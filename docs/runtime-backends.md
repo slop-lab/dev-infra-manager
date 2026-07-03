@@ -40,6 +40,14 @@ This backend is useful when Sysbox cannot start because the host or nested envir
 
 The host must install and register `runsc` as a Docker runtime before this backend can pass `doctor`.
 
+Install the latest gVisor release binaries and register the Docker runtime with:
+
+```bash
+just install-runsc-linux
+```
+
+This follows the official gVisor manual install flow: download `runsc` and `containerd-shim-runsc-v1`, verify their SHA-512 checksums, move them into `/usr/local/bin`, run `runsc install`, and restart Docker.
+
 Example agent config:
 
 ```json

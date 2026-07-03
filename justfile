@@ -9,6 +9,9 @@ install:
 install-host-ubuntu:
     bash scripts/install-host-ubuntu.sh
 
+install-runsc-linux:
+    bash scripts/install-runsc-linux.sh
+
 bootstrap-ubuntu:
     bash scripts/bootstrap-ubuntu.sh
 

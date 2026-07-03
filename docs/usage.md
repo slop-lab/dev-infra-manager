@@ -33,6 +33,14 @@ just install-host-ubuntu
 
 This installs Docker, downloads the pinned Sysbox CE package for the host architecture, verifies the package checksum, installs Sysbox, restarts Docker, and starts Sysbox services.
 
+Install gVisor `runsc` for the no-KVM Docker-compatible backend:
+
+```bash
+just install-runsc-linux
+```
+
+This downloads the latest official gVisor release binaries, verifies their SHA-512 checksums, installs them under `/usr/local/bin`, registers `runsc` with Docker, and restarts Docker.
+
 Run the full Ubuntu bootstrap:
 
 ```bash

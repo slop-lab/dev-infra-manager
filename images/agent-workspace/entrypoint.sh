@@ -10,11 +10,14 @@ if [[ "${DEV_INFRA_START_DOCKERD:-1}" == "1" ]]; then
     --data-root=/var/lib/docker \
     --iptables=false \
     --ip-masq=false \
+    --group=agent \
     ${DEV_INFRA_DOCKERD_FLAGS:-} \
     >/var/log/dockerd.log 2>&1 &
 
   for _ in $(seq 1 60); do
     if docker info >/dev/null 2>&1; then
+      chgrp agent /var/run/docker.sock
+      chmod 0660 /var/run/docker.sock
       break
     fi
     sleep 1

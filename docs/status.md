@@ -61,6 +61,10 @@ Current environment verification:
 - Rootless Podman with directory storage can run a full `job run` lifecycle in the current environment.
 - Secret runtime deployment from an approved bare Git ref was verified end-to-end with Docker and `/healthz`.
 - `just smoke` verifies the Docker-backed integration path that is available in the current environment.
+- gVisor `runsc` release `release-20260622.0` is installed and registered with Docker.
+- gVisor with directory storage passes `doctor --config` in the current environment.
+- gVisor with directory storage can run a full `job run` lifecycle in the current environment.
+- gVisor with directory storage can run a nested Docker `hello-world` container from inside the agent workspace.
 - Sysbox CE 0.7.0 arm64 is installed and registered with Docker.
 - Sysbox service cannot start in the current nested environment because id-mapped mount setup returns `operation not permitted`.
 - Running `hello-world:latest` with Docker `--runtime=sysbox-runc` fails in the current nested environment because Docker cannot connect to `sysbox-mgr`.

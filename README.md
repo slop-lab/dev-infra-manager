@@ -26,6 +26,12 @@ Install host runtime dependencies on Ubuntu:
 just install-host-ubuntu
 ```
 
+Install gVisor `runsc` for the no-KVM backend:
+
+```bash
+just install-runsc-linux
+```
+
 Or run the full Ubuntu bootstrap:
 
 ```bash
