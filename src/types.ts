@@ -1,6 +1,7 @@
 export interface ManagedGitHostConfig {
   kind: "bare-git-pr";
   remote: string;
+  protectedRefs: string[];
 }
 
 export interface ResourceProfile {

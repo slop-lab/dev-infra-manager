@@ -12,6 +12,7 @@ import {
   createPullRequest,
   createRepo,
   initGitHost,
+  installRepoHooks,
   listPullRequests,
   mergePullRequest,
   readPullRequest
@@ -68,6 +69,7 @@ async function main(argv: string[]): Promise<void> {
           jobMountRoot: config.jobMountRoot,
           resourceProfiles: Object.keys(config.resourceProfiles),
           managedGitHostKind: config.managedGitHost.kind,
+          managedGitHostProtectedRefs: config.managedGitHost.protectedRefs,
           agentImage: config.agent.image,
           secretRuntimeRepo: config.secretRuntime.repo,
           secretRuntimeApprovedRef: config.secretRuntime.approvedRef
@@ -120,6 +122,12 @@ async function main(argv: string[]): Promise<void> {
   if (command === "git-host" && subcommand === "create-repo") {
     const repo = requiredFlag(parsed, "repo");
     console.log(await createRepo(config, runner, repo));
+    return;
+  }
+
+  if (command === "git-host" && subcommand === "install-hooks") {
+    const repo = requiredFlag(parsed, "repo");
+    console.log(await installRepoHooks(config, repo));
     return;
   }
 
@@ -295,6 +303,7 @@ Usage:
   dim agent run --job-id ID [--config dev-infra.config.json] [--sudo=false] [-- COMMAND...]
   dim git-host init [--config dev-infra.config.json]
   dim git-host create-repo --repo NAME [--config dev-infra.config.json]
+  dim git-host install-hooks --repo NAME [--config dev-infra.config.json]
   dim pr create --repo NAME --source REF --target REF --title TITLE [--body BODY] [--config dev-infra.config.json]
   dim pr list --repo NAME [--config dev-infra.config.json]
   dim pr show --repo NAME --id ID [--config dev-infra.config.json]

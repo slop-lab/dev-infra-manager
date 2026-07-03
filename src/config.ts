@@ -21,7 +21,8 @@ export const DEFAULT_CONFIG: DevInfraConfig = {
   jobMountRoot: ".dev-infra/mounts",
   managedGitHost: {
     kind: "bare-git-pr",
-    remote: "ssh://git.example.internal/dev-infra-manager.git"
+    remote: "ssh://git.example.internal/dev-infra-manager.git",
+    protectedRefs: ["refs/heads/main"]
   },
   resourceProfiles: {
     default: {
@@ -70,6 +71,11 @@ export function normalizeConfig(raw: unknown, source = "config"): DevInfraConfig
   assertObject(value.managedGitHost, "managedGitHost");
   assertCondition(value.managedGitHost.kind === "bare-git-pr", "managedGitHost.kind must be bare-git-pr");
   assertString(value.managedGitHost.remote, "managedGitHost.remote");
+  assertStringArray(value.managedGitHost.protectedRefs, "managedGitHost.protectedRefs");
+  assertCondition(value.managedGitHost.protectedRefs.length > 0, "managedGitHost.protectedRefs must not be empty");
+  for (const ref of value.managedGitHost.protectedRefs) {
+    assertGitRef(ref, `managedGitHost.protectedRefs.${ref}`);
+  }
 
   assertObject(value.resourceProfiles, "resourceProfiles");
   const resourceProfiles: Record<string, ResourceProfile> = {};
@@ -161,4 +167,11 @@ function assertPositiveInteger(value: unknown, path: string): asserts value is n
 function assertAbsoluteContainerPath(value: unknown, path: string): asserts value is string {
   assertString(value, path);
   assertCondition(value.startsWith("/"), `${path} must be an absolute container path`);
+}
+
+function assertGitRef(value: string, path: string): void {
+  assertCondition(value.startsWith("refs/"), `${path} must be a full Git ref under refs/`);
+  assertCondition(!value.includes(".."), `${path} must not contain '..'`);
+  assertCondition(!/[\s~^:?*[\]\\]/.test(value), `${path} contains characters that are unsafe in Git refs`);
+  assertCondition(!value.endsWith("/") && !value.endsWith(".") && !value.includes("//"), `${path} is not a valid full Git ref`);
 }

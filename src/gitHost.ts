@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { UserError } from "./errors.js";
 import type { CommandRunner, DevInfraConfig } from "./types.js";
@@ -50,7 +50,16 @@ export async function createRepo(config: DevInfraConfig, runner: CommandRunner, 
     throw new UserError(`Failed to create bare repo: ${result.stderr}`);
   }
   await mkdir(prDir(config, repo), { recursive: true });
+  await installRepoHooks(config, repo);
   return path;
+}
+
+export async function installRepoHooks(config: DevInfraConfig, repo: string): Promise<string> {
+  const hookPath = join(repoPath(config, repo), "hooks", "pre-receive");
+  await mkdir(dirname(hookPath), { recursive: true });
+  await writeFile(hookPath, preReceiveHook(config.managedGitHost.protectedRefs), "utf8");
+  await chmod(hookPath, 0o755);
+  return hookPath;
 }
 
 export async function createPullRequest(
@@ -186,4 +195,20 @@ async function revParse(config: DevInfraConfig, runner: CommandRunner, repo: str
     throw new UserError(`Failed to resolve ref ${repo}:${ref}: ${result.stderr}`);
   }
   return result.stdout.trim();
+}
+
+function preReceiveHook(protectedRefs: string[]): string {
+  const refs = protectedRefs.map((ref) => `  ${JSON.stringify(ref)})`).join("\n");
+  return `#!/usr/bin/env bash
+set -euo pipefail
+
+while read -r oldrev newrev refname; do
+  case "$refname" in
+${refs}
+    echo "Direct pushes to protected ref '$refname' are blocked. Use the managed PR merge flow." >&2
+    exit 1
+    ;;
+  esac
+done
+`;
 }

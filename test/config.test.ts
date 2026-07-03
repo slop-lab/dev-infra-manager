@@ -13,4 +13,10 @@ describe("config", () => {
     invalid.agent = { image: "x" };
     expect(() => normalizeConfig(invalid)).toThrow(/agent.runtime/);
   });
+
+  it("requires managed Git protected refs", () => {
+    const invalid = structuredClone(DEFAULT_CONFIG);
+    invalid.managedGitHost.protectedRefs = [];
+    expect(() => normalizeConfig(invalid)).toThrow(/protectedRefs/);
+  });
 });

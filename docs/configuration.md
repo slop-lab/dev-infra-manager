@@ -34,8 +34,11 @@ Fields:
 
 - `kind`: must be `bare-git-pr`.
 - `remote`: informational remote URL for the managed Git host.
+- `protectedRefs`: full Git refs that reject direct pushes through the managed bare repository hook.
 
 The current implementation stores bare repositories and pull request metadata under `stateRoot`.
+Repositories created through `git-host create-repo` receive a `pre-receive` hook that blocks direct pushes to `protectedRefs`.
+Use `git-host install-hooks` to reinstall hooks after changing this list or importing an existing bare repository.
 
 ### `resourceProfiles`
 

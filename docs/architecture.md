@@ -82,6 +82,7 @@ The deploy controller checks out the configured approved ref into a temporary Gi
 The managed Git host uses bare Git repositories with a custom pull request layer. It may run on the same machine as the container infrastructure or on a separate machine.
 
 Agents can push proposed branches and create pull requests. Human review happens before changes are accepted into refs used by trusted deployment.
+Refs listed in `managedGitHost.protectedRefs` reject direct pushes through a bare repository `pre-receive` hook. This keeps agent pushes on proposal branches and makes the managed pull request merge flow the path that updates approved refs.
 
 ## Workspace Lifecycle
 

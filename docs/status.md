@@ -17,6 +17,7 @@ Documented decisions:
 - Resource limits apply at the agent workspace boundary.
 - Disk quota uses a per-job loopback filesystem by default.
 - The managed Git host uses bare Git repositories with a custom pull request layer.
+- Managed Git repositories block direct pushes to protected refs.
 - The managed Git host may run on the same machine or a separate machine.
 - Secret-bearing containers are deployed by a controller from approved refs.
 - The controller is part of the trusted boundary.
@@ -36,6 +37,7 @@ Implemented:
 - One-shot agent job orchestration with guaranteed cleanup.
 - Managed Git host state initialization.
 - Bare Git repository creation.
+- Protected-ref `pre-receive` hook installation for managed bare repositories.
 - Custom pull request metadata with create, list, show, approve, and fast-forward merge commands.
 - Secret runtime deployment planning and execution from configured approved refs.
 - Long-running controller mode that watches the approved ref and deploys when it changes.

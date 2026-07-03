@@ -158,7 +158,14 @@ Create a bare repository:
 pnpm run cli -- git-host create-repo --config dev-infra.config.json --repo app
 ```
 
-Agents can push branches to the resulting bare repository path. Create a pull request from pushed refs:
+Repositories created by this command include a `pre-receive` hook that blocks direct pushes to `managedGitHost.protectedRefs`, such as `refs/heads/main`.
+If hooks must be reinstalled for an existing bare repository, run:
+
+```bash
+pnpm run cli -- git-host install-hooks --config dev-infra.config.json --repo app
+```
+
+Agents can push non-protected branches to the resulting bare repository path. Create a pull request from pushed refs:
 
 ```bash
 pnpm run cli -- pr create \

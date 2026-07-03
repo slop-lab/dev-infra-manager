@@ -25,7 +25,11 @@ cat > "$tmpdir/config.json" <<EOF
 {
   "stateRoot": "$tmpdir/state",
   "jobMountRoot": "$tmpdir/mounts",
-  "managedGitHost": { "kind": "bare-git-pr", "remote": "file://$tmpdir/state/git-host" },
+  "managedGitHost": {
+    "kind": "bare-git-pr",
+    "remote": "file://$tmpdir/state/git-host",
+    "protectedRefs": ["refs/heads/main"]
+  },
   "resourceProfiles": {
     "tiny": {
       "cpuCount": 1,
@@ -66,7 +70,9 @@ git -C "$tmpdir/worktree" config user.name "Test User"
 cp images/secret-runtime-example/Dockerfile images/secret-runtime-example/server.mjs "$tmpdir/worktree/"
 git -C "$tmpdir/worktree" add Dockerfile server.mjs
 git -C "$tmpdir/worktree" commit -m trusted-runtime >/dev/null
-git -C "$tmpdir/worktree" push origin HEAD:refs/heads/main >/dev/null
+git -C "$tmpdir/worktree" push origin HEAD:refs/heads/bootstrap >/dev/null
+initial_sha="$(git -C "$tmpdir/worktree" rev-parse HEAD)"
+git --git-dir "$repo_path" update-ref refs/heads/main "$initial_sha"
 
 git -C "$tmpdir/worktree" checkout -b docs-change >/dev/null 2>&1
 printf 'reviewed change\n' > "$tmpdir/worktree/REVIEWED.txt"

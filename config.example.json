@@ -3,7 +3,10 @@
   "jobMountRoot": ".dev-infra/mounts",
   "managedGitHost": {
     "kind": "bare-git-pr",
-    "remote": "ssh://git.example.internal/dev-infra-manager.git"
+    "remote": "ssh://git.example.internal/dev-infra-manager.git",
+    "protectedRefs": [
+      "refs/heads/main"
+    ]
   },
   "resourceProfiles": {
     "default": {

@@ -33,7 +33,8 @@ describe("controller", () => {
     await writeFile(join(worktree, "Dockerfile"), "FROM scratch\n", "utf8");
     await git(["-C", worktree, "add", "Dockerfile"]);
     await git(["-C", worktree, "commit", "-m", "trusted runtime"]);
-    await git(["-C", worktree, "push", "origin", "HEAD:refs/heads/main"]);
+    await git(["-C", worktree, "push", "origin", "HEAD:refs/heads/bootstrap"]);
+    await seedApprovedRef(config, worktree);
 
     let deployCount = 0;
     const first = await controllerTick(config, runner, false, async () => {
@@ -84,8 +85,17 @@ describe("controller", () => {
     await writeFile(join(worktree, "Dockerfile"), "FROM scratch\n", "utf8");
     await git(["-C", worktree, "add", "Dockerfile"]);
     await git(["-C", worktree, "commit", "-m", "trusted runtime"]);
-    await git(["-C", worktree, "push", "origin", "HEAD:refs/heads/main"]);
+    await git(["-C", worktree, "push", "origin", "HEAD:refs/heads/bootstrap"]);
+    await seedApprovedRef(config, worktree);
     return config;
+  }
+
+  async function seedApprovedRef(config: ReturnType<typeof normalizeConfig>, worktree: string): Promise<void> {
+    const head = await runner.run("git", ["-C", worktree, "rev-parse", "HEAD"]);
+    if (head.exitCode !== 0) {
+      throw new Error(`git rev-parse failed: ${head.stderr}`);
+    }
+    await git(["--git-dir", repoPath(config, "trusted-runtime"), "update-ref", config.secretRuntime.approvedRef, head.stdout.trim()]);
   }
 
   async function git(args: string[]): Promise<void> {

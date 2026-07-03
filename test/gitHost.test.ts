@@ -34,10 +34,16 @@ describe("managed git host", () => {
     await writeFile(join(worktree, "README.md"), "main\n", "utf8");
     await run("git", ["-C", worktree, "add", "README.md"]);
     await run("git", ["-C", worktree, "commit", "-m", "initial"]);
-    await run("git", ["-C", worktree, "push", "origin", "HEAD:refs/heads/main"]);
+    await run("git", ["-C", worktree, "push", "origin", "HEAD:refs/heads/bootstrap"]);
+    const initial = await runner.run("git", ["-C", worktree, "rev-parse", "HEAD"]);
+    await run("git", ["--git-dir", repoPath(config, "app"), "update-ref", "refs/heads/main", initial.stdout.trim()]);
+
     await run("git", ["-C", worktree, "checkout", "-b", "change"]);
     await writeFile(join(worktree, "README.md"), "change\n", "utf8");
     await run("git", ["-C", worktree, "commit", "-am", "change"]);
+    const directPush = await runner.run("git", ["-C", worktree, "push", "origin", "HEAD:refs/heads/main"]);
+    expect(directPush.exitCode).not.toBe(0);
+    expect(directPush.stderr).toMatch(/protected ref/);
     await run("git", ["-C", worktree, "push", "origin", "HEAD:refs/heads/change"]);
 
     const pr = await createPullRequest(config, runner, {
