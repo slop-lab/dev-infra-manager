@@ -21,6 +21,7 @@ export async function runDoctor(runner: CommandRunner): Promise<DoctorCheck[]> {
   checks.push(await commandCheck(runner, "sysbox-runc", ["--version"], "sysbox-runc"));
   checks.push(await systemdUnitCheck(runner, "sysbox.service", "Sysbox service"));
   checks.push(await dockerRuntimeCheck(runner, "sysbox-runc", "Docker sysbox-runc runtime"));
+  checks.push(await sysboxExecutionCheck(runner));
   checks.push(await loopDeviceCheck(runner));
   checks.push(await pathCheck("/dev/kvm", "KVM device"));
   checks.push(await cgroupCheck());
@@ -72,6 +73,19 @@ async function dockerRuntimeCheck(runner: CommandRunner, runtime: string, name: 
   };
 }
 
+export async function sysboxExecutionCheck(runner: CommandRunner): Promise<DoctorCheck> {
+  let result = await runner.run("docker", ["run", "--rm", "--runtime=sysbox-runc", "--pull=missing", "hello-world:latest"]);
+  if (result.exitCode !== 0 && `${result.stderr}${result.stdout}`.includes("permission denied")) {
+    result = await runner.run("docker", ["run", "--rm", "--runtime=sysbox-runc", "--pull=missing", "hello-world:latest"], { sudo: true });
+  }
+  const output = `${result.stderr}${result.stdout}`.trim();
+  return {
+    name: "Sysbox container execution",
+    ok: result.exitCode === 0,
+    detail: result.exitCode === 0 ? "hello-world completed" : firstLine(output) || "docker run failed"
+  };
+}
+
 async function systemdUnitCheck(runner: CommandRunner, unit: string, name: string): Promise<DoctorCheck> {
   const result = await runner.run("systemctl", ["is-active", unit]);
   const detail = `${result.stdout}${result.stderr}`.trim();
@@ -115,4 +129,8 @@ async function cgroupCheck(): Promise<DoctorCheck> {
   } catch (error) {
     return { name: "cgroup v2", ok: false, detail: (error as Error).message };
   }
+}
+
+function firstLine(value: string): string {
+  return value.split("\n").find((line) => line.trim().length > 0)?.trim() ?? "";
 }

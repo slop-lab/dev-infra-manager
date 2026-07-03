@@ -46,7 +46,7 @@ Implemented:
 - Ubuntu host installation script for Docker and pinned Sysbox CE packages.
 - Ubuntu bootstrap script for toolchain install, host install, dependency install, verification, image build, and doctor.
 - Reproducible integration smoke script covering images, managed Git PR flow, approved-ref secret deployment, and health check.
-- Unit tests for size parsing, config validation, job planning, duplicate job protection, Docker command generation, one-shot agent job orchestration, managed Git pull request flow, secret runtime deployment planning, controller state handling, and controller deploy locking.
+- Unit tests for size parsing, config validation, job planning, duplicate job protection, Docker command generation, doctor Sysbox execution checks, one-shot agent job orchestration, managed Git pull request flow, secret runtime deployment planning, controller state handling, and controller deploy locking.
 
 Current environment verification:
 
@@ -57,6 +57,7 @@ Current environment verification:
 - `just smoke` verifies the Docker-backed integration path that is available in the current environment.
 - Sysbox CE 0.7.0 arm64 is installed and registered with Docker.
 - Sysbox service cannot start in the current nested environment because id-mapped mount setup returns `operation not permitted`.
+- Running `hello-world:latest` with Docker `--runtime=sysbox-runc` fails in the current nested environment because Docker cannot connect to `sysbox-mgr`.
 - Loop device setup is blocked in the current nested environment.
 - `/dev/kvm` is not exposed in the current nested environment.
 

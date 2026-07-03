@@ -86,7 +86,9 @@ Run:
 just doctor
 ```
 
-The doctor command checks local development tools, Docker CLI availability, Sysbox runtime availability, KVM access, and cgroup v2 support.
+The doctor command checks local development tools, Docker CLI availability, Docker daemon access, Sysbox runtime registration, actual Sysbox container execution, loop device setup, KVM access, and cgroup v2 support.
+
+The Sysbox registration check only proves that Docker knows about `sysbox-runc`. The Sysbox container execution check runs `hello-world:latest` with `--runtime=sysbox-runc`; this is the direct readiness signal for agent workspace containers.
 
 ## Job Filesystem Lifecycle
 
