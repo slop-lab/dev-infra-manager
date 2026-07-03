@@ -12,7 +12,7 @@ Documented decisions:
 - Secret-bearing containers are separate from agent workspace containers.
 - Raw secrets are never injected into agent workspace containers.
 - Agents can receive approved environment variables and Git configuration for job execution.
-- Agents can create nested containers through Sysbox.
+- Agents can create nested containers through selected runtime backends.
 - Agent workspaces are ephemeral per job.
 - Resource limits apply at the agent workspace boundary.
 - Disk quota uses a per-job loopback filesystem by default.
@@ -21,19 +21,19 @@ Documented decisions:
 - The managed Git host may run on the same machine or a separate machine.
 - Secret-bearing containers are deployed by a controller from approved refs.
 - The controller is part of the trusted boundary.
-- The primary supported runtime assumes KVM is available.
+- Sysbox remains the default production runtime; gVisor and rootless Podman are available for no-KVM or constrained environments.
 
 Implemented:
 
 - TypeScript project using pnpm.
-- just recipes for install, host install, check, test, build, verify, doctor, and sample config generation.
+- just recipes for install, host install, check, test, build, verify, doctor, sample config generation, and runtime image builds.
 - CLI entrypoint with `init-config`, `doctor`, `config validate`, `job prepare`, `job cleanup`, `job run`, `agent run-command`, and `agent run`.
 - Config validation and default config generation.
 - Configuration reference documentation.
-- Per-job loopback filesystem command planning.
+- Storage backend abstraction with loopback and directory implementations.
 - Atomic job ID state claiming to prevent accidental job overwrite.
 - Host command execution abstraction for testable privileged operations.
-- Docker/Sysbox agent command generation.
+- Agent runtime backend abstraction with Sysbox, gVisor, and rootless Podman command generation.
 - One-shot agent job orchestration with guaranteed cleanup.
 - Managed Git host state initialization.
 - Bare Git repository creation.
@@ -42,19 +42,23 @@ Implemented:
 - Secret runtime deployment planning and execution from configured approved refs.
 - Long-running controller mode that watches the approved ref and deploys when it changes.
 - Atomic controller deploy lock to prevent concurrent secret runtime replacement.
-- Agent workspace Docker image for Sysbox-based nested container use.
+- Agent workspace Docker image for Sysbox and gVisor Docker-in-Docker use.
+- Agent workspace Podman image for rootless Podman use.
 - Secret runtime example image with an HTTP health endpoint.
 - systemd controller service template.
 - Ubuntu host installation script for Docker and pinned Sysbox CE packages.
 - Ubuntu bootstrap script for toolchain install, host install, dependency install, verification, image build, and doctor.
 - Reproducible integration smoke script covering images, managed Git PR flow, approved-ref secret deployment, and health check.
-- Unit tests for size parsing, config validation, job planning, duplicate job protection, Docker command generation, doctor Sysbox execution checks, one-shot agent job orchestration, managed Git pull request flow, secret runtime deployment planning, controller state handling, and controller deploy locking.
+- Unit tests for size parsing, config validation, job planning, storage backend planning, duplicate job protection, runtime backend command generation, doctor runtime execution checks, one-shot agent job orchestration, managed Git pull request flow, secret runtime deployment planning, controller state handling, and controller deploy locking.
 
 Current environment verification:
 
 - Docker 29.1.3 is installed and can run `hello-world`.
 - Included agent and secret runtime images build successfully.
+- Included rootless Podman agent image builds successfully.
 - Agent image command smoke test passes with inner Docker startup disabled.
+- Rootless Podman with directory storage passes `doctor --config` in the current environment.
+- Rootless Podman with directory storage can run a full `job run` lifecycle in the current environment.
 - Secret runtime deployment from an approved bare Git ref was verified end-to-end with Docker and `/healthz`.
 - `just smoke` verifies the Docker-backed integration path that is available in the current environment.
 - Sysbox CE 0.7.0 arm64 is installed and registered with Docker.
@@ -62,9 +66,10 @@ Current environment verification:
 - Running `hello-world:latest` with Docker `--runtime=sysbox-runc` fails in the current nested environment because Docker cannot connect to `sysbox-mgr`.
 - Loop device setup is blocked in the current nested environment.
 - `/dev/kvm` is not exposed in the current nested environment.
+- Config-aware `doctor` can now check the selected runtime and storage backend instead of always checking Sysbox and loopback.
 
 ## Future Work
 
 - Add integration tests on a fully privileged host with Sysbox service, KVM, and loop device setup available.
-- Plan support for non-KVM and nested environments.
-- Evaluate rootless operation after the primary runtime boundary is working.
+- Add gVisor integration tests on a host with `runsc` registered as a Docker runtime.
+- Add rootless Podman integration tests on a host with `/dev/fuse` exposed.

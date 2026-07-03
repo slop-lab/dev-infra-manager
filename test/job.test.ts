@@ -37,6 +37,21 @@ describe("job lifecycle planning", () => {
     expect(runner.commands[2]?.sudo).toBe(true);
   });
 
+  it("supports directory storage without loop mounts", async () => {
+    const config = normalizeConfig({
+      ...DEFAULT_CONFIG,
+      stateRoot: join(root, "state"),
+      jobMountRoot: join(root, "mounts"),
+      storageBackend: { kind: "directory" }
+    });
+    const runner = new RecordingRunner();
+    const metadata = await prepareJob(config, runner, "job-directory", "default", false);
+
+    expect(metadata.storageBackend).toBe("directory");
+    expect(metadata.mounted).toBe(false);
+    expect(runner.commands.map((entry) => entry.command)).toEqual(["install", "chown"]);
+  });
+
   it("refuses to overwrite existing job state", async () => {
     const config = normalizeConfig({
       ...DEFAULT_CONFIG,

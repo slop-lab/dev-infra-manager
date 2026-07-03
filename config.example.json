@@ -1,6 +1,9 @@
 {
   "stateRoot": ".dev-infra/state",
   "jobMountRoot": ".dev-infra/mounts",
+  "storageBackend": {
+    "kind": "loopback"
+  },
   "managedGitHost": {
     "kind": "bare-git-pr",
     "remote": "ssh://git.example.internal/dev-infra-manager.git",
@@ -20,6 +23,10 @@
   "agent": {
     "image": "dev-infra-agent-workspace:latest",
     "runtime": "sysbox-runc",
+    "runtimeBackend": {
+      "kind": "sysbox",
+      "dockerRuntime": "sysbox-runc"
+    },
     "workspacePath": "/workspace",
     "runtimeDataPath": "/var/lib/docker",
     "env": {},

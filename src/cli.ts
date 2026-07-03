@@ -46,7 +46,7 @@ async function main(argv: string[]): Promise<void> {
   }
 
   if (command === "doctor") {
-    const checks = await runDoctor(runner);
+    const checks = await runDoctor(runner, parsed.flags.has("config") ? await loadConfig(stringFlag(parsed, "config", "dev-infra.config.json")) : undefined);
     for (const check of checks) {
       console.log(`${check.ok ? "ok" : "fail"}\t${check.name}\t${check.detail}`);
     }
@@ -67,10 +67,12 @@ async function main(argv: string[]): Promise<void> {
           configPath,
           stateRoot: config.stateRoot,
           jobMountRoot: config.jobMountRoot,
+          storageBackend: config.storageBackend.kind,
           resourceProfiles: Object.keys(config.resourceProfiles),
           managedGitHostKind: config.managedGitHost.kind,
           managedGitHostProtectedRefs: config.managedGitHost.protectedRefs,
           agentImage: config.agent.image,
+          agentRuntimeBackend: config.agent.runtimeBackend,
           secretRuntimeRepo: config.secretRuntime.repo,
           secretRuntimeApprovedRef: config.secretRuntime.approvedRef
         },
@@ -294,7 +296,7 @@ function printHelp(): void {
 
 Usage:
   dim init-config [--output dev-infra.config.json]
-  dim doctor
+  dim doctor [--config dev-infra.config.json]
   dim config validate [--config dev-infra.config.json]
   dim job prepare --job-id ID [--profile default] [--config dev-infra.config.json] [--dry-run]
   dim job cleanup --job-id ID [--config dev-infra.config.json] [--dry-run] [--keep-disk]

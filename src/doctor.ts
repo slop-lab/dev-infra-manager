@@ -1,7 +1,8 @@
 import { access, constants, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { CommandRunner } from "./types.js";
+import { DEFAULT_CONFIG, normalizeConfig } from "./config.js";
+import type { CommandRunner, DevInfraConfig } from "./types.js";
 
 export interface DoctorCheck {
   name: string;
@@ -9,7 +10,7 @@ export interface DoctorCheck {
   detail: string;
 }
 
-export async function runDoctor(runner: CommandRunner): Promise<DoctorCheck[]> {
+export async function runDoctor(runner: CommandRunner, config: DevInfraConfig = normalizeConfig(DEFAULT_CONFIG)): Promise<DoctorCheck[]> {
   const checks: DoctorCheck[] = [];
   checks.push(await commandCheck(runner, "node", ["--version"], "Node.js"));
   checks.push(await commandCheck(runner, "pnpm", ["--version"], "pnpm"));
@@ -18,14 +19,48 @@ export async function runDoctor(runner: CommandRunner): Promise<DoctorCheck[]> {
   checks.push(await commandCheck(runner, "timeout", ["--version"], "timeout"));
   checks.push(await commandCheck(runner, "docker", ["--version"], "Docker CLI"));
   checks.push(await dockerDaemonCheck(runner));
-  checks.push(await commandCheck(runner, "sysbox-runc", ["--version"], "sysbox-runc"));
-  checks.push(await systemdUnitCheck(runner, "sysbox.service", "Sysbox service"));
-  checks.push(await dockerRuntimeCheck(runner, "sysbox-runc", "Docker sysbox-runc runtime"));
-  checks.push(await sysboxExecutionCheck(runner));
-  checks.push(await loopDeviceCheck(runner));
-  checks.push(await pathCheck("/dev/kvm", "KVM device"));
+  checks.push(...(await runtimeBackendChecks(runner, config)));
+  checks.push(...(await storageBackendChecks(runner, config)));
   checks.push(await cgroupCheck());
   return checks;
+}
+
+async function runtimeBackendChecks(runner: CommandRunner, config: DevInfraConfig): Promise<DoctorCheck[]> {
+  switch (config.agent.runtimeBackend.kind) {
+    case "sysbox": {
+      const runtime = config.agent.runtimeBackend.dockerRuntime ?? "sysbox-runc";
+      return [
+        await commandCheck(runner, "sysbox-runc", ["--version"], "sysbox-runc"),
+        await systemdUnitCheck(runner, "sysbox.service", "Sysbox service"),
+        await dockerRuntimeCheck(runner, runtime, `Docker ${runtime} runtime`),
+        await dockerRuntimeExecutionCheck(runner, runtime, "Sysbox container execution"),
+        await pathCheck("/dev/kvm", "KVM device")
+      ];
+    }
+    case "gvisor": {
+      const runtime = config.agent.runtimeBackend.dockerRuntime ?? "runsc";
+      return [
+        await commandCheck(runner, "runsc", ["--version"], "runsc"),
+        await dockerRuntimeCheck(runner, runtime, `Docker ${runtime} runtime`),
+        await dockerRuntimeExecutionCheck(runner, runtime, "gVisor container execution")
+      ];
+    }
+    case "rootless-podman":
+      return [
+        await dockerImageCheck(runner, config.agent.image, "Rootless Podman agent image"),
+        await dockerAgentCommandCheck(runner, config.agent.image, ["podman", "--version"], "Podman in agent image"),
+        await pathCheck("/dev/fuse", "FUSE device")
+      ];
+  }
+}
+
+async function storageBackendChecks(runner: CommandRunner, config: DevInfraConfig): Promise<DoctorCheck[]> {
+  switch (config.storageBackend.kind) {
+    case "loopback":
+      return [await loopDeviceCheck(runner)];
+    case "directory":
+      return [{ name: "Directory storage backend", ok: true, detail: "available; diskBytes is not enforced by this backend" }];
+  }
 }
 
 async function commandCheck(runner: CommandRunner, command: string, args: string[], name: string): Promise<DoctorCheck> {
@@ -73,16 +108,44 @@ async function dockerRuntimeCheck(runner: CommandRunner, runtime: string, name: 
   };
 }
 
-export async function sysboxExecutionCheck(runner: CommandRunner): Promise<DoctorCheck> {
-  let result = await runner.run("docker", ["run", "--rm", "--runtime=sysbox-runc", "--pull=missing", "hello-world:latest"]);
+export async function dockerRuntimeExecutionCheck(runner: CommandRunner, runtime: string, name: string): Promise<DoctorCheck> {
+  let result = await runner.run("docker", ["run", "--rm", `--runtime=${runtime}`, "--pull=missing", "hello-world:latest"]);
   if (result.exitCode !== 0 && `${result.stderr}${result.stdout}`.includes("permission denied")) {
-    result = await runner.run("docker", ["run", "--rm", "--runtime=sysbox-runc", "--pull=missing", "hello-world:latest"], { sudo: true });
+    result = await runner.run("docker", ["run", "--rm", `--runtime=${runtime}`, "--pull=missing", "hello-world:latest"], { sudo: true });
   }
   const output = `${result.stderr}${result.stdout}`.trim();
   return {
-    name: "Sysbox container execution",
+    name,
     ok: result.exitCode === 0,
     detail: result.exitCode === 0 ? "hello-world completed" : firstLine(output) || "docker run failed"
+  };
+}
+
+export async function sysboxExecutionCheck(runner: CommandRunner): Promise<DoctorCheck> {
+  return dockerRuntimeExecutionCheck(runner, "sysbox-runc", "Sysbox container execution");
+}
+
+async function dockerImageCheck(runner: CommandRunner, image: string, name: string): Promise<DoctorCheck> {
+  let result = await runner.run("docker", ["image", "inspect", image, "--format", "{{.Id}}"]);
+  if (result.exitCode !== 0 && `${result.stderr}${result.stdout}`.includes("permission denied")) {
+    result = await runner.run("docker", ["image", "inspect", image, "--format", "{{.Id}}"], { sudo: true });
+  }
+  return {
+    name,
+    ok: result.exitCode === 0,
+    detail: result.exitCode === 0 ? "present" : firstLine(`${result.stderr}${result.stdout}`) || "image not present"
+  };
+}
+
+async function dockerAgentCommandCheck(runner: CommandRunner, image: string, commandArgs: string[], name: string): Promise<DoctorCheck> {
+  let result = await runner.run("docker", ["run", "--rm", image, ...commandArgs]);
+  if (result.exitCode !== 0 && `${result.stderr}${result.stdout}`.includes("permission denied")) {
+    result = await runner.run("docker", ["run", "--rm", image, ...commandArgs], { sudo: true });
+  }
+  return {
+    name,
+    ok: result.exitCode === 0,
+    detail: result.exitCode === 0 ? firstLine(`${result.stdout}${result.stderr}`) : firstLine(`${result.stderr}${result.stdout}`) || "agent command failed"
   };
 }
 

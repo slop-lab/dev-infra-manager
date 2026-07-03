@@ -2,7 +2,7 @@
 set -euo pipefail
 
 mkdir -p /workspace /var/lib/docker /var/run /home/agent
-chown -R agent:agent /workspace /home/agent
+chown -R agent:agent /workspace /home/agent /var/lib/docker
 
 if [[ "${DEV_INFRA_START_DOCKERD:-1}" == "1" ]]; then
   dockerd \
@@ -10,6 +10,7 @@ if [[ "${DEV_INFRA_START_DOCKERD:-1}" == "1" ]]; then
     --data-root=/var/lib/docker \
     --iptables=false \
     --ip-masq=false \
+    ${DEV_INFRA_DOCKERD_FLAGS:-} \
     >/var/log/dockerd.log 2>&1 &
 
   for _ in $(seq 1 60); do

@@ -2,18 +2,18 @@
 
 ## Container Isolation
 
-Sysbox is the preferred container runtime for agent workspaces because agents need to create nested containers without receiving access to the host container runtime.
+Sysbox is the default container runtime for agent workspaces because agents need to create nested containers without receiving access to the host container runtime. gVisor and rootless Podman backends are available for hosts where Sysbox cannot run.
 
 Required isolation properties:
 
 - Do not mount the host Docker socket into agent containers.
 - Do not run agent workspace containers as privileged containers.
-- Run nested containers inside the agent workspace boundary.
+- Run nested containers inside the agent workspace boundary through the selected backend.
 - Keep secret-bearing containers outside the agent workspace boundary.
 - Keep secret-bearing volumes unavailable to agent containers and nested containers.
 - Apply resource limits at the agent workspace level so nested workloads cannot exceed the job budget in aggregate.
 
-The primary supported runtime assumes KVM is available. Environments without KVM support, including nested virtualization environments, are future compatibility targets.
+The default production runtime assumes Sysbox host support and KVM availability. Environments without KVM can use the `gvisor` backend when `runsc` is available, or the `rootless-podman` backend when workloads can use Podman instead of Docker-in-Docker.
 
 ## Resource Limits
 
@@ -50,3 +50,5 @@ This makes disk usage from the agent workspace and nested containers count again
 The controller tears down the per-job filesystem after the job completes. Only explicitly exported artifacts or Git-pushed changes are preserved.
 
 The default implementation uses per-job loopback filesystems for disk quota enforcement. Future implementations may replace this with project quota, LVM thin pools, ZFS datasets, or btrfs subvolume quotas while preserving the same job-level quota model.
+
+The `directory` storage backend exists for constrained nested environments that cannot create loop devices. It creates ordinary directories and does not enforce `diskBytes`. Use it only with an external disk quota or for development checks where aggregate disk enforcement is not required.

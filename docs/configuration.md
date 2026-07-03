@@ -26,6 +26,17 @@ Host path where per-job quota filesystems are mounted.
 
 Each job receives a mount directory under this root. Agent workspaces and nested container runtime data are created inside that job mount.
 
+### `storageBackend`
+
+Job workspace storage backend.
+
+Fields:
+
+- `kind`: `loopback` or `directory`.
+
+`loopback` enforces `resourceProfiles.<name>.diskBytes` through a per-job ext4 disk image mounted through a loop device.
+`directory` creates ordinary directories and does not enforce `diskBytes`; use it only when loop devices are unavailable and another layer enforces disk limits.
+
 ### `managedGitHost`
 
 Configuration for the managed Git host.
@@ -59,13 +70,21 @@ Agent workspace container configuration.
 Fields:
 
 - `image`: agent workspace image.
-- `runtime`: Docker runtime, normally `sysbox-runc`.
+- `runtime`: legacy Docker runtime name kept for compatibility, normally `sysbox-runc`.
+- `runtimeBackend`: selected agent runtime backend.
 - `workspacePath`: container path for the job workspace.
 - `runtimeDataPath`: container path for nested container runtime data.
 - `env`: approved environment variables injected into the agent container.
 - `gitEnv`: approved Git-related environment variables injected into the agent container.
 
 Do not place raw secrets in `env` or `gitEnv`.
+
+`runtimeBackend` fields:
+
+- `kind`: `sysbox`, `gvisor`, or `rootless-podman`.
+- `dockerRuntime`: optional Docker runtime name. Defaults to `sysbox-runc` for `sysbox`, `runsc` for `gvisor`, and `runc` for `rootless-podman`.
+
+See [Runtime Backends](runtime-backends.md) for backend-specific requirements and tradeoffs.
 
 ### `secretRuntime`
 

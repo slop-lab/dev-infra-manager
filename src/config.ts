@@ -19,6 +19,9 @@ type RawConfig = Omit<DevInfraConfig, "resourceProfiles"> & {
 export const DEFAULT_CONFIG: DevInfraConfig = {
   stateRoot: ".dev-infra/state",
   jobMountRoot: ".dev-infra/mounts",
+  storageBackend: {
+    kind: "loopback"
+  },
   managedGitHost: {
     kind: "bare-git-pr",
     remote: "ssh://git.example.internal/dev-infra-manager.git",
@@ -36,6 +39,10 @@ export const DEFAULT_CONFIG: DevInfraConfig = {
   agent: {
     image: "dev-infra-agent-workspace:latest",
     runtime: "sysbox-runc",
+    runtimeBackend: {
+      kind: "sysbox",
+      dockerRuntime: "sysbox-runc"
+    },
     workspacePath: "/workspace",
     runtimeDataPath: "/var/lib/docker",
     env: {},
@@ -68,6 +75,8 @@ export function normalizeConfig(raw: unknown, source = "config"): DevInfraConfig
 
   assertString(value.stateRoot, "stateRoot");
   assertString(value.jobMountRoot, "jobMountRoot");
+  const storageBackend = normalizeStorageBackend(value.storageBackend);
+
   assertObject(value.managedGitHost, "managedGitHost");
   assertCondition(value.managedGitHost.kind === "bare-git-pr", "managedGitHost.kind must be bare-git-pr");
   assertString(value.managedGitHost.remote, "managedGitHost.remote");
@@ -87,6 +96,7 @@ export function normalizeConfig(raw: unknown, source = "config"): DevInfraConfig
   assertObject(value.agent, "agent");
   assertString(value.agent.image, "agent.image");
   assertString(value.agent.runtime, "agent.runtime");
+  const runtimeBackend = normalizeRuntimeBackend(value.agent.runtimeBackend, value.agent.runtime);
   assertAbsoluteContainerPath(value.agent.workspacePath, "agent.workspacePath");
   assertAbsoluteContainerPath(value.agent.runtimeDataPath, "agent.runtimeDataPath");
   assertStringRecord(value.agent.env, "agent.env");
@@ -108,11 +118,52 @@ export function normalizeConfig(raw: unknown, source = "config"): DevInfraConfig
   return {
     stateRoot: resolve(value.stateRoot),
     jobMountRoot: resolve(value.jobMountRoot),
+    storageBackend,
     managedGitHost: value.managedGitHost,
     resourceProfiles,
-    agent: value.agent,
+    agent: {
+      ...value.agent,
+      runtimeBackend
+    },
     secretRuntime: value.secretRuntime
   };
+}
+
+function normalizeStorageBackend(raw: unknown): DevInfraConfig["storageBackend"] {
+  if (raw === undefined) {
+    return { kind: "loopback" };
+  }
+  assertObject(raw, "storageBackend");
+  const value = raw as Partial<DevInfraConfig["storageBackend"]>;
+  assertCondition(value.kind === "loopback" || value.kind === "directory", "storageBackend.kind must be loopback or directory");
+  return { kind: value.kind };
+}
+
+function normalizeRuntimeBackend(raw: unknown, legacyRuntime: string): DevInfraConfig["agent"]["runtimeBackend"] {
+  if (raw === undefined) {
+    return { kind: legacyRuntime === "runsc" ? "gvisor" : "sysbox", dockerRuntime: legacyRuntime };
+  }
+  assertObject(raw, "agent.runtimeBackend");
+  const value = raw as Partial<DevInfraConfig["agent"]["runtimeBackend"]>;
+  assertCondition(value.kind === "sysbox" || value.kind === "gvisor" || value.kind === "rootless-podman", "agent.runtimeBackend.kind must be sysbox, gvisor, or rootless-podman");
+  if (value.dockerRuntime !== undefined) {
+    assertString(value.dockerRuntime, "agent.runtimeBackend.dockerRuntime");
+  }
+  return {
+    kind: value.kind,
+    dockerRuntime: value.dockerRuntime ?? defaultDockerRuntimeFor(value.kind)
+  };
+}
+
+function defaultDockerRuntimeFor(kind: DevInfraConfig["agent"]["runtimeBackend"]["kind"]): string {
+  switch (kind) {
+    case "sysbox":
+      return "sysbox-runc";
+    case "gvisor":
+      return "runsc";
+    case "rootless-podman":
+      return "runc";
+  }
 }
 
 function normalizeProfile(raw: unknown, path: string): ResourceProfile {

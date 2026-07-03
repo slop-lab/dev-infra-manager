@@ -1,4 +1,5 @@
 import { shellQuote } from "./commands.js";
+import { getRuntimePlan } from "./runtimeBackends.js";
 import { formatBytes } from "./size.js";
 import type { DevInfraConfig, JobMetadata, ResourceProfile } from "./types.js";
 
@@ -12,22 +13,26 @@ export interface AgentRunOptions {
 
 export function buildAgentDockerArgs(config: DevInfraConfig, metadata: JobMetadata, options: AgentRunOptions = {}): string[] {
   const profile = metadata.resourceProfile;
+  const runtimePlan = getRuntimePlan(config, metadata);
   const args = [
     "run",
-    "--runtime",
-    config.agent.runtime,
     "--cpus",
     String(profile.cpuCount),
     "--memory",
     String(profile.memoryBytes),
     "--pids-limit",
-    String(profile.pidsLimit),
-    "--mount",
-    bindMount(metadata.paths.workspace, config.agent.workspacePath),
-    "--mount",
-    bindMount(metadata.paths.runtimeData, config.agent.runtimeDataPath)
+    String(profile.pidsLimit)
   ];
 
+  if (runtimePlan.dockerRuntime) {
+    args.push("--runtime", runtimePlan.dockerRuntime);
+  }
+  for (const capability of runtimePlan.capabilities) {
+    args.push("--cap-add", capability);
+  }
+  for (const mount of runtimePlan.mounts) {
+    args.push("--mount", bindMount(mount.source, mount.target));
+  }
   if (options.name) {
     args.push("--name", options.name);
   }
@@ -38,11 +43,11 @@ export function buildAgentDockerArgs(config: DevInfraConfig, metadata: JobMetada
     args.push("--rm");
   }
 
-  for (const [key, value] of Object.entries({ ...config.agent.env, ...config.agent.gitEnv, ...options.extraEnv })) {
+  for (const [key, value] of Object.entries({ ...runtimePlan.env, ...config.agent.env, ...config.agent.gitEnv, ...options.extraEnv })) {
     args.push("--env", `${key}=${value}`);
   }
 
-  args.push(config.agent.image);
+  args.push(runtimePlan.image);
   if (options.command) {
     args.push(...options.command);
   }

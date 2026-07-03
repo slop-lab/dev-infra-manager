@@ -25,6 +25,7 @@ cat > "$tmpdir/config.json" <<EOF
 {
   "stateRoot": "$tmpdir/state",
   "jobMountRoot": "$tmpdir/mounts",
+  "storageBackend": { "kind": "directory" },
   "managedGitHost": {
     "kind": "bare-git-pr",
     "remote": "file://$tmpdir/state/git-host",
@@ -42,6 +43,7 @@ cat > "$tmpdir/config.json" <<EOF
   "agent": {
     "image": "dev-infra-agent-workspace:latest",
     "runtime": "sysbox-runc",
+    "runtimeBackend": { "kind": "sysbox", "dockerRuntime": "sysbox-runc" },
     "workspacePath": "/workspace",
     "runtimeDataPath": "/var/lib/docker",
     "env": {},

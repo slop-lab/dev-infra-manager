@@ -16,7 +16,7 @@ In scope:
 - Secret-bearing containers.
 - Controller-managed deployment of secret-bearing containers.
 - Managed Git hosting primitives used by agents to propose changes.
-- Sysbox-based container isolation.
+- Backend-selectable container isolation, with Sysbox as the default production backend.
 - Resource limits for agent workspaces and nested workloads.
 - Ephemeral read-write workspaces for agent jobs.
 - Injection of non-secret and approved per-job configuration into agent containers.

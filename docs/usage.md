@@ -12,8 +12,8 @@ The development toolchain uses:
 Runtime hosts also need the tools used by the controller:
 
 - Docker-compatible CLI.
-- Sysbox runtime registered as `sysbox-runc`.
-- KVM access for the primary supported runtime.
+- The selected agent runtime backend installed and registered. The default backend requires Sysbox as `sysbox-runc`; the gVisor backend requires `runsc`.
+- KVM access for the default Sysbox production runtime.
 - Linux cgroup v2.
 - `sudo` access for mount, unmount, ownership, and filesystem setup operations.
 
@@ -86,9 +86,17 @@ Run:
 just doctor
 ```
 
-The doctor command checks local development tools, Docker CLI availability, Docker daemon access, Sysbox runtime registration, actual Sysbox container execution, loop device setup, KVM access, and cgroup v2 support.
+The doctor command checks local development tools, Docker CLI availability, Docker daemon access, the selected runtime backend, the selected storage backend, and cgroup v2 support.
 
-The Sysbox registration check only proves that Docker knows about `sysbox-runc`. The Sysbox container execution check runs `hello-world:latest` with `--runtime=sysbox-runc`; this is the direct readiness signal for agent workspace containers.
+Run config-aware checks with:
+
+```bash
+pnpm run cli -- doctor --config dev-infra.config.json
+```
+
+The Sysbox registration check only proves that Docker knows about `sysbox-runc`. The Sysbox container execution check runs `hello-world:latest` with `--runtime=sysbox-runc`; this is the direct readiness signal for Sysbox agent workspace containers.
+For gVisor, `doctor --config` checks `runsc` and Docker runtime execution.
+For rootless Podman, `doctor --config` checks the configured agent image and verifies that `podman` is present in it.
 
 ## Job Filesystem Lifecycle
 
@@ -132,7 +140,7 @@ After preparing a job, inspect the Docker command that would run the agent works
 pnpm run cli -- agent run-command --config dev-infra.config.json --job-id demo bash
 ```
 
-The command uses the configured Sysbox runtime, resource profile, workspace bind mount, nested runtime data bind mount, and approved environment variables.
+The command uses the configured runtime backend, resource profile, workspace bind mount, nested runtime data bind mount, and approved environment variables.
 It is wrapped with the configured job timeout.
 
 Run the agent workspace container:

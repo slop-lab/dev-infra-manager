@@ -19,7 +19,7 @@ Properties:
 - Contains no raw API keys or secret credentials.
 - Provides a read-write workspace that is ephemeral per job.
 - Allows command execution inside the workspace.
-- Allows nested container creation through Sysbox.
+- Allows nested container creation through the selected runtime backend.
 - Receives approved environment variables and runtime configuration needed for the job.
 - Can access the managed Git host for pushing branches and opening pull requests through the configured workflow.
 - Can include Git configuration environment variables required for Git operations.

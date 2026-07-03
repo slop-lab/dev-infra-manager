@@ -2,6 +2,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { assertCondition, UserError } from "./errors.js";
 import { runPlannedCommand } from "./commands.js";
+import { getStorageBackend } from "./storageBackends.js";
 import type { CommandRunner, DevInfraConfig, JobMetadata, JobPaths, PlannedCommand } from "./types.js";
 
 export function validateJobId(jobId: string): string {
@@ -31,24 +32,12 @@ export function planPrepareJob(config: DevInfraConfig, jobId: string, profileNam
   }
 
   const paths = getJobPaths(config, jobId);
-  return [
-    { command: "truncate", args: ["-s", String(profile.diskBytes), paths.diskImage] },
-    { command: "mkfs.ext4", args: ["-F", "-q", paths.diskImage] },
-    { command: "mount", args: ["-o", "loop", paths.diskImage, paths.mountPoint], sudo: true },
-    { command: "install", args: ["-d", "-m", "0755", paths.workspace, paths.runtimeData], sudo: true },
-    { command: "chown", args: ["-R", `${process.getuid?.() ?? 0}:${process.getgid?.() ?? 0}`, paths.mountPoint], sudo: true }
-  ];
+  return getStorageBackend(config).planPrepare(paths, profile);
 }
 
 export function planCleanupJob(config: DevInfraConfig, jobId: string, removeDisk: boolean): PlannedCommand[] {
   const paths = getJobPaths(config, jobId);
-  const commands: PlannedCommand[] = [
-    { command: "umount", args: [paths.mountPoint], sudo: true }
-  ];
-  if (removeDisk) {
-    commands.push({ command: "rm", args: ["-rf", paths.jobRoot, paths.mountPoint], sudo: true });
-  }
-  return commands;
+  return getStorageBackend(config).planCleanup(paths, removeDisk);
 }
 
 export async function prepareJob(
@@ -64,6 +53,7 @@ export async function prepareJob(
   }
 
   const paths = getJobPaths(config, jobId);
+  const storageBackend = getStorageBackend(config);
   if (!dryRun) {
     await claimJobPaths(paths);
   }
@@ -76,9 +66,10 @@ export async function prepareJob(
     jobId,
     profileName,
     resourceProfile: profile,
+    storageBackend: storageBackend.kind,
     paths,
     createdAt: new Date().toISOString(),
-    mounted: !dryRun
+    mounted: !dryRun && storageBackend.mounted
   };
   if (!dryRun) {
     await writeFile(paths.metadata, `${JSON.stringify(metadata, null, 2)}\n`, "utf8");
@@ -118,9 +109,12 @@ export async function cleanupJob(
 ): Promise<void> {
   if (!dryRun) {
     const paths = getJobPaths(config, jobId);
-    const mountpoint = await runner.run("mountpoint", ["-q", paths.mountPoint]);
-    if (mountpoint.exitCode === 0) {
-      await runPlannedCommand(runner, { command: "umount", args: [paths.mountPoint], sudo: true }, false);
+    const storageBackend = getStorageBackend(config);
+    if (storageBackend.mounted) {
+      const mountpoint = await runner.run("mountpoint", ["-q", paths.mountPoint]);
+      if (mountpoint.exitCode === 0) {
+        await runPlannedCommand(runner, { command: "umount", args: [paths.mountPoint], sudo: true }, false);
+      }
     }
     if (removeDisk) {
       await runPlannedCommand(runner, { command: "rm", args: ["-rf", paths.jobRoot, paths.mountPoint], sudo: true }, false);

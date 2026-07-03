@@ -35,6 +35,9 @@ sample-config:
 build-agent-image:
     sudo docker build -t dev-infra-agent-workspace:latest images/agent-workspace
 
+build-agent-podman-image:
+    sudo docker build -t dev-infra-agent-workspace-podman:latest images/agent-workspace-podman
+
 build-secret-example:
     sudo docker build -t dev-infra-secret-runtime:latest images/secret-runtime-example
 

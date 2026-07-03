@@ -5,7 +5,7 @@
 The project focuses on the container and infrastructure boundary around agent jobs:
 
 - Ephemeral agent workspaces.
-- Sysbox-based nested container isolation.
+- Backend-selectable nested container isolation.
 - Secret-bearing runtime separation.
 - Review-gated deployment of secret-bearing environments.
 - Managed Git hosting primitives for proposed changes.
