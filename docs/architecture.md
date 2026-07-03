@@ -75,6 +75,8 @@ The deployment flow is:
 
 Secret-bearing containers must not be built or restarted directly from unreviewed workspace files.
 
+The deploy controller checks out the configured approved ref into a temporary Git worktree, builds the configured image from that worktree, replaces the previous container, and removes the temporary worktree. Secret values are supplied through host-side runtime configuration, such as an env file outside the agent workspace, not through agent-controlled files.
+
 ## Managed Git Host
 
 The managed Git host uses bare Git repositories with a custom pull request layer. It may run on the same machine as the container infrastructure or on a separate machine.

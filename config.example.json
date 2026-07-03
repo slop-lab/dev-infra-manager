@@ -1,0 +1,37 @@
+{
+  "stateRoot": ".dev-infra/state",
+  "jobMountRoot": ".dev-infra/mounts",
+  "managedGitHost": {
+    "kind": "bare-git-pr",
+    "remote": "ssh://git.example.internal/dev-infra-manager.git"
+  },
+  "resourceProfiles": {
+    "default": {
+      "cpuCount": 2,
+      "memoryBytes": 4294967296,
+      "pidsLimit": 2048,
+      "diskBytes": 21474836480,
+      "timeoutSeconds": 3600
+    }
+  },
+  "agent": {
+    "image": "dev-infra-agent-workspace:latest",
+    "runtime": "sysbox-runc",
+    "workspacePath": "/workspace",
+    "runtimeDataPath": "/var/lib/docker",
+    "env": {},
+    "gitEnv": {}
+  },
+  "secretRuntime": {
+    "endpoint": "http://127.0.0.1:7090",
+    "repo": "trusted-runtime",
+    "approvedRef": "refs/heads/main",
+    "image": "dev-infra-secret-runtime:latest",
+    "containerName": "dev-infra-secret-runtime",
+    "contextPath": ".",
+    "dockerfile": "Dockerfile",
+    "publish": [
+      "127.0.0.1:7090:7090"
+    ]
+  }
+}

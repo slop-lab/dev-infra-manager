@@ -1,0 +1,24 @@
+[Unit]
+Description=dev-infra-manager controller
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/dev-infra-manager
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/dev-infra-manager/dist/cli.js controller run --config /etc/dev-infra-manager/config.json --interval-seconds 30
+Restart=always
+RestartSec=5
+User=root
+Group=root
+
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/var/lib/dev-infra-manager /var/lib/docker /run/docker.sock /tmp
+
+[Install]
+WantedBy=multi-user.target

@@ -13,7 +13,7 @@ Required isolation properties:
 - Keep secret-bearing volumes unavailable to agent containers and nested containers.
 - Apply resource limits at the agent workspace level so nested workloads cannot exceed the job budget in aggregate.
 
-The MVP assumes KVM is available. Environments without KVM support, including nested virtualization environments, are future compatibility targets.
+The primary supported runtime assumes KVM is available. Environments without KVM support, including nested virtualization environments, are future compatibility targets.
 
 ## Resource Limits
 
@@ -31,6 +31,8 @@ Supported limit categories:
 
 Nested containers may also receive individual limits, but the agent workspace container remains the outer enforcement boundary for the whole job.
 
+Job runtime is enforced by wrapping agent container execution with the host `timeout` command. CPU, memory, and process limits are passed to Docker for the outer agent workspace container.
+
 ## Disk Quota
 
 Disk quota is enforced at the job boundary.
@@ -47,4 +49,4 @@ This makes disk usage from the agent workspace and nested containers count again
 
 The controller tears down the per-job filesystem after the job completes. Only explicitly exported artifacts or Git-pushed changes are preserved.
 
-The MVP uses per-job loopback filesystems for disk quota enforcement. Future implementations may replace this with project quota, LVM thin pools, ZFS datasets, or btrfs subvolume quotas while preserving the same job-level quota model.
+The default implementation uses per-job loopback filesystems for disk quota enforcement. Future implementations may replace this with project quota, LVM thin pools, ZFS datasets, or btrfs subvolume quotas while preserving the same job-level quota model.
