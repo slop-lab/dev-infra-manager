@@ -12,3 +12,5 @@ The documentation is split by concern:
 - [Runtime Backends](runtime-backends.md): Sysbox, gVisor, rootless Podman, loopback, and directory backend selection.
 - [Runtime Images](runtime-images.md): included agent workspace and secret runtime images.
 - [Status](status.md): current progress and known future work.
+
+Implementation-oriented normative specifications live in [../specs/README.md](../specs/README.md).

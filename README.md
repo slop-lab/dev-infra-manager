@@ -82,3 +82,4 @@ pnpm run cli -- controller run --config config.example.json --once --dry-run
 ```
 
 See [docs/README.md](docs/README.md) for the full documentation index.
+See [specs/README.md](specs/README.md) for implementation-oriented specifications.
