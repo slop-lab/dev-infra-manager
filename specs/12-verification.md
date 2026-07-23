@@ -27,6 +27,11 @@ pnpm run build
 - Docker agent image build.
 - Secret runtime example image build.
 - Agent image command smoke with inner Docker disabled.
+- Sysbox agent execution with explicit outer CPU, memory, and PID limits.
+- Exact cgroup v2 limit visibility inside the agent workspace.
+- Nested Docker `hello-world` execution.
+- Bidirectional image-store isolation using unique host-only and inner-only
+  probe tags, independent of pre-existing image caches.
 - Managed Git host initialization.
 - Bare repo creation.
 - Protected ref compatible initial seeding through trusted update-ref.
@@ -36,6 +41,20 @@ pnpm run build
 - Secret runtime `/healthz` check.
 
 The smoke gate may use `directory` storage because it primarily checks Git/deploy integration in environments where loop setup may be unavailable.
+
+## Fast Isolation Gate
+
+`just isolation-check` must run without contacting Docker or creating a
+container. It verifies generated runtime arguments, including:
+
+- Outer CPU, memory, and PID limits.
+- Job-specific workspace and nested runtime data mounts.
+- Absence of the host `/var/lib/docker` as a mount source.
+- Absence of the host `/var/run/docker.sock`.
+
+`just isolation-check-json` runs the same tests with Vitest's JSON reporter so
+CI can consume a single JSON document from stdout. These static checks do not
+replace `just smoke`, which verifies actual Sysbox and cgroup behavior.
 
 ## Backend Verification
 
@@ -51,8 +70,10 @@ Current verified host evidence:
 - gVisor with `directory` storage can pass `doctor --config`.
 - gVisor with `directory` storage can run a full `job run` lifecycle.
 - gVisor inner Docker can run nested `hello-world`.
-
-Sysbox remains blocked in the current nested host because `sysbox-mgr` cannot start and loop setup is denied.
+- Sysbox inner Docker can run nested `hello-world` without access to the host
+  Docker image store.
+- Sysbox exposes the outer agent CPU, memory, and PID cgroup limits to the
+  nested workload as aggregate upper bounds.
 
 ## Install Verification
 

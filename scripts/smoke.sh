@@ -5,9 +5,15 @@ repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 tmpdir="$(mktemp -d /tmp/dim-smoke-XXXXXX)"
+probe_suffix="$$-$(date +%s)"
+host_probe_image="dim-host-only-probe:${probe_suffix}"
+inner_probe_image="dim-inner-only-probe:${probe_suffix}"
+nested_smoke_container="dim-nested-smoke-${probe_suffix}"
 cleanup() {
   set +e
+  sudo docker rm -f "$nested_smoke_container" >/dev/null 2>&1
   sudo docker rm -f dim-smoke-secret >/dev/null 2>&1
+  sudo docker image rm -f "$host_probe_image" >/dev/null 2>&1
   sudo docker image rm -f dim-smoke-secret:latest >/dev/null 2>&1
   rm -rf "$tmpdir"
 }
@@ -20,6 +26,34 @@ sudo docker run --rm \
   -e DEV_INFRA_START_DOCKERD=0 \
   dev-infra-agent-workspace:latest \
   bash -lc 'test "$(whoami)" = agent && test "$HOME" = /home/agent && git --version >/dev/null && docker --version >/dev/null'
+
+# Use unique tags so the isolation assertions never depend on which images the
+# host or inner daemon happened to cache before this smoke run.
+sudo docker tag dev-infra-agent-workspace:latest "$host_probe_image"
+sudo docker run --rm \
+  --name "$nested_smoke_container" \
+  --runtime sysbox-runc \
+  --cpus 1 \
+  --memory 256m \
+  --pids-limit 128 \
+  --env HOST_PROBE_IMAGE="$host_probe_image" \
+  --env INNER_PROBE_IMAGE="$inner_probe_image" \
+  dev-infra-agent-workspace:latest \
+  bash -lc '
+    ! docker image inspect "$HOST_PROBE_IMAGE" >/dev/null 2>&1
+    read -r cpu_quota cpu_period < /sys/fs/cgroup/cpu.max
+    test "$cpu_quota" != max
+    test "$cpu_quota" -eq "$cpu_period"
+    test "$(cat /sys/fs/cgroup/memory.max)" -eq 268435456
+    test "$(cat /sys/fs/cgroup/pids.max)" -eq 128
+    docker run --rm hello-world | grep -q "Hello from Docker"
+    docker tag hello-world:latest "$INNER_PROBE_IMAGE"
+  '
+
+if sudo docker image inspect "$inner_probe_image" >/dev/null 2>&1; then
+  echo "inner Docker image leaked into the host image store: $inner_probe_image" >&2
+  exit 1
+fi
 
 cat > "$tmpdir/config.json" <<EOF
 {

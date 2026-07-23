@@ -48,7 +48,9 @@ Implemented:
 - systemd controller service template.
 - Ubuntu host installation script for Docker and pinned Sysbox CE packages.
 - Ubuntu bootstrap script for toolchain install, host install, dependency install, verification, image build, and doctor.
-- Reproducible integration smoke script covering images, managed Git PR flow, approved-ref secret deployment, and health check.
+- Reproducible integration smoke script covering image-store isolation,
+  aggregate cgroup limits, nested Docker execution, managed Git PR flow,
+  approved-ref secret deployment, and health check.
 - Unit tests for size parsing, config validation, job planning, storage backend planning, duplicate job protection, runtime backend command generation, doctor runtime execution checks, one-shot agent job orchestration, managed Git pull request flow, secret runtime deployment planning, controller state handling, and controller deploy locking.
 
 Current environment verification:
@@ -65,15 +67,18 @@ Current environment verification:
 - gVisor with directory storage passes `doctor --config` in the current environment.
 - gVisor with directory storage can run a full `job run` lifecycle in the current environment.
 - gVisor with directory storage can run a nested Docker `hello-world` container from inside the agent workspace.
-- Sysbox CE 0.7.0 arm64 is installed and registered with Docker.
-- Sysbox service cannot start in the current nested environment because id-mapped mount setup returns `operation not permitted`.
-- Running `hello-world:latest` with Docker `--runtime=sysbox-runc` fails in the current nested environment because Docker cannot connect to `sysbox-mgr`.
+- Sysbox CE 0.7.0 amd64 is installed and registered with Docker.
+- Sysbox can run the agent workspace with a separate inner Docker daemon.
+- Sysbox inner Docker can run `hello-world` and does not see a uniquely tagged
+  host-only image; an inner-only tag is likewise absent from the host daemon.
+- An agent limited to 1 CPU, 256 MiB memory, and 128 PIDs observes those exact
+  aggregate cgroup v2 limits while running the nested workload.
 - Loop device setup is blocked in the current nested environment.
 - `/dev/kvm` is not exposed in the current nested environment.
 - Config-aware `doctor` can now check the selected runtime and storage backend instead of always checking Sysbox and loopback.
 
 ## Future Work
 
-- Add integration tests on a fully privileged host with Sysbox service, KVM, and loop device setup available.
+- Add loopback-storage integration tests on a host with loop device setup available.
 - Add gVisor integration tests on a host with `runsc` registered as a Docker runtime.
 - Add rootless Podman integration tests on a host with `/dev/fuse` exposed.

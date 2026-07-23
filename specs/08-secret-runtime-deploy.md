@@ -41,6 +41,8 @@ Given a temporary worktree path, the deployment plan is:
 3. Track whether the Git worktree was added.
 4. Remove the Git worktree in `finally` if deployment fails after worktree creation.
 5. Remove the temporary directory in `finally`.
+6. If `docker run` fails, best-effort remove the named container object that
+   Docker may have left in `created` state.
 
 Dry-run mode must print commands and avoid executing host mutations.
 
@@ -66,6 +68,8 @@ If the secret runtime needs secrets:
 - Failure to resolve or check out the approved ref fails deployment.
 - Docker build failure fails deployment.
 - Docker run failure fails deployment.
+- A Docker run failure triggers `sudo docker rm --force <containerName>` so a
+  partial container does not block the next deployment.
 - Previous container removal failure is allowed.
 - Cleanup failures in the final fallback are best effort.
 

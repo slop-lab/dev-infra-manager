@@ -7,13 +7,13 @@ install:
     pnpm install --frozen-lockfile
 
 install-host-ubuntu:
-    bash scripts/install-host-ubuntu.sh
+    JUST_BIN="{{ just_executable() }}" bash scripts/install-host-ubuntu.sh
 
 install-runsc-linux:
     bash scripts/install-runsc-linux.sh
 
 bootstrap-ubuntu:
-    bash scripts/bootstrap-ubuntu.sh
+    JUST_BIN="{{ just_executable() }}" bash scripts/bootstrap-ubuntu.sh
 
 check:
     pnpm run check
@@ -28,6 +28,12 @@ verify:
     pnpm run check
     pnpm run test
     pnpm run build
+
+isolation-check:
+    pnpm exec vitest run test/docker.test.ts
+
+isolation-check-json:
+    pnpm exec vitest run test/docker.test.ts --reporter=json
 
 doctor:
     pnpm run cli -- doctor

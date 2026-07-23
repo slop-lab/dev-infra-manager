@@ -38,10 +38,18 @@ export function planSecretDeploy(config: DevInfraConfig, worktree: string): Plan
 export async function deploySecretRuntime(config: DevInfraConfig, runner: CommandRunner, dryRun: boolean): Promise<void> {
   const worktree = await mkdtemp(join(tmpdir(), "dim-secret-deploy-"));
   let removeWorktreeWithGit = false;
+  let removeFailedContainer = false;
   try {
     const commands = planSecretDeploy(config, worktree);
     for (const command of commands) {
+      const isContainerRun = command.command === "docker" && command.args[0] === "run";
+      if (isContainerRun && !dryRun) {
+        removeFailedContainer = true;
+      }
       await runPlannedCommand(runner, command, dryRun);
+      if (isContainerRun) {
+        removeFailedContainer = false;
+      }
       if (command.command === "git" && command.args.includes("worktree") && command.args.includes("add")) {
         removeWorktreeWithGit = !dryRun;
       }
@@ -50,6 +58,9 @@ export async function deploySecretRuntime(config: DevInfraConfig, runner: Comman
       }
     }
   } finally {
+    if (removeFailedContainer) {
+      await runner.run("docker", ["rm", "--force", config.secretRuntime.containerName], { sudo: true });
+    }
     if (!dryRun && removeWorktreeWithGit) {
       await runner.run("git", ["--git-dir", repoPath(config, config.secretRuntime.repo), "worktree", "remove", "--force", worktree]);
     }

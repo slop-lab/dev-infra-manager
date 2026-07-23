@@ -28,6 +28,9 @@ describe("docker command builder", () => {
     expect(args).toContain("sysbox-runc");
     expect(args).toContain("type=bind,source=/mounts/job-1/workspace,target=/workspace");
     expect(args).toContain("type=bind,source=/mounts/job-1/runtime-data,target=/var/lib/docker");
+    expect(args).toEqual(expect.arrayContaining(["--cpus", "2", "--memory", "4294967296", "--pids-limit", "2048"]));
+    expect(args.join(" ")).not.toContain("source=/var/lib/docker");
+    expect(args.join(" ")).not.toContain("/var/run/docker.sock");
     expect(buildAgentTimeoutCommand(config, metadata, { command: ["bash"] })).toMatch(/^timeout 3600s docker run/);
   });
 

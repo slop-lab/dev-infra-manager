@@ -26,6 +26,18 @@ Install host runtime dependencies on Ubuntu:
 just install-host-ubuntu
 ```
 
+Run `just` as your normal user, including when it is managed by mise. The
+installer invokes `sudo` only for host changes. It also adds the invoking user
+to the `docker` group; log out and back in or run `newgrp docker` once after
+the first installation. If the entire recipe must run through `sudo`, a
+mise-managed executable is also supported via
+`sudo "$(command -v just)" install-host-ubuntu`.
+
+The installer shows every package and host-level change before doing anything
+and proceeds only after you enter `yes`. It is a development convenience, not
+production hardening guidance. In particular, review its path-scoped AppArmor
+exception for Sysbox FUSE mounts before using it outside a development host.
+
 Install gVisor `runsc` for the no-KVM backend:
 
 ```bash
@@ -37,6 +49,10 @@ Or run the full Ubuntu bootstrap:
 ```bash
 just bootstrap-ubuntu
 ```
+
+Bootstrap prefers mise when available: it runs `mise install` and uses the
+repository-managed Node.js, pnpm, and `just`. Hosts without mise fall back to
+APT and the pinned global pnpm version.
 
 Create a local configuration:
 
@@ -56,6 +72,14 @@ Run the reproducible integration smoke test:
 ```bash
 just smoke
 ```
+
+Run the fast static isolation check without Docker or container creation:
+
+```bash
+just isolation-check
+```
+
+Use `just isolation-check-json` for machine-readable JSON output.
 
 Inspect host readiness:
 

@@ -31,6 +31,17 @@ Install Ubuntu host runtime dependencies:
 just install-host-ubuntu
 ```
 
+Run `just` as your normal user, including when it comes from mise. After the
+first install, log out and back in or run `newgrp docker` once to refresh the
+Docker group membership added by the installer. When invoking the whole recipe
+with elevated privileges, use `sudo "$(command -v just)" install-host-ubuntu`;
+the resolved mise executable is propagated to scripts that invoke `just` again.
+
+Before making changes, the installer identifies its APT packages, Sysbox
+download, service operations, Docker group update, and path-scoped AppArmor
+exception. It requires the exact response `yes`. Treat the script as a
+development convenience and independently review these changes for production.
+
 This installs Docker, downloads the pinned Sysbox CE package for the host architecture, verifies the package checksum, installs Sysbox, restarts Docker, and starts Sysbox services.
 
 Install gVisor `runsc` for the no-KVM Docker-compatible backend:
@@ -47,7 +58,12 @@ Run the full Ubuntu bootstrap:
 just bootstrap-ubuntu
 ```
 
-The bootstrap script installs Node.js, npm, just, the pinned pnpm version, host runtime dependencies, project dependencies, runs verification, builds the included runtime images, and runs `doctor`. If `doctor` reports missing host capabilities, bootstrap exits non-zero after printing the gaps.
+When mise is available, bootstrap runs `mise install` and uses the Node.js,
+pnpm, and `just` versions declared by this repository. Otherwise it installs
+Node.js, npm, and `just` through APT and installs the pinned pnpm version. It
+then installs host runtime and project dependencies, runs verification, builds
+the included runtime images, and runs `doctor`. If `doctor` reports missing
+host capabilities, bootstrap exits non-zero after printing the gaps.
 
 Build the included runtime images:
 
@@ -63,6 +79,22 @@ just smoke
 ```
 
 The smoke test builds the included images, verifies the agent image command environment, exercises the managed Git pull request flow, deploys the secret runtime from an approved ref, and checks the secret runtime health endpoint.
+
+For a fast check that does not contact Docker or create containers, validate
+the generated isolation arguments only:
+
+```bash
+just isolation-check
+```
+
+CI can request the same test result as JSON on stdout:
+
+```bash
+just isolation-check-json
+```
+
+This verifies resource flags and rejects host Docker storage or socket mounts;
+it does not replace the runtime behavior covered by `just smoke`.
 
 Run the full local verification suite:
 
