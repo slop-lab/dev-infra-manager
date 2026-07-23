@@ -82,7 +82,7 @@ Expected markers:
 - Runtime data mount to `/var/lib/docker` by default.
 - `DEV_INFRA_NESTED_ENGINE=docker`
 - `DEV_INFRA_START_DOCKERD=1`
-- `DEV_INFRA_DOCKERD_FLAGS=--iptables=false --ip6tables=false --feature containerd-snapshotter=false`
+- `DEV_INFRA_DOCKERD_FLAGS=--feature containerd-snapshotter=false`
 
 ## Rootless Podman Args
 

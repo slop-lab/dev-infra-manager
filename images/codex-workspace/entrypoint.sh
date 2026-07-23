@@ -6,7 +6,7 @@ chown -R agent:agent /home/agent /var/lib/docker
 chmod 0700 /home/agent/.codex
 
 dockerd --host=unix:///var/run/docker.sock --data-root=/var/lib/docker \
-  --iptables=false --ip-masq=false --group=agent >/var/log/dockerd.log 2>&1 &
+  --group=agent >/var/log/dockerd.log 2>&1 &
 for _ in $(seq 1 60); do
   if docker info >/dev/null 2>&1; then
     chgrp agent /var/run/docker.sock

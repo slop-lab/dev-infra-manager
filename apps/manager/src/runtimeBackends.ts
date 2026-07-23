@@ -40,7 +40,7 @@ export function getRuntimePlan(config: DevInfraConfig, metadata: JobMetadata): R
         env: {
           DEV_INFRA_NESTED_ENGINE: "docker",
           DEV_INFRA_START_DOCKERD: "1",
-          DEV_INFRA_DOCKERD_FLAGS: "--iptables=false --ip6tables=false --feature containerd-snapshotter=false"
+          DEV_INFRA_DOCKERD_FLAGS: "--feature containerd-snapshotter=false"
         },
         image: config.agent.image
       };

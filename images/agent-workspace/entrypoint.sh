@@ -8,8 +8,6 @@ if [[ "${DEV_INFRA_START_DOCKERD:-1}" == "1" ]]; then
   dockerd \
     --host=unix:///var/run/docker.sock \
     --data-root=/var/lib/docker \
-    --iptables=false \
-    --ip-masq=false \
     --group=agent \
     ${DEV_INFRA_DOCKERD_FLAGS:-} \
     >/var/log/dockerd.log 2>&1 &

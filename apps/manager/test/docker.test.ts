@@ -64,7 +64,7 @@ describe("docker command builder", () => {
     const args = buildAgentDockerArgs(config, metadata, { command: ["bash"] });
     expect(args).toContain("runsc");
     expect(args).toContain("SYS_ADMIN");
-    expect(args).toContain("DEV_INFRA_DOCKERD_FLAGS=--iptables=false --ip6tables=false --feature containerd-snapshotter=false");
+    expect(args).toContain("DEV_INFRA_DOCKERD_FLAGS=--feature containerd-snapshotter=false");
   });
 
   it("builds rootless Podman args without a Docker daemon", () => {

@@ -28,8 +28,6 @@ Startup behavior:
 4. Start `dockerd` with:
    - `--host=unix:///var/run/docker.sock`
    - `--data-root=/var/lib/docker`
-   - `--iptables=false`
-   - `--ip-masq=false`
    - `--group=agent`
    - plus `DEV_INFRA_DOCKERD_FLAGS`
 5. Wait up to 60 seconds for `docker info`.

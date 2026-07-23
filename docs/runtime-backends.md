@@ -32,7 +32,7 @@ Properties:
 - Uses Docker with the configured gVisor runtime, normally `runsc`.
 - Starts an inner Docker daemon inside the same agent workspace image used by Sysbox.
 - Adds the capabilities required for Docker-in-gVisor operation.
-- Sets inner Docker daemon flags that avoid iptables and Docker 29 containerd snapshotter issues.
+- Disables the Docker 29 containerd snapshotter for nested daemon compatibility.
 - Does not require KVM.
 - Does not mount the host Docker socket.
 

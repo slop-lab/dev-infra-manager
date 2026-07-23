@@ -34,6 +34,22 @@ workspace-verify:
     pnpm run workspace:test
     pnpm run workspace:build
 
+# Verification that is safe to run from the nested development container.
+# It deliberately avoids Sysbox, KVM, loop devices, systemd, and sudo.
+container-verify:
+    pnpm run workspace:check
+    pnpm run workspace:test
+    pnpm run workspace:build
+    pnpm run cli -- config validate --config config.example.json
+    bash scripts/container-cgroup-smoke.sh
+
+# Heavier nested-Docker smoke checks available without Sysbox in this container.
+container-runtime-verify:
+    just container-verify
+    just build-codex-workspace
+    docker build --force-rm -t dev-infra-agent-workspace:latest images/agent-workspace
+    bash scripts/container-inner-docker-smoke.sh
+
 isolation-check:
     pnpm --filter @dim/manager exec vitest run test/docker.test.ts
 

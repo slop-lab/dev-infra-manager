@@ -102,6 +102,31 @@ Run the full local verification suite:
 just verify
 ```
 
+When developing from inside a nested container that can reach a Docker daemon
+but does not provide Sysbox, KVM, loop devices, systemd, or sudo, run:
+
+```bash
+just container-verify
+```
+
+This runs monorepo type checks, unit tests, builds, configuration validation,
+and an runc-based cgroup v2 smoke test. The smoke test verifies initial and
+live-updated CPU, memory, swap, and PID values on the container's leaf cgroup
+without depending on host-only runtime checks. These values are not resource
+guarantees: an ancestor cgroup may impose a lower effective limit.
+
+For the heavier image-build and nested-Docker check, run:
+
+```bash
+just container-runtime-verify
+```
+
+This additionally builds both Docker-in-Docker workspace images and runs them
+with privileged runc solely as a nested-container compatibility smoke test. It
+checks the default containerd snapshotter path, the gVisor-compatible legacy
+`overlay2` path, and outbound networking from a container created by each
+inner daemon. It does not claim to validate the production Sysbox boundary.
+
 Create a starter configuration:
 
 ```bash
