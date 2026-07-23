@@ -49,6 +49,12 @@ sample-config:
 build-agent-image:
     sudo docker build -t dev-infra-agent-workspace:latest images/agent-workspace
 
+codex-workspace *args:
+    pnpm run codex-workspace -- {{ args }}
+
+build-codex-workspace:
+    pnpm run codex-workspace -- build
+
 build-agent-podman-image:
     sudo docker build -t dev-infra-agent-workspace-podman:latest images/agent-workspace-podman
 

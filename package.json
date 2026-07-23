@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "cli": "pnpm --filter @dim/manager run cli --",
+    "codex-workspace": "pnpm --filter @dim/codex-workspace run cli",
     "workspace:check": "pnpm --recursive run check",
     "workspace:test": "pnpm --recursive run test",
     "workspace:build": "pnpm --recursive run build"

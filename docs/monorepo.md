@@ -7,7 +7,8 @@ This repository is a pnpm workspace.
 ```text
 .
 ├── apps/
-│   └── manager/         current host-side CLI and controller
+│   ├── manager/         current host-side CLI and controller
+│   └── codex-workspace/ host-side isolated Codex launcher
 ├── packages/            provider-neutral contracts and adapters
 ├── deploy/              deployment manifests and service templates
 ├── images/              runtime image definitions
@@ -68,7 +69,8 @@ tunnel product.
 Before adding Gitea or the entry API, the next implementation target is a
 Sysbox workspace in which the Codex CLI itself runs. It should include:
 
-- Codex CLI, mise, Node.js, pnpm, and just.
+- Codex CLI, Node.js, pnpm, and just. Host-side convenience commands may use
+  mise, but the container image deliberately does not depend on mise or shims.
 - The repository mounted at `/workspace` without the host Docker socket.
 - A separate inner Docker daemon and image store.
 - Outer CPU, memory, PID, disk, and timeout enforcement.
@@ -78,6 +80,28 @@ Sysbox workspace in which the Codex CLI itself runs. It should include:
 
 This environment is the preferred place to implement the later Gitea and
 optional entry-service work.
+
+The initial launcher is available as `just codex-workspace`. Build and inspect
+it with:
+
+```bash
+just codex-workspace build
+just codex-workspace doctor
+```
+
+Authenticate into its dedicated home, then start Codex with full access inside
+the outer Sysbox boundary:
+
+```bash
+just codex-workspace login
+just codex-workspace run --yes
+```
+
+The launcher bind-mounts only the selected worktree, a dedicated Codex home,
+and a dedicated inner-Docker store. It never mounts the host Docker socket.
+CPU, memory, PID, and wall-clock limits are applied to the outer container.
+Directory-backed state does not provide a hard disk quota; use the manager's
+loopback storage backend when a hard aggregate disk limit is required.
 
 ## State And Credentials
 
