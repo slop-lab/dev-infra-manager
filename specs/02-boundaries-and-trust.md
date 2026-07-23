@@ -16,7 +16,9 @@ The host/controller boundary is trusted because it can create job filesystems, r
 
 Agent workspace containers:
 
-- Must not receive raw secrets.
+- Must not receive raw product/runtime secrets. It may receive an explicit
+  constrained infrastructure capability such as the internal Git writer
+  credential.
 - Must receive only approved non-secret environment variables.
 - May receive Git-related environment variables needed to push proposals.
 - Must not mount the host Docker socket.

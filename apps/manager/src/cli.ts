@@ -20,6 +20,10 @@ import {
 import { deploySecretRuntime } from "./secretDeploy.js";
 import { runController } from "./controller.js";
 import { runAgentJob } from "./agentJob.js";
+import { lifecycleOptions } from "./lifecycleOptions.js";
+import { listRegisteredRepos, registerRepo, showRegisteredRepo } from "./repoRegistry.js";
+import { discardWorkspace, runWorkspace, showWorkspace, stopWorkspace } from "./workspaceLifecycle.js";
+import { ensureGitea } from "./gitea.js";
 
 interface ParsedArgs {
   command: string[];
@@ -59,6 +63,83 @@ async function main(argv: string[]): Promise<void> {
     if (checks.some((check) => !check.ok)) {
       process.exitCode = 1;
     }
+    return;
+  }
+
+  if (command === "repo" && subcommand === "register") {
+    const sourcePath = parsed.command[2];
+    if (!sourcePath) throw new UserError("repo register requires a bare repository path");
+    const record = await registerRepo(runner, lifecycleOptions(), {
+      name: requiredFlag(parsed, "name"),
+      sourcePath: invocationPath(sourcePath),
+      protectedPatterns: commaSeparatedFlag(parsed, "protect", "main")
+    });
+    console.log(JSON.stringify(record, null, 2));
+    return;
+  }
+
+  if (command === "gitea" && subcommand === "ensure") {
+    await ensureGitea(runner, lifecycleOptions());
+    console.log("Gitea is ready at the configured local endpoint");
+    return;
+  }
+
+  if (command === "gitea" && subcommand === "credentials") {
+    if (!booleanFlag(parsed, "show-secrets", false)) {
+      throw new UserError("gitea credentials exposes login secrets; repeat with --show-secrets");
+    }
+    console.log(JSON.stringify(await ensureGitea(runner, lifecycleOptions()), null, 2));
+    return;
+  }
+
+  if (command === "repo" && subcommand === "list") {
+    console.log(JSON.stringify(await listRegisteredRepos(lifecycleOptions()), null, 2));
+    return;
+  }
+
+  if (command === "repo" && subcommand === "show") {
+    const name = parsed.command[2];
+    if (!name) throw new UserError("repo show requires a repository name");
+    console.log(JSON.stringify(await showRegisteredRepo(lifecycleOptions(), name), null, 2));
+    return;
+  }
+
+  if (command === "workspace" && subcommand === "run") {
+    const repo = parsed.command[2];
+    const name = parsed.command[3];
+    if (!repo || !name) throw new UserError("workspace run requires REPO and WORKSPACE");
+    const gitUserName = optionalStringFlag(parsed, "git-user-name");
+    const gitUserEmail = optionalStringFlag(parsed, "git-user-email");
+    process.exitCode = await runWorkspace(runner, lifecycleOptions(), {
+      repo,
+      name,
+      command: parsed.command.slice(4),
+      ...(gitUserName === undefined ? {} : { gitUserName }),
+      ...(gitUserEmail === undefined ? {} : { gitUserEmail }),
+      interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY)
+    });
+    return;
+  }
+
+  if (command === "workspace" && subcommand === "show") {
+    const name = parsed.command[2];
+    if (!name) throw new UserError("workspace show requires a workspace name");
+    console.log(JSON.stringify(await showWorkspace(lifecycleOptions(), name), null, 2));
+    return;
+  }
+
+  if (command === "workspace" && subcommand === "stop") {
+    const name = parsed.command[2];
+    if (!name) throw new UserError("workspace stop requires a workspace name");
+    await stopWorkspace(runner, lifecycleOptions(), name);
+    return;
+  }
+
+  if (command === "workspace" && subcommand === "discard") {
+    const name = parsed.command[2];
+    if (!name) throw new UserError("workspace discard requires a workspace name");
+    if (!booleanFlag(parsed, "yes", false)) throw new UserError("workspace discard permanently deletes unpushed changes; repeat with --yes");
+    await discardWorkspace(runner, lifecycleOptions(), name);
     return;
   }
 
@@ -270,6 +351,15 @@ function requiredFlag(args: ParsedArgs, name: string): string {
   return value;
 }
 
+function optionalStringFlag(args: ParsedArgs, name: string): string | undefined {
+  const value = args.flags.get(name);
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || value.length === 0) {
+    throw new UserError(`--${name} requires a value`);
+  }
+  return value;
+}
+
 function booleanFlag(args: ParsedArgs, name: string, fallback: boolean): boolean {
   const value = args.flags.get(name);
   if (value === undefined) {
@@ -297,6 +387,12 @@ function numericFlagWithDefault(args: ParsedArgs, name: string, fallback: number
   return numericFlag(args, name);
 }
 
+function commaSeparatedFlag(args: ParsedArgs, name: string, fallback: string): string[] {
+  const values = stringFlag(args, name, fallback).split(",").map((value) => value.trim()).filter(Boolean);
+  if (values.length === 0) throw new UserError(`--${name} must contain at least one value`);
+  return values;
+}
+
 function printHelp(): void {
   console.log(`dev-infra-manager
 
@@ -304,6 +400,15 @@ Usage:
   dim init-config [--output dev-infra.config.json]
   dim doctor [--config dev-infra.config.json]
   dim config validate [--config dev-infra.config.json]
+  dim repo register --name NAME [--protect main,release/*] /path/to/bare/repo.git
+  dim repo list
+  dim repo show NAME
+  dim gitea ensure
+  dim gitea credentials --show-secrets
+  dim workspace run REPO WORKSPACE [--git-user-name NAME] [--git-user-email EMAIL] [-- COMMAND...]
+  dim workspace show WORKSPACE
+  dim workspace stop WORKSPACE
+  dim workspace discard WORKSPACE --yes
   dim job prepare --job-id ID [--profile default] [--config dev-infra.config.json] [--dry-run]
   dim job cleanup --job-id ID [--config dev-infra.config.json] [--dry-run] [--keep-disk]
   dim job run --job-id ID [--profile default] [--config dev-infra.config.json] [--sudo=false] [--keep-disk] [-- COMMAND...]

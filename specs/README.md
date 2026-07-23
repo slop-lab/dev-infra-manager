@@ -44,6 +44,7 @@ Feature specifications:
 - [CLI Contract](10-cli-contract.md)
 - [Doctor Checks](11-doctor-checks.md)
 - [Verification](12-verification.md)
+- [Repository and Workspace Lifecycle](13-repo-workspace-lifecycle.md)
 
 ### Local Details
 

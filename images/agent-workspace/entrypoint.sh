@@ -3,6 +3,7 @@ set -euo pipefail
 
 mkdir -p /workspace /var/lib/docker /var/run /home/agent
 chown -R agent:agent /workspace /home/agent /var/lib/docker
+rm -f /var/run/docker.pid /var/run/docker.sock
 
 if [[ "${DEV_INFRA_START_DOCKERD:-1}" == "1" ]]; then
   dockerd \

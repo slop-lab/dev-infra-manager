@@ -126,6 +126,8 @@ with privileged runc solely as a nested-container compatibility smoke test. It
 checks the default containerd snapshotter path, the gVisor-compatible legacy
 `overlay2` path, and outbound networking from a container created by each
 inner daemon. It does not claim to validate the production Sysbox boundary.
+It also exercises the disposable Gitea repository and persistent workspace
+lifecycle described in [Repository-backed Workspaces](repo-workspaces.md).
 
 Create a starter configuration:
 

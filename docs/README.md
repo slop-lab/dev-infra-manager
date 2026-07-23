@@ -12,6 +12,7 @@ The documentation is split by concern:
 - [Configuration](configuration.md): configuration file reference.
 - [Runtime Backends](runtime-backends.md): Sysbox, gVisor, rootless Podman, loopback, and directory backend selection.
 - [Runtime Images](runtime-images.md): included agent workspace and secret runtime images.
+- [Repository-backed Workspaces](repo-workspaces.md): local Gitea registration, persistent workspaces, reconciliation, and Git environment.
 - [Status](status.md): current progress and known future work.
 
 Implementation-oriented normative specifications live in [../specs/README.md](../specs/README.md).

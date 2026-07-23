@@ -109,3 +109,16 @@ See [docs/README.md](docs/README.md) for the full documentation index.
 See [specs/README.md](specs/README.md) for implementation-oriented specifications.
 See [docs/monorepo.md](docs/monorepo.md) for workspace boundaries and the
 planned optional Git-host and ingress provider layout.
+
+Register an existing bare repository with the local Gitea service and run a
+persistent workspace whose checkout exists only inside its container:
+
+```bash
+just build-codex-workspace
+just install-dim-local
+dim repo register --name project /path/to/project.git
+dim workspace run project work-1 bash
+```
+
+See [docs/repo-workspaces.md](docs/repo-workspaces.md) for lifecycle,
+credential, reconciliation, and container-only verification details.

@@ -49,6 +49,13 @@ container-runtime-verify:
     just build-codex-workspace
     docker build --force-rm -t dev-infra-agent-workspace:latest images/agent-workspace
     bash scripts/container-inner-docker-smoke.sh
+    bash scripts/container-lifecycle-smoke.sh
+
+# Build and link the dim CLI for use from other local projects.
+install-dim-local:
+    pnpm --filter @dim/manager run build
+    chmod +x apps/manager/dist/cli.js
+    dim_bin_dir="$(node -p 'require("node:path").join(require("node:os").homedir(), ".local/bin")')"; install -d "$dim_bin_dir"; ln -sfn "{{ justfile_directory() }}/apps/manager/dist/cli.js" "$dim_bin_dir/dim"; echo "Installed $dim_bin_dir/dim (ensure $dim_bin_dir is in PATH)"
 
 isolation-check:
     pnpm --filter @dim/manager exec vitest run test/docker.test.ts

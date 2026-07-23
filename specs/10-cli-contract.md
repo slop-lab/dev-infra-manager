@@ -186,6 +186,65 @@ dim controller run [--config dev-infra.config.json] [--once] [--interval-seconds
 
 Runs controller ticks once or continuously.
 
+### `repo register`
+
+Usage:
+
+```bash
+dim repo register --name NAME [--protect main,release/*] /path/to/bare.git
+```
+
+Registers and imports an existing bare repository into the managed local
+Gitea service. The source path is not retained as a runtime mount.
+
+### `repo list` and `repo show`
+
+Usage:
+
+```bash
+dim repo list
+dim repo show NAME
+```
+
+Print role-neutral repository registry records as JSON.
+
+### `workspace run`
+
+Usage:
+
+```bash
+dim workspace run REPO WORKSPACE \
+  [--git-user-name NAME] [--git-user-email EMAIL] [-- COMMAND...]
+```
+
+Reconciles a persistent top-level workspace, clones the registered repository
+inside it, and executes the command from the clone. Commands with flags must
+follow `--`.
+
+### `workspace show`, `stop`, and `discard`
+
+Usage:
+
+```bash
+dim workspace show WORKSPACE
+dim workspace stop WORKSPACE
+dim workspace discard WORKSPACE --yes
+```
+
+`discard` requires confirmation and removes the workspace container, its
+inner-Docker volume, and metadata without deleting the registered repository.
+
+### `gitea ensure` and `gitea credentials`
+
+Usage:
+
+```bash
+dim gitea ensure
+dim gitea credentials --show-secrets
+```
+
+Credential output requires an explicit secret-disclosure flag.
+
 ## Verification
 
 Required verification:

@@ -10,7 +10,9 @@ Documented decisions:
 - This infrastructure repository is organized as a monorepo.
 - Agent workspace containers are untrusted.
 - Secret-bearing containers are separate from agent workspace containers.
-- Raw secrets are never injected into agent workspace containers.
+- Raw product/runtime secrets are never injected into agent workspace
+  containers; the internal Git writer credential is an explicit constrained
+  capability that cannot push protected branches.
 - Agents can receive approved environment variables and Git configuration for job execution.
 - Agents can create nested containers through selected runtime backends.
 - Agent workspaces are ephemeral per job.
@@ -54,6 +56,17 @@ Implemented:
   aggregate cgroup limits, nested Docker execution, managed Git PR flow,
   approved-ref secret deployment, and health check.
 - Unit tests for size parsing, config validation, job planning, storage backend planning, duplicate job protection, runtime backend command generation, doctor runtime execution checks, one-shot agent job orchestration, managed Git pull request flow, secret runtime deployment planning, controller state handling, and controller deploy locking.
+- Docker-managed local Gitea service with generated admin and shared-writer
+  credentials, loopback-only HTTP access, and persistent volume storage.
+- Role-neutral `repo register`, `repo list`, and `repo show` commands that
+  import an existing bare repository without retaining a host mount.
+- Persistent `workspace run`, `show`, `stop`, and confirmed `discard`
+  lifecycle with metadata-first journaling, labels, prefixes, reconciliation,
+  and a named inner-Docker volume.
+- Container-internal Git clone and identity/credential environment injection
+  without credential-bearing remote URLs.
+- Container lifecycle smoke coverage for free branch pushes, protected branch
+  rejection, nested containers, stop/start persistence, and cleanup.
 
 Current environment verification:
 
@@ -81,8 +94,9 @@ Current environment verification:
 
 ## Future Work
 
-- Add a Sysbox-based workspace image and launcher that run Codex CLI, mise,
-  Node.js, pnpm, just, and nested Docker inside the isolated agent boundary.
+- Validate the repository-backed workspace lifecycle end-to-end on the outer
+  Sysbox host; the current nested environment covers the explicit privileged
+  runc compatibility path.
 - Add loopback-storage integration tests on a host with loop device setup available.
 - Add gVisor integration tests on a host with `runsc` registered as a Docker runtime.
 - Add rootless Podman integration tests on a host with `/dev/fuse` exposed.

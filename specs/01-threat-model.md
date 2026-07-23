@@ -40,7 +40,10 @@ The agent is assumed to be capable of:
 
 ## Required Defenses
 
-- Do not inject raw secrets into agent environment variables, files, volumes, or images.
+- Do not inject raw product/runtime secrets into agent environment variables,
+  files, volumes, or images. Internal capability credentials explicitly
+  granted to the agent, such as an unprotected-branch Git writer, must be
+  scoped so disclosure cannot grant protected-ref or runtime-secret access.
 - Do not mount the host Docker socket into agent workspace containers.
 - Do not mount secret-bearing volumes into agent workspace containers.
 - Block direct pushes to protected refs in managed bare repositories.

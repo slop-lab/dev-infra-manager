@@ -25,7 +25,10 @@ The system must prevent that agent from:
 - Agent workspace containers are untrusted.
 - Nested containers created by agents are untrusted.
 - Secret-bearing containers are trusted only when built and deployed from reviewed source.
-- Raw secrets must never be injected into agent workspace containers.
+- Raw product/runtime secrets must never be injected into agent workspace
+  containers. A constrained infrastructure capability such as the internal
+  Gitea writer credential may be injected when its server-side permissions
+  cannot modify protected refs or secret-bearing runtime state.
 - Secret-bearing runtime deployment must use the configured approved Git ref.
 - Protected Git refs must reject direct push through managed bare repository hooks.
 - Managed pull request merge is the path that updates protected refs in normal operation.

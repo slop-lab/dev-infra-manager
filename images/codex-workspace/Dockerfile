@@ -12,12 +12,14 @@ RUN apk add --no-cache bash ca-certificates coreutils curl git jq just nodejs np
 ENV HOME=/home/agent \
     CODEX_HOME=/home/agent/.codex \
     DOCKER_TLS_CERTDIR="" \
-    DOCKER_HOST=unix:///var/run/docker.sock
+    DOCKER_HOST=unix:///var/run/docker.sock \
+    PATH=/home/agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 RUN npm install --global pnpm@10 @openai/codex
 
 COPY entrypoint.sh /usr/local/bin/dim-codex-entrypoint
-RUN chmod +x /usr/local/bin/dim-codex-entrypoint
+COPY git-askpass.sh /usr/local/bin/dim-git-askpass
+RUN chmod +x /usr/local/bin/dim-codex-entrypoint /usr/local/bin/dim-git-askpass
 
 WORKDIR /workspace
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/dim-codex-entrypoint"]
