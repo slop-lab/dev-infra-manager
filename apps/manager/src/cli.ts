@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { loadConfig, writeDefaultConfig } from "./config.js";
 import { UserError } from "./errors.js";
 import { buildAgentTimeoutArgs, buildAgentTimeoutCommand } from "./docker.js";
@@ -27,6 +27,12 @@ interface ParsedArgs {
 }
 
 const runner = new ProcessRunner();
+const invocationDirectory = resolve(process.env.INIT_CWD ?? process.cwd());
+process.chdir(invocationDirectory);
+
+function invocationPath(value: string): string {
+  return resolve(invocationDirectory, value);
+}
 
 async function main(argv: string[]): Promise<void> {
   const parsed = parseArgs(argv);
@@ -38,7 +44,7 @@ async function main(argv: string[]): Promise<void> {
   }
 
   if (command === "init-config") {
-    const output = stringFlag(parsed, "output", "dev-infra.config.json");
+    const output = invocationPath(stringFlag(parsed, "output", "dev-infra.config.json"));
     await mkdir(dirname(output), { recursive: true });
     await writeDefaultConfig(output);
     console.log(`Wrote ${output}`);
@@ -46,7 +52,7 @@ async function main(argv: string[]): Promise<void> {
   }
 
   if (command === "doctor") {
-    const checks = await runDoctor(runner, parsed.flags.has("config") ? await loadConfig(stringFlag(parsed, "config", "dev-infra.config.json")) : undefined);
+    const checks = await runDoctor(runner, parsed.flags.has("config") ? await loadConfig(invocationPath(stringFlag(parsed, "config", "dev-infra.config.json"))) : undefined);
     for (const check of checks) {
       console.log(`${check.ok ? "ok" : "fail"}\t${check.name}\t${check.detail}`);
     }
@@ -56,7 +62,7 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
 
-  const configPath = stringFlag(parsed, "config", "dev-infra.config.json");
+  const configPath = invocationPath(stringFlag(parsed, "config", "dev-infra.config.json"));
   const config = await loadConfig(configPath);
 
   if (command === "config" && subcommand === "validate") {
