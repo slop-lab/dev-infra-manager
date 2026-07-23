@@ -25,6 +25,8 @@ Documented decisions:
 
 Implemented:
 
+- pnpm monorepo workspace with the manager under `apps/manager` and reserved
+  `apps/` and `packages/` boundaries for optional hosting services.
 - TypeScript project using pnpm.
 - just recipes for install, host install, check, test, build, verify, doctor, sample config generation, and runtime image builds.
 - CLI entrypoint with `init-config`, `doctor`, `config validate`, `job prepare`, `job cleanup`, `job run`, `agent run-command`, and `agent run`.
@@ -79,6 +81,8 @@ Current environment verification:
 
 ## Future Work
 
+- Add a Sysbox-based workspace image and launcher that run Codex CLI, mise,
+  Node.js, pnpm, just, and nested Docker inside the isolated agent boundary.
 - Add loopback-storage integration tests on a host with loop device setup available.
 - Add gVisor integration tests on a host with `runsc` registered as a Docker runtime.
 - Add rootless Podman integration tests on a host with `/dev/fuse` exposed.

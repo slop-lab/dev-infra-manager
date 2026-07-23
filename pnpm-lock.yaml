@@ -6,7 +6,9 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  apps/manager:
     devDependencies:
       '@types/node':
         specifier: 22.15.34

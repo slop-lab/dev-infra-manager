@@ -6,9 +6,9 @@ Install flow:
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm run build
+pnpm --filter @dim/manager run build
 sudo mkdir -p /opt/dev-infra-manager /etc/dev-infra-manager /var/lib/dev-infra-manager
-sudo rsync -a dist package.json pnpm-lock.yaml /opt/dev-infra-manager/
+sudo rsync -a apps/manager/dist/ /opt/dev-infra-manager/dist/
 sudo cp config.example.json /etc/dev-infra-manager/config.json
 sudo cp deploy/systemd/dev-infra-controller.service /etc/systemd/system/dev-infra-controller.service
 sudo systemctl daemon-reload

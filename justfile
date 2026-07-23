@@ -16,24 +16,29 @@ bootstrap-ubuntu:
     JUST_BIN="{{ just_executable() }}" bash scripts/bootstrap-ubuntu.sh
 
 check:
-    pnpm run check
+    pnpm --filter @dim/manager run check
 
 test:
-    pnpm run test
+    pnpm --filter @dim/manager run test
 
 build:
-    pnpm run build
+    pnpm --filter @dim/manager run build
 
 verify:
-    pnpm run check
-    pnpm run test
-    pnpm run build
+    pnpm --filter @dim/manager run check
+    pnpm --filter @dim/manager run test
+    pnpm --filter @dim/manager run build
+
+workspace-verify:
+    pnpm run workspace:check
+    pnpm run workspace:test
+    pnpm run workspace:build
 
 isolation-check:
-    pnpm exec vitest run test/docker.test.ts
+    pnpm --filter @dim/manager exec vitest run test/docker.test.ts
 
 isolation-check-json:
-    pnpm exec vitest run test/docker.test.ts --reporter=json
+    pnpm --filter @dim/manager exec vitest run test/docker.test.ts --reporter=json
 
 doctor:
     pnpm run cli -- doctor

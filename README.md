@@ -107,3 +107,5 @@ pnpm run cli -- controller run --config config.example.json --once --dry-run
 
 See [docs/README.md](docs/README.md) for the full documentation index.
 See [specs/README.md](specs/README.md) for implementation-oriented specifications.
+See [docs/monorepo.md](docs/monorepo.md) for workspace boundaries and the
+planned optional Git-host and ingress provider layout.

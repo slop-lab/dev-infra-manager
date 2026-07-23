@@ -8,9 +8,6 @@
     "exactOptionalPropertyTypes": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    "outDir": "dist",
-    "rootDir": "."
-  },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+    "skipLibCheck": true
+  }
 }
