@@ -3,7 +3,7 @@ import { chmod, mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { canEnterRunningContainer, containerName, dockerExecArgs, dockerRunArgs, statePaths, timedCommand, type WorkspaceOptions } from "./docker.js";
+import { canEnterRunningContainer, containerName, dockerExecArgs, dockerStartArgs, dockerUpdateArgs, statePaths, timedCommand, type ResourceUpdateSelection, type WorkspaceOptions } from "./docker.js";
 
 const argv = process.argv.slice(2);
 if (argv[0] === "--") argv.shift();
@@ -50,7 +50,7 @@ async function prepare(options: WorkspaceOptions) {
   return state;
 }
 function printHelp() {
-  console.log(`dim-codex build|shell|login|run|doctor|clean [options] [-- Codex args]
+  console.log(`dim-codex build|shell|login|run|update|doctor|clean [options] [-- Codex args]
 
 run uses Codex full access inside a Sysbox container. It does not mount the host Docker socket.
 Common options: --name NAME --workspace PATH --state-root PATH --cpus 2 --memory 4g
@@ -66,6 +66,11 @@ function isContainerRunning(name: string): boolean {
 
 async function main() {
   if (action === "help" || action === "--help") return printHelp();
+  const resourceSelection: ResourceUpdateSelection = {
+    cpus: argv.includes("--cpus"),
+    memory: argv.includes("--memory"),
+    pids: argv.includes("--pids")
+  };
   const options = defaults();
   if (!Number.isFinite(options.timeoutSeconds) || options.timeoutSeconds < 0) throw new Error("--timeout must be a non-negative integer");
   const yes = has("--yes");
@@ -100,6 +105,14 @@ async function main() {
     }
     return;
   }
+  if (action === "update") {
+    if (!isContainerRunning(options.name)) throw new Error(`container ${containerName(options.name)} is not running`);
+    if (!resourceSelection.cpus && !resourceSelection.memory && !resourceSelection.pids) {
+      throw new Error("update requires at least one of --cpus, --memory, or --pids");
+    }
+    process.exitCode = await run("docker", dockerUpdateArgs(options, resourceSelection));
+    return;
+  }
   await prepare(options);
   let command: string[];
   if (action === "shell") command = ["bash", ...argv];
@@ -109,9 +122,24 @@ async function main() {
     command = ["codex", "--dangerously-bypass-approvals-and-sandbox", ...argv.filter((arg) => arg !== "--")];
   } else throw new Error(`unknown action: ${action}`);
   const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
-  const args = canEnterRunningContainer(action) && isContainerRunning(options.name)
-    ? dockerExecArgs(options.name, command, interactive)
-    : dockerRunArgs(options, command, interactive);
+  let running = isContainerRunning(options.name);
+  if (running && (resourceSelection.cpus || resourceSelection.memory || resourceSelection.pids)) {
+    const updateCode = await run("docker", dockerUpdateArgs(options, resourceSelection));
+    if (updateCode !== 0) {
+      process.exitCode = updateCode;
+      return;
+    }
+  }
+  if (!running && canEnterRunningContainer(action)) {
+    const startCode = await run("docker", dockerStartArgs(options));
+    if (startCode !== 0) {
+      process.exitCode = startCode;
+      return;
+    }
+    running = true;
+  }
+  if (!running) throw new Error(`container ${containerName(options.name)} is not running`);
+  const args = dockerExecArgs(options.name, command, interactive);
   const [bin, timedArgs] = timedCommand(options, args);
   process.exitCode = await run(bin, timedArgs);
 }

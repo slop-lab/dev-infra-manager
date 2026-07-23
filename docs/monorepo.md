@@ -97,9 +97,17 @@ just codex-workspace login
 just codex-workspace run --yes
 ```
 
-If that named workspace is already running, the `shell`, `login`, and `run`
-commands execute their process inside the existing container instead of
-attempting to create a conflicting container.
+The outer container runs a stable keepalive process. The `shell`, `login`, and
+`run` commands always execute through `docker exec`, so exiting one shell does
+not terminate other workspace sessions. If the named container does not exist,
+these commands start it in detached mode first.
+
+Explicit resource options update an existing container before entering it, or
+they can be changed independently:
+
+```bash
+just codex-workspace update --name dim-0 --cpus 16 --memory 32g --pids 16384
+```
 
 The launcher bind-mounts only the selected worktree, a dedicated Codex home,
 and a dedicated inner-Docker store. It never mounts the host Docker socket.
