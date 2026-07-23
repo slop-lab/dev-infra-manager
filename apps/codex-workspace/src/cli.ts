@@ -76,7 +76,7 @@ async function main() {
   const yes = has("--yes");
   const imageDir = path.resolve(import.meta.dirname, "../../../images/codex-workspace");
   if (action === "build") {
-    process.exitCode = await run("docker", ["build", "--build-arg", `AGENT_UID=${process.getuid?.() ?? 1000}`, "--build-arg", `AGENT_GID=${process.getgid?.() ?? 1000}`, "-t", options.image, imageDir]);
+    process.exitCode = await run("docker", ["build", "--force-rm", "--build-arg", `AGENT_UID=${process.getuid?.() ?? 1000}`, "--build-arg", `AGENT_GID=${process.getgid?.() ?? 1000}`, "-t", options.image, imageDir]);
     return;
   }
   if (action === "doctor") {
