@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dockerRunArgs, timedCommand, type WorkspaceOptions } from "../src/docker.js";
+import { canEnterRunningContainer, dockerExecArgs, dockerRunArgs, timedCommand, type WorkspaceOptions } from "../src/docker.js";
 
 const options: WorkspaceOptions = {
   name: "repo", workspace: "/src/repo", stateRoot: "/state", image: "codex:test",
@@ -15,5 +15,21 @@ describe("Codex workspace Docker boundary", () => {
     expect(args.join(" ")).toContain("source=/state/codex-workspaces/repo/inner-docker,target=/var/lib/docker");
     expect(args.join(" ")).not.toContain("/var/run/docker.sock");
     expect(timedCommand(options, args)).toEqual(["timeout", expect.arrayContaining(["900s", "docker"])]);
+  });
+
+  it("opens workspace processes in an existing named container", () => {
+    expect(canEnterRunningContainer("shell")).toBe(true);
+    expect(canEnterRunningContainer("login")).toBe(true);
+    expect(canEnterRunningContainer("run")).toBe(true);
+    expect(canEnterRunningContainer("doctor")).toBe(false);
+    expect(dockerExecArgs("repo", ["bash"], true)).toEqual([
+      "exec", "--interactive", "--tty", "dim-codex-repo", "bash"
+    ]);
+    expect(dockerExecArgs("repo", ["codex", "login"], false)).toEqual([
+      "exec", "dim-codex-repo", "codex", "login"
+    ]);
+    expect(dockerExecArgs("repo", ["codex", "--dangerously-bypass-approvals-and-sandbox"], false)).toEqual([
+      "exec", "dim-codex-repo", "codex", "--dangerously-bypass-approvals-and-sandbox"
+    ]);
   });
 });

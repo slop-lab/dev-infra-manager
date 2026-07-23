@@ -97,6 +97,10 @@ just codex-workspace login
 just codex-workspace run --yes
 ```
 
+If that named workspace is already running, the `shell`, `login`, and `run`
+commands execute their process inside the existing container instead of
+attempting to create a conflicting container.
+
 The launcher bind-mounts only the selected worktree, a dedicated Codex home,
 and a dedicated inner-Docker store. It never mounts the host Docker socket.
 CPU, memory, PID, and wall-clock limits are applied to the outer container.

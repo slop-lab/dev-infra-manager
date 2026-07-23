@@ -28,6 +28,17 @@ export function containerName(name: string): string {
   return `dim-codex-${name}`;
 }
 
+export function dockerExecArgs(name: string, command: string[], interactive: boolean): string[] {
+  const args = ["exec"];
+  if (interactive) args.push("--interactive", "--tty");
+  args.push(containerName(name), ...command);
+  return args;
+}
+
+export function canEnterRunningContainer(action: string): boolean {
+  return action === "shell" || action === "login" || action === "run";
+}
+
 export function dockerRunArgs(
   options: WorkspaceOptions,
   command: string[],

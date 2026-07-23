@@ -3,7 +3,7 @@ import { chmod, mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { containerName, dockerRunArgs, statePaths, timedCommand, type WorkspaceOptions } from "./docker.js";
+import { canEnterRunningContainer, containerName, dockerExecArgs, dockerRunArgs, statePaths, timedCommand, type WorkspaceOptions } from "./docker.js";
 
 const argv = process.argv.slice(2);
 if (argv[0] === "--") argv.shift();
@@ -58,6 +58,12 @@ Common options: --name NAME --workspace PATH --state-root PATH --cpus 2 --memory
 Use --yes to acknowledge full Codex access without an interactive confirmation.`);
 }
 
+function isContainerRunning(name: string): boolean {
+  return spawnSync("docker", ["inspect", "--format", "{{.State.Running}}", containerName(name)], {
+    encoding: "utf8"
+  }).stdout.trim() === "true";
+}
+
 async function main() {
   if (action === "help" || action === "--help") return printHelp();
   const options = defaults();
@@ -102,7 +108,10 @@ async function main() {
     if (!yes) throw new Error("Codex will have full access inside the isolated container; repeat with --yes to continue");
     command = ["codex", "--dangerously-bypass-approvals-and-sandbox", ...argv.filter((arg) => arg !== "--")];
   } else throw new Error(`unknown action: ${action}`);
-  const args = dockerRunArgs(options, command, Boolean(process.stdin.isTTY && process.stdout.isTTY));
+  const interactive = Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  const args = canEnterRunningContainer(action) && isContainerRunning(options.name)
+    ? dockerExecArgs(options.name, command, interactive)
+    : dockerRunArgs(options, command, interactive);
   const [bin, timedArgs] = timedCommand(options, args);
   process.exitCode = await run(bin, timedArgs);
 }
