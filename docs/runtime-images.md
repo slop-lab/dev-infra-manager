@@ -23,3 +23,11 @@ container storage is persisted in the workspace runtime volume at
 
 Neither image receives the host Docker socket or a host checkout. Project
 source is cloned inside the top-level workspace container.
+
+## GitHub Actions QEMU runner
+
+[`images/github-actions-runner-kvm`](../images/github-actions-runner-kvm)
+builds a reviewed Ubuntu qcow2 base image with Sysbox, QEMU, and nested KVM.
+`just run-github-runner-kvm` starts an ephemeral overlay, registers one
+`sysbox,kvm` self-hosted runner job, and discards the overlay afterward. Runner
+registration tokens are passed after boot and are never baked into the image.

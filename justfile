@@ -34,6 +34,18 @@ install-kvm-verify-deps-ubuntu:
     sudo apt-get install -y qemu-system-x86 qemu-utils cloud-image-utils openssh-client
     test -r /dev/kvm -a -w /dev/kvm
 
+# Builds the pinned Sysbox + nested-KVM GitHub Actions QEMU base image.
+build-github-runner-kvm:
+    bash images/github-actions-runner-kvm/build.sh
+
+# Boots the base image without registering it and exercises Sysbox + nested KVM.
+verify-github-runner-kvm:
+    bash images/github-actions-runner-kvm/run.sh --check
+
+# Runs one ephemeral self-hosted Actions job, then deletes the VM overlay.
+run-github-runner-kvm:
+    bash images/github-actions-runner-kvm/run.sh
+
 install-runsc-linux:
     bash scripts/install-runsc-linux.sh
 
