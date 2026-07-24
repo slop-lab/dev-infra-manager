@@ -65,38 +65,44 @@ Repository records do not classify repositories as product, control, or
 secret-handling repositories. Those are contextual roles for a future
 container-group definition.
 
-## Run a workspace
+## Create a workspace
 
-Run a command in a named persistent workspace:
+Bind a registered project repository to a named persistent workspace:
 
 ```bash
-dim workspace run project work-1 bash
-dim workspace run project work-1 -- git status --short
+dim workspace create project work-1 --profile development
 ```
 
-Use `--` before commands that have their own flags.
-
-The first invocation:
+Creation:
 
 1. Writes a `creating` journal record before Docker mutations.
 2. Reconciles the shared Gitea network and service.
 3. Creates a labeled workspace inner-Docker volume.
 4. Creates the labeled top-level workspace container.
 5. Waits for its inner Docker daemon.
-6. Clones the registered repository into
-   `/workspace/repos/<repo>` inside the container.
-7. Marks the journal record `ready`.
+6. Clones the project repository to `/workspace/project`.
+7. Runs the optional `.dim` setup contract.
+8. Marks the journal record `ready`.
 
-Later invocations reuse the same container, clone, and inner-Docker store.
+Later lifecycle commands reuse the same container, clone, and inner-Docker
+store.
 The workspace container has no host checkout bind mount and no host Docker
 socket mount.
+
+Project-owned development images can be built with the workspace's inner
+Docker daemon. The build context is the clone inside the workspace:
+
+```bash
+dim workspace exec work-1 -- docker build -t project-dev .
+dim workspace exec work-1 -- docker run --rm project-dev
+```
 
 Git identity can be supplied through flags or environment variables:
 
 ```bash
 export DIM_GIT_USER_NAME='Agent Name'
 export DIM_GIT_USER_EMAIL='agent@example.invalid'
-dim workspace run project work-1 bash
+dim workspace create project work-1
 ```
 
 The shared Gitea writer username and password are injected as
@@ -114,7 +120,9 @@ Inspect, stop, restart, or discard a workspace:
 ```bash
 dim workspace show work-1
 dim workspace stop work-1
-dim workspace run project work-1 bash
+dim workspace start work-1
+dim workspace run work-1 test
+dim workspace exec work-1 -- bash
 dim workspace discard work-1 --yes
 ```
 
@@ -127,10 +135,21 @@ names use the `dim-` prefix and resources carry `dim.managed`,
 `dim.workspace`, `dim.repo`, and `dim.resource` labels. A later invocation
 adopts matching partial resources, recreates missing resources, and rejects
 unmanaged name collisions. Journal errors remain visible and are retried by
-the next `workspace run`.
+`workspace start`, `workspace setup`, or the matching lifecycle command.
 
 Routes are optional. The initial lifecycle records an empty route list and
 does not create externally reachable routes.
+
+## Project workflow
+
+A workspace is bound to a project once, stores Compose capability profiles in
+workspace metadata, and uses only the optional `.dim` project contract. It
+does not inspect a root `compose.yaml` or use a separate JSON configuration
+file.
+
+See [Project Workspaces](project-workspaces.md) for the commands,
+`.dim/setup.sh`, `.dim/entrypoint.sh`, `.dim/docker-compose.yml`, lifecycle
+behavior, and scaffold.
 
 ## Gitea operation
 
@@ -180,6 +199,9 @@ DIM_WORKSPACE_MEMORY
 DIM_WORKSPACE_PIDS
 ```
 
+Project commands additionally receive `DIM_GIT_BASE_URL`, a managed Gitea
+endpoint routable from nested containers.
+
 ## Container verification
 
 The full nested-container verification available in a development container
@@ -191,4 +213,10 @@ just container-runtime-verify
 
 It includes a disposable Gitea repository and workspace lifecycle test:
 import, clone, Git identity, free branch push, protected branch rejection,
-nested container networking, stop/start persistence, and cleanup.
+nested container networking, stop/start persistence, and cleanup. It also
+creates a separate disposable project repository containing a Dockerfile,
+deletes the seed checkout and bare repository after registration, and verifies
+that only the installed `dim` command is needed to build and run that project
+inside the workspace. A four-repository project smoke also verifies Compose
+capability profiles, project task dispatch, service-owned Git volumes, direct
+nested Gitea clone and push, profile replacement, and cleanup.

@@ -117,8 +117,24 @@ persistent workspace whose checkout exists only inside its container:
 just build-codex-workspace
 just install-dim-local
 dim repo register --name project /path/to/project.git
-dim workspace run project work-1 bash
+dim workspace create project work-1 --profile development
+dim workspace run work-1 codex
+dim workspace exec work-1 -- bash
 ```
+
+The publishable CLI package is `@slop-lab/dim-cli`. Its source manifest remains
+private; the build generates a consumer-facing manifest under `dist`:
+
+```bash
+pnpm --filter @slop-lab/dim-cli run pack:dry-run
+pnpm --filter @slop-lab/dim-cli run publish:package
+mise use -g npm:@slop-lab/dim-cli
+```
+
+The other workspace package names use the
+`@slop-lab/dev-infra-manager-*` prefix and remain private.
 
 See [docs/repo-workspaces.md](docs/repo-workspaces.md) for lifecycle,
 credential, reconciliation, and container-only verification details.
+See [docs/project-workspaces.md](docs/project-workspaces.md) for the
+project-facing `.dim` contract and CLI lifecycle.

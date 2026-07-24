@@ -15,9 +15,9 @@ This specification defines the minimum verification gates for development.
 Current commands:
 
 ```bash
-pnpm --filter @dim/manager run check
-pnpm --filter @dim/manager run test
-pnpm --filter @dim/manager run build
+pnpm --filter @slop-lab/dim-cli run check
+pnpm --filter @slop-lab/dim-cli run test
+pnpm --filter @slop-lab/dim-cli run build
 ```
 
 ## Smoke Gate

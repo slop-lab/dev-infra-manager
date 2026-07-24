@@ -22,12 +22,23 @@ import { runController } from "./controller.js";
 import { runAgentJob } from "./agentJob.js";
 import { lifecycleOptions } from "./lifecycleOptions.js";
 import { listRegisteredRepos, registerRepo, showRegisteredRepo } from "./repoRegistry.js";
-import { discardWorkspace, runWorkspace, showWorkspace, stopWorkspace } from "./workspaceLifecycle.js";
+import {
+  createWorkspace,
+  discardWorkspace,
+  execWorkspace,
+  runWorkspace,
+  setupWorkspace,
+  showWorkspace,
+  startWorkspace,
+  stopWorkspace,
+  updateWorkspace
+} from "./workspaceLifecycle.js";
 import { ensureGitea } from "./gitea.js";
+import { initializeProject } from "./projectScaffold.js";
 
 interface ParsedArgs {
   command: string[];
-  flags: Map<string, string | boolean>;
+  flags: Map<string, string | boolean | Array<string | boolean>>;
 }
 
 const runner = new ProcessRunner();
@@ -104,20 +115,74 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
 
-  if (command === "workspace" && subcommand === "run") {
-    const repo = parsed.command[2];
+  if (command === "project" && subcommand === "init") {
+    const target = await initializeProject(invocationDirectory, booleanFlag(parsed, "force", false));
+    console.log(`Created ${target}`);
+    console.log("Next: review .dim/docker-compose.yml, then register this project's bare repository");
+    return;
+  }
+
+  if (command === "workspace" && subcommand === "create") {
+    const project = parsed.command[2];
     const name = parsed.command[3];
-    if (!repo || !name) throw new UserError("workspace run requires REPO and WORKSPACE");
+    if (!project || !name) throw new UserError("workspace create requires PROJECT and WORKSPACE");
     const gitUserName = optionalStringFlag(parsed, "git-user-name");
     const gitUserEmail = optionalStringFlag(parsed, "git-user-email");
-    process.exitCode = await runWorkspace(runner, lifecycleOptions(), {
-      repo,
+    const record = await createWorkspace(runner, lifecycleOptions(), {
+      project,
       name,
-      command: parsed.command.slice(4),
+      profiles: repeatedStringFlag(parsed, "profile"),
       ...(gitUserName === undefined ? {} : { gitUserName }),
-      ...(gitUserEmail === undefined ? {} : { gitUserEmail }),
+      ...(gitUserEmail === undefined ? {} : { gitUserEmail })
+    });
+    console.log(JSON.stringify(record, null, 2));
+    return;
+  }
+
+  if (command === "workspace" && subcommand === "run") {
+    const name = parsed.command[2];
+    if (!name || !parsed.command[3]) throw new UserError("workspace run requires WORKSPACE and TASK");
+    process.exitCode = await runWorkspace(runner, lifecycleOptions(), {
+      name,
+      command: parsed.command.slice(3),
       interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY)
     });
+    return;
+  }
+
+  if (command === "workspace" && subcommand === "exec") {
+    const name = parsed.command[2];
+    if (!name || !parsed.command[3]) throw new UserError("workspace exec requires WORKSPACE and COMMAND");
+    process.exitCode = await execWorkspace(runner, lifecycleOptions(), {
+      name,
+      command: parsed.command.slice(3),
+      interactive: Boolean(process.stdin.isTTY && process.stdout.isTTY)
+    });
+    return;
+  }
+
+  if (command === "workspace" && subcommand === "setup") {
+    const name = parsed.command[2];
+    if (!name) throw new UserError("workspace setup requires a workspace name");
+    console.log(JSON.stringify(await setupWorkspace(runner, lifecycleOptions(), name), null, 2));
+    return;
+  }
+
+  if (command === "workspace" && subcommand === "update") {
+    const name = parsed.command[2];
+    if (!name) throw new UserError("workspace update requires a workspace name");
+    const clearProfiles = booleanFlag(parsed, "clear-profiles", false);
+    const profilesProvided = parsed.flags.has("profile");
+    if (clearProfiles && profilesProvided) throw new UserError("--clear-profiles cannot be combined with --profile");
+    const profiles = clearProfiles ? [] : profilesProvided ? repeatedStringFlag(parsed, "profile") : undefined;
+    console.log(JSON.stringify(await updateWorkspace(runner, lifecycleOptions(), name, profiles), null, 2));
+    return;
+  }
+
+  if (command === "workspace" && subcommand === "start") {
+    const name = parsed.command[2];
+    if (!name) throw new UserError("workspace start requires a workspace name");
+    console.log(JSON.stringify(await startWorkspace(runner, lifecycleOptions(), name), null, 2));
     return;
   }
 
@@ -172,7 +237,7 @@ async function main(argv: string[]): Promise<void> {
 
   if (command === "job" && subcommand === "prepare") {
     const jobId = requiredFlag(parsed, "job-id");
-    const profile = stringFlag(parsed, "profile", "default");
+    const profile = resourceProfileFlag(parsed);
     const dryRun = booleanFlag(parsed, "dry-run", false);
     const metadata = await prepareJob(config, runner, jobId, profile, dryRun);
     console.log(JSON.stringify(metadata, null, 2));
@@ -189,7 +254,7 @@ async function main(argv: string[]): Promise<void> {
 
   if (command === "job" && subcommand === "run") {
     const jobId = requiredFlag(parsed, "job-id");
-    const profileName = stringFlag(parsed, "profile", "default");
+    const profileName = resourceProfileFlag(parsed);
     const commandArgs = parsed.command.slice(2);
     const exitCode = await runAgentJob(config, runner, {
       jobId,
@@ -289,7 +354,7 @@ async function main(argv: string[]): Promise<void> {
 
 function parseArgs(argv: string[]): ParsedArgs {
   const command: string[] = [];
-  const flags = new Map<string, string | boolean>();
+  const flags = new Map<string, string | boolean | Array<string | boolean>>();
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -310,26 +375,41 @@ function parseArgs(argv: string[]): ParsedArgs {
         throw new UserError(`Invalid flag: ${arg}`);
       }
       if (inlineValue !== undefined) {
-        flags.set(key, inlineValue);
+        appendFlag(flags, key, inlineValue);
         continue;
       }
       const next = argv[index + 1];
       if (next && !next.startsWith("--")) {
-        flags.set(key, next);
+        appendFlag(flags, key, next);
         index += 1;
       } else {
-        flags.set(key, true);
+        appendFlag(flags, key, true);
       }
       continue;
     }
     if (arg.startsWith("-") && arg.length > 1) {
-      flags.set(arg.slice(1), true);
+      appendFlag(flags, arg.slice(1), true);
       continue;
     }
     command.push(arg);
   }
 
   return { command, flags };
+}
+
+function appendFlag(
+  flags: ParsedArgs["flags"],
+  name: string,
+  value: string | boolean
+): void {
+  const existing = flags.get(name);
+  if (existing === undefined) {
+    flags.set(name, value);
+  } else if (Array.isArray(existing)) {
+    existing.push(value);
+  } else {
+    flags.set(name, [existing, value]);
+  }
 }
 
 function stringFlag(args: ParsedArgs, name: string, fallback: string): string {
@@ -360,11 +440,31 @@ function optionalStringFlag(args: ParsedArgs, name: string): string | undefined 
   return value;
 }
 
+function repeatedStringFlag(args: ParsedArgs, name: string): string[] {
+  const value = args.flags.get(name);
+  if (value === undefined) return [];
+  const values = Array.isArray(value) ? value : [value];
+  if (values.some((entry) => typeof entry !== "string" || entry.length === 0)) {
+    throw new UserError(`--${name} requires a value`);
+  }
+  return values as string[];
+}
+
+function resourceProfileFlag(args: ParsedArgs): string {
+  if (args.flags.has("resource-profile") && args.flags.has("profile")) {
+    throw new UserError("--resource-profile cannot be combined with the legacy --profile alias");
+  }
+  return args.flags.has("resource-profile")
+    ? stringFlag(args, "resource-profile", "default")
+    : stringFlag(args, "profile", "default");
+}
+
 function booleanFlag(args: ParsedArgs, name: string, fallback: boolean): boolean {
   const value = args.flags.get(name);
   if (value === undefined) {
     return fallback;
   }
+  if (Array.isArray(value)) throw new UserError(`--${name} may only be specified once`);
   if (typeof value === "boolean") {
     return value;
   }
@@ -403,15 +503,21 @@ Usage:
   dim repo register --name NAME [--protect main,release/*] /path/to/bare/repo.git
   dim repo list
   dim repo show NAME
+  dim project init [--force]
   dim gitea ensure
   dim gitea credentials --show-secrets
-  dim workspace run REPO WORKSPACE [--git-user-name NAME] [--git-user-email EMAIL] [-- COMMAND...]
+  dim workspace create PROJECT WORKSPACE [--profile PROFILE ...] [--git-user-name NAME] [--git-user-email EMAIL]
+  dim workspace run WORKSPACE TASK [ARGS...]
+  dim workspace exec WORKSPACE -- COMMAND [ARGS...]
+  dim workspace setup WORKSPACE
+  dim workspace update WORKSPACE [--profile PROFILE ... | --clear-profiles]
+  dim workspace start WORKSPACE
   dim workspace show WORKSPACE
   dim workspace stop WORKSPACE
   dim workspace discard WORKSPACE --yes
-  dim job prepare --job-id ID [--profile default] [--config dev-infra.config.json] [--dry-run]
+  dim job prepare --job-id ID [--resource-profile default] [--config dev-infra.config.json] [--dry-run]
   dim job cleanup --job-id ID [--config dev-infra.config.json] [--dry-run] [--keep-disk]
-  dim job run --job-id ID [--profile default] [--config dev-infra.config.json] [--sudo=false] [--keep-disk] [-- COMMAND...]
+  dim job run --job-id ID [--resource-profile default] [--config dev-infra.config.json] [--sudo=false] [--keep-disk] [-- COMMAND...]
   dim agent run-command --job-id ID [--config dev-infra.config.json] [COMMAND...]
   dim agent run --job-id ID [--config dev-infra.config.json] [--sudo=false] [-- COMMAND...]
   dim git-host init [--config dev-infra.config.json]

@@ -77,7 +77,7 @@ Prints a JSON summary containing:
 Usage:
 
 ```bash
-dim job prepare --job-id ID [--profile default] [--config dev-infra.config.json] [--dry-run]
+dim job prepare --job-id ID [--resource-profile default] [--config dev-infra.config.json] [--dry-run]
 ```
 
 Prepares job storage and prints job metadata JSON.
@@ -99,7 +99,7 @@ Cleans up job storage.
 Usage:
 
 ```bash
-dim job run --job-id ID [--profile default] [--config dev-infra.config.json] [--sudo=false] [--keep-disk] [-- COMMAND...]
+dim job run --job-id ID [--resource-profile default] [--config dev-infra.config.json] [--sudo=false] [--keep-disk] [-- COMMAND...]
 ```
 
 Runs prepare, agent execution, and cleanup.
@@ -208,18 +208,57 @@ dim repo show NAME
 
 Print role-neutral repository registry records as JSON.
 
-### `workspace run`
+### `project init`
 
 Usage:
 
 ```bash
-dim workspace run REPO WORKSPACE \
-  [--git-user-name NAME] [--git-user-email EMAIL] [-- COMMAND...]
+dim project init [--force]
 ```
 
-Reconciles a persistent top-level workspace, clones the registered repository
-inside it, and executes the command from the clone. Commands with flags must
-follow `--`.
+Creates the starter `.dim/docker-compose.yml` in the invocation directory.
+Existing files require `--force`.
+
+### `workspace create`
+
+Usage:
+
+```bash
+dim workspace create PROJECT WORKSPACE \
+  [--profile PROFILE ...] \
+  [--git-user-name NAME] [--git-user-email EMAIL]
+```
+
+Claims and reconciles a persistent workspace, clones the registered project
+repository inside it, persists Compose capability profiles, and invokes the
+project `.dim` setup contract.
+
+### `workspace run` and `workspace exec`
+
+Usage:
+
+```bash
+dim workspace run WORKSPACE TASK [-- ARGS...]
+dim workspace exec WORKSPACE -- COMMAND [ARGS...]
+```
+
+`run` dispatches through `.dim/entrypoint.sh` when present and otherwise
+executes the task directly. `exec` always bypasses project hooks. Neither
+command invokes setup.
+
+### `workspace setup`, `update`, and `start`
+
+Usage:
+
+```bash
+dim workspace setup WORKSPACE
+dim workspace update WORKSPACE [--profile PROFILE ... | --clear-profiles]
+dim workspace start WORKSPACE
+```
+
+`setup` retries project environment reconciliation without updating Git.
+`update` performs a clean fast-forward-only project pull and then setup.
+`start` reconciles a stopped workspace and then setup without pulling Git.
 
 ### `workspace show`, `stop`, and `discard`
 
@@ -231,8 +270,9 @@ dim workspace stop WORKSPACE
 dim workspace discard WORKSPACE --yes
 ```
 
-`discard` requires confirmation and removes the workspace container, its
-inner-Docker volume, and metadata without deleting the registered repository.
+`discard` requires confirmation, runs project teardown when available, and
+removes the workspace container, its inner-Docker volume, and metadata without
+deleting registered repositories.
 
 ### `gitea ensure` and `gitea credentials`
 

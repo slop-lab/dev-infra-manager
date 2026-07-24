@@ -83,12 +83,12 @@ different source must be rejected.
 Repository metadata must not assign product, control, or secret-handling
 roles.
 
-## Workspace run
+## Project workspace creation
 
 Usage:
 
 ```bash
-dim workspace run REPO WORKSPACE [-- COMMAND...]
+dim workspace create PROJECT WORKSPACE [--profile PROFILE ...]
 ```
 
 A workspace consists of:
@@ -97,20 +97,35 @@ A workspace consists of:
 - One named Docker volume for its inner Docker store.
 - Membership in the shared Gitea network.
 - Optional routes, initially an empty list.
-- One host metadata record.
+- One host metadata record containing the project, selected Compose profiles,
+  Compose project name, and last setup result.
 
 The top-level container must not mount a host checkout, host worktree, host
 Git directory, host Docker socket, or host workspace data directory.
 
-The repository must be cloned inside the container at:
+The project repository must be cloned inside the container at:
 
 ```text
-/workspace/repos/<repo>
+/workspace/project
 ```
 
-The first run must claim metadata before Docker mutations. Later runs must
-reconcile named and labeled resources, wait for inner Docker readiness, reuse
-an existing clone, and execute the command from the clone directory.
+Creation must claim metadata before Docker mutations, reconcile named and
+labeled resources, wait for inner Docker readiness, clone the project, and
+invoke the `.dim` setup contract.
+
+The project contract consists only of optional `.dim/setup.sh`,
+`.dim/entrypoint.sh`, `.dim/teardown.sh`, and `.dim/docker-compose.yml`.
+`dim` must not discover a root Compose file. A setup hook overrides the
+default Compose setup. With no setup hook or DIM Compose file, setup is a
+successful no-op.
+
+`workspace run WORKSPACE TASK` must not run setup. It dispatches the task
+through `.dim/entrypoint.sh` when present. `workspace exec WORKSPACE --
+COMMAND` always executes the raw command from the project root.
+
+`workspace update` must require a clean checkout and use fast-forward-only Git
+update before setup. `workspace start` must reconcile and run setup without
+updating Git.
 
 ## Git environment
 
@@ -120,6 +135,7 @@ The workspace container must receive:
 - `DIM_GIT_TOKEN`
 - `DIM_GIT_USER_NAME`
 - `DIM_GIT_USER_EMAIL`
+- `DIM_GIT_BASE_URL`
 - `GIT_ASKPASS`
 - Non-interactive Git configuration for `user.name` and `user.email`
 
@@ -128,10 +144,11 @@ containers receive Git values only through explicit environment forwarding.
 
 ## Stop and discard
 
-`workspace stop` must preserve the top-level container state and named
-inner-Docker volume.
+`workspace stop` must preserve the project checkout and named inner-Docker
+volume.
 
-`workspace discard --yes` must remove:
+`workspace discard --yes` must attempt `.dim/teardown.sh` or default Compose
+down, then remove:
 
 - The top-level container.
 - Its named inner-Docker volume.
@@ -166,4 +183,7 @@ Required verification:
 - An runc development smoke test for Gitea import, internal clone, Git
   identity, writer push, protected branch rejection, nested Docker,
   stop/start persistence, and discard cleanup.
+- A four-repository project smoke test for `.dim` setup and entrypoint,
+  capability profiles, nested service-owned Git clones, nested writer push,
+  profile replacement, setup retry, and cleanup.
 - A production smoke test on a host with `sysbox-runc`.

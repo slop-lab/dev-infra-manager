@@ -44,7 +44,8 @@ git -C "$worktree" commit -m initial >/dev/null
 git clone --bare "$worktree" "$bare_repo" >/dev/null
 
 pnpm run cli -- repo register --name "$repo_name" "$bare_repo" >/dev/null
-pnpm run cli -- workspace run "$repo_name" "$workspace_name" -- sh -c "
+pnpm run cli -- workspace create "$repo_name" "$workspace_name" >/dev/null
+pnpm run cli -- workspace exec "$workspace_name" -- sh -c "
   test \"\\\$(git config user.name)\" = 'dim/$workspace_name'
   git checkout -b 'agent/$workspace_name'
   printf 'workspace\n' >> README.md
@@ -64,7 +65,8 @@ pnpm run cli -- workspace run "$repo_name" "$workspace_name" -- sh -c "
 test "$(docker inspect --format '{{range .Mounts}}{{.Type}}:{{.Name}}:{{.Destination}}{{end}}' "dim-ws-$workspace_name")" \
   = "volume:dim-ws-$workspace_name-docker:/var/lib/docker"
 pnpm run cli -- workspace stop "$workspace_name" >/dev/null
-pnpm run cli -- workspace run "$repo_name" "$workspace_name" -- sh -c \
+pnpm run cli -- workspace start "$workspace_name" >/dev/null
+pnpm run cli -- workspace exec "$workspace_name" -- sh -c \
   "test -d .git; docker image inspect alpine:3.22 >/dev/null" >/dev/null
 pnpm run cli -- workspace discard "$workspace_name" --yes >/dev/null
 

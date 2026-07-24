@@ -1,5 +1,5 @@
 {
-  "name": "@dim/codex-workspace",
+  "name": "@slop-lab/dev-infra-manager-codex-workspace",
   "version": "0.1.0",
   "private": true,
   "type": "module",

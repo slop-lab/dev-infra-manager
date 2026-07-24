@@ -96,9 +96,9 @@ cat > "$tmpdir/config.json" <<EOF
 }
 EOF
 
-pnpm --filter @dim/manager exec tsx src/cli.ts config validate --config "$tmpdir/config.json" >/dev/null
-pnpm --filter @dim/manager exec tsx src/cli.ts git-host init --config "$tmpdir/config.json" >/dev/null
-repo_path="$(pnpm --filter @dim/manager exec tsx src/cli.ts git-host create-repo --config "$tmpdir/config.json" --repo trusted-runtime)"
+pnpm --filter @slop-lab/dim-cli exec tsx src/cli.ts config validate --config "$tmpdir/config.json" >/dev/null
+pnpm --filter @slop-lab/dim-cli exec tsx src/cli.ts git-host init --config "$tmpdir/config.json" >/dev/null
+repo_path="$(pnpm --filter @slop-lab/dim-cli exec tsx src/cli.ts git-host create-repo --config "$tmpdir/config.json" --repo trusted-runtime)"
 
 git clone "$repo_path" "$tmpdir/worktree" >/dev/null 2>&1
 git -C "$tmpdir/worktree" config user.email test@example.invalid
@@ -115,16 +115,16 @@ printf 'reviewed change\n' > "$tmpdir/worktree/REVIEWED.txt"
 git -C "$tmpdir/worktree" add REVIEWED.txt
 git -C "$tmpdir/worktree" commit -m reviewed-change >/dev/null
 git -C "$tmpdir/worktree" push origin HEAD:refs/heads/reviewed-change >/dev/null
-pnpm --filter @dim/manager exec tsx src/cli.ts pr create \
+pnpm --filter @slop-lab/dim-cli exec tsx src/cli.ts pr create \
   --config "$tmpdir/config.json" \
   --repo trusted-runtime \
   --source refs/heads/reviewed-change \
   --target refs/heads/main \
   --title "Reviewed change" >/dev/null
-pnpm --filter @dim/manager exec tsx src/cli.ts pr approve --config "$tmpdir/config.json" --repo trusted-runtime --id 1 --reviewer smoke >/dev/null
-pnpm --filter @dim/manager exec tsx src/cli.ts pr merge --config "$tmpdir/config.json" --repo trusted-runtime --id 1 >/dev/null
+pnpm --filter @slop-lab/dim-cli exec tsx src/cli.ts pr approve --config "$tmpdir/config.json" --repo trusted-runtime --id 1 --reviewer smoke >/dev/null
+pnpm --filter @slop-lab/dim-cli exec tsx src/cli.ts pr merge --config "$tmpdir/config.json" --repo trusted-runtime --id 1 >/dev/null
 
-pnpm --filter @dim/manager exec tsx src/cli.ts secret deploy --config "$tmpdir/config.json" >/dev/null
+pnpm --filter @slop-lab/dim-cli exec tsx src/cli.ts secret deploy --config "$tmpdir/config.json" >/dev/null
 
 for _ in $(seq 1 30); do
   if curl -fsS http://127.0.0.1:18090/healthz >/dev/null; then

@@ -60,13 +60,19 @@ Implemented:
   credentials, loopback-only HTTP access, and persistent volume storage.
 - Role-neutral `repo register`, `repo list`, and `repo show` commands that
   import an existing bare repository without retaining a host mount.
-- Persistent `workspace run`, `show`, `stop`, and confirmed `discard`
-  lifecycle with metadata-first journaling, labels, prefixes, reconciliation,
-  and a named inner-Docker volume.
+- Persistent project workspace `create`, `run`, `exec`, `setup`, `update`,
+  `start`, `show`, `stop`, and confirmed `discard` lifecycle with
+  metadata-first journaling, labels, prefixes, setup diagnostics, capability
+  profiles, and a named inner-Docker volume.
 - Container-internal Git clone and identity/credential environment injection
   without credential-bearing remote URLs.
 - Container lifecycle smoke coverage for free branch pushes, protected branch
   rejection, nested containers, stop/start persistence, and cleanup.
+- Optional `.dim` setup, entrypoint, teardown, and Compose contract plus
+  `project init` scaffold generation.
+- Four-repository project smoke coverage for service-owned source volumes,
+  nested Gitea clone and push, Compose profile replacement, setup failure
+  recovery, project task dispatch, and cleanup.
 
 Current environment verification:
 

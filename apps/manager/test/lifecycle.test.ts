@@ -1,11 +1,11 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { lifecycleOptions } from "../src/lifecycleOptions.js";
 import { LifecycleState, validateLifecycleName } from "../src/lifecycleState.js";
 import type { RepoRecord, WorkspaceRecord } from "../src/lifecycleTypes.js";
-import { workspaceContainerArgs } from "../src/workspaceLifecycle.js";
+import { validateWorkspaceProfiles, workspaceContainerArgs } from "../src/workspaceLifecycle.js";
 
 describe("repo and workspace lifecycle", () => {
   let root: string;
@@ -49,12 +49,18 @@ describe("repo and workspace lifecycle", () => {
 
     const workspace: WorkspaceRecord = {
       name: "work-1",
-      repo: "project",
+      project: "project",
+      projectPath: "/workspace/project",
       phase: "creating",
+      profiles: ["development"],
+      composeProjectName: "dim-work-1",
       containerName: "dim-ws-work-1",
       networkName: "dim-control",
       dockerVolumeName: "dim-ws-work-1-docker",
       routes: [],
+      gitUserName: "Agent",
+      gitUserEmail: "agent@example.invalid",
+      gitBaseUrl: "http://172.20.0.2:3000",
       createdAt: now,
       updatedAt: now
     };
@@ -71,6 +77,21 @@ describe("repo and workspace lifecycle", () => {
     await release();
     await second;
     expect(secondAcquired).toBe(true);
+
+    const releaseSetup = await state.acquireWorkspaceSetupLock("work-1");
+    const releaseReconciliation = await state.acquireWorkspaceLock("work-1");
+    let secondSetupAcquired = false;
+    const secondSetup = state.acquireWorkspaceSetupLock("work-1").then(async (releaseSecond) => {
+      secondSetupAcquired = true;
+      await releaseSecond();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(secondSetupAcquired).toBe(false);
+    await releaseReconciliation();
+    expect(secondSetupAcquired).toBe(false);
+    await releaseSetup();
+    await secondSetup;
+    expect(secondSetupAcquired).toBe(true);
   });
 
   it("builds a persistent container with credentials but no host mounts or socket", () => {
@@ -82,12 +103,18 @@ describe("repo and workspace lifecycle", () => {
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
       name: "work-1",
-      repo: "project",
+      project: "project",
+      projectPath: "/workspace/project",
       phase: "creating",
+      profiles: [],
+      composeProjectName: "dim-work-1",
       containerName: "dim-ws-work-1",
       networkName: "dim-control",
       dockerVolumeName: "dim-ws-work-1-docker",
       routes: [],
+      gitUserName: "Agent",
+      gitUserEmail: "agent@example.invalid",
+      gitBaseUrl: "http://172.20.0.2:3000",
       createdAt: now,
       updatedAt: now
     };
@@ -100,6 +127,7 @@ describe("repo and workspace lifecycle", () => {
     expect(args).toEqual(expect.arrayContaining([
       "--name", "dim-ws-work-1",
       "--label", "dim.managed=true",
+      "--label", "dim.project=project",
       "--label", "dim.repo=project",
       "--mount", "type=volume,source=dim-ws-work-1-docker,target=/var/lib/docker",
       "--env", "DIM_GIT_USERNAME=writer",
@@ -123,5 +151,38 @@ describe("repo and workspace lifecycle", () => {
     expect(options.giteaPort).toBe(4300);
     expect(options.memory).toBe("2g");
     expect(options.giteaImage).toBe("gitea/gitea:1.27.0");
+    expect(validateWorkspaceProfiles(["development", "secrets"])).toEqual(["development", "secrets"]);
+    expect(() => validateWorkspaceProfiles(["development", "development"])).toThrow(/duplicated/);
+    expect(() => validateWorkspaceProfiles(["bad,profile"])).toThrow(/workspace profile/);
+  });
+
+  it("normalizes legacy workspace records without moving their checkout", async () => {
+    const state = new LifecycleState(root);
+    const now = new Date().toISOString();
+    await mkdir(join(root, "workspaces"), { recursive: true });
+    await writeFile(join(root, "workspaces", "legacy.json"), JSON.stringify({
+      name: "legacy",
+      repo: "project",
+      phase: "ready",
+      containerName: "dim-ws-legacy",
+      networkName: "dim-control",
+      dockerVolumeName: "dim-ws-legacy-docker",
+      routes: [],
+      createdAt: now,
+      updatedAt: now
+    }));
+
+    const normalized = await state.readWorkspace("legacy");
+    expect(normalized).toMatchObject({
+      project: "project",
+      projectPath: "/workspace/repos/project",
+      profiles: [],
+      composeProjectName: "dim-legacy",
+      gitUserName: "dim/legacy",
+      gitUserEmail: "legacy@dim.invalid",
+      gitBaseUrl: "http://dim-gitea:3000"
+    });
+    await state.writeWorkspace(normalized);
+    expect(await readFile(join(root, "workspaces", "legacy.json"), "utf8")).not.toContain('"repo"');
   });
 });

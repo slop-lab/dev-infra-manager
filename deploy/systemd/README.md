@@ -6,7 +6,7 @@ Install flow:
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm --filter @dim/manager run build
+pnpm --filter @slop-lab/dim-cli run build
 sudo mkdir -p /opt/dev-infra-manager /etc/dev-infra-manager /var/lib/dev-infra-manager
 sudo rsync -a apps/manager/dist/ /opt/dev-infra-manager/dist/
 sudo cp config.example.json /etc/dev-infra-manager/config.json

@@ -43,17 +43,31 @@ export interface RepoRecord {
   error?: string;
 }
 
-export type WorkspacePhase = "creating" | "ready" | "error";
+export type WorkspacePhase = "creating" | "setting-up" | "ready" | "stopped" | "setup-error" | "error";
+
+export interface WorkspaceSetupRecord {
+  startedAt: string;
+  completedAt?: string;
+  exitCode?: number;
+  error?: string;
+}
 
 export interface WorkspaceRecord {
   name: string;
-  repo: string;
+  project: string;
+  projectPath: string;
   phase: WorkspacePhase;
+  profiles: string[];
+  composeProjectName: string;
   containerName: string;
   networkName: string;
   dockerVolumeName: string;
   routes: string[];
+  gitUserName: string;
+  gitUserEmail: string;
+  gitBaseUrl: string;
   createdAt: string;
   updatedAt: string;
+  lastSetup?: WorkspaceSetupRecord;
   error?: string;
 }

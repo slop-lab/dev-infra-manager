@@ -109,6 +109,17 @@ export function giteaHostCloneUrl(options: LifecycleOptions, owner: string, repo
   return `http://127.0.0.1:${options.giteaPort}/${owner}/${repo}.git`;
 }
 
+export async function giteaNestedBaseUrl(runner: CommandRunner): Promise<string> {
+  const result = await runner.run("docker", [
+    "container", "inspect", GITEA_CONTAINER,
+    "--format", `{{with index .NetworkSettings.Networks "${GITEA_NETWORK}"}}{{.IPAddress}}{{end}}`
+  ]);
+  if (result.exitCode !== 0 || !result.stdout.trim()) {
+    throw new UserError(`Failed to resolve nested Gitea endpoint: ${(result.stderr || result.stdout).trim()}`);
+  }
+  return `http://${result.stdout.trim()}:3000`;
+}
+
 export async function giteaRequest(
   options: LifecycleOptions,
   credentials: GiteaCredentials,

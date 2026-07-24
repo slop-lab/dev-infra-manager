@@ -126,8 +126,53 @@ with privileged runc solely as a nested-container compatibility smoke test. It
 checks the default containerd snapshotter path, the gVisor-compatible legacy
 `overlay2` path, and outbound networking from a container created by each
 inner daemon. It does not claim to validate the production Sysbox boundary.
-It also exercises the disposable Gitea repository and persistent workspace
-lifecycle described in [Repository-backed Workspaces](repo-workspaces.md).
+It also installs the publishable `@slop-lab/dim-cli` tarball into a temporary
+prefix and uses only that installed `dim` binary to exercise:
+
+- Disposable managed-Git repositories and persistent workspace reconciliation.
+- A project with custom setup and entrypoint hooks, including setup failure and
+  retry.
+- A four-repository project whose nested Compose services clone, persist, and
+  push through managed Gitea.
+- Capability-profile replacement, project fast-forward update, stop/start
+  persistence, and discard cleanup.
+
+## Project Workspaces
+
+Install `dim` from the registry with mise:
+
+```bash
+mise use -g npm:@slop-lab/dim-cli
+```
+
+Register a role-neutral bare repository, then create a workspace using the
+project's selected capability profiles:
+
+```bash
+dim repo register --name example /path/to/example.git
+dim workspace create example example-dev \
+  --profile development \
+  --profile secrets
+```
+
+Run a project task or bypass project hooks with a raw command:
+
+```bash
+dim workspace run example-dev codex
+dim workspace exec example-dev -- bash
+```
+
+`workspace run` does not repeat setup. Environment reconciliation happens on
+`workspace create`, `workspace start`, `workspace setup`, and after a
+fast-forward-only `workspace update`. Only the optional files under `.dim`
+have special meaning; root Compose files are never auto-discovered.
+
+Use `dim project init` in a new project to create the minimal
+`.dim/docker-compose.yml` scaffold. See
+[Project Workspaces](project-workspaces.md) for the hook contract, lifecycle,
+capability profiles, and multi-repository service pattern. See
+[Repository-backed Workspaces](repo-workspaces.md) for registration, Gitea,
+credentials, and reconciliation details.
 
 Create a starter configuration:
 
