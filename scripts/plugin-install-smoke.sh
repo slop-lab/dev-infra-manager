@@ -10,6 +10,7 @@ trap cleanup EXIT
 
 plugin_source="$root/plugin-source"
 plugin_home="$root/plugin-home"
+config_path="$root/config/slop-lab/dim.json"
 installer_prefix="$root/installer"
 mkdir -p "$plugin_source"
 
@@ -39,12 +40,14 @@ plugin_tarball="$(npm pack "$plugin_source" --pack-destination "$root" --json | 
 installer_tarball="$(npm pack packages/install/dist --pack-destination "$root" --json | jq -r '.[0].filename')"
 npm install --prefix "$installer_prefix" "$root/$installer_tarball" >/dev/null
 
-"$installer_prefix/node_modules/.bin/install-dim" \
+DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/install-dim" \
+  plugin \
   --plugin-home "$plugin_home" \
   "$root/$plugin_tarball" \
   >/dev/null
 
-result="$(DIM_PLUGIN_HOME="$plugin_home" node packages/dim-cli/dist/cli.js plugin list)"
+test "$(jq -r .pluginHome "$config_path")" = "$plugin_home"
+result="$(DIM_CONFIG_PATH="$config_path" node packages/dim-cli/dist/cli.js plugin list)"
 test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smoke"
 test "$(printf '%s' "$result" | jq -r '.repositoryProviders[0]')" = "smoke-mirror"
 

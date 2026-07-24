@@ -14,7 +14,6 @@
   "private": true,
   "type": "module",
   "bin": {
-    "dev-infra-manager": "./dist/cli.js",
     "dim": "./dist/cli.js"
   },
   "scripts": {

@@ -19,6 +19,7 @@ test -n "$cli_tarball"
 npm install --prefix "$package_root/install" "$core_tarball" "$cli_tarball" >/dev/null
 dim_bin="$package_root/install/node_modules/.bin/dim"
 test -x "$dim_bin"
+test ! -e "$package_root/install/node_modules/.bin/dev-infra-manager"
 "$dim_bin" --help >/dev/null
 
 (

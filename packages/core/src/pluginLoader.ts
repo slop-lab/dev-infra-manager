@@ -11,11 +11,45 @@ export interface PluginManifest {
   plugins: string[];
 }
 
+interface DimUserConfig {
+  schemaVersion: 1;
+  installPrefix?: string;
+  pluginHome?: string;
+}
+
+export function dimUserConfigPath(env: NodeJS.ProcessEnv = process.env): string {
+  const home = env.HOME ?? os.homedir();
+  return path.resolve(
+    env.DIM_CONFIG_PATH
+      ?? path.join(env.XDG_CONFIG_HOME ?? path.join(home, ".config"), "slop-lab", "dim.json")
+  );
+}
+
 export function pluginHome(env: NodeJS.ProcessEnv = process.env): string {
+  const home = env.HOME ?? os.homedir();
   return path.resolve(
     env.DIM_PLUGIN_HOME
-      ?? path.join(env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local", "share"), "dim", "plugins")
+      ?? path.join(env.XDG_DATA_HOME ?? path.join(home, ".local", "share"), "dim", "plugins")
   );
+}
+
+export async function resolvePluginHome(env: NodeJS.ProcessEnv = process.env): Promise<string> {
+  if (env.DIM_PLUGIN_HOME) return path.resolve(env.DIM_PLUGIN_HOME);
+  try {
+    const config = JSON.parse(await readFile(dimUserConfigPath(env), "utf8")) as DimUserConfig;
+    if (config.schemaVersion !== 1) {
+      throw new UserError(`invalid DIM user config at ${dimUserConfigPath(env)}`);
+    }
+    if (config.pluginHome !== undefined) {
+      if (typeof config.pluginHome !== "string" || config.pluginHome.length === 0) {
+        throw new UserError(`invalid pluginHome in DIM user config at ${dimUserConfigPath(env)}`);
+      }
+      return path.resolve(config.pluginHome);
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  return pluginHome(env);
 }
 
 export async function readPluginManifest(home = pluginHome()): Promise<PluginManifest> {
@@ -72,4 +106,3 @@ export async function loadInstalledPlugins(home = pluginHome()): Promise<{
 
   return { manifest, registry };
 }
-

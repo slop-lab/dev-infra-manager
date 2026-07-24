@@ -2,7 +2,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadInstalledPlugins, pluginHome, readPluginManifest } from "../src/pluginLoader.js";
+import {
+  dimUserConfigPath,
+  loadInstalledPlugins,
+  pluginHome,
+  readPluginManifest,
+  resolvePluginHome
+} from "../src/pluginLoader.js";
 
 describe("plugin loader configuration", () => {
   let root: string;
@@ -18,6 +24,19 @@ describe("plugin loader configuration", () => {
   it("uses an explicit plugin home and treats a missing manifest as empty", async () => {
     expect(pluginHome({ DIM_PLUGIN_HOME: root })).toBe(root);
     expect(await readPluginManifest(root)).toEqual({ schemaVersion: 1, plugins: [] });
+  });
+
+  it("loads the plugin home recorded by the installer unless the environment overrides it", async () => {
+    const configHome = join(root, "config");
+    const configuredHome = join(root, "configured-plugins");
+    await mkdir(join(configHome, "slop-lab"), { recursive: true });
+    await writeFile(
+      join(configHome, "slop-lab", "dim.json"),
+      JSON.stringify({ schemaVersion: 1, installPrefix: join(root, "prefix"), pluginHome: configuredHome })
+    );
+    expect(dimUserConfigPath({ XDG_CONFIG_HOME: configHome })).toBe(join(configHome, "slop-lab", "dim.json"));
+    expect(await resolvePluginHome({ XDG_CONFIG_HOME: configHome })).toBe(configuredHome);
+    expect(await resolvePluginHome({ XDG_CONFIG_HOME: configHome, DIM_PLUGIN_HOME: root })).toBe(root);
   });
 
   it("deduplicates configured plugin packages", async () => {

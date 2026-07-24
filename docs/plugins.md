@@ -43,7 +43,7 @@ export default plugin;
 Install and explicitly enable a plugin package with:
 
 ```bash
-npx "@slop-lab/install-dim@0.1.0" "@dev-infra-manager/plugin-github@1.2.3"
+npx "@slop-lab/install-dim@0.1.0" plugin "@dev-infra-manager/plugin-github@1.2.3"
 dim plugin list
 ```
 
@@ -53,6 +53,11 @@ The installer creates a private npm project under
 atomically records enabled package names in `plugins.json`. `dim plugin list`
 loads that explicit manifest and reports the repository provider kinds
 registered by each plugin.
+
+The selected plugin home is persisted in
+`${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json`, so a CLI installed with a
+custom `--prefix` resolves the same plugin location in later processes.
+`DIM_CONFIG_PATH` and `DIM_PLUGIN_HOME` override the persisted values.
 
 The package name recorded by the installer and the plugin's diagnostic `name`
 field need not follow the same prefix. Resolution always uses the exact

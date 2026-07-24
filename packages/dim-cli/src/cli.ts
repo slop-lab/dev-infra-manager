@@ -23,7 +23,6 @@ import {
   loadConfig,
   mergePullRequest,
   prepareJob,
-  pluginHome,
   ProcessRunner,
   readJobMetadata,
   readPullRequest,
@@ -32,6 +31,7 @@ import {
   runController,
   runDoctor,
   runWorkspace,
+  resolvePluginHome,
   setupWorkspace,
   showRegisteredRepo,
   showWorkspace,
@@ -129,7 +129,7 @@ async function main(argv: string[]): Promise<void> {
   }
 
   if (command === "plugin" && subcommand === "list") {
-    const home = pluginHome();
+    const home = await resolvePluginHome();
     const loaded = await loadInstalledPlugins(home);
     console.log(JSON.stringify({
       pluginHome: home,
@@ -511,7 +511,7 @@ function commaSeparatedFlag(args: ParsedArgs, name: string, fallback: string): s
 }
 
 function printHelp(): void {
-  console.log(`dev-infra-manager
+  console.log(`dim
 
 Usage:
   dim init-config [--output dev-infra.config.json]

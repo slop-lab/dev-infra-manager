@@ -6,7 +6,6 @@ This specification defines stable CLI commands, flags, outputs, and exit behavio
 
 The package exposes:
 
-- `dev-infra-manager`
 - `dim`
 
 Both point to `dist/cli.js` after build.

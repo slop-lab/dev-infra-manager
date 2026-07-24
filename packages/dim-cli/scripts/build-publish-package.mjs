@@ -18,6 +18,9 @@ output.dependencies = {
   ...output.dependencies,
   "@slop-lab/dev-infra-manager-core": source.version
 };
+output.bin = {
+  dim: "cli.js"
+};
 
 if ("private" in output) {
   throw new Error("The publish package.json must not contain private");

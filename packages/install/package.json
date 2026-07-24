@@ -1,7 +1,7 @@
 {
   "name": "@slop-lab/install-dim",
   "version": "0.1.0",
-  "description": "Installer for optional DIM plugins",
+  "description": "User-local installer for DIM and optional DIM plugins",
   "license": "MIT",
   "repository": {
     "type": "git",

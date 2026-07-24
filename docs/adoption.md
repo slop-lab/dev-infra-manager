@@ -36,7 +36,7 @@ For example:
 
 ```bash
 npm install --global "@slop-lab/dim-cli@0.1.0"
-npx "@slop-lab/install-dim@0.1.0" "@company/dim-plugin@1.2.3"
+npx "@slop-lab/install-dim@0.1.0" plugin "@company/dim-plugin@1.2.3"
 ```
 
 Treat the example versions as placeholders and select versions whose complete

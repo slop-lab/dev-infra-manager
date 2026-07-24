@@ -13,6 +13,9 @@ const output = minifyPackageJson(source, {
   stripPackagePathPrefix: "./dist/",
   includeFields: ["publishConfig"]
 });
+output.bin = {
+  "install-dim": "cli.js"
+};
 
 if ("private" in output) {
   throw new Error("The publish package.json must not contain private");

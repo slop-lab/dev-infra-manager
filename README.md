@@ -150,8 +150,15 @@ pnpm --filter @slop-lab/dev-infra-manager-core run publish:package
 pnpm --filter @slop-lab/dim-cli run publish:package
 pnpm --filter @slop-lab/install-dim run publish:package
 mise use -g npm:@slop-lab/dim-cli@0.1.0
-npx "@slop-lab/install-dim@0.1.0" "@dev-infra-manager/plugin-github@1.2.3"
+npx "@slop-lab/install-dim@0.1.0"
+npx "@slop-lab/install-dim@0.1.0" cli
+npx "@slop-lab/install-dim@0.1.0" plugin "@dev-infra-manager/plugin-github@1.2.3"
 ```
+
+Running `install-dim` without arguments opens an interactive installer for the
+DIM CLI, optional plugins, or both. Use the explicit `cli` or `plugin`
+subcommand for non-interactive automation. Installation choices are persisted
+under `${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json`.
 
 Optional Git hosting integrations are designed as separately installed,
 explicitly enabled packages over the versioned core plugin API. See
