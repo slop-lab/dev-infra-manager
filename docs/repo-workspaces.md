@@ -220,7 +220,7 @@ The full nested-container verification available in a development container
 is:
 
 ```bash
-just container-runtime-verify
+just verify-container-runc
 ```
 
 It includes a disposable Gitea repository and workspace lifecycle test:

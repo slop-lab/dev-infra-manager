@@ -178,6 +178,8 @@ describe("repo and workspace lifecycle", () => {
       image: "dev-infra-project-workspace-podman:latest",
       runtimeDataPath: "/home/agent/.local/share/containers",
       engine: "podman",
+      privileged: true,
+      securityOptions: ["seccomp=unconfined", "apparmor=unconfined"],
       devices: ["/dev/fuse"]
     });
     expect(workspaceRuntimePlan("runc", options)).toMatchObject({

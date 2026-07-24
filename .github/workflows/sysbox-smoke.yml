@@ -21,4 +21,4 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: just verify
-      - run: just smoke
+      - run: just verify-container-sysbox

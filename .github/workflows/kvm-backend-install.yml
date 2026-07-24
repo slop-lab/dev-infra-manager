@@ -1,0 +1,17 @@
+name: KVM backend install
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-backend-installers:
+    runs-on: [self-hosted, linux, x64, kvm]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - run: command -v just
+      - run: test -r /dev/kvm -a -w /dev/kvm
+      - run: just verify-host-backends-kvm

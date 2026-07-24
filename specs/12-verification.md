@@ -20,9 +20,18 @@ pnpm run workspace:test
 pnpm run workspace:build
 ```
 
+This gate must not require Docker, a runtime backend, QEMU, or KVM.
+
+## runc Nested-container Gate
+
+`just verify-container-runc` requires Docker with Compose v2 and support for
+privileged runc containers. It covers configuration validation, plugin
+installation, cgroup limits, workspace image builds, nested Docker, lifecycle
+behavior, and packed CLI project workflows. It must not require Sysbox or KVM.
+
 ## Smoke Gate
 
-`just smoke` must cover:
+`just verify-container-sysbox` must cover:
 
 - Docker agent image build.
 - Secret runtime example image build.
@@ -54,7 +63,7 @@ container. It verifies generated runtime arguments, including:
 
 `just isolation-check-json` runs the same tests with Vitest's JSON reporter so
 CI can consume a single JSON document from stdout. These static checks do not
-replace `just smoke`, which verifies actual Sysbox and cgroup behavior.
+replace `just verify-container-sysbox`, which verifies actual Sysbox and cgroup behavior.
 
 ## Backend Verification
 
@@ -82,6 +91,11 @@ Host installation scripts must be verified by:
 - Checksum verification for downloaded runtime artifacts.
 - Runtime version command after installation.
 - Docker runtime registration check when the script registers a runtime.
+
+`just verify-host-backend-kvm BACKEND` requires QEMU and writable `/dev/kvm`
+and verifies one backend installer in a disposable VM.
+`just verify-host-backends-kvm` runs the same gate for every backend in a
+separate VM.
 
 ## Documentation Verification
 

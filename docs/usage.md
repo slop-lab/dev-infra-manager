@@ -25,26 +25,43 @@ Install dependencies:
 pnpm install
 ```
 
-Install Ubuntu host runtime dependencies:
+Install and verify one Ubuntu host runtime backend:
 
 ```bash
-just install-host-ubuntu
+just install-host-sysbox-ubuntu
 ```
 
 Run `just` as your normal user, including when it comes from mise. After the
 first install, log out and back in or run `newgrp docker` once to refresh the
-Docker group membership added by the installer. When invoking the whole recipe
-with elevated privileges, use `sudo "$(command -v just)" install-host-ubuntu`;
-the resolved mise executable is propagated to scripts that invoke `just` again.
+Docker group membership added by the installer.
 
 Before making changes, the installer identifies its APT packages, Sysbox
 download, service operations, Docker group update, and path-scoped AppArmor
 exception. It requires the exact response `yes`. Treat the script as a
 development convenience and independently review these changes for production.
 
-This installs Docker, downloads the pinned Sysbox CE package for the host architecture, verifies the package checksum, installs Sysbox, restarts Docker, and starts Sysbox services.
+Choose exactly one backend recipe:
 
-Install gVisor `runsc` for the no-KVM Docker-compatible backend:
+```bash
+just install-host-sysbox-ubuntu
+just install-host-gvisor-ubuntu
+just install-host-rootless-podman-ubuntu
+just install-host-runc-ubuntu
+```
+
+Each recipe runs `doctor --backend` after installation; rootless Podman also builds its workspace image. Sysbox and gVisor are intentionally not installed together by a convenience recipe. Use the KVM recipes below to test every installer without requiring the runtimes to coexist on one host.
+
+Test installation destructively inside a disposable KVM-backed Ubuntu VM, without installing a backend on the host:
+
+```bash
+just verify-host-backends-kvm             # all backends, one clean VM each
+just verify-host-backend-kvm gvisor       # one backend
+just verify-host-backend-kvm gvisor --verbose
+```
+
+Prepare those dependencies with `just install-kvm-verify-deps-ubuntu`. This requires writable `/dev/kvm`, `qemu-system-x86_64`, `qemu-img`, and `cloud-localds`. The verified Ubuntu cloud image is cached under `.local/kvm`; each test uses and deletes a temporary overlay disk. The default output identifies each stage and prints only the last 30 log lines on failure; append `--verbose` to either KVM recipe to stream the complete guest installation, image build, and workload output.
+
+Install gVisor `runsc` directly for the no-KVM Docker-compatible backend:
 
 ```bash
 just install-runsc-linux
@@ -52,33 +69,35 @@ just install-runsc-linux
 
 This downloads the latest official gVisor release binaries, verifies their SHA-512 checksums, installs them under `/usr/local/bin`, registers `runsc` with Docker, and restarts Docker.
 
-Run the full Ubuntu bootstrap:
+Run the Ubuntu bootstrap with one selected backend (Sysbox by default):
 
 ```bash
 just bootstrap-ubuntu
+just bootstrap-ubuntu gvisor
 ```
 
 When mise is available, bootstrap runs `mise install` and uses the Node.js,
 pnpm, and `just` versions declared by this repository. Otherwise it installs
 Node.js, npm, and `just` through APT and installs the pinned pnpm version. It
-then installs host runtime and project dependencies, runs verification, builds
-the included runtime images, and runs `doctor`. If `doctor` reports missing
-host capabilities, bootstrap exits non-zero after printing the gaps.
+then installs the selected host runtime and project dependencies, runs
+verification, builds the included runtime images, and runs `doctor` for that
+backend. If `doctor` reports missing host capabilities, bootstrap exits
+non-zero after printing the gaps.
 
 Build the included runtime images:
 
 ```bash
-just build-agent-image
+just build-project-workspace
 just build-secret-example
 ```
 
 Run the integration smoke test:
 
 ```bash
-just smoke
+just verify-container-sysbox
 ```
 
-Use `just smoke -- --verbose` (or `just smoke -- -v`) to show detailed output for each labeled stage.
+Use `just verify-container-sysbox -- --verbose` (or `-- -v`) to show detailed output for each labeled stage.
 
 The smoke test builds the included images, verifies the agent image command environment, exercises the managed Git pull request flow, deploys the secret runtime from an approved ref, and checks the secret runtime health endpoint.
 
@@ -96,7 +115,7 @@ just isolation-check-json
 ```
 
 This verifies resource flags and rejects host Docker storage or socket mounts;
-it does not replace the runtime behavior covered by `just smoke`.
+it does not replace the Sysbox runtime behavior covered by `just verify-container-sysbox`.
 
 Run the full local verification suite:
 
@@ -104,29 +123,20 @@ Run the full local verification suite:
 just verify
 ```
 
-When developing from inside a nested container that can reach a Docker daemon
-but does not provide Sysbox, KVM, loop devices, systemd, or sudo, run:
+`just verify` runs only monorepo type checks, unit tests, and builds. It does
+not require Docker or a particular runtime backend.
+
+When Docker has Compose v2 and supports privileged runc containers, run:
 
 ```bash
-just container-verify
-```
-
-This runs monorepo type checks, unit tests, builds, configuration validation,
-and an runc-based cgroup v2 smoke test. The smoke test verifies initial and
-live-updated CPU, memory, swap, and PID values on the container's leaf cgroup
-without depending on host-only runtime checks. These values are not resource
-guarantees: an ancestor cgroup may impose a lower effective limit.
-
-For the heavier image-build and nested-Docker check, run:
-
-```bash
-just container-runtime-verify
+just verify-container-runc
 ```
 
 This additionally builds the role-neutral DIM project workspace image and runs
 it with privileged runc solely as a nested-container compatibility smoke test.
-It checks inner-Docker startup and outbound networking from a nested
-container. It does not claim to validate the production Sysbox boundary.
+It also validates configuration, plugin installation, cgroup v2 limits,
+inner-Docker startup, and outbound networking from a nested container. It
+does not require or validate the production Sysbox boundary.
 It also installs the publishable `@slop-lab/dim-cli` tarball into a temporary
 prefix and uses only that installed `dim` binary to exercise:
 
@@ -211,7 +221,7 @@ pnpm run cli -- doctor --backend gvisor
 
 The Sysbox registration check only proves that Docker knows about `sysbox-runc`. The Sysbox container execution check runs `hello-world:latest` with `--runtime=sysbox-runc`; this is the direct readiness signal for Sysbox agent workspace containers.
 For gVisor, `doctor --backend gvisor` checks `runsc` and Docker runtime execution.
-For rootless Podman, `doctor --backend rootless-podman` checks the workspace image and verifies that `podman` is present in it.
+For rootless Podman, `doctor --backend rootless-podman` checks the workspace image and verifies that `podman` is present in it. Podman runs rootless as `agent` inside the workspace, but the outer Docker workspace container is privileged: nested user namespaces and mounts do not work under Docker's normal container mount restrictions.
 
 ## Managed Git Host
 

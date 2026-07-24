@@ -3,6 +3,13 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "${script_dir}/.." && pwd)"
+# shellcheck source=lib/runtime-backends.sh
+source "$script_dir/lib/runtime-backends.sh"
+backend="${1:-sysbox}"
+if ! dim_is_runtime_backend "$backend"; then
+  echo "usage: $0 [$(dim_runtime_backend_choices)]" >&2
+  exit 2
+fi
 PNPM_VERSION="${PNPM_VERSION:-10.13.1}"
 JUST_BIN="${JUST_BIN:-}"
 DEV_INFRA_MISE_ACTIVE="${DEV_INFRA_MISE_ACTIVE:-0}"
@@ -15,7 +22,7 @@ if [[ "$DEV_INFRA_MISE_ACTIVE" != "1" ]] && command -v mise >/dev/null 2>&1; the
     DEV_INFRA_MISE_ACTIVE=1 \
     JUST_BIN="$JUST_BIN" \
     PNPM_VERSION="$PNPM_VERSION" \
-    bash "$0"
+    bash "$0" "$backend"
 fi
 
 sudo apt-get update
@@ -45,27 +52,24 @@ if [[ "$DEV_INFRA_MISE_ACTIVE" != "1" ]] && \
   sudo npm install -g "pnpm@${PNPM_VERSION}"
 fi
 
-"${script_dir}/install-host-ubuntu.sh"
+bash "${script_dir}/install-host-ubuntu.sh" "$backend"
 
 cd "$repo_root"
 pnpm install --frozen-lockfile
 "$JUST_BIN" verify
-"$JUST_BIN" build-agent-image
+"$JUST_BIN" build-project-workspace
+"$JUST_BIN" build-project-podman-image
 "$JUST_BIN" build-secret-example
 
 set +e
-pnpm run cli -- doctor
+"$JUST_BIN" verify-host-backend-local "$backend"
 doctor_rc=$?
 set -e
 
 if [[ "$doctor_rc" -ne 0 ]]; then
   cat >&2 <<'EOF'
 
-Bootstrap completed, but doctor reported host runtime gaps.
-This usually means the current host does not expose one of:
-  - running Sysbox services
-  - loop device setup
-  - /dev/kvm
+Bootstrap completed, but doctor reported a host runtime gap for the selected backend.
 
 Review the doctor output above before creating agent workspaces.
 EOF

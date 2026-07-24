@@ -28,34 +28,45 @@ pnpm install
 just verify
 ```
 
-Install host runtime dependencies on Ubuntu:
+Install and verify one host runtime backend on Ubuntu:
 
 ```bash
-just install-host-ubuntu
+just install-host-sysbox-ubuntu
 ```
 
 Run `just` as your normal user, including when it is managed by mise. The
 installer invokes `sudo` only for host changes. It also adds the invoking user
 to the `docker` group; log out and back in or run `newgrp docker` once after
-the first installation. If the entire recipe must run through `sudo`, a
-mise-managed executable is also supported via
-`sudo "$(command -v just)" install-host-ubuntu`.
+the first installation. Do not install Sysbox and gVisor together merely for
+testing; verify their installers in separate KVM guests instead.
 
 The installer shows every package and host-level change before doing anything
 and proceeds only after you enter `yes`. It is a development convenience, not
 production hardening guidance. In particular, review its path-scoped AppArmor
 exception for Sysbox FUSE mounts before using it outside a development host.
 
-Install gVisor `runsc` for the no-KVM backend:
+Install the VM test tools with `just install-kvm-verify-deps-ubuntu`, then test one installer without changing the host with `just verify-host-backend-kvm BACKEND`, or test every backend in a separate disposable VM with `just verify-host-backends-kvm`. Output is concise by default; append `--verbose` to show full guest installation and workload logs.
+
+Choose the backend the host needs:
+
+```bash
+just install-host-sysbox-ubuntu
+just install-host-gvisor-ubuntu
+just install-host-rootless-podman-ubuntu
+just install-host-runc-ubuntu
+```
+
+Install gVisor `runsc` directly for the no-KVM backend:
 
 ```bash
 just install-runsc-linux
 ```
 
-Or run the full Ubuntu bootstrap:
+Or bootstrap the project with one selected backend (Sysbox by default):
 
 ```bash
 just bootstrap-ubuntu
+just bootstrap-ubuntu gvisor
 ```
 
 Bootstrap prefers mise when available: it runs `mise install` and uses the
@@ -71,17 +82,17 @@ just sample-config
 Build the included runtime images:
 
 ```bash
-just build-agent-image
+just build-project-workspace
 just build-secret-example
 ```
 
 Run the reproducible integration smoke test:
 
 ```bash
-just smoke
+just verify-container-sysbox
 ```
 
-Use `just smoke -- --verbose` (or `just smoke -- -v`) to show detailed output for each stage.
+Use `just verify-container-sysbox -- --verbose` (or `-- -v`) to show detailed output for each stage. This requires a Docker host with Sysbox; standard GitHub-hosted CI uses `just verify-container-runc` instead.
 
 Run the fast static isolation check without Docker or container creation:
 

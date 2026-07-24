@@ -12,7 +12,7 @@
 ```bash
 pnpm install --frozen-lockfile
 just verify
-just container-runtime-verify
+just verify-container-runc
 pnpm audit --prod
 pnpm --filter @slop-lab/dev-infra-manager-core run pack:dry-run
 pnpm --filter @slop-lab/dim-cli run pack:dry-run

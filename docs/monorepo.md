@@ -113,8 +113,5 @@ Run the current manager verification:
 just verify
 ```
 
-Run matching scripts in every workspace package as packages are added:
-
-```bash
-just workspace-verify
-```
+This runs the matching check, test, and build scripts in every workspace
+package, including packages added later.

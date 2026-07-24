@@ -6,14 +6,47 @@ default:
 install:
     pnpm install --frozen-lockfile
 
-install-host-ubuntu:
-    JUST_BIN="{{ just_executable() }}" bash scripts/install-host-ubuntu.sh
+install-host-backend-ubuntu backend:
+    bash scripts/install-host-ubuntu.sh "{{backend}}"
+    just verify-host-backend-local "{{backend}}"
+
+install-host-sysbox-ubuntu:
+    just install-host-backend-ubuntu sysbox
+
+install-host-gvisor-ubuntu:
+    just install-host-backend-ubuntu gvisor
+
+install-host-rootless-podman-ubuntu:
+    just install-host-backend-ubuntu rootless-podman
+
+install-host-runc-ubuntu:
+    just install-host-backend-ubuntu runc
+
+# Requires the selected backend to be installed on the current host; readiness check only.
+verify-host-backend-local backend:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ "{{backend}}" == rootless-podman ]]; then just build-project-podman-image; fi
+    pnpm run cli -- doctor --backend "{{backend}}"
+
+install-kvm-verify-deps-ubuntu:
+    sudo apt-get update
+    sudo apt-get install -y qemu-system-x86 qemu-utils cloud-image-utils openssh-client
+    test -r /dev/kvm -a -w /dev/kvm
 
 install-runsc-linux:
     bash scripts/install-runsc-linux.sh
 
-bootstrap-ubuntu:
-    JUST_BIN="{{ just_executable() }}" bash scripts/bootstrap-ubuntu.sh
+# Requires QEMU and writable /dev/kvm; installs and exercises one backend in a disposable VM.
+verify-host-backend-kvm backend verbose="":
+    bash scripts/kvm-host-install-smoke.sh "{{backend}}" "{{verbose}}"
+
+# Requires QEMU and writable /dev/kvm; uses one clean VM per supported backend.
+verify-host-backends-kvm verbose="":
+    bash scripts/kvm-host-install-smoke.sh all "{{verbose}}"
+
+bootstrap-ubuntu backend="sysbox":
+    JUST_BIN="{{ just_executable() }}" bash scripts/bootstrap-ubuntu.sh "{{backend}}"
 
 check:
     pnpm run workspace:check
@@ -29,24 +62,18 @@ verify:
     pnpm run workspace:test
     pnpm run workspace:build
 
-workspace-verify:
-    pnpm run workspace:check
-    pnpm run workspace:test
-    pnpm run workspace:build
-
-# Verification that is safe to run from the nested development container.
-# It deliberately avoids Sysbox, KVM, loop devices, systemd, and sudo.
-container-verify:
-    pnpm run workspace:check
-    pnpm run workspace:test
-    pnpm run workspace:build
+# Shared prerequisites for the runc nested-container verification.
+_verify-container-runc-base:
+    just verify
     bash scripts/plugin-install-smoke.sh
     pnpm run cli -- config validate --config config.example.json
     bash scripts/container-cgroup-smoke.sh
 
-# Heavier nested-Docker smoke checks available without Sysbox in this container.
-container-runtime-verify:
-    just container-verify
+# Requires Docker, Compose v2, and privileged runc containers; does not require Sysbox or KVM.
+verify-container-runc:
+    docker info >/dev/null
+    docker compose version >/dev/null
+    just _verify-container-runc-base
     just build-project-workspace
     bash scripts/container-inner-docker-smoke.sh
     bash scripts/container-lifecycle-smoke.sh
@@ -78,5 +105,6 @@ build-project-podman-image:
 build-secret-example:
     docker build -t dev-infra-secret-runtime:latest images/secret-runtime-example
 
-smoke *args:
+# Requires a Docker host with the sysbox-runc runtime registered and usable.
+verify-container-sysbox *args:
     @bash scripts/smoke.sh {{args}}
