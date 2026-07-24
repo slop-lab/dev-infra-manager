@@ -43,4 +43,4 @@ The infrastructure assumes:
 - Nested containers created by agents are untrusted.
 - Secret-bearing containers are trusted only when built and deployed from reviewed sources.
 - Code that can directly or indirectly affect access to secrets is secret-bearing from a review perspective.
-- Shared infrastructure maintained by this repository is trusted by default across projects.
+- Shared infrastructure from this repository is trusted only after a project directly reviews the complete pinned DIM revision.

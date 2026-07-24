@@ -147,7 +147,7 @@ prefix and uses only that installed `dim` binary to exercise:
 Install `dim` from the registry with mise:
 
 ```bash
-mise use -g npm:@slop-lab/dim-cli
+mise use -g npm:@slop-lab/dim-cli@0.1.0
 ```
 
 Register a role-neutral bare repository, then create a workspace using the

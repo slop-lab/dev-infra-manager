@@ -58,7 +58,7 @@ This includes:
 
 Secret-bearing code must be reviewed by a human before it is used to build or deploy a secret-bearing environment.
 
-Shared infrastructure code from this repository is trusted by default for projects that adopt it. Project-specific changes that alter secret-bearing behavior are still subject to review.
+The complete infrastructure code from this repository must pass direct human review at the pinned revision before a project trusts or adopts it. The complete project repository and all secret-bearing environment code require the same review.
 
 ## Deployment Flow
 

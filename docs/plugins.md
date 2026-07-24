@@ -43,7 +43,7 @@ export default plugin;
 Install and explicitly enable a plugin package with:
 
 ```bash
-npx @slop-lab/install-dim @dev-infra-manager/plugin-github
+npx "@slop-lab/install-dim@0.1.0" "@dev-infra-manager/plugin-github@1.2.3"
 dim plugin list
 ```
 

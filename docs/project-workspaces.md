@@ -1,5 +1,10 @@
 # Project Workspaces
 
+Before adopting this workflow, follow the mandatory [DIM adoption and trust
+requirements](adoption.md). In particular, a human must review the complete DIM
+and project repositories and all secret-bearing environment code at the pinned
+revisions.
+
 This document defines the project-facing workspace workflow. Repository
 registration and managed Gitea details are documented in
 [Repository-backed Workspaces](repo-workspaces.md).

@@ -35,13 +35,13 @@ if (specifiers.length === 0) {
 
 function printHelp(): void {
   console.log(`Usage:
-  npx @slop-lab/install-dim PACKAGE [PACKAGE...]
+  npx "@slop-lab/install-dim@EXACT_VERSION" PACKAGE@EXACT_VERSION [PACKAGE@EXACT_VERSION...]
 
 Options:
   --plugin-home PATH  Override DIM_PLUGIN_HOME
 
 Examples:
-  npx @slop-lab/install-dim @dev-infra-manager/plugin-github
-  npx @slop-lab/install-dim @company/internal-git@1.2.3
-  npx @slop-lab/install-dim dim-plugin-local`);
+  npx "@slop-lab/install-dim@0.1.0" "@dev-infra-manager/plugin-github@1.2.3"
+  npx "@slop-lab/install-dim@0.1.0" "@company/internal-git@1.2.3"
+  npx "@slop-lab/install-dim@0.1.0" "dim-plugin-local@1.2.3"`);
 }

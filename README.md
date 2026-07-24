@@ -5,6 +5,11 @@
 Licensed under the [MIT License](LICENSE). Release history is recorded in the
 [changelog](CHANGELOG.md).
 
+Before using DIM in another project, read the mandatory [adoption and trust
+requirements](docs/adoption.md). They require full human review of DIM, the
+project repository, and every secret-bearing environment, plus immutable
+version pinning.
+
 The project focuses on the container and infrastructure boundary around agent jobs:
 
 - Ephemeral agent workspaces.
@@ -144,8 +149,8 @@ pnpm --filter @slop-lab/install-dim run pack:dry-run
 pnpm --filter @slop-lab/dev-infra-manager-core run publish:package
 pnpm --filter @slop-lab/dim-cli run publish:package
 pnpm --filter @slop-lab/install-dim run publish:package
-mise use -g npm:@slop-lab/dim-cli
-npx @slop-lab/install-dim @dev-infra-manager/plugin-github
+mise use -g npm:@slop-lab/dim-cli@0.1.0
+npx "@slop-lab/install-dim@0.1.0" "@dev-infra-manager/plugin-github@1.2.3"
 ```
 
 Optional Git hosting integrations are designed as separately installed,

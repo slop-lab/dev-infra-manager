@@ -10,7 +10,7 @@ The system has three major execution boundaries:
 
 The agent workspace boundary is untrusted.
 The secret-bearing runtime boundary is trusted only after human review of its effective source and runtime definition.
-The host/controller boundary is trusted because it can create job filesystems, run containers, and deploy secret-bearing runtimes.
+The host/controller boundary is privileged because it can create job filesystems, run containers, and deploy secret-bearing runtimes. A project must directly review the complete pinned DIM revision before trusting this boundary.
 
 ## Agent Workspace Boundary
 
@@ -51,8 +51,7 @@ The host/controller boundary:
 - Installs and checks runtime support through scripts and doctor checks.
 - Deploys secret-bearing containers.
 
-Controller code is trusted infrastructure code.
-Project-specific changes that alter secret-bearing behavior still require human review before deployment.
+Controller code is trusted infrastructure code only after direct human review of the complete pinned DIM revision. The complete project repository and all secret-bearing environment code also require human review before deployment.
 
 ## Git Boundary
 
