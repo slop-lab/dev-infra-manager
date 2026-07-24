@@ -9,6 +9,10 @@ requested command as `agent`.
 `DIM_DOCKERD_FLAGS` may add backend-specific daemon flags. The image must not
 mount or contact the host Docker socket.
 
+Before starting `dockerd`, the entrypoint removes managed containerd runtime
+state below `/var/run/docker/containerd`. That state belongs to the previous
+PID namespace and must not survive stop/start of the same workspace container.
+
 ## Rootless Podman image
 
 `images/project-workspace-podman` prepares the agent home, Codex home,

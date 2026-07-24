@@ -4,7 +4,10 @@ set -euo pipefail
 mkdir -p /home/agent/.codex /var/lib/docker /var/run /workspace
 chown -R agent:agent /home/agent /var/lib/docker /workspace
 chmod 0700 /home/agent/.codex
-rm -f /var/run/docker.pid /var/run/docker.sock
+# A stopped container keeps its writable /var/run layer. Managed containerd
+# state is process-namespace-local, so it must not survive a container restart.
+rm -rf -- /var/run/docker/containerd
+rm -f -- /var/run/docker.pid /var/run/docker.sock
 
 dockerd --host=unix:///var/run/docker.sock --data-root=/var/lib/docker \
   --group=agent ${DIM_DOCKERD_FLAGS:-} >/var/log/dockerd.log 2>&1 &
