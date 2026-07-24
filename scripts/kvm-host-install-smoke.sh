@@ -49,9 +49,6 @@ run_step() {
 dim_prepare_clone_source "$repo_root" "$workdir/snapshot"
 clone_source="$DIM_GIT_CLONE_SOURCE"
 git -C "$clone_source" bundle create "$workdir/repo.bundle" --all
-git -C "$repo_root" diff --binary HEAD > "$workdir/working-tree.patch"
-git -C "$repo_root" ls-files -z --others --exclude-standard >"$workdir/untracked-files"
-tar -C "$repo_root" --null -T "$workdir/untracked-files" -czf "$workdir/untracked-files.tar.gz"
 pid=""
 cleanup() {
   if [[ -n "$pid" ]]; then
@@ -75,7 +72,7 @@ qemu-img create -q -f qcow2 -F qcow2 -b "$image" "$workdir/root.qcow2" 24G
 qemu-system-x86_64 -enable-kvm -cpu host -m 4096 -smp 4 -nographic -drive "file=$workdir/root.qcow2,if=virtio" -drive "file=$workdir/seed.img,format=raw,if=virtio" -netdev user,id=n,hostfwd=tcp:127.0.0.1:22222-:22 -device virtio-net-pci,netdev=n >"$workdir/qemu.log" 2>&1 & pid=$!
 ssh_args=(-i "$workdir/id" -p 22222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=2)
 clone_repository() {
-  ssh "${ssh_args[@]}" dim@127.0.0.1 "tar -C /tmp -xzf - && git clone /tmp/repo.bundle dim && git -C dim apply /tmp/working-tree.patch && tar -C dim -xzf /tmp/untracked-files.tar.gz" <"$workdir/repo.tar.gz"
+  ssh "${ssh_args[@]}" dim@127.0.0.1 "tar -C /tmp -xzf - && git clone /tmp/repo.bundle dim" <"$workdir/repo.tar.gz"
 }
 install_backend() {
   printf 'yes\n' | ssh "${ssh_args[@]}" dim@127.0.0.1 "cd dim && bash scripts/install-host-ubuntu.sh '$backend'"
@@ -102,7 +99,7 @@ if [[ "$guest_ready" == false ]]; then
   exit 1
 fi
 run_step "install guest prerequisites" ssh "${ssh_args[@]}" dim@127.0.0.1 "sudo apt-get update && sudo apt-get install -y git"
-tar -C "$workdir" -czf "$workdir/repo.tar.gz" repo.bundle working-tree.patch untracked-files.tar.gz
+tar -C "$workdir" -czf "$workdir/repo.tar.gz" repo.bundle
 run_step "clone repository" clone_repository
 run_step "install $backend backend" install_backend
 run_step "run $backend workload" ssh "${ssh_args[@]}" dim@127.0.0.1 "set -e; sudo docker info >/dev/null; case '$backend' in all|sysbox) systemctl is-active sysbox; sudo docker run --rm --runtime=sysbox-runc hello-world >/dev/null;; esac; case '$backend' in all|gvisor) runsc --version; sudo docker run --rm --runtime=runsc hello-world >/dev/null;; esac; case '$backend' in rootless-podman) test -c /dev/fuse; command -v newuidmap; command -v newgidmap; cd dim; sudo docker build -t dev-infra-project-workspace-podman:latest images/project-workspace-podman; sudo docker run --rm --runtime=runc --privileged --device /dev/fuse --security-opt seccomp=unconfined --security-opt apparmor=unconfined dev-infra-project-workspace-podman:latest podman run --rm docker.io/library/hello-world;; esac; case '$backend' in all|runc) sudo docker run --rm --runtime=runc hello-world >/dev/null;; esac"
