@@ -446,16 +446,38 @@ export function workspaceContainerArgs(
   return args;
 }
 
-async function waitForInnerDocker(runner: StreamingCommandRunner, containerName: string): Promise<void> {
+export async function waitForInnerDocker(runner: StreamingCommandRunner, containerName: string): Promise<void> {
   let lastError = "not ready";
   for (let attempt = 0; attempt < 60; attempt += 1) {
     const result = await runner.run("docker", ["exec", "--user", "agent", containerName, "docker", "info"]);
     if (result.exitCode === 0) return;
     lastError = result.stderr.trim() || result.stdout.trim();
+
+    const inspect = await runner.run("docker", ["inspect", "--format", "{{json .State}}", containerName]);
+    if (inspect.exitCode === 0) {
+      try {
+        const state = JSON.parse(inspect.stdout) as { Running?: boolean; Status?: string };
+        if (state.Running === false || state.Status === "exited" || state.Status === "dead") break;
+      } catch {
+        // Preserve the original readiness error and retry when state output is malformed.
+      }
+    }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  const logs = await runner.run("docker", ["exec", containerName, "cat", "/var/log/dockerd.log"]);
-  throw new UserError(`inner Docker did not become ready: ${lastError}\n${logs.stdout || logs.stderr}`);
+
+  const state = await runner.run("docker", [
+    "inspect",
+    "--format",
+    "status={{.State.Status}} exitCode={{.State.ExitCode}} oomKilled={{.State.OOMKilled}} error={{json .State.Error}}",
+    containerName
+  ]);
+  const logs = await runner.run("docker", ["logs", containerName]);
+  const details = [
+    `inner Docker did not become ready: ${lastError}`,
+    state.exitCode === 0 ? `outer container: ${state.stdout.trim()}` : `outer container inspect failed: ${state.stderr.trim() || state.stdout.trim()}`,
+    `outer container logs:\n${logs.stdout || logs.stderr || "(empty)"}`
+  ];
+  throw new UserError(details.join("\n"));
 }
 
 async function ensureClone(

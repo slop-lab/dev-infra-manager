@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { lifecycleOptions } from "../src/lifecycleOptions.js";
 import { LifecycleState, validateLifecycleName } from "../src/lifecycleState.js";
 import type { RepoRecord, WorkspaceRecord } from "../src/lifecycleTypes.js";
-import { validateWorkspaceProfiles, workspaceContainerArgs } from "../src/workspaceLifecycle.js";
+import type { CommandResult, RunOptions, StreamingCommandRunner } from "../src/types.js";
+import { validateWorkspaceProfiles, waitForInnerDocker, workspaceContainerArgs } from "../src/workspaceLifecycle.js";
 
 describe("repo and workspace lifecycle", () => {
   let root: string;
@@ -185,5 +186,45 @@ describe("repo and workspace lifecycle", () => {
     });
     await state.writeWorkspace(normalized);
     expect(await readFile(join(root, "workspaces", "legacy.json"), "utf8")).not.toContain('"repo"');
+  });
+
+  it("reports stopped workspace state and entrypoint logs when inner Docker fails", async () => {
+    const calls: string[][] = [];
+    const runner: StreamingCommandRunner = {
+      async run(command: string, args: string[], _options?: RunOptions): Promise<CommandResult> {
+        calls.push([command, ...args]);
+        if (args[0] === "exec") {
+          return { command, args, stdout: "", stderr: "container is not running", exitCode: 1 };
+        }
+        if (args[0] === "inspect" && args[2] === "{{json .State}}") {
+          return {
+            command,
+            args,
+            stdout: JSON.stringify({ Running: false, Status: "exited" }),
+            stderr: "",
+            exitCode: 0
+          };
+        }
+        if (args[0] === "inspect") {
+          return {
+            command,
+            args,
+            stdout: 'status=exited exitCode=1 oomKilled=false error=""\n',
+            stderr: "",
+            exitCode: 0
+          };
+        }
+        return { command, args, stdout: "dockerd mount failure\n", stderr: "", exitCode: 0 };
+      },
+      async runStreaming(): Promise<number> {
+        return 0;
+      }
+    };
+
+    await expect(waitForInnerDocker(runner, "dim-ws-failed")).rejects.toThrow(
+      /status=exited exitCode=1 oomKilled=false[\s\S]*dockerd mount failure/
+    );
+    expect(calls.filter(([, subcommand]) => subcommand === "exec")).toHaveLength(1);
+    expect(calls.at(-1)).toEqual(["docker", "logs", "dim-ws-failed"]);
   });
 });
