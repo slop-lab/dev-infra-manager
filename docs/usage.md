@@ -78,6 +78,8 @@ Run the integration smoke test:
 just smoke
 ```
 
+Use `just smoke -- --verbose` (or `just smoke -- -v`) to show detailed output for each labeled stage.
+
 The smoke test builds the included images, verifies the agent image command environment, exercises the managed Git pull request flow, deploys the secret runtime from an approved ref, and checks the secret runtime health endpoint.
 
 For a fast check that does not contact Docker or create containers, validate

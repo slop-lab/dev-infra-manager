@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+verbose=false
+for arg in "$@"; do
+  case "$arg" in
+    --) ;;
+    -v|--verbose) verbose=true ;;
+    *) echo "usage: $0 [-v|--verbose]" >&2; exit 2 ;;
+  esac
+done
+
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
@@ -9,6 +18,26 @@ probe_suffix="$$-$(date +%s)"
 host_probe_image="dim-host-only-probe:${probe_suffix}"
 inner_probe_image="dim-inner-only-probe:${probe_suffix}"
 nested_smoke_container="dim-nested-smoke-${probe_suffix}"
+step_log="$tmpdir/step.log"
+current_step="startup"
+exec 3>&1 4>&2
+step() {
+  current_step="$1"
+  echo "[smoke] $current_step" >&3
+  if [[ "$verbose" == false ]]; then
+    exec >"$step_log" 2>&1
+  fi
+}
+show_failure() {
+  local status=$?
+  trap - ERR
+  echo "[smoke] failed: $current_step" >&4
+  if [[ "$verbose" == false && -s "$step_log" ]]; then
+    cat "$step_log" >&4
+  fi
+  exit "$status"
+}
+trap show_failure ERR
 cleanup() {
   set +e
   docker rm -f "$nested_smoke_container" >/dev/null 2>&1
@@ -19,12 +48,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
+step "build workspace"
 pnpm run workspace:build
 dim_bin="$repo_root/packages/dim-cli/dist/cli.js"
 
+step "build container images"
 just build-agent-image
 just build-secret-example
 
+step "verify agent image"
 docker run --rm \
   -e DEV_INFRA_START_DOCKERD=0 \
   dev-infra-agent-workspace:latest \
@@ -32,6 +64,7 @@ docker run --rm \
 
 # Use unique tags so the isolation assertions never depend on which images the
 # host or inner daemon happened to cache before this smoke run.
+step "verify nested Docker isolation and resource limits"
 docker tag dev-infra-agent-workspace:latest "$host_probe_image"
 docker run --rm \
   --name "$nested_smoke_container" \
@@ -58,6 +91,7 @@ if docker image inspect "$inner_probe_image" >/dev/null 2>&1; then
   exit 1
 fi
 
+step "exercise managed Git pull request flow"
 cat > "$tmpdir/config.json" <<EOF
 {
   "stateRoot": "$tmpdir/state",
@@ -127,11 +161,13 @@ node "$dim_bin" pr create \
 node "$dim_bin" pr approve --config "$tmpdir/config.json" --repo trusted-runtime --id 1 --reviewer smoke >/dev/null
 node "$dim_bin" pr merge --config "$tmpdir/config.json" --repo trusted-runtime --id 1 >/dev/null
 
+step "deploy secret runtime"
 node "$dim_bin" secret deploy --config "$tmpdir/config.json" --sudo=false >/dev/null
 
+step "wait for secret runtime health"
 for _ in $(seq 1 30); do
-  if curl -fsS http://127.0.0.1:18090/healthz >/dev/null; then
-    echo "smoke-ok"
+  if curl -fs http://127.0.0.1:18090/healthz >/dev/null; then
+    echo "[smoke] ok" >&3
     exit 0
   fi
   sleep 1

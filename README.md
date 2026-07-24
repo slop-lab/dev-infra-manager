@@ -76,6 +76,8 @@ Run the reproducible integration smoke test:
 just smoke
 ```
 
+Use `just smoke -- --verbose` (or `just smoke -- -v`) to show detailed output for each stage.
+
 Run the fast static isolation check without Docker or container creation:
 
 ```bash

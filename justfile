@@ -82,5 +82,5 @@ build-agent-podman-image:
 build-secret-example:
     docker build -t dev-infra-secret-runtime:latest images/secret-runtime-example
 
-smoke:
-    bash scripts/smoke.sh
+smoke *args:
+    @bash scripts/smoke.sh {{args}}
