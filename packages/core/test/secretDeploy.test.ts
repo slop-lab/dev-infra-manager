@@ -47,4 +47,11 @@ describe("secret runtime deploy planning", () => {
       sudo: true
     });
   });
+
+  it("can deploy through a user-accessible Docker socket without sudo", () => {
+    const config = normalizeConfig(DEFAULT_CONFIG);
+    const commands = planSecretDeploy(config, "/tmp/worktree", false);
+
+    expect(commands.filter(({ command }) => command === "docker").every(({ sudo }) => sudo === false)).toBe(true);
+  });
 });

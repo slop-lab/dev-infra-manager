@@ -335,7 +335,7 @@ async function main(argv: string[]): Promise<void> {
   }
 
   if (command === "secret" && subcommand === "deploy") {
-    await deploySecretRuntime(config, runner, booleanFlag(parsed, "dry-run", false));
+    await deploySecretRuntime(config, runner, booleanFlag(parsed, "dry-run", false), booleanFlag(parsed, "sudo", true));
     return;
   }
 
@@ -546,7 +546,7 @@ Usage:
   dim pr show --repo NAME --id ID [--config dev-infra.config.json]
   dim pr approve --repo NAME --id ID --reviewer USER [--config dev-infra.config.json]
   dim pr merge --repo NAME --id ID [--config dev-infra.config.json]
-  dim secret deploy [--config dev-infra.config.json] [--dry-run]
+  dim secret deploy [--config dev-infra.config.json] [--dry-run] [--sudo=false]
   dim controller run [--config dev-infra.config.json] [--once] [--interval-seconds 30] [--dry-run]
 `);
 }

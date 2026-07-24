@@ -203,11 +203,20 @@ Usage:
 
 ```bash
 dim repo list
-  dim repo show NAME
-  dim plugin list
+dim repo show NAME
 ```
 
 Print role-neutral repository registry records as JSON.
+
+### `plugin list`
+
+Usage:
+
+```bash
+dim plugin list
+```
+
+Print the enabled plugins and registered provider kinds as JSON.
 
 ### `project init`
 

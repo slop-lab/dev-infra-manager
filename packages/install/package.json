@@ -1,6 +1,16 @@
 {
   "name": "@slop-lab/install-dim",
   "version": "0.1.0",
+  "description": "Installer for optional DIM plugins",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/slop-lab/dev-infra-manager.git",
+    "directory": "packages/install"
+  },
+  "homepage": "https://github.com/slop-lab/dev-infra-manager#readme",
+  "bugs": "https://github.com/slop-lab/dev-infra-manager/issues",
+  "keywords": ["cli", "installer", "plugins"],
   "private": true,
   "type": "module",
   "bin": {

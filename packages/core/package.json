@@ -1,6 +1,16 @@
 {
   "name": "@slop-lab/dev-infra-manager-core",
   "version": "0.1.0",
+  "description": "Provider-neutral runtime and workspace lifecycle APIs for DIM",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/slop-lab/dev-infra-manager.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/slop-lab/dev-infra-manager#readme",
+  "bugs": "https://github.com/slop-lab/dev-infra-manager/issues",
+  "keywords": ["containers", "development", "isolation", "workspace"],
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -32,4 +42,3 @@
     "vitest": "3.2.4"
   }
 }
-

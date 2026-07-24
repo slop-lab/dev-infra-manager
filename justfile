@@ -71,16 +71,16 @@ sample-config:
     pnpm run cli -- init-config --output dev-infra.config.json
 
 build-agent-image:
-    sudo docker build -t dev-infra-agent-workspace:latest images/agent-workspace
+    docker build -t dev-infra-agent-workspace:latest images/agent-workspace
 
 build-project-workspace:
     docker build --force-rm --build-arg "AGENT_UID=$(id -u)" --build-arg "AGENT_GID=$(id -g)" -t dev-infra-project-workspace:latest images/project-workspace
 
 build-agent-podman-image:
-    sudo docker build -t dev-infra-agent-workspace-podman:latest images/agent-workspace-podman
+    docker build -t dev-infra-agent-workspace-podman:latest images/agent-workspace-podman
 
 build-secret-example:
-    sudo docker build -t dev-infra-secret-runtime:latest images/secret-runtime-example
+    docker build -t dev-infra-secret-runtime:latest images/secret-runtime-example
 
 smoke:
     bash scripts/smoke.sh

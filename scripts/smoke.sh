@@ -11,10 +11,10 @@ inner_probe_image="dim-inner-only-probe:${probe_suffix}"
 nested_smoke_container="dim-nested-smoke-${probe_suffix}"
 cleanup() {
   set +e
-  sudo docker rm -f "$nested_smoke_container" >/dev/null 2>&1
-  sudo docker rm -f dim-smoke-secret >/dev/null 2>&1
-  sudo docker image rm -f "$host_probe_image" >/dev/null 2>&1
-  sudo docker image rm -f dim-smoke-secret:latest >/dev/null 2>&1
+  docker rm -f "$nested_smoke_container" >/dev/null 2>&1
+  docker rm -f dim-smoke-secret >/dev/null 2>&1
+  docker image rm -f "$host_probe_image" >/dev/null 2>&1
+  docker image rm -f dim-smoke-secret:latest >/dev/null 2>&1
   rm -rf "$tmpdir"
 }
 trap cleanup EXIT
@@ -25,15 +25,15 @@ dim_bin="$repo_root/packages/dim-cli/dist/cli.js"
 just build-agent-image
 just build-secret-example
 
-sudo docker run --rm \
+docker run --rm \
   -e DEV_INFRA_START_DOCKERD=0 \
   dev-infra-agent-workspace:latest \
   bash -lc 'test "$(whoami)" = agent && test "$HOME" = /home/agent && git --version >/dev/null && docker --version >/dev/null'
 
 # Use unique tags so the isolation assertions never depend on which images the
 # host or inner daemon happened to cache before this smoke run.
-sudo docker tag dev-infra-agent-workspace:latest "$host_probe_image"
-sudo docker run --rm \
+docker tag dev-infra-agent-workspace:latest "$host_probe_image"
+docker run --rm \
   --name "$nested_smoke_container" \
   --runtime sysbox-runc \
   --cpus 1 \
@@ -53,7 +53,7 @@ sudo docker run --rm \
     docker tag hello-world:latest "$INNER_PROBE_IMAGE"
   '
 
-if sudo docker image inspect "$inner_probe_image" >/dev/null 2>&1; then
+if docker image inspect "$inner_probe_image" >/dev/null 2>&1; then
   echo "inner Docker image leaked into the host image store: $inner_probe_image" >&2
   exit 1
 fi
@@ -127,7 +127,7 @@ node "$dim_bin" pr create \
 node "$dim_bin" pr approve --config "$tmpdir/config.json" --repo trusted-runtime --id 1 --reviewer smoke >/dev/null
 node "$dim_bin" pr merge --config "$tmpdir/config.json" --repo trusted-runtime --id 1 >/dev/null
 
-node "$dim_bin" secret deploy --config "$tmpdir/config.json" >/dev/null
+node "$dim_bin" secret deploy --config "$tmpdir/config.json" --sudo=false >/dev/null
 
 for _ in $(seq 1 30); do
   if curl -fsS http://127.0.0.1:18090/healthz >/dev/null; then

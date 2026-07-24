@@ -2,7 +2,9 @@
 
 ## Current Status
 
-The project has an initial TypeScript implementation for configuration validation, job filesystem lifecycle planning, doctor checks, and agent container command generation.
+The project has a release-candidate TypeScript implementation of the DIM CLI,
+provider-neutral core APIs, plugin installation, persistent project workspaces,
+runtime isolation planning, and review-gated deployment.
 
 Documented decisions:
 
@@ -75,7 +77,11 @@ Implemented:
   nested Gitea clone and push, Compose profile replacement, setup failure
   recovery, project task dispatch, and cleanup.
 
-Current environment verification:
+Recorded environment verification:
+
+The following items are historical verification evidence from the environments
+where each backend was available. They are not assertions about every current
+checkout or container:
 
 - Docker 29.1.3 is installed and can run `hello-world`.
 - Included agent and secret runtime images build successfully.

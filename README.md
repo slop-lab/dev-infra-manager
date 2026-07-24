@@ -2,6 +2,9 @@
 
 `dev-infra-manager` provides infrastructure for running AI-assisted development jobs in isolated, review-gated environments.
 
+Licensed under the [MIT License](LICENSE). Release history is recorded in the
+[changelog](CHANGELOG.md).
+
 The project focuses on the container and infrastructure boundary around agent jobs:
 
 - Ephemeral agent workspaces.
