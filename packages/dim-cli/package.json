@@ -1,0 +1,32 @@
+{
+  "name": "@slop-lab/dim-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "dev-infra-manager": "./dist/cli.js",
+    "dim": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
+    "pack:dry-run": "pnpm run build && npm pack --dry-run ./dist",
+    "publish:package": "pnpm run build && npm publish ./dist",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "cli": "tsx src/cli.ts"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@slop-lab/dev-infra-manager-core": "workspace:0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.34",
+    "package.json-minifier": "0.0.6",
+    "tsx": "4.20.3",
+    "typescript": "5.8.3"
+  }
+}

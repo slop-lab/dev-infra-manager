@@ -6,7 +6,15 @@ repo_name="dim-self-$suffix"
 workspace_name="dim-self-$suffix"
 state_root="$(mktemp -d /tmp/dim-self-state.XXXXXX)"
 source_root="$(mktemp -d /tmp/dim-self-source.XXXXXX)"
-dim_bin="${DIM_BIN:-$PWD/apps/manager/dist/cli.js}"
+dim_bin="${DIM_BIN:-$PWD/packages/dim-cli/dist/cli.js}"
+
+dim() {
+  if [[ -n "${DIM_BIN:-}" ]]; then
+    "$dim_bin" "$@"
+  else
+    node "$dim_bin" "$@"
+  fi
+}
 
 export DIM_STATE_ROOT="$state_root"
 export DIM_WORKSPACE_RUNTIME="${DIM_WORKSPACE_RUNTIME:-runc}"
@@ -14,7 +22,7 @@ export DIM_WORKSPACE_PRIVILEGED="${DIM_WORKSPACE_PRIVILEGED:-yes}"
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    "$dim_bin" workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
+    dim workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
   fi
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     local credentials admin_username admin_password
@@ -35,16 +43,15 @@ cleanup() {
 trap cleanup EXIT
 
 git clone --bare "$PWD" "$source_root/project.git" >/dev/null
-"$dim_bin" repo register --name "$repo_name" "$source_root/project.git" >/dev/null
-"$dim_bin" workspace create "$repo_name" "$workspace_name" >/dev/null
+dim repo register --name "$repo_name" "$source_root/project.git" >/dev/null
+dim workspace create "$repo_name" "$workspace_name" >/dev/null
 
-"$dim_bin" workspace exec "$workspace_name" -- \
+dim workspace exec "$workspace_name" -- \
   sh -c 'test -x .dim/setup.sh && test -x .dim/entrypoint.sh'
-"$dim_bin" workspace run "$workspace_name" check >/dev/null
-test "$("$dim_bin" workspace run "$workspace_name" codex -- --version)" != ""
-"$dim_bin" workspace run "$workspace_name" verify >/dev/null
+dim workspace run "$workspace_name" check >/dev/null
+test "$(dim workspace run "$workspace_name" codex -- --version)" != ""
+dim workspace run "$workspace_name" verify >/dev/null
 
-"$dim_bin" workspace discard "$workspace_name" --yes >/dev/null
+dim workspace discard "$workspace_name" --yes >/dev/null
 
 echo "container-self-project-smoke-ok"
-

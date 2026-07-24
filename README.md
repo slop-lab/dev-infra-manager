@@ -127,14 +127,25 @@ This repository implements the same project contract itself through
 this repository, `dim workspace run work-1 codex` launches Codex in the
 persistent DIM workspace; no separate workspace launcher is required.
 
-The publishable CLI package is `@slop-lab/dim-cli`. Its source manifest remains
-private; the build generates a consumer-facing manifest under `dist`:
+The publishable packages are `@slop-lab/dev-infra-manager-core`, the thin
+`@slop-lab/dim-cli`, and the plugin installer
+`@slop-lab/install-dim`. Their source manifests remain private; each build
+generates a consumer-facing manifest under `dist`. Publish core before the CLI:
 
 ```bash
+pnpm --filter @slop-lab/dev-infra-manager-core run pack:dry-run
 pnpm --filter @slop-lab/dim-cli run pack:dry-run
+pnpm --filter @slop-lab/install-dim run pack:dry-run
+pnpm --filter @slop-lab/dev-infra-manager-core run publish:package
 pnpm --filter @slop-lab/dim-cli run publish:package
+pnpm --filter @slop-lab/install-dim run publish:package
 mise use -g npm:@slop-lab/dim-cli
+npx @slop-lab/install-dim @dev-infra-manager/plugin-github
 ```
+
+Optional Git hosting integrations are designed as separately installed,
+explicitly enabled packages over the versioned core plugin API. See
+[docs/plugins.md](docs/plugins.md).
 
 See [docs/repo-workspaces.md](docs/repo-workspaces.md) for lifecycle,
 credential, reconciliation, and container-only verification details.

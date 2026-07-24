@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "cli": "pnpm --filter @slop-lab/dim-cli run cli --",
+    "cli": "pnpm --filter @slop-lab/dev-infra-manager-core run build && pnpm --filter @slop-lab/dim-cli run cli --",
     "workspace:check": "pnpm --recursive run check",
     "workspace:test": "pnpm --recursive run test",
     "workspace:build": "pnpm --recursive run build"

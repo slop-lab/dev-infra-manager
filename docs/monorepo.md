@@ -6,18 +6,22 @@ This repository is a pnpm workspace.
 
 ```text
 .
-├── apps/
-│   └── manager/         current host-side CLI and controller
+├── apps/                future deployable services
 ├── .dim/                this repository's DIM project contract
-├── packages/            provider-neutral contracts and adapters
+├── packages/
+│   ├── core/            lifecycle, runtime, Git, state, and plugin contracts
+│   ├── dim-cli/         thin executable command and output adapter
+│   └── install/         npx plugin installer
 ├── deploy/              deployment manifests and service templates
 ├── images/              runtime image definitions
 └── specs/               normative behavior and local implementation details
 ```
 
 The root package is workspace orchestration only. It contains no application
-source or tests. Root-level `just` and pnpm commands forward to workspace
-packages for operator convenience.
+source or tests. `packages/dim-cli` imports only the public
+`@slop-lab/dev-infra-manager-core` entrypoint; core never imports the CLI.
+Root-level `just` and pnpm commands forward to workspace packages for operator
+convenience.
 
 ## Dependency Direction
 

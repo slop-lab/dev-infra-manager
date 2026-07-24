@@ -14,6 +14,7 @@ The documentation is split by concern:
 - [Runtime Images](runtime-images.md): included agent workspace and secret runtime images.
 - [Repository-backed Workspaces](repo-workspaces.md): local Gitea registration, persistent workspaces, reconciliation, and Git environment.
 - [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.
+- [Plugins](plugins.md): versioned provider extension boundary for optional GitHub, GitLab, and other integrations.
 - [Status](status.md): current progress and known future work.
 
 Implementation-oriented normative specifications live in [../specs/README.md](../specs/README.md).

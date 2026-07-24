@@ -16,18 +16,18 @@ bootstrap-ubuntu:
     JUST_BIN="{{ just_executable() }}" bash scripts/bootstrap-ubuntu.sh
 
 check:
-    pnpm --filter @slop-lab/dim-cli run check
+    pnpm run workspace:check
 
 test:
-    pnpm --filter @slop-lab/dim-cli run test
+    pnpm run workspace:test
 
 build:
-    pnpm --filter @slop-lab/dim-cli run build
+    pnpm run workspace:build
 
 verify:
-    pnpm --filter @slop-lab/dim-cli run check
-    pnpm --filter @slop-lab/dim-cli run test
-    pnpm --filter @slop-lab/dim-cli run build
+    pnpm run workspace:check
+    pnpm run workspace:test
+    pnpm run workspace:build
 
 workspace-verify:
     pnpm run workspace:check
@@ -40,6 +40,7 @@ container-verify:
     pnpm run workspace:check
     pnpm run workspace:test
     pnpm run workspace:build
+    bash scripts/plugin-install-smoke.sh
     pnpm run cli -- config validate --config config.example.json
     bash scripts/container-cgroup-smoke.sh
 
@@ -55,15 +56,13 @@ container-runtime-verify:
 
 # Build and link the dim CLI for use from other local projects.
 install-dim-local:
-    pnpm --filter @slop-lab/dim-cli run build
-    chmod +x apps/manager/dist/cli.js
-    dim_bin_dir="$(node -p 'require("node:path").join(require("node:os").homedir(), ".local/bin")')"; install -d "$dim_bin_dir"; ln -sfn "{{ justfile_directory() }}/apps/manager/dist/cli.js" "$dim_bin_dir/dim"; echo "Installed $dim_bin_dir/dim (ensure $dim_bin_dir is in PATH)"
+    bash scripts/install-dim-local.sh
 
 isolation-check:
-    pnpm --filter @slop-lab/dim-cli exec vitest run test/docker.test.ts
+    pnpm --filter @slop-lab/dev-infra-manager-core exec vitest run test/docker.test.ts
 
 isolation-check-json:
-    pnpm --filter @slop-lab/dim-cli exec vitest run test/docker.test.ts --reporter=json
+    pnpm --filter @slop-lab/dev-infra-manager-core exec vitest run test/docker.test.ts --reporter=json
 
 doctor:
     pnpm run cli -- doctor

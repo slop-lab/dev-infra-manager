@@ -1,40 +1,46 @@
 #!/usr/bin/env node
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { loadConfig, writeDefaultConfig } from "./config.js";
-import { UserError } from "./errors.js";
-import { buildAgentTimeoutArgs, buildAgentTimeoutCommand } from "./docker.js";
-import { cleanupJob, prepareJob, readJobMetadata } from "./job.js";
-import { ProcessRunner } from "./runner.js";
-import { runDoctor } from "./doctor.js";
 import {
   approvePullRequest,
+  buildAgentTimeoutArgs,
+  buildAgentTimeoutCommand,
+  cleanupJob,
   createPullRequest,
   createRepo,
-  initGitHost,
-  installRepoHooks,
-  listPullRequests,
-  mergePullRequest,
-  readPullRequest
-} from "./gitHost.js";
-import { deploySecretRuntime } from "./secretDeploy.js";
-import { runController } from "./controller.js";
-import { runAgentJob } from "./agentJob.js";
-import { lifecycleOptions } from "./lifecycleOptions.js";
-import { listRegisteredRepos, registerRepo, showRegisteredRepo } from "./repoRegistry.js";
-import {
   createWorkspace,
+  deploySecretRuntime,
   discardWorkspace,
+  ensureGitea,
   execWorkspace,
+  initGitHost,
+  initializeProject,
+  installRepoHooks,
+  lifecycleOptions,
+  listPullRequests,
+  listRegisteredRepos,
+  loadInstalledPlugins,
+  loadConfig,
+  mergePullRequest,
+  prepareJob,
+  pluginHome,
+  ProcessRunner,
+  readJobMetadata,
+  readPullRequest,
+  registerRepo,
+  runAgentJob,
+  runController,
+  runDoctor,
   runWorkspace,
   setupWorkspace,
+  showRegisteredRepo,
   showWorkspace,
   startWorkspace,
   stopWorkspace,
-  updateWorkspace
-} from "./workspaceLifecycle.js";
-import { ensureGitea } from "./gitea.js";
-import { initializeProject } from "./projectScaffold.js";
+  updateWorkspace,
+  UserError,
+  writeDefaultConfig
+} from "@slop-lab/dev-infra-manager-core";
 
 interface ParsedArgs {
   command: string[];
@@ -119,6 +125,17 @@ async function main(argv: string[]): Promise<void> {
     const target = await initializeProject(invocationDirectory, booleanFlag(parsed, "force", false));
     console.log(`Created ${target}`);
     console.log("Next: review .dim/docker-compose.yml, then register this project's bare repository");
+    return;
+  }
+
+  if (command === "plugin" && subcommand === "list") {
+    const home = pluginHome();
+    const loaded = await loadInstalledPlugins(home);
+    console.log(JSON.stringify({
+      pluginHome: home,
+      plugins: loaded.manifest.plugins,
+      repositoryProviders: loaded.registry.repositoryProviderKinds()
+    }, null, 2));
     return;
   }
 
@@ -504,6 +521,7 @@ Usage:
   dim repo list
   dim repo show NAME
   dim project init [--force]
+  dim plugin list
   dim gitea ensure
   dim gitea credentials --show-secrets
   dim workspace create PROJECT WORKSPACE [--profile PROFILE ...] [--git-user-name NAME] [--git-user-email EMAIL]

@@ -1,24 +1,20 @@
 {
-  "name": "@slop-lab/dim-cli",
+  "name": "@slop-lab/install-dim",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "dev-infra-manager": "./dist/cli.js",
-    "dim": "./dist/cli.js"
+    "install-dim": "./dist/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
     "pack:dry-run": "pnpm run build && npm pack --dry-run ./dist",
     "publish:package": "pnpm run build && npm publish ./dist",
     "check": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "cli": "tsx src/cli.ts"
+    "test": "vitest run"
   },
   "engines": {
-    "node": ">=22.0.0",
-    "pnpm": ">=10.0.0"
+    "node": ">=22.0.0"
   },
   "publishConfig": {
     "access": "public"
@@ -26,7 +22,6 @@
   "devDependencies": {
     "@types/node": "22.15.34",
     "package.json-minifier": "0.0.6",
-    "tsx": "4.20.3",
     "typescript": "5.8.3",
     "vitest": "3.2.4"
   }

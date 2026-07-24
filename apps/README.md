@@ -2,10 +2,9 @@
 
 Deployable processes belong under `apps/`.
 
-Current applications:
-
-- `manager`: host-side CLI and controller for jobs, managed Git primitives,
-  runtime deployment, and readiness checks.
+There are currently no deployable application packages. The executable DIM
+CLI lives under `packages/dim-cli`; its reusable implementation lives under
+`packages/core`.
 
 Planned application boundaries:
 

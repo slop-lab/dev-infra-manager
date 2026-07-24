@@ -203,7 +203,8 @@ Usage:
 
 ```bash
 dim repo list
-dim repo show NAME
+  dim repo show NAME
+  dim plugin list
 ```
 
 Print role-neutral repository registry records as JSON.

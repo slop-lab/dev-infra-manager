@@ -8,7 +8,7 @@ Requires=docker.service
 Type=simple
 WorkingDirectory=/opt/dev-infra-manager
 Environment=NODE_ENV=production
-ExecStart=/usr/bin/node /opt/dev-infra-manager/dist/cli.js controller run --config /etc/dev-infra-manager/config.json --interval-seconds 30
+ExecStart=/opt/dev-infra-manager/node_modules/.bin/dim controller run --config /etc/dev-infra-manager/config.json --interval-seconds 30
 Restart=always
 RestartSec=5
 User=root

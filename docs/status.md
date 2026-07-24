@@ -27,8 +27,9 @@ Documented decisions:
 
 Implemented:
 
-- pnpm monorepo workspace with the manager under `apps/manager` and reserved
-  `apps/` and `packages/` boundaries for optional hosting services.
+- pnpm monorepo workspace with a thin publishable CLI under
+  `packages/dim-cli`, reusable runtime/lifecycle APIs under `packages/core`,
+  and `apps/` reserved for future deployable services.
 - TypeScript project using pnpm.
 - just recipes for install, host install, check, test, build, verify, doctor, sample config generation, and runtime image builds.
 - CLI entrypoint with `init-config`, `doctor`, `config validate`, `job prepare`, `job cleanup`, `job run`, `agent run-command`, and `agent run`.

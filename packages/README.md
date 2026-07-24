@@ -1,16 +1,20 @@
 # Packages
 
-Reusable contracts and provider adapters belong under `packages/`.
+Reusable contracts, executable tooling, and provider adapters belong under
+`packages/`.
 
-Planned package boundaries:
+Current packages:
 
-- Git-host contracts independent of Gitea, Forgejo, or the built-in bare Git
-  implementation.
-- A Gitea provider adapter added as an optional package.
-- Entry and edge-route contracts independent of Caddy, Cloudflare Tunnel, or
-  Tailscale.
-- Provider adapters that translate those contracts for a specific external
-  system.
+- `core`: runtime, lifecycle, managed Git, state, and versioned plugin/provider
+  APIs. It has no dependency on CLI parsing.
+- `dim-cli`: thin executable adapter over core.
+- `install`: standalone `npx @slop-lab/install-dim` plugin installer.
+
+Plugin package names are unrestricted; for example,
+`@dev-infra-manager/plugin-github`, `@company/internal-git`, and unscoped npm
+packages are all valid. They register through core's versioned API and are
+loaded only when explicitly listed in the plugin manifest. Provider-specific
+dependencies and credentials must not leak into core or the CLI package.
 
 Packages must not start daemons or mutate host state merely by being imported.
 Credentials stay in application/runtime configuration and must not be embedded
