@@ -65,7 +65,7 @@ Behavior:
 
 ## KVM Host-install Smoke
 
-`just install-kvm-verify-deps-ubuntu` installs QEMU, qcow2, cloud-image, and SSH tooling only; it does not install a runtime backend. `just verify-host-backend-kvm BACKEND [--verbose]` verifies one backend, while `just verify-host-backends-kvm [--verbose]` verifies every backend in a separate VM. Each check boots a checksum-verified Ubuntu cloud-image VM with `/dev/kvm`, clones the complete repository history from a Git bundle, applies the current tracked working-tree diff, installs the selected backend in isolation, verifies its runtime, and deletes the VM overlay and SSH key on exit. The base cloud image is cached under `.local/kvm`. Default output names each stage and emits only the final 30 lines of a failing stage; `--verbose` streams full guest, build, and workload logs.
+`just install-kvm-verify-deps-ubuntu` installs QEMU, qcow2, cloud-image, and SSH tooling only; it does not install a runtime backend. `just verify-host-backend-kvm BACKEND [--verbose]` verifies one backend, while `just verify-host-backends-kvm [--verbose]` verifies every backend in a separate VM. Each check boots a checksum-verified Ubuntu cloud-image VM with `/dev/kvm`, clones the repository from a Git bundle, applies the current tracked working-tree diff, installs the selected backend in isolation, verifies its runtime, and deletes the VM overlay and SSH key on exit. A full source checkout retains its history; a shallow checkout is converted to a self-contained single-commit repository before bundling. The base cloud image is cached under `.local/kvm`. Default output names each stage and emits only the final 30 lines of a failing stage; `--verbose` streams full guest, build, and workload logs.
 
 ## Ubuntu Bootstrap
 

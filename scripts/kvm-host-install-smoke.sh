@@ -3,6 +3,8 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/runtime-backends.sh
 source "$script_dir/lib/runtime-backends.sh"
+# shellcheck source=lib/git-clone-source.sh
+source "$script_dir/lib/git-clone-source.sh"
 backend="all"
 verbose=false
 for arg in "$@"; do
@@ -44,7 +46,9 @@ run_step() {
     return 1
   fi
 }
-git -C "$repo_root" bundle create "$workdir/repo.bundle" --all
+dim_prepare_clone_source "$repo_root" "$workdir/snapshot"
+clone_source="$DIM_GIT_CLONE_SOURCE"
+git -C "$clone_source" bundle create "$workdir/repo.bundle" --all
 git -C "$repo_root" diff --binary HEAD > "$workdir/working-tree.patch"
 git -C "$repo_root" ls-files -z --others --exclude-standard >"$workdir/untracked-files"
 tar -C "$repo_root" --null -T "$workdir/untracked-files" -czf "$workdir/untracked-files.tar.gz"

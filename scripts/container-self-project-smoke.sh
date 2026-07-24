@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/git-clone-source.sh
+source "$script_dir/lib/git-clone-source.sh"
 
 suffix="$PPID-$$"
 repo_name="dim-self-$suffix"
@@ -42,16 +45,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if [[ "$(git rev-parse --is-shallow-repository)" == "true" ]]; then
-  project_source="$source_root/snapshot"
-  mkdir -p "$project_source"
-  git archive HEAD | tar -x -C "$project_source"
-  git -C "$project_source" init --initial-branch=main >/dev/null
-  git -C "$project_source" config user.name "DIM Self Smoke"
-  git -C "$project_source" config user.email "self-smoke@dim.invalid"
-  git -C "$project_source" add .
-  git -C "$project_source" commit -m "snapshot current checkout" >/dev/null
-fi
+dim_prepare_clone_source "$project_source" "$source_root/snapshot"
+project_source="$DIM_GIT_CLONE_SOURCE"
 
 git clone --bare "$project_source" "$source_root/project.git" >/dev/null
 dim repo register --name "$repo_name" "$source_root/project.git" >/dev/null
