@@ -22,7 +22,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
+    "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
     "pack:dry-run": "pnpm run build && npm pack --dry-run ./dist",
     "publish:package": "pnpm run build && npm publish ./dist",
     "check": "tsc -p tsconfig.json --noEmit",

@@ -8,7 +8,7 @@ The infrastructure separates agent-controlled execution from secret-bearing exec
 
 ## Scope
 
-This repository owns the container and infrastructure boundary for agent jobs.
+This repository owns the container and infrastructure boundary for agent workspaces.
 
 In scope:
 
@@ -18,8 +18,8 @@ In scope:
 - Managed Git hosting primitives used by agents to propose changes.
 - Backend-selectable container isolation, with Sysbox as the default production backend.
 - Resource limits for agent workspaces and nested workloads.
-- Ephemeral read-write workspaces for agent jobs.
-- Injection of non-secret and approved per-job configuration into agent containers.
+- Persistent read-write project workspaces.
+- Injection of non-secret and approved workspace configuration.
 - Support for adding project Git repositories later.
 
 Out of scope:

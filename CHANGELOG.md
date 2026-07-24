@@ -13,7 +13,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Provider-neutral DIM core APIs and a thin `dim` command-line package.
 - Persistent Gitea-backed project workspaces with nested container support.
-- Sysbox, gVisor, and rootless Podman runtime backend planning.
+- Per-workspace Sysbox, gVisor, rootless Podman, and privileged-runc backend selection.
 - Review-gated Git and secret-runtime deployment workflows.
 - Versioned plugin API and standalone plugin installer.
 - Container, lifecycle, multi-repository, packaging, and self-project smoke tests.

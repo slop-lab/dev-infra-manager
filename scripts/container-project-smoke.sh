@@ -12,8 +12,7 @@ bare_repo="$source_root/project.git"
 dim_bin="${DIM_BIN:-dim}"
 
 export DIM_STATE_ROOT="$state_root"
-export DIM_WORKSPACE_RUNTIME="${DIM_WORKSPACE_RUNTIME:-runc}"
-export DIM_WORKSPACE_PRIVILEGED="${DIM_WORKSPACE_PRIVILEGED:-yes}"
+export DIM_WORKSPACE_BACKEND="${DIM_WORKSPACE_BACKEND:-runc}"
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then

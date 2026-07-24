@@ -6,7 +6,10 @@ RUN dnf install -y \
     curl \
     git \
     jq \
+    nodejs \
+    npm \
     openssh-clients \
+    podman-compose \
     shadow-utils \
     sudo \
     tini \
@@ -18,13 +21,17 @@ RUN useradd -m -s /bin/bash agent \
   && echo "agent ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agent \
   && chmod 0440 /etc/sudoers.d/agent
 
-COPY entrypoint.sh /usr/local/bin/dev-infra-agent-podman-entrypoint
-RUN chmod +x /usr/local/bin/dev-infra-agent-podman-entrypoint
+RUN npm install --global pnpm@10 @openai/codex
 
-ENV DEV_INFRA_NESTED_ENGINE="podman" \
-    DEV_INFRA_START_DOCKERD="0" \
+COPY entrypoint.sh /usr/local/bin/dim-project-podman-entrypoint
+COPY git-askpass.sh /usr/local/bin/dim-git-askpass
+RUN chmod +x /usr/local/bin/dim-project-podman-entrypoint /usr/local/bin/dim-git-askpass
+
+ENV HOME="/home/agent" \
+    CODEX_HOME="/home/agent/.codex" \
+    DIM_NESTED_ENGINE="podman" \
     XDG_RUNTIME_DIR="/tmp/agent-runtime"
 
 WORKDIR /workspace
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/dev-infra-agent-podman-entrypoint"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/dim-project-podman-entrypoint"]
 CMD ["bash"]

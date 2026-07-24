@@ -4,13 +4,16 @@ export interface LifecycleOptions {
   giteaPort: number;
   giteaAdminUsername: string;
   gitUsername: string;
-  workspaceImage: string;
-  workspaceRuntime: string;
-  workspacePrivileged: boolean;
+  defaultWorkspaceBackend: WorkspaceRuntimeBackendKind;
+  workspaceImage?: string;
+  workspaceRuntime?: string;
+  workspacePrivileged?: boolean;
   cpuCount: string;
   memory: string;
   pidsLimit: string;
 }
+
+export type WorkspaceRuntimeBackendKind = "sysbox" | "gvisor" | "rootless-podman" | "runc";
 
 export interface GiteaCredentials {
   adminUsername: string;
@@ -62,6 +65,7 @@ export interface WorkspaceRecord {
   containerName: string;
   networkName: string;
   dockerVolumeName: string;
+  runtimeBackend: WorkspaceRuntimeBackendKind;
   routes: string[];
   gitUserName: string;
   gitUserEmail: string;

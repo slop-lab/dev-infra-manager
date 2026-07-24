@@ -21,8 +21,7 @@ container without Sysbox can explicitly opt into the privileged runc smoke
 path:
 
 ```bash
-export DIM_WORKSPACE_RUNTIME=runc
-export DIM_WORKSPACE_PRIVILEGED=yes
+export DIM_WORKSPACE_BACKEND=runc
 ```
 
 This opt-in is for compatibility testing and is not the production isolation
@@ -206,8 +205,7 @@ DIM_GIT_TOKEN
 DIM_GIT_USER_NAME
 DIM_GIT_USER_EMAIL
 DIM_WORKSPACE_IMAGE
-DIM_WORKSPACE_RUNTIME
-DIM_WORKSPACE_PRIVILEGED
+DIM_WORKSPACE_BACKEND
 DIM_WORKSPACE_CPUS
 DIM_WORKSPACE_MEMORY
 DIM_WORKSPACE_PIDS

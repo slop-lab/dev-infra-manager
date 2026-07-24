@@ -60,9 +60,9 @@ dependency. The existing bare Git implementation remains a lightweight
 provider, and other implementations such as Forgejo can implement the same
 contract.
 
-The optional entry API will authenticate an agent job and accept only a
+The optional entry API will authenticate an agent workspace and accept only a
 constrained service request. It must derive or validate the upstream from the
-job grant rather than accept an arbitrary host from an untrusted agent. Route
+workspace grant rather than accept an arbitrary host from an untrusted agent. Route
 providers and URL providers remain separate so one entry may expose local,
 tailnet, and public URLs without coupling the API contract to one proxy or
 tunnel product.

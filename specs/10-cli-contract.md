@@ -36,7 +36,7 @@ Writes the default config JSON to the output path, creating parent directories.
 Usage:
 
 ```bash
-dim doctor [--config dev-infra.config.json]
+dim doctor [--backend sysbox|gvisor|rootless-podman|runc]
 ```
 
 Prints tab-separated lines:
@@ -46,7 +46,7 @@ Prints tab-separated lines:
 ```
 
 Exits with code `1` if any check fails.
-Without `--config`, uses the default config.
+Without `--backend`, uses `DIM_WORKSPACE_BACKEND` or `sysbox`.
 
 ### `config validate`
 
@@ -61,68 +61,10 @@ Prints a JSON summary containing:
 - `ok`
 - `configPath`
 - `stateRoot`
-- `jobMountRoot`
-- `storageBackend`
-- `resourceProfiles`
 - `managedGitHostKind`
 - `managedGitHostProtectedRefs`
-- `agentImage`
-- `agentRuntimeBackend`
 - `secretRuntimeRepo`
 - `secretRuntimeApprovedRef`
-
-### `job prepare`
-
-Usage:
-
-```bash
-dim job prepare --job-id ID [--resource-profile default] [--config dev-infra.config.json] [--dry-run]
-```
-
-Prepares job storage and prints job metadata JSON.
-Dry-run prints planned commands and does not write metadata.
-
-### `job cleanup`
-
-Usage:
-
-```bash
-dim job cleanup --job-id ID [--config dev-infra.config.json] [--dry-run] [--keep-disk]
-```
-
-Cleans up job storage.
-`--keep-disk` prevents removal of job paths.
-
-### `job run`
-
-Usage:
-
-```bash
-dim job run --job-id ID [--resource-profile default] [--config dev-infra.config.json] [--sudo=false] [--keep-disk] [-- COMMAND...]
-```
-
-Runs prepare, agent execution, and cleanup.
-Exits with the agent command exit code after prepare succeeds.
-
-### `agent run-command`
-
-Usage:
-
-```bash
-dim agent run-command --job-id ID [--config dev-infra.config.json] [COMMAND...]
-```
-
-Reads existing job metadata and prints the timeout-wrapped Docker command line.
-
-### `agent run`
-
-Usage:
-
-```bash
-dim agent run --job-id ID [--config dev-infra.config.json] [--sudo=false] [-- COMMAND...]
-```
-
-Reads existing job metadata and executes the timeout-wrapped Docker command.
 
 ### `git-host init`
 
@@ -234,13 +176,14 @@ Usage:
 
 ```bash
 dim workspace create PROJECT WORKSPACE \
+  [--backend sysbox|gvisor|rootless-podman|runc] \
   [--profile PROFILE ...] \
   [--git-user-name NAME] [--git-user-email EMAIL]
 ```
 
 Claims and reconciles a persistent workspace, clones the registered project
-repository inside it, persists Compose capability profiles, and invokes the
-project `.dim` setup contract.
+repository inside it, persists the runtime backend and Compose capability
+profiles, and invokes the project `.dim` setup contract.
 
 ### `workspace run` and `workspace exec`
 
@@ -300,4 +243,4 @@ Required verification:
 
 - Unit tests for command helpers where behavior is non-trivial.
 - CLI smoke coverage through `scripts/smoke.sh`.
-- Manual or scripted checks for `doctor --config` on available backends.
+- Manual or scripted checks for `doctor --backend` on available backends.

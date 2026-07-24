@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CONFIG, normalizeConfig } from "../src/config.js";
 import { runDoctor, sysboxExecutionCheck } from "../src/doctor.js";
+import { lifecycleOptions } from "../src/lifecycleOptions.js";
 import type { CommandResult, CommandRunner, RunOptions } from "../src/types.js";
 
 class QueueRunner implements CommandRunner {
@@ -55,21 +55,12 @@ describe("doctor checks", () => {
   });
 
   it("runs gVisor checks without Sysbox service checks", async () => {
-    const config = normalizeConfig({
-      ...DEFAULT_CONFIG,
-      storageBackend: { kind: "directory" },
-      agent: {
-        ...DEFAULT_CONFIG.agent,
-        runtime: "runsc",
-        runtimeBackend: { kind: "gvisor", dockerRuntime: "runsc" }
-      }
-    });
+    const options = lifecycleOptions({ DIM_WORKSPACE_BACKEND: "gvisor" });
     const runner = new QueueRunner([
       result(0, "", "v22.0.0"),
       result(0, "", "10.0.0"),
       result(0, "", "just 1.0.0"),
       result(0, "", "git version 2.0.0"),
-      result(0, "", "timeout 1.0.0"),
       result(0, "", "Docker version 1.0.0"),
       result(0, "", "29.0.0"),
       result(0, "", "runsc version release"),
@@ -77,9 +68,8 @@ describe("doctor checks", () => {
       result(0)
     ]);
 
-    const checks = await runDoctor(runner, config);
+    const checks = await runDoctor(runner, "gvisor", options);
     expect(checks.map((check) => check.name)).toContain("gVisor container execution");
-    expect(checks.map((check) => check.name)).toContain("Directory storage backend");
     expect(checks.map((check) => check.name)).not.toContain("Sysbox service");
   });
 });

@@ -2,6 +2,7 @@ import { UserError } from "./errors.js";
 import { ensureGitea, giteaNestedBaseUrl, GITEA_NETWORK } from "./gitea.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type { GiteaCredentials, LifecycleOptions, RepoRecord, WorkspaceRecord } from "./lifecycleTypes.js";
+import { workspaceRuntimePlan } from "./runtimeBackends.js";
 import type { StreamingCommandRunner } from "./types.js";
 
 export interface WorkspaceGitEnvironment {
@@ -36,6 +37,7 @@ export async function createWorkspace(
     project: string;
     name: string;
     profiles: string[];
+    runtimeBackend: WorkspaceRecord["runtimeBackend"];
     gitUserName?: string;
     gitUserEmail?: string;
   }
@@ -58,6 +60,9 @@ export async function createWorkspace(
     if (record.profiles.join("\0") !== profiles.join("\0")) {
       throw new UserError(`workspace '${name}' already exists with different profiles; use workspace update`);
     }
+    if (record.runtimeBackend !== input.runtimeBackend) {
+      throw new UserError(`workspace '${name}' already exists with backend '${record.runtimeBackend}'`);
+    }
   } catch (error) {
     if (!(error instanceof UserError) || !error.message.includes("not found")) throw error;
     record = {
@@ -70,6 +75,7 @@ export async function createWorkspace(
       containerName: `dim-ws-${name}`,
       networkName: GITEA_NETWORK,
       dockerVolumeName: `dim-ws-${name}-docker`,
+      runtimeBackend: input.runtimeBackend,
       routes: [],
       gitUserName,
       gitUserEmail,
@@ -354,7 +360,7 @@ async function reconcileContainer(
   const inspectArgs = [
     "container", "inspect", record.containerName,
     "--format",
-    "{{index .Config.Labels \"dim.managed\"}}|{{index .Config.Labels \"dim.workspace\"}}|{{index .Config.Labels \"dim.project\"}}|{{index .Config.Labels \"dim.repo\"}}|{{.State.Running}}"
+    "{{index .Config.Labels \"dim.managed\"}}|{{index .Config.Labels \"dim.workspace\"}}|{{index .Config.Labels \"dim.project\"}}|{{index .Config.Labels \"dim.repo\"}}|{{index .Config.Labels \"dim.backend\"}}|{{.State.Running}}"
   ];
   let inspect = await runner.run("docker", inspectArgs);
   if (inspect.exitCode !== 0) {
@@ -368,11 +374,12 @@ async function reconcileContainer(
       inspect = await runner.run("docker", inspectArgs);
     }
   }
-  const [managed, workspace, projectLabel, repoLabel, running] = inspect.stdout.trim().split("|");
+  const [managed, workspace, projectLabel, repoLabel, backend, running] = inspect.stdout.trim().split("|");
   if (
     managed !== "true"
     || workspace !== record.name
     || (projectLabel !== record.project && repoLabel !== record.project)
+    || backend !== record.runtimeBackend
   ) {
     throw new UserError(`Docker resource '${record.containerName}' conflicts with workspace '${record.name}'`);
   }
@@ -380,7 +387,11 @@ async function reconcileContainer(
     const started = await runner.run("docker", ["start", record.containerName]);
     if (started.exitCode !== 0) throw new UserError(`failed to start workspace '${record.name}'`);
   }
-  await waitForInnerDocker(runner, record.containerName);
+  await waitForWorkspaceRuntime(
+    runner,
+    record.containerName,
+    workspaceRuntimePlan(record.runtimeBackend, options).engine
+  );
 }
 
 async function reconcileDockerVolume(runner: StreamingCommandRunner, record: WorkspaceRecord): Promise<void> {
@@ -414,20 +425,22 @@ export function workspaceContainerArgs(
   record: WorkspaceRecord,
   git: WorkspaceGitEnvironment
 ): string[] {
+  const plan = workspaceRuntimePlan(record.runtimeBackend, options);
   const args = [
     "run", "--detach",
     "--name", record.containerName,
     "--network", record.networkName,
-    "--runtime", options.workspaceRuntime,
+    "--runtime", plan.dockerRuntime,
     "--cpus", options.cpuCount,
     "--memory", options.memory,
     "--memory-swap", options.memory,
     "--pids-limit", options.pidsLimit,
-    "--mount", `type=volume,source=${record.dockerVolumeName},target=/var/lib/docker`,
+    "--mount", `type=volume,source=${record.dockerVolumeName},target=${plan.runtimeDataPath}`,
     "--label", "dim.managed=true",
     "--label", `dim.workspace=${record.name}`,
     "--label", `dim.project=${record.project}`,
     "--label", `dim.repo=${record.project}`,
+    "--label", `dim.backend=${record.runtimeBackend}`,
     "--label", "dim.resource=workspace",
     "--env", `DIM_GIT_USERNAME=${git.username}`,
     "--env", `DIM_GIT_TOKEN=${git.token}`,
@@ -441,15 +454,27 @@ export function workspaceContainerArgs(
     "--env", "GIT_CONFIG_KEY_1=user.email",
     "--env", `GIT_CONFIG_VALUE_1=${git.userEmail}`
   ];
-  if (options.workspacePrivileged) args.push("--privileged");
-  args.push(options.workspaceImage, "sleep", "infinity");
+  for (const capability of plan.capabilities) args.push("--cap-add", capability);
+  for (const securityOption of plan.securityOptions) args.push("--security-opt", securityOption);
+  for (const device of plan.devices) args.push("--device", device);
+  for (const [key, value] of Object.entries(plan.env)) args.push("--env", `${key}=${value}`);
+  if (plan.privileged) args.push("--privileged");
+  args.push(plan.image, "sleep", "infinity");
   return args;
 }
 
 export async function waitForInnerDocker(runner: StreamingCommandRunner, containerName: string): Promise<void> {
+  return waitForWorkspaceRuntime(runner, containerName, "docker");
+}
+
+export async function waitForWorkspaceRuntime(
+  runner: StreamingCommandRunner,
+  containerName: string,
+  engine: "docker" | "podman"
+): Promise<void> {
   let lastError = "not ready";
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const result = await runner.run("docker", ["exec", "--user", "agent", containerName, "docker", "info"]);
+    const result = await runner.run("docker", ["exec", "--user", "agent", containerName, engine, "info"]);
     if (result.exitCode === 0) return;
     lastError = result.stderr.trim() || result.stdout.trim();
 
@@ -473,9 +498,9 @@ export async function waitForInnerDocker(runner: StreamingCommandRunner, contain
   ]);
   const logs = await runner.run("docker", ["logs", containerName]);
   const details = [
-    `inner Docker did not become ready: ${lastError}`,
-    state.exitCode === 0 ? `outer container: ${state.stdout.trim()}` : `outer container inspect failed: ${state.stderr.trim() || state.stdout.trim()}`,
-    `outer container logs:\n${logs.stdout || logs.stderr || "(empty)"}`
+    `nested ${engine} did not become ready: ${lastError}`,
+    state.exitCode === 0 ? `workspace container: ${state.stdout.trim()}` : `workspace container inspect failed: ${state.stderr.trim() || state.stdout.trim()}`,
+    `workspace container logs:\n${logs.stdout || logs.stderr || "(empty)"}`
   ];
   throw new UserError(details.join("\n"));
 }
@@ -505,6 +530,7 @@ async function runProjectSetup(
   record: WorkspaceRecord,
   profilesChanged: boolean
 ): Promise<number> {
+  const engine = nestedEngine(record);
   const profileArgs = repeatedProfileArgs(record.profiles);
   if (await projectFileExists(runner, record, ".dim/setup.sh")) {
     return streamProjectCommand(runner, record, ["sh", ".dim/setup.sh", ...profileArgs], false);
@@ -512,14 +538,14 @@ async function runProjectSetup(
   if (!(await projectFileExists(runner, record, ".dim/docker-compose.yml"))) return 0;
   if (profilesChanged) {
     const down = await streamProjectCommand(runner, record, [
-      "docker", "compose", "--project-name", record.composeProjectName,
+      engine, "compose", "--project-name", record.composeProjectName,
       "--file", ".dim/docker-compose.yml", "--profile", "*",
       "down", "--remove-orphans"
     ], false);
     if (down !== 0) return down;
   }
   return streamProjectCommand(runner, record, [
-    "docker", "compose", "--project-name", record.composeProjectName,
+    engine, "compose", "--project-name", record.composeProjectName,
     "--file", ".dim/docker-compose.yml",
     ...composeProfileArgs(record.profiles),
     "up", "--detach", "--build"
@@ -533,7 +559,7 @@ async function runProjectTeardown(runner: StreamingCommandRunner, record: Worksp
   }
   if (await projectFileExists(runner, record, ".dim/docker-compose.yml")) {
     await streamProjectCommand(runner, record, [
-      "docker", "compose", "--project-name", record.composeProjectName,
+      nestedEngine(record), "compose", "--project-name", record.composeProjectName,
       "--file", ".dim/docker-compose.yml", "--profile", "*",
       "down", "--remove-orphans"
     ], false);
@@ -553,9 +579,15 @@ function projectEnvironment(record: WorkspaceRecord): string[] {
     "--env", `DIM_PROJECT_ROOT=${record.projectPath}`,
     "--env", `DIM_WORKSPACE_NAME=${record.name}`,
     "--env", `COMPOSE_PROJECT_NAME=${record.composeProjectName}`,
+    "--env", `DIM_WORKSPACE_BACKEND=${record.runtimeBackend}`,
+    "--env", `DIM_NESTED_ENGINE=${nestedEngine(record)}`,
     "--env", `COMPOSE_PROFILES=${record.profiles.join(",")}`,
     "--env", `DIM_GIT_BASE_URL=${record.gitBaseUrl}`
   ];
+}
+
+function nestedEngine(record: WorkspaceRecord): "docker" | "podman" {
+  return record.runtimeBackend === "rootless-podman" ? "podman" : "docker";
 }
 
 async function projectFileExists(

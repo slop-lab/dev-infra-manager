@@ -67,7 +67,7 @@ This usually means the current host does not expose one of:
   - loop device setup
   - /dev/kvm
 
-Review the doctor output above before running agent jobs.
+Review the doctor output above before creating agent workspaces.
 EOF
   exit "$doctor_rc"
 fi

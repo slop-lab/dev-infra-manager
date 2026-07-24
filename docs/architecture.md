@@ -12,15 +12,15 @@ The system uses separate runtime boundaries for agent workspaces and secret-bear
 
 ### Agent Workspace Container
 
-The agent workspace container is the execution environment exposed to an agent job.
+The agent workspace container is the persistent execution environment exposed to an agent.
 
 Properties:
 
 - Contains no raw API keys or secret credentials.
-- Provides a read-write workspace that is ephemeral per job.
+- Provides a named read-write workspace that persists until explicitly discarded.
 - Allows command execution inside the workspace.
 - Allows nested container creation through the selected runtime backend.
-- Receives approved environment variables and runtime configuration needed for the job.
+- Receives approved Git identity and project runtime configuration.
 - Can access the managed Git host for pushing branches and opening pull requests through the configured workflow.
 - Can include Git configuration environment variables required for Git operations.
 - Cannot access host container runtime sockets.
@@ -86,16 +86,16 @@ Refs listed in `managedGitHost.protectedRefs` reject direct pushes through a bar
 
 ## Workspace Lifecycle
 
-Agent workspaces are ephemeral and scoped to a job.
+Agent workspaces are named, persistent, and scoped to a registered project.
 
 The workspace lifecycle is:
 
-1. Create a new read-write workspace for the job.
-2. Inject approved job configuration and environment variables.
+1. Create a new read-write workspace for the project.
+2. Inject approved Git configuration and environment variables.
 3. Start the agent workspace container.
 4. Allow the agent to execute commands and create nested containers within the boundary.
 5. Preserve only explicitly exported artifacts or Git-pushed changes.
-6. Tear down the workspace and nested workloads after the job.
+6. Explicitly discard the workspace and nested workloads when they are no longer needed.
 
 No raw secret material is persisted in or exported from the agent workspace.
 

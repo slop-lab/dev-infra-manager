@@ -24,7 +24,7 @@ Protected assets:
 - Controller code and configuration that can deploy secret-bearing containers.
 - Approved Git refs used for trusted deployment.
 - Host container runtime control plane.
-- Host filesystem outside configured job state and mount roots.
+- Host filesystem outside DIM state and Docker-managed workspace resources.
 
 ## Attacker Capabilities
 
@@ -49,9 +49,8 @@ The agent is assumed to be capable of:
 - Block direct pushes to protected refs in managed bare repositories.
 - Deploy secret-bearing containers only from configured approved refs.
 - Treat controller and secret runtime code as trusted-boundary code.
-- Keep job workspaces isolated per job ID.
+- Keep named workspaces isolated from one another.
 - Enforce CPU, memory, pid, and timeout limits at the outer agent container boundary.
-- Enforce aggregate disk quota when using the `loopback` storage backend.
 
 ## Out-Of-Scope Threats
 
@@ -66,7 +65,7 @@ These are outside this repository's direct scope:
 
 ## Residual Risk
 
-- `directory` storage does not enforce disk quota.
+- DIM does not currently enforce per-workspace disk quotas.
 - A vulnerable selected runtime backend can break the intended boundary.
 - Secret-bearing code review quality depends on human reviewers and project process.
 - The managed PR layer is local and minimal; it is not a full GitHub replacement.

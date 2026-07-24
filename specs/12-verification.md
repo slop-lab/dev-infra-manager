@@ -60,15 +60,15 @@ replace `just smoke`, which verifies actual Sysbox and cgroup behavior.
 
 Runtime backend verification should include:
 
-- `doctor --config` for the selected backend.
-- `job run` lifecycle for at least a simple command.
+- `doctor --backend` for the selected backend.
+- Workspace create, task execution, stop/start persistence, and discard.
 - Nested container smoke when the backend claims nested Docker or Podman support.
 
 Current verified host evidence:
 
-- Rootless Podman with `directory` storage can run a full `job run` lifecycle.
-- gVisor with `directory` storage can pass `doctor --config`.
-- gVisor with `directory` storage can run a full `job run` lifecycle.
+- Rootless Podman can create a workspace on a compatible host.
+- gVisor can pass `doctor --backend gvisor`.
+- gVisor can create a workspace and run nested Docker.
 - gVisor inner Docker can run nested `hello-world`.
 - Sysbox inner Docker can run nested `hello-world` without access to the host
   Docker image store.

@@ -1,105 +1,23 @@
 # Configuration
 
-`dev-infra-manager` uses a JSON configuration file. Generate a starter file with:
+Persistent workspace lifecycle settings use `DIM_*` environment variables and
+workspace metadata. Runtime backend selection is documented in
+[Runtime Backends](runtime-backends.md).
+
+`dev-infra.config.json` remains for the legacy bare-Git review controller and
+secret-runtime deployment boundary. It contains:
+
+- `stateRoot`: controller and review metadata directory.
+- `managedGitHost`: bare Git remote and protected refs.
+- `secretRuntime`: approved ref, build context, image, container, env file,
+  and published ports.
+
+It does not configure workspace runtime, resource profiles, timeouts, job
+storage, or disk quotas.
+
+Generate an example:
 
 ```bash
-pnpm run cli -- init-config --output dev-infra.config.json
+dim init-config --output dev-infra.config.json
+dim config validate --config dev-infra.config.json
 ```
-
-Validate a configuration file with:
-
-```bash
-pnpm run cli -- config validate --config dev-infra.config.json
-```
-
-## Top-Level Fields
-
-### `stateRoot`
-
-Host path for persistent infrastructure state.
-
-This includes job metadata, managed Git host state, pull request metadata, and controller deployment state. Relative paths are resolved from the current working directory.
-
-### `jobMountRoot`
-
-Host path where per-job quota filesystems are mounted.
-
-Each job receives a mount directory under this root. Agent workspaces and nested container runtime data are created inside that job mount.
-
-### `storageBackend`
-
-Job workspace storage backend.
-
-Fields:
-
-- `kind`: `loopback` or `directory`.
-
-`loopback` enforces `resourceProfiles.<name>.diskBytes` through a per-job ext4 disk image mounted through a loop device.
-`directory` creates ordinary directories and does not enforce `diskBytes`; use it only when loop devices are unavailable and another layer enforces disk limits.
-
-### `managedGitHost`
-
-Configuration for the managed Git host.
-
-Fields:
-
-- `kind`: must be `bare-git-pr`.
-- `remote`: informational remote URL for the managed Git host.
-- `protectedRefs`: full Git refs that reject direct pushes through the managed bare repository hook.
-
-The current implementation stores bare repositories and pull request metadata under `stateRoot`.
-Repositories created through `git-host create-repo` receive a `pre-receive` hook that blocks direct pushes to `protectedRefs`.
-Use `git-host install-hooks` to reinstall hooks after changing this list or importing an existing bare repository.
-
-### `resourceProfiles`
-
-Named resource profiles for agent jobs.
-
-Each profile contains:
-
-- `cpuCount`: CPU count passed to Docker for the outer agent workspace container.
-- `memoryBytes`: memory limit as bytes or a size string such as `4GiB`.
-- `pidsLimit`: process limit for the outer agent workspace container.
-- `diskBytes`: per-job disk quota as bytes or a size string such as `20GiB`.
-- `timeoutSeconds`: wall-clock timeout for agent container execution.
-
-### `agent`
-
-Agent workspace container configuration.
-
-Fields:
-
-- `image`: agent workspace image.
-- `runtime`: legacy Docker runtime name kept for compatibility, normally `sysbox-runc`.
-- `runtimeBackend`: selected agent runtime backend.
-- `workspacePath`: container path for the job workspace.
-- `runtimeDataPath`: container path for nested container runtime data.
-- `env`: approved environment variables injected into the agent container.
-- `gitEnv`: approved Git-related environment variables injected into the agent container.
-
-Do not place raw secrets in `env` or `gitEnv`.
-
-`runtimeBackend` fields:
-
-- `kind`: `sysbox`, `gvisor`, or `rootless-podman`.
-- `dockerRuntime`: optional Docker runtime name. Defaults to `sysbox-runc` for `sysbox`, `runsc` for `gvisor`, and `runc` for `rootless-podman`.
-
-See [Runtime Backends](runtime-backends.md) for backend-specific requirements and tradeoffs.
-
-### `secretRuntime`
-
-Secret-bearing runtime deployment configuration.
-
-Fields:
-
-- `endpoint`: host-reachable endpoint exposed to the agent runtime tooling layer.
-- `repo`: managed Git repository that contains the trusted runtime source.
-- `approvedRef`: Git ref used for deployment.
-- `image`: Docker image tag to build.
-- `containerName`: Docker container name to replace.
-- `contextPath`: build context path inside the approved ref checkout.
-- `dockerfile`: Dockerfile path relative to `contextPath`.
-- `envFile`: optional host path to a Docker env file.
-- `publish`: Docker port publishing entries.
-
-Secret values are not stored in this configuration. If the secret runtime needs environment variables, use `secretRuntime.envFile` with a host path outside agent-controlled workspaces.

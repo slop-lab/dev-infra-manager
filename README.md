@@ -1,6 +1,6 @@
 # dev-infra-manager
 
-`dev-infra-manager` provides infrastructure for running AI-assisted development jobs in isolated, review-gated environments.
+`dev-infra-manager` provides persistent, isolated, review-gated workspaces for AI-assisted development.
 
 Licensed under the [MIT License](LICENSE). Release history is recorded in the
 [changelog](CHANGELOG.md).
@@ -10,14 +10,14 @@ requirements](docs/adoption.md). They require full human review of DIM, the
 project repository, and every secret-bearing environment, plus immutable
 version pinning.
 
-The project focuses on the container and infrastructure boundary around agent jobs:
+The project focuses on the container and infrastructure boundary around agent workspaces:
 
-- Ephemeral agent workspaces.
+- Persistent, explicitly discarded agent workspaces.
 - Backend-selectable nested container isolation.
 - Secret-bearing runtime separation.
 - Review-gated deployment of secret-bearing environments.
 - Managed Git hosting primitives for proposed changes.
-- Job-level resource limits, including aggregate disk quota.
+- Workspace-level CPU, memory, and PID limits.
 
 ## Quick Start
 
@@ -97,18 +97,6 @@ Inspect host readiness:
 just doctor
 ```
 
-Prepare an agent job filesystem without making host changes:
-
-```bash
-pnpm run cli -- job prepare --config config.example.json --job-id demo --dry-run
-```
-
-Run a full agent job lifecycle:
-
-```bash
-pnpm run cli -- job run --config config.example.json --job-id demo -- bash
-```
-
 Run the deploy controller once in dry-run mode:
 
 ```bash
@@ -127,7 +115,7 @@ persistent workspace whose checkout exists only inside its container:
 just build-project-workspace
 just install-dim-local
 dim repo register --name project /path/to/project.git
-dim workspace create project work-1 --profile development
+dim workspace create project work-1 --backend sysbox --profile development
 dim workspace run work-1 codex
 dim workspace exec work-1 -- bash
 ```

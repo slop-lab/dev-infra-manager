@@ -35,9 +35,7 @@ They describe inputs, persistent state, operations, invariants, failure behavior
 
 Feature specifications:
 
-- [Job Lifecycle](04-job-lifecycle.md)
 - [Runtime Backends](05-runtime-backends.md)
-- [Storage Backends](06-storage-backends.md)
 - [Managed Git Host](07-managed-git-host.md)
 - [Secret Runtime Deployment](08-secret-runtime-deploy.md)
 - [Controller](09-controller.md)
@@ -53,8 +51,6 @@ Changing these details should still preserve the global and feature specificatio
 
 Local details:
 
-- [Docker Command Shapes](local-details/docker-command-shapes.md)
-- [Filesystem Layout](local-details/filesystem-layout.md)
 - [Managed Git Hook Format](local-details/hook-format.md)
 - [Image Entrypoints](local-details/image-entrypoints.md)
 - [Installation Scripts](local-details/installation-scripts.md)

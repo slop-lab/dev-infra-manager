@@ -16,9 +16,5 @@ run_inner_smoke() {
 }
 
 run_inner_smoke dev-infra-project-workspace:latest overlayfs
-run_inner_smoke \
-  dev-infra-agent-workspace:latest \
-  overlay2 \
-  --env "DEV_INFRA_DOCKERD_FLAGS=--feature containerd-snapshotter=false"
 
 echo "container-inner-docker-smoke-ok"

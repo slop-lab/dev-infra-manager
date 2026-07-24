@@ -1,63 +1,72 @@
-import type { DevInfraConfig, JobMetadata } from "./types.js";
+import type { LifecycleOptions, WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
 
-export interface RuntimeMount {
-  source: string;
-  target: string;
-}
-
-export interface RuntimePlan {
-  dockerRuntime?: string;
-  capabilities: string[];
-  mounts: RuntimeMount[];
-  env: Record<string, string>;
+export interface WorkspaceRuntimePlan {
+  dockerRuntime: string;
   image: string;
+  privileged: boolean;
+  capabilities: string[];
+  securityOptions: string[];
+  devices: string[];
+  runtimeDataPath: string;
+  engine: "docker" | "podman";
+  env: Record<string, string>;
 }
 
-export function getRuntimePlan(config: DevInfraConfig, metadata: JobMetadata): RuntimePlan {
-  switch (config.agent.runtimeBackend.kind) {
+export function workspaceRuntimePlan(
+  backend: WorkspaceRuntimeBackendKind,
+  options: LifecycleOptions
+): WorkspaceRuntimePlan {
+  const shared = {
+    capabilities: [] as string[],
+    securityOptions: [] as string[],
+    devices: [] as string[],
+    env: {} as Record<string, string>
+  };
+  switch (backend) {
     case "sysbox":
       return {
-        dockerRuntime: config.agent.runtimeBackend.dockerRuntime ?? config.agent.runtime,
-        capabilities: [],
-        mounts: [
-          { source: metadata.paths.workspace, target: config.agent.workspacePath },
-          { source: metadata.paths.runtimeData, target: config.agent.runtimeDataPath }
-        ],
-        env: {
-          DEV_INFRA_NESTED_ENGINE: "docker",
-          DEV_INFRA_START_DOCKERD: "1"
-        },
-        image: config.agent.image
+        ...shared,
+        dockerRuntime: options.workspaceRuntime ?? "sysbox-runc",
+        image: options.workspaceImage ?? "dev-infra-project-workspace:latest",
+        privileged: options.workspacePrivileged ?? false,
+        runtimeDataPath: "/var/lib/docker",
+        engine: "docker"
       };
     case "gvisor":
       return {
-        dockerRuntime: config.agent.runtimeBackend.dockerRuntime ?? "runsc",
-        capabilities: ["AUDIT_WRITE", "CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "KILL", "MKNOD", "NET_BIND_SERVICE", "NET_ADMIN", "NET_RAW", "SETFCAP", "SETGID", "SETPCAP", "SETUID", "SYS_ADMIN", "SYS_CHROOT", "SYS_PTRACE"],
-        mounts: [
-          { source: metadata.paths.workspace, target: config.agent.workspacePath },
-          { source: metadata.paths.runtimeData, target: config.agent.runtimeDataPath }
+        ...shared,
+        dockerRuntime: options.workspaceRuntime ?? "runsc",
+        image: options.workspaceImage ?? "dev-infra-project-workspace:latest",
+        privileged: options.workspacePrivileged ?? false,
+        capabilities: [
+          "AUDIT_WRITE", "CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "KILL",
+          "MKNOD", "NET_ADMIN", "NET_BIND_SERVICE", "NET_RAW", "SETFCAP",
+          "SETGID", "SETPCAP", "SETUID", "SYS_ADMIN", "SYS_CHROOT", "SYS_PTRACE"
         ],
-        env: {
-          DEV_INFRA_NESTED_ENGINE: "docker",
-          DEV_INFRA_START_DOCKERD: "1",
-          DEV_INFRA_DOCKERD_FLAGS: "--feature containerd-snapshotter=false"
-        },
-        image: config.agent.image
+        runtimeDataPath: "/var/lib/docker",
+        engine: "docker",
+        env: { DIM_DOCKERD_FLAGS: "--feature containerd-snapshotter=false" }
       };
     case "rootless-podman":
       return {
-        dockerRuntime: config.agent.runtimeBackend.dockerRuntime ?? "runc",
-        capabilities: [],
-        mounts: [
-          { source: metadata.paths.workspace, target: config.agent.workspacePath },
-          { source: metadata.paths.runtimeData, target: "/home/agent/.local/share/containers" }
-        ],
-        env: {
-          DEV_INFRA_NESTED_ENGINE: "podman",
-          DEV_INFRA_START_DOCKERD: "0",
-          XDG_RUNTIME_DIR: "/tmp/agent-runtime"
-        },
-        image: config.agent.image
+        ...shared,
+        dockerRuntime: options.workspaceRuntime ?? "runc",
+        image: options.workspaceImage ?? "dev-infra-project-workspace-podman:latest",
+        privileged: options.workspacePrivileged ?? false,
+        securityOptions: ["seccomp=unconfined"],
+        devices: ["/dev/fuse"],
+        runtimeDataPath: "/home/agent/.local/share/containers",
+        engine: "podman",
+        env: { DIM_NESTED_ENGINE: "podman", XDG_RUNTIME_DIR: "/tmp/agent-runtime" }
+      };
+    case "runc":
+      return {
+        ...shared,
+        dockerRuntime: options.workspaceRuntime ?? "runc",
+        image: options.workspaceImage ?? "dev-infra-project-workspace:latest",
+        privileged: options.workspacePrivileged ?? true,
+        runtimeDataPath: "/var/lib/docker",
+        engine: "docker"
       };
   }
 }

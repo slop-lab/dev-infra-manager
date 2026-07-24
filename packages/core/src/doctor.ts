@@ -1,8 +1,8 @@
-import { access, constants, mkdtemp, readFile, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { DEFAULT_CONFIG, normalizeConfig } from "./config.js";
-import type { CommandRunner, DevInfraConfig } from "./types.js";
+import { access, constants, readFile } from "node:fs/promises";
+import { lifecycleOptions } from "./lifecycleOptions.js";
+import type { LifecycleOptions, WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
+import { workspaceRuntimePlan } from "./runtimeBackends.js";
+import type { CommandRunner } from "./types.js";
 
 export interface DoctorCheck {
   name: string;
@@ -10,56 +10,57 @@ export interface DoctorCheck {
   detail: string;
 }
 
-export async function runDoctor(runner: CommandRunner, config: DevInfraConfig = normalizeConfig(DEFAULT_CONFIG)): Promise<DoctorCheck[]> {
+export async function runDoctor(
+  runner: CommandRunner,
+  backend: WorkspaceRuntimeBackendKind = lifecycleOptions().defaultWorkspaceBackend,
+  options: LifecycleOptions = lifecycleOptions()
+): Promise<DoctorCheck[]> {
   const checks: DoctorCheck[] = [];
   checks.push(await commandCheck(runner, "node", ["--version"], "Node.js"));
   checks.push(await commandCheck(runner, "pnpm", ["--version"], "pnpm"));
   checks.push(await commandCheck(runner, "just", ["--version"], "just"));
   checks.push(await commandCheck(runner, "git", ["--version"], "git"));
-  checks.push(await commandCheck(runner, "timeout", ["--version"], "timeout"));
   checks.push(await commandCheck(runner, "docker", ["--version"], "Docker CLI"));
   checks.push(await dockerDaemonCheck(runner));
-  checks.push(...(await runtimeBackendChecks(runner, config)));
-  checks.push(...(await storageBackendChecks(runner, config)));
+  checks.push(...(await runtimeBackendChecks(runner, backend, options)));
   checks.push(await cgroupCheck());
   return checks;
 }
 
-async function runtimeBackendChecks(runner: CommandRunner, config: DevInfraConfig): Promise<DoctorCheck[]> {
-  switch (config.agent.runtimeBackend.kind) {
+async function runtimeBackendChecks(
+  runner: CommandRunner,
+  backend: WorkspaceRuntimeBackendKind,
+  options: LifecycleOptions
+): Promise<DoctorCheck[]> {
+  const plan = workspaceRuntimePlan(backend, options);
+  switch (backend) {
     case "sysbox": {
-      const runtime = config.agent.runtimeBackend.dockerRuntime ?? "sysbox-runc";
       return [
         await commandCheck(runner, "sysbox-runc", ["--version"], "sysbox-runc"),
         await systemdUnitCheck(runner, "sysbox.service", "Sysbox service"),
-        await dockerRuntimeCheck(runner, runtime, `Docker ${runtime} runtime`),
-        await dockerRuntimeExecutionCheck(runner, runtime, "Sysbox container execution"),
+        await dockerRuntimeCheck(runner, plan.dockerRuntime, `Docker ${plan.dockerRuntime} runtime`),
+        await dockerRuntimeExecutionCheck(runner, plan.dockerRuntime, "Sysbox container execution"),
         await pathCheck("/dev/kvm", "KVM device")
       ];
     }
     case "gvisor": {
-      const runtime = config.agent.runtimeBackend.dockerRuntime ?? "runsc";
       return [
         await commandCheck(runner, "runsc", ["--version"], "runsc"),
-        await dockerRuntimeCheck(runner, runtime, `Docker ${runtime} runtime`),
-        await dockerRuntimeExecutionCheck(runner, runtime, "gVisor container execution")
+        await dockerRuntimeCheck(runner, plan.dockerRuntime, `Docker ${plan.dockerRuntime} runtime`),
+        await dockerRuntimeExecutionCheck(runner, plan.dockerRuntime, "gVisor container execution")
       ];
     }
     case "rootless-podman":
       return [
-        await dockerImageCheck(runner, config.agent.image, "Rootless Podman agent image"),
-        await dockerAgentCommandCheck(runner, config.agent.image, ["podman", "--version"], "Podman in agent image"),
+        await dockerImageCheck(runner, plan.image, "Rootless Podman workspace image"),
+        await dockerAgentCommandCheck(runner, plan.image, ["podman", "--version"], "Podman in workspace image"),
         await pathCheck("/dev/fuse", "FUSE device")
       ];
-  }
-}
-
-async function storageBackendChecks(runner: CommandRunner, config: DevInfraConfig): Promise<DoctorCheck[]> {
-  switch (config.storageBackend.kind) {
-    case "loopback":
-      return [await loopDeviceCheck(runner)];
-    case "directory":
-      return [{ name: "Directory storage backend", ok: true, detail: "available; diskBytes is not enforced by this backend" }];
+    case "runc":
+      return [
+        await dockerRuntimeCheck(runner, plan.dockerRuntime, `Docker ${plan.dockerRuntime} runtime`),
+        await dockerRuntimeExecutionCheck(runner, plan.dockerRuntime, "runc container execution")
+      ];
   }
 }
 
@@ -157,31 +158,6 @@ async function systemdUnitCheck(runner: CommandRunner, unit: string, name: strin
     ok: result.exitCode === 0 && detail === "active",
     detail: detail || "inactive"
   };
-}
-
-async function loopDeviceCheck(runner: CommandRunner): Promise<DoctorCheck> {
-  const dir = await mkdtemp(join(tmpdir(), "dim-loop-check-"));
-  const image = join(dir, "disk.img");
-  let loopDevice = "";
-  try {
-    let result = await runner.run("truncate", ["-s", "8M", image]);
-    if (result.exitCode !== 0) {
-      return { name: "Loop device setup", ok: false, detail: "failed to create test image" };
-    }
-
-    result = await runner.run("losetup", ["-f", "--show", image], { sudo: true });
-    loopDevice = result.stdout.trim();
-    return {
-      name: "Loop device setup",
-      ok: result.exitCode === 0,
-      detail: result.exitCode === 0 ? loopDevice : `${result.stderr}${result.stdout}`.trim()
-    };
-  } finally {
-    if (loopDevice) {
-      await runner.run("losetup", ["-d", loopDevice], { sudo: true });
-    }
-    await rm(dir, { recursive: true, force: true });
-  }
 }
 
 async function cgroupCheck(): Promise<DoctorCheck> {

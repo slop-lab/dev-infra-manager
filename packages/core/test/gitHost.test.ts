@@ -21,8 +21,7 @@ describe("managed git host", () => {
   it("creates, approves, and fast-forward merges pull requests", async () => {
     const config = normalizeConfig({
       ...DEFAULT_CONFIG,
-      stateRoot: join(root, "state"),
-      jobMountRoot: join(root, "mounts")
+      stateRoot: join(root, "state")
     });
     await initGitHost(config);
     await createRepo(config, runner, "app");

@@ -10,7 +10,7 @@ The system has three major execution boundaries:
 
 The agent workspace boundary is untrusted.
 The secret-bearing runtime boundary is trusted only after human review of its effective source and runtime definition.
-The host/controller boundary is privileged because it can create job filesystems, run containers, and deploy secret-bearing runtimes. A project must directly review the complete pinned DIM revision before trusting this boundary.
+The host/controller boundary is privileged because it can create workspaces, run containers, and deploy secret-bearing runtimes. A project must directly review the complete pinned DIM revision before trusting this boundary.
 
 ## Agent Workspace Boundary
 
@@ -24,7 +24,7 @@ Agent workspace containers:
 - Must not mount the host Docker socket.
 - Must not mount secret-bearing runtime volumes.
 - May run nested containers through the selected backend.
-- Must use a per-job workspace.
+- Must use an isolated named workspace.
 - Must be resource-limited at the outer container boundary.
 
 The final command inside the included agent images runs as the `agent` user.
@@ -45,7 +45,7 @@ Any source, Dockerfile, entrypoint, dependency lockfile, runtime config, or cont
 
 The host/controller boundary:
 
-- Creates and tears down job filesystems.
+- Creates, reconciles, and discards workspace resources.
 - Runs Docker commands for agent and secret runtime containers.
 - Manages local bare Git repositories and PR metadata.
 - Installs and checks runtime support through scripts and doctor checks.
@@ -71,5 +71,4 @@ Runtime backend choice changes the strength and shape of isolation.
 
 Storage backend choice changes disk enforcement.
 
-- `loopback` enforces aggregate disk usage.
 - `directory` does not enforce disk usage.

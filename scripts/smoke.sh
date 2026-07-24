@@ -53,19 +53,20 @@ pnpm run workspace:build
 dim_bin="$repo_root/packages/dim-cli/dist/cli.js"
 
 step "build container images"
-just build-agent-image
+just build-project-workspace
 just build-secret-example
 
-step "verify agent image"
+step "verify workspace image"
 docker run --rm \
-  -e DEV_INFRA_START_DOCKERD=0 \
-  dev-infra-agent-workspace:latest \
+  --privileged \
+  --runtime runc \
+  dev-infra-project-workspace:latest \
   bash -lc 'test "$(whoami)" = agent && test "$HOME" = /home/agent && git --version >/dev/null && docker --version >/dev/null'
 
 # Use unique tags so the isolation assertions never depend on which images the
 # host or inner daemon happened to cache before this smoke run.
 step "verify nested Docker isolation and resource limits"
-docker tag dev-infra-agent-workspace:latest "$host_probe_image"
+docker tag dev-infra-project-workspace:latest "$host_probe_image"
 docker run --rm \
   --name "$nested_smoke_container" \
   --runtime sysbox-runc \
@@ -74,7 +75,7 @@ docker run --rm \
   --pids-limit 128 \
   --env HOST_PROBE_IMAGE="$host_probe_image" \
   --env INNER_PROBE_IMAGE="$inner_probe_image" \
-  dev-infra-agent-workspace:latest \
+  dev-infra-project-workspace:latest \
   bash -lc '
     ! docker image inspect "$HOST_PROBE_IMAGE" >/dev/null 2>&1
     read -r cpu_quota cpu_period < /sys/fs/cgroup/cpu.max
@@ -95,30 +96,10 @@ step "exercise managed Git pull request flow"
 cat > "$tmpdir/config.json" <<EOF
 {
   "stateRoot": "$tmpdir/state",
-  "jobMountRoot": "$tmpdir/mounts",
-  "storageBackend": { "kind": "directory" },
   "managedGitHost": {
     "kind": "bare-git-pr",
     "remote": "file://$tmpdir/state/git-host",
     "protectedRefs": ["refs/heads/main"]
-  },
-  "resourceProfiles": {
-    "tiny": {
-      "cpuCount": 1,
-      "memoryBytes": "256MiB",
-      "pidsLimit": 128,
-      "diskBytes": "64MiB",
-      "timeoutSeconds": 60
-    }
-  },
-  "agent": {
-    "image": "dev-infra-agent-workspace:latest",
-    "runtime": "sysbox-runc",
-    "runtimeBackend": { "kind": "sysbox", "dockerRuntime": "sysbox-runc" },
-    "workspacePath": "/workspace",
-    "runtimeDataPath": "/var/lib/docker",
-    "env": {},
-    "gitEnv": {}
   },
   "secretRuntime": {
     "endpoint": "http://127.0.0.1:18090",

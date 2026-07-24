@@ -93,4 +93,4 @@ Required verification:
 - Unit test for sudo retry on permission errors.
 - Unit test for first-line error detail.
 - Unit test that gVisor config uses gVisor checks and omits Sysbox service checks.
-- Manual or scripted `doctor --config` on installed backends.
+- Manual or scripted `doctor --backend` on installed backends.

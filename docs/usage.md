@@ -123,12 +123,10 @@ For the heavier image-build and nested-Docker check, run:
 just container-runtime-verify
 ```
 
-This additionally builds the role-neutral DIM project workspace image and the
-agent job image, then runs them with privileged runc solely as a
-nested-container compatibility smoke test. It checks the default containerd
-snapshotter path, the gVisor-compatible legacy `overlay2` path, and outbound
-networking from a container created by each inner daemon. It does not claim to
-validate the production Sysbox boundary.
+This additionally builds the role-neutral DIM project workspace image and runs
+it with privileged runc solely as a nested-container compatibility smoke test.
+It checks inner-Docker startup and outbound networking from a nested
+container. It does not claim to validate the production Sysbox boundary.
 It also installs the publishable `@slop-lab/dim-cli` tarball into a temporary
 prefix and uses only that installed `dim` binary to exercise:
 
@@ -203,71 +201,17 @@ Run:
 just doctor
 ```
 
-The doctor command checks local development tools, Docker CLI availability, Docker daemon access, the selected runtime backend, the selected storage backend, and cgroup v2 support.
+The doctor command checks local development tools, Docker daemon access, the selected workspace runtime backend, and cgroup v2 support.
 
 Run config-aware checks with:
 
 ```bash
-pnpm run cli -- doctor --config dev-infra.config.json
+pnpm run cli -- doctor --backend gvisor
 ```
 
 The Sysbox registration check only proves that Docker knows about `sysbox-runc`. The Sysbox container execution check runs `hello-world:latest` with `--runtime=sysbox-runc`; this is the direct readiness signal for Sysbox agent workspace containers.
-For gVisor, `doctor --config` checks `runsc` and Docker runtime execution.
-For rootless Podman, `doctor --config` checks the configured agent image and verifies that `podman` is present in it.
-
-## Job Filesystem Lifecycle
-
-Prepare a job in dry-run mode:
-
-```bash
-pnpm run cli -- job prepare --config dev-infra.config.json --job-id demo --dry-run
-```
-
-Prepare a job and execute host filesystem operations:
-
-```bash
-pnpm run cli -- job prepare --config dev-infra.config.json --job-id demo
-```
-
-This creates a per-job disk image, formats it, mounts it, creates workspace/runtime data directories, and records job metadata.
-
-Clean up a job:
-
-```bash
-pnpm run cli -- job cleanup --config dev-infra.config.json --job-id demo
-```
-
-Use `--dry-run` to inspect cleanup commands without executing them. Use `--keep-disk` to leave the job disk image and mount directory in place.
-
-Run the full lifecycle in one command:
-
-```bash
-pnpm run cli -- job run --config dev-infra.config.json --job-id demo -- bash
-```
-
-`job run` prepares the quota filesystem, runs the agent workspace container with the configured resource profile and timeout, and then cleans up the job even when prepare or execution fails. Use `--keep-disk` to keep the job filesystem after execution for debugging.
-
-Job IDs claim state atomically. Reusing a job ID while state or mount directories still exist is refused to avoid overwriting workspace data. Run `job cleanup` before reusing a job ID.
-
-## Agent Container Command
-
-After preparing a job, inspect the Docker command that would run the agent workspace container:
-
-```bash
-pnpm run cli -- agent run-command --config dev-infra.config.json --job-id demo bash
-```
-
-The command uses the configured runtime backend, resource profile, workspace bind mount, nested runtime data bind mount, and approved environment variables.
-It is wrapped with the configured job timeout.
-
-Run the agent workspace container:
-
-```bash
-pnpm run cli -- agent run --config dev-infra.config.json --job-id demo -- bash
-```
-
-`agent run` executes Docker with sudo by default. Use `--sudo=false` when the invoking user can access the Docker daemon directly.
-The command exits with the `timeout` exit code if the job exceeds `resourceProfiles.<name>.timeoutSeconds`.
+For gVisor, `doctor --backend gvisor` checks `runsc` and Docker runtime execution.
+For rootless Podman, `doctor --backend rootless-podman` checks the workspace image and verifies that `podman` is present in it.
 
 ## Managed Git Host
 

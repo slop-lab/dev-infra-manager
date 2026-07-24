@@ -4,37 +4,6 @@ export interface ManagedGitHostConfig {
   protectedRefs: string[];
 }
 
-export interface ResourceProfile {
-  cpuCount: number;
-  memoryBytes: number;
-  pidsLimit: number;
-  diskBytes: number;
-  timeoutSeconds: number;
-}
-
-export type AgentRuntimeBackendKind = "sysbox" | "gvisor" | "rootless-podman";
-
-export interface AgentRuntimeBackendConfig {
-  kind: AgentRuntimeBackendKind;
-  dockerRuntime?: string;
-}
-
-export interface AgentConfig {
-  image: string;
-  runtime: string;
-  runtimeBackend: AgentRuntimeBackendConfig;
-  workspacePath: string;
-  runtimeDataPath: string;
-  env: Record<string, string>;
-  gitEnv: Record<string, string>;
-}
-
-export type StorageBackendKind = "loopback" | "directory";
-
-export interface StorageBackendConfig {
-  kind: StorageBackendKind;
-}
-
 export interface SecretRuntimeConfig {
   endpoint: string;
   repo: string;
@@ -49,31 +18,8 @@ export interface SecretRuntimeConfig {
 
 export interface DevInfraConfig {
   stateRoot: string;
-  jobMountRoot: string;
-  storageBackend: StorageBackendConfig;
   managedGitHost: ManagedGitHostConfig;
-  resourceProfiles: Record<string, ResourceProfile>;
-  agent: AgentConfig;
   secretRuntime: SecretRuntimeConfig;
-}
-
-export interface JobPaths {
-  jobRoot: string;
-  diskImage: string;
-  mountPoint: string;
-  workspace: string;
-  runtimeData: string;
-  metadata: string;
-}
-
-export interface JobMetadata {
-  jobId: string;
-  profileName: string;
-  resourceProfile: ResourceProfile;
-  storageBackend: StorageBackendKind;
-  paths: JobPaths;
-  createdAt: string;
-  mounted: boolean;
 }
 
 export interface CommandResult {

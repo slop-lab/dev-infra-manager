@@ -25,7 +25,7 @@ and lifecycle journal.
 A workspace **profile** is a Docker Compose capability profile: for example
 `development`, `secrets`, `browser`, or `gpu-tools`. It selects optional
 project services and is unrelated to the CPU/memory/disk resource profiles
-used by legacy job commands.
+used for CPU, memory, and PID limits on the top-level workspace.
 
 A **service** is a container managed by the project, normally through
 `.dim/docker-compose.yml`. Services may clone additional registered
@@ -170,6 +170,7 @@ Create a workspace and persist its desired Compose profiles:
 
 ```bash
 dim workspace create example example-dev \
+  --backend sysbox \
   --profile development \
   --profile secrets
 ```
@@ -179,7 +180,7 @@ Creation:
 1. Claims the workspace journal before creating non-trivial resources.
 2. Reconciles the managed Git service and workspace runtime.
 3. Clones the project repository inside the workspace.
-4. Stores the selected profiles in workspace metadata.
+4. Stores the selected runtime backend and profiles in workspace metadata.
 5. Runs `.dim/setup.sh`, or the default `.dim/docker-compose.yml` setup.
 6. Leaves failed setup resources and diagnostics available for retry.
 

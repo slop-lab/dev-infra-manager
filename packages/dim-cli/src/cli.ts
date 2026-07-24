@@ -3,9 +3,6 @@ import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
   approvePullRequest,
-  buildAgentTimeoutArgs,
-  buildAgentTimeoutCommand,
-  cleanupJob,
   createPullRequest,
   createRepo,
   createWorkspace,
@@ -22,12 +19,9 @@ import {
   loadInstalledPlugins,
   loadConfig,
   mergePullRequest,
-  prepareJob,
   ProcessRunner,
-  readJobMetadata,
   readPullRequest,
   registerRepo,
-  runAgentJob,
   runController,
   runDoctor,
   runWorkspace,
@@ -39,6 +33,7 @@ import {
   stopWorkspace,
   updateWorkspace,
   UserError,
+  workspaceBackend,
   writeDefaultConfig
 } from "@slop-lab/dev-infra-manager-core";
 
@@ -73,7 +68,12 @@ async function main(argv: string[]): Promise<void> {
   }
 
   if (command === "doctor") {
-    const checks = await runDoctor(runner, parsed.flags.has("config") ? await loadConfig(invocationPath(stringFlag(parsed, "config", "dev-infra.config.json"))) : undefined);
+    const options = lifecycleOptions();
+    const checks = await runDoctor(
+      runner,
+      workspaceBackend(stringFlag(parsed, "backend", options.defaultWorkspaceBackend)),
+      options
+    );
     for (const check of checks) {
       console.log(`${check.ok ? "ok" : "fail"}\t${check.name}\t${check.detail}`);
     }
@@ -145,10 +145,12 @@ async function main(argv: string[]): Promise<void> {
     if (!project || !name) throw new UserError("workspace create requires PROJECT and WORKSPACE");
     const gitUserName = optionalStringFlag(parsed, "git-user-name");
     const gitUserEmail = optionalStringFlag(parsed, "git-user-email");
-    const record = await createWorkspace(runner, lifecycleOptions(), {
+    const options = lifecycleOptions();
+    const record = await createWorkspace(runner, options, {
       project,
       name,
       profiles: repeatedStringFlag(parsed, "profile"),
+      runtimeBackend: workspaceBackend(stringFlag(parsed, "backend", options.defaultWorkspaceBackend)),
       ...(gitUserName === undefined ? {} : { gitUserName }),
       ...(gitUserEmail === undefined ? {} : { gitUserEmail })
     });
@@ -235,13 +237,8 @@ async function main(argv: string[]): Promise<void> {
           ok: true,
           configPath,
           stateRoot: config.stateRoot,
-          jobMountRoot: config.jobMountRoot,
-          storageBackend: config.storageBackend.kind,
-          resourceProfiles: Object.keys(config.resourceProfiles),
           managedGitHostKind: config.managedGitHost.kind,
           managedGitHostProtectedRefs: config.managedGitHost.protectedRefs,
-          agentImage: config.agent.image,
-          agentRuntimeBackend: config.agent.runtimeBackend,
           secretRuntimeRepo: config.secretRuntime.repo,
           secretRuntimeApprovedRef: config.secretRuntime.approvedRef
         },
@@ -249,38 +246,6 @@ async function main(argv: string[]): Promise<void> {
         2
       )
     );
-    return;
-  }
-
-  if (command === "job" && subcommand === "prepare") {
-    const jobId = requiredFlag(parsed, "job-id");
-    const profile = resourceProfileFlag(parsed);
-    const dryRun = booleanFlag(parsed, "dry-run", false);
-    const metadata = await prepareJob(config, runner, jobId, profile, dryRun);
-    console.log(JSON.stringify(metadata, null, 2));
-    return;
-  }
-
-  if (command === "job" && subcommand === "cleanup") {
-    const jobId = requiredFlag(parsed, "job-id");
-    const dryRun = booleanFlag(parsed, "dry-run", false);
-    const removeDisk = !booleanFlag(parsed, "keep-disk", false);
-    await cleanupJob(config, runner, jobId, dryRun, removeDisk);
-    return;
-  }
-
-  if (command === "job" && subcommand === "run") {
-    const jobId = requiredFlag(parsed, "job-id");
-    const profileName = resourceProfileFlag(parsed);
-    const commandArgs = parsed.command.slice(2);
-    const exitCode = await runAgentJob(config, runner, {
-      jobId,
-      profileName,
-      command: commandArgs,
-      sudo: booleanFlag(parsed, "sudo", true),
-      keepDisk: booleanFlag(parsed, "keep-disk", false)
-    });
-    process.exitCode = exitCode;
     return;
   }
 
@@ -345,24 +310,6 @@ async function main(argv: string[]): Promise<void> {
       intervalSeconds: numericFlagWithDefault(parsed, "interval-seconds", 30),
       dryRun: booleanFlag(parsed, "dry-run", false)
     });
-    return;
-  }
-
-  if (command === "agent" && subcommand === "run-command") {
-    const jobId = requiredFlag(parsed, "job-id");
-    const metadata = await readJobMetadata(config, jobId);
-    const commandArgs = parsed.command.slice(2);
-    console.log(buildAgentTimeoutCommand(config, metadata, { name: `dim-${jobId}`, command: commandArgs }));
-    return;
-  }
-
-  if (command === "agent" && subcommand === "run") {
-    const jobId = requiredFlag(parsed, "job-id");
-    const metadata = await readJobMetadata(config, jobId);
-    const commandArgs = parsed.command.slice(2);
-    const timeoutArgs = buildAgentTimeoutArgs(config, metadata, { name: `dim-${jobId}`, command: commandArgs });
-    const exitCode = await runner.runStreaming("timeout", timeoutArgs, { sudo: booleanFlag(parsed, "sudo", true) });
-    process.exitCode = exitCode;
     return;
   }
 
@@ -467,15 +414,6 @@ function repeatedStringFlag(args: ParsedArgs, name: string): string[] {
   return values as string[];
 }
 
-function resourceProfileFlag(args: ParsedArgs): string {
-  if (args.flags.has("resource-profile") && args.flags.has("profile")) {
-    throw new UserError("--resource-profile cannot be combined with the legacy --profile alias");
-  }
-  return args.flags.has("resource-profile")
-    ? stringFlag(args, "resource-profile", "default")
-    : stringFlag(args, "profile", "default");
-}
-
 function booleanFlag(args: ParsedArgs, name: string, fallback: boolean): boolean {
   const value = args.flags.get(name);
   if (value === undefined) {
@@ -515,7 +453,7 @@ function printHelp(): void {
 
 Usage:
   dim init-config [--output dev-infra.config.json]
-  dim doctor [--config dev-infra.config.json]
+  dim doctor [--backend sysbox|gvisor|rootless-podman|runc]
   dim config validate [--config dev-infra.config.json]
   dim repo register --name NAME [--protect main,release/*] /path/to/bare/repo.git
   dim repo list
@@ -524,7 +462,7 @@ Usage:
   dim plugin list
   dim gitea ensure
   dim gitea credentials --show-secrets
-  dim workspace create PROJECT WORKSPACE [--profile PROFILE ...] [--git-user-name NAME] [--git-user-email EMAIL]
+  dim workspace create PROJECT WORKSPACE [--backend sysbox|gvisor|rootless-podman|runc] [--profile PROFILE ...] [--git-user-name NAME] [--git-user-email EMAIL]
   dim workspace run WORKSPACE TASK [ARGS...]
   dim workspace exec WORKSPACE -- COMMAND [ARGS...]
   dim workspace setup WORKSPACE
@@ -533,11 +471,6 @@ Usage:
   dim workspace show WORKSPACE
   dim workspace stop WORKSPACE
   dim workspace discard WORKSPACE --yes
-  dim job prepare --job-id ID [--resource-profile default] [--config dev-infra.config.json] [--dry-run]
-  dim job cleanup --job-id ID [--config dev-infra.config.json] [--dry-run] [--keep-disk]
-  dim job run --job-id ID [--resource-profile default] [--config dev-infra.config.json] [--sudo=false] [--keep-disk] [-- COMMAND...]
-  dim agent run-command --job-id ID [--config dev-infra.config.json] [COMMAND...]
-  dim agent run --job-id ID [--config dev-infra.config.json] [--sudo=false] [-- COMMAND...]
   dim git-host init [--config dev-infra.config.json]
   dim git-host create-repo --repo NAME [--config dev-infra.config.json]
   dim git-host install-hooks --repo NAME [--config dev-infra.config.json]

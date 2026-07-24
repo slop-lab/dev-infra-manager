@@ -7,7 +7,7 @@ chmod 0700 /home/agent/.codex
 rm -f /var/run/docker.pid /var/run/docker.sock
 
 dockerd --host=unix:///var/run/docker.sock --data-root=/var/lib/docker \
-  --group=agent >/var/log/dockerd.log 2>&1 &
+  --group=agent ${DIM_DOCKERD_FLAGS:-} >/var/log/dockerd.log 2>&1 &
 for _ in $(seq 1 60); do
   if docker info >/dev/null 2>&1; then
     chgrp agent /var/run/docker.sock

@@ -88,17 +88,19 @@ roles.
 Usage:
 
 ```bash
-dim workspace create PROJECT WORKSPACE [--profile PROFILE ...]
+dim workspace create PROJECT WORKSPACE \
+  [--backend sysbox|gvisor|rootless-podman|runc] \
+  [--profile PROFILE ...]
 ```
 
 A workspace consists of:
 
 - One top-level persistent workspace container.
-- One named Docker volume for its inner Docker store.
+- One named Docker volume for its nested-engine store.
 - Membership in the shared Gitea network.
 - Optional routes, initially an empty list.
-- One host metadata record containing the project, selected Compose profiles,
-  Compose project name, and last setup result.
+- One host metadata record containing the project, runtime backend, selected
+  Compose profiles, Compose project name, and last setup result.
 
 The top-level container must not mount a host checkout, host worktree, host
 Git directory, host Docker socket, or host workspace data directory.

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`dev-infra-manager` provides host-side infrastructure for running AI-assisted development jobs in isolated, review-gated environments.
+`dev-infra-manager` provides host-side infrastructure for persistent AI-assisted development workspaces in isolated, review-gated environments.
 
 The system must let an untrusted agent:
 
@@ -33,10 +33,9 @@ The system must prevent that agent from:
 - Protected Git refs must reject direct push through managed bare repository hooks.
 - Managed pull request merge is the path that updates protected refs in normal operation.
 - Runtime backend selection and storage backend selection must be independent.
-- `loopback` storage enforces aggregate job disk usage through a per-job disk image.
 - `directory` storage does not enforce `diskBytes` and must be treated as a compatibility backend.
-- `doctor --config` must check the selected runtime and storage backend, not unrelated default backends.
-- Job workspaces are ephemeral unless the user explicitly keeps the job disk or persists changes through Git or exported artifacts.
+- `doctor --backend` must check the selected workspace runtime backend.
+- Workspaces persist until explicitly discarded.
 - The controller is trusted because it controls secret-bearing deployment.
 
 ## Non-Goals
@@ -54,8 +53,6 @@ The project does not own:
 
 ## Compatibility Goals
 
-- Existing configs with `agent.runtime` and no `agent.runtimeBackend` must remain readable.
-- Existing configs with no `storageBackend` must default to `loopback`.
 - CLI commands should remain stable unless a specification update explicitly changes their contract.
 
 ## Review Scope

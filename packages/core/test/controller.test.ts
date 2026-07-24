@@ -22,8 +22,7 @@ describe("controller", () => {
   it("deploys when approved ref changes and records state", async () => {
     const config = normalizeConfig({
       ...DEFAULT_CONFIG,
-      stateRoot: join(root, "state"),
-      jobMountRoot: join(root, "mounts")
+      stateRoot: join(root, "state")
     });
     await createRepo(config, runner, "trusted-runtime");
     const worktree = join(root, "trusted-runtime");
@@ -74,8 +73,7 @@ describe("controller", () => {
   async function configWithApprovedRef() {
     const config = normalizeConfig({
       ...DEFAULT_CONFIG,
-      stateRoot: join(root, "state"),
-      jobMountRoot: join(root, "mounts")
+      stateRoot: join(root, "state")
     });
     await createRepo(config, runner, "trusted-runtime");
     const worktree = join(root, `trusted-runtime-${Math.random().toString(36).slice(2)}`);

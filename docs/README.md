@@ -1,6 +1,6 @@
 # dev-infra-manager Documentation
 
-`dev-infra-manager` provides infrastructure for running AI-assisted development jobs in isolated, review-gated environments.
+`dev-infra-manager` provides persistent, isolated, review-gated workspaces for AI-assisted development.
 
 The documentation is split by concern:
 
@@ -8,10 +8,10 @@ The documentation is split by concern:
 - [Adopting DIM Safely](adoption.md): mandatory human review, version pinning, and branch policy for consuming projects.
 - [Architecture](architecture.md): core runtime boundaries and Git/review flow.
 - [Monorepo Structure](monorepo.md): workspace layout, dependency direction, and optional hosting provider boundaries.
-- [Resource Isolation](resource-isolation.md): resource limits, runtime isolation, and disk quota model.
+- [Resource Isolation](resource-isolation.md): resource limits and runtime isolation.
 - [Usage](usage.md): local setup, commands, and operational workflow.
 - [Configuration](configuration.md): configuration file reference.
-- [Runtime Backends](runtime-backends.md): Sysbox, gVisor, rootless Podman, loopback, and directory backend selection.
+- [Runtime Backends](runtime-backends.md): Sysbox, gVisor, rootless Podman, and runc selection.
 - [Runtime Images](runtime-images.md): included agent workspace and secret runtime images.
 - [Repository-backed Workspaces](repo-workspaces.md): local Gitea registration, persistent workspaces, reconciliation, and Git environment.
 - [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.

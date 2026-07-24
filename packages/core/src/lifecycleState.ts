@@ -137,6 +137,7 @@ function normalizeWorkspaceRecord(raw: WorkspaceRecord & { repo?: string }): Wor
     projectPath: raw.projectPath ?? (legacy ? `/workspace/repos/${project}` : "/workspace/project"),
     profiles: raw.profiles ?? [],
     composeProjectName: raw.composeProjectName ?? `dim-${raw.name}`,
+    runtimeBackend: raw.runtimeBackend ?? "sysbox",
     gitUserName: raw.gitUserName ?? `dim/${raw.name}`,
     gitUserEmail: raw.gitUserEmail ?? `${raw.name}@dim.invalid`,
     gitBaseUrl: raw.gitBaseUrl ?? "http://dim-gitea:3000"

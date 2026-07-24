@@ -7,6 +7,7 @@ import { LifecycleState, validateLifecycleName } from "../src/lifecycleState.js"
 import type { RepoRecord, WorkspaceRecord } from "../src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../src/types.js";
 import { validateWorkspaceProfiles, waitForInnerDocker, workspaceContainerArgs } from "../src/workspaceLifecycle.js";
+import { workspaceRuntimePlan } from "../src/runtimeBackends.js";
 
 describe("repo and workspace lifecycle", () => {
   let root: string;
@@ -58,6 +59,7 @@ describe("repo and workspace lifecycle", () => {
       containerName: "dim-ws-work-1",
       networkName: "dim-control",
       dockerVolumeName: "dim-ws-work-1-docker",
+      runtimeBackend: "runc",
       routes: [],
       gitUserName: "Agent",
       gitUserEmail: "agent@example.invalid",
@@ -112,6 +114,7 @@ describe("repo and workspace lifecycle", () => {
       containerName: "dim-ws-work-1",
       networkName: "dim-control",
       dockerVolumeName: "dim-ws-work-1-docker",
+      runtimeBackend: "runc",
       routes: [],
       gitUserName: "Agent",
       gitUserEmail: "agent@example.invalid",
@@ -152,10 +155,36 @@ describe("repo and workspace lifecycle", () => {
     expect(options.giteaPort).toBe(4300);
     expect(options.memory).toBe("2g");
     expect(options.giteaImage).toBe("gitea/gitea:1.27.0");
-    expect(options.workspaceImage).toBe("dev-infra-project-workspace:latest");
+    expect(options.defaultWorkspaceBackend).toBe("sysbox");
     expect(validateWorkspaceProfiles(["development", "secrets"])).toEqual(["development", "secrets"]);
     expect(() => validateWorkspaceProfiles(["development", "development"])).toThrow(/duplicated/);
     expect(() => validateWorkspaceProfiles(["bad,profile"])).toThrow(/workspace profile/);
+  });
+
+  it("selects persistent workspace runtime backends", () => {
+    const options = lifecycleOptions({ DIM_STATE_ROOT: root });
+    expect(workspaceRuntimePlan("sysbox", options)).toMatchObject({
+      dockerRuntime: "sysbox-runc",
+      image: "dev-infra-project-workspace:latest",
+      privileged: false,
+      engine: "docker"
+    });
+    expect(workspaceRuntimePlan("gvisor", options)).toMatchObject({
+      dockerRuntime: "runsc",
+      privileged: false,
+      env: { DIM_DOCKERD_FLAGS: "--feature containerd-snapshotter=false" }
+    });
+    expect(workspaceRuntimePlan("rootless-podman", options)).toMatchObject({
+      image: "dev-infra-project-workspace-podman:latest",
+      runtimeDataPath: "/home/agent/.local/share/containers",
+      engine: "podman",
+      devices: ["/dev/fuse"]
+    });
+    expect(workspaceRuntimePlan("runc", options)).toMatchObject({
+      dockerRuntime: "runc",
+      privileged: true,
+      engine: "docker"
+    });
   });
 
   it("normalizes legacy workspace records without moving their checkout", async () => {
@@ -180,6 +209,7 @@ describe("repo and workspace lifecycle", () => {
       projectPath: "/workspace/repos/project",
       profiles: [],
       composeProjectName: "dim-legacy",
+      runtimeBackend: "sysbox",
       gitUserName: "dim/legacy",
       gitUserEmail: "legacy@dim.invalid",
       gitBaseUrl: "http://dim-gitea:3000"
@@ -222,7 +252,7 @@ describe("repo and workspace lifecycle", () => {
     };
 
     await expect(waitForInnerDocker(runner, "dim-ws-failed")).rejects.toThrow(
-      /status=exited exitCode=1 oomKilled=false[\s\S]*dockerd mount failure/
+      /nested docker did not become ready[\s\S]*status=exited exitCode=1 oomKilled=false[\s\S]*dockerd mount failure/
     );
     expect(calls.filter(([, subcommand]) => subcommand === "exec")).toHaveLength(1);
     expect(calls.at(-1)).toEqual(["docker", "logs", "dim-ws-failed"]);

@@ -48,7 +48,6 @@ container-verify:
 container-runtime-verify:
     just container-verify
     just build-project-workspace
-    docker build --force-rm -t dev-infra-agent-workspace:latest images/agent-workspace
     bash scripts/container-inner-docker-smoke.sh
     bash scripts/container-lifecycle-smoke.sh
     bash scripts/container-packed-project-smoke.sh
@@ -59,10 +58,10 @@ install-dim-local:
     bash scripts/install-dim-local.sh
 
 isolation-check:
-    pnpm --filter @slop-lab/dev-infra-manager-core exec vitest run test/docker.test.ts
+    pnpm --filter @slop-lab/dev-infra-manager-core exec vitest run test/lifecycle.test.ts
 
 isolation-check-json:
-    pnpm --filter @slop-lab/dev-infra-manager-core exec vitest run test/docker.test.ts --reporter=json
+    pnpm --filter @slop-lab/dev-infra-manager-core exec vitest run test/lifecycle.test.ts --reporter=json
 
 doctor:
     pnpm run cli -- doctor
@@ -70,14 +69,11 @@ doctor:
 sample-config:
     pnpm run cli -- init-config --output dev-infra.config.json
 
-build-agent-image:
-    docker build -t dev-infra-agent-workspace:latest images/agent-workspace
-
 build-project-workspace:
     docker build --force-rm --build-arg "AGENT_UID=$(id -u)" --build-arg "AGENT_GID=$(id -g)" -t dev-infra-project-workspace:latest images/project-workspace
 
-build-agent-podman-image:
-    docker build -t dev-infra-agent-workspace-podman:latest images/agent-workspace-podman
+build-project-podman-image:
+    docker build -t dev-infra-project-workspace-podman:latest images/project-workspace-podman
 
 build-secret-example:
     docker build -t dev-infra-secret-runtime:latest images/secret-runtime-example
