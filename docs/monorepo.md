@@ -6,7 +6,6 @@ This repository is a pnpm workspace.
 
 ```text
 .
-├── apps/                future deployable services
 ├── .dim/                this repository's DIM project contract
 ├── packages/
 │   ├── core/            lifecycle, runtime, Git, state, and plugin contracts
@@ -26,14 +25,14 @@ convenience.
 ## Dependency Direction
 
 ```text
-apps/*  ──> packages/*
+packages/dim-cli ──> packages/core
 packages/provider-* ──> packages/*-contracts
 ```
 
 Disallowed dependencies:
 
 - A shared contract importing a provider adapter.
-- One application importing another application's private source.
+- One package importing another package's private source.
 - Provider-neutral code importing Gitea, Caddy, Cloudflare, or Tailscale
   implementation details.
 
@@ -52,8 +51,8 @@ packages/git-host-gitea
 packages/entry-contracts
 packages/edge-caddy
 packages/tunnel-cloudflare
-apps/entry-api
-apps/edge-controller
+packages/entry-api
+packages/edge-controller
 ```
 
 Gitea will be the recommended full Git-host provider, not a mandatory runtime
