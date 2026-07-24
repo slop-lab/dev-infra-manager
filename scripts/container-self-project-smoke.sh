@@ -7,6 +7,7 @@ workspace_name="dim-self-$suffix"
 state_root="$(mktemp -d /tmp/dim-self-state.XXXXXX)"
 source_root="$(mktemp -d /tmp/dim-self-source.XXXXXX)"
 dim_bin="${DIM_BIN:-$PWD/packages/dim-cli/dist/cli.js}"
+project_source="$PWD"
 
 dim() {
   if [[ -n "${DIM_BIN:-}" ]]; then
@@ -42,7 +43,18 @@ cleanup() {
 }
 trap cleanup EXIT
 
-git clone --bare "$PWD" "$source_root/project.git" >/dev/null
+if [[ "$(git rev-parse --is-shallow-repository)" == "true" ]]; then
+  project_source="$source_root/snapshot"
+  mkdir -p "$project_source"
+  git archive HEAD | tar -x -C "$project_source"
+  git -C "$project_source" init --initial-branch=main >/dev/null
+  git -C "$project_source" config user.name "DIM Self Smoke"
+  git -C "$project_source" config user.email "self-smoke@dim.invalid"
+  git -C "$project_source" add .
+  git -C "$project_source" commit -m "snapshot current checkout" >/dev/null
+fi
+
+git clone --bare "$project_source" "$source_root/project.git" >/dev/null
 dim repo register --name "$repo_name" "$source_root/project.git" >/dev/null
 dim workspace create "$repo_name" "$workspace_name" >/dev/null
 
