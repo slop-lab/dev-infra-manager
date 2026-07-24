@@ -10,7 +10,7 @@ export function lifecycleOptions(env: NodeJS.ProcessEnv = process.env): Lifecycl
     giteaPort: positiveInteger(env.DIM_GITEA_PORT ?? "3300", "DIM_GITEA_PORT"),
     giteaAdminUsername: env.DIM_GITEA_ADMIN_USERNAME ?? "dim-admin",
     gitUsername: env.DIM_GIT_USERNAME ?? "dim-workspace",
-    workspaceImage: env.DIM_WORKSPACE_IMAGE ?? "dev-infra-codex-workspace:latest",
+    workspaceImage: env.DIM_WORKSPACE_IMAGE ?? "dev-infra-project-workspace:latest",
     workspaceRuntime: env.DIM_WORKSPACE_RUNTIME ?? "sysbox-runc",
     workspacePrivileged: booleanValue(env.DIM_WORKSPACE_PRIVILEGED),
     cpuCount: env.DIM_WORKSPACE_CPUS ?? "2",

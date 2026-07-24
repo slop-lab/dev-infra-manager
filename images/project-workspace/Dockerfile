@@ -17,10 +17,10 @@ ENV HOME=/home/agent \
 
 RUN npm install --global pnpm@10 @openai/codex
 
-COPY entrypoint.sh /usr/local/bin/dim-codex-entrypoint
+COPY entrypoint.sh /usr/local/bin/dim-project-entrypoint
 COPY git-askpass.sh /usr/local/bin/dim-git-askpass
-RUN chmod +x /usr/local/bin/dim-codex-entrypoint /usr/local/bin/dim-git-askpass
+RUN chmod +x /usr/local/bin/dim-project-entrypoint /usr/local/bin/dim-git-askpass
 
 WORKDIR /workspace
-ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/dim-codex-entrypoint"]
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/dim-project-entrypoint"]
 CMD ["bash"]

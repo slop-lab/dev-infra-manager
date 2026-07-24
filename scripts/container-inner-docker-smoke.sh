@@ -15,7 +15,7 @@ run_inner_smoke() {
   "
 }
 
-run_inner_smoke dev-infra-codex-workspace:latest overlayfs
+run_inner_smoke dev-infra-project-workspace:latest overlayfs
 run_inner_smoke \
   dev-infra-agent-workspace:latest \
   overlay2 \

@@ -7,8 +7,8 @@ This repository is a pnpm workspace.
 ```text
 .
 ├── apps/
-│   ├── manager/         current host-side CLI and controller
-│   └── codex-workspace/ host-side isolated Codex launcher
+│   └── manager/         current host-side CLI and controller
+├── .dim/                this repository's DIM project contract
 ├── packages/            provider-neutral contracts and adapters
 ├── deploy/              deployment manifests and service templates
 ├── images/              runtime image definitions
@@ -64,56 +64,34 @@ providers and URL providers remain separate so one entry may expose local,
 tailnet, and public URLs without coupling the API contract to one proxy or
 tunnel product.
 
-## Next Priority: Containerized Codex Workspace
+## DIM self-development workspace
 
-Before adding Gitea or the entry API, the next implementation target is a
-Sysbox workspace in which the Codex CLI itself runs. It should include:
+This repository uses the same project-facing contract as an external project:
 
-- Codex CLI, Node.js, pnpm, and just. Host-side convenience commands may use
-  mise, but the container image deliberately does not depend on mise or shims.
-- The repository mounted at `/workspace` without the host Docker socket.
-- A separate inner Docker daemon and image store.
-- Outer CPU, memory, PID, disk, and timeout enforcement.
-- Explicit, minimal handling for Codex authentication and Git credentials.
-- A launcher that can start, inspect, and clean up the workspace without
-  granting Codex direct control of the host Docker daemon.
-
-This environment is the preferred place to implement the later Gitea and
-optional entry-service work.
-
-The initial launcher is available as `just codex-workspace`. Build and inspect
-it with:
-
-```bash
-just codex-workspace build
-just codex-workspace doctor
+```text
+.dim/
+├── setup.sh
+└── entrypoint.sh
 ```
 
-Authenticate into its dedicated home, then start Codex with full access inside
-the outer Sysbox boundary:
+The role-neutral `images/project-workspace` image supplies Codex, Node.js,
+pnpm, just, Git, and an inner Docker daemon. It is the default outer image for
+all DIM project workspaces, not an application-specific launcher.
+
+Build the image once, register a bare clone of this repository, and create a
+persistent workspace:
 
 ```bash
-just codex-workspace login
-just codex-workspace run --yes
+just build-project-workspace
+dim repo register --name dim-self /path/to/dev-infra-manager.git
+dim workspace create dim-self dim-self-dev
+dim workspace run dim-self-dev codex
 ```
 
-The outer container runs a stable keepalive process. The `shell`, `login`, and
-`run` commands always execute through `docker exec`, so exiting one shell does
-not terminate other workspace sessions. If the named container does not exist,
-these commands start it in detached mode first.
-
-Explicit resource options update an existing container before entering it, or
-they can be changed independently:
-
-```bash
-just codex-workspace update --name dim-0 --cpus 16 --memory 32g --pids 16384
-```
-
-The launcher bind-mounts only the selected worktree, a dedicated Codex home,
-and a dedicated inner-Docker store. It never mounts the host Docker socket.
-CPU, memory, PID, and wall-clock limits are applied to the outer container.
-Directory-backed state does not provide a hard disk quota; use the manager's
-loopback storage backend when a hard aggregate disk limit is required.
+`workspace run` dispatches the repository's checked-in task contract.
+`workspace exec dim-self-dev -- bash` remains the raw recovery or interactive
+shell path. The project checkout and inner-Docker state exist only in the
+workspace; no host checkout or Docker socket is mounted.
 
 ## State And Credentials
 

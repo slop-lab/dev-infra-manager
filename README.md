@@ -114,13 +114,18 @@ Register an existing bare repository with the local Gitea service and run a
 persistent workspace whose checkout exists only inside its container:
 
 ```bash
-just build-codex-workspace
+just build-project-workspace
 just install-dim-local
 dim repo register --name project /path/to/project.git
 dim workspace create project work-1 --profile development
 dim workspace run work-1 codex
 dim workspace exec work-1 -- bash
 ```
+
+This repository implements the same project contract itself through
+`.dim/setup.sh` and `.dim/entrypoint.sh`. After registering a bare clone of
+this repository, `dim workspace run work-1 codex` launches Codex in the
+persistent DIM workspace; no separate workspace launcher is required.
 
 The publishable CLI package is `@slop-lab/dim-cli`. Its source manifest remains
 private; the build generates a consumer-facing manifest under `dist`:
@@ -130,9 +135,6 @@ pnpm --filter @slop-lab/dim-cli run pack:dry-run
 pnpm --filter @slop-lab/dim-cli run publish:package
 mise use -g npm:@slop-lab/dim-cli
 ```
-
-The other workspace package names use the
-`@slop-lab/dev-infra-manager-*` prefix and remain private.
 
 See [docs/repo-workspaces.md](docs/repo-workspaces.md) for lifecycle,
 credential, reconciliation, and container-only verification details.

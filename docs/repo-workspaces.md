@@ -6,10 +6,10 @@ keeps its checkout inside its top-level container.
 
 ## Local installation
 
-Build and link `dim` for use from other local projects:
+Build the generic DIM project workspace image and link `dim`:
 
 ```bash
-just build-codex-workspace
+just build-project-workspace
 just install-dim-local
 ```
 
@@ -27,6 +27,20 @@ export DIM_WORKSPACE_PRIVILEGED=yes
 
 This opt-in is for compatibility testing and is not the production isolation
 boundary.
+
+This repository is itself a DIM project. Register a bare clone under any
+role-neutral name and run its tasks through the checked-in `.dim` contract:
+
+```bash
+dim repo register --name dim-self /path/to/dev-infra-manager.git
+dim workspace create dim-self dim-self-dev
+dim workspace run dim-self-dev codex
+dim workspace run dim-self-dev verify
+```
+
+The first create runs `.dim/setup.sh`, which installs the locked pnpm
+dependencies. The `codex` task is dispatched by `.dim/entrypoint.sh`. There is
+no separate host-side Codex workspace launcher or host checkout mount.
 
 ## Register a repository
 

@@ -151,6 +151,7 @@ describe("repo and workspace lifecycle", () => {
     expect(options.giteaPort).toBe(4300);
     expect(options.memory).toBe("2g");
     expect(options.giteaImage).toBe("gitea/gitea:1.27.0");
+    expect(options.workspaceImage).toBe("dev-infra-project-workspace:latest");
     expect(validateWorkspaceProfiles(["development", "secrets"])).toEqual(["development", "secrets"]);
     expect(() => validateWorkspaceProfiles(["development", "development"])).toThrow(/duplicated/);
     expect(() => validateWorkspaceProfiles(["bad,profile"])).toThrow(/workspace profile/);

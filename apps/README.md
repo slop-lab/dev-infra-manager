@@ -9,8 +9,6 @@ Current applications:
 
 Planned application boundaries:
 
-- `codex-workspace`: launcher/runtime assets for running Codex itself inside a
-  resource-limited Sysbox workspace.
 - `entry-api`: optional agent-facing API for requesting managed ingress.
 - `edge-controller`: optional route reconciler for reverse proxies and tunnel
   providers.

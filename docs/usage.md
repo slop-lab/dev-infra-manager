@@ -121,11 +121,12 @@ For the heavier image-build and nested-Docker check, run:
 just container-runtime-verify
 ```
 
-This additionally builds both Docker-in-Docker workspace images and runs them
-with privileged runc solely as a nested-container compatibility smoke test. It
-checks the default containerd snapshotter path, the gVisor-compatible legacy
-`overlay2` path, and outbound networking from a container created by each
-inner daemon. It does not claim to validate the production Sysbox boundary.
+This additionally builds the role-neutral DIM project workspace image and the
+agent job image, then runs them with privileged runc solely as a
+nested-container compatibility smoke test. It checks the default containerd
+snapshotter path, the gVisor-compatible legacy `overlay2` path, and outbound
+networking from a container created by each inner daemon. It does not claim to
+validate the production Sysbox boundary.
 It also installs the publishable `@slop-lab/dim-cli` tarball into a temporary
 prefix and uses only that installed `dim` binary to exercise:
 
@@ -134,6 +135,8 @@ prefix and uses only that installed `dim` binary to exercise:
   retry.
 - A four-repository project whose nested Compose services clone, persist, and
   push through managed Gitea.
+- This repository registered as a real project, including locked dependency
+  setup and its checked-in `check`, `verify`, and `codex` tasks.
 - Capability-profile replacement, project fast-forward update, stop/start
   persistence, and discard cleanup.
 

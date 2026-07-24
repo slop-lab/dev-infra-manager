@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "cli": "pnpm --filter @slop-lab/dim-cli run cli --",
-    "codex-workspace": "pnpm --filter @slop-lab/dev-infra-manager-codex-workspace run cli",
     "workspace:check": "pnpm --recursive run check",
     "workspace:test": "pnpm --recursive run test",
     "workspace:build": "pnpm --recursive run build"
