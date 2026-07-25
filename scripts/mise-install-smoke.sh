@@ -44,27 +44,7 @@ cli_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-cli*.tgz' -pri
 install_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*install-dim*.tgz' -print -quit)"
 test -n "$core_tarball" && test -n "$cli_tarball" && test -n "$install_tarball"
 
-cat > "$source_dir/verdaccio.yaml" <<'YAML'
-storage: /work/registry-storage
-auth:
-  htpasswd:
-    file: /work/htpasswd
-    max_users: 1000
-uplinks:
-  npmjs:
-    url: https://registry.npmjs.org/
-packages:
-  '@slop-lab/*':
-    access: $all
-    publish: $all
-    unpublish: $all
-  '**':
-    access: $all
-    publish: $all
-    proxy: npmjs
-log: { type: stdout, format: pretty, level: warn }
-listen: 0.0.0.0:4873
-YAML
+cp "$repo_root/scripts/lib/local-npm-registry.sh" "$source_dir/local-npm-registry.sh"
 
 # Everything below runs entirely inside the container's own filesystem (the
 # host directory is mounted read-only and copied once) so a root-owned
@@ -74,35 +54,15 @@ cat > "$source_dir/run.sh" <<'SCRIPT'
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p /work
-cp /mnt/*.tgz /mnt/verdaccio.yaml /work/
+cp /mnt/*.tgz /mnt/local-npm-registry.sh /work/
 cd /work
+source /work/local-npm-registry.sh
 
 echo "[container] start local npm registry"
-npm install --global verdaccio@6.8.0 --silent >/dev/null 2>&1
-mkdir -p /work/registry-storage
-verdaccio --config /work/verdaccio.yaml --listen 0.0.0.0:4873 >/work/verdaccio.log 2>&1 &
-for _ in $(seq 1 30); do
-  curl -4 -sf http://127.0.0.1:4873/ >/dev/null 2>&1 && break
-  sleep 1
-done
-curl -4 -sf http://127.0.0.1:4873/ >/dev/null || { echo "verdaccio failed to start"; cat /work/verdaccio.log; exit 1; }
-
-resp="$(curl -s -X PUT http://127.0.0.1:4873/-/user/org.couchdb.user:smoketest \
-  -H "Content-Type: application/json" \
-  -d "{\"_id\":\"org.couchdb.user:smoketest\",\"name\":\"smoketest\",\"password\":\"smoketestpass\",\"type\":\"user\",\"roles\":[],\"date\":\"$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)\"}")"
-token="$(echo "$resp" | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>console.log(JSON.parse(d).token))')"
-test -n "$token" && test "$token" != "undefined" || { echo "failed to register local registry user: $resp"; exit 1; }
-npm config set registry http://127.0.0.1:4873 --location=global
-npm config set //127.0.0.1:4873/:_authToken="$token" --location=global
-# mise spawns npm without necessarily reading the npmrc file written above;
-# it does read npm_config_* environment variables, which is what actually
-# steers `mise use -g npm:...` at the package below.
-export npm_config_registry=http://127.0.0.1:4873
+dim_start_local_npm_registry /work
 
 echo "[container] publish local tarballs to the local registry"
-npm publish /work/*dev-infra-manager-core*.tgz --registry http://127.0.0.1:4873 >/dev/null
-npm publish /work/*dim-cli*.tgz --registry http://127.0.0.1:4873 >/dev/null
-npm publish /work/*install-dim*.tgz --registry http://127.0.0.1:4873 >/dev/null
+dim_publish_to_local_registry /work/*dev-infra-manager-core*.tgz /work/*dim-cli*.tgz /work/*install-dim*.tgz
 
 echo "[container] install mise ($PINNED_MISE_VERSION)"
 curl -fsSL https://mise.run | MISE_VERSION="$PINNED_MISE_VERSION" sh >/tmp/mise-install.log 2>&1 \

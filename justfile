@@ -99,6 +99,10 @@ install-dim-local:
 verify-mise-install-smoke:
     bash scripts/mise-install-smoke.sh
 
+# Requires Docker, a reachable dim-gitea, and network access; runs docs/example-project.md end to end and proves it against real containers.
+verify-example-project:
+    bash scripts/example-project-smoke.sh
+
 isolation-check:
     pnpm --filter @slop-lab/dev-infra-manager-core exec vitest run test/lifecycle.test.ts
 

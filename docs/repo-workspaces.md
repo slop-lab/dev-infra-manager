@@ -4,6 +4,9 @@ DIM 0.2 models a development project as a managed Git namespace plus
 project-scoped repository aliases. The built-in service creates a reserved
 Gitea organization named `dim-<project>`.
 
+For a complete, tested, end-to-end walkthrough instead of a reference, see
+[Example: A Multi-repository Project](example-project.md).
+
 ## Create and populate a project
 
 Create Project metadata and an empty root repository:

@@ -15,6 +15,7 @@ The documentation is split by concern:
 - [Runtime Images](runtime-images.md): included agent workspace and secret runtime images.
 - [Repository-backed Workspaces](repo-workspaces.md): local Gitea registration, persistent workspaces, reconciliation, and Git environment.
 - [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.
+- [Example: A Multi-repository Project](example-project.md): a readable, tested, end-to-end walkthrough — install DIM, register a root plus two additional repositories, create a real workspace container, and use it.
 - [Plugins](plugins.md): versioned provider extension boundary for optional GitHub, GitLab, and other integrations.
 - [Releasing](releasing.md): release prerequisites, verification, package order, and post-publish checks.
 - [Status](status.md): current progress and known future work.

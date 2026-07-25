@@ -152,13 +152,35 @@ prefix and uses only that installed `dim` binary to exercise:
 - Capability-profile replacement, project fast-forward update, stop/start
   persistence, and discard cleanup.
 
-## Project Workspaces
-
-Install `dim` from the registry with mise:
+Two additional standalone checks cover the installer itself against a real
+Docker daemon:
 
 ```bash
-mise use -g npm:@slop-lab/dim-cli@0.2.0
+just verify-mise-install-smoke   # mise use -g npm:@slop-lab/install-dim, in a disposable container
+just verify-example-project      # docs/example-project.md, proven end to end
 ```
+
+Both require Docker and network access; `verify-mise-install-smoke` also
+needs to reach the real npm registry to install `mise` itself, and
+`verify-example-project` needs the environment's managed Gitea (`dim-gitea`)
+reachable.
+
+## Project Workspaces
+
+For a complete, tested, multi-repository walkthrough, see [Example: A
+Multi-repository Project](example-project.md). The summary below is the
+minimal single-repository shape.
+
+Install `dim` from the registry through the installer facade, pinned to an
+exact, reviewed version:
+
+```bash
+mise use -g 'npm:@slop-lab/install-dim@0.2.0'
+dim install-cli
+```
+
+See the [installer README](https://www.npmjs.com/package/@slop-lab/install-dim)
+for `npx` and direct-`PATH` alternatives.
 
 Create a Project and root repository, push its initial branch, then create a
 workspace using the selected capability profiles:

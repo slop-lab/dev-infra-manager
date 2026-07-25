@@ -35,8 +35,8 @@ plugin_tarball="$(npm pack "$plugin_source" --pack-destination "$root" --json | 
 installer_tarball="$(npm pack packages/install/dist --pack-destination "$root" --json | jq -r '.[0].filename')"
 npm install --prefix "$installer_prefix" "$root/$installer_tarball" >/dev/null
 
-DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/install-dim" \
-  plugin \
+DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
+  install-plugin \
   --plugin-home "$plugin_home" \
   "$root/$plugin_tarball" \
   >/dev/null
