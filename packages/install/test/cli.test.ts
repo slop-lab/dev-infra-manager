@@ -202,6 +202,26 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(echoed.argv).toEqual(["--help"]);
   });
 
+  it("bare dim proxies to the configured CLI instead of opening the interactive installer", async () => {
+    const root = await tempDir("dim-cli-proxy-bare-");
+    const { env, configPath } = await baseEnv(root);
+    const stub = join(root, "dim-stub.mjs");
+    const echoFile = join(root, "echo.json");
+    await writeStubCli(stub, { versionOutput: "5.5.5", echoFile });
+
+    await mkdir(dirname(configPath), { recursive: true });
+    await writeFile(
+      configPath,
+      JSON.stringify({ schemaVersion: 1, cli: { mode: "proxied", version: "5.5.5", executable: stub } })
+    );
+
+    const result = await runCli([], tsxPath!, env, root);
+    expect(result.code).toBe(0);
+    expect(result.stderr).not.toContain("interactive installation requires a TTY");
+    const echoed = JSON.parse(await readFile(echoFile, "utf8"));
+    expect(echoed.argv).toEqual([]);
+  });
+
   it("dim --version reports both installer and CLI versions when configured and matching", async () => {
     const root = await tempDir("dim-cli-version-configured-");
     const { env, configPath } = await baseEnv(root);

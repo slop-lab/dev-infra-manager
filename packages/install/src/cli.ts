@@ -26,10 +26,6 @@ try {
 
 async function dispatch(commandArgs: string[]): Promise<number> {
   const first = commandArgs[0];
-  if (first === undefined) {
-    await interactiveInstall();
-    return 0;
-  }
   if (first === "installer") {
     if (commandArgs.length === 1) await interactiveInstall();
     else if (isHelp(commandArgs[1])) printInstallerHelp();
@@ -46,16 +42,23 @@ async function dispatch(commandArgs: string[]): Promise<number> {
   }
 
   const cli = await configuredCli();
-  if (isHelp(first) && cli === undefined) {
-    printFacadeHelp();
-    return 0;
-  }
-  if (isVersion(first) && cli === undefined) {
-    console.log(`DIM installer ${await installerVersion()}`);
-    console.log("DIM CLI: not installed");
-    return 0;
-  }
   if (cli === undefined) {
+    // Bare `dim` only opens the interactive installer when there is nothing
+    // installed yet to fall back to; once a CLI is configured, bare `dim`
+    // instead proxies below like any other command (matching `dim --help`).
+    if (first === undefined) {
+      await interactiveInstall();
+      return 0;
+    }
+    if (isHelp(first)) {
+      printFacadeHelp();
+      return 0;
+    }
+    if (isVersion(first)) {
+      console.log(`DIM installer ${await installerVersion()}`);
+      console.log("DIM CLI: not installed");
+      return 0;
+    }
     console.error(`dim: DIM CLI is not installed; run 'dim install-cli'`);
     return 2;
   }
