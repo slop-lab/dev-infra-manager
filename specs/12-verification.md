@@ -112,8 +112,11 @@ Gitea. It installs DIM through the installer facade and proves
 two additional repositories, creating a real workspace container whose
 nested `dev` service installs `codex` and `claude`, running a project task,
 running both agent CLIs inside `dev`, creating a further nested container
-from inside `dev` through its mounted nested Docker socket, and reaching
-another repository from inside the workspace through `$DIM_GIT_BASE_URL`.
+from inside `dev` through its mounted nested Docker socket, reaching another
+repository from inside the workspace through `$DIM_GIT_BASE_URL`, and
+deploying the secret-bearing service (built from the `secrets` repository)
+entirely outside the workspace lifecycle, confirming the workspace's own
+environment never receives the raw secret.
 
 ## Documentation Verification
 

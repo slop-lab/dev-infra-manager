@@ -185,6 +185,9 @@ real workspace container, and verifies it (`dim show --json` phase,
 `docker ps` against the resolved `containerName`, `dim exec`, `dim run`,
 `codex`/`claude` reachable in the nested `dev` service once its own startup
 command finishes installing them, a further nested container created from
-inside `dev` through its mounted nested Docker socket, and cross-repository
-access through `$DIM_GIT_BASE_URL`) before discarding everything. The doc
-and this script must change together.
+inside `dev` through its mounted nested Docker socket, cross-repository
+access through `$DIM_GIT_BASE_URL`, and the `secrets` repository's service
+built and run directly (outside `.dim/docker-compose.yml` and the workspace
+lifecycle entirely) with a confirmation that the workspace's own environment
+never receives the raw secret) before discarding everything. The doc and
+this script must change together.

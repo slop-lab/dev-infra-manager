@@ -25,6 +25,8 @@ source "$script_dir/lib/local-npm-registry.sh"
 suffix="$PPID-$$"
 project_name="example-$suffix"
 workspace_name="example-dev-$suffix"
+secret_image="example-secret-service-$suffix"
+secret_container="example-secret-service-$suffix"
 work_dir="$(mktemp -d /tmp/dim-example-project.XXXXXX)"
 state_root="$work_dir/state"
 source_root="$work_dir/source"
@@ -34,10 +36,17 @@ dim_bin="$install_prefix/bin/dim"
 export DIM_STATE_ROOT="$state_root"
 export DIM_WORKSPACE_BACKEND="${DIM_WORKSPACE_BACKEND:-runc}"
 export DIM_CONFIG_PATH="$work_dir/config/dim.json"
+# Isolate where install-cli puts the versioned DIM CLI too, not just state/
+# config: package.json's version doesn't change between local test runs, and
+# npm treats an already-installed version as up to date even when a fresh
+# local registry republished different content under that same version.
+export DIM_DATA_HOME="$work_dir/data"
 
 dim() { "$dim_bin" "$@"; }
 
 cleanup() {
+  docker rm --force "$secret_container" >/dev/null 2>&1 || true
+  docker image rm "$secret_image" >/dev/null 2>&1 || true
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
     dim discard "$workspace_name" --yes >/dev/null 2>&1 || true
   fi
@@ -172,7 +181,29 @@ web_content="$(dim exec "$workspace_name" -- sh -c \
   'git clone "$DIM_GIT_BASE_URL/web.git" /tmp/web >/dev/null 2>&1 && cat /tmp/web/app.txt')"
 test "$web_content" = "hello from example-web"
 
-echo "[example-project] 10. clean up"
+echo "[example-project] 10. deploy the secret-bearing service (outside the workspace)"
+docker build --tag "$secret_image" "$examples_dir/secrets" >/dev/null
+docker run --detach --name "$secret_container" \
+  --env EXAMPLE_SECRET=not-a-real-secret \
+  "$secret_image" >/dev/null
+
+healthz=""
+for attempt in $(seq 1 30); do
+  healthz="$(docker exec "$secret_container" wget -qO- http://127.0.0.1:7099/healthz 2>/dev/null || true)"
+  [[ -n "$healthz" ]] && break
+  sleep 1
+done
+echo "$healthz" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
+
+# The actual invariant: the workspace never received the raw secret, because
+# nothing about creating or using it ever passes EXAMPLE_SECRET there.
+leaked="$(dim exec "$workspace_name" -- sh -c 'env | grep -c EXAMPLE_SECRET || true')"
+test "$leaked" = "0"
+
+docker rm --force "$secret_container" >/dev/null
+docker image rm "$secret_image" >/dev/null 2>&1 || true
+
+echo "[example-project] 11. clean up"
 dim discard "$workspace_name" --yes >/dev/null
 
 echo "example-project-smoke-ok"

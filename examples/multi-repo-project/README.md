@@ -4,10 +4,13 @@ This walks through DIM end to end on a small but realistic Project: one root
 infrastructure repository plus two additional repositories, a product repo
 and a separate secret-bearing repo. It installs DIM, registers the three
 repositories, creates a real workspace container, runs `codex` and `claude`
-inside a nested dev container that can itself create further containers, and
-shows that the workspace can reach the other repositories on its own. This
-is DIM's actual purpose: a persistent, isolated container where a coding
-agent can work, not a toy.
+inside a nested dev container that can itself create further containers,
+shows that the workspace can reach the product repository on its own, and
+deploys the secret-bearing service the way DIM actually requires — outside
+the workspace entirely, never reachable by the agent. This is DIM's actual
+purpose: a persistent, isolated container where a coding agent can work
+without ever touching secrets or protected infrastructure directly, not a
+toy.
 
 `repos/` in this directory contains the actual repository skeletons used
 below — not a code listing, real files. Copy any of them directly as a
@@ -22,13 +25,15 @@ examples/multi-repo-project/repos/
 ├── web/              a product repository, unrelated to .dim
 │   └── app.txt
 └── secrets/          a separate, more strictly reviewed repository
-    └── env.txt
+    ├── Dockerfile
+    └── server.mjs
 ```
 
-They're placeholders sized for reading in one sitting, not a real
-infrastructure or secrets setup. Never commit real secret material to any
-Project repository, including one modeled after `secrets/` here — see
-[Project Workspaces](../../docs/project-workspaces.md#concepts).
+They're placeholders sized for reading in one sitting, not real
+infrastructure. `secrets/` builds a minimal service that takes a secret
+value as configuration and never returns it — even in this example, never
+commit the actual secret value itself to any Project repository, including
+this one; see [Project Workspaces](../../docs/project-workspaces.md#concepts).
 
 For the underlying concepts (what a Project is, the `.dim` contract,
 capability profiles), see [Project Workspaces](../../docs/project-workspaces.md)
@@ -183,7 +188,46 @@ repositories](../../docs/repo-workspaces.md#multiple-repositories) for how
 project code is expected to use this in practice (usually from
 `.dim/setup.sh` or a Compose service, not by hand).
 
-## 10. Clean up
+## 10. Deploy the secret-bearing service — outside the workspace
+
+The `secrets` repository is registered above like any other, but its
+container is deliberately **not** part of `.dim/docker-compose.yml` and
+never created by `dim create`/`dim run`. DIM keeps secret-bearing deployment
+entirely outside the workspace lifecycle on purpose (see [Trust
+Boundaries](../../specs/02-boundaries-and-trust.md#secret-bearing-runtime-boundary));
+in a real project a separate, human-reviewed controller builds and runs it
+from an approved ref, not the agent. This example plays that controller's
+part by hand:
+
+```bash
+docker build --tag example-secret-service ./example-secrets
+docker run --detach --name example-secret-service \
+  --env EXAMPLE_SECRET=not-a-real-secret \
+  --publish 7099:7099 \
+  example-secret-service
+curl -sf http://127.0.0.1:7099/healthz
+```
+
+This prints `{"ok":true,"secretConfigured":true}` — the service is real and
+has the secret, but never returns it. Confirm the agent's workspace never
+received it either, which is the actual invariant that matters:
+
+```bash
+dim exec example-dev -- sh -c 'env | grep -c EXAMPLE_SECRET || true'
+```
+
+This prints `0`. No command run inside `dev` or the top-level workspace ever
+sees `EXAMPLE_SECRET`, because nothing about creating or using the workspace
+ever passes it there.
+
+Tear the example service down when done — it's outside `dim discard`'s reach
+by design:
+
+```bash
+docker rm --force example-secret-service
+```
+
+## 11. Clean up
 
 ```bash
 dim discard example-dev --yes
