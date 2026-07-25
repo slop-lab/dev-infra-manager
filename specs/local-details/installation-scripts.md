@@ -67,6 +67,18 @@ Behavior:
 
 `just install-kvm-verify-deps-ubuntu` installs QEMU, qcow2, cloud-image, and SSH tooling only; it does not install a runtime backend. `just verify-host-backend-kvm BACKEND [--verbose]` verifies one backend, while `just verify-host-backends-kvm [--verbose]` verifies every backend in a separate VM. Each check boots a checksum-verified Ubuntu cloud-image VM with `/dev/kvm`, clones the committed repository state from a Git bundle, installs the selected backend in isolation, verifies its runtime, and deletes the VM overlay and SSH key on exit. A full source checkout retains its history; a shallow checkout is converted to a self-contained single-commit repository before bundling. Uncommitted and untracked files are intentionally excluded. The base cloud image is cached under `.local/kvm`. Default output names each stage and emits only the final 30 lines of a failing stage; `--verbose` streams full guest, build, and workload logs.
 
+The `rootless-podman` workload runs the outer container with the exact
+capability set `workspaceRuntimePlan()` grants
+(`packages/core/src/runtimeBackends.ts`) instead of `--privileged`, so
+`just verify-host-backend-kvm rootless-podman` is the real verification that
+those capabilities are sufficient for nested unprivileged user namespaces on
+a genuinely fresh (singly-nested) host — something a doubly-nested dev
+sandbox cannot exercise, since even `--privileged` nested user-namespace
+creation fails there for unrelated reasons. To validate the full `dim
+create --backend rootless-podman` path (not just that Podman itself starts),
+follow this with `DIM_WORKSPACE_BACKEND=rootless-podman bash
+scripts/container-lifecycle-smoke.sh` on the same or an equivalent host.
+
 ## Ubuntu Bootstrap
 
 Script:

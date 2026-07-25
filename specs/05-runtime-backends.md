@@ -21,7 +21,10 @@ label differs from the workspace record.
 The nested-engine volume target is `/var/lib/docker` for Docker backends and
 `/home/dim/.local/share/containers` for rootless Podman.
 Rootless Podman must receive `/dev/fuse` and requires host support for nested
-unprivileged user namespaces.
+unprivileged user namespaces. Its outer container must not require
+`--privileged`; it must instead receive the specific capabilities that
+nested unprivileged user namespaces and mounts need. `runc` remains the only
+backend whose outer container is privileged by default.
 
 Projects receive `DIM_WORKSPACE_BACKEND` and `DIM_NESTED_ENGINE`. Default
 Compose setup must use the selected nested engine.

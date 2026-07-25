@@ -209,7 +209,8 @@ describe("project and workspace lifecycle", () => {
       image: "dev-infra-project-workspace-podman:latest",
       runtimeDataPath: "/home/dim/.local/share/containers",
       engine: "podman",
-      privileged: true,
+      privileged: false,
+      capabilities: expect.arrayContaining(["SYS_ADMIN", "SETUID", "SETGID", "SYS_CHROOT"]),
       securityOptions: ["seccomp=unconfined", "apparmor=unconfined"],
       devices: ["/dev/fuse"]
     });

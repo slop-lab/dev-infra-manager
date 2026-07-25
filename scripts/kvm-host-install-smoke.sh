@@ -102,5 +102,13 @@ run_step "install guest prerequisites" ssh "${ssh_args[@]}" dim@127.0.0.1 "sudo 
 tar -C "$workdir" -czf "$workdir/repo.tar.gz" repo.bundle
 run_step "clone repository" clone_repository
 run_step "install $backend backend" install_backend
-run_step "run $backend workload" ssh "${ssh_args[@]}" dim@127.0.0.1 "set -e; sudo docker info >/dev/null; case '$backend' in all|sysbox) systemctl is-active sysbox; sudo docker run --rm --runtime=sysbox-runc hello-world >/dev/null;; esac; case '$backend' in all|gvisor) runsc --version; sudo docker run --rm --runtime=runsc hello-world >/dev/null;; esac; case '$backend' in rootless-podman) test -c /dev/fuse; command -v newuidmap; command -v newgidmap; cd dim; sudo docker build -t dev-infra-project-workspace-podman:latest images/project-workspace-podman; sudo docker run --rm --runtime=runc --privileged --device /dev/fuse --security-opt seccomp=unconfined --security-opt apparmor=unconfined dev-infra-project-workspace-podman:latest podman run --rm docker.io/library/hello-world;; esac; case '$backend' in all|runc) sudo docker run --rm --runtime=runc hello-world >/dev/null;; esac"
+# Rootless Podman's workload runs the outer container with the exact
+# capability set workspaceRuntimePlan() grants (packages/core/src/runtimeBackends.ts)
+# instead of --privileged, so this is the real verification that those
+# specific capabilities are sufficient for nested unprivileged user
+# namespaces -- something a doubly-nested dev sandbox cannot exercise.
+rootless_podman_caps=(SYS_ADMIN SETUID SETGID SYS_CHROOT SYS_PTRACE AUDIT_WRITE CHOWN DAC_OVERRIDE FOWNER FSETID KILL MKNOD NET_ADMIN NET_BIND_SERVICE NET_RAW SETFCAP SETPCAP)
+rootless_podman_cap_flags=""
+for cap in "${rootless_podman_caps[@]}"; do rootless_podman_cap_flags+=" --cap-add $cap"; done
+run_step "run $backend workload" ssh "${ssh_args[@]}" dim@127.0.0.1 "set -e; sudo docker info >/dev/null; case '$backend' in all|sysbox) systemctl is-active sysbox; sudo docker run --rm --runtime=sysbox-runc hello-world >/dev/null;; esac; case '$backend' in all|gvisor) runsc --version; sudo docker run --rm --runtime=runsc hello-world >/dev/null;; esac; case '$backend' in rootless-podman) test -c /dev/fuse; command -v newuidmap; command -v newgidmap; cd dim; sudo docker build -t dev-infra-project-workspace-podman:latest images/project-workspace-podman; sudo docker run --rm --runtime=runc$rootless_podman_cap_flags --device /dev/fuse --security-opt seccomp=unconfined --security-opt apparmor=unconfined dev-infra-project-workspace-podman:latest podman run --rm docker.io/library/hello-world;; esac; case '$backend' in all|runc) sudo docker run --rm --runtime=runc hello-world >/dev/null;; esac"
 echo "kvm-host-install-smoke-ok: $backend"

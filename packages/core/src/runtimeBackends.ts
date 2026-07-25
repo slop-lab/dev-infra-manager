@@ -52,7 +52,21 @@ export function workspaceRuntimePlan(
         ...shared,
         dockerRuntime: options.workspaceRuntime ?? "runc",
         image: options.workspaceImage ?? "dev-infra-project-workspace-podman:latest",
-        privileged: options.workspacePrivileged ?? true,
+        privileged: options.workspacePrivileged ?? false,
+        // Rootless Podman needs to create its own unprivileged user
+        // namespaces (newuidmap/newgidmap-based UID/GID remapping) inside
+        // this outer container. The same capability set already used for
+        // gVisor's nested Docker covers that (SYS_ADMIN for the mount/ns
+        // operations, SETUID/SETGID for the ID mapping, SYS_CHROOT/SYS_PTRACE
+        // for crun/conmon) without granting every capability via
+        // --privileged. Set DIM_WORKSPACE_PRIVILEGED=true to fall back to
+        // the old always-privileged behavior if this turns out insufficient
+        // on some host.
+        capabilities: [
+          "AUDIT_WRITE", "CHOWN", "DAC_OVERRIDE", "FOWNER", "FSETID", "KILL",
+          "MKNOD", "NET_ADMIN", "NET_BIND_SERVICE", "NET_RAW", "SETFCAP",
+          "SETGID", "SETPCAP", "SETUID", "SYS_ADMIN", "SYS_CHROOT", "SYS_PTRACE"
+        ],
         securityOptions: ["seccomp=unconfined", "apparmor=unconfined"],
         devices: ["/dev/fuse"],
         runtimeDataPath: "/home/dim/.local/share/containers",
