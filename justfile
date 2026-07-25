@@ -95,6 +95,10 @@ verify-container-runc:
 install-dim-local:
     bash scripts/install-dim-local.sh
 
+# Requires Docker and network access; exercises `mise use -g npm:@slop-lab/install-dim` in a disposable container.
+verify-mise-install-smoke:
+    bash scripts/mise-install-smoke.sh
+
 isolation-check:
     pnpm --filter @slop-lab/dev-infra-manager-core exec vitest run test/lifecycle.test.ts
 
