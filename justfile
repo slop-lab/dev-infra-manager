@@ -99,12 +99,12 @@ install-dim-local:
 verify-mise-install-smoke:
     bash scripts/mise-install-smoke.sh
 
-# Requires Docker; proves examples/external-urls/README.md with dnsmasq and real nested containers.
-verify-example-project:
-    bash scripts/external-url-example-smoke.sh
+# Requires Docker and managed Gitea; materializes and verifies the multi-repository example.
+verify-example-multi-repo-project:
+    bash scripts/example-project-smoke.sh
 
-# Exercises root -> dev -> deep routing through host proxy and dnsmasq wildcard DNS.
-verify-external-url-example:
+# Materializes the external-URL repo and exercises root -> dev -> deep routing with dnsmasq.
+verify-example-external-urls:
     bash scripts/external-url-example-smoke.sh
 
 isolation-check:

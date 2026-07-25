@@ -68,7 +68,7 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 docker exec "$root_container" mkdir -p /workspace/project
-docker cp examples/external-urls/. "$root_container:/workspace/project/"
+docker cp examples/external-urls/repo/. "$root_container:/workspace/project/"
 docker exec "$root_container" docker compose \
   --project-name dim-external-example \
   --file /workspace/project/.dim/docker-compose.yml \

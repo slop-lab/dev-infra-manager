@@ -12,6 +12,20 @@ project-root workspace container
 and creates `deep`, which serves `hello-from-deep` on container port 5678 and
 publishes it onto `dev`. Neither service publishes a host port.
 
+The copyable project repository is isolated under `repo/`:
+
+```text
+examples/external-urls/
+├── README.md
+└── repo/
+    ├── .dim/
+    │   ├── docker-compose.yml
+    │   └── entrypoint.sh
+    └── dev/
+        ├── Dockerfile
+        └── start.sh
+```
+
 The host runs `dim controller serve` and the external URL plugin. Tailscale is
 always a host capability: its private host binding must use a host-reachable
 reverse proxy. Cloudflare bindings may use a proxy running elsewhere.
@@ -49,8 +63,9 @@ installed in a workspace or controller container.
 
 ## Project use
 
-Register this directory as a DIM project root and create a development
-workspace. Its normal setup starts `dev` and `deep`:
+Copy or initialize `repo/` as a Git repository, register it as the DIM project
+root, and create a development workspace. Its normal setup starts `dev` and
+`deep`:
 
 ```bash
 dim create external external-dev --profile development
@@ -68,11 +83,16 @@ inside the project-root container so the host reverse proxy can reach both.
 ## Verification
 
 `scripts/external-url-example-smoke.sh` runs the complete example with a host
-controller and reverse proxy. It uses dnsmasq for wildcard test DNS and checks
-both generated URLs from a separate curl container:
+controller and reverse proxy. The host-side harness is intentionally outside
+the copyable repository because it builds unpublished local packages,
+constructs controller state, allocates ports and Docker networks, and performs
+cleanup. It copies only `repo/` into a newly created project-root workspace
+container, starts fresh `dev` and `deep` containers there, uses dnsmasq for
+wildcard test DNS, and checks both generated URLs from separate disposable curl
+containers:
 
 ```bash
-just verify-external-url-example
+just verify-example-external-urls
 ```
 
 No Tailscale account is needed for that deterministic verification; the

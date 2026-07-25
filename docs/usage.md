@@ -151,18 +151,20 @@ prefix and uses only that installed `dim` binary to exercise:
 - Capability-profile replacement, project fast-forward update, stop/start
   persistence, and discard cleanup.
 
-Two additional standalone checks cover the installer itself against a real
-Docker daemon:
+Three additional standalone checks cover installation and the copyable
+examples against a real Docker daemon:
 
 ```bash
 just verify-mise-install-smoke   # mise use -g npm:@slop-lab/install-dim, in a disposable container
-just verify-example-project      # examples/external-urls/README.md, proven with dnsmasq
+just verify-example-multi-repo-project # three materialized repositories and a real workspace
+just verify-example-external-urls      # nested URLs proven with dnsmasq
 ```
 
-Both require Docker and network access; `verify-mise-install-smoke` also
+All require Docker and network access; `verify-mise-install-smoke` also
 needs to reach the real npm registry to install `mise` itself, and
-`verify-example-project` uses Docker and dnsmasq but does not require a real
-Tailscale account.
+`verify-example-external-urls` uses Docker and dnsmasq but does not require a
+real Tailscale account. The multi-repository verification also requires the
+managed Gitea service.
 
 ## Project Workspaces
 

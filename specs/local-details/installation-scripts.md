@@ -179,7 +179,7 @@ installer into a temporary prefix, runs `dim install-plugin` against the
 packed plugin tarball, and confirms `dim plugin list` (a `dim-cli` command,
 run directly against the packed CLI) reports it enabled.
 
-## Example Project Smoke
+## Example External URL Smoke
 
 Script:
 
@@ -187,7 +187,7 @@ Script:
 scripts/external-url-example-smoke.sh
 ```
 
-`just verify-example-project`. Requires Docker. Executes
+`just verify-example-external-urls`. Requires Docker. Executes
 [examples/external-urls/README.md](../../examples/external-urls/README.md)
 against real containers: builds local packages and the workspace image,
 starts a project-root container, starts the nested `dev` Compose service and
@@ -196,3 +196,11 @@ provides wildcard DNS with dnsmasq, discovers the plugin profiles through
 `GET /api`, creates URLs for both nesting depths, fetches both sentinels from
 a separate curl container, and revokes the routes. The doc and script must
 change together.
+
+## Multi-repository Example Smoke
+
+`scripts/example-project-smoke.sh`, invoked by
+`just verify-example-multi-repo-project`, builds and installs local packages,
+copies each repository skeleton from `examples/multi-repo-project/repos/` to a
+temporary directory, initializes and pushes real Git repositories, and
+verifies the documented workspace and secret boundary against managed Gitea.

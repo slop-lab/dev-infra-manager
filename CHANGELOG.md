@@ -54,6 +54,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- [Multi-repository project
+  example](examples/multi-repo-project/README.md), with independent
+  real-container verification of its materialized repository skeletons.
 - [External URL example](examples/external-urls/README.md), a copyable,
   dnsmasq-verified walkthrough covering a nested development container and a
   container inside it.

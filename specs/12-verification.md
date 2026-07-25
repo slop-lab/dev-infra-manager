@@ -119,11 +119,17 @@ tarballs, covering facade-only vs. proxied `--help`/`--version`, the
 mise-detected `--no-local-bin` default, and an explicit `--local-bin`
 override. See [Installer Facade](14-installer-facade.md).
 
-`just verify-example-project` requires Docker. It proves
+`just verify-example-external-urls` requires Docker. It proves
 `examples/external-urls/README.md` end to end: a host DIM controller,
 host-configured profile, dnsmasq wildcard DNS, a project-root workspace,
 the nested `dev` Compose service, a further `deep` container, root relay,
 reverse proxy, profile discovery, URL creation, HTTP access, and revocation.
+
+`just verify-example-multi-repo-project` requires Docker and managed Gitea. It
+materializes the three repository skeletons under
+`examples/multi-repo-project/repos/` in a temporary directory and verifies the
+documented project, protected refs, workspace, nested Docker, repository
+access, and secret-bearing service boundary.
 
 ## Documentation Verification
 
