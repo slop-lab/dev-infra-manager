@@ -18,8 +18,7 @@ describe("plugin contract", () => {
 
     expect(register).toHaveBeenCalledWith(expect.objectContaining({
       apiVersion: DIM_PLUGIN_API_VERSION,
-      registerExternalRouteProvider: expect.any(Function),
-      registerExternalUrlProvider: expect.any(Function)
+      registerControllerRoute: expect.any(Function)
     }));
   });
 
@@ -38,10 +37,11 @@ describe("plugin contract", () => {
         name: "first",
         apiVersion: DIM_PLUGIN_API_VERSION,
         register(host) {
-          host.registerExternalRouteProvider({
-            name: "proxy",
-            provision: async () => ({ authority: "proxy.internal", protocol: "http" }),
-            revoke: async () => {}
+          host.registerControllerRoute({
+            method: "GET",
+            path: "/first",
+            summary: "first route",
+            handle: async () => ({ body: { ok: true } })
           });
           return () => { disposed.push("first"); };
         }
@@ -50,18 +50,21 @@ describe("plugin contract", () => {
         name: "second",
         apiVersion: DIM_PLUGIN_API_VERSION,
         register(host) {
-          host.registerExternalUrlProvider({
-            name: "tailnet",
-            publish: async () => ({ url: "https://example.test" }),
-            revoke: async () => {}
+          host.registerControllerRoute({
+            method: "POST",
+            path: "/second/:id",
+            summary: "second route",
+            handle: async () => ({ status: 204 })
           });
           return () => { disposed.push("second"); };
         }
       }
     ]);
 
-    expect([...registered.externalRouteProviders.keys()]).toEqual(["proxy"]);
-    expect([...registered.externalUrlProviders.keys()]).toEqual(["tailnet"]);
+    expect(registered.controllerRoutes.map((route) => `${route.method} ${route.path}`)).toEqual([
+      "GET /first",
+      "POST /second/:id"
+    ]);
     await registered.dispose();
     await registered.dispose();
     expect(disposed).toEqual(["second", "first"]);
@@ -73,10 +76,11 @@ describe("plugin contract", () => {
         name: "one",
         apiVersion: DIM_PLUGIN_API_VERSION,
         register(host) {
-          host.registerExternalUrlProvider({
-            name: "same",
-            publish: async () => ({ url: "https://one.test" }),
-            revoke: async () => {}
+          host.registerControllerRoute({
+            method: "GET",
+            path: "/same",
+            summary: "same",
+            handle: async () => {}
           });
         }
       },
@@ -84,10 +88,11 @@ describe("plugin contract", () => {
         name: "two",
         apiVersion: DIM_PLUGIN_API_VERSION,
         register(host) {
-          host.registerExternalUrlProvider({
-            name: "same",
-            publish: async () => ({ url: "https://two.test" }),
-            revoke: async () => {}
+          host.registerControllerRoute({
+            method: "GET",
+            path: "/same",
+            summary: "same again",
+            handle: async () => {}
           });
         }
       }
@@ -103,10 +108,11 @@ describe("plugin contract", () => {
         captured = host;
       }
     }]);
-    expect(() => captured?.registerExternalUrlProvider({
-      name: "late",
-      publish: async () => ({ url: "https://late.test" }),
-      revoke: async () => {}
+    expect(() => captured?.registerControllerRoute({
+      method: "GET",
+      path: "/late",
+      summary: "late",
+      handle: async () => {}
     })).toThrow(/after startup/);
     await registered.dispose();
   });

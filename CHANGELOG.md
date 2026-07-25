@@ -54,14 +54,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
-- [Example: A Multi-repository Project](examples/multi-repo-project/README.md),
-  a copyable example project with a tested, real-container walkthrough.
-- Added plugin API v2 with instance-scoped capability registries, ordered
-  disposal, and separate external route and URL provider contracts.
-- Added an authenticated workspace external URL controller API and a
+- [External URL example](examples/external-urls/README.md), a copyable,
+  dnsmasq-verified walkthrough covering a nested development container and a
+  container inside it.
+- Added plugin API v2 with an instance-scoped DIM controller route registry
+  and ordered disposal.
+- Added authenticated external URL routes on the general DIM controller and a
   local-build plugin with a shared reverse proxy plus Tailscale and Cloudflare
-  hostname providers. Host and controller Tailscale placements can be inferred,
-  explicitly selected, or configured together.
+  hostname providers. Public profiles expose only a name, description, and
+  external HTTP protocol; host-only bindings keep proxy/provider details
+  private.
 
 ### Fixed
 
@@ -72,8 +74,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `repo create`/`repo import`; omitting it there left `repo protect` with
   nothing to apply, and it reported success anyway — every literal reading
   of the docs left the root branch completely unprotected. All of them now
-  show `--protect` at `create` time; `example-project-smoke.sh` verifies a
-  protected root actually rejects a direct push.
+  show `--protect` at `create` time; the container workspace smoke test verifies
+  a protected root actually rejects a direct push.
 
 ## [0.2.0] - 2026-07-24
 

@@ -1,0 +1,13 @@
+services:
+  dev:
+    profiles: [development]
+    build:
+      context: ../dev
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    volumes:
+      - dev-docker:/var/lib/docker
+
+volumes:
+  dev-docker:

@@ -1,12 +1,12 @@
 #!/usr/bin/env sh
 set -eu
 
-: "${DIM_EXTERNAL_URLS_API:?DIM_EXTERNAL_URLS_API is required}"
-: "${DIM_EXTERNAL_URLS_TOKEN:?DIM_EXTERNAL_URLS_TOKEN is required}"
+: "${DIM_CONTROLLER_API:?DIM_CONTROLLER_API is required}"
+: "${DIM_CONTROLLER_TOKEN:?DIM_CONTROLLER_TOKEN is required}"
 
 port="${DIM_EXTERNAL_URL_TEST_PORT:-39091}"
 service="${DIM_EXTERNAL_URL_TEST_SERVICE:-dim-tail-smoke}"
-route_provider="${DIM_EXTERNAL_URL_TEST_ROUTE_PROVIDER:-}"
+profile="${DIM_EXTERNAL_URL_TEST_PROFILE:-tailscale}"
 sentinel="dim-tailscale-smoke-${DIM_WORKSPACE_NAME:-workspace}-$$"
 
 node -e '
@@ -24,8 +24,8 @@ cleanup() {
   if [ -n "$url_id" ]; then
     curl --fail --silent --show-error \
       -X DELETE \
-      -H "Authorization: Bearer $DIM_EXTERNAL_URLS_TOKEN" \
-      "$DIM_EXTERNAL_URLS_API/api/external-urls/$url_id" >/dev/null || true
+      -H "Authorization: Bearer $DIM_CONTROLLER_TOKEN" \
+      "$DIM_CONTROLLER_API/api/urls/$url_id" >/dev/null || true
   fi
   kill "$server_pid" 2>/dev/null || true
   wait "$server_pid" 2>/dev/null || true
@@ -36,19 +36,19 @@ payload="$(
   jq -n \
     --arg service "$service" \
     --argjson port "$port" \
-    --arg routeProvider "$route_provider" \
+    --arg profile "$profile" \
     '{
+      profile: $profile,
       service: $service,
-      port: $port,
-      urlProviders: ["tailscale"]
-    } + (if $routeProvider == "" then {} else {routeProvider: $routeProvider} end)'
+      target: {containers: [], port: $port, protocol: "http"}
+    }'
 )"
 created="$(
   curl --fail --silent --show-error \
-    -H "Authorization: Bearer $DIM_EXTERNAL_URLS_TOKEN" \
+    -H "Authorization: Bearer $DIM_CONTROLLER_TOKEN" \
     -H "Content-Type: application/json" \
     --data "$payload" \
-    "$DIM_EXTERNAL_URLS_API/api/external-urls/request"
+    "$DIM_CONTROLLER_API/api/urls"
 )"
 url_id="$(printf '%s' "$created" | jq -er '.urls[0].id')"
 external_url="$(printf '%s' "$created" | jq -er '.urls[0].url')"

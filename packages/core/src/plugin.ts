@@ -1,5 +1,5 @@
 import { UserError } from "./errors.js";
-import type { ExternalRouteProvider, ExternalUrlProvider } from "./externalUrls.js";
+import type { DimControllerRoute } from "./controller.js";
 
 export const DIM_PLUGIN_API_VERSION = 2 as const;
 
@@ -13,8 +13,7 @@ export interface DimPluginLogger {
 export interface DimPluginHost {
   readonly apiVersion: typeof DIM_PLUGIN_API_VERSION;
   readonly logger: DimPluginLogger;
-  registerExternalRouteProvider(provider: ExternalRouteProvider): void;
-  registerExternalUrlProvider(provider: ExternalUrlProvider): void;
+  registerControllerRoute(route: DimControllerRoute): void;
 }
 
 export interface DimPlugin {
@@ -26,51 +25,36 @@ export interface DimPlugin {
 export interface RegisteredDimPlugins {
   readonly host: DimPluginHost;
   readonly plugins: readonly string[];
-  readonly externalRouteProviders: ReadonlyMap<string, ExternalRouteProvider>;
-  readonly externalUrlProviders: ReadonlyMap<string, ExternalUrlProvider>;
+  readonly controllerRoutes: readonly DimControllerRoute[];
   dispose(): Promise<void>;
 }
 
 class PluginHost implements DimPluginHost {
   readonly apiVersion = DIM_PLUGIN_API_VERSION;
-  readonly externalRouteProviders = new Map<string, ExternalRouteProvider>();
-  readonly externalUrlProviders = new Map<string, ExternalUrlProvider>();
+  readonly routes: DimControllerRoute[] = [];
   registeringPlugin: string | undefined;
   acceptingRegistrations = true;
 
   constructor(readonly logger: DimPluginLogger) {}
 
-  registerExternalRouteProvider(provider: ExternalRouteProvider): void {
-    this.registerProvider(this.externalRouteProviders, provider, "external route");
-  }
-
-  registerExternalUrlProvider(provider: ExternalUrlProvider): void {
-    this.registerProvider(this.externalUrlProviders, provider, "external URL");
-  }
-
-  private registerProvider<T extends { name: string }>(providers: Map<string, T>, provider: T, kind: string): void {
+  registerControllerRoute(route: DimControllerRoute): void {
     const plugin = this.registeringPlugin ?? "unknown plugin";
     if (!this.acceptingRegistrations) {
-      throw new UserError(`plugin '${plugin}' attempted ${kind} registration after startup`);
+      throw new UserError(`plugin '${plugin}' attempted controller route registration after startup`);
     }
-    if (!/^[a-z0-9][a-z0-9.-]{0,62}[a-z0-9]$|^[a-z0-9]$/.test(provider.name)) {
-      throw new UserError(`plugin '${plugin}' registered invalid ${kind} provider name '${provider.name}'`);
+    if (!route || typeof route !== "object" || !["GET", "POST", "DELETE", "PUT", "PATCH"].includes(route.method)) {
+      throw new UserError(`plugin '${plugin}' registered an invalid controller route method`);
     }
-    if (providers.has(provider.name)) {
-      throw new UserError(`${kind} provider '${provider.name}' is already registered`);
+    if (!/^\/[a-z0-9][a-z0-9_/-]*(?:\/:[a-z][a-zA-Z0-9]*)?$/.test(route.path)) {
+      throw new UserError(`plugin '${plugin}' registered invalid controller route path '${route.path}'`);
     }
-    if (kind === "external route") {
-      const route = provider as T & Partial<ExternalRouteProvider>;
-      if (typeof route.provision !== "function" || typeof route.revoke !== "function") {
-        throw new UserError(`plugin '${plugin}' registered incomplete ${kind} provider '${provider.name}'`);
-      }
-    } else {
-      const url = provider as T & Partial<ExternalUrlProvider>;
-      if (typeof url.publish !== "function" || typeof url.revoke !== "function") {
-        throw new UserError(`plugin '${plugin}' registered incomplete ${kind} provider '${provider.name}'`);
-      }
+    if (typeof route.handle !== "function") {
+      throw new UserError(`plugin '${plugin}' registered controller route '${route.path}' without a handler`);
     }
-    providers.set(provider.name, provider);
+    if (this.routes.some((existing) => existing.method === route.method && existing.path === route.path)) {
+      throw new UserError(`controller route '${route.method} ${route.path}' is already registered`);
+    }
+    this.routes.push(Object.freeze({ ...route, plugin }));
   }
 }
 
@@ -110,8 +94,7 @@ export async function registerPlugins(
   return {
     host,
     plugins: [...names],
-    externalRouteProviders: host.externalRouteProviders,
-    externalUrlProviders: host.externalUrlProviders,
+    controllerRoutes: [...host.routes],
     async dispose(): Promise<void> {
       if (disposed) return;
       disposed = true;

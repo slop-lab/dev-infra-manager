@@ -11,7 +11,7 @@ export interface LifecycleOptions {
   cpuCount: string;
   memory: string;
   pidsLimit: string;
-  externalUrlControllerUrl: string;
+  controllerUrl: string;
 }
 
 export type WorkspaceRuntimeBackendKind = "sysbox" | "gvisor" | "rootless-podman" | "runc";

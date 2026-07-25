@@ -25,6 +25,7 @@ RUN npm install --global pnpm@10 @openai/codex
 
 COPY entrypoint.sh /usr/local/bin/dim-project-podman-entrypoint
 COPY git-askpass.sh /usr/local/bin/dim-git-askpass
+COPY route-relay.mjs /usr/local/lib/dim/route-relay.mjs
 RUN chmod +x /usr/local/bin/dim-project-podman-entrypoint /usr/local/bin/dim-git-askpass
 
 ENV HOME="/home/dim" \

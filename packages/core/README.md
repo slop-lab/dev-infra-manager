@@ -93,10 +93,10 @@ with DIM but are not yet promised to remain source-compatible across minor
 0.x releases. Prefer high-level functions from `projectRegistry` and
 `workspaceLifecycle` over direct state or Gitea mutation.
 
-The plugin loader is deliberately small. Version 0.2.0 validates and invokes
-explicitly installed plugins but does not define a generic repository-provider
-extension point. External repository import is performed through the local
-Git CLI.
+The plugin loader validates explicitly installed plugins and gives each
+controller an instance-scoped plugin route registry. `GET /api` discovers
+those authenticated routes. Core does not define product-specific external
+URL routes or a generic repository-provider extension point.
 
 DIM executes Project-controlled lifecycle scripts and manages container
 runtimes. Consumers must follow the mandatory

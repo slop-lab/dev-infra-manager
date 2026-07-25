@@ -167,8 +167,9 @@ describe("project and workspace lifecycle", () => {
       "--pids-limit", "1024",
       "--env", "DIM_GIT_USERNAME=writer",
       "--env", "DIM_GIT_TOKEN=token",
-      "--env", "DIM_EXTERNAL_URLS_API=http://dim-controller:7070",
-      "--env", "DIM_EXTERNAL_URLS_TOKEN=work-1.external-url-grant",
+      "--add-host", "host.docker.internal:host-gateway",
+      "--env", "DIM_CONTROLLER_API=http://host.docker.internal:7070",
+      "--env", "DIM_CONTROLLER_TOKEN=work-1.external-url-grant",
       "--env", "GIT_CONFIG_VALUE_0=Agent",
       "--privileged"
     ]));

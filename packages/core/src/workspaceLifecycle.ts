@@ -493,6 +493,7 @@ export function workspaceContainerArgs(
     "run", "--detach",
     "--name", record.containerName,
     "--network", record.networkName,
+    "--add-host", "host.docker.internal:host-gateway",
     "--runtime", plan.dockerRuntime,
     "--cpus", record.cpuCount,
     "--memory", record.memory,
@@ -509,7 +510,7 @@ export function workspaceContainerArgs(
     "--env", `DIM_GIT_TOKEN=${git.token}`,
     "--env", `DIM_GIT_USER_NAME=${git.userName}`,
     "--env", `DIM_GIT_USER_EMAIL=${git.userEmail}`,
-    "--env", `DIM_EXTERNAL_URLS_API=${options.externalUrlControllerUrl}`,
+    "--env", `DIM_CONTROLLER_API=${options.controllerUrl}`,
     "--env", "GIT_ASKPASS=/usr/local/bin/dim-git-askpass",
     "--env", "GIT_TERMINAL_PROMPT=0",
     "--env", "GIT_CONFIG_COUNT=2",
@@ -518,7 +519,7 @@ export function workspaceContainerArgs(
     "--env", "GIT_CONFIG_KEY_1=user.email",
     "--env", `GIT_CONFIG_VALUE_1=${git.userEmail}`
   ];
-  if (externalUrlGrant) args.push("--env", `DIM_EXTERNAL_URLS_TOKEN=${externalUrlGrant}`);
+  if (externalUrlGrant) args.push("--env", `DIM_CONTROLLER_TOKEN=${externalUrlGrant}`);
   for (const capability of plan.capabilities) args.push("--cap-add", capability);
   for (const securityOption of plan.securityOptions) args.push("--security-opt", securityOption);
   for (const device of plan.devices) args.push("--device", device);

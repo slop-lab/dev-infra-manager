@@ -184,22 +184,15 @@ run directly against the packed CLI) reports it enabled.
 Script:
 
 ```text
-scripts/example-project-smoke.sh
+scripts/external-url-example-smoke.sh
 ```
 
-`just verify-example-project`. Requires Docker and a reachable managed
-Gitea. Executes
-[examples/multi-repo-project/README.md](../../examples/multi-repo-project/README.md)
-command for command: installs DIM through the installer facade against a
-disposable local npm registry, copies the three repository skeletons under
-`examples/multi-repo-project/repos/`, registers them as a Project, creates a
-real workspace container, and verifies it (`dim show --json` phase,
-`docker ps` against the resolved `containerName`, `dim exec`, `dim run`,
-`codex`/`claude` reachable in the nested `dev` service once its own startup
-command finishes installing them, a further nested container created from
-inside `dev` through its mounted nested Docker socket, cross-repository
-access through `$DIM_GIT_BASE_URL`, and the `secrets` repository's service
-built and run directly (outside `.dim/docker-compose.yml` and the workspace
-lifecycle entirely) with a confirmation that the workspace's own environment
-never receives the raw secret) before discarding everything. The doc and
-this script must change together.
+`just verify-example-project`. Requires Docker. Executes
+[examples/external-urls/README.md](../../examples/external-urls/README.md)
+against real containers: builds local packages and the workspace image,
+starts a project-root container, starts the nested `dev` Compose service and
+its own `deep` nested container, runs a host DIM controller and reverse proxy,
+provides wildcard DNS with dnsmasq, discovers the plugin profiles through
+`GET /api`, creates URLs for both nesting depths, fetches both sentinels from
+a separate curl container, and revokes the routes. The doc and script must
+change together.

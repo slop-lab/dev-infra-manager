@@ -43,7 +43,6 @@ cleanup() {
   docker rm -f "$nested_smoke_container" >/dev/null 2>&1
   docker rm -f dim-smoke-secret >/dev/null 2>&1
   docker image rm -f "$host_probe_image" >/dev/null 2>&1
-  docker image rm -f dim-smoke-secret:latest >/dev/null 2>&1
   rm -rf "$tmpdir"
 }
 trap cleanup EXIT
@@ -54,7 +53,6 @@ dim_bin="$repo_root/packages/dim-cli/dist/cli.js"
 
 step "build container images"
 just build-project-workspace
-just build-secret-example
 
 step "verify workspace image"
 docker run --rm \

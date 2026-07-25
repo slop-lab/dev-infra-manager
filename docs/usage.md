@@ -88,7 +88,6 @@ Build the included runtime images:
 
 ```bash
 just build-project-workspace
-just build-secret-example
 ```
 
 Run the integration smoke test:
@@ -145,8 +144,8 @@ prefix and uses only that installed `dim` binary to exercise:
 - Disposable managed-Git repositories and persistent workspace reconciliation.
 - A project with custom setup and entrypoint hooks, including setup failure and
   retry.
-- A four-repository project whose nested Compose services clone, persist, and
-  push through managed Gitea.
+- An external URL project whose root, nested dev, and further nested service
+  are routed without publishing arbitrary host upstreams.
 - This repository registered as a real project, including locked dependency
   setup and its checked-in `check`, `verify`, and `codex` tasks.
 - Capability-profile replacement, project fast-forward update, stop/start
@@ -157,21 +156,20 @@ Docker daemon:
 
 ```bash
 just verify-mise-install-smoke   # mise use -g npm:@slop-lab/install-dim, in a disposable container
-just verify-example-project      # examples/multi-repo-project/README.md, proven end to end
+just verify-example-project      # examples/external-urls/README.md, proven with dnsmasq
 ```
 
 Both require Docker and network access; `verify-mise-install-smoke` also
 needs to reach the real npm registry to install `mise` itself, and
-`verify-example-project` needs the environment's managed Gitea (`dim-gitea`)
-reachable.
+`verify-example-project` uses Docker and dnsmasq but does not require a real
+Tailscale account.
 
 ## Project Workspaces
 
 For installing `dim` and the minimal single-repository "create a Project"
 shape, see the root [README](../README.md#install-the-dim-cli). For a
-complete, tested, multi-repository walkthrough — including running agent
-tasks and deploying a secret-bearing service correctly — see [Example: A
-Multi-repository Project](../examples/multi-repo-project/README.md).
+complete, tested nested-container walkthrough with external URL profiles, see
+[Example: External URLs](../examples/external-urls/README.md).
 
 `run` does not repeat setup. Environment reconciliation happens on `create`,
 `start`, `restart`, `setup`, and after a fast-forward-only `update`. Only the

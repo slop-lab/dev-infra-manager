@@ -2,8 +2,8 @@
 
 DIM has a versioned, instance-scoped plugin host. Version 0.2.0 does not expose
 a Git-provider abstraction: repository import uses the host's `git` CLI and
-managed repositories live in DIM's Gitea service. The first concrete
-capabilities are external route and URL providers; see
+managed repositories live in DIM's Gitea service. Plugins can register typed
+routes on the authenticated DIM controller API; see
 [External workspace URLs](external-urls.md).
 
 Plugin discovery does not depend on a naming convention. Scoped, unscoped, and
@@ -27,7 +27,14 @@ const plugin: DimPlugin = {
   name: "@example/dim-plugin",
   apiVersion: DIM_PLUGIN_API_VERSION,
   register(host) {
-    // Register only typed capabilities exposed by this API version.
+    host.registerControllerRoute({
+      method: "GET",
+      path: "/example",
+      summary: "Example plugin route",
+      async handle() {
+        return { body: { ok: true } };
+      }
+    });
   }
 };
 
@@ -63,5 +70,6 @@ Only packages listed in the manifest are imported, and their plugin API version
 is validated. Registration is atomic from the caller's perspective: duplicate
 names and initialization failures abort startup, and completed registrations
 are disposed in reverse order. A plugin may return an async disposer from
-`register`. Each controller owns its registry instance; there is no global
-capability singleton.
+`register`. Each controller owns its route registry instance; there is no
+global capability singleton. `GET /api` discovers registered plugin routes
+for an authenticated workspace.

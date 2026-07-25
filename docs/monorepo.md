@@ -51,12 +51,11 @@ dependency. The built-in managed Gitea implementation remains a lightweight
 provider, and other implementations such as Forgejo can implement the same
 contract.
 
-The optional entry API will authenticate an agent workspace and accept only a
-constrained service request. It must derive or validate the upstream from the
-workspace grant rather than accept an arbitrary host from an untrusted agent. Route
-providers and URL providers remain separate so one entry may expose local,
-tailnet, and public URLs without coupling the API contract to one proxy or
-tunnel product.
+The DIM controller API authenticates an agent workspace and lets installed
+plugins register routes. External URL profiles accept only a constrained
+workspace target and derive the upstream from the workspace grant rather than
+accepting an arbitrary host. Discovery exposes profile name, description, and
+HTTP protocol without leaking proxy or tunnel implementation details.
 
 ## DIM self-development workspace
 

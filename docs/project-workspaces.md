@@ -8,8 +8,8 @@ revisions.
 This document defines the project-facing workspace workflow. Repository
 registration and managed Gitea details are documented in
 [Repository-backed Workspaces](repo-workspaces.md). For a complete, tested
-walkthrough instead of a reference, see [Example: A Multi-repository
-Project](../examples/multi-repo-project/README.md).
+walkthrough instead of a reference, see
+[Example: External URLs](../examples/external-urls/README.md).
 
 ## Concepts
 

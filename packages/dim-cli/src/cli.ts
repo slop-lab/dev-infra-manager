@@ -6,7 +6,7 @@ import {
   createProject,
   createProjectRepository,
   createWorkspace,
-  configuredExternalUrlController,
+  configuredDimController,
   discardWorkspace,
   ensureGitea,
   execWorkspace,
@@ -21,7 +21,7 @@ import {
   projectRepositoryWorkspaceUrl,
   purgeProject,
   removeProject,
-  reconcileExternalUrlRoutes,
+  initializeControllerRoutes,
   resolvePluginHome,
   restartWorkspace,
   runDoctor,
@@ -298,8 +298,7 @@ plugin.command("list").option("--json", "print machine-readable JSON").action(as
     print({
       pluginHome: home,
       plugins: loaded.manifest.plugins,
-      externalRouteProviders: [...loaded.registered.externalRouteProviders.keys()],
-      externalUrlProviders: [...loaded.registered.externalUrlProviders.keys()]
+      controllerRoutes: loaded.registered.controllerRoutes.map((route) => `${route.method} /api${route.path}`)
     }, flags);
   } finally {
     await loaded.registered.dispose();
@@ -317,12 +316,12 @@ controller.command("serve")
       throw new UserError("--port must be between 1 and 65535");
     }
     const loaded = await loadInstalledPlugins(await resolvePluginHome());
-    if (loaded.registered.externalRouteProviders.size === 0 || loaded.registered.externalUrlProviders.size === 0) {
+    if (loaded.registered.controllerRoutes.length === 0) {
       await loaded.registered.dispose();
-      throw new UserError("external URL controller requires at least one route provider and one URL provider");
+      throw new UserError("DIM controller requires at least one plugin route");
     }
-    await reconcileExternalUrlRoutes(lifecycleOptions(), loaded.registered);
-    const server = configuredExternalUrlController(lifecycleOptions(), loaded.registered);
+    await initializeControllerRoutes(lifecycleOptions(), loaded.registered);
+    const server = configuredDimController(lifecycleOptions(), loaded.registered);
     server.listen(port, flags.host);
     await once(server, "listening");
     console.log(`DIM controller listening on http://${flags.host}:${port}`);

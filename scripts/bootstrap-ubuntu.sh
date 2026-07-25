@@ -59,7 +59,6 @@ pnpm install --frozen-lockfile
 "$JUST_BIN" verify
 "$JUST_BIN" build-project-workspace
 "$JUST_BIN" build-project-podman-image
-"$JUST_BIN" build-secret-example
 
 set +e
 "$JUST_BIN" verify-host-backend-local "$backend"

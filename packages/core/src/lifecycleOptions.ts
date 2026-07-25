@@ -17,7 +17,7 @@ export function lifecycleOptions(env: NodeJS.ProcessEnv = process.env): Lifecycl
     cpuCount: env.DIM_WORKSPACE_CPUS ?? "2",
     memory: env.DIM_WORKSPACE_MEMORY ?? "4g",
     pidsLimit: env.DIM_WORKSPACE_PIDS ?? "2048",
-    externalUrlControllerUrl: env.DIM_EXTERNAL_URL_CONTROLLER_URL ?? "http://dim-controller:7070"
+    controllerUrl: env.DIM_CONTROLLER_URL ?? "http://host.docker.internal:7070"
   };
 }
 

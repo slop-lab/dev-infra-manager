@@ -99,9 +99,13 @@ install-dim-local:
 verify-mise-install-smoke:
     bash scripts/mise-install-smoke.sh
 
-# Requires Docker, a reachable dim-gitea, and network access; runs examples/multi-repo-project/README.md end to end and proves it against real containers.
+# Requires Docker; proves examples/external-urls/README.md with dnsmasq and real nested containers.
 verify-example-project:
-    bash scripts/example-project-smoke.sh
+    bash scripts/external-url-example-smoke.sh
+
+# Exercises root -> dev -> deep routing through host proxy and dnsmasq wildcard DNS.
+verify-external-url-example:
+    bash scripts/external-url-example-smoke.sh
 
 isolation-check:
     pnpm --filter @slop-lab/dev-infra-manager-core exec vitest run test/lifecycle.test.ts
@@ -122,9 +126,6 @@ build-project-workspace:
 
 build-project-podman-image:
     docker build -t dev-infra-project-workspace-podman:latest images/project-workspace-podman
-
-build-secret-example:
-    docker build -t dev-infra-secret-runtime:latest images/secret-runtime-example
 
 # Requires a Docker host with the sysbox-runc runtime registered and usable.
 verify-container-sysbox *args:

@@ -1,82 +1,129 @@
 # External workspace URLs
 
-DIM's external URL controller lets a workspace request an externally reachable
-URL without letting the untrusted workspace select an arbitrary proxy
-upstream. The workspace submits a service label and container port. The
-controller authenticates the workspace grant and derives the upstream from the
-workspace record.
-
-## Contract
-
-Every workspace receives:
+DIM exposes one authenticated controller API that plugins extend. External
+URLs are not a separate controller:
 
 ```text
-DIM_EXTERNAL_URLS_API=http://dim-controller:7070
-DIM_EXTERNAL_URLS_TOKEN=<workspace-scoped grant>
+GET    /api
+GET    /api/urls
+POST   /api/urls
+DELETE /api/urls/:id
 ```
 
-List URLs:
+`GET /api` is the discovery entry point. It lists every installed plugin
+route and the external URL profiles available to the authenticated workspace.
+
+Every new workspace receives:
+
+```text
+DIM_CONTROLLER_API=http://host.docker.internal:7070
+DIM_CONTROLLER_TOKEN=<workspace-scoped grant>
+```
+
+The workspace container gets a `host.docker.internal` host-gateway mapping.
+Set `DIM_CONTROLLER_URL` on the host when the controller has another
+workspace-reachable address.
+
+## Host-owned profiles
+
+The host defines the only profiles a workspace can request:
+
+```text
+DIM_EXTERNAL_URL_PROFILES={
+  "tailscale": {
+    "description": "Private development URL on the host tailnet",
+    "protocol": "https"
+  },
+  "public": {
+    "description": "Public preview URL",
+    "protocol": "https"
+  }
+}
+DIM_EXTERNAL_URL_BINDINGS={
+  "tailscale": {
+    "routeProvider": "reverse-proxy",
+    "urlProvider": "tailscale"
+  },
+  "public": {
+    "routeProvider": "cloudflare-proxy",
+    "urlProvider": "cloudflare"
+  }
+}
+```
+
+Discovery reports only each profile's `name`, human-readable `description`,
+and external URL `protocol` (`http` or `https`). Provider and proxy details
+remain private host configuration. A workspace cannot provide raw provider
+names, upstream hosts, IPs, or external hostname templates.
+
+Tailscale is host-only. Internally, a profile backed by Tailscale must use a
+host-reachable reverse proxy or controller startup fails. Tailscale is never
+installed in a workspace, nested container, or controller container. Other
+host-approved reverse proxies can run elsewhere; that implementation detail
+can be mentioned in the profile description when it is useful to users.
+
+## Discovery and requests
+
+Discover profiles:
 
 ```bash
 curl --fail --silent \
-  -H "Authorization: Bearer $DIM_EXTERNAL_URLS_TOKEN" \
-  "$DIM_EXTERNAL_URLS_API/api/external-urls/list"
+  -H "Authorization: Bearer $DIM_CONTROLLER_TOKEN" \
+  "$DIM_CONTROLLER_API/api"
 ```
 
-Request URLs:
+Create a URL:
 
 ```bash
 curl --fail --silent \
-  -H "Authorization: Bearer $DIM_EXTERNAL_URLS_TOKEN" \
+  -H "Authorization: Bearer $DIM_CONTROLLER_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"service":"web","port":3000,"urlProviders":["tailscale","cloudflare"]}' \
-  "$DIM_EXTERNAL_URLS_API/api/external-urls/request"
+  --data '{
+    "profile": "tailscale",
+    "service": "web",
+    "target": {
+      "containers": ["dev"],
+      "port": 3000,
+      "protocol": "http"
+    }
+  }' \
+  "$DIM_CONTROLLER_API/api/urls"
 ```
 
-The body accepts `service`, `port`, optional `protocol` (`http` or `https`),
-optional absolute `path`, optional `routeProvider`, and optional
-`urlProviders`. When multiple route providers are installed,
-`routeProvider` is required. The response contains opaque URL IDs. Revoke one
-with:
+Targets are scoped to the authenticated workspace:
+
+- `containers: []` addresses the project-root workspace container.
+- `containers: ["dev"]` addresses a Compose service or named container in the
+  workspace's nested engine.
+- `containers: ["dev", "deep"]` addresses a container in `dev`'s nested
+  engine. `deep` must publish the requested container port onto `dev`.
+
+DIM resolves container identities itself. For nested targets it creates a TCP
+relay inside the project-root container. A host proxy reaches the root
+container's managed-network IP; a controller proxy uses Docker DNS.
+
+List and revoke:
 
 ```bash
+curl --fail --silent \
+  -H "Authorization: Bearer $DIM_CONTROLLER_TOKEN" \
+  "$DIM_CONTROLLER_API/api/urls"
+
 curl --fail --silent -X DELETE \
-  -H "Authorization: Bearer $DIM_EXTERNAL_URLS_TOKEN" \
-  "$DIM_EXTERNAL_URLS_API/api/external-urls/URL_ID"
+  -H "Authorization: Bearer $DIM_CONTROLLER_TOKEN" \
+  "$DIM_CONTROLLER_API/api/urls/URL_ID"
 ```
 
-The API never accepts an upstream hostname or IP. The built-in controller
-resolves the target to the authenticated workspace's top-level container and
-the requested port. A nested service must therefore publish its port onto the
-top-level workspace container.
+## Plugin and controller
 
-## Provider composition
+Plugin API version 2 is instance-scoped. Plugins use
+`registerControllerRoute()` to extend the DIM controller; core contains no
+external-URL-specific controller or route prefix. Duplicate routes,
+registration after startup, and unsupported API versions fail startup.
+Plugins can initialize durable routes before the controller accepts traffic
+and return an async disposer.
 
-External URL support is split into two plugin capabilities:
-
-1. A route provider maps a controller-derived workspace upstream into a
-   reverse proxy.
-2. One or more URL providers publish names for that route.
-
-The included `@slop-lab/dim-plugin-external-urls` package provides the
-`reverse-proxy` route provider and the `tailscale` and `cloudflare` URL
-providers. It forwards HTTP, HTTPS upstreams, streaming bodies, and WebSocket
-upgrades.
-
-Generated names use a unique first label:
-
-```text
-<service>--<workspace>.<tailscale-machine>.<user-domain>
-<service>--<workspace>.<cloudflare-domain>
-```
-
-This permits any number of URLs per workspace, one or more DIM reverse proxies
-per Tailscale machine, and a user-owned suffix whose wildcard records point at
-tailnet IPs.
-
-## Local build and installation
-
-No registry publication is required:
+Build the unpublished packages locally:
 
 ```bash
 pnpm install --frozen-lockfile
@@ -85,126 +132,55 @@ npm pack ./packages/core/dist --pack-destination /tmp
 npm pack ./packages/external-urls/dist --pack-destination /tmp
 ```
 
-Install both generated tarballs into the controller's configured plugin home
-with npm, then list the plugin package in `plugins.json`. The existing
-`install-plugin` facade can also receive absolute tarball paths. Core and
-plugin must come from the same checkout because the plugin API is currently
-unstable.
-
-## Controller
-
-Run the trusted controller from the locally built CLI:
+Install both tarballs in the configured plugin home, list
+`@slop-lab/dim-plugin-external-urls` in `plugins.json`, then run:
 
 ```bash
-node packages/dim-cli/dist/cli.js controller serve --host 0.0.0.0 --port 7070
+dim controller serve --host 0.0.0.0 --port 7070
 ```
 
-The process needs the DIM state directory and the installed plugin home. In a
-container deployment, attach it to the `dim-control` network with the
-`dim-controller` network alias. Do not expose port 7070 publicly.
+The controller port must be reachable by workspaces but must not be exposed
+publicly.
 
-The controller stores workspace grants under
-`$DIM_STATE_ROOT/workspace-grants` and route journals under
-`$DIM_STATE_ROOT/external-urls`, both with owner-only permissions. It
-reconciles persisted reverse-proxy routes before accepting API traffic.
-
-## Reverse proxy placement
-
-A single listener is configured by:
-
-```text
-DIM_EXTERNAL_URL_PROXY_HOST=0.0.0.0
-DIM_EXTERNAL_URL_PROXY_PORT=8080
-DIM_EXTERNAL_URL_PROXY_PLACEMENT=controller
-```
-
-Placement defaults from the bind address: wildcard binds mean `controller`;
-specific addresses mean `host`. `DIM_EXTERNAL_URL_PROXY_PLACEMENT` explicitly
-overrides that inference.
-
-To run host and controller listeners together, set a JSON array:
-
-```json
-[
-  {
-    "name": "reverse-proxy-host",
-    "listenHost": "100.64.0.10",
-    "listenPort": 8080,
-    "placement": "host"
-  },
-  {
-    "name": "reverse-proxy-controller",
-    "listenHost": "0.0.0.0",
-    "listenPort": 8081,
-    "placement": "controller"
-  }
-]
-```
-
-Pass it as `DIM_EXTERNAL_URL_PROXIES`. The explicit `placement` fields are
-optional overrides. Requests choose one with
-`"routeProvider":"reverse-proxy-host"`. Separate controller processes may
-instead run one listener each against the same durable DIM state.
-
-## Tailscale
-
-Configure:
+## Tailscale host configuration
 
 ```text
 DIM_TAILSCALE_MACHINE=builder-1
 DIM_TAILSCALE_DOMAIN=tail.example.com
 DIM_TAILSCALE_SCHEME=https
+DIM_EXTERNAL_URL_PROXY_HOST=100.64.0.10
+DIM_EXTERNAL_URL_PROXY_PORT=443
+DIM_EXTERNAL_URL_PROXY_UPSTREAM_MODE=container-ip
 ```
 
-Create wildcard DNS records for `*.builder-1.tail.example.com` pointing to the
-Tailscale machine's tailnet IP. Run TLS termination (for example Caddy with a
-DNS challenge certificate) in front of the plugin proxy when using `https`.
-
-Two layouts are supported:
-
-- Host Tailscale: run the controller/proxy on the host and bind the proxy to
-  its tailnet IP.
-- Controller Tailscale: give the trusted `dim-controller` container its own
-  Tailscale identity and bind the proxy inside it.
-
-Placement also selects upstream resolution: `controller` uses the workspace
-container's Docker DNS name, while `host` inspects its address on the managed
-Docker network. Tailscale identity and network-namespace provisioning remain
-deployment concerns.
-
-On a configured Tailnet, run the end-to-end smoke test from inside a DIM
-workspace:
-
-```bash
-DIM_EXTERNAL_URL_TEST_ROUTE_PROVIDER=reverse-proxy-host \
-  scripts/tailscale-external-url-smoke.sh
-```
-
-It starts a temporary HTTP service, requests a real Tailscale URL, fetches a
-sentinel through DNS, TLS, and the reverse proxy, then revokes the URL. This
-requires the operator's wildcard DNS and Tailnet, so it is intentionally
-separate from the environment-independent unit suite.
+Wildcard DNS for `*.builder-1.tail.example.com` points to the host's tailnet
+IP. TLS termination may run in front of the plugin proxy.
 
 ## Cloudflare Tunnel
-
-Configure:
 
 ```text
 DIM_CLOUDFLARE_DOMAIN=workspaces.example.com
 DIM_CLOUDFLARE_SCHEME=https
 ```
 
-Configure a wildcard Cloudflare Tunnel hostname,
-`*.workspaces.example.com`, to forward HTTP to the selected reverse-proxy
-listener. Cloudflare terminates public TLS. The plugin deliberately does not
-receive a Cloudflare API token: tunnel credentials stay in the separately
-managed `cloudflared` runtime, while DIM only publishes deterministic URLs.
+Configure `*.workspaces.example.com` in Cloudflare Tunnel to forward to the
+profile's reverse proxy. Tunnel credentials remain in the separately managed
+`cloudflared` runtime; the DIM plugin receives no Cloudflare API token.
 
-## Plugin API
+## Verification
 
-Plugin API version 2 supplies an instance-scoped host. Plugins register typed
-route and URL capabilities during `register(host)` and may return an async
-disposer. Duplicate plugin and provider names fail startup. On partial startup
-failure, already registered plugins are disposed in reverse order. Controller
-processes retain the returned registry for their lifetime and dispose it on
-shutdown.
+[The external URL example](../examples/external-urls/README.md) and
+`scripts/external-url-example-smoke.sh` verify:
+
+```text
+dnsmasq wildcard DNS
+→ host reverse proxy
+→ project-root relay
+→ nested dev service
+→ further nested container
+```
+
+The environment-independent unit suite also verifies controller discovery,
+mandatory profile selection, target forwarding, HTTP proxying, revocation,
+and Tailscale's host-only profile constraint. A configured real Tailnet can
+run `scripts/tailscale-external-url-smoke.sh`.
