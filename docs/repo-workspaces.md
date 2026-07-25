@@ -5,7 +5,7 @@ project-scoped repository aliases. The built-in service creates a reserved
 Gitea organization named `dim-<project>`.
 
 For a complete, tested, end-to-end walkthrough instead of a reference, see
-[Example: A Multi-repository Project](example-project.md).
+[Example: A Multi-repository Project](../examples/multi-repo-project/README.md).
 
 ## Create and populate a project
 

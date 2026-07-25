@@ -6,25 +6,45 @@ and a separate secret-bearing repo. It installs DIM, registers the three
 repositories, creates a real workspace container, runs a project task, and
 shows that the workspace can reach the other repositories on its own.
 
-The repository contents below are placeholders sized for reading in one
-sitting, not a real infrastructure or secrets setup. For the underlying
-concepts (what a Project is, the `.dim` contract, capability profiles), see
-[Project Workspaces](project-workspaces.md) and [Repository-backed
-Workspaces](repo-workspaces.md).
+`repos/` in this directory contains the actual repository skeletons used
+below — not a code listing, real files. Copy any of them directly as a
+starting point for your own project:
+
+```text
+examples/multi-repo-project/repos/
+├── root/            the required root repository
+│   └── .dim/
+│       ├── docker-compose.yml
+│       └── entrypoint.sh
+├── web/              a product repository, unrelated to .dim
+│   └── app.txt
+└── secrets/          a separate, more strictly reviewed repository
+    └── env.txt
+```
+
+They're placeholders sized for reading in one sitting, not a real
+infrastructure or secrets setup. Never commit real secret material to any
+Project repository, including one modeled after `secrets/` here — see
+[Project Workspaces](../../docs/project-workspaces.md#concepts).
+
+For the underlying concepts (what a Project is, the `.dim` contract,
+capability profiles), see [Project Workspaces](../../docs/project-workspaces.md)
+and [Repository-backed Workspaces](../../docs/repo-workspaces.md).
 
 This exact sequence is exercised by `scripts/example-project-smoke.sh`
-(`just verify-example-project`) against a real Docker daemon and a real
-managed Gitea instance. If you change the commands here, update that script
-too — it is what keeps this page honest.
+(`just verify-example-project`, from the repository root) against a real
+Docker daemon and a real managed Gitea instance. If you change the
+repository skeletons or commands here, update that script too — it is what
+keeps this page honest.
 
 Before adopting DIM for real infrastructure, follow the mandatory [DIM
-adoption and trust requirements](adoption.md).
+adoption and trust requirements](../../docs/adoption.md).
 
 ## Prerequisites
 
 - DIM installed and on `PATH` — see the [installer
   README](https://www.npmjs.com/package/@slop-lab/install-dim) or, for local
-  development, [Setup](usage.md#setup).
+  development, [Setup](../../docs/usage.md#setup).
 - A working runtime backend (`just doctor` should report it ready).
 - A managed Git service reachable at `$DIM_GIT_BASE_URL` (started for you by
   `dim create` the first time it's needed).
@@ -41,59 +61,22 @@ dim install-cli
 See the [installer README](https://www.npmjs.com/package/@slop-lab/install-dim)
 for `npx`-based and direct-`PATH` alternatives.
 
-## 2. The example repositories
+## 2. Create the example repositories
 
-Three tiny repositories make up the Project:
+Copy each repository skeleton out and make it a real Git repository with one
+commit:
 
-**`example-root`** (the required root repository) defines the workspace
-environment and one task:
-
-```text
-example-root/
-└── .dim/
-    ├── docker-compose.yml
-    └── entrypoint.sh
+```bash
+for name in root web secrets; do
+  cp -r "examples/multi-repo-project/repos/$name" "./example-$name"
+  git init --initial-branch=main "./example-$name"
+  git -C "./example-$name" add -A
+  git -C "./example-$name" commit -m "initial example-$name"
+done
 ```
 
-```yaml
-# .dim/docker-compose.yml
-services:
-  dev:
-    image: alpine:3.22
-    command: ["sleep", "infinity"]
-```
-
-```sh
-# .dim/entrypoint.sh
-#!/usr/bin/env sh
-set -eu
-task="${1:?task is required}"
-shift
-case "$task" in
-  hello) echo "hello from the example project" ;;
-  *) echo "unknown task: $task" >&2; exit 2 ;;
-esac
-```
-
-**`example-web`** (a product repository, unrelated to `.dim`):
-
-```text
-example-web/app.txt  -->  "hello from example-web"
-```
-
-**`example-secrets`** (a separate, more strictly reviewed repository for
-secret-bearing environment code — DIM assigns it no special runtime role;
-your own review policy does):
-
-```text
-example-secrets/env.txt  -->  "PLACEHOLDER_SECRET=not-a-real-secret"
-```
-
-Never commit real secret material to any Project repository, including this
-one — see [Project Workspaces](project-workspaces.md#concepts).
-
-Each is an ordinary Git repository with one commit. Create them however you
-normally would (`git init`, add the files above, commit).
+Each is otherwise an ordinary Git repository — create yours however you
+normally would.
 
 ## 3. Register the Project and its repositories
 
@@ -161,8 +144,9 @@ dim exec example-dev -- sh -c \
 
 This prints `hello from example-web` — cloned from inside the container,
 using `$DIM_GIT_BASE_URL` plus the `dim-git-askpass` helper `dim` installs
-into the workspace. See [Multiple repositories](repo-workspaces.md#multiple-repositories)
-for how project code is expected to use this in practice (usually from
+into the workspace. See [Multiple
+repositories](../../docs/repo-workspaces.md#multiple-repositories) for how
+project code is expected to use this in practice (usually from
 `.dim/setup.sh` or a Compose service, not by hand).
 
 ## 8. Clean up

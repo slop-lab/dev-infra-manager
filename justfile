@@ -99,7 +99,7 @@ install-dim-local:
 verify-mise-install-smoke:
     bash scripts/mise-install-smoke.sh
 
-# Requires Docker, a reachable dim-gitea, and network access; runs docs/example-project.md end to end and proves it against real containers.
+# Requires Docker, a reachable dim-gitea, and network access; runs examples/multi-repo-project/README.md end to end and proves it against real containers.
 verify-example-project:
     bash scripts/example-project-smoke.sh
 

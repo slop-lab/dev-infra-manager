@@ -157,7 +157,7 @@ Docker daemon:
 
 ```bash
 just verify-mise-install-smoke   # mise use -g npm:@slop-lab/install-dim, in a disposable container
-just verify-example-project      # docs/example-project.md, proven end to end
+just verify-example-project      # examples/multi-repo-project/README.md, proven end to end
 ```
 
 Both require Docker and network access; `verify-mise-install-smoke` also
@@ -168,8 +168,8 @@ reachable.
 ## Project Workspaces
 
 For a complete, tested, multi-repository walkthrough, see [Example: A
-Multi-repository Project](example-project.md). The summary below is the
-minimal single-repository shape.
+Multi-repository Project](../examples/multi-repo-project/README.md). The
+summary below is the minimal single-repository shape.
 
 Install `dim` from the registry through the installer facade, pinned to an
 exact, reviewed version:

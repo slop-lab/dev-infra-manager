@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Executes docs/example-project.md, command for command, against a real
-# Docker daemon and the environment's managed Gitea. Update that doc
-# alongside this script if either changes; it exists specifically so the doc
-# cannot silently drift from what actually works.
+# Executes examples/multi-repo-project/README.md, command for command,
+# against a real Docker daemon and the environment's managed Gitea. Update
+# that doc (and the repository skeletons under
+# examples/multi-repo-project/repos/) alongside this script if any of them
+# change; it exists specifically so the example cannot silently drift from
+# what actually works.
 #
 # DIM isn't installed from the published package here (today's changes
 # aren't released yet): it's built locally, packed, and installed through
@@ -77,46 +79,26 @@ npm install --global --prefix "$install_prefix" "$work_dir"/*install-dim*.tgz --
 "$dim_bin" install-cli --no-local-bin >/dev/null
 test -x "$dim_bin"
 
-echo "[example-project] 2. write the example repositories"
+echo "[example-project] 2. create the example repositories"
+examples_dir="$repo_root/examples/multi-repo-project/repos"
+mkdir -p "$source_root"
 create_repo() {
-  local name="$1" path="$2"
+  local name="$1"
+  local path="$source_root/example-$name"
+  cp -r "$examples_dir/$name" "$path"
   git init --initial-branch=main "$path" >/dev/null
   git -C "$path" config user.name "Example Project"
   git -C "$path" config user.email "example-project@dim.invalid"
   git -C "$path" add -A
-  git -C "$path" commit -m "initial $name" >/dev/null
+  git -C "$path" commit -m "initial example-$name" >/dev/null
 }
+create_repo root
+create_repo web
+create_repo secrets
 
 root_repo="$source_root/example-root"
 web_repo="$source_root/example-web"
 secrets_repo="$source_root/example-secrets"
-
-mkdir -p "$root_repo/.dim"
-printf '%s\n' \
-  'services:' \
-  '  dev:' \
-  '    image: alpine:3.22' \
-  '    command: ["sleep", "infinity"]' \
-  > "$root_repo/.dim/docker-compose.yml"
-printf '%s\n' \
-  '#!/usr/bin/env sh' \
-  'set -eu' \
-  'task="${1:?task is required}"' \
-  'shift' \
-  'case "$task" in' \
-  '  hello) echo "hello from the example project" ;;' \
-  '  *) echo "unknown task: $task" >&2; exit 2 ;;' \
-  'esac' \
-  > "$root_repo/.dim/entrypoint.sh"
-create_repo example-root "$root_repo"
-
-mkdir -p "$web_repo"
-printf '%s\n' 'hello from example-web' > "$web_repo/app.txt"
-create_repo example-web "$web_repo"
-
-mkdir -p "$secrets_repo"
-printf '%s\n' 'PLACEHOLDER_SECRET=not-a-real-secret' > "$secrets_repo/env.txt"
-create_repo example-secrets "$secrets_repo"
 
 echo "[example-project] 3. register the Project and its repositories"
 dim project create "$project_name" >/dev/null
