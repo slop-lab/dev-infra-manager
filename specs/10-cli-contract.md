@@ -48,7 +48,8 @@ Every repository belongs to one Project namespace. `create` makes an empty
 repository and leaves configured protection pending so an initial standard Git
 push can populate it. `protect` applies protection after that push. Workspace
 creation also applies pending protection to the root repository.
-The default protection patterns are `main`, `development`, and `lts/v*`.
+No protection pattern is implied. Projects pass their actual policy through
+`--protect`; an omitted option records no patterns.
 For a root with no configured ref, `protect` sets Gitea `HEAD` when exactly one
 branch exists and does not guess when multiple branches exist.
 

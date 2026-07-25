@@ -56,5 +56,9 @@ describe("@slop-lab/install-dim", () => {
       pluginHome: join(prefix, "share", "dim", "plugins")
     });
     expect(await configuredPluginHome({ DIM_CONFIG_PATH: configPath })).toBe(join(prefix, "share", "dim", "plugins"));
+    expect(await configuredPluginHome({
+      DIM_CONFIG_PATH: configPath,
+      DIM_PLUGIN_HOME: join(root, "later-environment")
+    })).toBe(join(prefix, "share", "dim", "plugins"));
   });
 });

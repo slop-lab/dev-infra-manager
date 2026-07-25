@@ -48,7 +48,6 @@ export function defaultInstallPrefix(env: NodeJS.ProcessEnv = process.env): stri
 }
 
 export async function configuredPluginHome(env: NodeJS.ProcessEnv = process.env): Promise<string> {
-  if (env.DIM_PLUGIN_HOME) return path.resolve(env.DIM_PLUGIN_HOME);
   const config = await readUserConfig(defaultUserConfigPath(env));
   return path.resolve(config.pluginHome ?? defaultPluginHome(env));
 }
@@ -70,7 +69,10 @@ export async function installDimCli(options: CliInstallOptions): Promise<void> {
   await writeUserConfig(configPath, {
     ...config,
     installPrefix: path.resolve(options.prefix),
-    pluginHome: config.pluginHome ?? path.join(path.resolve(options.prefix), "share", "dim", "plugins")
+    pluginHome: config.pluginHome
+      ?? (process.env.DIM_PLUGIN_HOME
+        ? path.resolve(process.env.DIM_PLUGIN_HOME)
+        : path.join(path.resolve(options.prefix), "share", "dim", "plugins"))
   });
 }
 

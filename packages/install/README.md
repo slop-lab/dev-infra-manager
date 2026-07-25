@@ -85,10 +85,20 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/slop-lab/dim.json
 ```
 
 The file contains the selected install prefix and plugin home. The CLI uses it
-to locate plugins. These environment variables override discovery:
+to locate plugins. Once `pluginHome` has been recorded, it takes precedence
+over a `DIM_PLUGIN_HOME` value introduced in a later process. This keeps an
+installed `dim` tied to the plugin set selected at installation time.
 
-- `DIM_CONFIG_PATH` selects a different installer configuration file.
-- `DIM_PLUGIN_HOME` selects a different plugin home.
+Configuration discovery uses the fixed
+`$XDG_CONFIG_HOME/slop-lab/dim.json` location (falling back to
+`$HOME/.config/slop-lab/dim.json`). The explicit controls are:
+
+- `--plugin-home` changes the selection during plugin installation and records
+  the new absolute path.
+- `DIM_PLUGIN_HOME` supplies the initial default only when no persisted
+  `pluginHome` exists.
+- `DIM_CONFIG_PATH` selects a different configuration file for testing or
+  portable installations.
 
 Re-running installation is the supported way to update the selected CLI or
 plugin set. Always specify exact versions; do not use `latest` for software

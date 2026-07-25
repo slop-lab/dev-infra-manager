@@ -83,9 +83,9 @@ dim repo protect acme root
 ```
 
 Protection is a separate step because an empty Git repository cannot protect a
-branch before its first push. Unless overridden with `--protect`, DIM protects
-`main`, `development`, and `lts/v*`. These are managed-Git policy defaults,
-not the root ref selection rule. When the root ref is omitted and exactly one
+branch before its first push. DIM does not guess protection patterns; configure
+the Project's actual policy explicitly, for example
+`--protect main,development`. When the root ref is omitted and exactly one
 branch exists, `repo protect` also makes that branch the managed repository's
 `HEAD`; it never chooses between multiple branches.
 
@@ -198,7 +198,7 @@ dim --help
 dim project --help
 dim repo --help
 dim help --all
-dim project show acme --json
+dim project show --json acme
 ```
 
 Normal list commands use compact tables. Record-producing subcommands expose

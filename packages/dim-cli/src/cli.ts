@@ -97,13 +97,13 @@ repo.command("create")
   .argument("<alias>")
   .option("--root", "make this the project root repository")
   .option("--ref <branch-or-ref>", "root branch/ref; defaults to the repository HEAD")
-  .option("--protect <patterns>", "comma-separated protected branch patterns", "main,development,lts/v*")
+  .option("--protect <patterns>", "comma-separated protected branch patterns")
   .option("--json", "print machine-readable JSON")
   .action(async (projectName: string, alias: string, flags: RepoFlags) => {
     print(await createProjectRepository(runner, lifecycleOptions(), {
       project: projectName,
       alias,
-      protectedPatterns: commaSeparated(flags.protect),
+      protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect),
       root: flags.root ?? false,
       ...(flags.root ? { rootRef: flags.ref } : {})
     }), flags);
@@ -116,14 +116,14 @@ repo.command("import")
   .argument("<source>")
   .option("--root", "make this the project root repository")
   .option("--ref <branch-or-ref>", "root branch/ref; defaults to the repository HEAD")
-  .option("--protect <patterns>", "comma-separated protected branch patterns", "main,development,lts/v*")
+  .option("--protect <patterns>", "comma-separated protected branch patterns")
   .option("--json", "print machine-readable JSON")
   .action(async (projectName: string, alias: string, source: string, flags: RepoFlags) => {
     print(await importProjectRepository(runner, lifecycleOptions(), {
       project: projectName,
       alias,
       source,
-      protectedPatterns: commaSeparated(flags.protect),
+      protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect),
       root: flags.root ?? false,
       ...(flags.root ? { rootRef: flags.ref } : {})
     }), flags);
@@ -388,7 +388,7 @@ program.exitOverride();
 interface RepoFlags {
   root?: boolean;
   ref?: string;
-  protect: string;
+  protect?: string;
   json?: boolean;
 }
 

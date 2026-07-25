@@ -34,7 +34,6 @@ export function pluginHome(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 export async function resolvePluginHome(env: NodeJS.ProcessEnv = process.env): Promise<string> {
-  if (env.DIM_PLUGIN_HOME) return path.resolve(env.DIM_PLUGIN_HOME);
   try {
     const config = JSON.parse(await readFile(dimUserConfigPath(env), "utf8")) as DimUserConfig;
     if (config.schemaVersion !== 1) {

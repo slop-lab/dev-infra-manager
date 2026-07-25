@@ -46,7 +46,10 @@ loads that explicit manifest and reports the enabled packages.
 The selected plugin home is persisted in
 `${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json`, so a CLI installed with a
 custom `--prefix` resolves the same plugin location in later processes.
-`DIM_CONFIG_PATH` and `DIM_PLUGIN_HOME` override the persisted values.
+The persisted plugin home takes precedence over a later `DIM_PLUGIN_HOME`.
+That environment variable supplies an initial default only when no selection
+has been recorded. `DIM_CONFIG_PATH` remains an explicit testing or portable
+installation override for the otherwise fixed XDG config location.
 
 The package name recorded by the installer and the plugin's diagnostic `name`
 field need not follow the same prefix. Resolution always uses the exact

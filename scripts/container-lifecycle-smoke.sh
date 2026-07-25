@@ -43,7 +43,7 @@ git -C "$worktree" commit -m initial >/dev/null
 git clone --bare "$worktree" "$bare_repo" >/dev/null
 
 pnpm run cli -- project create "$project_name" >/dev/null
-pnpm run cli -- repo create "$project_name" root --root --ref main >/dev/null
+pnpm run cli -- repo create "$project_name" root --root --ref main --protect main >/dev/null
 repo_url="$(pnpm run --silent cli -- repo url-for-host "$project_name" root)"
 pnpm run cli -- x git --git-dir "$bare_repo" push "$repo_url" --all >/dev/null
 pnpm run cli -- repo protect "$project_name" root >/dev/null

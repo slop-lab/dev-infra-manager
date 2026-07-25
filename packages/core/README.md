@@ -45,7 +45,7 @@ await createProjectRepository(runner, options, {
   project: "acme",
   alias: "root",
   root: true,
-  protectedPatterns: ["main", "development", "lts/v*"]
+  protectedPatterns: ["main", "development"]
 });
 
 // Push the initial root branch with ordinary Git before creating a workspace.

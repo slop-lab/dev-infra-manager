@@ -36,7 +36,11 @@ describe("plugin loader configuration", () => {
     );
     expect(dimUserConfigPath({ XDG_CONFIG_HOME: configHome })).toBe(join(configHome, "slop-lab", "dim.json"));
     expect(await resolvePluginHome({ XDG_CONFIG_HOME: configHome })).toBe(configuredHome);
-    expect(await resolvePluginHome({ XDG_CONFIG_HOME: configHome, DIM_PLUGIN_HOME: root })).toBe(root);
+    expect(await resolvePluginHome({ XDG_CONFIG_HOME: configHome, DIM_PLUGIN_HOME: root })).toBe(configuredHome);
+    expect(await resolvePluginHome({
+      XDG_CONFIG_HOME: join(root, "missing-config"),
+      DIM_PLUGIN_HOME: root
+    })).toBe(root);
   });
 
   it("deduplicates configured plugin packages", async () => {
