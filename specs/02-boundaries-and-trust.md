@@ -27,7 +27,13 @@ Agent workspace containers:
 - Must use an isolated named workspace.
 - Must be resource-limited at the outer container boundary.
 
-The final command inside the included agent images runs as the `agent` user.
+The final command inside the included agent images runs as the unprivileged
+`dim` user, not a user named after the agent itself: the workspace container
+is DIM's own execution boundary, and the agent's actual influence over
+anything outside it is limited to pushing proposals for review (see Git
+Boundary), the same constrained relationship it has to the secret-bearing
+runtime boundary. Naming the process identity `agent` would suggest the
+agent owns or fully controls this boundary, which it does not.
 
 ## Secret-Bearing Runtime Boundary
 

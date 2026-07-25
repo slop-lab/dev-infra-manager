@@ -23,6 +23,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   default, a managed `~/.local/bin/dim` symlink that refuses to touch an
   unmanaged or pre-0.2 `dim`, and a combined `dim --version` line once a
   CLI is configured.
+- Renamed the unprivileged user every workspace image runs project commands
+  as from `agent` to `dim` (`/home/agent` → `/home/dim`, `AGENT_UID`/
+  `AGENT_GID` build args → `DIM_UID`/`DIM_GID`), so it no longer reads as
+  though the agent owns the workspace boundary outright — its actual
+  influence there is the same PR-only relationship it has to the
+  secret-bearing boundary. See [Trust
+  Boundaries](specs/02-boundaries-and-trust.md#agent-workspace-boundary).
 
 ### Added
 

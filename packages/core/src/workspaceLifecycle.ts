@@ -12,6 +12,10 @@ import type {
 import { workspaceRuntimePlan } from "./runtimeBackends.js";
 import type { StreamingCommandRunner } from "./types.js";
 
+// The unprivileged OS user every workspace image (images/project-workspace,
+// images/project-workspace-podman) creates and runs project commands as.
+const WORKSPACE_USER = "dim";
+
 export interface WorkspaceGitEnvironment {
   username: string;
   token: string;
@@ -530,7 +534,7 @@ export async function waitForWorkspaceRuntime(
 ): Promise<void> {
   let lastError = "not ready";
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const result = await runner.run("docker", ["exec", "--user", "agent", containerName, engine, "info"]);
+    const result = await runner.run("docker", ["exec", "--user", WORKSPACE_USER, containerName, engine, "info"]);
     if (result.exitCode === 0) return;
     lastError = result.stderr.trim() || result.stdout.trim();
 
@@ -567,15 +571,15 @@ async function ensureClone(
   cloneUrl: string
 ): Promise<void> {
   const existing = await runner.run("docker", [
-    "exec", "--user", "agent", record.containerName,
+    "exec", "--user", WORKSPACE_USER, record.containerName,
     "git", "-C", record.projectPath, "rev-parse", "--git-dir"
   ]);
   if (existing.exitCode === 0) return;
   const parent = record.projectPath.slice(0, record.projectPath.lastIndexOf("/")) || "/workspace";
-  const directory = await runner.run("docker", ["exec", "--user", "agent", record.containerName, "mkdir", "-p", parent]);
+  const directory = await runner.run("docker", ["exec", "--user", WORKSPACE_USER, record.containerName, "mkdir", "-p", parent]);
   if (directory.exitCode !== 0) throw commandError("prepare project directory", directory);
   const clone = await runner.run("docker", [
-    "exec", "--user", "agent", record.containerName,
+    "exec", "--user", WORKSPACE_USER, record.containerName,
     "git", "clone", "--branch", rootBranch(record.rootRef), "--single-branch", cloneUrl, record.projectPath
   ]);
   if (clone.exitCode !== 0) throw commandError(`clone project '${record.projectName}'`, clone);
@@ -613,7 +617,7 @@ async function writeProjectManifest(
     "--env", `DIM_PROJECT_MANIFEST_B64=${encoded}`,
     record.containerName,
     "sh", "-c",
-    `mkdir -p /run/dim && printf %s "$DIM_PROJECT_MANIFEST_B64" | base64 -d > ${record.projectManifestPath} && chown agent:agent ${record.projectManifestPath} && chmod 0444 ${record.projectManifestPath}`
+    `mkdir -p /run/dim && printf %s "$DIM_PROJECT_MANIFEST_B64" | base64 -d > ${record.projectManifestPath} && chown ${WORKSPACE_USER}:${WORKSPACE_USER} ${record.projectManifestPath} && chmod 0444 ${record.projectManifestPath}`
   ]);
   if (result.exitCode !== 0) throw commandError("write project runtime manifest", result);
 }
@@ -750,7 +754,7 @@ async function projectFileExists(
   relativePath: string
 ): Promise<boolean> {
   const result = await runner.run("docker", [
-    "exec", "--user", "agent", "--workdir", record.projectPath,
+    "exec", "--user", WORKSPACE_USER, "--workdir", record.projectPath,
     record.containerName, "test", "-f", relativePath
   ]);
   return result.exitCode === 0;
@@ -762,7 +766,7 @@ async function projectCommand(
   command: string[]
 ) {
   const args = [
-    "exec", "--user", "agent", "--workdir", record.projectPath,
+    "exec", "--user", WORKSPACE_USER, "--workdir", record.projectPath,
     ...projectEnvironment(record), record.containerName, ...command
   ];
   return runner.run("docker", args);
@@ -775,7 +779,7 @@ async function streamProjectCommand(
   interactive: boolean
 ): Promise<number> {
   const args = [
-    "exec", "--user", "agent", "--workdir", record.projectPath,
+    "exec", "--user", WORKSPACE_USER, "--workdir", record.projectPath,
     ...projectEnvironment(record)
   ];
   if (interactive) args.push("--interactive", "--tty");

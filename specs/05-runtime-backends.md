@@ -19,7 +19,7 @@ managed container labels. Reconciliation must reject a container whose backend
 label differs from the workspace record.
 
 The nested-engine volume target is `/var/lib/docker` for Docker backends and
-`/home/agent/.local/share/containers` for rootless Podman.
+`/home/dim/.local/share/containers` for rootless Podman.
 Rootless Podman must receive `/dev/fuse` and requires host support for nested
 unprivileged user namespaces.
 

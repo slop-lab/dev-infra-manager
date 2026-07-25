@@ -113,7 +113,7 @@ doctor:
     pnpm run cli -- doctor
 
 build-project-workspace:
-    docker build --force-rm --build-arg "AGENT_UID=$(id -u)" --build-arg "AGENT_GID=$(id -g)" -t dev-infra-project-workspace:latest images/project-workspace
+    docker build --force-rm --build-arg "DIM_UID=$(id -u)" --build-arg "DIM_GID=$(id -g)" -t dev-infra-project-workspace:latest images/project-workspace
 
 build-project-podman-image:
     docker build -t dev-infra-project-workspace-podman:latest images/project-workspace-podman

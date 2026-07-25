@@ -55,9 +55,9 @@ export function workspaceRuntimePlan(
         privileged: options.workspacePrivileged ?? true,
         securityOptions: ["seccomp=unconfined", "apparmor=unconfined"],
         devices: ["/dev/fuse"],
-        runtimeDataPath: "/home/agent/.local/share/containers",
+        runtimeDataPath: "/home/dim/.local/share/containers",
         engine: "podman",
-        env: { DIM_NESTED_ENGINE: "podman", XDG_RUNTIME_DIR: "/tmp/agent-runtime" }
+        env: { DIM_NESTED_ENGINE: "podman", XDG_RUNTIME_DIR: "/tmp/dim-runtime" }
       };
     case "runc":
       return {

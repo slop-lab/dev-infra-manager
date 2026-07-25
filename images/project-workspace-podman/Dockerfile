@@ -15,11 +15,11 @@ RUN dnf install -y \
     tini \
   && dnf clean all
 
-RUN useradd -m -s /bin/bash agent \
-  && echo "agent:100000:65536" >> /etc/subuid \
-  && echo "agent:100000:65536" >> /etc/subgid \
-  && echo "agent ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/agent \
-  && chmod 0440 /etc/sudoers.d/agent
+RUN useradd -m -s /bin/bash dim \
+  && echo "dim:100000:65536" >> /etc/subuid \
+  && echo "dim:100000:65536" >> /etc/subgid \
+  && echo "dim ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dim \
+  && chmod 0440 /etc/sudoers.d/dim
 
 RUN npm install --global pnpm@10 @openai/codex
 
@@ -27,10 +27,10 @@ COPY entrypoint.sh /usr/local/bin/dim-project-podman-entrypoint
 COPY git-askpass.sh /usr/local/bin/dim-git-askpass
 RUN chmod +x /usr/local/bin/dim-project-podman-entrypoint /usr/local/bin/dim-git-askpass
 
-ENV HOME="/home/agent" \
-    CODEX_HOME="/home/agent/.codex" \
+ENV HOME="/home/dim" \
+    CODEX_HOME="/home/dim/.codex" \
     DIM_NESTED_ENGINE="podman" \
-    XDG_RUNTIME_DIR="/tmp/agent-runtime"
+    XDG_RUNTIME_DIR="/tmp/dim-runtime"
 
 WORKDIR /workspace
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/dim-project-podman-entrypoint"]

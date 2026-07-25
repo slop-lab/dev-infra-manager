@@ -207,7 +207,7 @@ describe("project and workspace lifecycle", () => {
     });
     expect(workspaceRuntimePlan("rootless-podman", options)).toMatchObject({
       image: "dev-infra-project-workspace-podman:latest",
-      runtimeDataPath: "/home/agent/.local/share/containers",
+      runtimeDataPath: "/home/dim/.local/share/containers",
       engine: "podman",
       privileged: true,
       securityOptions: ["seccomp=unconfined", "apparmor=unconfined"],

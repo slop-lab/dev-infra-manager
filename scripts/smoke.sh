@@ -61,7 +61,7 @@ docker run --rm \
   --privileged \
   --runtime runc \
   dev-infra-project-workspace:latest \
-  bash -lc 'test "$(whoami)" = agent && test "$HOME" = /home/agent && git --version >/dev/null && docker --version >/dev/null'
+  bash -lc 'test "$(whoami)" = dim && test "$HOME" = /home/dim && git --version >/dev/null && docker --version >/dev/null'
 
 # Use unique tags so the isolation assertions never depend on which images the
 # host or inner daemon happened to cache before this smoke run.

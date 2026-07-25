@@ -19,7 +19,7 @@ just build-project-podman-image
 
 It contains the same project tooling with Podman and podman-compose. Its
 container storage is persisted in the workspace runtime volume at
-`/home/agent/.local/share/containers`.
+`/home/dim/.local/share/containers`.
 
 Neither image receives the host Docker socket or a host checkout. Project
 source is cloned inside the top-level workspace container.

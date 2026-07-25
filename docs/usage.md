@@ -235,4 +235,4 @@ pnpm run cli -- doctor --backend gvisor
 
 The Sysbox registration check only proves that Docker knows about `sysbox-runc`. The Sysbox container execution check runs `hello-world:latest` with `--runtime=sysbox-runc`; this is the direct readiness signal for Sysbox agent workspace containers.
 For gVisor, `doctor --backend gvisor` checks `runsc` and Docker runtime execution.
-For rootless Podman, `doctor --backend rootless-podman` checks the workspace image and verifies that `podman` is present in it. Podman runs rootless as `agent` inside the workspace, but the outer Docker workspace container is privileged: nested user namespaces and mounts do not work under Docker's normal container mount restrictions.
+For rootless Podman, `doctor --backend rootless-podman` checks the workspace image and verifies that `podman` is present in it. Podman runs rootless as `dim` inside the workspace, but the outer Docker workspace container is privileged: nested user namespaces and mounts do not work under Docker's normal container mount restrictions.
