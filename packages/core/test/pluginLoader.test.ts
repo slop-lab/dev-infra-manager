@@ -26,7 +26,7 @@ describe("plugin loader configuration", () => {
     expect(await readPluginManifest(root)).toEqual({ schemaVersion: 1, plugins: [] });
   });
 
-  it("loads the plugin home recorded by the installer unless the environment overrides it", async () => {
+  it("prefers the plugin home recorded by the installer over later environment values", async () => {
     const configHome = join(root, "config");
     const configuredHome = join(root, "configured-plugins");
     await mkdir(join(configHome, "slop-lab"), { recursive: true });
