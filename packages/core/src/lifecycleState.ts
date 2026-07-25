@@ -1,3 +1,4 @@
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "./errors.js";
@@ -19,6 +20,51 @@ export class LifecycleState {
 
   workspacePath(name: string): string {
     return path.join(this.root, "workspaces", `${validateLifecycleName(name, "workspace")}.json`);
+  }
+
+  workspaceGrantPath(name: string): string {
+    return path.join(this.root, "workspace-grants", validateLifecycleName(name, "workspace"));
+  }
+
+  async ensureWorkspaceGrant(name: string): Promise<string> {
+    const workspace = validateLifecycleName(name, "workspace");
+    const target = this.workspaceGrantPath(workspace);
+    await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
+    try {
+      return (await readFile(target, "utf8")).trim();
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const token = `${workspace}.${randomBytes(32).toString("base64url")}`;
+    try {
+      const handle = await open(target, "wx", 0o600);
+      await handle.writeFile(`${token}\n`, "utf8");
+      await handle.close();
+      return token;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") return (await readFile(target, "utf8")).trim();
+      throw error;
+    }
+  }
+
+  async authenticateWorkspaceGrant(token: string): Promise<WorkspaceRecord | undefined> {
+    const separator = token.indexOf(".");
+    if (separator < 1) return undefined;
+    const name = token.slice(0, separator);
+    try {
+      validateLifecycleName(name, "workspace");
+      const expected = (await readFile(this.workspaceGrantPath(name), "utf8")).trim();
+      const actualBuffer = Buffer.from(token);
+      const expectedBuffer = Buffer.from(expected);
+      if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) return undefined;
+      return await this.readWorkspace(name);
+    } catch {
+      return undefined;
+    }
+  }
+
+  async removeWorkspaceGrant(name: string): Promise<void> {
+    await rm(this.workspaceGrantPath(name), { force: true });
   }
 
   giteaServicePath(): string {

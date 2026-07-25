@@ -325,6 +325,7 @@ export async function discardWorkspace(runner: StreamingCommandRunner, options: 
       throw new UserError(`failed to remove workspace Docker volume: ${volume.stderr.trim()}`);
     }
     await state.removeWorkspace(workspaceName);
+    await state.removeWorkspaceGrant(workspaceName);
   } finally {
     await release();
   }
@@ -416,6 +417,7 @@ async function reconcileContainer(
   git: WorkspaceGitEnvironment
 ): Promise<void> {
   await reconcileDockerVolume(runner, record);
+  const externalUrlGrant = await new LifecycleState(options.stateRoot).ensureWorkspaceGrant(record.name);
   const inspectArgs = [
     "container", "inspect", record.containerName,
     "--format",
@@ -423,7 +425,7 @@ async function reconcileContainer(
   ];
   let inspect = await runner.run("docker", inspectArgs);
   if (inspect.exitCode !== 0) {
-    const created = await runner.run("docker", workspaceContainerArgs(options, record, git));
+    const created = await runner.run("docker", workspaceContainerArgs(options, record, git, externalUrlGrant));
     if (created.exitCode !== 0) {
       inspect = await runner.run("docker", inspectArgs);
       if (inspect.exitCode !== 0) {
@@ -483,7 +485,8 @@ async function reconcileDockerVolume(runner: StreamingCommandRunner, record: Wor
 export function workspaceContainerArgs(
   options: LifecycleOptions,
   record: WorkspaceRecord,
-  git: WorkspaceGitEnvironment
+  git: WorkspaceGitEnvironment,
+  externalUrlGrant?: string
 ): string[] {
   const plan = workspaceRuntimePlan(record.runtimeBackend, options);
   const args = [
@@ -506,6 +509,7 @@ export function workspaceContainerArgs(
     "--env", `DIM_GIT_TOKEN=${git.token}`,
     "--env", `DIM_GIT_USER_NAME=${git.userName}`,
     "--env", `DIM_GIT_USER_EMAIL=${git.userEmail}`,
+    "--env", `DIM_EXTERNAL_URLS_API=${options.externalUrlControllerUrl}`,
     "--env", "GIT_ASKPASS=/usr/local/bin/dim-git-askpass",
     "--env", "GIT_TERMINAL_PROMPT=0",
     "--env", "GIT_CONFIG_COUNT=2",
@@ -514,6 +518,7 @@ export function workspaceContainerArgs(
     "--env", "GIT_CONFIG_KEY_1=user.email",
     "--env", `GIT_CONFIG_VALUE_1=${git.userEmail}`
   ];
+  if (externalUrlGrant) args.push("--env", `DIM_EXTERNAL_URLS_TOKEN=${externalUrlGrant}`);
   for (const capability of plan.capabilities) args.push("--cap-add", capability);
   for (const securityOption of plan.securityOptions) args.push("--security-opt", securityOption);
   for (const device of plan.devices) args.push("--device", device);

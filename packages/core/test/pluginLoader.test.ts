@@ -66,7 +66,7 @@ describe("plugin loader configuration", () => {
     await writeFile(join(packageRoot, "index.js"), `
       export default {
         name: "@example/github",
-        apiVersion: 1,
+        apiVersion: 2,
         register() {}
       };
     `);
@@ -77,5 +77,7 @@ describe("plugin loader configuration", () => {
 
     const loaded = await loadInstalledPlugins(root);
     expect(loaded.manifest.plugins).toEqual(["@example/github"]);
+    expect(loaded.registered.plugins).toEqual(["@example/github"]);
+    await loaded.registered.dispose();
   });
 });

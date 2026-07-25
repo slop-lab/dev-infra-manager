@@ -1,8 +1,10 @@
 # DIM Plugins
 
-DIM retains a small, versioned plugin loader for future integrations. Version
-0.2.0 does not expose a Git-provider abstraction: repository import uses the
-host's `git` CLI and managed repositories live in DIM's Gitea service.
+DIM has a versioned, instance-scoped plugin host. Version 0.2.0 does not expose
+a Git-provider abstraction: repository import uses the host's `git` CLI and
+managed repositories live in DIM's Gitea service. The first concrete
+capabilities are external route and URL providers; see
+[External workspace URLs](external-urls.md).
 
 Plugin discovery does not depend on a naming convention. Scoped, unscoped, and
 private-registry package names are accepted. For example:
@@ -24,7 +26,9 @@ import {
 const plugin: DimPlugin = {
   name: "@example/dim-plugin",
   apiVersion: DIM_PLUGIN_API_VERSION,
-  register() {}
+  register(host) {
+    // Register only typed capabilities exposed by this API version.
+  }
 };
 
 export default plugin;
@@ -56,6 +60,8 @@ field need not follow the same prefix. Resolution always uses the exact
 installed package name from `plugins.json`; no `plugin-*` pattern scan occurs.
 
 Only packages listed in the manifest are imported, and their plugin API version
-is validated. Concrete extension points should be added only when an actual
-integration needs one; the CLI does not freeze a generic provider interface in
-advance.
+is validated. Registration is atomic from the caller's perspective: duplicate
+names and initialization failures abort startup, and completed registrations
+are disposed in reverse order. A plugin may return an async disposer from
+`register`. Each controller owns its registry instance; there is no global
+capability singleton.

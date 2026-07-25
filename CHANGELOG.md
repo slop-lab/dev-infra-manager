@@ -56,6 +56,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - [Example: A Multi-repository Project](examples/multi-repo-project/README.md),
   a copyable example project with a tested, real-container walkthrough.
+- Added plugin API v2 with instance-scoped capability registries, ordered
+  disposal, and separate external route and URL provider contracts.
+- Added an authenticated workspace external URL controller API and a
+  local-build plugin with a shared reverse proxy plus Tailscale and Cloudflare
+  hostname providers. Host and controller Tailscale placements can be inferred,
+  explicitly selected, or configured together.
 
 ### Fixed
 

@@ -155,7 +155,7 @@ describe("project and workspace lifecycle", () => {
       token: "token",
       userName: "Agent",
       userEmail: "agent@example.invalid"
-    });
+    }, "work-1.external-url-grant");
     expect(args).toEqual(expect.arrayContaining([
       "--name", "dim-ws-work-1",
       "--label", "dim.managed=true",
@@ -167,12 +167,53 @@ describe("project and workspace lifecycle", () => {
       "--pids-limit", "1024",
       "--env", "DIM_GIT_USERNAME=writer",
       "--env", "DIM_GIT_TOKEN=token",
+      "--env", "DIM_EXTERNAL_URLS_API=http://dim-controller:7070",
+      "--env", "DIM_EXTERNAL_URLS_TOKEN=work-1.external-url-grant",
       "--env", "GIT_CONFIG_VALUE_0=Agent",
       "--privileged"
     ]));
     expect(args).not.toContain("--rm");
     expect(args.join(" ")).not.toContain("type=bind");
     expect(args.join(" ")).not.toContain("docker.sock");
+  });
+
+  it("creates and authenticates a workspace-scoped external URL grant", async () => {
+    const state = new LifecycleState(root);
+    const now = new Date().toISOString();
+    const record: WorkspaceRecord = {
+      schemaVersion: 2,
+      name: "work-1",
+      projectId: "project-id",
+      projectName: "project",
+      rootRepositoryAlias: "root",
+      rootRef: "refs/heads/main",
+      projectPath: "/workspace/project",
+      phase: "ready",
+      profiles: [],
+      composeProjectName: "dim-work-1",
+      containerName: "dim-ws-work-1",
+      networkName: "dim-control",
+      dockerVolumeName: "dim-ws-work-1-docker",
+      runtimeBackend: "runc",
+      cpuCount: "2",
+      memory: "4g",
+      pidsLimit: "2048",
+      routes: [],
+      gitUserName: "Agent",
+      gitUserEmail: "agent@example.invalid",
+      gitBaseUrl: "http://dim-gitea:3000/dim-project",
+      projectManifestPath: "/run/dim/project.json",
+      createdAt: now,
+      updatedAt: now
+    };
+    await state.claimWorkspace(record);
+    const grant = await state.ensureWorkspaceGrant(record.name);
+    expect(grant).toMatch(/^work-1\./);
+    expect(await state.ensureWorkspaceGrant(record.name)).toBe(grant);
+    expect(await state.authenticateWorkspaceGrant(grant)).toEqual(record);
+    expect(await state.authenticateWorkspaceGrant(`${grant}x`)).toBeUndefined();
+    await state.removeWorkspaceGrant(record.name);
+    expect(await state.authenticateWorkspaceGrant(grant)).toBeUndefined();
   });
 
   it("validates names and container-only option overrides", () => {

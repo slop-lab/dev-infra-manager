@@ -1,5 +1,7 @@
 export * from "./doctor.js";
 export * from "./errors.js";
+export * from "./externalUrls.js";
+export * from "./externalUrlController.js";
 export * from "./gitea.js";
 export * from "./lifecycleOptions.js";
 export * from "./lifecycleState.js";

@@ -41,6 +41,7 @@ The documentation is split by concern:
 - [Configuration](configuration.md): configuration file reference.
 - [Runtime Backends](runtime-backends.md): Sysbox, gVisor, rootless Podman, and runc selection.
 - [Runtime Images](runtime-images.md): included agent workspace and secret runtime images.
+- [External workspace URLs](external-urls.md): authenticated URL requests, reverse proxy placement, Tailscale, and Cloudflare Tunnel.
 - [Repository-backed Workspaces](repo-workspaces.md): local Gitea registration, persistent workspaces, reconciliation, and Git environment.
 - [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.
 - [Example: A Multi-repository Project](../examples/multi-repo-project/README.md): a readable, tested, end-to-end walkthrough — install DIM, register a root plus two additional repositories, create a real workspace container, and use it.

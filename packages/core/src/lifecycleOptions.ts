@@ -16,7 +16,8 @@ export function lifecycleOptions(env: NodeJS.ProcessEnv = process.env): Lifecycl
     ...(env.DIM_WORKSPACE_PRIVILEGED === undefined ? {} : { workspacePrivileged: booleanValue(env.DIM_WORKSPACE_PRIVILEGED) }),
     cpuCount: env.DIM_WORKSPACE_CPUS ?? "2",
     memory: env.DIM_WORKSPACE_MEMORY ?? "4g",
-    pidsLimit: env.DIM_WORKSPACE_PIDS ?? "2048"
+    pidsLimit: env.DIM_WORKSPACE_PIDS ?? "2048",
+    externalUrlControllerUrl: env.DIM_EXTERNAL_URL_CONTROLLER_URL ?? "http://dim-controller:7070"
   };
 }
 

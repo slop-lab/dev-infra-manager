@@ -1,10 +1,12 @@
 #!/usr/bin/env node
+import { once } from "node:events";
 import { AddHelpTextContext, Command, CommanderError } from "commander";
 import {
   applyProjectRepositoryProtection,
   createProject,
   createProjectRepository,
   createWorkspace,
+  configuredExternalUrlController,
   discardWorkspace,
   ensureGitea,
   execWorkspace,
@@ -19,6 +21,7 @@ import {
   projectRepositoryWorkspaceUrl,
   purgeProject,
   removeProject,
+  reconcileExternalUrlRoutes,
   resolvePluginHome,
   restartWorkspace,
   runDoctor,
@@ -291,11 +294,42 @@ const plugin = program.command("plugin").description("Inspect installed DIM plug
 plugin.command("list").option("--json", "print machine-readable JSON").action(async (flags: JsonFlags) => {
   const home = await resolvePluginHome();
   const loaded = await loadInstalledPlugins(home);
-  print({
-    pluginHome: home,
-    plugins: loaded.manifest.plugins
-  }, flags);
+  try {
+    print({
+      pluginHome: home,
+      plugins: loaded.manifest.plugins,
+      externalRouteProviders: [...loaded.registered.externalRouteProviders.keys()],
+      externalUrlProviders: [...loaded.registered.externalUrlProviders.keys()]
+    }, flags);
+  } finally {
+    await loaded.registered.dispose();
+  }
 });
+
+const controller = program.command("controller").description("Run trusted DIM controller services");
+controller.command("serve")
+  .description("Serve the workspace external URL API")
+  .option("--host <host>", "listen address", process.env.DIM_CONTROLLER_HOST ?? "0.0.0.0")
+  .option("--port <port>", "listen port", process.env.DIM_CONTROLLER_PORT ?? "7070")
+  .action(async (flags: { host: string; port: string }) => {
+    const port = Number(flags.port);
+    if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
+      throw new UserError("--port must be between 1 and 65535");
+    }
+    const loaded = await loadInstalledPlugins(await resolvePluginHome());
+    if (loaded.registered.externalRouteProviders.size === 0 || loaded.registered.externalUrlProviders.size === 0) {
+      await loaded.registered.dispose();
+      throw new UserError("external URL controller requires at least one route provider and one URL provider");
+    }
+    await reconcileExternalUrlRoutes(lifecycleOptions(), loaded.registered);
+    const server = configuredExternalUrlController(lifecycleOptions(), loaded.registered);
+    server.listen(port, flags.host);
+    await once(server, "listening");
+    console.log(`DIM controller listening on http://${flags.host}:${port}`);
+    await Promise.race([once(process, "SIGINT"), once(process, "SIGTERM")]);
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    await loaded.registered.dispose();
+  });
 
 const admin = program.command("admin", { hidden: true }).description("Low-level service administration");
 const service = admin.command("service");
