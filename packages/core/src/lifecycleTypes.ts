@@ -34,14 +34,33 @@ export interface GiteaServiceRecord {
   error?: string;
 }
 
-export interface RepoRecord {
-  name: string;
+export type ProjectPhase = "creating" | "ready" | "error";
+export type ProjectRepositoryPhase = "creating" | "ready" | "error";
+
+export interface ProjectRepositoryRecord {
+  alias: string;
+  providerRepoId: string;
   owner: string;
-  cloneUrl: string;
-  sourcePath: string;
-  phase: "importing" | "ready" | "error";
+  hostUrl: string;
+  workspaceUrl: string;
+  phase: ProjectRepositoryPhase;
   protectedPatterns: string[];
-  registeredAt: string;
+  protectionPhase: "pending" | "applied";
+  createdAt: string;
+  updatedAt: string;
+  error?: string;
+}
+
+export interface ProjectRecord {
+  schemaVersion: 2;
+  id: string;
+  name: string;
+  gitNamespace: string;
+  phase: ProjectPhase;
+  rootRepositoryAlias?: string;
+  rootRef?: string;
+  repositories: ProjectRepositoryRecord[];
+  createdAt: string;
   updatedAt: string;
   error?: string;
 }
@@ -56,8 +75,12 @@ export interface WorkspaceSetupRecord {
 }
 
 export interface WorkspaceRecord {
+  schemaVersion: 2;
   name: string;
-  project: string;
+  projectId: string;
+  projectName: string;
+  rootRepositoryAlias: string;
+  rootRef: string;
   projectPath: string;
   phase: WorkspacePhase;
   profiles: string[];
@@ -70,6 +93,8 @@ export interface WorkspaceRecord {
   gitUserName: string;
   gitUserEmail: string;
   gitBaseUrl: string;
+  projectRepositories: Record<string, string>;
+  projectManifestPath: string;
   createdAt: string;
   updatedAt: string;
   lastSetup?: WorkspaceSetupRecord;

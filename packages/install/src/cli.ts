@@ -138,8 +138,8 @@ Options:
   --plugin-home PATH  Override DIM_PLUGIN_HOME for the plugin command
 
 Examples:
-  npx "@slop-lab/install-dim@0.1.0"
-  npx "@slop-lab/install-dim@0.1.0" cli
-  npx "@slop-lab/install-dim@0.1.0" cli --prefix "$HOME/.local"
-  npx "@slop-lab/install-dim@0.1.0" plugin "@dev-infra-manager/plugin-github@1.2.3"`);
+  npx "@slop-lab/install-dim@0.2.0"
+  npx "@slop-lab/install-dim@0.2.0" cli
+  npx "@slop-lab/install-dim@0.2.0" cli --prefix "$HOME/.local"
+  npx "@slop-lab/install-dim@0.2.0" plugin "@example/dim-plugin@1.2.3"`);
 }

@@ -5,7 +5,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$script_dir/lib/git-clone-source.sh"
 
 suffix="$PPID-$$"
-repo_name="dim-self-$suffix"
+project_name="dim-self-$suffix"
 workspace_name="dim-self-$suffix"
 state_root="$(mktemp -d /tmp/dim-self-state.XXXXXX)"
 source_root="$(mktemp -d /tmp/dim-self-source.XXXXXX)"
@@ -25,7 +25,7 @@ export DIM_WORKSPACE_BACKEND="${DIM_WORKSPACE_BACKEND:-runc}"
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    dim workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
+    dim discard "$workspace_name" --yes >/dev/null 2>&1 || true
   fi
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     local credentials admin_username admin_password
@@ -36,7 +36,7 @@ cleanup() {
       curl --fail --silent --show-error \
         --user "$admin_username:$admin_password" \
         --request DELETE \
-        "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/repos/$admin_username/$repo_name" \
+        "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs/dim-$project_name" \
         >/dev/null 2>&1 || true
     fi
   fi
@@ -49,15 +49,20 @@ dim_prepare_clone_source "$project_source" "$source_root/snapshot"
 project_source="$DIM_GIT_CLONE_SOURCE"
 
 git clone --bare "$project_source" "$source_root/project.git" >/dev/null
-dim repo register --name "$repo_name" "$source_root/project.git" >/dev/null
-dim workspace create "$repo_name" "$workspace_name" >/dev/null
+dim project create "$project_name" >/dev/null
+root_ref="$(git -C "$project_source" rev-parse --abbrev-ref HEAD)"
+dim repo create "$project_name" root --root --ref "$root_ref" >/dev/null
+repo_url="$(dim repo url-for-host "$project_name" root)"
+dim x git --git-dir "$source_root/project.git" push "$repo_url" --all >/dev/null
+dim repo protect "$project_name" root >/dev/null
+dim create "$project_name" "$workspace_name" >/dev/null
 
-dim workspace exec "$workspace_name" -- \
+dim exec "$workspace_name" -- \
   sh -c 'test -x .dim/setup.sh && test -x .dim/entrypoint.sh'
-dim workspace run "$workspace_name" check >/dev/null
-test "$(dim workspace run "$workspace_name" codex -- --version)" != ""
-dim workspace run "$workspace_name" verify >/dev/null
+dim run "$workspace_name" check >/dev/null
+test "$(dim run "$workspace_name" codex -- --version)" != ""
+dim run "$workspace_name" verify >/dev/null
 
-dim workspace discard "$workspace_name" --yes >/dev/null
+dim discard "$workspace_name" --yes >/dev/null
 
 echo "container-self-project-smoke-ok"

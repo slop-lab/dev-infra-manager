@@ -78,7 +78,6 @@ verify:
 _verify-container-runc-base:
     just verify
     bash scripts/plugin-install-smoke.sh
-    pnpm run cli -- config validate --config config.example.json
     bash scripts/container-cgroup-smoke.sh
 
 # Requires Docker, Compose v2, and privileged runc containers; does not require Sysbox or KVM.
@@ -88,9 +87,9 @@ verify-container-runc:
     just _verify-container-runc-base
     just build-project-workspace
     bash scripts/container-inner-docker-smoke.sh
-    bash scripts/container-lifecycle-smoke.sh
-    bash scripts/container-packed-project-smoke.sh
-    bash scripts/container-self-project-smoke.sh
+    DIM_WORKSPACE_BACKEND=runc bash scripts/container-lifecycle-smoke.sh
+    DIM_WORKSPACE_BACKEND=runc bash scripts/container-packed-project-smoke.sh
+    DIM_WORKSPACE_BACKEND=runc bash scripts/container-self-project-smoke.sh
 
 # Build and link the dim CLI for use from other local projects.
 install-dim-local:
@@ -104,9 +103,6 @@ isolation-check-json:
 
 doctor:
     pnpm run cli -- doctor
-
-sample-config:
-    pnpm run cli -- init-config --output dev-infra.config.json
 
 build-project-workspace:
     docker build --force-rm --build-arg "AGENT_UID=$(id -u)" --build-arg "AGENT_GID=$(id -g)" -t dev-infra-project-workspace:latest images/project-workspace

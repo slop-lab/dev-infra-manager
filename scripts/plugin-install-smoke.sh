@@ -27,12 +27,7 @@ printf '%s\n' \
   'export default {' \
   '  name: "@example/dim-plugin-smoke",' \
   '  apiVersion: 1,' \
-  '  register(host) {' \
-  '    host.registerRepositoryProvider({' \
-  '      kind: "smoke-mirror",' \
-  '      async register() { throw new Error("not used by smoke"); }' \
-  '    });' \
-  '  }' \
+  '  register() {}' \
   '};' \
   > "$plugin_source/index.js"
 
@@ -47,8 +42,7 @@ DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/install-dim"
   >/dev/null
 
 test "$(jq -r .pluginHome "$config_path")" = "$plugin_home"
-result="$(DIM_CONFIG_PATH="$config_path" node packages/dim-cli/dist/cli.js plugin list)"
+result="$(DIM_CONFIG_PATH="$config_path" node packages/dim-cli/dist/cli.js --json plugin list)"
 test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smoke"
-test "$(printf '%s' "$result" | jq -r '.repositoryProviders[0]')" = "smoke-mirror"
 
 echo "plugin-install-smoke-ok"

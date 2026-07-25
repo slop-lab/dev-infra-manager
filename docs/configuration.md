@@ -1,23 +1,29 @@
 # Configuration
 
-Persistent workspace lifecycle settings use `DIM_*` environment variables and
-workspace metadata. Runtime backend selection is documented in
-[Runtime Backends](runtime-backends.md).
+DIM 0.2 uses `DIM_*` environment variables and schema-versioned state under
+`DIM_STATE_ROOT`. There is no generated JSON configuration file.
 
-`dev-infra.config.json` remains for the legacy bare-Git review controller and
-secret-runtime deployment boundary. It contains:
+Common settings:
 
-- `stateRoot`: controller and review metadata directory.
-- `managedGitHost`: bare Git remote and protected refs.
-- `secretRuntime`: approved ref, build context, image, container, env file,
-  and published ports.
-
-It does not configure workspace runtime, resource profiles, timeouts, job
-storage, or disk quotas.
-
-Generate an example:
-
-```bash
-dim init-config --output dev-infra.config.json
-dim config validate --config dev-infra.config.json
+```text
+DIM_STATE_ROOT
+DIM_GITEA_IMAGE
+DIM_GITEA_PORT
+DIM_GITEA_ADMIN_USERNAME
+DIM_GITEA_ADMIN_PASSWORD
+DIM_GIT_USERNAME
+DIM_GIT_TOKEN
+DIM_WORKSPACE_BACKEND
+DIM_WORKSPACE_IMAGE
+DIM_WORKSPACE_RUNTIME
+DIM_WORKSPACE_PRIVILEGED
+DIM_WORKSPACE_CPUS
+DIM_WORKSPACE_MEMORY
+DIM_WORKSPACE_PIDS
 ```
+
+Runtime backend selection is documented in
+[Runtime Backends](runtime-backends.md). Project and workspace settings are
+persisted by their lifecycle commands rather than copied into a global config.
+
+DIM 0.2 rejects 0.1 state and does not perform an automatic migration.

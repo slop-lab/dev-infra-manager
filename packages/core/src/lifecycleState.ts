@@ -1,7 +1,7 @@
 import { mkdir, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "./errors.js";
-import type { GiteaServiceRecord, RepoRecord, WorkspaceRecord } from "./lifecycleTypes.js";
+import type { GiteaServiceRecord, ProjectRecord, WorkspaceRecord } from "./lifecycleTypes.js";
 
 export function validateLifecycleName(value: string, kind: string): string {
   if (!/^[a-z0-9][a-z0-9_.-]{0,47}$/.test(value)) {
@@ -13,8 +13,8 @@ export function validateLifecycleName(value: string, kind: string): string {
 export class LifecycleState {
   constructor(readonly root: string) {}
 
-  repoPath(name: string): string {
-    return path.join(this.root, "repos", `${validateLifecycleName(name, "repo")}.json`);
+  projectPath(name: string): string {
+    return path.join(this.root, "projects", `${validateLifecycleName(name, "project")}.json`);
   }
 
   workspacePath(name: string): string {
@@ -68,11 +68,12 @@ export class LifecycleState {
   }
 
   async readWorkspace(name: string): Promise<WorkspaceRecord> {
-    const raw = await readJson<WorkspaceRecord & { repo?: string }>(
+    const raw = await readJson<WorkspaceRecord>(
       this.workspacePath(name),
       `workspace '${name}' not found`
     );
-    return normalizeWorkspaceRecord(raw);
+    assertSchemaVersion(raw, "workspace", name);
+    return raw;
   }
 
   async removeWorkspace(name: string): Promise<void> {
@@ -87,8 +88,12 @@ export class LifecycleState {
     return acquireLock(this.root, `workspace-${validateLifecycleName(name, "workspace")}-setup`, `workspace '${name}' setup`);
   }
 
-  async claimRepo(record: RepoRecord): Promise<void> {
-    const target = this.repoPath(record.name);
+  async listWorkspaces(): Promise<WorkspaceRecord[]> {
+    return listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace");
+  }
+
+  async claimProject(record: ProjectRecord): Promise<void> {
+    const target = this.projectPath(record.name);
     await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
     try {
       const handle = await open(target, "wx", 0o600);
@@ -96,52 +101,33 @@ export class LifecycleState {
       await handle.close();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-        throw new UserError(`repo '${record.name}' is already registered`);
+        throw new UserError(`project '${record.name}' already exists`);
       }
       throw error;
     }
   }
 
-  async writeRepo(record: RepoRecord): Promise<void> {
-    await atomicWrite(this.repoPath(record.name), record);
+  async writeProject(record: ProjectRecord): Promise<void> {
+    await atomicWrite(this.projectPath(record.name), record);
   }
 
-  async readRepo(name: string): Promise<RepoRecord> {
-    return readJson(this.repoPath(name), `repo '${name}' is not registered`);
+  async readProject(name: string): Promise<ProjectRecord> {
+    const record = await readJson<ProjectRecord>(this.projectPath(name), `project '${name}' not found`);
+    assertSchemaVersion(record, "project", name);
+    return record;
   }
 
-  async listRepos(): Promise<RepoRecord[]> {
-    const directory = path.join(this.root, "repos");
-    let entries: string[];
-    try {
-      entries = await readdir(directory);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw error;
-    }
-    const records = await Promise.all(entries.filter((entry) => entry.endsWith(".json")).map((entry) =>
-      readJson<RepoRecord>(path.join(directory, entry), `invalid repo record: ${entry}`)
-    ));
-    return records.sort((left, right) => left.name.localeCompare(right.name));
+  async listProjects(): Promise<ProjectRecord[]> {
+    return listRecords<ProjectRecord>(path.join(this.root, "projects"), "project");
   }
-}
 
-function normalizeWorkspaceRecord(raw: WorkspaceRecord & { repo?: string }): WorkspaceRecord {
-  const project = raw.project ?? raw.repo;
-  if (!project) throw new UserError(`workspace '${raw.name}' has no project`);
-  const legacy = raw.project === undefined;
-  const { repo: _legacyRepo, ...record } = raw;
-  return {
-    ...record,
-    project,
-    projectPath: raw.projectPath ?? (legacy ? `/workspace/repos/${project}` : "/workspace/project"),
-    profiles: raw.profiles ?? [],
-    composeProjectName: raw.composeProjectName ?? `dim-${raw.name}`,
-    runtimeBackend: raw.runtimeBackend ?? "sysbox",
-    gitUserName: raw.gitUserName ?? `dim/${raw.name}`,
-    gitUserEmail: raw.gitUserEmail ?? `${raw.name}@dim.invalid`,
-    gitBaseUrl: raw.gitBaseUrl ?? "http://dim-gitea:3000"
-  };
+  async removeProject(name: string): Promise<void> {
+    await rm(this.projectPath(name), { force: true });
+  }
+
+  async acquireProjectLock(name: string): Promise<() => Promise<void>> {
+    return acquireLock(this.root, `project-${validateLifecycleName(name, "project")}`, `project '${name}' reconciliation`);
+  }
 }
 
 async function acquireLock(root: string, name: string, description: string): Promise<() => Promise<void>> {
@@ -182,6 +168,33 @@ async function readJson<T>(target: string, missingMessage: string): Promise<T> {
       throw new UserError(missingMessage);
     }
     throw error;
+  }
+}
+
+async function listRecords<T extends { schemaVersion: number; name: string }>(
+  directory: string,
+  kind: string
+): Promise<T[]> {
+  let entries: string[];
+  try {
+    entries = await readdir(directory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+  const records = await Promise.all(entries.filter((entry) => entry.endsWith(".json")).map(async (entry) => {
+    const record = await readJson<T>(path.join(directory, entry), `invalid ${kind} record: ${entry}`);
+    assertSchemaVersion(record, kind, record.name);
+    return record;
+  }));
+  return records.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function assertSchemaVersion(record: { schemaVersion?: number }, kind: string, name: string): void {
+  if (record.schemaVersion !== 2) {
+    throw new UserError(
+      `${kind} '${name}' uses unsupported 0.1 state; DIM 0.2 does not migrate existing state`
+    );
   }
 }
 

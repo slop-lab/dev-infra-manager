@@ -1,246 +1,110 @@
 # CLI Contract
 
-## Scope
+## Common behavior
 
-This specification defines stable CLI commands, flags, outputs, and exit behavior.
+- The package exposes `dim`.
+- `--help` is hierarchical; `dim help --all` also shows administrative commands.
+- User errors and invalid CLI input exit with code `2`; unexpected errors exit
+  with code `1`.
+- Record commands print a human-readable summary by default and JSON with
+  `--json`.
+- URL commands print exactly one URL on stdout.
+- DIM 0.2 rejects 0.1 project/workspace state and does not migrate it.
 
-The package exposes:
-
-- `dim`
-
-Both point to `dist/cli.js` after build.
-
-## Common Behavior
-
-- `--help` or `-h` prints help and exits successfully.
-- Unknown commands fail with user-facing error and exit code `2`.
-- `UserError` failures exit with code `2`.
-- Unexpected errors exit with code `1`.
-- Boolean flags accept bare flags as true.
-- Boolean string values true are `true`, `1`, and `yes`; other strings are false.
-
-## Commands
-
-### `init-config`
-
-Usage:
+## Projects
 
 ```bash
-dim init-config [--output dev-infra.config.json]
+dim project create PROJECT
+dim project list
+dim project show PROJECT
+dim project remove PROJECT
+dim project purge PROJECT --yes
 ```
 
-Writes the default config JSON to the output path, creating parent directories.
+`create` atomically claims Project metadata and reconciles the reserved
+`dim-PROJECT` organization in the managed Gitea service. A Project may be
+assembled without a root, but it is not runnable until it has exactly one root
+repository and root ref.
 
-### `doctor`
+`remove` removes only DIM Project metadata. It preserves the managed Git
+organization and repositories and refuses while a workspace references the
+Project. `purge` has the same reference check and permanently deletes the
+DIM-managed Git organization and repositories after explicit confirmation.
 
-Usage:
+## Repositories
 
 ```bash
-dim doctor [--backend sysbox|gvisor|rootless-podman|runc]
+dim repo create PROJECT ALIAS [--root] [--ref main] [--protect main,release/*]
+dim repo import PROJECT ALIAS SOURCE [--root] [--ref main] [--protect PATTERNS]
+dim repo protect PROJECT ALIAS
+dim repo list PROJECT
+dim repo show PROJECT ALIAS
+dim repo url-for-host PROJECT ALIAS
+dim repo url-for-workspace PROJECT ALIAS
 ```
 
-Prints tab-separated lines:
+Every repository belongs to one Project namespace. `create` makes an empty
+repository and leaves configured protection pending so an initial standard Git
+push can populate it. `protect` applies protection after that push. Workspace
+creation also applies pending protection to the root repository.
 
-```text
-<ok|fail>\t<check name>\t<detail>
-```
+`import` is a convenience wrapper over `git clone --mirror`, repository
+creation, `git push --mirror`, and protection. Existing local Git
+authentication is used for the source URL.
 
-Exits with code `1` if any check fails.
-Without `--backend`, uses `DIM_WORKSPACE_BACKEND` or `sysbox`.
+Host and workspace URLs never contain credentials.
 
-### `config validate`
-
-Usage:
+## Workspaces
 
 ```bash
-dim config validate [--config dev-infra.config.json]
-```
-
-Prints a JSON summary containing:
-
-- `ok`
-- `configPath`
-- `stateRoot`
-- `managedGitHostKind`
-- `managedGitHostProtectedRefs`
-- `secretRuntimeRepo`
-- `secretRuntimeApprovedRef`
-
-### `git-host init`
-
-Creates managed Git host state directories.
-
-### `git-host create-repo`
-
-Usage:
-
-```bash
-dim git-host create-repo --repo NAME [--config dev-infra.config.json]
-```
-
-Creates a bare repository, installs hooks, and prints the repository path.
-
-### `git-host install-hooks`
-
-Reinstalls managed hooks for an existing bare repository and prints the hook path.
-
-### `pr create`
-
-Creates a pull request record and prints JSON.
-Required flags: `--repo`, `--source`, `--title`.
-`--target` defaults to `refs/heads/main`.
-`--body` defaults to empty string.
-
-### `pr list`
-
-Prints pull request records as JSON array.
-
-### `pr show`
-
-Prints one pull request record as JSON.
-
-### `pr approve`
-
-Adds an approval and prints the updated pull request record.
-
-### `pr merge`
-
-Fast-forward merges an approved pull request and prints the updated pull request record.
-
-### `secret deploy`
-
-Usage:
-
-```bash
-dim secret deploy [--config dev-infra.config.json] [--dry-run]
-```
-
-Deploys the secret runtime from the approved ref.
-
-### `controller run`
-
-Usage:
-
-```bash
-dim controller run [--config dev-infra.config.json] [--once] [--interval-seconds 30] [--dry-run]
-```
-
-Runs controller ticks once or continuously.
-
-### `repo register`
-
-Usage:
-
-```bash
-dim repo register --name NAME [--protect main,release/*] /path/to/bare.git
-```
-
-Registers and imports an existing bare repository into the managed local
-Gitea service. The source path is not retained as a runtime mount.
-
-### `repo list` and `repo show`
-
-Usage:
-
-```bash
-dim repo list
-dim repo show NAME
-```
-
-Print role-neutral repository registry records as JSON.
-
-### `plugin list`
-
-Usage:
-
-```bash
-dim plugin list
-```
-
-Print the enabled plugins and registered provider kinds as JSON.
-
-### `project init`
-
-Usage:
-
-```bash
-dim project init [--force]
-```
-
-Creates the starter `.dim/docker-compose.yml` in the invocation directory.
-Existing files require `--force`.
-
-### `workspace create`
-
-Usage:
-
-```bash
-dim workspace create PROJECT WORKSPACE \
+dim create PROJECT WORKSPACE \
   [--backend sysbox|gvisor|rootless-podman|runc] \
-  [--profile PROFILE ...] \
-  [--git-user-name NAME] [--git-user-email EMAIL]
+  [--profile PROFILE ...]
+
+dim ls
+dim show WORKSPACE
+dim exec WORKSPACE -- COMMAND [ARGS...]
+dim run WORKSPACE TASK [ARGS...]
+dim setup WORKSPACE
+dim update WORKSPACE [--profile PROFILE ... | --clear-profiles]
+dim start WORKSPACE
+dim restart WORKSPACE
+dim stop WORKSPACE
+dim discard WORKSPACE --yes
 ```
 
-Claims and reconciles a persistent workspace, clones the registered project
-repository inside it, persists the runtime backend and Compose capability
-profiles, and invokes the project `.dim` setup contract.
+`create` clones the Project root repository/ref at `/workspace/project` and
+runs its `.dim` setup contract. DIM directly manages no other checkout; the
+root repository lifecycle owns additional clones and nested services.
 
-### `workspace run` and `workspace exec`
+Running workspaces do not change when Project metadata or the root remote
+changes. `start` applies the configured root ref to a stopped workspace before
+setup. `restart` stops a running workspace and performs the same start,
+fast-forward, and setup sequence. Dirty root checkouts and non-fast-forward
+updates are rejected without reset.
 
-Usage:
+`run` dispatches through `.dim/entrypoint.sh` when present. `exec` always
+bypasses it. `discard` requires `--yes`, attempts project teardown, and removes
+the top-level container, inner-engine volume, and workspace state.
+
+## Git integration
 
 ```bash
-dim workspace run WORKSPACE TASK [-- ARGS...]
-dim workspace exec WORKSPACE -- COMMAND [ARGS...]
+dim x git ARGS...
 ```
 
-`run` dispatches through `.dim/entrypoint.sh` when present and otherwise
-executes the task directly. `exec` always bypasses project hooks. Neither
-command invokes setup.
+Runs the local Git CLI with managed Gitea credentials supplied through
+environment and a one-command credential helper. It does not put credentials
+in argv or repository URLs. Existing Git credential helpers and SSH agents
+remain valid alternatives.
 
-### `workspace setup`, `update`, and `start`
-
-Usage:
+## Diagnostics and administration
 
 ```bash
-dim workspace setup WORKSPACE
-dim workspace update WORKSPACE [--profile PROFILE ... | --clear-profiles]
-dim workspace start WORKSPACE
+dim doctor [--backend BACKEND]
+dim plugin list
+dim admin service ensure
+dim admin service credentials --show-secrets
 ```
 
-`setup` retries project environment reconciliation without updating Git.
-`update` performs a clean fast-forward-only project pull and then setup.
-`start` reconciles a stopped workspace and then setup without pulling Git.
-
-### `workspace show`, `stop`, and `discard`
-
-Usage:
-
-```bash
-dim workspace show WORKSPACE
-dim workspace stop WORKSPACE
-dim workspace discard WORKSPACE --yes
-```
-
-`discard` requires confirmation, runs project teardown when available, and
-removes the workspace container, its inner-Docker volume, and metadata without
-deleting registered repositories.
-
-### `gitea ensure` and `gitea credentials`
-
-Usage:
-
-```bash
-dim gitea ensure
-dim gitea credentials --show-secrets
-```
-
-Credential output requires an explicit secret-disclosure flag.
-
-## Verification
-
-Required verification:
-
-- Unit tests for command helpers where behavior is non-trivial.
-- CLI smoke coverage through `scripts/smoke.sh`.
-- Manual or scripted checks for `doctor --backend` on available backends.
+Administrative commands are omitted from the default root help.

@@ -36,7 +36,6 @@ The system must prevent that agent from:
 - `directory` storage does not enforce `diskBytes` and must be treated as a compatibility backend.
 - `doctor --backend` must check the selected workspace runtime backend.
 - Workspaces persist until explicitly discarded.
-- The controller is trusted because it controls secret-bearing deployment.
 
 ## Non-Goals
 

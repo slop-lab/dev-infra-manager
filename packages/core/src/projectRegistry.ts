@@ -1,0 +1,455 @@
+import { randomUUID } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { UserError } from "./errors.js";
+import {
+  ensureGitea,
+  giteaHostCloneUrl,
+  giteaInternalCloneUrl,
+  giteaRequest
+} from "./gitea.js";
+import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
+import type {
+  GiteaCredentials,
+  LifecycleOptions,
+  ProjectRecord,
+  ProjectRepositoryRecord
+} from "./lifecycleTypes.js";
+import type { CommandRunner } from "./types.js";
+
+export interface CreateRepositoryInput {
+  project: string;
+  alias: string;
+  protectedPatterns: string[];
+  root: boolean;
+  rootRef?: string;
+}
+
+export async function createProject(
+  runner: CommandRunner,
+  options: LifecycleOptions,
+  nameInput: string
+): Promise<ProjectRecord> {
+  const name = validateLifecycleName(nameInput, "project");
+  const state = new LifecycleState(options.stateRoot);
+  const now = new Date().toISOString();
+  let record: ProjectRecord = {
+    schemaVersion: 2,
+    id: randomUUID(),
+    name,
+    gitNamespace: projectNamespace(name),
+    phase: "creating",
+    repositories: [],
+    createdAt: now,
+    updatedAt: now
+  };
+  try {
+    const existing = await state.readProject(name);
+    if (existing.phase === "ready") throw new UserError(`project '${name}' already exists`);
+    record = { ...existing, phase: "creating", updatedAt: now };
+    delete record.error;
+    await state.writeProject(record);
+  } catch (error) {
+    if (!(error instanceof UserError) || !error.message.includes("not found")) throw error;
+    await state.claimProject(record);
+  }
+  const release = await state.acquireProjectLock(name);
+  try {
+    const credentials = await ensureGitea(runner, options);
+    await ensureOrganization(options, credentials, record.gitNamespace);
+    record = { ...record, phase: "ready", updatedAt: new Date().toISOString() };
+    await state.writeProject(record);
+    return record;
+  } catch (error) {
+    record = withProjectError(record, error);
+    await state.writeProject(record);
+    throw error;
+  } finally {
+    await release();
+  }
+}
+
+export async function listProjects(options: LifecycleOptions): Promise<ProjectRecord[]> {
+  return new LifecycleState(options.stateRoot).listProjects();
+}
+
+export async function showProject(options: LifecycleOptions, name: string): Promise<ProjectRecord> {
+  return new LifecycleState(options.stateRoot).readProject(validateLifecycleName(name, "project"));
+}
+
+export async function removeProject(options: LifecycleOptions, nameInput: string): Promise<void> {
+  const name = validateLifecycleName(nameInput, "project");
+  const state = new LifecycleState(options.stateRoot);
+  const release = await state.acquireProjectLock(name);
+  try {
+    await state.readProject(name);
+    await assertProjectUnused(state, name);
+    await state.removeProject(name);
+  } finally {
+    await release();
+  }
+}
+
+export async function purgeProject(
+  runner: CommandRunner,
+  options: LifecycleOptions,
+  nameInput: string
+): Promise<void> {
+  const name = validateLifecycleName(nameInput, "project");
+  const state = new LifecycleState(options.stateRoot);
+  const release = await state.acquireProjectLock(name);
+  try {
+    const project = await state.readProject(name);
+    await assertProjectUnused(state, name);
+    const credentials = await ensureGitea(runner, options);
+    for (const repo of project.repositories) {
+      const deleted = await giteaRequest(
+        options,
+        credentials,
+        "DELETE",
+        `/repos/${project.gitNamespace}/${repo.alias}`
+      );
+      if (!deleted.ok && deleted.status !== 404) {
+        throw await apiError(`delete Gitea repo '${project.gitNamespace}/${repo.alias}'`, deleted);
+      }
+    }
+    const response = await giteaRequest(options, credentials, "DELETE", `/orgs/${project.gitNamespace}`);
+    if (!response.ok && response.status !== 404) {
+      throw await apiError(`delete Gitea organization '${project.gitNamespace}'`, response);
+    }
+    await state.removeProject(name);
+  } finally {
+    await release();
+  }
+}
+
+export async function createProjectRepository(
+  runner: CommandRunner,
+  options: LifecycleOptions,
+  input: CreateRepositoryInput
+): Promise<ProjectRepositoryRecord> {
+  const projectName = validateLifecycleName(input.project, "project");
+  const alias = validateLifecycleName(input.alias, "repo alias");
+  const state = new LifecycleState(options.stateRoot);
+  const release = await state.acquireProjectLock(projectName);
+  let project = await state.readProject(projectName);
+  try {
+    assertReadyProject(project);
+    const existingRepo = project.repositories.find((repo) => repo.alias === alias);
+    if (existingRepo?.phase === "ready") throw new UserError(`repo '${projectName}/${alias}' already exists`);
+    const environmentName = repositoryEnvironmentName(alias);
+    const collision = project.repositories.find((repo) =>
+      repo.alias !== alias && repositoryEnvironmentName(repo.alias) === environmentName
+    );
+    if (collision) {
+      throw new UserError(
+        `repo aliases '${collision.alias}' and '${alias}' both map to DIM_REPO_${environmentName}`
+      );
+    }
+    if (input.root && project.rootRepositoryAlias !== undefined && project.rootRepositoryAlias !== alias) {
+      throw new UserError(`project '${projectName}' already has root repo '${project.rootRepositoryAlias}'`);
+    }
+    const now = new Date().toISOString();
+    let repo: ProjectRepositoryRecord = existingRepo === undefined
+      ? {
+          alias,
+          providerRepoId: `${project.gitNamespace}/${alias}`,
+          owner: project.gitNamespace,
+          hostUrl: giteaHostCloneUrl(options, project.gitNamespace, alias),
+          workspaceUrl: giteaInternalCloneUrl(project.gitNamespace, alias),
+          phase: "creating",
+          protectedPatterns: input.protectedPatterns,
+          protectionPhase: "pending",
+          createdAt: now,
+          updatedAt: now
+        }
+      : {
+          ...existingRepo,
+          phase: "creating",
+          updatedAt: now,
+          protectedPatterns: input.protectedPatterns
+        };
+    delete repo.error;
+    project = {
+      ...project,
+      ...(input.root
+        ? {
+            rootRepositoryAlias: alias,
+            rootRef: normalizeRootRef(input.rootRef ?? "main")
+          }
+        : {}),
+      repositories: existingRepo === undefined
+        ? [...project.repositories, repo]
+        : project.repositories.map((candidate) => candidate.alias === alias ? repo : candidate),
+      updatedAt: now
+    };
+    await state.writeProject(project);
+
+    try {
+      const credentials = await ensureGitea(runner, options);
+      await createGiteaRepository(options, credentials, project.gitNamespace, alias);
+      await grantWriter(options, credentials, project.gitNamespace, alias);
+      repo = { ...repo, phase: "ready", updatedAt: new Date().toISOString() };
+      project = replaceRepository(project, repo);
+      await state.writeProject(project);
+      return repo;
+    } catch (error) {
+      repo = {
+        ...repo,
+        phase: "error",
+        updatedAt: new Date().toISOString(),
+        error: error instanceof Error ? error.message : String(error)
+      };
+      await state.writeProject(replaceRepository(project, repo));
+      throw error;
+    }
+  } finally {
+    await release();
+  }
+}
+
+export async function importProjectRepository(
+  runner: CommandRunner,
+  options: LifecycleOptions,
+  input: CreateRepositoryInput & { source: string }
+): Promise<ProjectRepositoryRecord> {
+  const repo = await createProjectRepository(runner, options, input);
+  const temporary = await mkdtemp(join(tmpdir(), "dim-repo-import-"));
+  try {
+    const clone = await runner.run("git", ["clone", "--mirror", input.source, join(temporary, "source.git")]);
+    if (clone.exitCode !== 0) throw commandError(`clone '${input.source}'`, clone);
+    const credentials = await ensureGitea(runner, options);
+    const push = await runner.run(
+      "git",
+      ["--git-dir", join(temporary, "source.git"), "push", "--mirror", repo.hostUrl],
+      { env: gitCredentialEnvironment(credentials) }
+    );
+    if (push.exitCode !== 0) throw commandError(`push '${input.project}/${input.alias}'`, push);
+    return applyProjectRepositoryProtection(runner, options, input.project, input.alias);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+export async function listProjectRepositories(
+  options: LifecycleOptions,
+  project: string
+): Promise<ProjectRepositoryRecord[]> {
+  return (await showProject(options, project)).repositories
+    .slice()
+    .sort((left, right) => left.alias.localeCompare(right.alias));
+}
+
+export async function showProjectRepository(
+  options: LifecycleOptions,
+  projectName: string,
+  aliasInput: string
+): Promise<ProjectRepositoryRecord> {
+  const project = await showProject(options, projectName);
+  const alias = validateLifecycleName(aliasInput, "repo alias");
+  const repo = project.repositories.find((candidate) => candidate.alias === alias);
+  if (!repo) throw new UserError(`repo '${project.name}/${alias}' not found`);
+  return repo;
+}
+
+export async function projectRepositoryHostUrl(
+  options: LifecycleOptions,
+  project: string,
+  alias: string
+): Promise<string> {
+  return (await showProjectRepository(options, project, alias)).hostUrl;
+}
+
+export async function projectRepositoryWorkspaceUrl(
+  options: LifecycleOptions,
+  project: string,
+  alias: string
+): Promise<string> {
+  return (await showProjectRepository(options, project, alias)).workspaceUrl;
+}
+
+export async function applyProjectRepositoryProtection(
+  runner: CommandRunner,
+  options: LifecycleOptions,
+  projectNameInput: string,
+  aliasInput: string
+): Promise<ProjectRepositoryRecord> {
+  const projectName = validateLifecycleName(projectNameInput, "project");
+  const alias = validateLifecycleName(aliasInput, "repo alias");
+  const state = new LifecycleState(options.stateRoot);
+  const release = await state.acquireProjectLock(projectName);
+  try {
+    let project = await state.readProject(projectName);
+    let repo = project.repositories.find((candidate) => candidate.alias === alias);
+    if (!repo) throw new UserError(`repo '${projectName}/${alias}' not found`);
+    if (repo.phase !== "ready") throw new UserError(`repo '${projectName}/${alias}' is not ready`);
+    if (repo.protectionPhase === "applied") return repo;
+    const credentials = await ensureGitea(runner, options);
+    for (const pattern of repo.protectedPatterns) {
+      await protectBranch(options, credentials, project.gitNamespace, alias, pattern);
+    }
+    repo = { ...repo, protectionPhase: "applied", updatedAt: new Date().toISOString() };
+    project = replaceRepository(project, repo);
+    await state.writeProject(project);
+    return repo;
+  } finally {
+    await release();
+  }
+}
+
+export function projectNamespace(name: string): string {
+  return `dim-${validateLifecycleName(name, "project")}`;
+}
+
+export function normalizeRootRef(value: string): string {
+  const ref = value.startsWith("refs/") ? value : `refs/heads/${value}`;
+  if (!/^refs\/heads\/[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(ref) || ref.includes("..") || ref.endsWith("/")) {
+    throw new UserError(`root ref '${value}' is invalid`);
+  }
+  return ref;
+}
+
+function assertReadyProject(project: ProjectRecord): void {
+  if (project.phase !== "ready") {
+    throw new UserError(`project '${project.name}' is not ready (phase: ${project.phase})`);
+  }
+}
+
+async function ensureOrganization(
+  options: LifecycleOptions,
+  credentials: GiteaCredentials,
+  organization: string
+): Promise<void> {
+  const response = await giteaRequest(options, credentials, "POST", "/orgs", {
+    username: organization,
+    full_name: organization,
+    visibility: "public"
+  });
+  if (response.ok) return;
+  if (response.status === 422) {
+    const existing = await giteaRequest(options, credentials, "GET", `/orgs/${organization}`);
+    if (existing.ok) return;
+  }
+  throw await apiError(`create Gitea organization '${organization}'`, response);
+}
+
+async function createGiteaRepository(
+  options: LifecycleOptions,
+  credentials: GiteaCredentials,
+  organization: string,
+  alias: string
+): Promise<void> {
+  const response = await giteaRequest(options, credentials, "POST", `/orgs/${organization}/repos`, {
+    name: alias,
+    private: false,
+    auto_init: false
+  });
+  if (response.ok) return;
+  if (response.status === 409 || response.status === 422) {
+    const existing = await giteaRequest(options, credentials, "GET", `/repos/${organization}/${alias}`);
+    if (existing.ok) return;
+  }
+  throw await apiError(`create repo '${organization}/${alias}'`, response);
+}
+
+async function grantWriter(
+  options: LifecycleOptions,
+  credentials: GiteaCredentials,
+  organization: string,
+  alias: string
+): Promise<void> {
+  const response = await giteaRequest(
+    options,
+    credentials,
+    "PUT",
+    `/repos/${organization}/${alias}/collaborators/${credentials.writerUsername}`,
+    { permission: "write" }
+  );
+  if (!response.ok && response.status !== 204) {
+    throw await apiError(`grant writer access to '${organization}/${alias}'`, response);
+  }
+}
+
+async function protectBranch(
+  options: LifecycleOptions,
+  credentials: GiteaCredentials,
+  organization: string,
+  alias: string,
+  pattern: string
+): Promise<void> {
+  const response = await giteaRequest(
+    options,
+    credentials,
+    "POST",
+    `/repos/${organization}/${alias}/branch_protections`,
+    {
+      branch_name: pattern,
+      enable_push: false,
+      enable_merge_whitelist: true,
+      merge_whitelist_usernames: [credentials.adminUsername],
+      required_approvals: 1,
+      block_on_rejected_reviews: true,
+      dismiss_stale_approvals: true
+    }
+  );
+  if (!response.ok && response.status !== 409 && response.status !== 422) {
+    throw await apiError(`protect branch pattern '${pattern}'`, response);
+  }
+}
+
+function replaceRepository(
+  project: ProjectRecord,
+  repo: ProjectRepositoryRecord
+): ProjectRecord {
+  return {
+    ...project,
+    repositories: project.repositories.map((candidate) => candidate.alias === repo.alias ? repo : candidate),
+    updatedAt: repo.updatedAt
+  };
+}
+
+function withProjectError(project: ProjectRecord, error: unknown): ProjectRecord {
+  return {
+    ...project,
+    phase: "error",
+    updatedAt: new Date().toISOString(),
+    error: error instanceof Error ? error.message : String(error)
+  };
+}
+
+function gitCredentialEnvironment(credentials: GiteaCredentials): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    DIM_GIT_USERNAME: credentials.adminUsername,
+    DIM_GIT_TOKEN: credentials.adminPassword,
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "credential.helper",
+    GIT_CONFIG_VALUE_0: "!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f"
+  };
+}
+
+async function apiError(action: string, response: Response): Promise<UserError> {
+  return new UserError(`failed to ${action}: Gitea API ${response.status}: ${(await response.text()).trim()}`);
+}
+
+function commandError(
+  action: string,
+  result: { stdout: string; stderr: string }
+): UserError {
+  return new UserError(`failed to ${action}: ${(result.stderr || result.stdout).trim()}`);
+}
+
+function repositoryEnvironmentName(alias: string): string {
+  return alias.toUpperCase().replace(/[^A-Z0-9]/g, "_");
+}
+
+async function assertProjectUnused(state: LifecycleState, name: string): Promise<void> {
+  const references = (await state.listWorkspaces()).filter((workspace) => workspace.projectName === name);
+  if (references.length > 0) {
+    throw new UserError(
+      `project '${name}' is used by workspace${references.length === 1 ? "" : "s"} ${references.map((item) => `'${item.name}'`).join(", ")}`
+    );
+  }
+}

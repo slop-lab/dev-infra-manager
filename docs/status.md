@@ -1,12 +1,14 @@
 # Status
 
-DIM 0.1.0 is a release candidate centered on named, persistent project
+DIM 0.2.0 is a breaking Project-aware release centered on named, persistent
 workspaces.
 
 Implemented:
 
-- Managed local Gitea repository registration and protected branches.
-- Persistent workspace create, run, exec, setup, update, start, stop, show,
+- Project metadata with exactly one root repository per runnable Project.
+- Managed local Gitea repositories, imports through the host `git` CLI, and
+  protected branches.
+- Persistent create, run, exec, setup, update, start, stop, show,
   and discard lifecycle.
 - Backend selection persisted per workspace: Sysbox, gVisor, rootless Podman,
   and privileged runc.
@@ -14,7 +16,8 @@ Implemented:
 - Nested Docker or Podman storage isolated in a labeled volume.
 - Optional `.dim` setup, task entrypoint, teardown, and Compose contract.
 - Plugin installation and persisted plugin discovery configuration.
-- Review-gated secret-runtime deployment controller.
+- Root-ref refresh on workspace start/restart without live mutation of running
+  workspaces.
 - TypeScript unit tests and nested-container lifecycle smoke tests.
 
 DIM does not currently provide an independent `job` lifecycle, automatic

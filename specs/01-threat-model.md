@@ -68,4 +68,4 @@ These are outside this repository's direct scope:
 - DIM does not currently enforce per-workspace disk quotas.
 - A vulnerable selected runtime backend can break the intended boundary.
 - Secret-bearing code review quality depends on human reviewers and project process.
-- The managed PR layer is local and minimal; it is not a full GitHub replacement.
+- Review and merge semantics depend on the managed Git host and its protected branches.

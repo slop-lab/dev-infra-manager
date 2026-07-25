@@ -68,21 +68,23 @@ The deployment flow is:
 
 1. An agent creates or modifies code in an untrusted workspace.
 2. The agent pushes proposed changes to the managed Git host.
-3. The agent opens a pull request through the managed PR layer.
+3. The agent opens a pull request through the configured Git host.
 4. A human reviews the proposed changes.
 5. Reviewed changes are merged into the approved ref.
 6. The controller builds and deploys secret-bearing containers only from approved refs.
 
 Secret-bearing containers must not be built or restarted directly from unreviewed workspace files.
 
-The deploy controller checks out the configured approved ref into a temporary Git worktree, builds the configured image from that worktree, replaces the previous container, and removes the temporary worktree. Secret values are supplied through host-side runtime configuration, such as an env file outside the agent workspace, not through agent-controlled files.
+Secret-bearing deployment remains outside the DIM 0.2 workspace lifecycle.
+Secret values are supplied through host-side runtime configuration, not
+through agent-controlled files or Project state.
 
 ## Managed Git Host
 
-The managed Git host uses bare Git repositories with a custom pull request layer. It may run on the same machine as the container infrastructure or on a separate machine.
-
-Agents can push proposed branches and create pull requests. Human review happens before changes are accepted into refs used by trusted deployment.
-Refs listed in `managedGitHost.protectedRefs` reject direct pushes through a bare repository `pre-receive` hook. This keeps agent pushes on proposal branches and makes the managed pull request merge flow the path that updates approved refs.
+The built-in managed Git host is a DIM-owned Gitea service. Each Project owns
+a reserved `dim-<project>` organization and repository aliases below it.
+Gitea branch protection rejects direct workspace pushes to configured refs;
+review and merge happen through the Git host.
 
 ## Workspace Lifecycle
 

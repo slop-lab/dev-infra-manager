@@ -35,8 +35,8 @@ branch, or an unbounded package range. Pin:
 For example:
 
 ```bash
-npm install --global "@slop-lab/dim-cli@0.1.0"
-npx "@slop-lab/install-dim@0.1.0" plugin "@company/dim-plugin@1.2.3"
+npm install --global "@slop-lab/dim-cli@0.2.0"
+npx "@slop-lab/install-dim@0.2.0" plugin "@company/dim-plugin@1.2.3"
 ```
 
 Treat the example versions as placeholders and select versions whose complete

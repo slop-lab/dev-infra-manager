@@ -1,6 +1,6 @@
 {
   "name": "@slop-lab/dim-cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "CLI for isolated, persistent AI development workspaces",
   "license": "MIT",
   "repository": {
@@ -10,7 +10,13 @@
   },
   "homepage": "https://github.com/slop-lab/dev-infra-manager#readme",
   "bugs": "https://github.com/slop-lab/dev-infra-manager/issues",
-  "keywords": ["ai", "cli", "containers", "development", "workspace"],
+  "keywords": [
+    "ai",
+    "cli",
+    "containers",
+    "development",
+    "workspace"
+  ],
   "private": true,
   "type": "module",
   "bin": {
@@ -30,7 +36,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@slop-lab/dev-infra-manager-core": "workspace:0.1.0"
+    "@slop-lab/dev-infra-manager-core": "workspace:0.2.0",
+    "commander": "14.0.0"
   },
   "devDependencies": {
     "@types/node": "22.15.34",

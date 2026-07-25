@@ -22,7 +22,7 @@ pnpm --filter @slop-lab/install-dim run pack:dry-run
 Review every tarball listing and confirm it contains its README, MIT license,
 runtime files, and publishable manifest.
 
-## Publish 0.1.0
+## Publish 0.2.0
 
 Publish core first because the CLI has an exact dependency on its version:
 
@@ -33,4 +33,4 @@ pnpm --filter @slop-lab/install-dim run publish:package
 ```
 
 Verify clean installs from the registry before creating and pushing the signed
-`v0.1.0` tag and GitHub release.
+`v0.2.0` tag and GitHub release.

@@ -4,7 +4,7 @@ import path from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { UserError } from "./errors.js";
-import { PluginRegistry, registerPlugin, type DimPlugin } from "./plugin.js";
+import { registerPlugin, type DimPlugin } from "./plugin.js";
 
 export interface PluginManifest {
   schemaVersion: 1;
@@ -76,10 +76,8 @@ export async function readPluginManifest(home = pluginHome()): Promise<PluginMan
 
 export async function loadInstalledPlugins(home = pluginHome()): Promise<{
   manifest: PluginManifest;
-  registry: PluginRegistry;
 }> {
   const manifest = await readPluginManifest(home);
-  const registry = new PluginRegistry();
   const requireFromHome = createRequire(path.join(home, "package.json"));
 
   for (const specifier of manifest.plugins) {
@@ -101,8 +99,8 @@ export async function loadInstalledPlugins(home = pluginHome()): Promise<{
     if (!plugin) {
       throw new UserError(`DIM plugin '${specifier}' must export default or named 'plugin'`);
     }
-    await registerPlugin(registry, plugin);
+    await registerPlugin(plugin);
   }
 
-  return { manifest, registry };
+  return { manifest };
 }

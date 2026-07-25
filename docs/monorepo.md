@@ -42,21 +42,12 @@ Git hosting and externally reachable entries are optional capabilities.
 Configuration must select providers explicitly and disabling a capability must
 not require its binaries, containers, credentials, or network access.
 
-The intended future split is:
-
-```text
-packages/git-host-contracts
-packages/git-host-bare
-packages/git-host-gitea
-packages/entry-contracts
-packages/edge-caddy
-packages/tunnel-cloudflare
-packages/entry-api
-packages/edge-controller
-```
+The 0.2 core contains one built-in managed Gitea service boundary. A future
+gateway or external managed backend must preserve the Project/repository
+records and host/workspace endpoint contract.
 
 Gitea will be the recommended full Git-host provider, not a mandatory runtime
-dependency. The existing bare Git implementation remains a lightweight
+dependency. The built-in managed Gitea implementation remains a lightweight
 provider, and other implementations such as Forgejo can implement the same
 contract.
 
@@ -81,18 +72,22 @@ The role-neutral `images/project-workspace` image supplies Codex, Node.js,
 pnpm, just, Git, and an inner Docker daemon. It is the default outer image for
 all DIM project workspaces, not an application-specific launcher.
 
-Build the image once, register a bare clone of this repository, and create a
-persistent workspace:
+Build the image once, create a Project root, push this repository, and create
+a persistent workspace:
 
 ```bash
 just build-project-workspace
-dim repo register --name dim-self /path/to/dev-infra-manager.git
-dim workspace create dim-self dim-self-dev
-dim workspace run dim-self-dev codex
+dim project create dim-self
+dim repo create dim-self root --root --ref main
+git -C /path/to/dev-infra-manager push \
+  "$(dim repo url-for-host dim-self root)" main
+dim repo protect dim-self root
+dim create dim-self dim-self-dev
+dim run dim-self-dev codex
 ```
 
-`workspace run` dispatches the repository's checked-in task contract.
-`workspace exec dim-self-dev -- bash` remains the raw recovery or interactive
+`run` dispatches the repository's checked-in task contract.
+`exec dim-self-dev -- bash` remains the raw recovery or interactive
 shell path. The project checkout and inner-Docker state exist only in the
 workspace; no host checkout or Docker socket is mounted.
 

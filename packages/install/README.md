@@ -1,36 +1,99 @@
 # @slop-lab/install-dim
 
-Installs the `dim` CLI without requiring `sudo`:
+User-local installer for the `dim` CLI and explicitly selected DIM plugins.
+It invokes npm with exact versions and does not require `sudo`.
+
+## Install the CLI
+
+Run the installer at an exact, reviewed version:
 
 ```bash
-npx "@slop-lab/install-dim@0.1.0"
+npx "@slop-lab/install-dim@0.2.0" cli
 ```
 
-With no arguments, the installer interactively offers to install the DIM CLI,
-plugins, or both. The matching `@slop-lab/dim-cli` version is installed under
-`~/.local` by default. Ensure `~/.local/bin` is in `PATH`.
+The default prefix is `~/.local`, producing:
 
-For non-interactive installation, use the explicit `cli` command:
+```text
+~/.local/bin/dim
+~/.local/share/dim/plugins
+```
+
+Ensure the binary directory is on `PATH`:
 
 ```bash
-npx "@slop-lab/install-dim@0.1.0" cli
-npx "@slop-lab/install-dim@0.1.0" cli --prefix "$HOME/.local"
+export PATH="$HOME/.local/bin:$PATH"
+dim --version
+dim --help
 ```
 
-Install an optional plugin into the isolated plugin home with the explicit
-`plugin` command:
+Choose another user-writable prefix when needed:
 
 ```bash
-npx "@slop-lab/install-dim@0.1.0" plugin "PACKAGE_NAME@EXACT_VERSION"
+npx "@slop-lab/install-dim@0.2.0" cli --prefix "$HOME/tools/dim"
 ```
 
-The installer records the selected install prefix and plugin home in
-`${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json`. The `dim` CLI reads this
-file when locating plugins. `DIM_CONFIG_PATH` and `DIM_PLUGIN_HOME` remain
-available as explicit overrides.
+Running without a subcommand opens an interactive installer:
 
-Pin the installer and every plugin to reviewed exact versions. See the mandatory
+```bash
+npx "@slop-lab/install-dim@0.2.0"
+```
+
+Interactive mode requires a TTY. Scripts and CI should use the explicit `cli`
+or `plugin` command.
+
+The installer installs the matching `@slop-lab/dim-cli` release. It does not
+install Docker, a workspace runtime backend, or the DIM workspace image; use
+the repository's
+[host setup guide](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/usage.md)
+for those prerequisites.
+
+## Install plugins
+
+Install and enable one or more exact plugin packages in DIM's isolated plugin
+home:
+
+```bash
+npx "@slop-lab/install-dim@0.2.0" plugin \
+  "@example/dim-plugin@1.2.3"
+```
+
+Override the plugin location explicitly:
+
+```bash
+npx "@slop-lab/install-dim@0.2.0" plugin \
+  --plugin-home "$HOME/.local/share/dim/plugins" \
+  "@example/dim-plugin@1.2.3"
+```
+
+The plugin home is a private npm project. Enabled package names are recorded
+in `plugins.json`; `dim plugin list` imports only those named packages and
+validates their DIM plugin API version.
+
+Version 0.2.0 intentionally does not expose a generic Git-provider plugin
+interface. Repository import uses the host's `git` CLI.
+
+## Persisted configuration
+
+Installation choices are recorded in:
+
+```text
+${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json
+```
+
+The file contains the selected install prefix and plugin home. The CLI uses it
+to locate plugins. These environment variables override discovery:
+
+- `DIM_CONFIG_PATH` selects a different installer configuration file.
+- `DIM_PLUGIN_HOME` selects a different plugin home.
+
+Re-running installation is the supported way to update the selected CLI or
+plugin set. Always specify exact versions; do not use `latest` for software
+that controls development containers or loads executable plugins.
+
+Before adopting DIM or any plugin, follow the mandatory
 [adoption and trust requirements](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/adoption.md).
-
-See the [plugin documentation](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/plugins.md)
-for the plugin contract and security model.
+See the
+[plugin documentation](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/plugins.md)
+and
+[`@slop-lab/dim-cli`](https://www.npmjs.com/package/@slop-lab/dim-cli)
+for the next steps.

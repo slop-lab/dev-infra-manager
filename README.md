@@ -15,8 +15,8 @@ The project focuses on the container and infrastructure boundary around agent wo
 - Persistent, explicitly discarded agent workspaces.
 - Backend-selectable nested container isolation.
 - Secret-bearing runtime separation.
-- Review-gated deployment of secret-bearing environments.
-- Managed Git hosting primitives for proposed changes.
+- Project-scoped managed Git repositories and protected branches.
+- Root-repository lifecycle hooks for multi-repository projects.
 - Workspace-level CPU, memory, and PID limits.
 
 ## Quick Start
@@ -73,12 +73,6 @@ Bootstrap prefers mise when available: it runs `mise install` and uses the
 repository-managed Node.js, pnpm, and `just`. Hosts without mise fall back to
 APT and the pinned global pnpm version.
 
-Create a local configuration:
-
-```bash
-just sample-config
-```
-
 Build the included runtime images:
 
 ```bash
@@ -108,32 +102,29 @@ Inspect host readiness:
 just doctor
 ```
 
-Run the deploy controller once in dry-run mode:
-
-```bash
-pnpm run cli -- controller run --config config.example.json --once --dry-run
-```
-
 See [docs/README.md](docs/README.md) for the full documentation index.
 See [specs/README.md](specs/README.md) for implementation-oriented specifications.
 See [docs/monorepo.md](docs/monorepo.md) for workspace boundaries and the
 planned optional Git-host and ingress provider layout.
 
-Register an existing bare repository with the local Gitea service and run a
-persistent workspace whose checkout exists only inside its container:
+Create a Project namespace and root repository, push with ordinary Git, then
+run a persistent workspace whose checkout exists only inside its container:
 
 ```bash
 just build-project-workspace
 just install-dim-local
-dim repo register --name project /path/to/project.git
-dim workspace create project work-1 --backend sysbox --profile development
-dim workspace run work-1 codex
-dim workspace exec work-1 -- bash
+dim project create project
+dim repo create project root --root --ref main
+git -C /path/to/project push "$(dim repo url-for-host project root)" main
+dim repo protect project root
+dim create project work-1 --backend sysbox --profile development
+dim run work-1 codex
+dim exec work-1 -- bash
 ```
 
 This repository implements the same project contract itself through
-`.dim/setup.sh` and `.dim/entrypoint.sh`. After registering a bare clone of
-this repository, `dim workspace run work-1 codex` launches Codex in the
+`.dim/setup.sh` and `.dim/entrypoint.sh`. After pushing this repository as the
+Project root, `dim run work-1 codex` launches Codex in the
 persistent DIM workspace; no separate workspace launcher is required.
 
 The publishable packages are `@slop-lab/dev-infra-manager-core`, the thin
@@ -148,10 +139,10 @@ pnpm --filter @slop-lab/install-dim run pack:dry-run
 pnpm --filter @slop-lab/dev-infra-manager-core run publish:package
 pnpm --filter @slop-lab/dim-cli run publish:package
 pnpm --filter @slop-lab/install-dim run publish:package
-mise use -g npm:@slop-lab/dim-cli@0.1.0
-npx "@slop-lab/install-dim@0.1.0"
-npx "@slop-lab/install-dim@0.1.0" cli
-npx "@slop-lab/install-dim@0.1.0" plugin "@dev-infra-manager/plugin-github@1.2.3"
+mise use -g npm:@slop-lab/dim-cli@0.2.0
+npx "@slop-lab/install-dim@0.2.0"
+npx "@slop-lab/install-dim@0.2.0" cli
+npx "@slop-lab/install-dim@0.2.0" plugin "@example/dim-plugin@1.2.3"
 ```
 
 Running `install-dim` without arguments opens an interactive installer for the
@@ -159,9 +150,9 @@ DIM CLI, optional plugins, or both. Use the explicit `cli` or `plugin`
 subcommand for non-interactive automation. Installation choices are persisted
 under `${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json`.
 
-Optional Git hosting integrations are designed as separately installed,
-explicitly enabled packages over the versioned core plugin API. See
-[docs/plugins.md](docs/plugins.md).
+DIM retains an explicitly enabled, versioned plugin loader for future concrete
+integrations. Version 0.2.0 does not expose a generic Git-provider extension
+point. See [docs/plugins.md](docs/plugins.md).
 
 See [docs/repo-workspaces.md](docs/repo-workspaces.md) for lifecycle,
 credential, reconciliation, and container-only verification details.

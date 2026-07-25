@@ -33,7 +33,7 @@ The final command inside the included agent images runs as the `agent` user.
 
 Secret-bearing containers:
 
-- May receive raw secrets through host-side configuration such as `secretRuntime.envFile`.
+- May receive raw secrets through host-side deployment configuration outside DIM Project and workspace state.
 - Must be separate from agent workspace containers.
 - Must not mount an agent workspace as a writable shared volume.
 - Must be built and deployed from the configured approved ref.
@@ -59,7 +59,8 @@ Managed Git repositories are the transition point from untrusted agent output to
 
 Agents may push proposal refs.
 Agents must not directly update protected refs.
-Protected refs must be updated through the managed PR merge path or trusted host-side administrative operations.
+Protected refs must be updated through Git-host review/merge or trusted
+host-side administrative operations.
 
 ## Backend Boundary
 

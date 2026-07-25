@@ -9,7 +9,7 @@ The development toolchain uses:
 - just.
 - TypeScript.
 
-Runtime hosts also need the tools used by the controller:
+Runtime hosts also need the tools used by DIM:
 
 - Docker-compatible CLI.
 - The selected agent runtime backend installed and registered. The default backend requires Sysbox as `sysbox-runc`; the gVisor backend requires `runsc`.
@@ -99,7 +99,9 @@ just verify-container-sysbox
 
 Use `just verify-container-sysbox -- --verbose` (or `-- -v`) to show detailed output for each labeled stage.
 
-The smoke test builds the included images, verifies the agent image command environment, exercises the managed Git pull request flow, deploys the secret runtime from an approved ref, and checks the secret runtime health endpoint.
+The smoke test builds the included images, verifies the agent image command
+environment, and exercises Project-scoped managed Git and workspace lifecycle
+flows.
 
 For a fast check that does not contact Docker or create containers, validate
 the generated isolation arguments only:
@@ -155,15 +157,18 @@ prefix and uses only that installed `dim` binary to exercise:
 Install `dim` from the registry with mise:
 
 ```bash
-mise use -g npm:@slop-lab/dim-cli@0.1.0
+mise use -g npm:@slop-lab/dim-cli@0.2.0
 ```
 
-Register a role-neutral bare repository, then create a workspace using the
-project's selected capability profiles:
+Create a Project and root repository, push its initial branch, then create a
+workspace using the selected capability profiles:
 
 ```bash
-dim repo register --name example /path/to/example.git
-dim workspace create example example-dev \
+dim project create example
+dim repo create example root --root --ref main
+git -C /path/to/example push "$(dim repo url-for-host example root)" main
+dim repo protect example root
+dim create example example-dev \
   --profile development \
   --profile secrets
 ```
@@ -171,35 +176,20 @@ dim workspace create example example-dev \
 Run a project task or bypass project hooks with a raw command:
 
 ```bash
-dim workspace run example-dev codex
-dim workspace exec example-dev -- bash
+dim run example-dev codex
+dim exec example-dev -- bash
 ```
 
-`workspace run` does not repeat setup. Environment reconciliation happens on
-`workspace create`, `workspace start`, `workspace setup`, and after a
-fast-forward-only `workspace update`. Only the optional files under `.dim`
+`run` does not repeat setup. Environment reconciliation happens on
+`create`, `start`, `restart`, `setup`, and after a
+fast-forward-only `update`. Only the optional files under `.dim`
 have special meaning; root Compose files are never auto-discovered.
 
-Use `dim project init` in a new project to create the minimal
-`.dim/docker-compose.yml` scaffold. See
+Copy the minimal `.dim` examples from
 [Project Workspaces](project-workspaces.md) for the hook contract, lifecycle,
 capability profiles, and multi-repository service pattern. See
 [Repository-backed Workspaces](repo-workspaces.md) for registration, Gitea,
 credentials, and reconciliation details.
-
-Create a starter configuration:
-
-```bash
-just sample-config
-```
-
-The generated `dev-infra.config.json` follows the same shape as [config.example.json](../config.example.json).
-
-Validate configuration:
-
-```bash
-pnpm run cli -- config validate --config dev-infra.config.json
-```
 
 See [Configuration](configuration.md) for the full field reference.
 
@@ -222,90 +212,3 @@ pnpm run cli -- doctor --backend gvisor
 The Sysbox registration check only proves that Docker knows about `sysbox-runc`. The Sysbox container execution check runs `hello-world:latest` with `--runtime=sysbox-runc`; this is the direct readiness signal for Sysbox agent workspace containers.
 For gVisor, `doctor --backend gvisor` checks `runsc` and Docker runtime execution.
 For rootless Podman, `doctor --backend rootless-podman` checks the workspace image and verifies that `podman` is present in it. Podman runs rootless as `agent` inside the workspace, but the outer Docker workspace container is privileged: nested user namespaces and mounts do not work under Docker's normal container mount restrictions.
-
-## Managed Git Host
-
-Initialize managed Git host state:
-
-```bash
-pnpm run cli -- git-host init --config dev-infra.config.json
-```
-
-Create a bare repository:
-
-```bash
-pnpm run cli -- git-host create-repo --config dev-infra.config.json --repo app
-```
-
-Repositories created by this command include a `pre-receive` hook that blocks direct pushes to `managedGitHost.protectedRefs`, such as `refs/heads/main`.
-If hooks must be reinstalled for an existing bare repository, run:
-
-```bash
-pnpm run cli -- git-host install-hooks --config dev-infra.config.json --repo app
-```
-
-Agents can push non-protected branches to the resulting bare repository path. Create a pull request from pushed refs:
-
-```bash
-pnpm run cli -- pr create \
-  --config dev-infra.config.json \
-  --repo app \
-  --source refs/heads/agent/change \
-  --target refs/heads/main \
-  --title "Proposed change"
-```
-
-Review state is stored as JSON metadata next to the managed bare repositories. A pull request must have at least one approval before merge:
-
-```bash
-pnpm run cli -- pr approve --config dev-infra.config.json --repo app --id 1 --reviewer alice
-pnpm run cli -- pr merge --config dev-infra.config.json --repo app --id 1
-```
-
-Merges are fast-forward only. The source and target refs must still point to the same commits recorded when the pull request was created.
-
-## Secret Runtime Deployment
-
-Secret-bearing containers are deployed only from the configured approved ref:
-
-```bash
-pnpm run cli -- secret deploy --config dev-infra.config.json --dry-run
-```
-
-Dry-run mode prints the exact Git and Docker commands without executing them.
-
-Execute deployment:
-
-```bash
-pnpm run cli -- secret deploy --config dev-infra.config.json
-```
-
-The deploy command:
-
-1. Checks out the configured approved ref into a temporary Git worktree.
-2. Builds the configured Docker image from the checked-out source.
-3. Removes the previous secret runtime container if it exists.
-4. Starts the new secret runtime container.
-5. Removes the temporary worktree.
-
-Secret values are not stored in the repository configuration. If the secret runtime needs environment variables, configure `secretRuntime.envFile` with a host path outside the agent workspace.
-
-## Deploy Controller
-
-Run the controller once:
-
-```bash
-pnpm run cli -- controller run --config dev-infra.config.json --once
-```
-
-Run the controller continuously:
-
-```bash
-pnpm run cli -- controller run --config dev-infra.config.json --interval-seconds 30
-```
-
-The controller checks the configured approved ref. When the ref differs from the last deployed SHA recorded under the state root, it deploys the secret runtime and records the deployed SHA.
-
-The controller uses an atomic lock directory under the state root to prevent concurrent secret runtime deployments. If the controller exits unexpectedly while holding the lock, inspect the host before removing the lock directory manually.
-
-For systemd deployment, see [deploy/systemd](../deploy/systemd).

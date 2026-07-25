@@ -36,13 +36,10 @@ They describe inputs, persistent state, operations, invariants, failure behavior
 Feature specifications:
 
 - [Runtime Backends](05-runtime-backends.md)
-- [Managed Git Host](07-managed-git-host.md)
-- [Secret Runtime Deployment](08-secret-runtime-deploy.md)
-- [Controller](09-controller.md)
 - [CLI Contract](10-cli-contract.md)
 - [Doctor Checks](11-doctor-checks.md)
 - [Verification](12-verification.md)
-- [Repository and Workspace Lifecycle](13-repo-workspace-lifecycle.md)
+- [Project, Repository, and Workspace Lifecycle](13-repo-workspace-lifecycle.md)
 
 ### Local Details
 
@@ -51,7 +48,6 @@ Changing these details should still preserve the global and feature specificatio
 
 Local details:
 
-- [Managed Git Hook Format](local-details/hook-format.md)
 - [Image Entrypoints](local-details/image-entrypoints.md)
 - [Installation Scripts](local-details/installation-scripts.md)
 

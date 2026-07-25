@@ -1,9 +1,102 @@
 # @slop-lab/dev-infra-manager-core
 
-Provider-neutral runtime, workspace lifecycle, Git, controller, and plugin APIs
-used by DIM.
+Core TypeScript APIs behind the `dim` command-line interface. This package
+implements:
 
-Most users should install [`@slop-lab/dim-cli`](https://www.npmjs.com/package/@slop-lab/dim-cli).
-Consumers must follow the mandatory [adoption and trust requirements](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/adoption.md), including full human review and exact version pinning.
-API documentation and source are available in the
-[project repository](https://github.com/slop-lab/dev-infra-manager).
+- Project and project-scoped repository state;
+- managed Gitea reconciliation and clone URLs;
+- persistent workspace create/start/restart/update/discard lifecycle;
+- Sysbox, gVisor, rootless Podman, and runc runtime plans;
+- host-readiness checks;
+- plugin manifest loading and version validation.
+
+Most users should install
+[`@slop-lab/dim-cli`](https://www.npmjs.com/package/@slop-lab/dim-cli)
+instead. The core package is for embedding DIM lifecycle operations in
+TypeScript tools or contributing to DIM itself.
+
+## Installation
+
+Pin the same reviewed release used by the CLI:
+
+```bash
+npm install --save-exact "@slop-lab/dev-infra-manager-core@0.2.0"
+```
+
+The package is ESM-only, requires Node.js 22 or newer, and includes TypeScript
+declarations.
+
+## Basic use
+
+```ts
+import {
+  ProcessRunner,
+  createProject,
+  createProjectRepository,
+  createWorkspace,
+  lifecycleOptions
+} from "@slop-lab/dev-infra-manager-core";
+
+const runner = new ProcessRunner();
+const options = lifecycleOptions(process.env);
+
+await createProject(runner, options, "acme");
+await createProjectRepository(runner, options, {
+  project: "acme",
+  alias: "root",
+  root: true,
+  rootRef: "main",
+  protectedPatterns: ["main"]
+});
+
+// Push the initial root branch with ordinary Git before creating a workspace.
+await createWorkspace(runner, options, {
+  project: "acme",
+  name: "feature-123",
+  runtimeBackend: "sysbox",
+  profiles: []
+});
+```
+
+Lifecycle methods reconcile Docker containers, volumes, networks, and a local
+managed Gitea service. They are not pure data helpers. Callers must provide a
+usable host environment and surface `UserError` messages to users without
+discarding the underlying operation result.
+
+## Configuration
+
+`lifecycleOptions()` reads the same environment used by the CLI:
+
+- `DIM_STATE_ROOT`
+- `DIM_GITEA_IMAGE`, `DIM_GITEA_PORT`, and `DIM_GITEA_ADMIN_USERNAME`
+- `DIM_GIT_USERNAME`
+- `DIM_WORKSPACE_BACKEND`, `DIM_WORKSPACE_IMAGE`, and
+  `DIM_WORKSPACE_RUNTIME`
+- `DIM_WORKSPACE_CPUS`, `DIM_WORKSPACE_MEMORY`, and `DIM_WORKSPACE_PIDS`
+
+The default state root is `~/.local/state/dim`; the default managed Gitea port
+is `3300`. Project and workspace records use schema version 2. Version 0.2.0
+does not migrate 0.1 state.
+
+## API scope
+
+The package currently exports its core modules from the root entry point,
+including lifecycle records and low-level Gitea helpers. APIs are versioned
+with DIM but are not yet promised to remain source-compatible across minor
+0.x releases. Prefer high-level functions from `projectRegistry` and
+`workspaceLifecycle` over direct state or Gitea mutation.
+
+The plugin loader is deliberately small. Version 0.2.0 validates and invokes
+explicitly installed plugins but does not define a generic repository-provider
+extension point. External repository import is performed through the local
+Git CLI.
+
+DIM executes Project-controlled lifecycle scripts and manages container
+runtimes. Consumers must follow the mandatory
+[adoption and trust requirements](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/adoption.md),
+including full human review and exact version pinning.
+
+See the
+[architecture](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/architecture.md),
+[lifecycle documentation](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/repo-workspaces.md),
+and [source repository](https://github.com/slop-lab/dev-infra-manager).

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 suffix="$PPID-$$"
-repo_name="project-$suffix"
+project_name="project-$suffix"
 workspace_name="project-$suffix"
 image_name="dim-project-$suffix:smoke"
 state_root="$(mktemp -d /tmp/dim-project-state.XXXXXX)"
@@ -16,7 +16,7 @@ export DIM_WORKSPACE_BACKEND="${DIM_WORKSPACE_BACKEND:-runc}"
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    "$dim_bin" workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
+    "$dim_bin" discard "$workspace_name" --yes >/dev/null 2>&1 || true
   fi
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     local credentials admin_username admin_password
@@ -27,7 +27,7 @@ cleanup() {
       curl --fail --silent --show-error \
         --user "$admin_username:$admin_password" \
         --request DELETE \
-        "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/repos/$admin_username/$repo_name" \
+        "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs/dim-$project_name" \
         >/dev/null 2>&1 || true
     fi
   fi
@@ -72,35 +72,39 @@ git -C "$worktree" add .dim Dockerfile message.txt
 git -C "$worktree" commit -m 'add project development image' >/dev/null
 git clone --bare "$worktree" "$bare_repo" >/dev/null
 
-"$dim_bin" repo register --name "$repo_name" "$bare_repo" >/dev/null
+"$dim_bin" project create "$project_name" >/dev/null
+"$dim_bin" repo create "$project_name" root --root --ref main >/dev/null
+repo_url="$("$dim_bin" repo url-for-host "$project_name" root)"
+"$dim_bin" x git --git-dir "$bare_repo" push "$repo_url" --all >/dev/null
+"$dim_bin" repo protect "$project_name" root >/dev/null
 
 # Registration must be sufficient: neither the seed checkout nor bare repository
 # remains available while the workspace clones and builds the project.
 find "$source_root" -depth -delete
 
-"$dim_bin" workspace create "$repo_name" "$workspace_name" >/dev/null
+"$dim_bin" create "$project_name" "$workspace_name" >/dev/null
 
-output="$("$dim_bin" workspace run "$workspace_name" verify)"
+output="$("$dim_bin" run "$workspace_name" verify)"
 test "$output" = "hello-from-project-image"
 
-"$dim_bin" workspace exec "$workspace_name" -- touch .dim/fail-setup
-if "$dim_bin" workspace setup "$workspace_name" >/dev/null 2>&1; then
+"$dim_bin" exec "$workspace_name" -- touch .dim/fail-setup
+if "$dim_bin" setup "$workspace_name" >/dev/null 2>&1; then
   echo "failing project setup unexpectedly succeeded" >&2
   exit 1
 fi
-test "$("$dim_bin" workspace show "$workspace_name" | jq -r .phase)" = "setup-error"
-"$dim_bin" workspace exec "$workspace_name" -- rm .dim/fail-setup
-"$dim_bin" workspace setup "$workspace_name" >/dev/null
-test "$("$dim_bin" workspace show "$workspace_name" | jq -r .phase)" = "ready"
+test "$("$dim_bin" --json show "$workspace_name" | jq -r .phase)" = "setup-error"
+"$dim_bin" exec "$workspace_name" -- rm .dim/fail-setup
+"$dim_bin" setup "$workspace_name" >/dev/null
+test "$("$dim_bin" --json show "$workspace_name" | jq -r .phase)" = "ready"
 
-"$dim_bin" workspace stop "$workspace_name" >/dev/null
-"$dim_bin" workspace start "$workspace_name" >/dev/null
-"$dim_bin" workspace exec "$workspace_name" -- \
+"$dim_bin" stop "$workspace_name" >/dev/null
+"$dim_bin" start "$workspace_name" >/dev/null
+"$dim_bin" exec "$workspace_name" -- \
   docker image inspect "$image_name" >/dev/null
 
-output="$("$dim_bin" workspace run "$workspace_name" verify)"
+output="$("$dim_bin" run "$workspace_name" verify)"
 test "$output" = "hello-from-project-image"
 
-"$dim_bin" workspace discard "$workspace_name" --yes >/dev/null
+"$dim_bin" discard "$workspace_name" --yes >/dev/null
 
 echo "container-project-smoke-ok"

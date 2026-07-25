@@ -2,7 +2,7 @@
 set -euo pipefail
 
 suffix="$PPID-$$"
-repo_name="smoke-$suffix"
+project_name="smoke-$suffix"
 workspace_name="smoke-$suffix"
 state_root="$(mktemp -d /tmp/dim-lifecycle-state.XXXXXX)"
 source_root="$(mktemp -d /tmp/dim-lifecycle-source.XXXXXX)"
@@ -14,7 +14,7 @@ export DIM_WORKSPACE_BACKEND="${DIM_WORKSPACE_BACKEND:-runc}"
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    pnpm run cli -- workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
+    pnpm run cli -- discard "$workspace_name" --yes >/dev/null 2>&1 || true
   fi
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     local credentials admin_username admin_password
@@ -25,7 +25,7 @@ cleanup() {
       curl --fail --silent --show-error \
         --user "$admin_username:$admin_password" \
         --request DELETE \
-        "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/repos/$admin_username/$repo_name" \
+        "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs/dim-$project_name" \
         >/dev/null 2>&1 || true
     fi
   fi
@@ -42,9 +42,16 @@ git -C "$worktree" add README.md
 git -C "$worktree" commit -m initial >/dev/null
 git clone --bare "$worktree" "$bare_repo" >/dev/null
 
-pnpm run cli -- repo register --name "$repo_name" "$bare_repo" >/dev/null
-pnpm run cli -- workspace create "$repo_name" "$workspace_name" >/dev/null
-pnpm run cli -- workspace exec "$workspace_name" -- sh -c "
+pnpm run cli -- project create "$project_name" >/dev/null
+pnpm run cli -- repo create "$project_name" root --root --ref main >/dev/null
+repo_url="$(pnpm run --silent cli -- repo url-for-host "$project_name" root)"
+pnpm run cli -- x git --git-dir "$bare_repo" push "$repo_url" --all >/dev/null
+pnpm run cli -- repo protect "$project_name" root >/dev/null
+pnpm run cli -- repo import "$project_name" imported "$bare_repo" >/dev/null
+git ls-remote "$(pnpm run --silent cli -- repo url-for-host "$project_name" imported)" \
+  refs/heads/main | grep -q .
+pnpm run cli -- create "$project_name" "$workspace_name" >/dev/null
+pnpm run cli -- exec "$workspace_name" -- sh -c "
   test \"\\\$(git config user.name)\" = 'dim/$workspace_name'
   git checkout -b 'agent/$workspace_name'
   printf 'workspace\n' >> README.md
@@ -63,10 +70,11 @@ pnpm run cli -- workspace exec "$workspace_name" -- sh -c "
 
 test "$(docker inspect --format '{{range .Mounts}}{{.Type}}:{{.Name}}:{{.Destination}}{{end}}' "dim-ws-$workspace_name")" \
   = "volume:dim-ws-$workspace_name-docker:/var/lib/docker"
-pnpm run cli -- workspace stop "$workspace_name" >/dev/null
-pnpm run cli -- workspace start "$workspace_name" >/dev/null
-pnpm run cli -- workspace exec "$workspace_name" -- sh -c \
+pnpm run cli -- stop "$workspace_name" >/dev/null
+pnpm run cli -- start "$workspace_name" >/dev/null
+pnpm run cli -- exec "$workspace_name" -- sh -c \
   "test -d .git; docker image inspect alpine:3.22 >/dev/null" >/dev/null
-pnpm run cli -- workspace discard "$workspace_name" --yes >/dev/null
+pnpm run cli -- discard "$workspace_name" --yes >/dev/null
+pnpm run cli -- project purge "$project_name" --yes >/dev/null
 
 echo "container-lifecycle-smoke-ok"

@@ -1,15 +1,15 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { lifecycleOptions } from "../src/lifecycleOptions.js";
 import { LifecycleState, validateLifecycleName } from "../src/lifecycleState.js";
-import type { RepoRecord, WorkspaceRecord } from "../src/lifecycleTypes.js";
+import type { ProjectRecord, WorkspaceRecord } from "../src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../src/types.js";
 import { validateWorkspaceProfiles, waitForInnerDocker, workspaceContainerArgs } from "../src/workspaceLifecycle.js";
 import { workspaceRuntimePlan } from "../src/runtimeBackends.js";
 
-describe("repo and workspace lifecycle", () => {
+describe("project and workspace lifecycle", () => {
   let root: string;
 
   beforeEach(async () => {
@@ -20,7 +20,7 @@ describe("repo and workspace lifecycle", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("claims workspace names atomically and preserves role-neutral repo records", async () => {
+  it("claims project and workspace names atomically", async () => {
     const state = new LifecycleState(root);
     const now = new Date().toISOString();
     const service = {
@@ -35,23 +35,39 @@ describe("repo and workspace lifecycle", () => {
     };
     await state.claimGiteaService(service);
     expect(await state.readGiteaService()).toEqual(service);
-    const repo: RepoRecord = {
+    const project: ProjectRecord = {
+      schemaVersion: 2,
+      id: "project-id",
       name: "project",
-      owner: "dim-admin",
-      cloneUrl: "http://dim-gitea:3000/dim-admin/project.git",
-      sourcePath: "/import/project.git",
+      gitNamespace: "dim-project",
       phase: "ready",
-      protectedPatterns: ["main"],
-      registeredAt: now,
+      rootRepositoryAlias: "root",
+      rootRef: "refs/heads/main",
+      repositories: [{
+        alias: "root",
+        providerRepoId: "dim-project/root",
+        owner: "dim-project",
+        hostUrl: "http://127.0.0.1:3300/dim-project/root.git",
+        workspaceUrl: "http://dim-gitea:3000/dim-project/root.git",
+        phase: "ready",
+        protectedPatterns: ["main"],
+        protectionPhase: "applied",
+        createdAt: now,
+        updatedAt: now
+      }],
+      createdAt: now,
       updatedAt: now
     };
-    await state.claimRepo(repo);
-    expect(await state.listRepos()).toEqual([repo]);
-    expect(JSON.stringify(await state.readRepo("project"))).not.toMatch(/secret|product|control/);
+    await state.claimProject(project);
+    expect(await state.listProjects()).toEqual([project]);
 
     const workspace: WorkspaceRecord = {
+      schemaVersion: 2,
       name: "work-1",
-      project: "project",
+      projectId: project.id,
+      projectName: project.name,
+      rootRepositoryAlias: "root",
+      rootRef: "refs/heads/main",
       projectPath: "/workspace/project",
       phase: "creating",
       profiles: ["development"],
@@ -64,6 +80,8 @@ describe("repo and workspace lifecycle", () => {
       gitUserName: "Agent",
       gitUserEmail: "agent@example.invalid",
       gitBaseUrl: "http://172.20.0.2:3000",
+      projectRepositories: { root: "http://dim-gitea:3000/dim-project/root.git" },
+      projectManifestPath: "/run/dim/project.json",
       createdAt: now,
       updatedAt: now
     };
@@ -105,8 +123,12 @@ describe("repo and workspace lifecycle", () => {
     });
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
+      schemaVersion: 2,
       name: "work-1",
-      project: "project",
+      projectId: "project-id",
+      projectName: "project",
+      rootRepositoryAlias: "root",
+      rootRef: "refs/heads/main",
       projectPath: "/workspace/project",
       phase: "creating",
       profiles: [],
@@ -119,6 +141,8 @@ describe("repo and workspace lifecycle", () => {
       gitUserName: "Agent",
       gitUserEmail: "agent@example.invalid",
       gitBaseUrl: "http://172.20.0.2:3000",
+      projectRepositories: { root: "http://dim-gitea:3000/dim-project/root.git" },
+      projectManifestPath: "/run/dim/project.json",
       createdAt: now,
       updatedAt: now
     };
@@ -132,7 +156,7 @@ describe("repo and workspace lifecycle", () => {
       "--name", "dim-ws-work-1",
       "--label", "dim.managed=true",
       "--label", "dim.project=project",
-      "--label", "dim.repo=project",
+      "--label", "dim.repo=root",
       "--mount", "type=volume,source=dim-ws-work-1-docker,target=/var/lib/docker",
       "--env", "DIM_GIT_USERNAME=writer",
       "--env", "DIM_GIT_TOKEN=token",
@@ -189,7 +213,7 @@ describe("repo and workspace lifecycle", () => {
     });
   });
 
-  it("normalizes legacy workspace records without moving their checkout", async () => {
+  it("rejects legacy workspace records without modifying them", async () => {
     const state = new LifecycleState(root);
     const now = new Date().toISOString();
     await mkdir(join(root, "workspaces"), { recursive: true });
@@ -205,19 +229,7 @@ describe("repo and workspace lifecycle", () => {
       updatedAt: now
     }));
 
-    const normalized = await state.readWorkspace("legacy");
-    expect(normalized).toMatchObject({
-      project: "project",
-      projectPath: "/workspace/repos/project",
-      profiles: [],
-      composeProjectName: "dim-legacy",
-      runtimeBackend: "sysbox",
-      gitUserName: "dim/legacy",
-      gitUserEmail: "legacy@dim.invalid",
-      gitBaseUrl: "http://dim-gitea:3000"
-    });
-    await state.writeWorkspace(normalized);
-    expect(await readFile(join(root, "workspaces", "legacy.json"), "utf8")).not.toContain('"repo"');
+    await expect(state.readWorkspace("legacy")).rejects.toThrow(/does not migrate existing state/);
   });
 
   it("reports stopped workspace state and entrypoint logs when inner Docker fails", async () => {

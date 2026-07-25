@@ -10,7 +10,7 @@ containers.
 
 DIM does not currently impose a per-workspace disk quota. Project checkout
 data lives in the workspace container and nested-engine data lives in a
-labeled Docker volume. `workspace discard --yes` removes both. Operators
+labeled Docker volume. `discard --yes` removes both. Operators
 should monitor host filesystem and Docker storage usage.
 
 No workspace receives the host Docker socket or a host source checkout.

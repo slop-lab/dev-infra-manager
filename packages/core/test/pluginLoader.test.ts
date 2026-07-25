@@ -63,9 +63,7 @@ describe("plugin loader configuration", () => {
       export default {
         name: "@example/github",
         apiVersion: 1,
-        register(host) {
-          host.registerRepositoryProvider({ kind: "github-mirror", async register() {} });
-        }
+        register() {}
       };
     `);
     await writeFile(
@@ -74,6 +72,6 @@ describe("plugin loader configuration", () => {
     );
 
     const loaded = await loadInstalledPlugins(root);
-    expect(loaded.registry.repositoryProviderKinds()).toEqual(["github-mirror"]);
+    expect(loaded.manifest.plugins).toEqual(["@example/github"]);
   });
 });

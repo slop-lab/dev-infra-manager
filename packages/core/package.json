@@ -1,7 +1,7 @@
 {
   "name": "@slop-lab/dev-infra-manager-core",
-  "version": "0.1.0",
-  "description": "Provider-neutral runtime and workspace lifecycle APIs for DIM",
+  "version": "0.2.0",
+  "description": "Project, managed Git, and persistent workspace lifecycle APIs for DIM",
   "license": "MIT",
   "repository": {
     "type": "git",

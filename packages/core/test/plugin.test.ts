@@ -1,37 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   DIM_PLUGIN_API_VERSION,
-  PluginRegistry,
-  registerPlugin,
-  type RepositoryProvider
+  registerPlugin
 } from "../src/plugin.js";
 
-describe("plugin registry", () => {
-  it("registers repository providers through a versioned plugin contract", async () => {
-    const registry = new PluginRegistry();
+describe("plugin contract", () => {
+  it("loads plugins through a versioned contract", async () => {
     const register = vi.fn();
-    const provider = { kind: "github-mirror", register } satisfies RepositoryProvider;
 
-    await registerPlugin(registry, {
-      name: "@dev-infra-manager/plugin-github",
+    await registerPlugin({
+      name: "@example/dim-plugin",
       apiVersion: DIM_PLUGIN_API_VERSION,
-      register(host) {
-        host.registerRepositoryProvider(provider);
-      }
+      register
     });
 
-    expect(registry.repositoryProviderKinds()).toEqual(["github-mirror"]);
-    expect(registry.repositoryProvider("github-mirror")).toBe(provider);
+    expect(register).toHaveBeenCalledWith({});
   });
 
-  it("rejects duplicate and unavailable providers", () => {
-    const registry = new PluginRegistry();
-    const provider = {
-      kind: "github-mirror",
+  it("rejects unsupported plugin API versions", async () => {
+    await expect(registerPlugin({
+      name: "@example/future-plugin",
+      apiVersion: 2 as typeof DIM_PLUGIN_API_VERSION,
       register: vi.fn()
-    } satisfies RepositoryProvider;
-    registry.registerRepositoryProvider(provider);
-    expect(() => registry.registerRepositoryProvider(provider)).toThrow(/already registered/);
-    expect(() => registry.repositoryProvider("gitlab-mirror")).toThrow(/not installed/);
+    })).rejects.toThrow(/unsupported DIM plugin API/);
   });
 });

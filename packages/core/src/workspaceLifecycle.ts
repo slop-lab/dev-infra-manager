@@ -1,7 +1,14 @@
 import { UserError } from "./errors.js";
 import { ensureGitea, giteaNestedBaseUrl, GITEA_NETWORK } from "./gitea.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
-import type { GiteaCredentials, LifecycleOptions, RepoRecord, WorkspaceRecord } from "./lifecycleTypes.js";
+import { applyProjectRepositoryProtection } from "./projectRegistry.js";
+import type {
+  GiteaCredentials,
+  LifecycleOptions,
+  ProjectRecord,
+  ProjectRepositoryRecord,
+  WorkspaceRecord
+} from "./lifecycleTypes.js";
 import { workspaceRuntimePlan } from "./runtimeBackends.js";
 import type { StreamingCommandRunner } from "./types.js";
 
@@ -46,7 +53,11 @@ export async function createWorkspace(
   const name = validateLifecycleName(input.name, "workspace");
   const profiles = validateWorkspaceProfiles(input.profiles);
   const state = new LifecycleState(options.stateRoot);
-  const repo = await readyProject(state, project);
+  const projectRecord = await readyProject(state, project);
+  let repo = readyRootRepository(projectRecord);
+  if (repo.protectionPhase !== "applied") {
+    repo = await applyProjectRepositoryProtection(runner, options, projectRecord.name, repo.alias);
+  }
   const now = new Date().toISOString();
   const gitUserName = input.gitUserName ?? process.env.DIM_GIT_USER_NAME ?? `dim/${name}`;
   const gitUserEmail = input.gitUserEmail ?? process.env.DIM_GIT_USER_EMAIL ?? `${name}@dim.invalid`;
@@ -54,11 +65,11 @@ export async function createWorkspace(
 
   try {
     record = await state.readWorkspace(name);
-    if (record.project !== project) {
-      throw new UserError(`workspace '${name}' is already bound to project '${record.project}'`);
+    if (record.projectId !== projectRecord.id) {
+      throw new UserError(`workspace '${name}' is already bound to project '${record.projectName}'`);
     }
     if (record.profiles.join("\0") !== profiles.join("\0")) {
-      throw new UserError(`workspace '${name}' already exists with different profiles; use workspace update`);
+      throw new UserError(`workspace '${name}' already exists with different profiles; use dim update`);
     }
     if (record.runtimeBackend !== input.runtimeBackend) {
       throw new UserError(`workspace '${name}' already exists with backend '${record.runtimeBackend}'`);
@@ -66,8 +77,12 @@ export async function createWorkspace(
   } catch (error) {
     if (!(error instanceof UserError) || !error.message.includes("not found")) throw error;
     record = {
+      schemaVersion: 2,
       name,
-      project,
+      projectId: projectRecord.id,
+      projectName: projectRecord.name,
+      rootRepositoryAlias: repo.alias,
+      rootRef: requiredRootRef(projectRecord),
       projectPath: "/workspace/project",
       phase: "creating",
       profiles,
@@ -80,6 +95,8 @@ export async function createWorkspace(
       gitUserName,
       gitUserEmail,
       gitBaseUrl: "http://dim-gitea:3000",
+      projectRepositories: repositoryEnvironment(projectRecord),
+      projectManifestPath: "/run/dim/project.json",
       createdAt: now,
       updatedAt: now
     };
@@ -88,7 +105,7 @@ export async function createWorkspace(
 
   const release = await state.acquireWorkspaceSetupLock(name);
   try {
-    const reconciled = await reconcileProject(runner, options, state, record, repo);
+    const reconciled = await reconcileProject(runner, options, state, record, projectRecord, repo);
     return await setupWorkspaceLocked(runner, state, reconciled);
   } finally {
     await release();
@@ -101,7 +118,7 @@ export async function runWorkspace(
   input: WorkspaceCommandInput
 ): Promise<number> {
   const record = await runnableWorkspace(runner, options, input.name);
-  if (input.command.length === 0) throw new UserError("workspace run requires a task");
+  if (input.command.length === 0) throw new UserError("dim run requires a task");
   const hasEntrypoint = await projectFileExists(runner, record, ".dim/entrypoint.sh");
   const command = hasEntrypoint
     ? ["sh", ".dim/entrypoint.sh", ...input.command]
@@ -116,7 +133,7 @@ export async function execWorkspace(
 ): Promise<number> {
   const record = await showWorkspace(options, input.name);
   await assertContainerRunning(runner, record);
-  if (input.command.length === 0) throw new UserError("workspace exec requires a command");
+  if (input.command.length === 0) throw new UserError("dim exec requires a command");
   return streamProjectCommand(runner, record, input.command, input.interactive);
 }
 
@@ -193,11 +210,7 @@ export async function updateWorkspace(
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
     await assertContainerRunning(runner, record);
-    const status = await projectCommand(runner, record, ["git", "status", "--porcelain"]);
-    if (status.exitCode !== 0) throw commandError("inspect project Git status", status);
-    if (status.stdout.trim()) throw new UserError(`workspace '${workspaceName}' has uncommitted project changes`);
-    const pull = await projectCommand(runner, record, ["git", "pull", "--ff-only"]);
-    if (pull.exitCode !== 0) throw commandError("fast-forward project repository", pull);
+    await fastForwardRoot(runner, record);
     record = { ...record, profiles: nextProfiles, updatedAt: new Date().toISOString() };
     await state.writeWorkspace(record);
     return await setupWorkspaceLocked(
@@ -221,16 +234,36 @@ export async function startWorkspace(
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
     const record = await state.readWorkspace(workspaceName);
-    const repo = await readyProject(state, record.project);
-    const reconciled = await reconcileProject(runner, options, state, record, repo);
+    if (record.phase !== "stopped") {
+      throw new UserError(`workspace '${workspaceName}' is not stopped; use restart to apply project changes`);
+    }
+    const project = await readyProject(state, record.projectName);
+    if (project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
+    const repo = readyRootRepository(project);
+    const reconciled = await reconcileProject(runner, options, state, record, project, repo);
+    await fastForwardRoot(runner, reconciled);
     return await setupWorkspaceLocked(runner, state, reconciled);
   } finally {
     await release();
   }
 }
 
+export async function restartWorkspace(
+  runner: StreamingCommandRunner,
+  options: LifecycleOptions,
+  name: string
+): Promise<WorkspaceRecord> {
+  const record = await showWorkspace(options, name);
+  if (record.phase !== "stopped") await stopWorkspace(runner, options, name);
+  return startWorkspace(runner, options, name);
+}
+
 export async function showWorkspace(options: LifecycleOptions, name: string): Promise<WorkspaceRecord> {
   return new LifecycleState(options.stateRoot).readWorkspace(validateLifecycleName(name, "workspace"));
+}
+
+export async function listWorkspaces(options: LifecycleOptions): Promise<WorkspaceRecord[]> {
+  return new LifecycleState(options.stateRoot).listWorkspaces();
 }
 
 export async function stopWorkspace(runner: StreamingCommandRunner, options: LifecycleOptions, name: string): Promise<void> {
@@ -285,7 +318,8 @@ async function reconcileProject(
   options: LifecycleOptions,
   state: LifecycleState,
   initialRecord: WorkspaceRecord,
-  repo: RepoRecord
+  project: ProjectRecord,
+  repo: ProjectRepositoryRecord
 ): Promise<WorkspaceRecord> {
   const release = await state.acquireWorkspaceLock(initialRecord.name);
   let record = await state.readWorkspace(initialRecord.name);
@@ -293,10 +327,18 @@ async function reconcileProject(
     try {
       const credentials = await ensureGitea(runner, options);
       const gitBaseUrl = await giteaNestedBaseUrl(runner);
-      record = { ...record, gitBaseUrl };
+      record = {
+        ...record,
+        projectName: project.name,
+        rootRepositoryAlias: repo.alias,
+        rootRef: requiredRootRef(project),
+        gitBaseUrl,
+        projectRepositories: repositoryEnvironment(project, gitBaseUrl)
+      };
       await state.writeWorkspace(record);
       await reconcileContainer(runner, options, record, gitEnvironment(record, credentials));
-      await ensureClone(runner, record, repo.cloneUrl);
+      await ensureClone(runner, record, repo.workspaceUrl);
+      await writeProjectManifest(runner, record, project);
       record = { ...record, updatedAt: new Date().toISOString() };
       await state.writeWorkspace(record);
       return record;
@@ -315,10 +357,10 @@ async function reconcileProject(
   }
 }
 
-async function readyProject(state: LifecycleState, project: string): Promise<RepoRecord> {
-  const repo = await state.readRepo(project);
-  if (repo.phase !== "ready") throw new UserError(`project '${project}' is not ready (phase: ${repo.phase})`);
-  return repo;
+async function readyProject(state: LifecycleState, project: string): Promise<ProjectRecord> {
+  const record = await state.readProject(project);
+  if (record.phase !== "ready") throw new UserError(`project '${project}' is not ready (phase: ${record.phase})`);
+  return record;
 }
 
 function gitEnvironment(record: WorkspaceRecord, credentials: GiteaCredentials): WorkspaceGitEnvironment {
@@ -337,7 +379,7 @@ async function runnableWorkspace(
 ): Promise<WorkspaceRecord> {
   const record = await showWorkspace(options, name);
   if (record.phase !== "ready") {
-    throw new UserError(`workspace '${record.name}' is not ready (phase: ${record.phase}); run workspace setup`);
+    throw new UserError(`workspace '${record.name}' is not ready (phase: ${record.phase}); run dim setup`);
   }
   await assertContainerRunning(runner, record);
   return record;
@@ -346,7 +388,7 @@ async function runnableWorkspace(
 async function assertContainerRunning(runner: StreamingCommandRunner, record: WorkspaceRecord): Promise<void> {
   const inspect = await runner.run("docker", ["container", "inspect", record.containerName, "--format", "{{.State.Running}}"]);
   if (inspect.exitCode !== 0 || inspect.stdout.trim() !== "true") {
-    throw new UserError(`workspace '${record.name}' is stopped; run workspace start`);
+    throw new UserError(`workspace '${record.name}' is stopped; run dim start`);
   }
 }
 
@@ -378,7 +420,8 @@ async function reconcileContainer(
   if (
     managed !== "true"
     || workspace !== record.name
-    || (projectLabel !== record.project && repoLabel !== record.project)
+    || projectLabel !== record.projectName
+    || repoLabel !== record.rootRepositoryAlias
     || backend !== record.runtimeBackend
   ) {
     throw new UserError(`Docker resource '${record.containerName}' conflicts with workspace '${record.name}'`);
@@ -438,8 +481,8 @@ export function workspaceContainerArgs(
     "--mount", `type=volume,source=${record.dockerVolumeName},target=${plan.runtimeDataPath}`,
     "--label", "dim.managed=true",
     "--label", `dim.workspace=${record.name}`,
-    "--label", `dim.project=${record.project}`,
-    "--label", `dim.repo=${record.project}`,
+    "--label", `dim.project=${record.projectName}`,
+    "--label", `dim.repo=${record.rootRepositoryAlias}`,
     "--label", `dim.backend=${record.runtimeBackend}`,
     "--label", "dim.resource=workspace",
     "--env", `DIM_GIT_USERNAME=${git.username}`,
@@ -520,9 +563,49 @@ async function ensureClone(
   if (directory.exitCode !== 0) throw commandError("prepare project directory", directory);
   const clone = await runner.run("docker", [
     "exec", "--user", "agent", record.containerName,
-    "git", "clone", cloneUrl, record.projectPath
+    "git", "clone", "--branch", rootBranch(record.rootRef), "--single-branch", cloneUrl, record.projectPath
   ]);
-  if (clone.exitCode !== 0) throw commandError(`clone project '${record.project}'`, clone);
+  if (clone.exitCode !== 0) throw commandError(`clone project '${record.projectName}'`, clone);
+}
+
+async function fastForwardRoot(
+  runner: StreamingCommandRunner,
+  record: WorkspaceRecord
+): Promise<void> {
+  const status = await projectCommand(runner, record, ["git", "status", "--porcelain"]);
+  if (status.exitCode !== 0) throw commandError("inspect project Git status", status);
+  if (status.stdout.trim()) {
+    throw new UserError(`workspace '${record.name}' has uncommitted project changes`);
+  }
+  const fetch = await projectCommand(runner, record, ["git", "fetch", "origin", record.rootRef]);
+  if (fetch.exitCode !== 0) throw commandError(`fetch root ref '${record.rootRef}'`, fetch);
+  const merge = await projectCommand(runner, record, ["git", "merge", "--ff-only", "FETCH_HEAD"]);
+  if (merge.exitCode !== 0) throw commandError(`fast-forward root ref '${record.rootRef}'`, merge);
+}
+
+async function writeProjectManifest(
+  runner: StreamingCommandRunner,
+  record: WorkspaceRecord,
+  project: ProjectRecord
+): Promise<void> {
+  const manifest = {
+    schemaVersion: 1,
+    project: { id: project.id, name: project.name },
+    root: { repository: record.rootRepositoryAlias, ref: record.rootRef, path: record.projectPath },
+    repositories: Object.fromEntries(project.repositories.map((repo) => [
+      repo.alias,
+      { workspaceUrl: repo.workspaceUrl }
+    ]))
+  };
+  const encoded = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`).toString("base64");
+  const result = await runner.run("docker", [
+    "exec", "--user", "root",
+    "--env", `DIM_PROJECT_MANIFEST_B64=${encoded}`,
+    record.containerName,
+    "sh", "-c",
+    `mkdir -p /run/dim && printf %s "$DIM_PROJECT_MANIFEST_B64" | base64 -d > ${record.projectManifestPath} && chown agent:agent ${record.projectManifestPath} && chmod 0444 ${record.projectManifestPath}`
+  ]);
+  if (result.exitCode !== 0) throw commandError("write project runtime manifest", result);
 }
 
 async function runProjectSetup(
@@ -575,8 +658,11 @@ function repeatedProfileArgs(profiles: string[]): string[] {
 }
 
 function projectEnvironment(record: WorkspaceRecord): string[] {
-  return [
+  const values = [
+    "--env", `DIM_PROJECT_ID=${record.projectId}`,
+    "--env", `DIM_PROJECT_NAME=${record.projectName}`,
     "--env", `DIM_PROJECT_ROOT=${record.projectPath}`,
+    "--env", `DIM_PROJECT_MANIFEST=${record.projectManifestPath}`,
     "--env", `DIM_WORKSPACE_NAME=${record.name}`,
     "--env", `COMPOSE_PROJECT_NAME=${record.composeProjectName}`,
     "--env", `DIM_WORKSPACE_BACKEND=${record.runtimeBackend}`,
@@ -584,6 +670,47 @@ function projectEnvironment(record: WorkspaceRecord): string[] {
     "--env", `COMPOSE_PROFILES=${record.profiles.join(",")}`,
     "--env", `DIM_GIT_BASE_URL=${record.gitBaseUrl}`
   ];
+  for (const [alias, url] of Object.entries(record.projectRepositories)) {
+    values.push("--env", `DIM_REPO_${repositoryEnvironmentName(alias)}=${url}`);
+  }
+  return values;
+}
+
+function readyRootRepository(project: ProjectRecord): ProjectRepositoryRecord {
+  if (!project.rootRepositoryAlias || !project.rootRef) {
+    throw new UserError(`project '${project.name}' has no root repo/ref`);
+  }
+  const repo = project.repositories.find((candidate) => candidate.alias === project.rootRepositoryAlias);
+  if (!repo || repo.phase !== "ready") {
+    throw new UserError(`project '${project.name}' root repo '${project.rootRepositoryAlias}' is not ready`);
+  }
+  return repo;
+}
+
+function requiredRootRef(project: ProjectRecord): string {
+  if (!project.rootRef) throw new UserError(`project '${project.name}' has no root ref`);
+  return project.rootRef;
+}
+
+function rootBranch(ref: string): string {
+  const prefix = "refs/heads/";
+  if (!ref.startsWith(prefix)) throw new UserError(`workspace root ref '${ref}' is not a branch`);
+  return ref.slice(prefix.length);
+}
+
+function repositoryEnvironment(project: ProjectRecord, baseUrl?: string): Record<string, string> {
+  return Object.fromEntries(project.repositories
+    .filter((repo) => repo.phase === "ready")
+    .map((repo) => [
+      repo.alias,
+      baseUrl === undefined
+        ? repo.workspaceUrl
+        : `${baseUrl}/${project.gitNamespace}/${repo.alias}.git`
+    ]));
+}
+
+function repositoryEnvironmentName(alias: string): string {
+  return alias.toUpperCase().replace(/[^A-Z0-9]/g, "_");
 }
 
 function nestedEngine(record: WorkspaceRecord): "docker" | "podman" {

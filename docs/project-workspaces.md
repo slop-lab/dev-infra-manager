@@ -74,9 +74,9 @@ Selected profiles are passed as repeated arguments:
 ```
 
 The script must be safe to retry after partial failure. It is invoked by
-`workspace create`, `workspace start`, `workspace setup`, and after a
-successful `workspace update`. It is not invoked by `workspace run` or
-`workspace exec`.
+`create`, `start`, `setup`, and after a
+successful `update`. It is not invoked by `run` or
+`exec`.
 
 ### `.dim/docker-compose.yml`
 
@@ -102,7 +102,7 @@ environment through another tool.
 
 ### `.dim/entrypoint.sh`
 
-When present, `workspace run` passes the task name and arguments to this
+When present, `run` passes the task name and arguments to this
 script:
 
 ```bash
@@ -136,14 +136,14 @@ case "$task" in
 esac
 ```
 
-When the entrypoint is absent, `workspace run` executes the supplied task and
-arguments directly from the project root. `workspace exec` always bypasses
+When the entrypoint is absent, `run` executes the supplied task and
+arguments directly from the project root. `exec` always bypasses
 the entrypoint.
 
 ### `.dim/teardown.sh`
 
 When present, this script receives the same environment and repeated profile
-arguments as setup and runs before workspace discard. When it is absent and
+arguments as setup and runs before discard. When it is absent and
 `.dim/docker-compose.yml` exists, `dim` performs:
 
 ```bash
@@ -160,16 +160,19 @@ and is the project's responsibility.
 
 ## End-to-end workflow
 
-Register a bare project repository:
+Create the Project root and populate it with standard Git:
 
 ```bash
-dim repo register --name example /path/to/example.git
+dim project create example
+dim repo create example root --root --ref main
+git -C /path/to/example push "$(dim repo url-for-host example root)" main
+dim repo protect example root
 ```
 
 Create a workspace and persist its desired Compose profiles:
 
 ```bash
-dim workspace create example example-dev \
+dim create example example-dev \
   --backend sysbox \
   --profile development \
   --profile secrets
@@ -187,26 +190,26 @@ Creation:
 Run project-defined tasks without repeating setup:
 
 ```bash
-dim workspace run example-dev codex
-dim workspace run example-dev test -- --filter unit
+dim run example-dev codex
+dim run example-dev test -- --filter unit
 ```
 
 Run a raw command in the top-level workspace:
 
 ```bash
-dim workspace exec example-dev -- bash
-dim workspace exec example-dev -- docker compose \
+dim exec example-dev -- bash
+dim exec example-dev -- docker compose \
   --file .dim/docker-compose.yml ps
 ```
 
-There is no separate `workspace shell` command; `workspace exec NAME -- bash`
+There is no separate `workspace shell` command; `exec NAME -- bash`
 is the explicit equivalent.
 
 Update the project and reconcile its environment:
 
 ```bash
-dim workspace update example-dev
-dim workspace update example-dev \
+dim update example-dev
+dim update example-dev \
   --profile development \
   --profile production
 ```
@@ -221,26 +224,30 @@ the services that own those repositories.
 Stop and resume the environment:
 
 ```bash
-dim workspace stop example-dev
-dim workspace start example-dev
+dim stop example-dev
+dim start example-dev
 ```
 
 `stop` preserves the project checkout and inner-Docker state. `start`
-reconciles the runtime and invokes setup so detached project services return
-to their desired state. It does not pull the project repository; use
-`workspace update` when new Git content should be incorporated.
+reconciles the runtime, fast-forwards the root ref, and invokes setup so
+detached project services return to their desired state. Use `restart` to
+apply the same sequence to a running workspace:
+
+```bash
+dim restart example-dev
+```
 
 Retry setup explicitly:
 
 ```bash
-dim workspace setup example-dev
+dim setup example-dev
 ```
 
 Inspect or discard:
 
 ```bash
-dim workspace show example-dev
-dim workspace discard example-dev --yes
+dim show example-dev
+dim discard example-dev --yes
 ```
 
 Discard stops project services when possible, then removes the top-level
@@ -251,31 +258,25 @@ not remove repositories from the managed Git service.
 
 | Command | Project Git update | Setup | Project entrypoint |
 |---|---:|---:|---:|
-| `workspace create` | initial clone | yes | no |
-| `workspace start` | no | yes | no |
-| `workspace setup` | no | yes | no |
-| `workspace update` | fast-forward only | yes | no |
-| `workspace run` | no | no | when present |
-| `workspace exec` | no | no | never |
-| `workspace stop` | no | no | no |
-| `workspace discard` | no | teardown only | no |
+| `create` | initial clone | yes | no |
+| `start` | fast-forward only | yes | no |
+| `restart` | fast-forward only | yes | no |
+| `setup` | no | yes | no |
+| `update` | fast-forward only | yes | no |
+| `run` | no | no | when present |
+| `exec` | no | no | never |
+| `stop` | no | no | no |
+| `discard` | no | teardown only | no |
 
 Setup is serialized per workspace. Ordinary tasks may run concurrently.
 Setup failure is recorded separately from runtime reconciliation failure and
 does not destroy the checkout or inner-Docker cache. Task failure is returned
 to the caller but does not mark the workspace itself unhealthy.
 
-## Project scaffold
+## Minimal Compose example
 
-The scaffold command is:
-
-```bash
-dim project init
-```
-
-By default it creates only `.dim/docker-compose.yml`, leaving the optional
-hooks absent. The initial Compose file assumes a root `Dockerfile` and
-provides one long-running development service:
+DIM does not generate project files. Add `.dim/docker-compose.yml` directly
+when the root repository needs a Compose-managed development service:
 
 ```yaml
 services:
@@ -288,13 +289,9 @@ services:
       - ..:/workspace
 ```
 
-The command must refuse to overwrite existing files unless `--force` is
-explicitly supplied. A project that needs custom repository checkout,
-non-Compose orchestration, or task aliases can add `.dim/setup.sh` and
-`.dim/entrypoint.sh` manually.
-
-The generated files are ordinary project files. Developers may run the
-Compose definition directly without `dim`:
+Projects needing custom checkout, non-Compose orchestration, or task aliases
+can add `.dim/setup.sh` and `.dim/entrypoint.sh`. These files are ordinary
+project files and may be invoked directly without `dim`:
 
 ```bash
 docker compose --file .dim/docker-compose.yml up --detach --build
@@ -315,9 +312,10 @@ The project repository is the only checkout required in the top-level
 workspace. Other repositories need not be bind-mounted from it.
 
 Services can reach the managed Git service and may clone into service-specific
-named volumes. `DIM_GIT_BASE_URL` is a routable HTTP endpoint for nested
-services; projects explicitly pass `DIM_GIT_USERNAME`, `DIM_GIT_TOKEN`, and an
-askpass helper when a service also needs to push. Repositories used only as
+named volumes. `DIM_PROJECT_MANIFEST`, `DIM_GIT_BASE_URL`, and
+`DIM_REPO_<ALIAS>` provide routable repository endpoints. Projects explicitly
+pass `DIM_GIT_USERNAME`, `DIM_GIT_TOKEN`, and an askpass helper when a service
+also needs to push. Repositories used only as
 image build inputs may use a Git build context. Projects that require
 centralized checkout behavior can implement it in `.dim/setup.sh`; this is a
 project choice rather than a `dim` requirement.
@@ -328,6 +326,6 @@ The multi-repository container smoke covers:
 - Separate secret-handling and multiple product repositories.
 - Direct managed-Git access from nested services.
 - Service-owned persistent checkout volumes.
-- Compose profile selection stored by `workspace create`.
+- Compose profile selection stored by `create`.
 - Project task dispatch through `.dim/entrypoint.sh`.
 - Stop/start persistence, update/setup retry, and complete discard cleanup.

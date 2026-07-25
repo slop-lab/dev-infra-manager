@@ -1,191 +1,126 @@
-# Repository and Workspace Lifecycle
+# Project, Repository, and Workspace Lifecycle
 
-## Scope
+## State and identities
 
-This specification defines the local Gitea service, role-neutral repository
-registration, persistent workspace containers, Git environment injection,
-journaling, reconciliation, and cleanup.
-
-## State and Docker resources
-
-Metadata must be stored below `DIM_STATE_ROOT`, defaulting to
-`~/.local/state/dim`.
-
-Repository records:
+DIM stores schema-versioned Project and workspace records below
+`DIM_STATE_ROOT`, defaulting to `~/.local/state/dim`.
 
 ```text
-<stateRoot>/repos/<name>.json
-```
-
-Service, workspace records, and locks:
-
-```text
+<stateRoot>/projects/<project>.json
+<stateRoot>/workspaces/<workspace>.json
 <stateRoot>/services/gitea.json
-<stateRoot>/workspaces/<name>.json
-<stateRoot>/locks/workspace-<name>.lock
+<stateRoot>/locks/project-<project>.lock
+<stateRoot>/locks/workspace-<workspace>.lock
 ```
 
-Host metadata must not contain Gitea passwords or workspace writer
-credentials.
+Project and workspace records use stable IDs distinct from display names.
+Schema 2 is the first Project-aware schema. Schema 1/0.1 state is rejected
+without mutation.
 
-Managed Docker resources must:
+## Project namespace
 
-- Use a `dim-` name prefix.
-- Carry `dim.managed=true`.
-- Carry a `dim.resource` label.
-- Carry workspace and repository labels when scoped to a workspace.
+The built-in managed Git service is one DIM-owned Gitea instance. Each Project
+owns the reserved organization `dim-<project>` and repository aliases are
+scoped below it:
 
-## Gitea service
-
-The initial provider is a shared local Gitea service with:
-
-- Container `dim-gitea`.
-- Network `dim-control`.
-- Docker-managed volume `dim-gitea-data`.
-- Loopback-only HTTP publication.
-- No host Git repository bind mount.
-
-The service must create separate admin and shared workspace-writer users.
-Credentials must be generated or accepted from process environment and stored
-only inside the Gitea data volume. Workspace code must not receive admin
-credentials.
-
-All registered repositories may be publicly readable. The shared writer may
-push unprotected branches. Protected branch patterns must reject direct
-workspace pushes, and merge authority must remain with the human/admin path.
-
-## Repository registration
-
-Usage:
-
-```bash
-dim repo register --name NAME [--protect PATTERN,...] /path/to/bare.git
+```text
+dim-acme/root
+dim-acme/product
+dim-acme/environment
 ```
 
-Registration must:
+Project metadata contains its name/ID, namespace, repository catalog, and
+exactly one root repository/ref when runnable. Infrastructure implementation
+belongs to the root repository, not the Project state.
 
-1. Validate the logical name.
-2. Resolve the source to a canonical path.
-3. Verify it is a bare Git repository.
-4. Atomically claim an `importing` repository journal record.
-5. Reconcile the Gitea service.
-6. Create an empty Gitea repository.
-7. Import branches and tags without retaining the source path as a runtime
-   dependency.
-8. Grant the shared writer write access.
-9. Install protected branch patterns.
-10. Mark the record `ready`.
+Claims precede Gitea mutations. Project and repository reconciliation is
+serialized, records errors for diagnosis, and rejects unmanaged identity
+collisions.
 
-Failed imports must record `error`. Repeating registration with the same name
-and canonical source may resume the import. A ready registration or a
-different source must be rejected.
+## Repository creation and import
 
-Repository metadata must not assign product, control, or secret-handling
-roles.
+Empty repository creation is the primary operation. It returns separate host
+and workspace endpoints without credentials. Users may populate it with any
+standard Git commands.
 
-## Project workspace creation
+Protection is pending until the initial push, then applied explicitly or when
+the root is first used to create a workspace. Import performs the initial
+mirror push before applying protection.
 
-Usage:
+External sources are accessed only through the local Git CLI and its existing
+credential configuration. DIM 0.2 does not provision external Git providers or
+proxy Git traffic.
 
-```bash
-dim workspace create PROJECT WORKSPACE \
-  [--backend sysbox|gvisor|rootless-podman|runc] \
-  [--profile PROFILE ...]
-```
+## Root workspace contract
 
-A workspace consists of:
-
-- One top-level persistent workspace container.
-- One named Docker volume for its nested-engine store.
-- Membership in the shared Gitea network.
-- Optional routes, initially an empty list.
-- One host metadata record containing the project, runtime backend, selected
-  Compose profiles, Compose project name, and last setup result.
-
-The top-level container must not mount a host checkout, host worktree, host
-Git directory, host Docker socket, or host workspace data directory.
-
-The project repository must be cloned inside the container at:
+A workspace binds permanently to a Project ID and directly clones only the
+configured root repository/ref at:
 
 ```text
 /workspace/project
 ```
 
-Creation must claim metadata before Docker mutations, reconcile named and
-labeled resources, wait for inner Docker readiness, clone the project, and
-invoke the `.dim` setup contract.
+The root repository owns the optional:
 
-The project contract consists only of optional `.dim/setup.sh`,
-`.dim/entrypoint.sh`, `.dim/teardown.sh`, and `.dim/docker-compose.yml`.
-`dim` must not discover a root Compose file. A setup hook overrides the
-default Compose setup. With no setup hook or DIM Compose file, setup is a
-successful no-op.
+```text
+.dim/setup.sh
+.dim/entrypoint.sh
+.dim/teardown.sh
+.dim/docker-compose.yml
+```
 
-`workspace run WORKSPACE TASK` must not run setup. It dispatches the task
-through `.dim/entrypoint.sh` when present. `workspace exec WORKSPACE --
-COMMAND` always executes the raw command from the project root.
+It also owns checkout and reconciliation of any additional Project
+repositories. DIM supplies a read-only runtime manifest and environment:
 
-`workspace update` must require a clean checkout and use fast-forward-only Git
-update before setup. `workspace start` must reconcile and run setup without
-updating Git.
+```text
+DIM_PROJECT_ID
+DIM_PROJECT_NAME
+DIM_PROJECT_ROOT
+DIM_PROJECT_MANIFEST
+DIM_WORKSPACE_NAME
+DIM_GIT_BASE_URL
+DIM_REPO_<NORMALIZED_ALIAS>
+```
 
-## Git environment
+Alias-to-environment normalization must be collision-free.
 
-The workspace container must receive:
+## Applying changes
 
-- `DIM_GIT_USERNAME`
-- `DIM_GIT_TOKEN`
-- `DIM_GIT_USER_NAME`
-- `DIM_GIT_USER_EMAIL`
-- `DIM_GIT_BASE_URL`
-- `GIT_ASKPASS`
-- Non-interactive Git configuration for `user.name` and `user.email`
+DIM never applies Project or root remote changes to a running workspace
+automatically.
 
-Credentials must not be embedded in the remote URL or host metadata. Nested
-containers receive Git values only through explicit environment forwarding.
+- `start` starts a stopped runtime, fetches the configured root ref,
+  fast-forward merges it, and runs setup.
+- `restart` stops a running runtime and performs the same start/apply/setup
+  sequence.
+- `update` performs the fast-forward and setup without a stop and may also
+  replace Compose profiles.
+- `setup` retries setup without fetching.
 
-## Stop and discard
+Dirty roots and non-fast-forward updates fail without modifying user work.
+Stop/start and restart preserve the checkout and named inner-engine volume.
 
-`workspace stop` must preserve the project checkout and named inner-Docker
-volume.
+## Cleanup
 
-`workspace discard --yes` must attempt `.dim/teardown.sh` or default Compose
-down, then remove:
+`discard --yes` attempts root teardown and removes only the workspace
+container, named inner-engine volume, and workspace record. It does not delete
+Project metadata or managed Git repositories.
 
-- The top-level container.
-- Its named inner-Docker volume.
-- Its workspace metadata.
-
-It must not delete the registered Gitea repository. The command must require
-explicit acknowledgement because unpushed changes are lost.
-
-Entrypoints must remove stale inner-dockerd pid and socket files before
-restart.
-
-## Reconciliation
-
-Reconciliation must be serialized per workspace. Lock files must be created
-atomically, released after reconciliation rather than after the user command,
-and recoverable after process failure.
-
-The lifecycle must:
-
-- Adopt matching labeled resources.
-- Recreate missing recorded resources.
-- Reject unmanaged or mismatched name collisions.
-- Record errors for retry on the next invocation.
-- Avoid anonymous Docker volumes.
+`project remove` refuses while referenced and otherwise removes metadata only;
+the reserved Gitea organization remains. `project purge --yes` refuses while
+referenced and otherwise deletes the DIM-managed organization and Project
+metadata.
 
 ## Verification
 
-Required verification:
+Required tests cover:
 
-- Unit tests for name validation, atomic claims, locks, role-neutral records,
-  and Docker command boundaries.
-- An runc development smoke test for Gitea import, internal clone, Git
-  identity, writer push, protected branch rejection, nested Docker,
-  stop/start persistence, and discard cleanup.
-- A four-repository project smoke test for `.dim` setup and entrypoint,
-  capability profiles, nested service-owned Git clones, nested writer push,
-  profile replacement, setup retry, and cleanup.
-- A production smoke test on a host with `sysbox-runc`.
+- atomic Project/repository/workspace claims and schema rejection;
+- two Projects using the same repository alias without collision;
+- empty creation, standard initial push, delayed protection, and import;
+- host/workspace URL separation and credential-free output;
+- root clone/ref validation and runtime manifest injection;
+- no live update of a running workspace;
+- start/restart fast-forward and dirty-root rejection;
+- task/raw command dispatch, stop persistence, and discard cleanup;
+- packed CLI help, JSON output, URL stdout, and Git credential wrapper.

@@ -34,7 +34,7 @@ describe("@slop-lab/install-dim", () => {
 
     const prefix = join(root, "prefix");
     const configPath = join(root, "config", "slop-lab", "dim.json");
-    await installDimCli({ prefix, version: "0.1.0", npmCommand: npm, configPath });
+    await installDimCli({ prefix, version: "9.9.9", npmCommand: npm, configPath });
 
     expect((await readFile(argumentsFile, "utf8")).trim().split("\n")).toEqual([
       "install",
@@ -44,7 +44,7 @@ describe("@slop-lab/install-dim", () => {
       "--save-exact",
       "--no-fund",
       "--no-audit",
-      "@slop-lab/dim-cli@0.1.0"
+      "@slop-lab/dim-cli@9.9.9"
     ]);
     expect(defaultInstallPrefix({ HOME: join(root, "home") })).toBe(join(root, "home", ".local"));
     expect(defaultUserConfigPath({ HOME: join(root, "home") })).toBe(

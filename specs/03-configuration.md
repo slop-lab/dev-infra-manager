@@ -1,20 +1,13 @@
 # Configuration
 
-## Scope
+DIM configuration is environment-based. `DIM_STATE_ROOT` selects the
+schema-versioned state root; managed Gitea, workspace backend, image and
+resource options use the `DIM_GITEA_*`, `DIM_GIT_*`, and `DIM_WORKSPACE_*`
+variables documented in `docs/configuration.md`.
 
-This specification defines the JSON configuration used by the bare-Git review
-controller and secret-runtime deployment. Workspace lifecycle configuration is
-stored separately under `DIM_STATE_ROOT`.
+Project-specific Git namespaces, repository aliases, root repository/ref,
+profiles and backend choices belong to Project/workspace records. Raw
+credentials must not be written to those records.
 
-## Fields
-
-- `stateRoot`: required non-empty string, normalized to an absolute path.
-- `managedGitHost`: required `bare-git-pr` configuration with a remote and at
-  least one valid protected full ref.
-- `secretRuntime`: required approved ref, image, container, build context,
-  optional env file, and publish list.
-
-The config does not contain job storage, resource profiles, timeouts, agent
-images, or workspace runtime backends.
-
-Invalid configuration must fail before host mutation.
+There is no legacy JSON config, bare-Git PR store, controller config, job
+storage, or automatic 0.1 state migration.
