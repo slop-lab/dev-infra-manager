@@ -101,9 +101,8 @@ Behavior:
 6. Install project dependencies with frozen lockfile.
 7. Run `just verify`.
 8. Build the Docker and rootless Podman project workspace images.
-9. Build the secret runtime example image.
-10. Run `doctor --backend` for the selected backend.
-11. Exit non-zero if that backend doctor reports host runtime gaps.
+9. Run `doctor --backend` for the selected backend.
+10. Exit non-zero if that backend doctor reports host runtime gaps.
 
 ## Smoke Script
 
@@ -115,19 +114,12 @@ scripts/smoke.sh
 
 Behavior:
 
-1. Build default agent image.
-2. Build secret runtime example image.
-3. Run default agent image command smoke with inner Docker disabled.
-4. Create temporary config using directory storage.
-5. Initialize managed Git host.
-6. Create trusted runtime repo.
-7. Seed initial protected ref through trusted `git update-ref`.
-8. Push reviewed proposal branch.
-9. Create, approve, and merge PR.
-10. Deploy secret runtime.
-11. Poll `/healthz`.
-12. Print `smoke-ok` on success.
-13. Clean up temp files, container, and smoke image on exit.
+1. Build workspace packages and the workspace-root image.
+2. Run a workspace-root image command smoke.
+3. Start the image with Sysbox and explicit resource limits.
+4. Verify cgroup limits and nested Docker execution.
+5. Verify host and nested Docker image stores remain isolated.
+6. Print the success marker and clean up temporary probes.
 
 ## Local npm Registry Helper
 
@@ -204,3 +196,6 @@ change together.
 copies each repository skeleton from `examples/multi-repo-project/repos/` to a
 temporary directory, initializes and pushes real Git repositories, and
 verifies the documented workspace and secret boundary against managed Gitea.
+The root controller deploys the reviewed secret service on its own nested
+Docker daemon; the smoke verifies the agent container's independent daemon
+cannot see that service and its environment does not contain the raw secret.

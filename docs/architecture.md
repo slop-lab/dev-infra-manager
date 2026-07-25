@@ -8,22 +8,32 @@ The system supports adding project Git repositories later. This allows product c
 
 ## Runtime Boundaries
 
-The system uses separate runtime boundaries for agent workspaces and secret-bearing environments.
+Each DIM workspace has a trusted project-root container. Inside it, the
+controller keeps agent-controlled execution separate from secret-bearing
+execution by using distinct child containers and distinct container runtimes.
 
-### Agent Workspace Container
+### Workspace Root and Controller
 
-The agent workspace container is the persistent execution environment exposed to an agent.
+The workspace root is the persistent top-level container. Its controller owns
+the checkout and root nested-container runtime, reconciles the agent
+environment, and deploys reviewed secret-bearing workloads. Host-side DIM
+creates this outer boundary; it does not expose the root runtime to the agent.
+
+### Agent Container
+
+The agent container is the untrusted child execution environment exposed to an
+agent.
 
 Properties:
 
 - Contains no raw API keys or secret credentials.
 - Provides a named read-write workspace that persists until explicitly discarded.
 - Allows command execution inside the workspace.
-- Allows nested container creation through the selected runtime backend.
+- Allows nested container creation through an agent-specific inner runtime.
 - Receives approved Git identity and project runtime configuration.
 - Can access the managed Git host for pushing branches and opening pull requests through the configured workflow.
 - Can include Git configuration environment variables required for Git operations.
-- Cannot access host container runtime sockets.
+- Cannot access host or workspace-root controller runtime sockets.
 - Cannot mount secret-bearing volumes.
 - Cannot directly control secret-bearing containers.
 
@@ -33,11 +43,13 @@ The secret-bearing container is the execution environment that may hold API keys
 
 Properties:
 
-- Runs separately from the agent workspace container.
+- Runs inside the workspace root but separately from the agent container and
+  its nested runtime.
 - Contains or can access secrets required for trusted operations.
-- Exposes only a constrained host-reachable interface for use by the agent runtime.
+- Exposes only a constrained interface selected by the controller for use by
+  agent tooling.
 - Is deployed by a controller from reviewed sources.
-- Does not mount the agent workspace as a writable shared volume.
+- Does not mount an agent-controlled checkout as a writable shared volume.
 - Is treated as trusted only after its source, image definition, and runtime configuration pass human review.
 
 If an API shape is needed before the agent runtime integration exists, the default placeholder interface is HTTP. The exact tool-facing protocol is owned by the agent runtime layer.
@@ -75,9 +87,10 @@ The deployment flow is:
 
 Secret-bearing containers must not be built or restarted directly from unreviewed workspace files.
 
-Secret-bearing deployment remains outside the DIM 0.2 workspace lifecycle.
-Secret values are supplied through host-side runtime configuration, not
-through agent-controlled files or Project state.
+Secret-bearing deployment is owned by the controller rather than the
+agent-facing `.dim/entrypoint.sh` task surface. Secret values enter only the
+controller/secret-bearing boundary, not agent-controlled files, Project state,
+or the agent container.
 
 ## Managed Git Host
 
@@ -88,23 +101,29 @@ review and merge happen through the Git host.
 
 ## Workspace Lifecycle
 
-Agent workspaces are named, persistent, and scoped to a registered project.
+Workspace roots are named, persistent, and scoped to a registered project.
 
 The workspace lifecycle is:
 
 1. Create a new read-write workspace for the project.
 2. Inject approved Git configuration and environment variables.
-3. Start the agent workspace container.
-4. Allow the agent to execute commands and create nested containers within the boundary.
-5. Preserve only explicitly exported artifacts or Git-pushed changes.
-6. Explicitly discard the workspace and nested workloads when they are no longer needed.
+3. Start the workspace root and its controller.
+4. Start the agent container with a separate inner runtime.
+5. Allow the agent to execute commands and create containers only within the
+   agent boundary.
+6. Preserve only explicitly exported artifacts or Git-pushed changes.
+7. Explicitly discard the workspace and all nested workloads when they are no longer needed.
 
-No raw secret material is persisted in or exported from the agent workspace.
+No raw secret material is persisted in or exported from the agent container.
 
 ## Network Boundary
 
 Internet access policy is owned by the agent runtime layer and is not defined by this infrastructure document.
 
-For secret-bearing operations, the infrastructure requires only that the secret-bearing service be reachable from the host so the agent runtime can expose it as a tool, such as through MCP or another tool interface.
+For secret-bearing operations, the controller may expose a constrained service
+interface to agent tooling, such as through MCP or another tool interface. It
+must not expose the root container runtime or raw secret material.
 
-Agent workspace containers must not require direct access to raw secret material. If direct communication with a secret-bearing service is enabled for a project, it must be limited to the explicitly exposed service interface.
+Agent containers must not require direct access to raw secret material. If
+direct communication with a secret-bearing service is enabled for a project,
+it must be limited to the explicitly exposed service interface.

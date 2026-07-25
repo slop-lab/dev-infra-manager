@@ -207,6 +207,9 @@ directly from source via `tsx` — the reliable way to run the CLI without
 installing it. Running `tsx src/cli.ts` directly from `packages/dim-cli`
 instead fails with `ERR_MODULE_NOT_FOUND` unless core has already been built.
 
-The Sysbox registration check only proves that Docker knows about `sysbox-runc`. The Sysbox container execution check runs `hello-world:latest` with `--runtime=sysbox-runc`; this is the direct readiness signal for Sysbox agent workspace containers.
+The Sysbox registration check only proves that Docker knows about
+`sysbox-runc`. The Sysbox container execution check runs `hello-world:latest`
+with `--runtime=sysbox-runc`; this is the direct readiness signal for Sysbox
+workspace-root containers.
 For gVisor, `doctor --backend gvisor` checks `runsc` and Docker runtime execution.
 For rootless Podman, `doctor --backend rootless-podman` checks the workspace image and verifies that `podman` is present in it. Podman runs rootless as `dim` inside the workspace. The outer Docker workspace container is not privileged; it instead receives the specific capabilities (`SYS_ADMIN`, `SETUID`/`SETGID`, `SYS_CHROOT`, `SYS_PTRACE`, and the rest of the set shared with the gVisor backend) that nested unprivileged user namespaces and mounts need, since Docker's default capability set and seccomp profile normally block them. Set `DIM_WORKSPACE_PRIVILEGED=true` to fall back to a fully privileged outer container if a host's kernel/seccomp configuration needs it.

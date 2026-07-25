@@ -5,9 +5,9 @@ infrastructure repository plus two additional repositories, a product repo
 and a separate secret-bearing repo. It installs DIM, registers the three
 repositories, creates a real workspace container, runs `codex` and `claude`
 inside a nested dev container that can itself create further containers,
-shows that the workspace can reach the product repository on its own, and
-deploys the secret-bearing service the way DIM actually requires — outside
-the workspace entirely, never reachable by the agent. This is DIM's actual
+shows that the trusted project-root controller can reach reviewed repositories,
+and deploys the secret-bearing service inside the project-root workspace
+container but outside the agent's `dev` container and Docker daemon. This is DIM's actual
 purpose: a persistent, isolated container where a coding agent can work
 without ever touching secrets or protected infrastructure directly, not a
 toy.
@@ -20,6 +20,7 @@ starting point for your own project:
 examples/multi-repo-project/repos/
 ├── root/            the required root repository
 │   └── .dim/
+│       ├── controller.sh
 │       ├── docker-compose.yml
 │       └── entrypoint.sh
 ├── web/              a product repository, unrelated to .dim
@@ -129,10 +130,11 @@ reports success, having protected nothing.
 dim create example example-dev --backend runc --profile development
 ```
 
-This claims the workspace, clones `example-root` inside it, and runs
-`.dim/docker-compose.yml` — a real container now exists. Its `dev` service
-installs `codex` and `claude` and mounts the workspace's own nested Docker
-socket, so it can run agents and create further containers of its own.
+This claims the workspace, clones `example-root` inside its trusted
+project-root container, and runs `.dim/docker-compose.yml`. Its `dev` service
+installs `codex` and `claude` and starts an independent nested Docker daemon,
+so agents can create further containers without access to the project-root
+controller's daemon.
 
 ## 5. Confirm it's real
 
@@ -178,67 +180,68 @@ dim exec example-dev -- \
   docker run --rm hello-world
 ```
 
-`dev` mounts `/var/run/docker.sock` from the workspace's own nested Docker
-daemon (the same one `docker compose` itself runs against), so containers it
-creates are siblings within that same isolated daemon — never the real host.
-This is what lets an agent running inside `dev` build images, run test
-containers, or start service dependencies entirely on its own.
+`dev` has its own Docker-in-Docker daemon. Containers it creates are nested
+under the agent boundary and are neither host containers nor siblings managed
+by the project-root controller. This lets an agent build images, run tests,
+and start dependencies without being able to inspect or control a
+secret-bearing container.
 
 ## 9. Reach the other repositories from inside the workspace
 
-Only the root repository is cloned automatically. Everything else is
-reachable through the managed Git service using the credentials `dim`
-already exports into the workspace:
+Only the root repository is cloned automatically. The trusted project-root
+controller can fetch other reviewed repositories through the managed Git
+service using the credentials DIM exports at that boundary:
 
 ```bash
 dim exec example-dev -- sh -c \
   'git clone "$DIM_GIT_BASE_URL/web.git" /tmp/web && cat /tmp/web/app.txt'
 ```
 
-This prints `hello from example-web` — cloned from inside the container,
+This prints `hello from example-web` — cloned by the project-root controller,
 using `$DIM_GIT_BASE_URL` plus the `dim-git-askpass` helper `dim` installs
 into the workspace. See [Multiple
 repositories](../../docs/repo-workspaces.md#multiple-repositories) for how
 project code is expected to use this in practice (usually from
 `.dim/setup.sh` or a Compose service, not by hand).
 
-## 10. Deploy the secret-bearing service — outside the workspace
+## 10. Deploy the secret-bearing service beside the agent container
 
-The `secrets` repository is registered above like any other, but its
-container is deliberately **not** part of `.dim/docker-compose.yml` and
-never created by `dim create`/`dim run`. DIM keeps secret-bearing deployment
-entirely outside the workspace lifecycle on purpose (see [Trust
-Boundaries](../../specs/02-boundaries-and-trust.md#secret-bearing-runtime-boundary));
-in a real project a separate, human-reviewed controller builds and runs it
-from an approved ref, not the agent. This example plays that controller's
-part by hand:
+The `secrets` repository is registered above like any other, but its container
+is deliberately **not** part of the agent-facing `.dim/docker-compose.yml`.
+The reviewed `.dim/controller.sh` runs in the project-root workspace
+container, fetches the approved `secrets` ref, and uses the project-root
+nested Docker daemon to create the service. It is a sibling of `dev`, not a
+container inside `dev`, and `dev` has a different Docker daemon (see [Trust
+Boundaries](../../specs/02-boundaries-and-trust.md#secret-bearing-runtime-boundary)).
+The agent therefore cannot inspect, stop, or replace it.
 
 ```bash
-docker build --tag example-secret-service ./example-secrets
-docker run --detach --name example-secret-service \
-  --env EXAMPLE_SECRET=not-a-real-secret \
-  --publish 7099:7099 \
-  example-secret-service
-curl -sf http://127.0.0.1:7099/healthz
+dim exec example-dev -- \
+  env EXAMPLE_SECRET=not-a-real-secret sh .dim/controller.sh deploy-secret
+dim exec example-dev -- sh .dim/controller.sh secret-health
 ```
 
 This prints `{"ok":true,"secretConfigured":true}` — the service is real and
-has the secret, but never returns it. Confirm the agent's workspace never
-received it either, which is the actual invariant that matters:
+has the secret, but never returns it. These `dim exec` calls represent a
+trusted operator invoking the controller boundary; they are not agent tasks
+exposed through `.dim/entrypoint.sh`. Confirm the `dev` container received
+neither the secret nor control of the service:
 
 ```bash
-dim exec example-dev -- sh -c 'env | grep -c EXAMPLE_SECRET || true'
+dim exec example-dev -- docker compose -f .dim/docker-compose.yml \
+  exec -T dev sh -c 'env | grep -c EXAMPLE_SECRET || true'
+dim exec example-dev -- docker compose -f .dim/docker-compose.yml \
+  exec -T dev docker ps --format '{{.Names}}'
 ```
 
-This prints `0`. No command run inside `dev` or the top-level workspace ever
-sees `EXAMPLE_SECRET`, because nothing about creating or using the workspace
-ever passes it there.
+The first command prints `0`, and the second does not list
+`example-secret-service`. The project-root controller receives the secret only
+for deployment; the agent environment does not.
 
-Tear the example service down when done — it's outside `dim discard`'s reach
-by design:
+Tear the example service down explicitly when done:
 
 ```bash
-docker rm --force example-secret-service
+dim exec example-dev -- sh .dim/controller.sh remove-secret
 ```
 
 ## 11. Clean up

@@ -25,8 +25,6 @@ source "$script_dir/lib/local-npm-registry.sh"
 suffix="$PPID-$$"
 project_name="example-$suffix"
 workspace_name="example-dev-$suffix"
-secret_image="example-secret-service-$suffix"
-secret_container="example-secret-service-$suffix"
 work_dir="$(mktemp -d /tmp/dim-example-project.XXXXXX)"
 state_root="$work_dir/state"
 source_root="$work_dir/source"
@@ -45,8 +43,6 @@ export DIM_DATA_HOME="$work_dir/data"
 dim() { "$dim_bin" "$@"; }
 
 cleanup() {
-  docker rm --force "$secret_container" >/dev/null 2>&1 || true
-  docker image rm "$secret_image" >/dev/null 2>&1 || true
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
     dim discard "$workspace_name" --yes >/dev/null 2>&1 || true
   fi
@@ -192,27 +188,33 @@ web_content="$(dim exec "$workspace_name" -- sh -c \
   'git clone "$DIM_GIT_BASE_URL/web.git" /tmp/web >/dev/null 2>&1 && cat /tmp/web/app.txt')"
 test "$web_content" = "hello from example-web"
 
-echo "[example-project] 10. deploy the secret-bearing service (outside the workspace)"
-docker build --tag "$secret_image" "$examples_dir/secrets" >/dev/null
-docker run --detach --name "$secret_container" \
-  --env EXAMPLE_SECRET=not-a-real-secret \
-  "$secret_image" >/dev/null
+echo "[example-project] 10. deploy the secret-bearing service beside, not inside, the agent container"
+dim exec "$workspace_name" -- \
+  env EXAMPLE_SECRET=not-a-real-secret sh .dim/controller.sh deploy-secret >/dev/null
 
 healthz=""
 for attempt in $(seq 1 30); do
-  healthz="$(docker exec "$secret_container" wget -qO- http://127.0.0.1:7099/healthz 2>/dev/null || true)"
+  healthz="$(dim exec "$workspace_name" -- sh .dim/controller.sh secret-health 2>/dev/null || true)"
   [[ -n "$healthz" ]] && break
   sleep 1
 done
 echo "$healthz" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
 
-# The actual invariant: the workspace never received the raw secret, because
-# nothing about creating or using it ever passes EXAMPLE_SECRET there.
-leaked="$(dim exec "$workspace_name" -- sh -c 'env | grep -c EXAMPLE_SECRET || true')"
+# The agent container has a different Docker daemon and cannot see the
+# root-level controller's secret-bearing container or raw secret.
+agent_containers="$(dim exec "$workspace_name" -- \
+  docker compose --file .dim/docker-compose.yml exec -T dev \
+  docker ps --format '{{.Names}}')"
+if grep -q example-secret-service <<<"$agent_containers"; then
+  echo "agent Docker daemon unexpectedly sees the secret-bearing container" >&2
+  exit 1
+fi
+leaked="$(dim exec "$workspace_name" -- \
+  docker compose --file .dim/docker-compose.yml exec -T dev \
+  sh -c 'env | grep -c EXAMPLE_SECRET || true')"
 test "$leaked" = "0"
 
-docker rm --force "$secret_container" >/dev/null
-docker image rm "$secret_image" >/dev/null 2>&1 || true
+dim exec "$workspace_name" -- sh .dim/controller.sh remove-secret >/dev/null
 
 echo "[example-project] 11. clean up"
 dim discard "$workspace_name" --yes >/dev/null

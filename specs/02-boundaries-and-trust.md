@@ -4,58 +4,67 @@
 
 The system has three major execution boundaries:
 
-- Agent workspace boundary.
+- Agent container boundary.
 - Secret-bearing runtime boundary.
-- Host/controller boundary.
+- Controller boundary.
 
-The agent workspace boundary is untrusted.
+The agent container boundary is untrusted.
 The secret-bearing runtime boundary is trusted only after human review of its effective source and runtime definition.
-The host/controller boundary is privileged because it can create workspaces, run containers, and deploy secret-bearing runtimes. A project must directly review the complete pinned DIM revision before trusting this boundary.
+The controller boundary is privileged. It runs in the workspace root outside
+the agent container, owns the root nested-container runtime, and deploys
+secret-bearing workloads. Host-side DIM additionally creates and reconciles
+the outer workspace root. A project must directly review the complete pinned
+DIM revision before trusting these layers.
 
-## Agent Workspace Boundary
+## Agent Container Boundary
 
-Agent workspace containers:
+Agent containers:
 
 - Must not receive raw product/runtime secrets. It may receive an explicit
   constrained infrastructure capability such as the internal Git writer
   credential.
 - Must receive only approved non-secret environment variables.
 - May receive Git-related environment variables needed to push proposals.
-- Must not mount the host Docker socket.
+- Must not mount the host or workspace-root controller Docker socket.
 - Must not mount secret-bearing runtime volumes.
-- May run nested containers through the selected backend.
-- Must use an isolated named workspace.
+- May run nested containers through an agent-specific inner runtime.
+- Must run as an isolated child of a named workspace root.
 - Must be resource-limited at the outer container boundary.
 
-The final command inside the included agent images runs as the unprivileged
-`dim` user, not a user named after the agent itself: the workspace container
-is DIM's own execution boundary, and the agent's actual influence over
-anything outside it is limited to pushing proposals for review (see Git
-Boundary), the same constrained relationship it has to the secret-bearing
-runtime boundary. Naming the process identity `agent` would suggest the
-agent owns or fully controls this boundary, which it does not.
+The agent's actual influence over anything outside its container and inner
+runtime is limited to explicit controller interfaces and pushing proposals for
+review (see Git Boundary).
 
 ## Secret-Bearing Runtime Boundary
 
 Secret-bearing containers:
 
-- May receive raw secrets through host-side deployment configuration outside DIM Project and workspace state.
-- Must be separate from agent workspace containers.
-- Must not mount an agent workspace as a writable shared volume.
+- May receive raw secrets through controller deployment configuration outside
+  DIM Project state and agent-controlled files.
+- Must run as a separate child of the workspace root, outside the agent
+  container and the agent's nested runtime.
+- Must not mount an agent-controlled checkout as a writable shared volume.
 - Must be built and deployed from the configured approved ref.
-- Must expose only the configured host-reachable interface needed by the agent runtime tooling layer.
+- Must expose only the configured constrained interface needed by the agent
+  tooling layer.
 
 Any source, Dockerfile, entrypoint, dependency lockfile, runtime config, or controller change that can affect secret access is secret-bearing for review purposes.
 
-## Host And Controller Boundary
+## Controller Boundary
 
-The host/controller boundary:
+The controller boundary:
 
-- Creates, reconciles, and discards workspace resources.
-- Runs Docker commands for agent and secret runtime containers.
+- Runs in the workspace root, outside the agent container.
+- Owns the workspace-root nested-container runtime.
+- Starts and reconciles agent and secret-bearing child containers.
+- Keeps the agent's inner runtime separate from its own runtime.
+- Deploys secret-bearing containers only from approved refs.
+
+The host-side DIM boundary:
+
+- Creates, reconciles, and discards outer workspace-root resources.
 - Manages local bare Git repositories and PR metadata.
 - Installs and checks runtime support through scripts and doctor checks.
-- Deploys secret-bearing containers.
 
 Controller code is trusted infrastructure code only after direct human review of the complete pinned DIM revision. The complete project repository and all secret-bearing environment code also require human review before deployment.
 

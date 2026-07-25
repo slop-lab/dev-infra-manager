@@ -1,15 +1,23 @@
 services:
   dev:
-    image: docker:29.1.3-cli
+    image: docker:29.1.3-dind
+    privileged: true
     working_dir: /workspace
-    # Gives the dev container the same nested Docker daemon the workspace
-    # itself uses, so it can create further containers of its own (builds,
-    # test runs, whatever an agent needs) without ever touching the host.
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    # The agent gets its own daemon, not the project-root controller's daemon.
+    # Containers created here cannot inspect or control secret-bearing siblings
+    # that the controller starts at the project-root level.
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - dev-docker:/var/lib/docker
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
+        dockerd-entrypoint.sh dockerd >/var/log/dockerd.log 2>&1 &
+        until docker info >/dev/null 2>&1; do sleep 1; done
         apk add --no-cache nodejs npm >/dev/null
         npm install --global @openai/codex @anthropic-ai/claude-code >/dev/null
         exec sleep infinity
+
+volumes:
+  dev-docker:

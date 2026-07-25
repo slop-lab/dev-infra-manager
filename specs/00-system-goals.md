@@ -24,10 +24,10 @@ The system must prevent that agent from:
 
 ## Global Invariants
 
-- Agent workspace containers are untrusted.
+- Agent containers inside workspace roots are untrusted.
 - Nested containers created by agents are untrusted.
 - Secret-bearing containers are trusted only when built and deployed from reviewed source.
-- Raw product/runtime secrets must never be injected into agent workspace
+- Raw product/runtime secrets must never be injected into agent
   containers. A constrained infrastructure capability such as the internal
   Gitea writer credential may be injected when its server-side permissions
   cannot modify protected refs or secret-bearing runtime state.
@@ -65,5 +65,5 @@ Changes that affect these topics are global changes:
 - Protected ref behavior.
 - Runtime backend trust assumptions.
 - Storage quota enforcement.
-- Controller deployment authority.
+- Workspace-root controller deployment authority.
 - Config compatibility.

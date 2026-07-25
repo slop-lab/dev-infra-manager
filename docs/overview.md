@@ -4,7 +4,11 @@
 
 `dev-infra-manager` provides infrastructure for running AI agents in isolated, ephemeral development workspaces while protecting secrets from agents that may attempt to exfiltrate API keys or otherwise misuse their execution privileges.
 
-The infrastructure separates agent-controlled execution from secret-bearing execution. Agents may run commands, read and write files inside their workspace, create nested containers, and push proposed changes to a managed Git host. They must not receive raw secrets, control secret-bearing containers directly, or modify secret-bearing runtime environments without human review.
+The infrastructure separates agent-controlled execution from secret-bearing
+execution inside each workspace root. Agents run in a child container with
+their own nested runtime. A trusted root-level controller may run
+secret-bearing sibling containers, but agents must not receive their raw
+secrets, access the controller runtime, or control those siblings directly.
 
 ## Scope
 
@@ -12,7 +16,7 @@ This repository owns the container and infrastructure boundary for agent workspa
 
 In scope:
 
-- Agent workspace containers.
+- Workspace-root controller containers and nested agent containers.
 - Secret-bearing containers.
 - Controller-managed deployment of secret-bearing containers.
 - Managed Git hosting primitives used by agents to propose changes.
@@ -39,7 +43,7 @@ The primary threat is an AI agent that attempts to obtain secrets or alter trust
 
 The infrastructure assumes:
 
-- Agent workspace containers are untrusted.
+- Agent containers are untrusted.
 - Nested containers created by agents are untrusted.
 - Secret-bearing containers are trusted only when built and deployed from reviewed sources.
 - Code that can directly or indirectly affect access to secrets is secret-bearing from a review perspective.

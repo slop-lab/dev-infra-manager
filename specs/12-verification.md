@@ -46,23 +46,20 @@ behavior, and packed CLI project workflows. It must not require Sysbox or KVM.
 
 `just verify-container-sysbox` must cover:
 
-- Docker agent image build.
-- Secret runtime example image build.
-- Agent image command smoke with inner Docker disabled.
-- Sysbox agent execution with explicit outer CPU, memory, and PID limits.
-- Exact cgroup v2 limit visibility inside the agent workspace.
+- Workspace-root image build.
+- Workspace-root image command smoke.
+- Sysbox workspace-root execution with explicit outer CPU, memory, and PID
+  limits.
+- Exact cgroup v2 limit visibility inside the workspace root.
 - Nested Docker `hello-world` execution.
 - Bidirectional image-store isolation using unique host-only and inner-only
   probe tags, independent of pre-existing image caches.
-- Managed Git host initialization.
-- Bare repo creation.
-- Protected ref compatible initial seeding through trusted update-ref.
-- Proposal branch push.
-- PR create, approve, and merge.
-- Secret runtime deploy from approved ref.
-- Secret runtime `/healthz` check.
 
-The smoke gate may use `directory` storage because it primarily checks Git/deploy integration in environments where loop setup may be unavailable.
+The independent multi-repository example gate verifies managed Git, protected
+refs, and controller deployment of a secret-bearing child beside an isolated
+agent container. It must also prove the agent container uses a distinct Docker
+daemon, cannot list the controller's secret-bearing child, and does not receive
+the child's raw secret environment.
 
 ## Fast Isolation Gate
 

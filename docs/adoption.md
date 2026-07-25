@@ -26,10 +26,11 @@ these inputs or their pinned versions change.
 The full review above establishes overall trust in DIM — correctness,
 availability, and everything else a project depends on it for, not only
 secret safety. Secret safety specifically rests on a narrower guarantee: an
-agent workspace never receives raw secret material, because nothing in
-DIM's workspace creation or command dispatch ever passes it there, and
-secret-bearing containers are built and deployed entirely outside the
-workspace lifecycle (see [Architecture](architecture.md)). That guarantee
+agent container never receives raw secret material, because nothing in
+DIM's agent-container creation or command dispatch passes it there, and
+secret-bearing containers are built and deployed by the trusted controller
+outside the agent container and its runtime (see
+[Architecture](architecture.md)). That guarantee
 depends only on (3) above — the secret-bearing code and configuration
 itself — staying correct, plus the specific parts of DIM that enforce the
 boundary (workspace container/environment construction and protected-ref

@@ -5,9 +5,9 @@
 `images/project-workspace` starts a private Docker daemon, waits for readiness,
 sets ownership on the workspace and nested-engine storage, and executes the
 requested command as the unprivileged `dim` user (`DIM_UID`/`DIM_GID` build
-args select its UID/GID, both defaulting to 1000). See [Trust
-Boundaries](../02-boundaries-and-trust.md#agent-workspace-boundary) for why
-that user isn't named after the agent.
+args select its UID/GID, both defaulting to 1000). This is the workspace-root
+controller account, not the identity of an agent process; see [Trust
+Boundaries](../02-boundaries-and-trust.md#controller-boundary).
 
 `DIM_DOCKERD_FLAGS` may add backend-specific daemon flags. The image must not
 mount or contact the host Docker socket.

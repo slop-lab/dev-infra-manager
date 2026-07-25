@@ -16,19 +16,25 @@ Docker/Git terms aren't repeated here.
   optional `.dim` directory defines the workspace's environment and
   lifecycle hooks; DIM clones only this repository into a workspace
   automatically.
-- **Workspace** — a named, persistent, isolated top-level container bound
-  to exactly one Project. This is where an agent actually runs.
-- **Controller** — the trusted host-side actor with privileges a workspace
-  never has: it creates and reconciles Projects/workspaces, and builds and
-  deploys secret-bearing containers from approved refs. It is not a
-  container itself (a common misreading, since its job includes running
-  containers) — in practice today it's the `dim` CLI operated with host
-  access, not a separate service. See [Trust
-  Boundaries](../specs/02-boundaries-and-trust.md#host-and-controller-boundary).
-- **Secret-bearing container** — separate from any workspace, built and
-  deployed by the controller outside the workspace lifecycle entirely, from
-  a human-reviewed ref. A workspace's own environment never receives the
-  raw secret material it holds.
+- **Workspace root container** — a named, persistent, isolated top-level
+  container bound to exactly one Project. It owns the project checkout and
+  the nested runtime, and contains the controller and its child containers.
+- **Agent container** — an untrusted child container inside the workspace
+  root. The coding agent runs here with its own nested-container runtime; it
+  does not control the workspace root runtime.
+- **Controller** — the trusted control process in the workspace root,
+  outside the agent container. It starts agent and secret-bearing containers
+  and deploys the latter from approved refs. Host-side `dim` creates and
+  reconciles the outer workspace. See [Trust
+  Boundaries](../specs/02-boundaries-and-trust.md#controller-boundary).
+- **Controller API** — the authenticated, plugin-extensible HTTP API started
+  by `dim controller serve`. It may be hosted wherever workspaces can reach
+  it and is distinct from the project controller's secret-deployment role;
+  the shared word is part of the current CLI/API name.
+- **Secret-bearing container** — a controller-managed child of the workspace
+  root, separate from the agent container and its nested runtime. It is built
+  from a human-reviewed ref and may receive raw secrets; the agent container
+  receives neither those secrets nor control of this container.
 
 The documentation is split by concern:
 
@@ -40,10 +46,11 @@ The documentation is split by concern:
 - [Usage](usage.md): local setup, commands, and operational workflow.
 - [Configuration](configuration.md): configuration file reference.
 - [Runtime Backends](runtime-backends.md): Sysbox, gVisor, rootless Podman, and runc selection.
-- [Runtime Images](runtime-images.md): included agent workspace and secret runtime images.
+- [Runtime Images](runtime-images.md): workspace-root runtime images and their nested workloads.
 - [External workspace URLs](external-urls.md): controller discovery, host profiles, nested targets, Tailscale, and Cloudflare Tunnel.
 - [Repository-backed Workspaces](repo-workspaces.md): local Gitea registration, persistent workspaces, reconciliation, and Git environment.
 - [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.
+- [Example: Multi-repository Project](../examples/multi-repo-project/README.md): controller/agent separation, reviewed repositories, and a secret-bearing sibling container.
 - [Example: External URLs](../examples/external-urls/README.md): host profiles, controller discovery, and real root/dev/deep reverse-proxy routing.
 - [Plugins](plugins.md): versioned provider extension boundary for optional GitHub, GitLab, and other integrations.
 - [Releasing](releasing.md): release prerequisites, verification, package order, and post-publish checks.
