@@ -55,7 +55,11 @@ pnpm run cli -- create "$project_name" "$workspace_name" \
   --memory 3g \
   --pids-limit 1024 \
   >/dev/null
-test "$(docker inspect --format '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.PidsLimit}}' "dim-ws-$workspace_name")" \
+# The workspace's actual Docker resource names are an implementation detail
+# owned by `dim show --json`, not something to reconstruct by hand: never
+# assume a `dim-ws-<name>`-shaped prefix in test code or docs.
+container_name="$(pnpm run --silent cli -- show "$workspace_name" --json | jq -r .containerName)"
+test "$(docker inspect --format '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.PidsLimit}}' "$container_name")" \
   = "1500000000|3221225472|1024"
 pnpm run cli -- exec "$workspace_name" -- sh -c "
   test \"\\\$(git config user.name)\" = 'dim/$workspace_name'
@@ -74,8 +78,9 @@ pnpm run cli -- exec "$workspace_name" -- sh -c "
     'test -n \"\$DIM_GIT_USERNAME\"; test -n \"\$DIM_GIT_TOKEN\"; wget -qO- https://example.com >/dev/null'
 " >/dev/null
 
-test "$(docker inspect --format '{{range .Mounts}}{{.Type}}:{{.Name}}:{{.Destination}}{{end}}' "dim-ws-$workspace_name")" \
-  = "volume:dim-ws-$workspace_name-docker:/var/lib/docker"
+volume_name="$(pnpm run --silent cli -- show "$workspace_name" --json | jq -r .dockerVolumeName)"
+test "$(docker inspect --format '{{range .Mounts}}{{.Type}}:{{.Name}}:{{.Destination}}{{end}}' "$container_name")" \
+  = "volume:$volume_name:/var/lib/docker"
 pnpm run cli -- stop "$workspace_name" >/dev/null
 pnpm run cli -- start "$workspace_name" >/dev/null
 pnpm run cli -- exec "$workspace_name" -- sh -c \

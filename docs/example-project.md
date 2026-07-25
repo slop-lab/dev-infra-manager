@@ -131,12 +131,14 @@ This claims the workspace, clones `example-root` inside it, and runs
 
 ```bash
 dim show example-dev --json
-docker ps --filter "name=dim-ws-example-dev"
+docker ps --filter "name=$(dim show example-dev --json | jq -r .containerName)"
 dim exec example-dev -- hostname
 ```
 
-`show` reports `"phase": "ready"`, `docker ps` lists the running `dev`
-service container, and `exec` runs a command inside it.
+`show` reports `"phase": "ready"` and the workspace's actual `containerName`
+— read it from there rather than guessing a name; it's an implementation
+detail `dim` can change. `docker ps` then confirms it's a real, running
+container, and `exec` runs a command inside it.
 
 ## 6. Run the project task
 

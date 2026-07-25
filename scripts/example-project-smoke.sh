@@ -141,10 +141,13 @@ echo "[example-project] 4. create the workspace (a real container)"
 dim create "$project_name" "$workspace_name" --backend runc --profile development >/dev/null
 
 echo "[example-project] 5. confirm it's real"
-phase="$(dim show "$workspace_name" --json \
-  | node -e 'let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>console.log(JSON.parse(d).phase))')"
-test "$phase" = "ready"
-docker ps --filter "name=dim-ws-${workspace_name}" --format '{{.Names}}' | grep -q "dim-ws-${workspace_name}"
+# The workspace's actual container name is an implementation detail of
+# `dim`, not something to guess: read it back from `dim show --json` rather
+# than assuming a `dim-ws-<name>`-shaped prefix.
+workspace_json="$(dim show "$workspace_name" --json)"
+test "$(jq -r .phase <<<"$workspace_json")" = "ready"
+container_name="$(jq -r .containerName <<<"$workspace_json")"
+docker ps --filter "name=$container_name" --format '{{.Names}}' | grep -qx "$container_name"
 dim exec "$workspace_name" -- hostname >/dev/null
 
 echo "[example-project] 6. run the project task"
