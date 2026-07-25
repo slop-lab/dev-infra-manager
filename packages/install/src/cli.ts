@@ -104,7 +104,7 @@ async function interactiveInstall(): Promise<void> {
       const defaultHome = await configuredPluginHome();
       const homeInput = (await prompt.question(`Plugin home [${defaultHome}]: `)).trim();
       const specifierInput = (await prompt.question(
-        "Plugin package(s), space-separated and pinned to exact versions: "
+        "Plugin package(s), space-separated and pinned to exact versions (e.g. @scope/pkg@1.2.3): "
       )).trim();
       const specifiers = specifierInput.split(/\s+/).filter(Boolean);
       if (specifiers.length === 0) throw new Error("at least one plugin package is required");
@@ -153,8 +153,9 @@ async function installCli(exposeOnPath: boolean, binDirectory: string): Promise<
   if (installed.symlink) {
     console.log(`Linked ${installed.symlink} -> ${installed.executable}`);
     const pathEntries = (process.env.PATH ?? "").split(path.delimiter).map((entry) => path.resolve(entry));
-    if (!pathEntries.includes(path.resolve(path.dirname(installed.symlink)))) {
-      console.warn(`Warning: ${path.dirname(installed.symlink)} is not in PATH`);
+    const symlinkDirectory = path.dirname(installed.symlink);
+    if (!pathEntries.includes(path.resolve(symlinkDirectory))) {
+      console.warn(`Warning: ${symlinkDirectory} is not in PATH; add it, e.g. export PATH="${symlinkDirectory}:$PATH"`);
     }
   } else {
     console.log("DIM CLI will be invoked through the installer facade; no local bin symlink was created");
