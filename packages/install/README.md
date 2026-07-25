@@ -1,108 +1,208 @@
 # @slop-lab/install-dim
 
-User-local installer for the `dim` CLI and explicitly selected DIM plugins.
-It invokes npm with exact versions and does not require `sudo`.
+`@slop-lab/install-dim` is a thin installer/facade for the real DIM CLI,
+[`@slop-lab/dim-cli`](https://www.npmjs.com/package/@slop-lab/dim-cli). Its own
+executable is also named `dim`. It installs the CLI and plugins with exact
+versions via `npm`, requires no `sudo`, and does not duplicate DIM's command
+tree: anything other than its three installer-owned commands is forwarded
+as-is to the installed DIM CLI.
 
-## Interactive installation
+## Getting the `dim` command
 
-Start here for normal use:
-
-```bash
-npx "@slop-lab/install-dim@0.2.0"
-```
-
-The installer first asks whether to install the CLI, plugins, or both, then
-shows the relevant destination. Interactive mode requires a TTY. Scripts and
-CI should use the explicit commands below.
-
-## Install only the CLI
-
-Run the installer at an exact, reviewed version:
+Two supported ways to run it, both pinned to an exact version:
 
 ```bash
-npx "@slop-lab/install-dim@0.2.0" cli
+mise use -g 'npm:@slop-lab/install-dim@0.2.0'
+dim install-cli
 ```
 
-The default prefix is `~/.local`, producing:
+```bash
+npx '@slop-lab/install-dim@0.2.0' install-cli
+```
+
+With `mise`, plain `dim ...` keeps working afterwards for both installer
+commands and (once installed) the real CLI. With `npx`, repeat the pinned
+`npx '@slop-lab/install-dim@0.2.0' ...` invocation each time you need the
+installer.
+
+Never use `latest` for software that controls development containers or
+loads executable plugins — always pin an exact, reviewed version.
+
+> `mise` releases from `2026.7.x` onward reject installing any npm package
+> below a weekly-download popularity threshold (currently 1000). Until
+> `@slop-lab/install-dim` crosses that threshold on the public npm registry,
+> `mise use -g 'npm:@slop-lab/install-dim@0.2.0'` may fail with an `aube
+> install failed: ... weekly downloads` error on those `mise` versions, with
+> no known working bypass. Use the `npx` form above, or an older `mise`
+> release, until then.
+
+### Losing access to the installer
+
+If you install the CLI in direct-PATH mode (see below), `~/.local/bin/dim`
+becomes a symlink straight to the real DIM CLI. Once that `dim` is the one
+your shell resolves first, bare `dim` runs the real CLI directly — the
+facade, and with it `dim installer` / `dim install-cli` / `dim install-plugin`,
+is no longer reachable that way. To run installer-only commands again
+(upgrading, adding a plugin, repairing), go back to an explicit, pinned
+`npx` call:
+
+```bash
+npx '@slop-lab/install-dim@0.2.0' install-cli
+npx '@slop-lab/install-dim@0.2.0' install-plugin '@example/dim-plugin@1.2.3'
+```
+
+If both a mise-provided facade and a direct-PATH `dim` are on `PATH`, normal
+`PATH` order decides which one runs; use `which -a dim` to check.
+
+## Commands
+
+The installer owns exactly three root commands. Everything else is passed
+through unchanged to the installed DIM CLI (for example `dim plugin ...` is
+always a DIM CLI command, never handled here).
 
 ```text
-~/.local/bin/dim
-~/.local/share/dim/plugins
+dim                          Open the interactive installer (TTY only)
+dim installer                Same as above; `dim installer --help` for its usage
+dim install-cli [options]    Install/upgrade the DIM CLI
+dim install-plugin [options] PACKAGE@EXACT_VERSION...
+                              Install and enable one or more plugins
 ```
 
-The installer warns when the resulting binary directory is not on `PATH`. Add
-it before invoking `dim`:
+Running bare `dim` (or `dim installer`) with no TTY does not hang waiting for
+input — it prints usage and exits with an error instead.
+
+### Interactive install
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
-dim --version
-dim --help
+npx '@slop-lab/install-dim@0.2.0'
 ```
 
-Choose another user-writable prefix when needed:
+Prompts for what to install (CLI, plugin(s), or both), then — for the CLI —
+whether to expose a `~/.local/bin/dim` symlink, and — for plugins — the
+plugin home and space-separated, exact-version package specifiers.
+
+### `dim install-cli`
+
+```text
+Usage: dim install-cli [options]
+
+Options:
+  --no-local-bin  Install privately for facade use without ~/.local/bin/dim
+  --local-bin     Create a managed dim symlink in the user bin directory
+  --prefix PATH   Use PATH/bin for the managed symlink (default: ~/.local)
+  -h, --help      Show this help
+```
+
+`--local-bin` and `--no-local-bin` are mutually exclusive. See "CLI install
+modes" below for what each one does and which is the default.
+
+### `dim install-plugin`
+
+```text
+Usage: dim install-plugin [options] PACKAGE@EXACT_VERSION...
+
+Options:
+  --plugin-home PATH  Override the plugin installation directory
+  -h, --help          Show this help
+```
 
 ```bash
-npx "@slop-lab/install-dim@0.2.0" cli --prefix "$HOME/tools/dim"
+dim install-plugin '@example/dim-plugin@1.2.3'
+dim install-plugin --plugin-home "$HOME/.local/share/dim/plugins" '@example/dim-plugin@1.2.3'
 ```
 
-The installer installs the matching `@slop-lab/dim-cli` release. It does not
-install Docker, a workspace runtime backend, or the DIM workspace image; use
-the repository's
-[host setup guide](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/usage.md)
-for those prerequisites.
+Specifiers must be pinned to an exact version (`name@x.y.z`); this command
+does not resolve `latest` or ranges. Installed packages are recorded in
+`plugins.json` under the plugin home. If the DIM CLI is not installed yet,
+the command still installs and enables the plugin(s), but prints a warning
+that there is no CLI yet to use them.
 
-## Install only plugins
+## CLI install modes
 
-Install and enable one or more exact plugin packages in DIM's isolated plugin
-home:
+Either mode installs the real `@slop-lab/dim-cli` package into a private,
+versioned data directory that is never on `PATH` directly:
+
+```text
+$XDG_DATA_HOME/dim/cli/0.2.0/node_modules/.bin/dim
+```
+
+(falling back to `~/.local/share/dim/cli/0.2.0/...` when `XDG_DATA_HOME` is
+unset). The installed version matches the installer's own version.
+
+**Direct PATH (`--local-bin`)** additionally creates or replaces a symlink
+in the bin directory pointing at that versioned executable:
+
+```text
+~/.local/bin/dim -> $XDG_DATA_HOME/dim/cli/0.2.0/node_modules/.bin/dim
+```
+
+Use `--prefix PATH` to use `PATH/bin/dim` instead of `~/.local/bin/dim`. Once
+this symlink is what `PATH` resolves, `dim` runs the real CLI directly and
+the facade/installer commands are no longer reached that way (see above).
+
+The installer only ever creates, replaces, or removes a `dim` at that path
+if it is already a symlink pointing inside its own managed versioned data
+directory. If some other file or symlink is already there — including a
+leftover DIM `0.1.0` install — it stops with a conflict error instead of
+overwriting it; clean up the existing path yourself and re-run.
+
+**Proxied (`--no-local-bin`)** installs to the same versioned directory but
+does not touch `PATH` at all. The facade instead records the absolute
+executable path in its config and proxies every non-installer command to it.
 
 ```bash
-npx "@slop-lab/install-dim@0.2.0" plugin \
-  "@example/dim-plugin@1.2.3"
+dim install-cli --no-local-bin
 ```
 
-Override the plugin location explicitly:
+**Default**: under `mise`, `--no-local-bin` is the default; everywhere else,
+`--local-bin` is the default. The explicit flag always wins over this
+detection.
 
-```bash
-npx "@slop-lab/install-dim@0.2.0" plugin \
-  --plugin-home "$HOME/.local/share/dim/plugins" \
-  "@example/dim-plugin@1.2.3"
-```
+## `dim --help` / `dim --version`
 
-The plugin home is a private npm project. Enabled package names are recorded
-in `plugins.json`; `dim plugin list` imports only those named packages and
-validates their DIM plugin API version.
+Behavior depends on whether the real CLI is installed (per the facade's
+config, not just `PATH`):
 
-Version 0.2.0 intentionally does not expose a generic Git-provider plugin
-interface. Repository import uses the host's `git` CLI.
+- **Not installed**: `dim --help` prints facade-only help (this package's own
+  usage, not a pretend DIM CLI help). `dim --version` prints:
+  ```text
+  DIM installer 0.2.0
+  DIM CLI: not installed
+  ```
+- **Installed**: `dim --help` is forwarded to the real CLI's own `--help`.
+  `dim --version` prints:
+  ```text
+  DIM CLI 0.2.0 (via DIM installer 0.2.0)
+  ```
+  with a warning if the configured version no longer matches what's actually
+  installed (run `dim install-cli` again to repair).
 
-## Persisted configuration
+Any other command with no CLI installed fails fast with exit code 2 and a
+message pointing at `dim install-cli`, instead of guessing at some other
+`dim` on `PATH`.
 
-Installation choices are recorded in:
+## Configuration file
 
-```sh
+Installer state (proxied CLI executable path/version, plugin home) is kept
+in:
+
+```text
 ${XDG_CONFIG_HOME:-$HOME/.config}/slop-lab/dim.json
 ```
 
-The file contains the selected install prefix and plugin home. The CLI uses it
-to locate plugins. Once `pluginHome` has been recorded, it takes precedence
-over a `DIM_PLUGIN_HOME` value introduced in a later process. This keeps an
-installed `dim` tied to the plugin set selected at installation time.
+or the path given by `DIM_CONFIG_PATH`. This file is also read by the DIM
+CLI itself (for example to locate the plugin home), so treat it as shared
+state rather than installer-private cache. You normally don't need to edit
+it by hand — re-run `dim install-cli` / `dim install-plugin` to change what
+it points at.
 
-Configuration discovery uses the fixed
-`$XDG_CONFIG_HOME/slop-lab/dim.json` location (falling back to
-`$HOME/.config/slop-lab/dim.json`). The explicit controls are:
+## What this does not do
 
-- `--plugin-home` changes the selection during plugin installation and records
-  the new absolute path.
-- `DIM_PLUGIN_HOME` supplies the initial default only when no persisted
-  `pluginHome` exists.
-- `DIM_CONFIG_PATH` selects a different configuration file for testing or
-  portable installations.
-
-Re-running installation is the supported way to update the selected CLI or
-plugin set. Always specify exact versions; do not use `latest` for software
-that controls development containers or loads executable plugins.
+The installer only installs the DIM CLI and DIM plugins. It does not install
+Docker, a workspace runtime backend, or the DIM workspace image; see the
+repository's
+[host setup guide](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/usage.md)
+for those prerequisites.
 
 Before adopting DIM or any plugin, follow the mandatory
 [adoption and trust requirements](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/adoption.md).

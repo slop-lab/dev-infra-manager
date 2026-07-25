@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { Command, CommanderError } from "commander";
+import { AddHelpTextContext, Command, CommanderError } from "commander";
 import {
   applyProjectRepositoryProtection,
   createProject,
@@ -43,16 +43,7 @@ program
   .version("0.2.0")
   .showSuggestionAfterError()
   .configureHelp({ sortSubcommands: true, sortOptions: true })
-  .addHelpText("after", `
-Typical flow:
-  dim project create PROJECT
-  dim repo create PROJECT ROOT --root
-  git push "$(dim repo url-for-host PROJECT ROOT)" main
-  dim repo protect PROJECT ROOT
-  dim create PROJECT WORKSPACE
-  dim exec WORKSPACE -- bash
-
-Run 'dim help --all' to list administrative commands.`);
+  .addHelpText("afterAll", installerFacadeHelpText);
 
 const project = program.command("project").description("Manage project metadata and Git namespaces");
 
@@ -414,6 +405,38 @@ function commaSeparated(value: string): string[] {
   const values = value.split(",").map((item) => item.trim()).filter(Boolean);
   if (values.length === 0) throw new UserError("--protect must contain at least one pattern");
   return values;
+}
+
+function installerFacadeHelpText(context: AddHelpTextContext): string {
+  const rootText = `
+Typical flow:
+  dim project create PROJECT
+  dim repo create PROJECT ROOT --root
+  git push "$(dim repo url-for-host PROJECT ROOT)" main
+  dim repo protect PROJECT ROOT
+  dim create PROJECT WORKSPACE
+  dim exec WORKSPACE -- bash
+
+Run 'dim help --all' to list administrative commands.`;
+
+  if (process.env.DIM_INVOKED_VIA_INSTALLER !== "1") {
+    return context.command === program ? rootText : "";
+  }
+
+  const installerVersion = process.env.DIM_INSTALLER_VERSION;
+  const installerSuffix = installerVersion ? ` ${installerVersion}` : "";
+
+  if (context.command !== program) {
+    return `\nRunning via the DIM installer facade${installerSuffix}.`;
+  }
+
+  return `${rootText}
+
+Running via the DIM installer facade${installerSuffix}. The following installer commands are also
+available:
+  dim installer        interactive installer UI
+  dim install-cli      install or upgrade the DIM CLI
+  dim install-plugin   install a DIM plugin`;
 }
 
 function interactive(): boolean {

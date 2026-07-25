@@ -14,7 +14,7 @@ const output = minifyPackageJson(source, {
   includeFields: ["publishConfig"]
 });
 output.bin = {
-  "install-dim": "cli.js"
+  dim: "cli.js"
 };
 
 if ("private" in output) {

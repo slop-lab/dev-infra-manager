@@ -1,33 +1,83 @@
 #!/usr/bin/env node
+import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
+import { parseArgs } from "node:util";
 import {
+  configuredCli,
   configuredPluginHome,
-  defaultInstallPrefix,
+  defaultBinDirectory,
   installDimCli,
-  installPlugins
+  installPlugins,
+  queryCliVersion,
+  validateConfiguredCli
 } from "./install.js";
 
 const args = process.argv.slice(2);
-if (args.includes("--help") || args.includes("-h")) {
-  printHelp();
-  process.exit(0);
-} else if (args.length === 0) {
-  await interactiveInstall();
-} else if (args[0] === "cli") {
-  await installCliCommand(args.slice(1));
-} else if (args[0] === "plugin") {
-  await installPluginCommand(args.slice(1));
-} else {
-  throw new Error(`unknown command: ${args[0]}; expected 'cli' or 'plugin'`);
+
+try {
+  process.exitCode = await dispatch(args);
+} catch (error) {
+  console.error(`dim: ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 1;
+}
+
+async function dispatch(commandArgs: string[]): Promise<number> {
+  const first = commandArgs[0];
+  if (first === undefined) {
+    await interactiveInstall();
+    return 0;
+  }
+  if (first === "installer") {
+    if (commandArgs.length === 1) await interactiveInstall();
+    else if (isHelp(commandArgs[1])) printInstallerHelp();
+    else throw new Error(`unknown installer argument: ${commandArgs[1]}`);
+    return 0;
+  }
+  if (first === "install-cli") {
+    await installCliCommand(commandArgs.slice(1));
+    return 0;
+  }
+  if (first === "install-plugin") {
+    await installPluginCommand(commandArgs.slice(1));
+    return 0;
+  }
+
+  const cli = await configuredCli();
+  if (isHelp(first) && cli === undefined) {
+    printFacadeHelp();
+    return 0;
+  }
+  if (isVersion(first) && cli === undefined) {
+    console.log(`DIM installer ${await installerVersion()}`);
+    console.log("DIM CLI: not installed");
+    return 0;
+  }
+  if (cli === undefined) {
+    console.error(`dim: DIM CLI is not installed; run 'dim install-cli'`);
+    return 2;
+  }
+
+  const executable = await validateConfiguredCli(cli, process.argv[1]);
+  if (isVersion(first)) {
+    const installedVersion = await queryCliVersion(executable);
+    console.log(`DIM CLI ${installedVersion} (via DIM installer ${await installerVersion()})`);
+    if (installedVersion !== cli.version) {
+      console.error(
+        `dim: warning: configured version ${cli.version} does not match installed ${installedVersion}; run 'dim install-cli' to repair`
+      );
+    }
+    return 0;
+  }
+  return proxyCli(executable, commandArgs, await installerVersion());
 }
 
 async function interactiveInstall(): Promise<void> {
   if (!stdin.isTTY || !stdout.isTTY) {
-    printHelp();
-    throw new Error("interactive installation requires a TTY; use the cli or plugin command");
+    printFacadeHelp();
+    throw new Error("interactive installation requires a TTY; use install-cli or install-plugin");
   }
 
   const prompt = createInterface({ input: stdin, output: stdout });
@@ -42,9 +92,12 @@ async function interactiveInstall(): Promise<void> {
     if (!["1", "2", "3"].includes(choice)) throw new Error(`invalid selection: ${choice}`);
 
     if (choice === "1" || choice === "3") {
-      const defaultPrefix = defaultInstallPrefix();
-      const prefixInput = (await prompt.question(`Install prefix [${defaultPrefix}]: `)).trim();
-      await installCli(path.resolve(prefixInput || defaultPrefix));
+      const noLocalBin = runningUnderMise();
+      const mode = (await prompt.question(
+        `Expose ~/.local/bin/dim symlink? [${noLocalBin ? "y/N" : "Y/n"}]: `
+      )).trim().toLowerCase();
+      const exposeOnPath = mode === "" ? !noLocalBin : mode === "y" || mode === "yes";
+      await installCli(exposeOnPath, defaultBinDirectory());
     }
 
     if (choice === "2" || choice === "3") {
@@ -63,59 +116,115 @@ async function interactiveInstall(): Promise<void> {
 }
 
 async function installCliCommand(commandArgs: string[]): Promise<void> {
-  let prefix = defaultInstallPrefix();
-  for (let index = 0; index < commandArgs.length; index += 1) {
-    const arg = commandArgs[index]!;
-    if (arg === "--prefix") {
-      const value = commandArgs[index + 1];
-      if (!value) throw new Error("--prefix requires a path");
-      prefix = path.resolve(value);
-      index += 1;
-    } else {
-      throw new Error(arg.startsWith("-") ? `unknown option: ${arg}` : `unexpected argument: ${arg}`);
+  const parsed = parseArgs({
+    args: commandArgs,
+    allowPositionals: false,
+    strict: true,
+    options: {
+      help: { type: "boolean", short: "h" },
+      "no-local-bin": { type: "boolean" },
+      "local-bin": { type: "boolean" },
+      prefix: { type: "string" }
     }
+  });
+  if (parsed.values.help) {
+    printInstallCliHelp();
+    return;
+  }
+  if (parsed.values["no-local-bin"] && parsed.values["local-bin"]) {
+    throw new Error("--no-local-bin and --local-bin cannot be used together");
   }
 
-  await installCli(prefix);
+  const exposeOnPath = parsed.values["local-bin"]
+    ? true
+    : parsed.values["no-local-bin"]
+      ? false
+      : !runningUnderMise();
+  const binDirectory = parsed.values.prefix
+    ? path.join(path.resolve(parsed.values.prefix), "bin")
+    : defaultBinDirectory();
+  await installCli(exposeOnPath, binDirectory);
 }
 
-async function installCli(prefix: string): Promise<void> {
+async function installCli(exposeOnPath: boolean, binDirectory: string): Promise<void> {
   const version = await installerVersion();
-  await installDimCli({ prefix, version });
-  console.log(`Installed ${prefix}/bin/dim`);
-  const binaryDirectory = path.join(prefix, "bin");
-  const pathEntries = (process.env.PATH ?? "").split(path.delimiter).map((entry) => path.resolve(entry));
-  if (!pathEntries.includes(path.resolve(binaryDirectory))) {
-    console.warn(`Warning: ${binaryDirectory} is not in PATH`);
-    console.warn(`Add it before running dim, for example: export PATH="${binaryDirectory}:$PATH"`);
+  const installed = await installDimCli({ version, exposeOnPath, binDirectory });
+  console.log(`Installed DIM CLI ${version} at ${installed.executable}`);
+  if (installed.symlink) {
+    console.log(`Linked ${installed.symlink} -> ${installed.executable}`);
+    const pathEntries = (process.env.PATH ?? "").split(path.delimiter).map((entry) => path.resolve(entry));
+    if (!pathEntries.includes(path.resolve(path.dirname(installed.symlink)))) {
+      console.warn(`Warning: ${path.dirname(installed.symlink)} is not in PATH`);
+    }
+  } else {
+    console.log("DIM CLI will be invoked through the installer facade; no local bin symlink was created");
   }
 }
 
 async function installPluginCommand(commandArgs: string[]): Promise<void> {
-  let home = await configuredPluginHome();
-  const specifiers: string[] = [];
-  for (let index = 0; index < commandArgs.length; index += 1) {
-    const arg = commandArgs[index]!;
-    if (arg === "--plugin-home") {
-      const value = commandArgs[index + 1];
-      if (!value) throw new Error("--plugin-home requires a path");
-      home = path.resolve(value);
-      index += 1;
-    } else if (arg.startsWith("-")) {
-      throw new Error(`unknown option: ${arg}`);
-    } else {
-      specifiers.push(arg);
+  const parsed = parseArgs({
+    args: commandArgs,
+    allowPositionals: true,
+    strict: true,
+    options: {
+      help: { type: "boolean", short: "h" },
+      "plugin-home": { type: "string" }
     }
+  });
+  if (parsed.values.help) {
+    printInstallPluginHelp();
+    return;
   }
-  if (specifiers.length === 0) throw new Error("plugin requires at least one package");
-
-  await installPluginPackages(specifiers, home);
+  if (parsed.positionals.length === 0) throw new Error("install-plugin requires at least one package");
+  const home = path.resolve(parsed.values["plugin-home"] ?? await configuredPluginHome());
+  await installPluginPackages(parsed.positionals, home);
 }
 
 async function installPluginPackages(specifiers: string[], home: string): Promise<void> {
   const installed = await installPlugins(specifiers, { pluginHome: home });
   for (const name of installed) console.log(`Installed and enabled ${name}`);
   console.log(`Plugin home: ${home}`);
+  if (await configuredCli() === undefined) {
+    console.warn("Warning: DIM CLI is not installed yet; install it before using this plugin");
+  }
+}
+
+async function proxyCli(executable: string, commandArgs: string[], version: string): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    const child = spawn(executable, commandArgs, {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DIM_INVOKED_VIA_INSTALLER: "1",
+        DIM_INSTALLER_VERSION: version
+      },
+      stdio: "inherit"
+    });
+
+    const forwardedSignals: NodeJS.Signals[] = ["SIGINT", "SIGTERM", "SIGHUP"];
+    const handlers = new Map<NodeJS.Signals, () => void>();
+    for (const signal of forwardedSignals) {
+      const handler = () => child.kill(signal);
+      handlers.set(signal, handler);
+      process.on(signal, handler);
+    }
+    const cleanup = () => {
+      for (const [signal, handler] of handlers) process.off(signal, handler);
+    };
+
+    child.once("error", (error) => {
+      cleanup();
+      reject(error);
+    });
+    child.once("exit", (code, signal) => {
+      cleanup();
+      if (signal) {
+        process.kill(process.pid, signal);
+        return;
+      }
+      resolve(code ?? 1);
+    });
+  });
 }
 
 async function installerVersion(): Promise<string> {
@@ -130,21 +239,60 @@ async function installerVersion(): Promise<string> {
   throw new Error("could not determine @slop-lab/install-dim version");
 }
 
-function printHelp(): void {
-  console.log(`Usage:
-  npx "@slop-lab/install-dim@EXACT_VERSION"
-  npx "@slop-lab/install-dim@EXACT_VERSION" cli [--prefix PATH]
-  npx "@slop-lab/install-dim@EXACT_VERSION" plugin PACKAGE@EXACT_VERSION [PACKAGE@EXACT_VERSION...]
+function runningUnderMise(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (Object.keys(env).some((name) => name.startsWith("MISE_"))) return true;
+  const entrypoint = process.argv[1] ?? "";
+  return entrypoint.split(path.sep).includes("mise");
+}
 
-Running without arguments opens an interactive installer for DIM, plugins, or both.
+function isHelp(value: string | undefined): boolean {
+  return value === "--help" || value === "-h";
+}
+
+function isVersion(value: string | undefined): boolean {
+  return value === "--version" || value === "-V";
+}
+
+function printFacadeHelp(): void {
+  console.log(`DIM installer/facade
+
+DIM CLI is not installed.
+
+Usage:
+  dim                         Open the interactive installer
+  dim installer               Open the interactive installer
+  dim install-cli [options]   Install DIM CLI
+  dim install-plugin [options] PACKAGE@EXACT_VERSION...
+
+Run 'dim install-cli --help' for installation modes.`);
+}
+
+function printInstallerHelp(): void {
+  console.log(`Usage:
+  dim installer
+  dim install-cli [--no-local-bin | --local-bin] [--prefix PATH]
+  dim install-plugin [--plugin-home PATH] PACKAGE@EXACT_VERSION...
+
+The installer owns only installer, install-cli, and install-plugin.
+All other commands are forwarded unchanged to the installed DIM CLI.`);
+}
+
+function printInstallCliHelp(): void {
+  console.log(`Usage: dim install-cli [options]
 
 Options:
-  --prefix PATH       Install DIM under PATH (default: ~/.local)
-  --plugin-home PATH  Override DIM_PLUGIN_HOME for the plugin command
+  --no-local-bin  Install privately for facade use without ~/.local/bin/dim
+  --local-bin     Create a managed dim symlink in the user bin directory
+  --prefix PATH   Use PATH/bin for the managed symlink (default: ~/.local)
+  -h, --help      Show this help
 
-Examples:
-  npx "@slop-lab/install-dim@0.2.0"
-  npx "@slop-lab/install-dim@0.2.0" cli
-  npx "@slop-lab/install-dim@0.2.0" cli --prefix "$HOME/.local"
-  npx "@slop-lab/install-dim@0.2.0" plugin "@example/dim-plugin@1.2.3"`);
+Under mise, --no-local-bin is the default. Elsewhere, --local-bin is the default.`);
+}
+
+function printInstallPluginHelp(): void {
+  console.log(`Usage: dim install-plugin [options] PACKAGE@EXACT_VERSION...
+
+Options:
+  --plugin-home PATH  Override the plugin installation directory
+  -h, --help          Show this help`);
 }
