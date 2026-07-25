@@ -61,15 +61,20 @@ through unchanged to the installed DIM CLI (for example `dim plugin ...` is
 always a DIM CLI command, never handled here).
 
 ```text
-dim                          Open the interactive installer (TTY only)
-dim installer                Same as above; `dim installer --help` for its usage
+dim installer                Open the interactive installer (TTY only)
 dim install-cli [options]    Install/upgrade the DIM CLI
 dim install-plugin [options] PACKAGE@EXACT_VERSION...
                               Install and enable one or more plugins
 ```
 
-Running bare `dim` (or `dim installer`) with no TTY does not hang waiting for
-input — it prints usage and exits with an error instead.
+Bare `dim` (no arguments) is an alias for `dim installer` only while no DIM
+CLI is configured yet. Once one is, bare `dim` behaves like every other
+command instead — it's forwarded to the installed CLI, which prints the same
+thing as `dim --help`. This keeps `dim installer` as the one way to reopen
+the installer prompt after that point.
+
+Running `dim installer` with no TTY does not hang waiting for input — it
+prints usage and exits with an error instead.
 
 ### Interactive install
 

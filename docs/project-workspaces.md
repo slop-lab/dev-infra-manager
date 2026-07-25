@@ -66,8 +66,13 @@ clone or update additional repositories, build images, and start project
 services. It runs from the project root with:
 
 ```text
+DIM_PROJECT_ID
+DIM_PROJECT_NAME
 DIM_PROJECT_ROOT
+DIM_PROJECT_MANIFEST
 DIM_WORKSPACE_NAME
+DIM_WORKSPACE_BACKEND
+DIM_NESTED_ENGINE
 COMPOSE_PROJECT_NAME
 COMPOSE_PROFILES
 DIM_GIT_BASE_URL

@@ -51,9 +51,12 @@ npm install --global "@slop-lab/dim-cli@0.2.0"
 Or use the user-local installer:
 
 ```bash
-npx "@slop-lab/install-dim@0.2.0" cli
+npx '@slop-lab/install-dim@0.2.0' install-cli
 export PATH="$HOME/.local/bin:$PATH"
 ```
+
+See the [installer README](https://www.npmjs.com/package/@slop-lab/install-dim)
+for mise-based and direct-`PATH` alternatives.
 
 Do not track `latest`. DIM controls container runtimes and executes code from
 Project repositories, so follow the mandatory

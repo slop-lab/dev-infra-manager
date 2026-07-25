@@ -40,6 +40,7 @@ Feature specifications:
 - [Doctor Checks](11-doctor-checks.md)
 - [Verification](12-verification.md)
 - [Project, Repository, and Workspace Lifecycle](13-repo-workspace-lifecycle.md)
+- [Installer Facade](14-installer-facade.md)
 
 ### Local Details
 

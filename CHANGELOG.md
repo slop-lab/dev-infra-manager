@@ -7,6 +7,28 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- Renamed the `@slop-lab/install-dim` executable from `install-dim` to
+  `dim`, and its subcommands from `cli`/`plugin` to `install-cli`/
+  `install-plugin`, so both `mise use -g npm:@slop-lab/install-dim` and
+  `mise use -g npm:@slop-lab/dim-cli` resolve to the same command name.
+- Made the installer a strict facade: it owns only `installer`,
+  `install-cli`, and `install-plugin`, and proxies every other command
+  (including `dim plugin`, a `dim-cli` command) unchanged to a separately
+  installed `@slop-lab/dim-cli`, adding `DIM_INVOKED_VIA_INSTALLER`/
+  `DIM_INSTALLER_VERSION` for display purposes only. See
+  [Installer Facade](specs/14-installer-facade.md).
+- Added `--no-local-bin`/`--local-bin` install modes with a mise-aware
+  default, a managed `~/.local/bin/dim` symlink that refuses to touch an
+  unmanaged or pre-0.2 `dim`, and a combined `dim --version` line once a
+  CLI is configured.
+
+### Added
+
+- [Example: A Multi-repository Project](examples/multi-repo-project/README.md),
+  a copyable example project with a tested, real-container walkthrough.
+
 ## [0.2.0] - 2026-07-24
 
 ### Changed

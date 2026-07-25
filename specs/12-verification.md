@@ -97,6 +97,22 @@ and verifies one backend installer in a disposable VM.
 `just verify-host-backends-kvm` runs the same gate for every backend in a
 separate VM.
 
+## Installer Facade Verification
+
+`just verify-mise-install-smoke` requires Docker and network access. It
+verifies `mise use -g 'npm:@slop-lab/install-dim@<version>'` end to end in a
+disposable container against a local npm registry seeded from freshly built
+tarballs, covering facade-only vs. proxied `--help`/`--version`, the
+mise-detected `--no-local-bin` default, and an explicit `--local-bin`
+override. See [Installer Facade](14-installer-facade.md).
+
+`just verify-example-project` requires Docker and a reachable managed
+Gitea. It installs DIM through the installer facade and proves
+`examples/multi-repo-project/README.md` end to end: registering a root plus
+two additional repositories, creating a real workspace container, running a
+project task, and reaching another repository from inside the workspace
+through `$DIM_GIT_BASE_URL`.
+
 ## Documentation Verification
 
 When behavior changes:

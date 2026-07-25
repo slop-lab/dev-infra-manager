@@ -116,3 +116,72 @@ Behavior:
 11. Poll `/healthz`.
 12. Print `smoke-ok` on success.
 13. Clean up temp files, container, and smoke image on exit.
+
+## Local npm Registry Helper
+
+Script:
+
+```text
+scripts/lib/local-npm-registry.sh
+```
+
+Sourced, not run directly. Provides `dim_start_local_npm_registry WORK_DIR`,
+`dim_publish_to_local_registry TARBALL...`, and
+`dim_stop_local_npm_registry` so a script can install unreleased local
+package builds through ordinary `npm install`/`mise use -g npm:...` instead
+of the real npm registry. Runs `verdaccio` via `npx` (no global install, so
+no root/writable-prefix requirement), binds it to `0.0.0.0` explicitly
+(verdaccio defaults to IPv6 loopback only), registers one throwaway user via
+verdaccio's legacy user API, and points the registry at both
+`npm_config_registry` and an isolated `NPM_CONFIG_USERCONFIG` file rather
+than the caller's real npm config.
+
+## mise Install Smoke
+
+Script:
+
+```text
+scripts/mise-install-smoke.sh
+```
+
+`just verify-mise-install-smoke`. Requires Docker and network access.
+Builds and packs `core`, `dim-cli`, and `install`, publishes them to a
+disposable local npm registry inside a throwaway container, installs a
+pinned `mise` release predating its npm-backend download-popularity gate
+(see [Installer Facade](../14-installer-facade.md)), and runs
+`mise use -g 'npm:@slop-lab/install-dim@<version>'` followed by facade
+dispatch checks: facade-only vs. proxied `--help`/`--version`, the
+mise-detected `--no-local-bin` default, and an explicit `--local-bin`
+override.
+
+## Plugin Install Smoke
+
+Script:
+
+```text
+scripts/plugin-install-smoke.sh
+```
+
+Packs a synthetic plugin package and the `install` package, installs the
+installer into a temporary prefix, runs `dim install-plugin` against the
+packed plugin tarball, and confirms `dim plugin list` (a `dim-cli` command,
+run directly against the packed CLI) reports it enabled.
+
+## Example Project Smoke
+
+Script:
+
+```text
+scripts/example-project-smoke.sh
+```
+
+`just verify-example-project`. Requires Docker and a reachable managed
+Gitea. Executes
+[examples/multi-repo-project/README.md](../../examples/multi-repo-project/README.md)
+command for command: installs DIM through the installer facade against a
+disposable local npm registry, copies the three repository skeletons under
+`examples/multi-repo-project/repos/`, registers them as a Project, creates a
+real workspace container, and verifies it (`dim show --json` phase,
+`docker ps` against the resolved `containerName`, `dim exec`, `dim run`, and
+cross-repository access through `$DIM_GIT_BASE_URL`) before discarding
+everything. The doc and this script must change together.

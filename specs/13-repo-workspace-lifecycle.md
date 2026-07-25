@@ -70,7 +70,8 @@ The root repository owns the optional:
 ```
 
 It also owns checkout and reconciliation of any additional Project
-repositories. DIM supplies a read-only runtime manifest and environment:
+repositories. DIM supplies a read-only runtime manifest and environment to
+`.dim/setup.sh`, `.dim/entrypoint.sh`, `.dim/teardown.sh`, and `exec`:
 
 ```text
 DIM_PROJECT_ID
@@ -78,12 +79,33 @@ DIM_PROJECT_NAME
 DIM_PROJECT_ROOT
 DIM_PROJECT_MANIFEST
 DIM_WORKSPACE_NAME
+DIM_WORKSPACE_BACKEND
+DIM_NESTED_ENGINE
+COMPOSE_PROJECT_NAME
+COMPOSE_PROFILES
 DIM_GIT_BASE_URL
+```
+
+The workspace container additionally carries Git integration variables for
+its whole lifetime (not only during setup/entrypoint/exec dispatch):
+
+```text
+DIM_GIT_USERNAME
+DIM_GIT_TOKEN
+DIM_GIT_USER_NAME
+DIM_GIT_USER_EMAIL
+GIT_ASKPASS
+GIT_TERMINAL_PROMPT
 ```
 
 `DIM_GIT_BASE_URL` is Project-specific. Project lifecycle code appends its
 own stable managed repository names and owns all checkout paths and
-repository-to-service mappings. DIM does not export per-repository variables.
+repository-to-service mappings. DIM does not export per-repository
+variables. `COMPOSE_PROJECT_NAME`, `containerName`, and `dockerVolumeName`
+are the only stable identifiers for Docker resources DIM creates for a
+workspace; callers must read them from `dim show WORKSPACE --json` rather
+than reconstructing a naming scheme, which is not part of this contract and
+may change.
 
 ## Applying changes
 

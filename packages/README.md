@@ -8,7 +8,11 @@ Current packages:
 - `core`: runtime, lifecycle, managed Git, state, and versioned plugin/provider
   APIs. It has no dependency on CLI parsing.
 - `dim-cli`: thin executable adapter over core.
-- `install`: standalone `npx @slop-lab/install-dim` plugin installer.
+- `install`: thin `dim-cli` installer/facade (`@slop-lab/install-dim`,
+  `npx @slop-lab/install-dim` or `mise use -g npm:@slop-lab/install-dim`);
+  owns only `install-cli`/`install-plugin`/`installer` and proxies every
+  other command to a separately installed `dim-cli`. See
+  [Installer Facade](../specs/14-installer-facade.md).
 
 Plugin package names are unrestricted; for example,
 `@dev-infra-manager/plugin-github`, `@company/internal-git`, and unscoped npm

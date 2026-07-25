@@ -122,6 +122,9 @@ dim run work-1 codex
 dim exec work-1 -- bash
 ```
 
+For a complete, tested walkthrough spanning a root repository plus product
+and secret-bearing repositories, see [examples/multi-repo-project](examples/multi-repo-project/README.md).
+
 This repository implements the same project contract itself through
 `.dim/setup.sh` and `.dim/entrypoint.sh`. After pushing this repository as the
 Project root, `dim run work-1 codex` launches Codex in the
@@ -139,16 +142,20 @@ pnpm --filter @slop-lab/install-dim run pack:dry-run
 pnpm --filter @slop-lab/dev-infra-manager-core run publish:package
 pnpm --filter @slop-lab/dim-cli run publish:package
 pnpm --filter @slop-lab/install-dim run publish:package
-mise use -g npm:@slop-lab/dim-cli@0.2.0
-npx "@slop-lab/install-dim@0.2.0"
-npx "@slop-lab/install-dim@0.2.0" cli
-npx "@slop-lab/install-dim@0.2.0" plugin "@example/dim-plugin@1.2.3"
+mise use -g 'npm:@slop-lab/install-dim@0.2.0'
+dim install-cli
+npx '@slop-lab/install-dim@0.2.0'
+npx '@slop-lab/install-dim@0.2.0' install-cli
+npx '@slop-lab/install-dim@0.2.0' install-plugin '@example/dim-plugin@1.2.3'
 ```
 
-Running `install-dim` without arguments opens an interactive installer for the
-DIM CLI, optional plugins, or both. Use the explicit `cli` or `plugin`
-subcommand for non-interactive automation. Installation choices are persisted
-under `${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json`.
+Running `dim` without arguments opens an interactive installer for the DIM
+CLI, optional plugins, or both — but only until a CLI is configured; after
+that, bare `dim` behaves like every other command and proxies through
+instead (same as `dim --help`), and `dim installer` is what reopens the
+prompt. Use the explicit `install-cli` or `install-plugin` subcommand for
+non-interactive automation. Installation choices are persisted under
+`${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json`.
 
 DIM retains an explicitly enabled, versioned plugin loader for future concrete
 integrations. Version 0.2.0 does not expose a generic Git-provider extension
