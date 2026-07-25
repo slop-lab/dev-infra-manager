@@ -79,10 +79,11 @@ DIM_PROJECT_ROOT
 DIM_PROJECT_MANIFEST
 DIM_WORKSPACE_NAME
 DIM_GIT_BASE_URL
-DIM_REPO_<NORMALIZED_ALIAS>
 ```
 
-Alias-to-environment normalization must be collision-free.
+`DIM_GIT_BASE_URL` is Project-specific. Project lifecycle code appends its
+own stable managed repository names and owns all checkout paths and
+repository-to-service mappings. DIM does not export per-repository variables.
 
 ## Applying changes
 

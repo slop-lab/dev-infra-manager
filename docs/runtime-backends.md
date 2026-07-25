@@ -32,6 +32,8 @@ CPU, memory, and PID limits apply to the top-level workspace container and
 therefore bound its nested workloads in aggregate. DIM does not impose a
 per-workspace disk quota. `discard --yes` removes the workspace
 container and its nested-engine storage volume.
+Environment values provide creation defaults; individual workspaces can store
+different limits through `dim create` resource options.
 
 Projects using `.dim/setup.sh` can inspect `DIM_WORKSPACE_BACKEND` and
 `DIM_NESTED_ENGINE`. The default `.dim/docker-compose.yml` setup uses

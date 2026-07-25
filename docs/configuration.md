@@ -25,5 +25,8 @@ DIM_WORKSPACE_PIDS
 Runtime backend selection is documented in
 [Runtime Backends](runtime-backends.md). Project and workspace settings are
 persisted by their lifecycle commands rather than copied into a global config.
+The CPU, memory, and PID settings are defaults for new workspace records.
+`dim create --cpus`, `--memory`, and `--pids-limit` persist per-workspace
+overrides.
 
 DIM 0.2 rejects 0.1 state and does not perform an automatic migration.

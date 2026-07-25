@@ -83,7 +83,12 @@ async function installCli(prefix: string): Promise<void> {
   const version = await installerVersion();
   await installDimCli({ prefix, version });
   console.log(`Installed ${prefix}/bin/dim`);
-  console.log(`Ensure ${prefix}/bin is in PATH`);
+  const binaryDirectory = path.join(prefix, "bin");
+  const pathEntries = (process.env.PATH ?? "").split(path.delimiter).map((entry) => path.resolve(entry));
+  if (!pathEntries.includes(path.resolve(binaryDirectory))) {
+    console.warn(`Warning: ${binaryDirectory} is not in PATH`);
+    console.warn(`Add it before running dim, for example: export PATH="${binaryDirectory}:$PATH"`);
+  }
 }
 
 async function installPluginCommand(commandArgs: string[]): Promise<void> {

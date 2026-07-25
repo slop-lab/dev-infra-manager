@@ -45,8 +45,7 @@ await createProjectRepository(runner, options, {
   project: "acme",
   alias: "root",
   root: true,
-  rootRef: "main",
-  protectedPatterns: ["main"]
+  protectedPatterns: ["main", "development", "lts/v*"]
 });
 
 // Push the initial root branch with ordinary Git before creating a workspace.
@@ -54,7 +53,10 @@ await createWorkspace(runner, options, {
   project: "acme",
   name: "feature-123",
   runtimeBackend: "sysbox",
-  profiles: []
+  profiles: [],
+  cpuCount: "4",
+  memory: "8g",
+  pidsLimit: "4096"
 });
 ```
 
@@ -73,6 +75,11 @@ discarding the underlying operation result.
 - `DIM_WORKSPACE_BACKEND`, `DIM_WORKSPACE_IMAGE`, and
   `DIM_WORKSPACE_RUNTIME`
 - `DIM_WORKSPACE_CPUS`, `DIM_WORKSPACE_MEMORY`, and `DIM_WORKSPACE_PIDS`
+
+The resource environment variables provide defaults. `createWorkspace`
+accepts persistent per-workspace overrides. A Project root ref may be omitted;
+workspace creation then resolves the root repository's symbolic `HEAD` and
+fails if no `HEAD` exists.
 
 The default state root is `~/.local/state/dim`; the default managed Gitea port
 is `3300`. Project and workspace records use schema version 2. Version 0.2.0

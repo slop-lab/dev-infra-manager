@@ -10,13 +10,16 @@ branches or secret-bearing environments.
 A DIM **Project** is lightweight metadata:
 
 - a name and a dedicated `dim-<project>` namespace in DIM's managed Gitea;
-- one required **root repository** and its branch ref;
+- one required **root repository** and an optional branch ref;
 - any additional repositories that belong to the Project.
 
 Each **workspace** clones only the root repository. The root repository's
-optional `.dim/setup.sh`, `.dim/entrypoint.sh`, and Compose configuration can
-clone or start the other repositories. DIM therefore tracks one root ref
-instead of trying to prescribe a multi-repository checkout layout.
+optional `.dim/setup.sh`, `.dim/entrypoint.sh`, and Docker Compose
+configuration own any additional checkouts and nested containers. A repository
+does not need to correspond one-to-one with a container. DIM therefore tracks
+one root ref instead of prescribing a multi-repository runtime layout. When no
+root ref is configured, DIM resolves the repository's symbolic `HEAD`;
+workspace creation fails if the repository has no `HEAD`.
 
 A running workspace is never changed automatically when the Project changes.
 `dim start`, `dim restart`, and `dim update` fast-forward the configured root
@@ -26,7 +29,8 @@ refreshes explicit.
 ## Requirements
 
 - Linux with Node.js 22 or newer.
-- Git and a working Docker CLI/daemon.
+- Git and a working Docker CLI/daemon. DIM always uses Docker to manage the
+  outer workspace container, regardless of the selected backend.
 - A supported workspace backend: Sysbox, gVisor, rootless Podman, or
   privileged runc.
 - The DIM workspace image appropriate for that backend.
@@ -67,7 +71,7 @@ Create a Project and an empty root repository:
 
 ```bash
 dim project create acme
-dim repo create acme root --root --ref main
+dim repo create acme root --root
 ```
 
 Push an existing local repository with ordinary Git. `url-for-host` prints
@@ -79,7 +83,11 @@ dim repo protect acme root
 ```
 
 Protection is a separate step because an empty Git repository cannot protect a
-branch before its first push.
+branch before its first push. Unless overridden with `--protect`, DIM protects
+`main`, `development`, and `lts/v*`. These are managed-Git policy defaults,
+not the root ref selection rule. When the root ref is omitted and exactly one
+branch exists, `repo protect` also makes that branch the managed repository's
+`HEAD`; it never chooses between multiple branches.
 
 Alternatively, create and mirror a managed repository in one command:
 
@@ -139,16 +147,20 @@ dim repo import acme secrets-code https://example.com/secrets-code.git
 dim repo list acme
 ```
 
-The root lifecycle receives repository locations as normalized environment
-variables such as `DIM_REPO_PRODUCT` and `DIM_REPO_SECRETS_CODE`, plus a
-Project manifest at `DIM_PROJECT_MANIFEST`. The root repository decides where
-and how to clone them; DIM does not require every Project to use the same
-directory names.
+The root lifecycle receives a Project-specific base URL such as
+`http://dim-gitea:3000/dim-acme` in `DIM_GIT_BASE_URL`, plus a small runtime
+manifest at `DIM_PROJECT_MANIFEST`. Project code constructs managed URLs such
+as `$DIM_GIT_BASE_URL/product.git` and decides which repositories, checkout
+names, and services it supports. DIM neither exports a variable per repository
+nor assumes a repository-to-container mapping. Projects can independently map
+different upstream repository names without making their normal configuration
+depend on DIM.
 
 ## Managed Git credentials
 
-For managed Gitea operations, use either the workspace's configured
-credential helper/askpass environment or the host-side wrapper:
+`dim x git` is a one-shot wrapper around the ordinary Git CLI. It adds a
+temporary credential helper for DIM's managed Gitea and forwards every
+remaining argument unchanged:
 
 ```bash
 dim x git clone "$(dim repo url-for-host acme product)"
@@ -156,7 +168,17 @@ dim x git -C product push origin HEAD
 ```
 
 Plain `git` remains available for external URLs and locally configured
-credentials.
+credentials. To make ordinary host-side Git commands use DIM credentials
+without the wrapper, install a URL-scoped credential helper:
+
+```bash
+dim git setup
+git clone "$(dim repo url-for-host acme product)"
+```
+
+The helper is scoped to DIM's managed HTTP endpoint and enables path-aware
+matching. That lets a future gateway select credentials from the requested
+Project path without changing each repository's Git configuration.
 
 ## Project cleanup
 
@@ -176,11 +198,12 @@ dim --help
 dim project --help
 dim repo --help
 dim help --all
-dim --json project show acme
+dim project show acme --json
 ```
 
-Normal list commands use compact tables. `--json` provides machine-readable
-records. URL commands deliberately emit a bare URL even in normal use.
+Normal list commands use compact tables. Record-producing subcommands expose
+their own `--json` option; commands where JSON has no useful meaning do not.
+URL commands deliberately emit a bare URL.
 
 State is stored under `~/.local/state/dim` by default. The most useful
 overrides are:
@@ -190,6 +213,13 @@ overrides are:
 - `DIM_WORKSPACE_BACKEND`
 - `DIM_WORKSPACE_IMAGE`
 - `DIM_WORKSPACE_CPUS`, `DIM_WORKSPACE_MEMORY`, and `DIM_WORKSPACE_PIDS`
+
+The resource environment variables are defaults. Set persistent limits for an
+individual workspace at creation time:
+
+```bash
+dim create acme feature-123 --cpus 4 --memory 8g --pids-limit 4096
+```
 
 Version 0.2.0 is a breaking state schema. It rejects 0.1 Project/workspace
 state and does not migrate it.

@@ -11,6 +11,8 @@ The system must let an untrusted agent:
 - Run nested container workloads through an approved runtime backend.
 - Push proposed changes to a managed Git host.
 - Request reviewed changes to be promoted through a managed pull request flow.
+- Keep code that can affect secret-bearing environments in separate,
+  Project-selected repositories with stricter review policy when appropriate.
 
 The system must prevent that agent from:
 
@@ -30,7 +32,7 @@ The system must prevent that agent from:
   Gitea writer credential may be injected when its server-side permissions
   cannot modify protected refs or secret-bearing runtime state.
 - Secret-bearing runtime deployment must use the configured approved Git ref.
-- Protected Git refs must reject direct push through managed bare repository hooks.
+- Protected Git refs must reject direct push through managed Gitea policy.
 - Managed pull request merge is the path that updates protected refs in normal operation.
 - Runtime backend selection and storage backend selection must be independent.
 - `directory` storage does not enforce `diskBytes` and must be treated as a compatibility backend.

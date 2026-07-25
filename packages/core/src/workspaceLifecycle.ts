@@ -45,6 +45,9 @@ export async function createWorkspace(
     name: string;
     profiles: string[];
     runtimeBackend: WorkspaceRecord["runtimeBackend"];
+    cpuCount?: string;
+    memory?: string;
+    pidsLimit?: string;
     gitUserName?: string;
     gitUserEmail?: string;
   }
@@ -55,6 +58,7 @@ export async function createWorkspace(
   const state = new LifecycleState(options.stateRoot);
   const projectRecord = await readyProject(state, project);
   let repo = readyRootRepository(projectRecord);
+  const rootRef = await resolveRootRef(runner, options, projectRecord, repo);
   if (repo.protectionPhase !== "applied") {
     repo = await applyProjectRepositoryProtection(runner, options, projectRecord.name, repo.alias);
   }
@@ -74,6 +78,13 @@ export async function createWorkspace(
     if (record.runtimeBackend !== input.runtimeBackend) {
       throw new UserError(`workspace '${name}' already exists with backend '${record.runtimeBackend}'`);
     }
+    if (
+      record.cpuCount !== (input.cpuCount ?? options.cpuCount)
+      || record.memory !== (input.memory ?? options.memory)
+      || record.pidsLimit !== (input.pidsLimit ?? options.pidsLimit)
+    ) {
+      throw new UserError(`workspace '${name}' already exists with different resource limits`);
+    }
   } catch (error) {
     if (!(error instanceof UserError) || !error.message.includes("not found")) throw error;
     record = {
@@ -82,7 +93,7 @@ export async function createWorkspace(
       projectId: projectRecord.id,
       projectName: projectRecord.name,
       rootRepositoryAlias: repo.alias,
-      rootRef: requiredRootRef(projectRecord),
+      rootRef,
       projectPath: "/workspace/project",
       phase: "creating",
       profiles,
@@ -91,11 +102,13 @@ export async function createWorkspace(
       networkName: GITEA_NETWORK,
       dockerVolumeName: `dim-ws-${name}-docker`,
       runtimeBackend: input.runtimeBackend,
+      cpuCount: input.cpuCount ?? options.cpuCount,
+      memory: input.memory ?? options.memory,
+      pidsLimit: input.pidsLimit ?? options.pidsLimit,
       routes: [],
       gitUserName,
       gitUserEmail,
-      gitBaseUrl: "http://dim-gitea:3000",
-      projectRepositories: repositoryEnvironment(projectRecord),
+      gitBaseUrl: `http://dim-gitea:3000/${projectRecord.gitNamespace}`,
       projectManifestPath: "/run/dim/project.json",
       createdAt: now,
       updatedAt: now
@@ -326,14 +339,14 @@ async function reconcileProject(
   try {
     try {
       const credentials = await ensureGitea(runner, options);
-      const gitBaseUrl = await giteaNestedBaseUrl(runner);
+      const gitBaseUrl = `${await giteaNestedBaseUrl(runner)}/${project.gitNamespace}`;
+      const rootRef = await resolveRootRef(runner, options, project, repo, credentials);
       record = {
         ...record,
         projectName: project.name,
         rootRepositoryAlias: repo.alias,
-        rootRef: requiredRootRef(project),
-        gitBaseUrl,
-        projectRepositories: repositoryEnvironment(project, gitBaseUrl)
+        rootRef,
+        gitBaseUrl
       };
       await state.writeWorkspace(record);
       await reconcileContainer(runner, options, record, gitEnvironment(record, credentials));
@@ -474,10 +487,10 @@ export function workspaceContainerArgs(
     "--name", record.containerName,
     "--network", record.networkName,
     "--runtime", plan.dockerRuntime,
-    "--cpus", options.cpuCount,
-    "--memory", options.memory,
-    "--memory-swap", options.memory,
-    "--pids-limit", options.pidsLimit,
+    "--cpus", record.cpuCount,
+    "--memory", record.memory,
+    "--memory-swap", record.memory,
+    "--pids-limit", record.pidsLimit,
     "--mount", `type=volume,source=${record.dockerVolumeName},target=${plan.runtimeDataPath}`,
     "--label", "dim.managed=true",
     "--label", `dim.workspace=${record.name}`,
@@ -592,10 +605,7 @@ async function writeProjectManifest(
     schemaVersion: 1,
     project: { id: project.id, name: project.name },
     root: { repository: record.rootRepositoryAlias, ref: record.rootRef, path: record.projectPath },
-    repositories: Object.fromEntries(project.repositories.map((repo) => [
-      repo.alias,
-      { workspaceUrl: repo.workspaceUrl }
-    ]))
+    gitBaseUrl: record.gitBaseUrl
   };
   const encoded = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`).toString("base64");
   const result = await runner.run("docker", [
@@ -670,15 +680,12 @@ function projectEnvironment(record: WorkspaceRecord): string[] {
     "--env", `COMPOSE_PROFILES=${record.profiles.join(",")}`,
     "--env", `DIM_GIT_BASE_URL=${record.gitBaseUrl}`
   ];
-  for (const [alias, url] of Object.entries(record.projectRepositories)) {
-    values.push("--env", `DIM_REPO_${repositoryEnvironmentName(alias)}=${url}`);
-  }
   return values;
 }
 
 function readyRootRepository(project: ProjectRecord): ProjectRepositoryRecord {
-  if (!project.rootRepositoryAlias || !project.rootRef) {
-    throw new UserError(`project '${project.name}' has no root repo/ref`);
+  if (!project.rootRepositoryAlias) {
+    throw new UserError(`project '${project.name}' has no root repo`);
   }
   const repo = project.repositories.find((candidate) => candidate.alias === project.rootRepositoryAlias);
   if (!repo || repo.phase !== "ready") {
@@ -687,30 +694,50 @@ function readyRootRepository(project: ProjectRecord): ProjectRepositoryRecord {
   return repo;
 }
 
-function requiredRootRef(project: ProjectRecord): string {
-  if (!project.rootRef) throw new UserError(`project '${project.name}' has no root ref`);
-  return project.rootRef;
+async function resolveRootRef(
+  runner: StreamingCommandRunner,
+  options: LifecycleOptions,
+  project: ProjectRecord,
+  repo: ProjectRepositoryRecord,
+  existingCredentials?: GiteaCredentials
+): Promise<string> {
+  if (project.rootRef) return project.rootRef;
+  const credentials = existingCredentials ?? await ensureGitea(runner, options);
+  const helper = "!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f";
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const result = await runner.run(
+      "git",
+      ["-c", `credential.helper=${helper}`, "ls-remote", "--symref", repo.hostUrl, "HEAD"],
+      {
+        env: {
+          ...process.env,
+          DIM_GIT_USERNAME: credentials.writerUsername,
+          DIM_GIT_TOKEN: credentials.writerPassword,
+          GIT_TERMINAL_PROMPT: "0"
+        }
+      }
+    );
+    if (result.exitCode !== 0) throw commandError(`resolve root HEAD for project '${project.name}'`, result);
+    const match = result.stdout.match(/^ref:\s+(refs\/heads\/[^\s]+)\s+HEAD$/m);
+    if (match?.[1]) return normalizeResolvedRootRef(match[1], project.name);
+    if (attempt < 19) await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new UserError(
+    `project '${project.name}' has no configured root ref and repo '${repo.alias}' has no branch HEAD`
+  );
+}
+
+function normalizeResolvedRootRef(ref: string, project: string): string {
+  if (!/^refs\/heads\/[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(ref) || ref.includes("..") || ref.endsWith("/")) {
+    throw new UserError(`project '${project}' root HEAD '${ref}' is not a valid branch`);
+  }
+  return ref;
 }
 
 function rootBranch(ref: string): string {
   const prefix = "refs/heads/";
   if (!ref.startsWith(prefix)) throw new UserError(`workspace root ref '${ref}' is not a branch`);
   return ref.slice(prefix.length);
-}
-
-function repositoryEnvironment(project: ProjectRecord, baseUrl?: string): Record<string, string> {
-  return Object.fromEntries(project.repositories
-    .filter((repo) => repo.phase === "ready")
-    .map((repo) => [
-      repo.alias,
-      baseUrl === undefined
-        ? repo.workspaceUrl
-        : `${baseUrl}/${project.gitNamespace}/${repo.alias}.git`
-    ]));
-}
-
-function repositoryEnvironmentName(alias: string): string {
-  return alias.toUpperCase().replace(/[^A-Z0-9]/g, "_");
 }
 
 function nestedEngine(record: WorkspaceRecord): "docker" | "podman" {

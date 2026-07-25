@@ -114,7 +114,7 @@ run a persistent workspace whose checkout exists only inside its container:
 just build-project-workspace
 just install-dim-local
 dim project create project
-dim repo create project root --root --ref main
+dim repo create project root --root
 git -C /path/to/project push "$(dim repo url-for-host project root)" main
 dim repo protect project root
 dim create project work-1 --backend sysbox --profile development

@@ -21,6 +21,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   workspace is running.
 - Replaced the namespaced workspace CLI with concise top-level lifecycle
   commands and hierarchical Commander help.
+- Made the Project root ref optional with repository `HEAD` fallback, added
+  per-workspace CPU/memory/PID limits, and scoped JSON output to
+  record-producing subcommands.
+- Added `dim git setup`, Project-specific Git base URLs, and a smaller runtime
+  manifest that leaves repository layout and nested containers to `.dim`.
 - Removed automatic migration of 0.1 workspace state.
 
 ## [0.1.0] - 2026-07-24

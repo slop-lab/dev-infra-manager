@@ -14,9 +14,9 @@ registration and managed Gitea details are documented in
 A **repository** is a Git repository registered with the managed Git service.
 Repository registration is role-neutral.
 
-A **project** is a repository used as the root of a workspace. Its optional
-`.dim` directory defines how that project prepares its environment and
-dispatches project tasks.
+A **Project** is DIM metadata with one root repository and optional additional
+managed repositories. The root repository's optional `.dim` directory defines
+how that Project prepares its environment and dispatches tasks.
 
 A **workspace** is a named, persistent, isolated environment bound to one
 project. It owns its top-level runtime, inner-Docker state, selected profiles,
@@ -31,7 +31,13 @@ A **service** is a container managed by the project, normally through
 `.dim/docker-compose.yml`. Services may clone additional registered
 repositories directly from the managed Git service into their own named
 volumes. `dim` does not require every repository to be cloned into the
-top-level workspace.
+top-level workspace or mapped one-to-one to a container.
+
+A Project may keep code that can affect secret-bearing environments in a
+separate repository with stricter review rules. DIM records that repository
+without assigning it a special runtime role; the root lifecycle and the
+Project's protected-branch policy decide how it is consumed. Secret material
+itself must not be committed to any Project repository.
 
 ## Project contract
 
@@ -164,7 +170,7 @@ Create the Project root and populate it with standard Git:
 
 ```bash
 dim project create example
-dim repo create example root --root --ref main
+dim repo create example root --root
 git -C /path/to/example push "$(dim repo url-for-host example root)" main
 dim repo protect example root
 ```
@@ -312,8 +318,9 @@ The project repository is the only checkout required in the top-level
 workspace. Other repositories need not be bind-mounted from it.
 
 Services can reach the managed Git service and may clone into service-specific
-named volumes. `DIM_PROJECT_MANIFEST`, `DIM_GIT_BASE_URL`, and
-`DIM_REPO_<ALIAS>` provide routable repository endpoints. Projects explicitly
+named volumes. `DIM_PROJECT_MANIFEST` and the Project-specific
+`DIM_GIT_BASE_URL` let project code construct routable repository endpoints.
+Projects explicitly
 pass `DIM_GIT_USERNAME`, `DIM_GIT_TOKEN`, and an askpass helper when a service
 also needs to push. Repositories used only as
 image build inputs may use a Git build context. Projects that require

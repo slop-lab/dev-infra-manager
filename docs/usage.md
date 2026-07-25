@@ -165,12 +165,14 @@ workspace using the selected capability profiles:
 
 ```bash
 dim project create example
-dim repo create example root --root --ref main
+dim repo create example root --root
 git -C /path/to/example push "$(dim repo url-for-host example root)" main
 dim repo protect example root
 dim create example example-dev \
   --profile development \
-  --profile secrets
+  --profile secrets \
+  --cpus 4 \
+  --memory 8g
 ```
 
 Run a project task or bypass project hooks with a raw command:

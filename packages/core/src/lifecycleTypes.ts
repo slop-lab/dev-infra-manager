@@ -89,11 +89,13 @@ export interface WorkspaceRecord {
   networkName: string;
   dockerVolumeName: string;
   runtimeBackend: WorkspaceRuntimeBackendKind;
+  cpuCount: string;
+  memory: string;
+  pidsLimit: string;
   routes: string[];
   gitUserName: string;
   gitUserEmail: string;
   gitBaseUrl: string;
-  projectRepositories: Record<string, string>;
   projectManifestPath: string;
   createdAt: string;
   updatedAt: string;

@@ -50,7 +50,13 @@ pnpm run cli -- repo protect "$project_name" root >/dev/null
 pnpm run cli -- repo import "$project_name" imported "$bare_repo" >/dev/null
 git ls-remote "$(pnpm run --silent cli -- repo url-for-host "$project_name" imported)" \
   refs/heads/main | grep -q .
-pnpm run cli -- create "$project_name" "$workspace_name" >/dev/null
+pnpm run cli -- create "$project_name" "$workspace_name" \
+  --cpus 1.5 \
+  --memory 3g \
+  --pids-limit 1024 \
+  >/dev/null
+test "$(docker inspect --format '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.PidsLimit}}' "dim-ws-$workspace_name")" \
+  = "1500000000|3221225472|1024"
 pnpm run cli -- exec "$workspace_name" -- sh -c "
   test \"\\\$(git config user.name)\" = 'dim/$workspace_name'
   git checkout -b 'agent/$workspace_name'

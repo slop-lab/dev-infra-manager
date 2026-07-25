@@ -138,15 +138,6 @@ export async function createProjectRepository(
     assertReadyProject(project);
     const existingRepo = project.repositories.find((repo) => repo.alias === alias);
     if (existingRepo?.phase === "ready") throw new UserError(`repo '${projectName}/${alias}' already exists`);
-    const environmentName = repositoryEnvironmentName(alias);
-    const collision = project.repositories.find((repo) =>
-      repo.alias !== alias && repositoryEnvironmentName(repo.alias) === environmentName
-    );
-    if (collision) {
-      throw new UserError(
-        `repo aliases '${collision.alias}' and '${alias}' both map to DIM_REPO_${environmentName}`
-      );
-    }
     if (input.root && project.rootRepositoryAlias !== undefined && project.rootRepositoryAlias !== alias) {
       throw new UserError(`project '${projectName}' already has root repo '${project.rootRepositoryAlias}'`);
     }
@@ -176,7 +167,7 @@ export async function createProjectRepository(
       ...(input.root
         ? {
             rootRepositoryAlias: alias,
-            rootRef: normalizeRootRef(input.rootRef ?? "main")
+            ...(input.rootRef === undefined ? {} : { rootRef: normalizeRootRef(input.rootRef) })
           }
         : {}),
       repositories: existingRepo === undefined
@@ -286,6 +277,9 @@ export async function applyProjectRepositoryProtection(
     if (repo.phase !== "ready") throw new UserError(`repo '${projectName}/${alias}' is not ready`);
     if (repo.protectionPhase === "applied") return repo;
     const credentials = await ensureGitea(runner, options);
+    if (project.rootRepositoryAlias === alias && project.rootRef === undefined) {
+      await ensureSingleBranchHead(runner, options, credentials, project.gitNamespace, repo);
+    }
     for (const pattern of repo.protectedPatterns) {
       await protectBranch(options, credentials, project.gitNamespace, alias, pattern);
     }
@@ -296,6 +290,32 @@ export async function applyProjectRepositoryProtection(
   } finally {
     await release();
   }
+}
+
+async function ensureSingleBranchHead(
+  runner: CommandRunner,
+  options: LifecycleOptions,
+  credentials: GiteaCredentials,
+  organization: string,
+  repo: ProjectRepositoryRecord
+): Promise<void> {
+  const repository = await giteaRequest(options, credentials, "GET", `/repos/${organization}/${repo.alias}`);
+  if (!repository.ok) throw await apiError(`inspect repo '${organization}/${repo.alias}'`, repository);
+  const metadata = await repository.json() as { default_branch?: string };
+  const listed = await runner.run("git", ["ls-remote", "--heads", repo.hostUrl], {
+    env: gitCredentialEnvironment(credentials)
+  });
+  if (listed.exitCode !== 0) throw commandError(`list branches for '${organization}/${repo.alias}'`, listed);
+  const names = listed.stdout
+    .split(/\r?\n/)
+    .map((line) => line.match(/\srefs\/heads\/(.+)$/)?.[1])
+    .filter((name): name is string => typeof name === "string" && name.length > 0);
+  if (metadata.default_branch && names.includes(metadata.default_branch)) return;
+  if (names.length !== 1) return;
+  const updated = await giteaRequest(options, credentials, "PATCH", `/repos/${organization}/${repo.alias}`, {
+    default_branch: names[0]
+  });
+  if (!updated.ok) throw await apiError(`set root HEAD for '${organization}/${repo.alias}'`, updated);
 }
 
 export function projectNamespace(name: string): string {
@@ -439,10 +459,6 @@ function commandError(
   result: { stdout: string; stderr: string }
 ): UserError {
   return new UserError(`failed to ${action}: ${(result.stderr || result.stdout).trim()}`);
-}
-
-function repositoryEnvironmentName(alias: string): string {
-  return alias.toUpperCase().replace(/[^A-Z0-9]/g, "_");
 }
 
 async function assertProjectUnused(state: LifecycleState, name: string): Promise<void> {

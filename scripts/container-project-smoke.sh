@@ -92,10 +92,10 @@ if "$dim_bin" setup "$workspace_name" >/dev/null 2>&1; then
   echo "failing project setup unexpectedly succeeded" >&2
   exit 1
 fi
-test "$("$dim_bin" --json show "$workspace_name" | jq -r .phase)" = "setup-error"
+test "$("$dim_bin" show "$workspace_name" --json | jq -r .phase)" = "setup-error"
 "$dim_bin" exec "$workspace_name" -- rm .dim/fail-setup
 "$dim_bin" setup "$workspace_name" >/dev/null
-test "$("$dim_bin" --json show "$workspace_name" | jq -r .phase)" = "ready"
+test "$("$dim_bin" show "$workspace_name" --json | jq -r .phase)" = "ready"
 
 "$dim_bin" stop "$workspace_name" >/dev/null
 "$dim_bin" start "$workspace_name" >/dev/null

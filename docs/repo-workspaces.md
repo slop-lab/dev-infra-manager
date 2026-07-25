@@ -10,7 +10,7 @@ Create Project metadata and an empty root repository:
 
 ```bash
 dim project create example
-dim repo create example root --root --ref main
+dim repo create example root --root
 ```
 
 Populate it with ordinary Git. DIM does not require a local bare repository:
@@ -32,6 +32,9 @@ dim x git -C local-product push \
   main
 ```
 
+Run `dim git setup` once to install a URL-scoped credential helper when
+ordinary Git commands should authenticate without the one-shot wrapper.
+
 Import is an optional mirror convenience:
 
 ```bash
@@ -51,8 +54,10 @@ dim repo list example
 ```
 
 DIM directly clones only the configured root. The root `.dim` lifecycle reads
-`DIM_PROJECT_MANIFEST`, `DIM_GIT_BASE_URL`, and normalized variables such as
-`DIM_REPO_PRODUCT` to clone or start additional repositories and services.
+`DIM_PROJECT_MANIFEST` and the Project-specific `DIM_GIT_BASE_URL`, then
+constructs stable URLs such as `$DIM_GIT_BASE_URL/product.git`. The Project
+owns checkout paths and nested services; DIM does not create per-repository
+environment variables or require one container per repository.
 
 ## Workspaces
 

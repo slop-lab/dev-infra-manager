@@ -42,7 +42,7 @@ DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/install-dim"
   >/dev/null
 
 test "$(jq -r .pluginHome "$config_path")" = "$plugin_home"
-result="$(DIM_CONFIG_PATH="$config_path" node packages/dim-cli/dist/cli.js --json plugin list)"
+result="$(DIM_CONFIG_PATH="$config_path" node packages/dim-cli/dist/cli.js plugin list --json)"
 test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smoke"
 
 echo "plugin-install-smoke-ok"

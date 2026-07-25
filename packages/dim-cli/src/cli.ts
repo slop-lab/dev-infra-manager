@@ -41,14 +41,14 @@ program
   .name("dim")
   .description("Isolated, persistent development workspaces")
   .version("0.2.0")
-  .option("--json", "print machine-readable JSON")
   .showSuggestionAfterError()
   .configureHelp({ sortSubcommands: true, sortOptions: true })
   .addHelpText("after", `
 Typical flow:
   dim project create PROJECT
-  dim repo create PROJECT ROOT --root --ref main
+  dim repo create PROJECT ROOT --root
   git push "$(dim repo url-for-host PROJECT ROOT)" main
+  dim repo protect PROJECT ROOT
   dim create PROJECT WORKSPACE
   dim exec WORKSPACE -- bash
 
@@ -59,17 +59,22 @@ const project = program.command("project").description("Manage project metadata 
 project.command("create")
   .description("Create a project and its managed Git namespace")
   .argument("<project>")
-  .action(async (name: string) => print(await createProject(runner, lifecycleOptions(), name)));
+  .option("--json", "print machine-readable JSON")
+  .action(async (name: string, flags: JsonFlags) => print(await createProject(runner, lifecycleOptions(), name), flags));
 
 project.command("list")
   .alias("ls")
   .description("List projects")
-  .action(async () => printList(await listProjects(lifecycleOptions()), ["name", "phase", "gitNamespace", "rootRepositoryAlias", "rootRef"]));
+  .option("--json", "print machine-readable JSON")
+  .action(async (flags: JsonFlags) =>
+    printList(await listProjects(lifecycleOptions()), ["name", "phase", "gitNamespace", "rootRepositoryAlias", "rootRef"], flags)
+  );
 
 project.command("show")
   .description("Show a project")
   .argument("<project>")
-  .action(async (name: string) => print(await showProject(lifecycleOptions(), name)));
+  .option("--json", "print machine-readable JSON")
+  .action(async (name: string, flags: JsonFlags) => print(await showProject(lifecycleOptions(), name), flags));
 
 project.command("remove")
   .description("Remove project metadata while preserving Git repositories")
@@ -91,8 +96,9 @@ repo.command("create")
   .argument("<project>")
   .argument("<alias>")
   .option("--root", "make this the project root repository")
-  .option("--ref <branch-or-ref>", "root branch/ref", "main")
-  .option("--protect <patterns>", "comma-separated protected branch patterns", "main")
+  .option("--ref <branch-or-ref>", "root branch/ref; defaults to the repository HEAD")
+  .option("--protect <patterns>", "comma-separated protected branch patterns", "main,development,lts/v*")
+  .option("--json", "print machine-readable JSON")
   .action(async (projectName: string, alias: string, flags: RepoFlags) => {
     print(await createProjectRepository(runner, lifecycleOptions(), {
       project: projectName,
@@ -100,7 +106,7 @@ repo.command("create")
       protectedPatterns: commaSeparated(flags.protect),
       root: flags.root ?? false,
       ...(flags.root ? { rootRef: flags.ref } : {})
-    }));
+    }), flags);
   });
 
 repo.command("import")
@@ -109,8 +115,9 @@ repo.command("import")
   .argument("<alias>")
   .argument("<source>")
   .option("--root", "make this the project root repository")
-  .option("--ref <branch-or-ref>", "root branch/ref", "main")
-  .option("--protect <patterns>", "comma-separated protected branch patterns", "main")
+  .option("--ref <branch-or-ref>", "root branch/ref; defaults to the repository HEAD")
+  .option("--protect <patterns>", "comma-separated protected branch patterns", "main,development,lts/v*")
+  .option("--json", "print machine-readable JSON")
   .action(async (projectName: string, alias: string, source: string, flags: RepoFlags) => {
     print(await importProjectRepository(runner, lifecycleOptions(), {
       project: projectName,
@@ -119,29 +126,34 @@ repo.command("import")
       protectedPatterns: commaSeparated(flags.protect),
       root: flags.root ?? false,
       ...(flags.root ? { rootRef: flags.ref } : {})
-    }));
+    }), flags);
   });
 
 repo.command("list")
   .alias("ls")
   .description("List repositories in a project")
   .argument("<project>")
-  .action(async (name: string) =>
-    printList(await listProjectRepositories(lifecycleOptions(), name), ["alias", "phase", "hostUrl", "workspaceUrl"])
+  .option("--json", "print machine-readable JSON")
+  .action(async (name: string, flags: JsonFlags) =>
+    printList(await listProjectRepositories(lifecycleOptions(), name), ["alias", "phase", "hostUrl", "workspaceUrl"], flags)
   );
 
 repo.command("show")
   .description("Show a project repository")
   .argument("<project>")
   .argument("<alias>")
-  .action(async (name: string, alias: string) => print(await showProjectRepository(lifecycleOptions(), name, alias)));
+  .option("--json", "print machine-readable JSON")
+  .action(async (name: string, alias: string, flags: JsonFlags) =>
+    print(await showProjectRepository(lifecycleOptions(), name, alias), flags)
+  );
 
 repo.command("protect")
   .description("Apply configured branch protection after the initial push")
   .argument("<project>")
   .argument("<alias>")
-  .action(async (name: string, alias: string) =>
-    print(await applyProjectRepositoryProtection(runner, lifecycleOptions(), name, alias))
+  .option("--json", "print machine-readable JSON")
+  .action(async (name: string, alias: string, flags: JsonFlags) =>
+    print(await applyProjectRepositoryProtection(runner, lifecycleOptions(), name, alias), flags)
   );
 
 repo.command("url-for-host")
@@ -164,6 +176,10 @@ program.command("create")
   .option("--profile <profile>", "Compose capability profile", collect, [])
   .option("--git-user-name <name>")
   .option("--git-user-email <email>")
+  .option("--cpus <count>", "workspace CPU limit")
+  .option("--memory <size>", "workspace memory limit")
+  .option("--pids-limit <count>", "workspace PID limit")
+  .option("--json", "print machine-readable JSON")
   .action(async (projectName: string, name: string, flags: WorkspaceCreateFlags) => {
     const options = lifecycleOptions();
     print(await createWorkspace(runner, options, {
@@ -171,22 +187,31 @@ program.command("create")
       name,
       profiles: flags.profile,
       runtimeBackend: workspaceBackend(flags.backend ?? options.defaultWorkspaceBackend),
+      cpuCount: flags.cpus ?? options.cpuCount,
+      memory: flags.memory ?? options.memory,
+      pidsLimit: flags.pidsLimit ?? options.pidsLimit,
       ...(flags.gitUserName ? { gitUserName: flags.gitUserName } : {}),
       ...(flags.gitUserEmail ? { gitUserEmail: flags.gitUserEmail } : {})
-    }));
+    }), flags);
   });
 
 program.command("ls")
   .alias("list")
   .description("List workspaces")
-  .action(async () =>
-    printList(await listWorkspaces(lifecycleOptions()), ["name", "projectName", "phase", "runtimeBackend", "rootRef"])
+  .option("--json", "print machine-readable JSON")
+  .action(async (flags: JsonFlags) =>
+    printList(
+      await listWorkspaces(lifecycleOptions()),
+      ["name", "projectName", "phase", "runtimeBackend", "rootRef"],
+      flags
+    )
   );
 
 program.command("show")
   .description("Show a workspace")
   .argument("<workspace>")
-  .action(async (name: string) => print(await showWorkspace(lifecycleOptions(), name)));
+  .option("--json", "print machine-readable JSON")
+  .action(async (name: string, flags: JsonFlags) => print(await showWorkspace(lifecycleOptions(), name), flags));
 
 program.command("exec")
   .description("Execute a raw command in a running workspace")
@@ -217,14 +242,16 @@ program.command("run")
 program.command("setup")
   .description("Retry root project environment setup")
   .argument("<workspace>")
-  .action(async (name: string) => print(await setupWorkspace(runner, lifecycleOptions(), name)));
+  .option("--json", "print machine-readable JSON")
+  .action(async (name: string, flags: JsonFlags) => print(await setupWorkspace(runner, lifecycleOptions(), name), flags));
 
 program.command("update")
   .description("Fast-forward the root ref and run setup")
   .argument("<workspace>")
   .option("--profile <profile>", "replace Compose capability profiles", collect, [])
   .option("--clear-profiles", "remove all capability profiles")
-  .action(async (name: string, flags: { profile: string[]; clearProfiles?: boolean }) => {
+  .option("--json", "print machine-readable JSON")
+  .action(async (name: string, flags: { profile: string[]; clearProfiles?: boolean; json?: boolean }) => {
     if (flags.clearProfiles && flags.profile.length > 0) {
       throw new UserError("--clear-profiles cannot be combined with --profile");
     }
@@ -233,18 +260,20 @@ program.command("update")
       lifecycleOptions(),
       name,
       flags.clearProfiles ? [] : flags.profile.length > 0 ? flags.profile : undefined
-    ));
+    ), flags);
   });
 
 program.command("start")
   .description("Start a stopped workspace, fast-forward its root ref, and run setup")
   .argument("<workspace>")
-  .action(async (name: string) => print(await startWorkspace(runner, lifecycleOptions(), name)));
+  .option("--json", "print machine-readable JSON")
+  .action(async (name: string, flags: JsonFlags) => print(await startWorkspace(runner, lifecycleOptions(), name), flags));
 
 program.command("restart")
   .description("Restart a workspace, fast-forward its root ref, and run setup")
   .argument("<workspace>")
-  .action(async (name: string) => print(await restartWorkspace(runner, lifecycleOptions(), name)));
+  .option("--json", "print machine-readable JSON")
+  .action(async (name: string, flags: JsonFlags) => print(await restartWorkspace(runner, lifecycleOptions(), name), flags));
 
 program.command("stop")
   .description("Stop a workspace while preserving its checkout and inner-engine data")
@@ -268,13 +297,13 @@ program.command("doctor")
   });
 
 const plugin = program.command("plugin").description("Inspect installed DIM plugins");
-plugin.command("list").action(async () => {
+plugin.command("list").option("--json", "print machine-readable JSON").action(async (flags: JsonFlags) => {
   const home = await resolvePluginHome();
   const loaded = await loadInstalledPlugins(home);
   print({
     pluginHome: home,
     plugins: loaded.manifest.plugins
-  });
+  }, flags);
 });
 
 const admin = program.command("admin", { hidden: true }).description("Low-level service administration");
@@ -286,7 +315,8 @@ service.command("ensure").description("Reconcile the managed Gitea service").act
 service.command("credentials")
   .description("Print managed Gitea credentials")
   .requiredOption("--show-secrets")
-  .action(async () => print(await ensureGitea(runner, lifecycleOptions())));
+  .option("--json", "print machine-readable JSON")
+  .action(async (flags: JsonFlags) => print(await ensureGitea(runner, lifecycleOptions()), flags));
 
 const x = program.command("x").description("Run a command with DIM-provided integration settings");
 x.command("git")
@@ -306,6 +336,41 @@ x.command("git")
     });
   });
 
+const gitIntegration = program.command("git").description("Configure Git access to DIM-managed repositories");
+gitIntegration.command("setup")
+  .description("Install DIM's URL-scoped Git credential helper in global Git config")
+  .action(async () => {
+    await ensureGitea(runner, lifecycleOptions());
+    const baseUrl = `http://127.0.0.1:${lifecycleOptions().giteaPort}`;
+    const helperKey = `credential.${baseUrl}.helper`;
+    const pathKey = `credential.${baseUrl}.useHttpPath`;
+    const helper = await runner.run("git", ["config", "--global", "--replace-all", helperKey, "!dim git credential-helper"]);
+    if (helper.exitCode !== 0) throw new UserError(`failed to configure Git credential helper: ${helper.stderr.trim()}`);
+    const usePath = await runner.run("git", ["config", "--global", "--replace-all", pathKey, "true"]);
+    if (usePath.exitCode !== 0) throw new UserError(`failed to configure Git credential path matching: ${usePath.stderr.trim()}`);
+    console.log(`Configured DIM credentials for ${baseUrl}`);
+  });
+
+gitIntegration.command("credential-helper", { hidden: true })
+  .description("Serve credentials using the Git credential-helper protocol")
+  .argument("[operation]", "get, store, or erase", "get")
+  .action(async (operation: string) => {
+    const input = await readStdin();
+    if (operation !== "get") return;
+    const fields = Object.fromEntries(input
+      .split(/\r?\n/)
+      .filter((line) => line.includes("="))
+      .map((line) => {
+        const separator = line.indexOf("=");
+        return [line.slice(0, separator), line.slice(separator + 1)];
+      }));
+    const options = lifecycleOptions();
+    if (fields.protocol !== "http" || fields.host !== `127.0.0.1:${options.giteaPort}`) return;
+    const credentials = await ensureGitea(runner, options);
+    console.log(`username=${credentials.writerUsername}`);
+    console.log(`password=${credentials.writerPassword}`);
+  });
+
 program.command("help")
   .description("Show help")
   .option("--all", "include administrative commands")
@@ -322,15 +387,23 @@ program.exitOverride();
 
 interface RepoFlags {
   root?: boolean;
-  ref: string;
+  ref?: string;
   protect: string;
+  json?: boolean;
 }
 
-interface WorkspaceCreateFlags {
+interface JsonFlags {
+  json?: boolean;
+}
+
+interface WorkspaceCreateFlags extends JsonFlags {
   backend?: string;
   profile: string[];
   gitUserName?: string;
   gitUserEmail?: string;
+  cpus?: string;
+  memory?: string;
+  pidsLimit?: string;
 }
 
 function collect(value: string, previous: string[]): string[] {
@@ -347,12 +420,14 @@ function interactive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
 }
 
-function wantsJson(): boolean {
-  return Boolean(program.opts<{ json?: boolean }>().json);
+async function readStdin(): Promise<string> {
+  let value = "";
+  for await (const chunk of process.stdin) value += String(chunk);
+  return value;
 }
 
-function print(value: unknown): void {
-  if (wantsJson() || typeof value !== "object" || value === null || Array.isArray(value)) {
+function print(value: unknown, flags: JsonFlags = {}): void {
+  if (flags.json || typeof value !== "object" || value === null || Array.isArray(value)) {
     console.log(JSON.stringify(value, null, 2));
     return;
   }
@@ -362,9 +437,9 @@ function print(value: unknown): void {
   }
 }
 
-function printList<T extends object>(records: T[], fields: string[]): void {
-  if (wantsJson()) {
-    print(records);
+function printList<T extends object>(records: T[], fields: string[], flags: JsonFlags = {}): void {
+  if (flags.json) {
+    print(records, flags);
     return;
   }
   if (records.length === 0) return;

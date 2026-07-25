@@ -96,7 +96,7 @@ printf '%s\n' \
   '    profiles: [development]' \
   '    image: alpine:3.22' \
   '    environment:' \
-  '      REPO_URL: ${DIM_REPO_API}' \
+  '      REPO_URL: ${DIM_GIT_BASE_URL}/api.git' \
   '      DIM_WORKSPACE_NAME: ${DIM_WORKSPACE_NAME}' \
   '      DIM_GIT_USERNAME: ${DIM_GIT_USERNAME}' \
   '      DIM_GIT_TOKEN: ${DIM_GIT_TOKEN}' \
@@ -111,7 +111,7 @@ printf '%s\n' \
   '    profiles: [development]' \
   '    image: alpine:3.22' \
   '    environment:' \
-  '      REPO_URL: ${DIM_REPO_WORKER}' \
+  '      REPO_URL: ${DIM_GIT_BASE_URL}/worker.git' \
   '    entrypoint: ["/bin/sh", "-c"]' \
   '    command: ["apk add --no-cache git >/dev/null && { test -d /source/.git || git clone $$REPO_URL /source; }"]' \
   '    volumes: [worker-source:/source]' \
@@ -119,7 +119,7 @@ printf '%s\n' \
   '    profiles: [secrets]' \
   '    image: alpine:3.22' \
   '    environment:' \
-  '      REPO_URL: ${DIM_REPO_SECRET}' \
+  '      REPO_URL: ${DIM_GIT_BASE_URL}/secret.git' \
   '    entrypoint: ["/bin/sh", "-c"]' \
   '    command: ["apk add --no-cache git >/dev/null && { test -d /source/.git || git clone $$REPO_URL /source; }"]' \
   '    volumes: [secret-source:/source]' \
@@ -160,7 +160,7 @@ root_url="$("$dim_bin" repo url-for-host "$project_name" root)"
   --profile secrets \
   >/dev/null
 
-test "$("$dim_bin" --json show "$workspace_name" | jq -c .profiles)" = '["development","secrets"]'
+test "$("$dim_bin" show "$workspace_name" --json | jq -c .profiles)" = '["development","secrets"]'
 test "$("$dim_bin" exec "$workspace_name" -- ls -1 /workspace)" = "project"
 git ls-remote "$("$dim_bin" repo url-for-host "$project_name" api)" \
   "refs/heads/agent/$workspace_name" | grep -q .

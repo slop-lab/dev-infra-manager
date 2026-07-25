@@ -22,15 +22,14 @@ case "$task" in
     pnpm run workspace:test
     exec pnpm run workspace:build "$@"
     ;;
-  container-verify)
-    exec just container-verify "$@"
+  verify-container-runc)
+    exec just verify-container-runc "$@"
     ;;
-  container-runtime-verify)
-    exec just container-runtime-verify "$@"
+  verify-container-sysbox)
+    exec just verify-container-sysbox "$@"
     ;;
   *)
     echo "unknown DIM project task: $task" >&2
     exit 2
     ;;
 esac
-
