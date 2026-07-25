@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   DIM_PLUGIN_API_VERSION,
+  type DimPlugin,
   registerPlugin,
   registerPlugins
 } from "../src/plugin.js";
@@ -91,5 +92,22 @@ describe("plugin contract", () => {
         }
       }
     ])).rejects.toThrow(/already registered/);
+  });
+
+  it("closes registration after plugin startup", async () => {
+    let captured: Parameters<DimPlugin["register"]>[0] | undefined;
+    const registered = await registerPlugins([{
+      name: "capture",
+      apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) {
+        captured = host;
+      }
+    }]);
+    expect(() => captured?.registerExternalUrlProvider({
+      name: "late",
+      publish: async () => ({ url: "https://late.test" }),
+      revoke: async () => {}
+    })).toThrow(/after startup/);
+    await registered.dispose();
   });
 });

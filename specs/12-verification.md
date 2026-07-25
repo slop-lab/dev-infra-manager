@@ -22,6 +22,19 @@ pnpm run workspace:build
 
 This gate must not require Docker, a runtime backend, QEMU, or KVM.
 
+The external URL plugin unit suite must exercise real HTTP forwarding through
+each configured reverse-proxy shape and provider URL generation. A configured
+Tailnet can additionally run:
+
+```bash
+scripts/tailscale-external-url-smoke.sh
+```
+
+That smoke starts a workspace service, provisions a Tailscale URL through the
+controller API, fetches a unique sentinel through the external URL, and revokes
+the route. It is required verification code but is not part of the static gate
+because it depends on operator-owned Tailnet DNS and TLS.
+
 ## runc Nested-container Gate
 
 `just verify-container-runc` requires Docker with Compose v2 and support for

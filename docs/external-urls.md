@@ -172,6 +172,19 @@ container's Docker DNS name, while `host` inspects its address on the managed
 Docker network. Tailscale identity and network-namespace provisioning remain
 deployment concerns.
 
+On a configured Tailnet, run the end-to-end smoke test from inside a DIM
+workspace:
+
+```bash
+DIM_EXTERNAL_URL_TEST_ROUTE_PROVIDER=reverse-proxy-host \
+  scripts/tailscale-external-url-smoke.sh
+```
+
+It starts a temporary HTTP service, requests a real Tailscale URL, fetches a
+sentinel through DNS, TLS, and the reverse proxy, then revokes the URL. This
+requires the operator's wildcard DNS and Tailnet, so it is intentionally
+separate from the environment-independent unit suite.
+
 ## Cloudflare Tunnel
 
 Configure:

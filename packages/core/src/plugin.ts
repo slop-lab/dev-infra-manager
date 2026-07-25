@@ -36,6 +36,7 @@ class PluginHost implements DimPluginHost {
   readonly externalRouteProviders = new Map<string, ExternalRouteProvider>();
   readonly externalUrlProviders = new Map<string, ExternalUrlProvider>();
   registeringPlugin: string | undefined;
+  acceptingRegistrations = true;
 
   constructor(readonly logger: DimPluginLogger) {}
 
@@ -49,11 +50,25 @@ class PluginHost implements DimPluginHost {
 
   private registerProvider<T extends { name: string }>(providers: Map<string, T>, provider: T, kind: string): void {
     const plugin = this.registeringPlugin ?? "unknown plugin";
+    if (!this.acceptingRegistrations) {
+      throw new UserError(`plugin '${plugin}' attempted ${kind} registration after startup`);
+    }
     if (!/^[a-z0-9][a-z0-9.-]{0,62}[a-z0-9]$|^[a-z0-9]$/.test(provider.name)) {
       throw new UserError(`plugin '${plugin}' registered invalid ${kind} provider name '${provider.name}'`);
     }
     if (providers.has(provider.name)) {
       throw new UserError(`${kind} provider '${provider.name}' is already registered`);
+    }
+    if (kind === "external route") {
+      const route = provider as T & Partial<ExternalRouteProvider>;
+      if (typeof route.provision !== "function" || typeof route.revoke !== "function") {
+        throw new UserError(`plugin '${plugin}' registered incomplete ${kind} provider '${provider.name}'`);
+      }
+    } else {
+      const url = provider as T & Partial<ExternalUrlProvider>;
+      if (typeof url.publish !== "function" || typeof url.revoke !== "function") {
+        throw new UserError(`plugin '${plugin}' registered incomplete ${kind} provider '${provider.name}'`);
+      }
     }
     providers.set(provider.name, provider);
   }
@@ -88,6 +103,7 @@ export async function registerPlugins(
     throw error;
   } finally {
     host.registeringPlugin = undefined;
+    host.acceptingRegistrations = false;
   }
 
   let disposed = false;
@@ -104,8 +120,8 @@ export async function registerPlugins(
   };
 }
 
-export async function registerPlugin(plugin: DimPlugin): Promise<void> {
-  await registerPlugins([plugin]);
+export async function registerPlugin(plugin: DimPlugin): Promise<RegisteredDimPlugins> {
+  return registerPlugins([plugin]);
 }
 
 function validatePlugin(plugin: DimPlugin): void {
