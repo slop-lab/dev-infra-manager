@@ -27,7 +27,7 @@ verify-host-backend-local backend:
     #!/usr/bin/env bash
     set -euo pipefail
     if [[ "{{backend}}" == rootless-podman ]]; then just build-project-podman-image; fi
-    pnpm run cli -- doctor --backend "{{backend}}"
+    just cli doctor --backend "{{backend}}"
 
 install-kvm-verify-deps-ubuntu:
     sudo apt-get update
@@ -109,8 +109,13 @@ isolation-check:
 isolation-check-json:
     pnpm --filter @slop-lab/dev-infra-manager-core exec vitest run test/lifecycle.test.ts --reporter=json
 
+# Builds core first, then runs the local dim CLI from source (no install needed).
+cli *args:
+    pnpm --filter @slop-lab/dev-infra-manager-core run build
+    pnpm --filter @slop-lab/dim-cli exec tsx src/cli.ts {{args}}
+
 doctor:
-    pnpm run cli -- doctor
+    just cli doctor
 
 build-project-workspace:
     docker build --force-rm --build-arg "DIM_UID=$(id -u)" --build-arg "DIM_GID=$(id -g)" -t dev-infra-project-workspace:latest images/project-workspace

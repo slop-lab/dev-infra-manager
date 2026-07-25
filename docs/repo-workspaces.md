@@ -13,8 +13,14 @@ Create Project metadata and an empty root repository:
 
 ```bash
 dim project create example
-dim repo create example root --root
+dim repo create example root --root --protect main
 ```
+
+`--protect` only exists on `repo create`/`repo import` — it records the
+patterns to apply, it does not apply them yet (the repository has no branch
+to protect before its first push). Omitting it is not a safe default: `repo
+protect` below then has nothing configured and succeeds having protected
+nothing.
 
 Populate it with ordinary Git. DIM does not require a local bare repository:
 
@@ -25,6 +31,9 @@ git -C local-product push \
   main
 dim repo protect example root
 ```
+
+This applies the `main` pattern configured above, now that the branch
+exists.
 
 `dim x git` supplies managed Gitea credentials when the user's normal Git
 credential configuration does not:

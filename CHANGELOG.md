@@ -30,11 +30,44 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   influence there is the same PR-only relationship it has to the
   secret-bearing boundary. See [Trust
   Boundaries](specs/02-boundaries-and-trust.md#agent-workspace-boundary).
+- `rootless-podman` no longer defaults its outer container to
+  `--privileged`; it now receives the specific capabilities nested
+  unprivileged user namespaces need instead (the same set already used for
+  `gvisor`). Set `DIM_WORKSPACE_PRIVILEGED=true` to restore the old
+  behavior if a host needs it. **This has not been verified against a real
+  rootless-podman host** — it could not be exercised in this change's own
+  development environment, whose own nested sandboxing already rejects
+  nested user-namespace creation even under full `--privileged`, for
+  reasons unrelated to this change. Validate with `just
+  verify-host-backend-kvm rootless-podman` (now exercises the same
+  capability set) and `DIM_WORKSPACE_BACKEND=rootless-podman bash
+  scripts/container-lifecycle-smoke.sh` before relying on it.
+
+- Split the root `README.md` into user-facing content (installing and using
+  `dim`) and [CONTRIBUTING.md](CONTRIBUTING.md) (building/verifying DIM
+  itself), added a project glossary
+  ([docs/README.md](docs/README.md#glossary)) covering Project/Workspace
+  scope and what "controller" actually refers to, and added `just cli` to
+  build core and run `dim` from source without the
+  `ERR_MODULE_NOT_FOUND`-if-core-isn't-built footgun of invoking `tsx`
+  directly.
 
 ### Added
 
 - [Example: A Multi-repository Project](examples/multi-repo-project/README.md),
   a copyable example project with a tested, real-container walkthrough.
+
+### Fixed
+
+- Every documented walkthrough (root README, `docs/repo-workspaces.md`,
+  `docs/project-workspaces.md`, `docs/usage.md`, `packages/dim-cli/README.md`,
+  the multi-repository example) showed `dim repo create ... --root` without
+  `--protect`, then a bare `dim repo protect`. `--protect` only exists on
+  `repo create`/`repo import`; omitting it there left `repo protect` with
+  nothing to apply, and it reported success anyway — every literal reading
+  of the docs left the root branch completely unprotected. All of them now
+  show `--protect` at `create` time; `example-project-smoke.sh` verifies a
+  protected root actually rejects a direct push.
 
 ## [0.2.0] - 2026-07-24
 

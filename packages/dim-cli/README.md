@@ -74,8 +74,13 @@ Create a Project and an empty root repository:
 
 ```bash
 dim project create acme
-dim repo create acme root --root
+dim repo create acme root --root --protect main,development
 ```
+
+`--protect` is a `repo create`/`repo import` option — it only records the
+policy, since an empty Git repository has no branch to protect yet. DIM does
+not guess protection patterns; omitting `--protect` here means nothing gets
+protected later, even though the next step reports success.
 
 Push an existing local repository with ordinary Git. `url-for-host` prints
 only the clone URL, so it is safe to use in command substitution:
@@ -85,12 +90,10 @@ git -C /path/to/acme push "$(dim repo url-for-host acme root)" main
 dim repo protect acme root
 ```
 
-Protection is a separate step because an empty Git repository cannot protect a
-branch before its first push. DIM does not guess protection patterns; configure
-the Project's actual policy explicitly, for example
-`--protect main,development`. When the root ref is omitted and exactly one
-branch exists, `repo protect` also makes that branch the managed repository's
-`HEAD`; it never chooses between multiple branches.
+This applies the patterns configured at `create` time, now that the branch
+exists. When the root ref is omitted and exactly one branch exists, `repo
+protect` also makes that branch the managed repository's `HEAD`; it never
+chooses between multiple branches.
 
 Alternatively, create and mirror a managed repository in one command:
 

@@ -112,17 +112,28 @@ secrets_repo="$source_root/example-secrets"
 echo "[example-project] 3. register the Project and its repositories"
 dim project create "$project_name" >/dev/null
 
-dim repo create "$project_name" root --root --ref main >/dev/null
+dim repo create "$project_name" root --root --ref main --protect main >/dev/null
 dim x git -C "$root_repo" push "$(dim repo url-for-host "$project_name" root)" main >/dev/null
 dim repo protect "$project_name" root >/dev/null
 
-dim repo create "$project_name" web >/dev/null
+dim repo create "$project_name" web --protect main >/dev/null
 dim x git -C "$web_repo" push "$(dim repo url-for-host "$project_name" web)" main >/dev/null
 dim repo protect "$project_name" web >/dev/null
 
-dim repo create "$project_name" secrets >/dev/null
+dim repo create "$project_name" secrets --protect main >/dev/null
 dim x git -C "$secrets_repo" push "$(dim repo url-for-host "$project_name" secrets)" main >/dev/null
 dim repo protect "$project_name" secrets >/dev/null
+
+# The whole point of --protect at create time: confirm the root branch is
+# actually protected, not just reported as such (repo protect "succeeds"
+# even with nothing configured, per projectRegistry.ts). Re-pushing the
+# identical ref would be a silent no-op either way, so make a real commit.
+echo "unauthorized change" >> "$root_repo/.dim/entrypoint.sh"
+git -C "$root_repo" commit -am "attempted direct push" >/dev/null
+if dim x git -C "$root_repo" push "$(dim repo url-for-host "$project_name" root)" main >/dev/null 2>&1; then
+  echo "protected branch unexpectedly accepted a direct push" >&2
+  exit 1
+fi
 
 # Registration must be sufficient: the seed checkouts don't need to survive
 # for workspace creation to clone the root repository on its own.

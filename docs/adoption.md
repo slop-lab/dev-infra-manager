@@ -21,6 +21,25 @@ Agent output, automated checks, and a review limited to the changed lines do
 not replace this full human trust review. Repeat the review whenever any of
 these inputs or their pinned versions change.
 
+### What actually keeps secrets safe
+
+The full review above establishes overall trust in DIM — correctness,
+availability, and everything else a project depends on it for, not only
+secret safety. Secret safety specifically rests on a narrower guarantee: an
+agent workspace never receives raw secret material, because nothing in
+DIM's workspace creation or command dispatch ever passes it there, and
+secret-bearing containers are built and deployed entirely outside the
+workspace lifecycle (see [Architecture](architecture.md)). That guarantee
+depends only on (3) above — the secret-bearing code and configuration
+itself — staying correct, plus the specific parts of DIM that enforce the
+boundary (workspace container/environment construction and protected-ref
+Git policy), not the full agent-facing CLI surface in (1). A bug in, say,
+`dim project list`'s JSON output cannot leak a secret; a bug in what
+environment variables a workspace container receives could. Reviewing (3)
+well is what keeps secrets specifically safe even under time pressure; the
+full review in (1)-(2) is what a project needs before trusting DIM more
+broadly.
+
 ## Pin every version
 
 Consumers must use immutable, exact versions. Do not track `latest`, a moving

@@ -167,47 +167,16 @@ reachable.
 
 ## Project Workspaces
 
-For a complete, tested, multi-repository walkthrough, see [Example: A
-Multi-repository Project](../examples/multi-repo-project/README.md). The
-summary below is the minimal single-repository shape.
+For installing `dim` and the minimal single-repository "create a Project"
+shape, see the root [README](../README.md#install-the-dim-cli). For a
+complete, tested, multi-repository walkthrough — including running agent
+tasks and deploying a secret-bearing service correctly — see [Example: A
+Multi-repository Project](../examples/multi-repo-project/README.md).
 
-Install `dim` from the registry through the installer facade, pinned to an
-exact, reviewed version:
-
-```bash
-mise use -g 'npm:@slop-lab/install-dim@0.2.0'
-dim install-cli
-```
-
-See the [installer README](https://www.npmjs.com/package/@slop-lab/install-dim)
-for `npx` and direct-`PATH` alternatives.
-
-Create a Project and root repository, push its initial branch, then create a
-workspace using the selected capability profiles:
-
-```bash
-dim project create example
-dim repo create example root --root
-git -C /path/to/example push "$(dim repo url-for-host example root)" main
-dim repo protect example root
-dim create example example-dev \
-  --profile development \
-  --profile secrets \
-  --cpus 4 \
-  --memory 8g
-```
-
-Run a project task or bypass project hooks with a raw command:
-
-```bash
-dim run example-dev codex
-dim exec example-dev -- bash
-```
-
-`run` does not repeat setup. Environment reconciliation happens on
-`create`, `start`, `restart`, `setup`, and after a
-fast-forward-only `update`. Only the optional files under `.dim`
-have special meaning; root Compose files are never auto-discovered.
+`run` does not repeat setup. Environment reconciliation happens on `create`,
+`start`, `restart`, `setup`, and after a fast-forward-only `update`. Only the
+optional files under `.dim` have special meaning; root Compose files are
+never auto-discovered.
 
 Copy the minimal `.dim` examples from
 [Project Workspaces](project-workspaces.md) for the hook contract, lifecycle,
@@ -230,9 +199,14 @@ The doctor command checks local development tools, Docker daemon access, the sel
 Run config-aware checks with:
 
 ```bash
-pnpm run cli -- doctor --backend gvisor
+just cli doctor --backend gvisor
 ```
+
+`just cli` builds `@slop-lab/dev-infra-manager-core` first, then runs `dim`
+directly from source via `tsx` — the reliable way to run the CLI without
+installing it. Running `tsx src/cli.ts` directly from `packages/dim-cli`
+instead fails with `ERR_MODULE_NOT_FOUND` unless core has already been built.
 
 The Sysbox registration check only proves that Docker knows about `sysbox-runc`. The Sysbox container execution check runs `hello-world:latest` with `--runtime=sysbox-runc`; this is the direct readiness signal for Sysbox agent workspace containers.
 For gVisor, `doctor --backend gvisor` checks `runsc` and Docker runtime execution.
-For rootless Podman, `doctor --backend rootless-podman` checks the workspace image and verifies that `podman` is present in it. Podman runs rootless as `dim` inside the workspace, but the outer Docker workspace container is privileged: nested user namespaces and mounts do not work under Docker's normal container mount restrictions.
+For rootless Podman, `doctor --backend rootless-podman` checks the workspace image and verifies that `podman` is present in it. Podman runs rootless as `dim` inside the workspace. The outer Docker workspace container is not privileged; it instead receives the specific capabilities (`SYS_ADMIN`, `SETUID`/`SETGID`, `SYS_CHROOT`, `SYS_PTRACE`, and the rest of the set shared with the gVisor backend) that nested unprivileged user namespaces and mounts need, since Docker's default capability set and seccomp profile normally block them. Set `DIM_WORKSPACE_PRIVILEGED=true` to fall back to a fully privileged outer container if a host's kernel/seccomp configuration needs it.

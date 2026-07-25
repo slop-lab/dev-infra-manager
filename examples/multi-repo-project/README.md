@@ -91,15 +91,15 @@ normally would.
 ```bash
 dim project create example
 
-dim repo create example root --root --ref main
+dim repo create example root --root --ref main --protect main
 dim x git -C ./example-root push "$(dim repo url-for-host example root)" main
 dim repo protect example root
 
-dim repo create example web
+dim repo create example web --protect main
 dim x git -C ./example-web push "$(dim repo url-for-host example web)" main
 dim repo protect example web
 
-dim repo create example secrets
+dim repo create example secrets --protect main
 dim x git -C ./example-secrets push "$(dim repo url-for-host example secrets)" main
 dim repo protect example secrets
 ```
@@ -108,6 +108,12 @@ dim repo protect example secrets
 git setup` once instead if you'd rather your normal `git push` authenticate
 directly. Each `repo create` only registers an alias local to this Project —
 `web` and `secrets` don't need to be globally unique names.
+
+`--protect` belongs on `repo create`/`repo import`, not `repo protect`: an
+empty repository has no branch to protect yet, so `create` only records the
+policy, and `protect` applies it once the branch exists. Skipping `--protect`
+at `create` time is a real footgun — the later `repo protect` call still
+reports success, having protected nothing.
 
 ## 4. Create the workspace
 

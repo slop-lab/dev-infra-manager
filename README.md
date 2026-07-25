@@ -1,6 +1,7 @@
 # dev-infra-manager
 
-`dev-infra-manager` provides persistent, isolated, review-gated workspaces for AI-assisted development.
+`dev-infra-manager` (DIM) provides persistent, isolated, review-gated
+workspaces for AI-assisted development.
 
 Licensed under the [MIT License](LICENSE). Release history is recorded in the
 [changelog](CHANGELOG.md).
@@ -10,7 +11,8 @@ requirements](docs/adoption.md). They require full human review of DIM, the
 project repository, and every secret-bearing environment, plus immutable
 version pinning.
 
-The project focuses on the container and infrastructure boundary around agent workspaces:
+DIM focuses on the container and infrastructure boundary around agent
+workspaces:
 
 - Persistent, explicitly discarded agent workspaces.
 - Backend-selectable nested container isolation.
@@ -19,102 +21,81 @@ The project focuses on the container and infrastructure boundary around agent wo
 - Root-repository lifecycle hooks for multi-repository projects.
 - Workspace-level CPU, memory, and PID limits.
 
-## Quick Start
+This page covers using DIM. Building or contributing to DIM itself —
+running its own test/verification suite, publishing packages, testing host
+installers — is [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Install dependencies and verify the TypeScript project:
+## Set up a host runtime backend
+
+The container image and host-installer scripts DIM ships aren't published
+anywhere except this repository yet, so a one-time clone is needed even if
+you'll install the `dim` CLI itself from npm below:
 
 ```bash
-pnpm install
-just verify
-```
-
-Install and verify one host runtime backend on Ubuntu:
-
-```bash
+git clone <this-repository>
+cd dev-infra-manager
+just build-project-workspace
 just install-host-sysbox-ubuntu
 ```
 
 Run `just` as your normal user, including when it is managed by mise. The
-installer invokes `sudo` only for host changes. It also adds the invoking user
-to the `docker` group; log out and back in or run `newgrp docker` once after
-the first installation. Do not install Sysbox and gVisor together merely for
-testing; verify their installers in separate KVM guests instead.
+installer invokes `sudo` only for host changes, and adds the invoking user to
+the `docker` group; log out and back in or run `newgrp docker` once after the
+first installation.
 
 The installer shows every package and host-level change before doing anything
 and proceeds only after you enter `yes`. It is a development convenience, not
 production hardening guidance. In particular, review its path-scoped AppArmor
 exception for Sysbox FUSE mounts before using it outside a development host.
 
-Install the VM test tools with `just install-kvm-verify-deps-ubuntu`, then test one installer without changing the host with `just verify-host-backend-kvm BACKEND`, or test every backend in a separate disposable VM with `just verify-host-backends-kvm`. Output is concise by default; append `--verbose` to show full guest installation and workload logs.
-
-Choose the backend the host needs:
+Choose the backend your workspaces will use:
 
 ```bash
-just install-host-sysbox-ubuntu
-just install-host-gvisor-ubuntu
-just install-host-rootless-podman-ubuntu
-just install-host-runc-ubuntu
+just install-host-sysbox-ubuntu          # production default
+just install-host-gvisor-ubuntu          # no-KVM sandboxed fallback
+just install-host-rootless-podman-ubuntu # lower-privilege Podman workloads
+just install-host-runc-ubuntu            # nested development/CI only
 ```
 
-Install gVisor `runsc` directly for the no-KVM backend:
+See [docs/runtime-backends.md](docs/runtime-backends.md) for how these
+differ, and [CONTRIBUTING.md](CONTRIBUTING.md) for testing an installer in a
+disposable KVM guest instead of your own host.
+
+## Install the `dim` CLI
+
+Pin an exact, reviewed version — never `latest`:
 
 ```bash
-just install-runsc-linux
+mise use -g 'npm:@slop-lab/install-dim@0.2.0'
+dim install-cli
 ```
 
-Or bootstrap the project with one selected backend (Sysbox by default):
+or, without mise:
 
 ```bash
-just bootstrap-ubuntu
-just bootstrap-ubuntu gvisor
+npx '@slop-lab/install-dim@0.2.0'
+npx '@slop-lab/install-dim@0.2.0' install-cli
+npx '@slop-lab/install-dim@0.2.0' install-plugin '@example/dim-plugin@1.2.3'
 ```
 
-Bootstrap prefers mise when available: it runs `mise install` and uses the
-repository-managed Node.js, pnpm, and `just`. Hosts without mise fall back to
-APT and the pinned global pnpm version.
+`@slop-lab/install-dim` is a thin facade: it owns only `installer`,
+`install-cli`, and `install-plugin`, and proxies every other command to a
+separately installed `@slop-lab/dim-cli`. Bare `dim` opens an interactive
+installer only until a CLI is configured; after that it behaves like `dim
+--help`, and `dim installer` is what reopens the prompt. Installation
+choices persist under `${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json`. See
+the [installer README](https://www.npmjs.com/package/@slop-lab/install-dim)
+for the full command reference.
 
-Build the included runtime images:
+DIM retains an explicitly enabled, versioned plugin loader for future
+concrete integrations. Version 0.2.0 does not expose a generic Git-provider
+extension point. See [docs/plugins.md](docs/plugins.md).
 
-```bash
-just build-project-workspace
-just build-secret-example
-```
-
-Run the reproducible integration smoke test:
-
-```bash
-just verify-container-sysbox
-```
-
-Use `just verify-container-sysbox -- --verbose` (or `-- -v`) to show detailed output for each stage. This requires a Docker host with Sysbox; standard GitHub-hosted CI uses `just verify-container-runc` instead.
-
-Run the fast static isolation check without Docker or container creation:
+## Create a Project
 
 ```bash
-just isolation-check
-```
-
-Use `just isolation-check-json` for machine-readable JSON output.
-
-Inspect host readiness:
-
-```bash
-just doctor
-```
-
-See [docs/README.md](docs/README.md) for the full documentation index.
-See [specs/README.md](specs/README.md) for implementation-oriented specifications.
-See [docs/monorepo.md](docs/monorepo.md) for workspace boundaries and the
-planned optional Git-host and ingress provider layout.
-
-Create a Project namespace and root repository, push with ordinary Git, then
-run a persistent workspace whose checkout exists only inside its container:
-
-```bash
-just build-project-workspace
-just install-dim-local
 dim project create project
-dim repo create project root --root
+dim repo create project root --root --protect main
 git -C /path/to/project push "$(dim repo url-for-host project root)" main
 dim repo protect project root
 dim create project work-1 --backend sysbox --profile development
@@ -122,46 +103,24 @@ dim run work-1 codex
 dim exec work-1 -- bash
 ```
 
+`--protect` belongs on `repo create`, not `repo protect` — an empty
+repository has no branch to protect yet, so `create` only records the
+policy and `protect` applies it once the branch exists. Skipping it is a
+real footgun: `repo protect` still reports success having protected nothing.
+
+This repository implements the same project contract on itself through
+`.dim/setup.sh` and `.dim/entrypoint.sh`; after pushing it as the Project
+root, `dim run work-1 codex` launches Codex in the persistent DIM workspace,
+no separate launcher needed.
+
 For a complete, tested walkthrough spanning a root repository plus product
-and secret-bearing repositories, see [examples/multi-repo-project](examples/multi-repo-project/README.md).
+and secret-bearing repositories — including running `codex`/`claude` in a
+nested dev container and deploying a secret-bearing service the way DIM's
+architecture actually requires — see
+[examples/multi-repo-project](examples/multi-repo-project/README.md).
 
-This repository implements the same project contract itself through
-`.dim/setup.sh` and `.dim/entrypoint.sh`. After pushing this repository as the
-Project root, `dim run work-1 codex` launches Codex in the
-persistent DIM workspace; no separate workspace launcher is required.
-
-The publishable packages are `@slop-lab/dev-infra-manager-core`, the thin
-`@slop-lab/dim-cli`, and the plugin installer
-`@slop-lab/install-dim`. Their source manifests remain private; each build
-generates a consumer-facing manifest under `dist`. Publish core before the CLI:
-
-```bash
-pnpm --filter @slop-lab/dev-infra-manager-core run pack:dry-run
-pnpm --filter @slop-lab/dim-cli run pack:dry-run
-pnpm --filter @slop-lab/install-dim run pack:dry-run
-pnpm --filter @slop-lab/dev-infra-manager-core run publish:package
-pnpm --filter @slop-lab/dim-cli run publish:package
-pnpm --filter @slop-lab/install-dim run publish:package
-mise use -g 'npm:@slop-lab/install-dim@0.2.0'
-dim install-cli
-npx '@slop-lab/install-dim@0.2.0'
-npx '@slop-lab/install-dim@0.2.0' install-cli
-npx '@slop-lab/install-dim@0.2.0' install-plugin '@example/dim-plugin@1.2.3'
-```
-
-Running `dim` without arguments opens an interactive installer for the DIM
-CLI, optional plugins, or both — but only until a CLI is configured; after
-that, bare `dim` behaves like every other command and proxies through
-instead (same as `dim --help`), and `dim installer` is what reopens the
-prompt. Use the explicit `install-cli` or `install-plugin` subcommand for
-non-interactive automation. Installation choices are persisted under
-`${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json`.
-
-DIM retains an explicitly enabled, versioned plugin loader for future concrete
-integrations. Version 0.2.0 does not expose a generic Git-provider extension
-point. See [docs/plugins.md](docs/plugins.md).
-
-See [docs/repo-workspaces.md](docs/repo-workspaces.md) for lifecycle,
-credential, reconciliation, and container-only verification details.
-See [docs/project-workspaces.md](docs/project-workspaces.md) for the
-project-facing `.dim` contract and CLI lifecycle.
+See [glossary](docs/README.md#glossary), [docs/repo-workspaces.md](docs/repo-workspaces.md)
+for lifecycle, credential, and reconciliation details, and
+[docs/project-workspaces.md](docs/project-workspaces.md) for the
+project-facing `.dim` contract and CLI lifecycle. [docs/README.md](docs/README.md)
+is the full documentation index.

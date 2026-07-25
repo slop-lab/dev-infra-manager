@@ -26,8 +26,9 @@ and lifecycle journal.
 
 A workspace **profile** is a Docker Compose capability profile: for example
 `development`, `secrets`, `browser`, or `gpu-tools`. It selects optional
-project services and is unrelated to the CPU/memory/disk resource profiles
-used for CPU, memory, and PID limits on the top-level workspace.
+project services and is unrelated to the CPU, memory, and PID limits set on
+the top-level workspace. DIM does not impose a disk quota; see [Workspace
+Runtime Backends](runtime-backends.md).
 
 A **service** is a container managed by the project, normally through
 `.dim/docker-compose.yml`. Services may clone additional registered
@@ -177,10 +178,15 @@ Create the Project root and populate it with standard Git:
 
 ```bash
 dim project create example
-dim repo create example root --root
+dim repo create example root --root --protect main
 git -C /path/to/example push "$(dim repo url-for-host example root)" main
 dim repo protect example root
 ```
+
+`--protect` is set at `repo create` time (there's no branch to protect until
+the first push); `repo protect` then applies whatever was configured. Without
+it, `repo protect` has nothing to apply and still reports success — the root
+stays unprotected.
 
 Create a workspace and persist its desired Compose profiles:
 
