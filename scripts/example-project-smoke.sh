@@ -135,12 +135,44 @@ dim exec "$workspace_name" -- hostname >/dev/null
 echo "[example-project] 6. run the project task"
 test "$(dim run "$workspace_name" hello)" = "hello from the example project"
 
-echo "[example-project] 7. reach the other repositories from inside the workspace"
+echo "[example-project] 7. run a coding agent in the dev container"
+# The dev container installs codex/claude via its own startup command, which
+# can still be running just after `docker compose up` reports it started.
+wait_for_task() {
+  local task="$1"
+  local attempt
+  for attempt in $(seq 1 60); do
+    if dim run "$workspace_name" "$task" -- --version >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "timed out waiting for '$task' to become available in the dev container" >&2
+  return 1
+}
+wait_for_task codex
+wait_for_task claude
+codex_version="$(dim run "$workspace_name" codex -- --version)"
+claude_version="$(dim run "$workspace_name" claude -- --version)"
+echo "$codex_version" | grep -q "^codex-cli "
+echo "$claude_version" | grep -q "(Claude Code)$"
+# Without `--`, `--version` is parsed as a flag on `dim run`/`dim-cli`
+# itself, not forwarded to the task -- confirm the documented gotcha in the
+# README is real: it prints dim-cli's own version, not codex's.
+test "$(dim run "$workspace_name" codex --version)" != "$codex_version"
+
+echo "[example-project] 8. create a nested container from inside the dev container"
+nested_output="$(dim exec "$workspace_name" -- \
+  docker compose --file .dim/docker-compose.yml exec -T dev \
+  docker run --rm hello-world)"
+echo "$nested_output" | grep -q "Hello from Docker!"
+
+echo "[example-project] 9. reach the other repositories from inside the workspace"
 web_content="$(dim exec "$workspace_name" -- sh -c \
   'git clone "$DIM_GIT_BASE_URL/web.git" /tmp/web >/dev/null 2>&1 && cat /tmp/web/app.txt')"
 test "$web_content" = "hello from example-web"
 
-echo "[example-project] 8. clean up"
+echo "[example-project] 10. clean up"
 dim discard "$workspace_name" --yes >/dev/null
 
 echo "example-project-smoke-ok"

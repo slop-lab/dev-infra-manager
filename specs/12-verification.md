@@ -109,9 +109,11 @@ override. See [Installer Facade](14-installer-facade.md).
 `just verify-example-project` requires Docker and a reachable managed
 Gitea. It installs DIM through the installer facade and proves
 `examples/multi-repo-project/README.md` end to end: registering a root plus
-two additional repositories, creating a real workspace container, running a
-project task, and reaching another repository from inside the workspace
-through `$DIM_GIT_BASE_URL`.
+two additional repositories, creating a real workspace container whose
+nested `dev` service installs `codex` and `claude`, running a project task,
+running both agent CLIs inside `dev`, creating a further nested container
+from inside `dev` through its mounted nested Docker socket, and reaching
+another repository from inside the workspace through `$DIM_GIT_BASE_URL`.
 
 ## Documentation Verification
 

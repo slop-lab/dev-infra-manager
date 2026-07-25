@@ -182,6 +182,9 @@ command for command: installs DIM through the installer facade against a
 disposable local npm registry, copies the three repository skeletons under
 `examples/multi-repo-project/repos/`, registers them as a Project, creates a
 real workspace container, and verifies it (`dim show --json` phase,
-`docker ps` against the resolved `containerName`, `dim exec`, `dim run`, and
-cross-repository access through `$DIM_GIT_BASE_URL`) before discarding
-everything. The doc and this script must change together.
+`docker ps` against the resolved `containerName`, `dim exec`, `dim run`,
+`codex`/`claude` reachable in the nested `dev` service once its own startup
+command finishes installing them, a further nested container created from
+inside `dev` through its mounted nested Docker socket, and cross-repository
+access through `$DIM_GIT_BASE_URL`) before discarding everything. The doc
+and this script must change together.

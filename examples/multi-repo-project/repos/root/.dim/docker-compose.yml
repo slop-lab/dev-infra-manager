@@ -1,4 +1,15 @@
 services:
   dev:
-    image: alpine:3.22
-    command: ["sleep", "infinity"]
+    image: docker:29.1.3-cli
+    working_dir: /workspace
+    # Gives the dev container the same nested Docker daemon the workspace
+    # itself uses, so it can create further containers of its own (builds,
+    # test runs, whatever an agent needs) without ever touching the host.
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache nodejs npm >/dev/null
+        npm install --global @openai/codex @anthropic-ai/claude-code >/dev/null
+        exec sleep infinity

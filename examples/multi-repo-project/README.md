@@ -3,8 +3,11 @@
 This walks through DIM end to end on a small but realistic Project: one root
 infrastructure repository plus two additional repositories, a product repo
 and a separate secret-bearing repo. It installs DIM, registers the three
-repositories, creates a real workspace container, runs a project task, and
-shows that the workspace can reach the other repositories on its own.
+repositories, creates a real workspace container, runs `codex` and `claude`
+inside a nested dev container that can itself create further containers, and
+shows that the workspace can reach the other repositories on its own. This
+is DIM's actual purpose: a persistent, isolated container where a coding
+agent can work, not a toy.
 
 `repos/` in this directory contains the actual repository skeletons used
 below — not a code listing, real files. Copy any of them directly as a
@@ -108,7 +111,9 @@ dim create example example-dev --backend runc --profile development
 ```
 
 This claims the workspace, clones `example-root` inside it, and runs
-`.dim/docker-compose.yml` — a real container now exists.
+`.dim/docker-compose.yml` — a real container now exists. Its `dev` service
+installs `codex` and `claude` and mounts the workspace's own nested Docker
+socket, so it can run agents and create further containers of its own.
 
 ## 5. Confirm it's real
 
@@ -131,7 +136,36 @@ dim run example-dev hello
 
 `run` dispatches through `.dim/entrypoint.sh` without repeating setup.
 
-## 7. Reach the other repositories from inside the workspace
+## 7. Run a coding agent in the dev container
+
+```bash
+dim run example-dev codex -- "describe this repository in one sentence"
+dim run example-dev claude -- "describe this repository in one sentence"
+```
+
+The `codex` and `claude` tasks exec into the already-running `dev` service
+and run the agent with `--dangerously-bypass-approvals-and-sandbox` /
+`--dangerously-skip-permissions` — appropriate here because `dev` is itself
+an isolated, disposable container, not your host. Always put agent arguments
+after `--`: `dim run` forwards unrecognized flags to `dim` itself otherwise,
+so `dim run example-dev codex --version` (no `--`) prints `dim`'s own
+version instead of reaching `codex` at all.
+
+## 8. Create a nested container from inside the dev container
+
+```bash
+dim exec example-dev -- \
+  docker compose --file .dim/docker-compose.yml exec -T dev \
+  docker run --rm hello-world
+```
+
+`dev` mounts `/var/run/docker.sock` from the workspace's own nested Docker
+daemon (the same one `docker compose` itself runs against), so containers it
+creates are siblings within that same isolated daemon — never the real host.
+This is what lets an agent running inside `dev` build images, run test
+containers, or start service dependencies entirely on its own.
+
+## 9. Reach the other repositories from inside the workspace
 
 Only the root repository is cloned automatically. Everything else is
 reachable through the managed Git service using the credentials `dim`
@@ -149,7 +183,7 @@ repositories](../../docs/repo-workspaces.md#multiple-repositories) for how
 project code is expected to use this in practice (usually from
 `.dim/setup.sh` or a Compose service, not by hand).
 
-## 8. Clean up
+## 10. Clean up
 
 ```bash
 dim discard example-dev --yes
