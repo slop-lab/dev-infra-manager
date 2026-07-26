@@ -1,6 +1,7 @@
 FROM quay.io/podman/stable:v5.6.2
 
-RUN dnf install -y \
+RUN dnf clean all \
+  && dnf --refresh install -y \
     bash \
     coreutils \
     curl \

@@ -75,7 +75,8 @@ ssh "${DIM_RUNNER_SSH_ARGS[@]}" dim@127.0.0.1 \
 if [[ "$mode" == --check ]]; then
   echo "actions-runner[$runner_name]: verify Sysbox, runner binary, and nested KVM"
   ssh "${DIM_RUNNER_SSH_ARGS[@]}" dim@127.0.0.1 \
-    "set -e; systemctl is-active sysbox; docker run --rm --runtime=sysbox-runc hello-world >/dev/null; \
+    "set -e; systemctl is-active sysbox; docker compose version >/dev/null; \
+     docker run --rm --runtime=sysbox-runc hello-world >/dev/null; \
      /opt/actions-runner/bin/Runner.Listener --version; \
      status=0; sudo timeout 2 qemu-system-x86_64 -machine q35,accel=kvm -cpu host -m 128 -smp 1 -nodefaults -nographic -S || status=\$?; \
      test \"\$status\" -eq 124"

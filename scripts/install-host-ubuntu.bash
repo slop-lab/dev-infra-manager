@@ -33,7 +33,7 @@ This script is a development convenience, not production hardening guidance.
 Review and adapt every change before using it on a production host.
 
 It will:
-  - install common APT packages: curl, docker.io, jq
+  - install common APT packages: curl, docker.io, docker-compose-v2, jq
   - install and configure only the ${backend} backend
 EOF
   if [[ "$backend" == rootless-podman ]]; then
@@ -57,7 +57,7 @@ EOF
 
 install_common_packages() {
   sudo apt-get update
-  sudo apt-get install -y curl docker.io jq
+  sudo apt-get install -y curl docker.io docker-compose-v2 jq
 }
 
 install_sysbox() {
