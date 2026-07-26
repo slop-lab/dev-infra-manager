@@ -3,7 +3,7 @@ set -euo pipefail
 
 runner_version="${1:?runner version is required}"
 runner_sha256="${2:?runner SHA-256 is required}"
-source_root="${3:-/tmp/dim-runner-source}"
+source_root="${3:?source root is required}"
 runner_root="/opt/actions-runner"
 archive="/tmp/actions-runner-linux-x64-${runner_version}.tar.gz"
 

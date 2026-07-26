@@ -59,16 +59,16 @@ dim_runner_wait_for_ssh "$workdir/qemu.log" actions-runner-image
 
 tar -C "$repo_root" -czf "$workdir/source.tar.gz" \
   images/github-actions-runner-kvm/provision.bash \
-  scripts/install-host-ubuntu.bash \
-  scripts/install-runsc-linux.bash \
-  scripts/lib/runtime-backends.bash
-ssh "${DIM_RUNNER_SSH_ARGS[@]}" dim@127.0.0.1 \
-  "mkdir -p /tmp/dim-runner-source && tar -C /tmp/dim-runner-source -xzf -" \
-  <"$workdir/source.tar.gz"
+  scripts
 
 echo "actions-runner-image: provision Sysbox, nested KVM, and runner ${runner_version}"
 ssh "${DIM_RUNNER_SSH_ARGS[@]}" dim@127.0.0.1 \
-  "bash /tmp/dim-runner-source/images/github-actions-runner-kvm/provision.bash '$runner_version' '$runner_sha256'"
+  "source_root=\$(mktemp -d /tmp/dim-runner-source-XXXXXX)
+   trap 'rm -rf -- \"\$source_root\"' EXIT
+   tar -C \"\$source_root\" -xzf -
+   bash \"\$source_root/images/github-actions-runner-kvm/provision.bash\" \
+     '$runner_version' '$runner_sha256' \"\$source_root\"" \
+  <"$workdir/source.tar.gz"
 
 ssh "${DIM_RUNNER_SSH_ARGS[@]}" dim@127.0.0.1 "sudo poweroff" >/dev/null 2>&1 || true
 wait "$pid" || true
