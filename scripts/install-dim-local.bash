@@ -21,4 +21,3 @@ test -n "$cli_tarball"
 
 npm install --global --prefix "$install_prefix" "$core_tarball" "$cli_tarball"
 echo "Installed $install_prefix/bin/dim (ensure $install_prefix/bin is in PATH)"
-

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 suffix="$PPID-$$"
 project_name="multi-$suffix"
 api_repo="api"
@@ -12,7 +13,8 @@ source_root="$(mktemp -d /tmp/dim-multi-source.XXXXXX)"
 dim_bin="${DIM_BIN:-dim}"
 
 export DIM_STATE_ROOT="$state_root"
-export DIM_WORKSPACE_BACKEND="${DIM_WORKSPACE_BACKEND:-runc}"
+export DIM_CONFIG_PATH="$state_root/dim.json"
+bash "$script_dir/configure-user-backend.bash" runc
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then

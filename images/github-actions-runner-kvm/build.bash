@@ -4,8 +4,8 @@ set -euo pipefail
 runner_version="${ACTIONS_RUNNER_VERSION:-2.336.0}"
 runner_sha256="${ACTIONS_RUNNER_SHA256:-04cf0be1aff4c3ec3554466c39124ca250e3effd8873bb7e8d68535aa9505d5d}"
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
-# shellcheck source=qemu-common.sh
-source "$repo_root/images/github-actions-runner-kvm/qemu-common.sh"
+# shellcheck source=qemu-common.bash
+source "$repo_root/images/github-actions-runner-kvm/qemu-common.bash"
 cache="${DIM_KVM_IMAGE_CACHE:-$repo_root/.local/kvm}"
 output="${DIM_ACTIONS_RUNNER_IMAGE:-$repo_root/.local/github-actions-runner-kvm/base.qcow2}"
 ssh_port="${DIM_ACTIONS_RUNNER_SSH_PORT:-22223}"
@@ -58,17 +58,17 @@ pid="$DIM_RUNNER_QEMU_PID"
 dim_runner_wait_for_ssh "$workdir/qemu.log" actions-runner-image
 
 tar -C "$repo_root" -czf "$workdir/source.tar.gz" \
-  images/github-actions-runner-kvm/provision.sh \
-  scripts/install-host-ubuntu.sh \
-  scripts/install-runsc-linux.sh \
-  scripts/lib/runtime-backends.sh
+  images/github-actions-runner-kvm/provision.bash \
+  scripts/install-host-ubuntu.bash \
+  scripts/install-runsc-linux.bash \
+  scripts/lib/runtime-backends.bash
 ssh "${DIM_RUNNER_SSH_ARGS[@]}" dim@127.0.0.1 \
   "mkdir -p /tmp/dim-runner-source && tar -C /tmp/dim-runner-source -xzf -" \
   <"$workdir/source.tar.gz"
 
 echo "actions-runner-image: provision Sysbox, nested KVM, and runner ${runner_version}"
 ssh "${DIM_RUNNER_SSH_ARGS[@]}" dim@127.0.0.1 \
-  "bash /tmp/dim-runner-source/images/github-actions-runner-kvm/provision.sh '$runner_version' '$runner_sha256'"
+  "bash /tmp/dim-runner-source/images/github-actions-runner-kvm/provision.bash '$runner_version' '$runner_sha256'"
 
 ssh "${DIM_RUNNER_SSH_ARGS[@]}" dim@127.0.0.1 "sudo poweroff" >/dev/null 2>&1 || true
 wait "$pid" || true

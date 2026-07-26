@@ -1,5 +1,5 @@
 import { chmod, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   configuredCli,
@@ -101,6 +101,8 @@ describe("@slop-lab/install-dim", () => {
       const configPath = join(root, "config", "slop-lab", "dim.json");
       const pluginHome = join(root, "plugin-home");
       vi.stubEnv("DIM_PLUGIN_HOME", pluginHome);
+      await mkdir(dirname(configPath), { recursive: true });
+      await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "gvisor" }));
 
       const installed = await installDimCli({
         version: "9.9.9",
@@ -127,6 +129,7 @@ describe("@slop-lab/install-dim", () => {
 
       expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
         schemaVersion: 1,
+        workspaceBackend: "gvisor",
         cli: { mode: "proxied", version: "9.9.9", executable },
         pluginHome
       });

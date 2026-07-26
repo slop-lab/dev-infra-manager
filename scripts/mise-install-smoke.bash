@@ -44,7 +44,7 @@ cli_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-cli*.tgz' -pri
 install_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*install-dim*.tgz' -print -quit)"
 test -n "$core_tarball" && test -n "$cli_tarball" && test -n "$install_tarball"
 
-cp "$repo_root/scripts/lib/local-npm-registry.sh" "$source_dir/local-npm-registry.sh"
+cp "$repo_root/scripts/lib/local-npm-registry.bash" "$source_dir/local-npm-registry.bash"
 
 # Everything below runs entirely inside the container's own filesystem (the
 # host directory is mounted read-only and copied once) so a root-owned
@@ -54,9 +54,9 @@ cat > "$source_dir/run.sh" <<'SCRIPT'
 #!/usr/bin/env bash
 set -euo pipefail
 mkdir -p /work
-cp /mnt/*.tgz /mnt/local-npm-registry.sh /work/
+cp /mnt/*.tgz /mnt/local-npm-registry.bash /work/
 cd /work
-source /work/local-npm-registry.sh
+source /work/local-npm-registry.bash
 
 echo "[container] start local npm registry"
 dim_start_local_npm_registry /work

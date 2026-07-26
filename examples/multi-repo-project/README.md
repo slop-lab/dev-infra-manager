@@ -40,7 +40,7 @@ For the underlying concepts (what a Project is, the `.dim` contract,
 capability profiles), see [Project Workspaces](../../docs/project-workspaces.md)
 and [Repository-backed Workspaces](../../docs/repo-workspaces.md).
 
-This exact sequence is exercised by `scripts/example-project-smoke.sh`
+This exact sequence is exercised by `scripts/example-project-smoke.bash`
 (`just verify-example-multi-repo-project`, from the DIM repository root)
 against a real Docker daemon and a real managed Gitea instance. If you change the
 repository skeletons or commands here, update that script too — it is what

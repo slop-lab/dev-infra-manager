@@ -14,6 +14,10 @@ describe("project and workspace lifecycle", () => {
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "dim-lifecycle-"));
+    await writeFile(
+      join(root, "dim.json"),
+      JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" })
+    );
   });
 
   afterEach(async () => {
@@ -120,6 +124,7 @@ describe("project and workspace lifecycle", () => {
   it("builds a persistent container with credentials but no host mounts or socket", () => {
     const options = lifecycleOptions({
       DIM_STATE_ROOT: root,
+      DIM_CONFIG_PATH: join(root, "dim.json"),
       DIM_WORKSPACE_RUNTIME: "runc",
       DIM_WORKSPACE_PRIVILEGED: "yes"
     });
@@ -220,8 +225,12 @@ describe("project and workspace lifecycle", () => {
   it("validates names and container-only option overrides", () => {
     expect(validateLifecycleName("repo-1", "repo")).toBe("repo-1");
     expect(() => validateLifecycleName("../repo", "repo")).toThrow(/repo name/);
+    expect(() => lifecycleOptions({ DIM_CONFIG_PATH: join(root, "missing.json") })).toThrow(
+      /workspace backend is not configured/
+    );
     const options = lifecycleOptions({
       DIM_STATE_ROOT: root,
+      DIM_CONFIG_PATH: join(root, "dim.json"),
       DIM_GITEA_PORT: "4300",
       DIM_WORKSPACE_MEMORY: "2g"
     });
@@ -235,7 +244,7 @@ describe("project and workspace lifecycle", () => {
   });
 
   it("selects persistent workspace runtime backends", () => {
-    const options = lifecycleOptions({ DIM_STATE_ROOT: root });
+    const options = lifecycleOptions({ DIM_STATE_ROOT: root, DIM_CONFIG_PATH: join(root, "dim.json") });
     expect(workspaceRuntimePlan("sysbox", options)).toMatchObject({
       dockerRuntime: "sysbox-runc",
       image: "dev-infra-project-workspace:latest",
@@ -253,7 +262,11 @@ describe("project and workspace lifecycle", () => {
       engine: "podman",
       privileged: false,
       capabilities: expect.arrayContaining(["SYS_ADMIN", "SETUID", "SETGID", "SYS_CHROOT"]),
-      securityOptions: ["seccomp=unconfined", "apparmor=unconfined"],
+      securityOptions: [
+        "seccomp=unconfined",
+        "apparmor=unconfined",
+        "systempaths=unconfined"
+      ],
       devices: ["/dev/fuse"]
     });
     expect(workspaceRuntimePlan("runc", options)).toMatchObject({

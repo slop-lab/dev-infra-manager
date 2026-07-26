@@ -15,7 +15,7 @@ just build-github-runner-kvm
 just verify-github-runner-kvm
 ```
 
-The build pins the Actions runner version and SHA-256 in `build.sh`. Override
+The build pins the Actions runner version and SHA-256 in `build.bash`. Override
 both together when deliberately updating it:
 
 ```bash

@@ -25,4 +25,4 @@ sudo /usr/local/bin/runsc install
 sudo systemctl restart docker
 
 /usr/local/bin/runsc --version
-echo "runsc installed and registered with Docker. Run: pnpm run cli -- doctor --backend gvisor"
+echo "runsc installed and registered with Docker."

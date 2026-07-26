@@ -4,9 +4,9 @@
 
 This specification defines the minimum verification gates for development.
 
-## Static And Unit Gates
+## Source Check Gate
 
-`just verify` must run:
+`just check` must run:
 
 1. TypeScript check.
 2. Unit tests.
@@ -15,12 +15,17 @@ This specification defines the minimum verification gates for development.
 Current commands:
 
 ```bash
-pnpm run workspace:check
-pnpm run workspace:test
-pnpm run workspace:build
+just typecheck
+just test
+just build
 ```
 
-This gate must not require Docker, a runtime backend, QEMU, or KVM.
+This gate must require only Node.js and pnpm, not Docker, a runtime backend,
+QEMU, KVM, or an installed DIM CLI.
+
+`just verify-plugin-install` builds the publishable packages and verifies
+plugin installation through their packaged shape. It is separate because it
+tests an installation workflow rather than source correctness.
 
 The external URL plugin unit suite must exercise real HTTP forwarding through
 each configured reverse-proxy shape and provider URL generation. A configured
@@ -35,19 +40,23 @@ controller API, fetches a unique sentinel through the external URL, and revokes
 the route. It is required verification code but is not part of the static gate
 because it depends on operator-owned Tailnet DNS and TLS.
 
-## runc Nested-container Gate
+## Container Integration Gate
 
-`just verify-container-runc` requires Docker with Compose v2 and support for
-privileged runc containers. It covers configuration validation, plugin
-installation, cgroup limits, workspace image builds, nested Docker, lifecycle
-behavior, and packed CLI project workflows. It must not require Sysbox or KVM.
+`just verify-container` requires Docker with Compose v2 and support for
+privileged nested containers. It covers workspace image builds, nested Docker,
+lifecycle behavior, and packed CLI project workflows. It may run against the
+nested Docker daemon in a development container and must not claim to verify a
+host runtime backend boundary.
 
-## Smoke Gate
+## Container Backend Gates
 
-`just verify-container-sysbox` must cover:
+`scripts/container-cgroup-smoke.bash` requires direct access to the target Docker
+host and must cover exact runc cgroup v2 CPU, memory, swap, and PID limits,
+including live resource updates.
 
-- Workspace-root image build.
-- Workspace-root image command smoke.
+`scripts/container-sysbox-isolation-smoke.bash` requires a prebuilt workspace
+image and direct access to a Docker host with `sysbox-runc`. It must cover:
+
 - Sysbox workspace-root execution with explicit outer CPU, memory, and PID
   limits.
 - Exact cgroup v2 limit visibility inside the workspace root.
@@ -73,20 +82,21 @@ container. It verifies generated runtime arguments, including:
 
 `just isolation-check-json` runs the same tests with Vitest's JSON reporter so
 CI can consume a single JSON document from stdout. These static checks do not
-replace `just verify-container-sysbox`, which verifies actual Sysbox and cgroup behavior.
+replace `scripts/container-sysbox-isolation-smoke.bash`, which verifies actual
+Sysbox and cgroup behavior.
 
 ## Backend Verification
 
 Runtime backend verification should include:
 
-- `doctor --backend` for the selected backend.
+- `doctor` for the installed backend.
 - Workspace create, task execution, stop/start persistence, and discard.
 - Nested container smoke when the backend claims nested Docker or Podman support.
 
 Current verified host evidence:
 
 - Rootless Podman can create a workspace on a compatible host.
-- gVisor can pass `doctor --backend gvisor`.
+- gVisor can pass `doctor` when recorded as the installed backend.
 - gVisor can create a workspace and run nested Docker.
 - gVisor inner Docker can run nested `hello-world`.
 - Sysbox inner Docker can run nested `hello-world` without access to the host
@@ -102,10 +112,9 @@ Host installation scripts must be verified by:
 - Runtime version command after installation.
 - Docker runtime registration check when the script registers a runtime.
 
-`just verify-host-backend-kvm BACKEND` requires QEMU and writable `/dev/kvm`
-and verifies one backend installer in a disposable VM.
-`just verify-host-backends-kvm` runs the same gate for every backend in a
-separate VM.
+`scripts/kvm-host-install-smoke.bash BACKEND` verifies one backend installer in
+a disposable VM. `just verify-environments-kvm` requires QEMU and writable
+`/dev/kvm` and runs the gate for every backend in a separate VM.
 
 ## Installer Facade Verification
 

@@ -1,11 +1,8 @@
 # Workspace Runtime Backends
 
-DIM stores the selected runtime backend in each workspace record. Choose it
-when the workspace is created:
-
-```bash
-dim create PROJECT WORKSPACE --backend BACKEND
-```
+The host backend installer records its selection as `workspaceBackend` in the
+DIM user configuration. DIM uses that installed backend for new workspaces and
+stores it in each workspace record.
 
 The supported backends are:
 
@@ -23,12 +20,14 @@ workspace to change it. `show` reports the persisted selection.
 unprivileged user namespaces. Its outer container runs unprivileged, with a
 specific capability set (`SYS_ADMIN`, `SETUID`/`SETGID`, `SYS_CHROOT`,
 `SYS_PTRACE`, and the rest of the set shared with `gvisor`) granted instead;
+Docker's seccomp, AppArmor, and masked/read-only system-path confinement is
+disabled so the nested rootless runtime can create user namespaces and mount
+its own procfs;
 set `DIM_WORKSPACE_PRIVILEGED=true` to fall back to a fully privileged outer
-container if a host's kernel/seccomp configuration needs it. `doctor
---backend rootless-podman` checks the device and image, but creation is the
-definitive host compatibility test.
+container if a host's kernel/seccomp configuration needs it. `dim doctor`
+checks the configured backend's device and image requirements, but creation is
+the definitive host compatibility test.
 
-`DIM_WORKSPACE_BACKEND` changes the default used when `--backend` is omitted.
 `DIM_WORKSPACE_IMAGE`, `DIM_WORKSPACE_RUNTIME`, and
 `DIM_WORKSPACE_PRIVILEGED` are advanced image/runtime overrides; they do not
 change the backend stored in workspace metadata.

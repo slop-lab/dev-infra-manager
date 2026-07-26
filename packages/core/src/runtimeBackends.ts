@@ -67,7 +67,11 @@ export function workspaceRuntimePlan(
           "MKNOD", "NET_ADMIN", "NET_BIND_SERVICE", "NET_RAW", "SETFCAP",
           "SETGID", "SETPCAP", "SETUID", "SYS_ADMIN", "SYS_CHROOT", "SYS_PTRACE"
         ],
-        securityOptions: ["seccomp=unconfined", "apparmor=unconfined"],
+        securityOptions: [
+          "seccomp=unconfined",
+          "apparmor=unconfined",
+          "systempaths=unconfined"
+        ],
         devices: ["/dev/fuse"],
         runtimeDataPath: "/home/dim/.local/share/containers",
         engine: "podman",

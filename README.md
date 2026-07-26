@@ -35,7 +35,8 @@ you'll install the `dim` CLI itself from npm below:
 git clone <this-repository>
 cd dev-infra-manager
 just build-project-workspace
-just install-host-sysbox-ubuntu
+bash scripts/install-host-ubuntu.bash sysbox
+just doctor
 ```
 
 Run `just` as your normal user, including when it is managed by mise. The
@@ -51,10 +52,10 @@ exception for Sysbox FUSE mounts before using it outside a development host.
 Choose the backend your workspaces will use:
 
 ```bash
-just install-host-sysbox-ubuntu          # production default
-just install-host-gvisor-ubuntu          # no-KVM sandboxed fallback
-just install-host-rootless-podman-ubuntu # lower-privilege Podman workloads
-just install-host-runc-ubuntu            # nested development/CI only
+bash scripts/install-host-ubuntu.bash sysbox          # production default
+bash scripts/install-host-ubuntu.bash gvisor          # no-KVM sandboxed fallback
+bash scripts/install-host-ubuntu.bash rootless-podman # lower-privilege Podman workloads
+bash scripts/install-host-ubuntu.bash runc            # nested development/CI only
 ```
 
 See [docs/runtime-backends.md](docs/runtime-backends.md) for how these
@@ -98,7 +99,7 @@ dim project create project
 dim repo create project root --root --protect main
 git -C /path/to/project push "$(dim repo url-for-host project root)" main
 dim repo protect project root
-dim create project work-1 --backend sysbox --profile development
+dim create project work-1 --profile development
 dim run work-1 codex
 dim exec work-1 -- bash
 ```

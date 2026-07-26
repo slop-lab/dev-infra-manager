@@ -170,7 +170,7 @@ profile's reverse proxy. Tunnel credentials remain in the separately managed
 ## Verification
 
 [The external URL example](../examples/external-urls/README.md) and
-`scripts/external-url-example-smoke.sh` verify:
+`scripts/external-url-example-smoke.bash` verify:
 
 ```text
 dnsmasq wildcard DNS

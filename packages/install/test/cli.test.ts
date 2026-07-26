@@ -237,7 +237,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     const result = await runCli(["--version"], tsxPath!, env, root);
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("DIM CLI 5.5.5 (via DIM installer 0.2.0)");
-    expect(result.stderr).not.toContain("warning");
+    expect(result.stderr).not.toContain("configured version");
   });
 
   it("dim --version warns on a configured/installed version mismatch", async () => {

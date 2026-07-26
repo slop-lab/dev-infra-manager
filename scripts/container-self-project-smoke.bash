@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/git-clone-source.sh
-source "$script_dir/lib/git-clone-source.sh"
+# shellcheck source=lib/git-clone-source.bash
+source "$script_dir/lib/git-clone-source.bash"
 
 suffix="$PPID-$$"
 project_name="dim-self-$suffix"
@@ -21,7 +21,8 @@ dim() {
 }
 
 export DIM_STATE_ROOT="$state_root"
-export DIM_WORKSPACE_BACKEND="${DIM_WORKSPACE_BACKEND:-runc}"
+export DIM_CONFIG_PATH="$state_root/dim.json"
+bash "$script_dir/configure-user-backend.bash" runc
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then

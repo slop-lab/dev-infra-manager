@@ -3,12 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  dimUserConfigPath,
   loadInstalledPlugins,
   pluginHome,
   readPluginManifest,
   resolvePluginHome
 } from "../src/pluginLoader.js";
+import { configuredWorkspaceBackend, dimUserConfigPath } from "../src/userConfig.js";
 
 describe("plugin loader configuration", () => {
   let root: string;
@@ -41,6 +41,15 @@ describe("plugin loader configuration", () => {
       XDG_CONFIG_HOME: join(root, "missing-config"),
       DIM_PLUGIN_HOME: root
     })).toBe(root);
+  });
+
+  it("reads the installed workspace backend from the shared user config", async () => {
+    const configPath = join(root, "dim.json");
+    await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "gvisor" }));
+    expect(configuredWorkspaceBackend({ DIM_CONFIG_PATH: configPath })).toBe("gvisor");
+    expect(configuredWorkspaceBackend({ DIM_CONFIG_PATH: join(root, "missing.json") })).toBeUndefined();
+    await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "unknown" }));
+    expect(() => configuredWorkspaceBackend({ DIM_CONFIG_PATH: configPath })).toThrow(/invalid workspaceBackend/);
   });
 
   it("deduplicates configured plugin packages", async () => {

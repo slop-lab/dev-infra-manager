@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 suffix="$PPID-$$"
 project_name="smoke-$suffix"
 workspace_name="smoke-$suffix"
@@ -10,7 +11,8 @@ worktree="$source_root/worktree"
 bare_repo="$source_root/project.git"
 
 export DIM_STATE_ROOT="$state_root"
-export DIM_WORKSPACE_BACKEND="${DIM_WORKSPACE_BACKEND:-runc}"
+export DIM_CONFIG_PATH="$state_root/dim.json"
+bash "$script_dir/configure-user-backend.bash" runc
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then

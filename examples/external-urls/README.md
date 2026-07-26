@@ -82,7 +82,7 @@ inside the project-root container so the host reverse proxy can reach both.
 
 ## Verification
 
-`scripts/external-url-example-smoke.sh` runs the complete example with a host
+`scripts/external-url-example-smoke.bash` runs the complete example with a host
 controller and reverse proxy. The host-side harness is intentionally outside
 the copyable repository because it builds unpublished local packages,
 constructs controller state, allocates ports and Docker networks, and performs

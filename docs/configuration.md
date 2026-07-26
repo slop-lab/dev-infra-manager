@@ -1,7 +1,9 @@
 # Configuration
 
-DIM 0.2 uses `DIM_*` environment variables and schema-versioned state under
-`DIM_STATE_ROOT`. There is no generated JSON configuration file.
+DIM stores installation-wide user settings in
+`~/.config/slop-lab/dim.json` (or `DIM_CONFIG_PATH`) and schema-versioned
+runtime state under `DIM_STATE_ROOT`. The host backend installer writes the
+required `workspaceBackend` setting.
 
 Common settings:
 
@@ -13,7 +15,6 @@ DIM_GITEA_ADMIN_USERNAME
 DIM_GITEA_ADMIN_PASSWORD
 DIM_GIT_USERNAME
 DIM_GIT_TOKEN
-DIM_WORKSPACE_BACKEND
 DIM_WORKSPACE_IMAGE
 DIM_WORKSPACE_RUNTIME
 DIM_WORKSPACE_PRIVILEGED
@@ -24,7 +25,7 @@ DIM_WORKSPACE_PIDS
 
 Runtime backend selection is documented in
 [Runtime Backends](runtime-backends.md). Project and workspace settings are
-persisted by their lifecycle commands rather than copied into a global config.
+persisted by their lifecycle commands rather than copied into user config.
 The CPU, memory, and PID settings are defaults for new workspace records.
 `dim create --cpus`, `--memory`, and `--pids-limit` persist per-workspace
 overrides.

@@ -11,8 +11,10 @@
 
 ```bash
 pnpm install --frozen-lockfile
-just verify
-just verify-container-runc
+just check
+just verify-plugin-install
+just verify-container
+bash scripts/container-cgroup-smoke.bash
 pnpm audit --prod
 pnpm --filter @slop-lab/dev-infra-manager-core run pack:dry-run
 pnpm --filter @slop-lab/dim-cli run pack:dry-run

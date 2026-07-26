@@ -2,8 +2,8 @@
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/runtime-backends.sh
-source "$script_dir/lib/runtime-backends.sh"
+# shellcheck source=lib/runtime-backends.bash
+source "$script_dir/lib/runtime-backends.bash"
 
 backend="${1:-}"
 if ! dim_is_runtime_backend "$backend"; then
@@ -38,6 +38,7 @@ It will:
 EOF
   if [[ "$backend" == rootless-podman ]]; then
     echo "  - install rootless Podman host dependencies: fuse3, uidmap"
+    echo "  - build dev-infra-project-workspace-podman:latest"
   fi
   if [[ -n "$install_user" ]]; then
     echo "  - permanently add user '$install_user' to the docker group"
@@ -94,8 +95,13 @@ install_sysbox() {
 install_selected_backend() {
   case "$backend" in
     sysbox) install_sysbox ;;
-    gvisor) bash "$script_dir/install-runsc-linux.sh" ;;
-    rootless-podman) sudo apt-get install -y fuse3 uidmap ;;
+    gvisor) bash "$script_dir/install-runsc-linux.bash" ;;
+    rootless-podman)
+      sudo apt-get install -y fuse3 uidmap
+      sudo docker build \
+        -t dev-infra-project-workspace-podman:latest \
+        "$script_dir/../images/project-workspace-podman"
+      ;;
     runc) ;;
   esac
 }
@@ -119,9 +125,25 @@ Then run:
 EOF
 }
 
+configure_dim_backend() {
+  local target_home
+  if [[ -n "$install_user" ]]; then
+    target_home="$(getent passwd "$install_user" | cut -d: -f6)"
+    if [[ -z "$target_home" ]]; then
+      echo "Unable to resolve home directory for '$install_user'" >&2
+      exit 1
+    fi
+    sudo -u "$install_user" env HOME="$target_home" \
+      bash "$script_dir/configure-user-backend.bash" "$backend"
+  else
+    bash "$script_dir/configure-user-backend.bash" "$backend"
+  fi
+}
+
 confirm_install
 install_common_packages
 install_selected_backend
+configure_dim_backend
 configure_install_user
 if [[ -z "$install_user" ]]; then
   echo "Host install complete. Run: just doctor"

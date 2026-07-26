@@ -63,7 +63,6 @@ Host and workspace URLs never contain credentials.
 
 ```bash
 dim create PROJECT WORKSPACE \
-  [--backend sysbox|gvisor|rootless-podman|runc] \
   [--profile PROFILE ...] \
   [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
 
@@ -114,7 +113,7 @@ future Project-aware gateway routing.
 ## Diagnostics and administration
 
 ```bash
-dim doctor [--backend BACKEND]
+dim doctor
 dim plugin list
 dim admin service ensure
 dim admin service credentials --show-secrets

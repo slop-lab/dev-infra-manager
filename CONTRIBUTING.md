@@ -7,15 +7,18 @@ source. For using DIM in another project, see [README.md](README.md).
 
 ```bash
 pnpm install
-just verify          # typecheck + unit tests + build; no Docker required
+just typecheck       # TypeScript checks only
+just test            # unit tests
+just build           # publishable package builds
+just check           # typecheck + test + build; only Node.js and pnpm required
 just doctor          # host readiness: dev tools, Docker, selected backend, cgroup v2
 just cli -- --help   # build core, then run dim from source without installing it
 ```
 
 The full setup, verification-gate, and installer-testing walkthrough — host
 backend installers, KVM-based installer/backend smoke tests, the
-`verify-container-runc`/`verify-container-sysbox` integration suites, and the
-installer/example smoke tests — is [docs/usage.md](docs/usage.md).
+`verify-container` integration suite, the direct host-backend smoke scripts,
+and the installer/example smoke tests — is [docs/usage.md](docs/usage.md).
 
 ## Repository layout
 

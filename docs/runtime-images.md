@@ -14,7 +14,7 @@ The rootless Podman image is built from
 [`images/project-workspace-podman`](../images/project-workspace-podman):
 
 ```bash
-just build-project-podman-image
+docker build -t dev-infra-project-workspace-podman:latest images/project-workspace-podman
 ```
 
 It contains the same project tooling with Podman and podman-compose. Its

@@ -39,7 +39,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   reasons unrelated to this change. Validate with `just
   verify-host-backend-kvm rootless-podman` (now exercises the same
   capability set) and `DIM_WORKSPACE_BACKEND=rootless-podman bash
-  scripts/container-lifecycle-smoke.sh` before relying on it.
+  scripts/container-lifecycle-smoke.bash` before relying on it.
 
 - Split the root `README.md` into user-facing content (installing and using
   `dim`) and [CONTRIBUTING.md](CONTRIBUTING.md) (building/verifying DIM

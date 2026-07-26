@@ -8,8 +8,8 @@ case "$mode" in
 esac
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
-# shellcheck source=qemu-common.sh
-source "$repo_root/images/github-actions-runner-kvm/qemu-common.sh"
+# shellcheck source=qemu-common.bash
+source "$repo_root/images/github-actions-runner-kvm/qemu-common.bash"
 base_image="${DIM_ACTIONS_RUNNER_IMAGE:-$repo_root/.local/github-actions-runner-kvm/base.qcow2}"
 runner_url="${GITHUB_RUNNER_URL:-https://github.com/slop-lab/dev-infra-manager}"
 runner_labels="${GITHUB_RUNNER_LABELS:-sysbox,kvm}"

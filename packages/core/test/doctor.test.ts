@@ -1,4 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { runDoctor, sysboxExecutionCheck } from "../src/doctor.js";
 import { lifecycleOptions } from "../src/lifecycleOptions.js";
 import type { CommandResult, CommandRunner, RunOptions } from "../src/types.js";
@@ -23,6 +26,12 @@ function result(exitCode: number, stderr = "", stdout = ""): CommandResult {
 }
 
 describe("doctor checks", () => {
+  const temporaryDirectories: string[] = [];
+
+  afterEach(async () => {
+    await Promise.all(temporaryDirectories.splice(0).map((target) => rm(target, { recursive: true, force: true })));
+  });
+
   it("checks actual Sysbox container execution", async () => {
     const runner = new QueueRunner([result(0)]);
     const check = await sysboxExecutionCheck(runner);
@@ -55,7 +64,11 @@ describe("doctor checks", () => {
   });
 
   it("runs gVisor checks without Sysbox service checks", async () => {
-    const options = lifecycleOptions({ DIM_WORKSPACE_BACKEND: "gvisor" });
+    const root = await mkdtemp(join(tmpdir(), "dim-doctor-"));
+    temporaryDirectories.push(root);
+    const configPath = join(root, "dim.json");
+    await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "gvisor" }));
+    const options = lifecycleOptions({ DIM_CONFIG_PATH: configPath });
     const runner = new QueueRunner([
       result(0, "", "v22.0.0"),
       result(0, "", "10.0.0"),

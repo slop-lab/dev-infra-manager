@@ -65,7 +65,7 @@ Project repositories, so follow the mandatory
 Check the host before creating a workspace:
 
 ```bash
-dim doctor --backend sysbox
+dim doctor
 ```
 
 ## First Project
@@ -107,7 +107,7 @@ DIM does not define a general Git-provider abstraction.
 Create and enter a persistent workspace:
 
 ```bash
-dim create acme feature-123 --backend sysbox --profile development
+dim create acme feature-123 --profile development
 dim exec feature-123 -- bash
 ```
 
@@ -216,7 +216,7 @@ overrides are:
 
 - `DIM_STATE_ROOT`
 - `DIM_GITEA_PORT` (default `3300`)
-- `DIM_WORKSPACE_BACKEND`
+- installed `workspaceBackend` from the DIM user configuration
 - `DIM_WORKSPACE_IMAGE`
 - `DIM_WORKSPACE_CPUS`, `DIM_WORKSPACE_MEMORY`, and `DIM_WORKSPACE_PIDS`
 

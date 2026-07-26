@@ -36,7 +36,7 @@ The system must prevent that agent from:
 - Managed pull request merge is the path that updates protected refs in normal operation.
 - Runtime backend selection and storage backend selection must be independent.
 - `directory` storage does not enforce `diskBytes` and must be treated as a compatibility backend.
-- `doctor --backend` must check the selected workspace runtime backend.
+- `doctor` must check the workspace runtime backend recorded during host installation.
 - Workspaces persist until explicitly discarded.
 
 ## Non-Goals

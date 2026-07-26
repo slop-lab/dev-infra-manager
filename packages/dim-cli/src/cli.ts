@@ -34,7 +34,6 @@ import {
   stopWorkspace,
   updateWorkspace,
   UserError,
-  workspaceBackend
 } from "@slop-lab/dev-infra-manager-core";
 
 const runner = new ProcessRunner();
@@ -166,7 +165,6 @@ program.command("create")
   .description("Create a persistent workspace for a project")
   .argument("<project>")
   .argument("<workspace>")
-  .option("--backend <backend>", "sysbox, gvisor, rootless-podman, or runc")
   .option("--profile <profile>", "Compose capability profile", collect, [])
   .option("--git-user-name <name>")
   .option("--git-user-email <email>")
@@ -180,7 +178,7 @@ program.command("create")
       project: projectName,
       name,
       profiles: flags.profile,
-      runtimeBackend: workspaceBackend(flags.backend ?? options.defaultWorkspaceBackend),
+      runtimeBackend: options.defaultWorkspaceBackend,
       cpuCount: flags.cpus ?? options.cpuCount,
       memory: flags.memory ?? options.memory,
       pidsLimit: flags.pidsLimit ?? options.pidsLimit,
@@ -282,10 +280,9 @@ program.command("discard")
 
 program.command("doctor")
   .description("Check host and workspace runtime readiness")
-  .option("--backend <backend>", "sysbox, gvisor, rootless-podman, or runc")
-  .action(async (flags: { backend?: string }) => {
+  .action(async () => {
     const options = lifecycleOptions();
-    const checks = await runDoctor(runner, workspaceBackend(flags.backend ?? options.defaultWorkspaceBackend), options);
+    const checks = await runDoctor(runner, options.defaultWorkspaceBackend, options);
     for (const check of checks) console.log(`${check.ok ? "ok" : "fail"}\t${check.name}\t${check.detail}`);
     if (checks.some((check) => !check.ok)) process.exitCode = 1;
   });
@@ -421,7 +418,6 @@ interface JsonFlags {
 }
 
 interface WorkspaceCreateFlags extends JsonFlags {
-  backend?: string;
   profile: string[];
   gitUserName?: string;
   gitUserEmail?: string;

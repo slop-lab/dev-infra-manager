@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { UserError } from "./errors.js";
 import { registerPlugins, type DimPlugin, type RegisteredDimPlugins } from "./plugin.js";
+import { dimUserConfigPath } from "./userConfig.js";
 
 export interface PluginManifest {
   schemaVersion: 1;
@@ -15,14 +16,6 @@ interface DimUserConfig {
   schemaVersion: 1;
   installPrefix?: string;
   pluginHome?: string;
-}
-
-export function dimUserConfigPath(env: NodeJS.ProcessEnv = process.env): string {
-  const home = env.HOME ?? os.homedir();
-  return path.resolve(
-    env.DIM_CONFIG_PATH
-      ?? path.join(env.XDG_CONFIG_HOME ?? path.join(home, ".config"), "slop-lab", "dim.json")
-  );
 }
 
 export function pluginHome(env: NodeJS.ProcessEnv = process.env): string {

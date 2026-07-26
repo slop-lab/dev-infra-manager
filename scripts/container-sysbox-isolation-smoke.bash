@@ -13,17 +13,17 @@ done
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
-tmpdir="$(mktemp -d /tmp/dim-smoke-XXXXXX)"
+tmpdir="$(mktemp -d /tmp/dim-sysbox-isolation-XXXXXX)"
 probe_suffix="$$-$(date +%s)"
 host_probe_image="dim-host-only-probe:${probe_suffix}"
 inner_probe_image="dim-inner-only-probe:${probe_suffix}"
-nested_smoke_container="dim-nested-smoke-${probe_suffix}"
+nested_smoke_container="dim-sysbox-isolation-${probe_suffix}"
 step_log="$tmpdir/step.log"
 current_step="startup"
 exec 3>&1 4>&2
 step() {
   current_step="$1"
-  echo "[smoke] $current_step" >&3
+  echo "[sysbox-isolation] $current_step" >&3
   if [[ "$verbose" == false ]]; then
     exec >"$step_log" 2>&1
   fi
@@ -31,7 +31,7 @@ step() {
 show_failure() {
   local status=$?
   trap - ERR
-  echo "[smoke] failed: $current_step" >&4
+  echo "[sysbox-isolation] failed: $current_step" >&4
   if [[ "$verbose" == false && -s "$step_log" ]]; then
     cat "$step_log" >&4
   fi
@@ -46,20 +46,6 @@ cleanup() {
   rm -rf "$tmpdir"
 }
 trap cleanup EXIT
-
-step "build workspace"
-pnpm run workspace:build
-dim_bin="$repo_root/packages/dim-cli/dist/cli.js"
-
-step "build container images"
-just build-project-workspace
-
-step "verify workspace image"
-docker run --rm \
-  --privileged \
-  --runtime runc \
-  dev-infra-project-workspace:latest \
-  bash -lc 'test "$(whoami)" = dim && test "$HOME" = /home/dim && git --version >/dev/null && docker --version >/dev/null'
 
 # Use unique tags so the isolation assertions never depend on which images the
 # host or inner daemon happened to cache before this smoke run.
@@ -90,4 +76,4 @@ if docker image inspect "$inner_probe_image" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "[smoke] ok" >&3
+echo "[sysbox-isolation] ok" >&3

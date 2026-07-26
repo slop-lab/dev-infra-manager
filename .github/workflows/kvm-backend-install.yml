@@ -14,4 +14,4 @@ jobs:
       - uses: actions/checkout@v4
       - run: command -v just
       - run: test -r /dev/kvm -a -w /dev/kvm
-      - run: just verify-host-backends-kvm
+      - run: just verify-environments-kvm

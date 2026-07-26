@@ -3,8 +3,8 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "${script_dir}/.." && pwd)"
-# shellcheck source=lib/runtime-backends.sh
-source "$script_dir/lib/runtime-backends.sh"
+# shellcheck source=lib/runtime-backends.bash
+source "$script_dir/lib/runtime-backends.bash"
 backend="${1:-sysbox}"
 if ! dim_is_runtime_backend "$backend"; then
   echo "usage: $0 [$(dim_runtime_backend_choices)]" >&2
@@ -52,16 +52,16 @@ if [[ "$DEV_INFRA_MISE_ACTIVE" != "1" ]] && \
   sudo npm install -g "pnpm@${PNPM_VERSION}"
 fi
 
-bash "${script_dir}/install-host-ubuntu.sh" "$backend"
+bash "${script_dir}/install-host-ubuntu.bash" "$backend"
 
 cd "$repo_root"
 pnpm install --frozen-lockfile
-"$JUST_BIN" verify
+"$JUST_BIN" check
+"$JUST_BIN" verify-plugin-install
 "$JUST_BIN" build-project-workspace
-"$JUST_BIN" build-project-podman-image
 
 set +e
-"$JUST_BIN" verify-host-backend-local "$backend"
+"$JUST_BIN" cli doctor
 doctor_rc=$?
 set -e
 

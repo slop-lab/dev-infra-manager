@@ -104,7 +104,7 @@ workspace; no host checkout or Docker socket is mounted.
 Run the current manager verification:
 
 ```bash
-just verify
+just check
 ```
 
 This runs the matching check, test, and build scripts in every workspace

@@ -74,7 +74,7 @@ environment variables or require one container per repository.
 ## Workspaces
 
 ```bash
-dim create example dev --backend sysbox --profile development
+dim create example dev --profile development
 dim exec dev -- bash
 dim run dev codex
 ```

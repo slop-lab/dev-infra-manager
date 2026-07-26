@@ -20,5 +20,6 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: just verify
-      - run: just verify-container-sysbox
+      - run: just check
+      - run: just verify-container
+      - run: bash scripts/container-sysbox-isolation-smoke.bash

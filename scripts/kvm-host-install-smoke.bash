@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/runtime-backends.sh
-source "$script_dir/lib/runtime-backends.sh"
-# shellcheck source=lib/git-clone-source.sh
-source "$script_dir/lib/git-clone-source.sh"
+# shellcheck source=lib/runtime-backends.bash
+source "$script_dir/lib/runtime-backends.bash"
+# shellcheck source=lib/git-clone-source.bash
+source "$script_dir/lib/git-clone-source.bash"
 backend="all"
 verbose=false
 for arg in "$@"; do
@@ -75,7 +75,7 @@ clone_repository() {
   ssh "${ssh_args[@]}" dim@127.0.0.1 "tar -C /tmp -xzf - && git clone /tmp/repo.bundle dim" <"$workdir/repo.tar.gz"
 }
 install_backend() {
-  printf 'yes\n' | ssh "${ssh_args[@]}" dim@127.0.0.1 "cd dim && bash scripts/install-host-ubuntu.sh '$backend'"
+  printf 'yes\n' | ssh "${ssh_args[@]}" dim@127.0.0.1 "cd dim && bash scripts/install-host-ubuntu.bash '$backend'"
 }
 guest_ready=false
 echo "kvm[$backend]: wait for guest SSH"
@@ -102,6 +102,8 @@ run_step "install guest prerequisites" ssh "${ssh_args[@]}" dim@127.0.0.1 "sudo 
 tar -C "$workdir" -czf "$workdir/repo.tar.gz" repo.bundle
 run_step "clone repository" clone_repository
 run_step "install $backend backend" install_backend
+run_step "verify stored backend" ssh "${ssh_args[@]}" dim@127.0.0.1 \
+  "test \"\$(jq -r .workspaceBackend ~/.config/slop-lab/dim.json)\" = '$backend'"
 # Rootless Podman's workload runs the outer container with the exact
 # capability set workspaceRuntimePlan() grants (packages/core/src/runtimeBackends.ts)
 # instead of --privileged, so this is the real verification that those
@@ -110,5 +112,5 @@ run_step "install $backend backend" install_backend
 rootless_podman_caps=(SYS_ADMIN SETUID SETGID SYS_CHROOT SYS_PTRACE AUDIT_WRITE CHOWN DAC_OVERRIDE FOWNER FSETID KILL MKNOD NET_ADMIN NET_BIND_SERVICE NET_RAW SETFCAP SETPCAP)
 rootless_podman_cap_flags=""
 for cap in "${rootless_podman_caps[@]}"; do rootless_podman_cap_flags+=" --cap-add $cap"; done
-run_step "run $backend workload" ssh "${ssh_args[@]}" dim@127.0.0.1 "set -e; sudo docker info >/dev/null; case '$backend' in all|sysbox) systemctl is-active sysbox; sudo docker run --rm --runtime=sysbox-runc hello-world >/dev/null;; esac; case '$backend' in all|gvisor) runsc --version; sudo docker run --rm --runtime=runsc hello-world >/dev/null;; esac; case '$backend' in rootless-podman) test -c /dev/fuse; command -v newuidmap; command -v newgidmap; cd dim; sudo docker build -t dev-infra-project-workspace-podman:latest images/project-workspace-podman; sudo docker run --rm --runtime=runc$rootless_podman_cap_flags --device /dev/fuse --security-opt seccomp=unconfined --security-opt apparmor=unconfined dev-infra-project-workspace-podman:latest podman run --rm docker.io/library/hello-world;; esac; case '$backend' in all|runc) sudo docker run --rm --runtime=runc hello-world >/dev/null;; esac"
+run_step "run $backend workload" ssh "${ssh_args[@]}" dim@127.0.0.1 "set -e; sudo docker info >/dev/null; case '$backend' in all|sysbox) systemctl is-active sysbox; sudo docker run --rm --runtime=sysbox-runc hello-world >/dev/null;; esac; case '$backend' in all|gvisor) runsc --version; sudo docker run --rm --runtime=runsc hello-world >/dev/null;; esac; case '$backend' in rootless-podman) test -c /dev/fuse; command -v newuidmap; command -v newgidmap; cd dim; sudo docker build -t dev-infra-project-workspace-podman:latest images/project-workspace-podman; sudo docker run --rm --runtime=runc$rootless_podman_cap_flags --device /dev/fuse --security-opt seccomp=unconfined --security-opt apparmor=unconfined --security-opt systempaths=unconfined dev-infra-project-workspace-podman:latest podman run --rm docker.io/library/hello-world;; esac; case '$backend' in all|runc) sudo docker run --rm --runtime=runc hello-world >/dev/null;; esac"
 echo "kvm-host-install-smoke-ok: $backend"

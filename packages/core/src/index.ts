@@ -11,4 +11,5 @@ export * from "./projectRegistry.js";
 export * from "./runner.js";
 export * from "./runtimeBackends.js";
 export * from "./types.js";
+export * from "./userConfig.js";
 export * from "./workspaceLifecycle.js";

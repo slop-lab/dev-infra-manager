@@ -20,7 +20,7 @@ test -x "$dim_bin"
 test ! -e "$package_root/install/node_modules/.bin/dev-infra-manager"
 "$dim_bin" --help >/dev/null
 
-DIM_BIN="$dim_bin" bash scripts/container-project-smoke.sh
-DIM_BIN="$dim_bin" bash scripts/container-multi-repo-project-smoke.sh
+DIM_BIN="$dim_bin" bash scripts/container-project-smoke.bash
+DIM_BIN="$dim_bin" bash scripts/container-multi-repo-project-smoke.bash
 
 echo "container-packed-project-smoke-ok"

@@ -192,7 +192,6 @@ Create a workspace and persist its desired Compose profiles:
 
 ```bash
 dim create example example-dev \
-  --backend sysbox \
   --profile development \
   --profile secrets
 ```

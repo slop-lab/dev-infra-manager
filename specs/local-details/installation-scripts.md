@@ -5,7 +5,7 @@
 Script:
 
 ```text
-scripts/install-host-ubuntu.sh <sysbox|gvisor|rootless-podman|runc>
+scripts/install-host-ubuntu.bash <sysbox|gvisor|rootless-podman|runc>
 ```
 
 Behavior:
@@ -18,7 +18,8 @@ Behavior:
 5. For `sysbox`, select pinned SHA-256 for supported architectures:
    - `arm64`
    - `amd64`
-6. Install `curl`, `docker.io`, and `jq`; install `fuse3` and `uidmap` when rootless Podman is selected.
+6. Install `curl`, `docker.io`, and `jq`; install `fuse3` and `uidmap` and
+   build the rootless workspace image when rootless Podman is selected.
 7. For `sysbox`, create a uniquely named, invoking-user-owned temporary file, download the
    Sysbox CE deb into it, and remove it when the script exits.
 8. For `sysbox`, verify SHA-256.
@@ -29,21 +30,23 @@ Behavior:
 12. For `sysbox`, restart Docker.
 13. For `sysbox`, restart Sysbox so AppArmor changes take effect and stale in-memory
     container registrations are cleared.
-14. For every selection, add the invoking non-root user to the `docker` group.
-15. For every selection, explain that the user must log in again or run `newgrp docker` once
+14. Record the selected backend as `workspaceBackend` in the invoking user's
+    DIM configuration.
+15. For every selection, add the invoking non-root user to the `docker` group.
+16. For every selection, explain that the user must log in again or run `newgrp docker` once
     before the current session can use Docker without `sudo`.
 
 Unsupported Sysbox architectures must fail. Each invocation installs exactly
-one backend, and its just recipe runs `doctor --backend` afterward. Testing
-every installer uses a separate KVM guest per backend rather than requiring
-Sysbox and gVisor to coexist on one host.
+one backend and records it in DIM user configuration. The operator runs
+`just doctor` afterward. Testing every installer uses a separate KVM guest per
+backend rather than requiring Sysbox and gVisor to coexist on one host.
 
 ## gVisor runsc Install
 
 Script:
 
 ```text
-scripts/install-runsc-linux.sh
+scripts/install-runsc-linux.bash
 ```
 
 Behavior:
@@ -65,26 +68,39 @@ Behavior:
 
 ## KVM Host-install Smoke
 
-`just install-kvm-verify-deps-ubuntu` installs QEMU, qcow2, cloud-image, and SSH tooling only; it does not install a runtime backend. `just verify-host-backend-kvm BACKEND [--verbose]` verifies one backend, while `just verify-host-backends-kvm [--verbose]` verifies every backend in a separate VM. Each check boots a checksum-verified Ubuntu cloud-image VM with `/dev/kvm`, clones the committed repository state from a Git bundle, installs the selected backend in isolation, verifies its runtime, and deletes the VM overlay and SSH key on exit. A full source checkout retains its history; a shallow checkout is converted to a self-contained single-commit repository before bundling. Uncommitted and untracked files are intentionally excluded. The base cloud image is cached under `.local/kvm`. Default output names each stage and emits only the final 30 lines of a failing stage; `--verbose` streams full guest, build, and workload logs.
+`just install-kvm-verify-deps-ubuntu` installs QEMU, qcow2, cloud-image, and
+SSH tooling only; it does not install a runtime backend.
+`scripts/kvm-host-install-smoke.bash BACKEND [--verbose]` verifies one backend,
+while `just verify-environments-kvm [--verbose]` verifies every backend in a
+separate VM. Each check boots a checksum-verified Ubuntu cloud-image VM with
+`/dev/kvm`, clones the committed repository state from a Git bundle, installs
+the selected backend in isolation, verifies its runtime, and deletes the VM
+overlay and SSH key on exit. A full source checkout retains its history; a
+shallow checkout is converted to a self-contained single-commit repository
+before bundling. Uncommitted and untracked files are intentionally excluded.
+The base cloud image is cached under `.local/kvm`. Default output names each
+stage and emits only the final 30 lines of a failing stage; `--verbose`
+streams full guest, build, and workload logs.
 
 The `rootless-podman` workload runs the outer container with the exact
 capability set `workspaceRuntimePlan()` grants
 (`packages/core/src/runtimeBackends.ts`) instead of `--privileged`, so
-`just verify-host-backend-kvm rootless-podman` is the real verification that
+it also disables Docker system-path confinement to let the nested rootless
+runtime mount its own procfs, and
+`scripts/kvm-host-install-smoke.bash rootless-podman` is the real verification that
 those capabilities are sufficient for nested unprivileged user namespaces on
 a genuinely fresh (singly-nested) host — something a doubly-nested dev
 sandbox cannot exercise, since even `--privileged` nested user-namespace
-creation fails there for unrelated reasons. To validate the full `dim
-create --backend rootless-podman` path (not just that Podman itself starts),
-follow this with `DIM_WORKSPACE_BACKEND=rootless-podman bash
-scripts/container-lifecycle-smoke.sh` on the same or an equivalent host.
+creation fails there for unrelated reasons. Full DIM contract verification
+must run in the same environment after rootless Podman is installed and
+recorded as its backend.
 
 ## Ubuntu Bootstrap
 
 Script:
 
 ```text
-scripts/bootstrap-ubuntu.sh
+scripts/bootstrap-ubuntu.bash
 ```
 
 Behavior:
@@ -99,17 +115,18 @@ Behavior:
 4. Without mise, install pinned pnpm if missing or wrong version.
 5. Install the selected Ubuntu host backend (Sysbox by default).
 6. Install project dependencies with frozen lockfile.
-7. Run `just verify`.
-8. Build the Docker and rootless Podman project workspace images.
-9. Run `doctor --backend` for the selected backend.
-10. Exit non-zero if that backend doctor reports host runtime gaps.
+7. Run `just check`.
+8. Run `just verify-plugin-install`.
+9. Build the Docker and rootless Podman project workspace images.
+10. Run `doctor` for the backend persisted by the installer.
+11. Exit non-zero if that backend doctor reports host runtime gaps.
 
 ## Smoke Script
 
 Script:
 
 ```text
-scripts/smoke.sh
+scripts/container-sysbox-isolation-smoke.bash
 ```
 
 Behavior:
@@ -126,7 +143,7 @@ Behavior:
 Script:
 
 ```text
-scripts/lib/local-npm-registry.sh
+scripts/lib/local-npm-registry.bash
 ```
 
 Sourced, not run directly. Provides `dim_start_local_npm_registry WORK_DIR`,
@@ -145,7 +162,7 @@ than the caller's real npm config.
 Script:
 
 ```text
-scripts/mise-install-smoke.sh
+scripts/mise-install-smoke.bash
 ```
 
 `just verify-mise-install-smoke`. Requires Docker and network access.
@@ -163,7 +180,7 @@ override.
 Script:
 
 ```text
-scripts/plugin-install-smoke.sh
+scripts/plugin-install-smoke.bash
 ```
 
 Packs a synthetic plugin package and the `install` package, installs the
@@ -176,7 +193,7 @@ run directly against the packed CLI) reports it enabled.
 Script:
 
 ```text
-scripts/external-url-example-smoke.sh
+scripts/external-url-example-smoke.bash
 ```
 
 `just verify-example-external-urls`. Requires Docker. Executes
@@ -191,7 +208,7 @@ change together.
 
 ## Multi-repository Example Smoke
 
-`scripts/example-project-smoke.sh`, invoked by
+`scripts/example-project-smoke.bash`, invoked by
 `just verify-example-multi-repo-project`, builds and installs local packages,
 copies each repository skeleton from `examples/multi-repo-project/repos/` to a
 temporary directory, initializes and pushes real Git repositories, and

@@ -19,8 +19,8 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/.." && pwd)"
-# shellcheck source=lib/local-npm-registry.sh
-source "$script_dir/lib/local-npm-registry.sh"
+# shellcheck source=lib/local-npm-registry.bash
+source "$script_dir/lib/local-npm-registry.bash"
 
 suffix="$PPID-$$"
 project_name="example-$suffix"
@@ -32,13 +32,13 @@ install_prefix="$work_dir/install"
 dim_bin="$install_prefix/bin/dim"
 
 export DIM_STATE_ROOT="$state_root"
-export DIM_WORKSPACE_BACKEND="${DIM_WORKSPACE_BACKEND:-runc}"
 export DIM_CONFIG_PATH="$work_dir/config/dim.json"
 # Isolate where install-cli puts the versioned DIM CLI too, not just state/
 # config: package.json's version doesn't change between local test runs, and
 # npm treats an already-installed version as up to date even when a fresh
 # local registry republished different content under that same version.
 export DIM_DATA_HOME="$work_dir/data"
+bash "$script_dir/configure-user-backend.bash" runc
 
 dim() { "$dim_bin" "$@"; }
 
@@ -136,7 +136,7 @@ fi
 rm -rf "$source_root"
 
 echo "[example-project] 4. create the workspace (a real container)"
-dim create "$project_name" "$workspace_name" --backend runc --profile development >/dev/null
+dim create "$project_name" "$workspace_name" --profile development >/dev/null
 
 echo "[example-project] 5. confirm it's real"
 # The workspace's actual container name is an implementation detail of

@@ -42,6 +42,7 @@ export interface DimUserConfig {
   installPrefix?: string;
   pluginHome?: string;
   cli?: DimCliConfig;
+  workspaceBackend?: "sysbox" | "gvisor" | "rootless-podman" | "runc";
   [key: string]: unknown;
 }
 
@@ -285,6 +286,15 @@ export async function readUserConfig(target: string): Promise<DimUserConfig> {
     const value = JSON.parse(await readFile(target, "utf8")) as DimUserConfig;
     if (value.schemaVersion !== 1) throw new Error(`invalid DIM user config at ${target}`);
     if (value.cli !== undefined) validateCliConfig(value.cli, target);
+    if (
+      value.workspaceBackend !== undefined
+      && value.workspaceBackend !== "sysbox"
+      && value.workspaceBackend !== "gvisor"
+      && value.workspaceBackend !== "rootless-podman"
+      && value.workspaceBackend !== "runc"
+    ) {
+      throw new Error(`invalid workspaceBackend in DIM user config at ${target}`);
+    }
     return value;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return { schemaVersion: 1 };
