@@ -28,8 +28,8 @@ plugin installation through their packaged shape. It is separate because it
 tests an installation workflow rather than source correctness.
 
 The external URL plugin unit suite must exercise real HTTP forwarding through
-each configured reverse-proxy shape and provider URL generation. A configured
-Tailnet can additionally run:
+each configured named ingress and generated URL shape. A configured Tailnet
+ingress can additionally run:
 
 ```bash
 scripts/tailscale-external-url-smoke.sh
@@ -127,9 +127,9 @@ override. See [Installer Facade](14-installer-facade.md).
 
 `just verify-example-external-urls` requires Docker. It proves
 `examples/external-urls/README.md` end to end: a host DIM controller,
-host-configured profile, dnsmasq wildcard DNS, a project-root workspace,
+host-configured ingress, dnsmasq wildcard DNS, a project-root workspace,
 the nested `dev` Compose service, a further `deep` container, root relay,
-reverse proxy, profile discovery, URL creation, HTTP access, and revocation.
+reverse proxy, ingress discovery, URL creation, HTTP access, and revocation.
 
 `just verify-example-multi-repo-project` requires Docker and managed Gitea. It
 materializes the three repository skeletons under

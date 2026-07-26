@@ -1,7 +1,7 @@
 {
   "name": "@slop-lab/dim-plugin-external-urls",
-  "version": "0.3.0",
-  "description": "Reverse proxy, Tailscale, and Cloudflare external URL providers for DIM",
+  "version": "0.4.0",
+  "description": "Provider-agnostic named external URL ingresses for DIM",
   "license": "MIT",
   "private": true,
   "type": "module",

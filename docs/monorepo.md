@@ -52,10 +52,10 @@ provider, and other implementations such as Forgejo can implement the same
 contract.
 
 The DIM controller API authenticates an agent workspace and lets installed
-plugins register routes. External URL profiles accept only a constrained
+plugins register routes. External URL ingresses accept only a constrained
 workspace target and derive the upstream from the workspace grant rather than
-accepting an arbitrary host. Discovery exposes profile name, description, and
-HTTP protocol without leaking proxy or tunnel implementation details.
+accepting an arbitrary host. Discovery exposes ingress name, description, and
+URL scheme without leaking proxy or TLS implementation details.
 
 ## DIM self-development workspace
 

@@ -6,7 +6,7 @@ set -eu
 
 port="${DIM_EXTERNAL_URL_TEST_PORT:-39091}"
 service="${DIM_EXTERNAL_URL_TEST_SERVICE:-dim-tail-smoke}"
-profile="${DIM_EXTERNAL_URL_TEST_PROFILE:-tailscale}"
+ingress="${DIM_EXTERNAL_URL_TEST_INGRESS:-tailscale}"
 sentinel="dim-tailscale-smoke-${DIM_WORKSPACE_NAME:-workspace}-$$"
 
 node -e '
@@ -36,9 +36,9 @@ payload="$(
   jq -n \
     --arg service "$service" \
     --argjson port "$port" \
-    --arg profile "$profile" \
+    --arg ingress "$ingress" \
     '{
-      profile: $profile,
+      ingress: $ingress,
       service: $service,
       target: {containers: [], port: $port, protocol: "http"}
     }'

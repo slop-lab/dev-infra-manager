@@ -48,7 +48,7 @@ npm pack ./packages/core/dist --pack-destination "$pack_root" --silent >/dev/nul
 npm pack ./packages/external-urls/dist --pack-destination "$pack_root" --silent >/dev/null
 npm install --prefix "$plugin_home" --silent \
   "$pack_root/slop-lab-dev-infra-manager-core-0.2.0.tgz" \
-  "$pack_root/slop-lab-dim-plugin-external-urls-0.3.0.tgz"
+  "$pack_root/slop-lab-dim-plugin-external-urls-0.4.0.tgz"
 jq -n '{schemaVersion:1,plugins:["@slop-lab/dim-plugin-external-urls"]}' \
   > "$plugin_home/plugins.json"
 
@@ -89,7 +89,7 @@ done
 docker exec "$root_container" docker exec dim-external-example-dev-1 \
   docker container inspect deep >/dev/null
 
-echo "[external-url-example] create controller state and host profile"
+echo "[external-url-example] create controller state and host ingress"
 mkdir -p "$state_root/workspaces" "$state_root/workspace-grants"
 now="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
 jq -n \
@@ -126,21 +126,25 @@ jq -n \
 grant="$workspace_name.smoke-grant"
 printf '%s\n' "$grant" > "$state_root/workspace-grants/$workspace_name"
 chmod 0600 "$state_root/workspace-grants/$workspace_name"
+printf '%s\n' '{"schemaVersion":1,"workspaceBackend":"runc"}' > "$state_root/dim.json"
 
-profiles='{"dnsmasq":{"description":"dnsmasq host wildcard URL","protocol":"http"}}'
-bindings='{"dnsmasq":{"routeProvider":"reverse-proxy","urlProvider":"tailscale"}}'
+ingresses="$(jq -cn \
+  --argjson proxyPort "$proxy_port" \
+  '{
+    "local-http": {
+      description: "dnsmasq host wildcard HTTP ingress",
+      scheme: "http",
+      domain: "host.tail.test",
+      port: $proxyPort,
+      listenHost: "0.0.0.0",
+      listenPort: $proxyPort,
+      upstreamMode: "container-ip"
+    }
+  }')"
 DIM_STATE_ROOT="$state_root" \
 DIM_PLUGIN_HOME="$plugin_home" \
-DIM_CONFIG_PATH="$state_root/no-config.json" \
-DIM_TAILSCALE_MACHINE=host \
-DIM_TAILSCALE_DOMAIN=tail.test \
-DIM_TAILSCALE_SCHEME=http \
-DIM_TAILSCALE_PORT="$proxy_port" \
-DIM_EXTERNAL_URL_PROXY_HOST=0.0.0.0 \
-DIM_EXTERNAL_URL_PROXY_PORT="$proxy_port" \
-DIM_EXTERNAL_URL_PROXY_UPSTREAM_MODE=container-ip \
-DIM_EXTERNAL_URL_PROFILES="$profiles" \
-DIM_EXTERNAL_URL_BINDINGS="$bindings" \
+DIM_CONFIG_PATH="$state_root/dim.json" \
+DIM_EXTERNAL_URL_INGRESSES="$ingresses" \
   node packages/dim-cli/dist/cli.js controller serve \
     --host 127.0.0.1 --port "$api_port" \
     >"$state_root/controller.log" 2>&1 &
@@ -166,7 +170,7 @@ discovery="$(
     "http://127.0.0.1:$api_port/api"
 )"
 printf '%s' "$discovery" | jq -e \
-  '.routes[] | select(.path == "/api/urls") | .discovery.profiles[] | select(.name == "dnsmasq")' \
+  '.routes[] | select(.path == "/api/urls") | .discovery.ingresses[] | select(.name == "local-http")' \
   >/dev/null
 
 create_url() {
@@ -181,7 +185,7 @@ create_url() {
       --argjson containers "$containers" \
       --argjson port "$port" \
       '{
-        profile: "dnsmasq",
+        ingress: "local-http",
         service: $service,
         target: {containers: $containers, port: $port, protocol: "http"}
       }')" \

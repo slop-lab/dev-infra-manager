@@ -8,9 +8,9 @@ project-root workspace container
     └── deep (created by dev's own Docker daemon)
 ```
 
-`dev` serves `hello-from-dev` on port 8080. It also runs a nested Docker daemon
-and creates `deep`, which serves `hello-from-deep` on container port 5678 and
-publishes it onto `dev`. Neither service publishes a host port.
+`dev` serves `hello-from-dev` on port 8080. It also creates `deep`, which
+serves `hello-from-deep` on container port 5678 and publishes it onto `dev`.
+Neither service publishes a host port.
 
 The copyable project repository is isolated under `repo/`:
 
@@ -26,40 +26,30 @@ examples/external-urls/
         └── start.sh
 ```
 
-The host runs `dim controller serve` and the external URL plugin. Tailscale is
-always a host capability: its private host binding must use a host-reachable
-reverse proxy. Cloudflare bindings may use a proxy running elsewhere.
+## Host ingress
 
-## Host configuration
-
-Build and install DIM plus the plugin from this checkout, then configure the
-controller:
+The host runs `dim controller serve` with one named HTTP ingress:
 
 ```bash
-export DIM_TAILSCALE_MACHINE=builder-1
-export DIM_TAILSCALE_DOMAIN=tail.example.com
-export DIM_EXTERNAL_URL_PROXY_HOST=100.64.0.10
-export DIM_EXTERNAL_URL_PROXY_PORT=443
-export DIM_EXTERNAL_URL_PROXY_UPSTREAM_MODE=container-ip
-export DIM_EXTERNAL_URL_PROFILES='{
-  "tailscale": {
-    "description": "Private development URL on the host tailnet",
-    "protocol": "https"
-  }
-}'
-export DIM_EXTERNAL_URL_BINDINGS='{
-  "tailscale": {
-    "routeProvider": "reverse-proxy",
-    "urlProvider": "tailscale"
+export DIM_EXTERNAL_URL_INGRESSES='{
+  "local-http": {
+    "description": "Local HTTP development URL",
+    "scheme": "http",
+    "domain": "host.tail.test",
+    "port": 8080,
+    "listenHost": "0.0.0.0",
+    "listenPort": 8080,
+    "upstreamMode": "container-ip"
   }
 }'
 
 dim controller serve
 ```
 
-Wildcard DNS for `*.builder-1.tail.example.com` points at the host's Tailscale
-IP. TLS termination can run in front of the plugin proxy. Tailscale is never
-installed in a workspace or controller container.
+Wildcard DNS for `*.host.tail.test` points at the host. For a public HTTPS
+deployment, configure a separate `public-https` ingress whose internal router
+binds to loopback, then place Caddy with Cloudflare DNS-01 in front of it. See
+[External workspace URLs](../../docs/external-urls.md).
 
 ## Project use
 
@@ -70,30 +60,25 @@ root, and create a development workspace. Its normal setup starts `dev` and
 ```bash
 dim create external external-dev --profile development
 dim run external-dev discover | jq '.routes[] | select(.path == "/api/urls")'
-dim run external-dev expose-dev tailscale
-dim run external-dev expose-deep tailscale
+dim run external-dev expose-dev local-http
+dim run external-dev expose-deep local-http
 ```
 
-The requests name a host-configured profile. They cannot select raw providers,
-hostnames, IPs, or arbitrary upstreams. `containers: ["dev"]` resolves the
+The requests select only a host-configured ingress. They cannot select a raw
+domain, listener, hostname, IP, or upstream. `containers: ["dev"]` resolves the
 Compose service inside the project-root container. `["dev", "deep"]` resolves
-the nested container's published port through `dev`. DIM creates a TCP relay
-inside the project-root container so the host reverse proxy can reach both.
+the nested container's published port through `dev`.
 
 ## Verification
 
 `scripts/external-url-example-smoke.bash` runs the complete example with a host
-controller and reverse proxy. The host-side harness is intentionally outside
-the copyable repository because it builds unpublished local packages,
-constructs controller state, allocates ports and Docker networks, and performs
-cleanup. It copies only `repo/` into a newly created project-root workspace
-container, starts fresh `dev` and `deep` containers there, uses dnsmasq for
-wildcard test DNS, and checks both generated URLs from separate disposable curl
-containers:
+controller and named ingress. The host-side harness builds unpublished local
+packages, constructs controller state, allocates ports and Docker networks,
+and performs cleanup. It uses dnsmasq for wildcard test DNS and checks both
+generated URLs from separate disposable curl containers:
 
 ```bash
 just verify-example-external-urls
 ```
 
-No Tailscale account is needed for that deterministic verification; the
-dnsmasq test profile models the same host wildcard-DNS data path.
+No external DNS account is needed for this deterministic verification.

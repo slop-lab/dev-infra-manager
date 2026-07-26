@@ -14,7 +14,7 @@ describe("external URLs plugin", () => {
   const close: Array<() => Promise<void>> = [];
   afterEach(async () => Promise.all(close.splice(0).map((item) => item())));
 
-  it("discovers host profiles and proxies controller-selected nested targets", async () => {
+  it("discovers host ingresses and proxies controller-selected nested targets", async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-"));
     close.push(() => rm(stateRoot, { recursive: true, force: true }));
     const upstream = http.createServer((_request, response) => response.end("nested workspace app"));
@@ -27,30 +27,22 @@ describe("external URLs plugin", () => {
     const hostProxyPort = await availablePort();
     const controllerProxyPort = await availablePort();
     const registered = await registerPlugins([createExternalUrlsPlugin({
-      proxies: [
-        { name: "host-proxy", listenHost: "127.0.0.1", listenPort: hostProxyPort, upstreamMode: "container-ip" },
-        { name: "controller-proxy", listenHost: "127.0.0.1", listenPort: controllerProxyPort, upstreamMode: "container-dns" }
-      ],
-      tailscale: { machine: "builder", domain: "tail.example.test", scheme: "http" },
-      cloudflare: { domain: "public.example.test" },
-      profiles: {
+      ingresses: {
         tailnet: {
           description: "Tailnet development URL",
-          protocol: "http"
+          scheme: "http",
+          domain: "builder.tail.example.test",
+          listenHost: "127.0.0.1",
+          listenPort: hostProxyPort,
+          upstreamMode: "container-ip"
         },
         public: {
           description: "Public preview URL",
-          protocol: "https"
-        }
-      },
-      bindings: {
-        tailnet: {
-          routeProvider: "host-proxy",
-          urlProvider: "tailscale"
-        },
-        public: {
-          routeProvider: "controller-proxy",
-          urlProvider: "cloudflare"
+          scheme: "https",
+          domain: "public.example.test",
+          listenHost: "127.0.0.1",
+          listenPort: controllerProxyPort,
+          upstreamMode: "container-dns"
         }
       }
     })]);
@@ -77,25 +69,25 @@ describe("external URLs plugin", () => {
 
     const discovery = await fetch(`${base}/api`, { headers });
     const discovered = await discovery.json() as {
-      routes: Array<{ path: string; discovery?: { profiles?: Array<{ name: string }> } }>;
+      routes: Array<{ path: string; discovery?: { ingresses?: Array<{ name: string }> } }>;
     };
-    expect(discovered.routes.find((route) => route.path === "/api/urls")?.discovery?.profiles).toEqual([
-      { name: "tailnet", description: "Tailnet development URL", protocol: "http" },
-      { name: "public", description: "Public preview URL", protocol: "https" }
+    expect(discovered.routes.find((route) => route.path === "/api/urls")?.discovery?.ingresses).toEqual([
+      { name: "tailnet", description: "Tailnet development URL", scheme: "http" },
+      { name: "public", description: "Public preview URL", scheme: "https" }
     ]);
 
-    const missingProfile = await fetch(`${base}/api/urls`, {
+    const missingIngress = await fetch(`${base}/api/urls`, {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },
       body: JSON.stringify({ service: "dev", target: { containers: ["dev"], port: 8080 } })
     });
-    expect(missingProfile.status).toBe(400);
+    expect(missingIngress.status).toBe(400);
 
     const created = await fetch(`${base}/api/urls`, {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },
       body: JSON.stringify({
-        profile: "tailnet",
+        ingress: "tailnet",
         service: "deep",
         target: { containers: ["dev", "deep"], port: 8080 }
       })
@@ -119,28 +111,18 @@ describe("external URLs plugin", () => {
     })).status).toBe(204);
   });
 
-  it("rejects tailscale profiles backed by a non-host proxy", () => {
+  it("rejects invalid ingress configuration", () => {
     expect(() => createExternalUrlsPlugin({
-      proxies: [{
-        name: "controller-proxy",
-        listenHost: "0.0.0.0",
-        listenPort: 8080,
-        upstreamMode: "container-dns"
-      }],
-      tailscale: { machine: "builder", domain: "tail.example.test" },
-      profiles: {
+      ingresses: {
         invalid: {
-          description: "Invalid Tailnet URL",
-          protocol: "https"
-        }
-      },
-      bindings: {
-        invalid: {
-          routeProvider: "controller-proxy",
-          urlProvider: "tailscale"
+          description: "Invalid URL",
+          scheme: "ftp" as "https",
+          domain: "example.test",
+          listenHost: "0.0.0.0",
+          listenPort: 8080
         }
       }
-    })).toThrow(/must use a host-reachable reverse proxy/);
+    })).toThrow(/scheme must be http or https/);
   });
 });
 

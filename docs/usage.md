@@ -190,7 +190,7 @@ managed Gitea service.
 
 For installing `dim` and the minimal single-repository "create a Project"
 shape, see the root [README](../README.md#install-the-dim-cli). For a
-complete, tested nested-container walkthrough with external URL profiles, see
+complete, tested nested-container walkthrough with named external URL ingresses, see
 [Example: External URLs](../examples/external-urls/README.md).
 
 `run` does not repeat setup. Environment reconciliation happens on `create`,

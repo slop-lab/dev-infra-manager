@@ -201,7 +201,7 @@ scripts/external-url-example-smoke.bash
 against real containers: builds local packages and the workspace image,
 starts a project-root container, starts the nested `dev` Compose service and
 its own `deep` nested container, runs a host DIM controller and reverse proxy,
-provides wildcard DNS with dnsmasq, discovers the plugin profiles through
+provides wildcard DNS with dnsmasq, discovers the plugin ingresses through
 `GET /api`, creates URLs for both nesting depths, fetches both sentinels from
 a separate curl container, and revokes the routes. The doc and script must
 change together.

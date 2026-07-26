@@ -9,6 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Replaced external URL profiles, provider bindings, and provider-specific
+  environment variables with provider-agnostic named ingresses. Each ingress
+  now owns its public scheme/domain and internal reverse-proxy listener, and
+  workspace requests select it with `ingress`.
 - Renamed the `@slop-lab/install-dim` executable from `install-dim` to
   `dim`, and its subcommands from `cli`/`plugin` to `install-cli`/
   `install-plugin`, so both `mise use -g npm:@slop-lab/install-dim` and
@@ -61,10 +65,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added plugin API v2 with an instance-scoped DIM controller route registry
   and ordered disposal.
 - Added authenticated external URL routes on the general DIM controller and a
-  local-build plugin with a shared reverse proxy plus Tailscale and Cloudflare
-  hostname providers. Public profiles expose only a name, description, and
-  external HTTP protocol; host-only bindings keep proxy/provider details
-  private.
+  local-build plugin with named reverse-proxy ingresses. Discovery exposes
+  only ingress name, description, and external URL scheme.
 
 ### Fixed
 

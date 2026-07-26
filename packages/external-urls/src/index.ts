@@ -17,46 +17,22 @@ import {
   type WorkspaceTarget
 } from "@slop-lab/dev-infra-manager-core";
 
-export interface ReverseProxyOptions {
-  name?: string;
+export interface ExternalUrlIngressOptions {
+  description: string;
+  scheme: "http" | "https";
+  domain: string;
+  port?: number;
   listenHost: string;
   listenPort: number;
   upstreamMode?: "container-dns" | "container-ip";
 }
 
-export interface UrlProviderOptions {
-  domain: string;
-  scheme?: "http" | "https";
-  port?: number;
-}
-
-export interface TailscaleUrlProviderOptions extends UrlProviderOptions {
-  machine: string;
-}
-
-export interface ExternalUrlProfile {
-  description: string;
-  protocol: "http" | "https";
-}
-
-export interface ExternalUrlProfileBinding {
-  routeProvider: string;
-  urlProvider: string;
-}
-
 export interface ExternalUrlsPluginOptions {
-  proxies?: ReverseProxyOptions[];
-  listenHost?: string;
-  listenPort?: number;
-  upstreamMode?: "container-dns" | "container-ip";
-  tailscale?: TailscaleUrlProviderOptions;
-  cloudflare?: UrlProviderOptions;
-  profiles?: Readonly<Record<string, ExternalUrlProfile>>;
-  bindings?: Readonly<Record<string, ExternalUrlProfileBinding>>;
+  ingresses: Readonly<Record<string, ExternalUrlIngressOptions>>;
 }
 
 interface NormalizedRequest {
-  profile: string;
+  ingress: string;
   service: string;
   target: WorkspaceTarget;
   path?: string;
@@ -64,17 +40,16 @@ interface NormalizedRequest {
 
 interface ExternalRoute {
   id: string;
-  provider: string;
+  ingress: string;
   authority: string;
-  providerId?: string;
+  ingressId?: string;
 }
 
 interface StoredUrl {
   id: string;
   workspace: string;
   workspaceId: string;
-  profile: string;
-  urlProvider: string;
+  ingress: string;
   service: string;
   target: WorkspaceTarget;
   path?: string;
@@ -83,7 +58,7 @@ interface StoredUrl {
   createdAt: string;
 }
 
-interface RouteProvider {
+interface IngressRouter {
   name: string;
   upstreamMode: "container-dns" | "container-ip";
   provision(workspace: ControllerWorkspace, request: NormalizedRequest, upstream: ResolvedWorkspaceTarget): Promise<ExternalRoute>;
@@ -91,49 +66,45 @@ interface RouteProvider {
   close(): Promise<void>;
 }
 
-interface UrlProvider {
+interface ConfiguredIngress {
+  options: ExternalUrlIngressOptions;
+  router: IngressRouter;
+}
+
+interface RouterOptions {
   name: string;
-  publish(workspace: ControllerWorkspace, request: NormalizedRequest, route: ExternalRoute): Promise<string>;
-  revoke(entry: StoredUrl): Promise<void>;
+  listenHost: string;
+  listenPort: number;
+  upstreamMode: "container-dns" | "container-ip";
 }
 
 export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): DimPlugin {
-  const proxyOptions = normalizeProxies(options);
-  const { profiles, bindings } = normalizeProfileConfiguration(options, proxyOptions);
-  validateOptions(options, proxyOptions, profiles, bindings);
+  validateOptions(options);
 
   return {
     name: "@slop-lab/dim-plugin-external-urls",
     apiVersion: DIM_PLUGIN_API_VERSION,
     register(host) {
-      const routes = new Map<string, RouteProvider>();
-      for (const proxy of proxyOptions) {
-        routes.set(proxy.name, new WorkspaceReverseProxy(proxy, host.logger));
-      }
-      const urls = new Map<string, UrlProvider>();
-      if (options.tailscale) {
-        urls.set("tailscale", domainProvider("tailscale", options.tailscale.domain, {
-          machine: options.tailscale.machine,
-          scheme: options.tailscale.scheme ?? "https",
-          ...(options.tailscale.port === undefined ? {} : { port: options.tailscale.port })
-        }));
-      }
-      if (options.cloudflare) {
-        urls.set("cloudflare", domainProvider("cloudflare", options.cloudflare.domain, {
-          scheme: options.cloudflare.scheme ?? "https",
-          ...(options.cloudflare.port === undefined ? {} : { port: options.cloudflare.port })
-        }));
+      const ingresses = new Map<string, ConfiguredIngress>();
+      for (const [name, ingress] of Object.entries(options.ingresses)) {
+        ingresses.set(name, {
+          options: ingress,
+          router: new WorkspaceIngressRouter({
+            name,
+            listenHost: ingress.listenHost,
+            listenPort: ingress.listenPort,
+            upstreamMode: ingress.upstreamMode ?? "container-ip"
+          }, host.logger)
+        });
       }
 
       const initialize = async (runtime: ControllerRuntimeContext): Promise<void> => {
         const store = new ExternalUrlStore(runtime.stateRoot);
         for (const workspace of await runtime.listWorkspaces()) {
           for (const entry of deduplicateRoutes(await store.list(workspace.id))) {
-            const binding = bindings[entry.profile];
-            if (!binding) throw new Error(`external URL profile '${entry.profile}' is no longer configured`);
-            const routeProvider = required(routes, binding.routeProvider, "route");
-            const upstream = await runtime.resolveTarget(workspace, entry.target, routeProvider.upstreamMode);
-            const reconciled = await routeProvider.provision(workspace, storedRequest(entry), upstream);
+            const ingress = required(ingresses, entry.ingress);
+            const upstream = await runtime.resolveTarget(workspace, entry.target, ingress.router.upstreamMode);
+            const reconciled = await ingress.router.provision(workspace, storedRequest(entry), upstream);
             if (reconciled.authority !== entry.route.authority) {
               throw new Error(`external route '${entry.route.id}' changed authority during reconciliation`);
             }
@@ -142,10 +113,10 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
       };
 
       const discovery = {
-        profiles: Object.entries(profiles).map(([name, profile]) => ({
+        ingresses: Object.entries(options.ingresses).map(([name, ingress]) => ({
           name,
-          description: profile.description,
-          protocol: profile.protocol
+          description: ingress.description,
+          scheme: ingress.scheme
         })),
         target: {
           containers: "zero, one, or two nested container/service names",
@@ -163,62 +134,27 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
       host.registerControllerRoute({
         method: "POST",
         path: "/urls",
-        summary: "Create an external URL using a host-configured profile",
+        summary: "Create an external URL using a host-configured ingress",
         discovery,
-        handle: (context) => createUrl(context, profiles, bindings, routes, urls)
+        handle: (context) => createUrl(context, ingresses)
       });
       host.registerControllerRoute({
         method: "DELETE",
         path: "/urls/:id",
         summary: "Revoke an external URL",
-        handle: (context) => deleteUrl(context, routes, urls)
+        handle: (context) => deleteUrl(context, ingresses)
       });
 
-      return async () => Promise.all([...routes.values()].map((proxy) => proxy.close())).then(() => {});
+      return async () => Promise.all([...ingresses.values()].map((ingress) => ingress.router.close())).then(() => {});
     }
   };
 }
 
 export function externalUrlsPluginFromEnv(env: NodeJS.ProcessEnv = process.env): DimPlugin {
-  const configuredProxies = env.DIM_EXTERNAL_URL_PROXIES
-    ? parseProxyOptions(env.DIM_EXTERNAL_URL_PROXIES)
-    : undefined;
-  return createExternalUrlsPlugin({
-    ...(configuredProxies
-      ? { proxies: configuredProxies }
-      : {
-          listenHost: env.DIM_EXTERNAL_URL_PROXY_HOST ?? "0.0.0.0",
-          listenPort: Number(env.DIM_EXTERNAL_URL_PROXY_PORT ?? "8080"),
-          ...(env.DIM_EXTERNAL_URL_PROXY_UPSTREAM_MODE
-            ? { upstreamMode: upstreamMode(env.DIM_EXTERNAL_URL_PROXY_UPSTREAM_MODE) }
-            : {})
-        }),
-    ...(env.DIM_TAILSCALE_DOMAIN && env.DIM_TAILSCALE_MACHINE
-      ? {
-          tailscale: {
-            domain: env.DIM_TAILSCALE_DOMAIN,
-            machine: env.DIM_TAILSCALE_MACHINE,
-            ...(env.DIM_TAILSCALE_SCHEME ? { scheme: scheme(env.DIM_TAILSCALE_SCHEME) } : {}),
-            ...(env.DIM_TAILSCALE_PORT ? { port: Number(env.DIM_TAILSCALE_PORT) } : {})
-          }
-        }
-      : {}),
-    ...(env.DIM_CLOUDFLARE_DOMAIN
-      ? {
-          cloudflare: {
-            domain: env.DIM_CLOUDFLARE_DOMAIN,
-            ...(env.DIM_CLOUDFLARE_SCHEME ? { scheme: scheme(env.DIM_CLOUDFLARE_SCHEME) } : {}),
-            ...(env.DIM_CLOUDFLARE_PORT ? { port: Number(env.DIM_CLOUDFLARE_PORT) } : {})
-          }
-        }
-      : {}),
-    ...(env.DIM_EXTERNAL_URL_PROFILES
-      ? { profiles: parseProfiles(env.DIM_EXTERNAL_URL_PROFILES) }
-      : {}),
-    ...(env.DIM_EXTERNAL_URL_BINDINGS
-      ? { bindings: parseBindings(env.DIM_EXTERNAL_URL_BINDINGS) }
-      : {})
-  });
+  if (!env.DIM_EXTERNAL_URL_INGRESSES) {
+    throw new Error("DIM_EXTERNAL_URL_INGRESSES is required");
+  }
+  return createExternalUrlsPlugin({ ingresses: parseIngresses(env.DIM_EXTERNAL_URL_INGRESSES) });
 }
 
 async function listUrls(context: ControllerRouteContext) {
@@ -231,29 +167,19 @@ async function listUrls(context: ControllerRouteContext) {
 
 async function createUrl(
   context: ControllerRouteContext,
-  profiles: Readonly<Record<string, ExternalUrlProfile>>,
-  bindings: Readonly<Record<string, ExternalUrlProfileBinding>>,
-  routes: ReadonlyMap<string, RouteProvider>,
-  urls: ReadonlyMap<string, UrlProvider>
+  ingresses: ReadonlyMap<string, ConfiguredIngress>
 ) {
   const request = validateRequest(await context.readJson());
-  const profile = profiles[request.profile];
-  if (!profile) throw new UserError(`external URL profile '${request.profile}' is not configured`);
-  const binding = bindings[request.profile];
-  if (!binding) throw new UserError(`external URL profile '${request.profile}' has no provider binding`);
-  const routeProvider = required(routes, binding.routeProvider, "route");
-  const urlProvider = required(urls, binding.urlProvider, "URL");
-  const upstream = await context.resolveTarget(request.target, routeProvider.upstreamMode);
-  const route = await routeProvider.provision(context.workspace, request, upstream);
-  let entry: StoredUrl | undefined;
+  const ingress = required(ingresses, request.ingress);
+  const upstream = await context.resolveTarget(request.target, ingress.router.upstreamMode);
+  const route = await ingress.router.provision(context.workspace, request, upstream);
   try {
-    const url = validateExternalUrl(await urlProvider.publish(context.workspace, request, route));
-    entry = {
+    const url = externalUrl(ingress.options, request, route);
+    const entry: StoredUrl = {
       id: randomUUID(),
       workspace: context.workspace.name,
       workspaceId: context.workspace.id,
-      profile: request.profile,
-      urlProvider: urlProvider.name,
+      ingress: request.ingress,
       service: request.service,
       target: request.target,
       ...(request.path === undefined ? {} : { path: request.path }),
@@ -261,32 +187,28 @@ async function createUrl(
       url,
       createdAt: new Date().toISOString()
     };
-    const created = entry;
-    await new ExternalUrlStore(context.stateRoot).put(created);
-    return { status: 201, body: { urls: [publicEntry(created)] } };
+    await new ExternalUrlStore(context.stateRoot).put(entry);
+    return { status: 201, body: { urls: [publicEntry(entry)] } };
   } catch (error) {
-    if (entry) await urlProvider.revoke(entry).catch(() => {});
-    await routeProvider.revoke(route).catch(() => {});
+    await ingress.router.revoke(route).catch(() => {});
     throw error;
   }
 }
 
 async function deleteUrl(
   context: ControllerRouteContext,
-  routes: ReadonlyMap<string, RouteProvider>,
-  urls: ReadonlyMap<string, UrlProvider>
+  ingresses: ReadonlyMap<string, ConfiguredIngress>
 ) {
   const store = new ExternalUrlStore(context.stateRoot);
   const entries = await store.list(context.workspace.id);
   const entry = entries.find((candidate) => candidate.id === context.params.id);
   if (!entry) return { status: 404, body: { error: "external URL not found" } };
-  const urlProvider = required(urls, entry.urlProvider, "URL");
-  await urlProvider.revoke(entry);
+  const ingress = required(ingresses, entry.ingress);
   await store.remove(entry);
   if (!entries.some((candidate) => candidate.id !== entry.id
-    && candidate.route.provider === entry.route.provider
+    && candidate.route.ingress === entry.route.ingress
     && candidate.route.authority === entry.route.authority)) {
-    await required(routes, entry.route.provider, "route").revoke(entry.route);
+    await ingress.router.revoke(entry.route);
   }
   return { status: 204 };
 }
@@ -329,7 +251,7 @@ class ExternalUrlStore {
   }
 }
 
-class WorkspaceReverseProxy implements RouteProvider {
+class WorkspaceIngressRouter implements IngressRouter {
   readonly name: string;
   readonly upstreamMode: "container-dns" | "container-ip";
   readonly #routes = new Map<string, ResolvedWorkspaceTarget>();
@@ -337,7 +259,7 @@ class WorkspaceReverseProxy implements RouteProvider {
   readonly #ready: Promise<void>;
 
   constructor(
-    options: Required<Pick<ReverseProxyOptions, "name" | "listenHost" | "listenPort" | "upstreamMode">>,
+    options: RouterOptions,
     logger: DimPluginLogger
   ) {
     this.name = options.name;
@@ -349,7 +271,7 @@ class WorkspaceReverseProxy implements RouteProvider {
       this.#server.listen(options.listenPort, options.listenHost, () => {
         this.#server.off("error", reject);
         logger.info("DIM external URL reverse proxy listening", {
-          provider: options.name,
+          ingress: options.name,
           host: options.listenHost,
           port: options.listenPort,
           upstreamMode: options.upstreamMode
@@ -367,11 +289,11 @@ class WorkspaceReverseProxy implements RouteProvider {
       throw new UserError(`external route '${authority}' already targets another service`);
     }
     this.#routes.set(authority, upstream);
-    return { id: randomUUID(), provider: this.name, authority, providerId: authority };
+    return { id: randomUUID(), ingress: this.name, authority, ingressId: authority };
   }
 
   async revoke(route: ExternalRoute): Promise<void> {
-    this.#routes.delete(route.providerId ?? route.authority);
+    this.#routes.delete(route.ingressId ?? route.authority);
   }
 
   async close(): Promise<void> {
@@ -438,27 +360,22 @@ class WorkspaceReverseProxy implements RouteProvider {
   }
 }
 
-function domainProvider(
-  name: string,
-  domain: string,
-  options: { machine?: string; scheme: "http" | "https"; port?: number }
-): UrlProvider {
-  const suffix = [options.machine, normalizeDomain(domain)].filter(Boolean).join(".");
-  return {
-    name,
-    async publish(_workspace, request, route) {
-      const authority = `${route.authority}.${suffix}${options.port === undefined ? "" : `:${options.port}`}`;
-      return `${options.scheme}://${authority}${request.path ?? "/"}`;
-    },
-    async revoke() {}
-  };
+function externalUrl(
+  ingress: ExternalUrlIngressOptions,
+  request: NormalizedRequest,
+  route: ExternalRoute
+): string {
+  const authority = `${route.authority}.${normalizeDomain(ingress.domain)}${
+    ingress.port === undefined ? "" : `:${ingress.port}`
+  }`;
+  return validateExternalUrl(`${ingress.scheme}://${authority}${request.path ?? "/"}`);
 }
 
 function validateRequest(value: unknown): NormalizedRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new UserError("request body must be an object");
   const input = value as Record<string, unknown>;
-  if (typeof input.profile !== "string" || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(input.profile)) {
-    throw new UserError("profile must be a configured profile name");
+  if (typeof input.ingress !== "string" || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(input.ingress)) {
+    throw new UserError("ingress must be a configured ingress name");
   }
   if (typeof input.service !== "string" || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(input.service)) {
     throw new UserError("service must be a DNS label");
@@ -481,7 +398,7 @@ function validateRequest(value: unknown): NormalizedRequest {
     throw new UserError("path must be an absolute URL path without '..'");
   }
   return {
-    profile: input.profile,
+    ingress: input.ingress,
     service: input.service,
     target: {
       containers: containers as string[],
@@ -492,166 +409,42 @@ function validateRequest(value: unknown): NormalizedRequest {
   };
 }
 
-function normalizeProfileConfiguration(
-  options: ExternalUrlsPluginOptions,
-  proxies: Array<Required<Pick<ReverseProxyOptions, "name" | "listenHost" | "listenPort" | "upstreamMode">>>
-): {
-  profiles: Readonly<Record<string, ExternalUrlProfile>>;
-  bindings: Readonly<Record<string, ExternalUrlProfileBinding>>;
-} {
-  if (options.profiles || options.bindings) {
-    return {
-      profiles: { ...(options.profiles ?? {}) },
-      bindings: { ...(options.bindings ?? {}) }
-    };
-  }
-  const routeProvider = proxies[0]?.name ?? "reverse-proxy";
-  return {
-    profiles: {
-      ...(options.tailscale ? {
-        tailscale: {
-          description: "Private URL reachable through the host Tailscale machine",
-          protocol: options.tailscale.scheme ?? "https"
-        }
-      } : {}),
-      ...(options.cloudflare ? {
-        cloudflare: {
-          description: "Public URL served through Cloudflare Tunnel",
-          protocol: options.cloudflare.scheme ?? "https"
-        }
-      } : {})
-    },
-    bindings: {
-      ...(options.tailscale ? {
-      tailscale: {
-        routeProvider,
-        urlProvider: "tailscale"
-      }
-    } : {}),
-      ...(options.cloudflare ? {
-      cloudflare: {
-        routeProvider,
-        urlProvider: "cloudflare"
-      }
-    } : {})
+function validateOptions(options: ExternalUrlsPluginOptions): void {
+  const entries = Object.entries(options.ingresses);
+  if (entries.length === 0) throw new Error("at least one external URL ingress must be configured");
+  for (const [name, ingress] of entries) {
+    if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(name)) throw new Error(`invalid external URL ingress '${name}'`);
+    if (typeof ingress.description !== "string" || ingress.description.trim().length === 0) {
+      throw new Error(`external URL ingress '${name}' requires a description`);
     }
-  };
-}
-
-function validateOptions(
-  options: ExternalUrlsPluginOptions,
-  proxies: Array<Required<Pick<ReverseProxyOptions, "name" | "listenHost" | "listenPort" | "upstreamMode">>>,
-  profiles: Readonly<Record<string, ExternalUrlProfile>>,
-  bindings: Readonly<Record<string, ExternalUrlProfileBinding>>
-): void {
-  for (const proxy of proxies) {
-    if (!Number.isInteger(proxy.listenPort) || proxy.listenPort < 0 || proxy.listenPort > 65_535) {
-      throw new Error("listenPort must be an integer between 0 and 65535");
+    if (ingress.scheme !== "http" && ingress.scheme !== "https") {
+      throw new Error(`external URL ingress '${name}' scheme must be http or https`);
     }
-  }
-  if (new Set(proxies.map((proxy) => proxy.name)).size !== proxies.length) throw new Error("proxy names must be unique");
-  if (!options.tailscale && !options.cloudflare) throw new Error("at least one external URL provider must be configured");
-  if (options.tailscale && !/^[a-z0-9-]+$/.test(options.tailscale.machine)) {
-    throw new Error("tailscale machine must be a DNS label");
-  }
-  for (const provider of [options.tailscale, options.cloudflare]) {
-    if (provider?.port !== undefined
-      && (!Number.isInteger(provider.port) || provider.port < 1 || provider.port > 65_535)) {
-      throw new Error("external URL provider port must be between 1 and 65535");
+    if (typeof ingress.domain !== "string" || normalizeDomain(ingress.domain).length === 0) {
+      throw new Error(`external URL ingress '${name}' requires a domain`);
     }
-  }
-  for (const [name, profile] of Object.entries(profiles)) {
-    if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(name)) throw new Error(`invalid external URL profile '${name}'`);
-    if (typeof profile.description !== "string" || profile.description.trim().length === 0) {
-      throw new Error(`external URL profile '${name}' requires a description`);
+    if (!Number.isInteger(ingress.listenPort) || ingress.listenPort < 0 || ingress.listenPort > 65_535) {
+      throw new Error(`external URL ingress '${name}' listenPort must be between 0 and 65535`);
     }
-    if (profile.protocol !== "http" && profile.protocol !== "https") {
-      throw new Error(`external URL profile '${name}' protocol must be http or https`);
+    if (ingress.port !== undefined
+      && (!Number.isInteger(ingress.port) || ingress.port < 1 || ingress.port > 65_535)) {
+      throw new Error(`external URL ingress '${name}' port must be between 1 and 65535`);
     }
-    const binding = bindings[name];
-    if (!binding) throw new Error(`external URL profile '${name}' requires a provider binding`);
-    const proxy = proxies.find((candidate) => candidate.name === binding.routeProvider);
-    if (!proxy) {
-      throw new Error(`profile '${name}' references unknown route provider '${binding.routeProvider}'`);
-    }
-    if (binding.urlProvider === "tailscale" && !options.tailscale) throw new Error(`profile '${name}' requires tailscale`);
-    if (binding.urlProvider === "tailscale" && proxy.upstreamMode !== "container-ip") {
-      throw new Error(`tailscale profile '${name}' must use a host-reachable reverse proxy`);
-    }
-    if (binding.urlProvider === "cloudflare" && !options.cloudflare) throw new Error(`profile '${name}' requires cloudflare`);
-    if (binding.urlProvider !== "tailscale" && binding.urlProvider !== "cloudflare") {
-      throw new Error(`profile '${name}' references unknown URL provider '${binding.urlProvider}'`);
-    }
-    const providerScheme = binding.urlProvider === "tailscale"
-      ? options.tailscale?.scheme ?? "https"
-      : options.cloudflare?.scheme ?? "https";
-    if (profile.protocol !== providerScheme) {
-      throw new Error(`external URL profile '${name}' protocol does not match its configured URL scheme`);
-    }
-  }
-  for (const name of Object.keys(bindings)) {
-    if (!profiles[name]) throw new Error(`external URL binding '${name}' has no profile`);
+    if (ingress.upstreamMode !== undefined) upstreamMode(ingress.upstreamMode);
   }
 }
 
-function normalizeProxies(
-  options: ExternalUrlsPluginOptions
-): Array<Required<Pick<ReverseProxyOptions, "name" | "listenHost" | "listenPort" | "upstreamMode">>> {
-  const configured = options.proxies ?? [{
-    listenHost: options.listenHost ?? "0.0.0.0",
-    listenPort: options.listenPort ?? 8080,
-    ...(options.upstreamMode ? { upstreamMode: options.upstreamMode } : {})
-  }];
-  return configured.map((proxy, index) => {
-    const resolvedMode = proxy.upstreamMode ?? "container-ip";
-    return {
-      name: proxy.name ?? (configured.length === 1 ? "reverse-proxy" : `reverse-proxy-${index + 1}`),
-      listenHost: proxy.listenHost,
-      listenPort: proxy.listenPort,
-      upstreamMode: resolvedMode
-    };
-  });
-}
-
-function parseProfiles(value: string): Readonly<Record<string, ExternalUrlProfile>> {
+function parseIngresses(value: string): Readonly<Record<string, ExternalUrlIngressOptions>> {
   const parsed = JSON.parse(value) as unknown;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("DIM_EXTERNAL_URL_PROFILES must be a JSON object");
+    throw new Error("DIM_EXTERNAL_URL_INGRESSES must be a JSON object");
   }
-  return parsed as Record<string, ExternalUrlProfile>;
+  return parsed as Record<string, ExternalUrlIngressOptions>;
 }
 
-function parseBindings(value: string): Readonly<Record<string, ExternalUrlProfileBinding>> {
-  const parsed = JSON.parse(value) as unknown;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("DIM_EXTERNAL_URL_BINDINGS must be a JSON object");
-  }
-  return parsed as Record<string, ExternalUrlProfileBinding>;
-}
-
-function parseProxyOptions(value: string): ReverseProxyOptions[] {
-  const parsed = JSON.parse(value) as unknown;
-  if (!Array.isArray(parsed) || parsed.length === 0) {
-    throw new Error("DIM_EXTERNAL_URL_PROXIES must be a non-empty JSON array");
-  }
-  return parsed.map((item) => {
-    if (!item || typeof item !== "object") throw new Error("each external URL proxy must be an object");
-    const proxy = item as Record<string, unknown>;
-    if (typeof proxy.listenHost !== "string" || typeof proxy.listenPort !== "number") {
-      throw new Error("each external URL proxy requires listenHost and listenPort");
-    }
-    return {
-      listenHost: proxy.listenHost,
-      listenPort: proxy.listenPort,
-      ...(typeof proxy.name === "string" ? { name: proxy.name } : {}),
-      ...(typeof proxy.upstreamMode === "string" ? { upstreamMode: upstreamMode(proxy.upstreamMode) } : {})
-    };
-  });
-}
-
-function required<T>(values: ReadonlyMap<string, T>, name: string, kind: string): T {
+function required<T>(values: ReadonlyMap<string, T>, name: string): T {
   const value = values.get(name);
-  if (!value) throw new UserError(`external ${kind} provider '${name}' is not configured`);
+  if (!value) throw new UserError(`external URL ingress '${name}' is not configured`);
   return value;
 }
 
@@ -669,7 +462,7 @@ function deduplicateRoutes(entries: StoredUrl[]): StoredUrl[] {
 
 function storedRequest(entry: StoredUrl): NormalizedRequest {
   return {
-    profile: entry.profile,
+    ingress: entry.ingress,
     service: entry.service,
     target: entry.target,
     ...(entry.path === undefined ? {} : { path: entry.path })
@@ -696,11 +489,6 @@ function stableHash(value: string): number {
     hash = Math.imul(hash, 0x01000193);
   }
   return hash >>> 0;
-}
-
-function scheme(value: string): "http" | "https" {
-  if (value !== "http" && value !== "https") throw new Error("external URL scheme must be http or https");
-  return value;
 }
 
 function normalizeDomain(value: string): string {

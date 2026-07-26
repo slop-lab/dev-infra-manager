@@ -15,22 +15,22 @@ case "$task" in
     controller "$DIM_CONTROLLER_API/api"
     ;;
   expose-dev)
-    profile="${1:-tailscale}"
+    ingress="${1:-local-http}"
     controller \
       -H "Content-Type: application/json" \
-      --data "$(jq -n --arg profile "$profile" '{
-        profile: $profile,
+      --data "$(jq -n --arg ingress "$ingress" '{
+        ingress: $ingress,
         service: "dev",
         target: {containers: ["dev"], port: 8080, protocol: "http"}
       }')" \
       "$DIM_CONTROLLER_API/api/urls"
     ;;
   expose-deep)
-    profile="${1:-tailscale}"
+    ingress="${1:-local-http}"
     controller \
       -H "Content-Type: application/json" \
-      --data "$(jq -n --arg profile "$profile" '{
-        profile: $profile,
+      --data "$(jq -n --arg ingress "$ingress" '{
+        ingress: $ingress,
         service: "deep",
         target: {containers: ["dev", "deep"], port: 5678, protocol: "http"}
       }')" \

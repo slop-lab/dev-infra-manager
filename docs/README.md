@@ -47,11 +47,11 @@ The documentation is split by concern:
 - [Configuration](configuration.md): configuration file reference.
 - [Runtime Backends](runtime-backends.md): Sysbox, gVisor, rootless Podman, and runc selection.
 - [Runtime Images](runtime-images.md): workspace-root runtime images and their nested workloads.
-- [External workspace URLs](external-urls.md): controller discovery, host profiles, nested targets, Tailscale, and Cloudflare Tunnel.
+- [External workspace URLs](external-urls.md): controller discovery, named ingresses, nested targets, and Caddy/Cloudflare HTTPS.
 - [Repository-backed Workspaces](repo-workspaces.md): local Gitea registration, persistent workspaces, reconciliation, and Git environment.
 - [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.
 - [Example: Multi-repository Project](../examples/multi-repo-project/README.md): controller/agent separation, reviewed repositories, and a secret-bearing sibling container.
-- [Example: External URLs](../examples/external-urls/README.md): host profiles, controller discovery, and real root/dev/deep reverse-proxy routing.
+- [Example: External URLs](../examples/external-urls/README.md): named ingress discovery and real root/dev/deep reverse-proxy routing.
 - [Plugins](plugins.md): versioned provider extension boundary for optional GitHub, GitLab, and other integrations.
 - [Releasing](releasing.md): release prerequisites, verification, package order, and post-publish checks.
 - [Status](status.md): current progress and known future work.

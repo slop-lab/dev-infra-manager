@@ -22,7 +22,7 @@ describe("DIM controller", () => {
         path: "/things/:id",
         summary: "Test plugin route",
         plugin: "test",
-        discovery: { profiles: ["tailnet"] },
+        discovery: { ingresses: ["tailnet"] },
         async handle(context) {
           const body = await context.readJson() as { port: number };
           const target = await context.resolveTarget({
@@ -49,7 +49,7 @@ describe("DIM controller", () => {
         method: "POST",
         path: "/api/things/:id",
         plugin: "test",
-        discovery: { profiles: ["tailnet"] }
+        discovery: { ingresses: ["tailnet"] }
       }]
     });
     const created = await fetch(`${base}/api/things/item-1`, {
