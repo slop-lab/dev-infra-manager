@@ -3,7 +3,8 @@
 DIM has a versioned, instance-scoped plugin host. Version 0.2.0 does not expose
 a Git-provider abstraction: repository import uses the host's `git` CLI and
 managed repositories live in DIM's Gitea service. Plugins can register typed
-routes on the authenticated DIM controller API; see
+routes and narrowly scoped host-input providers on the authenticated DIM
+controller API; see
 [External workspace URLs](external-urls.md).
 
 Plugin discovery does not depend on a naming convention. Scoped, unscoped, and
@@ -14,6 +15,31 @@ private-registry package names are accepted. For example:
 @company/internal-dim-integration
 dim-plugin-audit
 ```
+
+## Host-input providers
+
+A plugin may register a provider that returns one string for an authenticated
+workspace request:
+
+```ts
+host.registerHostInputProvider("company.developer-setting", {
+  async resolve(request, context) {
+    // request.key is required; request.parameters is an optional string.
+    // context identifies the authenticated Project and workspace.
+    return readAllowedSetting(request.key, context);
+  }
+});
+```
+
+Providers decide which keys and optional parameter strings they accept. DIM
+does not cache results; `.dim/setup.sh` normally requests them again on every
+workspace start. The built-in `builtin.git-author` provider exposes only
+`name` and `email`, corresponding to the host's effective Git `user.name` and
+`user.email`.
+
+The managed controller runs providers on the host. Its authenticated Unix
+socket is mounted into the trusted project-root container, not into nested
+Compose services.
 
 It exports a versioned `DimPlugin`:
 

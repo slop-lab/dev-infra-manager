@@ -1,7 +1,22 @@
 import { UserError } from "./errors.js";
 import type { DimControllerRoute } from "./controller.js";
 
-export const DIM_PLUGIN_API_VERSION = 2 as const;
+export const DIM_PLUGIN_API_VERSION = 3 as const;
+
+export interface HostInputRequest {
+  readonly key: string;
+  readonly parameters?: string;
+}
+
+export interface HostInputContext {
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly workspaceName: string;
+}
+
+export interface HostInputProvider {
+  resolve(request: HostInputRequest, context: HostInputContext): Promise<string>;
+}
 
 export interface DimPluginLogger {
   debug(message: string, fields?: Readonly<Record<string, unknown>>): void;
@@ -14,6 +29,7 @@ export interface DimPluginHost {
   readonly apiVersion: typeof DIM_PLUGIN_API_VERSION;
   readonly logger: DimPluginLogger;
   registerControllerRoute(route: DimControllerRoute): void;
+  registerHostInputProvider(name: string, provider: HostInputProvider): void;
 }
 
 export interface DimPlugin {
@@ -26,12 +42,14 @@ export interface RegisteredDimPlugins {
   readonly host: DimPluginHost;
   readonly plugins: readonly string[];
   readonly controllerRoutes: readonly DimControllerRoute[];
+  readonly hostInputProviders: ReadonlyMap<string, HostInputProvider>;
   dispose(): Promise<void>;
 }
 
 class PluginHost implements DimPluginHost {
   readonly apiVersion = DIM_PLUGIN_API_VERSION;
   readonly routes: DimControllerRoute[] = [];
+  readonly providers = new Map<string, HostInputProvider>();
   registeringPlugin: string | undefined;
   acceptingRegistrations = true;
 
@@ -55,6 +73,21 @@ class PluginHost implements DimPluginHost {
       throw new UserError(`controller route '${route.method} ${route.path}' is already registered`);
     }
     this.routes.push(Object.freeze({ ...route, plugin }));
+  }
+
+  registerHostInputProvider(name: string, provider: HostInputProvider): void {
+    const plugin = this.registeringPlugin ?? "unknown plugin";
+    if (!this.acceptingRegistrations) {
+      throw new UserError(`plugin '${plugin}' attempted host input provider registration after startup`);
+    }
+    if (!/^[a-z0-9][a-z0-9.-]*$/.test(name)) {
+      throw new UserError(`plugin '${plugin}' registered invalid host input provider name '${name}'`);
+    }
+    if (!provider || typeof provider.resolve !== "function") {
+      throw new UserError(`plugin '${plugin}' registered invalid host input provider '${name}'`);
+    }
+    if (this.providers.has(name)) throw new UserError(`host input provider '${name}' is already registered`);
+    this.providers.set(name, provider);
   }
 }
 
@@ -95,6 +128,7 @@ export async function registerPlugins(
     host,
     plugins: [...names],
     controllerRoutes: [...host.routes],
+    hostInputProviders: new Map(host.providers),
     async dispose(): Promise<void> {
       if (disposed) return;
       disposed = true;

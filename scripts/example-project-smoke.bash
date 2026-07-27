@@ -38,6 +38,9 @@ export DIM_CONFIG_PATH="$work_dir/config/dim.json"
 # npm treats an already-installed version as up to date even when a fresh
 # local registry republished different content under that same version.
 export DIM_DATA_HOME="$work_dir/data"
+export GIT_CONFIG_GLOBAL="$work_dir/host.gitconfig"
+git config --file "$GIT_CONFIG_GLOBAL" user.name "Example Host Developer"
+git config --file "$GIT_CONFIG_GLOBAL" user.email "host-developer@dim.invalid"
 bash "$script_dir/configure-user-backend.bash" runc
 
 dim() { "$dim_bin" "$@"; }
@@ -70,6 +73,9 @@ pnpm run workspace:build >/dev/null
 
 echo "[example-project] pack tarballs"
 npm pack packages/core/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/external-url-contracts/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/provider-dns-cloudflare/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/ingress-external-url-caddy/dist --pack-destination "$work_dir" --silent >/dev/null
 npm pack packages/dim-cli/dist --pack-destination "$work_dir" --silent >/dev/null
 npm pack packages/install/dist --pack-destination "$work_dir" --silent >/dev/null
 
@@ -77,6 +83,9 @@ echo "[example-project] 1. install DIM through the installer facade"
 dim_start_local_npm_registry "$work_dir"
 dim_publish_to_local_registry \
   "$work_dir"/*dev-infra-manager-core*.tgz \
+  "$work_dir"/*external-url-contracts*.tgz \
+  "$work_dir"/*provider-dns-cloudflare*.tgz \
+  "$work_dir"/*ingress-external-url-caddy*.tgz \
   "$work_dir"/*dim-cli*.tgz \
   "$work_dir"/*install-dim*.tgz
 mkdir -p "$install_prefix"
@@ -177,6 +186,12 @@ echo "$claude_version" | grep -q "(Claude Code)$"
 # README is real: it prints dim-cli's own version, not codex's.
 test "$(dim run "$workspace_name" codex --version)" != "$codex_version"
 
+dev_git_identity="$(dim exec "$workspace_name" -- \
+  docker compose --file .dim/docker-compose.yml exec -T dev \
+  sh -c 'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
+test "$dev_git_identity" = \
+  "Example Host Developer <host-developer@dim.invalid>|Example Host Developer <host-developer@dim.invalid>"
+
 echo "[example-project] 8. create a nested container from inside the dev container"
 nested_output="$(dim exec "$workspace_name" -- \
   docker compose --file .dim/docker-compose.yml exec -T dev \
@@ -188,17 +203,17 @@ web_content="$(dim exec "$workspace_name" -- sh -c \
   'git clone "$DIM_GIT_BASE_URL/web.git" /tmp/web >/dev/null 2>&1 && cat /tmp/web/app.txt')"
 test "$web_content" = "hello from example-web"
 
-echo "[example-project] 10. deploy the secret-bearing service beside, not inside, the agent container"
+echo "[example-project] 10. deploy and narrowly control the secret-bearing service"
 dim exec "$workspace_name" -- \
   env EXAMPLE_SECRET=not-a-real-secret sh .dim/controller.sh deploy-secret >/dev/null
 
-healthz=""
-for attempt in $(seq 1 30); do
-  healthz="$(dim exec "$workspace_name" -- sh .dim/controller.sh secret-health 2>/dev/null || true)"
-  [[ -n "$healthz" ]] && break
-  sleep 1
-done
-echo "$healthz" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
+status="$(dim run "$workspace_name" secret -- status)"
+echo "$status" | jq -e '.ok == true and .output == "running"' >/dev/null
+dim run "$workspace_name" secret -- stop >/dev/null
+status="$(dim run "$workspace_name" secret -- status)"
+echo "$status" | jq -e '.ok == true and .output == "exited"' >/dev/null
+dim run "$workspace_name" secret -- start >/dev/null
+dim run "$workspace_name" secret -- restart >/dev/null
 
 # The agent container has a different Docker daemon and cannot see the
 # root-level controller's secret-bearing container or raw secret.

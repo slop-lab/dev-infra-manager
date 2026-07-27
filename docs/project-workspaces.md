@@ -79,6 +79,8 @@ COMPOSE_PROFILES
 DIM_GIT_BASE_URL
 DIM_GIT_USERNAME
 DIM_GIT_TOKEN
+DIM_CONTROLLER_SOCKET
+DIM_CONTROLLER_TOKEN
 ```
 
 Selected profiles are passed as repeated arguments:
@@ -91,6 +93,19 @@ The script must be safe to retry after partial failure. It is invoked by
 `create`, `start`, `setup`, and after a
 successful `update`. It is not invoked by `run` or
 `exec`.
+
+The trusted project root can request narrowly defined, non-secret host
+settings from installed providers:
+
+```bash
+name="$(dim-host-input builtin.git-author name)"
+email="$(dim-host-input builtin.git-author email)"
+```
+
+`builtin.git-author` accepts only `name` and `email`; it is not an arbitrary
+Git configuration reader. Providers run in DIM's managed host controller on
+every request, and DIM does not cache their results. The controller socket and
+grant are not inherited by Compose services.
 
 ### `.dim/docker-compose.yml`
 

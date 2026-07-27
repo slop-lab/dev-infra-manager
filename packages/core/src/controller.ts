@@ -65,6 +65,7 @@ export interface ControllerRuntimeContext {
 export interface DimControllerOptions {
   stateRoot: string;
   routes: readonly DimControllerRoute[];
+  hostInputProviders?: RegisteredDimPlugins["hostInputProviders"];
   authenticate(token: string): Promise<ControllerWorkspace | undefined>;
   resolveTarget(
     workspace: ControllerWorkspace,
@@ -83,6 +84,7 @@ export function configuredDimController(
   return createDimController({
     stateRoot: lifecycle.stateRoot,
     routes: plugins.controllerRoutes,
+    hostInputProviders: plugins.hostInputProviders,
     authenticate: async (token) => {
       const workspace = await state.authenticateWorkspaceGrant(token);
       return workspace && {
@@ -143,9 +145,12 @@ async function handleRequest(
   request: IncomingMessage,
   response: ServerResponse
 ): Promise<void> {
+  const url = new URL(request.url ?? "/", "http://dim-controller");
+  if (request.method === "GET" && url.pathname === "/healthz") {
+    return sendJson(response, 200, { ok: true, apiVersion: 1 });
+  }
   const workspace = await authenticate(options, request);
   if (!workspace) return sendJson(response, 401, { error: "invalid workspace grant" });
-  const url = new URL(request.url ?? "/", "http://dim-controller");
   if (request.method === "GET" && url.pathname === "/api") {
     return sendJson(response, 200, {
       apiVersion: 1,
@@ -156,8 +161,31 @@ async function handleRequest(
         summary,
         ...(plugin ? { plugin } : {}),
         ...(discovery ? { discovery } : {})
-      }))
+      })),
+      hostInputProviders: [...(options.hostInputProviders?.keys() ?? [])]
     });
+  }
+  if (request.method === "POST" && url.pathname.startsWith("/api/host-inputs/")) {
+    const name = decodeURIComponent(url.pathname.slice("/api/host-inputs/".length));
+    const provider = options.hostInputProviders?.get(name);
+    if (!provider) return sendJson(response, 404, { error: "host input provider not found" });
+    const body = await readJson(request, options.maxBodyBytes ?? 16_384);
+    if (!body || typeof body !== "object" || typeof (body as { key?: unknown }).key !== "string") {
+      throw new UserError("host input request requires a string key");
+    }
+    const parameters = (body as { parameters?: unknown }).parameters;
+    if (parameters !== undefined && typeof parameters !== "string") {
+      throw new UserError("host input request parameters must be a string");
+    }
+    const value = await provider.resolve({
+      key: (body as { key: string }).key,
+      ...(parameters === undefined ? {} : { parameters })
+    }, {
+      projectId: workspace.projectId,
+      projectName: workspace.projectName,
+      workspaceName: workspace.name
+    });
+    return sendJson(response, 200, { value });
   }
 
   for (const route of options.routes) {

@@ -7,10 +7,12 @@ repositories, creates a real workspace container, runs `codex` and `claude`
 inside a nested dev container that can itself create further containers,
 shows that the trusted project-root controller can reach reviewed repositories,
 and deploys the secret-bearing service inside the project-root workspace
-container but outside the agent's `dev` container and Docker daemon. This is DIM's actual
-purpose: a persistent, isolated container where a coding agent can work
-without ever touching secrets or protected infrastructure directly, not a
-toy.
+container but outside the agent's `dev` container and Docker daemon. The dev
+container can request a few safe lifecycle operations through a narrow
+controller, but cannot read the secret or access the controller's Docker
+socket. This is DIM's actual purpose: a persistent, isolated container where a
+coding agent can work without ever touching secrets or protected
+infrastructure directly, not a toy.
 
 `repos/` in this directory contains the actual repository skeletons used
 below — not a code listing, real files. Copy any of them directly as a
@@ -21,8 +23,11 @@ examples/multi-repo-project/repos/
 ├── root/            the required root repository
 │   └── .dim/
 │       ├── controller.sh
+│       ├── dev/
 │       ├── docker-compose.yml
-│       └── entrypoint.sh
+│       ├── entrypoint.sh
+│       ├── setup.sh
+│       └── secret-control/
 ├── web/              a product repository, unrelated to .dim
 │   └── app.txt
 └── secrets/          a separate, more strictly reviewed repository
@@ -134,7 +139,15 @@ This claims the workspace, clones `example-root` inside its trusted
 project-root container, and runs `.dim/docker-compose.yml`. Its `dev` service
 installs `codex` and `claude` and starts an independent nested Docker daemon,
 so agents can create further containers without access to the project-root
-controller's daemon.
+controller's daemon. `tini` runs as PID 1 and supervises the dev startup
+process.
+
+The reviewed `.dim/setup.sh` reads the host developer's `user.name` and
+`user.email` through DIM's `builtin.git-author` host-input provider each time
+the workspace starts. It writes only those returned values to a temporary
+Compose env file, mapping them to both `GIT_AUTHOR_*` and `GIT_COMMITTER_*` in
+dev. The controller socket and workspace grant stay in the trusted
+project-root container and are not passed to dev.
 
 ## 5. Confirm it's real
 
@@ -204,28 +217,47 @@ repositories](../../docs/repo-workspaces.md#multiple-repositories) for how
 project code is expected to use this in practice (usually from
 `.dim/setup.sh` or a Compose service, not by hand).
 
-## 10. Deploy the secret-bearing service beside the agent container
+## 10. Deploy and control the secret-bearing service
 
-The `secrets` repository is registered above like any other, but its container
-is deliberately **not** part of the agent-facing `.dim/docker-compose.yml`.
+The `secrets` repository is registered above like any other, but its
+secret-bearing container is deliberately **not** part of the agent-facing
+`.dim/docker-compose.yml`.
 The reviewed `.dim/controller.sh` runs in the project-root workspace
 container, fetches the approved `secrets` ref, and uses the project-root
 nested Docker daemon to create the service. It is a sibling of `dev`, not a
 container inside `dev`, and `dev` has a different Docker daemon (see [Trust
 Boundaries](../../specs/02-boundaries-and-trust.md#secret-bearing-runtime-boundary)).
-The agent therefore cannot inspect, stop, or replace it.
+The `secret-control` Compose service has no secret and exposes only
+`start`, `stop`, `restart`, and `status` for the fixed service name. This lets
+the agent operate the service without receiving a Docker socket or an
+interface that returns its configuration.
+
+This is not a general Docker proxy. The reviewed `secret-control` source
+hard-codes `example-secret-service`; an HTTP request can select only one of
+the four listed operations. It cannot supply a container name, Docker
+command, argument, image, environment variable, or secret. Supporting another
+service or operation requires changing and reviewing the root repository
+rather than sending a different runtime request.
 
 ```bash
 dim exec example-dev -- \
   env EXAMPLE_SECRET=not-a-real-secret sh .dim/controller.sh deploy-secret
-dim exec example-dev -- sh .dim/controller.sh secret-health
+dim run example-dev secret -- status
 ```
 
-This prints `{"ok":true,"secretConfigured":true}` — the service is real and
-has the secret, but never returns it. These `dim exec` calls represent a
-trusted operator invoking the controller boundary; they are not agent tasks
-exposed through `.dim/entrypoint.sh`. Confirm the `dev` container received
-neither the secret nor control of the service:
+Deployment remains a trusted operator action because it supplies the secret.
+Afterward an agent can use the deliberately small lifecycle interface:
+
+```bash
+dim run example-dev secret -- stop
+dim run example-dev secret -- start
+dim run example-dev secret -- restart
+dim run example-dev secret -- status
+```
+
+Status reports the lifecycle state but never returns container configuration.
+Confirm dev received neither the secret nor visibility through its private
+Docker daemon:
 
 ```bash
 dim exec example-dev -- docker compose -f .dim/docker-compose.yml \
@@ -236,7 +268,7 @@ dim exec example-dev -- docker compose -f .dim/docker-compose.yml \
 
 The first command prints `0`, and the second does not list
 `example-secret-service`. The project-root controller receives the secret only
-for deployment; the agent environment does not.
+for deployment; neither dev nor `secret-control` receives it.
 
 Tear the example service down explicitly when done:
 

@@ -13,6 +13,7 @@ const output = minifyPackageJson(source, {
 output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };
 output.dependencies["@slop-lab/dev-infra-manager-core"] = "0.2.0";
+output.dependencies["@slop-lab/dim-external-url-contracts"] = "0.1.0";
 delete output.private;
 
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);

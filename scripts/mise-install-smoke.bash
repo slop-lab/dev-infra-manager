@@ -37,12 +37,19 @@ pnpm run workspace:build >/dev/null
 
 echo "[mise-smoke] pack tarballs"
 npm pack packages/core/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/external-url-contracts/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/provider-dns-cloudflare/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/ingress-external-url-caddy/dist --pack-destination "$source_dir" --silent >/dev/null
 npm pack packages/dim-cli/dist --pack-destination "$source_dir" --silent >/dev/null
 npm pack packages/install/dist --pack-destination "$source_dir" --silent >/dev/null
 core_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dev-infra-manager-core*.tgz' -print -quit)"
 cli_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
 install_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*install-dim*.tgz' -print -quit)"
+contracts_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*external-url-contracts*.tgz' -print -quit)"
+cloudflare_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*provider-dns-cloudflare*.tgz' -print -quit)"
+caddy_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*ingress-external-url-caddy*.tgz' -print -quit)"
 test -n "$core_tarball" && test -n "$cli_tarball" && test -n "$install_tarball"
+test -n "$contracts_tarball" && test -n "$cloudflare_tarball" && test -n "$caddy_tarball"
 
 cp "$repo_root/scripts/lib/local-npm-registry.bash" "$source_dir/local-npm-registry.bash"
 
@@ -62,7 +69,13 @@ echo "[container] start local npm registry"
 dim_start_local_npm_registry /work
 
 echo "[container] publish local tarballs to the local registry"
-dim_publish_to_local_registry /work/*dev-infra-manager-core*.tgz /work/*dim-cli*.tgz /work/*install-dim*.tgz
+dim_publish_to_local_registry \
+  /work/*dev-infra-manager-core*.tgz \
+  /work/*external-url-contracts*.tgz \
+  /work/*provider-dns-cloudflare*.tgz \
+  /work/*ingress-external-url-caddy*.tgz \
+  /work/*dim-cli*.tgz \
+  /work/*install-dim*.tgz
 
 echo "[container] install mise ($PINNED_MISE_VERSION)"
 curl -fsSL https://mise.run | MISE_VERSION="$PINNED_MISE_VERSION" sh >/tmp/mise-install.log 2>&1 \

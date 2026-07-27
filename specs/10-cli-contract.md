@@ -94,6 +94,36 @@ updates are rejected without reset.
 bypasses it. `discard` requires `--yes`, attempts project teardown, and removes
 the top-level container, inner-engine volume, and workspace state.
 
+## External URL commands
+
+Host configuration is managed through:
+
+```text
+dim external-url add-provider cloudflare NAME [OPTIONS]
+dim external-url list-providers [--json]
+dim external-url remove-provider NAME
+dim external-url add-ingress NAME [OPTIONS]
+dim external-url list-ingresses [--json]
+dim external-url setup-ingress NAME [--output DIRECTORY]
+dim external-url verify-ingress NAME
+dim external-url remove-ingress NAME [--cleanup-dns]
+```
+
+Workspace-scoped URL operations are:
+
+```text
+dim external-url discover [--workspace WORKSPACE] [--json]
+dim external-url create [--workspace WORKSPACE] --ingress NAME
+  --service SERVICE [--container NAME ...] --port PORT [--protocol http|https]
+dim external-url list [--workspace WORKSPACE] [--json]
+dim external-url remove URL_ID [--workspace WORKSPACE]
+dim host-input get PROVIDER KEY [--parameters STRING]
+```
+
+Inside a workspace the controller endpoint and grant come from
+`DIM_CONTROLLER_SOCKET` and `DIM_CONTROLLER_TOKEN`. On the host, `--workspace`
+loads that workspace's stored grant and uses DIM's managed controller socket.
+
 ## Git integration
 
 ```bash

@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { UserError } from "./errors.js";
 import type { LifecycleOptions } from "./lifecycleTypes.js";
 import { configuredWorkspaceBackend } from "./userConfig.js";
@@ -24,7 +25,16 @@ export function lifecycleOptions(env: NodeJS.ProcessEnv = process.env): Lifecycl
     cpuCount: env.DIM_WORKSPACE_CPUS ?? "2",
     memory: env.DIM_WORKSPACE_MEMORY ?? "4g",
     pidsLimit: env.DIM_WORKSPACE_PIDS ?? "2048",
-    controllerUrl: env.DIM_CONTROLLER_URL ?? "http://host.docker.internal:7070"
+    controllerSocketPath: env.DIM_CONTROLLER_SOCKET
+      ?? path.join(
+        env.XDG_RUNTIME_DIR ?? path.join(os.tmpdir(), `dim-${process.getuid?.() ?? "user"}`),
+        "dim",
+        createHash("sha256")
+          .update(path.resolve(env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim")))
+          .digest("hex")
+          .slice(0, 16),
+        "controller.sock"
+      )
   };
 }
 

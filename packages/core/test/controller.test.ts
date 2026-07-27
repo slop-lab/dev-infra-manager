@@ -68,4 +68,36 @@ describe("DIM controller", () => {
       "container-dns"
     );
   });
+
+  it("resolves registered host inputs with authenticated workspace context", async () => {
+    const resolve = vi.fn(async () => "Developer");
+    const server = createDimController({
+      stateRoot: "/state",
+      authenticate: async (token) => token === "grant"
+        ? { id: "id", name: "work", projectId: "pid", projectName: "project" }
+        : undefined,
+      resolveTarget: vi.fn(),
+      routes: [],
+      hostInputProviders: new Map([["builtin.git-author", { resolve }]])
+    });
+    servers.push(server);
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing address");
+    const response = await fetch(
+      `http://127.0.0.1:${address.port}/api/host-inputs/builtin.git-author`,
+      {
+        method: "POST",
+        headers: { authorization: "Bearer grant", "content-type": "application/json" },
+        body: JSON.stringify({ key: "name" })
+      }
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ value: "Developer" });
+    expect(resolve).toHaveBeenCalledWith(
+      { key: "name" },
+      { projectId: "pid", projectName: "project", workspaceName: "work" }
+    );
+  });
 });

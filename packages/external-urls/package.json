@@ -23,7 +23,8 @@
     "node": ">=22.0.0"
   },
   "dependencies": {
-    "@slop-lab/dev-infra-manager-core": "workspace:0.2.0"
+    "@slop-lab/dev-infra-manager-core": "workspace:0.2.0",
+    "@slop-lab/dim-external-url-contracts": "workspace:0.1.0"
   },
   "devDependencies": {
     "@types/node": "22.15.34",

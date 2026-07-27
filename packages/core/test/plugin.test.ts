@@ -18,14 +18,15 @@ describe("plugin contract", () => {
 
     expect(register).toHaveBeenCalledWith(expect.objectContaining({
       apiVersion: DIM_PLUGIN_API_VERSION,
-      registerControllerRoute: expect.any(Function)
+      registerControllerRoute: expect.any(Function),
+      registerHostInputProvider: expect.any(Function)
     }));
   });
 
   it("rejects unsupported plugin API versions", async () => {
     await expect(registerPlugin({
       name: "@example/future-plugin",
-      apiVersion: 3 as typeof DIM_PLUGIN_API_VERSION,
+      apiVersion: 4 as typeof DIM_PLUGIN_API_VERSION,
       register: vi.fn()
     })).rejects.toThrow(/unsupported DIM plugin API/);
   });
@@ -115,5 +116,24 @@ describe("plugin contract", () => {
       handle: async () => {}
     })).toThrow(/after startup/);
     await registered.dispose();
+  });
+
+  it("registers host input providers and rejects duplicate names", async () => {
+    await expect(registerPlugins([
+      {
+        name: "one",
+        apiVersion: DIM_PLUGIN_API_VERSION,
+        register(host) {
+          host.registerHostInputProvider("example.setting", { resolve: async () => "one" });
+        }
+      },
+      {
+        name: "two",
+        apiVersion: DIM_PLUGIN_API_VERSION,
+        register(host) {
+          host.registerHostInputProvider("example.setting", { resolve: async () => "two" });
+        }
+      }
+    ])).rejects.toThrow(/already registered/);
   });
 });

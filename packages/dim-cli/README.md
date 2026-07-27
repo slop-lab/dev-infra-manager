@@ -104,6 +104,31 @@ dim repo import acme root https://example.com/acme.git --root --ref main
 Import uses the host's local `git` executable and its existing authentication.
 DIM does not define a general Git-provider abstraction.
 
+## External workspace URLs
+
+The optional external URL system plugin exposes named ingresses. Configure a
+local ingress and operate it from the host without project-specific curl
+tasks:
+
+```bash
+dim external-url add-ingress local-http \
+  --driver builtin-http \
+  --description "Local development URL" \
+  --scheme http \
+  --domain dev.test \
+  --listen-host 0.0.0.0 \
+  --listen-port 8080 \
+  --port 8080
+
+dim external-url discover --workspace work-1
+dim external-url create --workspace work-1 \
+  --ingress local-http --service web --container dev --port 3000
+dim external-url list --workspace work-1
+```
+
+Cloudflare DNS and Caddy HTTPS setup are documented in
+[`docs/external-urls.md`](../../docs/external-urls.md).
+
 Create and enter a persistent workspace:
 
 ```bash

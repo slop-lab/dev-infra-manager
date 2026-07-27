@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -123,6 +123,65 @@ describe("external URLs plugin", () => {
         }
       }
     })).toThrow(/scheme must be http or https/);
+  });
+
+  it("migrates stored profile/provider entries to ingress state", async () => {
+    const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-migrate-"));
+    close.push(() => rm(stateRoot, { recursive: true, force: true }));
+    const entryId = "12345678-1234-1234-1234-123456789abc";
+    const directory = path.join(stateRoot, "plugins", "external-urls", Buffer.from("id").toString("base64url"));
+    const target = path.join(directory, `${entryId}.json`);
+    await mkdir(directory, { recursive: true });
+    await writeFile(target, JSON.stringify({
+      id: entryId,
+      workspace: "work-1",
+      workspaceId: "id",
+      profile: "local-http",
+      urlProvider: "tailscale",
+      service: "dev",
+      target: { containers: ["dev"], port: 8080, protocol: "http" },
+      route: {
+        id: "route-id",
+        provider: "reverse-proxy",
+        providerId: "dev--work-1",
+        authority: "dev--work-1"
+      },
+      url: "http://dev--work-1.dev.test/",
+      createdAt: "2026-07-26T00:00:00.000Z"
+    }));
+    const registered = await registerPlugins([createExternalUrlsPlugin({
+      ingresses: {
+        "local-http": {
+          description: "Local",
+          scheme: "http",
+          domain: "dev.test",
+          listenHost: "127.0.0.1",
+          listenPort: await availablePort()
+        }
+      }
+    })]);
+    close.push(() => registered.dispose());
+    const controller = createDimController({
+      stateRoot,
+      routes: registered.controllerRoutes,
+      authenticate: async () => ({ id: "id", name: "work-1", projectId: "pid", projectName: "project" }),
+      resolveTarget: async () => ({ protocol: "http", host: "127.0.0.1", port: 8080 })
+    });
+    controller.listen(0, "127.0.0.1");
+    await once(controller, "listening");
+    close.push(() => new Promise((resolve) => controller.close(() => resolve())));
+    const address = controller.address();
+    if (!address || typeof address === "string") throw new Error("missing controller address");
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/urls`, {
+      headers: { authorization: "Bearer grant" }
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ urls: [{ ingress: "local-http" }] });
+    expect(JSON.parse(await readFile(target, "utf8"))).toMatchObject({
+      ingress: "local-http",
+      route: { ingress: "reverse-proxy", ingressId: "dev--work-1" }
+    });
+    expect(await readFile(target, "utf8")).not.toContain('"profile"');
   });
 });
 

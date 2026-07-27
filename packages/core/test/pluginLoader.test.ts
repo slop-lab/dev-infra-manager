@@ -75,7 +75,7 @@ describe("plugin loader configuration", () => {
     await writeFile(join(packageRoot, "index.js"), `
       export default {
         name: "@example/github",
-        apiVersion: 2,
+        apiVersion: 3,
         register() {}
       };
     `);
@@ -86,7 +86,8 @@ describe("plugin loader configuration", () => {
 
     const loaded = await loadInstalledPlugins(root);
     expect(loaded.manifest.plugins).toEqual(["@example/github"]);
-    expect(loaded.registered.plugins).toEqual(["@example/github"]);
+    expect(loaded.registered.plugins).toEqual(["builtin.host-inputs", "@example/github"]);
+    expect(loaded.registered.hostInputProviders.has("builtin.git-author")).toBe(true);
     await loaded.registered.dispose();
   });
 });

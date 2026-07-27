@@ -8,6 +8,12 @@ Current packages:
 - `core`: runtime, lifecycle, managed Git, state, and versioned plugin/provider
   APIs. It has no dependency on CLI parsing.
 - `dim-cli`: thin executable adapter over core.
+- `external-url-contracts`: provider-neutral external URL configuration and
+  persistence schema.
+- `external-urls`: controller system plugin and workspace-aware ingress router.
+- `provider-dns-cloudflare`: Cloudflare wildcard DNS reconciliation adapter.
+- `ingress-external-url-caddy`: pinned Caddy/Cloudflare DNS-01 deployment
+  generator and verifier.
 - `install`: thin `dim-cli` installer/facade (`@slop-lab/install-dim`,
   `npx @slop-lab/install-dim` or `mise use -g npm:@slop-lab/install-dim`);
   owns only `install-cli`/`install-plugin`/`installer` and proxies every

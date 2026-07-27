@@ -160,7 +160,7 @@ describe("project and workspace lifecycle", () => {
       token: "token",
       userName: "Agent",
       userEmail: "agent@example.invalid"
-    }, "work-1.external-url-grant");
+    }, "work-1.controller-grant");
     expect(args).toEqual(expect.arrayContaining([
       "--name", "dim-ws-work-1",
       "--label", "dim.managed=true",
@@ -173,13 +173,13 @@ describe("project and workspace lifecycle", () => {
       "--env", "DIM_GIT_USERNAME=writer",
       "--env", "DIM_GIT_TOKEN=token",
       "--add-host", "host.docker.internal:host-gateway",
-      "--env", "DIM_CONTROLLER_API=http://host.docker.internal:7070",
-      "--env", "DIM_CONTROLLER_TOKEN=work-1.external-url-grant",
+      "--mount", `type=bind,source=${join(options.controllerSocketPath, "..")},target=/run/dim/controller`,
+      "--env", "DIM_CONTROLLER_SOCKET=/run/dim/controller/controller.sock",
+      "--env", "DIM_CONTROLLER_TOKEN=work-1.controller-grant",
       "--env", "GIT_CONFIG_VALUE_0=Agent",
       "--privileged"
     ]));
     expect(args).not.toContain("--rm");
-    expect(args.join(" ")).not.toContain("type=bind");
     expect(args.join(" ")).not.toContain("docker.sock");
   });
 

@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { UserError } from "./errors.js";
 import { registerPlugins, type DimPlugin, type RegisteredDimPlugins } from "./plugin.js";
+import { builtInHostInputPlugin } from "./hostInputs.js";
 import { dimUserConfigPath } from "./userConfig.js";
 
 export interface PluginManifest {
@@ -96,5 +97,5 @@ export async function loadInstalledPlugins(home = pluginHome()): Promise<{
     plugins.push(plugin);
   }
 
-  return { manifest, registered: await registerPlugins(plugins) };
+  return { manifest, registered: await registerPlugins([builtInHostInputPlugin, ...plugins]) };
 }

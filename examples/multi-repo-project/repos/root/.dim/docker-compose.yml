@@ -1,8 +1,10 @@
 services:
   dev:
-    image: docker:29.1.3-dind
+    build: ./dev
     privileged: true
     working_dir: /workspace
+    env_file:
+      - /tmp/dim-host-inputs.env
     environment:
       DOCKER_TLS_CERTDIR: ""
     # The agent gets its own daemon, not the project-root controller's daemon.
@@ -10,14 +12,14 @@ services:
     # that the controller starts at the project-root level.
     volumes:
       - dev-docker:/var/lib/docker
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        dockerd-entrypoint.sh dockerd >/var/log/dockerd.log 2>&1 &
-        until docker info >/dev/null 2>&1; do sleep 1; done
-        apk add --no-cache nodejs npm >/dev/null
-        npm install --global @openai/codex @anthropic-ai/claude-code >/dev/null
-        exec sleep infinity
+      - ..:/workspace
+
+  # This proxy has no secret. It exposes only the few lifecycle operations
+  # that the dev container needs for the fixed secret-bearing service.
+  secret-control:
+    build: ./secret-control
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   dev-docker:

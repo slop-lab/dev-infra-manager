@@ -19,8 +19,7 @@ examples/external-urls/
 ├── README.md
 └── repo/
     ├── .dim/
-    │   ├── docker-compose.yml
-    │   └── entrypoint.sh
+    │   └── docker-compose.yml
     └── dev/
         ├── Dockerfile
         └── start.sh
@@ -28,20 +27,17 @@ examples/external-urls/
 
 ## Host ingress
 
-The host runs `dim controller serve` with one named HTTP ingress:
+Configure one named HTTP ingress on the host:
 
 ```bash
-export DIM_EXTERNAL_URL_INGRESSES='{
-  "local-http": {
-    "description": "Local HTTP development URL",
-    "scheme": "http",
-    "domain": "host.tail.test",
-    "port": 8080,
-    "listenHost": "0.0.0.0",
-    "listenPort": 8080,
-    "upstreamMode": "container-ip"
-  }
-}'
+dim external-url add-ingress local-http \
+  --driver builtin-http \
+  --description "Local HTTP development URL" \
+  --scheme http \
+  --domain host.tail.test \
+  --port 8080 \
+  --listen-host 0.0.0.0 \
+  --listen-port 8080
 
 dim controller serve
 ```
@@ -59,14 +55,18 @@ root, and create a development workspace. Its normal setup starts `dev` and
 
 ```bash
 dim create external external-dev --profile development
-dim run external-dev discover | jq '.routes[] | select(.path == "/api/urls")'
-dim run external-dev expose-dev local-http
-dim run external-dev expose-deep local-http
+dim external-url discover --workspace external-dev
+dim external-url create --workspace external-dev \
+  --ingress local-http --service dev --container dev --port 8080
+dim external-url create --workspace external-dev \
+  --ingress local-http --service deep \
+  --container dev --container deep --port 5678
 ```
 
-The requests select only a host-configured ingress. They cannot select a raw
-domain, listener, hostname, IP, or upstream. `containers: ["dev"]` resolves the
-Compose service inside the project-root container. `["dev", "deep"]` resolves
+The project contains no external-URL-specific task or curl wrapper. Host CLI
+requests select only a configured ingress. They cannot select a raw domain,
+listener, hostname, IP, or upstream. `--container dev` resolves the Compose
+service inside the project-root container. Repeating `--container` resolves
 the nested container's published port through `dev`.
 
 ## Verification
@@ -74,8 +74,10 @@ the nested container's published port through `dev`.
 `scripts/external-url-example-smoke.bash` runs the complete example with a host
 controller and named ingress. The host-side harness builds unpublished local
 packages, constructs controller state, allocates ports and Docker networks,
-and performs cleanup. It uses dnsmasq for wildcard test DNS and checks both
-generated URLs from separate disposable curl containers:
+and performs cleanup. It uses dnsmasq for the HTTP ingress and checks both
+generated URLs from separate disposable curl containers. It also runs a
+Cloudflare-compatible API with authoritative CoreDNS to verify provider
+creation, wildcard resolution, and cleanup:
 
 ```bash
 just verify-example-external-urls

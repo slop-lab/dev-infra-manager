@@ -16,6 +16,7 @@ import {
   type ResolvedWorkspaceTarget,
   type WorkspaceTarget
 } from "@slop-lab/dev-infra-manager-core";
+import { readExternalUrlConfig } from "@slop-lab/dim-external-url-contracts";
 
 export interface ExternalUrlIngressOptions {
   description: string;
@@ -150,11 +151,11 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
   };
 }
 
-export function externalUrlsPluginFromEnv(env: NodeJS.ProcessEnv = process.env): DimPlugin {
-  if (!env.DIM_EXTERNAL_URL_INGRESSES) {
-    throw new Error("DIM_EXTERNAL_URL_INGRESSES is required");
-  }
-  return createExternalUrlsPlugin({ ingresses: parseIngresses(env.DIM_EXTERNAL_URL_INGRESSES) });
+export async function externalUrlsPluginFromConfig(
+  env: NodeJS.ProcessEnv = process.env
+): Promise<DimPlugin> {
+  const config = await readExternalUrlConfig(env, { required: true });
+  return createExternalUrlsPlugin({ ingresses: config.ingresses });
 }
 
 async function listUrls(context: ControllerRouteContext) {
@@ -220,9 +221,12 @@ class ExternalUrlStore {
     const directory = this.directory(workspaceId);
     try {
       const names = await readdir(directory);
-      return await Promise.all(names.filter((name) => name.endsWith(".json")).map(async (name) =>
-        JSON.parse(await readFile(path.join(directory, name), "utf8")) as StoredUrl
-      ));
+      return await Promise.all(names.filter((name) => name.endsWith(".json")).map(async (name) => {
+        const value = JSON.parse(await readFile(path.join(directory, name), "utf8")) as unknown;
+        const normalized = normalizeStoredUrl(value);
+        if (normalized.migrated) await this.put(normalized.entry);
+        return normalized.entry;
+      }));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw error;
@@ -434,14 +438,6 @@ function validateOptions(options: ExternalUrlsPluginOptions): void {
   }
 }
 
-function parseIngresses(value: string): Readonly<Record<string, ExternalUrlIngressOptions>> {
-  const parsed = JSON.parse(value) as unknown;
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("DIM_EXTERNAL_URL_INGRESSES must be a JSON object");
-  }
-  return parsed as Record<string, ExternalUrlIngressOptions>;
-}
-
 function required<T>(values: ReadonlyMap<string, T>, name: string): T {
   const value = values.get(name);
   if (!value) throw new UserError(`external URL ingress '${name}' is not configured`);
@@ -466,6 +462,46 @@ function storedRequest(entry: StoredUrl): NormalizedRequest {
     service: entry.service,
     target: entry.target,
     ...(entry.path === undefined ? {} : { path: entry.path })
+  };
+}
+
+function normalizeStoredUrl(value: unknown): { entry: StoredUrl; migrated: boolean } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("invalid stored external URL");
+  }
+  const candidate = value as StoredUrl & {
+    profile?: string;
+    urlProvider?: string;
+    route: ExternalRoute & { provider?: string; providerId?: string };
+  };
+  const ingress = candidate.ingress ?? candidate.profile;
+  if (!ingress) throw new Error(`stored external URL '${candidate.id}' has no ingress`);
+  const routeIngress = candidate.route.ingress ?? candidate.route.provider ?? ingress;
+  const entry: StoredUrl = {
+    id: candidate.id,
+    workspace: candidate.workspace,
+    workspaceId: candidate.workspaceId,
+    ingress,
+    service: candidate.service,
+    target: candidate.target,
+    ...(candidate.path === undefined ? {} : { path: candidate.path }),
+    route: {
+      id: candidate.route.id,
+      ingress: routeIngress,
+      authority: candidate.route.authority,
+      ...(candidate.route.ingressId ?? candidate.route.providerId
+        ? { ingressId: candidate.route.ingressId ?? candidate.route.providerId }
+        : {})
+    },
+    url: candidate.url,
+    createdAt: candidate.createdAt
+  };
+  return {
+    entry,
+    migrated: candidate.ingress === undefined
+      || candidate.route.ingress === undefined
+      || candidate.profile !== undefined
+      || candidate.urlProvider !== undefined
   };
 }
 
@@ -505,8 +541,8 @@ function upstreamMode(value: string): "container-dns" | "container-ip" {
 const plugin: DimPlugin = {
   name: "@slop-lab/dim-plugin-external-urls",
   apiVersion: DIM_PLUGIN_API_VERSION,
-  register(host) {
-    return externalUrlsPluginFromEnv().register(host);
+  async register(host) {
+    return (await externalUrlsPluginFromConfig()).register(host);
   }
 };
 

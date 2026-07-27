@@ -1,3 +1,4 @@
+import path from "node:path";
 import { UserError } from "./errors.js";
 import { ensureGitea, giteaNestedBaseUrl, GITEA_NETWORK } from "./gitea.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
@@ -355,6 +356,7 @@ async function reconcileProject(
       };
       await state.writeWorkspace(record);
       await reconcileContainer(runner, options, record, gitEnvironment(record, credentials));
+      await installHostInputHelper(runner, record);
       await ensureClone(runner, record, repo.workspaceUrl);
       await writeProjectManifest(runner, record, project);
       record = { ...record, updatedAt: new Date().toISOString() };
@@ -417,7 +419,7 @@ async function reconcileContainer(
   git: WorkspaceGitEnvironment
 ): Promise<void> {
   await reconcileDockerVolume(runner, record);
-  const externalUrlGrant = await new LifecycleState(options.stateRoot).ensureWorkspaceGrant(record.name);
+  const controllerGrant = await new LifecycleState(options.stateRoot).ensureWorkspaceGrant(record.name);
   const inspectArgs = [
     "container", "inspect", record.containerName,
     "--format",
@@ -425,7 +427,7 @@ async function reconcileContainer(
   ];
   let inspect = await runner.run("docker", inspectArgs);
   if (inspect.exitCode !== 0) {
-    const created = await runner.run("docker", workspaceContainerArgs(options, record, git, externalUrlGrant));
+    const created = await runner.run("docker", workspaceContainerArgs(options, record, git, controllerGrant));
     if (created.exitCode !== 0) {
       inspect = await runner.run("docker", inspectArgs);
       if (inspect.exitCode !== 0) {
@@ -486,7 +488,7 @@ export function workspaceContainerArgs(
   options: LifecycleOptions,
   record: WorkspaceRecord,
   git: WorkspaceGitEnvironment,
-  externalUrlGrant?: string
+  controllerGrant?: string
 ): string[] {
   const plan = workspaceRuntimePlan(record.runtimeBackend, options);
   const args = [
@@ -500,6 +502,7 @@ export function workspaceContainerArgs(
     "--memory-swap", record.memory,
     "--pids-limit", record.pidsLimit,
     "--mount", `type=volume,source=${record.dockerVolumeName},target=${plan.runtimeDataPath}`,
+    "--mount", `type=bind,source=${path.dirname(options.controllerSocketPath)},target=/run/dim/controller`,
     "--label", "dim.managed=true",
     "--label", `dim.workspace=${record.name}`,
     "--label", `dim.project=${record.projectName}`,
@@ -510,7 +513,7 @@ export function workspaceContainerArgs(
     "--env", `DIM_GIT_TOKEN=${git.token}`,
     "--env", `DIM_GIT_USER_NAME=${git.userName}`,
     "--env", `DIM_GIT_USER_EMAIL=${git.userEmail}`,
-    "--env", `DIM_CONTROLLER_API=${options.controllerUrl}`,
+    "--env", "DIM_CONTROLLER_SOCKET=/run/dim/controller/controller.sock",
     "--env", "GIT_ASKPASS=/usr/local/bin/dim-git-askpass",
     "--env", "GIT_TERMINAL_PROMPT=0",
     "--env", "GIT_CONFIG_COUNT=2",
@@ -519,7 +522,7 @@ export function workspaceContainerArgs(
     "--env", "GIT_CONFIG_KEY_1=user.email",
     "--env", `GIT_CONFIG_VALUE_1=${git.userEmail}`
   ];
-  if (externalUrlGrant) args.push("--env", `DIM_CONTROLLER_TOKEN=${externalUrlGrant}`);
+  if (controllerGrant) args.push("--env", `DIM_CONTROLLER_TOKEN=${controllerGrant}`);
   for (const capability of plan.capabilities) args.push("--cap-add", capability);
   for (const securityOption of plan.securityOptions) args.push("--security-opt", securityOption);
   for (const device of plan.devices) args.push("--device", device);
@@ -626,6 +629,42 @@ async function writeProjectManifest(
     `mkdir -p /run/dim && printf %s "$DIM_PROJECT_MANIFEST_B64" | base64 -d > ${record.projectManifestPath} && chown ${WORKSPACE_USER}:${WORKSPACE_USER} ${record.projectManifestPath} && chmod 0444 ${record.projectManifestPath}`
   ]);
   if (result.exitCode !== 0) throw commandError("write project runtime manifest", result);
+}
+
+const HOST_INPUT_HELPER = `#!/usr/bin/env sh
+set -eu
+provider="\${1:?host input provider is required}"
+key="\${2:?host input key is required}"
+parameters="\${3-}"
+: "\${DIM_CONTROLLER_SOCKET:?DIM_CONTROLLER_SOCKET is required}"
+: "\${DIM_CONTROLLER_TOKEN:?DIM_CONTROLLER_TOKEN is required}"
+if [ "$#" -ge 3 ]; then
+  body="$(jq -cn --arg key "$key" --arg parameters "$parameters" '{key: $key, parameters: $parameters}')"
+else
+  body="$(jq -cn --arg key "$key" '{key: $key}')"
+fi
+curl --fail --silent --show-error \\
+  --unix-socket "$DIM_CONTROLLER_SOCKET" \\
+  --header "Authorization: Bearer $DIM_CONTROLLER_TOKEN" \\
+  --header "Content-Type: application/json" \\
+  --data "$body" \\
+  "http://dim-controller/api/host-inputs/$provider" |
+  jq -er '.value'
+`;
+
+async function installHostInputHelper(
+  runner: StreamingCommandRunner,
+  record: WorkspaceRecord
+): Promise<void> {
+  const encoded = Buffer.from(HOST_INPUT_HELPER).toString("base64");
+  const result = await runner.run("docker", [
+    "exec", "--user", "root",
+    "--env", `DIM_HOST_INPUT_HELPER_B64=${encoded}`,
+    record.containerName,
+    "sh", "-c",
+    "printf %s \"$DIM_HOST_INPUT_HELPER_B64\" | base64 -d > /usr/local/bin/dim-host-input && chmod 0755 /usr/local/bin/dim-host-input"
+  ]);
+  if (result.exitCode !== 0) throw commandError("install host input helper", result);
 }
 
 async function runProjectSetup(

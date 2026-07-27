@@ -33,8 +33,8 @@ specifications that changes should stay consistent with.
 ## Publishing packages
 
 See [docs/releasing.md](docs/releasing.md) for prerequisites, the
-verification gate, and the publish order (core, then `dim-cli`, then
-`install-dim`).
+verification gate, and the publish order (core and shared integration
+libraries, then `dim-cli`, then `install-dim`).
 
 ## Bootstrapping a fresh dev host
 

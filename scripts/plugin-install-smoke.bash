@@ -26,7 +26,7 @@ printf '%s\n' \
 printf '%s\n' \
   'export default {' \
   '  name: "@example/dim-plugin-smoke",' \
-  '  apiVersion: 2,' \
+  '  apiVersion: 3,' \
   '  register() {}' \
   '};' \
   > "$plugin_source/index.js"

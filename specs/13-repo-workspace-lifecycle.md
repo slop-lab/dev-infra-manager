@@ -96,7 +96,16 @@ DIM_GIT_USER_NAME
 DIM_GIT_USER_EMAIL
 GIT_ASKPASS
 GIT_TERMINAL_PROMPT
+DIM_CONTROLLER_SOCKET
+DIM_CONTROLLER_TOKEN
 ```
+
+Before `create`, `start`, `setup`, or `update` runs Project setup, DIM must
+ensure its managed controller is healthy. The host controller listens on a
+state-root-specific Unix socket directory mounted at `/run/dim/controller` in
+the trusted workspace root. Mounting the directory, rather than the socket
+inode alone, keeps existing workspace mounts valid when the controller
+restarts. Nested Project services do not inherit the mount or grant.
 
 `DIM_GIT_BASE_URL` is Project-specific. Project lifecycle code appends its
 own stable managed repository names and owns all checkout paths and

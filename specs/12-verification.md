@@ -130,6 +130,11 @@ override. See [Installer Facade](14-installer-facade.md).
 host-configured ingress, dnsmasq wildcard DNS, a project-root workspace,
 the nested `dev` Compose service, a further `deep` container, root relay,
 reverse proxy, ingress discovery, URL creation, HTTP access, and revocation.
+It also reconciles an ingress through a local Cloudflare-compatible API,
+resolves the resulting wildcard through authoritative CoreDNS, and verifies
+provider cleanup without external credentials.
+Ingress discovery, creation, and revocation must run through the public
+`dim external-url` CLI rather than project-specific curl wrappers.
 
 `just verify-example-multi-repo-project` requires Docker and managed Gitea. It
 materializes the three repository skeletons under

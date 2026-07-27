@@ -16,7 +16,10 @@ const output = minifyPackageJson(source, {
 
 output.dependencies = {
   ...output.dependencies,
-  "@slop-lab/dev-infra-manager-core": source.version
+  "@slop-lab/dev-infra-manager-core": source.version,
+  "@slop-lab/dim-external-url-contracts": "0.1.0",
+  "@slop-lab/dim-ingress-external-url-caddy": "0.1.0",
+  "@slop-lab/dim-provider-dns-cloudflare": "0.1.0"
 };
 output.bin = {
   dim: "cli.js"

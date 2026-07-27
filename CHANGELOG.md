@@ -13,6 +13,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   environment variables with provider-agnostic named ingresses. Each ingress
   now owns its public scheme/domain and internal reverse-proxy listener, and
   workspace requests select it with `ingress`.
+- Added persistent `dim external-url` provider/ingress and workspace URL
+  commands, a Cloudflare wildcard DNS adapter, a pinned Caddy HTTPS deployment
+  generator, and automatic migration of stored profile/provider URL entries.
 - Renamed the `@slop-lab/install-dim` executable from `install-dim` to
   `dim`, and its subcommands from `cli`/`plugin` to `install-cli`/
   `install-plugin`, so both `mise use -g npm:@slop-lab/install-dim` and

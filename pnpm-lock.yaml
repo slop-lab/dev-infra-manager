@@ -28,6 +28,15 @@ importers:
       '@slop-lab/dev-infra-manager-core':
         specifier: workspace:0.2.0
         version: link:../core
+      '@slop-lab/dim-external-url-contracts':
+        specifier: workspace:0.1.0
+        version: link:../external-url-contracts
+      '@slop-lab/dim-ingress-external-url-caddy':
+        specifier: workspace:0.1.0
+        version: link:../ingress-external-url-caddy
+      '@slop-lab/dim-provider-dns-cloudflare':
+        specifier: workspace:0.1.0
+        version: link:../provider-dns-cloudflare
       commander:
         specifier: 14.0.0
         version: 14.0.0
@@ -45,11 +54,48 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  packages/external-url-contracts:
+    devDependencies:
+      '@types/node':
+        specifier: 22.15.34
+        version: 22.15.34
+      package.json-minifier:
+        specifier: 0.0.6
+        version: 0.0.6
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+      vitest:
+        specifier: 3.2.4
+        version: 3.2.4(@types/node@22.15.34)(tsx@4.20.3)
+
   packages/external-urls:
     dependencies:
       '@slop-lab/dev-infra-manager-core':
         specifier: workspace:0.2.0
         version: link:../core
+      '@slop-lab/dim-external-url-contracts':
+        specifier: workspace:0.1.0
+        version: link:../external-url-contracts
+    devDependencies:
+      '@types/node':
+        specifier: 22.15.34
+        version: 22.15.34
+      package.json-minifier:
+        specifier: 0.0.6
+        version: 0.0.6
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+      vitest:
+        specifier: 3.2.4
+        version: 3.2.4(@types/node@22.15.34)(tsx@4.20.3)
+
+  packages/ingress-external-url-caddy:
+    dependencies:
+      '@slop-lab/dim-external-url-contracts':
+        specifier: workspace:0.1.0
+        version: link:../external-url-contracts
     devDependencies:
       '@types/node':
         specifier: 22.15.34
@@ -65,6 +111,25 @@ importers:
         version: 3.2.4(@types/node@22.15.34)(tsx@4.20.3)
 
   packages/install:
+    devDependencies:
+      '@types/node':
+        specifier: 22.15.34
+        version: 22.15.34
+      package.json-minifier:
+        specifier: 0.0.6
+        version: 0.0.6
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+      vitest:
+        specifier: 3.2.4
+        version: 3.2.4(@types/node@22.15.34)(tsx@4.20.3)
+
+  packages/provider-dns-cloudflare:
+    dependencies:
+      '@slop-lab/dim-external-url-contracts':
+        specifier: workspace:0.1.0
+        version: link:../external-url-contracts
     devDependencies:
       '@types/node':
         specifier: 22.15.34
