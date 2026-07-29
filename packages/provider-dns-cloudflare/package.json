@@ -22,7 +22,7 @@
     "test": "vitest run"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": "^24.0.0 || ^26.0.0"
   },
   "publishConfig": {
     "access": "public"
@@ -31,7 +31,7 @@
     "@slop-lab/dim-external-url-contracts": "workspace:0.2.0"
   },
   "devDependencies": {
-    "@types/node": "22.15.34",
+    "@types/node": "24.13.3",
     "package.json-minifier": "0.0.6",
     "typescript": "5.8.3",
     "vitest": "3.2.4"

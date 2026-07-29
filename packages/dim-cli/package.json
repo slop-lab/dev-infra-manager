@@ -30,7 +30,7 @@
     "cli": "tsx src/cli.ts"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": "^24.0.0 || ^26.0.0"
   },
   "publishConfig": {
     "access": "public"
@@ -43,7 +43,7 @@
     "commander": "14.0.0"
   },
   "devDependencies": {
-    "@types/node": "22.15.34",
+    "@types/node": "24.13.3",
     "package.json-minifier": "0.0.6",
     "tsx": "4.20.3",
     "typescript": "5.8.3"

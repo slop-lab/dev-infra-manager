@@ -28,7 +28,9 @@ refreshes explicit.
 
 ## Requirements
 
-- Linux with Node.js 22 or newer.
+- Linux with a supported Node.js LTS release line. DIM 0.2 supports Node.js
+  24; Node.js 26 is also accepted and validated ahead of its scheduled LTS
+  transition.
 - Git and a working Docker CLI/daemon. DIM always uses Docker to manage the
   outer workspace container, regardless of the selected backend.
 - A supported workspace backend: Sysbox, gVisor, rootless Podman, or

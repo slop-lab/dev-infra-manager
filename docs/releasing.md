@@ -9,6 +9,10 @@
 
 ## Verify
 
+CI runs the package checks on every supported Node.js LTS line and each
+release scheduled to become LTS (currently Node.js 24 and 26). Container and
+Sysbox integration checks use the newest validated line.
+
 ```bash
 pnpm install --frozen-lockfile
 just check

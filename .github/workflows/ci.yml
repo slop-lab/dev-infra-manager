@@ -10,8 +10,13 @@ permissions:
 
 jobs:
   check:
+    name: check (Node.js ${{ matrix.node-version }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [24, 26]
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -19,7 +24,7 @@ jobs:
           version: 10.13.1
       - uses: actions/setup-node@v7
         with:
-          node-version: 26
+          node-version: ${{ matrix.node-version }}
           cache: pnpm
       - run: sudo apt-get update && sudo apt-get install --yes just jq
       - run: pnpm install --frozen-lockfile

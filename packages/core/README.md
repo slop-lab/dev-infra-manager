@@ -23,8 +23,9 @@ Pin the same reviewed release used by the CLI:
 npm install --save-exact "@slop-lab/dev-infra-manager-core@0.2.0"
 ```
 
-The package is ESM-only, requires Node.js 22 or newer, and includes TypeScript
-declarations.
+The package is ESM-only, supports the Node.js 24 LTS release line, and includes
+TypeScript declarations. Node.js 26 is also accepted and validated ahead of
+its scheduled LTS transition.
 
 ## Basic use
 

@@ -4,7 +4,9 @@
 
 The development toolchain uses:
 
-- Node.js 22 or newer.
+- A supported Node.js LTS release line. DIM 0.2 supports Node.js 24. Releases
+  scheduled to become LTS, currently Node.js 26, are also validated during
+  development before they enter the supported set.
 - pnpm 10 or newer.
 - just.
 - TypeScript.
