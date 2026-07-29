@@ -12,8 +12,8 @@ const output = minifyPackageJson(source, {
 });
 output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };
-output.dependencies["@slop-lab/dev-infra-manager-core"] = source.version;
-output.dependencies["@slop-lab/dim-plugin-external-url-contracts"] = source.version;
+output.dependencies["@slop-lab/dim-core"] = source.version;
+output.dependencies["@slop-lab/dim-contracts-external-url"] = source.version;
 delete output.private;
 
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);

@@ -15,8 +15,8 @@ import {
   type DimPluginLogger,
   type ResolvedWorkspaceTarget,
   type WorkspaceTarget
-} from "@slop-lab/dev-infra-manager-core";
-import { readExternalUrlConfig } from "@slop-lab/dim-plugin-external-url-contracts";
+} from "@slop-lab/dim-core";
+import { readExternalUrlConfig } from "@slop-lab/dim-contracts-external-url";
 
 export interface ExternalUrlIngressOptions {
   description: string;

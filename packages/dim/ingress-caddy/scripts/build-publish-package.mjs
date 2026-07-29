@@ -11,7 +11,7 @@ const output = minifyPackageJson(source, {
 });
 output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };
-output.dependencies["@slop-lab/dim-plugin-external-url-contracts"] = source.version;
+output.dependencies["@slop-lab/dim-contracts-external-url"] = source.version;
 delete output.private;
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));

@@ -1,12 +1,12 @@
 {
-  "name": "@slop-lab/dim-plugin-external-url-contracts",
+  "name": "@slop-lab/dim-provider-dns-cloudflare",
   "version": "0.2.0",
-  "description": "Configuration and extension contracts for DIM external URL integrations",
+  "description": "Cloudflare wildcard DNS provider for DIM external URL ingresses",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/slop-lab/dev-infra-manager.git",
-    "directory": "packages/dim-plugin/external-url-contracts"
+    "directory": "packages/dim/provider-dns-cloudflare"
   },
   "private": true,
   "type": "module",
@@ -31,6 +31,9 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@slop-lab/dim-contracts-external-url": "workspace:0.2.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

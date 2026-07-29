@@ -39,22 +39,22 @@ import {
   stopWorkspace,
   updateWorkspace,
   UserError,
-} from "@slop-lab/dev-infra-manager-core";
+} from "@slop-lab/dim-core";
 import {
   readExternalUrlConfig,
   writeExternalUrlConfig,
   type CaddyIngressConfig,
   type ExternalUrlIngressConfig
-} from "@slop-lab/dim-plugin-external-url-contracts";
+} from "@slop-lab/dim-contracts-external-url";
 import {
   renderCaddyDeployment,
   verifyCaddyIngress
-} from "@slop-lab/dim-plugin-ingress-external-url-caddy";
+} from "@slop-lab/dim-ingress-caddy";
 import {
   ensureCloudflareWildcard,
   removeCloudflareWildcard,
   verifyCloudflareWildcard
-} from "@slop-lab/dim-plugin-provider-dns-cloudflare";
+} from "@slop-lab/dim-provider-dns-cloudflare";
 
 const runner = new ProcessRunner();
 const program = new Command();

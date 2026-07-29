@@ -1,7 +1,7 @@
 import type {
   CaddyIngressConfig,
   CloudflareDnsProviderConfig
-} from "@slop-lab/dim-plugin-external-url-contracts";
+} from "@slop-lab/dim-contracts-external-url";
 
 export const CADDY_VERSION = "2.11.4";
 export const CADDY_CLOUDFLARE_VERSION = "v0.2.4";

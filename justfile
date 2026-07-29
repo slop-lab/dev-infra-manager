@@ -77,14 +77,14 @@ verify-example-external-urls:
     bash scripts/external-url-example-smoke.bash
 
 isolation-check:
-    pnpm --filter @slop-lab/dev-infra-manager-core exec vitest run test/lifecycle.test.ts
+    pnpm --filter @slop-lab/dim-core exec vitest run test/lifecycle.test.ts
 
 isolation-check-json:
-    pnpm --filter @slop-lab/dev-infra-manager-core exec vitest run test/lifecycle.test.ts --reporter=json
+    pnpm --filter @slop-lab/dim-core exec vitest run test/lifecycle.test.ts --reporter=json
 
 # Builds core first, then runs the local dim CLI from source (no install needed).
 cli *args:
-    pnpm --filter @slop-lab/dev-infra-manager-core run build
+    pnpm --filter @slop-lab/dim-core run build
     pnpm --filter @slop-lab/dim-cli exec tsx src/cli.ts {{args}}
 
 doctor:

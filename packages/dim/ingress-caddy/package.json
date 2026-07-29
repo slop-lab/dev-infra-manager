@@ -1,12 +1,12 @@
 {
-  "name": "@slop-lab/dim-plugin-ingress-external-url-caddy",
+  "name": "@slop-lab/dim-ingress-caddy",
   "version": "0.2.0",
   "description": "Caddy HTTPS deployment generator for DIM external URL ingresses",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/slop-lab/dev-infra-manager.git",
-    "directory": "packages/dim-plugin/ingress-external-url-caddy"
+    "directory": "packages/dim/ingress-caddy"
   },
   "private": true,
   "type": "module",
@@ -33,7 +33,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@slop-lab/dim-plugin-external-url-contracts": "workspace:0.2.0"
+    "@slop-lab/dim-contracts-external-url": "workspace:0.2.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

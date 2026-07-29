@@ -84,7 +84,7 @@ streams full guest, build, and workload logs.
 
 The `rootless-podman` workload runs the outer container with the exact
 capability set `workspaceRuntimePlan()` grants
-(`packages/dev-infra-manager/core/src/runtimeBackends.ts`) instead of `--privileged`, so
+(`packages/dim/core/src/runtimeBackends.ts`) instead of `--privileged`, so
 it also disables Docker system-path confinement to let the nested rootless
 runtime mount its own procfs, and
 `scripts/kvm-host-install-smoke.bash rootless-podman` is the real verification that

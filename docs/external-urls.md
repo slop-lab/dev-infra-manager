@@ -165,8 +165,8 @@ Build the unpublished packages locally:
 ```bash
 pnpm install --frozen-lockfile
 pnpm run workspace:build
-npm pack ./packages/dev-infra-manager/core/dist --pack-destination /tmp
-npm pack ./packages/dim-plugin/external-url-contracts/dist --pack-destination /tmp
+npm pack ./packages/dim/core/dist --pack-destination /tmp
+npm pack ./packages/dim-contracts/external-url/dist --pack-destination /tmp
 npm pack ./packages/dim-plugin/external-urls/dist --pack-destination /tmp
 ```
 

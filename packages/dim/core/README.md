@@ -1,4 +1,4 @@
-# @slop-lab/dev-infra-manager-core
+# @slop-lab/dim-core
 
 Core TypeScript APIs behind the `dim` command-line interface. This package
 implements:
@@ -20,7 +20,7 @@ TypeScript tools or contributing to DIM itself.
 Pin the same reviewed release used by the CLI:
 
 ```bash
-npm install --save-exact "@slop-lab/dev-infra-manager-core@0.2.0"
+npm install --save-exact "@slop-lab/dim-core@0.2.0"
 ```
 
 The package is ESM-only, supports the Node.js 24 LTS release line, and includes
@@ -36,7 +36,7 @@ import {
   createProjectRepository,
   createWorkspace,
   lifecycleOptions
-} from "@slop-lab/dev-infra-manager-core";
+} from "@slop-lab/dim-core";
 
 const runner = new ProcessRunner();
 const options = lifecycleOptions(process.env);

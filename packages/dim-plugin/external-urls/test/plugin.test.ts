@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createDimController,
   registerPlugins
-} from "@slop-lab/dev-infra-manager-core";
+} from "@slop-lab/dim-core";
 import { createExternalUrlsPlugin } from "../src/index.js";
 
 describe("external URLs plugin", () => {

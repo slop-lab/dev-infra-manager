@@ -36,18 +36,18 @@ echo "[mise-smoke] build workspace packages"
 pnpm run workspace:build >/dev/null
 
 echo "[mise-smoke] pack tarballs"
-npm pack packages/dev-infra-manager/core/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/dim-plugin/external-url-contracts/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/dim-plugin/provider-dns-cloudflare/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/dim-plugin/ingress-external-url-caddy/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/dim/core/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/dim-contracts/external-url/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/dim/provider-dns-cloudflare/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/dim/ingress-caddy/dist --pack-destination "$source_dir" --silent >/dev/null
 npm pack packages/scope-root/dim-cli/dist --pack-destination "$source_dir" --silent >/dev/null
 npm pack packages/scope-root/install-dim/dist --pack-destination "$source_dir" --silent >/dev/null
-core_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dev-infra-manager-core*.tgz' -print -quit)"
+core_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-core*.tgz' -print -quit)"
 cli_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
 install_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*install-dim*.tgz' -print -quit)"
-contracts_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*external-url-contracts*.tgz' -print -quit)"
+contracts_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-contracts-external-url*.tgz' -print -quit)"
 cloudflare_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*provider-dns-cloudflare*.tgz' -print -quit)"
-caddy_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*ingress-external-url-caddy*.tgz' -print -quit)"
+caddy_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*ingress-caddy*.tgz' -print -quit)"
 test -n "$core_tarball" && test -n "$cli_tarball" && test -n "$install_tarball"
 test -n "$contracts_tarball" && test -n "$cloudflare_tarball" && test -n "$caddy_tarball"
 
@@ -70,10 +70,10 @@ dim_start_local_npm_registry /work
 
 echo "[container] publish local tarballs to the local registry"
 dim_publish_to_local_registry \
-  /work/*dev-infra-manager-core*.tgz \
-  /work/*external-url-contracts*.tgz \
+  /work/*dim-core*.tgz \
+  /work/*dim-contracts-external-url*.tgz \
   /work/*provider-dns-cloudflare*.tgz \
-  /work/*ingress-external-url-caddy*.tgz \
+  /work/*ingress-caddy*.tgz \
   /work/*dim-cli*.tgz \
   /work/*install-dim*.tgz
 

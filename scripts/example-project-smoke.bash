@@ -72,20 +72,20 @@ echo "[example-project] build workspace packages"
 pnpm run workspace:build >/dev/null
 
 echo "[example-project] pack tarballs"
-npm pack packages/dev-infra-manager/core/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/dim-plugin/external-url-contracts/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/dim-plugin/provider-dns-cloudflare/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/dim-plugin/ingress-external-url-caddy/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/dim/core/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/dim-contracts/external-url/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/dim/provider-dns-cloudflare/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/dim/ingress-caddy/dist --pack-destination "$work_dir" --silent >/dev/null
 npm pack packages/scope-root/dim-cli/dist --pack-destination "$work_dir" --silent >/dev/null
 npm pack packages/scope-root/install-dim/dist --pack-destination "$work_dir" --silent >/dev/null
 
 echo "[example-project] 1. install DIM through the installer facade"
 dim_start_local_npm_registry "$work_dir"
 dim_publish_to_local_registry \
-  "$work_dir"/*dev-infra-manager-core*.tgz \
-  "$work_dir"/*external-url-contracts*.tgz \
+  "$work_dir"/*dim-core*.tgz \
+  "$work_dir"/*dim-contracts-external-url*.tgz \
   "$work_dir"/*provider-dns-cloudflare*.tgz \
-  "$work_dir"/*ingress-external-url-caddy*.tgz \
+  "$work_dir"/*ingress-caddy*.tgz \
   "$work_dir"/*dim-cli*.tgz \
   "$work_dir"/*install-dim*.tgz
 mkdir -p "$install_prefix"

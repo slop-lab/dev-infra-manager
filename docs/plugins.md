@@ -47,7 +47,7 @@ It exports a versioned `DimPlugin`:
 import {
   DIM_PLUGIN_API_VERSION,
   type DimPlugin
-} from "@slop-lab/dev-infra-manager-core";
+} from "@slop-lab/dim-core";
 
 const plugin: DimPlugin = {
   name: "@example/dim-plugin",

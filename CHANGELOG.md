@@ -11,10 +11,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
-- Grouped workspace packages by npm naming family under `packages/scope-root`,
-  `packages/dev-infra-manager`, and `packages/dim-plugin`. The unpublished
-  external URL contracts, provider, and ingress packages now consistently use
-  the `@slop-lab/dim-plugin-*` prefix.
+- Standardized package names under `@slop-lab/dim-*`: core is now
+  `@slop-lab/dim-core`, reusable external URL contracts live under
+  `dim-contracts`, reusable provider and ingress implementations live under
+  `dim`, and only plugin API implementations live under `dim-plugin`. Package
+  name prefixes are organizational and never enable implicit discovery.
 - Node.js support now follows declared LTS release lines. DIM 0.2 supports
   Node.js 24 and validates Node.js 26 ahead of its scheduled LTS transition;
   package engines and CI cover both release lines.

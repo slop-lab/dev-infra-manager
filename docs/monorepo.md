@@ -11,9 +11,14 @@ This repository is a pnpm workspace.
 │   ├── scope-root/      packages named directly under @slop-lab
 │   │   ├── dim-cli/     executable command and output adapter
 │   │   └── install-dim/ installer facade
-│   ├── dev-infra-manager/
-│   │   └── core/        lifecycle, runtime, state, and plugin APIs
-│   └── dim-plugin/      external URL plugin, contracts, and adapters
+│   ├── dim/
+│   │   ├── core/        lifecycle, runtime, state, and plugin APIs
+│   │   ├── ingress-caddy/
+│   │   └── provider-dns-cloudflare/
+│   ├── dim-contracts/
+│   │   └── external-url/
+│   └── dim-plugin/
+│       └── external-urls/
 ├── deploy/              deployment manifests and service templates
 ├── images/              runtime image definitions
 └── specs/               normative behavior and local implementation details
@@ -21,17 +26,25 @@ This repository is a pnpm workspace.
 
 The root package is workspace orchestration only. It contains no application
 source or tests. `packages/scope-root/dim-cli` imports only the public
-`@slop-lab/dev-infra-manager-core` entrypoint; core never imports the CLI.
+`@slop-lab/dim-core` entrypoint; core never imports the CLI.
 Root-level `just` and pnpm commands forward to workspace packages for operator
 convenience.
 
 ## Dependency Direction
 
 ```text
-packages/scope-root/dim-cli ──> packages/dev-infra-manager/core
-packages/dim-plugin/{external-urls,provider-*,ingress-*}
-  ──> packages/dim-plugin/external-url-contracts
+packages/scope-root/dim-cli ──> packages/dim/core
+packages/dim/{ingress-caddy,provider-dns-cloudflare}
+  ──> packages/dim-contracts/external-url
+packages/dim-plugin/external-urls
+  ──> packages/{dim/core,dim-contracts/external-url}
 ```
+
+`dim-plugin-*` identifies a package that implements DIM's plugin API; DIM does
+not scan npm names or filesystem prefixes to discover it. A project must
+explicitly install and list every plugin. Reusable implementations stay in
+`dim-*` packages so a plugin can compose them without making the
+implementation itself a plugin.
 
 Disallowed dependencies:
 

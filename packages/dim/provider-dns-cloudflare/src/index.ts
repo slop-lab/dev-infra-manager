@@ -1,4 +1,4 @@
-import type { CloudflareDnsProviderConfig } from "@slop-lab/dim-plugin-external-url-contracts";
+import type { CloudflareDnsProviderConfig } from "@slop-lab/dim-contracts-external-url";
 
 const defaultApiBase = "https://api.cloudflare.com/client/v4";
 

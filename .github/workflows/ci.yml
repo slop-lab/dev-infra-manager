@@ -31,11 +31,11 @@ jobs:
       - run: just check
       - run: just verify-plugin-install
       - run: pnpm audit --prod
-      - run: pnpm --filter @slop-lab/dev-infra-manager-core run pack:dry-run
-      - run: pnpm --filter @slop-lab/dim-plugin-external-url-contracts run pack:dry-run
+      - run: pnpm --filter @slop-lab/dim-core run pack:dry-run
+      - run: pnpm --filter @slop-lab/dim-contracts-external-url run pack:dry-run
       - run: pnpm --filter @slop-lab/dim-plugin-external-urls run pack:dry-run
-      - run: pnpm --filter @slop-lab/dim-plugin-provider-dns-cloudflare run pack:dry-run
-      - run: pnpm --filter @slop-lab/dim-plugin-ingress-external-url-caddy run pack:dry-run
+      - run: pnpm --filter @slop-lab/dim-provider-dns-cloudflare run pack:dry-run
+      - run: pnpm --filter @slop-lab/dim-ingress-caddy run pack:dry-run
       - run: pnpm --filter @slop-lab/dim-cli run pack:dry-run
       - run: pnpm --filter @slop-lab/install-dim run pack:dry-run
 

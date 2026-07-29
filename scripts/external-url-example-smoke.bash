@@ -58,12 +58,12 @@ docker build \
   --tag dev-infra-project-workspace:latest \
   images/project-workspace >/dev/null
 
-npm pack ./packages/dev-infra-manager/core/dist --pack-destination "$pack_root" --silent >/dev/null
-npm pack ./packages/dim-plugin/external-url-contracts/dist --pack-destination "$pack_root" --silent >/dev/null
+npm pack ./packages/dim/core/dist --pack-destination "$pack_root" --silent >/dev/null
+npm pack ./packages/dim-contracts/external-url/dist --pack-destination "$pack_root" --silent >/dev/null
 npm pack ./packages/dim-plugin/external-urls/dist --pack-destination "$pack_root" --silent >/dev/null
 npm install --prefix "$plugin_home" --silent \
-  "$pack_root/slop-lab-dev-infra-manager-core-0.2.0.tgz" \
-  "$pack_root/slop-lab-dim-plugin-external-url-contracts-0.2.0.tgz" \
+  "$pack_root/slop-lab-dim-core-0.2.0.tgz" \
+  "$pack_root/slop-lab-dim-contracts-external-url-0.2.0.tgz" \
   "$pack_root/slop-lab-dim-plugin-external-urls-0.2.0.tgz"
 jq -n '{schemaVersion:1,plugins:["@slop-lab/dim-plugin-external-urls"]}' \
   > "$plugin_home/plugins.json"
