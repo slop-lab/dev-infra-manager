@@ -55,20 +55,20 @@ dim discard example-dev --yes
 
 ## What gets created
 
-The root repository is cloned into the trusted project-root container. Its
+The root repository is cloned into the trusted workspace container. Its
 `.dim/setup.sh` reads the host Git author through DIM's narrow host-input API,
 then starts [.dim/docker-compose.yml](repos/root/.dim/docker-compose.yml).
 
 ```text
 host
-└── project-root container (trusted controller, root Docker daemon)
-    ├── dev container (untrusted agent, its own Docker daemon)
+└── workspace container (trusted lifecycle code, Project Docker daemon)
+    ├── dev container (untrusted agent, private Docker daemon)
     │   └── containers created by dev
-    └── secret container (root Docker daemon, raw secret)
+    └── secret container (Project Docker daemon, raw secret)
 ```
 
 The `dev` container has Docker CLI access only to its own DinD daemon. It does
-not receive the project-root Docker socket, so `docker ps` there cannot see or
+not receive the Project Docker socket, so `docker ps` there cannot see or
 control the sibling `secret` container.
 
 Only the root repository is cloned automatically. Trusted root lifecycle code
@@ -92,11 +92,11 @@ EXAMPLE_SECRET=not-a-real-secret bash deploy-secret.bash
 
 [ops/secret-service.sh](repos/root/ops/secret-service.sh) then clones the approved
 `secrets` repository and starts the Compose `secret` service on the
-project-root Docker daemon. The deployment passes the secret into that
+Project Docker daemon. The deployment passes the secret into that
 container's environment without adding it to Project state, repository files,
 or the dev container.
 
-The trusted project-root container can administer or inspect it with Compose:
+The trusted workspace container can administer or inspect it with Compose:
 
 ```bash
 dim exec example-dev -- \

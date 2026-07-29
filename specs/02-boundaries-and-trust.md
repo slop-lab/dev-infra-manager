@@ -2,19 +2,21 @@
 
 ## Boundary Summary
 
-The system has three major execution boundaries:
+The system has four major execution boundaries:
 
 - Agent container boundary.
 - Secret-bearing runtime boundary.
-- Controller boundary.
+- Trusted Project lifecycle boundary.
+- DIM host boundary.
 
 The agent container boundary is untrusted.
 The secret-bearing runtime boundary is trusted only after human review of its effective source and runtime definition.
-The controller boundary is privileged. It runs in the workspace root outside
-the agent container, owns the root nested-container runtime, and deploys
-secret-bearing workloads. Host-side DIM additionally creates and reconciles
-the outer workspace root. A project must directly review the complete pinned
-DIM revision before trusting these layers.
+The trusted Project lifecycle boundary is privileged. Its code runs in the
+workspace container outside the agent container, owns the Project runtime, and
+deploys secret-bearing workloads. It is an authority boundary and need not be
+one long-running controller process. Host-side DIM creates and reconciles the
+workspace container and runs the DIM host controller. A project must directly
+review the complete pinned DIM revision before trusting these layers.
 
 ## Agent Container Boundary
 
@@ -25,21 +27,21 @@ Agent containers:
   credential.
 - Must receive only approved non-secret environment variables.
 - May receive Git-related environment variables needed to push proposals.
-- Must not mount the host or workspace-root controller Docker socket.
+- Must not mount the host runtime socket or Project runtime socket.
 - Must not mount secret-bearing runtime volumes.
 - May run nested containers through an agent-specific inner runtime.
 - Must run as an isolated child of a named workspace root.
 - Must be resource-limited at the outer container boundary.
 
 The agent's actual influence over anything outside its container and inner
-runtime is limited to explicit controller interfaces and pushing proposals for
+runtime is limited to explicit constrained interfaces and pushing proposals for
 review (see Git Boundary).
 
 ## Secret-Bearing Runtime Boundary
 
 Secret-bearing containers:
 
-- May receive raw secrets through controller deployment configuration outside
+- May receive raw secrets through trusted deployment configuration outside
   DIM Project state and agent-controlled files.
 - Must run as a separate child of the workspace root, outside the agent
   container and the agent's nested runtime.
@@ -48,25 +50,33 @@ Secret-bearing containers:
 - Must expose only the configured constrained interface needed by the agent
   tooling layer.
 
-Any source, Dockerfile, entrypoint, dependency lockfile, runtime config, or controller change that can affect secret access is secret-bearing for review purposes.
+Any source, Dockerfile, entrypoint, dependency lockfile, runtime config, or
+lifecycle-code change that can affect secret access is secret-bearing for
+review purposes.
 
-## Controller Boundary
+## Trusted Project Lifecycle Boundary
 
-The controller boundary:
+Trusted Project lifecycle code:
 
-- Runs in the workspace root, outside the agent container.
-- Owns the workspace-root nested-container runtime.
+- Runs in the workspace container, outside the agent container.
+- Owns the Project runtime.
 - Starts and reconciles agent and secret-bearing child containers.
 - Keeps the agent's inner runtime separate from its own runtime.
 - Deploys secret-bearing containers only from approved refs.
 
-The host-side DIM boundary:
+## DIM Host Boundary
 
-- Creates, reconciles, and discards outer workspace-root resources.
+Host-side DIM:
+
+- Creates, reconciles, and discards workspace containers.
 - Manages local bare Git repositories and PR metadata.
 - Installs and checks runtime support through scripts and doctor checks.
+- Runs the DIM host controller and grants each workspace only its scoped,
+  authenticated interfaces.
 
-Controller code is trusted infrastructure code only after direct human review of the complete pinned DIM revision. The complete project repository and all secret-bearing environment code also require human review before deployment.
+DIM host code is trusted infrastructure code only after direct human review of
+the complete pinned DIM revision. The complete root repository and all
+secret-bearing environment code also require human review before deployment.
 
 ## Git Boundary
 

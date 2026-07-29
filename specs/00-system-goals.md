@@ -65,5 +65,5 @@ Changes that affect these topics are global changes:
 - Protected ref behavior.
 - Runtime backend trust assumptions.
 - Storage quota enforcement.
-- Workspace-root controller deployment authority.
+- Trusted Project lifecycle deployment authority.
 - Config compatibility.

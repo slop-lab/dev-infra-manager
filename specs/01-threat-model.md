@@ -21,10 +21,11 @@ Protected assets:
 - AI inference API keys and other raw secrets.
 - Secret-bearing container filesystem and runtime configuration.
 - Secret-bearing source code before human review.
-- Controller code and configuration that can deploy secret-bearing containers.
+- Project lifecycle code and configuration that can deploy secret-bearing
+  containers.
 - Approved Git refs used for trusted deployment.
 - Host container runtime control plane.
-- Workspace-root controller runtime and host container runtime control planes.
+- Project runtime and host container runtime control planes.
 - Host filesystem outside DIM state and Docker-managed workspace resources.
 
 ## Attacker Capabilities
@@ -45,12 +46,12 @@ The agent is assumed to be capable of:
   files, volumes, or images. Internal capability credentials explicitly
   granted to the agent, such as an unprotected-branch Git writer, must be
   scoped so disclosure cannot grant protected-ref or runtime-secret access.
-- Do not mount the host or workspace-root controller Docker socket into agent
+- Do not mount the host or Project runtime Docker socket into agent
   containers.
 - Do not mount secret-bearing volumes into agent containers.
 - Block direct pushes to protected refs in managed bare repositories.
 - Deploy secret-bearing containers only from configured approved refs.
-- Treat controller and secret runtime code as trusted-boundary code.
+- Treat Project lifecycle and secret runtime code as trusted-boundary code.
 - Keep named workspaces isolated from one another.
 - Enforce aggregate CPU, memory, pid, and timeout limits at the workspace-root
   boundary.

@@ -16,25 +16,34 @@ Docker/Git terms aren't repeated here.
   optional `.dim` directory defines the workspace's environment and
   lifecycle hooks; DIM clones only this repository into a workspace
   automatically.
-- **Workspace root container** — a named, persistent, isolated top-level
-  container bound to exactly one Project. It owns the project checkout and
-  the nested runtime, and contains the controller and its child containers.
+- **Workspace** — a named, persistent DIM resource bound to exactly one
+  Project. Its record and top-level container survive stop/start until the
+  workspace is explicitly discarded.
+- **Workspace container** — the workspace's isolated top-level container. It
+  owns the root-repository checkout and the **Project runtime**. Older text
+  may call this the “workspace root” or “project-root container”; use
+  “workspace container” when the distinction from the root repository
+  matters.
+- **Project runtime** — the nested Docker or Podman runtime owned by trusted
+  Project lifecycle code in the workspace container. It runs agent and
+  secret-bearing containers. It is distinct from an agent container's private
+  nested runtime.
 - **Agent container** — an untrusted child container inside the workspace
-  root. The coding agent runs here with its own nested-container runtime; it
-  does not control the workspace root runtime.
-- **Controller** — the trusted control process in the workspace root,
-  outside the agent container. It starts agent and secret-bearing containers
-  and deploys the latter from approved refs. Host-side `dim` creates and
-  reconciles the outer workspace. See [Trust
-  Boundaries](../specs/02-boundaries-and-trust.md#controller-boundary).
-- **Controller API** — the authenticated, plugin-extensible HTTP API started
-  by `dim controller serve`. It may be hosted wherever workspaces can reach
-  it and is distinct from the project controller's secret-deployment role;
-  the shared word is part of the current CLI/API name.
-- **Secret-bearing container** — a controller-managed child of the workspace
-  root, separate from the agent container and its nested runtime. It is built
-  from a human-reviewed ref and may receive raw secrets; the agent container
-  receives neither those secrets nor control of this container.
+  container. The coding agent runs here with its own nested-container runtime;
+  it does not control the Project runtime.
+- **Project lifecycle code** — trusted code from the root repository, including
+  `.dim` hooks and reviewed operational scripts, that configures the Project
+  runtime. This is an authority boundary, not necessarily one long-running
+  “controller” process.
+- **DIM host controller** — the authenticated, plugin-extensible HTTP service
+  managed by host-side DIM (the CLI also exposes `dim controller serve`). Its
+  Unix socket and workspace-scoped grant let trusted Project lifecycle code
+  request narrow host capabilities. It does not deploy Project containers.
+- **Secret-bearing container** — a child of the Project runtime, separate from
+  the agent container and its nested runtime. Trusted Project lifecycle code
+  builds and deploys it from a human-reviewed ref. It may receive raw secrets;
+  the agent container receives neither those secrets nor control of this
+  container.
 
 The documentation is split by concern:
 

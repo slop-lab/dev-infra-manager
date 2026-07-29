@@ -7,14 +7,15 @@ services:
       - /tmp/dim-host-inputs.env
     environment:
       DOCKER_TLS_CERTDIR: ""
-    # The agent gets its own daemon, not the project-root controller's daemon.
+    # The agent gets its own daemon, not the workspace's Project daemon.
     # Containers created here cannot inspect or control secret-bearing siblings
-    # that the controller starts at the project-root level.
+    # that trusted Project lifecycle code starts outside dev.
     volumes:
       - dev-docker:/var/lib/docker
       - ..:/workspace
 
-  # This service runs on the project-root daemon, never dev's private daemon.
+  # This service runs on the workspace container's Project Docker daemon.
+  # dev uses a separate private Docker daemon and cannot manage this service.
   # The profile keeps it stopped until a trusted operator supplies the secret.
   secret:
     profiles: [secret]
