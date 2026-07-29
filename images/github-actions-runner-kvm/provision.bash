@@ -9,7 +9,7 @@ archive="/tmp/actions-runner-linux-x64-${runner_version}.tar.gz"
 
 sudo apt-get update
 sudo apt-get install -y \
-  curl git jq just \
+  curl git jq just libatomic1 \
   qemu-system-x86 qemu-utils cloud-image-utils openssh-client
 
 printf 'yes\n' | bash "$source_root/scripts/install-host-ubuntu.bash" sysbox
