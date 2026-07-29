@@ -91,4 +91,4 @@ doctor:
     just cli doctor
 
 build-project-workspace:
-    docker build --force-rm --build-arg "DIM_UID=$(id -u)" --build-arg "DIM_GID=$(id -g)" -t dev-infra-project-workspace:latest images/project-workspace
+    docker build --quiet --force-rm --build-arg "DIM_UID=$(id -u)" --build-arg "DIM_GID=$(id -g)" -t dev-infra-project-workspace:latest images/project-workspace >/dev/null

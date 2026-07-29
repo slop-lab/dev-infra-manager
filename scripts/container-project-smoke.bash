@@ -58,7 +58,7 @@ printf '%s\n' \
   '#!/usr/bin/env sh' \
   'set -eu' \
   'test ! -f .dim/fail-setup' \
-  "docker build --tag '$image_name' ." \
+  "docker build --quiet --tag '$image_name' . >/dev/null" \
   > "$worktree/.dim/setup.sh"
 printf '%s\n' \
   '#!/usr/bin/env sh' \

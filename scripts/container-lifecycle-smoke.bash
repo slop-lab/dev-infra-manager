@@ -81,7 +81,7 @@ pnpm run cli -- exec "$workspace_name" -- sh -c "
 " >/dev/null
 
 volume_name="$(pnpm run --silent cli -- show "$workspace_name" --json | jq -r .dockerVolumeName)"
-test "$(docker inspect --format '{{range .Mounts}}{{.Type}}:{{.Name}}:{{.Destination}}{{end}}' "$container_name")" \
+test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/docker"}}{{.Type}}:{{.Name}}:{{.Destination}}{{end}}{{end}}' "$container_name")" \
   = "volume:$volume_name:/var/lib/docker"
 pnpm run cli -- stop "$workspace_name" >/dev/null
 pnpm run cli -- start "$workspace_name" >/dev/null

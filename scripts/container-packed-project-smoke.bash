@@ -8,11 +8,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-npm pack packages/core/dist --pack-destination "$package_root" >/dev/null
-npm pack packages/external-url-contracts/dist --pack-destination "$package_root" >/dev/null
-npm pack packages/provider-dns-cloudflare/dist --pack-destination "$package_root" >/dev/null
-npm pack packages/ingress-external-url-caddy/dist --pack-destination "$package_root" >/dev/null
-npm pack packages/dim-cli/dist --pack-destination "$package_root" >/dev/null
+npm pack --silent packages/core/dist --pack-destination "$package_root" >/dev/null
+npm pack --silent packages/external-url-contracts/dist --pack-destination "$package_root" >/dev/null
+npm pack --silent packages/provider-dns-cloudflare/dist --pack-destination "$package_root" >/dev/null
+npm pack --silent packages/ingress-external-url-caddy/dist --pack-destination "$package_root" >/dev/null
+npm pack --silent packages/dim-cli/dist --pack-destination "$package_root" >/dev/null
 core_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dev-infra-manager-core*.tgz' -print -quit)"
 cli_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
 contracts_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*external-url-contracts*.tgz' -print -quit)"
@@ -21,7 +21,7 @@ caddy_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*ingress-extern
 test -n "$core_tarball"
 test -n "$cli_tarball"
 test -n "$contracts_tarball" -a -n "$cloudflare_tarball" -a -n "$caddy_tarball"
-npm install --prefix "$package_root/install" \
+npm install --silent --prefix "$package_root/install" \
   "$core_tarball" "$contracts_tarball" "$cloudflare_tarball" "$caddy_tarball" "$cli_tarball" >/dev/null
 dim_bin="$package_root/install/node_modules/.bin/dim"
 test -x "$dim_bin"
