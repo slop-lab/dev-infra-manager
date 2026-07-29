@@ -8,6 +8,7 @@ import type { ProjectRecord, WorkspaceRecord } from "../src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../src/types.js";
 import { validateWorkspaceProfiles, waitForInnerDocker, workspaceContainerArgs } from "../src/workspaceLifecycle.js";
 import { workspaceRuntimePlan } from "../src/runtimeBackends.js";
+import { agentContainerArgs } from "../src/agentLifecycle.js";
 
 describe("project and workspace lifecycle", () => {
   let root: string;
@@ -248,9 +249,9 @@ describe("project and workspace lifecycle", () => {
   it("selects persistent workspace runtime backends", () => {
     const options = lifecycleOptions({ DIM_STATE_ROOT: root, DIM_CONFIG_PATH: join(root, "dim.json") });
     expect(workspaceRuntimePlan("sysbox", options)).toMatchObject({
-      dockerRuntime: "sysbox-runc",
+      dockerRuntime: "runc",
       image: "dev-infra-project-workspace:latest",
-      privileged: false,
+      privileged: true,
       engine: "docker"
     });
     expect(workspaceRuntimePlan("gvisor", options)).toMatchObject({
@@ -276,6 +277,33 @@ describe("project and workspace lifecycle", () => {
       privileged: true,
       engine: "docker"
     });
+  });
+
+  it("creates an unprivileged host-side Sysbox agent without a Docker socket", () => {
+    const options = lifecycleOptions({ DIM_STATE_ROOT: root, DIM_CONFIG_PATH: join(root, "dim.json") });
+    const record = {
+      name: "work-1",
+      cpuCount: "2",
+      memory: "4g",
+      pidsLimit: "2048",
+      networkName: "dim-control",
+      agentContainerName: "dim-agent-work-1",
+      agentCheckoutVolumeName: "dim-agent-work-1-checkout",
+      agentDockerVolumeName: "dim-agent-work-1-docker",
+      agentImageName: "dim-agent-work-1:latest"
+    } as WorkspaceRecord;
+    const args = agentContainerArgs(
+      options,
+      record,
+      { name: "Developer", email: "developer@example.invalid", username: "writer", token: "token" },
+      "172.20.0.3"
+    );
+    expect(args).toContain("sysbox-runc");
+    expect(args).toContain("dim-control");
+    expect(args).not.toContain("--privileged");
+    expect(args.join("\n")).not.toContain("docker.sock,target=");
+    expect(args).toContain("project.internal:172.20.0.3");
+    expect(args).toContain("type=volume,source=dim-agent-work-1-docker,target=/var/lib/docker");
   });
 
   it("rejects legacy workspace records without modifying them", async () => {

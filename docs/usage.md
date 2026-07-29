@@ -32,6 +32,11 @@ bash scripts/install-host-ubuntu.bash sysbox
 just cli doctor
 ```
 
+For a root repository with `.dim/agent.json`, DIM keeps the trusted workspace
+and untrusted Sysbox agent as sibling containers. Users still need only
+`dim create PROJECT WORKSPACE` and `dim run WORKSPACE TASK`; no separate
+runtime command is required.
+
 Run `just` as your normal user, including when it comes from mise. After the
 first install, log out and back in or run `newgrp docker` once to refresh the
 Docker group membership added by the installer.

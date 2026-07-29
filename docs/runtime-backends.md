@@ -8,13 +8,24 @@ The supported backends are:
 
 | Backend | Outer runtime | Nested engine | Intended use |
 | --- | --- | --- | --- |
-| `sysbox` | `sysbox-runc` | Docker | Production default for Docker-compatible nested workloads |
+| `sysbox` | privileged `runc` workspace + host-side `sysbox-runc` agent | Private Docker in agent | Production default |
 | `gvisor` | `runsc` | Docker | No-KVM sandboxed fallback |
 | `rootless-podman` | `runc` | Podman | Lower-privilege Podman-compatible workloads |
 | `runc` | privileged `runc` | Docker | Nested development containers and CI only |
 
 The backend is immutable for the lifetime of a workspace. Create a new
 workspace to change it. `show` reports the persisted selection.
+
+With the default `sysbox` backend, trusted Project lifecycle code and its
+Docker daemon run in the workspace container. DIM separately creates the
+untrusted agent through the host-side Docker daemon, using `.dim/agent.json`.
+The agent has its own checkout and Docker data volumes and receives no Docker
+control socket. It shares only DIM's host-side control network with the
+workspace, not the nested Project network.
+
+Registering Sysbox in the nested Project daemon is intentionally unsupported.
+Doing so would require nesting the Sysbox manager/filesystem services, not
+merely adding a Docker runtime name.
 
 `rootless-podman` requires `/dev/fuse` and a host that permits nested
 unprivileged user namespaces. Its outer container runs unprivileged, with a
@@ -32,8 +43,8 @@ the definitive host compatibility test.
 `DIM_WORKSPACE_PRIVILEGED` are advanced image/runtime overrides; they do not
 change the backend stored in workspace metadata.
 
-CPU, memory, and PID limits apply to the top-level workspace container and
-therefore bound its nested workloads in aggregate. DIM does not impose a
+CPU, memory, and PID limits apply independently to the trusted workspace and
+the host-side agent container. DIM does not impose a
 per-workspace disk quota. `discard --yes` removes the workspace
 container and its nested-engine storage volume.
 Environment values provide creation defaults; individual workspaces can store

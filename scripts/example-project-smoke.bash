@@ -109,7 +109,7 @@ DIM_BIN="$dim_bin" bash \
 # actually protected, not just reported as such (repo protect "succeeds"
 # even with nothing configured, per projectRegistry.ts). Re-pushing the
 # identical ref would be a silent no-op either way, so make a real commit.
-echo "unauthorized change" >> "$root_repo/.dim/entrypoint.sh"
+printf '\n' >> "$root_repo/.dim/agent.json"
 git -C "$root_repo" commit -am "attempted direct push" >/dev/null
 if dim x git -C "$root_repo" push "$(dim repo url "$project_name" root)" main >/dev/null 2>&1; then
   echo "protected branch unexpectedly accepted a direct push" >&2
@@ -171,16 +171,14 @@ echo "$claude_version" | grep -q "(Claude Code)$"
 # README is real: it prints dim-cli's own version, not codex's.
 test "$(dim run "$workspace_name" codex --version)" != "$codex_version"
 
-dev_git_identity="$(dim exec "$workspace_name" -- \
-  docker compose --file .dim/docker-compose.yml exec -T dev \
-  sh -c 'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
+dev_git_identity="$(dim run "$workspace_name" bash -- \
+  -lc 'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
 test "$dev_git_identity" = \
   "Example Host Developer <host-developer@dim.invalid>|Example Host Developer <host-developer@dim.invalid>"
 
 echo "[example-project] 8. create a nested container from inside the dev container"
-nested_output="$(dim exec "$workspace_name" -- \
-  docker compose --file .dim/docker-compose.yml exec -T dev \
-  docker run --rm hello-world)"
+nested_output="$(dim run "$workspace_name" bash -- \
+  -lc 'docker run --rm hello-world')"
 echo "$nested_output" | grep -q "Hello from Docker!"
 
 echo "[example-project] 9. reach the other repositories from inside the workspace"
@@ -198,21 +196,19 @@ root_health="$(dim exec "$workspace_name" -- \
 echo "$root_health" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
 
 dev_health="$(dim run "$workspace_name" bash -- \
-  -lc 'wget -qO- http://secret:7099/healthz')"
+  -lc 'wget -qO- http://project.internal:7099/healthz')"
 echo "$dev_health" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
 
 # The agent container has a different Docker daemon and cannot see the
 # root-level controller's secret-bearing container or raw secret.
-agent_containers="$(dim exec "$workspace_name" -- \
-  docker compose --file .dim/docker-compose.yml exec -T dev \
-  docker ps --format '{{.Names}}')"
+agent_containers="$(dim run "$workspace_name" bash -- \
+  -lc "docker ps --format '{{.Names}}'")"
 if grep -q secret <<<"$agent_containers"; then
   echo "agent Docker daemon unexpectedly sees the secret-bearing container" >&2
   exit 1
 fi
-leaked="$(dim exec "$workspace_name" -- \
-  docker compose --file .dim/docker-compose.yml exec -T dev \
-  sh -c 'env | grep -c EXAMPLE_SECRET || true')"
+leaked="$(dim run "$workspace_name" bash -- \
+  -lc 'env | grep -c EXAMPLE_SECRET || true')"
 test "$leaked" = "0"
 
 dim exec "$workspace_name" -- sh ops/secret-service.sh remove-secret >/dev/null

@@ -30,7 +30,8 @@ Agent containers:
 - Must not mount the host runtime socket or Project runtime socket.
 - Must not mount secret-bearing runtime volumes.
 - May run nested containers through an agent-specific inner runtime.
-- Must run as an isolated child of a named workspace root.
+- Must belong to a named workspace. With the default Sysbox backend it is a
+  host-side sibling container, not a child of the Project daemon.
 - Must be resource-limited at the outer container boundary.
 
 The agent's actual influence over anything outside its container and inner

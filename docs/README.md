@@ -25,12 +25,13 @@ Docker/Git terms aren't repeated here.
   “workspace container” when the distinction from the root repository
   matters.
 - **Project runtime** — the nested Docker or Podman runtime owned by trusted
-  Project lifecycle code in the workspace container. It runs agent and
-  secret-bearing containers. It is distinct from an agent container's private
-  nested runtime.
-- **Agent container** — an untrusted child container inside the workspace
-  container. The coding agent runs here with its own nested-container runtime;
-  it does not control the Project runtime.
+  Project lifecycle code in the workspace container. It runs trusted Project
+  services, including secret-bearing containers. It is distinct from an agent
+  container's private nested runtime.
+- **Agent container** — the untrusted coding environment associated with a
+  workspace. With the default Sysbox layout it is a host-side sibling of the
+  workspace container, not a child of the Project runtime. It has separate
+  checkout and private-runtime storage and receives no Docker control socket.
 - **Project lifecycle code** — trusted code from the root repository, including
   `.dim` hooks and reviewed operational scripts, that configures the Project
   runtime. This is an authority boundary, not necessarily one long-running

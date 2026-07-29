@@ -57,9 +57,8 @@ including live resource updates.
 `scripts/container-sysbox-isolation-smoke.bash` requires a prebuilt workspace
 image and direct access to a Docker host with `sysbox-runc`. It must cover:
 
-- Sysbox workspace-root execution with explicit outer CPU, memory, and PID
-  limits.
-- Exact cgroup v2 limit visibility inside the workspace root.
+- Host-side Sysbox agent execution with explicit CPU, memory, and PID limits.
+- Exact cgroup v2 limit visibility inside the agent.
 - Nested Docker `hello-world` execution.
 - Bidirectional image-store isolation using unique host-only and inner-only
   probe tags, independent of pre-existing image caches.
@@ -115,6 +114,10 @@ Host installation scripts must be verified by:
 `scripts/kvm-host-install-smoke.bash BACKEND` verifies one backend installer in
 a disposable VM. `just verify-environments-kvm` requires QEMU and writable
 `/dev/kvm` and runs the gate for every backend in a separate VM.
+The Sysbox guest must additionally verify a privileged trusted workspace using
+its directly passed `/dev/kvm` with QEMU, absence of Sysbox registration in
+the workspace's Project daemon, and an unprivileged host-side Sysbox agent
+running a private DinD workload.
 
 ## Installer Facade Verification
 

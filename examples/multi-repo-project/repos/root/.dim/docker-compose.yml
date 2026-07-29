@@ -1,27 +1,11 @@
 services:
-  dev:
-    build: ./dev
-    privileged: true
-    working_dir: /workspace
-    env_file:
-      - /tmp/dim-host-inputs.env
-    environment:
-      DOCKER_TLS_CERTDIR: ""
-    # The agent gets its own daemon, not the workspace's Project daemon.
-    # Containers created here cannot inspect or control secret-bearing siblings
-    # that trusted Project lifecycle code starts outside dev.
-    volumes:
-      - dev-docker:/var/lib/docker
-      - ..:/workspace
-
-  # This service runs on the workspace container's Project Docker daemon.
-  # dev uses a separate private Docker daemon and cannot manage this service.
+  # This service runs only on the trusted workspace's Project Docker daemon.
+  # The host-side Sysbox agent is not a service in this Compose project.
   # The profile keeps it stopped until a trusted operator supplies the secret.
   secret:
     profiles: [secret]
     build: ${SECRET_SERVICE_CONTEXT:-/tmp/dim-controller/secrets}
     environment:
       EXAMPLE_SECRET: "${EXAMPLE_SECRET:-}"
-
-volumes:
-  dev-docker:
+    ports:
+      - "7099:7099"

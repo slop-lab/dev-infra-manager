@@ -117,4 +117,39 @@ rootless_podman_caps=(SYS_ADMIN SETUID SETGID SYS_CHROOT SYS_PTRACE AUDIT_WRITE 
 rootless_podman_cap_flags=""
 for cap in "${rootless_podman_caps[@]}"; do rootless_podman_cap_flags+=" --cap-add $cap"; done
 run_step "run $backend workload" ssh "${ssh_args[@]}" dim@127.0.0.1 "set -e; sudo docker info >/dev/null; sudo docker compose version >/dev/null; case '$backend' in all|sysbox) systemctl is-active sysbox; sudo docker run --rm --runtime=sysbox-runc hello-world >/dev/null;; esac; case '$backend' in all|gvisor) runsc --version; sudo docker run --rm --runtime=runsc hello-world >/dev/null;; esac; case '$backend' in rootless-podman) test -c /dev/fuse; command -v newuidmap; command -v newgidmap; cd dim; sudo docker build -t dev-infra-project-workspace-podman:latest images/project-workspace-podman; sudo docker run --rm --runtime=runc$rootless_podman_cap_flags --device /dev/fuse --security-opt seccomp=unconfined --security-opt apparmor=unconfined --security-opt systempaths=unconfined dev-infra-project-workspace-podman:latest podman run --rm docker.io/library/hello-world;; esac; case '$backend' in all|runc) sudo docker run --rm --runtime=runc hello-world >/dev/null;; esac"
+if [[ "$backend" == sysbox ]]; then
+  run_step "verify trusted KVM workspace and host-side Sysbox agent" \
+    ssh "${ssh_args[@]}" dim@127.0.0.1 '
+      set -e
+      trusted=dim-kvm-trusted
+      agent=dim-kvm-agent
+      cleanup() {
+        sudo docker rm -f "$trusted" "$agent" >/dev/null 2>&1 || true
+      }
+      trap cleanup EXIT
+      cd dim
+      sudo docker build --quiet -t dev-infra-project-workspace:latest images/project-workspace >/dev/null
+      sudo docker run -d --name "$trusted" --runtime=runc --privileged --device=/dev/kvm \
+        dev-infra-project-workspace:latest sleep infinity >/dev/null
+      for _ in $(seq 1 60); do
+        sudo docker exec "$trusted" docker info >/dev/null 2>&1 && break
+        sleep 1
+      done
+      sudo docker exec "$trusted" test -r /dev/kvm
+      sudo docker exec "$trusted" test -w /dev/kvm
+      ! sudo docker exec "$trusted" docker info --format "{{json .Runtimes}}" | grep -q sysbox-runc
+      sudo docker exec -u root "$trusted" apk add --no-cache qemu-system-x86_64 >/dev/null
+      status=0
+      sudo docker exec -u root "$trusted" timeout 2 qemu-system-x86_64 \
+        -machine q35,accel=kvm -cpu host -m 128 -smp 1 -nodefaults -nographic -S || status=$?
+      test "$status" -eq 124
+      sudo docker run -d --name "$agent" --runtime=sysbox-runc docker:29.1.3-dind >/dev/null
+      for _ in $(seq 1 60); do
+        sudo docker exec "$agent" docker info >/dev/null 2>&1 && break
+        sleep 1
+      done
+      sudo docker exec "$agent" docker run --rm hello-world >/dev/null
+      test "$(sudo docker inspect -f "{{.HostConfig.Privileged}}" "$agent")" = false
+    '
+fi
 echo "kvm-host-install-smoke-ok: $backend"

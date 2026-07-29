@@ -25,6 +25,7 @@ export function lifecycleOptions(env: NodeJS.ProcessEnv = process.env): Lifecycl
     cpuCount: env.DIM_WORKSPACE_CPUS ?? "2",
     memory: env.DIM_WORKSPACE_MEMORY ?? "4g",
     pidsLimit: env.DIM_WORKSPACE_PIDS ?? "2048",
+    agentDockerSocketPath: env.DIM_AGENT_DOCKER_SOCKET ?? "/var/run/docker.sock",
     controllerSocketPath: env.DIM_CONTROLLER_SOCKET
       ?? path.join(
         env.XDG_RUNTIME_DIR ?? path.join(os.tmpdir(), `dim-${process.getuid?.() ?? "user"}`),

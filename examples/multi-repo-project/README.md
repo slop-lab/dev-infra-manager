@@ -56,20 +56,24 @@ dim discard example-dev --yes
 ## What gets created
 
 The root repository is cloned into the trusted workspace container. Its
-`.dim/setup.sh` reads the host Git author through DIM's narrow host-input API,
-then starts [.dim/docker-compose.yml](repos/root/.dim/docker-compose.yml).
+`.dim/setup.sh` reads the host Git author through DIM's narrow host-input API.
+DIM then reads [.dim/agent.json](repos/root/.dim/agent.json), builds the agent
+image, and creates an unprivileged Sysbox container through the host-side agent
+daemon. The Project Compose file contains only trusted services.
 
 ```text
-host
-└── workspace container (trusted lifecycle code, Project Docker daemon)
-    ├── dev container (untrusted agent, private Docker daemon)
-    │   └── containers created by dev
-    └── secret container (Project Docker daemon, raw secret)
+host-side DIM runtime
+├── workspace container (trusted lifecycle code)
+│   └── Project Docker daemon
+│       └── secret container (raw secret)
+└── unprivileged Sysbox dev container
+    └── private DinD
+        └── containers created by dev
 ```
 
 The `dev` container has Docker CLI access only to its own DinD daemon. It does
-not receive the Project Docker socket, so `docker ps` there cannot see or
-control the sibling `secret` container.
+not receive either Docker control socket, so `docker ps` there cannot see or
+control the workspace or `secret` container.
 
 Only the root repository is cloned automatically. Trusted root lifecycle code
 can clone `web` or `secrets` using the managed Project Git URL. The registration
@@ -109,7 +113,7 @@ HTTP interface exposed by the service:
 
 ```bash
 dim run example-dev bash -- \
-  -lc 'wget -qO- http://secret:7099/healthz'
+  -lc 'wget -qO- http://project.internal:7099/healthz'
 ```
 
 The response confirms configuration without returning the secret:

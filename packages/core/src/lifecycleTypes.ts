@@ -12,6 +12,7 @@ export interface LifecycleOptions {
   memory: string;
   pidsLimit: string;
   controllerSocketPath: string;
+  agentDockerSocketPath: string;
 }
 
 export type WorkspaceRuntimeBackendKind = "sysbox" | "gvisor" | "rootless-podman" | "runc";
@@ -90,6 +91,10 @@ export interface WorkspaceRecord {
   networkName: string;
   dockerVolumeName: string;
   runtimeBackend: WorkspaceRuntimeBackendKind;
+  agentContainerName?: string;
+  agentCheckoutVolumeName?: string;
+  agentDockerVolumeName?: string;
+  agentImageName?: string;
   kvm?: boolean;
   cpuCount: string;
   memory: string;

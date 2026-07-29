@@ -11,8 +11,7 @@ jq -n --arg name "$git_name" --arg email "$git_email" -r '
   "GIT_COMMITTER_EMAIL=" + ($email | @sh)
 ' > /tmp/dim-host-inputs.env
 
-docker compose \
-  --project-name "$COMPOSE_PROJECT_NAME" \
-  --file .dim/docker-compose.yml \
-  "$@" \
-  up --detach --build
+# DIM reads .dim/agent.json after this trusted setup completes and creates the
+# unprivileged agent through its host-side Sysbox runtime. This Compose file
+# intentionally contains only trusted Project services and starts nothing
+# until the secret profile is explicitly deployed.

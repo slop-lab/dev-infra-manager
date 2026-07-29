@@ -38,8 +38,8 @@ async function runtimeBackendChecks(
       return [
         await commandCheck(runner, "sysbox-runc", ["--version"], "sysbox-runc"),
         await systemdUnitCheck(runner, "sysbox.service", "Sysbox service"),
-        await dockerRuntimeCheck(runner, plan.dockerRuntime, `Docker ${plan.dockerRuntime} runtime`),
-        await dockerRuntimeExecutionCheck(runner, plan.dockerRuntime, "Sysbox container execution"),
+        await dockerRuntimeCheck(runner, "sysbox-runc", "Agent Docker sysbox-runc runtime", options.agentDockerSocketPath),
+        await dockerRuntimeExecutionCheck(runner, "sysbox-runc", "Sysbox agent container execution", options.agentDockerSocketPath),
         await pathCheck("/dev/kvm", "KVM device")
       ];
     }
@@ -96,10 +96,11 @@ async function dockerDaemonCheck(runner: CommandRunner): Promise<DoctorCheck> {
   };
 }
 
-async function dockerRuntimeCheck(runner: CommandRunner, runtime: string, name: string): Promise<DoctorCheck> {
-  let result = await runner.run("docker", ["info", "--format", "{{json .Runtimes}}"]);
+async function dockerRuntimeCheck(runner: CommandRunner, runtime: string, name: string, socket?: string): Promise<DoctorCheck> {
+  const prefix = socket ? ["--host", `unix://${socket}`] : [];
+  let result = await runner.run("docker", [...prefix, "info", "--format", "{{json .Runtimes}}"]);
   if (result.exitCode !== 0 && `${result.stderr}${result.stdout}`.includes("permission denied")) {
-    result = await runner.run("docker", ["info", "--format", "{{json .Runtimes}}"], { sudo: true });
+    result = await runner.run("docker", [...prefix, "info", "--format", "{{json .Runtimes}}"], { sudo: true });
   }
   const output = `${result.stdout}${result.stderr}`;
   return {
@@ -109,10 +110,11 @@ async function dockerRuntimeCheck(runner: CommandRunner, runtime: string, name: 
   };
 }
 
-export async function dockerRuntimeExecutionCheck(runner: CommandRunner, runtime: string, name: string): Promise<DoctorCheck> {
-  let result = await runner.run("docker", ["run", "--rm", `--runtime=${runtime}`, "--pull=missing", "hello-world:latest"]);
+export async function dockerRuntimeExecutionCheck(runner: CommandRunner, runtime: string, name: string, socket?: string): Promise<DoctorCheck> {
+  const prefix = socket ? ["--host", `unix://${socket}`] : [];
+  let result = await runner.run("docker", [...prefix, "run", "--rm", `--runtime=${runtime}`, "--pull=missing", "hello-world:latest"]);
   if (result.exitCode !== 0 && `${result.stderr}${result.stdout}`.includes("permission denied")) {
-    result = await runner.run("docker", ["run", "--rm", `--runtime=${runtime}`, "--pull=missing", "hello-world:latest"], { sudo: true });
+    result = await runner.run("docker", [...prefix, "run", "--rm", `--runtime=${runtime}`, "--pull=missing", "hello-world:latest"], { sudo: true });
   }
   const output = `${result.stderr}${result.stdout}`.trim();
   return {

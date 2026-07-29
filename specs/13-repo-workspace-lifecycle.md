@@ -106,6 +106,25 @@ DIM_CONTROLLER_SOCKET
 DIM_CONTROLLER_TOKEN
 ```
 
+When the reviewed root repository contains `.dim/agent.json`, it defines the
+host-side agent image and named tasks:
+
+```json
+{
+  "buildContext": ".dim/dev",
+  "tasks": {
+    "bash": ["bash"]
+  }
+}
+```
+
+`buildContext` must remain within the root checkout after symlink resolution.
+Each task value is a non-empty command array. DIM builds and starts the agent
+through its host-side daemon using `sysbox-runc`, a separate checkout volume,
+and a separate private-Docker data volume. `dim run WORKSPACE TASK`
+executes only a named task. Projects without this file retain the legacy
+`.dim/entrypoint.sh` path.
+
 Before `create`, `start`, `setup`, or `update` runs Project setup, DIM must
 ensure its managed controller is healthy. The host controller listens on a
 state-root-specific Unix socket directory mounted at `/run/dim/controller` in

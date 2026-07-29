@@ -40,8 +40,8 @@ Checks:
 
 - `sysbox-runc --version`
 - `systemctl is-active sysbox.service`
-- Docker runtime registration for configured runtime.
-- `docker run --rm --runtime=<runtime> --pull=missing hello-world:latest`
+- Host-side Docker registration for `sysbox-runc`.
+- `docker run --rm --runtime=sysbox-runc --pull=missing hello-world:latest`
 - `/dev/kvm` readable and writable.
 
 ### gVisor

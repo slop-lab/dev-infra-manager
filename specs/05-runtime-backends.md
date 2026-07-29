@@ -2,12 +2,14 @@
 
 ## Scope
 
-Runtime backends define the top-level container runtime and nested engine for a
-persistent workspace.
+Runtime backends define the untrusted agent boundary. The trusted workspace
+container is a privileged `runc` container for the default `sysbox` backend;
+it owns the Project engine and may receive explicitly requested host devices.
 
 Allowed backend names:
 
-- `sysbox`: `sysbox-runc`, project Docker image, nested Docker.
+- `sysbox`: privileged `runc` workspace plus a host-side, unprivileged
+  `sysbox-runc` agent with private Docker.
 - `gvisor`: `runsc`, project Docker image, nested Docker with the containerd
   snapshotter disabled.
 - `rootless-podman`: `runc`, project Podman image, nested rootless Podman.
@@ -18,13 +20,21 @@ The selected backend must be stored in workspace metadata and included in the
 managed container labels. Reconciliation must reject a container whose backend
 label differs from the workspace record.
 
-The nested-engine volume target is `/var/lib/docker` for Docker backends and
+The agent-engine volume target is `/var/lib/docker` for Docker backends and
 `/home/dim/.local/share/containers` for rootless Podman.
 Rootless Podman must receive `/dev/fuse` and requires host support for nested
 unprivileged user namespaces. Its outer container must not require
 `--privileged`; it must instead receive the specific capabilities that
-nested unprivileged user namespaces and mounts need. `runc` remains the only
-backend whose outer container is privileged by default.
+nested unprivileged user namespaces and mounts need.
+
+For `sysbox`, `.dim/agent.json` is trusted root-repository configuration. DIM
+builds its relative `buildContext`, creates a separate checkout volume, and
+maps named tasks to fixed command arrays. `dim run` executes those tasks
+directly through the host-side agent daemon. The agent receives neither the
+host-side daemon socket nor the Project daemon socket.
+
+The host-side DIM daemon must have `sysbox-runc` registered. The nested Project
+daemon must not require Sysbox registration.
 
 Projects receive `DIM_WORKSPACE_BACKEND` and `DIM_NESTED_ENGINE`. Default
 Compose setup must use the selected nested engine.

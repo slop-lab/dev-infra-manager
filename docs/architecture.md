@@ -8,21 +8,21 @@ The system supports adding project Git repositories later. This allows product c
 
 ## Runtime Boundaries
 
-Each DIM workspace has a trusted project-root container. Inside it, the
-controller keeps agent-controlled execution separate from secret-bearing
-execution by using distinct child containers and distinct container runtimes.
+Each DIM workspace has a trusted project-root container. The host-side DIM
+runtime creates the untrusted agent beside that container, while the trusted
+Project daemon creates secret-bearing services inside the workspace.
 
 ### Workspace Root and Controller
 
-The workspace root is the persistent top-level container. Its controller owns
-the checkout and root nested-container runtime, reconciles the agent
-environment, and deploys reviewed secret-bearing workloads. Host-side DIM
-creates this outer boundary; it does not expose the root runtime to the agent.
+The workspace root owns the reviewed checkout and Project runtime and deploys
+reviewed secret-bearing workloads. It may be privileged because it is trusted
+lifecycle infrastructure. Host-side DIM creates this boundary and does not
+expose its runtime to the agent.
 
 ### Agent Container
 
-The agent container is the untrusted child execution environment exposed to an
-agent.
+The agent container is the untrusted sibling execution environment exposed to
+an agent. “Agent” is a logical workspace relationship, not Docker parentage.
 
 Properties:
 
@@ -108,7 +108,8 @@ The workspace lifecycle is:
 1. Create a new read-write workspace for the project.
 2. Inject approved Git configuration and environment variables.
 3. Start the workspace root and its controller.
-4. Start the agent container with a separate inner runtime.
+4. Read reviewed `.dim/agent.json` and start the agent through the host-side
+   Sysbox runtime with separate checkout and Docker-data volumes.
 5. Allow the agent to execute commands and create containers only within the
    agent boundary.
 6. Preserve only explicitly exported artifacts or Git-pushed changes.

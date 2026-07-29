@@ -7,6 +7,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- The default Sysbox layout now keeps the trusted privileged workspace and
+  untrusted agent as host-side sibling containers. Reviewed
+  `.dim/agent.json` files define the agent build context and fixed task
+  commands; agents receive separate checkout and private-Docker volumes, no
+  Docker control socket, and run without `--privileged`.
+- Extended the Sysbox KVM installer smoke to run QEMU through a directly
+  passed workspace `/dev/kvm`, prove the Project daemon has no Sysbox runtime,
+  and run nested Docker in an unprivileged host-side Sysbox agent.
+
 ## [0.2.0] - 2026-07-29
 
 ### Changed

@@ -26,9 +26,13 @@ export function workspaceRuntimePlan(
     case "sysbox":
       return {
         ...shared,
-        dockerRuntime: options.workspaceRuntime ?? "sysbox-runc",
+        // The workspace is trusted lifecycle infrastructure. The untrusted
+        // agent is the host-side Sysbox container; nesting the whole
+        // workspace in Sysbox would put the Project daemon and secrets in the
+        // same sandbox as the agent.
+        dockerRuntime: options.workspaceRuntime ?? "runc",
         image: options.workspaceImage ?? "dev-infra-project-workspace:latest",
-        privileged: options.workspacePrivileged ?? false,
+        privileged: options.workspacePrivileged ?? true,
         runtimeDataPath: "/var/lib/docker",
         engine: "docker"
       };
