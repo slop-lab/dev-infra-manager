@@ -113,18 +113,14 @@ local ingress and operate it from the host without project-specific curl
 tasks:
 
 ```bash
-dim external-url add-ingress local-http \
-  --driver builtin-http \
+dim external-url ingress add builtin-http --name local-http \
   --description "Local development URL" \
   --scheme http \
-  --domain dev.test \
-  --listen-host 0.0.0.0 \
-  --listen-port 8080 \
-  --port 8080
+  --argument '{"domain":"dev.test","publicPort":8080,"listenHost":"0.0.0.0","listenPort":"auto"}'
 
 dim external-url discover --workspace work-1
-dim external-url create --workspace work-1 \
-  --ingress local-http --service web --container dev --port 3000
+dim external-url request --workspace work-1 \
+  --ingress local-http --name web --container dev --port 3000
 dim external-url list --workspace work-1
 ```
 

@@ -17,6 +17,7 @@ import {
   type WorkspaceTarget
 } from "@slop-lab/dim-core";
 import { readExternalUrlConfig } from "@slop-lab/dim-contracts-external-url";
+import { parseCaddyIngressArgument } from "@slop-lab/dim-ingress-caddy";
 
 export interface ExternalUrlIngressOptions {
   description: string;
@@ -44,6 +45,7 @@ interface ExternalRoute {
   ingress: string;
   authority: string;
   ingressId?: string;
+  url?: string;
 }
 
 interface StoredUrl {
@@ -77,6 +79,9 @@ interface RouterOptions {
   listenHost: string;
   listenPort: number;
   upstreamMode: "container-dns" | "container-ip";
+  scheme: "http" | "https";
+  domain: string;
+  port?: number;
 }
 
 export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): DimPlugin {
@@ -88,7 +93,7 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
     register(host) {
       if (Object.keys(options.ingresses).length === 0) {
         host.logger.warn(
-          "External URLs plugin has no configured ingress; run 'dim external-url add-ingress --help' to add one"
+          "External URLs plugin has no configured ingress; run 'dim external-url ingress add --help' to add one"
         );
       }
       const ingresses = new Map<string, ConfiguredIngress>();
@@ -99,7 +104,10 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
             name,
             listenHost: ingress.listenHost,
             listenPort: ingress.listenPort,
-            upstreamMode: ingress.upstreamMode ?? "container-ip"
+            upstreamMode: ingress.upstreamMode ?? "container-ip",
+            scheme: ingress.scheme,
+            domain: ingress.domain,
+            ...(ingress.port === undefined ? {} : { port: ingress.port })
           }, host.logger)
         });
       }
@@ -146,6 +154,12 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
       });
       host.registerControllerRoute({
         method: "DELETE",
+        path: "/urls",
+        summary: "Revoke every external URL for this workspace",
+        handle: (context) => deleteWorkspaceUrls(context, ingresses)
+      });
+      host.registerControllerRoute({
+        method: "DELETE",
         path: "/urls/:id",
         summary: "Revoke an external URL",
         handle: (context) => deleteUrl(context, ingresses)
@@ -160,7 +174,61 @@ export async function externalUrlsPluginFromConfig(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<DimPlugin> {
   const config = await readExternalUrlConfig(env);
-  return createExternalUrlsPlugin({ ingresses: config.ingresses });
+  const ingresses: Record<string, ExternalUrlIngressOptions> = {};
+  for (const [name, ingress] of Object.entries(config.ingresses)) {
+    const argument = ingress.driver === "caddy"
+      ? parseCaddyIngressArgument(ingress.argument)
+      : parseBuiltinHttpArgument(ingress.driver, ingress.argument);
+    if (argument.listenPort === "auto") {
+      throw new Error(`ingress '${name}' has unresolved listenPort 'auto'; re-add it with the DIM CLI`);
+    }
+    ingresses[name] = {
+      description: ingress.description,
+      scheme: ingress.scheme,
+      domain: argument.domain,
+      ...("publicPort" in argument && argument.publicPort !== undefined ? { port: argument.publicPort } : {}),
+      listenHost: argument.listenHost,
+      listenPort: argument.listenPort,
+      ...(argument.upstreamMode === undefined ? {} : { upstreamMode: argument.upstreamMode })
+    };
+  }
+  return createExternalUrlsPlugin({ ingresses });
+}
+
+function parseBuiltinHttpArgument(driver: string, argument: string): {
+  domain: string;
+  listenHost: string;
+  listenPort: number | "auto";
+  publicPort?: number;
+  upstreamMode?: "container-ip" | "container-dns";
+} {
+  if (driver !== "builtin-http") throw new Error(`unsupported external URL ingress driver '${driver}'`);
+  let value: unknown;
+  try {
+    value = JSON.parse(argument);
+  } catch {
+    throw new Error("builtin-http ingress argument must be valid JSON");
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("builtin-http ingress argument must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.domain !== "string" || input.domain.length === 0) throw new Error("builtin-http argument requires domain");
+  if (typeof input.listenHost !== "string" || input.listenHost.length === 0) {
+    throw new Error("builtin-http argument requires listenHost");
+  }
+  if (input.listenPort !== "auto"
+    && (!Number.isInteger(input.listenPort) || (input.listenPort as number) < 1 || (input.listenPort as number) > 65_535)) {
+    throw new Error("builtin-http argument listenPort must be 'auto' or a port");
+  }
+  if (input.publicPort !== undefined
+    && (!Number.isInteger(input.publicPort) || (input.publicPort as number) < 1 || (input.publicPort as number) > 65_535)) {
+    throw new Error("builtin-http argument publicPort must be a port");
+  }
+  if (input.upstreamMode !== undefined && input.upstreamMode !== "container-ip" && input.upstreamMode !== "container-dns") {
+    throw new Error("builtin-http argument upstreamMode must be container-ip or container-dns");
+  }
+  return input as unknown as ReturnType<typeof parseBuiltinHttpArgument>;
 }
 
 async function listUrls(context: ControllerRouteContext) {
@@ -175,12 +243,21 @@ async function createUrl(
   context: ControllerRouteContext,
   ingresses: ReadonlyMap<string, ConfiguredIngress>
 ) {
-  const request = validateRequest(await context.readJson());
+  const input = await context.readJson() as Record<string, unknown>;
+  if (input && typeof input === "object" && input.service === undefined) {
+    const existing = await new ExternalUrlStore(context.stateRoot).list(context.workspace.id);
+    const used = new Set(existing.map((entry) => entry.service));
+    let index = 0;
+    while (used.has(String(index))) index += 1;
+    input.service = String(index);
+  }
+  const request = validateRequest(input);
   const ingress = required(ingresses, request.ingress);
   const upstream = await context.resolveTarget(request.target, ingress.router.upstreamMode);
   const route = await ingress.router.provision(context.workspace, request, upstream);
   try {
-    const url = externalUrl(ingress.options, request, route);
+    const url = route.url;
+    if (!url) throw new Error(`ingress '${request.ingress}' did not return a public URL`);
     const entry: StoredUrl = {
       id: randomUUID(),
       workspace: context.workspace.name,
@@ -219,6 +296,19 @@ async function deleteUrl(
   return { status: 204 };
 }
 
+async function deleteWorkspaceUrls(
+  context: ControllerRouteContext,
+  ingresses: ReadonlyMap<string, ConfiguredIngress>
+) {
+  const store = new ExternalUrlStore(context.stateRoot);
+  for (const entry of await store.list(context.workspace.id)) {
+    const ingress = ingresses.get(entry.ingress);
+    if (ingress) await ingress.router.revoke(entry.route);
+    await store.remove(entry);
+  }
+  return { status: 204 };
+}
+
 class ExternalUrlStore {
   constructor(readonly stateRoot: string) {}
 
@@ -228,9 +318,7 @@ class ExternalUrlStore {
       const names = await readdir(directory);
       return await Promise.all(names.filter((name) => name.endsWith(".json")).map(async (name) => {
         const value = JSON.parse(await readFile(path.join(directory, name), "utf8")) as unknown;
-        const normalized = normalizeStoredUrl(value);
-        if (normalized.migrated) await this.put(normalized.entry);
-        return normalized.entry;
+        return storedUrl(value);
       }));
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
@@ -266,6 +354,9 @@ class WorkspaceIngressRouter implements IngressRouter {
   readonly #routes = new Map<string, ResolvedWorkspaceTarget>();
   readonly #server: http.Server;
   readonly #ready: Promise<void>;
+  readonly #scheme: "http" | "https";
+  readonly #domain: string;
+  readonly #port: number | undefined;
 
   constructor(
     options: RouterOptions,
@@ -273,6 +364,9 @@ class WorkspaceIngressRouter implements IngressRouter {
   ) {
     this.name = options.name;
     this.upstreamMode = options.upstreamMode;
+    this.#scheme = options.scheme;
+    this.#domain = options.domain;
+    this.#port = options.port;
     this.#server = http.createServer((request, response) => this.#proxy(request, response));
     this.#server.on("upgrade", (request, socket, head) => this.#upgrade(request, socket, head));
     this.#ready = new Promise((resolve, reject) => {
@@ -298,7 +392,11 @@ class WorkspaceIngressRouter implements IngressRouter {
       throw new UserError(`external route '${authority}' already targets another service`);
     }
     this.#routes.set(authority, upstream);
-    return { id: randomUUID(), ingress: this.name, authority, ingressId: authority };
+    const publicAuthority = `${authority}.${normalizeDomain(this.#domain)}${
+      this.#port === undefined ? "" : `:${this.#port}`
+    }`;
+    const url = validateExternalUrl(`${this.#scheme}://${publicAuthority}${request.path ?? "/"}`);
+    return { id: randomUUID(), ingress: this.name, authority, ingressId: authority, url };
   }
 
   async revoke(route: ExternalRoute): Promise<void> {
@@ -369,25 +467,14 @@ class WorkspaceIngressRouter implements IngressRouter {
   }
 }
 
-function externalUrl(
-  ingress: ExternalUrlIngressOptions,
-  request: NormalizedRequest,
-  route: ExternalRoute
-): string {
-  const authority = `${route.authority}.${normalizeDomain(ingress.domain)}${
-    ingress.port === undefined ? "" : `:${ingress.port}`
-  }`;
-  return validateExternalUrl(`${ingress.scheme}://${authority}${request.path ?? "/"}`);
-}
-
 function validateRequest(value: unknown): NormalizedRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new UserError("request body must be an object");
   const input = value as Record<string, unknown>;
   if (typeof input.ingress !== "string" || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(input.ingress)) {
     throw new UserError("ingress must be a configured ingress name");
   }
-  if (typeof input.service !== "string" || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(input.service)) {
-    throw new UserError("service must be a DNS label");
+  if (typeof input.service !== "string" || !/^(?!.*--)[a-z0-9][a-z0-9-]{0,62}$/.test(input.service)) {
+    throw new UserError("name must be a DNS label without '--'");
   }
   if (!input.target || typeof input.target !== "object" || Array.isArray(input.target)) {
     throw new UserError("target must be an object");
@@ -469,44 +556,15 @@ function storedRequest(entry: StoredUrl): NormalizedRequest {
   };
 }
 
-function normalizeStoredUrl(value: unknown): { entry: StoredUrl; migrated: boolean } {
+function storedUrl(value: unknown): StoredUrl {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("invalid stored external URL");
   }
-  const candidate = value as StoredUrl & {
-    profile?: string;
-    urlProvider?: string;
-    route: ExternalRoute & { provider?: string; providerId?: string };
-  };
-  const ingress = candidate.ingress ?? candidate.profile;
-  if (!ingress) throw new Error(`stored external URL '${candidate.id}' has no ingress`);
-  const routeIngress = candidate.route.ingress ?? candidate.route.provider ?? ingress;
-  const entry: StoredUrl = {
-    id: candidate.id,
-    workspace: candidate.workspace,
-    workspaceId: candidate.workspaceId,
-    ingress,
-    service: candidate.service,
-    target: candidate.target,
-    ...(candidate.path === undefined ? {} : { path: candidate.path }),
-    route: {
-      id: candidate.route.id,
-      ingress: routeIngress,
-      authority: candidate.route.authority,
-      ...(candidate.route.ingressId ?? candidate.route.providerId
-        ? { ingressId: candidate.route.ingressId ?? candidate.route.providerId }
-        : {})
-    },
-    url: candidate.url,
-    createdAt: candidate.createdAt
-  };
-  return {
-    entry,
-    migrated: candidate.ingress === undefined
-      || candidate.route.ingress === undefined
-      || candidate.profile !== undefined
-      || candidate.urlProvider !== undefined
-  };
+  const candidate = value as StoredUrl;
+  if (typeof candidate.ingress !== "string" || typeof candidate.route?.ingress !== "string") {
+    throw new Error(`invalid stored external URL '${candidate.id}'`);
+  }
+  return candidate;
 }
 
 function validateExternalUrl(value: string): string {
@@ -517,7 +575,7 @@ function validateExternalUrl(value: string): string {
 }
 
 function routeLabel(service: string, workspace: string): string {
-  const value = `${service}--${workspace}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  const value = `${workspace}--${service}`.toLowerCase().replace(/[^a-z0-9-]/g, "-");
   if (value.length <= 63) return value;
   return `${value.slice(0, 54)}-${stableHash(value).toString(16).padStart(8, "0")}`;
 }

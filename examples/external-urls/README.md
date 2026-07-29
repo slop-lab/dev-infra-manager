@@ -54,8 +54,9 @@ dim discard external-dev --yes
 
 ## HTTPS
 
-For public HTTPS, use a loopback-bound Caddy ingress with Cloudflare DNS-01.
-The generated deployment shape is shown in
+For a public wildcard domain, the Caddy example combines plain HTTP on port
+8080 with loopback-routed HTTPS on port 443 using Cloudflare DNS-01. The
+generated deployment shape is shown in
 [host/cloudflare-caddy](host/cloudflare-caddy/README.md). Full configuration
 and security details are in
 [External workspace URLs](../../docs/external-urls.md).

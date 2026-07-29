@@ -28,6 +28,10 @@ test -x "$dim_bin"
 test ! -e "$package_root/install/node_modules/.bin/dev-infra-manager"
 "$dim_bin" --help >/dev/null
 
+export DIM_PLUGIN_HOME="$package_root/plugins"
+mkdir -p "$DIM_PLUGIN_HOME"
+printf '%s\n' '{"schemaVersion":1,"plugins":[]}' > "$DIM_PLUGIN_HOME/plugins.json"
+
 DIM_BIN="$dim_bin" bash scripts/container-project-smoke.bash
 DIM_BIN="$dim_bin" bash scripts/container-multi-repo-project-smoke.bash
 

@@ -1,9 +1,14 @@
 # Configuration
 
 DIM stores installation-wide user settings in
-`~/.config/slop-lab/dim.json` (or `DIM_CONFIG_PATH`) and schema-versioned
+`~/.config/dim/config.json` (or `DIM_CONFIG_PATH`) and schema-versioned
 runtime state under `DIM_STATE_ROOT`. The host backend installer writes the
 required `workspaceBackend` setting.
+
+The default paths use DIM's own namespace: configuration is under
+`~/.config/dim`, persistent application state under `~/.local/state/dim`,
+and installed data under `~/.local/share/dim`. DIM does not create files in
+the organization-wide `slop-lab` directory.
 
 Common settings:
 

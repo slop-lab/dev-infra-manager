@@ -83,7 +83,7 @@ npx '@slop-lab/dim-installer@0.2.0' install-plugin '@example/dim-plugin@1.2.3'
 separately installed `@slop-lab/dim-cli`. Bare `dim` opens an interactive
 installer only until a CLI is configured; after that it behaves like `dim
 --help`, and `dim installer` is what reopens the prompt. Installation
-choices persist under `${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json`. See
+choices persist under `${XDG_CONFIG_HOME:-~/.config}/dim/config.json`. See
 the [installer README](https://www.npmjs.com/package/@slop-lab/dim-installer)
 for the full command reference.
 

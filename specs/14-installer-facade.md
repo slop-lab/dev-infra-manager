@@ -53,7 +53,7 @@ anything else, CLI set    -> proxied to the configured executable
 ## Configuration
 
 State lives at `$DIM_CONFIG_PATH`, defaulting to
-`${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json`, schema version 1:
+`${XDG_CONFIG_HOME:-~/.config}/dim/config.json`, schema version 1:
 
 ```json
 {

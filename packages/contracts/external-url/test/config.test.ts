@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   emptyExternalUrlConfig,
+  externalUrlConfigPath,
   readExternalUrlConfig,
   validateExternalUrlConfig,
   writeExternalUrlConfig
@@ -30,36 +31,34 @@ describe("external URL config", () => {
       driver: "caddy",
       description: "Public HTTPS",
       scheme: "https",
-      domain: "Dev.Example.COM",
-      listenHost: "127.0.0.1",
-      listenPort: 9080,
-      upstreamMode: "container-ip",
-      provider: "cloudflare"
+      argument: JSON.stringify({
+        domain: "dev.example.com",
+        listenHost: "127.0.0.1",
+        listenPort: 9080,
+        provider: "cloudflare"
+      })
     };
     await writeExternalUrlConfig(config, env);
     expect(await readExternalUrlConfig(env)).toMatchObject({
       providers: { cloudflare: { zone: "example.com" } },
-      ingresses: { public: { domain: "dev.example.com" } }
+      ingresses: { public: { driver: "caddy" } }
     });
     expect(JSON.parse(await readFile(env.DIM_EXTERNAL_URL_CONFIG, "utf8"))).toMatchObject({ schemaVersion: 1 });
   });
 
-  it("rejects a Caddy ingress without a configured provider", () => {
+  it("leaves opaque arguments to the selected driver", () => {
     expect(() => validateExternalUrlConfig({
       schemaVersion: 1,
       providers: {},
       ingresses: {
-        public: {
-          driver: "caddy",
-          description: "Public",
-          scheme: "https",
-          domain: "dev.example.com",
-          listenHost: "127.0.0.1",
-          listenPort: 9080,
-          upstreamMode: "container-ip",
-          provider: "missing"
-        }
+        public: { driver: "caddy", description: "Public", scheme: "https", argument: "{}" }
       }
-    })).toThrow(/unknown provider/);
+    })).not.toThrow();
+  });
+
+  it("uses the DIM config namespace", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "dim-external-path-"));
+    roots.push(root);
+    expect(externalUrlConfigPath({ XDG_CONFIG_HOME: root })).toBe(path.join(root, "dim", "external-urls.json"));
   });
 });

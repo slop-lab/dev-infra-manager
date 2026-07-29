@@ -1,5 +1,4 @@
 import type {
-  CaddyIngressConfig,
   CloudflareDnsProviderConfig
 } from "@slop-lab/dim-contracts-external-url";
 
@@ -13,9 +12,51 @@ export interface CaddyDeployment {
   environmentExample: string;
 }
 
+export interface CaddyIngressArgument {
+  domain: string;
+  listenHost: string;
+  listenPort: number | "auto";
+  publicListenHost?: string;
+  upstreamMode?: "container-ip" | "container-dns";
+  provider: string;
+  acmeEmail?: string;
+}
+
+export function parseCaddyIngressArgument(argument: string): CaddyIngressArgument {
+  let value: unknown;
+  try {
+    value = JSON.parse(argument);
+  } catch {
+    throw new Error("Caddy ingress argument must be valid JSON");
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Caddy ingress argument must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.domain !== "string" || input.domain.length === 0) throw new Error("Caddy argument requires domain");
+  if (typeof input.listenHost !== "string" || input.listenHost.length === 0) {
+    throw new Error("Caddy argument requires listenHost");
+  }
+  if (input.listenPort !== "auto"
+    && (!Number.isInteger(input.listenPort) || (input.listenPort as number) < 1 || (input.listenPort as number) > 65535)) {
+    throw new Error("Caddy argument listenPort must be 'auto' or a port");
+  }
+  if (typeof input.provider !== "string" || input.provider.length === 0) throw new Error("Caddy argument requires provider");
+  if (input.publicListenHost !== undefined && typeof input.publicListenHost !== "string") {
+    throw new Error("Caddy argument publicListenHost must be a string");
+  }
+  if (input.upstreamMode !== undefined && input.upstreamMode !== "container-ip" && input.upstreamMode !== "container-dns") {
+    throw new Error("Caddy argument upstreamMode must be container-ip or container-dns");
+  }
+  if (input.acmeEmail !== undefined && typeof input.acmeEmail !== "string") {
+    throw new Error("Caddy argument acmeEmail must be a string");
+  }
+  return input as unknown as CaddyIngressArgument;
+}
+
 export function renderCaddyDeployment(
   name: string,
-  ingress: CaddyIngressConfig,
+  ingress: CaddyIngressArgument & { listenPort: number },
   provider: CloudflareDnsProviderConfig
 ): CaddyDeployment {
   if (provider.driver !== "cloudflare") throw new Error("Caddy currently supports only the Cloudflare DNS provider");
@@ -49,9 +90,9 @@ COPY --from=builder /usr/bin/caddy /usr/bin/caddy
     container_name: ${service}
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "${ingress.publicListenHost ? `${ingress.publicListenHost}:` : ""}80:80"
+      - "${ingress.publicListenHost ? `${ingress.publicListenHost}:` : ""}443:443"
+      - "${ingress.publicListenHost ? `${ingress.publicListenHost}:` : ""}443:443/udp"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -70,7 +111,7 @@ volumes:
 }
 
 export async function verifyCaddyIngress(
-  ingress: CaddyIngressConfig,
+  ingress: CaddyIngressArgument,
   fetchImpl: typeof fetch = fetch
 ): Promise<void> {
   const response = await fetchImpl(`https://health.${ingress.domain}/`, {

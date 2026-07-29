@@ -107,7 +107,7 @@ tar -C "$workdir" -czf "$workdir/repo.tar.gz" repo.bundle
 run_step "clone repository" clone_repository
 run_step "install $backend backend" install_backend
 run_step "verify stored backend" ssh "${ssh_args[@]}" dim@127.0.0.1 \
-  "test \"\$(jq -r .workspaceBackend ~/.config/slop-lab/dim.json)\" = '$backend'"
+  "test \"\$(jq -r .workspaceBackend ~/.config/dim/config.json)\" = '$backend'"
 # Rootless Podman's workload runs the outer container with the exact
 # capability set workspaceRuntimePlan() grants (packages/core/src/runtimeBackends.ts)
 # instead of --privileged, so this is the real verification that those

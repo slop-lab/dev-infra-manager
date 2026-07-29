@@ -106,7 +106,7 @@ grep -q "DIM CLI: not installed" <<<"$version1"
 echo "[container] dim install-cli with no explicit flag under mise (expect --no-local-bin default)"
 dim install-cli
 test ! -e "$HOME/.local/bin/dim"
-config_path="$HOME/.config/slop-lab/dim.json"
+config_path="$HOME/.config/dim/config.json"
 mode="$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).cli.mode)" "$config_path")"
 test "$mode" = "proxied"
 

@@ -8,7 +8,8 @@ export default defineConfig({
       "@slop-lab/dim-contracts-external-url": path.resolve(
         import.meta.dirname,
         "../../contracts/external-url/src/index.ts"
-      )
+      ),
+      "@slop-lab/dim-ingress-caddy": path.resolve(import.meta.dirname, "../../ingress/caddy/src/index.ts")
     }
   }
 });

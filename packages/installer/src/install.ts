@@ -48,9 +48,10 @@ export interface DimUserConfig {
 
 export function defaultUserConfigPath(env: NodeJS.ProcessEnv = process.env): string {
   const home = env.HOME ?? os.homedir();
+  const configHome = env.XDG_CONFIG_HOME ?? path.join(home, ".config");
   return path.resolve(
     env.DIM_CONFIG_PATH
-      ?? path.join(env.XDG_CONFIG_HOME ?? path.join(home, ".config"), "slop-lab", "dim.json")
+      ?? path.join(configHome, "dim", "config.json")
   );
 }
 

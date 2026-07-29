@@ -10,7 +10,7 @@ trap cleanup EXIT
 
 plugin_source="$root/plugin-source"
 plugin_home="$root/plugin-home"
-config_path="$root/config/slop-lab/dim.json"
+config_path="$root/config/dim/config.json"
 installer_prefix="$root/installer"
 mkdir -p "$plugin_source"
 

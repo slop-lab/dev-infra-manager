@@ -111,6 +111,9 @@ importers:
       '@slop-lab/dim-core':
         specifier: workspace:0.2.0
         version: link:../../core
+      '@slop-lab/dim-ingress-caddy':
+        specifier: workspace:0.2.0
+        version: link:../../ingress/caddy
     devDependencies:
       '@types/node':
         specifier: 24.13.3

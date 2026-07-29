@@ -62,13 +62,19 @@ docker build \
 npm pack ./packages/core/dist --pack-destination "$pack_root" --silent >/dev/null
 npm pack ./packages/cli/dist --pack-destination "$pack_root" --silent >/dev/null
 npm pack ./packages/contracts/external-url/dist --pack-destination "$pack_root" --silent >/dev/null
+npm pack ./packages/ingress/caddy/dist --pack-destination "$pack_root" --silent >/dev/null
+npm pack ./packages/provider/dns-cloudflare/dist --pack-destination "$pack_root" --silent >/dev/null
 npm pack ./packages/plugin/external-urls/dist --pack-destination "$pack_root" --silent >/dev/null
 npm install --prefix "$cli_home" --silent \
   "$pack_root/slop-lab-dim-core-0.2.0.tgz" \
+  "$pack_root/slop-lab-dim-contracts-external-url-0.2.0.tgz" \
+  "$pack_root/slop-lab-dim-ingress-caddy-0.2.0.tgz" \
+  "$pack_root/slop-lab-dim-provider-dns-cloudflare-0.2.0.tgz" \
   "$pack_root/slop-lab-dim-cli-0.2.0.tgz"
 npm install --prefix "$plugin_home" --silent \
   "$pack_root/slop-lab-dim-core-0.2.0.tgz" \
   "$pack_root/slop-lab-dim-contracts-external-url-0.2.0.tgz" \
+  "$pack_root/slop-lab-dim-ingress-caddy-0.2.0.tgz" \
   "$pack_root/slop-lab-dim-plugin-external-urls-0.2.0.tgz"
 jq -n '{schemaVersion:1,plugins:["@slop-lab/dim-plugin-external-urls"]}' \
   > "$plugin_home/plugins.json"
@@ -83,7 +89,7 @@ DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
   >"$state_root/plugin-list.json" 2>"$plugin_warning" \
   || { cat "$plugin_warning" >&2; exit 1; }
 jq -e '.plugins == ["@slop-lab/dim-plugin-external-urls"]' "$state_root/plugin-list.json" >/dev/null
-grep -Fq "dim external-url add-ingress --help" "$plugin_warning"
+grep -Fq "dim external-url ingress add --help" "$plugin_warning"
 test ! -e "$state_root/external-urls.json"
 
 echo "[external-url-example] start project-root, dev, and deep containers"
@@ -196,14 +202,11 @@ DIM_EXTERNAL_URL_PORT="$proxy_port" \
 DIM_EXTERNAL_URL_LISTEN_PORT="$proxy_port" \
   bash examples/external-urls/configure-ingress.bash >/dev/null
 DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
-  node packages/cli/dist/cli.js external-url add-ingress local-loopback \
-    --driver builtin-http \
+  node packages/cli/dist/cli.js external-url ingress add builtin-http \
+    --name local-loopback \
     --description "loopback-only negative-test ingress" \
     --scheme http \
-    --domain loopback.tail.test \
-    --port "$loopback_port" \
-    --listen-host 127.0.0.1 \
-    --listen-port "$loopback_port" \
+    --argument "{\"domain\":\"loopback.tail.test\",\"publicPort\":$loopback_port,\"listenHost\":\"127.0.0.1\",\"listenPort\":$loopback_port}" \
     >/dev/null
 mkdir -p "$(dirname -- "$controller_socket")"
 DIM_STATE_ROOT="$state_root" \
@@ -251,10 +254,10 @@ created_urls="$(run_dim external-url list --workspace "$workspace_name" --json)"
 dev_created="$(printf '%s' "$created_urls" | jq -ec '.urls[] | select(.service == "dev")')"
 deep_created="$(printf '%s' "$created_urls" | jq -ec '.urls[] | select(.service == "deep")')"
 loopback_created="$(
-  run_dim external-url create \
+  run_dim external-url request \
     --workspace "$workspace_name" \
     --ingress local-loopback \
-    --service loopback \
+    --name loopback \
     --container dev \
     --port 8080 \
     --json
@@ -281,15 +284,12 @@ cloudflare_cli=(
   --record-type A \
   --target "$gateway" \
   --credential-env CF_SMOKE_TOKEN >/dev/null
-"${cloudflare_cli[@]}" add-ingress local-https \
-  --driver caddy \
+"${cloudflare_cli[@]}" ingress add caddy \
+  --name local-https \
   --description "local Cloudflare-compatible DNS smoke ingress" \
   --scheme https \
-  --domain dev.smoke.test \
-  --listen-host 127.0.0.1 \
-  --listen-port 9443 \
-  --provider local-cloudflare >/dev/null
-"${cloudflare_cli[@]}" setup-ingress local-https --output "$cloudflare_output" >/dev/null
+  --argument '{"domain":"dev.smoke.test","listenHost":"127.0.0.1","listenPort":9443,"provider":"local-cloudflare"}' >/dev/null
+"${cloudflare_cli[@]}" ingress setup local-https --output "$cloudflare_output" >/dev/null
 test -f "$cloudflare_output/local-https/Caddyfile"
 docker build --quiet --tag "$caddy_image" "$cloudflare_output/local-https" >/dev/null
 if ! docker run --rm \
@@ -314,7 +314,7 @@ for attempt in $(seq 1 30); do
   fi
   sleep 1
 done
-"${cloudflare_cli[@]}" remove-ingress local-https --cleanup-dns >/dev/null
+"${cloudflare_cli[@]}" ingress remove local-https --cleanup-dns >/dev/null
 for attempt in $(seq 1 30); do
   if ! docker run --rm --network "$network" --dns "$coredns_ip" \
     busybox@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028 \
@@ -355,14 +355,14 @@ if external_curl --fail --silent --show-error "$loopback_url" >/dev/null 2>&1; t
 fi
 
 dev_id="$(printf '%s' "$dev_created" | jq -er '.id')"
-run_dim external-url remove "$dev_id" --workspace "$workspace_name"
+run_dim external-url revoke "$dev_id" --workspace "$workspace_name"
 test "$(external_curl --silent --output /dev/null --write-out '%{http_code}' \
   "$dev_url")" = "404"
 
-run_dim external-url remove \
+run_dim external-url revoke \
   "$(printf '%s' "$deep_created" | jq -er '.id')" \
   --workspace "$workspace_name"
-run_dim external-url remove \
+run_dim external-url revoke \
   "$(printf '%s' "$loopback_created" | jq -er '.urls[0].id')" \
   --workspace "$workspace_name"
 

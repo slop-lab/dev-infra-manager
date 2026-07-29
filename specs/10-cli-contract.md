@@ -108,23 +108,30 @@ Host configuration is managed through:
 dim external-url add-provider cloudflare NAME [OPTIONS]
 dim external-url list-providers [--json]
 dim external-url remove-provider NAME
-dim external-url add-ingress NAME [OPTIONS]
-dim external-url list-ingresses [--json]
-dim external-url setup-ingress NAME [--output DIRECTORY]
-dim external-url verify-ingress NAME
-dim external-url remove-ingress NAME [--cleanup-dns]
+dim external-url ingress add DRIVER --name NAME --description TEXT
+  --scheme SCHEME --argument STRING
+dim external-url ingress list [--json]
+dim external-url ingress setup NAME [--output DIRECTORY]
+dim external-url ingress verify NAME
+dim external-url ingress remove NAME [--cleanup-dns]
 ```
 
 Workspace-scoped URL operations are:
 
 ```text
 dim external-url discover [--workspace WORKSPACE] [--json]
-dim external-url create [--workspace WORKSPACE] --ingress NAME
-  --service SERVICE [--container NAME ...] --port PORT [--protocol http|https]
+dim external-url request [--workspace WORKSPACE] --ingress NAME
+  [--name NAME] [--container NAME ...] --port PORT [--protocol http|https]
 dim external-url list [--workspace WORKSPACE] [--json]
-dim external-url remove URL_ID [--workspace WORKSPACE]
+dim external-url revoke URL_ID [--workspace WORKSPACE]
 dim host-input get PROVIDER KEY [--parameters STRING]
 ```
+
+The ingress `argument` is an opaque string interpreted only by its driver.
+Drivers return public URLs rather than asking the common controller to derive
+domains. A missing request name receives the first unused numeric name, and
+the public DNS label begins `WORKSPACE--NAME`. Workspace discard revokes all
+routes authenticated by that workspace grant before removing the grant.
 
 Inside a workspace the controller endpoint and grant come from
 `DIM_CONTROLLER_SOCKET` and `DIM_CONTROLLER_TOKEN`. On the host, `--workspace`

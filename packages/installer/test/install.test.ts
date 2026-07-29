@@ -49,7 +49,7 @@ describe("@slop-lab/dim-installer", () => {
       expect(defaultBinDirectory(env)).toBe("/home/example/.local/bin");
       expect(defaultDataHome(env)).toBe("/home/example/.local/share/dim");
       expect(defaultPluginHome(env)).toBe("/home/example/.local/share/dim/plugins");
-      expect(defaultUserConfigPath(env)).toBe("/home/example/.config/slop-lab/dim.json");
+      expect(defaultUserConfigPath(env)).toBe("/home/example/.config/dim/config.json");
     });
 
     it("honor explicit overrides over HOME-derived defaults", () => {
@@ -67,6 +67,7 @@ describe("@slop-lab/dim-installer", () => {
       expect(defaultInstallPrefix(env)).toBe("/explicit/prefix");
       expect(defaultUserConfigPath(env)).toBe("/explicit/config.json");
     });
+
   });
 
   describe("readUserConfig", () => {
@@ -98,7 +99,7 @@ describe("@slop-lab/dim-installer", () => {
       await writeFakeCliNpm(npm, { argsFile: argumentsFile, versionOutput: "9.9.9" });
 
       const dataHome = join(root, "data-home");
-      const configPath = join(root, "config", "slop-lab", "dim.json");
+      const configPath = join(root, "config", "dim", "config.json");
       const pluginHome = join(root, "plugin-home");
       vi.stubEnv("DIM_PLUGIN_HOME", pluginHome);
       await mkdir(dirname(configPath), { recursive: true });

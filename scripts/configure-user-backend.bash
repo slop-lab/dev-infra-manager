@@ -11,7 +11,7 @@ if ! dim_is_runtime_backend "$backend"; then
   exit 2
 fi
 
-config_path="${DIM_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/slop-lab/dim.json}"
+config_path="${DIM_CONFIG_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/dim/config.json}"
 config_dir="$(dirname -- "$config_path")"
 mkdir -p "$config_dir"
 temporary="$(mktemp "$config_dir/dim.json.tmp.XXXXXX")"

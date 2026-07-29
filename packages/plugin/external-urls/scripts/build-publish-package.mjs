@@ -14,6 +14,7 @@ output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };
 output.dependencies["@slop-lab/dim-core"] = source.version;
 output.dependencies["@slop-lab/dim-contracts-external-url"] = source.version;
+output.dependencies["@slop-lab/dim-ingress-caddy"] = source.version;
 delete output.private;
 
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);

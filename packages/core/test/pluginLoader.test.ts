@@ -29,12 +29,12 @@ describe("plugin loader configuration", () => {
   it("prefers the plugin home recorded by the installer over later environment values", async () => {
     const configHome = join(root, "config");
     const configuredHome = join(root, "configured-plugins");
-    await mkdir(join(configHome, "slop-lab"), { recursive: true });
+    await mkdir(join(configHome, "dim"), { recursive: true });
     await writeFile(
-      join(configHome, "slop-lab", "dim.json"),
+      join(configHome, "dim", "config.json"),
       JSON.stringify({ schemaVersion: 1, installPrefix: join(root, "prefix"), pluginHome: configuredHome })
     );
-    expect(dimUserConfigPath({ XDG_CONFIG_HOME: configHome })).toBe(join(configHome, "slop-lab", "dim.json"));
+    expect(dimUserConfigPath({ XDG_CONFIG_HOME: configHome })).toBe(join(configHome, "dim", "config.json"));
     expect(await resolvePluginHome({ XDG_CONFIG_HOME: configHome })).toBe(configuredHome);
     expect(await resolvePluginHome({ XDG_CONFIG_HOME: configHome, DIM_PLUGIN_HOME: root })).toBe(configuredHome);
     expect(await resolvePluginHome({

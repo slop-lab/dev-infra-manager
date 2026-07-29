@@ -8,9 +8,6 @@ import {
 describe("Caddy ingress deployment", () => {
   it("renders pinned Cloudflare DNS-01 and loopback-router forwarding", () => {
     const deployment = renderCaddyDeployment("public", {
-      driver: "caddy",
-      description: "Public HTTPS",
-      scheme: "https",
       domain: "dev.example.com",
       listenHost: "127.0.0.1",
       listenPort: 9080,

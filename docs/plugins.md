@@ -81,7 +81,7 @@ atomically records enabled package names in `plugins.json`. `dim plugin list`
 loads that explicit manifest and reports the enabled packages.
 
 The selected plugin home is persisted in
-`${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json`, so a CLI installed with a
+`${XDG_CONFIG_HOME:-~/.config}/dim/config.json`, so a CLI installed with a
 custom `--prefix` resolves the same plugin location in later processes.
 The persisted plugin home takes precedence over a later `DIM_PLUGIN_HOME`.
 That environment variable supplies an initial default only when no selection

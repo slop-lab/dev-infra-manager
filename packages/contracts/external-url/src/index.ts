@@ -16,28 +16,12 @@ export interface CloudflareDnsProviderConfig {
 
 export type ExternalUrlProviderConfig = CloudflareDnsProviderConfig;
 
-interface ExternalUrlIngressBase {
+export interface ExternalUrlIngressConfig {
+  driver: string;
   description: string;
   scheme: ExternalUrlScheme;
-  domain: string;
-  port?: number;
-  listenHost: string;
-  listenPort: number;
-  upstreamMode: ExternalUrlUpstreamMode;
+  argument: string;
 }
-
-export interface BuiltinHttpIngressConfig extends ExternalUrlIngressBase {
-  driver: "builtin-http";
-}
-
-export interface CaddyIngressConfig extends ExternalUrlIngressBase {
-  driver: "caddy";
-  scheme: "https";
-  provider: string;
-  acmeEmail?: string;
-}
-
-export type ExternalUrlIngressConfig = BuiltinHttpIngressConfig | CaddyIngressConfig;
 
 export interface ExternalUrlConfig {
   schemaVersion: 1;
@@ -51,9 +35,10 @@ export function emptyExternalUrlConfig(): ExternalUrlConfig {
 
 export function externalUrlConfigPath(env: NodeJS.ProcessEnv = process.env): string {
   const home = env.HOME ?? os.homedir();
+  const configHome = env.XDG_CONFIG_HOME ?? path.join(home, ".config");
   return path.resolve(
     env.DIM_EXTERNAL_URL_CONFIG
-      ?? path.join(env.XDG_CONFIG_HOME ?? path.join(home, ".config"), "slop-lab", "external-urls.json")
+      ?? path.join(configHome, "dim", "external-urls.json")
   );
 }
 
@@ -116,8 +101,8 @@ export function validateExternalUrlConfig(value: unknown, source = "external URL
   const ingresses: Record<string, ExternalUrlIngressConfig> = {};
   for (const [name, ingress] of Object.entries(value.ingresses)) {
     validateName(name, "ingress");
-    if (!isRecord(ingress) || (ingress.driver !== "builtin-http" && ingress.driver !== "caddy")) {
-      throw new Error(`external URL ingress '${name}' has an unsupported driver`);
+    if (!isRecord(ingress) || typeof ingress.driver !== "string" || !/^[a-z0-9][a-z0-9-]*$/.test(ingress.driver)) {
+      throw new Error(`external URL ingress '${name}' requires a valid driver`);
     }
     if (typeof ingress.description !== "string" || ingress.description.trim().length === 0) {
       throw new Error(`external URL ingress '${name}' requires a description`);
@@ -125,42 +110,15 @@ export function validateExternalUrlConfig(value: unknown, source = "external URL
     if (ingress.scheme !== "http" && ingress.scheme !== "https") {
       throw new Error(`external URL ingress '${name}' requires scheme http or https`);
     }
-    if (!domain(ingress.domain)) throw new Error(`external URL ingress '${name}' requires a valid domain`);
-    if (typeof ingress.listenHost !== "string" || ingress.listenHost.length === 0) {
-      throw new Error(`external URL ingress '${name}' requires listenHost`);
+    if (typeof ingress.argument !== "string") {
+      throw new Error(`external URL ingress '${name}' requires a string argument`);
     }
-    const listenPort = validPort(ingress.listenPort, true, `${name}.listenPort`);
-    const port = ingress.port === undefined ? undefined : validPort(ingress.port, false, `${name}.port`);
-    if (ingress.upstreamMode !== "container-dns" && ingress.upstreamMode !== "container-ip") {
-      throw new Error(`external URL ingress '${name}' requires a valid upstreamMode`);
-    }
-    const base = {
+    ingresses[name] = {
+      driver: ingress.driver,
       description: ingress.description.trim(),
       scheme: ingress.scheme as ExternalUrlScheme,
-      domain: normalizeDomain(ingress.domain),
-      ...(port === undefined ? {} : { port }),
-      listenHost: ingress.listenHost,
-      listenPort,
-      upstreamMode: ingress.upstreamMode as ExternalUrlUpstreamMode
+      argument: ingress.argument
     };
-    if (ingress.driver === "caddy") {
-      if (ingress.scheme !== "https") throw new Error(`Caddy ingress '${name}' must use https`);
-      if (typeof ingress.provider !== "string" || !providers[ingress.provider]) {
-        throw new Error(`Caddy ingress '${name}' references an unknown provider`);
-      }
-      if (ingress.acmeEmail !== undefined && typeof ingress.acmeEmail !== "string") {
-        throw new Error(`Caddy ingress '${name}' has an invalid ACME email`);
-      }
-      ingresses[name] = {
-        ...base,
-        driver: "caddy",
-        scheme: "https",
-        provider: ingress.provider,
-        ...(ingress.acmeEmail === undefined ? {} : { acmeEmail: ingress.acmeEmail })
-      };
-    } else {
-      ingresses[name] = { ...base, driver: "builtin-http" };
-    }
   }
   return { schemaVersion: 1, providers, ingresses };
 }
@@ -181,11 +139,4 @@ function domain(value: unknown): value is string {
 
 function normalizeDomain(value: string): string {
   return value.toLowerCase().replace(/^\.+|\.+$/g, "");
-}
-
-function validPort(value: unknown, zero: boolean, field: string): number {
-  if (!Number.isInteger(value) || (value as number) < (zero ? 0 : 1) || (value as number) > 65_535) {
-    throw new Error(`${field} must be between ${zero ? 0 : 1} and 65535`);
-  }
-  return value as number;
 }

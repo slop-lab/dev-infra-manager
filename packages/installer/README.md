@@ -198,7 +198,7 @@ Installer state (proxied CLI executable path/version, plugin home) is kept
 in:
 
 ```text
-${XDG_CONFIG_HOME:-$HOME/.config}/slop-lab/dim.json
+${XDG_CONFIG_HOME:-$HOME/.config}/dim/config.json
 ```
 
 or the path given by `DIM_CONFIG_PATH`. This file is also read by the DIM
