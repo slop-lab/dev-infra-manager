@@ -9,9 +9,11 @@ repos/
 └── secrets/    source for a secret-bearing HTTP service
 ```
 
-The short scripts beside this README create local source repositories and
-write the real `root/.dim/repos.yml` used to register the complete Project in
-one operation. Read them before running them; they are intentionally small.
+The committed [repos.yml](repos/root/.dim/repos.yml) shows the complete
+Project repository set. The short scripts beside this README create local
+source repositories and replace only its placeholder URLs with their absolute
+paths before registration. Read them before running them; they are
+intentionally small.
 For the trust model, see [Trust Boundaries](../../specs/02-boundaries-and-trust.md).
 
 ## Try it

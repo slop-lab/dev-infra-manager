@@ -20,18 +20,18 @@ done
 root_url="$(realpath "$target_dir/root")"
 web_url="$(realpath "$target_dir/web")"
 secrets_url="$(realpath "$target_dir/secrets")"
-jq -n \
+manifest="$target_dir/root/.dim/repos.yml"
+temporary_manifest="$manifest.tmp"
+jq \
   --arg root "$root_url" \
   --arg web "$web_url" \
   --arg secrets "$secrets_url" \
-  '{
-    schemaVersion: 1,
-    repositories: {
-      root: {url: $root, root: true, ref: "main", protect: ["main"]},
-      web: {url: $web, protect: ["main"]},
-      secrets: {url: $secrets, protect: ["main"]}
-    }
-  }' > "$target_dir/root/.dim/repos.yml"
+  '
+    .repositories.root.url = $root
+    | .repositories.web.url = $web
+    | .repositories.secrets.url = $secrets
+  ' "$manifest" > "$temporary_manifest"
+mv "$temporary_manifest" "$manifest"
 git -C "$target_dir/root" add .dim/repos.yml
 git -C "$target_dir/root" commit --amend --no-edit
 
