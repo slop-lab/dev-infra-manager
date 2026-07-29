@@ -33,10 +33,11 @@ pnpm --filter @slop-lab/dim-installer run pack:dry-run
 Review every tarball listing and confirm it contains its README, MIT license,
 runtime files, and publishable manifest.
 
-## Publish 0.2.0
+## Publish
 
 Publish core and contracts first, then their implementations and plugin, and
-finally the CLI and installer. Workspace package dependencies are exact:
+finally the CLI and installer. Workspace package dependencies are exact.
+Run these commands from the release commit:
 
 ```bash
 pnpm --filter @slop-lab/dim-core run publish:package
@@ -49,22 +50,17 @@ pnpm --filter @slop-lab/dim-cli run publish:package
 pnpm --filter @slop-lab/dim-installer run publish:package
 ```
 
-Verify clean 0.2 installs from the registry. Then remove the three pre-stable
-0.1 versions:
+Verify clean installs of the released version from the registry in an empty
+temporary directory. Confirm the installer can install the CLI and plugin,
+`dim plugin list` succeeds, and the package versions match the release.
 
 ```bash
-npm unpublish '@slop-lab/install-dim@0.1.0'
-npm unpublish '@slop-lab/dim-cli@0.1.0'
-npm unpublish '@slop-lab/dev-infra-manager-core@0.1.0'
+release_version="$(node -p 'require("./package.json").version')"
+git tag --sign "v$release_version" --message "DIM $release_version"
+git push origin "v$release_version"
 ```
 
-Publish `dim-cli@0.2.0` before removing `dim-cli@0.1.0`, so the package name
-never disappears and no 24-hour name lock applies. Core is removed last
-because `dim-cli@0.1.0` depends on it. The old installer and core names are not
-reused; their package entries may disappear when their only version is
-removed. A removed `name@version` can never be reused. See npm's
-[unpublish policy](https://docs.npmjs.com/policies/unpublish/) before running
-these irreversible commands.
-
-After registry cleanup, create and push the signed `v0.2.0` tag and GitHub
-release.
+Create the GitHub release from that tag and use the changelog entry as its
+notes. Package unpublishing is not part of the normal release process; consult
+npm's [unpublish policy](https://docs.npmjs.com/policies/unpublish/) separately
+if an exceptional cleanup is required.

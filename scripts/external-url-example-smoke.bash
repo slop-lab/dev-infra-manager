@@ -139,7 +139,7 @@ done
 docker run --detach \
   --name "$coredns_container" \
   --network "$network" \
-  --volume "$PWD/examples/external-urls/host/cloudflare-local/Corefile:/Corefile:ro" \
+  --volume "$PWD/scripts/fixtures/external-url-cloudflare/Corefile:/Corefile:ro" \
   --volume "$state_root/cloudflare-zones:/zones:ro" \
   coredns/coredns@sha256:900f9c109f7a33545d3c811516e8376df9019147b750f5ce3e254468769176ea \
   -conf /Corefile >/dev/null

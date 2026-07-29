@@ -64,12 +64,45 @@ dim discard external-dev --yes
 
 ## HTTPS
 
-For a public wildcard domain, the Caddy example combines plain HTTP on port
-8080 with loopback-routed HTTPS on port 443 using Cloudflare DNS-01. The
-generated deployment shape is shown in
-[host/cloudflare-caddy](host/cloudflare-caddy/README.md). Full configuration
-and security details are in
-[External workspace URLs](../../docs/external-urls.md).
+For a public wildcard domain, plain HTTP can use DIM's built-in router on port
+8080 while Caddy owns ports 80 and 443, terminates HTTPS using Cloudflare
+DNS-01, and forwards to a loopback-only DIM ingress:
+
+```bash
+dim external-url add-provider cloudflare cloudflare-main \
+  --zone example.com \
+  --record-type A \
+  --target 203.0.113.10 \
+  --credential-env CF_API_TOKEN
+
+dim external-url ingress add builtin-http --name public-http \
+  --description "Public HTTP development URL" \
+  --scheme http \
+  --argument '{"domain":"remote.example.com","publicPort":8080,"listenHost":"0.0.0.0","listenPort":8080}'
+
+dim external-url ingress add caddy --name public-https \
+  --description "Public HTTPS development URL" \
+  --scheme https \
+  --argument '{"domain":"remote.example.com","listenHost":"127.0.0.1","listenPort":"auto","publicListenHost":"100.64.0.10","provider":"cloudflare-main"}'
+
+CF_API_TOKEN=... dim external-url ingress setup public-https \
+  --output .dim/external-url
+```
+
+`ingress setup` reconciles `*.remote.example.com` and generates the complete
+Caddy deployment. Start that generated deployment:
+
+```bash
+cd .dim/external-url/public-https
+cp .env.example .env
+docker compose up --detach --build
+dim external-url ingress verify public-https
+```
+
+Use a zone-scoped Cloudflare API Token with `Zone.Zone:Read` and
+`Zone.DNS:Edit`, not a Global API Key. The host must accept TCP 8080, TCP 80,
+TCP 443, and optionally UDP 443 for HTTP/3. Full configuration and security
+details are in [External workspace URLs](../../docs/external-urls.md).
 
 ## Verification
 
