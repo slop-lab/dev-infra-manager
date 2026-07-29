@@ -37,7 +37,7 @@ jobs:
       - run: pnpm --filter @slop-lab/dim-provider-dns-cloudflare run pack:dry-run
       - run: pnpm --filter @slop-lab/dim-ingress-caddy run pack:dry-run
       - run: pnpm --filter @slop-lab/dim-cli run pack:dry-run
-      - run: pnpm --filter @slop-lab/install-dim run pack:dry-run
+      - run: pnpm --filter @slop-lab/dim-installer run pack:dry-run
 
   container-integration:
     runs-on: ubuntu-24.04

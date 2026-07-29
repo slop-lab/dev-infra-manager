@@ -32,7 +32,7 @@ printf '%s\n' \
   > "$plugin_source/index.js"
 
 plugin_tarball="$(npm pack "$plugin_source" --pack-destination "$root" --json | jq -r '.[0].filename')"
-installer_tarball="$(npm pack packages/scope-root/install-dim/dist --pack-destination "$root" --json | jq -r '.[0].filename')"
+installer_tarball="$(npm pack packages/installer/dist --pack-destination "$root" --json | jq -r '.[0].filename')"
 npm install --prefix "$installer_prefix" "$root/$installer_tarball" >/dev/null
 
 DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
@@ -42,7 +42,7 @@ DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
   >/dev/null
 
 test "$(jq -r .pluginHome "$config_path")" = "$plugin_home"
-result="$(DIM_CONFIG_PATH="$config_path" node packages/scope-root/dim-cli/dist/cli.js plugin list --json)"
+result="$(DIM_CONFIG_PATH="$config_path" node packages/cli/dist/cli.js plugin list --json)"
 test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smoke"
 
 echo "plugin-install-smoke-ok"

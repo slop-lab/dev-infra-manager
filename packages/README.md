@@ -1,23 +1,20 @@
 # Packages
 
 Reusable contracts, executable tooling, and provider adapters belong under
-`packages/`. The first directory level mirrors the npm name prefix:
+`packages/`. Directories describe roles within this DIM repository rather
+than repeating the common `@slop-lab/dim-*` npm prefix:
 
-- `scope-root/` contains packages named directly under `@slop-lab/`.
-- `dim/` contains reusable `@slop-lab/dim-*` implementation packages.
-- `dim-contracts/` contains provider-neutral
-  `@slop-lab/dim-contracts-*` packages.
-- `dim-plugin/` contains `@slop-lab/dim-plugin-*` packages.
+- `core`, `cli`, and `installer` are top-level product components.
+- `contracts/` contains provider-neutral data and configuration boundaries.
+- `plugin/` contains packages that implement DIM's plugin API.
+- `ingress/` and `provider/` contain reusable implementations that plugins or
+  the CLI can compose.
 
-Package directory names are the remainder after that prefix. For example,
-`dim/provider-dns-cloudflare` publishes as
-`@slop-lab/dim-provider-dns-cloudflare`.
-
-The scope-root packages are the `dim-cli` executable and the `install-dim`
-installer facade. `dim/core` owns runtime and lifecycle APIs. Shared data and
-configuration boundaries belong in `dim-contracts`; implementations such as
-an ingress or provider belong in `dim`. A `dim-plugin` package composes those
-libraries behind DIM's plugin API.
+Nested directory segments follow the remainder of the package name. For
+example, `provider/dns-cloudflare` publishes as
+`@slop-lab/dim-provider-dns-cloudflare`, while
+`contracts/external-url` publishes as
+`@slop-lab/dim-contracts-external-url`.
 
 The prefix is a naming convention, not a discovery mechanism. DIM loads only
 packages explicitly listed in the plugin manifest, and third-party plugin

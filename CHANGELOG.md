@@ -11,11 +11,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
-- Standardized package names under `@slop-lab/dim-*`: core is now
-  `@slop-lab/dim-core`, reusable external URL contracts live under
-  `dim-contracts`, reusable provider and ingress implementations live under
-  `dim`, and only plugin API implementations live under `dim-plugin`. Package
-  name prefixes are organizational and never enable implicit discovery.
+- Standardized package names under `@slop-lab/dim-*` and organized source by
+  role under `packages/{core,cli,installer,contracts,plugin,ingress,provider}`.
+  Only plugin API implementations use `dim-plugin`; package name prefixes are
+  organizational and never enable implicit discovery.
 - Node.js support now follows declared LTS release lines. DIM 0.2 supports
   Node.js 24 and validates Node.js 26 ahead of its scheduled LTS transition;
   package engines and CI cover both release lines.
@@ -39,10 +38,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added persistent `dim external-url` provider/ingress and workspace URL
   commands, a Cloudflare wildcard DNS adapter, a pinned Caddy HTTPS deployment
   generator, and automatic migration of stored profile/provider URL entries.
-- Renamed the `@slop-lab/install-dim` executable from `install-dim` to
-  `dim`, and its subcommands from `cli`/`plugin` to `install-cli`/
-  `install-plugin`, so both `mise use -g npm:@slop-lab/install-dim` and
-  `mise use -g npm:@slop-lab/dim-cli` resolve to the same command name.
+- Replaced the pre-stable `@slop-lab/install-dim` package with
+  `@slop-lab/dim-installer`, renamed its executable from `install-dim` to
+  `dim`, and renamed its `cli`/`plugin` subcommands to `install-cli`/
+  `install-plugin`, so the installer and CLI resolve to the same command name.
 - Made the installer a strict facade: it owns only `installer`,
   `install-cli`, and `install-plugin`, and proxies every other command
   (including `dim plugin`, a `dim-cli` command) unchanged to a separately
@@ -97,7 +96,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Fixed
 
 - Every documented walkthrough (root README, `docs/repo-workspaces.md`,
-  `docs/project-workspaces.md`, `docs/usage.md`, `packages/scope-root/dim-cli/README.md`,
+  `docs/project-workspaces.md`, `docs/usage.md`, `packages/cli/README.md`,
   the multi-repository example) showed `dim repo create ... --root` without
   `--protect`, then a bare `dim repo protect`. `--protect` only exists on
   `repo create`/`repo import`; omitting it there left `repo protect` with

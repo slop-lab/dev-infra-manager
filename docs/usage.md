@@ -182,7 +182,7 @@ Three additional standalone checks cover installation and the copyable
 examples against a real Docker daemon:
 
 ```bash
-just verify-mise-install-smoke   # mise use -g npm:@slop-lab/install-dim, in a disposable container
+just verify-mise-install-smoke   # mise use -g npm:@slop-lab/dim-installer, in a disposable container
 just verify-example-multi-repo-project # three materialized repositories and a real workspace
 just verify-example-external-urls      # nested URLs proven with dnsmasq
 ```
@@ -232,7 +232,7 @@ just cli doctor
 
 `just cli` builds `@slop-lab/dim-core` first, then runs `dim`
 directly from source via `tsx` — the reliable way to run the CLI without
-installing it. Running `tsx src/cli.ts` directly from `packages/scope-root/dim-cli`
+installing it. Running `tsx src/cli.ts` directly from `packages/cli`
 instead fails with `ERR_MODULE_NOT_FOUND` unless core has already been built.
 
 The Sysbox registration check only proves that Docker knows about

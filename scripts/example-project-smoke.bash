@@ -72,12 +72,12 @@ echo "[example-project] build workspace packages"
 pnpm run workspace:build >/dev/null
 
 echo "[example-project] pack tarballs"
-npm pack packages/dim/core/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/dim-contracts/external-url/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/dim/provider-dns-cloudflare/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/dim/ingress-caddy/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/scope-root/dim-cli/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/scope-root/install-dim/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/core/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/contracts/external-url/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/provider/dns-cloudflare/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/ingress/caddy/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/cli/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/installer/dist --pack-destination "$work_dir" --silent >/dev/null
 
 echo "[example-project] 1. install DIM through the installer facade"
 dim_start_local_npm_registry "$work_dir"
@@ -87,9 +87,9 @@ dim_publish_to_local_registry \
   "$work_dir"/*provider-dns-cloudflare*.tgz \
   "$work_dir"/*ingress-caddy*.tgz \
   "$work_dir"/*dim-cli*.tgz \
-  "$work_dir"/*install-dim*.tgz
+  "$work_dir"/*dim-installer*.tgz
 mkdir -p "$install_prefix"
-npm install --global --prefix "$install_prefix" "$work_dir"/*install-dim*.tgz --silent >/dev/null
+npm install --global --prefix "$install_prefix" "$work_dir"/*dim-installer*.tgz --silent >/dev/null
 "$dim_bin" install-cli --no-local-bin >/dev/null
 test -x "$dim_bin"
 dim doctor >/dev/null

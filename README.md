@@ -66,25 +66,25 @@ disposable KVM guest instead of your own host.
 Pin an exact, reviewed version — never `latest`:
 
 ```bash
-mise use -g 'npm:@slop-lab/install-dim@0.2.0'
+mise use -g 'npm:@slop-lab/dim-installer@0.2.0'
 dim install-cli
 ```
 
 or, without mise:
 
 ```bash
-npx '@slop-lab/install-dim@0.2.0'
-npx '@slop-lab/install-dim@0.2.0' install-cli
-npx '@slop-lab/install-dim@0.2.0' install-plugin '@example/dim-plugin@1.2.3'
+npx '@slop-lab/dim-installer@0.2.0'
+npx '@slop-lab/dim-installer@0.2.0' install-cli
+npx '@slop-lab/dim-installer@0.2.0' install-plugin '@example/dim-plugin@1.2.3'
 ```
 
-`@slop-lab/install-dim` is a thin facade: it owns only `installer`,
+`@slop-lab/dim-installer` is a thin facade: it owns only `installer`,
 `install-cli`, and `install-plugin`, and proxies every other command to a
 separately installed `@slop-lab/dim-cli`. Bare `dim` opens an interactive
 installer only until a CLI is configured; after that it behaves like `dim
 --help`, and `dim installer` is what reopens the prompt. Installation
 choices persist under `${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json`. See
-the [installer README](https://www.npmjs.com/package/@slop-lab/install-dim)
+the [installer README](https://www.npmjs.com/package/@slop-lab/dim-installer)
 for the full command reference.
 
 Check the installed backend before creating a workspace:

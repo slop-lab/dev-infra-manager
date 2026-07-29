@@ -2,7 +2,7 @@
 
 ## Scope
 
-`@slop-lab/install-dim` exposes an executable also named `dim`. It is a thin
+`@slop-lab/dim-installer` exposes an executable also named `dim`. It is a thin
 facade: it owns exactly three commands and proxies everything else to a
 separately installed `@slop-lab/dim-cli`. `@slop-lab/dim-cli` must not
 implement `installer`, `install-cli`, or `install-plugin`, and the facade
@@ -139,7 +139,7 @@ Required tests cover:
 - stale config (missing executable, facade self-reference) surfaced as
   actionable errors, not silent fallback to a `PATH`-resolved `dim`;
 - `dim plugin ...` never intercepted by the facade;
-- `mise use -g 'npm:@slop-lab/install-dim@<version>'` end to end against a
+- `mise use -g 'npm:@slop-lab/dim-installer@<version>'` end to end against a
   disposable local npm registry (`just verify-mise-install-smoke`), covering
   the mise-detected `--no-local-bin` default and an explicit
   `--local-bin` override.

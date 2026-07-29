@@ -7,30 +7,6 @@
 - `npm whoami` succeeds for an account allowed to publish the `@slop-lab` scope.
 - The version and changelog agree, and the release tag does not already exist.
 
-### Remove the pre-stable 0.1 packages
-
-The public 0.1 packages predate the final naming scheme and have no stable
-release commitment. At least 24 hours before publishing 0.2, remove all three
-in dependency order:
-
-```bash
-npm unpublish '@slop-lab/install-dim' --force
-npm unpublish '@slop-lab/dim-cli' --force
-npm unpublish '@slop-lab/dev-infra-manager-core' --force
-```
-
-`dim-cli@0.1.0` depends on `dev-infra-manager-core@0.1.0`, so core must be
-removed last. Removing an entire package name prevents publishing that name
-again for 24 hours; a removed `name@version` can never be reused. Do not also
-deprecate these packages: after successful removal there is no registry entry
-left to deprecate. See npm's
-[unpublish policy](https://docs.npmjs.com/policies/unpublish/) before running
-these irreversible commands.
-
-Before continuing, confirm the old packages return `E404` and that at least 24
-hours have passed. The replacement core package is `@slop-lab/dim-core`;
-`@slop-lab/dim-cli` and `@slop-lab/install-dim` resume at 0.2.0.
-
 ## Verify
 
 CI runs the package checks on every supported Node.js LTS line and each
@@ -50,7 +26,7 @@ pnpm --filter @slop-lab/dim-plugin-external-urls run pack:dry-run
 pnpm --filter @slop-lab/dim-provider-dns-cloudflare run pack:dry-run
 pnpm --filter @slop-lab/dim-ingress-caddy run pack:dry-run
 pnpm --filter @slop-lab/dim-cli run pack:dry-run
-pnpm --filter @slop-lab/install-dim run pack:dry-run
+pnpm --filter @slop-lab/dim-installer run pack:dry-run
 ```
 
 Review every tarball listing and confirm it contains its README, MIT license,
@@ -64,12 +40,29 @@ finally the CLI and installer. Workspace package dependencies are exact:
 ```bash
 pnpm --filter @slop-lab/dim-core run publish:package
 pnpm --filter @slop-lab/dim-contracts-external-url run publish:package
-pnpm --filter @slop-lab/dim-plugin-external-urls run publish:package
 pnpm --filter @slop-lab/dim-provider-dns-cloudflare run publish:package
 pnpm --filter @slop-lab/dim-ingress-caddy run publish:package
+pnpm --filter @slop-lab/dim-plugin-external-urls run publish:package
 pnpm --filter @slop-lab/dim-cli run publish:package
-pnpm --filter @slop-lab/install-dim run publish:package
+pnpm --filter @slop-lab/dim-installer run publish:package
 ```
 
-Verify clean installs from the registry before creating and pushing the signed
-`v0.2.0` tag and GitHub release.
+Verify clean 0.2 installs from the registry. Then remove the three pre-stable
+0.1 versions:
+
+```bash
+npm unpublish '@slop-lab/install-dim@0.1.0'
+npm unpublish '@slop-lab/dim-cli@0.1.0'
+npm unpublish '@slop-lab/dev-infra-manager-core@0.1.0'
+```
+
+Publish `dim-cli@0.2.0` before removing `dim-cli@0.1.0`, so the package name
+never disappears and no 24-hour name lock applies. Core is removed last
+because `dim-cli@0.1.0` depends on it. The old installer and core names are not
+reused; their package entries may disappear when their only version is
+removed. A removed `name@version` can never be reused. See npm's
+[unpublish policy](https://docs.npmjs.com/policies/unpublish/) before running
+these irreversible commands.
+
+After registry cleanup, create and push the signed `v0.2.0` tag and GitHub
+release.

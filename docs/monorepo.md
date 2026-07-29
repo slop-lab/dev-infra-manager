@@ -8,24 +8,24 @@ This repository is a pnpm workspace.
 .
 ├── .dim/                this repository's DIM project contract
 ├── packages/
-│   ├── scope-root/      packages named directly under @slop-lab
-│   │   ├── dim-cli/     executable command and output adapter
-│   │   └── install-dim/ installer facade
-│   ├── dim/
-│   │   ├── core/        lifecycle, runtime, state, and plugin APIs
-│   │   ├── ingress-caddy/
-│   │   └── provider-dns-cloudflare/
-│   ├── dim-contracts/
+│   ├── core/            lifecycle, runtime, state, and plugin APIs
+│   ├── cli/             executable command and output adapter
+│   ├── installer/       installer facade
+│   ├── contracts/
 │   │   └── external-url/
-│   └── dim-plugin/
-│       └── external-urls/
+│   ├── plugin/
+│   │   └── external-urls/
+│   ├── ingress/
+│   │   └── caddy/
+│   └── provider/
+│       └── dns-cloudflare/
 ├── deploy/              deployment manifests and service templates
 ├── images/              runtime image definitions
 └── specs/               normative behavior and local implementation details
 ```
 
 The root package is workspace orchestration only. It contains no application
-source or tests. `packages/scope-root/dim-cli` imports only the public
+source or tests. `packages/cli` imports only the public
 `@slop-lab/dim-core` entrypoint; core never imports the CLI.
 Root-level `just` and pnpm commands forward to workspace packages for operator
 convenience.
@@ -33,11 +33,11 @@ convenience.
 ## Dependency Direction
 
 ```text
-packages/scope-root/dim-cli ──> packages/dim/core
-packages/dim/{ingress-caddy,provider-dns-cloudflare}
-  ──> packages/dim-contracts/external-url
-packages/dim-plugin/external-urls
-  ──> packages/{dim/core,dim-contracts/external-url}
+packages/cli ──> packages/core
+packages/{ingress/caddy,provider/dns-cloudflare}
+  ──> packages/contracts/external-url
+packages/plugin/external-urls
+  ──> packages/{core,contracts/external-url}
 ```
 
 `dim-plugin-*` identifies a package that implements DIM's plugin API; DIM does

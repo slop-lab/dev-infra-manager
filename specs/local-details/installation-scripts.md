@@ -84,7 +84,7 @@ streams full guest, build, and workload logs.
 
 The `rootless-podman` workload runs the outer container with the exact
 capability set `workspaceRuntimePlan()` grants
-(`packages/dim/core/src/runtimeBackends.ts`) instead of `--privileged`, so
+(`packages/core/src/runtimeBackends.ts`) instead of `--privileged`, so
 it also disables Docker system-path confinement to let the nested rootless
 runtime mount its own procfs, and
 `scripts/kvm-host-install-smoke.bash rootless-podman` is the real verification that
@@ -170,7 +170,7 @@ Builds and packs `core`, `dim-cli`, and `install`, publishes them to a
 disposable local npm registry inside a throwaway container, installs a
 pinned `mise` release predating its npm-backend download-popularity gate
 (see [Installer Facade](../14-installer-facade.md)), and runs
-`mise use -g 'npm:@slop-lab/install-dim@<version>'` followed by facade
+`mise use -g 'npm:@slop-lab/dim-installer@<version>'` followed by facade
 dispatch checks: facade-only vs. proxied `--help`/`--version`, the
 mise-detected `--no-local-bin` default, and an explicit `--local-bin`
 override.

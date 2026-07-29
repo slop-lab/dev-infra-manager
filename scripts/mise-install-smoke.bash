@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Exercises the `mise use -g 'npm:@slop-lab/install-dim@<version>'` install
+# Exercises the `mise use -g 'npm:@slop-lab/dim-installer@<version>'` install
 # path end to end inside a disposable container: a local npm registry is
 # seeded with the freshly built package tarballs (never the real npm
 # registry), mise resolves/installs the installer facade through it, and the
@@ -15,7 +15,7 @@ set -euo pipefail
 #
 # mise versions >= 2026.7.x refuse to install any npm package below a
 # popularity threshold ("aube": refuses low-download packages), which would
-# always reject an unreleased/low-adoption @slop-lab/install-dim regardless
+# always reject an unreleased/low-adoption @slop-lab/dim-installer regardless
 # of registry. There is no working bypass for this in that mise generation
 # yet, so this script pins an older mise release that predates the check
 # purely to keep the install-path smoke test runnable; it is not evidence
@@ -36,15 +36,15 @@ echo "[mise-smoke] build workspace packages"
 pnpm run workspace:build >/dev/null
 
 echo "[mise-smoke] pack tarballs"
-npm pack packages/dim/core/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/dim-contracts/external-url/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/dim/provider-dns-cloudflare/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/dim/ingress-caddy/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/scope-root/dim-cli/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/scope-root/install-dim/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/core/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/contracts/external-url/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/provider/dns-cloudflare/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/ingress/caddy/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/cli/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/installer/dist --pack-destination "$source_dir" --silent >/dev/null
 core_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-core*.tgz' -print -quit)"
 cli_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
-install_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*install-dim*.tgz' -print -quit)"
+install_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-installer*.tgz' -print -quit)"
 contracts_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-contracts-external-url*.tgz' -print -quit)"
 cloudflare_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*provider-dns-cloudflare*.tgz' -print -quit)"
 caddy_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*ingress-caddy*.tgz' -print -quit)"
@@ -75,7 +75,7 @@ dim_publish_to_local_registry \
   /work/*provider-dns-cloudflare*.tgz \
   /work/*ingress-caddy*.tgz \
   /work/*dim-cli*.tgz \
-  /work/*install-dim*.tgz
+  /work/*dim-installer*.tgz
 
 echo "[container] install mise ($PINNED_MISE_VERSION)"
 curl -fsSL https://mise.run | MISE_VERSION="$PINNED_MISE_VERSION" sh >/tmp/mise-install.log 2>&1 \
@@ -83,8 +83,8 @@ curl -fsSL https://mise.run | MISE_VERSION="$PINNED_MISE_VERSION" sh >/tmp/mise-
 export PATH="$HOME/.local/bin:$PATH"
 mise --version
 
-echo "[container] mise use -g npm:@slop-lab/install-dim@$DIM_PACKAGE_VERSION"
-mise use -g "npm:@slop-lab/install-dim@$DIM_PACKAGE_VERSION" >/dev/null
+echo "[container] mise use -g npm:@slop-lab/dim-installer@$DIM_PACKAGE_VERSION"
+mise use -g "npm:@slop-lab/dim-installer@$DIM_PACKAGE_VERSION" >/dev/null
 
 export PATH="$HOME/.local/share/mise/shims:$PATH"
 hash -r
@@ -133,7 +133,7 @@ echo "mise-install-smoke-ok"
 SCRIPT
 chmod +x "$source_dir/run.sh"
 
-package_version="$(node -e "console.log(require('$repo_root/packages/scope-root/install-dim/package.json').version)")"
+package_version="$(node -e "console.log(require('$repo_root/packages/installer/package.json').version)")"
 
 echo "[mise-smoke] run in $image (mise $mise_version)"
 docker run --rm \

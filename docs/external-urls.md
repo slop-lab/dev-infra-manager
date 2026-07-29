@@ -165,9 +165,9 @@ Build the unpublished packages locally:
 ```bash
 pnpm install --frozen-lockfile
 pnpm run workspace:build
-npm pack ./packages/dim/core/dist --pack-destination /tmp
-npm pack ./packages/dim-contracts/external-url/dist --pack-destination /tmp
-npm pack ./packages/dim-plugin/external-urls/dist --pack-destination /tmp
+npm pack ./packages/core/dist --pack-destination /tmp
+npm pack ./packages/contracts/external-url/dist --pack-destination /tmp
+npm pack ./packages/plugin/external-urls/dist --pack-destination /tmp
 ```
 
 Install the tarballs in the configured plugin home, list
