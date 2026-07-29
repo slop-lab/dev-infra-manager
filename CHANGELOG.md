@@ -11,6 +11,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Node.js support now follows declared LTS release lines. DIM 0.2 supports
+  Node.js 24 and validates Node.js 26 ahead of its scheduled LTS transition;
+  package engines and CI cover both release lines.
 - The default Sysbox layout now keeps the trusted privileged workspace and
   untrusted agent as host-side sibling containers. Reviewed
   `.dim/agent.json` files define the agent build context and fixed task
