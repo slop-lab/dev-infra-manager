@@ -72,12 +72,12 @@ echo "[example-project] build workspace packages"
 pnpm run workspace:build >/dev/null
 
 echo "[example-project] pack tarballs"
-npm pack packages/core/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/external-url-contracts/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/provider-dns-cloudflare/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/ingress-external-url-caddy/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/dim-cli/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/install/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/dev-infra-manager/core/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/dim-plugin/external-url-contracts/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/dim-plugin/provider-dns-cloudflare/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/dim-plugin/ingress-external-url-caddy/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/scope-root/dim-cli/dist --pack-destination "$work_dir" --silent >/dev/null
+npm pack packages/scope-root/install-dim/dist --pack-destination "$work_dir" --silent >/dev/null
 
 echo "[example-project] 1. install DIM through the installer facade"
 dim_start_local_npm_registry "$work_dir"

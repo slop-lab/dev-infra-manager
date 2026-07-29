@@ -9,7 +9,7 @@ project_name="dim-self-$suffix"
 workspace_name="dim-self-$suffix"
 state_root="$(mktemp -d /tmp/dim-self-state.XXXXXX)"
 source_root="$(mktemp -d /tmp/dim-self-source.XXXXXX)"
-dim_bin="${DIM_BIN:-$PWD/packages/dim-cli/dist/cli.js}"
+dim_bin="${DIM_BIN:-$PWD/packages/scope-root/dim-cli/dist/cli.js}"
 project_source="$PWD"
 
 dim() {

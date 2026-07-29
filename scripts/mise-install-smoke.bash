@@ -36,12 +36,12 @@ echo "[mise-smoke] build workspace packages"
 pnpm run workspace:build >/dev/null
 
 echo "[mise-smoke] pack tarballs"
-npm pack packages/core/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/external-url-contracts/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/provider-dns-cloudflare/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/ingress-external-url-caddy/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/dim-cli/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/install/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/dev-infra-manager/core/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/dim-plugin/external-url-contracts/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/dim-plugin/provider-dns-cloudflare/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/dim-plugin/ingress-external-url-caddy/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/scope-root/dim-cli/dist --pack-destination "$source_dir" --silent >/dev/null
+npm pack packages/scope-root/install-dim/dist --pack-destination "$source_dir" --silent >/dev/null
 core_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dev-infra-manager-core*.tgz' -print -quit)"
 cli_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
 install_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*install-dim*.tgz' -print -quit)"
@@ -133,7 +133,7 @@ echo "mise-install-smoke-ok"
 SCRIPT
 chmod +x "$source_dir/run.sh"
 
-package_version="$(node -e "console.log(require('$repo_root/packages/install/package.json').version)")"
+package_version="$(node -e "console.log(require('$repo_root/packages/scope-root/install-dim/package.json').version)")"
 
 echo "[mise-smoke] run in $image (mise $mise_version)"
 docker run --rm \

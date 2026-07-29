@@ -58,12 +58,12 @@ docker build \
   --tag dev-infra-project-workspace:latest \
   images/project-workspace >/dev/null
 
-npm pack ./packages/core/dist --pack-destination "$pack_root" --silent >/dev/null
-npm pack ./packages/external-url-contracts/dist --pack-destination "$pack_root" --silent >/dev/null
-npm pack ./packages/external-urls/dist --pack-destination "$pack_root" --silent >/dev/null
+npm pack ./packages/dev-infra-manager/core/dist --pack-destination "$pack_root" --silent >/dev/null
+npm pack ./packages/dim-plugin/external-url-contracts/dist --pack-destination "$pack_root" --silent >/dev/null
+npm pack ./packages/dim-plugin/external-urls/dist --pack-destination "$pack_root" --silent >/dev/null
 npm install --prefix "$plugin_home" --silent \
   "$pack_root/slop-lab-dev-infra-manager-core-0.2.0.tgz" \
-  "$pack_root/slop-lab-dim-external-url-contracts-0.2.0.tgz" \
+  "$pack_root/slop-lab-dim-plugin-external-url-contracts-0.2.0.tgz" \
   "$pack_root/slop-lab-dim-plugin-external-urls-0.2.0.tgz"
 jq -n '{schemaVersion:1,plugins:["@slop-lab/dim-plugin-external-urls"]}' \
   > "$plugin_home/plugins.json"
@@ -172,7 +172,7 @@ chmod 0600 "$state_root/workspace-grants/$workspace_name"
 printf '%s\n' '{"schemaVersion":1,"workspaceBackend":"runc"}' > "$state_root/dim.json"
 
 DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
-  node packages/dim-cli/dist/cli.js external-url add-ingress local-http \
+  node packages/scope-root/dim-cli/dist/cli.js external-url add-ingress local-http \
     --driver builtin-http \
     --description "dnsmasq host wildcard HTTP ingress" \
     --scheme http \
@@ -182,7 +182,7 @@ DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
     --listen-port "$proxy_port" \
     >/dev/null
 DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
-  node packages/dim-cli/dist/cli.js external-url add-ingress local-loopback \
+  node packages/scope-root/dim-cli/dist/cli.js external-url add-ingress local-loopback \
     --driver builtin-http \
     --description "loopback-only negative-test ingress" \
     --scheme http \
@@ -196,7 +196,7 @@ DIM_STATE_ROOT="$state_root" \
 DIM_PLUGIN_HOME="$plugin_home" \
 DIM_CONFIG_PATH="$state_root/dim.json" \
 DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
-  node packages/dim-cli/dist/cli.js controller serve \
+  node packages/scope-root/dim-cli/dist/cli.js controller serve \
     --socket "$controller_socket" \
     >"$state_root/controller.log" 2>&1 &
 controller_pid=$!
@@ -218,7 +218,7 @@ run_dim() {
   DIM_STATE_ROOT="$state_root" \
   DIM_CONFIG_PATH="$state_root/dim.json" \
   DIM_CONTROLLER_SOCKET="$controller_socket" \
-    node packages/dim-cli/dist/cli.js "$@"
+    node packages/scope-root/dim-cli/dist/cli.js "$@"
 }
 
 echo "[external-url-example] discover plugin routes and request nested URLs"
@@ -271,7 +271,7 @@ cloudflare_cli=(
   "CF_SMOKE_TOKEN=smoke-token"
   "DIM_CLOUDFLARE_API_BASE=http://127.0.0.1:$cloudflare_mock_port/client/v4"
   "DIM_EXTERNAL_URL_CONFIG=$cloudflare_config"
-  node packages/dim-cli/dist/cli.js external-url
+  node packages/scope-root/dim-cli/dist/cli.js external-url
 )
 "${cloudflare_cli[@]}" add-provider cloudflare local-cloudflare \
   --zone smoke.test \

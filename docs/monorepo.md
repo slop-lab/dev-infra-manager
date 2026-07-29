@@ -8,16 +8,19 @@ This repository is a pnpm workspace.
 .
 ├── .dim/                this repository's DIM project contract
 ├── packages/
-│   ├── core/            lifecycle, runtime, Git, state, and plugin contracts
-│   ├── dim-cli/         thin executable command and output adapter
-│   └── install/         npx plugin installer
+│   ├── scope-root/      packages named directly under @slop-lab
+│   │   ├── dim-cli/     executable command and output adapter
+│   │   └── install-dim/ installer facade
+│   ├── dev-infra-manager/
+│   │   └── core/        lifecycle, runtime, state, and plugin APIs
+│   └── dim-plugin/      external URL plugin, contracts, and adapters
 ├── deploy/              deployment manifests and service templates
 ├── images/              runtime image definitions
 └── specs/               normative behavior and local implementation details
 ```
 
 The root package is workspace orchestration only. It contains no application
-source or tests. `packages/dim-cli` imports only the public
+source or tests. `packages/scope-root/dim-cli` imports only the public
 `@slop-lab/dev-infra-manager-core` entrypoint; core never imports the CLI.
 Root-level `just` and pnpm commands forward to workspace packages for operator
 convenience.
@@ -25,8 +28,9 @@ convenience.
 ## Dependency Direction
 
 ```text
-packages/dim-cli ──> packages/core
-packages/provider-* ──> packages/*-contracts
+packages/scope-root/dim-cli ──> packages/dev-infra-manager/core
+packages/dim-plugin/{external-urls,provider-*,ingress-*}
+  ──> packages/dim-plugin/external-url-contracts
 ```
 
 Disallowed dependencies:

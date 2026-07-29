@@ -1,24 +1,20 @@
 # Packages
 
 Reusable contracts, executable tooling, and provider adapters belong under
-`packages/`.
+`packages/`. The first directory level mirrors the npm name prefix:
 
-Current packages:
+- `scope-root/` contains packages named directly under `@slop-lab/`.
+- `dev-infra-manager/` contains `@slop-lab/dev-infra-manager-*` packages.
+- `dim-plugin/` contains `@slop-lab/dim-plugin-*` packages.
 
-- `core`: runtime, lifecycle, managed Git, state, and versioned plugin/provider
-  APIs. It has no dependency on CLI parsing.
-- `dim-cli`: thin executable adapter over core.
-- `external-url-contracts`: provider-neutral external URL configuration and
-  persistence schema.
-- `external-urls`: controller system plugin and workspace-aware ingress router.
-- `provider-dns-cloudflare`: Cloudflare wildcard DNS reconciliation adapter.
-- `ingress-external-url-caddy`: pinned Caddy/Cloudflare DNS-01 deployment
-  generator and verifier.
-- `install`: thin `dim-cli` installer/facade (`@slop-lab/install-dim`,
-  `npx @slop-lab/install-dim` or `mise use -g npm:@slop-lab/install-dim`);
-  owns only `install-cli`/`install-plugin`/`installer` and proxies every
-  other command to a separately installed `dim-cli`. See
-  [Installer Facade](../specs/14-installer-facade.md).
+Package directory names are the remainder after that prefix. For example,
+`dim-plugin/provider-dns-cloudflare` publishes as
+`@slop-lab/dim-plugin-provider-dns-cloudflare`.
+
+The scope-root packages are the `dim-cli` executable and the `install-dim`
+installer facade. `dev-infra-manager/core` owns runtime and lifecycle APIs.
+The `dim-plugin` group contains external URL contracts, the controller plugin,
+and its provider and ingress adapters.
 
 Plugin package names are unrestricted; for example,
 `@dev-infra-manager/plugin-github`, `@company/internal-git`, and unscoped npm

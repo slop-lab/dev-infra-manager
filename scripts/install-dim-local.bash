@@ -12,11 +12,11 @@ trap cleanup EXIT
 
 cd "$repo_root"
 pnpm run workspace:build
-npm pack packages/core/dist --pack-destination "$package_root" >/dev/null
-npm pack packages/external-url-contracts/dist --pack-destination "$package_root" >/dev/null
-npm pack packages/provider-dns-cloudflare/dist --pack-destination "$package_root" >/dev/null
-npm pack packages/ingress-external-url-caddy/dist --pack-destination "$package_root" >/dev/null
-npm pack packages/dim-cli/dist --pack-destination "$package_root" >/dev/null
+npm pack packages/dev-infra-manager/core/dist --pack-destination "$package_root" >/dev/null
+npm pack packages/dim-plugin/external-url-contracts/dist --pack-destination "$package_root" >/dev/null
+npm pack packages/dim-plugin/provider-dns-cloudflare/dist --pack-destination "$package_root" >/dev/null
+npm pack packages/dim-plugin/ingress-external-url-caddy/dist --pack-destination "$package_root" >/dev/null
+npm pack packages/scope-root/dim-cli/dist --pack-destination "$package_root" >/dev/null
 core_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dev-infra-manager-core*.tgz' -print -quit)"
 cli_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
 contracts_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*external-url-contracts*.tgz' -print -quit)"

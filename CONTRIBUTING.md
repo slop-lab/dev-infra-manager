@@ -23,9 +23,9 @@ and the installer/example smoke tests — is [docs/usage.md](docs/usage.md).
 ## Repository layout
 
 [docs/monorepo.md](docs/monorepo.md) covers workspace boundaries and
-dependency direction. In short: `packages/core` has no CLI dependency,
-`packages/dim-cli` is a thin executable adapter over it, and
-`packages/install` is the separate installer facade — see
+dependency direction. In short: `packages/dev-infra-manager/core` has no CLI dependency,
+`packages/scope-root/dim-cli` is a thin executable adapter over it, and
+`packages/scope-root/install-dim` is the separate installer facade — see
 [docs/README.md](docs/README.md) for the full documentation index and
 [specs/README.md](specs/README.md) for the normative, implementation-facing
 specifications that changes should stay consistent with.

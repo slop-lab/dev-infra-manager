@@ -11,6 +11,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Grouped workspace packages by npm naming family under `packages/scope-root`,
+  `packages/dev-infra-manager`, and `packages/dim-plugin`. The unpublished
+  external URL contracts, provider, and ingress packages now consistently use
+  the `@slop-lab/dim-plugin-*` prefix.
 - Node.js support now follows declared LTS release lines. DIM 0.2 supports
   Node.js 24 and validates Node.js 26 ahead of its scheduled LTS transition;
   package engines and CI cover both release lines.
@@ -92,7 +96,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Fixed
 
 - Every documented walkthrough (root README, `docs/repo-workspaces.md`,
-  `docs/project-workspaces.md`, `docs/usage.md`, `packages/dim-cli/README.md`,
+  `docs/project-workspaces.md`, `docs/usage.md`, `packages/scope-root/dim-cli/README.md`,
   the multi-repository example) showed `dim repo create ... --root` without
   `--protect`, then a bare `dim repo protect`. `--protect` only exists on
   `repo create`/`repo import`; omitting it there left `repo protect` with

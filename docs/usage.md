@@ -232,7 +232,7 @@ just cli doctor
 
 `just cli` builds `@slop-lab/dev-infra-manager-core` first, then runs `dim`
 directly from source via `tsx` — the reliable way to run the CLI without
-installing it. Running `tsx src/cli.ts` directly from `packages/dim-cli`
+installing it. Running `tsx src/cli.ts` directly from `packages/scope-root/dim-cli`
 instead fails with `ERR_MODULE_NOT_FOUND` unless core has already been built.
 
 The Sysbox registration check only proves that Docker knows about
