@@ -177,6 +177,10 @@ installed plugins when it automatically starts the managed controller.
 `dim controller serve --socket PATH` remains available for foreground
 debugging.
 
+Loading or listing the plugin before the first ingress exists succeeds with
+an actionable warning and does not create an empty config file. URL discovery
+and creation become useful after `dim external-url add-ingress`.
+
 ## Verification
 
 [The external URL example](../examples/external-urls/README.md) and

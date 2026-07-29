@@ -86,6 +86,11 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
     name: "@slop-lab/dim-plugin-external-urls",
     apiVersion: DIM_PLUGIN_API_VERSION,
     register(host) {
+      if (Object.keys(options.ingresses).length === 0) {
+        host.logger.warn(
+          "External URLs plugin has no configured ingress; run 'dim external-url add-ingress --help' to add one"
+        );
+      }
       const ingresses = new Map<string, ConfiguredIngress>();
       for (const [name, ingress] of Object.entries(options.ingresses)) {
         ingresses.set(name, {
@@ -154,7 +159,7 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
 export async function externalUrlsPluginFromConfig(
   env: NodeJS.ProcessEnv = process.env
 ): Promise<DimPlugin> {
-  const config = await readExternalUrlConfig(env, { required: true });
+  const config = await readExternalUrlConfig(env);
   return createExternalUrlsPlugin({ ingresses: config.ingresses });
 }
 
@@ -415,7 +420,6 @@ function validateRequest(value: unknown): NormalizedRequest {
 
 function validateOptions(options: ExternalUrlsPluginOptions): void {
   const entries = Object.entries(options.ingresses);
-  if (entries.length === 0) throw new Error("at least one external URL ingress must be configured");
   for (const [name, ingress] of entries) {
     if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(name)) throw new Error(`invalid external URL ingress '${name}'`);
     if (typeof ingress.description !== "string" || ingress.description.trim().length === 0) {

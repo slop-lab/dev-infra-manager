@@ -159,6 +159,15 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(result.stderr).toContain("dim:");
   });
 
+  it("dim install-cli help warns about direct mode under mise", async () => {
+    const root = await tempDir("dim-cli-mise-help-");
+    const { env } = await baseEnv(root);
+    const result = await runCli(["install-cli", "--help"], tsxPath!, { ...env, MISE_SHELL: "bash" }, root);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("--local-bin under mise may shadow its dim shim");
+    expect(result.stdout).toContain("bypass the installer facade");
+  });
+
   it("proxies unrecognized args, cwd, and facade env vars through to the configured CLI", async () => {
     const root = await tempDir("dim-cli-proxy-");
     const { env, configPath } = await baseEnv(root);

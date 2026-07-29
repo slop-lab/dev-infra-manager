@@ -130,7 +130,8 @@ override. See [Installer Facade](14-installer-facade.md).
 
 `just verify-example-external-urls` requires Docker. It proves
 `examples/external-urls/README.md` end to end: a host DIM controller,
-host-configured ingress, dnsmasq wildcard DNS, a project-root workspace,
+plugin loading before any external URL config exists, the example's checked-in
+ingress and URL scripts, dnsmasq wildcard DNS, a project-root workspace,
 the nested `dev` Compose service, a further `deep` container, root relay,
 reverse proxy, ingress discovery, URL creation, HTTP access, and revocation.
 The HTTP client runs on a separate Docker network, a loopback-only listener

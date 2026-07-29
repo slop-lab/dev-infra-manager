@@ -11,6 +11,7 @@ caddy_image="dim-ext-caddy-$suffix"
 workspace_name="external-$suffix"
 state_root="$(mktemp -d /tmp/dim-external-state.XXXXXX)"
 plugin_home="$(mktemp -d /tmp/dim-external-plugins.XXXXXX)"
+cli_home="$(mktemp -d /tmp/dim-external-cli.XXXXXX)"
 pack_root="$(mktemp -d /tmp/dim-external-packs.XXXXXX)"
 controller_pid=""
 cloudflare_mock_pid=""
@@ -45,7 +46,7 @@ cleanup() {
   docker image rm "$caddy_image" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   docker network rm "$client_network" >/dev/null 2>&1 || true
-  find "$state_root" "$plugin_home" "$pack_root" -depth -delete 2>/dev/null || true
+  find "$state_root" "$plugin_home" "$cli_home" "$pack_root" -depth -delete 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -59,14 +60,31 @@ docker build \
   images/project-workspace >/dev/null
 
 npm pack ./packages/core/dist --pack-destination "$pack_root" --silent >/dev/null
+npm pack ./packages/cli/dist --pack-destination "$pack_root" --silent >/dev/null
 npm pack ./packages/contracts/external-url/dist --pack-destination "$pack_root" --silent >/dev/null
 npm pack ./packages/plugin/external-urls/dist --pack-destination "$pack_root" --silent >/dev/null
+npm install --prefix "$cli_home" --silent \
+  "$pack_root/slop-lab-dim-core-0.2.0.tgz" \
+  "$pack_root/slop-lab-dim-cli-0.2.0.tgz"
 npm install --prefix "$plugin_home" --silent \
   "$pack_root/slop-lab-dim-core-0.2.0.tgz" \
   "$pack_root/slop-lab-dim-contracts-external-url-0.2.0.tgz" \
   "$pack_root/slop-lab-dim-plugin-external-urls-0.2.0.tgz"
 jq -n '{schemaVersion:1,plugins:["@slop-lab/dim-plugin-external-urls"]}' \
   > "$plugin_home/plugins.json"
+dim_bin="$cli_home/node_modules/.bin/dim"
+
+echo "[external-url-example] load the freshly installed plugin before any ingress exists"
+plugin_warning="$state_root/plugin-warning.log"
+DIM_PLUGIN_HOME="$plugin_home" \
+DIM_CONFIG_PATH="$state_root/dim.json" \
+DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
+  "$dim_bin" plugin list --json \
+  >"$state_root/plugin-list.json" 2>"$plugin_warning" \
+  || { cat "$plugin_warning" >&2; exit 1; }
+jq -e '.plugins == ["@slop-lab/dim-plugin-external-urls"]' "$state_root/plugin-list.json" >/dev/null
+grep -Fq "dim external-url add-ingress --help" "$plugin_warning"
+test ! -e "$state_root/external-urls.json"
 
 echo "[external-url-example] start project-root, dev, and deep containers"
 docker network create "$network" >/dev/null
@@ -171,16 +189,12 @@ printf '%s\n' "$grant" > "$state_root/workspace-grants/$workspace_name"
 chmod 0600 "$state_root/workspace-grants/$workspace_name"
 printf '%s\n' '{"schemaVersion":1,"workspaceBackend":"runc"}' > "$state_root/dim.json"
 
+DIM_BIN="$dim_bin" \
 DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
-  node packages/cli/dist/cli.js external-url add-ingress local-http \
-    --driver builtin-http \
-    --description "dnsmasq host wildcard HTTP ingress" \
-    --scheme http \
-    --domain host.tail.test \
-    --port "$proxy_port" \
-    --listen-host 0.0.0.0 \
-    --listen-port "$proxy_port" \
-    >/dev/null
+DIM_EXTERNAL_URL_DOMAIN="host.tail.test" \
+DIM_EXTERNAL_URL_PORT="$proxy_port" \
+DIM_EXTERNAL_URL_LISTEN_PORT="$proxy_port" \
+  bash examples/external-urls/configure-ingress.bash >/dev/null
 DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
   node packages/cli/dist/cli.js external-url add-ingress local-loopback \
     --driver builtin-http \
@@ -227,26 +241,15 @@ printf '%s' "$discovery" | jq -e \
   '.[] | select(.name == "local-http")' \
   >/dev/null
 
-create_url() {
-  local service="$1"
-  local containers="$2"
-  local port="$3"
-  local args=(
-    external-url create
-    --workspace "$workspace_name"
-    --ingress local-http
-    --service "$service"
-    --port "$port"
-    --json
-  )
-  while IFS= read -r container; do
-    args+=(--container "$container")
-  done < <(jq -r '.[]' <<<"$containers")
-  run_dim "${args[@]}"
-}
-
-dev_created="$(create_url dev '["dev"]' 8080)"
-deep_created="$(create_url deep '["dev","deep"]' 5678)"
+DIM_BIN="$dim_bin" \
+DIM_STATE_ROOT="$state_root" \
+DIM_CONFIG_PATH="$state_root/dim.json" \
+DIM_CONTROLLER_SOCKET="$controller_socket" \
+  bash examples/external-urls/create-urls.bash "$workspace_name" \
+  >"$state_root/create-urls.log"
+created_urls="$(run_dim external-url list --workspace "$workspace_name" --json)"
+dev_created="$(printf '%s' "$created_urls" | jq -ec '.urls[] | select(.service == "dev")')"
+deep_created="$(printf '%s' "$created_urls" | jq -ec '.urls[] | select(.service == "deep")')"
 loopback_created="$(
   run_dim external-url create \
     --workspace "$workspace_name" \
@@ -256,8 +259,8 @@ loopback_created="$(
     --port 8080 \
     --json
 )"
-dev_url="$(printf '%s' "$dev_created" | jq -er '.urls[0].url')"
-deep_url="$(printf '%s' "$deep_created" | jq -er '.urls[0].url')"
+dev_url="$(printf '%s' "$dev_created" | jq -er '.url')"
+deep_url="$(printf '%s' "$deep_created" | jq -er '.url')"
 loopback_url="$(printf '%s' "$loopback_created" | jq -er '.urls[0].url')"
 
 echo "[external-url-example] resolve wildcard URLs through dnsmasq"
@@ -351,13 +354,13 @@ if external_curl --fail --silent --show-error "$loopback_url" >/dev/null 2>&1; t
   exit 1
 fi
 
-dev_id="$(printf '%s' "$dev_created" | jq -er '.urls[0].id')"
+dev_id="$(printf '%s' "$dev_created" | jq -er '.id')"
 run_dim external-url remove "$dev_id" --workspace "$workspace_name"
 test "$(external_curl --silent --output /dev/null --write-out '%{http_code}' \
   "$dev_url")" = "404"
 
 run_dim external-url remove \
-  "$(printf '%s' "$deep_created" | jq -er '.urls[0].id')" \
+  "$(printf '%s' "$deep_created" | jq -er '.id')" \
   --workspace "$workspace_name"
 run_dim external-url remove \
   "$(printf '%s' "$loopback_created" | jq -er '.urls[0].id')" \

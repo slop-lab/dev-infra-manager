@@ -97,6 +97,10 @@ config; it must not modify `PATH`.
 Detecting an active `mise` environment selects `--no-local-bin` as the
 default; every other environment defaults to `--local-bin`. An explicit
 `--local-bin`/`--no-local-bin` flag always overrides the detected default.
+Before the interactive installer offers direct mode in a detected mise
+environment, it must warn that the symlink can shadow the mise shim, bypass
+the installer facade, and decouple the invoked CLI from mise's selected
+installer version.
 
 ## Proxy contract
 

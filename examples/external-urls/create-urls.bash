@@ -2,10 +2,12 @@
 set -euo pipefail
 
 workspace="${1:-external-dev}"
+dim_bin="${DIM_BIN:-dim}"
+ingress="${DIM_EXTERNAL_URL_INGRESS:-local-http}"
 
-dim external-url discover --workspace "$workspace"
-dim external-url create --workspace "$workspace" \
-  --ingress local-http --service dev --container dev --port 8080
-dim external-url create --workspace "$workspace" \
-  --ingress local-http --service deep \
+"$dim_bin" external-url discover --workspace "$workspace"
+"$dim_bin" external-url create --workspace "$workspace" \
+  --ingress "$ingress" --service dev --container dev --port 8080
+"$dim_bin" external-url create --workspace "$workspace" \
+  --ingress "$ingress" --service deep \
   --container dev --container deep --port 5678

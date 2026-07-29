@@ -52,7 +52,12 @@ npx '@slop-lab/dim-installer@0.2.0' install-plugin '@example/dim-plugin@1.2.3'
 ```
 
 If both a mise-provided facade and a direct-PATH `dim` are on `PATH`, normal
-`PATH` order decides which one runs; use `which -a dim` to check.
+`PATH` order decides which one runs; use `which -a dim` to check. In
+particular, `~/.local/bin/dim` may shadow mise's shim. That direct symlink
+runs the CLI without the installer facade, so installer commands are no
+longer available through that `dim`, and changing the version selected by
+mise does not change the directly linked CLI. Keep the mise default (`N` /
+`--no-local-bin`) unless that separation is intentional.
 
 ## Commands
 
@@ -161,7 +166,8 @@ dim install-cli --no-local-bin
 
 **Default**: under `mise`, `--no-local-bin` is the default; everywhere else,
 `--local-bin` is the default. The explicit flag always wins over this
-detection.
+detection. The interactive installer prints the direct-mode risks before it
+offers `--local-bin` behavior under mise.
 
 ## `dim --help` / `dim --version`
 

@@ -17,6 +17,8 @@ commands. Read them before running them; they are intentionally small.
 Wildcard DNS for `*.host.tail.test` must resolve to this host. Then run:
 
 ```bash
+dim install-plugin '@slop-lab/dim-plugin-external-urls@0.2.0'
+dim plugin list
 dim doctor
 bash create-repository.bash
 bash register-project.bash
@@ -27,6 +29,10 @@ bash create-urls.bash
 
 DIM starts its managed host controller automatically. The last command prints
 URLs for `dev` and `deep`.
+
+Before the first ingress is configured, `dim plugin list` succeeds and warns
+that the plugin has no ingress yet. Inspecting it does not create an empty
+configuration file; `configure-ingress.bash` creates the first real config.
 
 The ingress fixes the public domain and listener in host configuration.
 Project requests select only its name and a service path:
@@ -56,9 +62,11 @@ and security details are in
 
 ## Verification
 
-The smoke test builds the local packages, starts the same workspace/dev/deep
-layout, and reaches both URLs from a separate client network through wildcard
-DNS and the host ingress. It also checks URL revocation, loopback-only ingress
+The smoke test builds and installs the local packages, loads the plugin before
+any config exists, and then runs this example's actual
+`configure-ingress.bash` and `create-urls.bash` scripts. It starts the same
+workspace/dev/deep layout and reaches both URLs from a separate client network
+through wildcard DNS. It also checks URL revocation, loopback-only ingress
 isolation, generated Caddy configuration, and Cloudflare-style DNS creation
 and cleanup without using a real DNS account:
 

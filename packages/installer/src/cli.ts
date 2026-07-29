@@ -96,6 +96,11 @@ async function interactiveInstall(): Promise<void> {
 
     if (choice === "1" || choice === "3") {
       const noLocalBin = runningUnderMise();
+      if (noLocalBin) {
+        console.warn(`Warning: exposing ~/.local/bin/dim can shadow the mise-managed dim, depending on PATH order.
+The symlink runs the CLI directly, bypassing the installer facade and mise version selection.
+Installer commands may then require an explicit pinned npx invocation. Keeping the default N is recommended.`);
+      }
       const mode = (await prompt.question(
         `Expose ~/.local/bin/dim symlink? [${noLocalBin ? "y/N" : "Y/n"}]: `
       )).trim().toLowerCase();
@@ -290,7 +295,9 @@ Options:
   --prefix PATH   Use PATH/bin for the managed symlink (default: ~/.local)
   -h, --help      Show this help
 
-Under mise, --no-local-bin is the default. Elsewhere, --local-bin is the default.`);
+Under mise, --no-local-bin is the default. Elsewhere, --local-bin is the default.
+Using --local-bin under mise may shadow its dim shim, bypass the installer facade,
+and make mise version selection differ from the CLI that actually runs.`);
 }
 
 function printInstallPluginHelp(): void {
