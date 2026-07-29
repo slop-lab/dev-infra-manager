@@ -36,7 +36,6 @@ git clone <this-repository>
 cd dev-infra-manager
 just build-project-workspace
 bash scripts/install-host-ubuntu.bash sysbox
-just doctor
 ```
 
 Run `just` as your normal user, including when it is managed by mise. The
@@ -88,6 +87,12 @@ choices persist under `${XDG_CONFIG_HOME:-~/.config}/slop-lab/dim.json`. See
 the [installer README](https://www.npmjs.com/package/@slop-lab/install-dim)
 for the full command reference.
 
+Check the installed backend before creating a workspace:
+
+```bash
+dim doctor
+```
+
 DIM retains an explicitly enabled, versioned plugin loader for future
 concrete integrations. Version 0.2.0 does not expose a generic Git-provider
 extension point. See [docs/plugins.md](docs/plugins.md).
@@ -97,9 +102,9 @@ extension point. See [docs/plugins.md](docs/plugins.md).
 ```bash
 dim project create project
 dim repo create project root --root --protect main
-git -C /path/to/project push "$(dim repo url-for-host project root)" main
+git -C /path/to/project push "$(dim repo url project root)" main
 dim repo protect project root
-dim create project work-1 --profile development
+dim create project work-1
 dim run work-1 codex
 dim exec work-1 -- bash
 ```

@@ -92,42 +92,18 @@ mkdir -p "$install_prefix"
 npm install --global --prefix "$install_prefix" "$work_dir"/*install-dim*.tgz --silent >/dev/null
 "$dim_bin" install-cli --no-local-bin >/dev/null
 test -x "$dim_bin"
+dim doctor >/dev/null
 
 echo "[example-project] 2. create the example repositories"
-examples_dir="$repo_root/examples/multi-repo-project/repos"
-mkdir -p "$source_root"
-create_repo() {
-  local name="$1"
-  local path="$source_root/example-$name"
-  cp -r "$examples_dir/$name" "$path"
-  git init --initial-branch=main "$path" >/dev/null
-  git -C "$path" config user.name "Example Project"
-  git -C "$path" config user.email "example-project@dim.invalid"
-  git -C "$path" add -A
-  git -C "$path" commit -m "initial example-$name" >/dev/null
-}
-create_repo root
-create_repo web
-create_repo secrets
+bash "$repo_root/examples/multi-repo-project/create-repositories.bash" \
+  "$source_root" >/dev/null
 
-root_repo="$source_root/example-root"
-web_repo="$source_root/example-web"
-secrets_repo="$source_root/example-secrets"
+root_repo="$source_root/root"
 
 echo "[example-project] 3. register the Project and its repositories"
-dim project create "$project_name" >/dev/null
-
-dim repo create "$project_name" root --root --ref main --protect main >/dev/null
-dim x git -C "$root_repo" push "$(dim repo url-for-host "$project_name" root)" main >/dev/null
-dim repo protect "$project_name" root >/dev/null
-
-dim repo create "$project_name" web --protect main >/dev/null
-dim x git -C "$web_repo" push "$(dim repo url-for-host "$project_name" web)" main >/dev/null
-dim repo protect "$project_name" web >/dev/null
-
-dim repo create "$project_name" secrets --protect main >/dev/null
-dim x git -C "$secrets_repo" push "$(dim repo url-for-host "$project_name" secrets)" main >/dev/null
-dim repo protect "$project_name" secrets >/dev/null
+DIM_BIN="$dim_bin" bash \
+  "$repo_root/examples/multi-repo-project/register-project.bash" \
+  "$project_name" "$source_root" >/dev/null
 
 # The whole point of --protect at create time: confirm the root branch is
 # actually protected, not just reported as such (repo protect "succeeds"
@@ -135,7 +111,7 @@ dim repo protect "$project_name" secrets >/dev/null
 # identical ref would be a silent no-op either way, so make a real commit.
 echo "unauthorized change" >> "$root_repo/.dim/entrypoint.sh"
 git -C "$root_repo" commit -am "attempted direct push" >/dev/null
-if dim x git -C "$root_repo" push "$(dim repo url-for-host "$project_name" root)" main >/dev/null 2>&1; then
+if dim x git -C "$root_repo" push "$(dim repo url "$project_name" root)" main >/dev/null 2>&1; then
   echo "protected branch unexpectedly accepted a direct push" >&2
   exit 1
 fi
@@ -145,7 +121,7 @@ fi
 rm -rf "$source_root"
 
 echo "[example-project] 4. create the workspace (a real container)"
-dim create "$project_name" "$workspace_name" --profile development >/dev/null
+dim create "$project_name" "$workspace_name" >/dev/null
 
 echo "[example-project] 5. confirm it's real"
 # The workspace's actual container name is an implementation detail of
@@ -153,12 +129,21 @@ echo "[example-project] 5. confirm it's real"
 # than assuming a `dim-ws-<name>`-shaped prefix.
 workspace_json="$(dim show "$workspace_name" --json)"
 test "$(jq -r .phase <<<"$workspace_json")" = "ready"
+test "$(jq -r .runtimeBackend <<<"$workspace_json")" = "runc"
+test "$(jq -r '.profiles | length' <<<"$workspace_json")" = "0"
 container_name="$(jq -r .containerName <<<"$workspace_json")"
 docker ps --filter "name=$container_name" --format '{{.Names}}' | grep -qx "$container_name"
 dim exec "$workspace_name" -- hostname >/dev/null
 
 echo "[example-project] 6. run the project task"
-test "$(dim run "$workspace_name" hello)" = "hello from the example project"
+set +e
+bash_output="$(dim run "$workspace_name" bash -- -lc 'printf project-bash-ok')"
+bash_status=$?
+set -e
+if [[ "$bash_status" -ne 0 || "$bash_output" != "project-bash-ok" ]]; then
+  echo "bash task failed ($bash_status), output: '$bash_output'" >&2
+  exit 1
+fi
 
 echo "[example-project] 7. run a coding agent in the dev container"
 # The dev container installs codex/claude via its own startup command, which
@@ -203,24 +188,25 @@ web_content="$(dim exec "$workspace_name" -- sh -c \
   'git clone "$DIM_GIT_BASE_URL/web.git" /tmp/web >/dev/null 2>&1 && cat /tmp/web/app.txt')"
 test "$web_content" = "hello from example-web"
 
-echo "[example-project] 10. deploy and narrowly control the secret-bearing service"
-dim exec "$workspace_name" -- \
-  env EXAMPLE_SECRET=not-a-real-secret sh .dim/controller.sh deploy-secret >/dev/null
+echo "[example-project] 10. deploy the secret-bearing service at the trusted root boundary"
+DIM_BIN="$dim_bin" EXAMPLE_SECRET=not-a-real-secret \
+  bash "$repo_root/examples/multi-repo-project/deploy-secret.bash" \
+  "$workspace_name" >/dev/null
 
-status="$(dim run "$workspace_name" secret -- status)"
-echo "$status" | jq -e '.ok == true and .output == "running"' >/dev/null
-dim run "$workspace_name" secret -- stop >/dev/null
-status="$(dim run "$workspace_name" secret -- status)"
-echo "$status" | jq -e '.ok == true and .output == "exited"' >/dev/null
-dim run "$workspace_name" secret -- start >/dev/null
-dim run "$workspace_name" secret -- restart >/dev/null
+root_health="$(dim exec "$workspace_name" -- \
+  sh ops/secret-service.sh secret-health)"
+echo "$root_health" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
+
+dev_health="$(dim run "$workspace_name" bash -- \
+  -lc 'wget -qO- http://secret:7099/healthz')"
+echo "$dev_health" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
 
 # The agent container has a different Docker daemon and cannot see the
 # root-level controller's secret-bearing container or raw secret.
 agent_containers="$(dim exec "$workspace_name" -- \
   docker compose --file .dim/docker-compose.yml exec -T dev \
   docker ps --format '{{.Names}}')"
-if grep -q example-secret-service <<<"$agent_containers"; then
+if grep -q secret <<<"$agent_containers"; then
   echo "agent Docker daemon unexpectedly sees the secret-bearing container" >&2
   exit 1
 fi
@@ -229,7 +215,7 @@ leaked="$(dim exec "$workspace_name" -- \
   sh -c 'env | grep -c EXAMPLE_SECRET || true')"
 test "$leaked" = "0"
 
-dim exec "$workspace_name" -- sh .dim/controller.sh remove-secret >/dev/null
+dim exec "$workspace_name" -- sh ops/secret-service.sh remove-secret >/dev/null
 
 echo "[example-project] 11. clean up"
 dim discard "$workspace_name" --yes >/dev/null

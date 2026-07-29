@@ -14,30 +14,14 @@ compose_exec() {
 }
 
 case "$task" in
-  hello)
-    echo "hello from the example project"
+  bash)
+    compose_exec dev bash "$@"
     ;;
   codex)
     compose_exec dev codex --dangerously-bypass-approvals-and-sandbox "$@"
     ;;
   claude)
     compose_exec dev claude --dangerously-skip-permissions "$@"
-    ;;
-  secret)
-    action="${1:?secret action is required (start, stop, restart, or status)}"
-    case "$action" in
-      start|stop|restart)
-        compose_exec dev wget -qO- --post-data="" \
-          "http://secret-control:7100/$action"
-        ;;
-      status)
-        compose_exec dev wget -qO- "http://secret-control:7100/status"
-        ;;
-      *)
-        echo "unknown secret action: $action" >&2
-        exit 2
-        ;;
-    esac
     ;;
   *)
     echo "unknown task: $task" >&2

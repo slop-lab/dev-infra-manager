@@ -29,7 +29,7 @@ Install and verify one Ubuntu host runtime backend:
 
 ```bash
 bash scripts/install-host-ubuntu.bash sysbox
-just doctor
+just cli doctor
 ```
 
 Run `just` as your normal user, including when it comes from mise. After the
@@ -51,8 +51,8 @@ bash scripts/install-host-ubuntu.bash runc
 ```
 
 The script records its backend in DIM user configuration and builds the
-rootless Podman workspace image when that backend is selected. Run
-`just doctor` after installation. Sysbox and gVisor are intentionally not
+rootless Podman workspace image when that backend is selected. From this
+source checkout, run `just cli doctor` after installation. Sysbox and gVisor are intentionally not
 installed together by the convenience script. Use the KVM gate below to test
 every installer without requiring the runtimes to coexist on one host.
 
@@ -211,10 +211,11 @@ See [Configuration](configuration.md) for the full field reference.
 Run:
 
 ```bash
-just doctor
+dim doctor
 ```
 
-The doctor command checks local development tools, Docker daemon access, the selected workspace runtime backend, and cgroup v2 support.
+The installed command checks Docker daemon access, the selected workspace
+runtime backend, and cgroup v2 support.
 
 Run the same check from source against the installed backend configuration:
 

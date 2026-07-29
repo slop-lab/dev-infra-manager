@@ -27,7 +27,7 @@ Populate it with ordinary Git. DIM does not require a local bare repository:
 ```bash
 git clone https://github.com/example/product.git local-product
 git -C local-product push \
-  "$(dim repo url-for-host example root)" \
+  "$(dim repo url example root)" \
   main
 dim repo protect example root
 ```
@@ -40,7 +40,7 @@ credential configuration does not:
 
 ```bash
 dim x git -C local-product push \
-  "$(dim repo url-for-host example root)" \
+  "$(dim repo url example root)" \
   main
 ```
 

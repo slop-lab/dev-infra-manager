@@ -76,7 +76,7 @@ git clone --bare "$worktree" "$bare_repo" >/dev/null
 
 "$dim_bin" project create "$project_name" >/dev/null
 "$dim_bin" repo create "$project_name" root --root --ref main >/dev/null
-repo_url="$("$dim_bin" repo url-for-host "$project_name" root)"
+repo_url="$("$dim_bin" repo url "$project_name" root)"
 "$dim_bin" x git --git-dir "$bare_repo" push "$repo_url" --all >/dev/null
 "$dim_bin" repo protect "$project_name" root >/dev/null
 

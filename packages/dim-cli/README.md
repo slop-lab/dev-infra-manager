@@ -82,11 +82,11 @@ policy, since an empty Git repository has no branch to protect yet. DIM does
 not guess protection patterns; omitting `--protect` here means nothing gets
 protected later, even though the next step reports success.
 
-Push an existing local repository with ordinary Git. `url-for-host` prints
-only the clone URL, so it is safe to use in command substitution:
+Push an existing local repository with ordinary Git. `repo url` prints only
+the clone URL, so it is safe to use in command substitution:
 
 ```bash
-git -C /path/to/acme push "$(dim repo url-for-host acme root)" main
+git -C /path/to/acme push "$(dim repo url acme root)" main
 dim repo protect acme root
 ```
 
@@ -194,7 +194,7 @@ temporary credential helper for DIM's managed Gitea and forwards every
 remaining argument unchanged:
 
 ```bash
-dim x git clone "$(dim repo url-for-host acme product)"
+dim x git clone "$(dim repo url acme product)"
 dim x git -C product push origin HEAD
 ```
 
@@ -204,7 +204,7 @@ without the wrapper, install a URL-scoped credential helper:
 
 ```bash
 dim git setup
-git clone "$(dim repo url-for-host acme product)"
+git clone "$(dim repo url acme product)"
 ```
 
 The helper is scoped to DIM's managed HTTP endpoint and enables path-aware

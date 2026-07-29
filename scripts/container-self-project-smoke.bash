@@ -53,7 +53,7 @@ git clone --bare "$project_source" "$source_root/project.git" >/dev/null
 dim project create "$project_name" >/dev/null
 root_ref="$(git -C "$project_source" rev-parse --abbrev-ref HEAD)"
 dim repo create "$project_name" root --root >/dev/null
-repo_url="$(dim repo url-for-host "$project_name" root)"
+repo_url="$(dim repo url "$project_name" root)"
 dim x git --git-dir "$source_root/project.git" push "$repo_url" "$root_ref:$root_ref" >/dev/null
 dim repo protect "$project_name" root >/dev/null
 dim create "$project_name" "$workspace_name" >/dev/null

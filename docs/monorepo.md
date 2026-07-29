@@ -79,7 +79,7 @@ just build-project-workspace
 dim project create dim-self
 dim repo create dim-self root --root
 git -C /path/to/dev-infra-manager push \
-  "$(dim repo url-for-host dim-self root)" main
+  "$(dim repo url dim-self root)" main
 dim repo protect dim-self root
 dim create dim-self dim-self-dev
 dim run dim-self-dev codex

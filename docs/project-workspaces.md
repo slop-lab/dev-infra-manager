@@ -194,7 +194,7 @@ Create the Project root and populate it with standard Git:
 ```bash
 dim project create example
 dim repo create example root --root --protect main
-git -C /path/to/example push "$(dim repo url-for-host example root)" main
+git -C /path/to/example push "$(dim repo url example root)" main
 dim repo protect example root
 ```
 

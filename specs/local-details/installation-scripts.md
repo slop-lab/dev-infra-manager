@@ -37,8 +37,8 @@ Behavior:
     before the current session can use Docker without `sudo`.
 
 Unsupported Sysbox architectures must fail. Each invocation installs exactly
-one backend and records it in DIM user configuration. The operator runs
-`just doctor` afterward. Testing every installer uses a separate KVM guest per
+one backend and records it in DIM user configuration. From a source checkout,
+the operator runs `just cli doctor` afterward. Testing every installer uses a separate KVM guest per
 backend rather than requiring Sysbox and gVisor to coexist on one host.
 
 ## gVisor runsc Install

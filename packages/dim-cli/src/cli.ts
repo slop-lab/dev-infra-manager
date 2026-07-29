@@ -169,17 +169,15 @@ repo.command("protect")
     print(await applyProjectRepositoryProtection(runner, lifecycleOptions(), name, alias), flags)
   );
 
-repo.command("url-for-host")
-  .description("Print the repository URL reachable from the host")
+repo.command("url")
+  .description("Print a repository URL")
   .argument("<project>")
   .argument("<alias>")
-  .action(async (name: string, alias: string) => console.log(await projectRepositoryHostUrl(lifecycleOptions(), name, alias)));
-
-repo.command("url-for-workspace")
-  .description("Print the repository URL reachable from workspaces")
-  .argument("<project>")
-  .argument("<alias>")
-  .action(async (name: string, alias: string) => console.log(await projectRepositoryWorkspaceUrl(lifecycleOptions(), name, alias)));
+  .option("--workspace", "print the URL reachable from workspaces")
+  .action(async (name: string, alias: string, flags: { workspace?: boolean }) =>
+    console.log(await (flags.workspace
+      ? projectRepositoryWorkspaceUrl(lifecycleOptions(), name, alias)
+      : projectRepositoryHostUrl(lifecycleOptions(), name, alias))));
 
 program.command("create")
   .description("Create a persistent workspace for a project")
@@ -779,7 +777,7 @@ function installerFacadeHelpText(context: AddHelpTextContext): string {
 Typical flow:
   dim project create PROJECT
   dim repo create PROJECT ROOT --root
-  git push "$(dim repo url-for-host PROJECT ROOT)" main
+  git push "$(dim repo url PROJECT ROOT)" main
   dim repo protect PROJECT ROOT
   dim create PROJECT WORKSPACE
   dim exec WORKSPACE -- bash

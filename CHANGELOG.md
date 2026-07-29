@@ -9,6 +9,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Simplified repository URLs to `dim repo url [--workspace] PROJECT ALIAS`.
+  The multi-repository example now uses short helper scripts, default
+  workspace backend/profile behavior, interactive `bash`/Codex/Claude tasks,
+  and a root-Compose secret service that dev can reach only through its HTTP
+  interface while retaining a separate DinD daemon.
 - Replaced external URL profiles, provider bindings, and provider-specific
   environment variables with provider-agnostic named ingresses. Each ingress
   now owns its public scheme/domain and internal reverse-proxy listener, and

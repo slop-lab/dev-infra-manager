@@ -14,12 +14,13 @@ services:
       - dev-docker:/var/lib/docker
       - ..:/workspace
 
-  # This proxy has no secret. It exposes only the few lifecycle operations
-  # that the dev container needs for the fixed secret-bearing service.
-  secret-control:
-    build: ./secret-control
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+  # This service runs on the project-root daemon, never dev's private daemon.
+  # The profile keeps it stopped until a trusted operator supplies the secret.
+  secret:
+    profiles: [secret]
+    build: ${SECRET_SERVICE_CONTEXT:-/tmp/dim-controller/secrets}
+    environment:
+      EXAMPLE_SECRET: "${EXAMPLE_SECRET:-}"
 
 volumes:
   dev-docker:

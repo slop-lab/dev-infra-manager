@@ -1,290 +1,144 @@
 # Example: A Multi-repository Project
 
-This walks through DIM end to end on a small but realistic Project: one root
-infrastructure repository plus two additional repositories, a product repo
-and a separate secret-bearing repo. It installs DIM, registers the three
-repositories, creates a real workspace container, runs `codex` and `claude`
-inside a nested dev container that can itself create further containers,
-shows that the trusted project-root controller can reach reviewed repositories,
-and deploys the secret-bearing service inside the project-root workspace
-container but outside the agent's `dev` container and Docker daemon. The dev
-container can request a few safe lifecycle operations through a narrow
-controller, but cannot read the secret or access the controller's Docker
-socket. This is DIM's actual purpose: a persistent, isolated container where a
-coding agent can work without ever touching secrets or protected
-infrastructure directly, not a toy.
-
-`repos/` in this directory contains the actual repository skeletons used
-below — not a code listing, real files. Copy any of them directly as a
-starting point for your own project:
+This example has three reviewed Git repositories:
 
 ```text
-examples/multi-repo-project/repos/
-├── root/            the required root repository
-│   └── .dim/
-│       ├── controller.sh
-│       ├── dev/
-│       ├── docker-compose.yml
-│       ├── entrypoint.sh
-│       ├── setup.sh
-│       └── secret-control/
-├── web/              a product repository, unrelated to .dim
-│   └── app.txt
-└── secrets/          a separate, more strictly reviewed repository
-    ├── Dockerfile
-    └── server.mjs
+repos/
+├── root/       trusted Project lifecycle and Compose definition
+├── web/        ordinary product source
+└── secrets/    source for a secret-bearing HTTP service
 ```
 
-They're placeholders sized for reading in one sitting, not real
-infrastructure. `secrets/` builds a minimal service that takes a secret
-value as configuration and never returns it — even in this example, never
-commit the actual secret value itself to any Project repository, including
-this one; see [Project Workspaces](../../docs/project-workspaces.md#concepts).
+The short scripts beside this README contain the otherwise repetitive Git and
+DIM commands. Read them before running them; they are intentionally small.
+For the trust model, see [Trust Boundaries](../../specs/02-boundaries-and-trust.md).
 
-For the underlying concepts (what a Project is, the `.dim` contract,
-capability profiles), see [Project Workspaces](../../docs/project-workspaces.md)
-and [Repository-backed Workspaces](../../docs/repo-workspaces.md).
+## Try it
 
-This exact sequence is exercised by `scripts/example-project-smoke.bash`
-(`just verify-example-multi-repo-project`, from the DIM repository root)
-against a real Docker daemon and a real managed Gitea instance. If you change the
-repository skeletons or commands here, update that script too — it is what
-keeps this page honest.
-
-The smoke script stays in DIM's top-level `scripts/` directory because it
-builds and locally installs unpublished DIM packages, manages a temporary npm
-registry and Gitea organization, and performs host-side cleanup. It copies
-each directory under this example's `repos/` into a fresh temporary location,
-initializes three real Git repositories, and creates the workspace container
-from those materialized repositories. No pre-existing example workspace is
-reused.
-
-Before adopting DIM for real infrastructure, follow the mandatory [DIM
-adoption and trust requirements](../../docs/adoption.md).
-
-## Prerequisites
-
-- DIM installed and on `PATH` — see the [installer
-  README](https://www.npmjs.com/package/@slop-lab/install-dim) or, for local
-  development, [Setup](../../docs/usage.md#setup).
-- A working runtime backend (`just doctor` should report it ready).
-- A managed Git service reachable at `$DIM_GIT_BASE_URL` (started for you by
-  `dim create` the first time it's needed).
-
-## 1. Install DIM
-
-Pin an exact, reviewed version — never `latest`:
+Install DIM, then check the configured default runtime:
 
 ```bash
-mise use -g 'npm:@slop-lab/install-dim@0.2.0'
-dim install-cli
+dim doctor
 ```
 
-See the [installer README](https://www.npmjs.com/package/@slop-lab/install-dim)
-for `npx`-based and direct-`PATH` alternatives.
-
-## 2. Create the example repositories
-
-Copy each repository skeleton out and make it a real Git repository with one
-commit:
+From this directory:
 
 ```bash
-for name in root web secrets; do
-  cp -r "examples/multi-repo-project/repos/$name" "./example-$name"
-  git init --initial-branch=main "./example-$name"
-  git -C "./example-$name" add -A
-  git -C "./example-$name" commit -m "initial example-$name"
-done
+bash create-repositories.bash
+bash register-project.bash
+dim create example example-dev
 ```
 
-Each is otherwise an ordinary Git repository — create yours however you
-normally would.
+`dim create` uses the runtime backend recorded during installation and uses
+no Compose profiles unless `--profile` is supplied.
 
-## 3. Register the Project and its repositories
+Open an interactive shell or coding agent in `dev`:
 
 ```bash
-dim project create example
-
-dim repo create example root --root --ref main --protect main
-dim x git -C ./example-root push "$(dim repo url-for-host example root)" main
-dim repo protect example root
-
-dim repo create example web --protect main
-dim x git -C ./example-web push "$(dim repo url-for-host example web)" main
-dim repo protect example web
-
-dim repo create example secrets --protect main
-dim x git -C ./example-secrets push "$(dim repo url-for-host example secrets)" main
-dim repo protect example secrets
+dim run example-dev bash
+dim run example-dev codex
+dim run example-dev claude
 ```
 
-`dim x git` supplies managed Gitea credentials for this one push; run `dim
-git setup` once instead if you'd rather your normal `git push` authenticate
-directly. Each `repo create` only registers an alias local to this Project —
-`web` and `secrets` don't need to be globally unique names.
-
-`--protect` belongs on `repo create`/`repo import`, not `repo protect`: an
-empty repository has no branch to protect yet, so `create` only records the
-policy, and `protect` applies it once the branch exists. Skipping `--protect`
-at `create` time is a real footgun — the later `repo protect` call still
-reports success, having protected nothing.
-
-## 4. Create the workspace
+Arguments can follow `--`, for example:
 
 ```bash
-dim create example example-dev --backend runc --profile development
+dim run example-dev bash -- -lc 'git status'
+dim run example-dev codex -- 'describe this repository'
 ```
 
-This claims the workspace, clones `example-root` inside its trusted
-project-root container, and runs `.dim/docker-compose.yml`. Its `dev` service
-installs `codex` and `claude` and starts an independent nested Docker daemon,
-so agents can create further containers without access to the project-root
-controller's daemon. `tini` runs as PID 1 and supervises the dev startup
-process.
-
-The reviewed `.dim/setup.sh` reads the host developer's `user.name` and
-`user.email` through DIM's `builtin.git-author` host-input provider each time
-the workspace starts. It writes only those returned values to a temporary
-Compose env file, mapping them to both `GIT_AUTHOR_*` and `GIT_COMMITTER_*` in
-dev. The controller socket and workspace grant stay in the trusted
-project-root container and are not passed to dev.
-
-## 5. Confirm it's real
-
-```bash
-dim show example-dev --json
-docker ps --filter "name=$(dim show example-dev --json | jq -r .containerName)"
-dim exec example-dev -- hostname
-```
-
-`show` reports `"phase": "ready"` and the workspace's actual `containerName`
-— read it from there rather than guessing a name; it's an implementation
-detail `dim` can change. `docker ps` then confirms it's a real, running
-container, and `exec` runs a command inside it.
-
-## 6. Run the project task
-
-```bash
-dim run example-dev hello
-```
-
-`run` dispatches through `.dim/entrypoint.sh` without repeating setup.
-
-## 7. Run a coding agent in the dev container
-
-```bash
-dim run example-dev codex -- "describe this repository in one sentence"
-dim run example-dev claude -- "describe this repository in one sentence"
-```
-
-The `codex` and `claude` tasks exec into the already-running `dev` service
-and run the agent with `--dangerously-bypass-approvals-and-sandbox` /
-`--dangerously-skip-permissions` — appropriate here because `dev` is itself
-an isolated, disposable container, not your host. Always put agent arguments
-after `--`: `dim run` forwards unrecognized flags to `dim` itself otherwise,
-so `dim run example-dev codex --version` (no `--`) prints `dim`'s own
-version instead of reaching `codex` at all.
-
-## 8. Create a nested container from inside the dev container
-
-```bash
-dim exec example-dev -- \
-  docker compose --file .dim/docker-compose.yml exec -T dev \
-  docker run --rm hello-world
-```
-
-`dev` has its own Docker-in-Docker daemon. Containers it creates are nested
-under the agent boundary and are neither host containers nor siblings managed
-by the project-root controller. This lets an agent build images, run tests,
-and start dependencies without being able to inspect or control a
-secret-bearing container.
-
-## 9. Reach the other repositories from inside the workspace
-
-Only the root repository is cloned automatically. The trusted project-root
-controller can fetch other reviewed repositories through the managed Git
-service using the credentials DIM exports at that boundary:
-
-```bash
-dim exec example-dev -- sh -c \
-  'git clone "$DIM_GIT_BASE_URL/web.git" /tmp/web && cat /tmp/web/app.txt'
-```
-
-This prints `hello from example-web` — cloned by the project-root controller,
-using `$DIM_GIT_BASE_URL` plus the `dim-git-askpass` helper `dim` installs
-into the workspace. See [Multiple
-repositories](../../docs/repo-workspaces.md#multiple-repositories) for how
-project code is expected to use this in practice (usually from
-`.dim/setup.sh` or a Compose service, not by hand).
-
-## 10. Deploy and control the secret-bearing service
-
-The `secrets` repository is registered above like any other, but its
-secret-bearing container is deliberately **not** part of the agent-facing
-`.dim/docker-compose.yml`.
-The reviewed `.dim/controller.sh` runs in the project-root workspace
-container, fetches the approved `secrets` ref, and uses the project-root
-nested Docker daemon to create the service. It is a sibling of `dev`, not a
-container inside `dev`, and `dev` has a different Docker daemon (see [Trust
-Boundaries](../../specs/02-boundaries-and-trust.md#secret-bearing-runtime-boundary)).
-The `secret-control` Compose service has no secret and exposes only
-`start`, `stop`, `restart`, and `status` for the fixed service name. This lets
-the agent operate the service without receiving a Docker socket or an
-interface that returns its configuration.
-
-This is not a general Docker proxy. The reviewed `secret-control` source
-hard-codes `example-secret-service`; an HTTP request can select only one of
-the four listed operations. It cannot supply a container name, Docker
-command, argument, image, environment variable, or secret. Supporting another
-service or operation requires changing and reviewing the root repository
-rather than sending a different runtime request.
-
-```bash
-dim exec example-dev -- \
-  env EXAMPLE_SECRET=not-a-real-secret sh .dim/controller.sh deploy-secret
-dim run example-dev secret -- status
-```
-
-Deployment remains a trusted operator action because it supplies the secret.
-Afterward an agent can use the deliberately small lifecycle interface:
-
-```bash
-dim run example-dev secret -- stop
-dim run example-dev secret -- start
-dim run example-dev secret -- restart
-dim run example-dev secret -- status
-```
-
-Status reports the lifecycle state but never returns container configuration.
-Confirm dev received neither the secret nor visibility through its private
-Docker daemon:
-
-```bash
-dim exec example-dev -- docker compose -f .dim/docker-compose.yml \
-  exec -T dev sh -c 'env | grep -c EXAMPLE_SECRET || true'
-dim exec example-dev -- docker compose -f .dim/docker-compose.yml \
-  exec -T dev docker ps --format '{{.Names}}'
-```
-
-The first command prints `0`, and the second does not list
-`example-secret-service`. The project-root controller receives the secret only
-for deployment; neither dev nor `secret-control` receives it.
-
-Tear the example service down explicitly when done:
-
-```bash
-dim exec example-dev -- sh .dim/controller.sh remove-secret
-```
-
-## 11. Clean up
+Discard the workspace when finished:
 
 ```bash
 dim discard example-dev --yes
 ```
 
-This stops the project's Compose services, then removes the workspace's
-runtime, inner-Docker store, checkout, and journal. The `example` Project and
-its three repositories are still registered on the managed Git service.
-Remove just the local Project metadata with `dim project remove example`, or
-delete the Project's Git organization and every repository in it with `dim
-project purge example --yes` once nothing still needs them.
+## What gets created
+
+The root repository is cloned into the trusted project-root container. Its
+`.dim/setup.sh` reads the host Git author through DIM's narrow host-input API,
+then starts [.dim/docker-compose.yml](repos/root/.dim/docker-compose.yml).
+
+```text
+host
+└── project-root container (trusted controller, root Docker daemon)
+    ├── dev container (untrusted agent, its own Docker daemon)
+    │   └── containers created by dev
+    └── secret container (root Docker daemon, raw secret)
+```
+
+The `dev` container has Docker CLI access only to its own DinD daemon. It does
+not receive the project-root Docker socket, so `docker ps` there cannot see or
+control the sibling `secret` container.
+
+Only the root repository is cloned automatically. Trusted root lifecycle code
+can clone `web` or `secrets` using the managed Project Git URL. The registration
+script demonstrates the host form:
+
+```bash
+dim repo url example web
+```
+
+Use `dim repo url --workspace example web` when lifecycle code needs the
+workspace-reachable form.
+
+## Secret-bearing service
+
+The normal setup starts only `dev`. A trusted operator supplies the secret:
+
+```bash
+EXAMPLE_SECRET=not-a-real-secret bash deploy-secret.bash
+```
+
+[ops/secret-service.sh](repos/root/ops/secret-service.sh) then clones the approved
+`secrets` repository and starts the Compose `secret` service on the
+project-root Docker daemon. The deployment passes the secret into that
+container's environment without adding it to Project state, repository files,
+or the dev container.
+
+The trusted project-root container can administer or inspect it with Compose:
+
+```bash
+dim exec example-dev -- \
+  docker compose -f .dim/docker-compose.yml exec -T secret \
+  wget -qO- http://127.0.0.1:7099/healthz
+```
+
+The dev container has no root Docker access. It can only call the constrained
+HTTP interface exposed by the service:
+
+```bash
+dim run example-dev bash -- \
+  -lc 'wget -qO- http://secret:7099/healthz'
+```
+
+The response confirms configuration without returning the secret:
+
+```json
+{"ok":true,"secretConfigured":true}
+```
+
+Remove the secret-bearing service from the trusted root boundary:
+
+```bash
+dim exec example-dev -- sh ops/secret-service.sh remove-secret
+```
+
+Never commit a real secret to any Project repository. Review the pinned root
+and secret-bearing revisions, Dockerfiles, dependencies, and deployment code
+before using this pattern with real credentials.
+
+For readability, this example deploys the protected `main` branch of
+`secrets`. A production Project should replace that branch selection in
+`ops/secret-service.sh` with its reviewed immutable revision.
+
+## Development verification
+
+DIM contributors can run the complete materialized-repository smoke test:
+
+```bash
+just verify-example-multi-repo-project
+```
+
+`just` is used only for this repository's development workflow; installed
+users use `dim doctor` and the commands above.

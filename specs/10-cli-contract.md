@@ -40,8 +40,8 @@ dim repo import PROJECT ALIAS SOURCE [--root] [--ref BRANCH] [--protect PATTERNS
 dim repo protect PROJECT ALIAS
 dim repo list PROJECT
 dim repo show PROJECT ALIAS
-dim repo url-for-host PROJECT ALIAS
-dim repo url-for-workspace PROJECT ALIAS
+dim repo url PROJECT ALIAS
+dim repo url --workspace PROJECT ALIAS
 ```
 
 Every repository belongs to one Project namespace. `create` makes an empty
@@ -83,6 +83,9 @@ runs its `.dim` setup contract. DIM directly manages no other checkout; the
 root repository lifecycle owns additional clones and nested services.
 Resource flags are stored in the workspace record. Environment configuration
 provides their defaults but does not force one limit set on every workspace.
+The runtime backend defaults to the backend recorded during installation.
+Omitting `--profile` stores an empty profile list and starts ordinary
+non-profiled Compose services.
 
 Running workspaces do not change when Project metadata or the root remote
 changes. `start` applies the configured root ref to a stopped workspace before

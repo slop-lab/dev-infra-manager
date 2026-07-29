@@ -52,7 +52,7 @@ create_repo() {
   git clone --bare "$worktree" "$bare" >/dev/null
   "$dim_bin" repo create "$project_name" "$name" >/dev/null
   local repo_url
-  repo_url="$("$dim_bin" repo url-for-host "$project_name" "$name")"
+  repo_url="$("$dim_bin" repo url "$project_name" "$name")"
   "$dim_bin" x git --git-dir "$bare" push "$repo_url" --all >/dev/null
   "$dim_bin" repo protect "$project_name" "$name" >/dev/null
 }
@@ -153,7 +153,7 @@ git -C "$project_worktree" add .dim compose.yaml version.txt
 git -C "$project_worktree" commit -m 'add DIM project environment' >/dev/null
 git clone --bare "$project_worktree" "$project_bare" >/dev/null
 "$dim_bin" repo create "$project_name" root --root --ref main --protect 'release/*' >/dev/null
-root_url="$("$dim_bin" repo url-for-host "$project_name" root)"
+root_url="$("$dim_bin" repo url "$project_name" root)"
 "$dim_bin" x git --git-dir "$project_bare" push "$root_url" --all >/dev/null
 "$dim_bin" repo protect "$project_name" root >/dev/null
 
@@ -170,7 +170,7 @@ compose_project_name="$("$dim_bin" show "$workspace_name" --json | jq -r .compos
 
 test "$("$dim_bin" show "$workspace_name" --json | jq -c .profiles)" = '["development","documentation"]'
 test "$("$dim_bin" exec "$workspace_name" -- ls -1 /workspace)" = "project"
-git ls-remote "$("$dim_bin" repo url-for-host "$project_name" api)" \
+git ls-remote "$("$dim_bin" repo url "$project_name" api)" \
   "refs/heads/agent/$workspace_name" | grep -q .
 
 output="$("$dim_bin" run "$workspace_name" verify)"
