@@ -2,10 +2,12 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import {
   applyProjectRepositoryProtection,
   createProject,
-  createProjectRepository,
-  importProjectRepository,
   listProjectRepositories,
   listProjects,
+  planProjectRepositorySet,
+  prepareProjectRepositoryTransfer,
+  completeProjectRepositoryTransfer,
+  readProjectRootRepositorySetYaml,
   projectRepositoryHostUrl,
   projectRepositoryWorkspaceUrl,
   purgeProject,
@@ -31,6 +33,7 @@ import type { RegisteredDimPlugins } from "./plugin.js";
 import { ProcessRunner } from "./runner.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { UserError } from "./errors.js";
+import { parseRepositorySetYaml, validateRepositorySet } from "./repositorySet.js";
 
 export interface AdminRouteContext {
   readonly params: Readonly<Record<string, string>>;
@@ -125,23 +128,53 @@ async function builtinCall(
     case "project.show": return showProject(lifecycle, text("name"));
     case "project.remove": await removeProject(lifecycle, text("name")); return {};
     case "project.purge": await purgeProject(runner, lifecycle, text("name")); return {};
-    case "repo.create":
-      return createProjectRepository(runner, lifecycle, {
+    case "repo.plan":
+      return planProjectRepositorySet(
+        lifecycle,
+        text("project"),
+        validateRepositorySet(input.repositorySet),
+        input.createProject === true
+      );
+    case "repo.prepare": {
+      const alias = text("alias");
+      const entry = validateRepositorySet({
+        schemaVersion: 1,
+        repositories: {
+          [alias]: {
+            root: input.root === true,
+            protectedPatterns: stringArray(input.protectedPatterns),
+            ...(input.source === undefined ? {} : { url: text("source") }),
+            ...(input.rootRef === undefined ? {} : { rootRef: text("rootRef") })
+          }
+        }
+      }).repositories[alias]!;
+      return prepareProjectRepositoryTransfer(runner, lifecycle, {
         project: text("project"),
-        alias: text("alias"),
-        root: input.root === true,
-        protectedPatterns: stringArray(input.protectedPatterns),
-        ...(input.rootRef === undefined ? {} : { rootRef: text("rootRef") })
+        alias,
+        root: entry.root,
+        protectedPatterns: entry.protectedPatterns,
+        ...(entry.url === undefined ? {} : { source: entry.url }),
+        ...(entry.rootRef === undefined ? {} : { rootRef: entry.rootRef })
       });
-    case "repo.import":
-      return importProjectRepository(runner, lifecycle, {
-        project: text("project"),
-        alias: text("alias"),
-        source: text("source"),
-        root: input.root === true,
-        protectedPatterns: stringArray(input.protectedPatterns),
-        ...(input.rootRef === undefined ? {} : { rootRef: text("rootRef") })
-      });
+    }
+    case "repo.complete":
+      return completeProjectRepositoryTransfer(
+        runner,
+        lifecycle,
+        text("project"),
+        text("alias"),
+        text("transferId"),
+        {
+          success: input.success === true,
+          ...(input.error === undefined ? {} : { error: text("error") })
+        }
+      );
+    case "repo.root-set": {
+      const yaml = await readProjectRootRepositorySetYaml(runner, lifecycle, text("project"));
+      return yaml === undefined
+        ? { found: false }
+        : { found: true, repositorySet: parseRepositorySetYaml(yaml, ".dim/repos.yml") };
+    }
     case "repo.list": return listProjectRepositories(lifecycle, text("project"));
     case "repo.show": return showProjectRepository(lifecycle, text("project"), text("alias"));
     case "repo.protect": return applyProjectRepositoryProtection(runner, lifecycle, text("project"), text("alias"));

@@ -65,7 +65,8 @@ image and direct access to a Docker host with `sysbox-runc`. It must cover:
 
 The independent multi-repository example gate verifies managed Git, protected
 refs, and controller deployment of a secret-bearing child beside an isolated
-agent container. It must also prove the agent container uses a distinct Docker
+agent container. It must use the example's generated `repos.yml` rather than a
+parallel sequence of individual registration commands. It must also prove the agent container uses a distinct Docker
 daemon, cannot list the controller's secret-bearing child, and does not receive
 the child's raw secret environment.
 
@@ -146,7 +147,7 @@ Ingress discovery, creation, and revocation must run through the public
 `just verify-example-multi-repo-project` requires Docker and managed Gitea. It
 materializes the three repository skeletons under
 `examples/multi-repo-project/repos/` in a temporary directory and verifies the
-documented project, protected refs, workspace, nested Docker, repository
+documented `project create --repos` flow, protected refs, workspace, nested Docker, repository
 access, and secret-bearing service boundary.
 
 ## Documentation Verification

@@ -7,6 +7,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- Replaced separate repository create/import flows with Project-scoped
+  `repo add`, `repo plan`, and `repo apply`. Repository aliases come from
+  `repos.yml` mapping keys, while external Git transport runs through the
+  invoking host Git CLI and its existing authentication.
+- Added standalone `project create --repos` registration and optional
+  discovery of a managed root's `.dim/repos.yml`.
+
 ## [0.2.0] - 2026-07-29
 
 ### Changed

@@ -9,7 +9,8 @@
 - Record commands print a human-readable summary by default. Record-producing
   subcommands expose their own `--json`; non-record commands do not.
 - URL commands print exactly one URL on stdout.
-- DIM 0.2 rejects 0.1 project/workspace state and does not migrate it.
+- DIM rejects incompatible pre-stable project/workspace state and does not
+  migrate it implicitly.
 - Except for interactive `exec` and `run`, commands that inspect or mutate DIM
   state are clients of the managed host-admin controller API. `exec` and `run`
   remain direct CLI adapters until the controller has a streaming terminal
@@ -24,7 +25,7 @@
 ## Projects
 
 ```bash
-dim project create PROJECT
+dim project create PROJECT [--repos FILE] [--yes]
 dim project list
 dim project show PROJECT
 dim project remove PROJECT
@@ -45,8 +46,9 @@ DIM-managed Git organization and repositories after explicit confirmation.
 ## Repositories
 
 ```bash
-dim repo create PROJECT ALIAS [--root] [--ref BRANCH] [--protect PATTERNS]
-dim repo import PROJECT ALIAS SOURCE [--root] [--ref BRANCH] [--protect PATTERNS]
+dim repo add PROJECT ALIAS [URL] [--root] [--ref BRANCH] [--protect PATTERNS]
+dim repo plan PROJECT [--file FILE]
+dim repo apply PROJECT [--file FILE] [--yes]
 dim repo protect PROJECT ALIAS
 dim repo list PROJECT
 dim repo show PROJECT ALIAS
@@ -54,18 +56,47 @@ dim repo url PROJECT ALIAS
 dim repo url --workspace PROJECT ALIAS
 ```
 
-Every repository belongs to one Project namespace. `create` makes an empty
-repository and leaves configured protection pending so an initial standard Git
-push can populate it. `protect` applies protection after that push. Workspace
-creation also applies pending protection to the root repository.
+Every repository alias belongs to one Project namespace and is always
+supplied explicitly; DIM never derives it from a URL. `add` without a URL
+creates an empty repository and leaves protection pending. `add` with a URL
+uses the invoking CLI's host `git` process to mirror the source into managed
+Gitea, then applies protection. Workspace creation also applies pending
+protection to the root repository.
 No protection pattern is implied. Projects pass their actual policy through
 `--protect`; an omitted option records no patterns.
 For a root with no configured ref, `protect` sets Gitea `HEAD` when exactly one
 branch exists and does not guess when multiple branches exist.
 
-`import` is a convenience wrapper over `git clone --mirror`, repository
-creation, `git push --mirror`, and protection. Existing local Git
-authentication is used for the source URL.
+`repos.yml` contains `schemaVersion: 1` and a `repositories` object whose
+property names are Project-scoped aliases. Each value may contain `url`,
+`root`, `ref`, and `protect`. `project create --repos` requires exactly one
+`root: true`. `repo apply` updates an existing Project without deleting
+repositories omitted from the file. Reapplying an identical entry is a no-op;
+an existing alias with a different URL, root role/ref, or protection policy is
+a conflict rather than an implicit mutation. With no `--file`, it reads the
+managed root's optional `.dim/repos.yml`.
+
+The CLI asks before applying a discovered root file in a TTY. Non-interactive
+use requires `--yes` or `--apply-repos`; it never answers its own prompt.
+Repository-set planning and all state transitions use the admin API. External
+clone/push transport is a local CLI adapter so current host credential helpers,
+SSH configuration, and SSH agent are used. The managed Gitea credential is
+applied only to the destination push.
+
+The built-in admin operations are:
+
+```text
+repo.plan       validate and compare a canonical RepositorySet
+repo.prepare    claim an alias, create its Gitea target, and begin a transfer
+repo.complete   finish or fail the identified transfer and update state
+repo.root-set   read and parse .dim/repos.yml from the managed root ref
+```
+
+`repo.prepare` returns an opaque transfer ID and destination-only Gitea
+credential to the host CLI. `repo.complete` accepts only the active transfer
+ID for that Project/alias. API inputs use normalized JSON field names
+`rootRef` and `protectedPatterns`; YAML `ref` and `protect` are file-format
+adapters, not API fields.
 
 Host and workspace URLs never contain credentials.
 

@@ -9,8 +9,9 @@ repos/
 └── secrets/    source for a secret-bearing HTTP service
 ```
 
-The short scripts beside this README contain the otherwise repetitive Git and
-DIM commands. Read them before running them; they are intentionally small.
+The short scripts beside this README create local source repositories and
+write the real `root/.dim/repos.yml` used to register the complete Project in
+one operation. Read them before running them; they are intentionally small.
 For the trust model, see [Trust Boundaries](../../specs/02-boundaries-and-trust.md).
 
 ## Try it
@@ -31,6 +32,18 @@ dim create example example-dev
 
 `dim create` uses the runtime backend recorded during installation and uses
 no Compose profiles unless `--profile` is supplied.
+
+`register-project.bash` runs:
+
+```bash
+dim project create example \
+  --repos example-repositories/root/.dim/repos.yml \
+  --yes
+```
+
+The `repositories` mapping keys (`root`, `web`, and `secrets`) are the
+Project-scoped aliases. The example uses local source paths and DIM's managed
+local Gitea, so it needs no external Git account.
 
 Open an interactive shell or coding agent in `dev`:
 

@@ -101,18 +101,21 @@ extension point. See [docs/plugins.md](docs/plugins.md).
 
 ```bash
 dim project create project
-dim repo create project root --root --protect main
-git -C /path/to/project push "$(dim repo url project root)" main
-dim repo protect project root
+dim repo add project root /path/to/project --root --ref main --protect main
 dim create project work-1
 dim run work-1 codex
 dim exec work-1 -- bash
 ```
 
-`--protect` belongs on `repo create`, not `repo protect` — an empty
-repository has no branch to protect yet, so `create` only records the
-policy and `protect` applies it once the branch exists. Skipping it is a
-real footgun: `repo protect` still reports success having protected nothing.
+For several repositories, create the Project and import the complete set in
+one reviewed operation:
+
+```bash
+dim project create project --repos repos.yml
+```
+
+The keys below `repositories` are Project-scoped aliases; URLs are passed to
+the host Git CLI and are never parsed to invent a name.
 
 This repository implements the same project contract on itself through
 `.dim/setup.sh` and `.dim/entrypoint.sh`; after pushing it as the Project

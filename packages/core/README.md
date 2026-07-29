@@ -33,7 +33,7 @@ its scheduled LTS transition.
 import {
   ProcessRunner,
   createProject,
-  createProjectRepository,
+  prepareProjectRepositoryTransfer,
   createWorkspace,
   lifecycleOptions
 } from "@slop-lab/dim-core";
@@ -42,14 +42,16 @@ const runner = new ProcessRunner();
 const options = lifecycleOptions(process.env);
 
 await createProject(runner, options, "acme");
-await createProjectRepository(runner, options, {
+const prepared = await prepareProjectRepositoryTransfer(runner, options, {
   project: "acme",
   alias: "root",
   root: true,
+  rootRef: "main",
   protectedPatterns: ["main", "development"]
 });
 
-// Push the initial root branch with ordinary Git before creating a workspace.
+// Populate prepared.targetUrl with Git and apply pending protection before
+// creating a workspace.
 await createWorkspace(runner, options, {
   project: "acme",
   name: "feature-123",
@@ -83,8 +85,8 @@ workspace creation then resolves the root repository's symbolic `HEAD` and
 fails if no `HEAD` exists.
 
 The default state root is `~/.local/state/dim`; the default managed Gitea port
-is `3300`. Project and workspace records use schema version 2. Version 0.2.0
-does not migrate 0.1 state.
+is `3300`. Project records use schema version 3 and workspace records use
+schema version 2. DIM does not migrate incompatible pre-stable state.
 
 ## API scope
 

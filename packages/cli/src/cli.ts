@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import { once } from "node:events";
-import { chmod, mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
+import { tmpdir } from "node:os";
+import { createInterface } from "node:readline/promises";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { AddHelpTextContext, Command, CommanderError } from "commander";
@@ -13,6 +15,10 @@ import {
   type LifecycleOptions,
   loadInstalledPlugins,
   ProcessRunner,
+  parseRepositorySetYaml,
+  assertRepositorySetCanCreateProject,
+  type RepositorySet,
+  type RepositorySetEntry,
   initializeControllerRoutes,
   resolvePluginHome,
   runWorkspace,
@@ -35,8 +41,22 @@ const project = program.command("project").description("Manage project metadata 
 project.command("create")
   .description("Create a project and its managed Git namespace")
   .argument("<project>")
+  .option("--repos <file>", "create and populate from a repos.yml file")
+  .option("--yes", "apply the repository plan without prompting")
   .option("--json", "print machine-readable JSON")
-  .action(async (name: string, flags: JsonFlags) => print(await adminCall("project.create", { name }), flags));
+  .action(async (name: string, flags: JsonFlags & { repos?: string; yes?: boolean }) => {
+    if (flags.repos === undefined) {
+      print(await adminCall("project.create", { name }), flags);
+      return;
+    }
+    const set = await readRepositorySetFile(flags.repos);
+    assertRepositorySetCanCreateProject(set, flags.repos);
+    const plan = await repositorySetPlan(name, set, true);
+    await approveRepositoryPlan(plan, flags.yes ?? false, !flags.json);
+    await adminCall("project.create", { name });
+    const repositories = await applyRepositorySet(name, set, plan);
+    print({ project: name, repositories }, flags);
+  });
 
 project.command("list")
   .alias("ls")
@@ -67,42 +87,48 @@ project.command("purge")
 
 const repo = program.command("repo").description("Manage project-scoped repositories");
 
-repo.command("create")
-  .description("Create an empty managed repository")
+repo.command("add")
+  .description("Add an empty repository or import an external Git URL")
   .argument("<project>")
   .argument("<alias>")
+  .argument("[url]")
   .option("--root", "make this the project root repository")
   .option("--ref <branch-or-ref>", "root branch/ref; defaults to the repository HEAD")
   .option("--protect <patterns>", "comma-separated protected branch patterns")
+  .option("--apply-repos", "apply .dim/repos.yml after adding the root")
   .option("--json", "print machine-readable JSON")
-  .action(async (projectName: string, alias: string, flags: RepoFlags) => {
-    print(await adminCall("repo.create", {
-      project: projectName,
-      alias,
-      protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect),
+  .action(async (projectName: string, alias: string, url: string | undefined, flags: RepoFlags & { applyRepos?: boolean }) => {
+    const repository = await addRepository(projectName, alias, {
+      ...(url === undefined ? {} : { url }),
       root: flags.root ?? false,
-      ...(flags.root ? { rootRef: flags.ref } : {})
-    }), flags);
+      ...(flags.ref === undefined ? {} : { rootRef: flags.ref }),
+      protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect)
+    });
+    print(repository, flags);
+    if (flags.root) await offerRootRepositorySet(projectName, flags.applyRepos ?? false);
   });
 
-repo.command("import")
-  .description("Create a managed repository and mirror an existing Git URL")
+repo.command("plan")
+  .description("Preview repositories from repos.yml without changing state")
   .argument("<project>")
-  .argument("<alias>")
-  .argument("<source>")
-  .option("--root", "make this the project root repository")
-  .option("--ref <branch-or-ref>", "root branch/ref; defaults to the repository HEAD")
-  .option("--protect <patterns>", "comma-separated protected branch patterns")
+  .option("--file <file>", "read an explicit repos.yml instead of the managed root")
   .option("--json", "print machine-readable JSON")
-  .action(async (projectName: string, alias: string, source: string, flags: RepoFlags) => {
-    print(await adminCall("repo.import", {
-      project: projectName,
-      alias,
-      source,
-      protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect),
-      root: flags.root ?? false,
-      ...(flags.root ? { rootRef: flags.ref } : {})
-    }), flags);
+  .action(async (projectName: string, flags: JsonFlags & { file?: string }) => {
+    const set = await resolveRepositorySet(projectName, flags.file);
+    print(await repositorySetPlan(projectName, set, false), flags);
+  });
+
+repo.command("apply")
+  .description("Reconcile repositories from repos.yml")
+  .argument("<project>")
+  .option("--file <file>", "read an explicit repos.yml instead of the managed root")
+  .option("--yes", "apply without prompting")
+  .option("--json", "print machine-readable JSON")
+  .action(async (projectName: string, flags: JsonFlags & { file?: string; yes?: boolean }) => {
+    const set = await resolveRepositorySet(projectName, flags.file);
+    const plan = await repositorySetPlan(projectName, set, false);
+    await approveRepositoryPlan(plan, flags.yes ?? false, !flags.json);
+    print(await applyRepositorySet(projectName, set, plan), flags);
   });
 
 repo.command("list")
@@ -679,9 +705,7 @@ function installerFacadeHelpText(context: AddHelpTextContext): string {
   const rootText = `
 Typical flow:
   dim project create PROJECT
-  dim repo create PROJECT ROOT --root
-  git push "$(dim repo url PROJECT ROOT)" main
-  dim repo protect PROJECT ROOT
+  dim repo add PROJECT ROOT SOURCE_URL --root --ref main
   dim create PROJECT WORKSPACE
   dim exec WORKSPACE -- bash
 
@@ -709,6 +733,187 @@ available:
 
 function interactive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+interface RepositorySetPlan {
+  project: string;
+  createProject: boolean;
+  actions: Array<{
+    action: "create" | "retry" | "unchanged" | "conflict";
+    alias: string;
+    entry: RepositorySetEntry;
+    detail?: string;
+  }>;
+}
+
+interface PreparedRepositoryTransfer {
+  transferId?: string;
+  repository: Record<string, unknown>;
+  sourceUrl?: string;
+  targetUrl: string;
+  writerUsername?: string;
+  writerPassword?: string;
+}
+
+async function readRepositorySetFile(file: string): Promise<RepositorySet> {
+  const absolute = path.resolve(file);
+  return parseRepositorySetYaml(await readFile(absolute, "utf8"), absolute);
+}
+
+async function resolveRepositorySet(projectName: string, file?: string): Promise<RepositorySet> {
+  if (file !== undefined) return readRepositorySetFile(file);
+  const response = await adminCall<{ found: boolean; repositorySet?: RepositorySet }>("repo.root-set", {
+    project: projectName
+  });
+  if (!response.found || !response.repositorySet) {
+    throw new UserError(`project '${projectName}' root does not contain .dim/repos.yml`);
+  }
+  return response.repositorySet;
+}
+
+async function repositorySetPlan(
+  projectName: string,
+  set: RepositorySet,
+  createProject: boolean
+): Promise<RepositorySetPlan> {
+  return adminCall("repo.plan", { project: projectName, createProject, repositorySet: set });
+}
+
+async function approveRepositoryPlan(plan: RepositorySetPlan, yes: boolean, show = true): Promise<void> {
+  const changed = plan.actions.filter(({ action }) => action !== "unchanged");
+  if (show) {
+    for (const action of plan.actions) {
+      console.log(`${action.action}\t${action.alias}\t${action.entry.url ?? "(empty)"}${action.detail ? `\t${action.detail}` : ""}`);
+    }
+  }
+  const conflicts = plan.actions.filter(({ action }) => action === "conflict");
+  if (conflicts.length > 0) {
+    throw new UserError(`repository plan has ${conflicts.length} conflict${conflicts.length === 1 ? "" : "s"}`);
+  }
+  if (changed.length === 0 || yes) return;
+  if (!interactive()) throw new UserError("repository changes require --yes in a non-interactive shell");
+  const prompt = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (await prompt.question("Apply this repository plan? [y/N] ")).trim().toLowerCase();
+    if (answer !== "y" && answer !== "yes") throw new UserError("repository plan was not applied");
+  } finally {
+    prompt.close();
+  }
+}
+
+async function applyRepositorySet(
+  projectName: string,
+  set: RepositorySet,
+  plan: RepositorySetPlan
+): Promise<Record<string, unknown>[]> {
+  const results: Record<string, unknown>[] = [];
+  for (const action of plan.actions) {
+    if (action.action === "unchanged") continue;
+    if (action.action === "conflict") throw new UserError(`repository '${action.alias}' conflicts with existing state`);
+    results.push(await addRepository(projectName, action.alias, action.entry));
+  }
+  return results;
+}
+
+async function addRepository(
+  projectName: string,
+  alias: string,
+  entry: RepositorySetEntry
+): Promise<Record<string, unknown>> {
+  const prepared = await adminCall<PreparedRepositoryTransfer>("repo.prepare", {
+    project: projectName,
+    alias,
+    root: entry.root,
+    protectedPatterns: entry.protectedPatterns,
+    ...(entry.url === undefined ? {} : { source: entry.url }),
+    ...(entry.rootRef === undefined ? {} : { rootRef: entry.rootRef })
+  });
+  if (!prepared.transferId || !prepared.sourceUrl) return prepared.repository;
+  const temporary = await mkdtemp(path.join(tmpdir(), "dim-repo-transfer-"));
+  const mirror = path.join(temporary, "source.git");
+  try {
+    let exitCode = await runner.runStreaming("git", ["clone", "--mirror", prepared.sourceUrl, mirror], {
+      env: process.env
+    });
+    if (exitCode === 0) {
+      if (!prepared.writerUsername || !prepared.writerPassword) {
+        throw new UserError("controller did not provide managed Git transfer credentials");
+      }
+      const helper = "!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f";
+      exitCode = await runner.runStreaming("git", [
+        "--git-dir", mirror,
+        "-c", "credential.helper=",
+        "-c", `credential.helper=${helper}`,
+        "push", "--mirror", prepared.targetUrl
+      ], {
+        env: {
+          ...process.env,
+          DIM_GIT_USERNAME: prepared.writerUsername,
+          DIM_GIT_TOKEN: prepared.writerPassword,
+          GIT_TERMINAL_PROMPT: "0"
+        }
+      });
+    }
+    if (exitCode !== 0) {
+      await adminCall("repo.complete", {
+        project: projectName,
+        alias,
+        transferId: prepared.transferId,
+        success: false,
+        error: `git transfer exited with code ${exitCode}`
+      });
+      throw new UserError(`failed to import repository '${projectName}/${alias}'`);
+    }
+    return await adminCall<Record<string, unknown>>("repo.complete", {
+      project: projectName,
+      alias,
+      transferId: prepared.transferId,
+      success: true
+    });
+  } catch (error) {
+    if (!(error instanceof UserError && error.message.startsWith("failed to import repository"))) {
+      await adminCall("repo.complete", {
+        project: projectName,
+        alias,
+        transferId: prepared.transferId,
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
+      }).catch(() => {});
+    }
+    throw error;
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+async function offerRootRepositorySet(projectName: string, apply: boolean): Promise<void> {
+  const response = await adminCall<{ found: boolean; repositorySet?: RepositorySet }>("repo.root-set", {
+    project: projectName
+  });
+  if (!response.found || !response.repositorySet) return;
+  const count = Object.keys(response.repositorySet.repositories).length;
+  if (apply) {
+    const plan = await repositorySetPlan(projectName, response.repositorySet, false);
+    await approveRepositoryPlan(plan, true);
+    await applyRepositorySet(projectName, response.repositorySet, plan);
+    return;
+  }
+  if (!interactive()) {
+    console.error(`Root contains .dim/repos.yml with ${count} repositories; run 'dim repo apply ${projectName} --yes'`);
+    return;
+  }
+  const prompt = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (await prompt.question(
+      `Root contains .dim/repos.yml with ${count} repositories. Apply it? [y/N] `
+    )).trim().toLowerCase();
+    if (answer !== "y" && answer !== "yes") return;
+  } finally {
+    prompt.close();
+  }
+  const plan = await repositorySetPlan(projectName, response.repositorySet, false);
+  await approveRepositoryPlan(plan, true);
+  await applyRepositorySet(projectName, response.repositorySet, plan);
 }
 
 async function readStdin(): Promise<string> {

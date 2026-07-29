@@ -38,7 +38,12 @@ export interface GiteaServiceRecord {
 }
 
 export type ProjectPhase = "creating" | "ready" | "error";
-export type ProjectRepositoryPhase = "creating" | "ready" | "error";
+export type ProjectRepositoryPhase = "creating" | "importing" | "ready" | "error";
+
+export interface RepositoryConnection {
+  name: "origin";
+  url: string;
+}
 
 export interface ProjectRepositoryRecord {
   alias: string;
@@ -47,6 +52,8 @@ export interface ProjectRepositoryRecord {
   hostUrl: string;
   workspaceUrl: string;
   phase: ProjectRepositoryPhase;
+  connections: RepositoryConnection[];
+  transferId?: string;
   protectedPatterns: string[];
   protectionPhase: "pending" | "applied";
   createdAt: string;
@@ -55,7 +62,7 @@ export interface ProjectRepositoryRecord {
 }
 
 export interface ProjectRecord {
-  schemaVersion: 2;
+  schemaVersion: 3;
   id: string;
   name: string;
   gitNamespace: string;

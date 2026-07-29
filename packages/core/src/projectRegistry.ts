@@ -16,6 +16,7 @@ import type {
   ProjectRecord,
   ProjectRepositoryRecord
 } from "./lifecycleTypes.js";
+import { assertRepositorySetCanCreateProject, type RepositorySet, type RepositorySetEntry } from "./repositorySet.js";
 import type { CommandRunner } from "./types.js";
 
 export interface CreateRepositoryInput {
@@ -35,7 +36,7 @@ export async function createProject(
   const state = new LifecycleState(options.stateRoot);
   const now = new Date().toISOString();
   let record: ProjectRecord = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     id: randomUUID(),
     name,
     gitNamespace: projectNamespace(name),
@@ -150,6 +151,7 @@ export async function createProjectRepository(
           hostUrl: giteaHostCloneUrl(options, project.gitNamespace, alias),
           workspaceUrl: giteaInternalCloneUrl(project.gitNamespace, alias),
           phase: "creating",
+          connections: [],
           protectedPatterns: input.protectedPatterns,
           protectionPhase: "pending",
           createdAt: now,
@@ -198,6 +200,204 @@ export async function createProjectRepository(
   } finally {
     await release();
   }
+}
+
+export interface RepositorySetPlanAction {
+  action: "create" | "retry" | "unchanged" | "conflict";
+  alias: string;
+  entry: RepositorySetEntry;
+  detail?: string;
+}
+
+export interface RepositorySetPlan {
+  project: string;
+  createProject: boolean;
+  actions: RepositorySetPlanAction[];
+}
+
+export async function planProjectRepositorySet(
+  options: LifecycleOptions,
+  projectNameInput: string,
+  set: RepositorySet,
+  createProject: boolean
+): Promise<RepositorySetPlan> {
+  const projectName = validateLifecycleName(projectNameInput, "project");
+  let project: ProjectRecord | undefined;
+  try {
+    project = await new LifecycleState(options.stateRoot).readProject(projectName);
+  } catch (error) {
+    if (!(error instanceof UserError) || !error.message.includes("not found")) throw error;
+  }
+  if (createProject && project) throw new UserError(`project '${projectName}' already exists`);
+  if (!createProject && !project) throw new UserError(`project '${projectName}' not found`);
+  if (createProject) assertRepositorySetCanCreateProject(set);
+  const actions = Object.entries(set.repositories).map(([alias, entry]): RepositorySetPlanAction => {
+    const existing = project?.repositories.find((repo) => repo.alias === alias);
+    if (!existing) return { action: "create", alias, entry };
+    const existingUrl = existing.connections.find((connection) => connection.name === "origin")?.url;
+    if (existingUrl !== entry.url) {
+      return {
+        action: "conflict",
+        alias,
+        entry,
+        detail: `existing origin is ${existingUrl ?? "(empty repository)"}`
+      };
+    }
+    const existingIsRoot = project?.rootRepositoryAlias === alias;
+    if (existingIsRoot !== entry.root) {
+      return { action: "conflict", alias, entry, detail: existingIsRoot ? "existing repository is the project root" : "root role differs" };
+    }
+    if (entry.rootRef !== undefined && project?.rootRef !== entry.rootRef) {
+      return { action: "conflict", alias, entry, detail: `existing root ref is ${project?.rootRef ?? "(default HEAD)"}` };
+    }
+    if (JSON.stringify(existing.protectedPatterns) !== JSON.stringify(entry.protectedPatterns)) {
+      return { action: "conflict", alias, entry, detail: "configured protection patterns differ" };
+    }
+    if (existing.phase === "ready") return { action: "unchanged", alias, entry };
+    return { action: "retry", alias, entry, detail: `current phase is ${existing.phase}` };
+  });
+  const requestedRoot = actions.find(({ entry }) => entry.root)?.alias;
+  if (project?.rootRepositoryAlias && requestedRoot && project.rootRepositoryAlias !== requestedRoot) {
+    actions.push({
+      action: "conflict",
+      alias: requestedRoot,
+      entry: set.repositories[requestedRoot]!,
+      detail: `project root is already '${project.rootRepositoryAlias}'`
+    });
+  }
+  return { project: projectName, createProject, actions };
+}
+
+export interface PreparedRepositoryTransfer {
+  transferId?: string;
+  repository: ProjectRepositoryRecord;
+  sourceUrl?: string;
+  targetUrl: string;
+  writerUsername?: string;
+  writerPassword?: string;
+}
+
+export async function prepareProjectRepositoryTransfer(
+  runner: CommandRunner,
+  options: LifecycleOptions,
+  input: CreateRepositoryInput & { source?: string }
+): Promise<PreparedRepositoryTransfer> {
+  const projectName = validateLifecycleName(input.project, "project");
+  const alias = validateLifecycleName(input.alias, "repo alias");
+  const state = new LifecycleState(options.stateRoot);
+  const release = await state.acquireProjectLock(projectName);
+  try {
+    let project = await state.readProject(projectName);
+    assertReadyProject(project);
+    const existing = project.repositories.find((repo) => repo.alias === alias);
+    const existingUrl = existing?.connections.find((connection) => connection.name === "origin")?.url;
+    if (existing?.phase === "ready") {
+      if (existingUrl !== input.source) {
+        throw new UserError(`repo '${projectName}/${alias}' already exists with a different origin`);
+      }
+      return {
+        repository: existing,
+        ...(input.source === undefined ? {} : { sourceUrl: input.source }),
+        targetUrl: existing.hostUrl
+      };
+    }
+    if (existing && existingUrl !== input.source) {
+      throw new UserError(`repo '${projectName}/${alias}' has a different pending origin`);
+    }
+    if (input.root && project.rootRepositoryAlias !== undefined && project.rootRepositoryAlias !== alias) {
+      throw new UserError(`project '${projectName}' already has root repo '${project.rootRepositoryAlias}'`);
+    }
+    const credentials = await ensureGitea(runner, options);
+    const now = new Date().toISOString();
+    const transferId = input.source === undefined ? undefined : randomUUID();
+    const repository: ProjectRepositoryRecord = existing
+      ? {
+          ...existing,
+          phase: input.source === undefined ? "ready" : "importing",
+          protectedPatterns: input.protectedPatterns,
+          connections: input.source === undefined ? [] : [{ name: "origin", url: input.source }],
+          ...(transferId === undefined ? {} : { transferId }),
+          updatedAt: now
+        }
+      : {
+          alias,
+          providerRepoId: `${project.gitNamespace}/${alias}`,
+          owner: project.gitNamespace,
+          hostUrl: giteaHostCloneUrl(options, project.gitNamespace, alias),
+          workspaceUrl: giteaInternalCloneUrl(project.gitNamespace, alias),
+          phase: input.source === undefined ? "ready" : "importing",
+          connections: input.source === undefined ? [] : [{ name: "origin", url: input.source }],
+          ...(transferId === undefined ? {} : { transferId }),
+          protectedPatterns: input.protectedPatterns,
+          protectionPhase: "pending",
+          createdAt: now,
+          updatedAt: now
+        };
+    delete repository.error;
+    project = {
+      ...project,
+      ...(input.root ? {
+        rootRepositoryAlias: alias,
+        ...(input.rootRef === undefined ? {} : { rootRef: normalizeRootRef(input.rootRef) })
+      } : {}),
+      repositories: existing
+        ? project.repositories.map((candidate) => candidate.alias === alias ? repository : candidate)
+        : [...project.repositories, repository],
+      updatedAt: now
+    };
+    await createGiteaRepository(options, credentials, project.gitNamespace, alias);
+    await grantWriter(options, credentials, project.gitNamespace, alias);
+    await state.writeProject(project);
+    return {
+      ...(transferId === undefined ? {} : { transferId }),
+      repository,
+      ...(input.source === undefined ? {} : {
+        sourceUrl: input.source,
+        writerUsername: credentials.writerUsername,
+        writerPassword: credentials.writerPassword
+      }),
+      targetUrl: repository.hostUrl
+    };
+  } finally {
+    await release();
+  }
+}
+
+export async function completeProjectRepositoryTransfer(
+  runner: CommandRunner,
+  options: LifecycleOptions,
+  projectNameInput: string,
+  aliasInput: string,
+  transferId: string,
+  result: { success: boolean; error?: string }
+): Promise<ProjectRepositoryRecord> {
+  const projectName = validateLifecycleName(projectNameInput, "project");
+  const alias = validateLifecycleName(aliasInput, "repo alias");
+  const state = new LifecycleState(options.stateRoot);
+  const release = await state.acquireProjectLock(projectName);
+  let repository: ProjectRepositoryRecord;
+  try {
+    let project = await state.readProject(projectName);
+    const existing = project.repositories.find((repo) => repo.alias === alias);
+    if (!existing || existing.transferId !== transferId || existing.phase !== "importing") {
+      throw new UserError(`repository transfer for '${projectName}/${alias}' is not active`);
+    }
+    repository = {
+      ...existing,
+      phase: result.success ? "ready" : "error",
+      updatedAt: new Date().toISOString(),
+      ...(result.success ? {} : { error: result.error ?? "Git transfer failed" })
+    };
+    delete repository.transferId;
+    if (result.success) delete repository.error;
+    project = replaceRepository(project, repository);
+    await state.writeProject(project);
+  } finally {
+    await release();
+  }
+  return result.success
+    ? applyProjectRepositoryProtection(runner, options, projectName, alias)
+    : repository;
 }
 
 export async function importProjectRepository(
@@ -258,6 +458,34 @@ export async function projectRepositoryWorkspaceUrl(
   alias: string
 ): Promise<string> {
   return (await showProjectRepository(options, project, alias)).workspaceUrl;
+}
+
+export async function readProjectRootRepositorySetYaml(
+  runner: CommandRunner,
+  options: LifecycleOptions,
+  projectNameInput: string
+): Promise<string | undefined> {
+  const project = await showProject(options, validateLifecycleName(projectNameInput, "project"));
+  if (!project.rootRepositoryAlias) throw new UserError(`project '${project.name}' has no root repository`);
+  const repository = await showProjectRepository(options, project.name, project.rootRepositoryAlias);
+  const credentials = await ensureGitea(runner, options);
+  const temporary = await mkdtemp(join(tmpdir(), "dim-root-manifest-"));
+  const gitDirectory = join(temporary, "root.git");
+  try {
+    const cloned = await runner.run("git", ["clone", "--mirror", repository.hostUrl, gitDirectory], {
+      env: gitCredentialEnvironment(credentials)
+    });
+    if (cloned.exitCode !== 0) throw commandError(`read root repository '${project.name}'`, cloned);
+    const ref = project.rootRef ?? "HEAD";
+    const shown = await runner.run("git", ["--git-dir", gitDirectory, "show", `${ref}:.dim/repos.yml`]);
+    if (shown.exitCode === 0) return shown.stdout;
+    if (/does not exist|exists on disk, but not in|invalid object name|unknown revision|bad object/i.test(shown.stderr)) {
+      return undefined;
+    }
+    throw commandError(`read ${ref}:.dim/repos.yml`, shown);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 }
 
 export async function applyProjectRepositoryProtection(

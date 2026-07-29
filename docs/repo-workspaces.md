@@ -1,6 +1,6 @@
 # Project Repositories
 
-DIM 0.2 models a development project as a managed Git namespace plus
+DIM models a development project as a managed Git namespace plus
 project-scoped repository aliases. The built-in service creates a reserved
 Gitea organization named `dim-<project>`.
 
@@ -9,49 +9,19 @@ For a complete, tested, end-to-end walkthrough instead of a reference, see
 
 ## Create and populate a project
 
-Create Project metadata and an empty root repository:
+Create Project metadata and import a root using the invoking host Git CLI:
 
 ```bash
 dim project create example
-dim repo create example root --root --protect main
+dim repo add example root https://github.com/example/product \
+  --root --ref main --protect main
 ```
 
-`--protect` only exists on `repo create`/`repo import` — it records the
-patterns to apply, it does not apply them yet (the repository has no branch
-to protect before its first push). Omitting it is not a safe default: `repo
-protect` below then has nothing configured and succeeds having protected
-nothing.
-
-Populate it with ordinary Git. DIM does not require a local bare repository:
+The source may be any URL or path accepted by host Git. Repository aliases are
+explicit and Project-scoped. An empty managed repository omits the URL:
 
 ```bash
-git clone https://github.com/example/product.git local-product
-git -C local-product push \
-  "$(dim repo url example root)" \
-  main
-dim repo protect example root
-```
-
-This applies the `main` pattern configured above, now that the branch
-exists.
-
-`dim x git` supplies managed Gitea credentials when the user's normal Git
-credential configuration does not:
-
-```bash
-dim x git -C local-product push \
-  "$(dim repo url example root)" \
-  main
-```
-
-Run `dim git setup` once to install a URL-scoped credential helper when
-ordinary Git commands should authenticate without the one-shot wrapper.
-
-Import is an optional mirror convenience:
-
-```bash
-dim repo import example root https://github.com/example/product.git \
-  --root --ref main
+dim repo add example scratch
 ```
 
 ## Multiple repositories
@@ -60,9 +30,23 @@ Aliases are local to a Project, so every Project may have `product`,
 `development`, and `environment` without global naming conventions:
 
 ```bash
-dim repo create example product
-dim repo create example environment
+dim repo add example product
+dim repo add example environment https://example.com/environment
 dim repo list example
+```
+
+For a complete set, use a `repos.yml` whose mapping keys are aliases:
+
+```yaml
+schemaVersion: 1
+repositories:
+  root: {url: https://example.com/product, root: true, ref: main}
+  product: {url: https://example.com/product-code}
+  environment: {url: https://example.com/environment}
+```
+
+```bash
+dim project create example --repos repos.yml
 ```
 
 DIM directly clones only the configured root. The root `.dim` lifecycle reads
@@ -98,6 +82,7 @@ dim discard dev --yes
 
 ## State compatibility
 
-DIM 0.2 does not migrate 0.1 repository/workspace state. Push all work before
-upgrading, explicitly clean old resources with the old CLI, then create the
-Project and workspace again. Unknown old state is rejected without mutation.
+DIM does not implicitly migrate incompatible pre-stable repository/workspace
+state. Push all work before upgrading, explicitly clean old resources with the
+old CLI, then create the Project and workspace again. Unknown state is rejected
+without mutation.

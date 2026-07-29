@@ -83,35 +83,25 @@ Create a Project and an empty root repository:
 
 ```bash
 dim project create acme
-dim repo create acme root --root --protect main,development
+dim repo add acme root /path/to/acme \
+  --root --ref main --protect main,development
 ```
 
-`--protect` is a `repo create`/`repo import` option — it only records the
-policy, since an empty Git repository has no branch to protect yet. DIM does
-not guess protection patterns; omitting `--protect` here means nothing gets
-protected later, even though the next step reports success.
-
-Push an existing local repository with ordinary Git. `repo url` prints only
-the clone URL, so it is safe to use in command substitution:
+`repo add` runs source clone through the invoking host Git CLI, so existing
+credential helpers, SSH configuration, and SSH agent work for any Git URL.
+The alias is explicit and scoped to the Project.
 
 ```bash
-git -C /path/to/acme push "$(dim repo url acme root)" main
-dim repo protect acme root
+dim repo add acme root https://example.com/acme.git --root --ref main
 ```
 
-This applies the patterns configured at `create` time, now that the branch
-exists. When the root ref is omitted and exactly one branch exists, `repo
-protect` also makes that branch the managed repository's `HEAD`; it never
-chooses between multiple branches.
-
-Alternatively, create and mirror a managed repository in one command:
+For a repository set:
 
 ```bash
-dim repo import acme root https://example.com/acme.git --root --ref main
+dim project create acme --repos repos.yml
+dim repo plan acme --file updated-repos.yml
+dim repo apply acme --file updated-repos.yml
 ```
-
-Import uses the host's local `git` executable and its existing authentication.
-DIM does not define a general Git-provider abstraction.
 
 ## External workspace URLs
 
@@ -180,8 +170,8 @@ workspace history.
 Register additional repositories under stable aliases:
 
 ```bash
-dim repo create acme product
-dim repo import acme secrets-code https://example.com/secrets-code.git
+dim repo add acme product
+dim repo add acme secrets-code https://example.com/secrets-code.git
 dim repo list acme
 ```
 

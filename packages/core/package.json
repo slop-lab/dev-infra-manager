@@ -35,6 +35,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "dependencies": {
+    "yaml": "2.8.1"
+  },
   "devDependencies": {
     "@types/node": "24.13.3",
     "package.json-minifier": "0.0.6",

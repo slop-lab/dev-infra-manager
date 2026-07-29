@@ -41,7 +41,7 @@ describe("project and workspace lifecycle", () => {
     await state.claimGiteaService(service);
     expect(await state.readGiteaService()).toEqual(service);
     const project: ProjectRecord = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       id: "project-id",
       name: "project",
       gitNamespace: "dim-project",
@@ -55,6 +55,7 @@ describe("project and workspace lifecycle", () => {
         hostUrl: "http://127.0.0.1:3300/dim-project/root.git",
         workspaceUrl: "http://dim-gitea:3000/dim-project/root.git",
         phase: "ready",
+        connections: [],
         protectedPatterns: ["main"],
         protectionPhase: "applied",
         createdAt: now,

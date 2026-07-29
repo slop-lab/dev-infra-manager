@@ -193,15 +193,12 @@ Create the Project root and populate it with standard Git:
 
 ```bash
 dim project create example
-dim repo create example root --root --protect main
-git -C /path/to/example push "$(dim repo url example root)" main
-dim repo protect example root
+dim repo add example root /path/to/example \
+  --root --ref main --protect main
 ```
 
-`--protect` is set at `repo create` time (there's no branch to protect until
-the first push); `repo protect` then applies whatever was configured. Without
-it, `repo protect` has nothing to apply and still reports success — the root
-stays unprotected.
+The invoking host Git CLI mirrors the source into managed Gitea and existing
+host credential helpers or SSH configuration apply to the source URL.
 
 Create a workspace and persist its desired Compose profiles:
 

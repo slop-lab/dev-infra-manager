@@ -4,6 +4,7 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 suffix="$PPID-$$"
 project_name="multi-$suffix"
+source_namespace="source-$suffix"
 api_repo="api"
 worker_repo="worker"
 docs_repo="docs"
@@ -26,11 +27,13 @@ cleanup() {
     if [[ -n "$credentials" ]]; then
       admin_username="$(printf '%s' "$credentials" | jq -r .adminUsername)"
       admin_password="$(printf '%s' "$credentials" | jq -r .adminPassword)"
-      curl --fail --silent --show-error \
-        --user "$admin_username:$admin_password" \
-        --request DELETE \
-        "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs/dim-$project_name" \
-        >/dev/null 2>&1 || true
+      for organization in "dim-$project_name" "$source_namespace"; do
+        curl --fail --silent --show-error \
+          --user "$admin_username:$admin_password" \
+          --request DELETE \
+          "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs/$organization" \
+          >/dev/null 2>&1 || true
+      done
     fi
   fi
   find "$state_root" -depth -delete 2>/dev/null || true
@@ -50,17 +53,24 @@ create_repo() {
   git -C "$worktree" add message.txt
   git -C "$worktree" commit -m initial >/dev/null
   git clone --bare "$worktree" "$bare" >/dev/null
-  "$dim_bin" repo create "$project_name" "$name" >/dev/null
-  local repo_url
-  repo_url="$("$dim_bin" repo url "$project_name" "$name")"
-  "$dim_bin" x git --git-dir "$bare" push "$repo_url" --all >/dev/null
-  "$dim_bin" repo protect "$project_name" "$name" >/dev/null
 }
 
-"$dim_bin" project create "$project_name" >/dev/null
 create_repo "$api_repo" "api-source-ok"
 create_repo "$worker_repo" "worker-source-ok"
 create_repo "$docs_repo" "docs-source-ok"
+
+"$dim_bin" admin service ensure >/dev/null
+source_credentials="$("$dim_bin" admin service credentials --show-secrets --json)"
+export SOURCE_GIT_USERNAME
+export SOURCE_GIT_TOKEN
+SOURCE_GIT_USERNAME="$(printf '%s' "$source_credentials" | jq -r .adminUsername)"
+SOURCE_GIT_TOKEN="$(printf '%s' "$source_credentials" | jq -r .adminPassword)"
+source_git_base="http://127.0.0.1:${DIM_GITEA_PORT:-3300}/$source_namespace"
+curl --fail --silent --show-error \
+  --user "$SOURCE_GIT_USERNAME:$SOURCE_GIT_TOKEN" \
+  --header 'Content-Type: application/json' \
+  --data "$(jq -n --arg name "$source_namespace" '{username:$name,visibility:"private"}')" \
+  "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs" >/dev/null
 
 project_worktree="$source_root/root"
 project_bare="$source_root/root.git"
@@ -149,13 +159,46 @@ printf '%s\n' \
   > "$project_worktree/.dim/docker-compose.yml"
 
 printf '%s\n' v1 > "$project_worktree/version.txt"
+jq -n \
+  --arg root "$source_git_base/root" \
+  --arg api "$source_git_base/$api_repo" \
+  --arg worker "$source_git_base/$worker_repo" \
+  --arg docs "$source_git_base/$docs_repo" \
+  '{
+    schemaVersion: 1,
+    repositories: {
+      root: {url: $root, root: true, ref: "main", protect: ["release/*"]},
+      api: {url: $api},
+      worker: {url: $worker},
+      docs: {url: $docs}
+    }
+  }' > "$project_worktree/.dim/repos.yml"
 git -C "$project_worktree" add .dim compose.yaml version.txt
 git -C "$project_worktree" commit -m 'add DIM project environment' >/dev/null
 git clone --bare "$project_worktree" "$project_bare" >/dev/null
-"$dim_bin" repo create "$project_name" root --root --ref main --protect 'release/*' >/dev/null
+
+source_helper='!f() { echo username=$SOURCE_GIT_USERNAME; echo password=$SOURCE_GIT_TOKEN; }; f'
+for name in root "$api_repo" "$worker_repo" "$docs_repo"; do
+  curl --fail --silent --show-error \
+    --user "$SOURCE_GIT_USERNAME:$SOURCE_GIT_TOKEN" \
+    --header 'Content-Type: application/json' \
+    --data "$(jq -n --arg name "$name" '{name:$name,private:true}')" \
+    "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs/$source_namespace/repos" >/dev/null
+  git --git-dir "$source_root/$name.git" \
+    -c credential.helper= \
+    -c "credential.helper=$source_helper" \
+    push "$source_git_base/$name" --all >/dev/null
+done
+
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0=credential.helper
+export GIT_CONFIG_VALUE_0="$source_helper"
+export GIT_TERMINAL_PROMPT=0
+"$dim_bin" project create "$project_name" \
+  --repos "$project_worktree/.dim/repos.yml" \
+  --yes \
+  >/dev/null
 root_url="$("$dim_bin" repo url "$project_name" root)"
-"$dim_bin" x git --git-dir "$project_bare" push "$root_url" --all >/dev/null
-"$dim_bin" repo protect "$project_name" root >/dev/null
 
 "$dim_bin" create "$project_name" "$workspace_name" \
   --profile development \

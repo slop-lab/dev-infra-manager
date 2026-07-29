@@ -72,11 +72,19 @@ The root repository owns the optional:
 .dim/entrypoint.sh
 .dim/teardown.sh
 .dim/docker-compose.yml
+.dim/repos.yml
 ```
 
 It also owns checkout and reconciliation of any additional Project
 repositories. DIM supplies a read-only runtime manifest and environment to
 `.dim/setup.sh`, `.dim/entrypoint.sh`, `.dim/teardown.sh`, and `exec`:
+
+The optional `.dim/repos.yml` is a repository-connection set, not a Project or
+workspace manifest. Its `repositories` mapping keys are aliases in the already
+selected Project. Registering a root may offer to apply this file, but
+non-interactive use must opt in explicitly. Applying it never removes a
+managed repository omitted from the file. A standalone `repos.yml` with
+exactly one `root: true` may be passed to `project create --repos`.
 
 ```text
 DIM_PROJECT_ID

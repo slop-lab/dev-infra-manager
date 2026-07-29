@@ -1,8 +1,10 @@
 # DIM Plugins
 
-DIM has a versioned, instance-scoped plugin host. Version 0.2.0 does not expose
-a Git-provider abstraction: repository import uses the host's `git` CLI and
-managed repositories live in DIM's Gitea service. Plugins can register typed
+DIM has a versioned, instance-scoped plugin host. DIM does not need a
+Git-provider abstraction for repository URLs: `repo add` and `repo apply` use
+the invoking host's `git` CLI and managed repositories live in DIM's Gitea
+service. Provider plugins are reserved for host-specific API capabilities such
+as creating a remote repository or opening a pull request. Plugins can register typed
 routes and narrowly scoped host-input providers on the authenticated DIM
 controller API; see
 [External workspace URLs](external-urls.md).

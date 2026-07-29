@@ -237,9 +237,11 @@ async function listRecords<T extends { schemaVersion: number; name: string }>(
 }
 
 function assertSchemaVersion(record: { schemaVersion?: number }, kind: string, name: string): void {
-  if (record.schemaVersion !== 2) {
+  const expected = kind === "project" ? 3 : 2;
+  if (record.schemaVersion !== expected) {
     throw new UserError(
-      `${kind} '${name}' uses unsupported 0.1 state; DIM 0.2 does not migrate existing state`
+      `${kind} '${name}' uses unsupported state schema ${String(record.schemaVersion)}; `
+      + `expected ${expected} and DIM does not migrate existing state`
     );
   }
 }
