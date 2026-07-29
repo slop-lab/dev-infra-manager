@@ -67,7 +67,7 @@ trap report_error ERR
 trap cleanup EXIT
 
 echo "[external-url-example] build local packages and workspace image"
-pnpm run workspace:build >/dev/null
+bash scripts/pack-local-packages.bash "$pack_root" >/dev/null
 docker build \
   --quiet \
   --build-arg "DIM_UID=$(id -u)" \
@@ -76,23 +76,30 @@ docker build \
   --file images/project-workspace/Dockerfile \
   . >/dev/null
 
-npm pack ./packages/core/dist --pack-destination "$pack_root" --silent >/dev/null
-npm pack ./packages/cli/dist --pack-destination "$pack_root" --silent >/dev/null
-npm pack ./packages/contracts/external-url/dist --pack-destination "$pack_root" --silent >/dev/null
-npm pack ./packages/ingress/caddy/dist --pack-destination "$pack_root" --silent >/dev/null
-npm pack ./packages/provider/dns-cloudflare/dist --pack-destination "$pack_root" --silent >/dev/null
-npm pack ./packages/plugin/external-urls/dist --pack-destination "$pack_root" --silent >/dev/null
+package_archive() {
+  local package_name="$1"
+  node -e '
+    const fs = require("node:fs");
+    const path = require("node:path");
+    const [root, name] = process.argv.slice(1);
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, "packages.json")));
+    const entry = manifest.packages.find((item) => item.name === name);
+    if (!entry) throw new Error(`package not found in manifest: ${name}`);
+    process.stdout.write(path.join(root, entry.file));
+  ' "$pack_root" "$package_name"
+}
+
 npm install --prefix "$cli_home" --silent \
-  "$pack_root/slop-lab-dim-core-0.2.0.tgz" \
-  "$pack_root/slop-lab-dim-contracts-external-url-0.2.0.tgz" \
-  "$pack_root/slop-lab-dim-ingress-caddy-0.2.0.tgz" \
-  "$pack_root/slop-lab-dim-provider-dns-cloudflare-0.2.0.tgz" \
-  "$pack_root/slop-lab-dim-cli-0.2.0.tgz"
+  "$(package_archive @slop-lab/dim-core)" \
+  "$(package_archive @slop-lab/dim-contracts-external-url)" \
+  "$(package_archive @slop-lab/dim-ingress-caddy)" \
+  "$(package_archive @slop-lab/dim-provider-dns-cloudflare)" \
+  "$(package_archive @slop-lab/dim-cli)"
 npm install --prefix "$plugin_home" --silent \
-  "$pack_root/slop-lab-dim-core-0.2.0.tgz" \
-  "$pack_root/slop-lab-dim-contracts-external-url-0.2.0.tgz" \
-  "$pack_root/slop-lab-dim-ingress-caddy-0.2.0.tgz" \
-  "$pack_root/slop-lab-dim-plugin-external-urls-0.2.0.tgz"
+  "$(package_archive @slop-lab/dim-core)" \
+  "$(package_archive @slop-lab/dim-contracts-external-url)" \
+  "$(package_archive @slop-lab/dim-ingress-caddy)" \
+  "$(package_archive @slop-lab/dim-plugin-external-urls)"
 jq -n '{schemaVersion:1,plugins:["@slop-lab/dim-plugin-external-urls"]}' \
   > "$plugin_home/plugins.json"
 dim_bin="$cli_home/node_modules/.bin/dim"

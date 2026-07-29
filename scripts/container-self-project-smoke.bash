@@ -14,7 +14,7 @@ project_source="$PWD"
 
 dim() {
   if [[ -n "${DIM_BIN:-}" ]]; then
-    "$dim_bin" "$@"
+    command "$dim_bin" "$@"
   else
     node "$dim_bin" "$@"
   fi
@@ -59,7 +59,7 @@ dim repo add "$project_name" root "$source_root/project.git" --root --ref "$root
 dim create "$project_name" "$workspace_name" >/dev/null
 
 dim exec "$workspace_name" -- \
-  sh -c 'test -x .dim/setup.sh && test -x .dim/entrypoint.sh && test "$DIM_GIT_BASE_URL" = "$(jq -r .gitBaseUrl "$DIM_PROJECT_MANIFEST")"'
+  sh -c 'test -r .dim/setup.sh && test ! -x .dim/setup.sh && test -r .dim/entrypoint.sh && test ! -x .dim/entrypoint.sh && test "$DIM_GIT_BASE_URL" = "$(jq -r .gitBaseUrl "$DIM_PROJECT_MANIFEST")"'
 test "$(dim show "$workspace_name" --json | jq -r .rootRef)" = "refs/heads/$root_ref"
 dim run "$workspace_name" check >/dev/null
 test "$(dim run "$workspace_name" codex -- --version)" != ""

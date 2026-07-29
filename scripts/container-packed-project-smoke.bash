@@ -8,11 +8,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-npm pack --silent packages/core/dist --pack-destination "$package_root" >/dev/null
-npm pack --silent packages/contracts/external-url/dist --pack-destination "$package_root" >/dev/null
-npm pack --silent packages/provider/dns-cloudflare/dist --pack-destination "$package_root" >/dev/null
-npm pack --silent packages/ingress/caddy/dist --pack-destination "$package_root" >/dev/null
-npm pack --silent packages/cli/dist --pack-destination "$package_root" >/dev/null
+bash scripts/pack-local-packages.bash "$package_root" >/dev/null
 core_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dim-core*.tgz' -print -quit)"
 cli_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
 contracts_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dim-contracts-external-url*.tgz' -print -quit)"

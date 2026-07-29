@@ -68,16 +68,8 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$repo_root"
-echo "[example-project] build workspace packages"
-pnpm run workspace:build >/dev/null
-
-echo "[example-project] pack tarballs"
-npm pack packages/core/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/contracts/external-url/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/provider/dns-cloudflare/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/ingress/caddy/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/cli/dist --pack-destination "$work_dir" --silent >/dev/null
-npm pack packages/installer/dist --pack-destination "$work_dir" --silent >/dev/null
+echo "[example-project] build and pack local packages"
+bash "$script_dir/pack-local-packages.bash" "$work_dir" >/dev/null
 
 echo "[example-project] 1. install DIM through the installer facade"
 dim_start_local_npm_registry "$work_dir"

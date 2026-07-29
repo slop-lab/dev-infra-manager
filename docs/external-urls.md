@@ -198,13 +198,23 @@ Build the unpublished packages locally:
 
 ```bash
 pnpm install --frozen-lockfile
-pnpm run workspace:build
-npm pack ./packages/core/dist --pack-destination /tmp
-npm pack ./packages/contracts/external-url/dist --pack-destination /tmp
-npm pack ./packages/plugin/external-urls/dist --pack-destination /tmp
+bash scripts/pack-local-packages.bash /tmp/dim-packages
 ```
 
-Install the tarballs in the configured plugin home, list
+The directory contains every publishable package tarball plus `packages.json`,
+which records the package name, version, and exact filename. This is also the
+artifact directory to `COPY` into a container. Install the required tarballs
+together so npm resolves unpublished DIM dependencies locally:
+
+```dockerfile
+COPY dim-packages /tmp/dim-packages
+RUN npm install --global \
+  /tmp/dim-packages/slop-lab-dim-core-*.tgz \
+  /tmp/dim-packages/slop-lab-dim-cli-*.tgz
+```
+
+For external URLs, install the core, contract, ingress, and external-URL
+plugin tarballs in the configured plugin home, list
 `@slop-lab/dim-plugin-external-urls` in `plugins.json`, configure at least one
 ingress with the CLI, and use a workspace command normally. DIM loads
 installed plugins when it automatically starts the managed controller.

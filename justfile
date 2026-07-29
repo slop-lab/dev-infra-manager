@@ -76,6 +76,14 @@ verify-example-multi-repo-project:
 verify-example-external-urls:
     bash scripts/external-url-example-smoke.bash
 
+# Verify this repository's .dim contract with Docker and managed Gitea.
+verify-self-development:
+    docker info >/dev/null
+    docker compose version >/dev/null
+    just build
+    just build-project-workspace
+    bash scripts/container-self-project-smoke.bash
+
 isolation-check:
     pnpm --filter @slop-lab/dim-core exec vitest run test/lifecycle.test.ts
 
