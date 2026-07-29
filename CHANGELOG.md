@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-29
+
 ### Changed
 
 - The default Sysbox layout now keeps the trusted privileged workspace and
@@ -17,11 +19,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Extended the Sysbox KVM installer smoke to run QEMU through a directly
   passed workspace `/dev/kvm`, prove the Project daemon has no Sysbox runtime,
   and run nested Docker in an unprivileged host-side Sysbox agent.
-
-## [0.2.0] - 2026-07-29
-
-### Changed
-
 - Simplified repository URLs to `dim repo url [--workspace] PROJECT ALIAS`.
   The multi-repository example now uses short helper scripts, default
   workspace backend/profile behavior, interactive `bash`/Codex/Claude tasks,
