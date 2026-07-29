@@ -28,6 +28,7 @@ jobs:
       - run: pnpm audit --prod
       - run: pnpm --filter @slop-lab/dev-infra-manager-core run pack:dry-run
       - run: pnpm --filter @slop-lab/dim-external-url-contracts run pack:dry-run
+      - run: pnpm --filter @slop-lab/dim-plugin-external-urls run pack:dry-run
       - run: pnpm --filter @slop-lab/dim-provider-dns-cloudflare run pack:dry-run
       - run: pnpm --filter @slop-lab/dim-ingress-external-url-caddy run pack:dry-run
       - run: pnpm --filter @slop-lab/dim-cli run pack:dry-run

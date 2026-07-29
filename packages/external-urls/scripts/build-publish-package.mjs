@@ -8,12 +8,12 @@ if (source.private !== true) throw new Error("The source package.json must remai
 
 const output = minifyPackageJson(source, {
   stripPackagePathPrefix: "./dist/",
-  includeFields: ["exports", "types"]
+  includeFields: ["exports", "types", "publishConfig"]
 });
 output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };
-output.dependencies["@slop-lab/dev-infra-manager-core"] = "0.2.0";
-output.dependencies["@slop-lab/dim-external-url-contracts"] = "0.1.0";
+output.dependencies["@slop-lab/dev-infra-manager-core"] = source.version;
+output.dependencies["@slop-lab/dim-external-url-contracts"] = source.version;
 delete output.private;
 
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);

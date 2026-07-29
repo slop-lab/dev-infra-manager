@@ -1,6 +1,6 @@
 {
   "name": "@slop-lab/dim-provider-dns-cloudflare",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Cloudflare wildcard DNS provider for DIM external URL ingresses",
   "license": "MIT",
   "private": true,
@@ -28,7 +28,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@slop-lab/dim-external-url-contracts": "workspace:0.1.0"
+    "@slop-lab/dim-external-url-contracts": "workspace:0.2.0"
   },
   "devDependencies": {
     "@types/node": "22.15.34",

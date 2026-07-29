@@ -29,13 +29,13 @@ importers:
         specifier: workspace:0.2.0
         version: link:../core
       '@slop-lab/dim-external-url-contracts':
-        specifier: workspace:0.1.0
+        specifier: workspace:0.2.0
         version: link:../external-url-contracts
       '@slop-lab/dim-ingress-external-url-caddy':
-        specifier: workspace:0.1.0
+        specifier: workspace:0.2.0
         version: link:../ingress-external-url-caddy
       '@slop-lab/dim-provider-dns-cloudflare':
-        specifier: workspace:0.1.0
+        specifier: workspace:0.2.0
         version: link:../provider-dns-cloudflare
       commander:
         specifier: 14.0.0
@@ -75,7 +75,7 @@ importers:
         specifier: workspace:0.2.0
         version: link:../core
       '@slop-lab/dim-external-url-contracts':
-        specifier: workspace:0.1.0
+        specifier: workspace:0.2.0
         version: link:../external-url-contracts
     devDependencies:
       '@types/node':
@@ -94,7 +94,7 @@ importers:
   packages/ingress-external-url-caddy:
     dependencies:
       '@slop-lab/dim-external-url-contracts':
-        specifier: workspace:0.1.0
+        specifier: workspace:0.2.0
         version: link:../external-url-contracts
     devDependencies:
       '@types/node':
@@ -128,7 +128,7 @@ importers:
   packages/provider-dns-cloudflare:
     dependencies:
       '@slop-lab/dim-external-url-contracts':
-        specifier: workspace:0.1.0
+        specifier: workspace:0.2.0
         version: link:../external-url-contracts
     devDependencies:
       '@types/node':

@@ -23,9 +23,9 @@ available_port() {
   '
 }
 
-api_port="$(available_port)"
 proxy_port="$(available_port)"
 cloudflare_mock_port="$(available_port)"
+controller_socket="$state_root/controller/controller.sock"
 
 cleanup() {
   if [[ -n "$controller_pid" ]]; then
@@ -47,6 +47,7 @@ trap cleanup EXIT
 echo "[external-url-example] build local packages and workspace image"
 pnpm run workspace:build >/dev/null
 docker build \
+  --quiet \
   --build-arg "DIM_UID=$(id -u)" \
   --build-arg "DIM_GID=$(id -g)" \
   --tag dev-infra-project-workspace:latest \
@@ -57,8 +58,8 @@ npm pack ./packages/external-url-contracts/dist --pack-destination "$pack_root" 
 npm pack ./packages/external-urls/dist --pack-destination "$pack_root" --silent >/dev/null
 npm install --prefix "$plugin_home" --silent \
   "$pack_root/slop-lab-dev-infra-manager-core-0.2.0.tgz" \
-  "$pack_root/slop-lab-dim-external-url-contracts-0.1.0.tgz" \
-  "$pack_root/slop-lab-dim-plugin-external-urls-0.4.0.tgz"
+  "$pack_root/slop-lab-dim-external-url-contracts-0.2.0.tgz" \
+  "$pack_root/slop-lab-dim-plugin-external-urls-0.2.0.tgz"
 jq -n '{schemaVersion:1,plugins:["@slop-lab/dim-plugin-external-urls"]}' \
   > "$plugin_home/plugins.json"
 
@@ -113,7 +114,7 @@ docker exec "$root_container" docker compose \
 
 for attempt in $(seq 1 60); do
   if docker exec "$root_container" docker exec dim-external-example-dev-1 \
-    wget -qO- http://127.0.0.1:8080 | grep -qx hello-from-dev; then
+    wget -qO- http://127.0.0.1:8080 2>/dev/null | grep -qx hello-from-dev; then
     break
   fi
   if [[ "$attempt" -eq 60 ]]; then
@@ -174,19 +175,20 @@ DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
     --listen-host 0.0.0.0 \
     --listen-port "$proxy_port" \
     >/dev/null
+mkdir -p "$(dirname -- "$controller_socket")"
 DIM_STATE_ROOT="$state_root" \
 DIM_PLUGIN_HOME="$plugin_home" \
 DIM_CONFIG_PATH="$state_root/dim.json" \
 DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
   node packages/dim-cli/dist/cli.js controller serve \
-    --host 127.0.0.1 --port "$api_port" \
+    --socket "$controller_socket" \
     >"$state_root/controller.log" 2>&1 &
 controller_pid=$!
 
 for attempt in $(seq 1 30); do
-  if curl --fail --silent \
+  if curl --fail --silent --unix-socket "$controller_socket" \
     -H "Authorization: Bearer $grant" \
-    "http://127.0.0.1:$api_port/api" >/dev/null 2>&1; then
+    "http://dim-controller/api" >/dev/null 2>&1; then
     break
   fi
   if [[ "$attempt" -eq 30 ]]; then
@@ -199,7 +201,7 @@ done
 run_dim() {
   DIM_STATE_ROOT="$state_root" \
   DIM_CONFIG_PATH="$state_root/dim.json" \
-  DIM_CONTROLLER_API="http://127.0.0.1:$api_port" \
+  DIM_CONTROLLER_SOCKET="$controller_socket" \
     node packages/dim-cli/dist/cli.js "$@"
 }
 

@@ -37,9 +37,9 @@
   },
   "dependencies": {
     "@slop-lab/dev-infra-manager-core": "workspace:0.2.0",
-    "@slop-lab/dim-external-url-contracts": "workspace:0.1.0",
-    "@slop-lab/dim-ingress-external-url-caddy": "workspace:0.1.0",
-    "@slop-lab/dim-provider-dns-cloudflare": "workspace:0.1.0",
+    "@slop-lab/dim-external-url-contracts": "workspace:0.2.0",
+    "@slop-lab/dim-ingress-external-url-caddy": "workspace:0.2.0",
+    "@slop-lab/dim-provider-dns-cloudflare": "workspace:0.2.0",
     "commander": "14.0.0"
   },
   "devDependencies": {

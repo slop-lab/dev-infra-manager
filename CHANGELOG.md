@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-29
+
 ### Changed
 
 - Simplified repository URLs to `dim repo url [--workspace] PROJECT ALIAS`.
@@ -88,9 +90,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   show `--protect` at `create` time; the container workspace smoke test verifies
   a protected root actually rejects a direct push.
 
-## [0.2.0] - 2026-07-24
-
-### Changed
+### Changed: Project workspaces
 
 - Added first-class projects with project-scoped managed Gitea organizations
   and repository aliases.
