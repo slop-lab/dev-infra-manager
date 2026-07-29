@@ -4,7 +4,8 @@ Reusable contracts, executable tooling, and provider adapters belong under
 `packages/`. Directories describe roles within this DIM repository rather
 than repeating the common `@slop-lab/dim-*` npm prefix:
 
-- `core`, `cli`, and `installer` are top-level product components.
+- `core`, `cli`, `installer`, and `controller-proxy` are top-level product
+  components.
 - `contracts/` contains provider-neutral data and configuration boundaries.
 - `plugin/` contains packages that implement DIM's plugin API.
 - `ingress/` and `provider/` contain reusable implementations that plugins or

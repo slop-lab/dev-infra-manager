@@ -4,6 +4,9 @@ set -euo pipefail
 root="$(mktemp -d /tmp/dim-plugin-install.XXXXXX)"
 
 cleanup() {
+  if [[ -f "$root/state/controller/controller.pid" ]]; then
+    kill "$(cat "$root/state/controller/controller.pid")" >/dev/null 2>&1 || true
+  fi
   find "$root" -depth -delete 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -42,7 +45,9 @@ DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
   >/dev/null
 
 test "$(jq -r .pluginHome "$config_path")" = "$plugin_home"
-result="$(DIM_CONFIG_PATH="$config_path" node packages/cli/dist/cli.js plugin list --json)"
+jq '.workspaceBackend = "runc"' "$config_path" > "$root/config.json"
+mv "$root/config.json" "$config_path"
+result="$(DIM_STATE_ROOT="$root/state" DIM_CONFIG_PATH="$config_path" node packages/cli/dist/cli.js plugin list --json)"
 test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smoke"
 
 echo "plugin-install-smoke-ok"

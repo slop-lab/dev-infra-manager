@@ -1,0 +1,257 @@
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import {
+  applyProjectRepositoryProtection,
+  createProject,
+  createProjectRepository,
+  importProjectRepository,
+  listProjectRepositories,
+  listProjects,
+  projectRepositoryHostUrl,
+  projectRepositoryWorkspaceUrl,
+  purgeProject,
+  removeProject,
+  showProject,
+  showProjectRepository
+} from "./projectRegistry.js";
+import {
+  createWorkspace,
+  discardWorkspace,
+  listWorkspaces,
+  restartWorkspace,
+  setupWorkspace,
+  showWorkspace,
+  startWorkspace,
+  stopWorkspace,
+  updateWorkspace
+} from "./workspaceLifecycle.js";
+import { ensureGitea } from "./gitea.js";
+import { runDoctor } from "./doctor.js";
+import type { LifecycleOptions, WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
+import type { RegisteredDimPlugins } from "./plugin.js";
+import { ProcessRunner } from "./runner.js";
+import type { StreamingCommandRunner } from "./types.js";
+import { UserError } from "./errors.js";
+
+export interface AdminRouteContext {
+  readonly params: Readonly<Record<string, string>>;
+  readonly request: IncomingMessage;
+  readonly lifecycle: LifecycleOptions;
+  readonly runner: StreamingCommandRunner;
+  readJson(maxBytes?: number): Promise<unknown>;
+}
+
+export interface DimAdminRoute {
+  readonly method: "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
+  readonly path: string;
+  readonly summary: string;
+  readonly plugin?: string;
+  handle(context: AdminRouteContext): Promise<{ status?: number; body?: unknown } | void>;
+}
+
+export function configuredDimAdminController(
+  lifecycle: LifecycleOptions,
+  plugins: RegisteredDimPlugins,
+  runner: StreamingCommandRunner = new ProcessRunner()
+): Server {
+  return createServer((request, response) => {
+    void handleAdminRequest(lifecycle, plugins, runner, request, response).catch((error) => {
+      sendJson(response, error instanceof UserError ? 400 : 500, {
+        error: error instanceof Error ? error.message : String(error)
+      });
+    });
+  });
+}
+
+async function handleAdminRequest(
+  lifecycle: LifecycleOptions,
+  plugins: RegisteredDimPlugins,
+  runner: StreamingCommandRunner,
+  request: IncomingMessage,
+  response: ServerResponse
+): Promise<void> {
+  const url = new URL(request.url ?? "/", "http://dim-admin");
+  if (request.method === "GET" && url.pathname === "/healthz") {
+    return sendJson(response, 200, { ok: true, apiVersion: 1 });
+  }
+  if (request.method === "GET" && url.pathname === "/v1") {
+    return sendJson(response, 200, {
+      apiVersion: 1,
+      routes: plugins.adminRoutes.map(({ method, path, summary, plugin }) => ({
+        method,
+        path: `/v1${path}`,
+        summary,
+        ...(plugin ? { plugin } : {})
+      }))
+    });
+  }
+  if (request.method === "POST" && url.pathname.startsWith("/v1/call/")) {
+    const operation = decodeURIComponent(url.pathname.slice("/v1/call/".length));
+    const body = await readJson(request, 65_536);
+    return sendJson(response, 200, await builtinCall(operation, record(body), lifecycle, runner, plugins));
+  }
+  for (const route of plugins.adminRoutes) {
+    if (route.method !== request.method) continue;
+    const params = matchRoute(route.path, url.pathname);
+    if (!params) continue;
+    const result = await route.handle({
+      params,
+      request,
+      lifecycle,
+      runner,
+      readJson: (limit = 65_536) => readJson(request, limit)
+    });
+    if (!result) return void response.writeHead(204).end();
+    if (result.body === undefined) return void response.writeHead(result.status ?? 204).end();
+    return sendJson(response, result.status ?? 200, result.body);
+  }
+  sendJson(response, 404, { error: "not found" });
+}
+
+async function builtinCall(
+  operation: string,
+  input: Record<string, unknown>,
+  lifecycle: LifecycleOptions,
+  runner: StreamingCommandRunner,
+  plugins: RegisteredDimPlugins
+): Promise<unknown> {
+  const text = (name: string) => {
+    const value = input[name];
+    if (typeof value !== "string") throw new UserError(`${name} must be a string`);
+    return value;
+  };
+  switch (operation) {
+    case "project.create": return createProject(runner, lifecycle, text("name"));
+    case "project.list": return listProjects(lifecycle);
+    case "project.show": return showProject(lifecycle, text("name"));
+    case "project.remove": await removeProject(lifecycle, text("name")); return {};
+    case "project.purge": await purgeProject(runner, lifecycle, text("name")); return {};
+    case "repo.create":
+      return createProjectRepository(runner, lifecycle, {
+        project: text("project"),
+        alias: text("alias"),
+        root: input.root === true,
+        protectedPatterns: stringArray(input.protectedPatterns),
+        ...(input.rootRef === undefined ? {} : { rootRef: text("rootRef") })
+      });
+    case "repo.import":
+      return importProjectRepository(runner, lifecycle, {
+        project: text("project"),
+        alias: text("alias"),
+        source: text("source"),
+        root: input.root === true,
+        protectedPatterns: stringArray(input.protectedPatterns),
+        ...(input.rootRef === undefined ? {} : { rootRef: text("rootRef") })
+      });
+    case "repo.list": return listProjectRepositories(lifecycle, text("project"));
+    case "repo.show": return showProjectRepository(lifecycle, text("project"), text("alias"));
+    case "repo.protect": return applyProjectRepositoryProtection(runner, lifecycle, text("project"), text("alias"));
+    case "repo.url":
+      return {
+        url: input.workspace === true
+          ? await projectRepositoryWorkspaceUrl(lifecycle, text("project"), text("alias"))
+          : await projectRepositoryHostUrl(lifecycle, text("project"), text("alias"))
+      };
+    case "workspace.create":
+      return createWorkspace(runner, lifecycle, {
+        project: text("project"),
+        name: text("name"),
+        profiles: stringArray(input.profiles),
+        runtimeBackend: text("runtimeBackend") as WorkspaceRuntimeBackendKind,
+        cpuCount: text("cpuCount"),
+        memory: text("memory"),
+        pidsLimit: text("pidsLimit"),
+        ...(input.kvm === true ? { kvm: true } : {}),
+        ...(input.gitUserName === undefined ? {} : { gitUserName: text("gitUserName") }),
+        ...(input.gitUserEmail === undefined ? {} : { gitUserEmail: text("gitUserEmail") })
+      });
+    case "workspace.list": return listWorkspaces(lifecycle);
+    case "workspace.show": return showWorkspace(lifecycle, text("name"));
+    case "workspace.setup": return setupWorkspace(runner, lifecycle, text("name"));
+    case "workspace.update":
+      return updateWorkspace(
+        runner,
+        lifecycle,
+        text("name"),
+        input.profiles === undefined ? undefined : stringArray(input.profiles)
+      );
+    case "workspace.start": return startWorkspace(runner, lifecycle, text("name"));
+    case "workspace.restart": return restartWorkspace(runner, lifecycle, text("name"));
+    case "workspace.stop": await stopWorkspace(runner, lifecycle, text("name")); return {};
+    case "workspace.discard": await discardWorkspace(runner, lifecycle, text("name")); return {};
+    case "doctor": return runDoctor(runner, lifecycle.defaultWorkspaceBackend, lifecycle);
+    case "service.ensure": return ensureGitea(runner, lifecycle);
+    case "git.credentials": return ensureGitea(runner, lifecycle);
+    case "git.setup": {
+      await ensureGitea(runner, lifecycle);
+      const baseUrl = `http://127.0.0.1:${lifecycle.giteaPort}`;
+      const helper = await runner.run("git", [
+        "config", "--global", "--replace-all",
+        `credential.${baseUrl}.helper`,
+        "!dim git credential-helper"
+      ]);
+      if (helper.exitCode !== 0) throw new UserError(`failed to configure Git credential helper: ${helper.stderr.trim()}`);
+      const usePath = await runner.run("git", [
+        "config", "--global", "--replace-all",
+        `credential.${baseUrl}.useHttpPath`,
+        "true"
+      ]);
+      if (usePath.exitCode !== 0) throw new UserError(`failed to configure Git credential path matching: ${usePath.stderr.trim()}`);
+      return { baseUrl };
+    }
+    case "plugin.list":
+      return {
+        plugins: plugins.plugins.filter((name) => !name.startsWith("builtin.")),
+        controllerRoutes: plugins.controllerRoutes.map((route) => `${route.method} /api${route.path}`),
+        adminRoutes: plugins.adminRoutes.map((route) => `${route.method} /v1${route.path}`)
+      };
+    default: throw new UserError(`unknown admin operation '${operation}'`);
+  }
+}
+
+function matchRoute(routePath: string, requestPath: string): Record<string, string> | undefined {
+  const expected = `/v1${routePath}`.split("/");
+  const actual = requestPath.split("/");
+  if (expected.length !== actual.length) return undefined;
+  const params: Record<string, string> = {};
+  for (let index = 0; index < expected.length; index += 1) {
+    const part = expected[index] ?? "";
+    const value = actual[index] ?? "";
+    if (part.startsWith(":")) params[part.slice(1)] = decodeURIComponent(value);
+    else if (part !== value) return undefined;
+  }
+  return params;
+}
+
+async function readJson(request: IncomingMessage, maxBytes: number): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of request) {
+    const value = Buffer.from(chunk);
+    size += value.length;
+    if (size > maxBytes) throw new UserError(`request body exceeds ${maxBytes} bytes`);
+    chunks.push(value);
+  }
+  if (size === 0) return {};
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+  } catch {
+    throw new UserError("request body must be valid JSON");
+  }
+}
+
+function record(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new UserError("request body must be an object");
+  return value as Record<string, unknown>;
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string")) {
+    throw new UserError("expected an array of strings");
+  }
+  return value as string[];
+}
+
+function sendJson(response: ServerResponse, status: number, body: unknown): void {
+  response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  response.end(`${JSON.stringify(body)}\n`);
+}

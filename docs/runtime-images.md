@@ -7,6 +7,9 @@ The Docker-compatible project workspace image is built from
 just build-project-workspace
 ```
 
+The build first packages `@slop-lab/dim-controller-proxy` and includes its
+restricted controller-socket helper in the image.
+
 It contains Node.js, pnpm, Codex, Git, and a nested Docker daemon. Sysbox,
 gVisor, and privileged-runc workspaces use this image.
 

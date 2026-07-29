@@ -10,6 +10,16 @@
   subcommands expose their own `--json`; non-record commands do not.
 - URL commands print exactly one URL on stdout.
 - DIM 0.2 rejects 0.1 project/workspace state and does not migrate it.
+- Except for interactive `exec` and `run`, commands that inspect or mutate DIM
+  state are clients of the managed host-admin controller API. `exec` and `run`
+  remain direct CLI adapters until the controller has a streaming terminal
+  protocol. Local process adapters such as `x git`, the Git credential helper,
+  and controller bootstrap may execute locally, but obtain DIM-owned state and
+  credentials through the admin API.
+- The managed controller uses separate Unix sockets. The host-admin socket is
+  mode `0600` and is never mounted into a workspace. The workspace socket
+  accepts workspace-scoped grants and is mounted only into the trusted
+  workspace root.
 
 ## Projects
 

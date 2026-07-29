@@ -1,5 +1,6 @@
 import { UserError } from "./errors.js";
 import type { DimControllerRoute } from "./controller.js";
+import type { DimAdminRoute } from "./adminController.js";
 
 export const DIM_PLUGIN_API_VERSION = 3 as const;
 
@@ -29,6 +30,7 @@ export interface DimPluginHost {
   readonly apiVersion: typeof DIM_PLUGIN_API_VERSION;
   readonly logger: DimPluginLogger;
   registerControllerRoute(route: DimControllerRoute): void;
+  registerAdminRoute(route: DimAdminRoute): void;
   registerHostInputProvider(name: string, provider: HostInputProvider): void;
 }
 
@@ -42,6 +44,7 @@ export interface RegisteredDimPlugins {
   readonly host: DimPluginHost;
   readonly plugins: readonly string[];
   readonly controllerRoutes: readonly DimControllerRoute[];
+  readonly adminRoutes: readonly DimAdminRoute[];
   readonly hostInputProviders: ReadonlyMap<string, HostInputProvider>;
   dispose(): Promise<void>;
 }
@@ -49,6 +52,7 @@ export interface RegisteredDimPlugins {
 class PluginHost implements DimPluginHost {
   readonly apiVersion = DIM_PLUGIN_API_VERSION;
   readonly routes: DimControllerRoute[] = [];
+  readonly adminRoutes: DimAdminRoute[] = [];
   readonly providers = new Map<string, HostInputProvider>();
   registeringPlugin: string | undefined;
   acceptingRegistrations = true;
@@ -73,6 +77,26 @@ class PluginHost implements DimPluginHost {
       throw new UserError(`controller route '${route.method} ${route.path}' is already registered`);
     }
     this.routes.push(Object.freeze({ ...route, plugin }));
+  }
+
+  registerAdminRoute(route: DimAdminRoute): void {
+    const plugin = this.registeringPlugin ?? "unknown plugin";
+    if (!this.acceptingRegistrations) {
+      throw new UserError(`plugin '${plugin}' attempted admin route registration after startup`);
+    }
+    if (!route || typeof route !== "object" || !["GET", "POST", "DELETE", "PUT", "PATCH"].includes(route.method)) {
+      throw new UserError(`plugin '${plugin}' registered an invalid admin route method`);
+    }
+    if (!/^\/[a-z0-9][a-z0-9_/-]*(?:\/:[a-z][a-zA-Z0-9]*)?$/.test(route.path)) {
+      throw new UserError(`plugin '${plugin}' registered invalid admin route path '${route.path}'`);
+    }
+    if (typeof route.handle !== "function") {
+      throw new UserError(`plugin '${plugin}' registered admin route '${route.path}' without a handler`);
+    }
+    if (this.adminRoutes.some((existing) => existing.method === route.method && existing.path === route.path)) {
+      throw new UserError(`admin route '${route.method} ${route.path}' is already registered`);
+    }
+    this.adminRoutes.push(Object.freeze({ ...route, plugin }));
   }
 
   registerHostInputProvider(name: string, provider: HostInputProvider): void {
@@ -128,6 +152,7 @@ export async function registerPlugins(
     host,
     plugins: [...names],
     controllerRoutes: [...host.routes],
+    adminRoutes: [...host.adminRoutes],
     hostInputProviders: new Map(host.providers),
     async dispose(): Promise<void> {
       if (disposed) return;

@@ -70,6 +70,13 @@ Check the host before creating a workspace:
 dim doctor
 ```
 
+DIM automatically runs one managed controller process with separate local
+Unix sockets: a mode-`0600` host-admin API and a workspace-scoped API. Normal
+state commands are admin API clients. Only interactive `exec` and `run` remain
+direct CLI operations; controller bootstrap and local Git process adapters
+also stay local. Neither the admin socket nor host credentials are mounted
+into workspaces.
+
 ## First Project
 
 Create a Project and an empty root repository:
@@ -118,11 +125,13 @@ dim external-url ingress add builtin-http --name local-http \
   --scheme http \
   --argument '{"domain":"dev.test","publicPort":8080,"listenHost":"0.0.0.0","listenPort":"auto"}'
 
-dim external-url discover --workspace work-1
-dim external-url request --workspace work-1 \
-  --ingress local-http --name web --container dev --port 3000
-dim external-url list --workspace work-1
+dim external-url discover
+dim external-url request --ingress local-http --container dev --port 3000
+dim external-url list
 ```
+
+These commands normally run with the current workspace's controller socket
+and grant. `--workspace work-1` is available for host-side administration.
 
 Cloudflare DNS and Caddy HTTPS setup are documented in
 [`docs/external-urls.md`](../../docs/external-urls.md).

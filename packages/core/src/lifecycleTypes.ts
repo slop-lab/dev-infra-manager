@@ -12,6 +12,7 @@ export interface LifecycleOptions {
   memory: string;
   pidsLimit: string;
   controllerSocketPath: string;
+  adminControllerSocketPath: string;
   agentDockerSocketPath: string;
 }
 

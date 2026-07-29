@@ -16,8 +16,21 @@ import {
   type ResolvedWorkspaceTarget,
   type WorkspaceTarget
 } from "@slop-lab/dim-core";
-import { readExternalUrlConfig } from "@slop-lab/dim-contracts-external-url";
-import { parseCaddyIngressArgument } from "@slop-lab/dim-ingress-caddy";
+import {
+  readExternalUrlConfig,
+  writeExternalUrlConfig,
+  type ExternalUrlIngressConfig
+} from "@slop-lab/dim-contracts-external-url";
+import {
+  parseCaddyIngressArgument,
+  renderCaddyDeployment,
+  verifyCaddyIngress
+} from "@slop-lab/dim-ingress-caddy";
+import {
+  ensureCloudflareWildcard,
+  removeCloudflareWildcard,
+  verifyCloudflareWildcard
+} from "@slop-lab/dim-provider-dns-cloudflare";
 
 export interface ExternalUrlIngressOptions {
   description: string;
@@ -91,6 +104,14 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
     name: "@slop-lab/dim-plugin-external-urls",
     apiVersion: DIM_PLUGIN_API_VERSION,
     register(host) {
+      host.registerAdminRoute({
+        method: "POST",
+        path: "/external-url/:action",
+        summary: "Manage External URL providers and ingresses",
+        async handle(context) {
+          return { body: await externalUrlAdmin(context.params.action ?? "", await context.readJson()) };
+        }
+      });
       if (Object.keys(options.ingresses).length === 0) {
         host.logger.warn(
           "External URLs plugin has no configured ingress; run 'dim external-url ingress add --help' to add one"
@@ -193,6 +214,172 @@ export async function externalUrlsPluginFromConfig(
     };
   }
   return createExternalUrlsPlugin({ ingresses });
+}
+
+async function externalUrlAdmin(action: string, value: unknown): Promise<unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new UserError("request body must be an object");
+  const input = value as Record<string, unknown>;
+  const text = (name: string) => {
+    const result = input[name];
+    if (typeof result !== "string") throw new UserError(`${name} must be a string`);
+    return result;
+  };
+  const config = await readExternalUrlConfig();
+  switch (action) {
+    case "provider-add": {
+      const driver = text("driver");
+      if (driver !== "cloudflare") throw new UserError("provider driver must be cloudflare");
+      const recordType = text("recordType");
+      if (recordType !== "A" && recordType !== "AAAA" && recordType !== "CNAME") {
+        throw new UserError("recordType must be A, AAAA, or CNAME");
+      }
+      config.providers[text("name")] = {
+        driver: "cloudflare",
+        zone: text("zone"),
+        recordType,
+        target: text("target"),
+        proxied: input.proxied === true,
+        credentialEnv: text("credentialEnv")
+      };
+      await writeExternalUrlConfig(config);
+      return {};
+    }
+    case "provider-list":
+      return Object.entries(config.providers).map(([name, provider]) => ({ name, ...provider }));
+    case "provider-remove": {
+      const name = text("name");
+      if (!config.providers[name]) throw new UserError(`external URL provider '${name}' is not configured`);
+      const dependent = Object.entries(config.ingresses)
+        .find(([, ingress]) => ingress.driver === "caddy"
+          && parseCaddyIngressArgument(ingress.argument).provider === name);
+      if (dependent) throw new UserError(`external URL provider '${name}' is used by ingress '${dependent[0]}'`);
+      delete config.providers[name];
+      await writeExternalUrlConfig(config);
+      return {};
+    }
+    case "ingress-add": {
+      const driver = text("driver");
+      const scheme = text("scheme");
+      if (scheme !== "http" && scheme !== "https") throw new UserError("scheme must be http or https");
+      const ingress: ExternalUrlIngressConfig = {
+        driver,
+        description: text("description"),
+        scheme,
+        argument: await configureIngressArgument(driver, scheme, text("argument"))
+      };
+      config.ingresses[text("name")] = ingress;
+      await writeExternalUrlConfig(config);
+      return {};
+    }
+    case "ingress-list":
+      return Object.entries(config.ingresses).map(([name, ingress]) => ({ name, ...ingress }));
+    case "ingress-credential-env": {
+      const ingress = config.ingresses[text("name")];
+      if (!ingress || ingress.driver !== "caddy") return { credentialEnv: null };
+      const provider = config.providers[parseCaddyIngressArgument(ingress.argument).provider];
+      if (!provider) throw new UserError("ingress references an unconfigured provider");
+      return { credentialEnv: provider.credentialEnv };
+    }
+    case "ingress-remove": {
+      const name = text("name");
+      const ingress = config.ingresses[name];
+      if (!ingress) throw new UserError(`external URL ingress '${name}' is not configured`);
+      if (input.cleanupDns === true) {
+        if (ingress.driver !== "caddy") throw new UserError(`ingress '${name}' does not have provider-managed DNS`);
+        const argument = parseCaddyIngressArgument(ingress.argument);
+        const provider = config.providers[argument.provider];
+        if (!provider) throw new UserError(`provider '${argument.provider}' is not configured`);
+        const env = requestEnvironment(input, provider.credentialEnv);
+        await removeCloudflareWildcard(
+          provider,
+          await verifyCloudflareWildcard(provider, argument.domain, env),
+          env
+        );
+      }
+      delete config.ingresses[name];
+      await writeExternalUrlConfig(config);
+      return {};
+    }
+    case "ingress-setup": {
+      const name = text("name");
+      const ingress = config.ingresses[name];
+      if (!ingress || ingress.driver !== "caddy") throw new UserError(`ingress '${name}' does not require Caddy setup`);
+      const argument = parseCaddyIngressArgument(ingress.argument);
+      if (argument.listenPort === "auto") throw new UserError(`ingress '${name}' has unresolved auto port`);
+      const provider = config.providers[argument.provider];
+      if (!provider) throw new UserError(`provider '${argument.provider}' is not configured`);
+      await ensureCloudflareWildcard(provider, argument.domain, requestEnvironment(input, provider.credentialEnv));
+      const deployment = renderCaddyDeployment(name, { ...argument, listenPort: argument.listenPort }, provider);
+      const output = path.resolve(text("output"), name);
+      await mkdir(output, { recursive: true, mode: 0o700 });
+      await Promise.all([
+        writeFile(path.join(output, "Dockerfile"), deployment.dockerfile),
+        writeFile(path.join(output, "Caddyfile"), deployment.caddyfile),
+        writeFile(path.join(output, "compose.yml"), deployment.compose),
+        writeFile(path.join(output, ".env.example"), deployment.environmentExample, { mode: 0o600 })
+      ]);
+      return { output };
+    }
+    case "ingress-verify": {
+      const name = text("name");
+      const ingress = config.ingresses[name];
+      if (!ingress) throw new UserError(`external URL ingress '${name}' is not configured`);
+      if (ingress.driver === "caddy") {
+        const argument = parseCaddyIngressArgument(ingress.argument);
+        const provider = config.providers[argument.provider];
+        if (!provider) throw new UserError(`provider '${argument.provider}' is not configured`);
+        await verifyCloudflareWildcard(provider, argument.domain, requestEnvironment(input, provider.credentialEnv));
+        await verifyCaddyIngress(argument);
+      }
+      return {};
+    }
+    default: throw new UserError(`unknown External URL admin action '${action}'`);
+  }
+}
+
+function requestEnvironment(input: Record<string, unknown>, credentialEnv: string): NodeJS.ProcessEnv {
+  if (typeof input.credential !== "string" || input.credential.length === 0) {
+    throw new UserError(`credential ${credentialEnv} is required`);
+  }
+  return {
+    ...process.env,
+    [credentialEnv]: input.credential,
+    ...(typeof input.cloudflareApiBase === "string"
+      ? { DIM_CLOUDFLARE_API_BASE: input.cloudflareApiBase }
+      : {})
+  };
+}
+
+async function configureIngressArgument(
+  driver: string,
+  scheme: "http" | "https",
+  argument: string
+): Promise<string> {
+  if (driver === "caddy") {
+    if (scheme !== "https") throw new UserError("Caddy ingress requires scheme https");
+    const parsed = parseCaddyIngressArgument(argument);
+    return JSON.stringify({
+      ...parsed,
+      listenPort: parsed.listenPort === "auto" ? await availableTcpPort(parsed.listenHost) : parsed.listenPort
+    });
+  }
+  const parsed = parseBuiltinHttpArgument(driver, argument);
+  return JSON.stringify({
+    ...parsed,
+    listenPort: parsed.listenPort === "auto" ? await availableTcpPort(parsed.listenHost) : parsed.listenPort
+  });
+}
+
+async function availableTcpPort(host: string): Promise<number> {
+  const server = net.createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, host, () => resolve());
+  });
+  const address = server.address();
+  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  if (!address || typeof address === "string") throw new UserError(`could not allocate a TCP port on ${host}`);
+  return address.port;
 }
 
 function parseBuiltinHttpArgument(driver: string, argument: string): {

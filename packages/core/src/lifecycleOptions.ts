@@ -12,6 +12,14 @@ export function lifecycleOptions(env: NodeJS.ProcessEnv = process.env): Lifecycl
       `workspace backend is not configured in DIM user config; install a host backend first`
     );
   }
+  const controllerDirectory = path.join(
+    env.XDG_RUNTIME_DIR ?? path.join(os.tmpdir(), `dim-${process.getuid?.() ?? "user"}`),
+    "dim",
+    createHash("sha256")
+      .update(path.resolve(env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim")))
+      .digest("hex")
+      .slice(0, 16)
+  );
   return {
     stateRoot: path.resolve(env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim")),
     giteaImage: env.DIM_GITEA_IMAGE ?? "gitea/gitea:1.27.0",
@@ -27,15 +35,9 @@ export function lifecycleOptions(env: NodeJS.ProcessEnv = process.env): Lifecycl
     pidsLimit: env.DIM_WORKSPACE_PIDS ?? "2048",
     agentDockerSocketPath: env.DIM_AGENT_DOCKER_SOCKET ?? "/var/run/docker.sock",
     controllerSocketPath: env.DIM_CONTROLLER_SOCKET
-      ?? path.join(
-        env.XDG_RUNTIME_DIR ?? path.join(os.tmpdir(), `dim-${process.getuid?.() ?? "user"}`),
-        "dim",
-        createHash("sha256")
-          .update(path.resolve(env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim")))
-          .digest("hex")
-          .slice(0, 16),
-        "controller.sock"
-      )
+      ?? path.join(controllerDirectory, "controller.sock"),
+    adminControllerSocketPath: env.DIM_ADMIN_CONTROLLER_SOCKET
+      ?? path.join(controllerDirectory, "admin.sock")
   };
 }
 

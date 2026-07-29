@@ -35,8 +35,9 @@ CF_API_TOKEN=... dim external-url ingress setup public-https \
 ```
 
 `ingress setup` idempotently reconciles `*.remote.example.com` in Cloudflare and
-writes a Caddy deployment. Copy `.env.example` to `.env`, supply the same
-zone-scoped token, and start it:
+writes the complete Caddy deployment; this example does not maintain a second
+hand-written copy. Copy the generated `.env.example` to `.env`, supply the
+same zone-scoped token, and start it:
 
 ```bash
 cd .dim/external-url/public-https
@@ -49,13 +50,12 @@ The credential must be a Cloudflare API Token accepted as a Bearer token, not
 a Global API Key. Restrict it to the configured zone with `Zone.Zone:Read`
 and `Zone.DNS:Edit`. Caddy uses it for ACME DNS-01 issuance and renewal.
 
-Issue both URL forms for one workspace target:
+From a workspace with DIM CLI available, issue both URL forms for one target.
+The workspace identity and URL names are inferred:
 
 ```bash
-dim external-url request --workspace WORKSPACE \
-  --ingress public-http --name web --container dev --port 3000
-dim external-url request --workspace WORKSPACE \
-  --ingress public-https --name web --container dev --port 3000
+dim external-url request --ingress public-http --container dev --port 3000
+dim external-url request --ingress public-https --container dev --port 3000
 ```
 
 The host must accept TCP 8080, TCP 80, TCP 443, and optionally UDP 443 for

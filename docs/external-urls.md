@@ -1,18 +1,21 @@
 # External workspace URLs
 
-DIM exposes one authenticated controller API that the external URL system
-plugin extends:
+The external URL plugin extends two controller APIs. Host configuration uses
+the host-only admin socket; workspace URL operations use the authenticated
+workspace socket:
 
 ```text
+POST   /v1/external-url/:action    # host administration
+
 GET    /api
 GET    /api/urls
 POST   /api/urls
 DELETE /api/urls/:id
 ```
 
-DIM automatically starts and health-checks the managed controller before
-creating, starting, updating, or setting up a workspace. Every workspace root
-receives its Unix socket and a workspace-scoped controller grant:
+DIM automatically starts and health-checks both sockets. The admin socket is
+mode `0600` in the host state directory and is never mounted into a workspace.
+Every workspace root receives only the workspace socket and its scoped grant:
 
 ```text
 DIM_CONTROLLER_SOCKET=/run/dim/controller/controller.sock
@@ -22,6 +25,23 @@ DIM_CONTROLLER_TOKEN=<workspace-scoped grant>
 The socket is mounted only into the trusted project-root container. Compose
 services do not inherit either the socket or token unless reviewed `.dim`
 code explicitly passes them through.
+
+Do not pass the original socket and token into a development container.
+The standard workspace image includes `dim-controller-proxy`; reviewed root
+code can expose an ingress-restricted socket instead:
+
+```bash
+dim-controller-proxy external-url \
+  --listen /run/dim/dev-controller/controller.sock \
+  --ingress tailscale-main
+```
+
+Only the proxy socket directory is mounted into `dev`. The preset permits
+filtered discovery, list, request, and individual revoke operations for the
+named ingress and denies all other controller routes. Advanced reviewed policies use
+`createControllerProxy` and `externalUrlProxy` from
+`@slop-lab/dim-controller-proxy`; the runnable form is in the
+[External URL example](../examples/external-urls/README.md).
 
 ## Named ingresses
 
@@ -44,13 +64,14 @@ dim external-url ingress add builtin-http --name local-http \
   --argument '{"domain":"dev.test","publicPort":8080,"listenHost":"0.0.0.0","listenPort":"auto"}'
 ```
 
-The CLI atomically stores provider and ingress configuration in
-`~/.config/dim/external-urls.json`. Override the location with
-`DIM_EXTERNAL_URL_CONFIG`.
+The CLI sends provider and ingress requests to the plugin's admin API. The
+controller atomically stores configuration in
+`~/.config/dim/external-urls.json`; override its location with
+`DIM_EXTERNAL_URL_CONFIG` in the managed controller environment.
 
-`listenPort:"auto"` is resolved by the driver command to an available port and
-the selected number is persisted. After changing ingress configuration, run
-`dim controller restart` to reload drivers without recreating workspaces.
+`listenPort:"auto"` is resolved by the driver to an available port and the
+selected number is persisted. The CLI restarts the managed controller after
+ingress changes so drivers reload without recreating workspaces.
 
 `port` is the optional port placed in generated public URLs. `listenHost` and
 `listenPort` select the plugin's internal HTTP router. For an HTTPS ingress,
@@ -66,17 +87,13 @@ arbitrary provider configuration.
 Discover ingresses:
 
 ```bash
-dim external-url discover --workspace WORKSPACE
+dim external-url discover
 ```
 
 Create a URL:
 
 ```bash
-dim external-url request --workspace WORKSPACE \
-  --ingress public-https \
-  --name web \
-  --container dev \
-  --port 3000
+dim external-url request --ingress public-https --container dev --port 3000
 ```
 
 Targets are scoped to the authenticated workspace:
@@ -105,8 +122,14 @@ dim external-url list --workspace WORKSPACE
 dim external-url revoke URL_ID --workspace WORKSPACE
 ```
 
-Inside a workspace the same commands omit `--workspace` and automatically use
-`DIM_CONTROLLER_SOCKET` and `DIM_CONTROLLER_TOKEN`.
+These `--workspace` forms are for occasional host-side administration. Normal
+workspace use omits the option and automatically uses
+`DIM_CONTROLLER_SOCKET` and `DIM_CONTROLLER_TOKEN`:
+
+```bash
+dim external-url list
+dim external-url revoke URL_ID
+```
 
 ## HTTP and HTTPS with Cloudflare DNS and Caddy
 

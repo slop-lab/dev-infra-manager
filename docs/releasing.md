@@ -22,6 +22,7 @@ bash scripts/container-cgroup-smoke.bash
 pnpm audit --prod
 pnpm --filter @slop-lab/dim-core run pack:dry-run
 pnpm --filter @slop-lab/dim-contracts-external-url run pack:dry-run
+pnpm --filter @slop-lab/dim-controller-proxy run pack:dry-run
 pnpm --filter @slop-lab/dim-plugin-external-urls run pack:dry-run
 pnpm --filter @slop-lab/dim-provider-dns-cloudflare run pack:dry-run
 pnpm --filter @slop-lab/dim-ingress-caddy run pack:dry-run
@@ -40,6 +41,7 @@ finally the CLI and installer. Workspace package dependencies are exact:
 ```bash
 pnpm --filter @slop-lab/dim-core run publish:package
 pnpm --filter @slop-lab/dim-contracts-external-url run publish:package
+pnpm --filter @slop-lab/dim-controller-proxy run publish:package
 pnpm --filter @slop-lab/dim-provider-dns-cloudflare run publish:package
 pnpm --filter @slop-lab/dim-ingress-caddy run publish:package
 pnpm --filter @slop-lab/dim-plugin-external-urls run publish:package

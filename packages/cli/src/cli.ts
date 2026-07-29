@@ -2,60 +2,22 @@
 import { once } from "node:events";
 import { chmod, mkdir, open, readFile, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
-import net from "node:net";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { AddHelpTextContext, Command, CommanderError } from "commander";
 import {
-  applyProjectRepositoryProtection,
-  createProject,
-  createProjectRepository,
-  createWorkspace,
+  configuredDimAdminController,
   configuredDimController,
-  discardWorkspace,
-  ensureGitea,
   execWorkspace,
-  importProjectRepository,
   lifecycleOptions,
   type LifecycleOptions,
-  listProjectRepositories,
-  listProjects,
-  listWorkspaces,
   loadInstalledPlugins,
   ProcessRunner,
-  projectRepositoryHostUrl,
-  projectRepositoryWorkspaceUrl,
-  purgeProject,
-  removeProject,
   initializeControllerRoutes,
   resolvePluginHome,
-  restartWorkspace,
-  runDoctor,
   runWorkspace,
-  setupWorkspace,
-  showProject,
-  showProjectRepository,
-  showWorkspace,
-  startWorkspace,
-  stopWorkspace,
-  updateWorkspace,
   UserError,
 } from "@slop-lab/dim-core";
-import {
-  readExternalUrlConfig,
-  writeExternalUrlConfig,
-  type ExternalUrlIngressConfig
-} from "@slop-lab/dim-contracts-external-url";
-import {
-  parseCaddyIngressArgument,
-  renderCaddyDeployment,
-  verifyCaddyIngress
-} from "@slop-lab/dim-ingress-caddy";
-import {
-  ensureCloudflareWildcard,
-  removeCloudflareWildcard,
-  verifyCloudflareWildcard
-} from "@slop-lab/dim-provider-dns-cloudflare";
 
 const runner = new ProcessRunner();
 const program = new Command();
@@ -74,34 +36,34 @@ project.command("create")
   .description("Create a project and its managed Git namespace")
   .argument("<project>")
   .option("--json", "print machine-readable JSON")
-  .action(async (name: string, flags: JsonFlags) => print(await createProject(runner, lifecycleOptions(), name), flags));
+  .action(async (name: string, flags: JsonFlags) => print(await adminCall("project.create", { name }), flags));
 
 project.command("list")
   .alias("ls")
   .description("List projects")
   .option("--json", "print machine-readable JSON")
   .action(async (flags: JsonFlags) =>
-    printList(await listProjects(lifecycleOptions()), ["name", "phase", "gitNamespace", "rootRepositoryAlias", "rootRef"], flags)
+    printList(await adminCall<Record<string, unknown>[]>("project.list"), ["name", "phase", "gitNamespace", "rootRepositoryAlias", "rootRef"], flags)
   );
 
 project.command("show")
   .description("Show a project")
   .argument("<project>")
   .option("--json", "print machine-readable JSON")
-  .action(async (name: string, flags: JsonFlags) => print(await showProject(lifecycleOptions(), name), flags));
+  .action(async (name: string, flags: JsonFlags) => print(await adminCall("project.show", { name }), flags));
 
 project.command("remove")
   .description("Remove project metadata while preserving Git repositories")
   .argument("<project>")
   .action(async (name: string) => {
-    await removeProject(lifecycleOptions(), name);
+    await adminCall("project.remove", { name });
   });
 
 project.command("purge")
   .description("Delete an unused project and its DIM-managed Git organization")
   .argument("<project>")
   .requiredOption("--yes", "confirm permanent repository deletion")
-  .action(async (name: string) => purgeProject(runner, lifecycleOptions(), name));
+  .action(async (name: string) => void await adminCall("project.purge", { name }));
 
 const repo = program.command("repo").description("Manage project-scoped repositories");
 
@@ -114,7 +76,7 @@ repo.command("create")
   .option("--protect <patterns>", "comma-separated protected branch patterns")
   .option("--json", "print machine-readable JSON")
   .action(async (projectName: string, alias: string, flags: RepoFlags) => {
-    print(await createProjectRepository(runner, lifecycleOptions(), {
+    print(await adminCall("repo.create", {
       project: projectName,
       alias,
       protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect),
@@ -133,7 +95,7 @@ repo.command("import")
   .option("--protect <patterns>", "comma-separated protected branch patterns")
   .option("--json", "print machine-readable JSON")
   .action(async (projectName: string, alias: string, source: string, flags: RepoFlags) => {
-    print(await importProjectRepository(runner, lifecycleOptions(), {
+    print(await adminCall("repo.import", {
       project: projectName,
       alias,
       source,
@@ -149,7 +111,7 @@ repo.command("list")
   .argument("<project>")
   .option("--json", "print machine-readable JSON")
   .action(async (name: string, flags: JsonFlags) =>
-    printList(await listProjectRepositories(lifecycleOptions(), name), ["alias", "phase", "hostUrl", "workspaceUrl"], flags)
+    printList(await adminCall<Record<string, unknown>[]>("repo.list", { project: name }), ["alias", "phase", "hostUrl", "workspaceUrl"], flags)
   );
 
 repo.command("show")
@@ -158,7 +120,7 @@ repo.command("show")
   .argument("<alias>")
   .option("--json", "print machine-readable JSON")
   .action(async (name: string, alias: string, flags: JsonFlags) =>
-    print(await showProjectRepository(lifecycleOptions(), name, alias), flags)
+    print(await adminCall("repo.show", { project: name, alias }), flags)
   );
 
 repo.command("protect")
@@ -167,7 +129,7 @@ repo.command("protect")
   .argument("<alias>")
   .option("--json", "print machine-readable JSON")
   .action(async (name: string, alias: string, flags: JsonFlags) =>
-    print(await applyProjectRepositoryProtection(runner, lifecycleOptions(), name, alias), flags)
+    print(await adminCall("repo.protect", { project: name, alias }), flags)
   );
 
 repo.command("url")
@@ -176,9 +138,11 @@ repo.command("url")
   .argument("<alias>")
   .option("--workspace", "print the URL reachable from workspaces")
   .action(async (name: string, alias: string, flags: { workspace?: boolean }) =>
-    console.log(await (flags.workspace
-      ? projectRepositoryWorkspaceUrl(lifecycleOptions(), name, alias)
-      : projectRepositoryHostUrl(lifecycleOptions(), name, alias))));
+    console.log((await adminCall<{ url: string }>("repo.url", {
+      project: name,
+      alias,
+      workspace: flags.workspace ?? false
+    })).url));
 
 program.command("create")
   .description("Create a persistent workspace for a project")
@@ -195,7 +159,7 @@ program.command("create")
   .action(async (projectName: string, name: string, flags: WorkspaceCreateFlags) => {
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await createWorkspace(runner, options, {
+    print(await adminCall("workspace.create", {
       project: projectName,
       name,
       profiles: flags.profile,
@@ -215,7 +179,7 @@ program.command("ls")
   .option("--json", "print machine-readable JSON")
   .action(async (flags: JsonFlags) =>
     printList(
-      await listWorkspaces(lifecycleOptions()),
+      await adminCall<Record<string, unknown>[]>("workspace.list"),
       ["name", "projectName", "phase", "runtimeBackend", "rootRef"],
       flags
     )
@@ -225,7 +189,7 @@ program.command("show")
   .description("Show a workspace")
   .argument("<workspace>")
   .option("--json", "print machine-readable JSON")
-  .action(async (name: string, flags: JsonFlags) => print(await showWorkspace(lifecycleOptions(), name), flags));
+  .action(async (name: string, flags: JsonFlags) => print(await adminCall("workspace.show", { name }), flags));
 
 program.command("exec")
   .description("Execute a raw command in a running workspace")
@@ -260,7 +224,7 @@ program.command("setup")
   .action(async (name: string, flags: JsonFlags) => {
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await setupWorkspace(runner, options, name), flags);
+    print(await adminCall("workspace.setup", { name }), flags);
   });
 
 program.command("update")
@@ -275,12 +239,10 @@ program.command("update")
     }
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await updateWorkspace(
-      runner,
-      options,
+    print(await adminCall("workspace.update", {
       name,
-      flags.clearProfiles ? [] : flags.profile.length > 0 ? flags.profile : undefined
-    ), flags);
+      ...(flags.clearProfiles ? { profiles: [] } : flags.profile.length > 0 ? { profiles: flags.profile } : {})
+    }), flags);
   });
 
 program.command("start")
@@ -290,7 +252,7 @@ program.command("start")
   .action(async (name: string, flags: JsonFlags) => {
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await startWorkspace(runner, options, name), flags);
+    print(await adminCall("workspace.start", { name }), flags);
   });
 
 program.command("restart")
@@ -300,13 +262,13 @@ program.command("restart")
   .action(async (name: string, flags: JsonFlags) => {
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await restartWorkspace(runner, options, name), flags);
+    print(await adminCall("workspace.restart", { name }), flags);
   });
 
 program.command("stop")
   .description("Stop a workspace while preserving its checkout and inner-engine data")
   .argument("<workspace>")
-  .action(async (name: string) => stopWorkspace(runner, lifecycleOptions(), name));
+  .action(async (name: string) => void await adminCall("workspace.stop", { name }));
 
 program.command("discard")
   .description("Permanently delete a workspace and unpushed changes")
@@ -318,32 +280,22 @@ program.command("discard")
     await externalUrlControllerRequest("/api/urls", { method: "DELETE" }, name).catch((error) => {
       if (!(error instanceof Error) || !error.message.includes("(404)")) throw error;
     });
-    await discardWorkspace(runner, options, name);
-    if ((await listWorkspaces(options)).length === 0) await stopManagedController(options);
+    await adminCall("workspace.discard", { name });
+    if ((await adminCall<unknown[]>("workspace.list")).length === 0) await stopManagedController(options);
   });
 
 program.command("doctor")
   .description("Check host and workspace runtime readiness")
   .action(async () => {
     const options = lifecycleOptions();
-    const checks = await runDoctor(runner, options.defaultWorkspaceBackend, options);
+    const checks = await adminCall<Array<{ ok: boolean; name: string; detail: string }>>("doctor");
     for (const check of checks) console.log(`${check.ok ? "ok" : "fail"}\t${check.name}\t${check.detail}`);
     if (checks.some((check) => !check.ok)) process.exitCode = 1;
   });
 
 const plugin = program.command("plugin").description("Inspect installed DIM plugins");
 plugin.command("list").option("--json", "print machine-readable JSON").action(async (flags: JsonFlags) => {
-  const home = await resolvePluginHome();
-  const loaded = await loadInstalledPlugins(home);
-  try {
-    print({
-      pluginHome: home,
-      plugins: loaded.manifest.plugins,
-      controllerRoutes: loaded.registered.controllerRoutes.map((route) => `${route.method} /api${route.path}`)
-    }, flags);
-  } finally {
-    await loaded.registered.dispose();
-  }
+  print(await adminCall<Record<string, unknown>>("plugin.list"), flags);
 });
 
 const externalUrl = program.command("external-url").description("Configure ingresses and manage workspace URLs");
@@ -358,20 +310,15 @@ externalUrl.command("add-provider")
   .option("--credential-env <name>", "API token environment variable", "CF_API_TOKEN")
   .option("--proxied", "enable Cloudflare proxying", false)
   .action(async (driver: string, name: string, flags: CloudflareProviderFlags) => {
-    if (driver !== "cloudflare") throw new UserError("provider driver must be cloudflare");
-    if (flags.recordType !== "A" && flags.recordType !== "AAAA" && flags.recordType !== "CNAME") {
-      throw new UserError("--record-type must be A, AAAA, or CNAME");
-    }
-    const config = await readExternalUrlConfig();
-    config.providers[name] = {
-      driver: "cloudflare",
+    await externalUrlAdmin("provider-add", {
+      driver,
+      name,
       zone: flags.zone,
       recordType: flags.recordType,
       target: flags.target,
       proxied: flags.proxied ?? false,
       credentialEnv: flags.credentialEnv
-    };
-    await writeExternalUrlConfig(config);
+    });
     console.log(`Configured external URL provider '${name}'`);
   });
 
@@ -386,15 +333,14 @@ externalUrlIngress.command("add")
   .requiredOption("--argument <string>", "opaque driver-specific argument")
   .action(async (driver: string, flags: IngressAddFlags) => {
     if (flags.scheme !== "http" && flags.scheme !== "https") throw new UserError("--scheme must be http or https");
-    const ingress: ExternalUrlIngressConfig = {
+    await externalUrlAdmin("ingress-add", {
       driver,
+      name: flags.name,
       description: flags.description,
       scheme: flags.scheme,
-      argument: await configureIngressArgument(driver, flags.scheme, flags.argument)
-    };
-    const config = await readExternalUrlConfig();
-    config.ingresses[flags.name] = ingress;
-    await writeExternalUrlConfig(config);
+      argument: flags.argument
+    });
+    await restartManagedController(lifecycleOptions());
     console.log(`Configured external URL ingress '${flags.name}'`);
   });
 
@@ -402,8 +348,7 @@ externalUrl.command("list-providers")
   .description("List configured external URL infrastructure providers")
   .option("--json", "print machine-readable JSON")
   .action(async (flags: JsonFlags) => {
-    const config = await readExternalUrlConfig();
-    const values = Object.entries(config.providers).map(([name, provider]) => ({ name, ...provider }));
+    const values = await externalUrlAdmin<Record<string, unknown>[]>("provider-list");
     printList(values, ["name", "driver", "zone", "recordType", "target", "proxied"], flags);
   });
 
@@ -411,21 +356,14 @@ externalUrl.command("remove-provider")
   .description("Remove an unused external URL infrastructure provider")
   .argument("<name>")
   .action(async (name: string) => {
-    const config = await readExternalUrlConfig();
-    if (!config.providers[name]) throw new UserError(`external URL provider '${name}' is not configured`);
-    const dependent = Object.entries(config.ingresses)
-      .find(([, ingress]) => ingress.driver === "caddy" && parseCaddyIngressArgument(ingress.argument).provider === name);
-    if (dependent) throw new UserError(`external URL provider '${name}' is used by ingress '${dependent[0]}'`);
-    delete config.providers[name];
-    await writeExternalUrlConfig(config);
+    await externalUrlAdmin("provider-remove", { name });
   });
 
 externalUrlIngress.command("list")
   .description("List configured external URL ingresses")
   .option("--json", "print machine-readable JSON")
   .action(async (flags: JsonFlags) => {
-    const config = await readExternalUrlConfig();
-    const values = Object.entries(config.ingresses).map(([name, ingress]) => ({ name, ...ingress }));
+    const values = await externalUrlAdmin<Record<string, unknown>[]>("ingress-list");
     printList(values, ["name", "driver", "scheme", "description", "argument"], flags);
   });
 
@@ -434,21 +372,10 @@ externalUrlIngress.command("remove")
   .argument("<name>")
   .option("--cleanup-dns", "remove the ingress wildcard DNS record first")
   .action(async (name: string, flags: { cleanupDns?: boolean }) => {
-    const config = await readExternalUrlConfig();
-    const ingress = config.ingresses[name];
-    if (!ingress) throw new UserError(`external URL ingress '${name}' is not configured`);
-    if (flags.cleanupDns) {
-      if (ingress.driver !== "caddy") {
-        throw new UserError(`ingress '${name}' does not have provider-managed DNS`);
-      }
-      const argument = parseCaddyIngressArgument(ingress.argument);
-      const provider = config.providers[argument.provider];
-      if (!provider) throw new UserError(`provider '${argument.provider}' is not configured`);
-      const record = await verifyCloudflareWildcard(provider, argument.domain);
-      await removeCloudflareWildcard(provider, record);
-    }
-    delete config.ingresses[name];
-    await writeExternalUrlConfig(config);
+    await (flags.cleanupDns
+      ? externalUrlAdminWithCredential("ingress-remove", name, { cleanupDns: true })
+      : externalUrlAdmin("ingress-remove", { name, cleanupDns: false }));
+    await restartManagedController(lifecycleOptions());
   });
 
 externalUrlIngress.command("setup")
@@ -456,24 +383,9 @@ externalUrlIngress.command("setup")
   .argument("<name>")
   .option("--output <directory>", "deployment output directory", ".dim/external-url")
   .action(async (name: string, flags: { output: string }) => {
-    const config = await readExternalUrlConfig();
-    const ingress = config.ingresses[name];
-    if (!ingress) throw new UserError(`external URL ingress '${name}' is not configured`);
-    if (ingress.driver !== "caddy") throw new UserError(`ingress '${name}' does not require Caddy setup`);
-    const argument = parseCaddyIngressArgument(ingress.argument);
-    if (argument.listenPort === "auto") throw new UserError(`ingress '${name}' has unresolved auto port`);
-    const provider = config.providers[argument.provider];
-    if (!provider) throw new UserError(`provider '${argument.provider}' is not configured`);
-    await ensureCloudflareWildcard(provider, argument.domain);
-    const deployment = renderCaddyDeployment(name, { ...argument, listenPort: argument.listenPort }, provider);
-    const output = path.resolve(flags.output, name);
-    await mkdir(output, { recursive: true, mode: 0o700 });
-    await Promise.all([
-      writeFile(path.join(output, "Dockerfile"), deployment.dockerfile),
-      writeFile(path.join(output, "Caddyfile"), deployment.caddyfile),
-      writeFile(path.join(output, "compose.yml"), deployment.compose),
-      writeFile(path.join(output, ".env.example"), deployment.environmentExample, { mode: 0o600 })
-    ]);
+    const { output } = await externalUrlAdminWithCredential<{ output: string }>("ingress-setup", name, {
+      output: path.resolve(flags.output)
+    });
     console.log(`Reconciled wildcard DNS and wrote Caddy deployment to ${output}`);
   });
 
@@ -481,16 +393,7 @@ externalUrlIngress.command("verify")
   .description("Verify provider state and HTTPS ingress reachability")
   .argument("<name>")
   .action(async (name: string) => {
-    const config = await readExternalUrlConfig();
-    const ingress = config.ingresses[name];
-    if (!ingress) throw new UserError(`external URL ingress '${name}' is not configured`);
-    if (ingress.driver === "caddy") {
-      const argument = parseCaddyIngressArgument(ingress.argument);
-      const provider = config.providers[argument.provider];
-      if (!provider) throw new UserError(`provider '${argument.provider}' is not configured`);
-      await verifyCloudflareWildcard(provider, argument.domain);
-      await verifyCaddyIngress(argument);
-    }
+    await externalUrlAdminWithCredential("ingress-verify", name);
     console.log(`External URL ingress '${name}' is ready`);
   });
 
@@ -561,11 +464,12 @@ controller.command("restart")
   });
 
 controller.command("serve")
-  .description("Serve trusted workspace controller APIs")
+  .description("Serve host-admin and trusted-workspace controller APIs")
   .option("--socket <path>", "listen on a Unix socket")
+  .option("--admin-socket <path>", "listen for host administration on a Unix socket")
   .option("--host <host>", "listen address for explicit TCP mode")
   .option("--port <port>", "listen port for explicit TCP mode")
-  .action(async (flags: { socket?: string; host?: string; port?: string }) => {
+  .action(async (flags: { socket?: string; adminSocket?: string; host?: string; port?: string }) => {
     if (flags.socket && (flags.host || flags.port)) {
       throw new UserError("--socket cannot be combined with --host or --port");
     }
@@ -573,34 +477,53 @@ controller.command("serve")
       throw new UserError("controller serve requires --socket, or both --host and --port");
     }
     const loaded = await loadInstalledPlugins(await resolvePluginHome());
-    await initializeControllerRoutes(lifecycleOptions(), loaded.registered);
-    const server = configuredDimController(lifecycleOptions(), loaded.registered);
+    const options = lifecycleOptions();
+    await initializeControllerRoutes(options, loaded.registered);
+    const server = configuredDimController(options, loaded.registered);
+    const adminServer = configuredDimAdminController(options, loaded.registered);
     if (flags.socket) {
       await mkdir(path.dirname(flags.socket), { recursive: true });
       await rm(flags.socket, { force: true });
+      const workspaceListening = once(server, "listening");
       server.listen(flags.socket);
+      const adminSocket = flags.adminSocket ?? options.adminControllerSocketPath;
+      await mkdir(path.dirname(adminSocket), { recursive: true });
+      await rm(adminSocket, { force: true });
+      const adminListening = once(adminServer, "listening");
+      adminServer.listen(adminSocket);
+      await Promise.all([workspaceListening, adminListening]);
+      await chmod(adminSocket, 0o600);
     } else {
       const port = Number(flags.port);
       if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
         throw new UserError("--port must be between 1 and 65535");
       }
+      const listening = once(server, "listening");
       server.listen(port, flags.host);
+      await listening;
     }
-    await once(server, "listening");
     if (flags.socket) {
       await chmod(flags.socket, 0o666);
       await writeFile(path.join(path.dirname(flags.socket), "controller.pid"), `${process.pid}\n`);
-      console.log(`DIM controller listening on ${flags.socket}`);
+      console.log(`DIM workspace controller listening on ${flags.socket}`);
+      console.log(`DIM admin controller listening on ${flags.adminSocket ?? options.adminControllerSocketPath}`);
     } else {
       console.log(`DIM controller listening on http://${flags.host}:${flags.port}`);
     }
     await Promise.race([once(process, "SIGINT"), once(process, "SIGTERM")]);
+    await loaded.registered.dispose();
+    server.closeIdleConnections();
+    adminServer.closeIdleConnections();
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    if (adminServer.listening) {
+      await new Promise<void>((resolve, reject) =>
+        adminServer.close((error) => error ? reject(error) : resolve()));
+    }
     if (flags.socket) {
       await rm(flags.socket, { force: true });
+      await rm(flags.adminSocket ?? options.adminControllerSocketPath, { force: true });
       await rm(path.join(path.dirname(flags.socket), "controller.pid"), { force: true });
     }
-    await loaded.registered.dispose();
   });
 
 const hostInput = program.command("host-input").description("Read an allowed host setting from a workspace");
@@ -623,14 +546,14 @@ hostInput.command("get")
 const admin = program.command("admin", { hidden: true }).description("Low-level service administration");
 const service = admin.command("service");
 service.command("ensure").description("Reconcile the managed Gitea service").action(async () => {
-  await ensureGitea(runner, lifecycleOptions());
+  await adminCall("service.ensure");
   console.log("Managed Gitea is ready");
 });
 service.command("credentials")
   .description("Print managed Gitea credentials")
   .requiredOption("--show-secrets")
   .option("--json", "print machine-readable JSON")
-  .action(async (flags: JsonFlags) => print(await ensureGitea(runner, lifecycleOptions()), flags));
+  .action(async (flags: JsonFlags) => print(await adminCall("service.ensure"), flags));
 
 const x = program.command("x").description("Run a command with DIM-provided integration settings");
 x.command("git")
@@ -638,7 +561,7 @@ x.command("git")
   .argument("<args...>")
   .allowUnknownOption(true)
   .action(async (args: string[]) => {
-    const credentials = await ensureGitea(runner, lifecycleOptions());
+    const credentials = await adminCall<{ writerUsername: string; writerPassword: string }>("git.credentials");
     const helper = "!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f";
     process.exitCode = await runner.runStreaming("git", ["-c", `credential.helper=${helper}`, ...args], {
       env: {
@@ -654,14 +577,7 @@ const gitIntegration = program.command("git").description("Configure Git access 
 gitIntegration.command("setup")
   .description("Install DIM's URL-scoped Git credential helper in global Git config")
   .action(async () => {
-    await ensureGitea(runner, lifecycleOptions());
-    const baseUrl = `http://127.0.0.1:${lifecycleOptions().giteaPort}`;
-    const helperKey = `credential.${baseUrl}.helper`;
-    const pathKey = `credential.${baseUrl}.useHttpPath`;
-    const helper = await runner.run("git", ["config", "--global", "--replace-all", helperKey, "!dim git credential-helper"]);
-    if (helper.exitCode !== 0) throw new UserError(`failed to configure Git credential helper: ${helper.stderr.trim()}`);
-    const usePath = await runner.run("git", ["config", "--global", "--replace-all", pathKey, "true"]);
-    if (usePath.exitCode !== 0) throw new UserError(`failed to configure Git credential path matching: ${usePath.stderr.trim()}`);
+    const { baseUrl } = await adminCall<{ baseUrl: string }>("git.setup");
     console.log(`Configured DIM credentials for ${baseUrl}`);
   });
 
@@ -680,7 +596,7 @@ gitIntegration.command("credential-helper", { hidden: true })
       }));
     const options = lifecycleOptions();
     if (fields.protocol !== "http" || fields.host !== `127.0.0.1:${options.giteaPort}`) return;
-    const credentials = await ensureGitea(runner, options);
+    const credentials = await adminCall<{ writerUsername: string; writerPassword: string }>("git.credentials");
     console.log(`username=${credentials.writerUsername}`);
     console.log(`password=${credentials.writerPassword}`);
   });
@@ -832,55 +748,74 @@ function cliPort(value: string, flag: string, zero: boolean): number {
   return port;
 }
 
-async function configureIngressArgument(driver: string, scheme: "http" | "https", argument: string): Promise<string> {
-  if (driver === "caddy") {
-    if (scheme !== "https") throw new UserError("Caddy ingress requires --scheme https");
-    const parsed = parseCaddyIngressArgument(argument);
-    return JSON.stringify({
-      ...parsed,
-      listenPort: parsed.listenPort === "auto" ? await availableTcpPort(parsed.listenHost) : parsed.listenPort
-    });
-  }
-  if (driver === "builtin-http") {
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(argument) as Record<string, unknown>;
-    } catch {
-      throw new UserError("builtin-http ingress argument must be valid JSON");
-    }
-    if (typeof parsed.domain !== "string" || typeof parsed.listenHost !== "string") {
-      throw new UserError("builtin-http argument requires domain and listenHost");
-    }
-    if (parsed.listenPort !== "auto"
-      && (!Number.isInteger(parsed.listenPort) || (parsed.listenPort as number) < 1 || (parsed.listenPort as number) > 65_535)) {
-      throw new UserError("builtin-http argument listenPort must be 'auto' or a port");
-    }
-    return JSON.stringify({
-      ...parsed,
-      listenPort: parsed.listenPort === "auto" ? await availableTcpPort(parsed.listenHost) : parsed.listenPort
-    });
-  }
-  throw new UserError(`unsupported external URL ingress driver '${driver}'`);
-}
-
-async function availableTcpPort(host: string): Promise<number> {
-  const server = net.createServer();
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, host, () => resolve());
-  });
-  const address = server.address();
-  await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-  if (!address || typeof address === "string") throw new UserError(`could not allocate a TCP port on ${host}`);
-  return address.port;
-}
-
 async function externalUrlControllerRequest(
   pathname: string,
   init: RequestInit = {},
   workspace?: string
 ): Promise<unknown> {
   return controllerRequest(pathname, init, workspace);
+}
+
+async function adminCall<T = unknown>(
+  operation: string,
+  body: Record<string, unknown> = {}
+): Promise<T> {
+  const options = lifecycleOptions();
+  await ensureManagedController(options);
+  const response = await unixHttpRequest(
+    options.adminControllerSocketPath,
+    `/v1/call/${encodeURIComponent(operation)}`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+  if (response.status < 200 || response.status >= 300) {
+    throw new UserError(
+      `admin controller request failed (${response.status})${response.body ? `: ${response.body.trim()}` : ""}`
+    );
+  }
+  return (response.status === 204 || response.body.length === 0 ? {} : JSON.parse(response.body)) as T;
+}
+
+async function externalUrlAdmin<T = unknown>(
+  action: string,
+  body: Record<string, unknown> = {}
+): Promise<T> {
+  const options = lifecycleOptions();
+  await ensureManagedController(options);
+  const response = await unixHttpRequest(
+    options.adminControllerSocketPath,
+    `/v1/external-url/${encodeURIComponent(action)}`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+  if (response.status < 200 || response.status >= 300) {
+    if (response.status === 404) {
+      throw new UserError(
+        "External URL commands require the @slop-lab/dim-plugin-external-urls plugin; install it and restart the controller"
+      );
+    }
+    throw new UserError(
+      `External URL admin request failed (${response.status})${response.body ? `: ${response.body.trim()}` : ""}`
+    );
+  }
+  return (response.status === 204 || response.body.length === 0 ? {} : JSON.parse(response.body)) as T;
+}
+
+async function externalUrlAdminWithCredential<T = unknown>(
+  action: string,
+  name: string,
+  body: Record<string, unknown> = {}
+): Promise<T> {
+  const { credentialEnv } = await externalUrlAdmin<{ credentialEnv: string | null }>(
+    "ingress-credential-env",
+    { name }
+  );
+  return externalUrlAdmin<T>(action, {
+    name,
+    ...body,
+    ...(credentialEnv === null ? {} : {
+      credential: process.env[credentialEnv],
+      cloudflareApiBase: process.env.DIM_CLOUDFLARE_API_BASE
+    })
+  });
 }
 
 async function controllerRequest(
@@ -968,7 +903,7 @@ async function unixHttpRequest(
 }
 
 async function ensureManagedController(options: LifecycleOptions): Promise<void> {
-  if (await controllerHealthy(options.controllerSocketPath)) return;
+  if (await managedControllerReady(options)) return;
   const runtimeDir = path.dirname(options.controllerSocketPath);
   const lockDir = path.join(runtimeDir, "ensure.lock");
   await mkdir(runtimeDir, { recursive: true });
@@ -980,7 +915,7 @@ async function ensureManagedController(options: LifecycleOptions): Promise<void>
       break;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      if (await controllerHealthy(options.controllerSocketPath)) return;
+      if (await managedControllerReady(options)) return;
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
   }
@@ -989,8 +924,9 @@ async function ensureManagedController(options: LifecycleOptions): Promise<void>
     return ensureManagedController(options);
   }
   try {
-    if (await controllerHealthy(options.controllerSocketPath)) return;
+    if (await managedControllerReady(options)) return;
     await rm(options.controllerSocketPath, { force: true });
+    await rm(options.adminControllerSocketPath, { force: true });
     const log = await open(path.join(runtimeDir, "controller.log"), "a");
     const script = process.argv[1];
     if (!script) throw new UserError("cannot locate the DIM CLI entrypoint");
@@ -1000,7 +936,9 @@ async function ensureManagedController(options: LifecycleOptions): Promise<void>
       "controller",
       "serve",
       "--socket",
-      options.controllerSocketPath
+      options.controllerSocketPath,
+      "--admin-socket",
+      options.adminControllerSocketPath
     ], {
       detached: true,
       stdio: ["ignore", log.fd, log.fd],
@@ -1009,13 +947,30 @@ async function ensureManagedController(options: LifecycleOptions): Promise<void>
     child.unref();
     await log.close();
     for (let attempt = 0; attempt < 100; attempt += 1) {
-      if (await controllerHealthy(options.controllerSocketPath)) return;
+      if (await managedControllerReady(options)) return;
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     throw new UserError(`managed controller failed to start; see ${path.join(runtimeDir, "controller.log")}`);
   } finally {
     await rm(lockDir, { recursive: true, force: true });
   }
+}
+
+async function managedControllerReady(options: LifecycleOptions): Promise<boolean> {
+  if (!await controllersHealthy(options)) return false;
+  try {
+    const value = await readFile(path.join(path.dirname(options.controllerSocketPath), "controller.pid"), "utf8");
+    const pid = Number(value.trim());
+    return Number.isSafeInteger(pid) && pid > 1 && processExists(pid);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+async function controllersHealthy(options: LifecycleOptions): Promise<boolean> {
+  return await controllerHealthy(options.controllerSocketPath)
+    && await controllerHealthy(options.adminControllerSocketPath);
 }
 
 async function controllerHealthy(socketPath: string): Promise<boolean> {
@@ -1038,16 +993,48 @@ async function stopManagedController(options: LifecycleOptions): Promise<void> {
 }
 
 async function restartManagedController(options: LifecycleOptions): Promise<void> {
+  let pid: number | undefined;
+  try {
+    const value = await readFile(path.join(path.dirname(options.controllerSocketPath), "controller.pid"), "utf8");
+    const parsed = Number(value.trim());
+    if (Number.isSafeInteger(parsed) && parsed > 1) pid = parsed;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
   await stopManagedController(options);
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (!await controllerHealthy(options.controllerSocketPath)) {
+    if (pid === undefined || !processExists(pid)) {
       await rm(options.controllerSocketPath, { force: true });
+      await rm(options.adminControllerSocketPath, { force: true });
       await ensureManagedController(options);
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  throw new UserError(`managed controller did not stop; see ${path.join(path.dirname(options.controllerSocketPath), "controller.log")}`);
+  try {
+    if (pid !== undefined) process.kill(pid, "SIGKILL");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+  }
+  if (pid !== undefined) {
+    for (let attempt = 0; attempt < 100 && processExists(pid); attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (processExists(pid)) throw new UserError(`managed controller process ${pid} did not stop`);
+  }
+  await rm(options.controllerSocketPath, { force: true });
+  await rm(options.adminControllerSocketPath, { force: true });
+  await ensureManagedController(options);
+}
+
+function processExists(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+    throw error;
+  }
 }
 
 main();

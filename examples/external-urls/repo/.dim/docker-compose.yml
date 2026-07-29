@@ -6,8 +6,10 @@ services:
     privileged: true
     environment:
       DOCKER_TLS_CERTDIR: ""
+      DIM_CONTROLLER_SOCKET: /run/dim/controller-proxy/external-url.sock
     volumes:
       - dev-docker:/var/lib/docker
+      - /tmp/dim-controller-proxy:/run/dim/controller-proxy:ro
 
 volumes:
   dev-docker:

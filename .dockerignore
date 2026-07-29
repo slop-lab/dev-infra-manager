@@ -1,0 +1,11 @@
+*
+!images/
+images/*
+!images/project-workspace/
+!images/project-workspace/**
+!packages/
+packages/*
+!packages/controller-proxy/
+packages/controller-proxy/*
+!packages/controller-proxy/dist/
+!packages/controller-proxy/dist/**

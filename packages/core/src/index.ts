@@ -1,4 +1,5 @@
 export * from "./doctor.js";
+export * from "./adminController.js";
 export * from "./controller.js";
 export * from "./errors.js";
 export * from "./gitea.js";

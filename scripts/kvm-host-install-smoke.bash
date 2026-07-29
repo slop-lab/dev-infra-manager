@@ -128,7 +128,8 @@ if [[ "$backend" == sysbox ]]; then
       }
       trap cleanup EXIT
       cd dim
-      sudo docker build --quiet -t dev-infra-project-workspace:latest images/project-workspace >/dev/null
+      pnpm --filter @slop-lab/dim-controller-proxy run build
+      sudo docker build --quiet -t dev-infra-project-workspace:latest -f images/project-workspace/Dockerfile . >/dev/null
       sudo docker run -d --name "$trusted" --runtime=runc --privileged --device=/dev/kvm \
         dev-infra-project-workspace:latest sleep infinity >/dev/null
       for _ in $(seq 1 60); do

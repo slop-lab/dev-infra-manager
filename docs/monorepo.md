@@ -11,6 +11,7 @@ This repository is a pnpm workspace.
 │   ├── core/            lifecycle, runtime, state, and plugin APIs
 │   ├── cli/             executable command and output adapter
 │   ├── installer/       installer facade
+│   ├── controller-proxy/ restricted workspace-to-controller proxy
 │   ├── contracts/
 │   │   └── external-url/
 │   ├── plugin/
@@ -34,6 +35,7 @@ convenience.
 
 ```text
 packages/cli ──> packages/core
+packages/controller-proxy (Node built-ins only)
 packages/{ingress/caddy,provider/dns-cloudflare}
   ──> packages/contracts/external-url
 packages/plugin/external-urls
@@ -73,6 +75,11 @@ plugins register routes. External URL ingresses accept only a constrained
 workspace target and derive the upstream from the workspace grant rather than
 accepting an arbitrary host. Discovery exposes ingress name, description, and
 URL scheme without leaking proxy or TLS implementation details.
+
+The standard workspace image includes `dim-controller-proxy`. Reviewed root
+lifecycle code can use its verified feature presets or Node.js API to expose a
+new, policy-constrained Unix socket to a development container without
+sharing the original controller socket or workspace grant.
 
 ## DIM self-development workspace
 

@@ -126,11 +126,28 @@ executes only a named task. Projects without this file retain the legacy
 `.dim/entrypoint.sh` path.
 
 Before `create`, `start`, `setup`, or `update` runs Project setup, DIM must
-ensure its managed controller is healthy. The host controller listens on a
-state-root-specific Unix socket directory mounted at `/run/dim/controller` in
-the trusted workspace root. Mounting the directory, rather than the socket
-inode alone, keeps existing workspace mounts valid when the controller
-restarts. Nested Project services do not inherit the mount or grant.
+ensure both managed controller APIs are healthy. The host-admin API listens on
+a mode-`0600` state-root-specific Unix socket which never enters a workspace.
+The workspace API listens on a separate Unix socket directory mounted at
+`/run/dim/controller` in the trusted workspace root. Mounting the directory,
+rather than the socket inode alone, keeps existing workspace mounts valid when
+the controller restarts. Nested Project services do not inherit the mount or
+grant.
+
+The standard workspace image provides `dim-controller-proxy`. Reviewed root
+lifecycle code may create a second Unix socket for a development container.
+The proxy keeps the original controller socket and workspace grant outside
+that container, removes client authorization, injects the trusted grant
+upstream, and denies every request not accepted by an explicitly configured
+capability. The External URL preset additionally validates the requested
+ingress and filters discovery/list/revoke operations to its ingress allowlist. Projects
+mount only the derived proxy socket directory into development containers.
+
+Plugins register host administration routes separately from workspace routes.
+Administration routes run only on the host-admin socket. A workspace route is
+reachable only with a workspace grant and may be narrowed further by reviewed
+Project-root proxy policy; registering an admin route never exposes it through
+that proxy.
 
 `DIM_GIT_BASE_URL` is Project-specific. Project lifecycle code appends its
 own stable managed repository names and owns all checkout paths and
