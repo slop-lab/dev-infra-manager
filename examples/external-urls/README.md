@@ -57,8 +57,10 @@ and security details are in
 ## Verification
 
 The smoke test builds the local packages, starts the same workspace/dev/deep
-layout, verifies both URLs through wildcard DNS, and checks Cloudflare-style
-DNS creation and cleanup without using a real DNS account:
+layout, and reaches both URLs from a separate client network through wildcard
+DNS and the host ingress. It also checks URL revocation, loopback-only ingress
+isolation, generated Caddy configuration, and Cloudflare-style DNS creation
+and cleanup without using a real DNS account:
 
 ```bash
 just verify-example-external-urls

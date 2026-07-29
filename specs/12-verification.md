@@ -130,6 +130,9 @@ override. See [Installer Facade](14-installer-facade.md).
 host-configured ingress, dnsmasq wildcard DNS, a project-root workspace,
 the nested `dev` Compose service, a further `deep` container, root relay,
 reverse proxy, ingress discovery, URL creation, HTTP access, and revocation.
+The HTTP client runs on a separate Docker network, a loopback-only listener
+must be unreachable from it, unknown and revoked routes must return 404, and
+the generated Caddy deployment must pass `caddy validate`.
 It also reconciles an ingress through a local Cloudflare-compatible API,
 resolves the resulting wildcard through authoritative CoreDNS, and verifies
 provider cleanup without external credentials.

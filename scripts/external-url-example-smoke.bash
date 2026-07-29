@@ -3,9 +3,11 @@ set -euo pipefail
 
 suffix="$PPID-$$"
 network="dim-ext-$suffix"
+client_network="dim-ext-client-$suffix"
 root_container="dim-ext-root-$suffix"
 dns_container="dim-ext-dns-$suffix"
 coredns_container="dim-ext-coredns-$suffix"
+caddy_image="dim-ext-caddy-$suffix"
 workspace_name="external-$suffix"
 state_root="$(mktemp -d /tmp/dim-external-state.XXXXXX)"
 plugin_home="$(mktemp -d /tmp/dim-external-plugins.XXXXXX)"
@@ -24,6 +26,7 @@ available_port() {
 }
 
 proxy_port="$(available_port)"
+loopback_port="$(available_port)"
 cloudflare_mock_port="$(available_port)"
 controller_socket="$state_root/controller/controller.sock"
 
@@ -39,7 +42,9 @@ cleanup() {
   docker container rm --force "$dns_container" >/dev/null 2>&1 || true
   docker container rm --force "$coredns_container" >/dev/null 2>&1 || true
   docker container rm --force "$root_container" >/dev/null 2>&1 || true
+  docker image rm "$caddy_image" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
+  docker network rm "$client_network" >/dev/null 2>&1 || true
   find "$state_root" "$plugin_home" "$pack_root" -depth -delete 2>/dev/null || true
 }
 trap cleanup EXIT
@@ -65,6 +70,7 @@ jq -n '{schemaVersion:1,plugins:["@slop-lab/dim-plugin-external-urls"]}' \
 
 echo "[external-url-example] start project-root, dev, and deep containers"
 docker network create "$network" >/dev/null
+docker network create "$client_network" >/dev/null
 mkdir -p "$state_root/cloudflare-zones"
 CF_MOCK_PORT="$cloudflare_mock_port" \
 CF_MOCK_ZONE="smoke.test" \
@@ -175,6 +181,16 @@ DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
     --listen-host 0.0.0.0 \
     --listen-port "$proxy_port" \
     >/dev/null
+DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
+  node packages/dim-cli/dist/cli.js external-url add-ingress local-loopback \
+    --driver builtin-http \
+    --description "loopback-only negative-test ingress" \
+    --scheme http \
+    --domain loopback.tail.test \
+    --port "$loopback_port" \
+    --listen-host 127.0.0.1 \
+    --listen-port "$loopback_port" \
+    >/dev/null
 mkdir -p "$(dirname -- "$controller_socket")"
 DIM_STATE_ROOT="$state_root" \
 DIM_PLUGIN_HOME="$plugin_home" \
@@ -231,11 +247,21 @@ create_url() {
 
 dev_created="$(create_url dev '["dev"]' 8080)"
 deep_created="$(create_url deep '["dev","deep"]' 5678)"
+loopback_created="$(
+  run_dim external-url create \
+    --workspace "$workspace_name" \
+    --ingress local-loopback \
+    --service loopback \
+    --container dev \
+    --port 8080 \
+    --json
+)"
 dev_url="$(printf '%s' "$dev_created" | jq -er '.urls[0].url')"
 deep_url="$(printf '%s' "$deep_created" | jq -er '.urls[0].url')"
+loopback_url="$(printf '%s' "$loopback_created" | jq -er '.urls[0].url')"
 
 echo "[external-url-example] resolve wildcard URLs through dnsmasq"
-gateway="$(docker network inspect "$network" --format '{{(index .IPAM.Config 0).Gateway}}')"
+gateway="$(docker network inspect "$client_network" --format '{{(index .IPAM.Config 0).Gateway}}')"
 
 echo "[external-url-example] reconcile Cloudflare-compatible API state into authoritative DNS"
 cloudflare_config="$state_root/cloudflare-external-urls.json"
@@ -262,6 +288,15 @@ cloudflare_cli=(
   --provider local-cloudflare >/dev/null
 "${cloudflare_cli[@]}" setup-ingress local-https --output "$cloudflare_output" >/dev/null
 test -f "$cloudflare_output/local-https/Caddyfile"
+docker build --quiet --tag "$caddy_image" "$cloudflare_output/local-https" >/dev/null
+if ! docker run --rm \
+  --env CF_SMOKE_TOKEN=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --volume "$cloudflare_output/local-https/Caddyfile:/etc/caddy/Caddyfile:ro" \
+  "$caddy_image" caddy validate --config /etc/caddy/Caddyfile \
+  >"$state_root/caddy-validate.log" 2>&1; then
+  cat "$state_root/caddy-validate.log" >&2
+  exit 1
+fi
 coredns_ip="$(docker container inspect "$coredns_container" \
   --format "{{(index .NetworkSettings.Networks \"$network\").IPAddress}}")"
 for attempt in $(seq 1 30); do
@@ -292,22 +327,40 @@ done
 
 docker run --detach \
   --name "$dns_container" \
-  --network "$network" \
+  --network "$client_network" \
   --cap-add NET_ADMIN \
   strm/dnsmasq@sha256:dcf4c0aeb69ea6b9bca81314449d732ecd2ea021588d8a34d4be7c2304f89a39 \
   --address="/.host.tail.test/$gateway" \
+  --address="/.loopback.tail.test/$gateway" \
   --log-facility=- >/dev/null
-dns_ip="$(docker container inspect "$dns_container" --format "{{(index .NetworkSettings.Networks \"$network\").IPAddress}}")"
+dns_ip="$(docker container inspect "$dns_container" --format "{{(index .NetworkSettings.Networks \"$client_network\").IPAddress}}")"
 
-test "$(docker run --rm --network "$network" --dns "$dns_ip" curlimages/curl:8.12.1 \
+external_curl() {
+  docker run --rm --network "$client_network" --dns "$dns_ip" \
+    curlimages/curl:8.12.1 "$@"
+}
+
+test "$(external_curl \
   --fail --silent --show-error "$dev_url")" = "hello-from-dev"
-test "$(docker run --rm --network "$network" --dns "$dns_ip" curlimages/curl:8.12.1 \
+test "$(external_curl \
   --fail --silent --show-error "$deep_url")" = "hello-from-deep"
+test "$(external_curl --silent --output /dev/null --write-out '%{http_code}' \
+  "http://unknown--$workspace_name.host.tail.test:$proxy_port/")" = "404"
+if external_curl --fail --silent --show-error "$loopback_url" >/dev/null 2>&1; then
+  echo "loopback-only ingress was reachable from the external client network" >&2
+  exit 1
+fi
 
-for id in \
-  "$(printf '%s' "$dev_created" | jq -er '.urls[0].id')" \
-  "$(printf '%s' "$deep_created" | jq -er '.urls[0].id')"; do
-  run_dim external-url remove "$id" --workspace "$workspace_name"
-done
+dev_id="$(printf '%s' "$dev_created" | jq -er '.urls[0].id')"
+run_dim external-url remove "$dev_id" --workspace "$workspace_name"
+test "$(external_curl --silent --output /dev/null --write-out '%{http_code}' \
+  "$dev_url")" = "404"
+
+run_dim external-url remove \
+  "$(printf '%s' "$deep_created" | jq -er '.urls[0].id')" \
+  --workspace "$workspace_name"
+run_dim external-url remove \
+  "$(printf '%s' "$loopback_created" | jq -er '.urls[0].id')" \
+  --workspace "$workspace_name"
 
 echo "external-url-example-smoke-ok"
