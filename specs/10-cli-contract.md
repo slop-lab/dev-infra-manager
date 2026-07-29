@@ -64,6 +64,7 @@ Host and workspace URLs never contain credentials.
 ```bash
 dim create PROJECT WORKSPACE \
   [--profile PROFILE ...] \
+  [--kvm] \
   [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
 
 dim ls
@@ -83,6 +84,8 @@ runs its `.dim` setup contract. DIM directly manages no other checkout; the
 root repository lifecycle owns additional clones and nested services.
 Resource flags are stored in the workspace record. Environment configuration
 provides their defaults but does not force one limit set on every workspace.
+`--kvm` stores an immutable workspace capability and passes the host
+`/dev/kvm` device directly into the trusted workspace container.
 The runtime backend defaults to the backend recorded during installation.
 Omitting `--profile` stores an empty profile list and starts ordinary
 non-profiled Compose services.

@@ -144,6 +144,7 @@ describe("project and workspace lifecycle", () => {
       networkName: "dim-control",
       dockerVolumeName: "dim-ws-work-1-docker",
       runtimeBackend: "runc",
+      kvm: true,
       cpuCount: "1.5",
       memory: "3g",
       pidsLimit: "1024",
@@ -177,6 +178,7 @@ describe("project and workspace lifecycle", () => {
       "--env", "DIM_CONTROLLER_SOCKET=/run/dim/controller/controller.sock",
       "--env", "DIM_CONTROLLER_TOKEN=work-1.controller-grant",
       "--env", "GIT_CONFIG_VALUE_0=Agent",
+      "--device", "/dev/kvm",
       "--privileged"
     ]));
     expect(args).not.toContain("--rm");

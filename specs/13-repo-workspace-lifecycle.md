@@ -60,6 +60,11 @@ configured root repository/ref at:
 /workspace/project
 ```
 
+`create --kvm` records an immutable workspace capability and passes the host
+`/dev/kvm` device directly into the trusted workspace container. It does not
+virtualize the workspace container. Workspaces without this option must not
+receive the device.
+
 The root repository owns the optional:
 
 ```text
@@ -80,6 +85,7 @@ DIM_PROJECT_ROOT
 DIM_PROJECT_MANIFEST
 DIM_WORKSPACE_NAME
 DIM_WORKSPACE_BACKEND
+DIM_WORKSPACE_KVM
 DIM_NESTED_ENGINE
 COMPOSE_PROJECT_NAME
 COMPOSE_PROFILES

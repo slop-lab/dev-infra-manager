@@ -90,6 +90,7 @@ export interface WorkspaceRecord {
   networkName: string;
   dockerVolumeName: string;
   runtimeBackend: WorkspaceRuntimeBackendKind;
+  kvm?: boolean;
   cpuCount: string;
   memory: string;
   pidsLimit: string;

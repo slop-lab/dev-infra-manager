@@ -211,6 +211,12 @@ dim create example example-dev \
   --profile secrets
 ```
 
+Add `--kvm` only when trusted Project lifecycle code must run QEMU or another
+KVM consumer. DIM passes the host `/dev/kvm` device directly into the workspace
+container; it does not place the workspace container in a VM. A VM started
+there is therefore the first virtualization layer and may use host-supported
+nested virtualization itself.
+
 Creation:
 
 1. Claims the workspace journal before creating non-trivial resources.

@@ -189,6 +189,7 @@ program.command("create")
   .option("--cpus <count>", "workspace CPU limit")
   .option("--memory <size>", "workspace memory limit")
   .option("--pids-limit <count>", "workspace PID limit")
+  .option("--kvm", "pass the host /dev/kvm device into the trusted workspace container")
   .option("--json", "print machine-readable JSON")
   .action(async (projectName: string, name: string, flags: WorkspaceCreateFlags) => {
     const options = lifecycleOptions();
@@ -198,6 +199,7 @@ program.command("create")
       name,
       profiles: flags.profile,
       runtimeBackend: options.defaultWorkspaceBackend,
+      ...(flags.kvm ? { kvm: true } : {}),
       cpuCount: flags.cpus ?? options.cpuCount,
       memory: flags.memory ?? options.memory,
       pidsLimit: flags.pidsLimit ?? options.pidsLimit,
@@ -725,6 +727,7 @@ interface WorkspaceCreateFlags extends JsonFlags {
   cpus?: string;
   memory?: string;
   pidsLimit?: string;
+  kvm?: boolean;
 }
 
 interface CloudflareProviderFlags {

@@ -1,4 +1,6 @@
 import path from "node:path";
+import { constants as fsConstants } from "node:fs";
+import { access } from "node:fs/promises";
 import { UserError } from "./errors.js";
 import { ensureGitea, giteaNestedBaseUrl, GITEA_NETWORK } from "./gitea.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
@@ -50,6 +52,7 @@ export async function createWorkspace(
     name: string;
     profiles: string[];
     runtimeBackend: WorkspaceRecord["runtimeBackend"];
+    kvm?: boolean;
     cpuCount?: string;
     memory?: string;
     pidsLimit?: string;
@@ -60,6 +63,13 @@ export async function createWorkspace(
   const project = validateLifecycleName(input.project, "project");
   const name = validateLifecycleName(input.name, "workspace");
   const profiles = validateWorkspaceProfiles(input.profiles);
+  if (input.kvm) {
+    try {
+      await access("/dev/kvm", fsConstants.R_OK | fsConstants.W_OK);
+    } catch {
+      throw new UserError("--kvm requires readable and writable host /dev/kvm");
+    }
+  }
   const state = new LifecycleState(options.stateRoot);
   const projectRecord = await readyProject(state, project);
   let repo = readyRootRepository(projectRecord);
@@ -82,6 +92,9 @@ export async function createWorkspace(
     }
     if (record.runtimeBackend !== input.runtimeBackend) {
       throw new UserError(`workspace '${name}' already exists with backend '${record.runtimeBackend}'`);
+    }
+    if ((record.kvm ?? false) !== (input.kvm ?? false)) {
+      throw new UserError(`workspace '${name}' already exists with different KVM access`);
     }
     if (
       record.cpuCount !== (input.cpuCount ?? options.cpuCount)
@@ -107,6 +120,7 @@ export async function createWorkspace(
       networkName: GITEA_NETWORK,
       dockerVolumeName: `dim-ws-${name}-docker`,
       runtimeBackend: input.runtimeBackend,
+      kvm: input.kvm ?? false,
       cpuCount: input.cpuCount ?? options.cpuCount,
       memory: input.memory ?? options.memory,
       pidsLimit: input.pidsLimit ?? options.pidsLimit,
@@ -526,6 +540,7 @@ export function workspaceContainerArgs(
   for (const capability of plan.capabilities) args.push("--cap-add", capability);
   for (const securityOption of plan.securityOptions) args.push("--security-opt", securityOption);
   for (const device of plan.devices) args.push("--device", device);
+  if (record.kvm) args.push("--device", "/dev/kvm");
   for (const [key, value] of Object.entries(plan.env)) args.push("--env", `${key}=${value}`);
   if (plan.privileged) args.push("--privileged");
   args.push(plan.image, "sleep", "infinity");
@@ -725,6 +740,7 @@ function projectEnvironment(record: WorkspaceRecord): string[] {
     "--env", `DIM_WORKSPACE_NAME=${record.name}`,
     "--env", `COMPOSE_PROJECT_NAME=${record.composeProjectName}`,
     "--env", `DIM_WORKSPACE_BACKEND=${record.runtimeBackend}`,
+    "--env", `DIM_WORKSPACE_KVM=${record.kvm ? "1" : "0"}`,
     "--env", `DIM_NESTED_ENGINE=${nestedEngine(record)}`,
     "--env", `COMPOSE_PROFILES=${record.profiles.join(",")}`,
     "--env", `DIM_GIT_BASE_URL=${record.gitBaseUrl}`
