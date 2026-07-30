@@ -8,12 +8,12 @@ than repeating the common `@slop-lab/dim-*` npm prefix:
   components.
 - `contracts/` contains provider-neutral data and configuration boundaries.
 - `plugin/` contains packages that implement DIM's plugin API.
-- `ingress/` and `provider/` contain reusable implementations that plugins or
+- `ingress/` and `dns-provider/` contain reusable implementations that plugins or
   the CLI can compose.
 
 Nested directory segments follow the remainder of the package name. For
-example, `provider/dns-cloudflare` publishes as
-`@slop-lab/dim-provider-dns-cloudflare`, while
+example, `dns-provider/cloudflare` publishes as
+`@slop-lab/dim-dns-provider-cloudflare`, while
 `contracts/external-url` publishes as
 `@slop-lab/dim-contracts-external-url`.
 

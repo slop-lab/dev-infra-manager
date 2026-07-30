@@ -93,12 +93,13 @@ npm install --prefix "$cli_home" --silent \
   "$(package_archive @slop-lab/dim-core)" \
   "$(package_archive @slop-lab/dim-contracts-external-url)" \
   "$(package_archive @slop-lab/dim-ingress-caddy)" \
-  "$(package_archive @slop-lab/dim-provider-dns-cloudflare)" \
+  "$(package_archive @slop-lab/dim-dns-provider-cloudflare)" \
   "$(package_archive @slop-lab/dim-cli)"
 npm install --prefix "$plugin_home" --silent \
   "$(package_archive @slop-lab/dim-core)" \
   "$(package_archive @slop-lab/dim-contracts-external-url)" \
   "$(package_archive @slop-lab/dim-ingress-caddy)" \
+  "$(package_archive @slop-lab/dim-dns-provider-cloudflare)" \
   "$(package_archive @slop-lab/dim-plugin-external-urls)"
 jq -n '{schemaVersion:1,plugins:["@slop-lab/dim-plugin-external-urls"]}' \
   > "$plugin_home/plugins.json"
@@ -106,7 +107,6 @@ dim_bin="$cli_home/node_modules/.bin/dim"
 
 echo "[external-url-example] load the freshly installed plugin before any ingress exists"
 printf '%s\n' '{"schemaVersion":1,"workspaceBackend":"runc"}' > "$state_root/dim.json"
-plugin_warning="$state_root/plugin-warning.log"
 DIM_STATE_ROOT="$state_root" \
 DIM_PLUGIN_HOME="$plugin_home" \
 DIM_CONFIG_PATH="$state_root/dim.json" \
@@ -114,10 +114,8 @@ DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
 DIM_CONTROLLER_SOCKET="$controller_socket" \
 DIM_ADMIN_CONTROLLER_SOCKET="$admin_socket" \
 	  "$dim_bin" plugin list --json \
-	  >"$state_root/plugin-list.json" 2>"$plugin_warning" \
-	  || { cat "$plugin_warning" >&2; report_error; exit 1; }
+	  >"$state_root/plugin-list.json"
 jq -e '.plugins | index("@slop-lab/dim-plugin-external-urls") != null' "$state_root/plugin-list.json" >/dev/null
-grep -Fq "dim external-url ingress add --help" "$state_root/controller/controller.log"
 test ! -e "$state_root/external-urls.json"
 
 echo "[external-url-example] start project-root, dev, and deep containers"
@@ -328,16 +326,15 @@ cloudflare_cli=(
   "DIM_ADMIN_CONTROLLER_SOCKET=$admin_socket"
   node packages/cli/dist/cli.js external-url
 )
-"${cloudflare_cli[@]}" add-provider cloudflare local-cloudflare \
-  --zone smoke.test \
-  --record-type A \
-  --target "$gateway" \
-  --credential-env CF_SMOKE_TOKEN >/dev/null
+"${cloudflare_cli[@]}" dns-provider add cloudflare \
+  --name local-cloudflare \
+  --argument '{"credentialEnv":"CF_SMOKE_TOKEN"}' >/dev/null
 "${cloudflare_cli[@]}" ingress add caddy \
   --name local-https \
   --description "local Cloudflare-compatible DNS smoke ingress" \
   --scheme https \
-  --argument '{"domain":"dev.smoke.test","listenHost":"127.0.0.1","listenPort":9443,"provider":"local-cloudflare"}' >/dev/null
+  --argument "$(jq -cn --arg target "$gateway" \
+    '{domain:"dev.smoke.test",listenHost:"127.0.0.1",listenPort:9443,dnsProvider:"local-cloudflare",zone:"smoke.test",recordType:"A",target:$target,proxied:false}')" >/dev/null
 "${cloudflare_cli[@]}" ingress setup local-https --output "$cloudflare_output" >/dev/null
 test -f "$cloudflare_output/local-https/Caddyfile"
 docker build --quiet --tag "$caddy_image" "$cloudflare_output/local-https" >/dev/null

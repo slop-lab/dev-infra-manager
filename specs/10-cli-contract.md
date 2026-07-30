@@ -150,9 +150,9 @@ requiring the controller to be running.
 Host configuration is managed through:
 
 ```text
-dim external-url add-provider cloudflare NAME [OPTIONS]
-dim external-url list-providers [--json]
-dim external-url remove-provider NAME
+dim external-url dns-provider add DRIVER --name NAME [--argument STRING]
+dim external-url dns-provider list [--json]
+dim external-url dns-provider remove NAME
 dim external-url ingress add DRIVER --name NAME --description TEXT
   --scheme SCHEME [--argument STRING]
 dim external-url ingress list [--json]
@@ -163,7 +163,9 @@ dim external-url ingress remove NAME [--cleanup-dns]
 
 Invalid ingress driver arguments are client errors. The admin API returns HTTP
 400, and its message links to the ingress configuration documentation when a
-driver-specific JSON object is missing or malformed.
+driver-specific JSON object is missing or malformed. An ingress that references
+a named infrastructure provider must be rejected unless that provider is
+already configured.
 
 Workspace-scoped URL operations are:
 

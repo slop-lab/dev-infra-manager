@@ -19,14 +19,14 @@ describe("Caddy ingress deployment", () => {
       listenHost: "127.0.0.1",
       listenPort: 9080,
       upstreamMode: "container-ip",
-      provider: "cloudflare",
-      acmeEmail: "ops@example.com"
-    }, {
-      driver: "cloudflare",
+      dnsProvider: "cloudflare",
       zone: "example.com",
       recordType: "A",
       target: "203.0.113.10",
       proxied: false,
+      acmeEmail: "ops@example.com"
+    }, {
+      driver: "cloudflare",
       credentialEnv: "CF_API_TOKEN"
     });
     expect(deployment.dockerfile).toContain(`caddy:${CADDY_VERSION}-builder-alpine`);

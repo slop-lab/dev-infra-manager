@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { createInterface } from "node:readline/promises";
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { AddHelpTextContext, Command, CommanderError } from "commander";
+import { Command, CommanderError, type AddHelpTextContext } from "commander";
 import {
   configuredDimAdminController,
   configuredDimController,
@@ -363,26 +363,20 @@ plugin.command("list").option("--json", "print machine-readable JSON").action(as
 
 const externalUrl = program.command("external-url").description("Configure ingresses and manage workspace URLs");
 
-externalUrl.command("add-provider")
-  .description("Add or replace an external URL infrastructure provider")
-  .argument("<driver>", "provider driver; currently cloudflare")
-  .argument("<name>")
-  .requiredOption("--zone <domain>", "Cloudflare zone")
-  .requiredOption("--record-type <type>", "wildcard record type: A, AAAA, or CNAME")
-  .requiredOption("--target <value>", "wildcard record target")
-  .option("--credential-env <name>", "API token environment variable", "CF_API_TOKEN")
-  .option("--proxied", "enable Cloudflare proxying", false)
-  .action(async (driver: string, name: string, flags: CloudflareProviderFlags) => {
-    await externalUrlAdmin("provider-add", {
+const externalUrlDnsProvider = externalUrl.command("dns-provider").description("Manage external URL DNS providers");
+
+externalUrlDnsProvider.command("add")
+  .description("Add or replace an external URL DNS provider")
+  .argument("<driver>")
+  .requiredOption("--name <name>")
+  .option("--argument <string>", "opaque driver-specific argument", "")
+  .action(async (driver: string, flags: DnsProviderAddFlags) => {
+    await externalUrlAdmin("dns-provider-add", {
       driver,
-      name,
-      zone: flags.zone,
-      recordType: flags.recordType,
-      target: flags.target,
-      proxied: flags.proxied ?? false,
-      credentialEnv: flags.credentialEnv
+      name: flags.name,
+      argument: flags.argument
     });
-    console.log(`Configured external URL provider '${name}'`);
+    console.log(`Configured external URL DNS provider '${flags.name}'`);
   });
 
 const externalUrlIngress = externalUrl.command("ingress").description("Manage host-shared ingresses");
@@ -407,19 +401,19 @@ externalUrlIngress.command("add")
     console.log(`Configured external URL ingress '${flags.name}'`);
   });
 
-externalUrl.command("list-providers")
-  .description("List configured external URL infrastructure providers")
+externalUrlDnsProvider.command("list")
+  .description("List configured external URL DNS providers")
   .option("--json", "print machine-readable JSON")
   .action(async (flags: JsonFlags) => {
-    const values = await externalUrlAdmin<Record<string, unknown>[]>("provider-list");
-    printList(values, ["name", "driver", "zone", "recordType", "target", "proxied"], flags);
+    const values = await externalUrlAdmin<Record<string, unknown>[]>("dns-provider-list");
+    printList(values, ["name", "driver", "argument"], flags);
   });
 
-externalUrl.command("remove-provider")
-  .description("Remove an unused external URL infrastructure provider")
+externalUrlDnsProvider.command("remove")
+  .description("Remove an unused external URL DNS provider")
   .argument("<name>")
   .action(async (name: string) => {
-    await externalUrlAdmin("provider-remove", { name });
+    await externalUrlAdmin("dns-provider-remove", { name });
   });
 
 externalUrlIngress.command("list")
@@ -698,12 +692,9 @@ interface WorkspaceCreateFlags extends JsonFlags {
   pidsLimit?: string;
 }
 
-interface CloudflareProviderFlags {
-  zone: string;
-  recordType: "A" | "AAAA" | "CNAME";
-  target: string;
-  credentialEnv: string;
-  proxied?: boolean;
+interface DnsProviderAddFlags {
+  name: string;
+  argument: string;
 }
 
 interface IngressAddFlags {

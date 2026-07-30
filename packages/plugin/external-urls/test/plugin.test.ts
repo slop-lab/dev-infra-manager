@@ -33,7 +33,19 @@ describe("external URLs plugin", () => {
     close.push(() => new Promise((resolve) => server.close(() => resolve())));
     const address = server.address();
     if (!address || typeof address === "string") throw new Error("missing address");
-    const endpoint = `http://127.0.0.1:${address.port}/v1/external-url/ingress-add`;
+    const base = `http://127.0.0.1:${address.port}/v1/external-url`;
+    const endpoint = `${base}/ingress-add`;
+
+    const providerResponse = await fetch(`${base}/dns-provider-add`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        driver: "cloudflare",
+        name: "cloudflare-main",
+        argument: ""
+      })
+    });
+    expect(providerResponse.status).toBe(200);
 
     const request = (scheme: "http" | "https", argument: string, driver = "builtin-http") =>
       fetch(endpoint, {
@@ -67,6 +79,25 @@ describe("external URLs plugin", () => {
     expect((await invalidCaddyJson.json() as { error: string }).error).toContain(
       "docs/external-urls.md#http-and-https-with-cloudflare-dns-and-caddy"
     );
+
+    const missingDnsProvider = await request(
+      "https",
+      JSON.stringify({
+        domain: "remote.example.com",
+        listenHost: "127.0.0.1",
+        listenPort: 9443,
+        dnsProvider: "missing",
+        zone: "example.com",
+        recordType: "A",
+        target: "203.0.113.10",
+        proxied: false
+      }),
+      "caddy"
+    );
+    expect(missingDnsProvider.status).toBe(400);
+    expect(await missingDnsProvider.json()).toEqual({
+      error: "DNS provider 'missing' is not configured; run 'dim external-url dns-provider add --help' first"
+    });
   });
 
   it("starts normally without a configured ingress", async () => {

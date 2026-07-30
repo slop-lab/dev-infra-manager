@@ -4,9 +4,9 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   resolve: {
     alias: {
-      "@slop-lab/dim-contracts-external-url": path.resolve(
+      "@slop-lab/dim-dns-provider-cloudflare": path.resolve(
         import.meta.dirname,
-        "../../contracts/external-url/src/index.ts"
+        "../../dns-provider/cloudflare/src/index.ts"
       )
     }
   }

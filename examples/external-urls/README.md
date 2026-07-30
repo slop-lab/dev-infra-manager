@@ -69,11 +69,9 @@ For a public wildcard domain, plain HTTP can use DIM's built-in router on port
 DNS-01, and forwards to a loopback-only DIM ingress:
 
 ```bash
-dim external-url add-provider cloudflare cloudflare-main \
-  --zone example.com \
-  --record-type A \
-  --target 203.0.113.10 \
-  --credential-env CF_API_TOKEN
+dim external-url dns-provider add cloudflare \
+  --name cloudflare-main \
+  --argument '{"credentialEnv":"CF_API_TOKEN"}'
 
 dim external-url ingress add builtin-http --name public-http \
   --description "Public HTTP development URL" \
@@ -83,7 +81,7 @@ dim external-url ingress add builtin-http --name public-http \
 dim external-url ingress add caddy --name public-https \
   --description "Public HTTPS development URL" \
   --scheme https \
-  --argument '{"domain":"remote.example.com","listenHost":"127.0.0.1","listenPort":"auto","publicListenHost":"100.64.0.10","provider":"cloudflare-main"}'
+  --argument '{"domain":"remote.example.com","listenHost":"127.0.0.1","listenPort":"auto","publicListenHost":"100.64.0.10","dnsProvider":"cloudflare-main","zone":"example.com","recordType":"A","target":"203.0.113.10","proxied":false}'
 
 CF_API_TOKEN=... dim external-url ingress setup public-https \
   --output .dim/external-url

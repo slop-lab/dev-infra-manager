@@ -147,11 +147,9 @@ https://*.remote.example.com     → Caddy :443               ├→ workspace t
 Configure the Cloudflare adapter and both ingresses:
 
 ```bash
-dim external-url add-provider cloudflare cloudflare-main \
-  --zone example.com \
-  --record-type A \
-  --target 203.0.113.10 \
-  --credential-env CF_API_TOKEN
+dim external-url dns-provider add cloudflare \
+  --name cloudflare-main \
+  --argument '{"credentialEnv":"CF_API_TOKEN"}'
 
 dim external-url ingress add builtin-http --name public-http \
   --description "Public HTTP development URL" \
@@ -161,10 +159,16 @@ dim external-url ingress add builtin-http --name public-http \
 dim external-url ingress add caddy --name public-https \
   --description "Public HTTPS development URL" \
   --scheme https \
-  --argument '{"domain":"remote.example.com","listenHost":"127.0.0.1","listenPort":"auto","publicListenHost":"100.64.0.10","provider":"cloudflare-main"}'
+  --argument '{"domain":"remote.example.com","listenHost":"127.0.0.1","listenPort":"auto","publicListenHost":"100.64.0.10","dnsProvider":"cloudflare-main","zone":"example.com","recordType":"A","target":"203.0.113.10","proxied":false}'
 
 CF_API_TOKEN=... dim external-url ingress setup public-https
 ```
+
+The Cloudflare DNS provider owns only connection and credential settings; its
+argument is optional and defaults `credentialEnv` to `CF_API_TOKEN`. The Caddy
+driver's `dnsProvider` field references that configured instance. Domain-bound
+record policy (`zone`, `recordType`, `target`, and `proxied`) belongs to the
+ingress argument, so one provider can serve multiple domains and ingresses.
 
 `ingress setup` idempotently creates or updates `*.remote.example.com` and writes
 a pinned Caddy deployment under `.dim/external-url/public-https`. The

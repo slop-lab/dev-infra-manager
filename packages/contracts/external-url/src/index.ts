@@ -5,16 +5,10 @@ import path from "node:path";
 export type ExternalUrlScheme = "http" | "https";
 export type ExternalUrlUpstreamMode = "container-dns" | "container-ip";
 
-export interface CloudflareDnsProviderConfig {
-  driver: "cloudflare";
-  zone: string;
-  recordType: "A" | "AAAA" | "CNAME";
-  target: string;
-  proxied: boolean;
-  credentialEnv: string;
+export interface ExternalUrlDnsProviderConfig {
+  driver: string;
+  argument: string;
 }
-
-export type ExternalUrlProviderConfig = CloudflareDnsProviderConfig;
 
 export interface ExternalUrlIngressConfig {
   driver: string;
@@ -25,12 +19,12 @@ export interface ExternalUrlIngressConfig {
 
 export interface ExternalUrlConfig {
   schemaVersion: 1;
-  providers: Record<string, ExternalUrlProviderConfig>;
+  dnsProviders: Record<string, ExternalUrlDnsProviderConfig>;
   ingresses: Record<string, ExternalUrlIngressConfig>;
 }
 
 export function emptyExternalUrlConfig(): ExternalUrlConfig {
-  return { schemaVersion: 1, providers: {}, ingresses: {} };
+  return { schemaVersion: 1, dnsProviders: {}, ingresses: {} };
 }
 
 export function externalUrlConfigPath(env: NodeJS.ProcessEnv = process.env): string {
@@ -68,33 +62,22 @@ export async function writeExternalUrlConfig(
 }
 
 export function validateExternalUrlConfig(value: unknown, source = "external URL config"): ExternalUrlConfig {
-  if (!isRecord(value) || value.schemaVersion !== 1 || !isRecord(value.providers) || !isRecord(value.ingresses)) {
+  if (!isRecord(value) || value.schemaVersion !== 1 || !isRecord(value.dnsProviders) || !isRecord(value.ingresses)) {
     throw new Error(`invalid external URL config at ${source}`);
   }
-  const providers: Record<string, ExternalUrlProviderConfig> = {};
-  for (const [name, provider] of Object.entries(value.providers)) {
-    validateName(name, "provider");
-    if (!isRecord(provider) || provider.driver !== "cloudflare") {
-      throw new Error(`external URL provider '${name}' has an unsupported driver`);
+  const dnsProviders: Record<string, ExternalUrlDnsProviderConfig> = {};
+  for (const [name, provider] of Object.entries(value.dnsProviders)) {
+    validateName(name, "DNS provider");
+    if (!isRecord(provider) || typeof provider.driver !== "string"
+      || !/^[a-z0-9][a-z0-9-]*$/.test(provider.driver)) {
+      throw new Error(`external URL DNS provider '${name}' requires a valid driver`);
     }
-    if (!domain(provider.zone)) throw new Error(`Cloudflare provider '${name}' requires a valid zone`);
-    if (provider.recordType !== "A" && provider.recordType !== "AAAA" && provider.recordType !== "CNAME") {
-      throw new Error(`Cloudflare provider '${name}' requires recordType A, AAAA, or CNAME`);
+    if (typeof provider.argument !== "string") {
+      throw new Error(`external URL DNS provider '${name}' requires a string argument`);
     }
-    if (typeof provider.target !== "string" || provider.target.length === 0) {
-      throw new Error(`Cloudflare provider '${name}' requires a target`);
-    }
-    if (typeof provider.proxied !== "boolean") throw new Error(`Cloudflare provider '${name}' requires proxied`);
-    if (typeof provider.credentialEnv !== "string" || !/^[A-Z_][A-Z0-9_]*$/.test(provider.credentialEnv)) {
-      throw new Error(`Cloudflare provider '${name}' requires a credential environment variable`);
-    }
-    providers[name] = {
-      driver: "cloudflare",
-      zone: normalizeDomain(provider.zone),
-      recordType: provider.recordType,
-      target: provider.target,
-      proxied: provider.proxied,
-      credentialEnv: provider.credentialEnv
+    dnsProviders[name] = {
+      driver: provider.driver,
+      argument: provider.argument
     };
   }
 
@@ -120,7 +103,7 @@ export function validateExternalUrlConfig(value: unknown, source = "external URL
       argument: ingress.argument
     };
   }
-  return { schemaVersion: 1, providers, ingresses };
+  return { schemaVersion: 1, dnsProviders, ingresses };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -129,14 +112,4 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function validateName(value: string, kind: string): void {
   if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(value)) throw new Error(`invalid external URL ${kind} '${value}'`);
-}
-
-function domain(value: unknown): value is string {
-  return typeof value === "string"
-    && value.length <= 253
-    && value.split(".").every((label) => /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label));
-}
-
-function normalizeDomain(value: string): string {
-  return value.toLowerCase().replace(/^\.+|\.+$/g, "");
 }

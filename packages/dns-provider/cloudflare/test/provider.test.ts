@@ -1,19 +1,29 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ensureCloudflareWildcard,
+  parseCloudflareDnsProviderArgument,
   verifyCloudflareWildcard
 } from "../src/index.js";
 
-const provider = {
+const dnsProvider = {
   driver: "cloudflare" as const,
+  credentialEnv: "CF_API_TOKEN"
+};
+const recordConfig = {
   zone: "example.com",
   recordType: "A" as const,
   target: "203.0.113.10",
-  proxied: false,
-  credentialEnv: "CF_API_TOKEN"
+  proxied: false
 };
 
 describe("Cloudflare DNS provider", () => {
+  it("owns and normalizes its opaque argument", () => {
+    expect(parseCloudflareDnsProviderArgument("")).toEqual({
+      driver: "cloudflare",
+      credentialEnv: "CF_API_TOKEN"
+    });
+  });
+
   it("creates a missing wildcard record", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response([{ id: "zone", name: "example.com" }]))
@@ -26,7 +36,8 @@ describe("Cloudflare DNS provider", () => {
         proxied: false
       }));
     const state = await ensureCloudflareWildcard(
-      provider,
+      dnsProvider,
+      recordConfig,
       "dev.example.com",
       { CF_API_TOKEN: "secret" },
       fetchMock
@@ -46,7 +57,8 @@ describe("Cloudflare DNS provider", () => {
         proxied: false
       }]));
     await expect(verifyCloudflareWildcard(
-      provider,
+      dnsProvider,
+      recordConfig,
       "dev.example.com",
       { CF_API_TOKEN: "secret" },
       fetchMock
@@ -65,7 +77,8 @@ describe("Cloudflare DNS provider", () => {
         proxied: false
       }));
     await ensureCloudflareWildcard(
-      provider,
+      dnsProvider,
+      recordConfig,
       "dev.example.com",
       {
         CF_API_TOKEN: "secret",

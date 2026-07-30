@@ -19,13 +19,9 @@ describe("external URL config", () => {
     roots.push(root);
     const env = { DIM_EXTERNAL_URL_CONFIG: path.join(root, "external-urls.json") };
     const config = emptyExternalUrlConfig();
-    config.providers.cloudflare = {
+    config.dnsProviders.cloudflare = {
       driver: "cloudflare",
-      zone: "Example.COM",
-      recordType: "A",
-      target: "203.0.113.10",
-      proxied: false,
-      credentialEnv: "CF_API_TOKEN"
+      argument: '{"zone":"example.com"}'
     };
     config.ingresses.public = {
       driver: "caddy",
@@ -35,12 +31,12 @@ describe("external URL config", () => {
         domain: "dev.example.com",
         listenHost: "127.0.0.1",
         listenPort: 9080,
-        provider: "cloudflare"
+        dnsProvider: "cloudflare"
       })
     };
     await writeExternalUrlConfig(config, env);
     expect(await readExternalUrlConfig(env)).toMatchObject({
-      providers: { cloudflare: { zone: "example.com" } },
+      dnsProviders: { cloudflare: { driver: "cloudflare" } },
       ingresses: { public: { driver: "caddy" } }
     });
     expect(JSON.parse(await readFile(env.DIM_EXTERNAL_URL_CONFIG, "utf8"))).toMatchObject({ schemaVersion: 1 });
@@ -49,7 +45,7 @@ describe("external URL config", () => {
   it("leaves opaque arguments to the selected driver", () => {
     expect(() => validateExternalUrlConfig({
       schemaVersion: 1,
-      providers: {},
+      dnsProviders: {},
       ingresses: {
         public: { driver: "caddy", description: "Public", scheme: "https", argument: "{}" }
       }

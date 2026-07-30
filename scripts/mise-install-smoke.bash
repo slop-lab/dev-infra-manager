@@ -38,7 +38,7 @@ pnpm run workspace:build >/dev/null
 echo "[mise-smoke] pack tarballs"
 pnpm --dir packages/core/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir packages/contracts/external-url/dist pack --pack-destination "$source_dir" --json >/dev/null
-pnpm --dir packages/provider/dns-cloudflare/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/dns-provider/cloudflare/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir packages/ingress/caddy/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir packages/cli/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir packages/installer/dist pack --pack-destination "$source_dir" --json >/dev/null

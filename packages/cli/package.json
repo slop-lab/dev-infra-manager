@@ -27,7 +27,8 @@
     "pack:dry-run": "pnpm run build && bash ../../scripts/pnpm-pack-dry-run.bash ./dist",
     "publish:package": "pnpm run build && pnpm publish ./dist",
     "check": "tsc -p tsconfig.json --noEmit",
-    "cli": "tsx src/cli.ts"
+    "cli": "tsx src/cli.ts",
+    "test": "node --test test/*.test.ts"
   },
   "engines": {
     "node": "^24.0.0 || ^26.0.0"

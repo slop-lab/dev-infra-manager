@@ -6,4 +6,4 @@ packages:
   - packages/contracts/*
   - packages/plugin/*
   - packages/ingress/*
-  - packages/provider/*
+  - packages/dns-provider/*

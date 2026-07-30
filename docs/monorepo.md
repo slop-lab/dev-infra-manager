@@ -36,7 +36,7 @@ convenience.
 ```text
 packages/cli ──> packages/core
 packages/controller-proxy (Node built-ins only)
-packages/{ingress/caddy,provider/dns-cloudflare}
+packages/{ingress/caddy,dns-provider/cloudflare}
   ──> packages/contracts/external-url
 packages/plugin/external-urls
   ──> packages/{core,contracts/external-url}

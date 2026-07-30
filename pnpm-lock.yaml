@@ -79,11 +79,26 @@ importers:
         specifier: 3.2.4
         version: 3.2.4(@types/node@24.13.3)(tsx@4.20.3)(yaml@2.8.3)
 
+  packages/dns-provider/cloudflare:
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      package.json-minifier:
+        specifier: 0.0.6
+        version: 0.0.6
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+      vitest:
+        specifier: 3.2.4
+        version: 3.2.4(@types/node@24.13.3)(tsx@4.20.3)(yaml@2.8.3)
+
   packages/ingress/caddy:
     dependencies:
-      '@slop-lab/dim-contracts-external-url':
+      '@slop-lab/dim-dns-provider-cloudflare':
         specifier: workspace:0.3.0
-        version: link:../../contracts/external-url
+        version: link:../../dns-provider/cloudflare
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -121,31 +136,12 @@ importers:
       '@slop-lab/dim-core':
         specifier: workspace:0.3.0
         version: link:../../core
+      '@slop-lab/dim-dns-provider-cloudflare':
+        specifier: workspace:0.3.0
+        version: link:../../dns-provider/cloudflare
       '@slop-lab/dim-ingress-caddy':
         specifier: workspace:0.3.0
         version: link:../../ingress/caddy
-      '@slop-lab/dim-provider-dns-cloudflare':
-        specifier: workspace:0.3.0
-        version: link:../../provider/dns-cloudflare
-    devDependencies:
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      package.json-minifier:
-        specifier: 0.0.6
-        version: 0.0.6
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-      vitest:
-        specifier: 3.2.4
-        version: 3.2.4(@types/node@24.13.3)(tsx@4.20.3)(yaml@2.8.3)
-
-  packages/provider/dns-cloudflare:
-    dependencies:
-      '@slop-lab/dim-contracts-external-url':
-        specifier: workspace:0.3.0
-        version: link:../../contracts/external-url
     devDependencies:
       '@types/node':
         specifier: 24.13.3

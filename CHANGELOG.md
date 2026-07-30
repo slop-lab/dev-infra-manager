@@ -12,6 +12,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added `dim doctor configure-backend [BACKEND]` to verify and record an
   installed workspace backend, with interactive selection when needed.
 - Made external URL ingress driver arguments optional at the CLI boundary.
+- Renamed the Cloudflare adapter package to
+  `@slop-lab/dim-dns-provider-cloudflare` and clarified the Caddy ingress
+  provider reference as `dnsProvider`.
+- Rejected Caddy ingress registration when its named DNS provider is not
+  configured.
+- Replaced the flat External URL provider commands with
+  `external-url dns-provider add|list|remove`.
+- Made DNS provider configuration a driver-owned opaque argument. Cloudflare
+  provider instances now contain only credential connection settings, while
+  Caddy ingress arguments own domain-specific DNS record policy.
 
 ### Fixed
 
