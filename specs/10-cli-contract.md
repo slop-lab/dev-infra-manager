@@ -172,7 +172,7 @@ Workspace-scoped URL operations are:
 ```text
 dim external-url discover [--workspace WORKSPACE] [--json]
 dim external-url request [--workspace WORKSPACE] --ingress NAME
-  [--name NAME] [--container NAME ...] --port PORT [--protocol http|https]
+  [--subdomain NAME] [--container NAME ...] --port PORT [--protocol http|https]
 dim external-url list [--workspace WORKSPACE] [--json]
 dim external-url revoke URL_ID [--workspace WORKSPACE]
 dim host-input get PROVIDER KEY [--parameters STRING]
@@ -180,9 +180,12 @@ dim host-input get PROVIDER KEY [--parameters STRING]
 
 The ingress `argument` is an opaque string interpreted only by its driver.
 Drivers return public URLs rather than asking the common controller to derive
-domains. A missing request name receives the first unused numeric name, and
-the public DNS label begins `WORKSPACE--NAME`. Workspace discard revokes all
-routes authenticated by that workspace grant before removing the grant.
+domains. The request contains a complete relative subdomain. By default it
+must begin `WORKSPACE--`; an omitted value receives the first unused
+`WORKSPACE--INDEX` name. An ingress may replace this default with a fail-closed
+HTTP(S) or Unix-socket policy webhook. DIM revalidates any webhook replacement
+and prevents hostname conflicts. Workspace discard revokes all routes
+authenticated by that workspace grant before removing the grant.
 
 Inside a workspace the controller endpoint and grant come from
 `DIM_CONTROLLER_SOCKET` and `DIM_CONTROLLER_TOKEN`. On the host, `--workspace`

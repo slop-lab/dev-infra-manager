@@ -65,15 +65,15 @@ dim discard external-dev --yes
 ## HTTPS
 
 For a public wildcard domain, plain HTTP can use DIM's built-in router on port
-8080 while Caddy owns ports 80 and 443, terminates HTTPS using Cloudflare
-DNS-01, and forwards to a loopback-only DIM ingress:
+8080 while Caddy binds a selected external HTTPS address and forwards through
+a driver-managed loopback router:
 
 ```bash
 dim external-url dns-provider add cloudflare \
   --name cloudflare-main \
-  --argument '{"credentialEnv":"CF_API_TOKEN"}'
+  --argument "$(jq -cn --arg credential "$CF_API_TOKEN" '{credential:$credential}')"
 
-dim external-url ingress add builtin-http --name public-http \
+dim external-url ingress add http --name public-http \
   --description "Public HTTP development URL" \
   --scheme http \
   --argument '{"domain":"remote.example.com","publicPort":8080,"listenHost":"0.0.0.0","listenPort":8080}'
@@ -81,9 +81,9 @@ dim external-url ingress add builtin-http --name public-http \
 dim external-url ingress add caddy --name public-https \
   --description "Public HTTPS development URL" \
   --scheme https \
-  --argument '{"domain":"remote.example.com","listenHost":"127.0.0.1","listenPort":"auto","publicListenHost":"100.64.0.10","dnsProvider":"cloudflare-main","zone":"example.com","recordType":"A","target":"203.0.113.10","proxied":false}'
+  --argument '{"domain":"remote.example.com","listenHost":"100.64.0.10","listenPort":8443,"dnsProvider":"cloudflare-main","zone":"example.com","recordType":"A","target":"203.0.113.10","proxied":false}'
 
-CF_API_TOKEN=... dim external-url ingress setup public-https \
+dim external-url ingress setup public-https \
   --output .dim/external-url
 ```
 
@@ -92,14 +92,13 @@ Caddy deployment. Start that generated deployment:
 
 ```bash
 cd .dim/external-url/public-https
-cp .env.example .env
 docker compose up --detach --build
 dim external-url ingress verify public-https
 ```
 
 Use a zone-scoped Cloudflare API Token with `Zone.Zone:Read` and
-`Zone.DNS:Edit`, not a Global API Key. The host must accept TCP 8080, TCP 80,
-TCP 443, and optionally UDP 443 for HTTP/3. Full configuration and security
+`Zone.DNS:Edit`, not a Global API Key. The host must accept TCP 8080 and
+TCP/UDP 8443. Full configuration and security
 details are in [External workspace URLs](../../docs/external-urls.md).
 
 ## Verification

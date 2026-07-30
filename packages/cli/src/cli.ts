@@ -406,7 +406,7 @@ externalUrlDnsProvider.command("list")
   .option("--json", "print machine-readable JSON")
   .action(async (flags: JsonFlags) => {
     const values = await externalUrlAdmin<Record<string, unknown>[]>("dns-provider-list");
-    printList(values, ["name", "driver", "argument"], flags);
+    printList(values, ["name", "driver"], flags);
   });
 
 externalUrlDnsProvider.command("remove")
@@ -430,7 +430,7 @@ externalUrlIngress.command("remove")
   .option("--cleanup-dns", "remove the ingress wildcard DNS record first")
   .action(async (name: string, flags: { cleanupDns?: boolean }) => {
     await (flags.cleanupDns
-      ? externalUrlAdminWithCredential("ingress-remove", name, { cleanupDns: true })
+      ? externalUrlAdmin("ingress-remove", { name, cleanupDns: true })
       : externalUrlAdmin("ingress-remove", { name, cleanupDns: false }));
     await restartManagedController(lifecycleOptions());
   });
@@ -440,7 +440,8 @@ externalUrlIngress.command("setup")
   .argument("<name>")
   .option("--output <directory>", "deployment output directory", ".dim/external-url")
   .action(async (name: string, flags: { output: string }) => {
-    const { output } = await externalUrlAdminWithCredential<{ output: string }>("ingress-setup", name, {
+    const { output } = await externalUrlAdmin<{ output: string }>("ingress-setup", {
+      name,
       output: path.resolve(flags.output)
     });
     console.log(`Reconciled wildcard DNS and wrote Caddy deployment to ${output}`);
@@ -450,7 +451,7 @@ externalUrlIngress.command("verify")
   .description("Verify provider state and HTTPS ingress reachability")
   .argument("<name>")
   .action(async (name: string) => {
-    await externalUrlAdminWithCredential("ingress-verify", name);
+    await externalUrlAdmin("ingress-verify", { name });
     console.log(`External URL ingress '${name}' is ready`);
   });
 
@@ -468,7 +469,7 @@ externalUrl.command("discover")
 externalUrl.command("request")
   .description("Create an external URL for a target in the current workspace")
   .requiredOption("--ingress <name>")
-  .option("--name <name>")
+  .option("--subdomain <name>", "relative subdomain; defaults to the next workspace-prefixed index")
   .option("--container <name>", "nested container path; repeat up to twice", collect, [])
   .requiredOption("--port <port>")
   .option("--protocol <protocol>", "target protocol", "http")
@@ -483,7 +484,7 @@ externalUrl.command("request")
       method: "POST",
       body: JSON.stringify({
         ingress: flags.ingress,
-        ...(flags.name === undefined ? {} : { service: flags.name }),
+        ...(flags.subdomain === undefined ? {} : { subdomain: flags.subdomain }),
         target: {
           containers: flags.container,
           port: cliPort(flags.port, "--port", false),
@@ -706,7 +707,7 @@ interface IngressAddFlags {
 
 interface ExternalUrlCreateFlags extends JsonFlags {
   ingress: string;
-  name?: string;
+  subdomain?: string;
   container: string[];
   port: string;
   protocol: "http" | "https";
@@ -1085,25 +1086,6 @@ function externalUrlErrorDetail(body: string): string {
     // Preserve a non-JSON response from the controller for diagnostics.
   }
   return body.trim();
-}
-
-async function externalUrlAdminWithCredential<T = unknown>(
-  action: string,
-  name: string,
-  body: Record<string, unknown> = {}
-): Promise<T> {
-  const { credentialEnv } = await externalUrlAdmin<{ credentialEnv: string | null }>(
-    "ingress-credential-env",
-    { name }
-  );
-  return externalUrlAdmin<T>(action, {
-    name,
-    ...body,
-    ...(credentialEnv === null ? {} : {
-      credential: process.env[credentialEnv],
-      cloudflareApiBase: process.env.DIM_CLOUDFLARE_API_BASE
-    })
-  });
 }
 
 async function controllerRequest(

@@ -9,7 +9,6 @@ export default defineConfig({
         import.meta.dirname,
         "../../contracts/external-url/src/index.ts"
       ),
-      "@slop-lab/dim-ingress-caddy": path.resolve(import.meta.dirname, "../../ingress/caddy/src/index.ts"),
       "@slop-lab/dim-dns-provider-cloudflare": path.resolve(
         import.meta.dirname,
         "../../dns-provider/cloudflare/src/index.ts"

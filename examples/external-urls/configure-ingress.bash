@@ -15,7 +15,7 @@ argument="$(jq -cn \
   --argjson listenPort "$listen_port" \
   '{domain:$domain,publicPort:$publicPort,listenHost:$listenHost,listenPort:$listenPort,upstreamMode:"container-ip"}')"
 
-"$dim_bin" external-url ingress add builtin-http \
+"$dim_bin" external-url ingress add http \
   --name "$ingress" \
   --description "Local HTTP development URL" \
   --scheme http \

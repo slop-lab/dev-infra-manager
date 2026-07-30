@@ -28,7 +28,9 @@ plugin installation through their packaged shape. It is separate because it
 tests an installation workflow rather than source correctness.
 
 The external URL plugin unit suite must exercise real HTTP forwarding through
-each configured named ingress and generated URL shape. A configured Tailnet
+configured listeners sharing the hostname registry, generated URL shape,
+default workspace-prefix rejection, webhook approval, and independent route
+claim revocation. A configured Tailnet
 ingress can additionally run:
 
 ```bash

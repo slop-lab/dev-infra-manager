@@ -34,7 +34,6 @@ pnpm --filter @slop-lab/dim-core run publish:package
 pnpm --filter @slop-lab/dim-contracts-external-url run publish:package
 pnpm --filter @slop-lab/dim-controller-proxy run publish:package
 pnpm --filter @slop-lab/dim-dns-provider-cloudflare run publish:package
-pnpm --filter @slop-lab/dim-ingress-caddy run publish:package
 pnpm --filter @slop-lab/dim-plugin-external-urls run publish:package
 pnpm --filter @slop-lab/dim-cli run publish:package
 pnpm --filter @slop-lab/dim-installer run publish:package

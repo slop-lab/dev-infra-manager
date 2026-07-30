@@ -5,7 +5,7 @@ import {
   CADDY_VERSION,
   parseCaddyIngressArgument,
   renderCaddyDeployment
-} from "../src/index.js";
+} from "../src/caddy.js";
 
 describe("Caddy ingress deployment", () => {
   it("links argument validation errors to the Caddy ingress documentation", () => {
@@ -16,8 +16,9 @@ describe("Caddy ingress deployment", () => {
   it("renders pinned Cloudflare DNS-01 and loopback-router forwarding", () => {
     const deployment = renderCaddyDeployment("public", {
       domain: "dev.example.com",
-      listenHost: "127.0.0.1",
-      listenPort: 9080,
+      listenHost: "100.64.0.10",
+      listenPort: 8443,
+      internalPort: 39080,
       upstreamMode: "container-ip",
       dnsProvider: "cloudflare",
       zone: "example.com",
@@ -27,7 +28,7 @@ describe("Caddy ingress deployment", () => {
       acmeEmail: "ops@example.com"
     }, {
       driver: "cloudflare",
-      credentialEnv: "CF_API_TOKEN"
+      credential: "secret-token"
     });
     expect(deployment.dockerfile).toContain(`caddy:${CADDY_VERSION}-builder-alpine`);
     expect(deployment.dockerfile).toContain(
@@ -35,8 +36,12 @@ describe("Caddy ingress deployment", () => {
     );
     expect(deployment.caddyfile).toContain("*.dev.example.com");
     expect(deployment.caddyfile).toContain("dns cloudflare {env.CF_API_TOKEN}");
-    expect(deployment.caddyfile).toContain("reverse_proxy host.docker.internal:9080");
-    expect(deployment.compose).toContain("host.docker.internal:host-gateway");
+    expect(deployment.caddyfile).toContain("https://*.dev.example.com:8443");
+    expect(deployment.caddyfile).toContain("bind 100.64.0.10");
+    expect(deployment.caddyfile).toContain("reverse_proxy 127.0.0.1:39080");
+    expect(deployment.compose).toContain("network_mode: host");
+    expect(deployment.compose).not.toContain("80:80");
     expect(deployment.compose).not.toContain("replace-with-zone-scoped-token");
+    expect(deployment.environment).toContain('CF_API_TOKEN="secret-token"');
   });
 });

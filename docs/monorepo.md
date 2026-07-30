@@ -36,10 +36,8 @@ convenience.
 ```text
 packages/cli ──> packages/core
 packages/controller-proxy (Node built-ins only)
-packages/{ingress/caddy,dns-provider/cloudflare}
-  ──> packages/contracts/external-url
 packages/plugin/external-urls
-  ──> packages/{core,contracts/external-url}
+  ──> packages/{core,contracts/external-url,dns-provider/cloudflare}
 ```
 
 `dim-plugin-*` identifies a package that implements DIM's plugin API; DIM does

@@ -39,7 +39,6 @@ echo "[mise-smoke] pack tarballs"
 pnpm --dir packages/core/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir packages/contracts/external-url/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir packages/dns-provider/cloudflare/dist pack --pack-destination "$source_dir" --json >/dev/null
-pnpm --dir packages/ingress/caddy/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir packages/cli/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir packages/installer/dist pack --pack-destination "$source_dir" --json >/dev/null
 core_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-core*.tgz' -print -quit)"
@@ -47,9 +46,8 @@ cli_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-cli*.tgz' -pri
 install_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-installer*.tgz' -print -quit)"
 contracts_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-contracts-external-url*.tgz' -print -quit)"
 cloudflare_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*provider-dns-cloudflare*.tgz' -print -quit)"
-caddy_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*ingress-caddy*.tgz' -print -quit)"
 test -n "$core_tarball" && test -n "$cli_tarball" && test -n "$install_tarball"
-test -n "$contracts_tarball" && test -n "$cloudflare_tarball" && test -n "$caddy_tarball"
+test -n "$contracts_tarball" && test -n "$cloudflare_tarball"
 
 cp "$repo_root/scripts/lib/local-npm-registry.bash" "$source_dir/local-npm-registry.bash"
 
@@ -73,7 +71,6 @@ dim_publish_to_local_registry \
   /work/*dim-core*.tgz \
   /work/*dim-contracts-external-url*.tgz \
   /work/*provider-dns-cloudflare*.tgz \
-  /work/*ingress-caddy*.tgz \
   /work/*dim-cli*.tgz \
   /work/*dim-installer*.tgz
 

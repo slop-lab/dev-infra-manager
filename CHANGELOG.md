@@ -22,6 +22,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Made DNS provider configuration a driver-owned opaque argument. Cloudflare
   provider instances now contain only credential connection settings, while
   Caddy ingress arguments own domain-specific DNS record policy.
+- Store the Cloudflare provider's actual `credential` in the mode-`0600`
+  External URL config, omit provider arguments from list responses, and render
+  the generated Caddy `.env` directly.
+- Made Caddy `listenHost` and `listenPort` describe the external HTTPS
+  listener. The driver now allocates its loopback HTTP router internally and
+  no longer opens an HTTP redirect port.
+- Consolidated direct HTTP and Caddy HTTPS ingress handling in the External
+  URLs plugin around one hostname route registry; the separate
+  `@slop-lab/dim-ingress-caddy` package is no longer needed.
+- Replaced generated service names in URL requests with explicit relative
+  `subdomain` requests. The default policy requires the authenticated
+  workspace prefix, while an ingress can opt into a fail-closed HTTP(S) or
+  Unix-socket policy webhook.
 
 ### Fixed
 
@@ -32,6 +45,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Returned plugin-originated user input failures as HTTP 400 responses even
   when plugins load a separate copy of DIM core, and linked ingress validation
   errors to the relevant configuration documentation.
+- Removed the state-root hash from default managed-controller socket paths;
+  custom state roots remain hash-namespaced to prevent collisions.
 
 ## [0.3.0] - 2026-07-30
 

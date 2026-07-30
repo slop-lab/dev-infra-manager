@@ -2,6 +2,7 @@ import type {
   CloudflareDnsProviderConfig,
   CloudflareDnsRecordConfig
 } from "@slop-lab/dim-dns-provider-cloudflare";
+import { parseRoutePolicy, type ExternalUrlRoutePolicyConfig } from "./routePolicy.js";
 
 export const CADDY_VERSION = "2.11.4";
 export const CADDY_CLOUDFLARE_VERSION = "v0.2.4";
@@ -13,17 +14,18 @@ export interface CaddyDeployment {
   dockerfile: string;
   caddyfile: string;
   compose: string;
-  environmentExample: string;
+  environment: string;
 }
 
 export interface CaddyIngressArgument extends CloudflareDnsRecordConfig {
   domain: string;
   listenHost: string;
   listenPort: number | "auto";
-  publicListenHost?: string;
+  internalPort?: number;
   upstreamMode?: "container-ip" | "container-dns";
   dnsProvider: string;
   acmeEmail?: string;
+  routePolicy?: ExternalUrlRoutePolicyConfig;
 }
 
 export function parseCaddyIngressArgument(argument: string): CaddyIngressArgument {
@@ -62,8 +64,10 @@ export function parseCaddyIngressArgument(argument: string): CaddyIngressArgumen
   if (input.proxied !== undefined && typeof input.proxied !== "boolean") {
     throw caddyArgumentError("field 'proxied' must be boolean");
   }
-  if (input.publicListenHost !== undefined && typeof input.publicListenHost !== "string") {
-    throw caddyArgumentError("field 'publicListenHost' must be a string");
+  if (input.internalPort !== undefined
+    && (!Number.isInteger(input.internalPort) || (input.internalPort as number) < 1
+      || (input.internalPort as number) > 65535)) {
+    throw caddyArgumentError("stored field 'internalPort' must be a port");
   }
   if (input.upstreamMode !== undefined && input.upstreamMode !== "container-ip" && input.upstreamMode !== "container-dns") {
     throw caddyArgumentError("field 'upstreamMode' must be container-ip or container-dns");
@@ -71,7 +75,11 @@ export function parseCaddyIngressArgument(argument: string): CaddyIngressArgumen
   if (input.acmeEmail !== undefined && typeof input.acmeEmail !== "string") {
     throw caddyArgumentError("field 'acmeEmail' must be a string");
   }
-  return { ...input, proxied: input.proxied ?? false } as unknown as CaddyIngressArgument;
+  return {
+    ...input,
+    proxied: input.proxied ?? false,
+    ...(input.routePolicy === undefined ? {} : { routePolicy: parseRoutePolicy(input.routePolicy, caddyArgumentError) })
+  } as unknown as CaddyIngressArgument;
 }
 
 function caddyArgumentError(detail: string): Error {
@@ -84,10 +92,11 @@ function normalizeDomain(value: string): string {
 
 export function renderCaddyDeployment(
   name: string,
-  ingress: CaddyIngressArgument & { listenPort: number },
+  ingress: CaddyIngressArgument & { listenPort: number; internalPort: number },
   provider: CloudflareDnsProviderConfig
 ): CaddyDeployment {
   if (provider.driver !== "cloudflare") throw new Error("Caddy currently supports only the Cloudflare DNS provider");
+  const credentialEnvironment = "CF_API_TOKEN";
   const service = `dim-caddy-${name}`;
   const email = ingress.acmeEmail ? `\n\temail ${ingress.acmeEmail}` : "";
   return {
@@ -101,13 +110,14 @@ COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 \tadmin off${email}
 }
 
-*.${ingress.domain} {
+https://*.${ingress.domain}:${ingress.listenPort} {
+\tbind ${ingress.listenHost}
 \ttls {
-\t\tdns cloudflare {env.${provider.credentialEnv}}
+\t\tdns cloudflare {env.${credentialEnvironment}}
 \t\tresolvers 1.1.1.1
 \t}
 
-\treverse_proxy host.docker.internal:${ingress.listenPort}
+\treverse_proxy 127.0.0.1:${ingress.internalPort}
 }
 `,
     compose: `services:
@@ -117,14 +127,9 @@ COPY --from=builder /usr/bin/caddy /usr/bin/caddy
       dockerfile: Dockerfile
     container_name: ${service}
     restart: unless-stopped
-    ports:
-      - "${ingress.publicListenHost ? `${ingress.publicListenHost}:` : ""}80:80"
-      - "${ingress.publicListenHost ? `${ingress.publicListenHost}:` : ""}443:443"
-      - "${ingress.publicListenHost ? `${ingress.publicListenHost}:` : ""}443:443/udp"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    network_mode: host
     environment:
-      ${provider.credentialEnv}: \${${provider.credentialEnv}:?set ${provider.credentialEnv}}
+      ${credentialEnvironment}: \${${credentialEnvironment}:?set ${credentialEnvironment}}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -134,7 +139,7 @@ volumes:
   caddy-data:
   caddy-config:
 `,
-    environmentExample: `${provider.credentialEnv}=replace-with-zone-scoped-token\n`
+    environment: `${credentialEnvironment}=${JSON.stringify(provider.credential)}\n`
   };
 }
 
@@ -142,7 +147,11 @@ export async function verifyCaddyIngress(
   ingress: CaddyIngressArgument,
   fetchImpl: typeof fetch = fetch
 ): Promise<void> {
-  const response = await fetchImpl(`https://health.${ingress.domain}/`, {
+  if (ingress.listenPort === "auto") throw new Error("Caddy ingress has unresolved listenPort 'auto'");
+  const authority = ingress.listenPort === 443
+    ? `health.${ingress.domain}`
+    : `health.${ingress.domain}:${ingress.listenPort}`;
+  const response = await fetchImpl(`https://${authority}/`, {
     method: "HEAD",
     redirect: "manual"
   });

@@ -45,7 +45,8 @@ named ingress and denies all other controller routes. Advanced reviewed policies
 
 ## Named ingresses
 
-An ingress is a host-approved external entry point. It combines:
+An ingress is a host-approved external entry point backed by the plugin's
+shared route registry. It combines:
 
 - the public URL scheme and wildcard domain;
 - the HTTP reverse-proxy listener;
@@ -60,7 +61,7 @@ with a driver-specific error. HTTP and HTTPS entry points are configured as
 separate named ingresses:
 
 ```bash
-dim external-url ingress add builtin-http --name local-http \
+dim external-url ingress add http --name local-http \
   --description "Local development URL" \
   --scheme http \
   --argument '{"domain":"dev.test","publicPort":8080,"listenHost":"0.0.0.0","listenPort":"auto"}'
@@ -71,14 +72,13 @@ controller atomically stores configuration in
 `~/.config/dim/external-urls.json`; override its location with
 `DIM_EXTERNAL_URL_CONFIG` in the managed controller environment.
 
-`listenPort:"auto"` is resolved by the driver to an available port and the
-selected number is persisted. The CLI restarts the managed controller after
-ingress changes so drivers reload without recreating workspaces.
-
-`port` is the optional port placed in generated public URLs. `listenHost` and
-`listenPort` select the plugin's internal HTTP router. For an HTTPS ingress,
-Caddy or another TLS terminator listens publicly on port 443 and forwards the
-original Host header to that internal router.
+`listenPort:"auto"` is resolved according to the selected driver's contract
+and the selected number is persisted. For `http`, `listenHost` and
+`listenPort` configure the DIM HTTP router. For `caddy`, they configure the
+external HTTPS listener and therefore appear in returned URLs; its loopback
+HTTP router is allocated and managed internally. The CLI restarts the managed
+controller after ingress changes so drivers reload without recreating
+workspaces.
 
 Discovery exposes only each ingress's `name`, `description`, and `scheme`.
 Workspaces cannot select domains, listener addresses, upstream hosts, or
@@ -111,11 +111,49 @@ relay inside the project-root container. An ingress using `container-ip`
 reaches the root container's managed-network IP; `container-dns` is intended
 for a router attached to the managed Docker network.
 
-The ingress returns the externally reachable URL. Names use
-`WORKSPACE--NAME` as the leftmost DNS label; `--name` rejects `--`. When the
-name is omitted, the ingress assigns the first available numeric name.
+The ingress returns the externally reachable URL. A request may provide any
+relative DNS name with `--subdomain`. The default `workspace-prefix` route
+policy accepts it only when it starts with `WORKSPACE--`; when omitted, DIM
+assigns the first available `WORKSPACE--INDEX` name. An ingress may replace
+that policy with a fail-closed webhook when shorter or shared names are
+intentionally required.
 Discarding a workspace revokes all its routes before its grant and state are
 removed.
+
+### Route policies
+
+Every ingress defaults to the built-in `workspace-prefix` policy. The
+authenticated workspace `dim-0` may request `dim-0--docs`, but not `docs` or
+another workspace's prefix. This is a policy decision rather than a hostname
+construction rule: the request carries the complete relative subdomain and
+the shared registry checks the policy before reserving the resulting hostname.
+
+Trusted installations may replace the default with an HTTP(S) or Unix-socket
+webhook in the ingress argument:
+
+```json
+{
+  "domain": "remote.example.com",
+  "listenHost": "127.0.0.1",
+  "listenPort": 8080,
+  "routePolicy": {
+    "driver": "webhook",
+    "argument": "{\"url\":\"unix:/run/dim/policies/external-url.sock\"}"
+  }
+}
+```
+
+DIM sends `workspace.id`, `workspace.name`, `ingress`,
+`requestedSubdomain`, and `domain`. The webhook returns
+`{"allow":true}`, may return a replacement `subdomain`, or rejects with
+`{"allow":false,"reason":"..."}`. DIM validates the final relative DNS name
+and checks the complete hostname for conflicts. Errors, timeouts, malformed
+responses, and non-2xx status codes fail closed. The policy cannot change the
+target container or upstream address.
+
+HTTP and Caddy listeners using the same domain share its hostname routes.
+They must therefore configure the same route policy and upstream resolution
+mode; DIM rejects ambiguous configurations at controller startup.
 
 List and revoke:
 
@@ -135,13 +173,13 @@ dim external-url revoke URL_ID
 
 ## HTTP and HTTPS with Cloudflare DNS and Caddy
 
-The system plugin is provider-agnostic. One wildcard can provide plain HTTP
-through the built-in router and HTTPS through Caddy:
+The plugin owns one shared route registry. One wildcard can expose it directly
+over HTTP or through its built-in Caddy HTTPS frontend:
 
 ```text
-http://*.remote.example.com:8080  → DIM router 0.0.0.0:8080 ─┐
-https://*.remote.example.com     → Caddy :443               ├→ workspace target
-                                  → DIM router 127.0.0.1:9080 ┘
+http://*.remote.example.com:8080   → DIM router 0.0.0.0:8080 ─┐
+https://*.remote.example.com:8443 → Caddy 100.64.0.10:8443   ├→ workspace target
+                                   → managed loopback router ─┘
 ```
 
 Configure the Cloudflare adapter and both ingresses:
@@ -149,9 +187,9 @@ Configure the Cloudflare adapter and both ingresses:
 ```bash
 dim external-url dns-provider add cloudflare \
   --name cloudflare-main \
-  --argument '{"credentialEnv":"CF_API_TOKEN"}'
+  --argument "$(jq -cn --arg credential "$CF_API_TOKEN" '{credential:$credential}')"
 
-dim external-url ingress add builtin-http --name public-http \
+dim external-url ingress add http --name public-http \
   --description "Public HTTP development URL" \
   --scheme http \
   --argument '{"domain":"remote.example.com","publicPort":8080,"listenHost":"0.0.0.0","listenPort":"auto"}'
@@ -159,26 +197,29 @@ dim external-url ingress add builtin-http --name public-http \
 dim external-url ingress add caddy --name public-https \
   --description "Public HTTPS development URL" \
   --scheme https \
-  --argument '{"domain":"remote.example.com","listenHost":"127.0.0.1","listenPort":"auto","publicListenHost":"100.64.0.10","dnsProvider":"cloudflare-main","zone":"example.com","recordType":"A","target":"203.0.113.10","proxied":false}'
+  --argument '{"domain":"remote.example.com","listenHost":"100.64.0.10","listenPort":8443,"dnsProvider":"cloudflare-main","zone":"example.com","recordType":"A","target":"203.0.113.10","proxied":false}'
 
-CF_API_TOKEN=... dim external-url ingress setup public-https
+dim external-url ingress setup public-https
 ```
 
-The Cloudflare DNS provider owns only connection and credential settings; its
-argument is optional and defaults `credentialEnv` to `CF_API_TOKEN`. The Caddy
+The Cloudflare DNS provider owns only its credential. The driver requires
+`argument.credential` and stores it in the mode-`0600` External URL config.
+`dns-provider list` does not return provider arguments. The Caddy
 driver's `dnsProvider` field references that configured instance. Domain-bound
 record policy (`zone`, `recordType`, `target`, and `proxied`) belongs to the
 ingress argument, so one provider can serve multiple domains and ingresses.
 
+Because the current config contains credentials, do not provide
+`~/.config/dim/external-urls.json` to an AI agent or include it in diagnostics.
+A separately managed secret store may replace this layout in a later version.
+
 `ingress setup` idempotently creates or updates `*.remote.example.com` and writes
 a pinned Caddy deployment under `.dim/external-url/public-https`. The
-Cloudflare adapter reads the token from the configured environment variable;
-the token value is never stored in DIM configuration. Start the generated
-deployment, then verify both DNS and HTTPS:
+generated `.env` contains the stored credential and remains mode `0600`.
+Start the deployment, then verify both DNS and HTTPS:
 
 ```bash
 cd .dim/external-url/public-https
-cp .env.example .env
 docker compose up --detach --build
 dim external-url ingress verify public-https
 ```
@@ -187,9 +228,9 @@ Use a Cloudflare API Token accepted as a Bearer token, not a Global API Key,
 restricted to the relevant zone with `Zone.Zone:Read` and `Zone.DNS:Edit`.
 Caddy uses DNS-01 for wildcard certificate issuance and renewal.
 
-Caddy owns host ports 80 and 443; port 80 redirects to HTTPS. The distinct
-plain HTTP ingress therefore uses port 8080 and generated HTTP URLs include
-`:8080`. Open TCP 8080, TCP 80, TCP 443, and optionally UDP 443 for HTTP/3.
+Caddy uses host networking and binds only `listenHost:listenPort`; it does not
+open an HTTP redirect port. In this example, open TCP 8080 for plain HTTP and
+TCP/UDP 8443 for HTTPS and HTTP/3.
 
 Removing an ingress preserves DNS by default. To verify and remove its
 provider-managed wildcard record before deleting the local configuration:
@@ -219,7 +260,7 @@ RUN npm install --global \
   /tmp/dim-packages/slop-lab-dim-cli-*.tgz
 ```
 
-For external URLs, install the core, contract, ingress, and external-URL
+For external URLs, install the core, contract, DNS provider, and external-URL
 plugin tarballs in the configured plugin home, list
 `@slop-lab/dim-plugin-external-urls` in `plugins.json`, configure at least one
 ingress with the CLI, and use a workspace command normally. DIM loads
@@ -227,9 +268,9 @@ installed plugins when it automatically starts the managed controller.
 `dim controller serve --socket PATH` remains available for foreground
 debugging.
 
-Loading or listing the plugin before the first ingress exists succeeds with
-an actionable warning and does not create an empty config file. URL discovery
-and creation become useful after `dim external-url ingress add`.
+Loading or listing the plugin before the first ingress exists succeeds and
+does not create an empty config file. URL discovery and creation become useful
+after `dim external-url ingress add`.
 
 ## Verification
 

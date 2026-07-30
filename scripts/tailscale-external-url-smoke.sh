@@ -5,7 +5,7 @@ set -eu
 : "${DIM_CONTROLLER_TOKEN:?DIM_CONTROLLER_TOKEN is required}"
 
 port="${DIM_EXTERNAL_URL_TEST_PORT:-39091}"
-service="${DIM_EXTERNAL_URL_TEST_SERVICE:-dim-tail-smoke}"
+subdomain="${DIM_EXTERNAL_URL_TEST_SUBDOMAIN:-${DIM_WORKSPACE_NAME:-workspace}--dim-tail-smoke}"
 ingress="${DIM_EXTERNAL_URL_TEST_INGRESS:-tailscale}"
 sentinel="dim-tailscale-smoke-${DIM_WORKSPACE_NAME:-workspace}-$$"
 
@@ -34,12 +34,12 @@ trap cleanup EXIT INT TERM
 
 payload="$(
   jq -n \
-    --arg service "$service" \
+    --arg subdomain "$subdomain" \
     --argjson port "$port" \
     --arg ingress "$ingress" \
     '{
       ingress: $ingress,
-      service: $service,
+      subdomain: $subdomain,
       target: {containers: [], port: $port, protocol: "http"}
     }'
 )"

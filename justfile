@@ -57,7 +57,6 @@ verify-package-packs:
     pnpm --filter @slop-lab/dim-controller-proxy run pack:dry-run
     pnpm --filter @slop-lab/dim-plugin-external-urls run pack:dry-run
     pnpm --filter @slop-lab/dim-dns-provider-cloudflare run pack:dry-run
-    pnpm --filter @slop-lab/dim-ingress-caddy run pack:dry-run
     pnpm --filter @slop-lab/dim-cli run pack:dry-run
     pnpm --filter @slop-lab/dim-installer run pack:dry-run
 

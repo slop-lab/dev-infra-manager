@@ -5,7 +5,7 @@ export const CLOUDFLARE_DNS_PROVIDER_DOCUMENTATION_URL =
 
 export interface CloudflareDnsProviderConfig {
   driver: "cloudflare";
-  credentialEnv: string;
+  credential: string;
 }
 
 export interface CloudflareDnsRecordConfig {
@@ -17,9 +17,8 @@ export interface CloudflareDnsRecordConfig {
 
 export function parseCloudflareDnsProviderArgument(argument: string): CloudflareDnsProviderConfig {
   let value: unknown;
-  if (argument.length === 0) value = {};
   try {
-    if (value === undefined) value = JSON.parse(argument);
+    value = JSON.parse(argument);
   } catch {
     throw cloudflareArgumentError("must be valid JSON");
   }
@@ -27,13 +26,12 @@ export function parseCloudflareDnsProviderArgument(argument: string): Cloudflare
     throw cloudflareArgumentError("must be a JSON object");
   }
   const input = value as Record<string, unknown>;
-  if (input.credentialEnv !== undefined
-    && (typeof input.credentialEnv !== "string" || !/^[A-Z_][A-Z0-9_]*$/.test(input.credentialEnv))) {
-    throw cloudflareArgumentError("field 'credentialEnv' must be an environment variable name");
+  if (typeof input.credential !== "string" || input.credential.length === 0) {
+    throw cloudflareArgumentError("requires string field 'credential'");
   }
   return {
     driver: "cloudflare",
-    credentialEnv: input.credentialEnv ?? "CF_API_TOKEN"
+    credential: input.credential
   };
 }
 
@@ -76,7 +74,7 @@ export async function ensureCloudflareWildcard(
   env: NodeJS.ProcessEnv = process.env,
   fetchImpl: typeof fetch = fetch
 ): Promise<CloudflareDnsRecordState> {
-  const token = credential(provider, env);
+  const token = credential(provider);
   const apiBase = resolveApiBase(env);
   const zone = await findZone(apiBase, recordConfig.zone, token, fetchImpl);
   const name = `*.${normalizeDomain(domain)}`;
@@ -111,7 +109,7 @@ export async function verifyCloudflareWildcard(
   env: NodeJS.ProcessEnv = process.env,
   fetchImpl: typeof fetch = fetch
 ): Promise<CloudflareDnsRecordState> {
-  const token = credential(provider, env);
+  const token = credential(provider);
   const apiBase = resolveApiBase(env);
   const zone = await findZone(apiBase, recordConfig.zone, token, fetchImpl);
   const name = `*.${normalizeDomain(domain)}`;
@@ -136,7 +134,7 @@ export async function removeCloudflareWildcard(
   const apiBase = resolveApiBase(env);
   await request<unknown>(
     `${apiBase}/zones/${record.zoneId}/dns_records/${record.recordId}`,
-    credential(provider, env),
+    credential(provider),
     fetchImpl,
     { method: "DELETE" }
   );
@@ -200,10 +198,8 @@ async function request<T>(
   return payload.result;
 }
 
-function credential(provider: CloudflareDnsProviderConfig, env: NodeJS.ProcessEnv): string {
-  const token = env[provider.credentialEnv];
-  if (!token) throw new Error(`Cloudflare credential environment variable ${provider.credentialEnv} is not set`);
-  return token;
+function credential(provider: CloudflareDnsProviderConfig): string {
+  return provider.credential;
 }
 
 function resolveApiBase(env: NodeJS.ProcessEnv): string {

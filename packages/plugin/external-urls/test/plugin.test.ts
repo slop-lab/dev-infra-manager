@@ -42,12 +42,12 @@ describe("external URLs plugin", () => {
       body: JSON.stringify({
         driver: "cloudflare",
         name: "cloudflare-main",
-        argument: ""
+        argument: '{"credential":"secret-token"}'
       })
     });
     expect(providerResponse.status).toBe(200);
 
-    const request = (scheme: "http" | "https", argument: string, driver = "builtin-http") =>
+    const request = (scheme: "http" | "https", argument: string, driver = "http") =>
       fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -98,6 +98,28 @@ describe("external URLs plugin", () => {
     expect(await missingDnsProvider.json()).toEqual({
       error: "DNS provider 'missing' is not configured; run 'dim external-url dns-provider add --help' first"
     });
+
+    const configuredCaddy = await request(
+      "https",
+      JSON.stringify({
+        domain: "remote.example.com",
+        listenHost: "127.0.0.1",
+        listenPort: 9443,
+        dnsProvider: "cloudflare-main",
+        zone: "example.com",
+        recordType: "A",
+        target: "203.0.113.10",
+        proxied: false
+      }),
+      "caddy"
+    );
+    expect(configuredCaddy.status).toBe(200);
+    const providers = await fetch(`${base}/dns-provider-list`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}"
+    });
+    expect(await providers.json()).toEqual([{ name: "cloudflare-main", driver: "cloudflare" }]);
   });
 
   it("starts normally without a configured ingress", async () => {
@@ -154,10 +176,10 @@ describe("external URLs plugin", () => {
         public: {
           description: "Public preview URL",
           scheme: "https",
-          domain: "public.example.test",
+          domain: "builder.tail.example.test",
           listenHost: "127.0.0.1",
           listenPort: controllerProxyPort,
-          upstreamMode: "container-dns"
+          upstreamMode: "container-ip"
         }
       }
     })]);
@@ -194,7 +216,7 @@ describe("external URLs plugin", () => {
     const missingIngress = await fetch(`${base}/api/urls`, {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },
-      body: JSON.stringify({ service: "dev", target: { containers: ["dev"], port: 8080 } })
+      body: JSON.stringify({ subdomain: "work-1--dev", target: { containers: ["dev"], port: 8080 } })
     });
     expect(missingIngress.status).toBe(400);
 
@@ -203,7 +225,7 @@ describe("external URLs plugin", () => {
       headers: { ...headers, "content-type": "application/json" },
       body: JSON.stringify({
         ingress: "tailnet",
-        service: "deep",
+        subdomain: "work-1--deep",
         target: { containers: ["dev", "deep"], port: 8080 }
       })
     });
@@ -216,11 +238,42 @@ describe("external URLs plugin", () => {
       "container-ip"
     );
     expect(await proxyRequest(hostProxyPort, "work-1--deep.builder.tail.example.test")).toBe("nested workspace app");
+    expect(await proxyRequest(controllerProxyPort, "work-1--deep.builder.tail.example.test")).toBe("nested workspace app");
     expect(await proxyRequest(hostProxyPort, "unknown.builder.tail.example.test")).toBe("404");
 
+    const secondFrontend = await fetch(`${base}/api/urls`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({
+        ingress: "public",
+        subdomain: "work-1--deep",
+        target: { containers: ["dev", "deep"], port: 8080 }
+      })
+    });
+    expect(secondFrontend.status).toBe(201);
+    const secondBody = await secondFrontend.json() as { urls: Array<{ id: string; url: string }> };
+    expect(secondBody.urls[0]?.url).toBe("https://work-1--deep.builder.tail.example.test/");
+
+    const rejected = await fetch(`${base}/api/urls`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({
+        ingress: "tailnet",
+        subdomain: "docs",
+        target: { containers: [], port: 8080 }
+      })
+    });
+    expect(rejected.status).toBe(400);
+    expect((await rejected.json() as { error: string }).error).toContain("must start with 'work-1--'");
+
     const listed = await fetch(`${base}/api/urls`, { headers });
-    expect((await listed.json() as { urls: unknown[] }).urls).toHaveLength(1);
+    expect((await listed.json() as { urls: unknown[] }).urls).toHaveLength(2);
     expect((await fetch(`${base}/api/urls/${body.urls[0]?.id}`, {
+      method: "DELETE",
+      headers
+    })).status).toBe(204);
+    expect(await proxyRequest(controllerProxyPort, "work-1--deep.builder.tail.example.test")).toBe("nested workspace app");
+    expect((await fetch(`${base}/api/urls/${secondBody.urls[0]?.id}`, {
       method: "DELETE",
       headers
     })).status).toBe(204);

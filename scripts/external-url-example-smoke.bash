@@ -92,13 +92,11 @@ package_archive() {
 npm install --prefix "$cli_home" --silent \
   "$(package_archive @slop-lab/dim-core)" \
   "$(package_archive @slop-lab/dim-contracts-external-url)" \
-  "$(package_archive @slop-lab/dim-ingress-caddy)" \
   "$(package_archive @slop-lab/dim-dns-provider-cloudflare)" \
   "$(package_archive @slop-lab/dim-cli)"
 npm install --prefix "$plugin_home" --silent \
   "$(package_archive @slop-lab/dim-core)" \
   "$(package_archive @slop-lab/dim-contracts-external-url)" \
-  "$(package_archive @slop-lab/dim-ingress-caddy)" \
   "$(package_archive @slop-lab/dim-dns-provider-cloudflare)" \
   "$(package_archive @slop-lab/dim-plugin-external-urls)"
 jq -n '{schemaVersion:1,plugins:["@slop-lab/dim-plugin-external-urls"]}' \
@@ -111,6 +109,7 @@ DIM_STATE_ROOT="$state_root" \
 DIM_PLUGIN_HOME="$plugin_home" \
 DIM_CONFIG_PATH="$state_root/dim.json" \
 DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
+DIM_CLOUDFLARE_API_BASE="http://127.0.0.1:$cloudflare_mock_port/client/v4" \
 DIM_CONTROLLER_SOCKET="$controller_socket" \
 DIM_ADMIN_CONTROLLER_SOCKET="$admin_socket" \
 	  "$dim_bin" plugin list --json \
@@ -221,7 +220,7 @@ DIM_PLUGIN_HOME="$plugin_home" \
 DIM_CONFIG_PATH="$state_root/dim.json" \
 DIM_CONTROLLER_SOCKET="$controller_socket" \
 DIM_ADMIN_CONTROLLER_SOCKET="$admin_socket" \
-  node packages/cli/dist/cli.js external-url ingress add builtin-http \
+  node packages/cli/dist/cli.js external-url ingress add http \
     --name local-loopback \
     --description "loopback-only negative-test ingress" \
     --scheme http \
@@ -296,8 +295,8 @@ test "$(docker exec "$root_container" docker exec "$dev_container" \
 created_urls="$(run_dim external-url list --json)"
 dev_created="$(printf '%s' "$created_urls" | jq -ec '.urls[] | select(.target.containers == ["dev"])')"
 deep_created="$(printf '%s' "$created_urls" | jq -ec '.urls[] | select(.target.containers == ["dev","deep"])')"
-test "$(printf '%s' "$dev_created" | jq -er '.service')" = "0"
-test "$(printf '%s' "$deep_created" | jq -er '.service')" = "1"
+test "$(printf '%s' "$dev_created" | jq -er '.subdomain')" = "${workspace_name}--0"
+test "$(printf '%s' "$deep_created" | jq -er '.subdomain')" = "${workspace_name}--1"
 loopback_created="$(
   run_dim external-url request \
     --ingress local-loopback \
@@ -328,18 +327,19 @@ cloudflare_cli=(
 )
 "${cloudflare_cli[@]}" dns-provider add cloudflare \
   --name local-cloudflare \
-  --argument '{"credentialEnv":"CF_SMOKE_TOKEN"}' >/dev/null
+  --argument '{"credential":"smoke-token"}' >/dev/null
 "${cloudflare_cli[@]}" ingress add caddy \
   --name local-https \
   --description "local Cloudflare-compatible DNS smoke ingress" \
   --scheme https \
   --argument "$(jq -cn --arg target "$gateway" \
-    '{domain:"dev.smoke.test",listenHost:"127.0.0.1",listenPort:9443,dnsProvider:"local-cloudflare",zone:"smoke.test",recordType:"A",target:$target,proxied:false}')" >/dev/null
+    '{domain:"dev.smoke.test",listenHost:"127.0.0.1",listenPort:"auto",dnsProvider:"local-cloudflare",zone:"smoke.test",recordType:"A",target:$target,proxied:false}')" >/dev/null
 "${cloudflare_cli[@]}" ingress setup local-https --output "$cloudflare_output" >/dev/null
 test -f "$cloudflare_output/local-https/Caddyfile"
+test -f "$cloudflare_output/local-https/.env"
 docker build --quiet --tag "$caddy_image" "$cloudflare_output/local-https" >/dev/null
 if ! docker run --rm \
-  --env CF_SMOKE_TOKEN=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --env CF_API_TOKEN=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   --volume "$cloudflare_output/local-https/Caddyfile:/etc/caddy/Caddyfile:ro" \
   "$caddy_image" caddy validate --config /etc/caddy/Caddyfile \
   >"$state_root/caddy-validate.log" 2>&1; then

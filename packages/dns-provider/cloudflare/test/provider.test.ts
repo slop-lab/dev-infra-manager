@@ -7,7 +7,7 @@ import {
 
 const dnsProvider = {
   driver: "cloudflare" as const,
-  credentialEnv: "CF_API_TOKEN"
+  credential: "secret-token"
 };
 const recordConfig = {
   zone: "example.com",
@@ -18,9 +18,9 @@ const recordConfig = {
 
 describe("Cloudflare DNS provider", () => {
   it("owns and normalizes its opaque argument", () => {
-    expect(parseCloudflareDnsProviderArgument("")).toEqual({
+    expect(parseCloudflareDnsProviderArgument('{"credential":"secret-token"}')).toEqual({
       driver: "cloudflare",
-      credentialEnv: "CF_API_TOKEN"
+      credential: "secret-token"
     });
   });
 

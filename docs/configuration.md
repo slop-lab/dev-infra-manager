@@ -13,6 +13,11 @@ The default paths use DIM's own namespace: configuration is under
 and installed data under `~/.local/share/dim`. DIM does not create files in
 the organization-wide `slop-lab` directory.
 
+The default managed-controller sockets are
+`${XDG_RUNTIME_DIR:-/tmp/dim-UID}/dim/controller.sock` and `admin.sock`.
+Only a non-default `DIM_STATE_ROOT` adds a stable state-root hash directory so
+multiple controller instances cannot collide.
+
 Common settings:
 
 ```text

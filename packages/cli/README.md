@@ -110,7 +110,7 @@ local ingress and operate it from the host without project-specific curl
 tasks:
 
 ```bash
-dim external-url ingress add builtin-http --name local-http \
+dim external-url ingress add http --name local-http \
   --description "Local development URL" \
   --scheme http \
   --argument '{"domain":"dev.test","publicPort":8080,"listenHost":"0.0.0.0","listenPort":"auto"}'

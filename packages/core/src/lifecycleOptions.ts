@@ -19,16 +19,20 @@ export function lifecycleOptionsForBackend(
   defaultWorkspaceBackend: LifecycleOptions["defaultWorkspaceBackend"],
   env: NodeJS.ProcessEnv = process.env
 ): LifecycleOptions {
-  const controllerDirectory = path.join(
+  const stateRoot = path.resolve(env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim"));
+  const defaultStateRoot = path.resolve(path.join(os.homedir(), ".local/state/dim"));
+  const runtimeRoot = path.join(
     env.XDG_RUNTIME_DIR ?? path.join(os.tmpdir(), `dim-${process.getuid?.() ?? "user"}`),
-    "dim",
-    createHash("sha256")
-      .update(path.resolve(env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim")))
-      .digest("hex")
-      .slice(0, 16)
+    "dim"
   );
+  const controllerDirectory = stateRoot === defaultStateRoot
+    ? runtimeRoot
+    : path.join(
+      runtimeRoot,
+      createHash("sha256").update(stateRoot).digest("hex").slice(0, 16)
+    );
   return {
-    stateRoot: path.resolve(env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim")),
+    stateRoot,
     giteaImage: env.DIM_GITEA_IMAGE ?? "gitea/gitea:1.27.0",
     giteaPort: positiveInteger(env.DIM_GITEA_PORT ?? "3300", "DIM_GITEA_PORT"),
     giteaAdminUsername: env.DIM_GITEA_ADMIN_USERNAME ?? "dim-admin",
