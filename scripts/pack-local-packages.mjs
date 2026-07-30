@@ -24,19 +24,19 @@ const packages = packageDirectories.map((directory) => {
     readFileSync(path.join(directory, "package.json"), "utf8"),
   );
   const packed = spawnSync(
-    "npm",
-    ["pack", directory, "--pack-destination", outputDirectory, "--json"],
+    "pnpm",
+    ["--dir", directory, "pack", "--pack-destination", outputDirectory, "--json"],
     { encoding: "utf8" },
   );
   if (packed.status !== 0) {
     process.stderr.write(packed.stderr);
-    throw new Error(`npm pack failed for ${metadata.name}`);
+    throw new Error(`pnpm pack failed for ${metadata.name}`);
   }
-  const [{ filename }] = JSON.parse(packed.stdout);
+  const { filename } = JSON.parse(packed.stdout);
   return {
     name: metadata.name,
     version: metadata.version,
-    file: filename,
+    file: path.basename(filename),
   };
 });
 

@@ -12,11 +12,11 @@ trap cleanup EXIT
 
 cd "$repo_root"
 pnpm run workspace:build
-npm pack packages/core/dist --pack-destination "$package_root" >/dev/null
-npm pack packages/contracts/external-url/dist --pack-destination "$package_root" >/dev/null
-npm pack packages/provider/dns-cloudflare/dist --pack-destination "$package_root" >/dev/null
-npm pack packages/ingress/caddy/dist --pack-destination "$package_root" >/dev/null
-npm pack packages/cli/dist --pack-destination "$package_root" >/dev/null
+pnpm --dir packages/core/dist pack --pack-destination "$package_root" --json >/dev/null
+pnpm --dir packages/contracts/external-url/dist pack --pack-destination "$package_root" --json >/dev/null
+pnpm --dir packages/provider/dns-cloudflare/dist pack --pack-destination "$package_root" --json >/dev/null
+pnpm --dir packages/ingress/caddy/dist pack --pack-destination "$package_root" --json >/dev/null
+pnpm --dir packages/cli/dist pack --pack-destination "$package_root" --json >/dev/null
 core_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dim-core*.tgz' -print -quit)"
 cli_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
 contracts_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dim-contracts-external-url*.tgz' -print -quit)"

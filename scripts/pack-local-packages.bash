@@ -17,5 +17,5 @@ cd "$repo_root"
 echo "[packages] build workspace"
 pnpm run workspace:build >/dev/null
 
-echo "[packages] create npm tarballs"
+echo "[packages] create pnpm tarballs"
 node "$script_dir/pack-local-packages.mjs" "$output_directory"

@@ -18,8 +18,8 @@
   },
   "scripts": {
     "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
-    "pack:dry-run": "pnpm run build && npm pack --dry-run ./dist",
-    "publish:package": "pnpm run build && npm publish ./dist",
+    "pack:dry-run": "pnpm run build && bash ../../scripts/pnpm-pack-dry-run.bash ./dist",
+    "publish:package": "pnpm run build && pnpm publish ./dist",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

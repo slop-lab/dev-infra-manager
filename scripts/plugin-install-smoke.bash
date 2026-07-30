@@ -34,8 +34,8 @@ printf '%s\n' \
   '};' \
   > "$plugin_source/index.js"
 
-plugin_tarball="$(npm pack "$plugin_source" --pack-destination "$root" --json | jq -r '.[0].filename')"
-installer_tarball="$(npm pack packages/installer/dist --pack-destination "$root" --json | jq -r '.[0].filename')"
+plugin_tarball="$(pnpm --dir "$plugin_source" pack --pack-destination "$root" --json | jq -r '.filename | split("/")[-1]')"
+installer_tarball="$(pnpm --dir packages/installer/dist pack --pack-destination "$root" --json | jq -r '.filename | split("/")[-1]')"
 npm install --prefix "$installer_prefix" "$root/$installer_tarball" >/dev/null
 
 DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \

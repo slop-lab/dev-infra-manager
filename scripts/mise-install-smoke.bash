@@ -36,12 +36,12 @@ echo "[mise-smoke] build workspace packages"
 pnpm run workspace:build >/dev/null
 
 echo "[mise-smoke] pack tarballs"
-npm pack packages/core/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/contracts/external-url/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/provider/dns-cloudflare/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/ingress/caddy/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/cli/dist --pack-destination "$source_dir" --silent >/dev/null
-npm pack packages/installer/dist --pack-destination "$source_dir" --silent >/dev/null
+pnpm --dir packages/core/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/contracts/external-url/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/provider/dns-cloudflare/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/ingress/caddy/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/cli/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/installer/dist pack --pack-destination "$source_dir" --json >/dev/null
 core_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-core*.tgz' -print -quit)"
 cli_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
 install_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-installer*.tgz' -print -quit)"
