@@ -28,16 +28,7 @@ jobs:
           cache: pnpm
       - run: sudo apt-get update && sudo apt-get install --yes just jq
       - run: pnpm install --frozen-lockfile
-      - run: just check
-      - run: just verify-plugin-install
-      - run: pnpm audit --prod
-      - run: pnpm --filter @slop-lab/dim-core run pack:dry-run
-      - run: pnpm --filter @slop-lab/dim-contracts-external-url run pack:dry-run
-      - run: pnpm --filter @slop-lab/dim-plugin-external-urls run pack:dry-run
-      - run: pnpm --filter @slop-lab/dim-provider-dns-cloudflare run pack:dry-run
-      - run: pnpm --filter @slop-lab/dim-ingress-caddy run pack:dry-run
-      - run: pnpm --filter @slop-lab/dim-cli run pack:dry-run
-      - run: pnpm --filter @slop-lab/dim-installer run pack:dry-run
+      - run: just ci-check
 
   container-integration:
     runs-on: ubuntu-24.04
@@ -53,6 +44,4 @@ jobs:
           cache: pnpm
       - run: sudo apt-get update && sudo apt-get install --yes just jq
       - run: pnpm install --frozen-lockfile
-      - run: just check
-      - run: just verify-container
-      - run: bash scripts/container-cgroup-smoke.bash
+      - run: just ci-container

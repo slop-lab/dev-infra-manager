@@ -11,9 +11,21 @@ just typecheck       # TypeScript checks only
 just test            # unit tests
 just build           # publishable package builds
 just check           # typecheck + test + build; only Node.js and pnpm required
+just ci              # complete CI gate with the active Node.js version
+just ci-matrix       # exact Node.js 24/26 GitHub Actions matrix via mise
+just ci-matrix --manual # also include manually dispatched Sysbox/KVM workflows
 just doctor          # host readiness: dev tools, Docker, selected backend, cgroup v2
 just cli -- --help   # build core, then run dim from source without installing it
 ```
+
+`just ci-matrix` requires mise, Docker with Compose v2, and the same host
+capabilities as the container integration tests. It installs the locked
+dependencies under Node.js 24 and 26, then runs the same `just ci-check` and
+`just ci-container` recipes used by GitHub Actions. Use `just ci` when one run
+with the currently active Node.js version is enough. The `--manual` option also
+runs the same Sysbox isolation and KVM backend-installer recipes as the
+manually dispatched workflows; it requires a registered `sysbox-runc` runtime,
+QEMU tooling, and readable/writable `/dev/kvm`.
 
 The full setup, verification-gate, and installer-testing walkthrough — host
 backend installers, KVM-based installer/backend smoke tests, the

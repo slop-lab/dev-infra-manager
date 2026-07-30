@@ -50,6 +50,52 @@ verify-plugin-install:
     just build
     bash scripts/plugin-install-smoke.bash
 
+# Verify every publishable package through the same dry-run used before release.
+verify-package-packs:
+    pnpm --filter @slop-lab/dim-core run pack:dry-run
+    pnpm --filter @slop-lab/dim-contracts-external-url run pack:dry-run
+    pnpm --filter @slop-lab/dim-controller-proxy run pack:dry-run
+    pnpm --filter @slop-lab/dim-plugin-external-urls run pack:dry-run
+    pnpm --filter @slop-lab/dim-provider-dns-cloudflare run pack:dry-run
+    pnpm --filter @slop-lab/dim-ingress-caddy run pack:dry-run
+    pnpm --filter @slop-lab/dim-cli run pack:dry-run
+    pnpm --filter @slop-lab/dim-installer run pack:dry-run
+
+# GitHub Actions' Node-only lane, after dependencies have been installed.
+ci-check:
+    just check
+    just verify-plugin-install
+    pnpm audit --prod
+    just verify-package-packs
+
+# GitHub Actions' Docker lane, after dependencies have been installed.
+ci-container:
+    just check
+    just verify-container
+    bash scripts/container-cgroup-smoke.bash
+
+# Manually dispatched Sysbox Actions lane, after dependencies have been installed.
+ci-sysbox:
+    just check
+    just verify-container
+    bash scripts/container-sysbox-isolation-smoke.bash
+
+# Manually dispatched KVM backend-installer Actions lane.
+ci-kvm:
+    test -r /dev/kvm -a -w /dev/kvm
+    just verify-environments-kvm
+
+# Run the complete CI gate once with the active Node.js version.
+ci:
+    just install
+    just ci-check
+    just verify-container
+    bash scripts/container-cgroup-smoke.bash
+
+# Reproduce GitHub Actions locally; pass --manual to include dispatched workflows.
+ci-matrix *args:
+    bash scripts/local-ci-matrix.bash {{args}}
+
 # Backend-independent container integration; may run against nested Docker in a development container.
 verify-container:
     docker info >/dev/null

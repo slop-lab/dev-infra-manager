@@ -14,24 +14,14 @@ release scheduled to become LTS (currently Node.js 24 and 26). Container and
 Sysbox integration checks use the newest validated line.
 
 ```bash
-pnpm install --frozen-lockfile
-just check
-just verify-plugin-install
-just verify-container
-bash scripts/container-cgroup-smoke.bash
-pnpm audit --prod
-pnpm --filter @slop-lab/dim-core run pack:dry-run
-pnpm --filter @slop-lab/dim-contracts-external-url run pack:dry-run
-pnpm --filter @slop-lab/dim-controller-proxy run pack:dry-run
-pnpm --filter @slop-lab/dim-plugin-external-urls run pack:dry-run
-pnpm --filter @slop-lab/dim-provider-dns-cloudflare run pack:dry-run
-pnpm --filter @slop-lab/dim-ingress-caddy run pack:dry-run
-pnpm --filter @slop-lab/dim-cli run pack:dry-run
-pnpm --filter @slop-lab/dim-installer run pack:dry-run
+just ci-matrix --manual
 ```
 
-Review every tarball listing and confirm it contains its README, MIT license,
-runtime files, and publishable manifest.
+This uses mise to reproduce the Node.js 24/26 GitHub Actions matrix and the
+Node.js 26 container lane, followed by both manually dispatched Sysbox and KVM
+workflows. It requires the same Sysbox, QEMU, and `/dev/kvm` host capabilities
+as their self-hosted runners. Review every package dry-run listing and confirm
+it contains its README, MIT license, runtime files, and publishable manifest.
 
 ## Publish
 

@@ -13,5 +13,4 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: command -v just
-      - run: test -r /dev/kvm -a -w /dev/kvm
-      - run: just verify-environments-kvm
+      - run: just ci-kvm
