@@ -1,6 +1,6 @@
 import path from "node:path";
-import { constants as fsConstants, statSync } from "node:fs";
-import { access } from "node:fs/promises";
+import { statSync } from "node:fs";
+import { stat } from "node:fs/promises";
 import { UserError } from "./errors.js";
 import { ensureGitea, giteaNestedBaseUrl, GITEA_NETWORK } from "./gitea.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
@@ -47,7 +47,7 @@ export function validateWorkspaceProfiles(values: string[]): string[] {
 
 export async function detectWorkspaceKvm(
   backend: WorkspaceRecord["runtimeBackend"],
-  probe: () => Promise<void> = () => access("/dev/kvm", fsConstants.R_OK | fsConstants.W_OK)
+  probe: () => Promise<void> = probeKvmDevice
 ): Promise<boolean> {
   // runsc does not expose the KVM ioctl surface. Explicit device forwarding
   // remains useful for runc-backed privileged and rootless-Podman workspaces.
@@ -58,6 +58,11 @@ export async function detectWorkspaceKvm(
   } catch {
     return false;
   }
+}
+
+async function probeKvmDevice(): Promise<void> {
+  const device = await stat("/dev/kvm");
+  if (!device.isCharacterDevice()) throw new Error("/dev/kvm is not a character device");
 }
 
 export async function createWorkspace(
@@ -464,9 +469,9 @@ async function reconcileContainer(
 ): Promise<void> {
   if (record.kvm) {
     try {
-      await access("/dev/kvm", fsConstants.R_OK | fsConstants.W_OK);
+      await probeKvmDevice();
     } catch {
-      throw new UserError(`workspace '${record.name}' requires readable and writable host /dev/kvm`);
+      throw new UserError(`workspace '${record.name}' requires host /dev/kvm`);
     }
   }
   await reconcileDockerVolume(runner, record);

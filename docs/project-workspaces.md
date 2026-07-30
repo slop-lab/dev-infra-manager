@@ -208,9 +208,10 @@ dim create example example-dev \
   --profile secrets
 ```
 
-When `/dev/kvm` is readable and writable on the host, DIM automatically passes
-it into supported trusted workspace backends. Rootless-Podman workspaces also
-receive the device's host group as a supplemental group; gVisor workspaces do
+When host `/dev/kvm` exists as a character device, DIM automatically passes it
+and its host group into supported trusted workspace backends. The DIM process
+does not need to open the device itself; the container runtime does that and
+the supplemental group gives the workspace user access. gVisor workspaces do
 not receive KVM. DIM records the effective result in workspace state and
 exposes it as `DIM_WORKSPACE_KVM=0|1`. It does not place the workspace
 container in a VM. A VM started there is therefore the first virtualization

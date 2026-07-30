@@ -59,7 +59,7 @@ dim repo add "$project_name" root "$source_root/project.git" --root --ref "$root
 dim create "$project_name" "$workspace_name" >/dev/null
 
 workspace_json="$(dim show "$workspace_name" --json)"
-if [[ -r /dev/kvm && -w /dev/kvm ]]; then
+if [[ -c /dev/kvm ]]; then
   test "$(jq -r .kvm <<<"$workspace_json")" = "true"
   test "$(dim run "$workspace_name" kvm)" = "workspace-kvm-ok"
 else
