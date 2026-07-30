@@ -10,8 +10,11 @@ import { AddHelpTextContext, Command, CommanderError } from "commander";
 import {
   configuredDimAdminController,
   configuredDimController,
+  configuredWorkspaceBackend,
   execWorkspace,
+  inspectWorkspaceBackends,
   lifecycleOptions,
+  lifecycleOptionsForBackend,
   type LifecycleOptions,
   loadInstalledPlugins,
   ProcessRunner,
@@ -21,8 +24,13 @@ import {
   type RepositorySetEntry,
   initializeControllerRoutes,
   resolvePluginHome,
+  runCommonDoctorChecks,
+  runDoctor,
   runWorkspace,
+  runtimeBackendChecks,
+  setConfiguredWorkspaceBackend,
   UserError,
+  type WorkspaceRuntimeBackendKind,
 } from "@slop-lab/dim-core";
 
 const runner = new ProcessRunner();
@@ -308,13 +316,44 @@ program.command("discard")
     if ((await adminCall<unknown[]>("workspace.list")).length === 0) await stopManagedController(options);
   });
 
-program.command("doctor")
+const doctor = program.command("doctor")
   .description("Check host and workspace runtime readiness")
   .action(async () => {
-    const options = lifecycleOptions();
-    const checks = await adminCall<Array<{ ok: boolean; name: string; detail: string }>>("doctor");
-    for (const check of checks) console.log(`${check.ok ? "ok" : "fail"}\t${check.name}\t${check.detail}`);
+    const backend = configuredWorkspaceBackend();
+    if (backend === undefined) {
+      const checks = await runCommonDoctorChecks(runner);
+      printDoctorChecks(checks);
+      const detected = (await inspectWorkspaceBackends(runner))
+        .filter((inspection) => inspection.ok)
+        .map((inspection) => inspection.backend);
+      console.log(
+        `fail\tWorkspace backend configuration\t`
+        + `${detected.length === 0 ? "no installed backend detected" : `detected: ${detected.join(", ")}`}; `
+        + "run 'dim doctor configure-backend'"
+      );
+      process.exitCode = 1;
+      return;
+    }
+    const checks = await runDoctor(runner, backend, lifecycleOptionsForBackend(backend));
+    printDoctorChecks(checks);
     if (checks.some((check) => !check.ok)) process.exitCode = 1;
+  });
+
+doctor.command("configure-backend")
+  .description("Detect, verify, and record an installed workspace backend")
+  .argument("[backend]", "sysbox, gvisor, rootless-podman, or runc")
+  .action(async (backendArgument: string | undefined) => {
+    const backend = backendArgument === undefined
+      ? await selectInstalledWorkspaceBackend()
+      : parseWorkspaceBackend(backendArgument);
+    const checks = await runtimeBackendChecks(runner, backend, lifecycleOptionsForBackend(backend));
+    const requiredChecks = checks.filter((check) => check.name !== "KVM device");
+    printDoctorChecks(requiredChecks);
+    if (requiredChecks.some((check) => !check.ok)) {
+      throw new UserError(`workspace backend '${backend}' is not installed and ready`);
+    }
+    const target = await setConfiguredWorkspaceBackend(backend);
+    console.log(`Configured workspace backend '${backend}' in ${target}`);
   });
 
 const plugin = program.command("plugin").description("Inspect installed DIM plugins");
@@ -354,7 +393,7 @@ externalUrlIngress.command("add")
   .requiredOption("--name <name>")
   .requiredOption("--description <text>")
   .requiredOption("--scheme <scheme>", "http or https")
-  .requiredOption("--argument <string>", "opaque driver-specific argument")
+  .option("--argument <string>", "opaque driver-specific argument", "")
   .action(async (driver: string, flags: IngressAddFlags) => {
     if (flags.scheme !== "http" && flags.scheme !== "https") throw new UserError("--scheme must be http or https");
     await externalUrlAdmin("ingress-add", {
@@ -730,6 +769,47 @@ available:
 
 function interactive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+function parseWorkspaceBackend(value: string): WorkspaceRuntimeBackendKind {
+  if (value === "sysbox" || value === "gvisor" || value === "rootless-podman" || value === "runc") {
+    return value;
+  }
+  throw new UserError("backend must be sysbox, gvisor, rootless-podman, or runc");
+}
+
+async function selectInstalledWorkspaceBackend(): Promise<WorkspaceRuntimeBackendKind> {
+  const installed = (await inspectWorkspaceBackends(runner))
+    .filter((inspection) => inspection.ok)
+    .map((inspection) => inspection.backend);
+  if (installed.length === 0) {
+    throw new UserError("no installed workspace backend detected; install a host backend first");
+  }
+  if (installed.length === 1) return installed[0]!;
+  if (!interactive()) {
+    throw new UserError(
+      `multiple installed workspace backends detected (${installed.join(", ")}); specify one explicitly`
+    );
+  }
+  console.log("Select an installed workspace backend:");
+  installed.forEach((backend, index) => console.log(`  ${index + 1}) ${backend}`));
+  const prompt = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (await prompt.question("Selection: ")).trim();
+    const index = Number(answer) - 1;
+    if (!Number.isSafeInteger(index) || index < 0 || index >= installed.length) {
+      throw new UserError("invalid backend selection");
+    }
+    return installed[index]!;
+  } finally {
+    prompt.close();
+  }
+}
+
+function printDoctorChecks(checks: Array<{ name: string; ok: boolean; detail: string }>): void {
+  for (const check of checks) {
+    console.log(`${check.ok ? "ok" : "fail"}\t${check.name}\t${check.detail}`);
+  }
 }
 
 interface RepositorySetPlan {

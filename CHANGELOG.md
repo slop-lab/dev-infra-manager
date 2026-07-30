@@ -7,6 +7,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- Added `dim doctor configure-backend [BACKEND]` to verify and record an
+  installed workspace backend, with interactive selection when needed.
+- Made external URL ingress driver arguments optional at the CLI boundary.
+
+### Fixed
+
+- Made `dim doctor` report missing backend configuration instead of exiting
+  before diagnostics run.
+
 ## [0.3.0] - 2026-07-30
 
 ### Added

@@ -1,5 +1,5 @@
 import { access, constants, readFile } from "node:fs/promises";
-import { lifecycleOptions } from "./lifecycleOptions.js";
+import { lifecycleOptions, lifecycleOptionsForBackend } from "./lifecycleOptions.js";
 import type { LifecycleOptions, WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
 import { workspaceRuntimePlan } from "./runtimeBackends.js";
 import type { CommandRunner } from "./types.js";
@@ -8,6 +8,12 @@ export interface DoctorCheck {
   name: string;
   ok: boolean;
   detail: string;
+}
+
+export interface WorkspaceBackendInspection {
+  backend: WorkspaceRuntimeBackendKind;
+  ok: boolean;
+  checks: DoctorCheck[];
 }
 
 export async function runDoctor(
@@ -27,7 +33,36 @@ export async function runDoctor(
   return checks;
 }
 
-async function runtimeBackendChecks(
+export async function inspectWorkspaceBackends(
+  runner: CommandRunner,
+  env: NodeJS.ProcessEnv = process.env
+): Promise<WorkspaceBackendInspection[]> {
+  const backends: WorkspaceRuntimeBackendKind[] = ["sysbox", "gvisor", "rootless-podman", "runc"];
+  const inspections: WorkspaceBackendInspection[] = [];
+  for (const backend of backends) {
+    const checks = await runtimeBackendChecks(runner, backend, lifecycleOptionsForBackend(backend, env));
+    inspections.push({
+      backend,
+      checks,
+      ok: checks.filter((check) => check.name !== "KVM device").every((check) => check.ok)
+    });
+  }
+  return inspections;
+}
+
+export async function runCommonDoctorChecks(runner: CommandRunner): Promise<DoctorCheck[]> {
+  return [
+    await commandCheck(runner, "node", ["--version"], "Node.js"),
+    await commandCheck(runner, "pnpm", ["--version"], "pnpm"),
+    await commandCheck(runner, "just", ["--version"], "just"),
+    await commandCheck(runner, "git", ["--version"], "git"),
+    await commandCheck(runner, "docker", ["--version"], "Docker CLI"),
+    await dockerDaemonCheck(runner),
+    await cgroupCheck()
+  ];
+}
+
+export async function runtimeBackendChecks(
   runner: CommandRunner,
   backend: WorkspaceRuntimeBackendKind,
   options: LifecycleOptions

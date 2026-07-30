@@ -12,6 +12,13 @@ export function lifecycleOptions(env: NodeJS.ProcessEnv = process.env): Lifecycl
       `workspace backend is not configured in DIM user config; install a host backend first`
     );
   }
+  return lifecycleOptionsForBackend(defaultWorkspaceBackend, env);
+}
+
+export function lifecycleOptionsForBackend(
+  defaultWorkspaceBackend: LifecycleOptions["defaultWorkspaceBackend"],
+  env: NodeJS.ProcessEnv = process.env
+): LifecycleOptions {
   const controllerDirectory = path.join(
     env.XDG_RUNTIME_DIR ?? path.join(os.tmpdir(), `dim-${process.getuid?.() ?? "user"}`),
     "dim",

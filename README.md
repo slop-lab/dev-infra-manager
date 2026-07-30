@@ -93,6 +93,13 @@ Check the installed backend before creating a workspace:
 dim doctor
 ```
 
+If the CLI was installed without configuring a host backend, configure one
+through the same diagnostic path:
+
+```bash
+dim doctor configure-backend
+```
+
 DIM retains an explicitly enabled, versioned plugin loader for future
 concrete integrations. Version 0.3.0 does not expose a generic Git-provider
 extension point. See [docs/plugins.md](docs/plugins.md).

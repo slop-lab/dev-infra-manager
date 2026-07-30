@@ -54,8 +54,10 @@ An ingress is a host-approved external entry point. It combines:
 
 Ingresses are host resources shared by every workspace. `--argument` is an
 opaque string owned and interpreted by the selected driver; DIM's common
-contract does not add driver-specific JSON fields. HTTP and HTTPS entry points
-are configured as separate named ingresses:
+contract does not add driver-specific JSON fields. Omitting it passes an empty
+string, which the driver may accept as its default configuration or reject
+with a driver-specific error. HTTP and HTTPS entry points are configured as
+separate named ingresses:
 
 ```bash
 dim external-url ingress add builtin-http --name local-http \

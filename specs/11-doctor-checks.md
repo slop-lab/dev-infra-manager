@@ -6,6 +6,15 @@ This specification defines host readiness checks.
 
 `doctor` checks must reflect the selected config.
 They must not require Sysbox checks when the selected backend is gVisor or rootless Podman.
+They must also run when no workspace backend is configured. In that case,
+`doctor` reports the missing configuration and the backends it can currently
+verify instead of failing while loading lifecycle options.
+
+`dim doctor configure-backend [BACKEND]` verifies that the selected backend is
+usable before writing it to user configuration. Without `BACKEND`, it selects
+the only verified backend or prompts when more than one is available. A
+non-interactive invocation with multiple available backends must require an
+explicit argument.
 
 ## Output
 

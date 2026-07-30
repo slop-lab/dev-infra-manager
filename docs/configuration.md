@@ -3,7 +3,10 @@
 DIM stores installation-wide user settings in
 `~/.config/dim/config.json` (or `DIM_CONFIG_PATH`) and schema-versioned
 runtime state under `DIM_STATE_ROOT`. The host backend installer writes the
-required `workspaceBackend` setting.
+required `workspaceBackend` setting. If the CLI was installed separately, run
+`dim doctor configure-backend`. It verifies locally usable backends before
+recording one; when several are available, an interactive terminal prompts for
+the choice.
 
 The default paths use DIM's own namespace: configuration is under
 `~/.config/dim`, persistent application state under `~/.local/state/dim`,

@@ -141,6 +141,10 @@ updates are rejected without reset.
 bypasses it. `discard` requires `--yes`, attempts project teardown, and removes
 the top-level container, inner-engine volume, and workspace state.
 
+`doctor` can diagnose the host without a configured workspace backend.
+`doctor configure-backend [BACKEND]` verifies and records a backend without
+requiring the controller to be running.
+
 ## External URL commands
 
 Host configuration is managed through:
@@ -150,7 +154,7 @@ dim external-url add-provider cloudflare NAME [OPTIONS]
 dim external-url list-providers [--json]
 dim external-url remove-provider NAME
 dim external-url ingress add DRIVER --name NAME --description TEXT
-  --scheme SCHEME --argument STRING
+  --scheme SCHEME [--argument STRING]
 dim external-url ingress list [--json]
 dim external-url ingress setup NAME [--output DIRECTORY]
 dim external-url ingress verify NAME
