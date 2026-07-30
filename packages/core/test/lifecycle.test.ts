@@ -6,7 +6,12 @@ import { lifecycleOptions } from "../src/lifecycleOptions.js";
 import { LifecycleState, validateLifecycleName } from "../src/lifecycleState.js";
 import type { ProjectRecord, WorkspaceRecord } from "../src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../src/types.js";
-import { validateWorkspaceProfiles, waitForInnerDocker, workspaceContainerArgs } from "../src/workspaceLifecycle.js";
+import {
+  detectWorkspaceKvm,
+  validateWorkspaceProfiles,
+  waitForInnerDocker,
+  workspaceContainerArgs
+} from "../src/workspaceLifecycle.js";
 import { workspaceRuntimePlan } from "../src/runtimeBackends.js";
 import { agentContainerArgs } from "../src/agentLifecycle.js";
 
@@ -68,7 +73,7 @@ describe("project and workspace lifecycle", () => {
     expect(await state.listProjects()).toEqual([project]);
 
     const workspace: WorkspaceRecord = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       name: "work-1",
       projectId: project.id,
       projectName: project.name,
@@ -82,6 +87,7 @@ describe("project and workspace lifecycle", () => {
       networkName: "dim-control",
       dockerVolumeName: "dim-ws-work-1-docker",
       runtimeBackend: "runc",
+      kvm: false,
       cpuCount: "2",
       memory: "4g",
       pidsLimit: "2048",
@@ -123,6 +129,15 @@ describe("project and workspace lifecycle", () => {
     expect(secondSetupAcquired).toBe(true);
   });
 
+  it("auto-detects KVM except for the gVisor workspace runtime", async () => {
+    await expect(detectWorkspaceKvm("runc", async () => {})).resolves.toBe(true);
+    await expect(detectWorkspaceKvm("rootless-podman", async () => {})).resolves.toBe(true);
+    await expect(detectWorkspaceKvm("runc", async () => {
+      throw new Error("missing");
+    })).resolves.toBe(false);
+    await expect(detectWorkspaceKvm("gvisor", async () => {})).resolves.toBe(false);
+  });
+
   it("builds a persistent container with credentials but no host mounts or socket", () => {
     const options = lifecycleOptions({
       DIM_STATE_ROOT: root,
@@ -132,7 +147,7 @@ describe("project and workspace lifecycle", () => {
     });
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
@@ -163,7 +178,7 @@ describe("project and workspace lifecycle", () => {
       token: "token",
       userName: "Agent",
       userEmail: "agent@example.invalid"
-    }, "work-1.controller-grant");
+    }, "work-1.controller-grant", () => 992);
     expect(args).toEqual(expect.arrayContaining([
       "--name", "dim-ws-work-1",
       "--label", "dim.managed=true",
@@ -181,6 +196,7 @@ describe("project and workspace lifecycle", () => {
       "--env", "DIM_CONTROLLER_TOKEN=work-1.controller-grant",
       "--env", "GIT_CONFIG_VALUE_0=Agent",
       "--device", "/dev/kvm",
+      "--group-add", "992",
       "--privileged"
     ]));
     expect(args).not.toContain("--rm");
@@ -191,7 +207,7 @@ describe("project and workspace lifecycle", () => {
     const state = new LifecycleState(root);
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
@@ -205,6 +221,7 @@ describe("project and workspace lifecycle", () => {
       networkName: "dim-control",
       dockerVolumeName: "dim-ws-work-1-docker",
       runtimeBackend: "runc",
+      kvm: false,
       cpuCount: "2",
       memory: "4g",
       pidsLimit: "2048",

@@ -60,10 +60,12 @@ configured root repository/ref at:
 /workspace/project
 ```
 
-`create --kvm` records an immutable workspace capability and passes the host
-`/dev/kvm` device directly into the trusted workspace container. It does not
-virtualize the workspace container. Workspaces without this option must not
-receive the device.
+Creation records an immutable effective KVM capability. When host `/dev/kvm`
+is readable and writable and the selected backend supports it, DIM passes the
+device directly into the trusted workspace container. For non-privileged
+rootless-Podman workspaces it also adds the device's host GID as a supplemental
+group. gVisor workspaces record KVM as unavailable. DIM does not place the
+workspace container in a VM.
 
 The root repository owns the optional:
 

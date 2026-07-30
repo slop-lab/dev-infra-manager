@@ -112,6 +112,11 @@ dim run dim-self-dev codex
 shell path. The project checkout and inner-Docker state exist only in the
 workspace; no host checkout or Docker socket is mounted.
 
+On a host with accessible KVM, creation records and exposes `/dev/kvm`
+automatically. `dim run dim-self-dev kvm` verifies the self-development
+workspace's effective KVM capability. The ordinary `verify` task remains
+portable to hosts without KVM.
+
 ## State And Credentials
 
 - Application state is separate per service under the configured state root.

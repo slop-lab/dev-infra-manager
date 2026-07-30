@@ -58,6 +58,14 @@ root_ref="$(git -C "$project_source" rev-parse --abbrev-ref HEAD)"
 dim repo add "$project_name" root "$source_root/project.git" --root --ref "$root_ref" >/dev/null
 dim create "$project_name" "$workspace_name" >/dev/null
 
+workspace_json="$(dim show "$workspace_name" --json)"
+if [[ -r /dev/kvm && -w /dev/kvm ]]; then
+  test "$(jq -r .kvm <<<"$workspace_json")" = "true"
+  test "$(dim run "$workspace_name" kvm)" = "workspace-kvm-ok"
+else
+  test "$(jq -r .kvm <<<"$workspace_json")" = "false"
+  dim exec "$workspace_name" -- sh -c 'test ! -e /dev/kvm'
+fi
 dim exec "$workspace_name" -- \
   sh -c 'test -r .dim/setup.sh && test ! -x .dim/setup.sh && test -r .dim/entrypoint.sh && test ! -x .dim/entrypoint.sh && test "$DIM_GIT_BASE_URL" = "$(jq -r .gitBaseUrl "$DIM_PROJECT_MANIFEST")"'
 test "$(dim show "$workspace_name" --json | jq -r .rootRef)" = "refs/heads/$root_ref"

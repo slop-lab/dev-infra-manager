@@ -178,7 +178,7 @@ jq -n \
   --arg network "$network" \
   --arg now "$now" \
   '{
-    schemaVersion: 2,
+    schemaVersion: 3,
     name: $name,
     projectId: "external-example-project-id",
     projectName: "external-example",
@@ -192,6 +192,7 @@ jq -n \
     networkName: $network,
     dockerVolumeName: "unused-in-smoke",
     runtimeBackend: "runc",
+    kvm: false,
     cpuCount: "2",
     memory: "4g",
     pidsLimit: "2048",

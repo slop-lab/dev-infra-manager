@@ -64,8 +64,9 @@ Trusted Project lifecycle code:
 - Starts and reconciles agent and secret-bearing child containers.
 - Keeps the agent's inner runtime separate from its own runtime.
 - Deploys secret-bearing containers only from approved refs.
-- May receive explicitly requested host devices such as `/dev/kvm`; these
-  devices must not be passed into the untrusted agent container.
+- Receives an available host `/dev/kvm` automatically when its backend
+  supports KVM; host devices must not be passed into the untrusted agent
+  container.
 
 ## DIM Host Boundary
 

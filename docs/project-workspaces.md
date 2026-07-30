@@ -208,11 +208,13 @@ dim create example example-dev \
   --profile secrets
 ```
 
-Add `--kvm` only when trusted Project lifecycle code must run QEMU or another
-KVM consumer. DIM passes the host `/dev/kvm` device directly into the workspace
-container; it does not place the workspace container in a VM. A VM started
-there is therefore the first virtualization layer and may use host-supported
-nested virtualization itself.
+When `/dev/kvm` is readable and writable on the host, DIM automatically passes
+it into supported trusted workspace backends. Rootless-Podman workspaces also
+receive the device's host group as a supplemental group; gVisor workspaces do
+not receive KVM. DIM records the effective result in workspace state and
+exposes it as `DIM_WORKSPACE_KVM=0|1`. It does not place the workspace
+container in a VM. A VM started there is therefore the first virtualization
+layer and may use host-supported nested virtualization itself.
 
 Creation:
 

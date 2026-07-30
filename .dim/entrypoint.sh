@@ -17,6 +17,12 @@ case "$task" in
   build)
     exec pnpm run workspace:build "$@"
     ;;
+  kvm)
+    test "${DIM_WORKSPACE_KVM:-0}" = 1
+    test -r /dev/kvm
+    test -w /dev/kvm
+    printf '%s\n' "workspace-kvm-ok"
+    ;;
   verify)
     pnpm run workspace:check
     pnpm run workspace:test

@@ -193,7 +193,6 @@ async function builtinCall(
         cpuCount: text("cpuCount"),
         memory: text("memory"),
         pidsLimit: text("pidsLimit"),
-        ...(input.kvm === true ? { kvm: true } : {}),
         ...(input.gitUserName === undefined ? {} : { gitUserName: text("gitUserName") }),
         ...(input.gitUserEmail === undefined ? {} : { gitUserEmail: text("gitUserEmail") })
       });

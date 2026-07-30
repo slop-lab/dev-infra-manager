@@ -237,7 +237,7 @@ async function listRecords<T extends { schemaVersion: number; name: string }>(
 }
 
 function assertSchemaVersion(record: { schemaVersion?: number }, kind: string, name: string): void {
-  const expected = kind === "project" ? 3 : 2;
+  const expected = 3;
   if (record.schemaVersion !== expected) {
     throw new UserError(
       `${kind} '${name}' uses unsupported state schema ${String(record.schemaVersion)}; `

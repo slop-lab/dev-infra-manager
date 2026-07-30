@@ -1,5 +1,5 @@
 import path from "node:path";
-import { constants as fsConstants } from "node:fs";
+import { constants as fsConstants, statSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { UserError } from "./errors.js";
 import { ensureGitea, giteaNestedBaseUrl, GITEA_NETWORK } from "./gitea.js";
@@ -45,6 +45,21 @@ export function validateWorkspaceProfiles(values: string[]): string[] {
   return [...seen];
 }
 
+export async function detectWorkspaceKvm(
+  backend: WorkspaceRecord["runtimeBackend"],
+  probe: () => Promise<void> = () => access("/dev/kvm", fsConstants.R_OK | fsConstants.W_OK)
+): Promise<boolean> {
+  // runsc does not expose the KVM ioctl surface. Explicit device forwarding
+  // remains useful for runc-backed privileged and rootless-Podman workspaces.
+  if (backend === "gvisor") return false;
+  try {
+    await probe();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function createWorkspace(
   runner: StreamingCommandRunner,
   options: LifecycleOptions,
@@ -53,7 +68,6 @@ export async function createWorkspace(
     name: string;
     profiles: string[];
     runtimeBackend: WorkspaceRecord["runtimeBackend"];
-    kvm?: boolean;
     cpuCount?: string;
     memory?: string;
     pidsLimit?: string;
@@ -64,13 +78,6 @@ export async function createWorkspace(
   const project = validateLifecycleName(input.project, "project");
   const name = validateLifecycleName(input.name, "workspace");
   const profiles = validateWorkspaceProfiles(input.profiles);
-  if (input.kvm) {
-    try {
-      await access("/dev/kvm", fsConstants.R_OK | fsConstants.W_OK);
-    } catch {
-      throw new UserError("--kvm requires readable and writable host /dev/kvm");
-    }
-  }
   const state = new LifecycleState(options.stateRoot);
   const projectRecord = await readyProject(state, project);
   let repo = readyRootRepository(projectRecord);
@@ -94,9 +101,6 @@ export async function createWorkspace(
     if (record.runtimeBackend !== input.runtimeBackend) {
       throw new UserError(`workspace '${name}' already exists with backend '${record.runtimeBackend}'`);
     }
-    if ((record.kvm ?? false) !== (input.kvm ?? false)) {
-      throw new UserError(`workspace '${name}' already exists with different KVM access`);
-    }
     if (
       record.cpuCount !== (input.cpuCount ?? options.cpuCount)
       || record.memory !== (input.memory ?? options.memory)
@@ -106,8 +110,9 @@ export async function createWorkspace(
     }
   } catch (error) {
     if (!(error instanceof UserError) || !error.message.includes("not found")) throw error;
+    const kvm = await detectWorkspaceKvm(input.runtimeBackend);
     record = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       name,
       projectId: projectRecord.id,
       projectName: projectRecord.name,
@@ -125,7 +130,7 @@ export async function createWorkspace(
       agentCheckoutVolumeName: `dim-agent-${name}-checkout`,
       agentDockerVolumeName: `dim-agent-${name}-docker`,
       agentImageName: `dim-agent-${name}:latest`,
-      kvm: input.kvm ?? false,
+      kvm,
       cpuCount: input.cpuCount ?? options.cpuCount,
       memory: input.memory ?? options.memory,
       pidsLimit: input.pidsLimit ?? options.pidsLimit,
@@ -457,6 +462,13 @@ async function reconcileContainer(
   record: WorkspaceRecord,
   git: WorkspaceGitEnvironment
 ): Promise<void> {
+  if (record.kvm) {
+    try {
+      await access("/dev/kvm", fsConstants.R_OK | fsConstants.W_OK);
+    } catch {
+      throw new UserError(`workspace '${record.name}' requires readable and writable host /dev/kvm`);
+    }
+  }
   await reconcileDockerVolume(runner, record);
   const controllerGrant = await new LifecycleState(options.stateRoot).ensureWorkspaceGrant(record.name);
   const inspectArgs = [
@@ -527,7 +539,8 @@ export function workspaceContainerArgs(
   options: LifecycleOptions,
   record: WorkspaceRecord,
   git: WorkspaceGitEnvironment,
-  controllerGrant?: string
+  controllerGrant?: string,
+  kvmGroupId: () => number = () => statSync("/dev/kvm").gid
 ): string[] {
   const plan = workspaceRuntimePlan(record.runtimeBackend, options);
   const args = [
@@ -565,7 +578,10 @@ export function workspaceContainerArgs(
   for (const capability of plan.capabilities) args.push("--cap-add", capability);
   for (const securityOption of plan.securityOptions) args.push("--security-opt", securityOption);
   for (const device of plan.devices) args.push("--device", device);
-  if (record.kvm) args.push("--device", "/dev/kvm");
+  if (record.kvm) {
+    args.push("--device", "/dev/kvm");
+    args.push("--group-add", String(kvmGroupId()));
+  }
   for (const [key, value] of Object.entries(plan.env)) args.push("--env", `${key}=${value}`);
   if (plan.privileged) args.push("--privileged");
   args.push(plan.image, "sleep", "infinity");

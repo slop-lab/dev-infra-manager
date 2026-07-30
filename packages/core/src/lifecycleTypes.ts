@@ -85,7 +85,7 @@ export interface WorkspaceSetupRecord {
 }
 
 export interface WorkspaceRecord {
-  schemaVersion: 2;
+  schemaVersion: 3;
   name: string;
   projectId: string;
   projectName: string;
@@ -103,7 +103,7 @@ export interface WorkspaceRecord {
   agentCheckoutVolumeName?: string;
   agentDockerVolumeName?: string;
   agentImageName?: string;
-  kvm?: boolean;
+  kvm: boolean;
   cpuCount: string;
   memory: string;
   pidsLimit: string;

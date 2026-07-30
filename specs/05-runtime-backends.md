@@ -4,7 +4,8 @@
 
 Runtime backends define the untrusted agent boundary. The trusted workspace
 container is a privileged `runc` container for the default `sysbox` backend;
-it owns the Project engine and may receive explicitly requested host devices.
+it owns the Project engine and automatically receives an available
+`/dev/kvm`.
 
 Allowed backend names:
 
@@ -26,6 +27,10 @@ Rootless Podman must receive `/dev/fuse` and requires host support for nested
 unprivileged user namespaces. Its outer container must not require
 `--privileged`; it must instead receive the specific capabilities that
 nested unprivileged user namespaces and mounts need.
+
+When host KVM is accessible, rootless Podman additionally receives
+`/dev/kvm` and its numeric host group as a supplemental group. gVisor does not
+receive KVM.
 
 For `sysbox`, `.dim/agent.json` is trusted root-repository configuration. DIM
 builds its relative `buildContext`, creates a separate checkout volume, and
