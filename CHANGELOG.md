@@ -17,6 +17,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Made `dim doctor` report missing backend configuration instead of exiting
   before diagnostics run.
+- Treated an External URLs plugin with no configured ingress as a normal empty
+  state instead of warning during controller startup.
 
 ## [0.3.0] - 2026-07-30
 

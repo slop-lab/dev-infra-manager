@@ -14,6 +14,35 @@ describe("external URLs plugin", () => {
   const close: Array<() => Promise<void>> = [];
   afterEach(async () => Promise.all(close.splice(0).map((item) => item())));
 
+  it("starts normally without a configured ingress", async () => {
+    const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-empty-"));
+    close.push(() => rm(stateRoot, { recursive: true, force: true }));
+    const registered = await registerPlugins([createExternalUrlsPlugin({ ingresses: {} })]);
+    close.push(() => registered.dispose());
+    const controller = createDimController({
+      stateRoot,
+      routes: registered.controllerRoutes,
+      authenticate: async () => ({ id: "id", name: "work-1", projectId: "pid", projectName: "project" }),
+      resolveTarget: async () => {
+        throw new Error("an empty ingress configuration must not resolve targets");
+      }
+    });
+    controller.listen(0, "127.0.0.1");
+    await once(controller, "listening");
+    close.push(() => new Promise((resolve) => controller.close(() => resolve())));
+    const address = controller.address();
+    if (!address || typeof address === "string") throw new Error("missing controller address");
+
+    const response = await fetch(`http://127.0.0.1:${address.port}/api`, {
+      headers: { authorization: "Bearer grant" }
+    });
+    expect(response.status).toBe(200);
+    const discovery = await response.json() as {
+      routes: Array<{ path: string; discovery?: { ingresses?: unknown[] } }>;
+    };
+    expect(discovery.routes.find((route) => route.path === "/api/urls")?.discovery?.ingresses).toEqual([]);
+  });
+
   it("discovers host ingresses and proxies controller-selected nested targets", async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-"));
     close.push(() => rm(stateRoot, { recursive: true, force: true }));

@@ -112,11 +112,6 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
           return { body: await externalUrlAdmin(context.params.action ?? "", await context.readJson()) };
         }
       });
-      if (Object.keys(options.ingresses).length === 0) {
-        host.logger.warn(
-          "External URLs plugin has no configured ingress; run 'dim external-url ingress add --help' to add one"
-        );
-      }
       const ingresses = new Map<string, ConfiguredIngress>();
       for (const [name, ingress] of Object.entries(options.ingresses)) {
         ingresses.set(name, {

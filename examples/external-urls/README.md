@@ -36,8 +36,8 @@ grant—and prints URLs for `dev` and `deep`. It
 supplies neither a workspace name nor URL names: the controller already knows
 the current workspace and assigns the first available names (`0`, then `1`).
 
-Before the first ingress is configured, `dim plugin list` succeeds and warns
-that the plugin has no ingress yet. Inspecting it does not create an empty
+Before the first ingress is configured, the plugin starts normally and
+`dim plugin list` succeeds. Inspecting it does not create an empty
 configuration file; `configure-ingress.bash` creates the first real config.
 
 The ingress fixes the public domain and listener in host configuration.
