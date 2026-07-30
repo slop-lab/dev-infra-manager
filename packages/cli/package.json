@@ -1,6 +1,6 @@
 {
   "name": "@slop-lab/dim-cli",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "CLI for isolated, persistent AI development workspaces",
   "license": "MIT",
   "repository": {
@@ -36,7 +36,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@slop-lab/dim-core": "workspace:0.2.0",
+    "@slop-lab/dim-core": "workspace:0.3.0",
     "commander": "14.0.0"
   },
   "devDependencies": {

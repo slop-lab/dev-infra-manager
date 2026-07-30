@@ -1,6 +1,6 @@
 {
   "name": "@slop-lab/dim-plugin-external-urls",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Provider-agnostic named external URL ingresses for DIM",
   "license": "MIT",
   "repository": {
@@ -33,10 +33,10 @@
     "node": "^24.0.0 || ^26.0.0"
   },
   "dependencies": {
-    "@slop-lab/dim-core": "workspace:0.2.0",
-    "@slop-lab/dim-contracts-external-url": "workspace:0.2.0",
-    "@slop-lab/dim-ingress-caddy": "workspace:0.2.0",
-    "@slop-lab/dim-provider-dns-cloudflare": "workspace:0.2.0"
+    "@slop-lab/dim-core": "workspace:0.3.0",
+    "@slop-lab/dim-contracts-external-url": "workspace:0.3.0",
+    "@slop-lab/dim-ingress-caddy": "workspace:0.3.0",
+    "@slop-lab/dim-provider-dns-cloudflare": "workspace:0.3.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

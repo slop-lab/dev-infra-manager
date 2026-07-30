@@ -12,17 +12,17 @@ as-is to the installed DIM CLI.
 Two supported ways to run it, both pinned to an exact version:
 
 ```bash
-mise use -g 'npm:@slop-lab/dim-installer@0.2.0'
+mise use -g 'npm:@slop-lab/dim-installer@0.3.0'
 dim install-cli
 ```
 
 ```bash
-npx '@slop-lab/dim-installer@0.2.0' install-cli
+npx '@slop-lab/dim-installer@0.3.0' install-cli
 ```
 
 With `mise`, plain `dim ...` keeps working afterwards for both installer
 commands and (once installed) the real CLI. With `npx`, repeat the pinned
-`npx '@slop-lab/dim-installer@0.2.0' ...` invocation each time you need the
+`npx '@slop-lab/dim-installer@0.3.0' ...` invocation each time you need the
 installer.
 
 Never use `latest` for software that controls development containers or
@@ -31,7 +31,7 @@ loads executable plugins — always pin an exact, reviewed version.
 > `mise` releases from `2026.7.x` onward reject installing any npm package
 > below a weekly-download popularity threshold (currently 1000). Until
 > `@slop-lab/dim-installer` crosses that threshold on the public npm registry,
-> `mise use -g 'npm:@slop-lab/dim-installer@0.2.0'` may fail with an `aube
+> `mise use -g 'npm:@slop-lab/dim-installer@0.3.0'` may fail with an `aube
 > install failed: ... weekly downloads` error on those `mise` versions, with
 > no known working bypass. Use the `npx` form above, or an older `mise`
 > release, until then.
@@ -47,8 +47,8 @@ is no longer reachable that way. To run installer-only commands again
 `npx` call:
 
 ```bash
-npx '@slop-lab/dim-installer@0.2.0' install-cli
-npx '@slop-lab/dim-installer@0.2.0' install-plugin '@example/dim-plugin@1.2.3'
+npx '@slop-lab/dim-installer@0.3.0' install-cli
+npx '@slop-lab/dim-installer@0.3.0' install-plugin '@example/dim-plugin@1.2.3'
 ```
 
 If both a mise-provided facade and a direct-PATH `dim` are on `PATH`, normal
@@ -84,7 +84,7 @@ prints usage and exits with an error instead.
 ### Interactive install
 
 ```bash
-npx '@slop-lab/dim-installer@0.2.0'
+npx '@slop-lab/dim-installer@0.3.0'
 ```
 
 Prompts for what to install (CLI, plugin(s), or both), then — for the CLI —
@@ -133,17 +133,17 @@ Either mode installs the real `@slop-lab/dim-cli` package into a private,
 versioned data directory that is never on `PATH` directly:
 
 ```text
-$XDG_DATA_HOME/dim/cli/0.2.0/node_modules/.bin/dim
+$XDG_DATA_HOME/dim/cli/0.3.0/node_modules/.bin/dim
 ```
 
-(falling back to `~/.local/share/dim/cli/0.2.0/...` when `XDG_DATA_HOME` is
+(falling back to `~/.local/share/dim/cli/0.3.0/...` when `XDG_DATA_HOME` is
 unset). The installed version matches the installer's own version.
 
 **Direct PATH (`--local-bin`)** additionally creates or replaces a symlink
 in the bin directory pointing at that versioned executable:
 
 ```text
-~/.local/bin/dim -> $XDG_DATA_HOME/dim/cli/0.2.0/node_modules/.bin/dim
+~/.local/bin/dim -> $XDG_DATA_HOME/dim/cli/0.3.0/node_modules/.bin/dim
 ```
 
 Use `--prefix PATH` to use `PATH/bin/dim` instead of `~/.local/bin/dim`. Once
@@ -177,13 +177,13 @@ config, not just `PATH`):
 - **Not installed**: `dim --help` prints facade-only help (this package's own
   usage, not a pretend DIM CLI help). `dim --version` prints:
   ```text
-  DIM installer 0.2.0
+  DIM installer 0.3.0
   DIM CLI: not installed
   ```
 - **Installed**: `dim --help` is forwarded to the real CLI's own `--help`.
   `dim --version` prints:
   ```text
-  DIM CLI 0.2.0 (via DIM installer 0.2.0)
+  DIM CLI 0.3.0 (via DIM installer 0.3.0)
   ```
   with a warning if the configured version no longer matches what's actually
   installed (run `dim install-cli` again to repair).

@@ -72,7 +72,7 @@ export default plugin;
 Install and explicitly enable a plugin package with:
 
 ```bash
-npx '@slop-lab/dim-installer@0.2.0' install-plugin '@example/dim-plugin@1.2.3'
+npx '@slop-lab/dim-installer@0.3.0' install-plugin '@example/dim-plugin@1.2.3'
 dim plugin list
 ```
 

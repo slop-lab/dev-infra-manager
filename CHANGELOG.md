@@ -7,6 +7,24 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-30
+
+### Added
+
+- Added Project-scoped repository sets. `repos.yml` maps stable aliases to
+  arbitrary host-Git URLs, and `project create --repos`, `repo plan`, and
+  `repo apply` provide reviewed bulk registration without treating the file as
+  a Project manifest.
+- Added the `@slop-lab/dim-controller-proxy` package and a workspace-side
+  controller proxy helper. Root repositories can expose only selected
+  controller capabilities to development containers through a private Unix
+  socket.
+- Added controller HTTP APIs for DIM management commands other than
+  interactive `run` and `exec`, plus controller restart support.
+- Added local package tarball generation for examples and self-development,
+  and a `just ci-matrix --manual` entrypoint that reproduces automatic and
+  manually dispatched GitHub Actions workflows.
+
 ### Changed
 
 - Replaced separate repository create/import flows with Project-scoped
@@ -15,6 +33,27 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   invoking host Git CLI and its existing authentication.
 - Added standalone `project create --repos` registration and optional
   discovery of a managed root's `.dim/repos.yml`.
+- Redesigned external URLs around host-shared named ingresses. Drivers own
+  their opaque string arguments, automatically allocate listener ports when
+  requested, generate workspace-qualified public names, and remove routes
+  with their workspace.
+- Moved DIM configuration and state under DIM-specific roots rather than the
+  organization-wide `slop-lab` directory.
+- Changed workspace KVM handling to automatically pass a host `/dev/kvm`
+  character device and its numeric group to supported trusted backends.
+  gVisor remains KVM-free.
+- Changed package dry-run and local tarball creation to use pnpm consistently.
+
+### Fixed
+
+- Made an absent external URL configuration resolve to an empty configuration
+  instead of crashing plugin discovery.
+- Fixed workspace controller startup so users do not need to launch it
+  explicitly and avoided controller TCP port conflicts by using Unix sockets.
+- Fixed self-development KVM detection on GitHub runners where `/dev/kvm`
+  exists but the runner process itself cannot open it.
+- Normalized installer test paths on macOS where temporary directories acquire
+  a `/private` prefix.
 
 ## [0.2.0] - 2026-07-29
 
@@ -144,6 +183,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Versioned plugin API and standalone plugin installer.
 - Container, lifecycle, multi-repository, packaging, and self-project smoke tests.
 
-[Unreleased]: https://github.com/slop-lab/dev-infra-manager/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/slop-lab/dev-infra-manager/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/slop-lab/dev-infra-manager/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/slop-lab/dev-infra-manager/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/slop-lab/dev-infra-manager/releases/tag/v0.1.0

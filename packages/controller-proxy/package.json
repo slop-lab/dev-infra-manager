@@ -1,6 +1,6 @@
 {
   "name": "@slop-lab/dim-controller-proxy",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Policy-constrained Unix socket proxy for DIM workspace controller APIs",
   "license": "MIT",
   "repository": {

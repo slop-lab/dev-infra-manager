@@ -17,7 +17,7 @@ commands. Read them before running them; they are intentionally small.
 Wildcard DNS for `*.host.tail.test` must resolve to this host. Then run:
 
 ```bash
-dim install-plugin '@slop-lab/dim-plugin-external-urls@0.2.0'
+dim install-plugin '@slop-lab/dim-plugin-external-urls@0.3.0'
 dim plugin list
 dim doctor
 bash create-repository.bash
