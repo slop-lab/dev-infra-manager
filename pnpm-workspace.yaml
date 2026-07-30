@@ -5,4 +5,3 @@ packages:
   - packages/controller-proxy
   - packages/contracts/*
   - packages/plugin/*
-  - packages/dns-provider/*

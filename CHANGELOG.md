@@ -12,9 +12,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added `dim doctor configure-backend [BACKEND]` to verify and record an
   installed workspace backend, with interactive selection when needed.
 - Made external URL ingress driver arguments optional at the CLI boundary.
-- Renamed the Cloudflare adapter package to
-  `@slop-lab/dim-dns-provider-cloudflare` and clarified the Caddy ingress
-  provider reference as `dnsProvider`.
+- Made Cloudflare an independently installed
+  `@slop-lab/dim-plugin-dns-cloudflare` extension and clarified the Caddy
+  ingress provider reference as `dnsProvider`.
 - Rejected Caddy ingress registration when its named DNS provider is not
   configured.
 - Replaced the flat External URL provider commands with
@@ -35,6 +35,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `subdomain` requests. The default policy requires the authenticated
   workspace prefix, while an ingress can opt into a fail-closed HTTP(S) or
   Unix-socket policy webhook.
+- Added a general named plugin-extension registry. External URL DNS providers
+  now register a driver contract instead of becoming dependencies of the
+  External URLs plugin.
+- Serialized External URL route mutations so concurrent automatic subdomain
+  requests receive distinct names.
 
 ### Fixed
 
@@ -47,6 +52,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   errors to the relevant configuration documentation.
 - Removed the state-root hash from default managed-controller socket paths;
   custom state roots remain hash-namespaced to prevent collisions.
+- Prevented clients from spoofing forwarded proxy metadata, removed
+  hop-by-hop upstream headers, and bounded route-policy webhook responses.
 
 ## [0.3.0] - 2026-07-30
 

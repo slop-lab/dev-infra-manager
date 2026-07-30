@@ -37,14 +37,18 @@ convenience.
 packages/cli ──> packages/core
 packages/controller-proxy (Node built-ins only)
 packages/plugin/external-urls
-  ──> packages/{core,contracts/external-url,dns-provider/cloudflare}
+  ──> packages/{core,contracts/external-url}
+packages/plugin/dns-cloudflare
+  ──> packages/{core,contracts/external-url}
 ```
 
 `dim-plugin-*` identifies a package that implements DIM's plugin API; DIM does
 not scan npm names or filesystem prefixes to discover it. A project must
 explicitly install and list every plugin. Reusable implementations stay in
 `dim-*` packages so a plugin can compose them without making the
-implementation itself a plugin.
+implementation itself a plugin. Plugins may register named extension
+implementations, such as External URL DNS provider drivers, through the common
+plugin host without adding dependencies to their consumers.
 
 Disallowed dependencies:
 

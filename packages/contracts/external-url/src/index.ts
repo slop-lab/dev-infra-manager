@@ -4,6 +4,29 @@ import path from "node:path";
 
 export type ExternalUrlScheme = "http" | "https";
 export type ExternalUrlUpstreamMode = "container-dns" | "container-ip";
+export const EXTERNAL_URL_DNS_PROVIDER_EXTENSION = "external-url.dns-provider";
+
+export interface ExternalUrlDnsOperation {
+  providerArgument: string;
+  recordArgument: string;
+  domain: string;
+  env: NodeJS.ProcessEnv;
+}
+
+export interface ExternalUrlCaddyDnsModule {
+  modules: readonly string[];
+  directive: string;
+  environment: Readonly<Record<string, string>>;
+}
+
+export interface ExternalUrlDnsProviderDriver {
+  normalizeProviderArgument(argument: string): string;
+  normalizeRecordArgument(argument: string): string;
+  ensure(operation: ExternalUrlDnsOperation): Promise<void>;
+  verify(operation: ExternalUrlDnsOperation): Promise<void>;
+  remove(operation: ExternalUrlDnsOperation): Promise<void>;
+  caddyDns01(providerArgument: string): ExternalUrlCaddyDnsModule;
+}
 
 export interface ExternalUrlDnsProviderConfig {
   driver: string;

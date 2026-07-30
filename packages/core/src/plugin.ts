@@ -32,6 +32,8 @@ export interface DimPluginHost {
   registerControllerRoute(route: DimControllerRoute): void;
   registerAdminRoute(route: DimAdminRoute): void;
   registerHostInputProvider(name: string, provider: HostInputProvider): void;
+  registerExtension(kind: string, name: string, extension: object): void;
+  extension<T extends object>(kind: string, name: string): T | undefined;
 }
 
 export interface DimPlugin {
@@ -54,6 +56,7 @@ class PluginHost implements DimPluginHost {
   readonly routes: DimControllerRoute[] = [];
   readonly adminRoutes: DimAdminRoute[] = [];
   readonly providers = new Map<string, HostInputProvider>();
+  readonly extensions = new Map<string, Map<string, object>>();
   registeringPlugin: string | undefined;
   acceptingRegistrations = true;
 
@@ -113,6 +116,31 @@ class PluginHost implements DimPluginHost {
     if (this.providers.has(name)) throw new UserError(`host input provider '${name}' is already registered`);
     this.providers.set(name, provider);
   }
+
+  registerExtension(kind: string, name: string, extension: object): void {
+    const plugin = this.registeringPlugin ?? "unknown plugin";
+    if (!this.acceptingRegistrations) {
+      throw new UserError(`plugin '${plugin}' attempted extension registration after startup`);
+    }
+    if (!validExtensionName(kind) || !validExtensionName(name)) {
+      throw new UserError(`plugin '${plugin}' registered invalid extension '${kind}/${name}'`);
+    }
+    if (!extension || typeof extension !== "object") {
+      throw new UserError(`plugin '${plugin}' registered invalid extension '${kind}/${name}'`);
+    }
+    const values = this.extensions.get(kind) ?? new Map<string, object>();
+    if (values.has(name)) throw new UserError(`extension '${kind}/${name}' is already registered`);
+    values.set(name, Object.freeze(extension));
+    this.extensions.set(kind, values);
+  }
+
+  extension<T extends object>(kind: string, name: string): T | undefined {
+    return this.extensions.get(kind)?.get(name) as T | undefined;
+  }
+}
+
+function validExtensionName(value: string): boolean {
+  return /^[a-z0-9][a-z0-9.-]*$/.test(value);
 }
 
 const consoleLogger: DimPluginLogger = {

@@ -29,8 +29,13 @@ tests an installation workflow rather than source correctness.
 
 The external URL plugin unit suite must exercise real HTTP forwarding through
 configured listeners sharing the hostname registry, generated URL shape,
-default workspace-prefix rejection, webhook approval, and independent route
-claim revocation. A configured Tailnet
+concurrent automatic-name allocation, default workspace-prefix rejection,
+webhook approval and response bounds, forwarded-header normalization, and
+independent route claim revocation. The Cloudflare plugin suite must verify named driver
+registration, provider/record argument normalization, and DNS reconciliation.
+The route-policy test launches the checked-in advanced example server rather
+than maintaining a test-only webhook implementation.
+A configured Tailnet
 ingress can additionally run:
 
 ```bash

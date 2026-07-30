@@ -1,7 +1,7 @@
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 
-export default defineConfig({
+const config = defineConfig({
   resolve: {
     alias: {
       "@slop-lab/dim-core": path.resolve(import.meta.dirname, "../../core/src/index.ts"),
@@ -12,3 +12,5 @@ export default defineConfig({
     }
   }
 });
+
+export default config;

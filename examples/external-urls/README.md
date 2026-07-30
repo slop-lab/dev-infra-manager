@@ -17,7 +17,9 @@ commands. Read them before running them; they are intentionally small.
 Wildcard DNS for `*.host.tail.test` must resolve to this host. Then run:
 
 ```bash
-dim install-plugin '@slop-lab/dim-plugin-external-urls@0.3.0'
+dim install-plugin \
+  '@slop-lab/dim-plugin-dns-cloudflare@0.3.0' \
+  '@slop-lab/dim-plugin-external-urls@0.3.0'
 dim plugin list
 dim doctor
 bash create-repository.bash
@@ -81,7 +83,9 @@ dim external-url ingress add http --name public-http \
 dim external-url ingress add caddy --name public-https \
   --description "Public HTTPS development URL" \
   --scheme https \
-  --argument '{"domain":"remote.example.com","listenHost":"100.64.0.10","listenPort":8443,"dnsProvider":"cloudflare-main","zone":"example.com","recordType":"A","target":"203.0.113.10","proxied":false}'
+  --argument "$(jq -cn \
+    --arg dnsArgument '{"zone":"example.com","recordType":"A","target":"203.0.113.10","proxied":false}' \
+    '{domain:"remote.example.com",listenHost:"100.64.0.10",listenPort:8443,dnsProvider:"cloudflare-main",dnsArgument:$dnsArgument}')"
 
 dim external-url ingress setup public-https \
   --output .dim/external-url

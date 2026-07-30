@@ -1,11 +1,7 @@
-import type {
-  CloudflareDnsProviderConfig,
-  CloudflareDnsRecordConfig
-} from "@slop-lab/dim-dns-provider-cloudflare";
+import type { ExternalUrlCaddyDnsModule } from "@slop-lab/dim-contracts-external-url";
 import { parseRoutePolicy, type ExternalUrlRoutePolicyConfig } from "./routePolicy.js";
 
 export const CADDY_VERSION = "2.11.4";
-export const CADDY_CLOUDFLARE_VERSION = "v0.2.4";
 export const CADDY_INGRESS_DOCUMENTATION_URL =
   "https://github.com/slop-lab/dev-infra-manager/blob/main/docs/external-urls.md"
   + "#http-and-https-with-cloudflare-dns-and-caddy";
@@ -17,13 +13,14 @@ export interface CaddyDeployment {
   environment: string;
 }
 
-export interface CaddyIngressArgument extends CloudflareDnsRecordConfig {
+export interface CaddyIngressArgument {
   domain: string;
   listenHost: string;
   listenPort: number | "auto";
   internalPort?: number;
   upstreamMode?: "container-ip" | "container-dns";
   dnsProvider: string;
+  dnsArgument: string;
   acmeEmail?: string;
   routePolicy?: ExternalUrlRoutePolicyConfig;
 }
@@ -52,17 +49,8 @@ export function parseCaddyIngressArgument(argument: string): CaddyIngressArgumen
   if (typeof input.dnsProvider !== "string" || input.dnsProvider.length === 0) {
     throw caddyArgumentError("requires string field 'dnsProvider'");
   }
-  if (typeof input.zone !== "string" || normalizeDomain(input.zone).length === 0) {
-    throw caddyArgumentError("requires string field 'zone'");
-  }
-  if (input.recordType !== "A" && input.recordType !== "AAAA" && input.recordType !== "CNAME") {
-    throw caddyArgumentError("field 'recordType' must be A, AAAA, or CNAME");
-  }
-  if (typeof input.target !== "string" || input.target.length === 0) {
-    throw caddyArgumentError("requires string field 'target'");
-  }
-  if (input.proxied !== undefined && typeof input.proxied !== "boolean") {
-    throw caddyArgumentError("field 'proxied' must be boolean");
+  if (typeof input.dnsArgument !== "string") {
+    throw caddyArgumentError("requires string field 'dnsArgument'");
   }
   if (input.internalPort !== undefined
     && (!Number.isInteger(input.internalPort) || (input.internalPort as number) < 1
@@ -77,7 +65,6 @@ export function parseCaddyIngressArgument(argument: string): CaddyIngressArgumen
   }
   return {
     ...input,
-    proxied: input.proxied ?? false,
     ...(input.routePolicy === undefined ? {} : { routePolicy: parseRoutePolicy(input.routePolicy, caddyArgumentError) })
   } as unknown as CaddyIngressArgument;
 }
@@ -93,15 +80,18 @@ function normalizeDomain(value: string): string {
 export function renderCaddyDeployment(
   name: string,
   ingress: CaddyIngressArgument & { listenPort: number; internalPort: number },
-  provider: CloudflareDnsProviderConfig
+  dns: ExternalUrlCaddyDnsModule
 ): CaddyDeployment {
-  if (provider.driver !== "cloudflare") throw new Error("Caddy currently supports only the Cloudflare DNS provider");
-  const credentialEnvironment = "CF_API_TOKEN";
+  validateCaddyDnsModule(dns);
   const service = `dim-caddy-${name}`;
   const email = ingress.acmeEmail ? `\n\temail ${ingress.acmeEmail}` : "";
+  const modules = dns.modules.map((module) => ` --with ${module}`).join("");
+  const environment = Object.keys(dns.environment)
+    .map((name) => `      ${name}: \${${name}:?set ${name}}`)
+    .join("\n");
   return {
     dockerfile: `FROM caddy:${CADDY_VERSION}-builder-alpine AS builder
-RUN xcaddy build v${CADDY_VERSION} --with github.com/caddy-dns/cloudflare@${CADDY_CLOUDFLARE_VERSION}
+RUN xcaddy build v${CADDY_VERSION}${modules}
 
 FROM caddy:${CADDY_VERSION}-alpine
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
@@ -113,7 +103,7 @@ COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 https://*.${ingress.domain}:${ingress.listenPort} {
 \tbind ${ingress.listenHost}
 \ttls {
-\t\tdns cloudflare {env.${credentialEnvironment}}
+\t\t${dns.directive}
 \t\tresolvers 1.1.1.1
 \t}
 
@@ -129,7 +119,7 @@ https://*.${ingress.domain}:${ingress.listenPort} {
     restart: unless-stopped
     network_mode: host
     environment:
-      ${credentialEnvironment}: \${${credentialEnvironment}:?set ${credentialEnvironment}}
+${environment}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
@@ -139,8 +129,25 @@ volumes:
   caddy-data:
   caddy-config:
 `,
-    environment: `${credentialEnvironment}=${JSON.stringify(provider.credential)}\n`
+    environment: Object.entries(dns.environment)
+      .map(([name, value]) => `${name}=${JSON.stringify(value)}\n`)
+      .join("")
   };
+}
+
+function validateCaddyDnsModule(value: ExternalUrlCaddyDnsModule): void {
+  if (!Array.isArray(value.modules) || value.modules.length === 0
+    || !value.modules.every((module) => typeof module === "string" && module.length > 0 && !/\s/.test(module))) {
+    throw new Error("DNS provider returned invalid Caddy module names");
+  }
+  if (typeof value.directive !== "string" || value.directive.length === 0 || /[\r\n]/.test(value.directive)) {
+    throw new Error("DNS provider returned an invalid Caddy DNS-01 directive");
+  }
+  if (!value.environment || typeof value.environment !== "object"
+    || !Object.entries(value.environment).every(([name, setting]) =>
+      /^[A-Z_][A-Z0-9_]*$/.test(name) && typeof setting === "string")) {
+    throw new Error("DNS provider returned invalid Caddy environment settings");
+  }
 }
 
 export async function verifyCaddyIngress(

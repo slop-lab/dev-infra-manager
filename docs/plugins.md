@@ -9,6 +9,26 @@ routes and narrowly scoped host-input providers on the authenticated DIM
 controller API; see
 [External workspace URLs](external-urls.md).
 
+## Named extensions
+
+Plugins can provide implementation objects to other plugins without creating
+a package dependency:
+
+```ts
+host.registerExtension("example.storage", "company-driver", driver);
+```
+
+A consumer resolves it from the same controller instance:
+
+```ts
+const driver = host.extension("example.storage", configuredDriverName);
+```
+
+Extension kind/name pairs are unique and use lowercase dotted or hyphenated
+names. Registration remains explicit and instance-scoped: installing a package
+does not activate it unless it is also listed in `plugins.json`. The External
+URL system uses this mechanism for DNS provider drivers.
+
 Plugin discovery does not depend on a naming convention. Scoped, unscoped, and
 private-registry package names are accepted. For example:
 
@@ -98,6 +118,6 @@ Only packages listed in the manifest are imported, and their plugin API version
 is validated. Registration is atomic from the caller's perspective: duplicate
 names and initialization failures abort startup, and completed registrations
 are disposed in reverse order. A plugin may return an async disposer from
-`register`. Each controller owns its route registry instance; there is no
-global capability singleton. `GET /api` discovers registered plugin routes
+`register`. Each controller owns its route and extension registry instances;
+there is no global capability singleton. `GET /api` discovers registered plugin routes
 for an authenticated workspace.

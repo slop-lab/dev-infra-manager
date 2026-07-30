@@ -148,8 +148,14 @@ DIM sends `workspace.id`, `workspace.name`, `ingress`,
 `{"allow":true}`, may return a replacement `subdomain`, or rejects with
 `{"allow":false,"reason":"..."}`. DIM validates the final relative DNS name
 and checks the complete hostname for conflicts. Errors, timeouts, malformed
-responses, and non-2xx status codes fail closed. The policy cannot change the
-target container or upstream address.
+responses, responses above 64 KiB, and non-2xx status codes fail closed. The
+policy cannot change the target container or upstream address.
+
+The checked-in
+[advanced route-policy example](../examples/external-url-route-policy/README.md)
+contains the Unix-socket server used by the automated policy test. The basic
+External URL example intentionally uses only the default workspace-prefix
+policy.
 
 HTTP and Caddy listeners using the same domain share its hostname routes.
 They must therefore configure the same route policy and upstream resolution
@@ -185,6 +191,10 @@ https://*.remote.example.com:8443 → Caddy 100.64.0.10:8443   ├→ workspace 
 Configure the Cloudflare adapter and both ingresses:
 
 ```bash
+dim install-plugin \
+  '@slop-lab/dim-plugin-dns-cloudflare@0.3.0' \
+  '@slop-lab/dim-plugin-external-urls@0.3.0'
+
 dim external-url dns-provider add cloudflare \
   --name cloudflare-main \
   --argument "$(jq -cn --arg credential "$CF_API_TOKEN" '{credential:$credential}')"
@@ -197,7 +207,9 @@ dim external-url ingress add http --name public-http \
 dim external-url ingress add caddy --name public-https \
   --description "Public HTTPS development URL" \
   --scheme https \
-  --argument '{"domain":"remote.example.com","listenHost":"100.64.0.10","listenPort":8443,"dnsProvider":"cloudflare-main","zone":"example.com","recordType":"A","target":"203.0.113.10","proxied":false}'
+  --argument "$(jq -cn \
+    --arg dnsArgument '{"zone":"example.com","recordType":"A","target":"203.0.113.10","proxied":false}' \
+    '{domain:"remote.example.com",listenHost:"100.64.0.10",listenPort:8443,dnsProvider:"cloudflare-main",dnsArgument:$dnsArgument}')"
 
 dim external-url ingress setup public-https
 ```
@@ -205,9 +217,12 @@ dim external-url ingress setup public-https
 The Cloudflare DNS provider owns only its credential. The driver requires
 `argument.credential` and stores it in the mode-`0600` External URL config.
 `dns-provider list` does not return provider arguments. The Caddy
-driver's `dnsProvider` field references that configured instance. Domain-bound
-record policy (`zone`, `recordType`, `target`, and `proxied`) belongs to the
-ingress argument, so one provider can serve multiple domains and ingresses.
+driver's `dnsProvider` field references that configured instance.
+`dnsArgument` is an opaque string normalized and interpreted by the selected
+provider driver; Cloudflare uses `zone`, `recordType`, `target`, and `proxied`.
+One provider instance can serve multiple domains and ingresses.
+The controller rejects a configured Caddy ingress when its referenced provider
+instance or registered driver plugin is missing.
 
 Because the current config contains credentials, do not provide
 `~/.config/dim/external-urls.json` to an AI agent or include it in diagnostics.
@@ -260,10 +275,11 @@ RUN npm install --global \
   /tmp/dim-packages/slop-lab-dim-cli-*.tgz
 ```
 
-For external URLs, install the core, contract, DNS provider, and external-URL
-plugin tarballs in the configured plugin home, list
-`@slop-lab/dim-plugin-external-urls` in `plugins.json`, configure at least one
-ingress with the CLI, and use a workspace command normally. DIM loads
+For plain HTTP external URLs, enable
+`@slop-lab/dim-plugin-external-urls`. For Cloudflare/Caddy, also install and
+enable `@slop-lab/dim-plugin-dns-cloudflare`; another provider plugin can
+register the same driver contract under a different name. Configure at least
+one ingress with the CLI and use a workspace command normally. DIM loads
 installed plugins when it automatically starts the managed controller.
 `dim controller serve --socket PATH` remains available for foreground
 debugging.

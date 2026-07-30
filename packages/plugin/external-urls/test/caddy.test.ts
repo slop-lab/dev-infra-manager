@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  CADDY_CLOUDFLARE_VERSION,
   CADDY_INGRESS_DOCUMENTATION_URL,
   CADDY_VERSION,
   parseCaddyIngressArgument,
@@ -21,18 +20,16 @@ describe("Caddy ingress deployment", () => {
       internalPort: 39080,
       upstreamMode: "container-ip",
       dnsProvider: "cloudflare",
-      zone: "example.com",
-      recordType: "A",
-      target: "203.0.113.10",
-      proxied: false,
+      dnsArgument: "{}",
       acmeEmail: "ops@example.com"
     }, {
-      driver: "cloudflare",
-      credential: "secret-token"
+      modules: ["github.com/caddy-dns/cloudflare@v0.2.4"],
+      directive: "dns cloudflare {env.CF_API_TOKEN}",
+      environment: { CF_API_TOKEN: "secret-token" }
     });
     expect(deployment.dockerfile).toContain(`caddy:${CADDY_VERSION}-builder-alpine`);
     expect(deployment.dockerfile).toContain(
-      `github.com/caddy-dns/cloudflare@${CADDY_CLOUDFLARE_VERSION}`
+      "github.com/caddy-dns/cloudflare@v0.2.4"
     );
     expect(deployment.caddyfile).toContain("*.dev.example.com");
     expect(deployment.caddyfile).toContain("dns cloudflare {env.CF_API_TOKEN}");

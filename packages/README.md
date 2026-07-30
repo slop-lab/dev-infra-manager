@@ -7,13 +7,12 @@ than repeating the common `@slop-lab/dim-*` npm prefix:
 - `core`, `cli`, `installer`, and `controller-proxy` are top-level product
   components.
 - `contracts/` contains provider-neutral data and configuration boundaries.
-- `plugin/` contains packages that implement DIM's plugin API.
-- `ingress/` and `dns-provider/` contain reusable implementations that plugins or
-  the CLI can compose.
+- `plugin/` contains packages that implement DIM's plugin API, including
+  named extension providers.
 
 Nested directory segments follow the remainder of the package name. For
-example, `dns-provider/cloudflare` publishes as
-`@slop-lab/dim-dns-provider-cloudflare`, while
+example, `plugin/dns-cloudflare` publishes as
+`@slop-lab/dim-plugin-dns-cloudflare`, while
 `contracts/external-url` publishes as
 `@slop-lab/dim-contracts-external-url`.
 

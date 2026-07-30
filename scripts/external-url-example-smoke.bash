@@ -92,14 +92,17 @@ package_archive() {
 npm install --prefix "$cli_home" --silent \
   "$(package_archive @slop-lab/dim-core)" \
   "$(package_archive @slop-lab/dim-contracts-external-url)" \
-  "$(package_archive @slop-lab/dim-dns-provider-cloudflare)" \
+  "$(package_archive @slop-lab/dim-plugin-dns-cloudflare)" \
   "$(package_archive @slop-lab/dim-cli)"
 npm install --prefix "$plugin_home" --silent \
   "$(package_archive @slop-lab/dim-core)" \
   "$(package_archive @slop-lab/dim-contracts-external-url)" \
-  "$(package_archive @slop-lab/dim-dns-provider-cloudflare)" \
+  "$(package_archive @slop-lab/dim-plugin-dns-cloudflare)" \
   "$(package_archive @slop-lab/dim-plugin-external-urls)"
-jq -n '{schemaVersion:1,plugins:["@slop-lab/dim-plugin-external-urls"]}' \
+jq -n '{schemaVersion:1,plugins:[
+  "@slop-lab/dim-plugin-dns-cloudflare",
+  "@slop-lab/dim-plugin-external-urls"
+]}' \
   > "$plugin_home/plugins.json"
 dim_bin="$cli_home/node_modules/.bin/dim"
 
@@ -115,6 +118,7 @@ DIM_ADMIN_CONTROLLER_SOCKET="$admin_socket" \
 	  "$dim_bin" plugin list --json \
 	  >"$state_root/plugin-list.json"
 jq -e '.plugins | index("@slop-lab/dim-plugin-external-urls") != null' "$state_root/plugin-list.json" >/dev/null
+jq -e '.plugins | index("@slop-lab/dim-plugin-dns-cloudflare") != null' "$state_root/plugin-list.json" >/dev/null
 test ! -e "$state_root/external-urls.json"
 
 echo "[external-url-example] start project-root, dev, and deep containers"
@@ -333,7 +337,9 @@ cloudflare_cli=(
   --description "local Cloudflare-compatible DNS smoke ingress" \
   --scheme https \
   --argument "$(jq -cn --arg target "$gateway" \
-    '{domain:"dev.smoke.test",listenHost:"127.0.0.1",listenPort:"auto",dnsProvider:"local-cloudflare",zone:"smoke.test",recordType:"A",target:$target,proxied:false}')" >/dev/null
+    --arg dnsArgument "$(jq -cn --arg target "$gateway" \
+      '{zone:"smoke.test",recordType:"A",target:$target,proxied:false}')" \
+    '{domain:"dev.smoke.test",listenHost:"127.0.0.1",listenPort:"auto",dnsProvider:"local-cloudflare",dnsArgument:$dnsArgument}')" >/dev/null
 "${cloudflare_cli[@]}" ingress setup local-https --output "$cloudflare_output" >/dev/null
 test -f "$cloudflare_output/local-https/Caddyfile"
 test -f "$cloudflare_output/local-https/.env"

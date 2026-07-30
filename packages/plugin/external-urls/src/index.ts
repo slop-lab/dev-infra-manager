@@ -12,6 +12,7 @@ import {
   type ControllerRuntimeContext,
   type ControllerWorkspace,
   type DimPlugin,
+  type DimPluginHost,
   type DimPluginLogger,
   type ResolvedWorkspaceTarget,
   type WorkspaceTarget
@@ -19,6 +20,8 @@ import {
 import {
   readExternalUrlConfig,
   writeExternalUrlConfig,
+  EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
+  type ExternalUrlDnsProviderDriver,
   type ExternalUrlDnsProviderConfig,
   type ExternalUrlIngressConfig
 } from "@slop-lab/dim-contracts-external-url";
@@ -34,13 +37,6 @@ import {
   workspaceSubdomainPrefix,
   type ExternalUrlRoutePolicyConfig
 } from "./routePolicy.js";
-import {
-  ensureCloudflareWildcard,
-  parseCloudflareDnsProviderArgument,
-  removeCloudflareWildcard,
-  verifyCloudflareWildcard,
-  type CloudflareDnsProviderConfig
-} from "@slop-lab/dim-dns-provider-cloudflare";
 
 export interface ExternalUrlIngressOptions {
   description: string;
@@ -55,6 +51,7 @@ export interface ExternalUrlIngressOptions {
 
 export interface ExternalUrlsPluginOptions {
   ingresses: Readonly<Record<string, ExternalUrlIngressOptions>>;
+  requiredDnsDrivers?: readonly string[];
 }
 
 interface NormalizedRequest {
@@ -121,10 +118,11 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
         path: "/external-url/:action",
         summary: "Manage External URL DNS providers and ingresses",
         async handle(context) {
-          return { body: await externalUrlAdmin(context.params.action ?? "", await context.readJson()) };
+          return { body: await externalUrlAdmin(host, context.params.action ?? "", await context.readJson()) };
         }
       });
       const registry = new WorkspaceRouteRegistry();
+      const mutations = new RouteMutationQueue();
       const ingresses = new Map<string, ConfiguredIngress>();
       for (const [name, ingress] of Object.entries(options.ingresses)) {
         ingresses.set(name, {
@@ -143,6 +141,7 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
       }
 
       const initialize = async (runtime: ControllerRuntimeContext): Promise<void> => {
+        for (const driver of options.requiredDnsDrivers ?? []) dnsDriver(host, driver);
         const store = new ExternalUrlStore(runtime.stateRoot);
         for (const workspace of await runtime.listWorkspaces()) {
           for (const entry of deduplicateRoutes(await store.list(workspace.id))) {
@@ -180,19 +179,19 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
         path: "/urls",
         summary: "Create an external URL using a host-configured ingress",
         discovery,
-        handle: (context) => createUrl(context, ingresses)
+        handle: (context) => mutations.run(() => createUrl(context, ingresses))
       });
       host.registerControllerRoute({
         method: "DELETE",
         path: "/urls",
         summary: "Revoke every external URL for this workspace",
-        handle: (context) => deleteWorkspaceUrls(context, ingresses)
+        handle: (context) => mutations.run(() => deleteWorkspaceUrls(context, ingresses))
       });
       host.registerControllerRoute({
         method: "DELETE",
         path: "/urls/:id",
         summary: "Revoke an external URL",
-        handle: (context) => deleteUrl(context, ingresses)
+        handle: (context) => mutations.run(() => deleteUrl(context, ingresses))
       });
 
       return async () => Promise.all([...ingresses.values()].map((ingress) => ingress.listener.close())).then(() => {});
@@ -205,9 +204,13 @@ export async function externalUrlsPluginFromConfig(
 ): Promise<DimPlugin> {
   const config = await readExternalUrlConfig(env);
   const ingresses: Record<string, ExternalUrlIngressOptions> = {};
+  const requiredDnsDrivers = new Set<string>();
   for (const [name, ingress] of Object.entries(config.ingresses)) {
     if (ingress.driver === "caddy") {
       const argument = parseCaddyIngressArgument(ingress.argument);
+      const provider = config.dnsProviders[argument.dnsProvider];
+      if (!provider) throw new Error(`ingress '${name}' references missing DNS provider '${argument.dnsProvider}'`);
+      requiredDnsDrivers.add(provider.driver);
       if (argument.listenPort === "auto" || argument.internalPort === undefined) {
         throw new Error(`ingress '${name}' has unresolved Caddy ports; re-add it with the DIM CLI`);
       }
@@ -238,10 +241,10 @@ export async function externalUrlsPluginFromConfig(
       };
     }
   }
-  return createExternalUrlsPlugin({ ingresses });
+  return createExternalUrlsPlugin({ ingresses, requiredDnsDrivers: [...requiredDnsDrivers] });
 }
 
-async function externalUrlAdmin(action: string, value: unknown): Promise<unknown> {
+async function externalUrlAdmin(host: DimPluginHost, action: string, value: unknown): Promise<unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new UserError("request body must be an object");
   const input = value as Record<string, unknown>;
   const text = (name: string) => {
@@ -255,7 +258,7 @@ async function externalUrlAdmin(action: string, value: unknown): Promise<unknown
       const driver = text("driver");
       config.dnsProviders[text("name")] = {
         driver,
-        argument: configureDnsProviderArgument(driver, text("argument"))
+        argument: normalizeDnsProviderArgument(host, driver, text("argument"))
       };
       await writeExternalUrlConfig(config);
       return {};
@@ -280,9 +283,10 @@ async function externalUrlAdmin(action: string, value: unknown): Promise<unknown
       const driver = text("driver");
       const scheme = text("scheme");
       if (scheme !== "http" && scheme !== "https") throw new UserError("scheme must be http or https");
-      const argument = await configureIngressArgument(driver, scheme, text("argument"));
+      let argument = await configureIngressArgument(driver, scheme, text("argument"));
       if (driver === "caddy") {
-        const dnsProvider = parseCaddyIngressArgument(argument).dnsProvider;
+        const parsed = parseCaddyIngressArgument(argument);
+        const dnsProvider = parsed.dnsProvider;
         const storedProvider = config.dnsProviders[dnsProvider];
         if (!storedProvider) {
           throw new UserError(
@@ -290,7 +294,9 @@ async function externalUrlAdmin(action: string, value: unknown): Promise<unknown
             + "run 'dim external-url dns-provider add --help' first"
           );
         }
-        cloudflareDnsProvider(storedProvider);
+        const providerDriver = dnsDriver(host, storedProvider.driver);
+        parsed.dnsArgument = normalizeDnsRecordArgument(providerDriver, parsed.dnsArgument);
+        argument = JSON.stringify(parsed);
       }
       const ingress: ExternalUrlIngressConfig = {
         driver,
@@ -313,12 +319,7 @@ async function externalUrlAdmin(action: string, value: unknown): Promise<unknown
         const argument = parseCaddyIngressArgument(ingress.argument);
         const storedProvider = config.dnsProviders[argument.dnsProvider];
         if (!storedProvider) throw new UserError(`DNS provider '${argument.dnsProvider}' is not configured`);
-        const provider = cloudflareDnsProvider(storedProvider);
-        await removeCloudflareWildcard(
-          provider,
-          await verifyCloudflareWildcard(provider, argument, argument.domain, process.env),
-          process.env
-        );
+        await dnsDriver(host, storedProvider.driver).remove(dnsOperation(storedProvider, argument));
       }
       delete config.ingresses[name];
       await writeExternalUrlConfig(config);
@@ -334,18 +335,13 @@ async function externalUrlAdmin(action: string, value: unknown): Promise<unknown
       }
       const storedProvider = config.dnsProviders[argument.dnsProvider];
       if (!storedProvider) throw new UserError(`DNS provider '${argument.dnsProvider}' is not configured`);
-      const provider = cloudflareDnsProvider(storedProvider);
-      await ensureCloudflareWildcard(
-        provider,
-        argument,
-        argument.domain,
-        process.env
-      );
+      const providerDriver = dnsDriver(host, storedProvider.driver);
+      await providerDriver.ensure(dnsOperation(storedProvider, argument));
       const deployment = renderCaddyDeployment(name, {
         ...argument,
         listenPort: argument.listenPort,
         internalPort: argument.internalPort
-      }, provider);
+      }, providerDriver.caddyDns01(storedProvider.argument));
       const output = path.resolve(text("output"), name);
       await mkdir(output, { recursive: true, mode: 0o700 });
       await Promise.all([
@@ -364,13 +360,7 @@ async function externalUrlAdmin(action: string, value: unknown): Promise<unknown
         const argument = parseCaddyIngressArgument(ingress.argument);
         const storedProvider = config.dnsProviders[argument.dnsProvider];
         if (!storedProvider) throw new UserError(`DNS provider '${argument.dnsProvider}' is not configured`);
-        const provider = cloudflareDnsProvider(storedProvider);
-        await verifyCloudflareWildcard(
-          provider,
-          argument,
-          argument.domain,
-          process.env
-        );
+        await dnsDriver(host, storedProvider.driver).verify(dnsOperation(storedProvider, argument));
         await verifyCaddyIngress(argument);
       }
       return {};
@@ -379,26 +369,51 @@ async function externalUrlAdmin(action: string, value: unknown): Promise<unknown
   }
 }
 
-function configureDnsProviderArgument(driver: string, argument: string): string {
-  if (driver !== "cloudflare") {
-    throw new UserError(`unsupported external URL DNS provider driver '${driver}'; supported drivers: cloudflare`);
-  }
+function normalizeDnsProviderArgument(host: DimPluginHost, driver: string, argument: string): string {
   try {
-    return JSON.stringify(parseCloudflareDnsProviderArgument(argument));
+    return dnsDriver(host, driver).normalizeProviderArgument(argument);
   } catch (error) {
     throw new UserError(error instanceof Error ? error.message : String(error));
   }
 }
 
-function cloudflareDnsProvider(provider: ExternalUrlDnsProviderConfig): CloudflareDnsProviderConfig {
-  if (provider.driver !== "cloudflare") {
-    throw new UserError(`Caddy ingress does not support DNS provider driver '${provider.driver}'`);
-  }
+function normalizeDnsRecordArgument(driver: ExternalUrlDnsProviderDriver, argument: string): string {
   try {
-    return parseCloudflareDnsProviderArgument(provider.argument);
+    return driver.normalizeRecordArgument(argument);
   } catch (error) {
     throw new UserError(error instanceof Error ? error.message : String(error));
   }
+}
+
+function dnsDriver(host: DimPluginHost, name: string): ExternalUrlDnsProviderDriver {
+  const driver = host.extension<ExternalUrlDnsProviderDriver>(EXTERNAL_URL_DNS_PROVIDER_EXTENSION, name);
+  if (!driver) {
+    throw new UserError(
+      `external URL DNS provider driver '${name}' is not installed; install and enable its DIM plugin first`
+    );
+  }
+  for (const method of [
+    "normalizeProviderArgument",
+    "normalizeRecordArgument",
+    "ensure",
+    "verify",
+    "remove",
+    "caddyDns01"
+  ] as const) {
+    if (typeof driver[method] !== "function") {
+      throw new UserError(`external URL DNS provider driver '${name}' has an invalid '${method}' implementation`);
+    }
+  }
+  return driver;
+}
+
+function dnsOperation(provider: ExternalUrlDnsProviderConfig, ingress: ReturnType<typeof parseCaddyIngressArgument>) {
+  return {
+    providerArgument: provider.argument,
+    recordArgument: ingress.dnsArgument,
+    domain: ingress.domain,
+    env: process.env
+  };
 }
 
 async function configureIngressArgument(
@@ -649,6 +664,16 @@ class WorkspaceRouteRegistry {
   }
 }
 
+class RouteMutationQueue {
+  #tail: Promise<void> = Promise.resolve();
+
+  run<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.#tail.then(operation, operation);
+    this.#tail = result.then(() => {}, () => {});
+    return result;
+  }
+}
+
 class WorkspaceIngressListener implements IngressListener {
   readonly name: string;
   readonly upstreamMode: "container-dns" | "container-ip";
@@ -739,10 +764,11 @@ class WorkspaceIngressListener implements IngressListener {
       method: request.method,
       path: request.url ?? "/",
       headers: {
-        ...request.headers,
+        ...proxyHeaders(request.headers),
         host: `${target.host}:${target.port}`,
         "x-forwarded-host": request.headers.host ?? "",
-        "x-forwarded-proto": request.headers["x-forwarded-proto"] ?? "http"
+        "x-forwarded-proto": this.#scheme,
+        "x-forwarded-for": request.socket.remoteAddress ?? ""
       }
     }, (upstreamResponse) => {
       response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
@@ -816,6 +842,11 @@ function validateRequest(value: unknown): NormalizedRequest {
 }
 
 function validateOptions(options: ExternalUrlsPluginOptions): void {
+  if (options.requiredDnsDrivers !== undefined
+    && (!Array.isArray(options.requiredDnsDrivers)
+      || !options.requiredDnsDrivers.every((name) => /^[a-z0-9][a-z0-9.-]*$/.test(name)))) {
+    throw new Error("external URL requiredDnsDrivers must contain valid extension names");
+  }
   const entries = Object.entries(options.ingresses);
   const domains = new Map<string, {
     name: string;
@@ -912,6 +943,22 @@ function validateSubdomain(value: string): void {
       label.length > 0 && label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label))) {
     throw new UserError("subdomain must be a lowercase relative DNS name");
   }
+}
+
+function proxyHeaders(headers: IncomingMessage["headers"]): IncomingMessage["headers"] {
+  const result = { ...headers };
+  for (const name of [
+    "connection",
+    "keep-alive",
+    "proxy-connection",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade"
+  ]) {
+    delete result[name];
+  }
+  return result;
 }
 
 function routeClaim(workspace: ControllerWorkspace, request: NormalizedRequest): string {

@@ -12,7 +12,7 @@ const packageDirectories = [
   "packages/core/dist",
   "packages/contracts/external-url/dist",
   "packages/controller-proxy/dist",
-  "packages/dns-provider/cloudflare/dist",
+  "packages/plugin/dns-cloudflare/dist",
   "packages/plugin/external-urls/dist",
   "packages/cli/dist",
   "packages/installer/dist",

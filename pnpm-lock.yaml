@@ -79,7 +79,7 @@ importers:
         specifier: 3.2.4
         version: 3.2.4(@types/node@24.13.3)(tsx@4.20.3)(yaml@2.8.3)
 
-  packages/dns-provider/cloudflare:
+  packages/installer:
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -94,7 +94,14 @@ importers:
         specifier: 3.2.4
         version: 3.2.4(@types/node@24.13.3)(tsx@4.20.3)(yaml@2.8.3)
 
-  packages/installer:
+  packages/plugin/dns-cloudflare:
+    dependencies:
+      '@slop-lab/dim-contracts-external-url':
+        specifier: workspace:0.3.0
+        version: link:../../contracts/external-url
+      '@slop-lab/dim-core':
+        specifier: workspace:0.3.0
+        version: link:../../core
     devDependencies:
       '@types/node':
         specifier: 24.13.3
@@ -117,9 +124,6 @@ importers:
       '@slop-lab/dim-core':
         specifier: workspace:0.3.0
         version: link:../../core
-      '@slop-lab/dim-dns-provider-cloudflare':
-        specifier: workspace:0.3.0
-        version: link:../../dns-provider/cloudflare
     devDependencies:
       '@types/node':
         specifier: 24.13.3

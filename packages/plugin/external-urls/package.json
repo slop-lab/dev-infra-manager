@@ -34,8 +34,7 @@
   },
   "dependencies": {
     "@slop-lab/dim-core": "workspace:0.3.0",
-    "@slop-lab/dim-contracts-external-url": "workspace:0.3.0",
-    "@slop-lab/dim-dns-provider-cloudflare": "workspace:0.3.0"
+    "@slop-lab/dim-contracts-external-url": "workspace:0.3.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

@@ -179,6 +179,10 @@ dim host-input get PROVIDER KEY [--parameters STRING]
 ```
 
 The ingress `argument` is an opaque string interpreted only by its driver.
+DNS provider plugins register named drivers through the instance-scoped DIM
+plugin extension registry. Provider configuration and Caddy's per-record
+`dnsArgument` remain opaque strings interpreted only by that driver; the
+External URLs plugin must not depend on a provider implementation package.
 Drivers return public URLs rather than asking the common controller to derive
 domains. The request contains a complete relative subdomain. By default it
 must begin `WORKSPACE--`; an omitted value receives the first unused

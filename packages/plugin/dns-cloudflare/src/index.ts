@@ -1,3 +1,13 @@
+import {
+  DIM_PLUGIN_API_VERSION,
+  type DimPlugin
+} from "@slop-lab/dim-core";
+import {
+  EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
+  type ExternalUrlDnsProviderDriver,
+  type ExternalUrlDnsOperation
+} from "@slop-lab/dim-contracts-external-url";
+
 const defaultCloudflareApiBase = "https://api.cloudflare.com/client/v4";
 export const CLOUDFLARE_DNS_PROVIDER_DOCUMENTATION_URL =
   "https://github.com/slop-lab/dev-infra-manager/blob/main/docs/external-urls.md"
@@ -13,6 +23,41 @@ export interface CloudflareDnsRecordConfig {
   recordType: "A" | "AAAA" | "CNAME";
   target: string;
   proxied: boolean;
+}
+
+export function parseCloudflareDnsRecordArgument(argument: string): CloudflareDnsRecordConfig {
+  let value: unknown;
+  try {
+    value = JSON.parse(argument);
+  } catch {
+    throw cloudflareRecordArgumentError("must be valid JSON");
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw cloudflareRecordArgumentError("must be a JSON object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.zone !== "string" || normalizeDomain(input.zone).length === 0) {
+    throw cloudflareRecordArgumentError("requires string field 'zone'");
+  }
+  if (input.recordType !== "A" && input.recordType !== "AAAA" && input.recordType !== "CNAME") {
+    throw cloudflareRecordArgumentError("field 'recordType' must be A, AAAA, or CNAME");
+  }
+  if (typeof input.target !== "string" || input.target.length === 0) {
+    throw cloudflareRecordArgumentError("requires string field 'target'");
+  }
+  if (input.proxied !== undefined && typeof input.proxied !== "boolean") {
+    throw cloudflareRecordArgumentError("field 'proxied' must be boolean");
+  }
+  return {
+    zone: normalizeDomain(input.zone),
+    recordType: input.recordType,
+    target: input.target,
+    proxied: input.proxied ?? false
+  };
+}
+
+function cloudflareRecordArgumentError(detail: string): Error {
+  return new Error(`Cloudflare DNS record argument ${detail}. See ${CLOUDFLARE_DNS_PROVIDER_DOCUMENTATION_URL}`);
 }
 
 export function parseCloudflareDnsProviderArgument(argument: string): CloudflareDnsProviderConfig {
@@ -224,3 +269,63 @@ function state(
     proxied: Boolean(record.proxied)
   };
 }
+
+export const cloudflareDnsProviderDriver: ExternalUrlDnsProviderDriver = {
+  normalizeProviderArgument(argument) {
+    return JSON.stringify(parseCloudflareDnsProviderArgument(argument));
+  },
+  normalizeRecordArgument(argument) {
+    return JSON.stringify(parseCloudflareDnsRecordArgument(argument));
+  },
+  async ensure(operation) {
+    await ensureCloudflareWildcard(...operationArguments(operation));
+  },
+  async verify(operation) {
+    await verifyCloudflareWildcard(...operationArguments(operation));
+  },
+  async remove(operation) {
+    const [provider, record, domain, env] = operationArguments(operation);
+    await removeCloudflareWildcard(
+      provider,
+      await verifyCloudflareWildcard(provider, record, domain, env),
+      env
+    );
+  },
+  caddyDns01(providerArgument) {
+    return {
+      modules: ["github.com/caddy-dns/cloudflare@v0.2.4"],
+      directive: "dns cloudflare {env.CF_API_TOKEN}",
+      environment: {
+        CF_API_TOKEN: parseCloudflareDnsProviderArgument(providerArgument).credential
+      }
+    };
+  }
+};
+
+function operationArguments(operation: ExternalUrlDnsOperation): [
+  CloudflareDnsProviderConfig,
+  CloudflareDnsRecordConfig,
+  string,
+  NodeJS.ProcessEnv
+] {
+  return [
+    parseCloudflareDnsProviderArgument(operation.providerArgument),
+    parseCloudflareDnsRecordArgument(operation.recordArgument),
+    operation.domain,
+    operation.env
+  ];
+}
+
+const plugin: DimPlugin = {
+  name: "@slop-lab/dim-plugin-dns-cloudflare",
+  apiVersion: DIM_PLUGIN_API_VERSION,
+  register(host) {
+    host.registerExtension(
+      EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
+      "cloudflare",
+      cloudflareDnsProviderDriver
+    );
+  }
+};
+
+export default plugin;

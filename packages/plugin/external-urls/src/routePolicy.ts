@@ -86,6 +86,7 @@ async function callWebhook(
   input: ExternalUrlRoutePolicyRequest
 ): Promise<{ allow: boolean; reason?: string; subdomain?: string }> {
   const body = JSON.stringify(input);
+  const maxResponseBytes = 64 * 1024;
   const transport = endpoint.url.protocol === "https:" ? https : http;
   const response = await new Promise<{ status: number; body: string }>((resolve, reject) => {
     const request = transport.request({
@@ -95,7 +96,7 @@ async function callWebhook(
             port: endpoint.url.port || undefined
           }
         : { socketPath: endpoint.socketPath }),
-      path: endpoint.url.pathname || "/",
+      path: `${endpoint.url.pathname || "/"}${endpoint.url.search}`,
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -104,7 +105,17 @@ async function callWebhook(
       timeout: 5_000
     }, (incoming) => {
       const chunks: Buffer[] = [];
-      incoming.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      let bytes = 0;
+      incoming.on("data", (chunk) => {
+        const value = Buffer.from(chunk);
+        bytes += value.length;
+        if (bytes > maxResponseBytes) {
+          incoming.destroy(new Error("external URL route policy webhook response exceeds 64 KiB"));
+          return;
+        }
+        chunks.push(value);
+      });
+      incoming.once("error", reject);
       incoming.on("end", () => resolve({
         status: incoming.statusCode ?? 500,
         body: Buffer.concat(chunks).toString("utf8")
@@ -125,7 +136,9 @@ async function callWebhook(
   }
   if (!isRecord(value) || typeof value.allow !== "boolean"
     || (value.reason !== undefined && typeof value.reason !== "string")
-    || (value.subdomain !== undefined && typeof value.subdomain !== "string")) {
+    || (typeof value.reason === "string" && value.reason.length > 1024)
+    || (value.subdomain !== undefined && typeof value.subdomain !== "string")
+    || (typeof value.subdomain === "string" && value.subdomain.length > 253)) {
     throw new Error("external URL route policy webhook returned an invalid response");
   }
   return value as { allow: boolean; reason?: string; subdomain?: string };

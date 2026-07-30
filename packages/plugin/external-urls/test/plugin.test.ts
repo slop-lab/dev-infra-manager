@@ -7,9 +7,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   configuredDimAdminController,
   createDimController,
+  DIM_PLUGIN_API_VERSION,
   registerPlugins,
   type LifecycleOptions
 } from "@slop-lab/dim-core";
+import {
+  EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
+  type ExternalUrlDnsProviderDriver
+} from "@slop-lab/dim-contracts-external-url";
 import { createExternalUrlsPlugin } from "../src/index.js";
 
 describe("external URLs plugin", () => {
@@ -25,7 +30,21 @@ describe("external URLs plugin", () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-admin-"));
     close.push(() => rm(stateRoot, { recursive: true, force: true }));
     process.env.DIM_EXTERNAL_URL_CONFIG = path.join(stateRoot, "external-urls.json");
-    const registered = await registerPlugins([createExternalUrlsPlugin({ ingresses: {} })]);
+    const driver: ExternalUrlDnsProviderDriver = {
+      normalizeProviderArgument: (argument) => `provider:${argument}`,
+      normalizeRecordArgument: (argument) => `record:${argument}`,
+      ensure: vi.fn(),
+      verify: vi.fn(),
+      remove: vi.fn(),
+      caddyDns01: () => ({ modules: [], directive: "dns example", environment: {} })
+    };
+    const registered = await registerPlugins([createExternalUrlsPlugin({ ingresses: {} }), {
+      name: "@example/dim-plugin-dns",
+      apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) {
+        host.registerExtension(EXTERNAL_URL_DNS_PROVIDER_EXTENSION, "example", driver);
+      }
+    }]);
     close.push(() => registered.dispose());
     const server = configuredDimAdminController({} as LifecycleOptions, registered);
     server.listen(0, "127.0.0.1");
@@ -36,13 +55,27 @@ describe("external URLs plugin", () => {
     const base = `http://127.0.0.1:${address.port}/v1/external-url`;
     const endpoint = `${base}/ingress-add`;
 
+    const missingDriver = await fetch(`${base}/dns-provider-add`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        driver: "missing",
+        name: "missing",
+        argument: ""
+      })
+    });
+    expect(missingDriver.status).toBe(400);
+    expect((await missingDriver.json() as { error: string }).error).toContain(
+      "DNS provider driver 'missing' is not installed"
+    );
+
     const providerResponse = await fetch(`${base}/dns-provider-add`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        driver: "cloudflare",
-        name: "cloudflare-main",
-        argument: '{"credential":"secret-token"}'
+        driver: "example",
+        name: "example-main",
+        argument: "connection"
       })
     });
     expect(providerResponse.status).toBe(200);
@@ -87,10 +120,7 @@ describe("external URLs plugin", () => {
         listenHost: "127.0.0.1",
         listenPort: 9443,
         dnsProvider: "missing",
-        zone: "example.com",
-        recordType: "A",
-        target: "203.0.113.10",
-        proxied: false
+        dnsArgument: "{}"
       }),
       "caddy"
     );
@@ -105,11 +135,8 @@ describe("external URLs plugin", () => {
         domain: "remote.example.com",
         listenHost: "127.0.0.1",
         listenPort: 9443,
-        dnsProvider: "cloudflare-main",
-        zone: "example.com",
-        recordType: "A",
-        target: "203.0.113.10",
-        proxied: false
+        dnsProvider: "example-main",
+        dnsArgument: "record configuration"
       }),
       "caddy"
     );
@@ -119,7 +146,7 @@ describe("external URLs plugin", () => {
       headers: { "content-type": "application/json" },
       body: "{}"
     });
-    expect(await providers.json()).toEqual([{ name: "cloudflare-main", driver: "cloudflare" }]);
+    expect(await providers.json()).toEqual([{ name: "example-main", driver: "example" }]);
   });
 
   it("starts normally without a configured ingress", async () => {
@@ -154,7 +181,11 @@ describe("external URLs plugin", () => {
   it("discovers host ingresses and proxies controller-selected nested targets", async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-"));
     close.push(() => rm(stateRoot, { recursive: true, force: true }));
-    const upstream = http.createServer((_request, response) => response.end("nested workspace app"));
+    let upstreamHeaders: http.IncomingHttpHeaders | undefined;
+    const upstream = http.createServer((request, response) => {
+      upstreamHeaders = request.headers;
+      response.end("nested workspace app");
+    });
     upstream.listen(0, "127.0.0.1");
     await once(upstream, "listening");
     close.push(() => new Promise((resolve) => upstream.close(() => resolve())));
@@ -213,6 +244,25 @@ describe("external URLs plugin", () => {
       { name: "public", description: "Public preview URL", scheme: "https" }
     ]);
 
+    const automatic = await Promise.all([8080, 8081].map((port) => fetch(`${base}/api/urls`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({
+        ingress: "tailnet",
+        target: { containers: ["dev"], port }
+      })
+    }).then(async (response) => {
+      expect(response.status).toBe(201);
+      return response.json() as Promise<{ urls: Array<{ id: string; subdomain: string }> }>;
+    })));
+    expect(automatic.map((result) => result.urls[0]?.subdomain).sort()).toEqual(["work-1--0", "work-1--1"]);
+    for (const result of automatic) {
+      expect((await fetch(`${base}/api/urls/${result.urls[0]?.id}`, {
+        method: "DELETE",
+        headers
+      })).status).toBe(204);
+    }
+
     const missingIngress = await fetch(`${base}/api/urls`, {
       method: "POST",
       headers: { ...headers, "content-type": "application/json" },
@@ -237,7 +287,13 @@ describe("external URLs plugin", () => {
       { containers: ["dev", "deep"], port: 8080, protocol: "http" },
       "container-ip"
     );
-    expect(await proxyRequest(hostProxyPort, "work-1--deep.builder.tail.example.test")).toBe("nested workspace app");
+    expect(await proxyRequest(
+      hostProxyPort,
+      "work-1--deep.builder.tail.example.test",
+      { "x-forwarded-proto": "spoofed" }
+    )).toBe("nested workspace app");
+    expect(upstreamHeaders?.["x-forwarded-proto"]).toBe("http");
+    expect(upstreamHeaders?.["x-forwarded-host"]).toBe("work-1--deep.builder.tail.example.test");
     expect(await proxyRequest(controllerProxyPort, "work-1--deep.builder.tail.example.test")).toBe("nested workspace app");
     expect(await proxyRequest(hostProxyPort, "unknown.builder.tail.example.test")).toBe("404");
 
@@ -305,12 +361,16 @@ async function availablePort(): Promise<number> {
   return address.port;
 }
 
-async function proxyRequest(port: number, host: string): Promise<string> {
+async function proxyRequest(
+  port: number,
+  host: string,
+  headers: http.OutgoingHttpHeaders = {}
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const request = http.request({
       hostname: "127.0.0.1",
       port,
-      headers: { host }
+      headers: { ...headers, host }
     }, (response) => {
       const chunks: Buffer[] = [];
       response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));

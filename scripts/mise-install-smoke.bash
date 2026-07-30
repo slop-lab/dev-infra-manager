@@ -38,14 +38,14 @@ pnpm run workspace:build >/dev/null
 echo "[mise-smoke] pack tarballs"
 pnpm --dir packages/core/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir packages/contracts/external-url/dist pack --pack-destination "$source_dir" --json >/dev/null
-pnpm --dir packages/dns-provider/cloudflare/dist pack --pack-destination "$source_dir" --json >/dev/null
+pnpm --dir packages/plugin/dns-cloudflare/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir packages/cli/dist pack --pack-destination "$source_dir" --json >/dev/null
 pnpm --dir packages/installer/dist pack --pack-destination "$source_dir" --json >/dev/null
 core_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-core*.tgz' -print -quit)"
 cli_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
 install_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-installer*.tgz' -print -quit)"
 contracts_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-contracts-external-url*.tgz' -print -quit)"
-cloudflare_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dns-provider-cloudflare*.tgz' -print -quit)"
+cloudflare_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*plugin-dns-cloudflare*.tgz' -print -quit)"
 test -n "$core_tarball" && test -n "$cli_tarball" && test -n "$install_tarball"
 test -n "$contracts_tarball" && test -n "$cloudflare_tarball"
 
@@ -70,7 +70,7 @@ echo "[container] publish local tarballs to the local registry"
 dim_publish_to_local_registry \
   /work/*dim-core*.tgz \
   /work/*dim-contracts-external-url*.tgz \
-  /work/*dns-provider-cloudflare*.tgz \
+  /work/*plugin-dns-cloudflare*.tgz \
   /work/*dim-cli*.tgz \
   /work/*dim-installer*.tgz
 

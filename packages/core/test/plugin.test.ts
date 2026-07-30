@@ -19,7 +19,9 @@ describe("plugin contract", () => {
     expect(register).toHaveBeenCalledWith(expect.objectContaining({
       apiVersion: DIM_PLUGIN_API_VERSION,
       registerControllerRoute: expect.any(Function),
-      registerHostInputProvider: expect.any(Function)
+      registerHostInputProvider: expect.any(Function),
+      registerExtension: expect.any(Function),
+      extension: expect.any(Function)
     }));
   });
 
@@ -135,5 +137,30 @@ describe("plugin contract", () => {
         }
       }
     ])).rejects.toThrow(/already registered/);
+  });
+
+  it("shares named extensions between plugins and rejects duplicates", async () => {
+    const capability = { value: "cloudflare" };
+    await expect(registerPlugins([
+      {
+        name: "provider",
+        apiVersion: DIM_PLUGIN_API_VERSION,
+        register(host) {
+          host.registerExtension("external-url.dns-provider", "cloudflare", capability);
+        }
+      },
+      {
+        name: "consumer",
+        apiVersion: DIM_PLUGIN_API_VERSION,
+        register(host) {
+          expect(host.extension("external-url.dns-provider", "cloudflare")).toBe(capability);
+          expect(() => host.registerExtension(
+            "external-url.dns-provider",
+            "cloudflare",
+            {}
+          )).toThrow(/already registered/);
+        }
+      }
+    ])).resolves.toBeDefined();
   });
 });

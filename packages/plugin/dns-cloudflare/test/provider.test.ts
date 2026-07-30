@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+import { registerPlugin } from "@slop-lab/dim-core";
 import {
+  EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
+  type ExternalUrlDnsProviderDriver
+} from "@slop-lab/dim-contracts-external-url";
+import cloudflarePlugin, {
   ensureCloudflareWildcard,
   parseCloudflareDnsProviderArgument,
+  parseCloudflareDnsRecordArgument,
   verifyCloudflareWildcard
 } from "../src/index.js";
 
@@ -22,6 +28,29 @@ describe("Cloudflare DNS provider", () => {
       driver: "cloudflare",
       credential: "secret-token"
     });
+    expect(parseCloudflareDnsRecordArgument(JSON.stringify(recordConfig))).toEqual(recordConfig);
+  });
+
+  it("registers as an External URL DNS provider extension", async () => {
+    const registered = await registerPlugin(cloudflarePlugin);
+    const driver = registered.host.extension<ExternalUrlDnsProviderDriver>(
+      EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
+      "cloudflare"
+    );
+    expect(driver).toMatchObject({
+      normalizeProviderArgument: expect.any(Function),
+      normalizeRecordArgument: expect.any(Function),
+      ensure: expect.any(Function),
+      verify: expect.any(Function),
+      remove: expect.any(Function),
+      caddyDns01: expect.any(Function)
+    });
+    expect(driver?.caddyDns01('{"driver":"cloudflare","credential":"secret-token"}')).toEqual({
+      modules: ["github.com/caddy-dns/cloudflare@v0.2.4"],
+      directive: "dns cloudflare {env.CF_API_TOKEN}",
+      environment: { CF_API_TOKEN: "secret-token" }
+    });
+    await registered.dispose();
   });
 
   it("creates a missing wildcard record", async () => {

@@ -14,12 +14,12 @@ cd "$repo_root"
 pnpm run workspace:build
 pnpm --dir packages/core/dist pack --pack-destination "$package_root" --json >/dev/null
 pnpm --dir packages/contracts/external-url/dist pack --pack-destination "$package_root" --json >/dev/null
-pnpm --dir packages/dns-provider/cloudflare/dist pack --pack-destination "$package_root" --json >/dev/null
+pnpm --dir packages/plugin/dns-cloudflare/dist pack --pack-destination "$package_root" --json >/dev/null
 pnpm --dir packages/cli/dist pack --pack-destination "$package_root" --json >/dev/null
 core_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dim-core*.tgz' -print -quit)"
 cli_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
 contracts_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dim-contracts-external-url*.tgz' -print -quit)"
-cloudflare_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dns-provider-cloudflare*.tgz' -print -quit)"
+cloudflare_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*plugin-dns-cloudflare*.tgz' -print -quit)"
 test -n "$core_tarball"
 test -n "$cli_tarball"
 test -n "$contracts_tarball" -a -n "$cloudflare_tarball"
