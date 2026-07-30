@@ -21,6 +21,11 @@ describe("DIM admin controller", () => {
           path: "/test/:name",
           summary: "Test admin route",
           async handle(context) {
+            if (context.params.name === "invalid") {
+              const error = new Error("invalid plugin input");
+              error.name = "UserError";
+              throw error;
+            }
             return { body: { name: context.params.name, input: await context.readJson() } };
           }
         });
@@ -45,6 +50,13 @@ describe("DIM admin controller", () => {
       body: JSON.stringify({ enabled: true })
     });
     expect(await response.json()).toEqual({ name: "item", input: { enabled: true } });
+    const invalid = await fetch(`${base}/v1/test/invalid`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}"
+    });
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({ error: "invalid plugin input" });
     await plugins.dispose();
   });
 });

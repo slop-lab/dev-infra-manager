@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { UserError } from "./errors.js";
+import { isUserError, UserError } from "./errors.js";
 import { LifecycleState } from "./lifecycleState.js";
 import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
@@ -133,7 +133,7 @@ export async function initializeControllerRoutes(
 export function createDimController(options: DimControllerOptions): Server {
   return createServer((request, response) => {
     void handleRequest(options, request, response).catch((error) => {
-      sendJson(response, error instanceof UserError ? 400 : 500, {
+      sendJson(response, isUserError(error) ? 400 : 500, {
         error: error instanceof Error ? error.message : String(error)
       });
     });

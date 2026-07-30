@@ -4,6 +4,9 @@ import type {
 
 export const CADDY_VERSION = "2.11.4";
 export const CADDY_CLOUDFLARE_VERSION = "v0.2.4";
+export const CADDY_INGRESS_DOCUMENTATION_URL =
+  "https://github.com/slop-lab/dev-infra-manager/blob/main/docs/external-urls.md"
+  + "#http-and-https-with-cloudflare-dns-and-caddy";
 
 export interface CaddyDeployment {
   dockerfile: string;
@@ -27,31 +30,39 @@ export function parseCaddyIngressArgument(argument: string): CaddyIngressArgumen
   try {
     value = JSON.parse(argument);
   } catch {
-    throw new Error("Caddy ingress argument must be valid JSON");
+    throw caddyArgumentError("must be valid JSON");
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Caddy ingress argument must be an object");
+    throw caddyArgumentError("must be a JSON object");
   }
   const input = value as Record<string, unknown>;
-  if (typeof input.domain !== "string" || input.domain.length === 0) throw new Error("Caddy argument requires domain");
+  if (typeof input.domain !== "string" || input.domain.length === 0) {
+    throw caddyArgumentError("requires string field 'domain'");
+  }
   if (typeof input.listenHost !== "string" || input.listenHost.length === 0) {
-    throw new Error("Caddy argument requires listenHost");
+    throw caddyArgumentError("requires string field 'listenHost'");
   }
   if (input.listenPort !== "auto"
     && (!Number.isInteger(input.listenPort) || (input.listenPort as number) < 1 || (input.listenPort as number) > 65535)) {
-    throw new Error("Caddy argument listenPort must be 'auto' or a port");
+    throw caddyArgumentError("field 'listenPort' must be 'auto' or a port");
   }
-  if (typeof input.provider !== "string" || input.provider.length === 0) throw new Error("Caddy argument requires provider");
+  if (typeof input.provider !== "string" || input.provider.length === 0) {
+    throw caddyArgumentError("requires string field 'provider'");
+  }
   if (input.publicListenHost !== undefined && typeof input.publicListenHost !== "string") {
-    throw new Error("Caddy argument publicListenHost must be a string");
+    throw caddyArgumentError("field 'publicListenHost' must be a string");
   }
   if (input.upstreamMode !== undefined && input.upstreamMode !== "container-ip" && input.upstreamMode !== "container-dns") {
-    throw new Error("Caddy argument upstreamMode must be container-ip or container-dns");
+    throw caddyArgumentError("field 'upstreamMode' must be container-ip or container-dns");
   }
   if (input.acmeEmail !== undefined && typeof input.acmeEmail !== "string") {
-    throw new Error("Caddy argument acmeEmail must be a string");
+    throw caddyArgumentError("field 'acmeEmail' must be a string");
   }
   return input as unknown as CaddyIngressArgument;
+}
+
+function caddyArgumentError(detail: string): Error {
+  return new Error(`Caddy ingress --argument ${detail}. See ${CADDY_INGRESS_DOCUMENTATION_URL}`);
 }
 
 export function renderCaddyDeployment(

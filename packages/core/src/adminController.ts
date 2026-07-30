@@ -32,7 +32,7 @@ import type { LifecycleOptions, WorkspaceRuntimeBackendKind } from "./lifecycleT
 import type { RegisteredDimPlugins } from "./plugin.js";
 import { ProcessRunner } from "./runner.js";
 import type { StreamingCommandRunner } from "./types.js";
-import { UserError } from "./errors.js";
+import { isUserError, UserError } from "./errors.js";
 import { parseRepositorySetYaml, validateRepositorySet } from "./repositorySet.js";
 
 export interface AdminRouteContext {
@@ -58,7 +58,7 @@ export function configuredDimAdminController(
 ): Server {
   return createServer((request, response) => {
     void handleAdminRequest(lifecycle, plugins, runner, request, response).catch((error) => {
-      sendJson(response, error instanceof UserError ? 400 : 500, {
+      sendJson(response, isUserError(error) ? 400 : 500, {
         error: error instanceof Error ? error.message : String(error)
       });
     });

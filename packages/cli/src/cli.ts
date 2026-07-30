@@ -1074,11 +1074,26 @@ async function externalUrlAdmin<T = unknown>(
         "External URL commands require the @slop-lab/dim-plugin-external-urls plugin; install it and restart the controller"
       );
     }
+    const detail = externalUrlErrorDetail(response.body);
     throw new UserError(
-      `External URL admin request failed (${response.status})${response.body ? `: ${response.body.trim()}` : ""}`
+      `External URL admin request failed (${response.status})${detail ? `: ${detail}` : ""}`
     );
   }
   return (response.status === 204 || response.body.length === 0 ? {} : JSON.parse(response.body)) as T;
+}
+
+function externalUrlErrorDetail(body: string): string {
+  if (body.length === 0) return "";
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      && typeof (parsed as Record<string, unknown>).error === "string") {
+      return (parsed as { error: string }).error;
+    }
+  } catch {
+    // Preserve a non-JSON response from the controller for diagnostics.
+  }
+  return body.trim();
 }
 
 async function externalUrlAdminWithCredential<T = unknown>(

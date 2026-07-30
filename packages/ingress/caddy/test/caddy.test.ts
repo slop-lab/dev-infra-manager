@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   CADDY_CLOUDFLARE_VERSION,
+  CADDY_INGRESS_DOCUMENTATION_URL,
   CADDY_VERSION,
+  parseCaddyIngressArgument,
   renderCaddyDeployment
 } from "../src/index.js";
 
 describe("Caddy ingress deployment", () => {
+  it("links argument validation errors to the Caddy ingress documentation", () => {
+    expect(() => parseCaddyIngressArgument("")).toThrow(CADDY_INGRESS_DOCUMENTATION_URL);
+    expect(() => parseCaddyIngressArgument("{}")).toThrow(CADDY_INGRESS_DOCUMENTATION_URL);
+  });
+
   it("renders pinned Cloudflare DNS-01 and loopback-router forwarding", () => {
     const deployment = renderCaddyDeployment("public", {
       domain: "dev.example.com",

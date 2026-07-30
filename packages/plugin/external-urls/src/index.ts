@@ -22,6 +22,7 @@ import {
   type ExternalUrlIngressConfig
 } from "@slop-lab/dim-contracts-external-url";
 import {
+  CADDY_INGRESS_DOCUMENTATION_URL,
   parseCaddyIngressArgument,
   renderCaddyDeployment,
   verifyCaddyIngress
@@ -351,8 +352,18 @@ async function configureIngressArgument(
   argument: string
 ): Promise<string> {
   if (driver === "caddy") {
-    if (scheme !== "https") throw new UserError("Caddy ingress requires scheme https");
-    const parsed = parseCaddyIngressArgument(argument);
+    if (scheme !== "https") {
+      throw new UserError(
+        "Caddy ingress requires '--scheme https'; use driver 'builtin-http' for '--scheme http'. "
+        + `See ${CADDY_INGRESS_DOCUMENTATION_URL}`
+      );
+    }
+    let parsed: ReturnType<typeof parseCaddyIngressArgument>;
+    try {
+      parsed = parseCaddyIngressArgument(argument);
+    } catch (error) {
+      throw new UserError(error instanceof Error ? error.message : String(error));
+    }
     return JSON.stringify({
       ...parsed,
       listenPort: parsed.listenPort === "auto" ? await availableTcpPort(parsed.listenHost) : parsed.listenPort
@@ -384,33 +395,46 @@ function parseBuiltinHttpArgument(driver: string, argument: string): {
   publicPort?: number;
   upstreamMode?: "container-ip" | "container-dns";
 } {
-  if (driver !== "builtin-http") throw new Error(`unsupported external URL ingress driver '${driver}'`);
+  if (driver !== "builtin-http") {
+    throw new UserError(
+      `unsupported external URL ingress driver '${driver}'; supported drivers: builtin-http, caddy`
+    );
+  }
   let value: unknown;
   try {
     value = JSON.parse(argument);
   } catch {
-    throw new Error("builtin-http ingress argument must be valid JSON");
+    throw builtinHttpArgumentError("must be valid JSON");
   }
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("builtin-http ingress argument must be an object");
+    throw builtinHttpArgumentError("must be a JSON object");
   }
   const input = value as Record<string, unknown>;
-  if (typeof input.domain !== "string" || input.domain.length === 0) throw new Error("builtin-http argument requires domain");
+  if (typeof input.domain !== "string" || input.domain.length === 0) {
+    throw builtinHttpArgumentError("requires string field 'domain'");
+  }
   if (typeof input.listenHost !== "string" || input.listenHost.length === 0) {
-    throw new Error("builtin-http argument requires listenHost");
+    throw builtinHttpArgumentError("requires string field 'listenHost'");
   }
   if (input.listenPort !== "auto"
     && (!Number.isInteger(input.listenPort) || (input.listenPort as number) < 1 || (input.listenPort as number) > 65_535)) {
-    throw new Error("builtin-http argument listenPort must be 'auto' or a port");
+    throw builtinHttpArgumentError("field 'listenPort' must be 'auto' or a port");
   }
   if (input.publicPort !== undefined
     && (!Number.isInteger(input.publicPort) || (input.publicPort as number) < 1 || (input.publicPort as number) > 65_535)) {
-    throw new Error("builtin-http argument publicPort must be a port");
+    throw builtinHttpArgumentError("field 'publicPort' must be a port");
   }
   if (input.upstreamMode !== undefined && input.upstreamMode !== "container-ip" && input.upstreamMode !== "container-dns") {
-    throw new Error("builtin-http argument upstreamMode must be container-ip or container-dns");
+    throw builtinHttpArgumentError("field 'upstreamMode' must be container-ip or container-dns");
   }
   return input as unknown as ReturnType<typeof parseBuiltinHttpArgument>;
+}
+
+const INGRESS_DOCUMENTATION_URL =
+  "https://github.com/slop-lab/dev-infra-manager/blob/main/docs/external-urls.md#named-ingresses";
+
+function builtinHttpArgumentError(detail: string): UserError {
+  return new UserError(`builtin-http ingress --argument ${detail}. See ${INGRESS_DOCUMENTATION_URL}`);
 }
 
 async function listUrls(context: ControllerRouteContext) {

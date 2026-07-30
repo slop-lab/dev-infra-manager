@@ -161,6 +161,10 @@ dim external-url ingress verify NAME
 dim external-url ingress remove NAME [--cleanup-dns]
 ```
 
+Invalid ingress driver arguments are client errors. The admin API returns HTTP
+400, and its message links to the ingress configuration documentation when a
+driver-specific JSON object is missing or malformed.
+
 Workspace-scoped URL operations are:
 
 ```text

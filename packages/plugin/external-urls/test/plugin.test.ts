@@ -5,14 +5,69 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  configuredDimAdminController,
   createDimController,
-  registerPlugins
+  registerPlugins,
+  type LifecycleOptions
 } from "@slop-lab/dim-core";
 import { createExternalUrlsPlugin } from "../src/index.js";
 
 describe("external URLs plugin", () => {
   const close: Array<() => Promise<void>> = [];
-  afterEach(async () => Promise.all(close.splice(0).map((item) => item())));
+  const originalExternalUrlConfig = process.env.DIM_EXTERNAL_URL_CONFIG;
+  afterEach(async () => {
+    if (originalExternalUrlConfig === undefined) delete process.env.DIM_EXTERNAL_URL_CONFIG;
+    else process.env.DIM_EXTERNAL_URL_CONFIG = originalExternalUrlConfig;
+    await Promise.all(close.splice(0).map((item) => item()));
+  });
+
+  it("reports ingress argument mistakes as actionable client errors", async () => {
+    const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-admin-"));
+    close.push(() => rm(stateRoot, { recursive: true, force: true }));
+    process.env.DIM_EXTERNAL_URL_CONFIG = path.join(stateRoot, "external-urls.json");
+    const registered = await registerPlugins([createExternalUrlsPlugin({ ingresses: {} })]);
+    close.push(() => registered.dispose());
+    const server = configuredDimAdminController({} as LifecycleOptions, registered);
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    close.push(() => new Promise((resolve) => server.close(() => resolve())));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing address");
+    const endpoint = `http://127.0.0.1:${address.port}/v1/external-url/ingress-add`;
+
+    const request = (scheme: "http" | "https", argument: string, driver = "builtin-http") =>
+      fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          driver,
+          name: "test",
+          description: "Test ingress",
+          scheme,
+          argument
+        })
+      });
+
+    const invalidJson = await request("http", "");
+    expect(invalidJson.status).toBe(400);
+    expect((await invalidJson.json() as { error: string }).error).toContain("docs/external-urls.md#named-ingresses");
+
+    const missingDomain = await request("http", '{"listenHost":"0.0.0.0","listenPort":"auto"}');
+    expect(missingDomain.status).toBe(400);
+    expect((await missingDomain.json() as { error: string }).error).toContain("docs/external-urls.md#named-ingresses");
+
+    const caddyHttp = await request("http", "{}", "caddy");
+    expect(caddyHttp.status).toBe(400);
+    expect((await caddyHttp.json() as { error: string }).error).toContain(
+      "docs/external-urls.md#http-and-https-with-cloudflare-dns-and-caddy"
+    );
+
+    const invalidCaddyJson = await request("https", "", "caddy");
+    expect(invalidCaddyJson.status).toBe(400);
+    expect((await invalidCaddyJson.json() as { error: string }).error).toContain(
+      "docs/external-urls.md#http-and-https-with-cloudflare-dns-and-caddy"
+    );
+  });
 
   it("starts normally without a configured ingress", async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-empty-"));

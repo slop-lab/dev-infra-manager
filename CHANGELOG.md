@@ -19,6 +19,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   before diagnostics run.
 - Treated an External URLs plugin with no configured ingress as a normal empty
   state instead of warning during controller startup.
+- Returned plugin-originated user input failures as HTTP 400 responses even
+  when plugins load a separate copy of DIM core, and linked ingress validation
+  errors to the relevant configuration documentation.
 
 ## [0.3.0] - 2026-07-30
 
