@@ -1,6 +1,6 @@
 # Status
 
-DIM 0.3.0 is a pre-stable Project-aware release centered on named, persistent
+DIM 0.4.0 is a pre-stable Project-aware release centered on named, persistent
 workspaces. Pre-stable state and configuration are not migrated between
 incompatible releases.
 

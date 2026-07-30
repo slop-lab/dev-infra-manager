@@ -11,7 +11,7 @@ importers:
   packages/cli:
     dependencies:
       '@slop-lab/dim-core':
-        specifier: workspace:0.3.0
+        specifier: workspace:0.4.0
         version: link:../core
       commander:
         specifier: 14.0.0
@@ -97,10 +97,10 @@ importers:
   packages/plugin/dns-cloudflare:
     dependencies:
       '@slop-lab/dim-contracts-external-url':
-        specifier: workspace:0.3.0
+        specifier: workspace:0.4.0
         version: link:../../contracts/external-url
       '@slop-lab/dim-core':
-        specifier: workspace:0.3.0
+        specifier: workspace:0.4.0
         version: link:../../core
     devDependencies:
       '@types/node':
@@ -119,10 +119,10 @@ importers:
   packages/plugin/external-urls:
     dependencies:
       '@slop-lab/dim-contracts-external-url':
-        specifier: workspace:0.3.0
+        specifier: workspace:0.4.0
         version: link:../../contracts/external-url
       '@slop-lab/dim-core':
-        specifier: workspace:0.3.0
+        specifier: workspace:0.4.0
         version: link:../../core
     devDependencies:
       '@types/node':

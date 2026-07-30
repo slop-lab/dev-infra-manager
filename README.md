@@ -66,16 +66,16 @@ disposable KVM guest instead of your own host.
 Pin an exact, reviewed version — never `latest`:
 
 ```bash
-mise use -g 'npm:@slop-lab/dim-installer@0.3.0'
+mise use -g 'npm:@slop-lab/dim-installer@0.4.0'
 dim install-cli
 ```
 
 or, without mise:
 
 ```bash
-npx '@slop-lab/dim-installer@0.3.0'
-npx '@slop-lab/dim-installer@0.3.0' install-cli
-npx '@slop-lab/dim-installer@0.3.0' install-plugin '@example/dim-plugin@1.2.3'
+npx '@slop-lab/dim-installer@0.4.0'
+npx '@slop-lab/dim-installer@0.4.0' install-cli
+npx '@slop-lab/dim-installer@0.4.0' install-plugin '@example/dim-plugin@1.2.3'
 ```
 
 `@slop-lab/dim-installer` is a thin facade: it owns only `installer`,
@@ -101,7 +101,7 @@ dim doctor configure-backend
 ```
 
 DIM retains an explicitly enabled, versioned plugin loader for future
-concrete integrations. Version 0.3.0 does not expose a generic Git-provider
+concrete integrations. Version 0.4.0 does not expose a generic Git-provider
 extension point. See [docs/plugins.md](docs/plugins.md).
 
 ## Create a Project

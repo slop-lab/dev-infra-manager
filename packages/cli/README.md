@@ -47,13 +47,13 @@ compatibility and CI smoke testing; it is not the preferred isolation boundary.
 Install an exact, reviewed version globally:
 
 ```bash
-npm install --global "@slop-lab/dim-cli@0.3.0"
+npm install --global "@slop-lab/dim-cli@0.4.0"
 ```
 
 Or use the user-local installer:
 
 ```bash
-npx '@slop-lab/dim-installer@0.3.0' install-cli
+npx '@slop-lab/dim-installer@0.4.0' install-cli
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
