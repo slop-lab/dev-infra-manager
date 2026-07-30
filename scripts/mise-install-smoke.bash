@@ -45,7 +45,7 @@ core_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-core*.tgz' -p
 cli_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
 install_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-installer*.tgz' -print -quit)"
 contracts_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dim-contracts-external-url*.tgz' -print -quit)"
-cloudflare_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*provider-dns-cloudflare*.tgz' -print -quit)"
+cloudflare_tarball="$(find "$source_dir" -maxdepth 1 -type f -name '*dns-provider-cloudflare*.tgz' -print -quit)"
 test -n "$core_tarball" && test -n "$cli_tarball" && test -n "$install_tarball"
 test -n "$contracts_tarball" && test -n "$cloudflare_tarball"
 
@@ -70,7 +70,7 @@ echo "[container] publish local tarballs to the local registry"
 dim_publish_to_local_registry \
   /work/*dim-core*.tgz \
   /work/*dim-contracts-external-url*.tgz \
-  /work/*provider-dns-cloudflare*.tgz \
+  /work/*dns-provider-cloudflare*.tgz \
   /work/*dim-cli*.tgz \
   /work/*dim-installer*.tgz
 
