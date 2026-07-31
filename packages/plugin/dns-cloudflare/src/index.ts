@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import {
   DIM_PLUGIN_API_VERSION,
   type DimPlugin
@@ -21,7 +22,7 @@ export interface CloudflareDnsProviderConfig {
 export interface CloudflareDnsRecordConfig {
   zone: string;
   recordType: "A" | "AAAA" | "CNAME";
-  target: string;
+  value: string;
   proxied: boolean;
 }
 
@@ -39,19 +40,17 @@ export function parseCloudflareDnsRecordArgument(argument: string): CloudflareDn
   if (typeof input.zone !== "string" || normalizeDomain(input.zone).length === 0) {
     throw cloudflareRecordArgumentError("requires string field 'zone'");
   }
-  if (input.recordType !== "A" && input.recordType !== "AAAA" && input.recordType !== "CNAME") {
-    throw cloudflareRecordArgumentError("field 'recordType' must be A, AAAA, or CNAME");
+  if (typeof input.value !== "string" || input.value.length === 0) {
+    throw cloudflareRecordArgumentError("requires string field 'value'");
   }
-  if (typeof input.target !== "string" || input.target.length === 0) {
-    throw cloudflareRecordArgumentError("requires string field 'target'");
-  }
+  const addressFamily = isIP(input.value);
   if (input.proxied !== undefined && typeof input.proxied !== "boolean") {
     throw cloudflareRecordArgumentError("field 'proxied' must be boolean");
   }
   return {
     zone: normalizeDomain(input.zone),
-    recordType: input.recordType,
-    target: input.target,
+    recordType: addressFamily === 4 ? "A" : addressFamily === 6 ? "AAAA" : "CNAME",
+    value: input.value,
     proxied: input.proxied ?? false
   };
 }
@@ -89,7 +88,7 @@ export interface CloudflareDnsRecordState {
   recordId: string;
   name: string;
   type: "A" | "AAAA" | "CNAME";
-  target: string;
+  value: string;
   proxied: boolean;
 }
 
@@ -127,7 +126,7 @@ export async function ensureCloudflareWildcard(
   const body = {
     type: recordConfig.recordType,
     name,
-    content: recordConfig.target,
+    content: recordConfig.value,
     proxied: recordConfig.proxied,
     ttl: 1
   };
@@ -162,7 +161,7 @@ export async function verifyCloudflareWildcard(
   if (!record) throw new Error(`Cloudflare wildcard DNS record '${name}' is missing`);
   if (
     record.type !== recordConfig.recordType
-    || record.content !== recordConfig.target
+    || record.content !== recordConfig.value
     || Boolean(record.proxied) !== recordConfig.proxied
   ) {
     throw new Error(`Cloudflare wildcard DNS record '${name}' does not match DIM configuration`);
@@ -265,7 +264,7 @@ function state(
     recordId: record.id,
     name: record.name,
     type: recordConfig.recordType,
-    target: record.content,
+    value: record.content,
     proxied: Boolean(record.proxied)
   };
 }

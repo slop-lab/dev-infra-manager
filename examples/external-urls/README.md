@@ -84,7 +84,7 @@ dim external-url ingress add caddy --name public-https \
   --description "Public HTTPS development URL" \
   --scheme https \
   --argument "$(jq -cn \
-    --arg dnsArgument '{"zone":"example.com","recordType":"A","target":"203.0.113.10","proxied":false}' \
+    --arg dnsArgument '{"zone":"example.com","value":"203.0.113.10","proxied":false}' \
     '{domain:"remote.example.com",listenHost:"100.64.0.10",listenPort:8443,dnsProvider:"cloudflare-main",dnsArgument:$dnsArgument}')"
 
 dim external-url ingress setup public-https \

@@ -18,7 +18,7 @@ const dnsProvider = {
 const recordConfig = {
   zone: "example.com",
   recordType: "A" as const,
-  target: "203.0.113.10",
+  value: "203.0.113.10",
   proxied: false
 };
 
@@ -28,7 +28,15 @@ describe("Cloudflare DNS provider", () => {
       driver: "cloudflare",
       credential: "secret-token"
     });
-    expect(parseCloudflareDnsRecordArgument(JSON.stringify(recordConfig))).toEqual(recordConfig);
+    expect(parseCloudflareDnsRecordArgument(
+      '{"zone":"example.com","value":"203.0.113.10","proxied":false}'
+    )).toEqual(recordConfig);
+    expect(parseCloudflareDnsRecordArgument(
+      '{"zone":"example.com","value":"2001:db8::1"}'
+    )).toMatchObject({ recordType: "AAAA", value: "2001:db8::1" });
+    expect(parseCloudflareDnsRecordArgument(
+      '{"zone":"example.com","value":"origin.example.net"}'
+    )).toMatchObject({ recordType: "CNAME", value: "origin.example.net" });
   });
 
   it("registers as an External URL DNS provider extension", async () => {

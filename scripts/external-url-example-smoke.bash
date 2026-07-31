@@ -337,8 +337,8 @@ cloudflare_cli=(
   --description "local Cloudflare-compatible DNS smoke ingress" \
   --scheme https \
   --argument "$(jq -cn --arg target "$gateway" \
-    --arg dnsArgument "$(jq -cn --arg target "$gateway" \
-      '{zone:"smoke.test",recordType:"A",target:$target,proxied:false}')" \
+    --arg dnsArgument "$(jq -cn --arg value "$gateway" \
+      '{zone:"smoke.test",value:$value,proxied:false}')" \
     '{domain:"dev.smoke.test",listenHost:"127.0.0.1",listenPort:"auto",dnsProvider:"local-cloudflare",dnsArgument:$dnsArgument}')" >/dev/null
 "${cloudflare_cli[@]}" ingress setup local-https --output "$cloudflare_output" >/dev/null
 test -f "$cloudflare_output/local-https/Caddyfile"

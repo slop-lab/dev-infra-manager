@@ -7,6 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- Simplified Cloudflare DNS record arguments to `zone`, `value`, and
+  `proxied`; record type is inferred as A, AAAA, or CNAME from the value.
+
 ## [0.4.0] - 2026-07-30
 
 ### Changed

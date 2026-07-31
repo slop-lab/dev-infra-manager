@@ -208,7 +208,7 @@ dim external-url ingress add caddy --name public-https \
   --description "Public HTTPS development URL" \
   --scheme https \
   --argument "$(jq -cn \
-    --arg dnsArgument '{"zone":"example.com","recordType":"A","target":"203.0.113.10","proxied":false}' \
+    --arg dnsArgument '{"zone":"example.com","value":"203.0.113.10","proxied":false}' \
     '{domain:"remote.example.com",listenHost:"100.64.0.10",listenPort:8443,dnsProvider:"cloudflare-main",dnsArgument:$dnsArgument}')"
 
 dim external-url ingress setup public-https
@@ -219,7 +219,8 @@ The Cloudflare DNS provider owns only its credential. The driver requires
 `dns-provider list` does not return provider arguments. The Caddy
 driver's `dnsProvider` field references that configured instance.
 `dnsArgument` is an opaque string normalized and interpreted by the selected
-provider driver; Cloudflare uses `zone`, `recordType`, `target`, and `proxied`.
+provider driver. Cloudflare uses `zone`, `value`, and `proxied`, inferring an
+`A` record from an IPv4 value, `AAAA` from IPv6, and `CNAME` otherwise.
 One provider instance can serve multiple domains and ingresses.
 The controller rejects a configured Caddy ingress when its referenced provider
 instance or registered driver plugin is missing.
