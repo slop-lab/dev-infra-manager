@@ -61,9 +61,9 @@ The documentation is split by concern:
 - [Repository-backed Workspaces](repo-workspaces.md): local Gitea registration, persistent workspaces, reconciliation, and Git environment.
 - [Managed CI Runners](ci-runners.md): independent pull-request verification, resource defaults, and runner lifecycle.
 - [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.
-- [Example: Multi-repository Project](../examples/multi-repo-project/README.md): controller/agent separation, reviewed repositories, and a secret-bearing sibling container.
-- [Example: External URLs](../examples/external-urls/README.md): named ingress discovery and real root/dev/deep reverse-proxy routing.
-- [Advanced example: External URL route policy](../examples/external-url-route-policy/README.md): a checked-in Unix-socket policy webhook.
+- [Example Project](../examples/project/README.md): copyable multi-repository Project, Project-owned agent, host Git identity, and reviewed secret service.
+- [Example: External URLs](../examples/features/external-urls/README.md): named ingress discovery and real root/dev/deep reverse-proxy routing.
+- [Advanced example: External URL route policy](../examples/features/external-url-route-policy/README.md): a checked-in Unix-socket policy webhook.
 - [Plugins](plugins.md): versioned provider extension boundary for optional GitHub, GitLab, and other integrations.
 - [Releasing](releasing.md): release prerequisites, verification, package order, and post-publish checks.
 - [Status](status.md): current progress and known future work.

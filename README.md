@@ -134,7 +134,7 @@ no separate launcher needed.
 
 For a complete, tested walkthrough that exposes a nested development
 container and a container inside it through host-configured external URL
-ingresses, see [examples/external-urls](examples/external-urls/README.md).
+ingresses, see [examples/features/external-urls](examples/features/external-urls/README.md).
 
 See [glossary](docs/README.md#glossary), [docs/repo-workspaces.md](docs/repo-workspaces.md)
 for lifecycle, credential, and reconciliation details, and

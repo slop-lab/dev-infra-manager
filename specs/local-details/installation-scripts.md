@@ -197,7 +197,7 @@ scripts/external-url-example-smoke.bash
 ```
 
 `just verify-example-external-urls`. Requires Docker. Executes
-[examples/external-urls/README.md](../../examples/external-urls/README.md)
+[examples/features/external-urls/README.md](../../examples/features/external-urls/README.md)
 against real containers: builds local packages and the workspace image,
 starts a project-root container, starts the nested `dev` Compose service and
 its own `deep` nested container, runs a host DIM controller and reverse proxy,
@@ -206,13 +206,13 @@ plugin ingresses and create URLs for both nesting depths, fetches both
 sentinels from a separate curl container, and revokes the routes. The doc and
 script must change together.
 
-## Multi-repository Example Smoke
+## Project Example Smoke
 
 `scripts/example-project-smoke.bash`, invoked by
-`just verify-example-multi-repo-project`, builds and installs local packages,
-copies each repository skeleton from `examples/multi-repo-project/repos/` to a
-temporary directory, initializes and pushes real Git repositories, and
+`just verify-example-project`, builds and installs local packages,
+copies `examples/project/repos/` to a temporary directory, initializes and
+pushes real Git repositories, and
 verifies the documented workspace and secret boundary against managed Gitea.
-The root controller deploys the reviewed secret service on its own nested
-Docker daemon; the smoke verifies the agent container's independent daemon
+The trusted workspace deploys the reviewed secret service on its own nested
+Docker daemon; the smoke verifies the agent service's independent daemon
 cannot see that service and its environment does not contain the raw secret.

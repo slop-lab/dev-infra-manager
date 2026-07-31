@@ -1,8 +1,8 @@
 # Resource Isolation
 
-DIM applies CPU, memory, and PID limits independently to the trusted workspace
-and host-side Sysbox agent. Project workloads share the workspace's aggregate
-cgroup boundary; private agent workloads share the agent's boundary.
+DIM applies CPU, memory, and PID limits to the trusted workspace. Project-owned
+services, including an optional development agent, share that aggregate cgroup
+boundary unless the Project's Compose definition adds stricter child limits.
 
 The production default is Sysbox. gVisor provides a Docker-compatible
 no-KVM alternative, rootless Podman supports compatible lower-privilege
@@ -10,10 +10,12 @@ workloads, and privileged runc is reserved for CI or nested development
 containers.
 
 DIM does not currently impose a per-workspace disk quota. Project checkout
-data lives in separate workspace and agent storage, and nested-engine data
-lives in labeled Docker volumes. `discard --yes` removes them. Operators
-should monitor host filesystem and Docker storage usage.
+data lives in workspace storage and nested-engine data lives in labeled Docker
+volumes. `discard --yes` removes them. Operators should monitor host
+filesystem and Docker storage usage.
 
-Neither workspace nor agent receives the host Docker socket or a host source checkout.
-Secret-bearing runtimes live inside the workspace root boundary but outside
-the untrusted agent container and its nested runtime.
+Neither workspace nor a correctly configured Project agent receives the host
+Docker socket or a host source checkout. Secret-bearing runtimes may live
+beside an agent inside the current privileged workspace; this is not a strong
+security boundary, so raw secrets must still be withheld from the agent and
+exposed only through reviewed constrained interfaces.

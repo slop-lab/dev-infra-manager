@@ -5,10 +5,11 @@
 `dev-infra-manager` provides infrastructure for running AI agents in isolated, ephemeral development workspaces while protecting secrets from agents that may attempt to exfiltrate API keys or otherwise misuse their execution privileges.
 
 The infrastructure separates agent-controlled execution from secret-bearing
-execution. The default Sysbox agent is a host-side sibling of the trusted
-workspace container and has its own nested runtime. The workspace's Project
-daemon may run secret-bearing children, but agents must not receive their raw
-secrets, access either control socket, or control those children directly.
+interfaces. Projects may run an agent as a nested service with its own private
+Docker daemon, but core does not own that service. Agents must not receive raw
+secrets or either Docker control socket. The current privileged workspace does
+not make sibling Project services a strong isolation boundary; reviewed
+Project code and constrained service interfaces remain required.
 
 ## Scope
 
@@ -16,7 +17,7 @@ This repository owns the container and infrastructure boundary for agent workspa
 
 In scope:
 
-- Trusted workspace containers and host-side agent containers.
+- Trusted workspace containers and Project-owned agent containers.
 - Secret-bearing containers.
 - Controller-managed deployment of secret-bearing containers.
 - Managed Git hosting primitives used by agents to propose changes.

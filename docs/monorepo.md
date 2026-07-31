@@ -89,13 +89,22 @@ This repository uses the same project-facing contract as an external project:
 
 ```text
 .dim/
+├── dev/
+│   ├── Dockerfile
+│   └── start.sh
+├── docker-compose.yml
+├── kvm.sh
 ├── setup.sh
-└── entrypoint.sh
+├── entrypoint.sh
+└── teardown.sh
 ```
 
-The role-neutral `images/project-workspace` image supplies Codex, Node.js,
-pnpm, just, Git, and an inner Docker daemon. It is the default outer image for
-all DIM project workspaces, not an application-specific launcher.
+The role-neutral `images/project-workspace` image is the trusted lifecycle
+container. The reviewed `.dim/setup.sh` obtains the host Git author through
+the narrow host-input API and starts the repository-owned Compose `agent`
+service. The agent image supplies Codex, Node.js, pnpm, just, Git, and a
+private Docker daemon without receiving either host Docker socket or the
+trusted workspace's Docker socket.
 
 Build the image once, create a Project root, push this repository, and create
 a persistent workspace:
@@ -109,15 +118,18 @@ dim create dim-self dim-self-dev
 dim run dim-self-dev codex
 ```
 
-`run` dispatches the repository's checked-in task contract.
-`exec dim-self-dev -- bash` remains the raw recovery or interactive
-shell path. The project checkout and inner-Docker state exist only in the
-workspace; no host checkout or Docker socket is mounted.
+`run` dispatches the repository's checked-in `.dim/entrypoint.sh` task
+contract into the Project-owned agent.
+`exec dim-self-dev -- bash` remains the raw trusted-workspace recovery or
+interactive shell path. The agent bind-mounts the workspace checkout and its
+private-Docker state uses a separate Project volume; no host checkout or
+Docker socket is mounted.
 
 On a host with accessible KVM, creation records and exposes `/dev/kvm`
-automatically. `dim run dim-self-dev kvm` verifies the self-development
-workspace's effective KVM capability. The ordinary `verify` task remains
-portable to hosts without KVM.
+automatically. Run `dim exec dim-self-dev -- sh .dim/kvm.sh` to verify the
+trusted workspace's effective KVM capability; `/dev/kvm` is intentionally not
+passed to the ordinary agent. The `verify` agent task remains portable to
+hosts without KVM.
 
 ## State And Credentials
 

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Executes examples/multi-repo-project/README.md, command for command,
+# Executes examples/project/README.md, command for command,
 # against a real Docker daemon and the environment's managed Gitea. Update
-# that doc (and the repository skeletons under
-# examples/multi-repo-project/repos/) alongside this script if any of them
+# that doc (and the repository skeletons under examples/project/repos/)
+# alongside this script if either changes; it
 # change; it exists specifically so the example cannot silently drift from
 # what actually works.
 #
@@ -86,21 +86,21 @@ test -x "$dim_bin"
 dim doctor >/dev/null
 
 echo "[example-project] 2. create the example repositories"
-bash "$repo_root/examples/multi-repo-project/create-repositories.bash" \
+bash "$repo_root/examples/project/create-repositories.bash" \
   "$source_root" >/dev/null
 
 root_repo="$source_root/root"
 
 echo "[example-project] 3. register the Project and its repositories"
 DIM_BIN="$dim_bin" bash \
-  "$repo_root/examples/multi-repo-project/register-project.bash" \
+  "$repo_root/examples/project/register-project.bash" \
   "$project_name" "$source_root" >/dev/null
 
 # The whole point of --protect at create time: confirm the root branch is
 # actually protected, not just reported as such (repo protect "succeeds"
 # even with nothing configured, per projectRegistry.ts). Re-pushing the
 # identical ref would be a silent no-op either way, so make a real commit.
-printf '\n' >> "$root_repo/.dim/agent.json"
+printf '\n' >> "$root_repo/.dim/docker-compose.yml"
 git -C "$root_repo" commit -am "attempted direct push" >/dev/null
 if dim x git -C "$root_repo" push "$(dim repo url "$project_name" root)" main >/dev/null 2>&1; then
   echo "protected branch unexpectedly accepted a direct push" >&2
@@ -166,20 +166,36 @@ dev_git_identity="$(dim run "$workspace_name" bash -- \
   -lc 'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
 test "$dev_git_identity" = \
   "Example Host Developer <host-developer@dim.invalid>|Example Host Developer <host-developer@dim.invalid>"
+agent_commit_identity="$(dim run "$workspace_name" bash -- -lc '
+  printf "%s\n" "agent commit" > agent-commit.txt
+  git add agent-commit.txt
+  git commit -m "verify host identity" >/dev/null
+  git log -1 --format="%an <%ae>|%cn <%ce>"
+')"
+test "$agent_commit_identity" = "$dev_git_identity"
+
+agent_container="$(dim exec "$workspace_name" -- \
+  docker compose --project-name "dim-$workspace_name" \
+  --file .dim/docker-compose.yml ps --quiet agent)"
+test -n "$agent_container"
+dim exec "$workspace_name" -- docker inspect "$agent_container" \
+  --format '{{.HostConfig.Privileged}}' | grep -qx true
+! dim exec "$workspace_name" -- docker inspect "$agent_container" \
+  --format '{{json .Mounts}}' | grep -q /var/run/docker.sock
 
 echo "[example-project] 8. create a nested container from inside the dev container"
 nested_output="$(dim run "$workspace_name" bash -- \
   -lc 'docker run --rm hello-world')"
 echo "$nested_output" | grep -q "Hello from Docker!"
 
-echo "[example-project] 9. reach the other repositories from inside the workspace"
+echo "[example-project] 9. reach another managed repository"
 web_content="$(dim exec "$workspace_name" -- sh -c \
   'git clone "$DIM_GIT_BASE_URL/web.git" /tmp/web >/dev/null 2>&1 && cat /tmp/web/app.txt')"
 test "$web_content" = "hello from example-web"
 
 echo "[example-project] 10. deploy the secret-bearing service at the trusted root boundary"
 DIM_BIN="$dim_bin" EXAMPLE_SECRET=not-a-real-secret \
-  bash "$repo_root/examples/multi-repo-project/deploy-secret.bash" \
+  bash "$repo_root/examples/project/deploy-secret.bash" \
   "$workspace_name" >/dev/null
 
 root_health="$(dim exec "$workspace_name" -- \
@@ -187,7 +203,7 @@ root_health="$(dim exec "$workspace_name" -- \
 echo "$root_health" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
 
 dev_health="$(dim run "$workspace_name" bash -- \
-  -lc 'wget -qO- http://project.internal:7099/healthz')"
+  -lc 'wget -qO- http://secret:7099/healthz')"
 echo "$dev_health" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
 
 # The agent container has a different Docker daemon and cannot see the

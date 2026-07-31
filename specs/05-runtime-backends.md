@@ -34,14 +34,15 @@ require the DIM process itself to open the device: the container runtime opens
 it, and the supplemental group gives the workspace user access. gVisor does
 not receive KVM.
 
-For `sysbox`, `.dim/agent.json` is trusted root-repository configuration. DIM
-builds its relative `buildContext`, creates a separate checkout volume, and
-maps named tasks to fixed command arrays. `dim run` executes those tasks
-directly through the host-side agent daemon. The agent receives neither the
-host-side daemon socket nor the Project daemon socket.
+Agent containers are Project-owned workloads, not a core lifecycle resource.
+Reviewed `.dim/setup.sh` code may build and start one through the nested
+Project engine, while `.dim/entrypoint.sh` maps `dim run` tasks into it. DIM
+does not define an agent manifest, image schema, container name, or separate
+resource record.
 
-The host-side DIM daemon must have `sysbox-runc` registered. The nested Project
-daemon must not require Sysbox registration.
+The current `sysbox` installation retains `sysbox-runc` for isolated host
+workloads such as managed CI runners. Project-owned containers use the nested
+engine and remain within the workspace cgroup boundary.
 
 Projects receive `DIM_WORKSPACE_BACKEND` and `DIM_NESTED_ENGINE`. Default
 Compose setup must use the selected nested engine.

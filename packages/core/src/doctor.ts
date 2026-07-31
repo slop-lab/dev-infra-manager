@@ -75,8 +75,8 @@ export async function runtimeBackendChecks(
       return [
         await commandCheck(runner, "sysbox-runc", ["--version"], "sysbox-runc"),
         await systemdUnitCheck(runner, "sysbox.service", "Sysbox service"),
-        await dockerRuntimeCheck(runner, "sysbox-runc", "Agent Docker sysbox-runc runtime", options.agentDockerSocketPath),
-        await dockerRuntimeExecutionCheck(runner, "sysbox-runc", "Sysbox agent container execution", options.agentDockerSocketPath),
+        await dockerRuntimeCheck(runner, "sysbox-runc", "Docker sysbox-runc runtime"),
+        await dockerRuntimeExecutionCheck(runner, "sysbox-runc", "Sysbox container execution"),
         await pathCheck("/dev/kvm", "KVM device")
       ];
     }

@@ -108,10 +108,10 @@ The workspace lifecycle is:
 1. Create a new read-write workspace for the project.
 2. Inject approved Git configuration and environment variables.
 3. Start the workspace root and its controller.
-4. Read reviewed `.dim/agent.json` and start the agent through the host-side
-   Sysbox runtime with separate checkout and Docker-data volumes.
-5. Allow the agent to execute commands and create containers only within the
-   agent boundary.
+4. Run reviewed `.dim/setup.sh`, which may start a Project-owned agent service
+   through the workspace's private engine.
+5. Dispatch reviewed `.dim/entrypoint.sh` tasks into that service without
+   exposing a Docker control socket to it.
 6. Preserve only explicitly exported artifacts or Git-pushed changes.
 7. Explicitly discard the workspace and all nested workloads when they are no longer needed.
 

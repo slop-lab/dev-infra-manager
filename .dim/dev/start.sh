@@ -13,4 +13,5 @@ until docker info >/dev/null 2>&1; do
   sleep 1
 done
 
+chmod 0666 /var/run/docker.sock
 wait "$dockerd_pid"

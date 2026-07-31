@@ -14,7 +14,6 @@ import type {
 } from "./lifecycleTypes.js";
 import { workspaceRuntimePlan } from "./runtimeBackends.js";
 import type { StreamingCommandRunner } from "./types.js";
-import { reconcileAgent, removeAgent, runAgentTask, stopAgent } from "./agentLifecycle.js";
 
 // The unprivileged OS user every workspace image (images/project-workspace,
 // images/project-workspace-podman) creates and runs project commands as.
@@ -131,10 +130,6 @@ export async function createWorkspace(
       networkName: GITEA_NETWORK,
       dockerVolumeName: `dim-ws-${name}-docker`,
       runtimeBackend: input.runtimeBackend,
-      agentContainerName: `dim-agent-${name}`,
-      agentCheckoutVolumeName: `dim-agent-${name}-checkout`,
-      agentDockerVolumeName: `dim-agent-${name}-docker`,
-      agentImageName: `dim-agent-${name}:latest`,
       kvm,
       cpuCount: input.cpuCount ?? options.cpuCount,
       memory: input.memory ?? options.memory,
@@ -166,8 +161,6 @@ export async function runWorkspace(
 ): Promise<number> {
   const record = await runnableWorkspace(runner, options, input.name);
   if (input.command.length === 0) throw new UserError("dim run requires a task");
-  const agentResult = await runAgentTask(runner, options, record, input.command, input.interactive);
-  if (agentResult !== undefined) return agentResult;
   const hasEntrypoint = await projectFileExists(runner, record, ".dim/entrypoint.sh");
   const command = hasEntrypoint
     ? ["sh", ".dim/entrypoint.sh", ...input.command]
@@ -234,20 +227,6 @@ async function setupWorkspaceLocked(
     };
     await state.writeWorkspace(record);
     throw new UserError(setupError);
-  }
-  try {
-    await reconcileAgent(runner, options, record);
-  } catch (error) {
-    const setupError = error instanceof Error ? error.message : String(error);
-    record = {
-      ...record,
-      phase: "setup-error",
-      lastSetup: { startedAt, completedAt, exitCode: 1, error: setupError },
-      updatedAt: completedAt,
-      error: setupError
-    };
-    await state.writeWorkspace(record);
-    throw error;
   }
   record = {
     ...record,
@@ -339,7 +318,6 @@ export async function stopWorkspace(runner: StreamingCommandRunner, options: Lif
     let record = await state.readWorkspace(workspaceName);
     const inspect = await runner.run("docker", ["container", "inspect", record.containerName, "--format", "{{.State.Running}}"]);
     if (inspect.exitCode === 0 && inspect.stdout.trim() === "true") {
-      await stopAgent(runner, options, record);
       const exitCode = await runner.runStreaming("docker", ["stop", record.containerName]);
       if (exitCode !== 0) throw new UserError(`failed to stop workspace '${name}'`);
     }
@@ -365,7 +343,6 @@ export async function discardWorkspace(runner: StreamingCommandRunner, options: 
       }
       await runProjectTeardown(runner, record);
     }
-    await removeAgent(runner, options, record);
     const removed = await runner.run("docker", ["container", "rm", "--force", record.containerName]);
     if (removed.exitCode !== 0 && !removed.stderr.includes("No such container")) {
       throw new UserError(`failed to remove workspace container: ${removed.stderr.trim()}`);

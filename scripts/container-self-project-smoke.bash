@@ -23,6 +23,9 @@ dim() {
 export DIM_STATE_ROOT="$state_root"
 export DIM_CONFIG_PATH="$state_root/dim.json"
 export DIM_PLUGIN_HOME="$state_root/plugins"
+export GIT_CONFIG_GLOBAL="$state_root/host.gitconfig"
+git config --file "$GIT_CONFIG_GLOBAL" user.name "DIM Self Host"
+git config --file "$GIT_CONFIG_GLOBAL" user.email "dim-self-host@dim.invalid"
 mkdir -p "$DIM_PLUGIN_HOME"
 printf '%s\n' '{"schemaVersion":1,"plugins":[]}' > "$DIM_PLUGIN_HOME/plugins.json"
 bash "$script_dir/configure-user-backend.bash" runc
@@ -50,25 +53,57 @@ cleanup() {
 trap cleanup EXIT
 
 dim_prepare_clone_source "$project_source" "$source_root/snapshot"
-project_source="$DIM_GIT_CLONE_SOURCE"
+git clone "$DIM_GIT_CLONE_SOURCE" "$source_root/materialized" >/dev/null
+project_source="$source_root/materialized"
+
+temporary_manifest="$project_source/.dim/repos.yml.tmp"
+sed "s#^    url:.*#    url: $source_root/project.git#" \
+  "$project_source/.dim/repos.yml" >"$temporary_manifest"
+mv "$temporary_manifest" "$project_source/.dim/repos.yml"
+git -C "$project_source" add .dim/repos.yml
+git -C "$project_source" \
+  -c user.name="DIM Snapshot" \
+  -c user.email="snapshot@dim.invalid" \
+  commit -m "point self manifest at smoke source" >/dev/null
 
 git clone --bare "$project_source" "$source_root/project.git" >/dev/null
 dim project create "$project_name" >/dev/null
 root_ref="$(git -C "$project_source" rev-parse --abbrev-ref HEAD)"
-dim repo add "$project_name" root "$source_root/project.git" --root --ref "$root_ref" >/dev/null
+dim repo add "$project_name" dim "$source_root/project.git" \
+  --root --ref "$root_ref" --protect main,development >/dev/null
+dim repo apply "$project_name" --yes >/dev/null
 dim create "$project_name" "$workspace_name" >/dev/null
 
 workspace_json="$(dim show "$workspace_name" --json)"
 if [[ -c /dev/kvm ]]; then
   test "$(jq -r .kvm <<<"$workspace_json")" = "true"
-  test "$(dim run "$workspace_name" kvm)" = "workspace-kvm-ok"
+  test "$(dim exec "$workspace_name" -- sh .dim/kvm.sh)" = "workspace-kvm-ok"
 else
   test "$(jq -r .kvm <<<"$workspace_json")" = "false"
   dim exec "$workspace_name" -- sh -c 'test ! -e /dev/kvm'
 fi
 dim exec "$workspace_name" -- \
-  sh -c 'test -r .dim/setup.sh && test ! -x .dim/setup.sh && test -r .dim/entrypoint.sh && test ! -x .dim/entrypoint.sh && test "$DIM_GIT_BASE_URL" = "$(jq -r .gitBaseUrl "$DIM_PROJECT_MANIFEST")"'
+  sh -c 'test -r .dim/setup.sh && test ! -x .dim/setup.sh && test -r .dim/entrypoint.sh && test ! -x .dim/entrypoint.sh && test -r .dim/docker-compose.yml && test "$DIM_GIT_BASE_URL" = "$(jq -r .gitBaseUrl "$DIM_PROJECT_MANIFEST")"'
 test "$(dim show "$workspace_name" --json | jq -r .rootRef)" = "refs/heads/$root_ref"
+agent_git_identity="$(dim run "$workspace_name" bash -- -lc \
+  'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
+test "$agent_git_identity" = \
+  "DIM Self Host <dim-self-host@dim.invalid>|DIM Self Host <dim-self-host@dim.invalid>"
+agent_commit_identity="$(dim run "$workspace_name" bash -- -lc '
+  printf "%s\n" "self agent commit" > self-agent-commit.txt
+  git add self-agent-commit.txt
+  git commit -m "verify self agent host identity" >/dev/null
+  git log -1 --format="%an <%ae>|%cn <%ce>"
+')"
+test "$agent_commit_identity" = "$agent_git_identity"
+agent_container="$(dim exec "$workspace_name" -- \
+  docker compose --project-name "dim-$workspace_name" \
+  --file .dim/docker-compose.yml ps --quiet agent)"
+test -n "$agent_container"
+dim exec "$workspace_name" -- docker inspect --format '{{.HostConfig.Privileged}}' \
+  "$agent_container" | grep -qx true
+! dim exec "$workspace_name" -- docker inspect --format '{{json .Mounts}}' \
+  "$agent_container" | grep -q /var/run/docker.sock
 dim run "$workspace_name" check >/dev/null
 test "$(dim run "$workspace_name" codex -- --version)" != ""
 dim run "$workspace_name" verify >/dev/null

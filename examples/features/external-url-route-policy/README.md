@@ -7,7 +7,7 @@ focused on ordinary workspace-qualified URLs.
 Start the policy beside the DIM controller:
 
 ```bash
-node examples/external-url-route-policy/policy-server.mjs \
+node examples/features/external-url-route-policy/policy-server.mjs \
   /run/user/"$(id -u)"/dim/external-url-policy.sock
 ```
 

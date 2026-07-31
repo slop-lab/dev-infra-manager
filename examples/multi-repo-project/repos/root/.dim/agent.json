@@ -1,8 +1,0 @@
-{
-  "buildContext": ".dim/dev",
-  "tasks": {
-    "bash": ["bash"],
-    "codex": ["codex", "--dangerously-bypass-approvals-and-sandbox"],
-    "claude": ["claude", "--dangerously-skip-permissions"]
-  }
-}

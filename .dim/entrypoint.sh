@@ -5,37 +5,36 @@ task="${1:?task is required}"
 shift
 
 case "$task" in
+  bash)
+    set -- bash "$@"
+    ;;
   codex)
-    exec codex --dangerously-bypass-approvals-and-sandbox "$@"
+    set -- codex --dangerously-bypass-approvals-and-sandbox "$@"
     ;;
   check)
-    exec pnpm run workspace:check "$@"
+    set -- pnpm run workspace:check "$@"
     ;;
   test)
-    exec pnpm run workspace:test "$@"
+    set -- pnpm run workspace:test "$@"
     ;;
   build)
-    exec pnpm run workspace:build "$@"
-    ;;
-  kvm)
-    test "${DIM_WORKSPACE_KVM:-0}" = 1
-    test -r /dev/kvm
-    test -w /dev/kvm
-    printf '%s\n' "workspace-kvm-ok"
+    set -- pnpm run workspace:build "$@"
     ;;
   verify)
-    pnpm run workspace:check
-    pnpm run workspace:test
-    exec pnpm run workspace:build "$@"
+    set -- just check "$@"
     ;;
   verify-container-runc)
-    exec just verify-container-runc "$@"
+    set -- just verify-container-runc "$@"
     ;;
   verify-container-sysbox)
-    exec just verify-container-sysbox "$@"
+    set -- just verify-container-sysbox "$@"
     ;;
   *)
     echo "unknown DIM project task: $task" >&2
     exit 2
     ;;
 esac
+
+exec docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" \
+  --file .dim/docker-compose.yml exec \
+  --user "$(id -u):$(id -g)" --env HOME=/tmp/dim-agent-home agent "$@"

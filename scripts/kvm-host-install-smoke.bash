@@ -139,7 +139,7 @@ if [[ "$backend" == sysbox ]]; then
       pnpm install --frozen-lockfile >/dev/null
     '
   if [[ "${DIM_KVM_SKIP_TRUSTED_WORKSPACE:-0}" != 1 ]]; then
-    run_step "verify trusted KVM workspace and host-side Sysbox agent" \
+    run_step "verify trusted KVM workspace and Sysbox isolation probe" \
       ssh "${ssh_args[@]}" dim@127.0.0.1 '
       set -e
       trusted=dim-kvm-trusted

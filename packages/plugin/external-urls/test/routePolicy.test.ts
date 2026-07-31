@@ -74,7 +74,7 @@ describe("external URL route policies", () => {
     const directory = await mkdtemp("/tmp/dim-route-policy-example-");
     cleanup.push(() => rm(directory, { recursive: true, force: true }));
     const socketPath = path.join(directory, "policy.sock");
-    const script = path.resolve(import.meta.dirname, "../../../../examples/external-url-route-policy/policy-server.mjs");
+    const script = path.resolve(import.meta.dirname, "../../../../examples/features/external-url-route-policy/policy-server.mjs");
     const child = spawn(process.execPath, [script, socketPath], {
       stdio: ["ignore", "pipe", "inherit"]
     });

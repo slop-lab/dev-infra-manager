@@ -99,7 +99,7 @@ dim external-url ingress verify public-https
 Use a zone-scoped Cloudflare API Token with `Zone.Zone:Read` and
 `Zone.DNS:Edit`, not a Global API Key. The host must accept TCP 8080 and
 TCP/UDP 8443. Full configuration and security
-details are in [External workspace URLs](../../docs/external-urls.md).
+details are in [External workspace URLs](../../../docs/external-urls.md).
 
 ## Verification
 

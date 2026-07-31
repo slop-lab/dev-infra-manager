@@ -30,7 +30,8 @@ jq \
     .repositories.root.url = $root
     | .repositories.web.url = $web
     | .repositories.secrets.url = $secrets
-  ' "$manifest" > "$temporary_manifest"
+  ' \
+  "$manifest" >"$temporary_manifest"
 mv "$temporary_manifest" "$manifest"
 git -C "$target_dir/root" add .dim/repos.yml
 git -C "$target_dir/root" commit --amend --no-edit

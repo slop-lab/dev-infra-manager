@@ -172,7 +172,7 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 docker exec "$root_container" mkdir -p /workspace/project
-docker cp examples/external-urls/repo/. "$root_container:/workspace/project/"
+docker cp examples/features/external-urls/repo/. "$root_container:/workspace/project/"
 echo "[external-url-example] create controller state and host ingress"
 mkdir -p "$state_root/workspaces" "$state_root/workspace-grants"
 now="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
@@ -220,7 +220,7 @@ DIM_ADMIN_CONTROLLER_SOCKET="$admin_socket" \
 DIM_EXTERNAL_URL_DOMAIN="host.tail.test" \
 DIM_EXTERNAL_URL_PORT="$proxy_port" \
 DIM_EXTERNAL_URL_LISTEN_PORT="$proxy_port" \
-  bash examples/external-urls/configure-ingress.bash >/dev/null
+  bash examples/features/external-urls/configure-ingress.bash >/dev/null
 DIM_EXTERNAL_URL_CONFIG="$state_root/external-urls.json" \
 DIM_STATE_ROOT="$state_root" \
 DIM_PLUGIN_HOME="$plugin_home" \

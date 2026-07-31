@@ -1,0 +1,33 @@
+services:
+  agent:
+    build:
+      context: dev
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+      DIM_GIT_USERNAME: "${DIM_GIT_USERNAME:?}"
+      DIM_GIT_TOKEN: "${DIM_GIT_TOKEN:?}"
+      GIT_AUTHOR_NAME: "${GIT_AUTHOR_NAME:?}"
+      GIT_AUTHOR_EMAIL: "${GIT_AUTHOR_EMAIL:?}"
+      GIT_COMMITTER_NAME: "${GIT_COMMITTER_NAME:?}"
+      GIT_COMMITTER_EMAIL: "${GIT_COMMITTER_EMAIL:?}"
+      GIT_CONFIG_COUNT: "2"
+      GIT_CONFIG_KEY_0: credential.helper
+      GIT_CONFIG_VALUE_0: "!f() { echo username=$$DIM_GIT_USERNAME; echo password=$$DIM_GIT_TOKEN; }; f"
+      GIT_CONFIG_KEY_1: safe.directory
+      GIT_CONFIG_VALUE_1: /workspace
+    volumes:
+      - ..:/workspace
+      - agent-docker:/var/lib/docker
+    working_dir: /workspace
+
+  secret:
+    profiles: [secret]
+    build: ${SECRET_SERVICE_CONTEXT:-/tmp/dim-controller/secrets}
+    environment:
+      EXAMPLE_SECRET: "${EXAMPLE_SECRET:-}"
+    ports:
+      - "7099:7099"
+
+volumes:
+  agent-docker:

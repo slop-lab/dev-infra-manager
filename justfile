@@ -113,8 +113,8 @@ install-dim-local:
 verify-mise-install-smoke:
     bash scripts/mise-install-smoke.bash
 
-# Requires Docker and managed Gitea; materializes and verifies the multi-repository example.
-verify-example-multi-repo-project:
+# Requires Docker and managed Gitea; materializes and verifies the canonical Project example.
+verify-example-project:
     bash scripts/example-project-smoke.bash
 
 # Requires Docker, Sysbox, and managed Gitea; runs a real example PR workflow.

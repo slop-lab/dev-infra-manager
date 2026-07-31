@@ -73,18 +73,18 @@ including live resource updates.
 `scripts/container-sysbox-isolation-smoke.bash` requires a prebuilt workspace
 image and direct access to a Docker host with `sysbox-runc`. It must cover:
 
-- Host-side Sysbox agent execution with explicit CPU, memory, and PID limits.
-- Exact cgroup v2 limit visibility inside the agent.
+- Sysbox system-container execution with explicit CPU, memory, and PID limits.
+- Exact cgroup v2 limit visibility inside the container.
 - Nested Docker `hello-world` execution.
 - Bidirectional image-store isolation using unique host-only and inner-only
   probe tags, independent of pre-existing image caches.
 
-The independent multi-repository example gate verifies managed Git, protected
-refs, and controller deployment of a secret-bearing child beside an isolated
-agent container. It must use the example's generated `repos.yml` rather than a
-parallel sequence of individual registration commands. It must also prove the agent container uses a distinct Docker
-daemon, cannot list the controller's secret-bearing child, and does not receive
-the child's raw secret environment.
+The canonical Project example gate verifies managed Git, protected refs, and
+trusted deployment of a reviewed secret-bearing child beside a Project-owned
+agent. It must use the example's generated `repos.yml`, prove the agent uses a
+distinct Docker daemon, cannot list the trusted workspace's secret-bearing
+child, does not mount either Docker socket, and does not receive the child's
+raw secret environment.
 
 ## Fast Isolation Gate
 
@@ -133,8 +133,8 @@ a disposable VM. `just verify-environments-kvm` requires QEMU and writable
 `/dev/kvm` and runs the gate for every backend in a separate VM.
 The Sysbox guest must additionally verify a privileged trusted workspace using
 its directly passed `/dev/kvm` with QEMU, absence of Sysbox registration in
-the workspace's Project daemon, and an unprivileged host-side Sysbox agent
-running a private DinD workload.
+the workspace's Project daemon, and an unprivileged host-side Sysbox isolation
+probe running a private DinD workload.
 
 ## Installer Facade Verification
 
@@ -146,7 +146,7 @@ mise-detected `--no-local-bin` default, and an explicit `--local-bin`
 override. See [Installer Facade](14-installer-facade.md).
 
 `just verify-example-external-urls` requires Docker. It proves
-`examples/external-urls/README.md` end to end: a host DIM controller,
+`examples/features/external-urls/README.md` end to end: a host DIM controller,
 plugin loading before any external URL config exists, the example's checked-in
 ingress and URL scripts, dnsmasq wildcard DNS, a project-root workspace,
 the nested `dev` Compose service, a further `deep` container, root relay,
@@ -162,11 +162,11 @@ provider cleanup without external credentials.
 Ingress discovery, creation, and revocation must run through the public
 `dim external-url` CLI rather than project-specific curl wrappers.
 
-`just verify-example-multi-repo-project` requires Docker and managed Gitea. It
-materializes the three repository skeletons under
-`examples/multi-repo-project/repos/` in a temporary directory and verifies the
-documented `project create --repos` flow, protected refs, workspace, nested Docker, repository
-access, and secret-bearing service boundary.
+`just verify-example-project` requires Docker and managed Gitea. It
+materializes the repositories under `examples/project/repos/` in a temporary
+directory and verifies the documented `project create --repos` flow,
+protected refs, workspace, Project-owned agent, host Git identity, managed
+repository access, nested Docker, and secret-bearing service boundary.
 
 ## Documentation Verification
 

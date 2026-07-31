@@ -28,6 +28,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added `dim ci runner` lifecycle commands for a Project-scoped isolated
   container runner, with configurable inherited resource defaults and a
   provider-neutral coordinator boundary.
+- Returned development-agent ownership to Projects: `.dim/setup.sh`, Compose,
+  and `.dim/entrypoint.sh` now define and dispatch agent services without a
+  core-managed `.dim/agent.json` resource.
+- Organized examples around a canonical multi-repository `examples/project`
+  and capability-focused `examples/features/*` examples.
 
 ## [0.4.0] - 2026-07-30
 
@@ -202,9 +207,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 
 - [Multi-repository project
-  example](examples/multi-repo-project/README.md), with independent
+  example](examples/project/README.md), with independent
   real-container verification of its materialized repository skeletons.
-- [External URL example](examples/external-urls/README.md), a copyable,
+- [External URL example](examples/features/external-urls/README.md), a copyable,
   dnsmasq-verified walkthrough covering a nested development container and a
   container inside it.
 - Added plugin API v2 with an instance-scoped DIM controller route registry

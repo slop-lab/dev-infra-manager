@@ -13,7 +13,6 @@ export interface LifecycleOptions {
   pidsLimit: string;
   controllerSocketPath: string;
   adminControllerSocketPath: string;
-  agentDockerSocketPath: string;
   ciRunnerImage: string;
   ciRunnerRuntime: string;
   ciRunnerDefaultCpus: string;
@@ -130,10 +129,6 @@ export interface WorkspaceRecord {
   networkName: string;
   dockerVolumeName: string;
   runtimeBackend: WorkspaceRuntimeBackendKind;
-  agentContainerName?: string;
-  agentCheckoutVolumeName?: string;
-  agentDockerVolumeName?: string;
-  agentImageName?: string;
   kvm: boolean;
   cpuCount: string;
   memory: string;

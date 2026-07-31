@@ -41,7 +41,7 @@ filtered discovery, list, request, and individual revoke operations for the
 named ingress and denies all other controller routes. Advanced reviewed policies use
 `createControllerProxy` and `externalUrlProxy` from
 `@slop-lab/dim-controller-proxy`; the runnable form is in the
-[External URL example](../examples/external-urls/README.md).
+[External URL example](../examples/features/external-urls/README.md).
 
 ## Named ingresses
 
@@ -152,7 +152,7 @@ responses, responses above 64 KiB, and non-2xx status codes fail closed. The
 policy cannot change the target container or upstream address.
 
 The checked-in
-[advanced route-policy example](../examples/external-url-route-policy/README.md)
+[advanced route-policy example](../examples/features/external-url-route-policy/README.md)
 contains the Unix-socket server used by the automated policy test. The basic
 External URL example intentionally uses only the default workspace-prefix
 policy.
@@ -293,7 +293,7 @@ after `dim external-url ingress add`.
 
 ## Verification
 
-[The external URL example](../examples/external-urls/README.md) and
+[The external URL example](../examples/features/external-urls/README.md) and
 `scripts/external-url-example-smoke.bash` verify:
 
 ```text

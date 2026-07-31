@@ -50,10 +50,10 @@ bash scripts/install-host-ubuntu.bash sysbox
 just cli doctor
 ```
 
-For a root repository with `.dim/agent.json`, DIM keeps the trusted workspace
-and untrusted Sysbox agent as sibling containers. Users still need only
-`dim create PROJECT WORKSPACE` and `dim run WORKSPACE TASK`; no separate
-runtime command is required.
+Projects may start a development-agent service from `.dim/setup.sh` and route
+fixed tasks into it from `.dim/entrypoint.sh`. The service is ordinary
+Project-owned Compose configuration; DIM core does not define or manage an
+agent resource.
 
 Run `just` as your normal user, including when it comes from mise. After the
 first install, log out and back in or run `newgrp docker` once to refresh the
@@ -199,7 +199,7 @@ examples against a real Docker daemon:
 
 ```bash
 just verify-mise-install-smoke   # mise use -g npm:@slop-lab/dim-installer, in a disposable container
-just verify-example-multi-repo-project # three materialized repositories and a real workspace
+just verify-example-project            # canonical Project and a real workspace
 just verify-example-external-urls      # nested URLs proven with dnsmasq
 ```
 
@@ -214,7 +214,7 @@ managed Gitea service.
 For installing `dim` and the minimal single-repository "create a Project"
 shape, see the root [README](../README.md#install-the-dim-cli). For a
 complete, tested nested-container walkthrough with named external URL ingresses, see
-[Example: External URLs](../examples/external-urls/README.md).
+[Example: External URLs](../examples/features/external-urls/README.md).
 
 `run` does not repeat setup. Environment reconciliation happens on `create`,
 `start`, `restart`, `setup`, and after a fast-forward-only `update`. Only the
