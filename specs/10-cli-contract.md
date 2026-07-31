@@ -52,6 +52,7 @@ dim repo apply PROJECT [--file FILE] [--yes]
 dim repo protect PROJECT ALIAS
 dim repo list PROJECT
 dim repo show PROJECT ALIAS
+dim repo delete PROJECT ALIAS --yes
 dim repo url PROJECT ALIAS
 dim repo url --workspace PROJECT ALIAS
 ```
@@ -75,6 +76,10 @@ repositories omitted from the file. Reapplying an identical entry is a no-op;
 an existing alias with a different URL, root role/ref, or protection policy is
 a conflict rather than an implicit mutation. With no `--file`, it reads the
 managed root's optional `.dim/repos.yml`.
+
+`repo delete --yes` deletes an unused non-root repository from managed Gitea
+and Project metadata. It rejects the Project root and any Project referenced
+by a workspace.
 
 The CLI asks before applying a discovered root file in a TTY. Non-interactive
 use requires `--yes` or `--apply-repos`; it never answers its own prompt.

@@ -35,6 +35,16 @@ dim repo add example environment https://example.com/environment
 dim repo list example
 ```
 
+Permanently delete an unused non-root repository from DIM and managed Gitea:
+
+```bash
+dim repo delete example environment --yes
+```
+
+The command rejects a Project that still has workspaces. The root repository
+cannot be removed independently because every runnable Project must retain
+exactly one root; remove or purge the whole Project instead.
+
 For a complete set, use a `repos.yml` whose mapping keys are aliases:
 
 ```yaml

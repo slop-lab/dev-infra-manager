@@ -16,6 +16,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Made Caddy ingresses controller-managed: DNS and the Caddy container are
   reconciled automatically, while the internal router port remains runtime
   state instead of being stored in the ingress argument.
+- Added `repo delete --yes` for deleting an unused non-root repository from
+  Project metadata and managed Gitea.
+- Made `repo add --root` promote an already imported matching repository when
+  the Project does not yet have a root.
 
 ## [0.4.0] - 2026-07-30
 

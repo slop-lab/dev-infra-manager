@@ -1,7 +1,23 @@
-import { describe, expect, it } from "vitest";
-import { normalizeRootRef, projectNamespace } from "../src/projectRegistry.js";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { LifecycleState } from "../src/lifecycleState.js";
+import type { LifecycleOptions, ProjectRecord } from "../src/lifecycleTypes.js";
+import {
+  deleteProjectRepository,
+  normalizeRootRef,
+  prepareProjectRepositoryTransfer,
+  projectNamespace
+} from "../src/projectRegistry.js";
+import { RecordingRunner } from "../src/runner.js";
 
 describe("project registry", () => {
+  const cleanup: string[] = [];
+  afterEach(async () => {
+    await Promise.all(cleanup.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+  });
+
   it("derives reserved managed namespaces", () => {
     expect(projectNamespace("acme")).toBe("dim-acme");
     expect(() => projectNamespace("../acme")).toThrow(/project name/);
@@ -12,5 +28,90 @@ describe("project registry", () => {
     expect(normalizeRootRef("refs/heads/release/next")).toBe("refs/heads/release/next");
     expect(() => normalizeRootRef("refs/tags/v1")).toThrow(/root ref/);
     expect(() => normalizeRootRef("bad..ref")).toThrow(/root ref/);
+  });
+
+  it("rejects deleting the project root repository", async () => {
+    const stateRoot = await mkdtemp(join(tmpdir(), "dim-project-registry-"));
+    cleanup.push(stateRoot);
+    const state = new LifecycleState(stateRoot);
+    const now = new Date().toISOString();
+    const repository = (alias: string) => ({
+      alias,
+      providerRepoId: `dim-example/${alias}`,
+      owner: "dim-example",
+      hostUrl: `http://127.0.0.1:3300/dim-example/${alias}.git`,
+      workspaceUrl: `http://dim-gitea:3000/dim-example/${alias}.git`,
+      phase: "ready" as const,
+      connections: [],
+      protectedPatterns: [],
+      protectionPhase: "applied" as const,
+      createdAt: now,
+      updatedAt: now
+    });
+    const project: ProjectRecord = {
+      schemaVersion: 3,
+      id: "project-id",
+      name: "example",
+      gitNamespace: "dim-example",
+      phase: "ready",
+      rootRepositoryAlias: "root",
+      rootRef: "refs/heads/main",
+      repositories: [repository("root"), repository("extra")],
+      createdAt: now,
+      updatedAt: now
+    };
+    await state.claimProject(project);
+    const options = { stateRoot } as LifecycleOptions;
+
+    await expect(deleteProjectRepository(new RecordingRunner(), options, "example", "root")).rejects.toThrow(
+      "is the project root"
+    );
+  });
+
+  it("promotes an existing matching repository to the project root", async () => {
+    const stateRoot = await mkdtemp(join(tmpdir(), "dim-project-root-"));
+    cleanup.push(stateRoot);
+    const state = new LifecycleState(stateRoot);
+    const now = new Date().toISOString();
+    const source = "https://github.com/example/project.git";
+    await state.claimProject({
+      schemaVersion: 3,
+      id: "project-id",
+      name: "example",
+      gitNamespace: "dim-example",
+      phase: "ready",
+      repositories: [{
+        alias: "root",
+        providerRepoId: "dim-example/root",
+        owner: "dim-example",
+        hostUrl: "http://127.0.0.1:3300/dim-example/root.git",
+        workspaceUrl: "http://dim-gitea:3000/dim-example/root.git",
+        phase: "ready",
+        connections: [{ name: "origin", url: source }],
+        protectedPatterns: [],
+        protectionPhase: "applied",
+        createdAt: now,
+        updatedAt: now
+      }],
+      createdAt: now,
+      updatedAt: now
+    });
+
+    await prepareProjectRepositoryTransfer(
+      new RecordingRunner(),
+      { stateRoot } as LifecycleOptions,
+      {
+        project: "example",
+        alias: "root",
+        source,
+        root: true,
+        rootRef: "main",
+        protectedPatterns: []
+      }
+    );
+
+    const project = await state.readProject("example");
+    expect(project.rootRepositoryAlias).toBe("root");
+    expect(project.rootRef).toBe("refs/heads/main");
   });
 });

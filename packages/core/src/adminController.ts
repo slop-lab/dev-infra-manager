@@ -11,6 +11,7 @@ import {
   projectRepositoryHostUrl,
   projectRepositoryWorkspaceUrl,
   purgeProject,
+  deleteProjectRepository,
   removeProject,
   showProject,
   showProjectRepository
@@ -177,6 +178,9 @@ async function builtinCall(
     }
     case "repo.list": return listProjectRepositories(lifecycle, text("project"));
     case "repo.show": return showProjectRepository(lifecycle, text("project"), text("alias"));
+    case "repo.delete":
+      await deleteProjectRepository(runner, lifecycle, text("project"), text("alias"));
+      return {};
     case "repo.protect": return applyProjectRepositoryProtection(runner, lifecycle, text("project"), text("alias"));
     case "repo.url":
       return {

@@ -295,6 +295,18 @@ export async function prepareProjectRepositoryTransfer(
       if (existingUrl !== input.source) {
         throw new UserError(`repo '${projectName}/${alias}' already exists with a different origin`);
       }
+      if (input.root && project.rootRepositoryAlias !== alias) {
+        if (project.rootRepositoryAlias !== undefined) {
+          throw new UserError(`project '${projectName}' already has root repo '${project.rootRepositoryAlias}'`);
+        }
+        project = {
+          ...project,
+          rootRepositoryAlias: alias,
+          ...(input.rootRef === undefined ? {} : { rootRef: normalizeRootRef(input.rootRef) }),
+          updatedAt: new Date().toISOString()
+        };
+        await state.writeProject(project);
+      }
       return {
         repository: existing,
         ...(input.source === undefined ? {} : { sourceUrl: input.source }),
@@ -442,6 +454,34 @@ export async function showProjectRepository(
   const repo = project.repositories.find((candidate) => candidate.alias === alias);
   if (!repo) throw new UserError(`repo '${project.name}/${alias}' not found`);
   return repo;
+}
+
+export async function deleteProjectRepository(
+  runner: CommandRunner,
+  options: LifecycleOptions,
+  projectNameInput: string,
+  aliasInput: string
+): Promise<void> {
+  const projectName = validateLifecycleName(projectNameInput, "project");
+  const alias = validateLifecycleName(aliasInput, "repo alias");
+  const state = new LifecycleState(options.stateRoot);
+  const release = await state.acquireProjectLock(projectName);
+  try {
+    const project = await deletableProjectRepository(state, projectName, alias);
+    const credentials = await ensureGitea(runner, options);
+    const response = await giteaRequest(
+      options,
+      credentials,
+      "DELETE",
+      `/repos/${project.gitNamespace}/${alias}`
+    );
+    if (!response.ok && response.status !== 404) {
+      throw await apiError(`delete Gitea repo '${project.gitNamespace}/${alias}'`, response);
+    }
+    await state.writeProject(withoutRepository(project, alias));
+  } finally {
+    await release();
+  }
 }
 
 export async function projectRepositoryHostUrl(
@@ -654,6 +694,33 @@ function replaceRepository(
     ...project,
     repositories: project.repositories.map((candidate) => candidate.alias === repo.alias ? repo : candidate),
     updatedAt: repo.updatedAt
+  };
+}
+
+async function deletableProjectRepository(
+  state: LifecycleState,
+  projectName: string,
+  alias: string
+): Promise<ProjectRecord> {
+  const project = await state.readProject(projectName);
+  assertReadyProject(project);
+  if (!project.repositories.some((repository) => repository.alias === alias)) {
+    throw new UserError(`repo '${projectName}/${alias}' not found`);
+  }
+  if (project.rootRepositoryAlias === alias) {
+    throw new UserError(
+      `repo '${projectName}/${alias}' is the project root; remove or purge the project instead`
+    );
+  }
+  await assertProjectUnused(state, projectName);
+  return project;
+}
+
+function withoutRepository(project: ProjectRecord, alias: string): ProjectRecord {
+  return {
+    ...project,
+    repositories: project.repositories.filter((repository) => repository.alias !== alias),
+    updatedAt: new Date().toISOString()
   };
 }
 

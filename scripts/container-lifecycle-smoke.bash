@@ -53,6 +53,10 @@ repo_url="$(pnpm run --silent cli -- repo url "$project_name" root)"
 pnpm run cli -- repo add "$project_name" imported "$bare_repo" >/dev/null
 git ls-remote "$(pnpm run --silent cli -- repo url "$project_name" imported)" \
   refs/heads/main | grep -q .
+pnpm run cli -- repo add "$project_name" disposable >/dev/null
+pnpm run cli -- repo delete "$project_name" disposable --yes >/dev/null
+test "$(pnpm run --silent cli -- repo list "$project_name" --json | jq \
+  --arg alias disposable '[.[] | select(.alias == $alias)] | length')" = 0
 pnpm run cli -- create "$project_name" "$workspace_name" \
   --cpus 1.5 \
   --memory 3g \

@@ -157,6 +157,15 @@ repo.command("show")
     print(await adminCall("repo.show", { project: name, alias }), flags)
   );
 
+repo.command("delete")
+  .description("Delete an unused non-root repository from DIM and managed Gitea")
+  .argument("<project>")
+  .argument("<alias>")
+  .requiredOption("--yes", "confirm permanent repository deletion")
+  .action(async (project: string, alias: string) => {
+    await adminCall("repo.delete", { project, alias });
+  });
+
 repo.command("protect")
   .description("Apply configured branch protection after the initial push")
   .argument("<project>")
