@@ -1,0 +1,8 @@
+schemaVersion: 1
+repositories:
+  dim:
+    url: https://github.com/slop-lab/dev-infra-manager.git
+    root: true
+    protect:
+      - main
+      - development
