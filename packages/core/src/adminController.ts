@@ -36,6 +36,13 @@ import { ProcessRunner } from "./runner.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { isUserError, UserError } from "./errors.js";
 import { parseRepositorySetYaml, validateRepositorySet } from "./repositorySet.js";
+import {
+  disableCiRunner,
+  enableCiRunner,
+  listCiRunners,
+  showCiRunner,
+  stopCiRunner
+} from "./ciRunner.js";
 
 export interface AdminRouteContext {
   readonly params: Readonly<Record<string, string>>;
@@ -191,6 +198,15 @@ async function builtinCall(
           ? await projectRepositoryWorkspaceUrl(lifecycle, text("project"), text("alias"))
           : await projectRepositoryHostUrl(lifecycle, text("project"), text("alias"))
       };
+    case "ci.runner.enable":
+      return enableCiRunner(runner, lifecycle, {
+        project: text("project"),
+        ...(input.resources === undefined ? {} : { resources: ciResources(input.resources) })
+      });
+    case "ci.runner.list": return listCiRunners(lifecycle);
+    case "ci.runner.show": return showCiRunner(lifecycle, text("project"));
+    case "ci.runner.stop": return stopCiRunner(runner, lifecycle, text("project"));
+    case "ci.runner.disable": await disableCiRunner(runner, lifecycle, text("project")); return {};
     case "workspace.create":
       return createWorkspace(runner, lifecycle, {
         project: text("project"),
@@ -245,6 +261,19 @@ async function builtinCall(
       };
     default: throw new UserError(`unknown admin operation '${operation}'`);
   }
+}
+
+function ciResources(value: unknown): { cpus?: string; memory?: string; pidsLimit?: string } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new UserError("resources must be an object");
+  const input = value as Record<string, unknown>;
+  const result: { cpus?: string; memory?: string; pidsLimit?: string } = {};
+  for (const key of ["cpus", "memory", "pidsLimit"] as const) {
+    if (input[key] !== undefined) {
+      if (typeof input[key] !== "string" || input[key].length === 0) throw new UserError(`resources.${key} must be a string`);
+      result[key] = input[key];
+    }
+  }
+  return result;
 }
 
 function matchRoute(routePath: string, requestPath: string): Record<string, string> | undefined {

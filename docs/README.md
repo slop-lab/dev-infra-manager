@@ -59,6 +59,7 @@ The documentation is split by concern:
 - [Runtime Images](runtime-images.md): workspace-root runtime images and their nested workloads.
 - [External workspace URLs](external-urls.md): controller discovery, named ingresses, nested targets, and Caddy/Cloudflare HTTPS.
 - [Repository-backed Workspaces](repo-workspaces.md): local Gitea registration, persistent workspaces, reconciliation, and Git environment.
+- [Managed CI Runners](ci-runners.md): independent pull-request verification, resource defaults, and runner lifecycle.
 - [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.
 - [Example: Multi-repository Project](../examples/multi-repo-project/README.md): controller/agent separation, reviewed repositories, and a secret-bearing sibling container.
 - [Example: External URLs](../examples/external-urls/README.md): named ingress discovery and real root/dev/deep reverse-proxy routing.

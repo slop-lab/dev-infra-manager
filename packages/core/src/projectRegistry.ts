@@ -787,6 +787,12 @@ function commandError(
 }
 
 async function assertProjectUnused(state: LifecycleState, name: string): Promise<void> {
+  try {
+    await state.readCiRunner(name);
+    throw new UserError(`project '${name}' has an enabled CI runner; disable it first`);
+  } catch (error) {
+    if (!(error instanceof UserError) || !error.message.includes("not found")) throw error;
+  }
   const references = (await state.listWorkspaces()).filter((workspace) => workspace.projectName === name);
   if (references.length > 0) {
     throw new UserError(

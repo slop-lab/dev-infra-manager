@@ -34,6 +34,8 @@ Implemented:
   workspaces.
 - TypeScript unit tests and nested-container lifecycle smoke tests.
 - Reproducible local Node.js 24/26, container, Sysbox, and KVM CI entrypoints.
+- Project-scoped managed CI runners with Sysbox-isolated DinD, independent
+  resource limits, and a provider-neutral coordinator boundary.
 
 DIM does not currently provide an independent `job` lifecycle, automatic
 workspace cleanup after PR merge, one-shot workspace wrappers, or disk quota.

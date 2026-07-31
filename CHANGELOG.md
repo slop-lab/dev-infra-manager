@@ -25,6 +25,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   explicit non-forced branch or tag refspecs.
 - Limited the default `repo add URL` import to branches and tags; copying every
   source ref now requires `--mirror`.
+- Added `dim ci runner` lifecycle commands for a Project-scoped isolated
+  container runner, with configurable inherited resource defaults and a
+  provider-neutral coordinator boundary.
 
 ## [0.4.0] - 2026-07-30
 

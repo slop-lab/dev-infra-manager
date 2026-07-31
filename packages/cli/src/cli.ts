@@ -29,6 +29,9 @@ import {
   runWorkspace,
   runtimeBackendChecks,
   setConfiguredWorkspaceBackend,
+  configuredCiRunnerDefaults,
+  setConfiguredCiRunnerDefaults,
+  BUILTIN_CI_RUNNER_DEFAULTS,
   UserError,
   type WorkspaceRuntimeBackendKind,
 } from "@slop-lab/dim-core";
@@ -206,6 +209,98 @@ repo.command("url")
       alias,
       workspace: flags.workspace ?? false
     })).url));
+
+const ci = program.command("ci").description("Manage isolated CI execution");
+const ciRunner = ci.command("runner").description("Manage project CI runners");
+
+ciRunner.command("enable")
+  .description("Enable or reconcile the isolated container runner for a project")
+  .argument("<project>")
+  .option("--cpus <count>")
+  .option("--memory <size>")
+  .option("--pids-limit <count>")
+  .option("--json", "print machine-readable JSON")
+  .action(async (project: string, flags: ResourceFlags & JsonFlags) => {
+    print(await adminCall("ci.runner.enable", {
+      project,
+      ...(hasResourceFlags(flags) ? { resources: resourceInput(flags) } : {})
+    }), flags);
+  });
+
+ciRunner.command("list")
+  .alias("ls")
+  .description("List managed CI runners")
+  .option("--json", "print machine-readable JSON")
+  .action(async (flags: JsonFlags) =>
+    printList(
+      await adminCall<Record<string, unknown>[]>("ci.runner.list"),
+      ["projectName", "phase", "backend", "resources", "inheritsResources"],
+      flags
+    )
+  );
+
+ciRunner.command("status")
+  .description("Show a project CI runner")
+  .argument("<project>")
+  .option("--json", "print machine-readable JSON")
+  .action(async (project: string, flags: JsonFlags) =>
+    print(await adminCall("ci.runner.show", { project }), flags)
+  );
+
+ciRunner.command("restart")
+  .description("Reconcile and restart a project CI runner")
+  .argument("<project>")
+  .option("--json", "print machine-readable JSON")
+  .action(async (project: string, flags: JsonFlags) =>
+    print(await adminCall("ci.runner.enable", { project }), flags)
+  );
+
+ciRunner.command("stop")
+  .description("Stop a project CI runner without deleting its registration")
+  .argument("<project>")
+  .option("--json", "print machine-readable JSON")
+  .action(async (project: string, flags: JsonFlags) =>
+    print(await adminCall("ci.runner.stop", { project }), flags)
+  );
+
+ciRunner.command("logs")
+  .description("Follow project CI runner logs")
+  .argument("<project>")
+  .action(async (project: string) => {
+    const record = await adminCall<{ containerName: string }>("ci.runner.show", { project });
+    process.exitCode = await runner.runStreaming("docker", ["logs", "--follow", record.containerName]);
+  });
+
+ciRunner.command("disable")
+  .description("Remove a project CI runner and its local data")
+  .argument("<project>")
+  .requiredOption("--yes", "confirm runner and local data deletion")
+  .action(async (project: string) => void await adminCall("ci.runner.disable", { project }));
+
+const ciDefaults = ciRunner.command("defaults").description("Manage inherited CI runner resource defaults");
+
+ciDefaults.command("show")
+  .option("--json", "print machine-readable JSON")
+  .action((flags: JsonFlags) => {
+    const configured = configuredCiRunnerDefaults();
+    print({
+      resources: configured ?? BUILTIN_CI_RUNNER_DEFAULTS,
+      source: configured ? "configured" : "builtin"
+    }, flags);
+  });
+
+ciDefaults.command("set")
+  .requiredOption("--cpus <count>")
+  .requiredOption("--memory <size>")
+  .requiredOption("--pids-limit <count>")
+  .action(async (flags: Required<ResourceFlags>) => {
+    console.log(await setConfiguredCiRunnerDefaults(resourceInput(flags) as Required<ReturnType<typeof resourceInput>>));
+  });
+
+ciDefaults.command("reset")
+  .action(async () => {
+    console.log(await setConfiguredCiRunnerDefaults(undefined));
+  });
 
 program.command("create")
   .description("Create a persistent workspace for a project")
@@ -701,6 +796,12 @@ interface JsonFlags {
   json?: boolean;
 }
 
+interface ResourceFlags {
+  cpus?: string;
+  memory?: string;
+  pidsLimit?: string;
+}
+
 interface WorkspaceCreateFlags extends JsonFlags {
   profile: string[];
   gitUserName?: string;
@@ -1164,6 +1265,18 @@ async function readStdin(): Promise<string> {
   let value = "";
   for await (const chunk of process.stdin) value += String(chunk);
   return value;
+}
+
+function hasResourceFlags(flags: ResourceFlags): boolean {
+  return flags.cpus !== undefined || flags.memory !== undefined || flags.pidsLimit !== undefined;
+}
+
+function resourceInput(flags: ResourceFlags): { cpus?: string; memory?: string; pidsLimit?: string } {
+  return {
+    ...(flags.cpus === undefined ? {} : { cpus: flags.cpus }),
+    ...(flags.memory === undefined ? {} : { memory: flags.memory }),
+    ...(flags.pidsLimit === undefined ? {} : { pidsLimit: flags.pidsLimit })
+  };
 }
 
 function print(value: unknown, flags: JsonFlags = {}): void {

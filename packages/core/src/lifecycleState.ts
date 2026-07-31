@@ -2,7 +2,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "./errors.js";
-import type { GiteaServiceRecord, ProjectRecord, WorkspaceRecord } from "./lifecycleTypes.js";
+import type { CiRunnerRecord, GiteaServiceRecord, ProjectRecord, WorkspaceRecord } from "./lifecycleTypes.js";
 
 export function validateLifecycleName(value: string, kind: string): string {
   if (!/^[a-z0-9][a-z0-9_.-]{0,47}$/.test(value)) {
@@ -69,6 +69,30 @@ export class LifecycleState {
 
   giteaServicePath(): string {
     return path.join(this.root, "services", "gitea.json");
+  }
+
+  ciRunnerPath(project: string): string {
+    return path.join(this.root, "ci-runners", `${validateLifecycleName(project, "project")}.json`);
+  }
+
+  async readCiRunner(project: string): Promise<CiRunnerRecord> {
+    return readJson(this.ciRunnerPath(project), `CI runner for project '${project}' not found`);
+  }
+
+  async writeCiRunner(record: CiRunnerRecord): Promise<void> {
+    await atomicWrite(this.ciRunnerPath(record.projectName), record);
+  }
+
+  async removeCiRunner(project: string): Promise<void> {
+    await rm(this.ciRunnerPath(project), { force: true });
+  }
+
+  async listCiRunners(): Promise<CiRunnerRecord[]> {
+    return listRecords<CiRunnerRecord>(path.join(this.root, "ci-runners"), "CI runner");
+  }
+
+  async acquireCiRunnerLock(project: string): Promise<() => Promise<void>> {
+    return acquireLock(this.root, `ci-runner-${validateLifecycleName(project, "project")}`, `CI runner '${project}' reconciliation`);
   }
 
   async claimGiteaService(record: GiteaServiceRecord): Promise<void> {

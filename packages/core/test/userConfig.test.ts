@@ -3,7 +3,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  configuredCiRunnerDefaults,
   configuredWorkspaceBackend,
+  setConfiguredCiRunnerDefaults,
   setConfiguredWorkspaceBackend
 } from "../src/userConfig.js";
 
@@ -30,5 +32,19 @@ describe("DIM user config", () => {
       pluginHome: "/plugins",
       workspaceBackend: "runc"
     });
+  });
+
+  it("records and resets inherited CI runner resource defaults", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "dim-user-config-"));
+    roots.push(root);
+    const target = path.join(root, "config.json");
+    const env = { DIM_CONFIG_PATH: target };
+
+    await setConfiguredCiRunnerDefaults({ cpus: "6", memory: "12GiB", pidsLimit: "4096" }, env);
+    expect(configuredCiRunnerDefaults(env)).toEqual({ cpus: "6", memory: "12GiB", pidsLimit: "4096" });
+
+    await setConfiguredCiRunnerDefaults(undefined, env);
+    expect(configuredCiRunnerDefaults(env)).toBeUndefined();
+    expect(JSON.parse(await readFile(target, "utf8"))).toEqual({ schemaVersion: 1 });
   });
 });

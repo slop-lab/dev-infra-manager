@@ -29,7 +29,11 @@ if [[ "$backend" == all ]]; then
   echo "kvm-host-install-smoke-ok: all"
   exit 0
 fi
-for cmd in qemu-system-x86_64 qemu-img cloud-localds curl ssh ssh-keygen tar; do command -v "$cmd" >/dev/null || { echo "missing KVM smoke dependency: $cmd (run: just install-kvm-verify-deps-ubuntu)" >&2; exit 2; }; done
+for cmd in qemu-system-x86_64 qemu-img curl ssh ssh-keygen tar; do command -v "$cmd" >/dev/null || { echo "missing KVM smoke dependency: $cmd (run: just install-kvm-verify-deps-ubuntu)" >&2; exit 2; }; done
+if ! command -v cloud-localds >/dev/null && ! command -v genisoimage >/dev/null; then
+  echo "missing KVM smoke dependency: cloud-localds or genisoimage" >&2
+  exit 2
+fi
 test -r /dev/kvm && test -w /dev/kvm || { echo "/dev/kvm is not accessible" >&2; exit 2; }
 repo_root="$(cd -- "$script_dir/.." && pwd)"
 if [[ -n "$(git -C "$repo_root" status --porcelain)" ]]; then
@@ -71,9 +75,14 @@ fi
 ssh-keygen -q -t ed25519 -N '' -f "$workdir/id"; key="$(cat "$workdir/id.pub")"
 printf 'instance-id: dim-kvm-smoke\nlocal-hostname: dim-kvm-smoke\n' > "$workdir/meta-data"
 printf '#cloud-config\nusers:\n  - name: dim\n    sudo: ALL=(ALL) NOPASSWD:ALL\n    shell: /bin/bash\n    ssh_authorized_keys:\n      - %s\n' "$key" > "$workdir/user-data"
-cloud-localds "$workdir/seed.img" "$workdir/user-data" "$workdir/meta-data"
+if command -v cloud-localds >/dev/null; then
+  cloud-localds "$workdir/seed.img" "$workdir/user-data" "$workdir/meta-data"
+else
+  genisoimage -quiet -output "$workdir/seed.img" -volid cidata -joliet -rock \
+    "$workdir/user-data" "$workdir/meta-data"
+fi
 qemu-img create -q -f qcow2 -F qcow2 -b "$image" "$workdir/root.qcow2" 24G
-qemu-system-x86_64 -enable-kvm -cpu host -m 4096 -smp 4 -nographic -drive "file=$workdir/root.qcow2,if=virtio" -drive "file=$workdir/seed.img,format=raw,if=virtio" -netdev user,id=n,hostfwd=tcp:127.0.0.1:22222-:22 -device virtio-net-pci,netdev=n >"$workdir/qemu.log" 2>&1 & pid=$!
+qemu-system-x86_64 -enable-kvm -cpu host -m "${DIM_KVM_SMOKE_MEMORY_MB:-4096}" -smp 4 -nographic -drive "file=$workdir/root.qcow2,if=virtio" -drive "file=$workdir/seed.img,format=raw,if=virtio" -netdev user,id=n,hostfwd=tcp:127.0.0.1:22222-:22 -device virtio-net-pci,netdev=n >"$workdir/qemu.log" 2>&1 & pid=$!
 ssh_args=(-i "$workdir/id" -p 22222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=2)
 clone_repository() {
   ssh "${ssh_args[@]}" dim@127.0.0.1 "tar -C /tmp -xzf - && git clone /tmp/repo.bundle dim" <"$workdir/repo.tar.gz"
@@ -129,8 +138,9 @@ if [[ "$backend" == sysbox ]]; then
       cd dim
       pnpm install --frozen-lockfile >/dev/null
     '
-  run_step "verify trusted KVM workspace and host-side Sysbox agent" \
-    ssh "${ssh_args[@]}" dim@127.0.0.1 '
+  if [[ "${DIM_KVM_SKIP_TRUSTED_WORKSPACE:-0}" != 1 ]]; then
+    run_step "verify trusted KVM workspace and host-side Sysbox agent" \
+      ssh "${ssh_args[@]}" dim@127.0.0.1 '
       set -e
       trusted=dim-kvm-trusted
       agent=dim-kvm-agent
@@ -162,6 +172,52 @@ if [[ "$backend" == sysbox ]]; then
       done
       sudo docker exec "$agent" docker run --rm hello-world >/dev/null
       test "$(sudo docker inspect -f "{{.HostConfig.Privileged}}" "$agent")" = false
+      '
+  fi
+  run_step "verify managed CI runner cgroup boundary" \
+    ssh "${ssh_args[@]}" dim@127.0.0.1 '
+      set -e
+      export DIM_STATE_ROOT=/tmp/dim-ci-runner-state
+      export DIM_CONFIG_PATH="$DIM_STATE_ROOT/config.json"
+      export DIM_CI_RUNNER_CPUS=1.5
+      export DIM_CI_RUNNER_MEMORY=1g
+      export DIM_CI_RUNNER_PIDS=1024
+      project=ci-smoke
+      source=/tmp/dim-ci-source
+      cleanup() {
+        cd ~/dim
+        pnpm run --silent cli -- ci runner disable "$project" --yes >/dev/null 2>&1 || true
+        pnpm run --silent cli -- project purge "$project" --yes >/dev/null 2>&1 || true
+        sudo docker rm -f dim-ci-ci-smoke >/dev/null 2>&1 || true
+        sudo rm -rf "$DIM_STATE_ROOT" "$source"
+      }
+      trap cleanup EXIT
+      mkdir -p "$DIM_STATE_ROOT" "$source"
+      printf "%s\n" "{\"schemaVersion\":1,\"workspaceBackend\":\"sysbox\"}" >"$DIM_CONFIG_PATH"
+      git init --initial-branch=main "$source/work" >/dev/null
+      git -C "$source/work" config user.name Smoke
+      git -C "$source/work" config user.email smoke@dim.invalid
+      touch "$source/work/README.md"
+      git -C "$source/work" add README.md
+      git -C "$source/work" commit -m initial >/dev/null
+      git clone --bare "$source/work" "$source/project.git" >/dev/null
+      cd ~/dim
+      pnpm run --silent cli -- project create "$project" >/dev/null
+      pnpm run --silent cli -- repo add "$project" root "$source/project.git" \
+        --root --ref main >/dev/null
+      pnpm run --silent cli -- ci runner enable "$project" >/dev/null
+      container="$(pnpm run --silent cli -- ci runner status "$project" --json | jq -r .containerName)"
+      test "$(sudo docker inspect --format "{{.HostConfig.Runtime}}" "$container")" = sysbox-runc
+      test "$(sudo docker inspect --format "{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.PidsLimit}}" "$container")" \
+        = "1500000000|1073741824|1024"
+      test "$(sudo docker inspect --format "{{.HostConfig.Privileged}}" "$container")" = false
+      ! sudo docker inspect --format "{{json .Mounts}}" "$container" | grep -q /var/run/docker.sock
+      for _ in $(seq 1 60); do
+        status="$(sudo docker inspect --format "{{.State.Status}}" "$container")"
+        [[ "$status" != running ]] || break
+        sleep 1
+      done
+      test "$status" = running
     '
 fi
 echo "kvm-host-install-smoke-ok: $backend"

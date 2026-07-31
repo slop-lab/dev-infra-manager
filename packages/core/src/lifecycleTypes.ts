@@ -14,6 +14,37 @@ export interface LifecycleOptions {
   controllerSocketPath: string;
   adminControllerSocketPath: string;
   agentDockerSocketPath: string;
+  ciRunnerImage: string;
+  ciRunnerRuntime: string;
+  ciRunnerDefaultCpus: string;
+  ciRunnerDefaultMemory: string;
+  ciRunnerDefaultPidsLimit: string;
+}
+
+export interface CiRunnerResources {
+  cpus: string;
+  memory: string;
+  pidsLimit: string;
+}
+
+export interface CiRunnerRecord {
+  schemaVersion: 1;
+  name: string;
+  projectId: string;
+  projectName: string;
+  provider: string;
+  backend: "container";
+  phase: "creating" | "ready" | "stopped" | "error";
+  containerName: string;
+  volumeName: string;
+  image: string;
+  runtime: string;
+  resources: CiRunnerResources;
+  inheritsResources: boolean;
+  labels: string[];
+  createdAt: string;
+  updatedAt: string;
+  error?: string;
 }
 
 export type WorkspaceRuntimeBackendKind = "sysbox" | "gvisor" | "rootless-podman" | "runc";

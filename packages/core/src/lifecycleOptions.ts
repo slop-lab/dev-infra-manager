@@ -45,6 +45,12 @@ export function lifecycleOptionsForBackend(
     memory: env.DIM_WORKSPACE_MEMORY ?? "4g",
     pidsLimit: env.DIM_WORKSPACE_PIDS ?? "2048",
     agentDockerSocketPath: env.DIM_AGENT_DOCKER_SOCKET ?? "/var/run/docker.sock",
+    ciRunnerImage: env.DIM_CI_RUNNER_IMAGE
+      ?? "gitea/act_runner@sha256:578925b4bdec5f60d93b5ba766cf02f2f9f32b1c8a4ec665ddf4d53d45f683c7",
+    ciRunnerRuntime: env.DIM_CI_RUNNER_RUNTIME ?? "sysbox-runc",
+    ciRunnerDefaultCpus: env.DIM_CI_RUNNER_CPUS ?? "4",
+    ciRunnerDefaultMemory: env.DIM_CI_RUNNER_MEMORY ?? "8g",
+    ciRunnerDefaultPidsLimit: env.DIM_CI_RUNNER_PIDS ?? "2048",
     controllerSocketPath: env.DIM_CONTROLLER_SOCKET
       ?? path.join(controllerDirectory, "controller.sock"),
     adminControllerSocketPath: env.DIM_ADMIN_CONTROLLER_SOCKET

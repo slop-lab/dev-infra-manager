@@ -37,6 +37,28 @@ test("repository sync commands expose safe explicit contracts", () => {
   assert.match(invalid.stderr, /requires non-forced source:destination refspecs/);
 });
 
+test("CI runner commands expose lifecycle and configurable defaults", () => {
+  const help = run(["ci", "runner", "--help"]);
+  assert.equal(help.status, 0);
+  for (const command of ["enable", "status", "logs", "restart", "stop", "disable", "defaults"]) {
+    assert.match(help.stdout, new RegExp(command));
+  }
+
+  const enable = run(["ci", "runner", "enable", "--help"]);
+  assert.equal(enable.status, 0);
+  assert.match(enable.stdout, /--cpus <count>/);
+  assert.match(enable.stdout, /--memory <size>/);
+  assert.match(enable.stdout, /--pids-limit <count>/);
+
+  const defaults = run(["ci", "runner", "defaults", "set", "--help"]);
+  assert.equal(defaults.status, 0);
+  assert.match(defaults.stdout, /--cpus <count>/);
+
+  const missingDefaults = run(["ci", "runner", "defaults", "set"]);
+  assert.notEqual(missingDefaults.status, 0);
+  assert.match(missingDefaults.stderr, /required option/);
+});
+
 function run(args: string[]): ReturnType<typeof spawnSync> {
   return spawnSync(process.execPath, [cli, ...args], {
     cwd: packageDirectory,

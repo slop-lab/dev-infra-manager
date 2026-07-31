@@ -126,6 +126,43 @@ Both operations use temporary bare Git storage. The invoking host Git process
 supplies credentials for the external URL, while DIM credentials are installed
 only for the separate managed-Gitea command.
 
+## CI runners
+
+```bash
+dim ci runner enable PROJECT [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
+dim ci runner list
+dim ci runner status PROJECT
+dim ci runner logs PROJECT
+dim ci runner restart PROJECT
+dim ci runner stop PROJECT
+dim ci runner disable PROJECT --yes
+dim ci runner defaults show
+dim ci runner defaults set --cpus COUNT --memory SIZE --pids-limit COUNT
+dim ci runner defaults reset
+```
+
+Each enabled Project has at most one repository-scoped runner with concurrency
+one and the fixed workflow label `dim`. Its supervisor, nested container
+daemon, job containers, data volume, and resource limits are independent from
+every workspace. The runner receives neither workspace credentials nor a host
+container-engine socket. The initial adapter also maps `ubuntu-24.04` to its
+compatible job image so a workflow shared with GitHub does not require a
+provider-specific `runs-on` edit.
+
+Effective resources resolve in this order: Project overrides, configured user
+defaults, then the built-in `4 CPU / 8 GiB / 2048 PID` fallback. `enable` with
+resource flags records a Project override. Without flags it inherits defaults;
+`restart` preserves an existing override.
+
+The CI coordinator and execution backend are separate contracts. The initial
+coordinator adapter registers against managed Gitea Actions, while lifecycle
+state, CLI, cgroup resources, and the container executor use provider-neutral
+CI terms. Registration credentials are not persisted in DIM state.
+
+The initial executor is a pinned DinD system container isolated by Sysbox. A disposable-QEMU
+executor may later implement the same runner contract and advertise
+`dim-qemu`; it is not part of the initial container-runner lifecycle.
+
 ## Workspaces
 
 ```bash

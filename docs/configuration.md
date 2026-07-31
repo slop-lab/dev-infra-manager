@@ -34,6 +34,11 @@ DIM_WORKSPACE_PRIVILEGED
 DIM_WORKSPACE_CPUS
 DIM_WORKSPACE_MEMORY
 DIM_WORKSPACE_PIDS
+DIM_CI_RUNNER_IMAGE
+DIM_CI_RUNNER_RUNTIME
+DIM_CI_RUNNER_CPUS
+DIM_CI_RUNNER_MEMORY
+DIM_CI_RUNNER_PIDS
 ```
 
 Runtime backend selection is documented in
@@ -42,5 +47,16 @@ persisted by their lifecycle commands rather than copied into user config.
 The CPU, memory, and PID settings are defaults for new workspace records.
 `dim create --cpus`, `--memory`, and `--pids-limit` persist per-workspace
 overrides.
+
+CI runner resource defaults use the built-in `4 CPU`, `8g` memory, and `2048`
+PID fallback unless changed in user configuration:
+
+```bash
+dim ci runner defaults set --cpus 6 --memory 12GiB --pids-limit 4096
+dim ci runner defaults show
+dim ci runner defaults reset
+```
+
+Project-specific flags on `dim ci runner enable` override these defaults.
 
 DIM 0.2 rejects 0.1 state and does not perform an automatic migration.

@@ -23,6 +23,15 @@ just build
 This gate must require only Node.js and pnpm, not Docker, a runtime backend,
 QEMU, KVM, or an installed DIM CLI.
 
+CI runner unit coverage must verify resource-default precedence, stable managed
+names, and that default container arguments use the configured isolation
+runtime without mounting the host Docker socket.
+
+The Sysbox lane of `scripts/kvm-host-install-smoke.bash` must enable a real
+Project CI runner inside its disposable QEMU guest and inspect the effective
+Docker runtime, CPU quota, memory limit, PID limit, non-privileged flag, and
+absence of a host Docker-socket mount.
+
 `just verify-plugin-install` builds the publishable packages and verifies
 plugin installation through their packaged shape. It is separate because it
 tests an installation workflow rather than source correctness.
