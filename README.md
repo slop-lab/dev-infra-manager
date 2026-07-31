@@ -3,6 +3,9 @@
 `dev-infra-manager` (DIM) provides persistent, isolated, review-gated
 workspaces for AI-assisted development.
 
+DIM supports Linux hosts only. macOS and Windows are not supported host
+platforms, including through Docker Desktop.
+
 Licensed under the [MIT License](LICENSE). Release history is recorded in the
 [changelog](CHANGELOG.md).
 

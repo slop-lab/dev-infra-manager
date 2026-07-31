@@ -25,6 +25,9 @@ try {
 }
 
 async function dispatch(commandArgs: string[]): Promise<number> {
+  if (process.platform !== "linux") {
+    throw new Error(`DIM requires a Linux host; unsupported platform '${process.platform}'`);
+  }
   const first = commandArgs[0];
   if (first === "installer") {
     if (commandArgs.length === 1) await interactiveInstall();

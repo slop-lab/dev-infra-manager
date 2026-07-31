@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { once } from "node:events";
-import { chmod, mkdir, mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { createInterface } from "node:readline/promises";
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -1174,6 +1174,10 @@ async function unixHttpRequest(
 
 async function ensureManagedController(options: LifecycleOptions): Promise<void> {
   if (await managedControllerReady(options)) return;
+  if (usesSystemdManagedController(options)) {
+    await startSystemdManagedController(options);
+    return;
+  }
   const runtimeDir = path.dirname(options.controllerSocketPath);
   const lockDir = path.join(runtimeDir, "ensure.lock");
   await mkdir(runtimeDir, { recursive: true });
@@ -1253,6 +1257,13 @@ async function controllerHealthy(socketPath: string): Promise<boolean> {
 }
 
 async function stopManagedController(options: LifecycleOptions): Promise<void> {
+  if (usesSystemdManagedController(options)) {
+    const result = await runner.run("systemctl", ["--user", "stop", "dim-controller.service"]);
+    if (result.exitCode !== 0 && !result.stderr.includes("not loaded")) {
+      throw new UserError(`could not stop DIM controller: ${result.stderr.trim()}`);
+    }
+    return;
+  }
   try {
     const value = await readFile(path.join(path.dirname(options.controllerSocketPath), "controller.pid"), "utf8");
     const pid = Number(value.trim());
@@ -1263,6 +1274,13 @@ async function stopManagedController(options: LifecycleOptions): Promise<void> {
 }
 
 async function restartManagedController(options: LifecycleOptions): Promise<void> {
+  if (usesSystemdManagedController(options)) {
+    await stopManagedController(options);
+    await rm(options.controllerSocketPath, { force: true });
+    await rm(options.adminControllerSocketPath, { force: true });
+    await startSystemdManagedController(options);
+    return;
+  }
   let pid: number | undefined;
   try {
     const value = await readFile(path.join(path.dirname(options.controllerSocketPath), "controller.pid"), "utf8");
@@ -1307,10 +1325,109 @@ function processExists(pid: number): boolean {
   }
 }
 
+function usesSystemdManagedController(options: LifecycleOptions): boolean {
+  if (process.platform !== "linux") return false;
+  const uid = process.getuid?.();
+  if (uid === undefined) return false;
+  const systemdRuntimeRoot = `/run/user/${uid}`;
+  if ((process.env.XDG_RUNTIME_DIR ?? systemdRuntimeRoot) !== systemdRuntimeRoot) return false;
+  const defaultStateRoot = path.resolve(path.join(homedir(), ".local/state/dim"));
+  const runtimeDirectory = path.join(systemdRuntimeRoot, "dim");
+  return options.stateRoot === defaultStateRoot
+    && options.controllerSocketPath === path.join(runtimeDirectory, "controller.sock")
+    && options.adminControllerSocketPath === path.join(runtimeDirectory, "admin.sock");
+}
+
+async function startSystemdManagedController(options: LifecycleOptions): Promise<void> {
+  const script = process.argv[1];
+  if (!script) throw new UserError("cannot locate the DIM CLI entrypoint");
+  const unitDirectory = path.join(
+    process.env.XDG_CONFIG_HOME ?? path.join(homedir(), ".config"),
+    "systemd",
+    "user"
+  );
+  const unitPath = path.join(unitDirectory, "dim-controller.service");
+  const environment = [
+    "DIM_CONFIG_PATH",
+    "DIM_DATA_HOME",
+    "DIM_INSTALL_PREFIX",
+    "DIM_PLUGIN_HOME",
+    "DIM_EXTERNAL_URL_CONFIG",
+    "DOCKER_HOST",
+    "PATH",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME"
+  ].flatMap((name) => process.env[name] === undefined
+    ? []
+    : [`Environment=${systemdQuote(`${name}=${process.env[name]}`)}`]);
+  const command = [
+    process.execPath,
+    ...process.execArgv,
+    script,
+    "controller",
+    "serve",
+    "--socket",
+    options.controllerSocketPath,
+    "--admin-socket",
+    options.adminControllerSocketPath
+  ].map(systemdQuote).join(" ");
+  const unit = `[Unit]
+Description=DIM managed controller
+
+[Service]
+Type=simple
+ExecStart=${command}
+Restart=on-failure
+RestartSec=1s
+KillMode=control-group
+RuntimeDirectory=dim
+RuntimeDirectoryMode=0700
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=dim-controller
+${environment.join("\n")}
+
+[Install]
+WantedBy=default.target
+`;
+  await mkdir(unitDirectory, { recursive: true, mode: 0o700 });
+  const temporary = `${unitPath}.tmp-${process.pid}`;
+  await writeFile(temporary, unit, { encoding: "utf8", mode: 0o644 });
+  await rename(temporary, unitPath);
+  for (const args of [
+    ["--user", "daemon-reload"],
+    ["--user", "enable", "dim-controller.service"],
+    ["--user", "restart", "dim-controller.service"]
+  ]) {
+    const result = await runner.run("systemctl", args);
+    if (result.exitCode !== 0) {
+      throw new UserError(
+        `could not start DIM controller with systemd: ${result.stderr.trim() || result.stdout.trim()}`
+      );
+    }
+  }
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (await managedControllerReady(options)) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new UserError(
+    "managed controller failed to start; run "
+      + "'journalctl --user --unit dim-controller.service --lines 100' for details"
+  );
+}
+
+function systemdQuote(value: string): string {
+  if (/[\r\n]/.test(value)) throw new UserError("systemd controller arguments must not contain newlines");
+  return `"${value.replaceAll("%", "%%").replaceAll("\\", "\\\\").replaceAll("\"", "\\\"")}"`;
+}
+
 main();
 
 async function main(): Promise<void> {
   try {
+    if (process.platform !== "linux") {
+      throw new UserError(`DIM requires a Linux host; unsupported platform '${process.platform}'`);
+    }
     const argv = process.argv[2] === "--"
       ? [process.argv[0] ?? "node", process.argv[1] ?? "dim", ...process.argv.slice(3)]
       : process.argv;

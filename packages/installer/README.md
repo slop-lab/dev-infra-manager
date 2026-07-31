@@ -7,6 +7,9 @@ versions via `npm`, requires no `sudo`, and does not duplicate DIM's command
 tree: anything other than its three installer-owned commands is forwarded
 as-is to the installed DIM CLI.
 
+DIM installs and runs on Linux hosts only. macOS, Windows, and Docker Desktop
+hosts are not supported.
+
 ## Getting the `dim` command
 
 Two supported ways to run it, both pinned to an exact version:

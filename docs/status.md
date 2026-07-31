@@ -4,6 +4,9 @@ DIM 0.4.0 is a pre-stable Project-aware release centered on named, persistent
 workspaces. Pre-stable state and configuration are not migrated between
 incompatible releases.
 
+The supported host platform is Linux with a systemd user manager. macOS,
+Windows, and Docker Desktop are outside the supported runtime model.
+
 Implemented:
 
 - Project metadata with exactly one root repository per runnable Project.

@@ -77,8 +77,7 @@ export function cliVersionDirectory(version: string, dataHome = defaultDataHome(
 }
 
 export function cliExecutable(version: string, dataHome = defaultDataHome()): string {
-  const executable = process.platform === "win32" ? "dim.cmd" : "dim";
-  return path.join(cliVersionDirectory(version, dataHome), "node_modules", ".bin", executable);
+  return path.join(cliVersionDirectory(version, dataHome), "node_modules", ".bin", "dim");
 }
 
 export async function configuredPluginHome(env: NodeJS.ProcessEnv = process.env): Promise<string> {
@@ -112,7 +111,7 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
   let installedSymlink: string | undefined;
   if (options.exposeOnPath) {
     const binDirectory = path.resolve(options.binDirectory ?? defaultBinDirectory());
-    installedSymlink = path.join(binDirectory, process.platform === "win32" ? "dim.cmd" : "dim");
+    installedSymlink = path.join(binDirectory, "dim");
     await installManagedSymlink(installedSymlink, executable, path.join(dataHome, "cli"));
   }
 
@@ -137,10 +136,6 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
 }
 
 export async function installManagedSymlink(linkPath: string, target: string, managedRoot: string): Promise<void> {
-  if (process.platform === "win32") {
-    throw new Error("direct PATH installation is not yet supported on Windows; use --no-local-bin");
-  }
-
   const absoluteLink = path.resolve(linkPath);
   const absoluteTarget = path.resolve(target);
   const absoluteManagedRoot = path.resolve(managedRoot);

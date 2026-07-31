@@ -11,6 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Simplified Cloudflare DNS record arguments to `zone`, `value`, and
   `proxied`; record type is inferred as A, AAAA, or CNAME from the value.
+- Made Linux the explicit host platform and moved the default managed
+  controller to a systemd user service with journald logging and rotation.
 
 ## [0.4.0] - 2026-07-30
 

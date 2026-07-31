@@ -26,6 +26,7 @@ export async function runDoctor(
   checks.push(await commandCheck(runner, "pnpm", ["--version"], "pnpm"));
   checks.push(await commandCheck(runner, "just", ["--version"], "just"));
   checks.push(await commandCheck(runner, "git", ["--version"], "git"));
+  checks.push(await userSystemdCheck(runner));
   checks.push(await commandCheck(runner, "docker", ["--version"], "Docker CLI"));
   checks.push(await dockerDaemonCheck(runner));
   checks.push(...(await runtimeBackendChecks(runner, backend, options)));
@@ -56,6 +57,7 @@ export async function runCommonDoctorChecks(runner: CommandRunner): Promise<Doct
     await commandCheck(runner, "pnpm", ["--version"], "pnpm"),
     await commandCheck(runner, "just", ["--version"], "just"),
     await commandCheck(runner, "git", ["--version"], "git"),
+    await userSystemdCheck(runner),
     await commandCheck(runner, "docker", ["--version"], "Docker CLI"),
     await dockerDaemonCheck(runner),
     await cgroupCheck()
@@ -194,6 +196,17 @@ async function systemdUnitCheck(runner: CommandRunner, unit: string, name: strin
     name,
     ok: result.exitCode === 0 && detail === "active",
     detail: detail || "inactive"
+  };
+}
+
+async function userSystemdCheck(runner: CommandRunner): Promise<DoctorCheck> {
+  const result = await runner.run("systemctl", ["--user", "show-environment"]);
+  return {
+    name: "systemd user manager",
+    ok: result.exitCode === 0,
+    detail: result.exitCode === 0
+      ? "available"
+      : firstLine(`${result.stderr}${result.stdout}`) || "not available"
   };
 }
 

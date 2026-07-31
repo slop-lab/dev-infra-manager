@@ -13,11 +13,27 @@ The development toolchain uses:
 
 Runtime hosts also need the tools used by DIM:
 
+- A Linux host running a systemd user manager. macOS, Windows, and Docker
+  Desktop hosts are not supported.
 - Docker-compatible CLI.
 - The selected agent runtime backend installed and registered. The default backend requires Sysbox as `sysbox-runc`; the gVisor backend requires `runsc`.
 - KVM access for the default Sysbox production runtime.
 - Linux cgroup v2.
 - `sudo` access for mount, unmount, ownership, and filesystem setup operations.
+
+The default managed controller is a `systemd --user` service. DIM installs and
+starts the unit automatically when a command first needs the controller.
+Inspect its timestamped, rotated journal with:
+
+```bash
+systemctl --user status dim-controller.service
+journalctl --user --unit dim-controller.service --lines 100
+```
+
+`dim controller restart` rewrites the unit for the currently installed CLI,
+reloads systemd, and restarts it. Custom state roots used by disposable tests
+retain an isolated foreground-compatible controller instead of sharing this
+host service.
 
 ## Setup
 
