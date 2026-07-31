@@ -17,12 +17,11 @@ describe("Caddy ingress deployment", () => {
       domain: "dev.example.com",
       listenHost: "100.64.0.10",
       listenPort: 8443,
-      internalPort: 39080,
       upstreamMode: "container-ip",
       dnsProvider: "cloudflare",
       dnsArgument: "{}",
       acmeEmail: "ops@example.com"
-    }, {
+    }, 39080, {
       modules: ["github.com/caddy-dns/cloudflare@v0.2.4"],
       directive: "dns cloudflare {env.CF_API_TOKEN}",
       environment: { CF_API_TOKEN: "secret-token" }

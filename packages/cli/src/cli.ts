@@ -435,18 +435,6 @@ externalUrlIngress.command("remove")
     await restartManagedController(lifecycleOptions());
   });
 
-externalUrlIngress.command("setup")
-  .description("Reconcile DNS and render deployment files for an ingress")
-  .argument("<name>")
-  .option("--output <directory>", "deployment output directory", ".dim/external-url")
-  .action(async (name: string, flags: { output: string }) => {
-    const { output } = await externalUrlAdmin<{ output: string }>("ingress-setup", {
-      name,
-      output: path.resolve(flags.output)
-    });
-    console.log(`Reconciled wildcard DNS and wrote Caddy deployment to ${output}`);
-  });
-
 externalUrlIngress.command("verify")
   .description("Verify provider state and HTTPS ingress reachability")
   .argument("<name>")
@@ -1172,6 +1160,8 @@ async function unixHttpRequest(
   });
 }
 
+const managedControllerStartAttempts = 2400;
+
 async function ensureManagedController(options: LifecycleOptions): Promise<void> {
   if (await managedControllerReady(options)) return;
   if (usesSystemdManagedController(options)) {
@@ -1182,7 +1172,7 @@ async function ensureManagedController(options: LifecycleOptions): Promise<void>
   const lockDir = path.join(runtimeDir, "ensure.lock");
   await mkdir(runtimeDir, { recursive: true });
   let ownsLock = false;
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < managedControllerStartAttempts; attempt += 1) {
     try {
       await mkdir(lockDir);
       ownsLock = true;
@@ -1220,7 +1210,7 @@ async function ensureManagedController(options: LifecycleOptions): Promise<void>
     });
     child.unref();
     await log.close();
-    for (let attempt = 0; attempt < 100; attempt += 1) {
+    for (let attempt = 0; attempt < managedControllerStartAttempts; attempt += 1) {
       if (await managedControllerReady(options)) return;
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
@@ -1290,7 +1280,7 @@ async function restartManagedController(options: LifecycleOptions): Promise<void
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
   await stopManagedController(options);
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < managedControllerStartAttempts; attempt += 1) {
     if (pid === undefined || !processExists(pid)) {
       await rm(options.controllerSocketPath, { force: true });
       await rm(options.adminControllerSocketPath, { force: true });

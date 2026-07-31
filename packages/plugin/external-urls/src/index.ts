@@ -8,6 +8,7 @@ import tls from "node:tls";
 import {
   DIM_PLUGIN_API_VERSION,
   UserError,
+  type AdminRouteContext,
   type ControllerRouteContext,
   type ControllerRuntimeContext,
   type ControllerWorkspace,
@@ -52,6 +53,13 @@ export interface ExternalUrlIngressOptions {
 export interface ExternalUrlsPluginOptions {
   ingresses: Readonly<Record<string, ExternalUrlIngressOptions>>;
   requiredDnsDrivers?: readonly string[];
+  managedCaddy?: Readonly<Record<string, ManagedCaddyIngress>>;
+}
+
+interface ManagedCaddyIngress {
+  argument: ReturnType<typeof parseCaddyIngressArgument> & { listenPort: number };
+  provider: ExternalUrlDnsProviderConfig;
+  routerPort: number;
 }
 
 interface NormalizedRequest {
@@ -118,7 +126,14 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
         path: "/external-url/:action",
         summary: "Manage External URL DNS providers and ingresses",
         async handle(context) {
-          return { body: await externalUrlAdmin(host, context.params.action ?? "", await context.readJson()) };
+          return {
+            body: await externalUrlAdmin(
+              host,
+              context,
+              context.params.action ?? "",
+              await context.readJson()
+            )
+          };
         }
       });
       const registry = new WorkspaceRouteRegistry();
@@ -142,6 +157,10 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
 
       const initialize = async (runtime: ControllerRuntimeContext): Promise<void> => {
         for (const driver of options.requiredDnsDrivers ?? []) dnsDriver(host, driver);
+        await removeStaleManagedCaddy(runtime, new Set(Object.keys(options.managedCaddy ?? {})));
+        for (const [name, ingress] of Object.entries(options.managedCaddy ?? {})) {
+          await reconcileManagedCaddy(host, runtime, name, ingress);
+        }
         const store = new ExternalUrlStore(runtime.stateRoot);
         for (const workspace of await runtime.listWorkspaces()) {
           for (const entry of deduplicateRoutes(await store.list(workspace.id))) {
@@ -204,6 +223,7 @@ export async function externalUrlsPluginFromConfig(
 ): Promise<DimPlugin> {
   const config = await readExternalUrlConfig(env);
   const ingresses: Record<string, ExternalUrlIngressOptions> = {};
+  const managedCaddy: Record<string, ManagedCaddyIngress> = {};
   const requiredDnsDrivers = new Set<string>();
   for (const [name, ingress] of Object.entries(config.ingresses)) {
     if (ingress.driver === "caddy") {
@@ -211,18 +231,24 @@ export async function externalUrlsPluginFromConfig(
       const provider = config.dnsProviders[argument.dnsProvider];
       if (!provider) throw new Error(`ingress '${name}' references missing DNS provider '${argument.dnsProvider}'`);
       requiredDnsDrivers.add(provider.driver);
-      if (argument.listenPort === "auto" || argument.internalPort === undefined) {
-        throw new Error(`ingress '${name}' has unresolved Caddy ports; re-add it with the DIM CLI`);
+      if (argument.listenPort === "auto") {
+        throw new Error(`ingress '${name}' has unresolved Caddy listenPort; re-add it with the DIM CLI`);
       }
+      const routerPort = await availableTcpPort("127.0.0.1", new Set([argument.listenPort]));
       ingresses[name] = {
         description: ingress.description,
         scheme: ingress.scheme,
         domain: argument.domain,
         ...(argument.listenPort === 443 ? {} : { port: argument.listenPort }),
         listenHost: "127.0.0.1",
-        listenPort: argument.internalPort,
+        listenPort: routerPort,
         ...(argument.upstreamMode === undefined ? {} : { upstreamMode: argument.upstreamMode }),
         ...(argument.routePolicy === undefined ? {} : { routePolicy: argument.routePolicy })
+      };
+      managedCaddy[name] = {
+        argument: { ...argument, listenPort: argument.listenPort },
+        provider,
+        routerPort
       };
     } else {
       const argument = parseHttpIngressArgument(ingress.driver, ingress.argument);
@@ -241,10 +267,19 @@ export async function externalUrlsPluginFromConfig(
       };
     }
   }
-  return createExternalUrlsPlugin({ ingresses, requiredDnsDrivers: [...requiredDnsDrivers] });
+  return createExternalUrlsPlugin({
+    ingresses,
+    requiredDnsDrivers: [...requiredDnsDrivers],
+    managedCaddy
+  });
 }
 
-async function externalUrlAdmin(host: DimPluginHost, action: string, value: unknown): Promise<unknown> {
+async function externalUrlAdmin(
+  host: DimPluginHost,
+  context: AdminRouteContext,
+  action: string,
+  value: unknown
+): Promise<unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new UserError("request body must be an object");
   const input = value as Record<string, unknown>;
   const text = (name: string) => {
@@ -321,36 +356,12 @@ async function externalUrlAdmin(host: DimPluginHost, action: string, value: unkn
         if (!storedProvider) throw new UserError(`DNS provider '${argument.dnsProvider}' is not configured`);
         await dnsDriver(host, storedProvider.driver).remove(dnsOperation(storedProvider, argument));
       }
+      if (ingress.driver === "caddy") {
+        await stopManagedCaddy(context, name);
+      }
       delete config.ingresses[name];
       await writeExternalUrlConfig(config);
       return {};
-    }
-    case "ingress-setup": {
-      const name = text("name");
-      const ingress = config.ingresses[name];
-      if (!ingress || ingress.driver !== "caddy") throw new UserError(`ingress '${name}' does not require Caddy setup`);
-      const argument = parseCaddyIngressArgument(ingress.argument);
-      if (argument.listenPort === "auto" || argument.internalPort === undefined) {
-        throw new UserError(`ingress '${name}' has unresolved Caddy ports`);
-      }
-      const storedProvider = config.dnsProviders[argument.dnsProvider];
-      if (!storedProvider) throw new UserError(`DNS provider '${argument.dnsProvider}' is not configured`);
-      const providerDriver = dnsDriver(host, storedProvider.driver);
-      await providerDriver.ensure(dnsOperation(storedProvider, argument));
-      const deployment = renderCaddyDeployment(name, {
-        ...argument,
-        listenPort: argument.listenPort,
-        internalPort: argument.internalPort
-      }, providerDriver.caddyDns01(storedProvider.argument));
-      const output = path.resolve(text("output"), name);
-      await mkdir(output, { recursive: true, mode: 0o700 });
-      await Promise.all([
-        writeFile(path.join(output, "Dockerfile"), deployment.dockerfile),
-        writeFile(path.join(output, "Caddyfile"), deployment.caddyfile),
-        writeFile(path.join(output, "compose.yml"), deployment.compose),
-        writeFile(path.join(output, ".env"), deployment.environment, { mode: 0o600 })
-      ]);
-      return { output };
     }
     case "ingress-verify": {
       const name = text("name");
@@ -367,6 +378,107 @@ async function externalUrlAdmin(host: DimPluginHost, action: string, value: unkn
     }
     default: throw new UserError(`unknown External URL admin action '${action}'`);
   }
+}
+
+async function reconcileManagedCaddy(
+  host: DimPluginHost,
+  runtime: ControllerRuntimeContext,
+  name: string,
+  ingress: ManagedCaddyIngress
+): Promise<void> {
+  const providerDriver = dnsDriver(host, ingress.provider.driver);
+  await providerDriver.ensure(dnsOperation(ingress.provider, ingress.argument));
+  const deployment = renderCaddyDeployment(
+    name,
+    ingress.argument,
+    ingress.routerPort,
+    providerDriver.caddyDns01(ingress.provider.argument)
+  );
+  const output = managedCaddyDirectory(runtime.stateRoot, name);
+  await mkdir(output, { recursive: true, mode: 0o700 });
+  await Promise.all([
+    writeFile(path.join(output, "Dockerfile"), deployment.dockerfile),
+    writeFile(path.join(output, "Caddyfile"), deployment.caddyfile),
+    writeFile(path.join(output, "compose.yml"), deployment.compose),
+    writeFile(path.join(output, ".env"), deployment.environment, { mode: 0o600 })
+  ]);
+  const result = await runtime.runner.run("docker", [
+    "compose",
+    "--project-directory",
+    output,
+    "--file",
+    path.join(output, "compose.yml"),
+    "up",
+    "--detach",
+    "--build"
+  ]);
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `could not start managed Caddy ingress '${name}': ${result.stderr.trim() || result.stdout.trim()}`
+    );
+  }
+  host.logger.info("DIM managed Caddy ingress ready", {
+    ingress: name,
+    host: ingress.argument.listenHost,
+    port: ingress.argument.listenPort
+  });
+}
+
+async function stopManagedCaddy(context: AdminRouteContext, name: string): Promise<void> {
+  await stopManagedCaddyAt(context.runner, context.lifecycle.stateRoot, name);
+}
+
+async function removeStaleManagedCaddy(
+  runtime: ControllerRuntimeContext,
+  configuredNames: ReadonlySet<string>
+): Promise<void> {
+  const root = path.join(runtime.stateRoot, "plugins", "external-urls", "caddy");
+  let names: string[];
+  try {
+    names = await readdir(root);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  for (const name of names) {
+    if (/^[a-z0-9][a-z0-9-]{0,62}$/.test(name) && !configuredNames.has(name)) {
+      await stopManagedCaddyAt(runtime.runner, runtime.stateRoot, name);
+    }
+  }
+}
+
+async function stopManagedCaddyAt(
+  runner: ControllerRuntimeContext["runner"],
+  stateRoot: string,
+  name: string
+): Promise<void> {
+  const output = managedCaddyDirectory(stateRoot, name);
+  const composeFile = path.join(output, "compose.yml");
+  try {
+    await readFile(composeFile);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  const result = await runner.run("docker", [
+    "compose",
+    "--project-directory",
+    output,
+    "--file",
+    composeFile,
+    "down",
+    "--remove-orphans"
+  ]);
+  if (result.exitCode !== 0) {
+    throw new UserError(
+      `could not stop managed Caddy ingress '${name}': ${result.stderr.trim() || result.stdout.trim()}`
+    );
+  }
+  await rm(output, { recursive: true, force: true });
+}
+
+function managedCaddyDirectory(stateRoot: string, name: string): string {
+  return path.join(stateRoot, "plugins", "external-urls", "caddy", name);
 }
 
 function normalizeDnsProviderArgument(host: DimPluginHost, driver: string, argument: string): string {
@@ -439,8 +551,7 @@ async function configureIngressArgument(
       : parsed.listenPort;
     return JSON.stringify({
       ...parsed,
-      listenPort,
-      internalPort: await availableTcpPort("127.0.0.1", new Set([listenPort]))
+      listenPort
     });
   }
   const parsed = parseHttpIngressArgument(driver, argument);

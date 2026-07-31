@@ -13,6 +13,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `proxied`; record type is inferred as A, AAAA, or CNAME from the value.
 - Made Linux the explicit host platform and moved the default managed
   controller to a systemd user service with journald logging and rotation.
+- Made Caddy ingresses controller-managed: DNS and the Caddy container are
+  reconciled automatically, while the internal router port remains runtime
+  state instead of being stored in the ingress argument.
 
 ## [0.4.0] - 2026-07-30
 

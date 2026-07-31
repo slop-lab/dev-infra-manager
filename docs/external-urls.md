@@ -76,9 +76,9 @@ controller atomically stores configuration in
 and the selected number is persisted. For `http`, `listenHost` and
 `listenPort` configure the DIM HTTP router. For `caddy`, they configure the
 external HTTPS listener and therefore appear in returned URLs; its loopback
-HTTP router is allocated and managed internally. The CLI restarts the managed
-controller after ingress changes so drivers reload without recreating
-workspaces.
+HTTP router is allocated at runtime and is never written to the user
+configuration. The CLI restarts the managed controller after ingress changes;
+the controller reconciles provider DNS and the Caddy container automatically.
 
 Discovery exposes only each ingress's `name`, `description`, and `scheme`.
 Workspaces cannot select domains, listener addresses, upstream hosts, or
@@ -210,8 +210,6 @@ dim external-url ingress add caddy --name public-https \
   --argument "$(jq -cn \
     --arg dnsArgument '{"zone":"example.com","value":"203.0.113.10","proxied":false}' \
     '{domain:"remote.example.com",listenHost:"100.64.0.10",listenPort:8443,dnsProvider:"cloudflare-main",dnsArgument:$dnsArgument}')"
-
-dim external-url ingress setup public-https
 ```
 
 The Cloudflare DNS provider owns only its credential. The driver requires
@@ -229,14 +227,14 @@ Because the current config contains credentials, do not provide
 `~/.config/dim/external-urls.json` to an AI agent or include it in diagnostics.
 A separately managed secret store may replace this layout in a later version.
 
-`ingress setup` idempotently creates or updates `*.remote.example.com` and writes
-a pinned Caddy deployment under `.dim/external-url/public-https`. The
-generated `.env` contains the stored credential and remains mode `0600`.
-Start the deployment, then verify both DNS and HTTPS:
+When the controller reloads this ingress, it idempotently creates or updates
+`*.remote.example.com`, writes its private generated deployment under the DIM
+state root, and starts or updates the Caddy container. The deployment is
+controller-owned runtime state rather than a project file. Its generated
+`.env` contains the stored credential and remains mode `0600`.
+Verify both DNS and HTTPS with:
 
 ```bash
-cd .dim/external-url/public-https
-docker compose up --detach --build
 dim external-url ingress verify public-https
 ```
 
@@ -247,6 +245,10 @@ Caddy uses DNS-01 for wildcard certificate issuance and renewal.
 Caddy uses host networking and binds only `listenHost:listenPort`; it does not
 open an HTTP redirect port. In this example, open TCP 8080 for plain HTTP and
 TCP/UDP 8443 for HTTPS and HTTP/3.
+
+Removing a Caddy ingress stops and removes its managed container and generated
+deployment. The named Docker volumes retain Caddy certificate state when the
+same ingress is added again.
 
 Removing an ingress preserves DNS by default. To verify and remove its
 provider-managed wildcard record before deleting the local configuration:

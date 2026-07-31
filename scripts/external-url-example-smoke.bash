@@ -7,7 +7,6 @@ client_network="dim-ext-client-$suffix"
 root_container="dim-ext-root-$suffix"
 dns_container="dim-ext-dns-$suffix"
 coredns_container="dim-ext-coredns-$suffix"
-caddy_image="dim-ext-caddy-$suffix"
 workspace_name="external-$suffix"
 grant="$workspace_name.smoke-grant"
 state_root="$(mktemp -d /tmp/dim-external-state.XXXXXX)"
@@ -34,8 +33,12 @@ controller_socket="$state_root/controller/controller.sock"
 admin_socket="$state_root/controller/admin.sock"
 
 cleanup() {
-  if [[ -z "$controller_pid" && -f "$state_root/controller/controller.pid" ]]; then
-    controller_pid="$(cat "$state_root/controller/controller.pid")"
+  local managed_controller_pid=""
+  if [[ -f "$state_root/controller/controller.pid" ]]; then
+    managed_controller_pid="$(cat "$state_root/controller/controller.pid")"
+  fi
+  if [[ -n "$managed_controller_pid" && "$managed_controller_pid" != "$controller_pid" ]]; then
+    kill "$managed_controller_pid" >/dev/null 2>&1 || true
   fi
   if [[ -n "$controller_pid" ]]; then
     kill "$controller_pid" >/dev/null 2>&1 || true
@@ -47,8 +50,8 @@ cleanup() {
   fi
   docker container rm --force "$dns_container" >/dev/null 2>&1 || true
   docker container rm --force "$coredns_container" >/dev/null 2>&1 || true
+  docker container rm --force dim-caddy-local-https >/dev/null 2>&1 || true
   docker container rm --force "$root_container" >/dev/null 2>&1 || true
-  docker image rm "$caddy_image" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   docker network rm "$client_network" >/dev/null 2>&1 || true
   find "$state_root" "$plugin_home" "$cli_home" "$pack_root" -depth -delete 2>/dev/null || true
@@ -316,7 +319,6 @@ echo "[external-url-example] resolve wildcard URLs through dnsmasq"
 gateway="$(docker network inspect "$client_network" --format '{{(index .IPAM.Config 0).Gateway}}')"
 
 echo "[external-url-example] reconcile Cloudflare-compatible API state into authoritative DNS"
-cloudflare_output="$state_root/cloudflare-deployment"
 cloudflare_cli=(
   env
   "CF_SMOKE_TOKEN=smoke-token"
@@ -340,18 +342,12 @@ cloudflare_cli=(
     --arg dnsArgument "$(jq -cn --arg value "$gateway" \
       '{zone:"smoke.test",value:$value,proxied:false}')" \
     '{domain:"dev.smoke.test",listenHost:"127.0.0.1",listenPort:"auto",dnsProvider:"local-cloudflare",dnsArgument:$dnsArgument}')" >/dev/null
-"${cloudflare_cli[@]}" ingress setup local-https --output "$cloudflare_output" >/dev/null
-test -f "$cloudflare_output/local-https/Caddyfile"
-test -f "$cloudflare_output/local-https/.env"
-docker build --quiet --tag "$caddy_image" "$cloudflare_output/local-https" >/dev/null
-if ! docker run --rm \
-  --env CF_API_TOKEN=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-  --volume "$cloudflare_output/local-https/Caddyfile:/etc/caddy/Caddyfile:ro" \
-  "$caddy_image" caddy validate --config /etc/caddy/Caddyfile \
-  >"$state_root/caddy-validate.log" 2>&1; then
-  cat "$state_root/caddy-validate.log" >&2
-  exit 1
-fi
+managed_caddy="$state_root/plugins/external-urls/caddy/local-https"
+test -f "$managed_caddy/Caddyfile"
+test -f "$managed_caddy/.env"
+test "$(docker inspect --format '{{.State.Running}}' dim-caddy-local-https)" = true
+test -z "$(jq -r '.ingresses["local-https"].argument | fromjson | .internalPort // empty' \
+  "$state_root/external-urls.json")"
 coredns_ip="$(docker container inspect "$coredns_container" \
   --format "{{(index .NetworkSettings.Networks \"$network\").IPAddress}}")"
 for attempt in $(seq 1 30); do
@@ -367,6 +363,11 @@ for attempt in $(seq 1 30); do
   sleep 1
 done
 "${cloudflare_cli[@]}" ingress remove local-https --cleanup-dns >/dev/null
+test ! -e "$managed_caddy"
+if docker container inspect dim-caddy-local-https >/dev/null 2>&1; then
+  echo "managed Caddy container remained after ingress removal" >&2
+  exit 1
+fi
 for attempt in $(seq 1 30); do
   if ! docker run --rm --network "$network" --dns "$coredns_ip" \
     busybox@sha256:9532d8c39891ca2ecde4d30d7710e01fb739c87a8b9299685c63704296b16028 \

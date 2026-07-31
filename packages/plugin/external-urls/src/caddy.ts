@@ -17,7 +17,6 @@ export interface CaddyIngressArgument {
   domain: string;
   listenHost: string;
   listenPort: number | "auto";
-  internalPort?: number;
   upstreamMode?: "container-ip" | "container-dns";
   dnsProvider: string;
   dnsArgument: string;
@@ -52,10 +51,8 @@ export function parseCaddyIngressArgument(argument: string): CaddyIngressArgumen
   if (typeof input.dnsArgument !== "string") {
     throw caddyArgumentError("requires string field 'dnsArgument'");
   }
-  if (input.internalPort !== undefined
-    && (!Number.isInteger(input.internalPort) || (input.internalPort as number) < 1
-      || (input.internalPort as number) > 65535)) {
-    throw caddyArgumentError("stored field 'internalPort' must be a port");
+  if (input.internalPort !== undefined) {
+    throw caddyArgumentError("field 'internalPort' is managed by DIM and must not be configured");
   }
   if (input.upstreamMode !== undefined && input.upstreamMode !== "container-ip" && input.upstreamMode !== "container-dns") {
     throw caddyArgumentError("field 'upstreamMode' must be container-ip or container-dns");
@@ -79,7 +76,8 @@ function normalizeDomain(value: string): string {
 
 export function renderCaddyDeployment(
   name: string,
-  ingress: CaddyIngressArgument & { listenPort: number; internalPort: number },
+  ingress: CaddyIngressArgument & { listenPort: number },
+  routerPort: number,
   dns: ExternalUrlCaddyDnsModule
 ): CaddyDeployment {
   validateCaddyDnsModule(dns);
@@ -107,7 +105,7 @@ https://*.${ingress.domain}:${ingress.listenPort} {
 \t\tresolvers 1.1.1.1
 \t}
 
-\treverse_proxy 127.0.0.1:${ingress.internalPort}
+\treverse_proxy 127.0.0.1:${routerPort}
 }
 `,
     compose: `services:

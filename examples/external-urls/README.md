@@ -86,17 +86,13 @@ dim external-url ingress add caddy --name public-https \
   --argument "$(jq -cn \
     --arg dnsArgument '{"zone":"example.com","value":"203.0.113.10","proxied":false}' \
     '{domain:"remote.example.com",listenHost:"100.64.0.10",listenPort:8443,dnsProvider:"cloudflare-main",dnsArgument:$dnsArgument}')"
-
-dim external-url ingress setup public-https \
-  --output .dim/external-url
 ```
 
-`ingress setup` reconciles `*.remote.example.com` and generates the complete
-Caddy deployment. Start that generated deployment:
+The ingress change restarts the managed controller. It reconciles
+`*.remote.example.com`, generates controller-owned Caddy runtime state, and
+starts the Caddy container automatically. Verify the resulting ingress:
 
 ```bash
-cd .dim/external-url/public-https
-docker compose up --detach --build
 dim external-url ingress verify public-https
 ```
 

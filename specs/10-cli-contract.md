@@ -156,7 +156,6 @@ dim external-url dns-provider remove NAME
 dim external-url ingress add DRIVER --name NAME --description TEXT
   --scheme SCHEME [--argument STRING]
 dim external-url ingress list [--json]
-dim external-url ingress setup NAME [--output DIRECTORY]
 dim external-url ingress verify NAME
 dim external-url ingress remove NAME [--cleanup-dns]
 ```
@@ -166,6 +165,11 @@ Invalid ingress driver arguments are client errors. The admin API returns HTTP
 driver-specific JSON object is missing or malformed. An ingress that references
 a named infrastructure provider must be rejected unless that provider is
 already configured.
+
+Drivers may own host services required by an ingress. Those services are
+reconciled by the managed controller after configuration changes and must not
+require a separate setup command. Driver-private runtime values must be kept
+under DIM state rather than added to the opaque user-supplied argument.
 
 Workspace-scoped URL operations are:
 

@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -8,6 +8,8 @@ import {
   configuredDimAdminController,
   createDimController,
   DIM_PLUGIN_API_VERSION,
+  initializeControllerRoutes,
+  RecordingRunner,
   registerPlugins,
   type LifecycleOptions
 } from "@slop-lab/dim-core";
@@ -15,7 +17,7 @@ import {
   EXTERNAL_URL_DNS_PROVIDER_EXTENSION,
   type ExternalUrlDnsProviderDriver
 } from "@slop-lab/dim-contracts-external-url";
-import { createExternalUrlsPlugin } from "../src/index.js";
+import { createExternalUrlsPlugin, externalUrlsPluginFromConfig } from "../src/index.js";
 
 describe("external URLs plugin", () => {
   const close: Array<() => Promise<void>> = [];
@@ -147,6 +149,82 @@ describe("external URLs plugin", () => {
       body: "{}"
     });
     expect(await providers.json()).toEqual([{ name: "example-main", driver: "example" }]);
+  });
+
+  it("automatically reconciles managed Caddy without storing its router port", async () => {
+    const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-caddy-"));
+    close.push(() => rm(stateRoot, { recursive: true, force: true }));
+    const configPath = path.join(stateRoot, "external-urls.json");
+    process.env.DIM_EXTERNAL_URL_CONFIG = configPath;
+    await writeFile(configPath, JSON.stringify({
+      schemaVersion: 1,
+      dnsProviders: {
+        "example-main": {
+          driver: "example",
+          argument: "provider configuration"
+        }
+      },
+      ingresses: {
+        public: {
+          driver: "caddy",
+          description: "Managed HTTPS",
+          scheme: "https",
+          argument: JSON.stringify({
+            domain: "remote.example.com",
+            listenHost: "127.0.0.1",
+            listenPort: 9443,
+            dnsProvider: "example-main",
+            dnsArgument: "record configuration"
+          })
+        }
+      }
+    }));
+    const ensure = vi.fn();
+    const driver: ExternalUrlDnsProviderDriver = {
+      normalizeProviderArgument: (argument) => argument,
+      normalizeRecordArgument: (argument) => argument,
+      ensure,
+      verify: vi.fn(),
+      remove: vi.fn(),
+      caddyDns01: () => ({
+        modules: ["example.test/caddy-dns"],
+        directive: "dns example",
+        environment: { EXAMPLE_TOKEN: "secret" }
+      })
+    };
+    const registered = await registerPlugins([{
+      name: "@example/dim-plugin-dns",
+      apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) {
+        host.registerExtension(EXTERNAL_URL_DNS_PROVIDER_EXTENSION, "example", driver);
+      }
+    }, await externalUrlsPluginFromConfig()]);
+    close.push(() => registered.dispose());
+    const runner = new RecordingRunner();
+    const streamingRunner = {
+      run: runner.run.bind(runner),
+      runStreaming: vi.fn(async () => 0)
+    };
+    await initializeControllerRoutes({
+      stateRoot,
+      defaultWorkspaceBackend: "runc"
+    } as LifecycleOptions, registered, streamingRunner);
+
+    expect(ensure).toHaveBeenCalledOnce();
+    expect(runner.commands).toContainEqual({
+      command: "docker",
+      args: expect.arrayContaining(["compose", "up", "--detach", "--build"]),
+      sudo: false
+    });
+    const stored = JSON.parse(await readFile(configPath, "utf8")) as {
+      ingresses: { public: { argument: string } };
+    };
+    expect(JSON.parse(stored.ingresses.public.argument)).not.toHaveProperty("internalPort");
+    const caddyfile = await readFile(
+      path.join(stateRoot, "plugins", "external-urls", "caddy", "public", "Caddyfile"),
+      "utf8"
+    );
+    expect(caddyfile).toMatch(/reverse_proxy 127\.0\.0\.1:\d+/);
   });
 
   it("starts normally without a configured ingress", async () => {

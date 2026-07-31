@@ -144,7 +144,9 @@ the nested `dev` Compose service, a further `deep` container, root relay,
 reverse proxy, ingress discovery, URL creation, HTTP access, and revocation.
 The HTTP client runs on a separate Docker network, a loopback-only listener
 must be unreachable from it, unknown and revoked routes must return 404, and
-the generated Caddy deployment must pass `caddy validate`.
+the controller-managed Caddy deployment must be generated and running without
+an explicit setup command. Its private router port must not appear in the user
+configuration.
 It also reconciles an ingress through a local Cloudflare-compatible API,
 resolves the resulting wildcard through authoritative CoreDNS, and verifies
 provider cleanup without external credentials.

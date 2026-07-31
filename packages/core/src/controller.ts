@@ -54,6 +54,7 @@ export interface DimControllerRoute {
 
 export interface ControllerRuntimeContext {
   readonly stateRoot: string;
+  readonly runner: StreamingCommandRunner;
   listWorkspaces(): Promise<ControllerWorkspace[]>;
   resolveTarget(
     workspace: ControllerWorkspace,
@@ -110,6 +111,7 @@ export async function initializeControllerRoutes(
   const state = new LifecycleState(lifecycle.stateRoot);
   const runtime: ControllerRuntimeContext = {
     stateRoot: lifecycle.stateRoot,
+    runner,
     listWorkspaces: async () => (await state.listWorkspaces()).map((workspace) => ({
       id: `${workspace.projectId}:${workspace.name}`,
       name: workspace.name,
