@@ -5,12 +5,16 @@ Managed CI runners repeat pull-request checks in a separate checkout and
 container environment so their result can be used as independent review
 evidence.
 
-Enable the single repository-scoped runner for a Project:
+Enable the single runner for a Project:
 
 ```bash
 dim ci runner enable example
 dim ci runner status example
 ```
+
+The initial Gitea coordinator registers it at the Project's managed
+organization. Every root or non-root repository registered to that Project can
+therefore select the same runner.
 
 Workflows select it with the stable DIM label:
 

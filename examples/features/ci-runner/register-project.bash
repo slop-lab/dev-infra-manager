@@ -2,11 +2,11 @@
 set -euo pipefail
 
 project="${1:-ci-runner-example}"
-repository="${2:-$PWD/ci-runner-example-repository}"
+repositories="${2:-$PWD/ci-runner-example-repositories}"
 dim_bin="${DIM_BIN:-dim}"
 
 "$dim_bin" project create "$project" \
-  --repos "$repository/.dim/repos.yml" \
+  --repos "$repositories/root/.dim/repos.yml" \
   --yes
 
 echo "Registered Project '$project'"

@@ -27,7 +27,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   source ref now requires `--mirror`.
 - Added `dim ci runner` lifecycle commands for a Project-scoped isolated
   container runner, with configurable inherited resource defaults and a
-  provider-neutral coordinator boundary.
+  provider-neutral coordinator boundary. The managed Gitea adapter registers
+  one organization-scoped runner so every Project repository can use it.
 - Returned development-agent ownership to Projects: `.dim/setup.sh`, Compose,
   and `.dim/entrypoint.sh` now define and dispatch agent services without a
   core-managed `.dim/agent.json` resource.

@@ -30,7 +30,12 @@ runtime without mounting the host Docker socket.
 The Sysbox lane of `scripts/kvm-host-install-smoke.bash` must enable a real
 Project CI runner inside its disposable QEMU guest and inspect the effective
 Docker runtime, CPU quota, memory limit, PID limit, non-privileged flag, and
-absence of a host Docker-socket mount.
+absence of a host Docker-socket mount. It must then run the CI runner feature
+smoke against a non-root repository.
+
+`just verify-example-ci-runner` must register one organization-scoped runner
+for a multi-repository Project, open a pull request in a non-root repository,
+and wait for that repository's real workflow to succeed.
 
 `just verify-plugin-install` builds the publishable packages and verifies
 plugin installation through their packaged shape. It is separate because it

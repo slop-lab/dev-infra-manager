@@ -141,8 +141,10 @@ dim ci runner defaults set --cpus COUNT --memory SIZE --pids-limit COUNT
 dim ci runner defaults reset
 ```
 
-Each enabled Project has at most one repository-scoped runner with concurrency
-one and the fixed workflow label `dim`. Its supervisor, nested container
+Each enabled Project has at most one organization-scoped runner with concurrency
+one and the fixed workflow label `dim`. The managed organization contains all
+repositories registered to that Project, so root and non-root repositories can
+use the same runner. Its supervisor, nested container
 daemon, job containers, data volume, and resource limits are independent from
 every workspace. The runner receives neither workspace credentials nor a host
 container-engine socket. The initial adapter also maps `ubuntu-24.04` to its

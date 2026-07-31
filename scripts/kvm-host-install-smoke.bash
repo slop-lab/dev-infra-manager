@@ -200,7 +200,7 @@ if [[ "$backend" == sysbox ]]; then
       bash examples/features/ci-runner/create-repository.bash "$source/repository" >/dev/null
       cd ~/dim
       pnpm run --silent cli -- project create "$project" \
-        --repos "$source/repository/.dim/repos.yml" --yes >/dev/null
+        --repos "$source/repository/root/.dim/repos.yml" --yes >/dev/null
       pnpm run --silent cli -- ci runner enable "$project" >/dev/null
       container="$(pnpm run --silent cli -- ci runner status "$project" --json | jq -r .containerName)"
       test "$(sudo docker inspect --format "{{.HostConfig.Runtime}}" "$container")" = sysbox-runc
@@ -215,5 +215,8 @@ if [[ "$backend" == sysbox ]]; then
       done
       test "$status" = running
     '
+  run_step "verify non-root repository CI workflow" \
+    ssh "${ssh_args[@]}" dim@127.0.0.1 \
+      "cd dim && DIM_CI_RUNNER_EXAMPLE_ATTEMPTS=300 bash scripts/ci-runner-example-smoke.bash"
 fi
 echo "kvm-host-install-smoke-ok: $backend"

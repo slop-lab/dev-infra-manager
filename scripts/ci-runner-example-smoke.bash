@@ -12,7 +12,8 @@ source "$script_dir/lib/local-npm-registry.bash"
 suffix="$PPID-$$"
 project_name="ci-runner-example-$suffix"
 work_dir="$(mktemp -d /tmp/dim-ci-runner-example.XXXXXX)"
-source_root="$work_dir/repository"
+source_repositories="$work_dir/repositories"
+source_app="$source_repositories/app"
 state_root="$work_dir/state"
 install_prefix="$work_dir/install"
 dim_bin="$install_prefix/bin/dim"
@@ -90,10 +91,10 @@ npm install --global --prefix "$install_prefix" "$work_dir"/*dim-installer*.tgz 
 
 echo "[ci-runner-example] 2. materialize and register the Project"
 bash "$repo_root/examples/features/ci-runner/create-repository.bash" \
-  "$source_root" >/dev/null
+  "$source_repositories" >/dev/null
 DIM_BIN="$dim_bin" bash \
   "$repo_root/examples/features/ci-runner/register-project.bash" \
-  "$project_name" "$source_root" >/dev/null
+  "$project_name" "$source_repositories" >/dev/null
 
 echo "[ci-runner-example] 3. enable an isolated runner"
 runner_json="$(dim ci runner enable "$project_name" \
@@ -114,13 +115,13 @@ if jq -e '.[0].Mounts[]? | select(.Destination == "/var/run/docker.sock")' \
   exit 1
 fi
 
-echo "[ci-runner-example] 4. open a pull request"
-git -C "$source_root" switch -c example-change >/dev/null
-printf '\nverified through a pull request\n' >>"$source_root/message.txt"
-git -C "$source_root" add message.txt
-git -C "$source_root" commit -m "exercise managed CI" >/dev/null
-dim x git -C "$source_root" push \
-  "$(dim repo url "$project_name" root)" \
+echo "[ci-runner-example] 4. open a pull request in a non-root repository"
+git -C "$source_app" switch -c example-change >/dev/null
+printf '\nverified through a pull request\n' >>"$source_app/message.txt"
+git -C "$source_app" add message.txt
+git -C "$source_app" commit -m "exercise managed CI" >/dev/null
+dim x git -C "$source_app" push \
+  "$(dim repo url "$project_name" app)" \
   example-change >/dev/null
 
 pull_request="$(jq -n \
@@ -128,12 +129,13 @@ pull_request="$(jq -n \
   --arg base main \
   --arg title "Exercise managed CI runner" \
   '{head: $head, base: $base, title: $title}')"
-gitea_api POST "/repos/$organization/root/pulls" "$pull_request" >/dev/null
+gitea_api POST "/repos/$organization/app/pulls" "$pull_request" >/dev/null
 
 echo "[ci-runner-example] 5. wait for the example workflow"
 workflow_result=""
-for attempt in $(seq 1 120); do
-  runs="$(gitea_api GET "/repos/$organization/root/actions/runs?limit=20")"
+workflow_attempts="${DIM_CI_RUNNER_EXAMPLE_ATTEMPTS:-120}"
+for attempt in $(seq 1 "$workflow_attempts"); do
+  runs="$(gitea_api GET "/repos/$organization/app/actions/runs?limit=20")"
   workflow_result="$(jq -r '
     [.workflow_runs[]
       | select(.event == "pull_request")
@@ -141,8 +143,9 @@ for attempt in $(seq 1 120); do
       | if . == null then "" else (.status + "|" + (.conclusion // "")) end
   ' <<<"$runs")"
   case "$workflow_result" in
-    completed\|success) break ;;
-    completed\|*)
+    *\|success) break ;;
+    *\|) ;;
+    *)
       echo "example workflow failed: $workflow_result" >&2
       jq '.workflow_runs[0]' <<<"$runs" >&2
       exit 1
@@ -150,7 +153,12 @@ for attempt in $(seq 1 120); do
   esac
   sleep 2
 done
-test "$workflow_result" = "completed|success"
+if [[ "$workflow_result" != *"|success" ]]; then
+  docker logs --tail 40 "$container_name" >&2 || true
+  echo "example workflow timed out: ${workflow_result:-no workflow run}" >&2
+  jq '.workflow_runs[:3]' <<<"$runs" >&2
+  exit 1
+fi
 
 echo "[ci-runner-example] 6. disable the runner"
 dim ci runner disable "$project_name" --yes

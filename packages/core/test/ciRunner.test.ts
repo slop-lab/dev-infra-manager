@@ -5,6 +5,7 @@ import {
   ciRunnerContainerName,
   effectiveCiRunnerResources
 } from "../src/ciRunner.js";
+import { giteaCiRunnerApiBase } from "../src/giteaCiCoordinator.js";
 import type { CiRunnerRecord, LifecycleOptions } from "../src/lifecycleTypes.js";
 
 const options = {
@@ -39,6 +40,12 @@ describe("CI runner resources", () => {
   it("derives stable managed resource names", () => {
     expect(ciRunnerContainerName("example")).toBe("dim-ci-example");
     expect(() => ciRunnerContainerName("../bad")).toThrow(/project name/);
+  });
+
+  it("registers the Project runner at organization scope", () => {
+    expect(giteaCiRunnerApiBase({
+      gitNamespace: "dim-example"
+    })).toBe("/orgs/dim-example/actions/runners");
   });
 
   it("applies the runner boundary without mounting the host Docker socket", () => {
