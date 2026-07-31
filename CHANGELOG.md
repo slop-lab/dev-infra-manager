@@ -20,6 +20,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Project metadata and managed Gitea.
 - Made `repo add --root` promote an already imported matching repository when
   the Project does not yet have a root.
+- Added reusable external repository synchronization: `repo fetch` projects
+  external branches under managed `upstream/*`, and `repo push` publishes only
+  explicit non-forced branch or tag refspecs.
+- Limited the default `repo add URL` import to branches and tags; copying every
+  source ref now requires `--mirror`.
 
 ## [0.4.0] - 2026-07-30
 

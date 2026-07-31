@@ -277,6 +277,36 @@ export interface PreparedRepositoryTransfer {
   writerPassword?: string;
 }
 
+export interface PreparedRepositorySync {
+  externalUrl: string;
+  managedUrl: string;
+  writerUsername: string;
+  writerPassword: string;
+}
+
+export async function prepareProjectRepositorySync(
+  runner: CommandRunner,
+  options: LifecycleOptions,
+  projectName: string,
+  alias: string
+): Promise<PreparedRepositorySync> {
+  const repository = await showProjectRepository(options, projectName, alias);
+  if (repository.phase !== "ready") {
+    throw new UserError(`repo '${projectName}/${alias}' is not ready`);
+  }
+  const externalUrl = repository.connections.find((connection) => connection.name === "origin")?.url;
+  if (externalUrl === undefined) {
+    throw new UserError(`repo '${projectName}/${alias}' has no external origin`);
+  }
+  const credentials = await ensureGitea(runner, options);
+  return {
+    externalUrl,
+    managedUrl: repository.hostUrl,
+    writerUsername: credentials.writerUsername,
+    writerPassword: credentials.writerPassword
+  };
+}
+
 export async function prepareProjectRepositoryTransfer(
   runner: CommandRunner,
   options: LifecycleOptions,

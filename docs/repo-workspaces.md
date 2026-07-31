@@ -17,6 +17,26 @@ dim repo add example root https://github.com/example/product \
   --root --ref main --protect main
 ```
 
+The recorded URL remains the repository's external `origin`. Refresh its
+branches without overwriting DIM branches:
+
+```bash
+dim repo fetch example root
+# external main is now the managed branch upstream/main
+```
+
+Use `--prune` to remove only stale `upstream/*` tracking branches. Tags keep
+their original names and conflicting tag updates are rejected.
+
+Pushing back requires explicit full refspecs and is never forced:
+
+```bash
+dim repo push example root refs/heads/main:refs/heads/main
+```
+
+The default `repo add URL` import copies branches and tags. Use `--mirror` only
+when server-private refs must also be copied.
+
 The source may be any URL or path accepted by host Git. Repository aliases are
 explicit and Project-scoped. An empty managed repository omits the URL:
 

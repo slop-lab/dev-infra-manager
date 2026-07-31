@@ -103,14 +103,16 @@ repo.command("add")
   .option("--root", "make this the project root repository")
   .option("--ref <branch-or-ref>", "root branch/ref; defaults to the repository HEAD")
   .option("--protect <patterns>", "comma-separated protected branch patterns")
+  .option("--mirror", "import every ref instead of only branches and tags")
   .option("--apply-repos", "apply .dim/repos.yml after adding the root")
   .option("--json", "print machine-readable JSON")
-  .action(async (projectName: string, alias: string, url: string | undefined, flags: RepoFlags & { applyRepos?: boolean }) => {
+  .action(async (projectName: string, alias: string, url: string | undefined, flags: RepoFlags & { applyRepos?: boolean; mirror?: boolean }) => {
     const repository = await addRepository(projectName, alias, {
       ...(url === undefined ? {} : { url }),
       root: flags.root ?? false,
       ...(flags.ref === undefined ? {} : { rootRef: flags.ref }),
-      protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect)
+      protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect),
+      mirror: flags.mirror ?? false
     });
     print(repository, flags);
     if (flags.root) await offerRootRepositorySet(projectName, flags.applyRepos ?? false);
@@ -174,6 +176,24 @@ repo.command("protect")
   .action(async (name: string, alias: string, flags: JsonFlags) =>
     print(await adminCall("repo.protect", { project: name, alias }), flags)
   );
+
+repo.command("fetch")
+  .description("Fetch external branches into upstream/* and import tags")
+  .argument("<project>")
+  .argument("<alias>")
+  .option("--prune", "delete upstream/* branches removed from the external repository")
+  .action(async (projectName: string, alias: string, flags: { prune?: boolean }) => {
+    await fetchRepository(projectName, alias, flags.prune ?? false);
+  });
+
+repo.command("push")
+  .description("Push explicit branch or tag refspecs to the external repository")
+  .argument("<project>")
+  .argument("<alias>")
+  .argument("<refspec...>", "source:destination branch or tag refspecs")
+  .action(async (projectName: string, alias: string, refspecs: string[]) => {
+    await pushRepository(projectName, alias, refspecs);
+  });
 
 repo.command("url")
   .description("Print a repository URL")
@@ -821,6 +841,145 @@ interface PreparedRepositoryTransfer {
   writerPassword?: string;
 }
 
+interface PreparedRepositorySync {
+  externalUrl: string;
+  managedUrl: string;
+  writerUsername: string;
+  writerPassword: string;
+}
+
+async function fetchRepository(projectName: string, alias: string, prune: boolean): Promise<void> {
+  const prepared = await adminCall<PreparedRepositorySync>("repo.sync-prepare", {
+    project: projectName,
+    alias
+  });
+  const temporary = await mkdtemp(path.join(tmpdir(), "dim-repo-fetch-"));
+  const gitDirectory = path.join(temporary, "sync.git");
+  try {
+    await runGit(["init", "--bare", gitDirectory], process.env, "initialize temporary repository");
+    await runGit([
+      "--git-dir", gitDirectory,
+      "fetch", prepared.externalUrl,
+      "+refs/heads/*:refs/heads/upstream/*",
+      "refs/tags/*:refs/tags/*"
+    ], process.env, `fetch external repository '${projectName}/${alias}'`);
+
+    const managedEnvironment = managedGitEnvironment(prepared);
+    const upstreamRefs = await localRefs(gitDirectory, "refs/heads/upstream");
+    const tagRefs = await localRefs(gitDirectory, "refs/tags");
+    const managedUpstreamRefs = prune
+      ? await remoteRefs(prepared.managedUrl, "refs/heads/upstream/*", managedEnvironment)
+      : [];
+    const branchRefspecs = upstreamRefs.map((ref) => `+${ref}:${ref}`);
+    if (prune) {
+      const fetched = new Set(upstreamRefs);
+      branchRefspecs.push(...managedUpstreamRefs.filter((ref) => !fetched.has(ref)).map((ref) => `:${ref}`));
+    }
+    const tagRefspecs = tagRefs.map((ref) => `${ref}:${ref}`);
+    if (tagRefspecs.length > 0) {
+      await runGit([
+        "--git-dir", gitDirectory,
+        "push", "--dry-run", "--atomic", prepared.managedUrl,
+        ...tagRefspecs
+      ], managedEnvironment, `check tags for '${projectName}/${alias}'`);
+    }
+    if (branchRefspecs.length > 0) {
+      await runGit([
+        "--git-dir", gitDirectory,
+        "push", "--atomic", prepared.managedUrl,
+        ...branchRefspecs
+      ], managedEnvironment, `update upstream branches for '${projectName}/${alias}'`);
+    }
+    if (tagRefspecs.length > 0) {
+      await runGit([
+        "--git-dir", gitDirectory,
+        "push", "--atomic", prepared.managedUrl,
+        ...tagRefspecs
+      ], managedEnvironment, `update tags for '${projectName}/${alias}'`);
+    }
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+async function pushRepository(projectName: string, alias: string, refspecs: string[]): Promise<void> {
+  for (const refspec of refspecs) {
+    const [source, destination, extra] = refspec.split(":");
+    if (extra !== undefined || !source || !destination || source.startsWith("+")) {
+      throw new UserError(`repo push requires non-forced source:destination refspecs; invalid refspec '${refspec}'`);
+    }
+    if (!isBranchOrTagRef(source) || !isBranchOrTagRef(destination)) {
+      throw new UserError(`repo push accepts only full branch or tag refs; invalid refspec '${refspec}'`);
+    }
+  }
+  const prepared = await adminCall<PreparedRepositorySync>("repo.sync-prepare", {
+    project: projectName,
+    alias
+  });
+  const temporary = await mkdtemp(path.join(tmpdir(), "dim-repo-push-"));
+  const gitDirectory = path.join(temporary, "sync.git");
+  try {
+    await runGit(["init", "--bare", gitDirectory], process.env, "initialize temporary repository");
+    const sourceRefs = [...new Set(refspecs.map((refspec) => {
+      const source = refspec.slice(0, refspec.indexOf(":"));
+      return `${source}:${source}`;
+    }))];
+    await runGit([
+      "--git-dir", gitDirectory,
+      "fetch", prepared.managedUrl,
+      ...sourceRefs
+    ], managedGitEnvironment(prepared), `read managed repository '${projectName}/${alias}'`);
+    await runGit([
+      "--git-dir", gitDirectory,
+      "push", prepared.externalUrl,
+      ...refspecs
+    ], process.env, `push external repository '${projectName}/${alias}'`);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+function managedGitEnvironment(prepared: PreparedRepositorySync): NodeJS.ProcessEnv {
+  const helper = "!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f";
+  return {
+    ...process.env,
+    DIM_GIT_USERNAME: prepared.writerUsername,
+    DIM_GIT_TOKEN: prepared.writerPassword,
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_COUNT: "2",
+    GIT_CONFIG_KEY_0: "credential.helper",
+    GIT_CONFIG_VALUE_0: "",
+    GIT_CONFIG_KEY_1: "credential.helper",
+    GIT_CONFIG_VALUE_1: helper
+  };
+}
+
+function isBranchOrTagRef(ref: string): boolean {
+  return ref.startsWith("refs/heads/") || ref.startsWith("refs/tags/");
+}
+
+async function runGit(args: string[], env: NodeJS.ProcessEnv, action: string): Promise<void> {
+  const exitCode = await runner.runStreaming("git", args, { env });
+  if (exitCode !== 0) throw new UserError(`failed to ${action}: git exited with code ${exitCode}`);
+}
+
+async function localRefs(gitDirectory: string, prefix: string): Promise<string[]> {
+  const result = await runner.run("git", [
+    "--git-dir", gitDirectory,
+    "for-each-ref", "--format=%(refname)", prefix
+  ], { env: process.env });
+  if (result.exitCode !== 0) throw new UserError("failed to inspect fetched refs");
+  return result.stdout.split("\n").map((ref) => ref.trim()).filter(Boolean);
+}
+
+async function remoteRefs(url: string, pattern: string, env: NodeJS.ProcessEnv): Promise<string[]> {
+  const result = await runner.run("git", ["ls-remote", "--refs", url, pattern], { env });
+  if (result.exitCode !== 0) throw new UserError("failed to inspect managed upstream refs");
+  return result.stdout.split("\n")
+    .map((line) => line.trim().split(/\s+/, 2)[1])
+    .filter((ref): ref is string => ref !== undefined);
+}
+
 async function readRepositorySetFile(file: string): Promise<RepositorySet> {
   const absolute = path.resolve(file);
   return parseRepositorySetYaml(await readFile(absolute, "utf8"), absolute);
@@ -884,7 +1043,7 @@ async function applyRepositorySet(
 async function addRepository(
   projectName: string,
   alias: string,
-  entry: RepositorySetEntry
+  entry: RepositorySetEntry & { mirror?: boolean }
 ): Promise<Record<string, unknown>> {
   const prepared = await adminCall<PreparedRepositoryTransfer>("repo.prepare", {
     project: projectName,
@@ -898,19 +1057,38 @@ async function addRepository(
   const temporary = await mkdtemp(path.join(tmpdir(), "dim-repo-transfer-"));
   const mirror = path.join(temporary, "source.git");
   try {
-    let exitCode = await runner.runStreaming("git", ["clone", "--mirror", prepared.sourceUrl, mirror], {
-      env: process.env
-    });
+    let exitCode = await runner.runStreaming("git", ["init", "--bare", mirror], { env: process.env });
+    if (exitCode === 0) {
+      exitCode = await runner.runStreaming("git", [
+        "--git-dir", mirror,
+        "fetch", prepared.sourceUrl,
+        ...(entry.mirror
+          ? ["+refs/*:refs/*"]
+          : ["+refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"])
+      ], { env: process.env });
+    }
     if (exitCode === 0) {
       if (!prepared.writerUsername || !prepared.writerPassword) {
         throw new UserError("controller did not provide managed Git transfer credentials");
       }
       const helper = "!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f";
+      const importedRefs = entry.mirror
+        ? []
+        : [
+            ...(await localRefs(mirror, "refs/heads")).map((ref) => `${ref}:${ref}`),
+            ...(await localRefs(mirror, "refs/tags")).map((ref) => `${ref}:${ref}`)
+          ];
+      if (!entry.mirror && importedRefs.length === 0) {
+        throw new UserError(`external repository '${projectName}/${alias}' contains no branches or tags`);
+      }
       exitCode = await runner.runStreaming("git", [
         "--git-dir", mirror,
         "-c", "credential.helper=",
         "-c", `credential.helper=${helper}`,
-        "push", "--mirror", prepared.targetUrl
+        "push",
+        ...(entry.mirror ? ["--mirror"] : []),
+        prepared.targetUrl,
+        ...importedRefs
       ], {
         env: {
           ...process.env,

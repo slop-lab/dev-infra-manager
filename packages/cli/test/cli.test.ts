@@ -18,6 +18,25 @@ test("DNS provider add exposes the common driver-owned argument contract", () =>
   assert.match(missingName.stderr, /required option '--name <name>' not specified/);
 });
 
+test("repository sync commands expose safe explicit contracts", () => {
+  const fetchHelp = run(["repo", "fetch", "--help"]);
+  assert.equal(fetchHelp.status, 0);
+  assert.match(fetchHelp.stdout, /--prune/);
+  assert.doesNotMatch(fetchHelp.stdout, /--force/);
+
+  const pushHelp = run(["repo", "push", "--help"]);
+  assert.equal(pushHelp.status, 0);
+  assert.match(pushHelp.stdout, /<refspec\.\.\.>/);
+
+  const addHelp = run(["repo", "add", "--help"]);
+  assert.equal(addHelp.status, 0);
+  assert.match(addHelp.stdout, /--mirror/);
+
+  const invalid = run(["repo", "push", "project", "root", "main"]);
+  assert.notEqual(invalid.status, 0);
+  assert.match(invalid.stderr, /requires non-forced source:destination refspecs/);
+});
+
 function run(args: string[]): ReturnType<typeof spawnSync> {
   return spawnSync(process.execPath, [cli, ...args], {
     cwd: packageDirectory,

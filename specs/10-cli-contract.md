@@ -46,7 +46,9 @@ DIM-managed Git organization and repositories after explicit confirmation.
 ## Repositories
 
 ```bash
-dim repo add PROJECT ALIAS [URL] [--root] [--ref BRANCH] [--protect PATTERNS]
+dim repo add PROJECT ALIAS [URL] [--root] [--ref BRANCH] [--protect PATTERNS] [--mirror]
+dim repo fetch PROJECT ALIAS [--prune]
+dim repo push PROJECT ALIAS REF...
 dim repo plan PROJECT [--file FILE]
 dim repo apply PROJECT [--file FILE] [--yes]
 dim repo protect PROJECT ALIAS
@@ -60,8 +62,10 @@ dim repo url --workspace PROJECT ALIAS
 Every repository alias belongs to one Project namespace and is always
 supplied explicitly; DIM never derives it from a URL. `add` without a URL
 creates an empty repository and leaves protection pending. `add` with a URL
-uses the invoking CLI's host `git` process to mirror the source into managed
-Gitea, then applies protection. Workspace creation also applies pending
+uses the invoking CLI's host `git` process to transfer the source into managed
+Gitea, then applies protection. The default import copies branches and tags;
+`--mirror` explicitly copies every source ref, including server-private refs.
+Workspace creation also applies pending
 protection to the root repository.
 No protection pattern is implied. Projects pass their actual policy through
 `--protect`; an omitted option records no patterns.
@@ -104,6 +108,23 @@ ID for that Project/alias. API inputs use normalized JSON field names
 adapters, not API fields.
 
 Host and workspace URLs never contain credentials.
+
+`repo fetch` reuses the external `origin` URL recorded by `repo add`. External
+branches are projected into managed branches under `upstream/` (for example,
+external `refs/heads/main` becomes managed `refs/heads/upstream/main`).
+Updates to those tracking branches are forced so an external force-push can be
+represented without changing DIM-owned branches. Tags retain their names and
+an existing tag that points to a different object rejects the fetch.
+`--prune` deletes only managed `upstream/*` branches that disappeared
+externally. It never deletes other managed branches or tags.
+
+`repo push` requires one or more explicit, full `source:destination` branch or
+tag refspecs. It is non-forced and does not infer a destination or strip an
+`upstream/` prefix.
+
+Both operations use temporary bare Git storage. The invoking host Git process
+supplies credentials for the external URL, while DIM credentials are installed
+only for the separate managed-Gitea command.
 
 ## Workspaces
 

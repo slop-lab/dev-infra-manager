@@ -5,6 +5,7 @@ import {
   listProjectRepositories,
   listProjects,
   planProjectRepositorySet,
+  prepareProjectRepositorySync,
   prepareProjectRepositoryTransfer,
   completeProjectRepositoryTransfer,
   readProjectRootRepositorySetYaml,
@@ -170,6 +171,8 @@ async function builtinCall(
           ...(input.error === undefined ? {} : { error: text("error") })
         }
       );
+    case "repo.sync-prepare":
+      return prepareProjectRepositorySync(runner, lifecycle, text("project"), text("alias"));
     case "repo.root-set": {
       const yaml = await readProjectRootRepositorySetYaml(runner, lifecycle, text("project"));
       return yaml === undefined
