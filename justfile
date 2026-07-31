@@ -117,6 +117,10 @@ verify-mise-install-smoke:
 verify-example-multi-repo-project:
     bash scripts/example-project-smoke.bash
 
+# Requires Docker, Sysbox, and managed Gitea; runs a real example PR workflow.
+verify-example-ci-runner:
+    bash scripts/ci-runner-example-smoke.bash
+
 # Materializes the external-URL repo and exercises root -> dev -> deep routing with dnsmasq.
 verify-example-external-urls:
     bash scripts/external-url-example-smoke.bash

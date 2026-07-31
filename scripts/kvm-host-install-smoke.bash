@@ -194,17 +194,13 @@ if [[ "$backend" == sysbox ]]; then
       trap cleanup EXIT
       mkdir -p "$DIM_STATE_ROOT" "$source"
       printf "%s\n" "{\"schemaVersion\":1,\"workspaceBackend\":\"sysbox\"}" >"$DIM_CONFIG_PATH"
-      git init --initial-branch=main "$source/work" >/dev/null
-      git -C "$source/work" config user.name Smoke
-      git -C "$source/work" config user.email smoke@dim.invalid
-      touch "$source/work/README.md"
-      git -C "$source/work" add README.md
-      git -C "$source/work" commit -m initial >/dev/null
-      git clone --bare "$source/work" "$source/project.git" >/dev/null
+      git config --global user.name Smoke
+      git config --global user.email smoke@dim.invalid
       cd ~/dim
-      pnpm run --silent cli -- project create "$project" >/dev/null
-      pnpm run --silent cli -- repo add "$project" root "$source/project.git" \
-        --root --ref main >/dev/null
+      bash examples/features/ci-runner/create-repository.bash "$source/repository" >/dev/null
+      cd ~/dim
+      pnpm run --silent cli -- project create "$project" \
+        --repos "$source/repository/.dim/repos.yml" --yes >/dev/null
       pnpm run --silent cli -- ci runner enable "$project" >/dev/null
       container="$(pnpm run --silent cli -- ci runner status "$project" --json | jq -r .containerName)"
       test "$(sudo docker inspect --format "{{.HostConfig.Runtime}}" "$container")" = sysbox-runc
