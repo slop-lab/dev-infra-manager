@@ -2,6 +2,7 @@
 import { once } from "node:events";
 import { chmod, mkdir, mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
+import { createConnection } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { createInterface } from "node:readline/promises";
 import { spawn } from "node:child_process";
@@ -646,53 +647,68 @@ controller.command("serve")
     if (!flags.socket && (!flags.host || !flags.port)) {
       throw new UserError("controller serve requires --socket, or both --host and --port");
     }
-    const loaded = await loadInstalledPlugins(await resolvePluginHome());
     const options = lifecycleOptions();
-    await initializeControllerRoutes(options, loaded.registered);
-    const server = configuredDimController(options, loaded.registered);
-    const adminServer = configuredDimAdminController(options, loaded.registered);
-    if (flags.socket) {
-      await mkdir(path.dirname(flags.socket), { recursive: true });
-      await rm(flags.socket, { force: true });
-      const workspaceListening = once(server, "listening");
-      server.listen(flags.socket);
-      const adminSocket = flags.adminSocket ?? options.adminControllerSocketPath;
-      await mkdir(path.dirname(adminSocket), { recursive: true });
-      await rm(adminSocket, { force: true });
-      const adminListening = once(adminServer, "listening");
-      adminServer.listen(adminSocket);
-      await Promise.all([workspaceListening, adminListening]);
-      await chmod(adminSocket, 0o600);
-    } else {
-      const port = Number(flags.port);
-      if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
-        throw new UserError("--port must be between 1 and 65535");
+    const adminSocket = flags.socket
+      ? flags.adminSocket ?? options.adminControllerSocketPath
+      : undefined;
+    const pidPath = flags.socket
+      ? path.join(path.dirname(flags.socket), "controller.pid")
+      : undefined;
+    let ownsPid = false;
+    let loaded: Awaited<ReturnType<typeof loadInstalledPlugins>> | undefined;
+    let server: ReturnType<typeof configuredDimController> | undefined;
+    let adminServer: ReturnType<typeof configuredDimAdminController> | undefined;
+    try {
+      if (pidPath) {
+        await mkdir(path.dirname(pidPath), { recursive: true });
+        await claimControllerPid(pidPath);
+        ownsPid = true;
       }
-      const listening = once(server, "listening");
-      server.listen(port, flags.host);
-      await listening;
-    }
-    if (flags.socket) {
-      await chmod(flags.socket, 0o666);
-      await writeFile(path.join(path.dirname(flags.socket), "controller.pid"), `${process.pid}\n`);
-      console.log(`DIM workspace controller listening on ${flags.socket}`);
-      console.log(`DIM admin controller listening on ${flags.adminSocket ?? options.adminControllerSocketPath}`);
-    } else {
-      console.log(`DIM controller listening on http://${flags.host}:${flags.port}`);
-    }
-    await Promise.race([once(process, "SIGINT"), once(process, "SIGTERM")]);
-    await loaded.registered.dispose();
-    server.closeIdleConnections();
-    adminServer.closeIdleConnections();
-    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-    if (adminServer.listening) {
-      await new Promise<void>((resolve, reject) =>
-        adminServer.close((error) => error ? reject(error) : resolve()));
-    }
-    if (flags.socket) {
-      await rm(flags.socket, { force: true });
-      await rm(flags.adminSocket ?? options.adminControllerSocketPath, { force: true });
-      await rm(path.join(path.dirname(flags.socket), "controller.pid"), { force: true });
+      loaded = await loadInstalledPlugins(await resolvePluginHome());
+      await initializeControllerRoutes(options, loaded.registered);
+      server = configuredDimController(options, loaded.registered);
+      adminServer = configuredDimAdminController(options, loaded.registered);
+      if (flags.socket && adminSocket) {
+        await prepareControllerSocket(flags.socket);
+        const workspaceListening = once(server, "listening");
+        server.listen(flags.socket);
+        await workspaceListening;
+        await prepareControllerSocket(adminSocket);
+        const adminListening = once(adminServer, "listening");
+        adminServer.listen(adminSocket);
+        await adminListening;
+        await chmod(adminSocket, 0o600);
+        await chmod(flags.socket, 0o666);
+        console.log(`DIM workspace controller listening on ${flags.socket}`);
+        console.log(`DIM admin controller listening on ${adminSocket}`);
+      } else {
+        const port = Number(flags.port);
+        if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) {
+          throw new UserError("--port must be between 1 and 65535");
+        }
+        const listening = once(server, "listening");
+        server.listen(port, flags.host);
+        await listening;
+        console.log(`DIM controller listening on http://${flags.host}:${flags.port}`);
+      }
+      await Promise.race([once(process, "SIGINT"), once(process, "SIGTERM")]);
+    } finally {
+      try {
+        await loaded?.registered.dispose();
+      } finally {
+        try {
+          await Promise.all([
+            closeControllerServer(server),
+            closeControllerServer(adminServer)
+          ]);
+        } finally {
+          if (ownsPid && pidPath && await pidFileOwnedByCurrentProcess(pidPath)) {
+            if (flags.socket) await rm(flags.socket, { force: true });
+            if (adminSocket) await rm(adminSocket, { force: true });
+            await rm(pidPath, { force: true });
+          }
+        }
+      }
     }
   });
 
@@ -1546,6 +1562,73 @@ async function controllerHealthy(socketPath: string): Promise<boolean> {
   }
 }
 
+async function claimControllerPid(pidPath: string): Promise<void> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      await writeFile(pidPath, `${process.pid}\n`, { flag: "wx" });
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      let existingPid: number | undefined;
+      try {
+        existingPid = Number((await readFile(pidPath, "utf8")).trim());
+      } catch (readError) {
+        if ((readError as NodeJS.ErrnoException).code !== "ENOENT") throw readError;
+        continue;
+      }
+      if (Number.isSafeInteger(existingPid) && existingPid > 1 && processExists(existingPid)) {
+        throw new UserError(`managed controller process ${existingPid} is already running`);
+      }
+      await rm(pidPath, { force: true });
+    }
+  }
+  throw new UserError(`could not claim managed controller PID file at ${pidPath}`);
+}
+
+async function pidFileOwnedByCurrentProcess(pidPath: string): Promise<boolean> {
+  try {
+    return Number((await readFile(pidPath, "utf8")).trim()) === process.pid;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+async function prepareControllerSocket(socketPath: string): Promise<void> {
+  await mkdir(path.dirname(socketPath), { recursive: true });
+  if (await unixSocketAcceptingConnections(socketPath)) {
+    throw new UserError(`controller socket is already in use at ${socketPath}`);
+  }
+  await rm(socketPath, { force: true });
+}
+
+async function unixSocketAcceptingConnections(socketPath: string): Promise<boolean> {
+  return await new Promise<boolean>((resolve, reject) => {
+    const socket = createConnection(socketPath);
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once("error", (error) => {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "ECONNREFUSED") {
+        resolve(false);
+        return;
+      }
+      reject(error);
+    });
+  });
+}
+
+async function closeControllerServer(
+  server: ReturnType<typeof configuredDimController> | undefined
+): Promise<void> {
+  if (!server?.listening) return;
+  server.closeIdleConnections();
+  await new Promise<void>((resolve, reject) =>
+    server.close((error) => error ? reject(error) : resolve()));
+}
+
 async function stopManagedController(options: LifecycleOptions): Promise<void> {
   if (usesSystemdManagedController(options)) {
     const result = await runner.run("systemctl", ["--user", "stop", "dim-controller.service"]);
@@ -1559,7 +1642,8 @@ async function stopManagedController(options: LifecycleOptions): Promise<void> {
     const pid = Number(value.trim());
     if (Number.isSafeInteger(pid) && pid > 1) process.kill(pid, "SIGTERM");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT" && code !== "ESRCH") throw error;
   }
 }
 
