@@ -133,6 +133,19 @@ test "$(jq -r '.profiles | length' <<<"$workspace_json")" = "0"
 container_name="$(jq -r .containerName <<<"$workspace_json")"
 docker ps --filter "name=$container_name" --format '{{.Names}}' | grep -qx "$container_name"
 dim exec "$workspace_name" -- hostname >/dev/null
+original_cpus="$(jq -r .cpuCount <<<"$workspace_json")"
+original_memory="$(jq -r .memory <<<"$workspace_json")"
+original_pids="$(jq -r .pidsLimit <<<"$workspace_json")"
+updated_resources="$(dim resources "$workspace_name" \
+  --cpus 1.25 --memory 2g --pids-limit 1024 --json)"
+test "$(jq -r .cpuCount <<<"$updated_resources")" = "1.25"
+test "$(jq -r .memory <<<"$updated_resources")" = "2g"
+test "$(jq -r .pidsLimit <<<"$updated_resources")" = "1024"
+test "$(docker inspect "$container_name" --format \
+  '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}')" = \
+  "1250000000|2147483648|2147483648|1024"
+dim resources "$workspace_name" \
+  --cpus "$original_cpus" --memory "$original_memory" --pids-limit "$original_pids" >/dev/null
 
 echo "[example-project] 6. run the project task"
 set +e

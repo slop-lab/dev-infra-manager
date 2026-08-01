@@ -75,6 +75,9 @@ dim repo apply "$project_name" --yes >/dev/null
 dim create "$project_name" "$workspace_name" >/dev/null
 
 workspace_json="$(dim show "$workspace_name" --json)"
+original_cpus="$(jq -r .cpuCount <<<"$workspace_json")"
+original_memory="$(jq -r .memory <<<"$workspace_json")"
+original_pids="$(jq -r .pidsLimit <<<"$workspace_json")"
 if [[ -c /dev/kvm ]]; then
   test "$(jq -r .kvm <<<"$workspace_json")" = "true"
   test "$(dim exec "$workspace_name" -- sh .dim/kvm.sh)" = "workspace-kvm-ok"
@@ -82,6 +85,17 @@ else
   test "$(jq -r .kvm <<<"$workspace_json")" = "false"
   dim exec "$workspace_name" -- sh -c 'test ! -e /dev/kvm'
 fi
+updated_resources="$(dim resources "$workspace_name" \
+  --cpus 1.25 --memory 2g --pids-limit 1024 --json)"
+test "$(jq -r .cpuCount <<<"$updated_resources")" = "1.25"
+test "$(jq -r .memory <<<"$updated_resources")" = "2g"
+test "$(jq -r .pidsLimit <<<"$updated_resources")" = "1024"
+container_name="$(jq -r .containerName <<<"$workspace_json")"
+test "$(docker inspect "$container_name" --format \
+  '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}')" = \
+  "1250000000|2147483648|2147483648|1024"
+dim resources "$workspace_name" \
+  --cpus "$original_cpus" --memory "$original_memory" --pids-limit "$original_pids" >/dev/null
 dim exec "$workspace_name" -- \
   sh -c 'test -r .dim/setup.sh && test ! -x .dim/setup.sh && test -r .dim/entrypoint.sh && test ! -x .dim/entrypoint.sh && test -r .dim/docker-compose.yml && test "$DIM_GIT_BASE_URL" = "$(jq -r .gitBaseUrl "$DIM_PROJECT_MANIFEST")"'
 test "$(dim show "$workspace_name" --json | jq -r .rootRef)" = "refs/heads/$root_ref"

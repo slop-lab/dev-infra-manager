@@ -348,6 +348,25 @@ program.command("show")
   .option("--json", "print machine-readable JSON")
   .action(async (name: string, flags: JsonFlags) => print(await adminCall("workspace.show", { name }), flags));
 
+program.command("resources")
+  .description("Update resource limits for an existing workspace")
+  .argument("<workspace>")
+  .option("--cpus <count>", "workspace CPU limit")
+  .option("--memory <size>", "workspace memory limit")
+  .option("--pids-limit <count>", "workspace PID limit")
+  .option("--json", "print machine-readable JSON")
+  .action(async (name: string, flags: ResourceFlags & JsonFlags) => {
+    if (!hasResourceFlags(flags)) throw new UserError("provide at least one resource limit");
+    const options = lifecycleOptions();
+    await ensureManagedController(options);
+    print(await adminCall("workspace.resources", {
+      name,
+      ...(flags.cpus === undefined ? {} : { cpuCount: flags.cpus }),
+      ...(flags.memory === undefined ? {} : { memory: flags.memory }),
+      ...(flags.pidsLimit === undefined ? {} : { pidsLimit: flags.pidsLimit })
+    }), flags);
+  });
+
 program.command("exec")
   .description("Execute a raw command in a running workspace")
   .argument("<workspace>")

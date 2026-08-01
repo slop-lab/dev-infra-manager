@@ -8,7 +8,9 @@ import type { ProjectRecord, WorkspaceRecord } from "../src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../src/types.js";
 import {
   detectWorkspaceKvm,
+  updateWorkspaceResources,
   validateWorkspaceProfiles,
+  validateWorkspaceResources,
   waitForInnerDocker,
   workspaceContainerArgs
 } from "../src/workspaceLifecycle.js";
@@ -261,6 +263,82 @@ describe("project and workspace lifecycle", () => {
     expect(validateWorkspaceProfiles(["development", "secrets"])).toEqual(["development", "secrets"]);
     expect(() => validateWorkspaceProfiles(["development", "development"])).toThrow(/duplicated/);
     expect(() => validateWorkspaceProfiles(["bad,profile"])).toThrow(/workspace profile/);
+    expect(() => validateWorkspaceResources({
+      cpuCount: "0",
+      memory: "4g",
+      pidsLimit: "2048"
+    })).toThrow(/CPU limit/);
+    expect(() => validateWorkspaceResources({
+      cpuCount: "2",
+      memory: "unlimited",
+      pidsLimit: "2048"
+    })).toThrow(/memory limit/);
+  });
+
+  it("updates a claimed workspace container and persists its effective resources", async () => {
+    const state = new LifecycleState(root);
+    const now = new Date().toISOString();
+    const record: WorkspaceRecord = {
+      schemaVersion: 3,
+      name: "work-1",
+      projectId: "project-id",
+      projectName: "project",
+      rootRepositoryAlias: "root",
+      rootRef: "refs/heads/main",
+      projectPath: "/workspace/project",
+      phase: "ready",
+      profiles: [],
+      composeProjectName: "dim-work-1",
+      containerName: "dim-ws-work-1",
+      networkName: "dim-control",
+      dockerVolumeName: "dim-ws-work-1-docker",
+      runtimeBackend: "runc",
+      kvm: false,
+      cpuCount: "2",
+      memory: "4g",
+      pidsLimit: "2048",
+      routes: [],
+      gitUserName: "Agent",
+      gitUserEmail: "agent@example.invalid",
+      gitBaseUrl: "http://dim-gitea:3000/dim-project",
+      projectManifestPath: "/run/dim/project.json",
+      createdAt: now,
+      updatedAt: now
+    };
+    await state.claimWorkspace(record);
+    const calls: string[][] = [];
+    const runner: StreamingCommandRunner = {
+      async run(command: string, args: string[]): Promise<CommandResult> {
+        calls.push([command, ...args]);
+        if (args[0] === "container" && args[1] === "inspect") {
+          return { command, args, stdout: "true|work-1|workspace\n", stderr: "", exitCode: 0 };
+        }
+        return { command, args, stdout: "dim-ws-work-1\n", stderr: "", exitCode: 0 };
+      },
+      async runStreaming(): Promise<number> {
+        return 0;
+      }
+    };
+
+    const options = lifecycleOptions({ DIM_STATE_ROOT: root, DIM_CONFIG_PATH: join(root, "dim.json") });
+    const updated = await updateWorkspaceResources(runner, options, "work-1", {
+      memory: "3g",
+      pidsLimit: "1024"
+    });
+    expect(updated).toMatchObject({ cpuCount: "2", memory: "3g", pidsLimit: "1024" });
+    expect(await state.readWorkspace("work-1")).toMatchObject({
+      cpuCount: "2",
+      memory: "3g",
+      pidsLimit: "1024"
+    });
+    expect(calls.at(-1)).toEqual([
+      "docker", "update",
+      "--cpus", "2",
+      "--memory", "3g",
+      "--memory-swap", "3g",
+      "--pids-limit", "1024",
+      "dim-ws-work-1"
+    ]);
   });
 
   it("selects persistent workspace runtime backends", () => {

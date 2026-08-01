@@ -174,6 +174,7 @@ dim create PROJECT WORKSPACE \
 
 dim ls
 dim show WORKSPACE
+dim resources WORKSPACE [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
 dim exec WORKSPACE -- COMMAND [ARGS...]
 dim run WORKSPACE TASK [ARGS...]
 dim setup WORKSPACE
@@ -189,6 +190,10 @@ runs its `.dim` setup contract. DIM directly manages no other checkout; the
 root repository lifecycle owns additional clones and nested services.
 Resource flags are stored in the workspace record. Environment configuration
 provides their defaults but does not force one limit set on every workspace.
+`resources` requires at least one flag, applies the complete effective limit
+set to the existing top-level container with `docker update`, and persists
+state only after the runtime accepts the update. Omitted flags retain their
+current per-workspace values. Running and stopped containers are supported.
 At creation, DIM records whether host `/dev/kvm` exists as a character device.
 Supported trusted workspaces receive that device and its host group
 automatically; gVisor workspaces record KVM as unavailable.

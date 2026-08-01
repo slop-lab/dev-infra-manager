@@ -46,7 +46,16 @@ Runtime backend selection is documented in
 persisted by their lifecycle commands rather than copied into user config.
 The CPU, memory, and PID settings are defaults for new workspace records.
 `dim create --cpus`, `--memory`, and `--pids-limit` persist per-workspace
-overrides.
+overrides. Change one or more limits on an existing workspace without
+recreating it:
+
+```bash
+dim resources WORKSPACE --cpus 4 --memory 8g --pids-limit 2048
+```
+
+Omitted flags keep their recorded values. DIM updates the live or stopped
+container first and persists the new effective limits only after Docker
+accepts them.
 
 CI runner resource defaults use the built-in `4 CPU`, `8g` memory, and `2048`
 PID fallback unless changed in user configuration:

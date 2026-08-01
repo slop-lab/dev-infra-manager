@@ -3,6 +3,9 @@
 DIM applies CPU, memory, and PID limits to the trusted workspace. Project-owned
 services, including an optional development agent, share that aggregate cgroup
 boundary unless the Project's Compose definition adds stricter child limits.
+An operator may change this aggregate boundary after creation with
+`dim resources WORKSPACE` and any combination of `--cpus`, `--memory`, and
+`--pids-limit`; omitted limits remain unchanged.
 
 The production default is Sysbox. gVisor provides a Docker-compatible
 no-KVM alternative, rootless Podman supports compatible lower-privilege

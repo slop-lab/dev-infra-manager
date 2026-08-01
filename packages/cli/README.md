@@ -146,6 +146,7 @@ dim run feature-123 codex
 ```bash
 dim ls
 dim show feature-123
+dim resources feature-123 --cpus 4 --memory 8g --pids-limit 4096
 dim stop feature-123
 dim start feature-123
 dim restart feature-123
@@ -155,6 +156,8 @@ dim discard feature-123 --yes
 ```
 
 - `stop` preserves the checkout and nested container-engine storage.
+- `resources` changes any supplied live or stopped workspace limits and keeps
+  omitted limits unchanged.
 - `start` refreshes the root ref and runs setup.
 - `restart` is the explicit way to apply merged root-repository changes to a
   running workspace.
@@ -300,10 +303,11 @@ overrides are:
 - `DIM_WORKSPACE_CPUS`, `DIM_WORKSPACE_MEMORY`, and `DIM_WORKSPACE_PIDS`
 
 The resource environment variables are defaults. Set persistent limits for an
-individual workspace at creation time:
+individual workspace at creation time or change them later:
 
 ```bash
 dim create acme feature-123 --cpus 4 --memory 8g --pids-limit 4096
+dim resources feature-123 --memory 12g
 ```
 
 DIM is pre-stable and does not migrate incompatible state between `0.x`

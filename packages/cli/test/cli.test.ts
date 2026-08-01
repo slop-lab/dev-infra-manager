@@ -63,6 +63,18 @@ test("CI runner commands expose lifecycle and configurable defaults", () => {
   assert.match(missingDefaults.stderr, /required option/);
 });
 
+test("workspace resources command requires at least one live limit", () => {
+  const help = run(["resources", "--help"]);
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /--cpus <count>/);
+  assert.match(help.stdout, /--memory <size>/);
+  assert.match(help.stdout, /--pids-limit <count>/);
+
+  const missing = run(["resources", "work-1"]);
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /provide at least one resource limit/);
+});
+
 test("controller serve preserves the active owner and cleans up its runtime files", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "dim-controller-test-"));
   const socket = path.join(root, "controller.sock");

@@ -32,6 +32,28 @@ export interface WorkspaceCommandInput {
   interactive: boolean;
 }
 
+export interface WorkspaceResourceInput {
+  cpuCount?: string;
+  memory?: string;
+  pidsLimit?: string;
+}
+
+export function validateWorkspaceResources(resources: {
+  cpuCount: string;
+  memory: string;
+  pidsLimit: string;
+}): void {
+  if (!/^[0-9]+(?:\.[0-9]+)?$/.test(resources.cpuCount) || Number(resources.cpuCount) <= 0) {
+    throw new UserError("workspace CPU limit must be a positive number");
+  }
+  if (!/^[1-9][0-9]*(?:[kmgt]i?b?|[KMGT]i?B?)?$/.test(resources.memory)) {
+    throw new UserError("workspace memory limit must be a positive container memory size");
+  }
+  if (!/^[1-9][0-9]*$/.test(resources.pidsLimit)) {
+    throw new UserError("workspace PID limit must be a positive integer");
+  }
+}
+
 export function validateWorkspaceProfiles(values: string[]): string[] {
   const seen = new Set<string>();
   for (const value of values) {
@@ -82,6 +104,11 @@ export async function createWorkspace(
   const project = validateLifecycleName(input.project, "project");
   const name = validateLifecycleName(input.name, "workspace");
   const profiles = validateWorkspaceProfiles(input.profiles);
+  validateWorkspaceResources({
+    cpuCount: input.cpuCount ?? options.cpuCount,
+    memory: input.memory ?? options.memory,
+    pidsLimit: input.pidsLimit ?? options.pidsLimit
+  });
   const state = new LifecycleState(options.stateRoot);
   const projectRecord = await readyProject(state, project);
   let repo = readyRootRepository(projectRecord);
@@ -308,6 +335,57 @@ export async function showWorkspace(options: LifecycleOptions, name: string): Pr
 
 export async function listWorkspaces(options: LifecycleOptions): Promise<WorkspaceRecord[]> {
   return new LifecycleState(options.stateRoot).listWorkspaces();
+}
+
+export async function updateWorkspaceResources(
+  runner: StreamingCommandRunner,
+  options: LifecycleOptions,
+  name: string,
+  input: WorkspaceResourceInput
+): Promise<WorkspaceRecord> {
+  const workspaceName = validateLifecycleName(name, "workspace");
+  if (input.cpuCount === undefined && input.memory === undefined && input.pidsLimit === undefined) {
+    throw new UserError("provide at least one workspace resource limit");
+  }
+  const state = new LifecycleState(options.stateRoot);
+  const release = await state.acquireWorkspaceSetupLock(workspaceName);
+  try {
+    const record = await state.readWorkspace(workspaceName);
+    const resources = {
+      cpuCount: input.cpuCount ?? record.cpuCount,
+      memory: input.memory ?? record.memory,
+      pidsLimit: input.pidsLimit ?? record.pidsLimit
+    };
+    validateWorkspaceResources(resources);
+
+    const inspect = await runner.run("docker", [
+      "container", "inspect", record.containerName,
+      "--format", "{{index .Config.Labels \"dim.managed\"}}|{{index .Config.Labels \"dim.workspace\"}}|{{index .Config.Labels \"dim.resource\"}}"
+    ]);
+    if (inspect.exitCode !== 0) {
+      throw new UserError(`workspace container '${record.containerName}' is not available`);
+    }
+    if (inspect.stdout.trim() !== `true|${record.name}|workspace`) {
+      throw new UserError(`Docker resource '${record.containerName}' conflicts with workspace '${record.name}'`);
+    }
+
+    const updated = await runner.run("docker", [
+      "update",
+      "--cpus", resources.cpuCount,
+      "--memory", resources.memory,
+      "--memory-swap", resources.memory,
+      "--pids-limit", resources.pidsLimit,
+      record.containerName
+    ]);
+    if (updated.exitCode !== 0) {
+      throw new UserError(`failed to update workspace resources: ${updated.stderr.trim()}`);
+    }
+    const next = { ...record, ...resources, updatedAt: new Date().toISOString() };
+    await state.writeWorkspace(next);
+    return next;
+  } finally {
+    await release();
+  }
 }
 
 export async function stopWorkspace(runner: StreamingCommandRunner, options: LifecycleOptions, name: string): Promise<void> {

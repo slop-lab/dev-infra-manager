@@ -26,7 +26,8 @@ import {
   showWorkspace,
   startWorkspace,
   stopWorkspace,
-  updateWorkspace
+  updateWorkspace,
+  updateWorkspaceResources
 } from "./workspaceLifecycle.js";
 import { ensureGitea } from "./gitea.js";
 import { runDoctor } from "./doctor.js";
@@ -229,6 +230,12 @@ async function builtinCall(
         text("name"),
         input.profiles === undefined ? undefined : stringArray(input.profiles)
       );
+    case "workspace.resources":
+      return updateWorkspaceResources(runner, lifecycle, text("name"), {
+        ...(input.cpuCount === undefined ? {} : { cpuCount: text("cpuCount") }),
+        ...(input.memory === undefined ? {} : { memory: text("memory") }),
+        ...(input.pidsLimit === undefined ? {} : { pidsLimit: text("pidsLimit") })
+      });
     case "workspace.start": return startWorkspace(runner, lifecycle, text("name"));
     case "workspace.restart": return restartWorkspace(runner, lifecycle, text("name"));
     case "workspace.stop": await stopWorkspace(runner, lifecycle, text("name")); return {};

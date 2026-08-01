@@ -37,6 +37,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added a common example verifier with current-host and disposable QEMU
   backends, explicit dirty-checkout policies, and automatic `repos/<alias>`
   Git fixture materialization and registration.
+- Added `dim resources` to change CPU, memory, and PID limits on an existing
+  running or stopped workspace without recreating it.
 
 ## [0.4.0] - 2026-07-30
 
