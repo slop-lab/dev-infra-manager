@@ -29,7 +29,7 @@ if [[ "$backend" == all ]]; then
   echo "kvm-host-install-smoke-ok: all"
   exit 0
 fi
-for cmd in qemu-system-x86_64 qemu-img curl ssh ssh-keygen tar; do command -v "$cmd" >/dev/null || { echo "missing KVM smoke dependency: $cmd (run: just install-kvm-verify-deps-ubuntu)" >&2; exit 2; }; done
+for cmd in qemu-system-x86_64 qemu-img curl ssh ssh-keygen tar; do command -v "$cmd" >/dev/null || { echo "missing KVM smoke dependency: $cmd (run: bash scripts/install-kvm-verify-deps-ubuntu.bash)" >&2; exit 2; }; done
 if ! command -v cloud-localds >/dev/null && ! command -v genisoimage >/dev/null; then
   echo "missing KVM smoke dependency: cloud-localds or genisoimage" >&2
   exit 2

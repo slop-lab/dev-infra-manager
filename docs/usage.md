@@ -90,7 +90,8 @@ just verify-environments-kvm --verbose
 bash scripts/kvm-host-install-smoke.bash gvisor --verbose # one backend, direct script
 ```
 
-Prepare those dependencies with `just install-kvm-verify-deps-ubuntu`. This
+Prepare those dependencies with
+`bash scripts/install-kvm-verify-deps-ubuntu.bash`. This
 requires writable `/dev/kvm`, `qemu-system-x86_64`, `qemu-img`, and
 `cloud-localds`. The verified Ubuntu cloud image is cached under `.local/kvm`;
 each test uses and deletes a temporary overlay disk. The default output

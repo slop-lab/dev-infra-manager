@@ -68,8 +68,11 @@ Behavior:
 
 ## KVM Host-install Smoke
 
-`just install-kvm-verify-deps-ubuntu` installs QEMU, qcow2, cloud-image, and
-SSH tooling only; it does not install a runtime backend.
+`scripts/install-kvm-verify-deps-ubuntu.bash` installs QEMU, qcow2,
+cloud-image, and SSH tooling and adds the invoking non-root user to the `kvm`
+group; it does not install a runtime backend. It requires the exact
+confirmation `yes` and explains that the login session must be refreshed
+before the new group membership is active.
 `scripts/kvm-host-install-smoke.bash BACKEND [--verbose]` verifies one backend,
 while `just verify-environments-kvm [--verbose]` verifies every backend in a
 separate VM. Each check boots a checksum-verified Ubuntu cloud-image VM with

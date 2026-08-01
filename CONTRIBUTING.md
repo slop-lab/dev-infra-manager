@@ -27,6 +27,13 @@ runs the same Sysbox isolation and KVM backend-installer recipes as the
 manually dispatched workflows; it requires a registered `sysbox-runc` runtime,
 QEMU tooling, and readable/writable `/dev/kvm`.
 
+On Ubuntu, install the QEMU tooling and grant the invoking user persistent KVM
+access with:
+
+```bash
+bash scripts/install-kvm-verify-deps-ubuntu.bash
+```
+
 The full setup, verification-gate, and installer-testing walkthrough — host
 backend installers, KVM-based installer/backend smoke tests, the
 `verify-container` integration suite, the direct host-backend smoke scripts,

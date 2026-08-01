@@ -4,7 +4,7 @@ dim_runner_require_qemu_host() {
   local command
   for command in qemu-system-x86_64 qemu-img cloud-localds ssh ssh-keygen; do
     command -v "$command" >/dev/null || {
-      echo "missing runner dependency: $command (run: just install-kvm-verify-deps-ubuntu)" >&2
+      echo "missing runner dependency: $command (run: bash scripts/install-kvm-verify-deps-ubuntu.bash)" >&2
       return 2
     }
   done
