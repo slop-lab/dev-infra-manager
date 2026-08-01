@@ -21,6 +21,8 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/.." && pwd)"
 # shellcheck source=lib/local-npm-registry.bash
 source "$script_dir/lib/local-npm-registry.bash"
+# shellcheck source=lib/example-dim-install.bash
+source "$script_dir/lib/example-dim-install.bash"
 
 suffix="$PPID-$$"
 project_name="example-$suffix"
@@ -41,7 +43,8 @@ export DIM_DATA_HOME="$work_dir/data"
 export GIT_CONFIG_GLOBAL="$work_dir/host.gitconfig"
 git config --file "$GIT_CONFIG_GLOBAL" user.name "Example Host Developer"
 git config --file "$GIT_CONFIG_GLOBAL" user.email "host-developer@dim.invalid"
-bash "$script_dir/configure-user-backend.bash" runc
+workspace_backend="${DIM_EXAMPLE_WORKSPACE_BACKEND:-runc}"
+bash "$script_dir/configure-user-backend.bash" "$workspace_backend"
 
 dim() { "$dim_bin" "$@"; }
 
@@ -69,21 +72,18 @@ trap cleanup EXIT
 
 cd "$repo_root"
 echo "[example-project] build and pack local packages"
-bash "$script_dir/pack-local-packages.bash" "$work_dir" >/dev/null
-
 echo "[example-project] 1. install DIM through the installer facade"
-dim_start_local_npm_registry "$work_dir"
-dim_publish_to_local_registry \
-  "$work_dir"/*dim-core*.tgz \
-  "$work_dir"/*dim-contracts-external-url*.tgz \
-  "$work_dir"/*plugin-dns-cloudflare*.tgz \
-  "$work_dir"/*dim-cli*.tgz \
-  "$work_dir"/*dim-installer*.tgz
-mkdir -p "$install_prefix"
-npm install --global --prefix "$install_prefix" "$work_dir"/*dim-installer*.tgz --silent >/dev/null
-"$dim_bin" install-cli --no-local-bin >/dev/null
+dim_install_example_cli "$repo_root" "$work_dir" "$install_prefix"
+test "$DIM_EXAMPLE_DIM_BIN" = "$dim_bin"
 test -x "$dim_bin"
-dim doctor >/dev/null
+docker build \
+  --quiet \
+  --build-arg "DIM_UID=$(id -u)" \
+  --build-arg "DIM_GID=$(id -g)" \
+  --tag dev-infra-project-workspace:latest \
+  --file "$repo_root/images/project-workspace/Dockerfile" \
+  "$repo_root" >/dev/null
+dim doctor
 
 echo "[example-project] 2. create the example repositories"
 bash "$repo_root/examples/project/create-repositories.bash" \
@@ -120,7 +120,7 @@ echo "[example-project] 5. confirm it's real"
 # than assuming a `dim-ws-<name>`-shaped prefix.
 workspace_json="$(dim show "$workspace_name" --json)"
 test "$(jq -r .phase <<<"$workspace_json")" = "ready"
-test "$(jq -r .runtimeBackend <<<"$workspace_json")" = "runc"
+test "$(jq -r .runtimeBackend <<<"$workspace_json")" = "$workspace_backend"
 test "$(jq -r '.profiles | length' <<<"$workspace_json")" = "0"
 container_name="$(jq -r .containerName <<<"$workspace_json")"
 docker ps --filter "name=$container_name" --format '{{.Names}}' | grep -qx "$container_name"

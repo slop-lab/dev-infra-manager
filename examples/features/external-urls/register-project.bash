@@ -2,11 +2,12 @@
 set -euo pipefail
 
 project="${1:-external}"
-repository="${2:-$PWD/example-repository}"
+repositories="${2:-$PWD/example-repositories}"
 dim_bin="${DIM_BIN:-dim}"
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# shellcheck source=../../../scripts/lib/example-repositories.bash
+source "$repo_root/scripts/lib/example-repositories.bash"
 
-"$dim_bin" project create "$project"
-"$dim_bin" repo add "$project" root "$repository" \
-  --root --ref main --protect main
+dim_register_example_repositories "$project" "$repositories" "$dim_bin"
 
 echo "Registered Project '$project'"

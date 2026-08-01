@@ -7,20 +7,39 @@
 dim_prepare_clone_source() {
   local source_repo="$1"
   local snapshot_dir="$2"
+  local dirty_policy="${3:-use}"
   local snapshot_tree="HEAD"
   local snapshot_commit
   local -a untracked_files=()
 
+  case "$dirty_policy" in
+    use|discard|auto) ;;
+    *)
+      echo "dirty repository policy must be use, discard, or auto" >&2
+      return 2
+      ;;
+  esac
+
   mapfile -d '' untracked_files \
     < <(git -C "$source_repo" ls-files --others --exclude-standard -z)
 
-  if ! git -C "$source_repo" diff --quiet HEAD --; then
+  local dirty=false
+  if ! git -C "$source_repo" diff --quiet HEAD -- ||
+    [[ "${#untracked_files[@]}" -gt 0 ]]; then
+    dirty=true
+  fi
+  if [[ "$dirty_policy" == auto && "$dirty" == true ]]; then
+    echo "repository is dirty; pass --dirty-repo use or discard explicitly" >&2
+    return 2
+  fi
+  if [[ "$dirty_policy" == use ]] &&
+    ! git -C "$source_repo" diff --quiet HEAD --; then
     snapshot_commit="$(git -C "$source_repo" stash create "DIM worktree snapshot")"
     snapshot_tree="$snapshot_commit"
   fi
 
   if [[ "$snapshot_tree" == "HEAD" ]] &&
-    [[ "${#untracked_files[@]}" -eq 0 ]] &&
+    [[ "$dirty" == false ]] &&
     [[ "$(git -C "$source_repo" rev-parse --is-shallow-repository)" != "true" ]]; then
     DIM_GIT_CLONE_SOURCE="$source_repo"
     return
@@ -28,7 +47,7 @@ dim_prepare_clone_source() {
 
   mkdir -p "$snapshot_dir"
   git -C "$source_repo" archive "$snapshot_tree" | tar -x -C "$snapshot_dir"
-  if [[ "${#untracked_files[@]}" -gt 0 ]]; then
+  if [[ "$dirty_policy" == use && "${#untracked_files[@]}" -gt 0 ]]; then
     printf '%s\0' "${untracked_files[@]}" |
       tar -C "$source_repo" --null --files-from=- -cf - |
       tar -x -C "$snapshot_dir"

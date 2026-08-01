@@ -4,6 +4,26 @@
 
 This specification defines the minimum verification gates for development.
 
+## Example runner
+
+`scripts/verify-example.bash` is the common entrypoint for runnable examples.
+It accepts `current-installed` and `{sysbox,gvisor,rootless-podman,runc}`
+backends. A named backend provisions an independent disposable QEMU guest for
+each selected example, while an optional example selector narrows the
+otherwise compatible suite. Its dirty-repository policy is `auto`, `use`, or
+`discard`: `auto`
+rejects dirty input, `use` snapshots tracked and non-ignored untracked files,
+and `discard` verifies committed `HEAD` without changing the checkout.
+
+Repository-backed examples use `repos/<alias>`. The common fixture code must
+initialize every alias as an independent Git repository, update matching
+entries in the root `repos.yml`, and register that reviewed set in the
+verification run's disposable managed Gitea.
+
+The QEMU wrapper owns only guest and toolchain provisioning. After installing
+the selected backend, Node.js, pnpm, and `just`, it must invoke repository
+verification through `just install` and `just verify-example`.
+
 ## Source Check Gate
 
 `just check` must run:
@@ -33,7 +53,8 @@ Docker runtime, CPU quota, memory limit, PID limit, non-privileged flag, and
 absence of a host Docker-socket mount. It must then run the CI runner feature
 smoke against a non-root repository.
 
-`just verify-example-ci-runner` must register one organization-scoped runner
+`just verify-example sysbox DIRTY ci-runner` must register one
+organization-scoped runner
 for a multi-repository Project, open a pull request in a non-root repository,
 and wait for that repository's real workflow to succeed.
 
@@ -150,7 +171,7 @@ tarballs, covering facade-only vs. proxied `--help`/`--version`, the
 mise-detected `--no-local-bin` default, and an explicit `--local-bin`
 override. See [Installer Facade](14-installer-facade.md).
 
-`just verify-example-external-urls` requires Docker. It proves
+`just verify-example BACKEND DIRTY external-urls` requires Docker. It proves
 `examples/features/external-urls/README.md` end to end: a host DIM controller,
 plugin loading before any external URL config exists, the example's checked-in
 ingress and URL scripts, dnsmasq wildcard DNS, a project-root workspace,
@@ -167,7 +188,7 @@ provider cleanup without external credentials.
 Ingress discovery, creation, and revocation must run through the public
 `dim external-url` CLI rather than project-specific curl wrappers.
 
-`just verify-example-project` requires Docker and managed Gitea. It
+`just verify-example BACKEND DIRTY project` requires Docker and managed Gitea. It
 materializes the repositories under `examples/project/repos/` in a temporary
 directory and verifies the documented `project create --repos` flow,
 protected refs, workspace, Project-owned agent, host Git identity, managed

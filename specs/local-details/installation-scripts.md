@@ -196,7 +196,7 @@ Script:
 scripts/external-url-example-smoke.bash
 ```
 
-`just verify-example-external-urls`. Requires Docker. Executes
+`just verify-example current-installed auto external-urls`. Requires Docker. Executes
 [examples/features/external-urls/README.md](../../examples/features/external-urls/README.md)
 against real containers: builds local packages and the workspace image,
 starts a project-root container, starts the nested `dev` Compose service and
@@ -209,7 +209,7 @@ script must change together.
 ## Project Example Smoke
 
 `scripts/example-project-smoke.bash`, invoked by
-`just verify-example-project`, builds and installs local packages,
+`just verify-example current-installed auto project`, builds and installs local packages,
 copies `examples/project/repos/` to a temporary directory, initializes and
 pushes real Git repositories, and
 verifies the documented workspace and secret boundary against managed Gitea.

@@ -13,6 +13,7 @@ state_root="$(mktemp -d /tmp/dim-external-state.XXXXXX)"
 plugin_home="$(mktemp -d /tmp/dim-external-plugins.XXXXXX)"
 cli_home="$(mktemp -d /tmp/dim-external-cli.XXXXXX)"
 pack_root="$(mktemp -d /tmp/dim-external-packs.XXXXXX)"
+repository_root="$(mktemp -d /tmp/dim-external-repositories.XXXXXX)"
 controller_pid=""
 cloudflare_mock_pid=""
 
@@ -54,7 +55,8 @@ cleanup() {
   docker container rm --force "$root_container" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   docker network rm "$client_network" >/dev/null 2>&1 || true
-  find "$state_root" "$plugin_home" "$cli_home" "$pack_root" -depth -delete 2>/dev/null || true
+  find "$state_root" "$plugin_home" "$cli_home" "$pack_root" "$repository_root" \
+    -depth -delete 2>/dev/null || true
 }
 report_error() {
   if [[ -d "$state_root/controller" ]]; then
@@ -71,6 +73,8 @@ trap cleanup EXIT
 
 echo "[external-url-example] build local packages and workspace image"
 bash scripts/pack-local-packages.bash "$pack_root" >/dev/null
+bash examples/features/external-urls/create-repository.bash \
+  "$repository_root/materialized" >/dev/null
 docker build \
   --quiet \
   --build-arg "DIM_UID=$(id -u)" \
@@ -172,7 +176,7 @@ for attempt in $(seq 1 60); do
   sleep 1
 done
 docker exec "$root_container" mkdir -p /workspace/project
-docker cp examples/features/external-urls/repo/. "$root_container:/workspace/project/"
+docker cp "$repository_root/materialized/root/." "$root_container:/workspace/project/"
 echo "[external-url-example] create controller state and host ingress"
 mkdir -p "$state_root/workspaces" "$state_root/workspace-grants"
 now="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"

@@ -124,5 +124,6 @@ DIM contributors can materialize all three repositories and verify this exact
 example:
 
 ```bash
-just verify-example-project
+just verify-example current-installed auto project
+just verify-example runc use project
 ```

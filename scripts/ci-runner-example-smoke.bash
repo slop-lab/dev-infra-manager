@@ -8,6 +8,8 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/.." && pwd)"
 # shellcheck source=lib/local-npm-registry.bash
 source "$script_dir/lib/local-npm-registry.bash"
+# shellcheck source=lib/example-dim-install.bash
+source "$script_dir/lib/example-dim-install.bash"
 
 suffix="$PPID-$$"
 project_name="ci-runner-example-$suffix"
@@ -26,7 +28,8 @@ export DIM_DATA_HOME="$work_dir/data"
 export GIT_CONFIG_GLOBAL="$work_dir/host.gitconfig"
 git config --file "$GIT_CONFIG_GLOBAL" user.name "CI Runner Example"
 git config --file "$GIT_CONFIG_GLOBAL" user.email "ci-runner-example@dim.invalid"
-bash "$script_dir/configure-user-backend.bash" runc
+workspace_backend="${DIM_EXAMPLE_WORKSPACE_BACKEND:-runc}"
+bash "$script_dir/configure-user-backend.bash" "$workspace_backend"
 
 dim() { "$dim_bin" "$@"; }
 
@@ -77,17 +80,8 @@ trap cleanup EXIT
 
 cd "$repo_root"
 echo "[ci-runner-example] 1. build and install DIM"
-bash "$script_dir/pack-local-packages.bash" "$work_dir" >/dev/null
-dim_start_local_npm_registry "$work_dir"
-dim_publish_to_local_registry \
-  "$work_dir"/*dim-core*.tgz \
-  "$work_dir"/*dim-contracts-external-url*.tgz \
-  "$work_dir"/*plugin-dns-cloudflare*.tgz \
-  "$work_dir"/*dim-cli*.tgz \
-  "$work_dir"/*dim-installer*.tgz
-mkdir -p "$install_prefix"
-npm install --global --prefix "$install_prefix" "$work_dir"/*dim-installer*.tgz --silent >/dev/null
-"$dim_bin" install-cli --no-local-bin >/dev/null
+dim_install_example_cli "$repo_root" "$work_dir" "$install_prefix"
+test "$DIM_EXAMPLE_DIM_BIN" = "$dim_bin"
 
 echo "[ci-runner-example] 2. materialize and register the Project"
 bash "$repo_root/examples/features/ci-runner/create-repository.bash" \
@@ -139,12 +133,15 @@ for attempt in $(seq 1 "$workflow_attempts"); do
   workflow_result="$(jq -r '
     [.workflow_runs[]
       | select(.event == "pull_request")
-      | select(.head_branch == "example-change")][0]
+      | select(
+          .head_branch == "example-change"
+          or any(.pull_requests[]?; .head.ref == "example-change")
+        )][0]
       | if . == null then "" else (.status + "|" + (.conclusion // "")) end
   ' <<<"$runs")"
   case "$workflow_result" in
     *\|success) break ;;
-    *\|) ;;
+    ""|*\|) ;;
     *)
       echo "example workflow failed: $workflow_result" >&2
       jq '.workflow_runs[0]' <<<"$runs" >&2

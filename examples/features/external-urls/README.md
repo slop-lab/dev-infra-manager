@@ -30,8 +30,9 @@ dim exec external-dev -- bash .dim/create-urls.bash
 ```
 
 DIM starts its managed host controller automatically. The last command asks
-the trusted root to execute [the request script](repo/dev/request-urls.bash)
-inside `dev`. Reviewed [setup code](repo/.dim/setup.sh) runs
+the trusted root to execute
+[the request script](repos/root/dev/request-urls.bash) inside `dev`. Reviewed
+[setup code](repos/root/.dim/setup.sh) runs
 `dim-controller-proxy` with the `local-http` ingress allowlisted. `dev` gets
 only that restricted socket—not the host controller socket or workspace
 grant—and prints URLs for `dev` and `deep`. It
@@ -112,5 +113,6 @@ isolation, generated Caddy configuration, and Cloudflare-style DNS creation
 and cleanup without using a real DNS account:
 
 ```bash
-just verify-example-external-urls
+just verify-example current-installed auto external-urls
+just verify-example runc use external-urls
 ```

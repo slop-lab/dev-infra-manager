@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd -- "$script_dir/.." && pwd)"
+# shellcheck source=lib/git-clone-source.bash
+source "$script_dir/lib/git-clone-source.bash"
+
+backend="current-installed"
+dirty_policy="auto"
+selection="all"
+while [[ "$#" -gt 0 ]]; do
+  case "$1" in
+    --backend)
+      backend="${2:?--backend requires a value}"
+      shift 2
+      ;;
+    --dirty-repo)
+      dirty_policy="${2:?--dirty-repo requires a value}"
+      shift 2
+      ;;
+    --example)
+      selection="${2:?--example requires a value}"
+      shift 2
+      ;;
+    --help|-h)
+      cat <<'EOF'
+usage: scripts/verify-example.bash [--backend BACKEND] [--dirty-repo POLICY] [--example EXAMPLE]
+
+BACKEND:
+  current-installed | sysbox | gvisor | rootless-podman | runc
+
+EXAMPLE:
+  all | project | ci-runner | external-urls
+
+POLICY:
+  auto     reject a dirty source repository
+  use      include tracked and untracked working-tree changes
+  discard  verify committed HEAD without changing the working tree
+EOF
+      exit 0
+      ;;
+    -*)
+      echo "unknown option: $1" >&2
+      exit 2
+      ;;
+    *)
+      if [[ "$backend" == current-installed ]]; then
+        backend="$1"
+      elif [[ "$dirty_policy" == auto ]]; then
+        dirty_policy="$1"
+      elif [[ "$selection" == all ]]; then
+        selection="$1"
+      else
+        echo "too many positional arguments" >&2
+        exit 2
+      fi
+      shift
+      ;;
+  esac
+done
+
+case "$backend" in
+  current-installed|sysbox|gvisor|rootless-podman|runc) ;;
+  *) echo "unsupported example backend: $backend" >&2; exit 2 ;;
+esac
+case "$dirty_policy" in
+  auto|use|discard) ;;
+  *) echo "dirty repository policy must be auto, use, or discard" >&2; exit 2 ;;
+esac
+case "$selection" in
+  all|project|ci-runner|external-urls) ;;
+  *) echo "example must be all, project, ci-runner, or external-urls" >&2; exit 2 ;;
+esac
+work_dir="$(mktemp -d /tmp/dim-example-verification.XXXXXX)"
+cleanup() {
+  find "$work_dir" -depth -delete 2>/dev/null || true
+}
+trap cleanup EXIT
+
+dim_prepare_clone_source "$repo_root" "$work_dir/source" "$dirty_policy"
+verification_source="$DIM_GIT_CLONE_SOURCE"
+
+if [[ "$backend" != current-installed ]]; then
+  export DIM_KVM_IMAGE_CACHE="${DIM_KVM_IMAGE_CACHE:-$repo_root/.local/kvm}"
+  if [[ "$selection" == all ]]; then
+    qemu_examples=(project external-urls)
+    if [[ "$backend" == sysbox ]]; then
+      qemu_examples+=(ci-runner)
+    else
+      echo "example[$backend]: skip ci-runner (the runner requires sysbox)"
+    fi
+  else
+    qemu_examples=("$selection")
+  fi
+  if [[ "$selection" == ci-runner && "$backend" != sysbox ]]; then
+    echo "the ci-runner example requires the sysbox backend" >&2
+    exit 2
+  fi
+  for example in "${qemu_examples[@]}"; do
+    bash "$verification_source/scripts/example-qemu-smoke.bash" \
+      "$backend" "$verification_source" "$example"
+  done
+  exit
+fi
+
+cd "$verification_source"
+if [[ ! -d node_modules/.pnpm ]]; then
+  pnpm install --frozen-lockfile
+fi
+
+if [[ "$selection" == all ]]; then
+  examples=(project external-urls)
+  if docker info --format '{{json .Runtimes}}' | grep -q '"sysbox-runc"'; then
+    examples+=(ci-runner)
+  else
+    echo "example[current-installed]: skip ci-runner (sysbox-runc is unavailable)"
+  fi
+else
+  examples=("$selection")
+fi
+if [[ "$selection" == ci-runner ]] &&
+  ! docker info --format '{{json .Runtimes}}' | grep -q '"sysbox-runc"'; then
+  echo "the ci-runner example requires sysbox-runc" >&2
+  exit 2
+fi
+for example in "${examples[@]}"; do
+  case "$example" in
+    project) smoke="example-project-smoke.bash" ;;
+    ci-runner) smoke="ci-runner-example-smoke.bash" ;;
+    external-urls) smoke="external-url-example-smoke.bash" ;;
+  esac
+  echo "example[current-installed]: verify $example"
+  bash "scripts/$smoke"
+done

@@ -34,6 +34,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   core-managed `.dim/agent.json` resource.
 - Organized examples around a canonical multi-repository `examples/project`
   and capability-focused `examples/features/*` examples.
+- Added a common example verifier with current-host and disposable QEMU
+  backends, explicit dirty-checkout policies, and automatic `repos/<alias>`
+  Git fixture materialization and registration.
 
 ## [0.4.0] - 2026-07-30
 

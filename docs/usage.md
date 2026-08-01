@@ -199,15 +199,24 @@ examples against a real Docker daemon:
 
 ```bash
 just verify-mise-install-smoke   # mise use -g npm:@slop-lab/dim-installer, in a disposable container
-just verify-example-project            # canonical Project and a real workspace
-just verify-example-external-urls      # nested URLs proven with dnsmasq
+just verify-example current-installed auto project
+just verify-example runc use
+just verify-example sysbox use ci-runner
 ```
 
+The example recipe accepts `current-installed` or
+`{sysbox,gvisor,rootless-podman,runc}` as its backend. A named backend creates
+one disposable QEMU guest per selected example and invokes
+`just verify-example current-installed` inside it.
+The dirty-repository policy defaults to `auto` (reject), while `use` snapshots
+the worktree and `discard` verifies committed `HEAD`. The optional final
+argument selects one example instead of the compatible suite.
+
 All require Docker and network access; `verify-mise-install-smoke` also
-needs to reach the real npm registry to install `mise` itself, and
-`verify-example-external-urls` uses Docker and dnsmasq but does not require a
-real Tailscale account. The multi-repository verification also requires the
-managed Gitea service.
+needs to reach the real npm registry to install `mise` itself. The
+`external-urls` example uses Docker and dnsmasq but does not require a real
+Tailscale account. The multi-repository verification also requires the managed
+Gitea service.
 
 ## Project Workspaces
 

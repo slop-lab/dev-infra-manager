@@ -53,7 +53,8 @@ request in the non-root `app` repository, and wait for the workflow to
 succeed:
 
 ```bash
-just verify-example-ci-runner
+just verify-example current-installed auto ci-runner
+just verify-example sysbox use ci-runner
 ```
 
 This proves that organization registration makes one Project runner available

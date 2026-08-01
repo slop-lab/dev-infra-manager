@@ -113,17 +113,9 @@ install-dim-local:
 verify-mise-install-smoke:
     bash scripts/mise-install-smoke.bash
 
-# Requires Docker and managed Gitea; materializes and verifies the canonical Project example.
-verify-example-project:
-    bash scripts/example-project-smoke.bash
-
-# Requires Docker, Sysbox, and managed Gitea; runs a real example PR workflow.
-verify-example-ci-runner:
-    bash scripts/ci-runner-example-smoke.bash
-
-# Materializes the external-URL repo and exercises root -> dev -> deep routing with dnsmasq.
-verify-example-external-urls:
-    bash scripts/external-url-example-smoke.bash
+# Verify examples on the current host or in a separate disposable backend VM per example.
+verify-example backend="current-installed" dirty_repo="auto" example="all":
+    bash scripts/verify-example.bash --backend "{{backend}}" --dirty-repo "{{dirty_repo}}" --example "{{example}}"
 
 # Verify this repository's .dim contract with Docker and managed Gitea.
 verify-self-development:
