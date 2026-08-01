@@ -70,15 +70,20 @@ service.
 host-side DIM runtime
 └── trusted workspace container
     └── private Project Docker daemon
-        ├── agent container
-        │   └── private DinD
+        ├── unprivileged agent container
+        ├── privileged rootless-DinD sidecar
         └── secret container built from the managed secrets repository
 ```
 
 The agent receives the host author, managed Project Git credentials, and the
 root checkout. It does not receive the host Docker socket or the trusted
-workspace Docker socket. Its privileged DinD runs inside the workspace's
-existing resource and isolation boundary.
+workspace Docker socket. The privileged sidecar runs a rootless Docker daemon
+inside the workspace's existing resource and isolation boundary; the agent
+reaches it over the private Compose network.
+
+The agent and DinD sidecar share only the named volume mounted at
+`/mnt/workspace-shared-dind`. Bind-mounted nested workloads must use a source
+below that path so the source has the same meaning from both containers.
 
 DIM core does not know that this service is an agent. The root repository owns
 its image, service lifecycle, resource choices, and fixed task mapping through

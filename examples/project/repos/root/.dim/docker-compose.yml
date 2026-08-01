@@ -2,9 +2,8 @@ services:
   agent:
     build:
       context: dev
-    privileged: true
     environment:
-      DOCKER_TLS_CERTDIR: ""
+      DOCKER_HOST: "tcp://agent-dind:2375"
       DIM_GIT_USERNAME: "${DIM_GIT_USERNAME:?}"
       DIM_GIT_TOKEN: "${DIM_GIT_TOKEN:?}"
       # Setup supplies these when creating the agent. Defaults keep unrelated
@@ -20,8 +19,32 @@ services:
       GIT_CONFIG_VALUE_1: /workspace
     volumes:
       - ..:/workspace
-      - agent-docker:/var/lib/docker
+      - agent-dind-shared:/mnt/workspace-shared-dind
+    networks:
+      - default
+      - agent-dind
     working_dir: /workspace
+    depends_on:
+      agent-dind:
+        condition: service_healthy
+
+  agent-dind:
+    build:
+      context: dind
+    privileged: true
+    environment:
+      DOCKER_HOST: "tcp://127.0.0.1:2375"
+      DOCKER_TLS_CERTDIR: ""
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+    volumes:
+      - agent-dind-data:/home/rootless/.local/share/docker
+      - agent-dind-shared:/mnt/workspace-shared-dind
+    networks:
+      - agent-dind
 
   secret:
     profiles: [secret]
@@ -32,4 +55,8 @@ services:
       - "7099:7099"
 
 volumes:
-  agent-docker:
+  agent-dind-data:
+  agent-dind-shared:
+
+networks:
+  agent-dind:

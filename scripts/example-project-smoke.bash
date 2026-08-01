@@ -112,7 +112,15 @@ fi
 rm -rf "$source_root"
 
 echo "[example-project] 4. create the workspace (a real container)"
-dim create "$project_name" "$workspace_name" >/dev/null
+if ! dim create "$project_name" "$workspace_name" >/dev/null; then
+  dim exec "$workspace_name" -- \
+    docker compose --project-name "dim-$workspace_name" \
+    --file .dim/docker-compose.yml ps --all >&2 || true
+  dim exec "$workspace_name" -- \
+    docker compose --project-name "dim-$workspace_name" \
+    --file .dim/docker-compose.yml logs agent-dind >&2 || true
+  exit 1
+fi
 
 echo "[example-project] 5. confirm it's real"
 # The workspace's actual container name is an implementation detail of
@@ -179,9 +187,26 @@ agent_container="$(dim exec "$workspace_name" -- \
   --file .dim/docker-compose.yml ps --quiet agent)"
 test -n "$agent_container"
 dim exec "$workspace_name" -- docker inspect "$agent_container" \
-  --format '{{.HostConfig.Privileged}}' | grep -qx true
+  --format '{{.HostConfig.Privileged}}' | grep -qx false
 ! dim exec "$workspace_name" -- docker inspect "$agent_container" \
   --format '{{json .Mounts}}' | grep -q /var/run/docker.sock
+dind_container="$(dim exec "$workspace_name" -- \
+  docker compose --project-name "dim-$workspace_name" \
+  --file .dim/docker-compose.yml ps --quiet agent-dind)"
+test -n "$dind_container"
+dim exec "$workspace_name" -- docker inspect "$dind_container" \
+  --format '{{.HostConfig.Privileged}}' | grep -qx true
+dim run "$workspace_name" bash -- -lc '
+  docker info --format "{{json .SecurityOptions}}" | grep -q rootless
+  rm -rf /mnt/workspace-shared-dind/bind-smoke
+  mkdir -p /mnt/workspace-shared-dind/bind-smoke
+  printf "from-agent\n" > /mnt/workspace-shared-dind/bind-smoke/input
+  docker run --rm \
+    --mount type=bind,source=/mnt/workspace-shared-dind/bind-smoke,target=/shared \
+    alpine:3.22 sh -c \
+      "test \"\$(cat /shared/input)\" = from-agent; printf \"from-dind\\n\" > /shared/output"
+  test "$(cat /mnt/workspace-shared-dind/bind-smoke/output)" = from-dind
+'
 
 echo "[example-project] 8. create a nested container from inside the dev container"
 nested_output="$(dim run "$workspace_name" bash -- \

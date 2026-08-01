@@ -101,9 +101,26 @@ agent_container="$(dim exec "$workspace_name" -- \
   --file .dim/docker-compose.yml ps --quiet agent)"
 test -n "$agent_container"
 dim exec "$workspace_name" -- docker inspect --format '{{.HostConfig.Privileged}}' \
-  "$agent_container" | grep -qx true
+  "$agent_container" | grep -qx false
 ! dim exec "$workspace_name" -- docker inspect --format '{{json .Mounts}}' \
   "$agent_container" | grep -q /var/run/docker.sock
+dind_container="$(dim exec "$workspace_name" -- \
+  docker compose --project-name "dim-$workspace_name" \
+  --file .dim/docker-compose.yml ps --quiet agent-dind)"
+test -n "$dind_container"
+dim exec "$workspace_name" -- docker inspect --format '{{.HostConfig.Privileged}}' \
+  "$dind_container" | grep -qx true
+dim run "$workspace_name" bash -- -lc '
+  docker info --format "{{json .SecurityOptions}}" | grep -q rootless
+  rm -rf /mnt/workspace-shared-dind/bind-smoke
+  mkdir -p /mnt/workspace-shared-dind/bind-smoke
+  printf "from-agent\n" > /mnt/workspace-shared-dind/bind-smoke/input
+  docker run --rm \
+    --mount type=bind,source=/mnt/workspace-shared-dind/bind-smoke,target=/shared \
+    alpine:3.22 sh -c \
+      "test \"\$(cat /shared/input)\" = from-agent; printf \"from-dind\\n\" > /shared/output"
+  test "$(cat /mnt/workspace-shared-dind/bind-smoke/output)" = from-dind
+'
 dim run "$workspace_name" check >/dev/null
 test "$(dim run "$workspace_name" codex -- --version)" != ""
 dim run "$workspace_name" verify >/dev/null

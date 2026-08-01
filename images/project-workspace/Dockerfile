@@ -3,11 +3,17 @@ FROM docker:29.1.3-dind
 ARG DIM_UID=1000
 ARG DIM_GID=1000
 
+# A nested user namespace can make files created while assigning DIM_UID
+# appear to inherit that UID. Reassert sudo's required root ownership after
+# all user-account writes, independently of the chosen workspace UID.
 RUN apk add --no-cache bash ca-certificates coreutils curl git jq just nodejs npm openssh-client shadow sudo tini \
   && groupadd --non-unique --gid "${DIM_GID}" dim \
   && useradd --non-unique --uid "${DIM_UID}" --gid dim --create-home --shell /bin/bash dim \
   && echo "dim ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dim \
-  && chmod 0440 /etc/sudoers.d/dim
+  && chown root:root /etc/sudoers /etc/sudoers.d /etc/sudoers.d/dim \
+  && if [ -e /etc/sudo.conf ]; then chown root:root /etc/sudo.conf; fi \
+  && chmod 0755 /etc/sudoers.d \
+  && chmod 0440 /etc/sudoers /etc/sudoers.d/dim
 
 ENV HOME=/home/dim \
     CODEX_HOME=/home/dim/.codex \

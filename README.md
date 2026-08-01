@@ -53,7 +53,9 @@ first installation.
 The installer shows every package and host-level change before doing anything
 and proceeds only after you enter `yes`. It is a development convenience, not
 production hardening guidance. In particular, review its path-scoped AppArmor
-exception for Sysbox FUSE mounts before using it outside a development host.
+exceptions for Sysbox FUSE mounts and rootless DinD's
+`/usr/local/bin/rootlesskit` user namespace before using it outside a
+development host.
 
 Choose the backend your workspaces will use:
 

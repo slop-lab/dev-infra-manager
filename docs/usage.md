@@ -63,6 +63,9 @@ Before making changes, the installer identifies its APT packages, Sysbox
 download, service operations, Docker group update, and path-scoped AppArmor
 exception. It requires the exact response `yes`. Treat the script as a
 development convenience and independently review these changes for production.
+On Ubuntu 24.04 and later, the common install also loads the official-style
+AppArmor exception that permits only `/usr/local/bin/rootlesskit` to create
+the user namespace needed by Project-owned rootless-DinD sidecars.
 
 Choose exactly one backend:
 
