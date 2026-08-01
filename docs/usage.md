@@ -4,9 +4,7 @@
 
 The development toolchain uses:
 
-- A supported Node.js LTS release line. DIM 0.2 supports Node.js 24. Releases
-  scheduled to become LTS, currently Node.js 26, are also validated during
-  development before they enter the supported set.
+- Node.js 24 or 26.
 - pnpm 10 or newer.
 - just.
 - TypeScript.
@@ -16,7 +14,9 @@ Runtime hosts also need the tools used by DIM:
 - A Linux host running a systemd user manager. macOS, Windows, and Docker
   Desktop hosts are not supported.
 - Docker-compatible CLI.
-- The selected agent runtime backend installed and registered. The default backend requires Sysbox as `sysbox-runc`; the gVisor backend requires `runsc`.
+- The selected workspace runtime backend installed and registered. The default
+  backend requires Sysbox as `sysbox-runc`; the gVisor backend requires
+  `runsc`.
 - KVM access for the default Sysbox production runtime.
 - Linux cgroup v2.
 - `sudo` access for mount, unmount, ownership, and filesystem setup operations.

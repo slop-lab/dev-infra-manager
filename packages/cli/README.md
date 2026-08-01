@@ -30,8 +30,7 @@ refreshes explicit.
 
 - A Linux host with a systemd user manager. macOS, Windows, and Docker Desktop
   hosts are not supported.
-- A supported Node.js LTS release line. Node.js 24 is supported; Node.js 26 is
-  also accepted and validated ahead of its scheduled LTS transition.
+- Node.js 24 or 26.
 - Git and a working Docker CLI/daemon. DIM always uses Docker to manage the
   outer workspace container, regardless of the selected backend.
 - A supported workspace backend: Sysbox, gVisor, rootless Podman, or
@@ -48,13 +47,13 @@ compatibility and CI smoke testing; it is not the preferred isolation boundary.
 Install an exact, reviewed version globally:
 
 ```bash
-npm install --global "@slop-lab/dim-cli@0.4.0"
+npm install --global "@slop-lab/dim-cli@0.5.0"
 ```
 
 Or use the user-local installer:
 
 ```bash
-npx '@slop-lab/dim-installer@0.4.0' install-cli
+npx '@slop-lab/dim-installer@0.5.0' install-cli
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
@@ -124,8 +123,8 @@ dim external-url list
 These commands normally run with the current workspace's controller socket
 and grant. `--workspace work-1` is available for host-side administration.
 
-Cloudflare DNS and Caddy HTTPS setup are documented in
-[`docs/external-urls.md`](../../docs/external-urls.md).
+Cloudflare DNS and Caddy HTTPS setup are documented in the
+[External URLs guide](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/external-urls.md).
 
 Create and enter a persistent workspace:
 
@@ -184,6 +183,63 @@ names, and services it supports. DIM neither exports a variable per repository
 nor assumes a repository-to-container mapping. Projects can independently map
 different upstream repository names without making their normal configuration
 depend on DIM.
+
+### Synchronizing an external repository
+
+For a repository registered with an external URL, fetch remote branches into
+managed Gitea under `upstream/*` and import tags:
+
+```bash
+dim repo fetch acme product
+dim repo fetch acme product --prune
+```
+
+This preserves DIM-only branches. Non-fast-forward upstream changes are
+rejected. Push back only explicitly named branch or tag refspecs:
+
+```bash
+dim repo push acme product \
+  refs/heads/main:refs/heads/main \
+  refs/tags/v1.2.3:refs/tags/v1.2.3
+```
+
+External authentication comes from the invoking host Git process. Pushes are
+non-forced.
+
+Delete an unused non-root repository with:
+
+```bash
+dim repo delete acme obsolete --yes
+```
+
+## Project CI runner
+
+One isolated, Project-scoped runner can serve every repository in a Project's
+managed Git organization:
+
+```bash
+dim ci runner enable acme
+dim ci runner status acme
+dim ci runner logs acme
+```
+
+The runner uses its own Sysbox container and nested Docker daemon outside
+development workspaces, with independent cgroup limits. Built-in defaults are
+4 CPUs, 8 GiB memory, and 2,048 PIDs. Change the user-level fallback or
+override one runner:
+
+```bash
+dim ci runner defaults set --cpus 2 --memory 4g --pids-limit 1024
+dim ci runner enable acme --cpus 6 --memory 12g --pids-limit 4096
+```
+
+Use `list`, `restart`, `stop`, and `disable --yes` for lifecycle management.
+The core lifecycle boundary is provider-neutral, but 0.5.0 ships only the
+managed-Gitea coordinator and Sysbox container executor. QEMU is not yet a
+selectable CI runner backend.
+
+`logs` follows the container log until interrupted. `stop` preserves the
+runner registration and local data; `disable --yes` removes both.
 
 ## Managed Git credentials
 
@@ -250,8 +306,9 @@ individual workspace at creation time:
 dim create acme feature-123 --cpus 4 --memory 8g --pids-limit 4096
 ```
 
-Version 0.2.0 is a breaking state schema. It rejects 0.1 Project/workspace
-state and does not migrate it.
+DIM is pre-stable and does not migrate incompatible state between `0.x`
+releases. Push all important work before upgrading and review the release
+notes.
 
 For the complete lifecycle and `.dim` hook contracts, see
 [Repository-backed Workspaces](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/repo-workspaces.md)

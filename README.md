@@ -9,6 +9,10 @@ platforms, including through Docker Desktop.
 Licensed under the [MIT License](LICENSE). Release history is recorded in the
 [changelog](CHANGELOG.md).
 
+DIM has no stable release yet. Pre-stable `0.x` releases may change CLI, API,
+configuration, state, and plugin contracts without backward-compatibility
+shims or implicit migration. Pin and review an exact release.
+
 Before using DIM in another project, read the mandatory [adoption and trust
 requirements](docs/adoption.md). They require full human review of DIM, the
 project repository, and every secret-bearing environment, plus immutable
@@ -69,16 +73,16 @@ disposable KVM guest instead of your own host.
 Pin an exact, reviewed version — never `latest`:
 
 ```bash
-mise use -g 'npm:@slop-lab/dim-installer@0.4.0'
+mise use -g 'npm:@slop-lab/dim-installer@0.5.0'
 dim install-cli
 ```
 
 or, without mise:
 
 ```bash
-npx '@slop-lab/dim-installer@0.4.0'
-npx '@slop-lab/dim-installer@0.4.0' install-cli
-npx '@slop-lab/dim-installer@0.4.0' install-plugin '@example/dim-plugin@1.2.3'
+npx '@slop-lab/dim-installer@0.5.0'
+npx '@slop-lab/dim-installer@0.5.0' install-cli
+npx '@slop-lab/dim-installer@0.5.0' install-plugin '@example/dim-plugin@1.2.3'
 ```
 
 `@slop-lab/dim-installer` is a thin facade: it owns only `installer`,
@@ -103,9 +107,9 @@ through the same diagnostic path:
 dim doctor configure-backend
 ```
 
-DIM retains an explicitly enabled, versioned plugin loader for future
-concrete integrations. Version 0.4.0 does not expose a generic Git-provider
-extension point. See [docs/plugins.md](docs/plugins.md).
+DIM uses an explicitly enabled, versioned plugin loader for concrete
+integrations. It does not expose a generic Git-provider extension point. See
+[docs/plugins.md](docs/plugins.md).
 
 ## Create a Project
 

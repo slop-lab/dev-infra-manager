@@ -30,9 +30,11 @@ Agent containers:
 - Must not mount the host runtime socket or Project runtime socket.
 - Must not mount secret-bearing runtime volumes.
 - May run nested containers through an agent-specific inner runtime.
-- Must belong to a named workspace. With the default Sysbox backend it is a
-  host-side sibling container, not a child of the Project daemon.
-- Must be resource-limited at the outer container boundary.
+- Must belong to a named workspace and be declared by reviewed Project code;
+  DIM core does not define an agent resource.
+- Must remain inside the resource-limited outer workspace boundary. A Project
+  may add stricter per-service limits, but core does not currently impose
+  separate agent-container limits.
 
 The agent's actual influence over anything outside its container and inner
 runtime is limited to explicit constrained interfaces and pushing proposals for
@@ -61,7 +63,7 @@ Trusted Project lifecycle code:
 
 - Runs in the workspace container, outside the agent container.
 - Owns the Project runtime.
-- Starts and reconciles agent and secret-bearing child containers.
+- Defines, starts, and reconciles agent and secret-bearing Project services.
 - Keeps the agent's inner runtime separate from its own runtime.
 - Deploys secret-bearing containers only from approved refs.
 - Receives an available host `/dev/kvm` automatically when its backend
@@ -73,7 +75,7 @@ Trusted Project lifecycle code:
 Host-side DIM:
 
 - Creates, reconciles, and discards workspace containers.
-- Manages local bare Git repositories and PR metadata.
+- Manages Project-scoped repositories and protection through managed Gitea.
 - Installs and checks runtime support through scripts and doctor checks.
 - Runs the DIM host controller and grants each workspace only its scoped,
   authenticated interfaces.

@@ -17,7 +17,7 @@ Sysbox integration checks use the newest validated line.
 just ci-matrix --manual
 ```
 
-This uses mise to reproduce the Node.js 24/26 GitHub Actions matrix and the
+This uses mise to reproduce the Node.js 24/26 CI workflow matrix and the
 Node.js 26 container lane, followed by both manually dispatched Sysbox and KVM
 workflows. It requires the same Sysbox, QEMU, and `/dev/kvm` host capabilities
 as their self-hosted runners. Review every package dry-run listing and confirm

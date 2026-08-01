@@ -4,13 +4,16 @@
 
 This infrastructure repository is organized as a monorepo. Projects that use the infrastructure are not required to use a monorepo.
 
-The system supports adding project Git repositories later. This allows product code, environment code, harness code, and permission-bearing code to be separated by repository when a project needs stronger ownership or review boundaries.
+The system supports Project-scoped repository sets. This allows product code,
+environment code, harness code, and permission-bearing code to be separated
+by repository when a project needs stronger ownership or review boundaries.
 
 ## Runtime Boundaries
 
-Each DIM workspace has a trusted project-root container. The host-side DIM
-runtime creates the untrusted agent beside that container, while the trusted
-Project daemon creates secret-bearing services inside the workspace.
+Each DIM workspace has a trusted workspace container. Reviewed Project
+lifecycle code owns its private Project runtime and may create both an
+untrusted agent service and secret-bearing services there. DIM core creates
+the workspace boundary but does not define an agent resource.
 
 ### Workspace Root and Controller
 
@@ -21,19 +24,22 @@ expose its runtime to the agent.
 
 ### Agent Container
 
-The agent container is the untrusted sibling execution environment exposed to
-an agent. “Agent” is a logical workspace relationship, not Docker parentage.
+The agent container is a Project-defined untrusted execution environment.
+Its image, mounts, privileges, private runtime, and task dispatch are reviewed
+Project policy rather than a core-managed resource.
 
 Properties:
 
 - Contains no raw API keys or secret credentials.
-- Provides a named read-write workspace that persists until explicitly discarded.
+- May receive the persistent workspace checkout through an explicit
+  Project-owned mount.
 - Allows command execution inside the workspace.
 - Allows nested container creation through an agent-specific inner runtime.
-- Receives approved Git identity and project runtime configuration.
+- May receive approved Git identity and constrained managed-Git credentials.
 - Can access the managed Git host for pushing branches and opening pull requests through the configured workflow.
 - Can include Git configuration environment variables required for Git operations.
-- Cannot access host or workspace-root controller runtime sockets.
+- Must not receive the host Docker socket, Project runtime socket, or original
+  DIM controller socket/grant.
 - Cannot mount secret-bearing volumes.
 - Cannot directly control secret-bearing containers.
 
@@ -43,8 +49,8 @@ The secret-bearing container is the execution environment that may hold API keys
 
 Properties:
 
-- Runs inside the workspace root but separately from the agent container and
-  its nested runtime.
+- Runs as a separate Project service outside the agent container and its
+  private nested runtime.
 - Contains or can access secrets required for trusted operations.
 - Exposes only a constrained interface selected by the controller for use by
   agent tooling.
@@ -74,7 +80,10 @@ The complete infrastructure code from this repository must pass direct human rev
 
 ## Deployment Flow
 
-Secret-bearing containers are deployed by a controller. The controller is part of the trusted boundary because it can control environments that access secrets.
+Secret-bearing containers are deployed by reviewed trusted Project lifecycle
+code or another trusted controller selected by the Project. That authority is
+part of the trusted boundary because it controls environments that access
+secrets.
 
 The deployment flow is:
 
@@ -107,7 +116,8 @@ The workspace lifecycle is:
 
 1. Create a new read-write workspace for the project.
 2. Inject approved Git configuration and environment variables.
-3. Start the workspace root and its controller.
+3. Start the trusted workspace container and ensure the host-managed DIM
+   controller is available.
 4. Run reviewed `.dim/setup.sh`, which may start a Project-owned agent service
    through the workspace's private engine.
 5. Dispatch reviewed `.dim/entrypoint.sh` tasks into that service without

@@ -9,5 +9,6 @@ Project-specific Git namespaces, repository aliases, root repository/ref,
 profiles and backend choices belong to Project/workspace records. Raw
 credentials must not be written to those records.
 
-There is no legacy JSON config, bare-Git PR store, controller config, job
-storage, or automatic 0.1 state migration.
+There is no legacy bare-Git PR store, separate controller config, or job
+storage. DIM is pre-stable and rejects incompatible configuration or state
+unless an explicit migration is part of the current contract.

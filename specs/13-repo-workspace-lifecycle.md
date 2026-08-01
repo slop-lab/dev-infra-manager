@@ -13,9 +13,9 @@ DIM stores schema-versioned Project and workspace records below
 <stateRoot>/locks/workspace-<workspace>.lock
 ```
 
-Project and workspace records use stable IDs distinct from display names.
-Schema 2 is the first Project-aware schema. Schema 1/0.1 state is rejected
-without mutation.
+Project and workspace records use persistent IDs distinct from display names.
+Incompatible pre-stable schemas are rejected without mutation unless a
+release explicitly defines a migration.
 
 ## Project namespace
 
@@ -44,12 +44,15 @@ and workspace endpoints without credentials. Users may populate it with any
 standard Git commands.
 
 Protection is pending until the initial push, then applied explicitly or when
-the root is first used to create a workspace. Import performs the initial
-mirror push before applying protection.
+the root is first used to create a workspace. The default CLI import transfers
+branches and tags before applying protection; `--mirror` explicitly includes
+all source refs.
 
 External sources are accessed only through the local Git CLI and its existing
-credential configuration. DIM 0.2 does not provision external Git providers or
-proxy Git traffic.
+credential configuration. DIM does not provision external Git providers or
+proxy Git traffic. A repository retains its explicit external connection so
+`repo fetch` can project remote branches under managed `upstream/*` and
+`repo push` can publish explicitly named, non-forced branch or tag refspecs.
 
 ## Root workspace contract
 

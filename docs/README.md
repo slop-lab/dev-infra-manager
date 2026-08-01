@@ -29,9 +29,10 @@ Docker/Git terms aren't repeated here.
   services, including secret-bearing containers. It is distinct from an agent
   container's private nested runtime.
 - **Agent container** — the untrusted coding environment associated with a
-  workspace. With the default Sysbox layout it is a host-side sibling of the
-  workspace container, not a child of the Project runtime. It has separate
-  checkout and private-runtime storage and receives no Docker control socket.
+  workspace. DIM core does not create or configure it: reviewed Project code
+  may define it as a service in the workspace's Project runtime, give it a
+  private nested runtime, and dispatch tasks through `.dim/entrypoint.sh`. It
+  receives neither the host nor Project runtime control socket.
 - **Project lifecycle code** — trusted code from the root repository, including
   `.dim` hooks and reviewed operational scripts, that configures the Project
   runtime. This is an authority boundary, not necessarily one long-running
@@ -64,7 +65,8 @@ The documentation is split by concern:
 - [Example Project](../examples/project/README.md): copyable multi-repository Project, Project-owned agent, host Git identity, and reviewed secret service.
 - [Example: External URLs](../examples/features/external-urls/README.md): named ingress discovery and real root/dev/deep reverse-proxy routing.
 - [Advanced example: External URL route policy](../examples/features/external-url-route-policy/README.md): a checked-in Unix-socket policy webhook.
-- [Plugins](plugins.md): versioned provider extension boundary for optional GitHub, GitLab, and other integrations.
+- [Plugins](plugins.md): explicit plugin loading, named extensions, and
+  constrained host-input providers.
 - [Releasing](releasing.md): release prerequisites, verification, package order, and post-publish checks.
 - [Status](status.md): current progress and known future work.
 

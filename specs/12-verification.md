@@ -159,7 +159,7 @@ a disposable VM. `just verify-environments-kvm` requires QEMU and writable
 `/dev/kvm` and runs the gate for every backend in a separate VM.
 The Sysbox guest must additionally verify a privileged trusted workspace using
 its directly passed `/dev/kvm` with QEMU, absence of Sysbox registration in
-the workspace's Project daemon, and an unprivileged host-side Sysbox isolation
+the workspace's Project daemon, and a separate unprivileged Sysbox isolation
 probe running a private DinD workload.
 
 ## Installer Facade Verification

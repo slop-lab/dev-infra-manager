@@ -6,7 +6,8 @@
 
 The system must let an untrusted agent:
 
-- Execute commands in an ephemeral workspace.
+- Execute commands in a persistent workspace that is removed only when
+  explicitly discarded.
 - Read and write files in that workspace.
 - Run nested container workloads through an approved runtime backend.
 - Push proposed changes to a managed Git host.
@@ -48,13 +49,16 @@ The project does not own:
 - MCP or other tool protocol details.
 - Internet access policy.
 - Human collaboration UI.
-- GitHub synchronization.
+- Automatic provider-specific GitHub synchronization.
 - Model request audit logs.
 - Project-specific product code.
 
 ## Compatibility Goals
 
-- CLI commands should remain stable unless a specification update explicitly changes their contract.
+DIM has no stable release. Backward compatibility across pre-stable `0.x`
+versions is not required. Contract changes should prefer a clear final design
+over aliases, shims, dual formats, or implicit migrations, while updating the
+implementation, tests, examples, specifications, and documentation together.
 
 ## Review Scope
 

@@ -58,7 +58,7 @@ State lives at `$DIM_CONFIG_PATH`, defaulting to
 ```json
 {
   "schemaVersion": 1,
-  "cli": { "mode": "direct" | "proxied", "version": "0.4.0", "executable": "/abs/path" },
+  "cli": { "mode": "direct" | "proxied", "version": "0.5.0", "executable": "/abs/path" },
   "pluginHome": "/abs/path"
 }
 ```
@@ -87,9 +87,8 @@ $XDG_DATA_HOME/dim/cli/<version>/node_modules/.bin/dim
 executable. The facade must only create, replace, or remove a path there if
 it is already a symlink resolving inside its own managed versioned
 directory; any other existing file or symlink is a conflict that stops
-installation without modification. This applies uniformly to unrecognized
-files and to a pre-0.2 `dim` left at that path; there is no migration path
-from 0.1.
+installation without modification. The installer does not infer ownership or
+attempt migration from the contents of an unmanaged path.
 
 **Proxied** (`--no-local-bin`) records only the absolute executable path in
 config; it must not modify `PATH`.
@@ -137,8 +136,7 @@ Required tests cover:
 - `install-cli`/`install-plugin` argument parsing, including conflicting
   `--local-bin`/`--no-local-bin`;
 - managed-symlink create, idempotent replace, and rejection of an
-  unmanaged/foreign path at the same location (including a simulated 0.1
-  `dim`);
+  unmanaged/foreign path at the same location;
 - proxy argv/cwd/env/stdio/exit-code fidelity;
 - stale config (missing executable, facade self-reference) surfaced as
   actionable errors, not silent fallback to a `PATH`-resolved `dim`;

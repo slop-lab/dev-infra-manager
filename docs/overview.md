@@ -2,7 +2,9 @@
 
 ## Goal
 
-`dev-infra-manager` provides infrastructure for running AI agents in isolated, ephemeral development workspaces while protecting secrets from agents that may attempt to exfiltrate API keys or otherwise misuse their execution privileges.
+`dev-infra-manager` provides infrastructure for running AI agents in isolated,
+persistent development workspaces while protecting secrets from agents that
+may attempt to exfiltrate credentials or misuse their execution privileges.
 
 The infrastructure separates agent-controlled execution from secret-bearing
 interfaces. Projects may run an agent as a nested service with its own private
@@ -25,7 +27,8 @@ In scope:
 - Resource limits for agent workspaces and nested workloads.
 - Persistent read-write project workspaces.
 - Injection of non-secret and approved workspace configuration.
-- Support for adding project Git repositories later.
+- Project-scoped repository sets and explicit synchronization with external
+  Git repositories.
 
 Out of scope:
 
@@ -33,7 +36,7 @@ Out of scope:
 - Agent reasoning, tool orchestration, and MCP tool implementation.
 - Internet access policy for the agent runtime.
 - Human collaboration UI.
-- GitHub synchronization.
+- Automatic provider-specific GitHub synchronization.
 - Agent command audit logs.
 - Model request audit logs.
 - Project-specific product code.

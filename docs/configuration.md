@@ -59,4 +59,6 @@ dim ci runner defaults reset
 
 Project-specific flags on `dim ci runner enable` override these defaults.
 
-DIM 0.2 rejects 0.1 state and does not perform an automatic migration.
+DIM is pre-stable. Incompatible configuration and state are rejected rather
+than migrated implicitly; compatibility behavior is added only when a release
+explicitly defines it.

@@ -22,12 +22,11 @@ TypeScript tools or contributing to DIM itself.
 Pin the same reviewed release used by the CLI:
 
 ```bash
-npm install --save-exact "@slop-lab/dim-core@0.4.0"
+npm install --save-exact "@slop-lab/dim-core@0.5.0"
 ```
 
-The package is ESM-only, supports the Node.js 24 LTS release line, and includes
-TypeScript declarations. Node.js 26 is also accepted and validated ahead of
-its scheduled LTS transition.
+The package is ESM-only, supports Node.js 24 and 26, and includes TypeScript
+declarations. It supports Linux hosts only.
 
 ## Basic use
 
@@ -35,7 +34,7 @@ its scheduled LTS transition.
 import {
   ProcessRunner,
   createProject,
-  prepareProjectRepositoryTransfer,
+  importProjectRepository,
   createWorkspace,
   lifecycleOptions
 } from "@slop-lab/dim-core";
@@ -44,16 +43,14 @@ const runner = new ProcessRunner();
 const options = lifecycleOptions(process.env);
 
 await createProject(runner, options, "acme");
-const prepared = await prepareProjectRepositoryTransfer(runner, options, {
+await importProjectRepository(runner, options, {
   project: "acme",
   alias: "root",
+  source: "/path/to/acme",
   root: true,
   rootRef: "main",
   protectedPatterns: ["main", "development"]
 });
-
-// Populate prepared.targetUrl with Git and apply pending protection before
-// creating a workspace.
 await createWorkspace(runner, options, {
   project: "acme",
   name: "feature-123",
@@ -70,6 +67,11 @@ managed Gitea service. They are not pure data helpers. Callers must provide a
 usable host environment and surface `UserError` messages to users without
 discarding the underlying operation result.
 
+`importProjectRepository` is a low-level mirror import and copies every source
+ref. Applications that want the CLI's branches-and-tags-only default should
+use the prepare/transfer/complete API and perform that explicit Git transfer
+with host credentials.
+
 ## Configuration
 
 `lifecycleOptions()` reads the same environment used by the CLI:
@@ -80,6 +82,8 @@ discarding the underlying operation result.
 - the installed `workspaceBackend`, `DIM_WORKSPACE_IMAGE`, and
   `DIM_WORKSPACE_RUNTIME`
 - `DIM_WORKSPACE_CPUS`, `DIM_WORKSPACE_MEMORY`, and `DIM_WORKSPACE_PIDS`
+- `DIM_CI_RUNNER_IMAGE`, `DIM_CI_RUNNER_RUNTIME`, `DIM_CI_RUNNER_CPUS`,
+  `DIM_CI_RUNNER_MEMORY`, and `DIM_CI_RUNNER_PIDS`
 
 The resource environment variables provide defaults. `createWorkspace`
 accepts persistent per-workspace overrides. A Project root ref may be omitted;
@@ -87,16 +91,15 @@ workspace creation then resolves the root repository's symbolic `HEAD` and
 fails if no `HEAD` exists.
 
 The default state root is `~/.local/state/dim`; the default managed Gitea port
-is `3300`. Project records use schema version 3 and workspace records use
-schema version 2. DIM does not migrate incompatible pre-stable state.
+is `3300`. DIM does not migrate incompatible pre-stable state.
 
 ## API scope
 
-The package currently exports its core modules from the root entry point,
-including lifecycle records and low-level Gitea helpers. APIs are versioned
-with DIM but are not yet promised to remain source-compatible across minor
-0.x releases. Prefer high-level functions from `projectRegistry` and
-`workspaceLifecycle` over direct state or Gitea mutation.
+The package exports its core modules from the root entry point, including
+lifecycle records and low-level managed-Gitea helpers. APIs are versioned with
+DIM but are not promised to remain source-compatible across minor `0.x`
+releases. Prefer high-level functions from `projectRegistry`,
+`workspaceLifecycle`, and `ciRunner` over direct state or Gitea mutation.
 
 The plugin loader validates explicitly installed plugins and gives each
 controller an instance-scoped plugin route registry. `GET /api` discovers

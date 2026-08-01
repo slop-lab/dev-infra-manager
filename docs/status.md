@@ -1,8 +1,8 @@
 # Status
 
-DIM 0.4.0 is a pre-stable Project-aware release centered on named, persistent
-workspaces. Pre-stable state and configuration are not migrated between
-incompatible releases.
+The development branch targets DIM 0.5.0. DIM has no stable release yet;
+pre-stable state, configuration, CLI, and extension contracts may change
+without backward-compatibility shims or implicit migration.
 
 The supported host platform is Linux with a systemd user manager. macOS,
 Windows, and Docker Desktop are outside the supported runtime model.
@@ -14,6 +14,8 @@ Implemented:
   protected branches.
 - Project-scoped repository sets loaded from `repos.yml`, including reviewed
   bulk planning and application.
+- Explicit external repository synchronization through `repo fetch` and
+  `repo push`, without coupling the core Git transport to one provider.
 - Persistent create, run, exec, setup, update, start, stop, show,
   and discard lifecycle.
 - Backend selection persisted per workspace: Sysbox, gVisor, rootless Podman,
@@ -21,6 +23,8 @@ Implemented:
 - CPU, memory, and PID limits at the top-level workspace boundary.
 - Nested Docker or Podman storage isolated in a labeled volume.
 - Optional `.dim` setup, task entrypoint, teardown, and Compose contract.
+- Project-owned development-agent containers and task dispatch, without a
+  core-managed agent resource.
 - Plugin installation and persisted plugin discovery configuration.
 - Host-shared external URL ingresses with workspace-scoped route requests
   mediated through a private controller proxy socket.
@@ -34,6 +38,8 @@ Implemented:
   workspaces.
 - TypeScript unit tests and nested-container lifecycle smoke tests.
 - Reproducible local Node.js 24/26, container, Sysbox, and KVM CI entrypoints.
+- A common example verifier that creates a separate disposable QEMU guest for
+  each selected example and runtime backend.
 - Project-scoped managed CI runners shared by all repositories in the Project,
   with Sysbox-isolated DinD, independent resource limits, and a
   provider-neutral coordinator boundary.

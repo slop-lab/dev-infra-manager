@@ -15,13 +15,11 @@ This repository is a pnpm workspace.
 │   ├── contracts/
 │   │   └── external-url/
 │   ├── plugin/
-│   │   └── external-urls/
-│   ├── ingress/
-│   │   └── caddy/
-│   └── provider/
-│       └── dns-cloudflare/
-├── deploy/              deployment manifests and service templates
+│   │   ├── external-urls/
+│   │   └── dns-cloudflare/
 ├── images/              runtime image definitions
+├── examples/            copyable Project and feature examples
+├── scripts/             verification and host-install helpers
 └── specs/               normative behavior and local implementation details
 ```
 
@@ -63,14 +61,12 @@ Git hosting and externally reachable entries are optional capabilities.
 Configuration must select providers explicitly and disabling a capability must
 not require its binaries, containers, credentials, or network access.
 
-The 0.2 core contains one built-in managed Gitea service boundary. A future
-gateway or external managed backend must preserve the Project/repository
-records and host/workspace endpoint contract.
-
-Gitea will be the recommended full Git-host provider, not a mandatory runtime
-dependency. The built-in managed Gitea implementation remains a lightweight
-provider, and other implementations such as Forgejo can implement the same
-contract.
+The current core contains one built-in managed Gitea service boundary.
+External source and destination transport still runs through the host Git CLI
+and is provider-neutral. A future replacement for managed Gitea must preserve
+the Project/repository records, protected-ref boundary, and separate
+host/workspace endpoint contract without leaking provider details into
+Project-owned repository configuration.
 
 The DIM controller API authenticates an agent workspace and lets installed
 plugins register routes. External URL ingresses accept only a constrained
