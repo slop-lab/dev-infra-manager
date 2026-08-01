@@ -111,7 +111,8 @@ if [[ "$guest_ready" == false ]]; then
   tail -n 30 "$workdir/qemu.log" >&2
   exit 1
 fi
-run_step "install guest prerequisites" ssh "${ssh_args[@]}" dim@127.0.0.1 "sudo apt-get update && sudo apt-get install -y git"
+run_step "install guest prerequisites" ssh "${ssh_args[@]}" dim@127.0.0.1 \
+  "sudo apt-get update && sudo apt-get install -y git just"
 tar -C "$workdir" -czf "$workdir/repo.tar.gz" repo.bundle
 run_step "clone repository" clone_repository
 run_step "install $backend backend" install_backend
