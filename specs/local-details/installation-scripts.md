@@ -18,8 +18,12 @@ Behavior:
 5. For `sysbox`, select pinned SHA-256 for supported architectures:
    - `arm64`
    - `amd64`
-6. Install `curl`, `docker.io`, and `jq`; install `fuse3` and `uidmap` and
+6. Install `apparmor`, `curl`, `docker.io`, and `jq`; install `fuse3` and `uidmap` and
    build the rootless workspace image when rootless Podman is selected.
+   On Ubuntu hosts that restrict unprivileged user namespaces through
+   AppArmor, install the path-scoped `/usr/local/bin/rootlesskit` profile via
+   `scripts/install-rootlesskit-apparmor-profile-ubuntu.bash`. The container
+   CI lane invokes the same script before exercising rootless-DinD sidecars.
 7. For `sysbox`, create a uniquely named, invoking-user-owned temporary file, download the
    Sysbox CE deb into it, and remove it when the script exits.
 8. For `sysbox`, verify SHA-256.

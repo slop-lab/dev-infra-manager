@@ -67,11 +67,9 @@ git -C "$project_source" \
   commit -m "point self manifest at smoke source" >/dev/null
 
 git clone --bare "$project_source" "$source_root/project.git" >/dev/null
-dim project create "$project_name" >/dev/null
 root_ref="$(git -C "$project_source" rev-parse --abbrev-ref HEAD)"
-dim repo add "$project_name" dim "$source_root/project.git" \
-  --root --ref "$root_ref" --protect main,development >/dev/null
-dim repo apply "$project_name" --yes >/dev/null
+dim project create "$project_name" \
+  --repos "$project_source/.dim/repos.yml" --yes >/dev/null
 dim create "$project_name" "$workspace_name" >/dev/null
 
 workspace_json="$(dim show "$workspace_name" --json)"

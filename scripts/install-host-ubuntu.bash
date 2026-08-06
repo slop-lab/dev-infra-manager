@@ -18,7 +18,6 @@ sysbox_arch="${SYSBOX_ARCH:-$(dpkg --print-architecture)}"
 sysbox_deb=""
 apparmor_local_profile="/etc/apparmor.d/local/fusermount3"
 apparmor_rule_marker="# dev-infra-manager: allow Sysbox FUSE mounts"
-rootlesskit_apparmor_profile="/etc/apparmor.d/usr.local.bin.rootlesskit"
 
 cleanup() {
   [[ -z "$sysbox_deb" ]] || rm -f -- "$sysbox_deb"
@@ -34,7 +33,7 @@ This script is a development convenience, not production hardening guidance.
 Review and adapt every change before using it on a production host.
 
 It will:
-  - install common APT packages: curl, docker.io, docker-compose-v2, jq
+  - install common APT packages: apparmor, curl, docker.io, docker-compose-v2, jq
   - when required by Ubuntu, allow /usr/local/bin/rootlesskit to create its user namespace
   - install and configure only the ${backend} backend
 EOF
@@ -59,23 +58,7 @@ EOF
 
 install_common_packages() {
   sudo apt-get update
-  sudo apt-get install -y curl docker.io docker-compose-v2 jq
-}
-
-install_rootlesskit_apparmor_profile() {
-  [[ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]] || return 0
-  command -v apparmor_parser >/dev/null || return 0
-  printf '%s\n' \
-    'abi <abi/4.0>,' \
-    'include <tunables/global>' \
-    '' \
-    '"/usr/local/bin/rootlesskit" flags=(unconfined) {' \
-    '  userns,' \
-    '' \
-    '  include if exists <local/usr.local.bin.rootlesskit>' \
-    '}' \
-    | sudo tee "$rootlesskit_apparmor_profile" >/dev/null
-  sudo apparmor_parser -r "$rootlesskit_apparmor_profile"
+  sudo apt-get install -y apparmor curl docker.io docker-compose-v2 jq
 }
 
 install_sysbox() {
@@ -160,7 +143,7 @@ configure_dim_backend() {
 
 confirm_install
 install_common_packages
-install_rootlesskit_apparmor_profile
+sudo bash "$script_dir/install-rootlesskit-apparmor-profile-ubuntu.bash"
 install_selected_backend
 configure_dim_backend
 configure_install_user
