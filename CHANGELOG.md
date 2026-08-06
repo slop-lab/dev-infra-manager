@@ -34,6 +34,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Returned development-agent ownership to Projects: `.dim/setup.sh`, Compose,
   and `.dim/entrypoint.sh` now define and dispatch agent services without a
   core-managed `.dim/agent.json` resource.
+- Moved the canonical Project agent onto an unprivileged container backed by
+  a private rootless-DinD sidecar instead of running the agent itself as a
+  privileged nested-Docker container.
 - Organized examples around a canonical multi-repository `examples/project`
   and capability-focused `examples/features/*` examples.
 - Added a common example verifier with current-host and disposable QEMU
@@ -41,6 +44,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Git fixture materialization and registration.
 - Added `dim resources` to change CPU, memory, and PID limits on an existing
   running or stopped workspace without recreating it.
+
+### Fixed
+
+- Prevented concurrent managed controllers from overwriting an active
+  controller's PID and Unix sockets, cleaned up controller runtime files after
+  startup failures, and treated a missing process during restart as already
+  stopped.
 
 ## [0.4.0] - 2026-07-30
 
