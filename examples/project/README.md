@@ -84,6 +84,10 @@ reaches it over the private Compose network.
 The agent and DinD sidecar share only the named volume mounted at
 `/mnt/workspace-shared-dind`. Bind-mounted nested workloads must use a source
 below that path so the source has the same meaning from both containers.
+Because the unprivileged agent and rootless DinD may have different host UIDs,
+the shared volume root is a sticky writable directory. A bind-source directory
+that both sides must modify must grant write access to both identities, for
+example `mkdir -m 0777 /mnt/workspace-shared-dind/my-bind`.
 
 DIM core does not know that this service is an agent. The root repository owns
 its image, service lifecycle, resource choices, and fixed task mapping through

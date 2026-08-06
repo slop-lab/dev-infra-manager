@@ -125,7 +125,7 @@ dim exec "$workspace_name" -- docker inspect --format '{{.HostConfig.Privileged}
 dim run "$workspace_name" bash -- -lc '
   docker info --format "{{json .SecurityOptions}}" | grep -q rootless
   rm -rf /mnt/workspace-shared-dind/bind-smoke
-  mkdir -p /mnt/workspace-shared-dind/bind-smoke
+  mkdir -m 0777 /mnt/workspace-shared-dind/bind-smoke
   printf "from-agent\n" > /mnt/workspace-shared-dind/bind-smoke/input
   docker run --rm \
     --mount type=bind,source=/mnt/workspace-shared-dind/bind-smoke,target=/shared \

@@ -12,6 +12,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Extended disposable runc QEMU verification to exercise the canonical DIM
   self-Project, its private rootless-DinD sidecar, and the installed
   RootlessKit AppArmor profile together.
+- Made the private agent/DinD shared bind area work when the unprivileged agent
+  and rootless-DinD sidecar use different host UIDs.
 
 ## [0.5.0] - 2026-08-01
 

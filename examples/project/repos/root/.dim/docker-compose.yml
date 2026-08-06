@@ -56,6 +56,9 @@ services:
 
 volumes:
   agent-dind-data:
+  # The agent and rootless DinD may use different host UIDs. The private
+  # shared volume therefore has a sticky writable root, and bind-source
+  # directories below it must grant access to both containers.
   agent-dind-shared:
 
 networks:

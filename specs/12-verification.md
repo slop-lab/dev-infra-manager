@@ -110,7 +110,8 @@ trusted deployment of a reviewed secret-bearing child beside a Project-owned
 agent. It must use the example's generated `repos.yml`, prove the agent uses a
 distinct Docker daemon, cannot list the trusted workspace's secret-bearing
 child, does not mount either Docker socket, and does not receive the child's
-raw secret environment.
+raw secret environment. Its shared bind-mount probe must work when the agent
+UID differs from the rootless-DinD UID.
 
 ## Fast Isolation Gate
 
@@ -160,7 +161,9 @@ a disposable VM. `just verify-environments-kvm` requires QEMU and writable
 The runc guest must additionally run `just verify-self-development` after the
 host installer completes. This verifies the canonical DIM Project, its
 unprivileged agent and private rootless-DinD sidecar, and the path-scoped
-RootlessKit AppArmor profile together on a clean Ubuntu host.
+RootlessKit AppArmor profile together on a clean Ubuntu host. The guest
+verification user must use UID 1001 so this gate does not accidentally depend
+on matching the rootless-DinD image's UID 1000.
 The Sysbox guest must additionally verify a privileged trusted workspace using
 its directly passed `/dev/kvm` with QEMU, absence of Sysbox registration in
 the workspace's Project daemon, and a separate unprivileged Sysbox isolation

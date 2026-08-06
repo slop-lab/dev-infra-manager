@@ -74,7 +74,7 @@ if [[ ! -f "$image" ]]; then
 fi
 ssh-keygen -q -t ed25519 -N '' -f "$workdir/id"; key="$(cat "$workdir/id.pub")"
 printf 'instance-id: dim-kvm-smoke\nlocal-hostname: dim-kvm-smoke\n' > "$workdir/meta-data"
-printf '#cloud-config\nusers:\n  - name: dim\n    sudo: ALL=(ALL) NOPASSWD:ALL\n    shell: /bin/bash\n    ssh_authorized_keys:\n      - %s\n' "$key" > "$workdir/user-data"
+printf '#cloud-config\nusers:\n  - name: dim\n    uid: 1001\n    sudo: ALL=(ALL) NOPASSWD:ALL\n    shell: /bin/bash\n    ssh_authorized_keys:\n      - %s\n' "$key" > "$workdir/user-data"
 if command -v cloud-localds >/dev/null; then
   cloud-localds "$workdir/seed.img" "$workdir/user-data" "$workdir/meta-data"
 else

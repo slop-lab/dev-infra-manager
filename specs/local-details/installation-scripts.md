@@ -88,7 +88,9 @@ before bundling. Uncommitted and untracked files are intentionally excluded.
 The runc check installs the source verification toolchain after the host
 installer and runs `just verify-self-development`, covering the canonical
 Project's unprivileged agent, private rootless-DinD sidecar, and installed
-RootlessKit AppArmor profile end to end.
+RootlessKit AppArmor profile end to end. The QEMU verification user has the
+explicit UID 1001, keeping it distinct from the rootless-DinD image's UID 1000
+and matching the UID relationship commonly exposed by GitHub-hosted runners.
 The base cloud image is cached under `.local/kvm`. Default output names each
 stage and emits only the final 30 lines of a failing stage; `--verbose`
 streams full guest, build, and workload logs.
