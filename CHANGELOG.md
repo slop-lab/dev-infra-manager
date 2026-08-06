@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-06
+
 ### Changed
 
 - Extended disposable runc QEMU verification to exercise the canonical DIM
@@ -14,11 +16,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   RootlessKit AppArmor profile together.
 - Made the private agent/DinD shared bind area work when the unprivileged agent
   and rootless-DinD sidecar use different host UIDs.
-
-## [0.5.0] - 2026-08-01
-
-### Changed
-
 - Simplified Cloudflare DNS record arguments to `zone`, `value`, and
   `proxied`; record type is inferred as A, AAAA, or CNAME from the value.
 - Made Linux the explicit host platform and moved the default managed
