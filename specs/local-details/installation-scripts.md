@@ -85,6 +85,10 @@ the selected backend in isolation, verifies its runtime, and deletes the VM
 overlay and SSH key on exit. A full source checkout retains its history; a
 shallow checkout is converted to a self-contained single-commit repository
 before bundling. Uncommitted and untracked files are intentionally excluded.
+The runc check installs the source verification toolchain after the host
+installer and runs `just verify-self-development`, covering the canonical
+Project's unprivileged agent, private rootless-DinD sidecar, and installed
+RootlessKit AppArmor profile end to end.
 The base cloud image is cached under `.local/kvm`. Default output names each
 stage and emits only the final 30 lines of a failing stage; `--verbose`
 streams full guest, build, and workload logs.

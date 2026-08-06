@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- Extended disposable runc QEMU verification to exercise the canonical DIM
+  self-Project, its private rootless-DinD sidecar, and the installed
+  RootlessKit AppArmor profile together.
+
 ## [0.5.0] - 2026-08-01
 
 ### Changed

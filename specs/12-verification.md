@@ -157,6 +157,10 @@ Host installation scripts must be verified by:
 `scripts/kvm-host-install-smoke.bash BACKEND` verifies one backend installer in
 a disposable VM. `just verify-environments-kvm` requires QEMU and writable
 `/dev/kvm` and runs the gate for every backend in a separate VM.
+The runc guest must additionally run `just verify-self-development` after the
+host installer completes. This verifies the canonical DIM Project, its
+unprivileged agent and private rootless-DinD sidecar, and the path-scoped
+RootlessKit AppArmor profile together on a clean Ubuntu host.
 The Sysbox guest must additionally verify a privileged trusted workspace using
 its directly passed `/dev/kvm` with QEMU, absence of Sysbox registration in
 the workspace's Project daemon, and a separate unprivileged Sysbox isolation

@@ -14,14 +14,68 @@ release scheduled to become LTS (currently Node.js 24 and 26). Container and
 Sysbox integration checks use the newest validated line.
 
 ```bash
-just ci-matrix --manual
+just ci-matrix
 ```
 
 This uses mise to reproduce the Node.js 24/26 CI workflow matrix and the
-Node.js 26 container lane, followed by both manually dispatched Sysbox and KVM
-workflows. It requires the same Sysbox, QEMU, and `/dev/kvm` host capabilities
-as their self-hosted runners. Review every package dry-run listing and confirm
-it contains its README, MIT license, runtime files, and publishable manifest.
+Node.js 26 container lane. Review every package dry-run listing and confirm it
+contains its README, MIT license, runtime files, and publishable manifest.
+
+Run the manual backend gates locally from the committed release candidate:
+
+```bash
+just ci-sysbox
+just verify-environments-kvm
+```
+
+The KVM gate uses a separate clean Ubuntu guest for each backend. Its runc
+guest installs the RootlessKit AppArmor profile through the host installer and
+runs the canonical self-Project verification, including the unprivileged agent
+and its private rootless-DinD sidecar. `just ci-matrix --manual` is the combined
+local shorthand for the automatic matrix and both manual backend gates.
+
+Finally, run the two manual GitHub workflows on actual ephemeral self-hosted
+runners. The workflow definitions must already be present on the repository's
+default branch, and the release commit must be pushed before dispatch.
+
+Build and verify the reviewed runner image once:
+
+```bash
+just build-github-runner-kvm
+just verify-github-runner-kvm
+gh auth status
+```
+
+For each workflow below, start one ephemeral runner in the first terminal. Wait
+until it reports that it is registered and waiting for one job:
+
+```bash
+GITHUB_RUNNER_URL=https://github.com/slop-lab/dev-infra-manager \
+just run-github-runner-kvm
+```
+
+Then dispatch exactly one workflow at the pushed release ref from a second
+terminal and watch it to completion:
+
+```bash
+gh workflow run sysbox-smoke.yml --ref RELEASE_REF
+run_id="$(gh run list --workflow sysbox-smoke.yml --branch RELEASE_REF \
+  --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')"
+gh run watch "$run_id" --exit-status
+```
+
+Start a fresh ephemeral runner, then repeat for the KVM installer workflow:
+
+```bash
+gh workflow run kvm-backend-install.yml --ref RELEASE_REF
+run_id="$(gh run list --workflow kvm-backend-install.yml --branch RELEASE_REF \
+  --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')"
+gh run watch "$run_id" --exit-status
+```
+
+Each runner accepts one job and deletes its VM overlay and SSH key afterward.
+Confirm both workflow runs used the intended release commit and completed
+successfully before publishing.
 
 ## Publish
 

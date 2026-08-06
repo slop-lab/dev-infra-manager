@@ -127,6 +127,22 @@ rootless_podman_caps=(SYS_ADMIN SETUID SETGID SYS_CHROOT SYS_PTRACE AUDIT_WRITE 
 rootless_podman_cap_flags=""
 for cap in "${rootless_podman_caps[@]}"; do rootless_podman_cap_flags+=" --cap-add $cap"; done
 run_step "run $backend workload" ssh "${ssh_args[@]}" dim@127.0.0.1 "set -e; sudo docker info >/dev/null; sudo docker compose version >/dev/null; case '$backend' in all|sysbox) systemctl is-active sysbox; sudo docker run --rm --runtime=sysbox-runc hello-world >/dev/null;; esac; case '$backend' in all|gvisor) runsc --version; sudo docker run --rm --runtime=runsc hello-world >/dev/null;; esac; case '$backend' in rootless-podman) test -c /dev/fuse; command -v newuidmap; command -v newgidmap; cd dim; sudo docker build -t dev-infra-project-workspace-podman:latest images/project-workspace-podman; sudo docker run --rm --runtime=runc$rootless_podman_cap_flags --device /dev/fuse --security-opt seccomp=unconfined --security-opt apparmor=unconfined --security-opt systempaths=unconfined dev-infra-project-workspace-podman:latest podman run --rm docker.io/library/hello-world;; esac; case '$backend' in all|runc) sudo docker run --rm --runtime=runc hello-world >/dev/null;; esac"
+if [[ "$backend" == runc ]]; then
+  run_step "install self-project verification tools" \
+    ssh "${ssh_args[@]}" dim@127.0.0.1 '
+      set -e
+      curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource-setup.bash
+      sudo bash /tmp/nodesource-setup.bash >/dev/null
+      rm -f /tmp/nodesource-setup.bash
+      sudo apt-get install -y nodejs >/dev/null
+      sudo npm install --global pnpm@10.13.1 >/dev/null
+      cd dim
+      pnpm install --frozen-lockfile >/dev/null
+    '
+  run_step "verify canonical self Project and private rootless DinD" \
+    ssh "${ssh_args[@]}" dim@127.0.0.1 \
+      "cd dim && just verify-self-development"
+fi
 if [[ "$backend" == sysbox ]]; then
   run_step "install trusted-workspace build tools" \
     ssh "${ssh_args[@]}" dim@127.0.0.1 '
