@@ -79,6 +79,26 @@ repositories:
 dim project create example --repos repos.yml
 ```
 
+Several managed repositories may also share one external Git repository
+without rewriting commits. Assign each non-fallback repository a disjoint ref
+prefix; refs not claimed by those prefixes belong to the explicit fallback:
+
+```yaml
+schemaVersion: 1
+upstreams:
+  product:
+    url: https://example.com/product.git
+repositories:
+  root: {upstream: product, fallback: true, root: true, ref: main}
+  api: {upstream: product, refPrefix: api/}
+```
+
+Here managed `api` branch `main` maps to external branch `api/main`, while the
+root's `main` remains external `main`. The same rule applies to tags. Prefixes
+must end in `/` and may not overlap; each shared upstream may have at most one
+fallback. Unmatched refs are ignored when no fallback is declared. See the
+[shared-upstream feature example](../examples/features/shared-upstream/README.md).
+
 DIM directly clones only the configured root. The root `.dim` lifecycle reads
 `DIM_PROJECT_MANIFEST` and the Project-specific `DIM_GIT_BASE_URL`, then
 constructs stable URLs such as `$DIM_GIT_BASE_URL/product.git`. The Project

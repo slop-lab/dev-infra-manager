@@ -21,6 +21,10 @@ import {
   ProcessRunner,
   parseRepositorySetYaml,
   assertRepositorySetCanCreateProject,
+  mapExternalRefToRepository,
+  mapRepositoryRefToExternal,
+  resolveRepositoryConnection,
+  type RepositoryRefNamespace,
   type RepositorySet,
   type RepositorySetEntry,
   initializeControllerRoutes,
@@ -113,6 +117,7 @@ repo.command("add")
   .action(async (projectName: string, alias: string, url: string | undefined, flags: RepoFlags & { applyRepos?: boolean; mirror?: boolean }) => {
     const repository = await addRepository(projectName, alias, {
       ...(url === undefined ? {} : { url }),
+      fallback: false,
       root: flags.root ?? false,
       ...(flags.ref === undefined ? {} : { rootRef: flags.ref }),
       protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect),
@@ -979,6 +984,7 @@ interface PreparedRepositoryTransfer {
 
 interface PreparedRepositorySync {
   externalUrl: string;
+  refNamespace?: RepositoryRefNamespace;
   managedUrl: string;
   writerUsername: string;
   writerPassword: string;
@@ -995,10 +1001,11 @@ async function fetchRepository(projectName: string, alias: string, prune: boolea
     await runGit(["init", "--bare", gitDirectory], process.env, "initialize temporary repository");
     await runGit([
       "--git-dir", gitDirectory,
-      "fetch", prepared.externalUrl,
-      "+refs/heads/*:refs/heads/upstream/*",
-      "refs/tags/*:refs/tags/*"
+      "fetch", "--no-tags", prepared.externalUrl,
+      "+refs/heads/*:refs/dim-external/heads/*",
+      "+refs/tags/*:refs/dim-external/tags/*"
     ], process.env, `fetch external repository '${projectName}/${alias}'`);
+    await materializeExternalRefs(gitDirectory, prepared.refNamespace, true);
 
     const managedEnvironment = managedGitEnvironment(prepared);
     const upstreamRefs = await localRefs(gitDirectory, "refs/heads/upstream");
@@ -1065,10 +1072,16 @@ async function pushRepository(projectName: string, alias: string, refspecs: stri
       "fetch", prepared.managedUrl,
       ...sourceRefs
     ], managedGitEnvironment(prepared), `read managed repository '${projectName}/${alias}'`);
+    const externalRefspecs = refspecs.map((refspec) => {
+      const separator = refspec.indexOf(":");
+      const source = refspec.slice(0, separator);
+      const destination = refspec.slice(separator + 1);
+      return `${source}:${mapRepositoryRefToExternal(prepared.refNamespace, destination)}`;
+    });
     await runGit([
       "--git-dir", gitDirectory,
       "push", prepared.externalUrl,
-      ...refspecs
+      ...externalRefspecs
     ], process.env, `push external repository '${projectName}/${alias}'`);
   } finally {
     await rm(temporary, { recursive: true, force: true });
@@ -1108,6 +1121,36 @@ async function localRefs(gitDirectory: string, prefix: string): Promise<string[]
   return result.stdout.split("\n").map((ref) => ref.trim()).filter(Boolean);
 }
 
+async function materializeExternalRefs(
+  gitDirectory: string,
+  namespace: RepositoryRefNamespace | undefined,
+  upstreamBranches: boolean
+): Promise<void> {
+  const result = await runner.run("git", [
+    "--git-dir", gitDirectory,
+    "for-each-ref", "--format=%(objectname) %(refname)", "refs/dim-external"
+  ], { env: process.env });
+  if (result.exitCode !== 0) throw new UserError("failed to inspect external refs");
+  for (const line of result.stdout.split("\n").map((item) => item.trim()).filter(Boolean)) {
+    const separator = line.indexOf(" ");
+    const objectId = line.slice(0, separator);
+    const stagingRef = line.slice(separator + 1);
+    const externalRef = stagingRef.startsWith("refs/dim-external/heads/")
+      ? `refs/heads/${stagingRef.slice("refs/dim-external/heads/".length)}`
+      : `refs/tags/${stagingRef.slice("refs/dim-external/tags/".length)}`;
+    const repositoryRef = mapExternalRefToRepository(namespace, externalRef);
+    if (repositoryRef === undefined) continue;
+    const targetRef = upstreamBranches && repositoryRef.startsWith("refs/heads/")
+      ? `refs/heads/upstream/${repositoryRef.slice("refs/heads/".length)}`
+      : repositoryRef;
+    await runGit(
+      ["--git-dir", gitDirectory, "update-ref", targetRef, objectId],
+      process.env,
+      `map external ref '${externalRef}'`
+    );
+  }
+}
+
 async function remoteRefs(url: string, pattern: string, env: NodeJS.ProcessEnv): Promise<string[]> {
   const result = await runner.run("git", ["ls-remote", "--refs", url, pattern], { env });
   if (result.exitCode !== 0) throw new UserError("failed to inspect managed upstream refs");
@@ -1144,7 +1187,9 @@ async function approveRepositoryPlan(plan: RepositorySetPlan, yes: boolean, show
   const changed = plan.actions.filter(({ action }) => action !== "unchanged");
   if (show) {
     for (const action of plan.actions) {
-      console.log(`${action.action}\t${action.alias}\t${action.entry.url ?? "(empty)"}${action.detail ? `\t${action.detail}` : ""}`);
+      const source = action.entry.url
+        ?? (action.entry.upstream === undefined ? "(empty)" : `upstream:${action.entry.upstream}`);
+      console.log(`${action.action}\t${action.alias}\t${source}${action.detail ? `\t${action.detail}` : ""}`);
     }
   }
   const conflicts = plan.actions.filter(({ action }) => action === "conflict");
@@ -1171,7 +1216,7 @@ async function applyRepositorySet(
   for (const action of plan.actions) {
     if (action.action === "unchanged") continue;
     if (action.action === "conflict") throw new UserError(`repository '${action.alias}' conflicts with existing state`);
-    results.push(await addRepository(projectName, action.alias, action.entry));
+    results.push(await addRepository(projectName, action.alias, action.entry, set));
   }
   return results;
 }
@@ -1179,14 +1224,21 @@ async function applyRepositorySet(
 async function addRepository(
   projectName: string,
   alias: string,
-  entry: RepositorySetEntry & { mirror?: boolean }
+  entry: RepositorySetEntry & { mirror?: boolean },
+  set?: RepositorySet
 ): Promise<Record<string, unknown>> {
+  const connection = set === undefined
+    ? (entry.url === undefined ? undefined : { url: entry.url })
+    : resolveRepositoryConnection(set, alias);
   const prepared = await adminCall<PreparedRepositoryTransfer>("repo.prepare", {
     project: projectName,
     alias,
     root: entry.root,
     protectedPatterns: entry.protectedPatterns,
-    ...(entry.url === undefined ? {} : { source: entry.url }),
+    ...(connection === undefined ? {} : {
+      source: connection.url,
+      ...(connection.refNamespace === undefined ? {} : { refNamespace: connection.refNamespace })
+    }),
     ...(entry.rootRef === undefined ? {} : { rootRef: entry.rootRef })
   });
   if (!prepared.transferId || !prepared.sourceUrl) return prepared.repository;
@@ -1197,11 +1249,14 @@ async function addRepository(
     if (exitCode === 0) {
       exitCode = await runner.runStreaming("git", [
         "--git-dir", mirror,
-        "fetch", prepared.sourceUrl,
+        "fetch", "--no-tags", prepared.sourceUrl,
         ...(entry.mirror
           ? ["+refs/*:refs/*"]
-          : ["+refs/heads/*:refs/heads/*", "refs/tags/*:refs/tags/*"])
+          : ["+refs/heads/*:refs/dim-external/heads/*", "+refs/tags/*:refs/dim-external/tags/*"])
       ], { env: process.env });
+    }
+    if (exitCode === 0 && !entry.mirror) {
+      await materializeExternalRefs(mirror, connection?.refNamespace, false);
     }
     if (exitCode === 0) {
       if (!prepared.writerUsername || !prepared.writerPassword) {

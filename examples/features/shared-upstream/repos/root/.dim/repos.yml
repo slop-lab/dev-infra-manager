@@ -1,0 +1,13 @@
+schemaVersion: 1
+upstreams:
+  product:
+    url: __DIM_SHARED_UPSTREAM_URL__
+repositories:
+  root:
+    upstream: product
+    fallback: true
+    root: true
+    ref: main
+  api:
+    upstream: product
+    refPrefix: api/

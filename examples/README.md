@@ -14,13 +14,15 @@ support process:
 - [Managed CI runner](features/ci-runner/README.md)
 - [External URLs](features/external-urls/README.md)
 - [External URL route policy](features/external-url-route-policy/README.md)
+- [Several managed repositories in one upstream](features/shared-upstream/README.md)
 
 ## Verification
 
-Every runnable example stores repository fixtures under `repos/<alias>`.
-The common fixture helper discovers those aliases, creates disposable Git
-repositories, rewrites the root `repos.yml` to their temporary locations, and
-lets the example register the complete set in its temporary managed Gitea.
+Every runnable example stores logical repository fixtures under
+`repos/<alias>`. Its materializer creates the required disposable external Git
+layout—normally one remote per alias, or a namespaced shared remote when that
+layout is the feature being demonstrated—and registers the complete set in a
+temporary managed Gitea.
 
 Run an example against the currently installed host runtimes:
 
@@ -50,8 +52,8 @@ The second argument controls a dirty source checkout:
 - `use` snapshots tracked changes and non-ignored untracked files.
 - `discard` verifies committed `HEAD` without modifying the checkout.
 
-The optional third argument selects one example (`project`, `ci-runner`, or
-`external-urls`) instead of the compatible suite.
+The optional third argument selects one example (`project`, `ci-runner`,
+`external-urls`, or `shared-upstream`) instead of the compatible suite.
 
 If a broader integration example becomes useful, it should be added as
 `all-in-one/` and exercise all major supported capabilities together. Special

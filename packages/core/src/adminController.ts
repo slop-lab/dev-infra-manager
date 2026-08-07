@@ -36,7 +36,11 @@ import type { RegisteredDimPlugins } from "./plugin.js";
 import { ProcessRunner } from "./runner.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { isUserError, UserError } from "./errors.js";
-import { parseRepositorySetYaml, validateRepositorySet } from "./repositorySet.js";
+import {
+  parseRepositorySetYaml,
+  validateRepositoryRefNamespace,
+  validateRepositorySet
+} from "./repositorySet.js";
 import {
   disableCiRunner,
   enableCiRunner,
@@ -147,23 +151,29 @@ async function builtinCall(
       );
     case "repo.prepare": {
       const alias = text("alias");
-      const entry = validateRepositorySet({
+      const repositorySet = validateRepositorySet({
         schemaVersion: 1,
+        upstreams: {},
         repositories: {
           [alias]: {
             root: input.root === true,
+            fallback: false,
             protectedPatterns: stringArray(input.protectedPatterns),
             ...(input.source === undefined ? {} : { url: text("source") }),
             ...(input.rootRef === undefined ? {} : { rootRef: text("rootRef") })
           }
         }
-      }).repositories[alias]!;
+      });
+      const entry = repositorySet.repositories[alias]!;
       return prepareProjectRepositoryTransfer(runner, lifecycle, {
         project: text("project"),
         alias,
         root: entry.root,
         protectedPatterns: entry.protectedPatterns,
         ...(entry.url === undefined ? {} : { source: entry.url }),
+        ...(input.refNamespace === undefined
+          ? {}
+          : { refNamespace: validateRepositoryRefNamespace(input.refNamespace, "refNamespace") }),
         ...(entry.rootRef === undefined ? {} : { rootRef: entry.rootRef })
       });
     }

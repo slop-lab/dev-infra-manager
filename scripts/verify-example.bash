@@ -31,7 +31,7 @@ BACKEND:
   current-installed | sysbox | gvisor | rootless-podman | runc
 
 EXAMPLE:
-  all | project | ci-runner | external-urls
+  all | project | ci-runner | external-urls | shared-upstream
 
 POLICY:
   auto     reject a dirty source repository
@@ -69,8 +69,8 @@ case "$dirty_policy" in
   *) echo "dirty repository policy must be auto, use, or discard" >&2; exit 2 ;;
 esac
 case "$selection" in
-  all|project|ci-runner|external-urls) ;;
-  *) echo "example must be all, project, ci-runner, or external-urls" >&2; exit 2 ;;
+  all|project|ci-runner|external-urls|shared-upstream) ;;
+  *) echo "example must be all, project, ci-runner, external-urls, or shared-upstream" >&2; exit 2 ;;
 esac
 work_dir="$(mktemp -d /tmp/dim-example-verification.XXXXXX)"
 cleanup() {
@@ -84,7 +84,7 @@ verification_source="$DIM_GIT_CLONE_SOURCE"
 if [[ "$backend" != current-installed ]]; then
   export DIM_KVM_IMAGE_CACHE="${DIM_KVM_IMAGE_CACHE:-$repo_root/.local/kvm}"
   if [[ "$selection" == all ]]; then
-    qemu_examples=(project external-urls)
+    qemu_examples=(project external-urls shared-upstream)
     if [[ "$backend" == sysbox ]]; then
       qemu_examples+=(ci-runner)
     else
@@ -110,7 +110,7 @@ if [[ ! -d node_modules/.pnpm ]]; then
 fi
 
 if [[ "$selection" == all ]]; then
-  examples=(project external-urls)
+  examples=(project external-urls shared-upstream)
   if docker info --format '{{json .Runtimes}}' | grep -q '"sysbox-runc"'; then
     examples+=(ci-runner)
   else
@@ -129,6 +129,7 @@ for example in "${examples[@]}"; do
     project) smoke="example-project-smoke.bash" ;;
     ci-runner) smoke="ci-runner-example-smoke.bash" ;;
     external-urls) smoke="external-url-example-smoke.bash" ;;
+    shared-upstream) smoke="shared-upstream-example-smoke.bash" ;;
   esac
   echo "example[current-installed]: verify $example"
   bash "scripts/$smoke"

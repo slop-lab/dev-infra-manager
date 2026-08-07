@@ -209,6 +209,26 @@ dim repo push acme product \
 External authentication comes from the invoking host Git process. Pushes are
 non-forced.
 
+To keep DIM repositories separate while synchronizing them with one external
+Git repository, declare a shared upstream in `.dim/repos.yml`:
+
+```yaml
+schemaVersion: 1
+upstreams:
+  product:
+    url: https://github.com/example/product.git
+repositories:
+  root: {upstream: product, fallback: true, root: true, ref: main}
+  api: {upstream: product, refPrefix: api/}
+```
+
+Managed `api` ref `refs/heads/main` maps to external
+`refs/heads/api/main`; root refs that do not match `api/` keep their names.
+Branches and tags use the same mapping, and commit IDs are preserved. Prefixes
+must end in `/` and cannot overlap. A shared upstream has at most one explicit
+fallback; without one, unmatched refs are ignored. Repositories using `url`
+continue to synchronize with separate external repositories.
+
 Delete an unused non-root repository with:
 
 ```bash

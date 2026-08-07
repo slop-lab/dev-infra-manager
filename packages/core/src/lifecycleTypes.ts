@@ -73,6 +73,11 @@ export type ProjectRepositoryPhase = "creating" | "importing" | "ready" | "error
 export interface RepositoryConnection {
   name: "origin";
   url: string;
+  refNamespace?: {
+    prefix?: string;
+    fallback?: boolean;
+    excludedPrefixes?: string[];
+  };
 }
 
 export interface ProjectRepositoryRecord {

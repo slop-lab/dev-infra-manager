@@ -16,7 +16,13 @@ import type {
   ProjectRecord,
   ProjectRepositoryRecord
 } from "./lifecycleTypes.js";
-import { assertRepositorySetCanCreateProject, type RepositorySet, type RepositorySetEntry } from "./repositorySet.js";
+import {
+  assertRepositorySetCanCreateProject,
+  resolveRepositoryConnection,
+  type RepositoryRefNamespace,
+  type RepositorySet,
+  type RepositorySetEntry
+} from "./repositorySet.js";
 import type { CommandRunner } from "./types.js";
 
 export interface CreateRepositoryInput {
@@ -234,13 +240,16 @@ export async function planProjectRepositorySet(
   const actions = Object.entries(set.repositories).map(([alias, entry]): RepositorySetPlanAction => {
     const existing = project?.repositories.find((repo) => repo.alias === alias);
     if (!existing) return { action: "create", alias, entry };
-    const existingUrl = existing.connections.find((connection) => connection.name === "origin")?.url;
-    if (existingUrl !== entry.url) {
+    const requestedConnection = resolveRepositoryConnection(set, alias);
+    const existingConnection = existing.connections.find((connection) => connection.name === "origin");
+    if (JSON.stringify(existingConnection) !== JSON.stringify(requestedConnection === undefined
+      ? undefined
+      : { name: "origin", ...requestedConnection })) {
       return {
         action: "conflict",
         alias,
         entry,
-        detail: `existing origin is ${existingUrl ?? "(empty repository)"}`
+        detail: `existing origin is ${existingConnection?.url ?? "(empty repository)"}`
       };
     }
     const existingIsRoot = project?.rootRepositoryAlias === alias;
@@ -279,6 +288,7 @@ export interface PreparedRepositoryTransfer {
 
 export interface PreparedRepositorySync {
   externalUrl: string;
+  refNamespace?: RepositoryRefNamespace;
   managedUrl: string;
   writerUsername: string;
   writerPassword: string;
@@ -294,13 +304,14 @@ export async function prepareProjectRepositorySync(
   if (repository.phase !== "ready") {
     throw new UserError(`repo '${projectName}/${alias}' is not ready`);
   }
-  const externalUrl = repository.connections.find((connection) => connection.name === "origin")?.url;
-  if (externalUrl === undefined) {
+  const connection = repository.connections.find((candidate) => candidate.name === "origin");
+  if (connection === undefined) {
     throw new UserError(`repo '${projectName}/${alias}' has no external origin`);
   }
   const credentials = await ensureGitea(runner, options);
   return {
-    externalUrl,
+    externalUrl: connection.url,
+    ...(connection.refNamespace === undefined ? {} : { refNamespace: connection.refNamespace }),
     managedUrl: repository.hostUrl,
     writerUsername: credentials.writerUsername,
     writerPassword: credentials.writerPassword
@@ -310,7 +321,7 @@ export async function prepareProjectRepositorySync(
 export async function prepareProjectRepositoryTransfer(
   runner: CommandRunner,
   options: LifecycleOptions,
-  input: CreateRepositoryInput & { source?: string }
+  input: CreateRepositoryInput & { source?: string; refNamespace?: RepositoryRefNamespace }
 ): Promise<PreparedRepositoryTransfer> {
   const projectName = validateLifecycleName(input.project, "project");
   const alias = validateLifecycleName(input.alias, "repo alias");
@@ -320,9 +331,12 @@ export async function prepareProjectRepositoryTransfer(
     let project = await state.readProject(projectName);
     assertReadyProject(project);
     const existing = project.repositories.find((repo) => repo.alias === alias);
-    const existingUrl = existing?.connections.find((connection) => connection.name === "origin")?.url;
+    const requestedConnection = input.source === undefined
+      ? undefined
+      : { name: "origin" as const, url: input.source, ...(input.refNamespace === undefined ? {} : { refNamespace: input.refNamespace }) };
+    const existingConnection = existing?.connections.find((connection) => connection.name === "origin");
     if (existing?.phase === "ready") {
-      if (existingUrl !== input.source) {
+      if (JSON.stringify(existingConnection) !== JSON.stringify(requestedConnection)) {
         throw new UserError(`repo '${projectName}/${alias}' already exists with a different origin`);
       }
       if (input.root && project.rootRepositoryAlias !== alias) {
@@ -343,7 +357,7 @@ export async function prepareProjectRepositoryTransfer(
         targetUrl: existing.hostUrl
       };
     }
-    if (existing && existingUrl !== input.source) {
+    if (existing && JSON.stringify(existingConnection) !== JSON.stringify(requestedConnection)) {
       throw new UserError(`repo '${projectName}/${alias}' has a different pending origin`);
     }
     if (input.root && project.rootRepositoryAlias !== undefined && project.rootRepositoryAlias !== alias) {
@@ -357,7 +371,7 @@ export async function prepareProjectRepositoryTransfer(
           ...existing,
           phase: input.source === undefined ? "ready" : "importing",
           protectedPatterns: input.protectedPatterns,
-          connections: input.source === undefined ? [] : [{ name: "origin", url: input.source }],
+          connections: requestedConnection === undefined ? [] : [requestedConnection],
           ...(transferId === undefined ? {} : { transferId }),
           updatedAt: now
         }
@@ -368,7 +382,7 @@ export async function prepareProjectRepositoryTransfer(
           hostUrl: giteaHostCloneUrl(options, project.gitNamespace, alias),
           workspaceUrl: giteaInternalCloneUrl(project.gitNamespace, alias),
           phase: input.source === undefined ? "ready" : "importing",
-          connections: input.source === undefined ? [] : [{ name: "origin", url: input.source }],
+          connections: requestedConnection === undefined ? [] : [requestedConnection],
           ...(transferId === undefined ? {} : { transferId }),
           protectedPatterns: input.protectedPatterns,
           protectionPhase: "pending",
