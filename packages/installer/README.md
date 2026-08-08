@@ -28,6 +28,14 @@ commands and (once installed) the real CLI. With `npx`, repeat the pinned
 `npx '@slop-lab/dim-installer@0.5.0' ...` invocation each time you need the
 installer.
 
+The mise-installed facade uses an existing supported Node.js 24 or 26 when
+one is on `PATH`. Otherwise it runs itself through `mise exec node@24`, which
+installs Node.js 24 on demand without adding it to the global mise
+configuration. Consequently, the first `dim` invocation may require network
+access and take longer while Node.js is downloaded. A direct `--local-bin`
+CLI symlink bypasses this facade bootstrap and still requires Node.js 24 or
+26 on `PATH`.
+
 Never use `latest` for software that controls development containers or
 loads executable plugins — always pin an exact, reviewed version.
 

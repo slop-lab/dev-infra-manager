@@ -1,4 +1,4 @@
-import { copyFile, readFile, writeFile } from "node:fs/promises";
+import { chmod, copyFile, readFile, writeFile } from "node:fs/promises";
 import { minifyPackageJson } from "package.json-minifier";
 
 const sourcePath = new URL("../package.json", import.meta.url);
@@ -14,7 +14,7 @@ const output = minifyPackageJson(source, {
   includeFields: ["publishConfig"]
 });
 output.bin = {
-  dim: "cli.js"
+  dim: "dim"
 };
 
 if ("private" in output) {
@@ -22,5 +22,7 @@ if ("private" in output) {
 }
 
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);
+await copyFile(new URL("../src/dim", import.meta.url), new URL("../dist/dim", import.meta.url));
+await chmod(new URL("../dist/dim", import.meta.url), 0o755);
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
 await copyFile(new URL("../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));

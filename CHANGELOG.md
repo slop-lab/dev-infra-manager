@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- Made the npm installer facade bootstrap itself through `mise exec node@24`
+  when Node.js 24 or 26 is not already on `PATH`, so a mise installation no
+  longer requires Node.js in the global mise configuration.
+
 ## [0.5.0] - 2026-08-06
 
 ### Changed

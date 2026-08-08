@@ -9,6 +9,14 @@ implement `installer`, `install-cli`, or `install-plugin`, and the facade
 must not duplicate `@slop-lab/dim-cli`'s command tree or reimplement its
 behavior.
 
+The published executable is a POSIX launcher. When Node.js 24 or 26 is on
+`PATH`, it must run the facade with that executable. When no supported Node.js
+is on `PATH` but `mise` is available, it must run the facade through `mise
+exec node@24` so Node.js need not be present in the global mise configuration.
+When neither is available, it must fail with an actionable runtime error. This
+bootstrap applies only to the facade; a direct-mode CLI symlink still requires
+a supported Node.js on `PATH`.
+
 ## Command ownership
 
 The facade owns only:

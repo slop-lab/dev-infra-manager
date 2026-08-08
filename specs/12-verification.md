@@ -177,6 +177,10 @@ disposable container against a local npm registry seeded from freshly built
 tarballs, covering facade-only vs. proxied `--help`/`--version`, the
 mise-detected `--no-local-bin` default, and an explicit `--local-bin`
 override. See [Installer Facade](14-installer-facade.md).
+Package tests must additionally cover the published launcher's direct use of
+Node.js 24 or 26, its `mise exec node@24` fallback when the available Node.js
+is absent or unsupported, npm `.bin` symlink resolution, argv preservation,
+and its actionable failure when neither runtime path is available.
 
 `just verify-example BACKEND DIRTY external-urls` requires Docker. It proves
 `examples/features/external-urls/README.md` end to end: a host DIM controller,

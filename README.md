@@ -79,6 +79,10 @@ mise use -g 'npm:@slop-lab/dim-installer@0.5.0'
 dim install-cli
 ```
 
+The mise-installed facade provisions Node.js 24 on demand when no supported
+Node.js is on `PATH`; Node.js does not need to be added to the global mise
+configuration. The first `dim` invocation may therefore download Node.js.
+
 or, without mise:
 
 ```bash

@@ -14,7 +14,7 @@
   "private": true,
   "type": "module",
   "bin": {
-    "dim": "./dist/cli.js"
+    "dim": "./dist/dim"
   },
   "scripts": {
     "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",

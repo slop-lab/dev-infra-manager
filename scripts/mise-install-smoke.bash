@@ -5,9 +5,11 @@ set -euo pipefail
 # path end to end inside a disposable container: a local npm registry is
 # seeded with the freshly built package tarballs (never the real npm
 # registry), mise resolves/installs the installer facade through it, and the
-# resulting `dim` runs the same dispatch checks the design doc requires
-# (facade-only help/version, mise-detected --no-local-bin default, explicit
-# --local-bin override, env var passthrough to the proxied DIM CLI).
+# resulting `dim` runs the same dispatch checks the design doc requires. The
+# image's Node.js is then removed from PATH to prove the facade bootstraps
+# Node.js 24 through `mise exec` without adding Node.js to global mise config,
+# including facade-only help/version, the mise-detected --no-local-bin default,
+# an explicit --local-bin override, and proxying to the installed DIM CLI.
 #
 # Requires Docker. Network access is required to install mise and to let the
 # local registry proxy ordinary public dependencies (e.g. commander) that
@@ -83,8 +85,18 @@ mise --version
 echo "[container] mise use -g npm:@slop-lab/dim-installer@$DIM_PACKAGE_VERSION"
 mise use -g "npm:@slop-lab/dim-installer@$DIM_PACKAGE_VERSION" >/dev/null
 
-export PATH="$HOME/.local/share/mise/shims:$PATH"
+echo "[container] remove the image Node.js from PATH; keep only mise and system utilities"
+export PATH="$HOME/.local/share/mise/shims:$HOME/.local/bin:/usr/bin:/bin"
 hash -r
+if node --version >/dev/null 2>&1; then
+  echo "expected no active Node.js before the DIM facade bootstrap" >&2
+  exit 1
+fi
+if mise ls --global | grep -Eq '^node[[:space:]]'; then
+  echo "expected Node.js to be absent from global mise configuration" >&2
+  exit 1
+fi
+
 dim_path="$(command -v dim)"
 echo "resolved dim: $dim_path"
 case "$dim_path" in
@@ -104,7 +116,7 @@ echo "[container] dim install-cli with no explicit flag under mise (expect --no-
 dim install-cli
 test ! -e "$HOME/.local/bin/dim"
 config_path="$HOME/.config/dim/config.json"
-mode="$(node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).cli.mode)" "$config_path")"
+mode="$(mise exec node@24 -- node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).cli.mode)" "$config_path")"
 test "$mode" = "proxied"
 
 echo "[container] dim --version after install (matching versions, proxied)"
@@ -116,6 +128,11 @@ echo "[container] dim --help proxied to the real DIM CLI with facade footer"
 help2="$(dim --help)"
 grep -q "Isolated, persistent development workspaces" <<<"$help2"
 grep -q "Running via the DIM installer facade" <<<"$help2"
+
+if mise ls --global | grep -Eq '^node[[:space:]]'; then
+  echo "facade bootstrap must not add Node.js to global mise configuration" >&2
+  exit 1
+fi
 
 echo "[container] explicit --local-bin overrides the mise auto-detected default"
 dim install-cli --local-bin

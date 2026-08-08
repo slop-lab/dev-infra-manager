@@ -1,0 +1,21 @@
+#!/bin/sh
+set -eu
+
+launcher_path=$(readlink -f -- "$0")
+script_dir=$(CDPATH= cd -- "$(dirname -- "$launcher_path")" && pwd)
+
+if command -v node >/dev/null 2>&1; then
+  node_major=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)
+  case "$node_major" in
+    24|26)
+      exec node "$script_dir/cli.js" "$@"
+      ;;
+  esac
+fi
+
+if command -v mise >/dev/null 2>&1; then
+  exec mise exec node@24 -- node "$script_dir/cli.js" "$@"
+fi
+
+echo "dim: Node.js 24 or 26 is required; install it or install mise so DIM can provision Node.js 24 on demand" >&2
+exit 127
