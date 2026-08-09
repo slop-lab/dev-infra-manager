@@ -12,10 +12,25 @@ For a complete, tested, end-to-end walkthrough instead of a reference, see
 Create Project metadata and import a root using the invoking host Git CLI:
 
 ```bash
-dim project create example
-dim repo add example root https://github.com/example/product \
-  --root --ref main --protect main
+dim project create example \
+  --root root \
+  --url https://github.com/example/product \
+  --ref main \
+  --protect main
 ```
+
+If the selected root ref contains `.dim/repos.yml`, an interactive invocation
+offers to apply it. Use `--apply-repos` to apply it without prompting or
+`--no-apply-repos` to skip it explicitly. Skipping never requires a local
+clone later:
+
+```bash
+dim repo plan example
+dim repo apply example --yes
+```
+
+Both commands read `.dim/repos.yml` from DIM's managed root when `--file` is
+omitted.
 
 The recorded URL remains the repository's external `origin`. Refresh its
 branches without overwriting DIM branches:
@@ -65,7 +80,8 @@ The command rejects a Project that still has workspaces. The root repository
 cannot be removed independently because every runnable Project must retain
 exactly one root; remove or purge the whole Project instead.
 
-For a complete set, use a `repos.yml` whose mapping keys are aliases:
+For a complete set, commit a `.dim/repos.yml` to the root repository whose
+mapping keys are aliases:
 
 ```yaml
 schemaVersion: 1
@@ -76,8 +92,15 @@ repositories:
 ```
 
 ```bash
-dim project create example --repos repos.yml
+dim project create example \
+  --root root \
+  --url https://example.com/product \
+  --ref main \
+  --apply-repos
 ```
+
+`project create --repos FILE` remains available when the repository set is a
+standalone local bootstrap input rather than reviewed root content.
 
 Several managed repositories may also share one external Git repository
 without rewriting commits. Assign each non-fallback repository a disjoint ref

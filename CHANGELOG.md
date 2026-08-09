@@ -9,6 +9,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Added a root-aware `project create` workflow that imports the root, offers
+  its managed `.dim/repos.yml`, supports explicit apply/skip choices, and
+  points skipped applications at the clone-free `repo apply` path.
 - Made the npm installer facade bootstrap itself through `mise exec node@24`
   when Node.js 24 or 26 is not already on `PATH`, so a mise installation no
   longer requires Node.js in the global mise configuration.

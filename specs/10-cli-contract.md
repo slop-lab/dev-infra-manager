@@ -26,6 +26,9 @@
 
 ```bash
 dim project create PROJECT [--repos FILE] [--yes]
+dim project create PROJECT --root ALIAS [--url URL] [--ref REF]
+  [--protect PATTERNS] [--mirror]
+  [--apply-repos | --no-apply-repos]
 dim project list
 dim project show PROJECT
 dim project remove PROJECT
@@ -37,6 +40,15 @@ dim project purge PROJECT --yes
 assembled without a root, but it is not runnable until it has exactly one root
 repository. Its ref is optional and falls back to the repository's symbolic
 `HEAD`; a missing configured ref and missing `HEAD` is an error.
+
+`project create --root` creates the Project and registers its root in one
+workflow. `--url` imports it through the invoking host Git CLI; omitting the
+URL creates an empty root. After importing a non-empty root, the CLI reads the
+selected managed root ref's optional `.dim/repos.yml`. `--apply-repos` applies
+it, `--no-apply-repos` skips it, and omitting both prompts only in a TTY. A
+declined or non-interactive default must print `dim repo apply PROJECT --yes`
+as the clone-free later path. The two flags are mutually exclusive and root
+options cannot be combined with `--repos FILE`.
 
 `remove` removes only DIM Project metadata. It preserves the managed Git
 organization and repositories and refuses while a workspace references the
@@ -86,7 +98,9 @@ and Project metadata. It rejects the Project root and any Project referenced
 by a workspace.
 
 The CLI asks before applying a discovered root file in a TTY. Non-interactive
-use requires `--yes` or `--apply-repos`; it never answers its own prompt.
+use requires `--yes` for `repo apply` or `--apply-repos` during root
+registration; it never answers its own prompt. `--no-apply-repos` explicitly
+skips discovery without disabling later clone-free `repo apply`.
 Repository-set planning and all state transitions use the admin API. External
 clone/push transport is a local CLI adapter so current host credential helpers,
 SSH configuration, and SSH agent are used. The managed Gitea credential is

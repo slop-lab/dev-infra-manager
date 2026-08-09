@@ -41,6 +41,30 @@ test("repository sync commands expose safe explicit contracts", () => {
   assert.match(invalid.stderr, /requires non-forced source:destination refspecs/);
 });
 
+test("project create exposes root bootstrap and explicit repository-set choices", () => {
+  const help = run(["project", "create", "--help"]);
+  assert.equal(help.status, 0);
+  for (const option of ["--root <alias>", "--url <url>", "--apply-repos", "--no-apply-repos"]) {
+    assert.match(help.stdout, new RegExp(option.replace(/[<>]/g, "\\$&")));
+  }
+
+  const missingRoot = run(["project", "create", "example", "--url", "https://example.com/root.git"]);
+  assert.notEqual(missingRoot.status, 0);
+  assert.match(missingRoot.stderr, /--root is required/);
+
+  const conflictingApply = run([
+    "project", "create", "example", "--root", "root", "--apply-repos", "--no-apply-repos"
+  ]);
+  assert.notEqual(conflictingApply.status, 0);
+  assert.match(conflictingApply.stderr, /--apply-repos and --no-apply-repos cannot be used together/);
+
+  const conflictingSources = run([
+    "project", "create", "example", "--repos", "repos.yml", "--root", "root"
+  ]);
+  assert.notEqual(conflictingSources.status, 0);
+  assert.match(conflictingSources.stderr, /--repos cannot be combined/);
+});
+
 test("CI runner commands expose lifecycle and configurable defaults", () => {
   const help = run(["ci", "runner", "--help"]);
   assert.equal(help.status, 0);

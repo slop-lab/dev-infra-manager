@@ -55,7 +55,12 @@ dim_register_example_repositories() {
   local manifest="$repositories/root/.dim/repos.yml"
 
   if [[ -f "$manifest" ]]; then
-    "$dim_bin" project create "$project" --repos "$manifest" --yes
+    "$dim_bin" project create "$project" \
+      --root root --url "$repositories/root" --ref main --protect main \
+      --no-apply-repos
+    # Prove a declined/skipped discovery remains recoverable from the managed
+    # root without passing the local manifest or cloning the repository again.
+    "$dim_bin" repo apply "$project" --yes
   else
     "$dim_bin" project create "$project"
     "$dim_bin" repo add "$project" root "$repositories/root" \

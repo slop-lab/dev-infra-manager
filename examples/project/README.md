@@ -32,9 +32,17 @@ The registration script runs:
 
 ```bash
 dim project create example \
-  --repos example-repositories/root/.dim/repos.yml \
-  --yes
+  --root root \
+  --url example-repositories/root \
+  --ref main \
+  --protect main \
+  --no-apply-repos
+dim repo apply example --yes
 ```
+
+The example deliberately skips the discovered set and then applies it from
+the managed root to verify that declining `Apply it?` never requires another
+local clone. Normal unattended setup can use `--apply-repos` directly.
 
 Only the root repository is cloned automatically into the trusted workspace.
 Reviewed lifecycle code can reach the other managed repositories through

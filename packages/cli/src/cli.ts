@@ -58,20 +58,66 @@ project.command("create")
   .description("Create a project and its managed Git namespace")
   .argument("<project>")
   .option("--repos <file>", "create and populate from a repos.yml file")
+  .option("--root <alias>", "import or create the root repository with this alias")
+  .option("--url <url>", "import the root repository from this Git URL or path")
+  .option("--ref <branch-or-ref>", "root branch/ref; defaults to the repository HEAD")
+  .option("--protect <patterns>", "comma-separated protected branch patterns")
+  .option("--mirror", "import every root ref instead of only branches and tags")
+  .option("--apply-repos", "apply the root .dim/repos.yml without prompting")
+  .option("--no-apply-repos", "do not apply the root .dim/repos.yml")
   .option("--yes", "apply the repository plan without prompting")
   .option("--json", "print machine-readable JSON")
-  .action(async (name: string, flags: JsonFlags & { repos?: string; yes?: boolean }) => {
-    if (flags.repos === undefined) {
+  .action(async (name: string, flags: JsonFlags & {
+    repos?: string;
+    root?: string;
+    url?: string;
+    ref?: string;
+    protect?: string;
+    applyRepos?: boolean;
+    mirror?: boolean;
+    yes?: boolean;
+  }) => {
+    const rootOptionsPresent = flags.root !== undefined
+      || flags.url !== undefined
+      || flags.ref !== undefined
+      || flags.protect !== undefined
+      || flags.mirror !== undefined
+      || flags.applyRepos !== undefined;
+    if (flags.repos !== undefined && rootOptionsPresent) {
+      throw new UserError("--repos cannot be combined with root repository options");
+    }
+    if (flags.root === undefined && rootOptionsPresent) {
+      throw new UserError("--root is required with --url, --ref, --protect, --mirror, or repository apply options");
+    }
+    if (process.argv.includes("--apply-repos") && process.argv.includes("--no-apply-repos")) {
+      throw new UserError("--apply-repos and --no-apply-repos cannot be used together");
+    }
+    if (flags.repos === undefined && flags.root === undefined) {
       print(await adminCall("project.create", { name }), flags);
       return;
     }
-    const set = await readRepositorySetFile(flags.repos);
-    assertRepositorySetCanCreateProject(set, flags.repos);
-    const plan = await repositorySetPlan(name, set, true);
-    await approveRepositoryPlan(plan, flags.yes ?? false, !flags.json);
+    if (flags.repos !== undefined) {
+      const set = await readRepositorySetFile(flags.repos);
+      assertRepositorySetCanCreateProject(set, flags.repos);
+      const plan = await repositorySetPlan(name, set, true);
+      await approveRepositoryPlan(plan, flags.yes ?? false, !flags.json);
+      await adminCall("project.create", { name });
+      const repositories = await applyRepositorySet(name, set, plan);
+      print({ project: name, repositories }, flags);
+      return;
+    }
+
     await adminCall("project.create", { name });
-    const repositories = await applyRepositorySet(name, set, plan);
-    print({ project: name, repositories }, flags);
+    const repository = await addRepository(name, flags.root!, {
+      ...(flags.url === undefined ? {} : { url: flags.url }),
+      fallback: false,
+      root: true,
+      ...(flags.ref === undefined ? {} : { rootRef: flags.ref }),
+      protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect),
+      mirror: flags.mirror ?? false
+    });
+    print({ project: name, repository }, flags);
+    await offerRootRepositorySet(name, flags.applyRepos);
   });
 
 project.command("list")
@@ -113,8 +159,15 @@ repo.command("add")
   .option("--protect <patterns>", "comma-separated protected branch patterns")
   .option("--mirror", "import every ref instead of only branches and tags")
   .option("--apply-repos", "apply .dim/repos.yml after adding the root")
+  .option("--no-apply-repos", "do not apply .dim/repos.yml after adding the root")
   .option("--json", "print machine-readable JSON")
   .action(async (projectName: string, alias: string, url: string | undefined, flags: RepoFlags & { applyRepos?: boolean; mirror?: boolean }) => {
+    if (process.argv.includes("--apply-repos") && process.argv.includes("--no-apply-repos")) {
+      throw new UserError("--apply-repos and --no-apply-repos cannot be used together");
+    }
+    if (!flags.root && flags.applyRepos !== undefined) {
+      throw new UserError("repository apply options require --root");
+    }
     const repository = await addRepository(projectName, alias, {
       ...(url === undefined ? {} : { url }),
       fallback: false,
@@ -124,7 +177,7 @@ repo.command("add")
       mirror: flags.mirror ?? false
     });
     print(repository, flags);
-    if (flags.root) await offerRootRepositorySet(projectName, flags.applyRepos ?? false);
+    if (flags.root) await offerRootRepositorySet(projectName, flags.applyRepos);
   });
 
 repo.command("plan")
@@ -1321,20 +1374,25 @@ async function addRepository(
   }
 }
 
-async function offerRootRepositorySet(projectName: string, apply: boolean): Promise<void> {
+async function offerRootRepositorySet(projectName: string, apply: boolean | undefined): Promise<void> {
   const response = await adminCall<{ found: boolean; repositorySet?: RepositorySet }>("repo.root-set", {
     project: projectName
   });
   if (!response.found || !response.repositorySet) return;
   const count = Object.keys(response.repositorySet.repositories).length;
+  const later = `Apply it later without a local clone: dim repo apply ${projectName} --yes`;
   if (apply) {
     const plan = await repositorySetPlan(projectName, response.repositorySet, false);
     await approveRepositoryPlan(plan, true);
     await applyRepositorySet(projectName, response.repositorySet, plan);
     return;
   }
+  if (apply === false) {
+    console.error(`Root contains .dim/repos.yml with ${count} repositories; it was not applied. ${later}`);
+    return;
+  }
   if (!interactive()) {
-    console.error(`Root contains .dim/repos.yml with ${count} repositories; run 'dim repo apply ${projectName} --yes'`);
+    console.error(`Root contains .dim/repos.yml with ${count} repositories; it was not applied. ${later}`);
     return;
   }
   const prompt = createInterface({ input: process.stdin, output: process.stdout });
@@ -1342,7 +1400,10 @@ async function offerRootRepositorySet(projectName: string, apply: boolean): Prom
     const answer = (await prompt.question(
       `Root contains .dim/repos.yml with ${count} repositories. Apply it? [y/N] `
     )).trim().toLowerCase();
-    if (answer !== "y" && answer !== "yes") return;
+    if (answer !== "y" && answer !== "yes") {
+      console.error(later);
+      return;
+    }
   } finally {
     prompt.close();
   }

@@ -120,19 +120,23 @@ integrations. It does not expose a generic Git-provider extension point. See
 ## Create a Project
 
 ```bash
-dim project create project
-dim repo add project root /path/to/project --root --ref main --protect main
+dim project create project \
+  --root root --url /path/to/project --ref main --protect main
 dim create project work-1
 dim run work-1 codex
 dim exec work-1 -- bash
 ```
 
-For several repositories, create the Project and import the complete set in
-one reviewed operation:
+When the root contains `.dim/repos.yml`, apply its reviewed repository set
+without requiring a separate local manifest:
 
 ```bash
-dim project create project --repos repos.yml
+dim project create project \
+  --root root --url /path/to/project --ref main --apply-repos
 ```
+
+If an interactive prompt is declined, apply the managed root file later
+without a local clone using `dim repo apply project --yes`.
 
 The keys below `repositories` are Project-scoped aliases; URLs are passed to
 the host Git CLI and are never parsed to invent a name.

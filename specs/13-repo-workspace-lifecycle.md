@@ -90,6 +90,10 @@ selected Project. Registering a root may offer to apply this file, but
 non-interactive use must opt in explicitly. Applying it never removes a
 managed repository omitted from the file. A standalone `repos.yml` with
 exactly one `root: true` may be passed to `project create --repos`.
+The normal bootstrap imports the root through `project create --root ALIAS
+--url URL`; it discovers `.dim/repos.yml` from the managed root ref and can
+apply, skip, or interactively offer that set without a local clone. A skipped
+set remains available through `repo plan` and `repo apply` with no `--file`.
 
 ```text
 DIM_PROJECT_ID

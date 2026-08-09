@@ -79,12 +79,12 @@ into workspaces.
 
 ## First Project
 
-Create a Project and an empty root repository:
+Create a Project and import its root repository:
 
 ```bash
-dim project create acme
-dim repo add acme root /path/to/acme \
-  --root --ref main --protect main,development
+dim project create acme \
+  --root root --url /path/to/acme \
+  --ref main --protect main,development
 ```
 
 `repo add` runs source clone through the invoking host Git CLI, so existing
@@ -95,13 +95,19 @@ The alias is explicit and scoped to the Project.
 dim repo add acme root https://example.com/acme.git --root --ref main
 ```
 
-For a repository set:
+When the imported root contains `.dim/repos.yml`, an interactive invocation
+offers to apply it. Choose explicitly for scripts:
 
 ```bash
-dim project create acme --repos repos.yml
-dim repo plan acme --file updated-repos.yml
-dim repo apply acme --file updated-repos.yml
+dim project create acme \
+  --root root --url https://example.com/acme.git \
+  --ref main --apply-repos
 ```
+
+Declining or using `--no-apply-repos` does not require another clone. Run
+`dim repo plan acme` and `dim repo apply acme --yes` to read the file from the
+managed root. `project create --repos FILE` is reserved for a standalone local
+bootstrap manifest.
 
 ## External workspace URLs
 
