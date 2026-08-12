@@ -149,6 +149,9 @@ no separate launcher needed.
 For a complete, tested walkthrough that exposes a nested development
 container and a container inside it through host-configured external URL
 ingresses, see [examples/features/external-urls](examples/features/external-urls/README.md).
+For the smallest complete Project with one unprotected repository and no
+secrets, see
+[examples/projects/single-repository](examples/projects/single-repository/README.md).
 
 See [glossary](docs/README.md#glossary), [docs/repo-workspaces.md](docs/repo-workspaces.md)
 for lifecycle, credential, and reconciliation details, and

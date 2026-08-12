@@ -203,7 +203,8 @@ examples against a real Docker daemon:
 
 ```bash
 just verify-mise-install-smoke   # mise use -g npm:@slop-lab/dim-installer, in a disposable container
-just verify-example current-installed auto project
+just verify-example current-installed auto single-repository
+just verify-example current-installed auto multi-repository
 just verify-example runc use
 just verify-example sysbox use ci-runner
 ```

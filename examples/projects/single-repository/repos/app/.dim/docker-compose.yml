@@ -1,0 +1,52 @@
+services:
+  agent:
+    build:
+      context: agent
+    environment:
+      DOCKER_HOST: "tcp://agent-dind:2375"
+      DIM_GIT_USERNAME: "${DIM_GIT_USERNAME:?}"
+      DIM_GIT_TOKEN: "${DIM_GIT_TOKEN:?}"
+      GIT_AUTHOR_NAME: "${GIT_AUTHOR_NAME:-}"
+      GIT_AUTHOR_EMAIL: "${GIT_AUTHOR_EMAIL:-}"
+      GIT_COMMITTER_NAME: "${GIT_COMMITTER_NAME:-}"
+      GIT_COMMITTER_EMAIL: "${GIT_COMMITTER_EMAIL:-}"
+      GIT_CONFIG_COUNT: "2"
+      GIT_CONFIG_KEY_0: credential.helper
+      GIT_CONFIG_VALUE_0: "!f() { echo username=$$DIM_GIT_USERNAME; echo password=$$DIM_GIT_TOKEN; }; f"
+      GIT_CONFIG_KEY_1: safe.directory
+      GIT_CONFIG_VALUE_1: /workspace
+    volumes:
+      - ..:/workspace
+      - agent-dind-shared:/mnt/workspace-shared-dind
+    networks:
+      - default
+      - agent-dind
+    working_dir: /workspace
+    depends_on:
+      agent-dind:
+        condition: service_healthy
+
+  agent-dind:
+    build:
+      context: dind
+    privileged: true
+    environment:
+      DOCKER_HOST: "tcp://127.0.0.1:2375"
+      DOCKER_TLS_CERTDIR: ""
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+    volumes:
+      - agent-dind-data:/home/rootless/.local/share/docker
+      - agent-dind-shared:/mnt/workspace-shared-dind
+    networks:
+      - agent-dind
+
+volumes:
+  agent-dind-data:
+  agent-dind-shared:
+
+networks:
+  agent-dind:

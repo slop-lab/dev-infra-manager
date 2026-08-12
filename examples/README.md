@@ -1,10 +1,14 @@
 # Examples
 
-## Project
+## Project examples
 
-[`project/`](project/README.md) is the canonical, copyable DIM Project. It
-demonstrates a reviewed root lifecycle repository together with ordinary
-application and secret-service repositories, and is verified end to end.
+Project examples are complete, copyable adoption shapes:
+
+- [`projects/single-repository/`](projects/single-repository/README.md) is the
+  default: one repository, no secrets or protected ref, resource limits, and
+  a Project-owned agent/private DinD pair, and an optional external URL.
+- [`projects/multi-repository/`](projects/multi-repository/README.md) adds
+  independent repository and secret-bearing review boundaries.
 
 ## Feature examples
 
@@ -52,9 +56,9 @@ The second argument controls a dirty source checkout:
 - `use` snapshots tracked changes and non-ignored untracked files.
 - `discard` verifies committed `HEAD` without modifying the checkout.
 
-The optional third argument selects one example (`project`, `ci-runner`,
-`external-urls`, or `shared-upstream`) instead of the compatible suite.
+The optional third argument selects one example (`single-repository`,
+`multi-repository`, `ci-runner`, `external-urls`, or `shared-upstream`) instead
+of the compatible suite.
 
-If a broader integration example becomes useful, it should be added as
-`all-in-one/` and exercise all major supported capabilities together. Special
-one-off examples should otherwise remain under `features/`.
+Complete adoption shapes belong under `projects/`; capability-focused and
+one-off examples belong under `features/`.

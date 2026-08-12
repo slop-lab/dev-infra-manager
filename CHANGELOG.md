@@ -9,6 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Split complete examples into single- and multi-repository Project shapes.
+  The new default example intentionally uses no `.dim/repos.yml`, protected
+  ref, or secret service while demonstrating a resource-bounded workspace,
+  unprivileged agent, private rootless DinD, and an optional external URL.
 - Added a root-aware `project create` workflow that imports the root, offers
   its managed `.dim/repos.yml`, supports explicit apply/skip choices, and
   points skipped applications at the clone-free `repo apply` path.
@@ -239,7 +243,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Added
 
 - [Multi-repository project
-  example](examples/project/README.md), with independent
+  example](examples/projects/multi-repository/README.md), with independent
   real-container verification of its materialized repository skeletons.
 - [External URL example](examples/features/external-urls/README.md), a copyable,
   dnsmasq-verified walkthrough covering a nested development container and a

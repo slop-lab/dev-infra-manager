@@ -219,13 +219,22 @@ plugin ingresses and create URLs for both nesting depths, fetches both
 sentinels from a separate curl container, and revokes the routes. The doc and
 script must change together.
 
-## Project Example Smoke
+## Multi-Repository Project Example Smoke
 
-`scripts/example-project-smoke.bash`, invoked by
-`just verify-example current-installed auto project`, builds and installs local packages,
-copies `examples/project/repos/` to a temporary directory, initializes and
+`scripts/multi-repository-example-smoke.bash`, invoked by
+`just verify-example current-installed auto multi-repository`, builds and installs local packages,
+copies `examples/projects/multi-repository/repos/` to a temporary directory, initializes and
 pushes real Git repositories, and
 verifies the documented workspace and secret boundary against managed Gitea.
 The trusted workspace deploys the reviewed secret service on its own nested
 Docker daemon; the smoke verifies the agent service's independent daemon
 cannot see that service and its environment does not contain the raw secret.
+
+## Single-Repository Project Example Smoke
+
+`scripts/single-repository-example-smoke.bash`, invoked by `just verify-example
+current-installed auto single-repository`, verifies the default
+one-repository/no-secret shape, including an unprotected direct `main` push,
+explicit workspace resource limits, an unprivileged Project-owned agent, its
+private rootless DinD sidecar, nested container execution, and the agent HTTP
+application.

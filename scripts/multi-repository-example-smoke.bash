@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Executes examples/project/README.md, command for command,
+# Executes examples/projects/multi-repository/README.md, command for command,
 # against a real Docker daemon and the environment's managed Gitea. Update
-# that doc (and the repository skeletons under examples/project/repos/)
+# that doc (and the repository skeletons under
+# examples/projects/multi-repository/repos/)
 # alongside this script if either changes; it
 # change; it exists specifically so the example cannot silently drift from
 # what actually works.
@@ -71,8 +72,8 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$repo_root"
-echo "[example-project] build and pack local packages"
-echo "[example-project] 1. install DIM through the installer facade"
+echo "[multi-repository] build and pack local packages"
+echo "[multi-repository] 1. install DIM through the installer facade"
 dim_install_example_cli "$repo_root" "$work_dir" "$install_prefix"
 test "$DIM_EXAMPLE_DIM_BIN" = "$dim_bin"
 test -x "$dim_bin"
@@ -85,15 +86,15 @@ docker build \
   "$repo_root" >/dev/null
 dim doctor
 
-echo "[example-project] 2. create the example repositories"
-bash "$repo_root/examples/project/create-repositories.bash" \
+echo "[multi-repository] 2. create the example repositories"
+bash "$repo_root/examples/projects/multi-repository/create-repositories.bash" \
   "$source_root" >/dev/null
 
 root_repo="$source_root/root"
 
-echo "[example-project] 3. register the Project and its repositories"
+echo "[multi-repository] 3. register the Project and its repositories"
 DIM_BIN="$dim_bin" bash \
-  "$repo_root/examples/project/register-project.bash" \
+  "$repo_root/examples/projects/multi-repository/register-project.bash" \
   "$project_name" "$source_root" >/dev/null
 
 # The whole point of --protect at create time: confirm the root branch is
@@ -233,7 +234,7 @@ test "$web_content" = "hello from example-web"
 
 echo "[example-project] 10. deploy the secret-bearing service at the trusted root boundary"
 DIM_BIN="$dim_bin" EXAMPLE_SECRET=not-a-real-secret \
-  bash "$repo_root/examples/project/deploy-secret.bash" \
+  bash "$repo_root/examples/projects/multi-repository/deploy-secret.bash" \
   "$workspace_name" >/dev/null
 
 root_health="$(dim exec "$workspace_name" -- \
@@ -261,4 +262,4 @@ dim exec "$workspace_name" -- sh ops/secret-service.sh remove-secret >/dev/null
 echo "[example-project] 11. clean up"
 dim discard "$workspace_name" --yes >/dev/null
 
-echo "example-project-smoke-ok"
+echo "multi-repository-example-smoke-ok"

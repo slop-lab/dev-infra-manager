@@ -1,8 +1,9 @@
-# Example Project
+# Multi-Repository Project
 
-This is the canonical, copyable DIM Project example. A Project commonly spans
-several repositories even though DIM's own self-development Project happens
-to need only one.
+This is the expanded DIM Project shape for cases that need independent
+repository or secret-bearing review boundaries. Start with the
+[`single-repository`](../single-repository/README.md) example unless those
+boundaries are useful.
 
 ```text
 repos/
@@ -16,7 +17,7 @@ reviewed repository set. The root repository owns Project lifecycle and task
 dispatch, while all three repositories remain part of the same reviewable
 Project.
 
-Feature-specific examples live under [`../features`](../features).
+Feature-specific examples live under [`../../features`](../../features).
 
 ## Try it
 
@@ -141,6 +142,6 @@ DIM contributors can materialize all three repositories and verify this exact
 example:
 
 ```bash
-just verify-example current-installed auto project
-just verify-example runc use project
+just verify-example current-installed auto multi-repository
+just verify-example runc use multi-repository
 ```

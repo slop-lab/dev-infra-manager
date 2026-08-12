@@ -105,7 +105,7 @@ image and direct access to a Docker host with `sysbox-runc`. It must cover:
 - Bidirectional image-store isolation using unique host-only and inner-only
   probe tags, independent of pre-existing image caches.
 
-The canonical Project example gate verifies managed Git, protected refs, and
+The multi-repository Project example gate verifies managed Git, protected refs, and
 trusted deployment of a reviewed secret-bearing child beside a Project-owned
 agent. It must use the example's generated `repos.yml`, prove the agent uses a
 distinct Docker daemon, cannot list the trusted workspace's secret-bearing
@@ -199,12 +199,19 @@ provider cleanup without external credentials.
 Ingress discovery, creation, and revocation must run through the public
 `dim external-url` CLI rather than project-specific curl wrappers.
 
-`just verify-example BACKEND DIRTY project` requires Docker and managed Gitea. It
-materializes the repositories under `examples/project/repos/` in a temporary
+`just verify-example BACKEND DIRTY multi-repository` requires Docker and managed Gitea. It
+materializes the repositories under `examples/projects/multi-repository/repos/` in a temporary
 directory and verifies the documented root-aware `project create --root
 --url --apply-repos` flow,
 protected refs, workspace, Project-owned agent, host Git identity, managed
 repository access, nested Docker, and secret-bearing service boundary.
+
+`just verify-example BACKEND DIRTY single-repository` verifies the default
+one-repository shape under `examples/projects/single-repository/`: no
+`.dim/repos.yml`, no protected ref or secret service, a direct agent-style
+push to `main`, explicit workspace resource limits, and an unprivileged
+Project-owned agent serving the application through its private rootless DinD
+sidecar boundary.
 
 ## Documentation Verification
 
