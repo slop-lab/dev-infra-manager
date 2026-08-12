@@ -169,7 +169,7 @@ jq -n \
   '{
     schemaVersion: 1,
     repositories: {
-      root: {url: $root, root: true, ref: "main", protect: ["release/*"]},
+      atlas: {url: $root, root: true, ref: "main", protect: ["release/*"]},
       api: {url: $api},
       worker: {url: $worker},
       docs: {url: $docs}
@@ -210,22 +210,21 @@ test "$("$dim_bin" repo show "$retry_project_name" root --json | jq -r .phase)" 
 
 echo "[multi-repository] custom bootstrap manifest does not replace the tracked root manifest"
 custom_manifest="$source_root/custom-repos.yml"
-jq '.repositories.root.protect = []' "$project_worktree/.dim/repos.yml" > "$custom_manifest"
+jq '.repositories.atlas.protect = []' "$project_worktree/.dim/repos.yml" > "$custom_manifest"
 "$dim_bin" project create "$custom_project_name" --repos "$custom_manifest" --yes >/dev/null
 custom_clone="$source_root/custom-managed-root"
-"$dim_bin" x git clone --quiet "$("$dim_bin" repo url "$custom_project_name" root)" "$custom_clone"
+"$dim_bin" x git clone --quiet "$("$dim_bin" repo url "$custom_project_name" atlas)" "$custom_clone"
 cmp "$project_worktree/.dim/repos.yml" "$custom_clone/.dim/repos.yml"
 "$dim_bin" project purge "$custom_project_name" --yes
 
 echo "[multi-repository] bootstrap from an authenticated private root URL and apply its manifest"
 "$dim_bin" project create "$project_name" \
-  --root root \
   --url "$source_git_base/root" \
   --ref main \
-  --protect 'release/*' \
   --apply-repos \
   >/dev/null
-root_url="$("$dim_bin" repo url "$project_name" root)"
+test "$("$dim_bin" project show "$project_name" --json | jq -r .rootRepositoryAlias)" = atlas
+root_url="$("$dim_bin" repo url "$project_name" atlas)"
 
 "$dim_bin" create "$project_name" "$workspace_name" \
   --profile development \

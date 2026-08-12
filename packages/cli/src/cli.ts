@@ -59,7 +59,7 @@ project.command("create")
   .argument("<project>")
   .option("--repos <file>", "create and populate from a repos.yml file")
   .option("--root <alias>", "import or create the root repository with this alias")
-  .option("--url <url>", "import the root repository from this Git URL or path")
+  .option("--url <url>", "discover .dim/repos.yml and import its root from this Git URL or path")
   .option("--ref <branch-or-ref>", "root branch/ref; defaults to the repository HEAD")
   .option("--protect <patterns>", "comma-separated protected branch patterns")
   .option("--mirror", "import every root ref instead of only branches and tags")
@@ -77,22 +77,23 @@ project.command("create")
     mirror?: boolean;
     yes?: boolean;
   }) => {
-    const rootOptionsPresent = flags.root !== undefined
-      || flags.url !== undefined
-      || flags.ref !== undefined
+    const rootOptionsPresent = flags.root !== undefined || flags.url !== undefined || flags.ref !== undefined
       || flags.protect !== undefined
       || flags.mirror !== undefined
       || flags.applyRepos !== undefined;
     if (flags.repos !== undefined && rootOptionsPresent) {
       throw new UserError("--repos cannot be combined with root repository options");
     }
-    if (flags.root === undefined && rootOptionsPresent) {
-      throw new UserError("--root is required with --url, --ref, --protect, --mirror, or repository apply options");
+    if (flags.root === undefined && flags.url === undefined && rootOptionsPresent) {
+      throw new UserError("--root or --url is required with --ref or repository apply options");
+    }
+    if (flags.root === undefined && (flags.protect !== undefined || flags.mirror !== undefined)) {
+      throw new UserError("--protect and --mirror require --root; manifest bootstrap reads root policy from .dim/repos.yml");
     }
     if (process.argv.includes("--apply-repos") && process.argv.includes("--no-apply-repos")) {
       throw new UserError("--apply-repos and --no-apply-repos cannot be used together");
     }
-    if (flags.repos === undefined && flags.root === undefined) {
+    if (flags.repos === undefined && flags.root === undefined && flags.url === undefined) {
       print(await adminCall("project.create", { name }), flags);
       return;
     }
@@ -107,15 +108,36 @@ project.command("create")
       return;
     }
 
-    await createOrResumeRootProject(name, flags.root!, flags.url);
-    const repository = await addRepository(name, flags.root!, {
+    let rootAlias = flags.root;
+    let rootSet: RepositorySet | undefined;
+    if (rootAlias === undefined) {
+      rootSet = await readRemoteRepositorySet(flags.url!, flags.ref);
+      assertRepositorySetCanCreateProject(rootSet, `${flags.url!}:.dim/repos.yml`);
+      [rootAlias] = Object.entries(rootSet.repositories).find(([, entry]) => entry.root)!;
+      const connection = resolveRepositoryConnection(rootSet, rootAlias);
+      if (connection?.url !== flags.url) {
+        throw new UserError(
+          `remote manifest root '${rootAlias}' URL '${connection?.url ?? "(empty)"}' does not match bootstrap URL '${flags.url}'`
+        );
+      }
+    }
+    const rootEntry = rootSet?.repositories[rootAlias];
+    if (flags.ref !== undefined && rootEntry?.rootRef !== undefined && flags.ref !== rootEntry.rootRef) {
+      throw new UserError(
+        `--ref '${flags.ref}' conflicts with manifest root ref '${rootEntry.rootRef}' for '${rootAlias}'`
+      );
+    }
+    const selectedRootRef = rootEntry?.rootRef ?? flags.ref;
+    await createOrResumeRootProject(name, rootAlias, flags.url);
+    const repository = await addRepository(name, rootAlias, {
       ...(flags.url === undefined ? {} : { url: flags.url }),
-      fallback: false,
+      fallback: rootEntry?.fallback ?? false,
       root: true,
-      ...(flags.ref === undefined ? {} : { rootRef: flags.ref }),
-      protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect),
+      ...(selectedRootRef === undefined ? {} : { rootRef: selectedRootRef }),
+      protectedPatterns: rootEntry?.protectedPatterns
+        ?? (flags.protect === undefined ? [] : commaSeparated(flags.protect)),
       mirror: flags.mirror ?? false
-    });
+    }, rootSet);
     print({ project: name, repository }, flags);
     await offerRootRepositorySet(name, flags.applyRepos);
   });
@@ -1215,6 +1237,32 @@ async function remoteRefs(url: string, pattern: string, env: NodeJS.ProcessEnv):
 async function readRepositorySetFile(file: string): Promise<RepositorySet> {
   const absolute = path.resolve(file);
   return parseRepositorySetYaml(await readFile(absolute, "utf8"), absolute);
+}
+
+async function readRemoteRepositorySet(url: string, ref?: string): Promise<RepositorySet> {
+  const temporary = await mkdtemp(path.join(tmpdir(), "dim-root-manifest-"));
+  const gitDirectory = path.join(temporary, "source.git");
+  try {
+    await runGit(["init", "--bare", gitDirectory], process.env, "initialize root manifest checkout");
+    await runGit(
+      ["--git-dir", gitDirectory, "fetch", "--depth=1", "--no-tags", url, ref ?? "HEAD"],
+      process.env,
+      `read root manifest from '${url}'`
+    );
+    const shown = await runner.run("git", [
+      "--git-dir", gitDirectory,
+      "show", "FETCH_HEAD:.dim/repos.yml"
+    ], { env: process.env });
+    if (shown.exitCode !== 0) {
+      const selected = ref ?? "HEAD";
+      throw new UserError(
+        `remote '${url}' ref '${selected}' does not contain .dim/repos.yml; provide --root ALIAS for a manifest-free repository`
+      );
+    }
+    return parseRepositorySetYaml(shown.stdout, `${url}:${ref ?? "HEAD"}:.dim/repos.yml`);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 }
 
 async function createOrResumeRootProject(name: string, alias: string, source: string | undefined): Promise<void> {

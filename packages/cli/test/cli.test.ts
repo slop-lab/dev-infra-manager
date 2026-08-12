@@ -48,9 +48,11 @@ test("project create exposes root bootstrap and explicit repository-set choices"
     assert.match(help.stdout, new RegExp(option.replace(/[<>]/g, "\\$&")));
   }
 
-  const missingRoot = run(["project", "create", "example", "--url", "https://example.com/root.git"]);
-  assert.notEqual(missingRoot.status, 0);
-  assert.match(missingRoot.stderr, /--root is required/);
+  const rootOnlyPolicy = run([
+    "project", "create", "example", "--url", "https://example.com/root.git", "--protect", "main"
+  ]);
+  assert.notEqual(rootOnlyPolicy.status, 0);
+  assert.match(rootOnlyPolicy.stderr, /--protect and --mirror require --root/);
 
   const conflictingApply = run([
     "project", "create", "example", "--root", "root", "--apply-repos", "--no-apply-repos"

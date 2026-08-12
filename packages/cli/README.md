@@ -79,33 +79,37 @@ into workspaces.
 
 ## First Project
 
-Create a Project and import its root repository:
+Create a Project from a repository whose `.dim/repos.yml` declares its stable
+root alias and policy:
 
 ```bash
 dim project create acme \
-  --root root --url /path/to/acme \
-  --ref main --protect main,development
+  --url /path/to/acme \
+  --ref main --apply-repos
 ```
 
 `repo add` runs source clone through the invoking host Git CLI, so existing
 credential helpers, SSH configuration, and SSH agent work for any Git URL.
-The alias is explicit and scoped to the Project.
+The manifest alias is explicit and scoped to the Project.
 If the source is temporarily unavailable, fix host connectivity or
 credentials and repeat the same `project create` command; DIM resumes only a
-failed root import with the same root alias and origin.
+failed root import with the same manifest-derived root alias and origin.
 
 ```bash
 dim repo add acme root https://example.com/acme.git --root --ref main
 ```
 
-When the imported root contains `.dim/repos.yml`, an interactive invocation
-offers to apply it. Choose explicitly for scripts:
+For a manifest-free repository, provide the root alias and policy explicitly:
 
 ```bash
 dim project create acme \
   --root root --url https://example.com/acme.git \
-  --ref main --apply-repos
+  --ref main --protect main
 ```
+
+With manifest bootstrap, an interactive invocation offers to apply additional
+repositories. Choose `--apply-repos` or `--no-apply-repos` explicitly in
+scripts.
 
 Managed-root manifests are read without a checkout, so use network/scp-style
 Git URLs or absolute paths in tracked `.dim/repos.yml`; relative filesystem

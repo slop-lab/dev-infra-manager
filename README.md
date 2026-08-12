@@ -121,19 +121,15 @@ integrations. It does not expose a generic Git-provider extension point. See
 
 ```bash
 dim project create project \
-  --root root --url /path/to/project --ref main --protect main
+  --url /path/to/project --ref main --apply-repos
 dim create project work-1
 dim run work-1 codex
 dim exec work-1 -- bash
 ```
 
-When the root contains `.dim/repos.yml`, apply its reviewed repository set
-without requiring a separate local manifest:
-
-```bash
-dim project create project \
-  --root root --url /path/to/project --ref main --apply-repos
-```
+The selected ref's `.dim/repos.yml` supplies the stable root and non-root
+repository aliases. `--apply-repos` applies the complete reviewed set without
+requiring a separate local manifest.
 
 If an interactive prompt is declined, apply the managed root file later
 without a local clone using `dim repo apply project --yes`.

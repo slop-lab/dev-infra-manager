@@ -13,14 +13,14 @@ Create Project metadata and import a root using the invoking host Git CLI:
 
 ```bash
 dim project create example \
-  --root root \
   --url https://github.com/example/product \
   --ref main \
-  --protect main
+  --apply-repos
 ```
 
-If the selected root ref contains `.dim/repos.yml`, an interactive invocation
-offers to apply it. Use `--apply-repos` to apply it without prompting or
+The selected root ref's `.dim/repos.yml` declares the root alias, connection,
+ref, and protection policy. An interactive invocation offers to apply its
+remaining repositories. Use `--apply-repos` to apply them without prompting or
 `--no-apply-repos` to skip it explicitly. Skipping never requires a local
 clone later:
 
@@ -93,7 +93,6 @@ repositories:
 
 ```bash
 dim project create example \
-  --root root \
   --url https://example.com/product \
   --ref main \
   --apply-repos

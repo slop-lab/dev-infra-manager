@@ -201,8 +201,8 @@ Ingress discovery, creation, and revocation must run through the public
 
 `just verify-example BACKEND DIRTY multi-repository` requires Docker and managed Gitea. It
 materializes the repositories under `examples/projects/multi-repository/repos/` in a temporary
-directory and verifies the documented root-aware `project create --root
---url --apply-repos` flow,
+directory and verifies the manifest-aware `project create --url
+--apply-repos` flow,
 protected refs, workspace, Project-owned agent, host Git identity, managed
 repository access, nested Docker, and secret-bearing service boundary.
 

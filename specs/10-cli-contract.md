@@ -26,6 +26,8 @@
 
 ```bash
 dim project create PROJECT [--repos FILE] [--yes]
+dim project create PROJECT --url URL [--ref REF]
+  [--apply-repos | --no-apply-repos]
 dim project create PROJECT --root ALIAS [--url URL] [--ref REF]
   [--protect PATTERNS] [--mirror]
   [--apply-repos | --no-apply-repos]
@@ -41,14 +43,22 @@ assembled without a root, but it is not runnable until it has exactly one root
 repository. Its ref is optional and falls back to the repository's symbolic
 `HEAD`; a missing configured ref and missing `HEAD` is an error.
 
-`project create --root` creates the Project and registers its root in one
-workflow. `--url` imports it through the invoking host Git CLI; omitting the
-URL creates an empty root. After importing a non-empty root, the CLI reads the
-selected managed root ref's optional `.dim/repos.yml`. `--apply-repos` applies
-it, `--no-apply-repos` skips it, and omitting both prompts only in a TTY. A
+`project create --url` fetches the selected external ref before creating
+Project state and requires `.dim/repos.yml` there. Its single `root: true`
+mapping key supplies the stable root alias and its URL must match the bootstrap
+URL. The CLI imports that root through the invoking host Git CLI using the
+manifest's protection policy. `--ref` selects the manifest revision and
+sets the root ref when the manifest omits one; a differing manifest root ref is
+an error. `--apply-repos` applies the remaining
+set, `--no-apply-repos` skips it, and omitting both prompts only in a TTY. A
 declined or non-interactive default must print `dim repo apply PROJECT --yes`
-as the clone-free later path. The two flags are mutually exclusive and root
-options cannot be combined with `--repos FILE`.
+as the clone-free later path.
+
+`project create --root` is the explicit manifest-free form. It creates the
+Project and registers an empty or imported root under the supplied alias.
+`--protect` and `--mirror` require this form because manifest bootstrap reads
+those policies from `.dim/repos.yml`. Apply flags are mutually exclusive and
+root/bootstrap options cannot be combined with `--repos FILE`.
 
 `remove` removes only DIM Project metadata. It preserves the managed Git
 organization and repositories and refuses while a workspace references the
@@ -110,7 +120,9 @@ clone/push transport is a local CLI adapter so current host credential helpers,
 SSH configuration, and SSH agent are used. The managed Gitea credential is
 applied only to the destination push.
 If root transfer fails after Project creation, repeating `project create` with
-the same root alias and origin retries that failed transfer. It does not adopt
+the same URL re-reads the manifest and derives the same root alias before
+retrying that failed transfer. The explicit `--root` form likewise retries
+with the same alias and origin. Neither form adopts
 an unrelated existing Project, a ready root, or a different origin.
 
 The built-in admin operations are:

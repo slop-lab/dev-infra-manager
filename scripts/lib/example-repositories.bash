@@ -56,7 +56,7 @@ dim_register_example_repositories() {
 
   if [[ -f "$manifest" ]]; then
     "$dim_bin" project create "$project" \
-      --root root --url "$repositories/root" --ref main --protect main \
+      --url "$repositories/root" --ref main \
       --no-apply-repos
     # Prove a declined/skipped discovery remains recoverable from the managed
     # root without passing the local manifest or cloning the repository again.

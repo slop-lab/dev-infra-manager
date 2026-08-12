@@ -15,10 +15,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   The new default example intentionally uses no `.dim/repos.yml`, protected
   ref, or secret service while demonstrating a resource-bounded workspace,
   unprivileged agent, private rootless DinD, and an optional external URL.
-- Added a root-aware `project create` workflow that imports the root, offers
-  its managed `.dim/repos.yml`, supports explicit apply/skip choices, and
-  points skipped applications at the clone-free `repo apply` path. Matching
-  failed root imports can be retried with the same root alias and origin;
+- Added a manifest-aware `project create --url` workflow that reads the
+  selected external ref's `.dim/repos.yml` before creating Project state, so
+  repository code fixes the root alias and policy instead of duplicating them
+  on the command line. It supports explicit apply/skip choices and points
+  skipped applications at the clone-free `repo apply` path. Matching failed
+  root imports can be retried with the same manifest-derived alias and origin;
   managed-root manifests reject ambiguous relative filesystem URLs and local
   manifest inputs never replace the tracked root file.
 - Made the npm installer facade bootstrap itself through `mise exec node@24`
