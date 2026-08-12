@@ -353,6 +353,11 @@ workspace. Other repositories need not be bind-mounted from it.
 Services can reach the managed Git service and may clone into service-specific
 named volumes. `DIM_PROJECT_MANIFEST` and the Project-specific
 `DIM_GIT_BASE_URL` let project code construct routable repository endpoints.
+The manifest's `hostAliases` mapping supplies controller-approved names, such
+as `dim-gitea`, for nested services whose Docker DNS cannot inherit the
+workspace container's aliases. Project setup applies those aliases only to
+the services that need them; ordinary intranet and public names continue to
+use DNS normally.
 Projects explicitly
 pass `DIM_GIT_USERNAME`, `DIM_GIT_TOKEN`, and an askpass helper when a service
 also needs to push. Repositories used only as

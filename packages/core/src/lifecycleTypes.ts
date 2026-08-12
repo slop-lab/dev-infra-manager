@@ -142,6 +142,7 @@ export interface WorkspaceRecord {
   gitUserName: string;
   gitUserEmail: string;
   gitBaseUrl: string;
+  hostAliases: Record<string, string[]>;
   projectManifestPath: string;
   createdAt: string;
   updatedAt: string;

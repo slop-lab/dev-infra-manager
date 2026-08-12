@@ -165,6 +165,7 @@ export async function createWorkspace(
       gitUserName,
       gitUserEmail,
       gitBaseUrl: `http://dim-gitea:3000/${projectRecord.gitNamespace}`,
+      hostAliases: {},
       projectManifestPath: "/run/dim/project.json",
       createdAt: now,
       updatedAt: now
@@ -450,13 +451,15 @@ async function reconcileProject(
     try {
       const credentials = await ensureGitea(runner, options);
       const gitBaseUrl = `${await giteaNestedBaseUrl(runner)}/${project.gitNamespace}`;
+      const giteaAddress = new URL(gitBaseUrl).hostname;
       const rootRef = await resolveRootRef(runner, options, project, repo, credentials);
       record = {
         ...record,
         projectName: project.name,
         rootRepositoryAlias: repo.alias,
         rootRef,
-        gitBaseUrl
+        gitBaseUrl,
+        hostAliases: { "dim-gitea": [giteaAddress] }
       };
       await state.writeWorkspace(record);
       await reconcileContainer(runner, options, record, gitEnvironment(record, credentials));
@@ -734,7 +737,8 @@ async function writeProjectManifest(
     schemaVersion: 1,
     project: { id: project.id, name: project.name },
     root: { repository: record.rootRepositoryAlias, ref: record.rootRef, path: record.projectPath },
-    gitBaseUrl: record.gitBaseUrl
+    gitBaseUrl: record.gitBaseUrl,
+    hostAliases: record.hostAliases
   };
   const encoded = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`).toString("base64");
   const result = await runner.run("docker", [

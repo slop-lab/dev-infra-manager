@@ -8,6 +8,10 @@ if [ -n "${DIM_PROJECT_MANIFEST:-}" ]; then
   test "$(jq -r '.root.path' "$DIM_PROJECT_MANIFEST")" = "${DIM_PROJECT_ROOT:-$PWD}"
 fi
 
+compose_host_aliases=/tmp/dim-project-compose-host-aliases.json
+jq '{services:{agent:{extra_hosts:[.hostAliases | to_entries[] | .key as $host | .value[] | "\($host)=\(.)"]}}}' \
+  "$DIM_PROJECT_MANIFEST" > "$compose_host_aliases"
+
 case "${DIM_WORKSPACE_KVM:-}" in
   1)
     test -r /dev/kvm
@@ -36,9 +40,12 @@ mkdir -p "$DOCKER_CONFIG"
 
 agent_uid="$(id -u)"
 agent_gid="$(id -g)"
-compose="docker compose --project-name dim-${DIM_WORKSPACE_NAME} --file .dim/docker-compose.yml"
+compose() {
+  docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" \
+    --file .dim/docker-compose.yml --file "$compose_host_aliases" "$@"
+}
 agent_image="dim-${DIM_WORKSPACE_NAME}-agent"
-$compose build --quiet agent
+compose build --quiet agent
 # Setup runs as the unprivileged workspace account. This short-lived reviewed
 # helper creates only the fixed subtree; the persistent agent stays unprivileged.
 docker run --rm --privileged --cgroupns host \
@@ -46,7 +53,7 @@ docker run --rm --privileged --cgroupns host \
   --mount type=bind,source="$PWD/.dim/cgroup-delegation.sh",target=/tmp/cgroup-delegation.sh,readonly \
   "$agent_image" sh /tmp/cgroup-delegation.sh setup "$agent_uid" "$agent_gid"
 
-$compose up --detach agent
-$compose exec --no-TTY \
+compose up --detach agent
+compose exec --no-TTY \
   --user "$(id -u):$(id -g)" --env HOME=/tmp/dim-agent-home agent \
   pnpm install --frozen-lockfile

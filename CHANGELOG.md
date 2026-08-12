@@ -38,6 +38,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   self-development agent. Ordinary `bash` tasks retain a responsive default
   execution path while Codex and its descendants run in a separately tunable
   child, still bounded by the workspace-wide CPU, memory, and PID limits.
+- Added a workspace `hostAliases` registry to the read-only Project manifest
+  and applied it to the canonical agent through a generated Compose override,
+  so nested services can resolve approved DIM-managed endpoints such as
+  `dim-gitea` without hard-coded addresses or copying the workspace hosts file.
 
 ## [0.5.0] - 2026-08-06
 

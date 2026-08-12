@@ -103,12 +103,16 @@ test "$(docker inspect "$container_name" --format \
 dim resources "$workspace_name" \
   --cpus "$original_cpus" --memory "$original_memory" --pids-limit "$original_pids" >/dev/null
 dim exec "$workspace_name" -- \
-  sh -c 'test -r .dim/setup.sh && test ! -x .dim/setup.sh && test -r .dim/entrypoint.sh && test ! -x .dim/entrypoint.sh && test -r .dim/docker-compose.yml && test "$DIM_GIT_BASE_URL" = "$(jq -r .gitBaseUrl "$DIM_PROJECT_MANIFEST")"'
+  sh -c 'test -r .dim/setup.sh && test ! -x .dim/setup.sh && test -r .dim/entrypoint.sh && test ! -x .dim/entrypoint.sh && test -r .dim/docker-compose.yml && test "$DIM_GIT_BASE_URL" = "$(jq -r .gitBaseUrl "$DIM_PROJECT_MANIFEST")" && test -n "$(jq -r ".hostAliases[\"dim-gitea\"][0]" "$DIM_PROJECT_MANIFEST")"'
 test "$(dim show "$workspace_name" --json | jq -r .rootRef)" = "refs/heads/$root_ref"
 agent_git_identity="$(dim run "$workspace_name" bash -- -lc \
   'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
 test "$agent_git_identity" = \
   "DIM Self Host <dim-self-host@dim.invalid>|DIM Self Host <dim-self-host@dim.invalid>"
+dim run "$workspace_name" bash -- -lc '
+  test -n "$(getent hosts dim-gitea)"
+  git ls-remote origin HEAD >/dev/null
+'
 default_agent_cgroup="$(dim run "$workspace_name" bash -- -lc \
   "awk -F: '\$1 == 0 { print \$3 }' /proc/self/cgroup")"
 tool_agent_cgroup="$(dim run "$workspace_name" bash -- -lc \

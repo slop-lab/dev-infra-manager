@@ -38,5 +38,6 @@ case "$task" in
 esac
 
 exec docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" \
-  --file .dim/docker-compose.yml exec \
+  --file .dim/docker-compose.yml \
+  --file /tmp/dim-project-compose-host-aliases.json exec \
   --user "$(id -u):$(id -g)" --env HOME=/tmp/dim-agent-home agent "$@"

@@ -96,6 +96,7 @@ describe("project and workspace lifecycle", () => {
       gitUserName: "Agent",
       gitUserEmail: "agent@example.invalid",
       gitBaseUrl: "http://172.20.0.2:3000/dim-project",
+      hostAliases: { "dim-gitea": ["172.20.0.2"] },
       projectManifestPath: "/run/dim/project.json",
       createdAt: now,
       updatedAt: now
@@ -170,6 +171,7 @@ describe("project and workspace lifecycle", () => {
       gitUserName: "Agent",
       gitUserEmail: "agent@example.invalid",
       gitBaseUrl: "http://172.20.0.2:3000/dim-project",
+      hostAliases: { "dim-gitea": ["172.20.0.2"] },
       projectManifestPath: "/run/dim/project.json",
       createdAt: now,
       updatedAt: now
@@ -230,6 +232,7 @@ describe("project and workspace lifecycle", () => {
       gitUserName: "Agent",
       gitUserEmail: "agent@example.invalid",
       gitBaseUrl: "http://dim-gitea:3000/dim-project",
+      hostAliases: { "dim-gitea": ["172.20.0.2"] },
       projectManifestPath: "/run/dim/project.json",
       createdAt: now,
       updatedAt: now
@@ -301,6 +304,7 @@ describe("project and workspace lifecycle", () => {
       gitUserName: "Agent",
       gitUserEmail: "agent@example.invalid",
       gitBaseUrl: "http://dim-gitea:3000/dim-project",
+      hostAliases: { "dim-gitea": ["172.20.0.2"] },
       projectManifestPath: "/run/dim/project.json",
       createdAt: now,
       updatedAt: now

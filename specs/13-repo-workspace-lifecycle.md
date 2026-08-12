@@ -112,6 +112,14 @@ COMPOSE_PROFILES
 DIM_GIT_BASE_URL
 ```
 
+The read-only runtime manifest also contains `hostAliases`, a mapping from
+workspace-visible service names to one or more controller-resolved addresses.
+DIM registers only endpoints granted to that workspace; Project lifecycle
+code selects which nested services receive them. The canonical self-Project
+generates a Compose override that applies the mapping to its agent service.
+This is a static bootstrap registry: address changes take effect when setup
+reconciles the workspace and recreates the affected Project service.
+
 The workspace container additionally carries Git integration variables for
 its whole lifetime (not only during setup/entrypoint/exec dispatch):
 

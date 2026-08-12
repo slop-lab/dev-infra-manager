@@ -32,3 +32,10 @@ Docker socket or a host source checkout. Secret-bearing runtimes may live
 beside an agent inside the current privileged workspace; this is not a strong
 security boundary, so raw secrets must still be withheld from the agent and
 exposed only through reviewed constrained interfaces.
+
+Nested Project containers do not inherit the trusted workspace container's
+Docker-managed host aliases. DIM therefore records approved workspace-local
+names and resolved addresses in the read-only Project manifest. Reviewed
+Project setup may copy that static mapping into selected child containers;
+it must not treat the workspace's complete `/etc/hosts` as an authorization
+source.
