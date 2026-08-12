@@ -10,8 +10,8 @@ workspace.
 Install the plugin at the same exact version as DIM:
 
 ```bash
-npx '@slop-lab/dim-installer@0.5.0' install-plugin \
-  '@slop-lab/dim-plugin-external-urls@0.5.0'
+npx '@slop-lab/dim-installer@0.6.0' install-plugin \
+  '@slop-lab/dim-plugin-external-urls@0.6.0'
 dim plugin list
 ```
 

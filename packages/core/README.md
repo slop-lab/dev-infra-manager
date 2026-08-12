@@ -22,7 +22,7 @@ TypeScript tools or contributing to DIM itself.
 Pin the same reviewed release used by the CLI:
 
 ```bash
-npm install --save-exact "@slop-lab/dim-core@0.5.0"
+npm install --save-exact "@slop-lab/dim-core@0.6.0"
 ```
 
 The package is ESM-only, supports Node.js 24 and 26, and includes TypeScript

@@ -16,7 +16,7 @@ Project's `.dim` code, deployment authority, or policy requires review.
 Install the external URL plugin if you want the optional URL steps:
 
 ```bash
-dim install-plugin '@slop-lab/dim-plugin-external-urls@0.5.0'
+dim install-plugin '@slop-lab/dim-plugin-external-urls@0.6.0'
 ```
 
 Materialize and register the one repository:

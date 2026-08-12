@@ -1,6 +1,6 @@
 # Status
 
-The development branch targets DIM 0.5.0. DIM has no stable release yet;
+The development branch targets DIM 0.6.0. DIM has no stable release yet;
 pre-stable state, configuration, CLI, and extension contracts may change
 without backward-compatibility shims or implicit migration.
 

@@ -70,7 +70,15 @@ git clone --bare "$project_source" "$source_root/project.git" >/dev/null
 root_ref="$(git -C "$project_source" rev-parse --abbrev-ref HEAD)"
 dim project create "$project_name" \
   --repos "$project_source/.dim/repos.yml" --yes >/dev/null
-dim create "$project_name" "$workspace_name" >/dev/null
+if ! dim create "$project_name" "$workspace_name" >/dev/null; then
+  dim exec "$workspace_name" -- \
+    docker compose --project-name "dim-$workspace_name" \
+    --file .dim/docker-compose.yml ps --all >&2 || true
+  dim exec "$workspace_name" -- \
+    docker compose --project-name "dim-$workspace_name" \
+    --file .dim/docker-compose.yml logs --no-color >&2 || true
+  exit 1
+fi
 
 workspace_json="$(dim show "$workspace_name" --json)"
 original_cpus="$(jq -r .cpuCount <<<"$workspace_json")"

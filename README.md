@@ -75,7 +75,7 @@ disposable KVM guest instead of your own host.
 Pin an exact, reviewed version — never `latest`:
 
 ```bash
-mise use --raw --global 'npm:@slop-lab/dim-installer@0.5.0'
+mise use --raw --global 'npm:@slop-lab/dim-installer@0.6.0'
 dim install-cli
 ```
 
@@ -86,9 +86,9 @@ configuration. The first `dim` invocation may therefore download Node.js.
 or, without mise:
 
 ```bash
-npx '@slop-lab/dim-installer@0.5.0'
-npx '@slop-lab/dim-installer@0.5.0' install-cli
-npx '@slop-lab/dim-installer@0.5.0' install-plugin '@example/dim-plugin@1.2.3'
+npx '@slop-lab/dim-installer@0.6.0'
+npx '@slop-lab/dim-installer@0.6.0' install-cli
+npx '@slop-lab/dim-installer@0.6.0' install-plugin '@example/dim-plugin@1.2.3'
 ```
 
 `@slop-lab/dim-installer` is a thin facade: it owns only `installer`,

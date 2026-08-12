@@ -66,7 +66,7 @@ State lives at `$DIM_CONFIG_PATH`, defaulting to
 ```json
 {
   "schemaVersion": 1,
-  "cli": { "mode": "direct" | "proxied", "version": "0.5.0", "executable": "/abs/path" },
+  "cli": { "mode": "direct" | "proxied", "version": "0.6.0", "executable": "/abs/path" },
   "pluginHome": "/abs/path"
 }
 ```
