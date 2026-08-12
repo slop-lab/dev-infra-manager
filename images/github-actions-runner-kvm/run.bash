@@ -16,7 +16,9 @@ runner_labels="${GITHUB_RUNNER_LABELS:-sysbox,kvm}"
 runner_name="${GITHUB_RUNNER_NAME:-dim-qemu-$(hostname)-$$}"
 ssh_port="${DIM_ACTIONS_RUNNER_SSH_PORT:-22223}"
 disk_size="${DIM_ACTIONS_RUNNER_DISK_SIZE:-64G}"
-workdir="$(mktemp -d /tmp/dim-actions-runner-run-XXXXXX)"
+run_root="${DIM_ACTIONS_RUNNER_WORK_ROOT:-$repo_root/.local/github-actions-runner-kvm/runs}"
+mkdir -p "$run_root"
+workdir="$(mktemp -d "$run_root/run-XXXXXX")"
 pid=""
 
 [[ "$runner_url" =~ ^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || {
