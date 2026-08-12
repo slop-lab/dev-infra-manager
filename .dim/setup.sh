@@ -54,6 +54,9 @@ docker run --rm --privileged --cgroupns host \
   "$agent_image" sh /tmp/cgroup-delegation.sh setup "$agent_uid" "$agent_gid"
 
 compose up --detach agent
+compose exec --no-TTY agent \
+  chown -R "$(id -u):$(id -g)" /home/dim-agent
 compose exec --no-TTY \
-  --user "$(id -u):$(id -g)" --env HOME=/tmp/dim-agent-home agent \
+  --user "$(id -u):$(id -g)" \
+  --env HOME=/home/dim-agent agent \
   pnpm install --frozen-lockfile
