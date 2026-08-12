@@ -137,7 +137,7 @@ DIM_CONTROLLER_TOKEN
 Agent containers are ordinary, reviewed Project workloads. A Project may
 declare one in `.dim/docker-compose.yml`, start it from `.dim/setup.sh`, and
 dispatch fixed tasks into it from `.dim/entrypoint.sh`. Core owns none of its
-image, service, volume, privilege, or task configuration. `dim run WORKSPACE
+image, service, volume, privilege, or task configuration. `dim workspace run WORKSPACE
 TASK` always follows the checked-in `.dim/entrypoint.sh` contract when present.
 
 Before `create`, `start`, `setup`, or `update` runs Project setup, DIM must
@@ -169,7 +169,7 @@ own stable managed repository names and owns all checkout paths and
 repository-to-service mappings. DIM does not export per-repository
 variables. `COMPOSE_PROJECT_NAME`, `containerName`, and `dockerVolumeName`
 are the only stable identifiers for Docker resources DIM creates for a
-workspace; callers must read them from `dim show WORKSPACE --json` rather
+workspace; callers must read them from `dim workspace show WORKSPACE --json` rather
 than reconstructing a naming scheme, which is not part of this contract and
 may change.
 

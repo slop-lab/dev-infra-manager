@@ -51,7 +51,7 @@ dim() { "$dim_bin" "$@"; }
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    dim discard "$workspace_name" --yes >/dev/null 2>&1 || true
+    dim workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
   fi
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     local credentials admin_username admin_password
@@ -113,11 +113,11 @@ fi
 rm -rf "$source_root"
 
 echo "[example-project] 4. create the workspace (a real container)"
-if ! dim create "$project_name" "$workspace_name" >/dev/null; then
-  dim exec "$workspace_name" -- \
+if ! dim workspace create "$project_name" "$workspace_name" >/dev/null; then
+  dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml ps --all >&2 || true
-  dim exec "$workspace_name" -- \
+  dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml logs agent-dind >&2 || true
   exit 1
@@ -125,19 +125,19 @@ fi
 
 echo "[example-project] 5. confirm it's real"
 # The workspace's actual container name is an implementation detail of
-# `dim`, not something to guess: read it back from `dim show --json` rather
+# `dim`, not something to guess: read it back from `dim workspace show --json` rather
 # than assuming a `dim-ws-<name>`-shaped prefix.
-workspace_json="$(dim show "$workspace_name" --json)"
+workspace_json="$(dim workspace show "$workspace_name" --json)"
 test "$(jq -r .phase <<<"$workspace_json")" = "ready"
 test "$(jq -r .runtimeBackend <<<"$workspace_json")" = "$workspace_backend"
 test "$(jq -r '.profiles | length' <<<"$workspace_json")" = "0"
 container_name="$(jq -r .containerName <<<"$workspace_json")"
 docker ps --filter "name=$container_name" --format '{{.Names}}' | grep -qx "$container_name"
-dim exec "$workspace_name" -- hostname >/dev/null
+dim workspace exec "$workspace_name" -- hostname >/dev/null
 original_cpus="$(jq -r .cpuCount <<<"$workspace_json")"
 original_memory="$(jq -r .memory <<<"$workspace_json")"
 original_pids="$(jq -r .pidsLimit <<<"$workspace_json")"
-updated_resources="$(dim resources "$workspace_name" \
+updated_resources="$(dim workspace resources "$workspace_name" \
   --cpus 1.25 --memory 2g --pids-limit 1024 --json)"
 test "$(jq -r .cpuCount <<<"$updated_resources")" = "1.25"
 test "$(jq -r .memory <<<"$updated_resources")" = "2g"
@@ -145,12 +145,12 @@ test "$(jq -r .pidsLimit <<<"$updated_resources")" = "1024"
 test "$(docker inspect "$container_name" --format \
   '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}')" = \
   "1250000000|2147483648|2147483648|1024"
-dim resources "$workspace_name" \
+dim workspace resources "$workspace_name" \
   --cpus "$original_cpus" --memory "$original_memory" --pids-limit "$original_pids" >/dev/null
 
 echo "[example-project] 6. run the project task"
 set +e
-bash_output="$(dim run "$workspace_name" bash -- -lc 'printf project-bash-ok')"
+bash_output="$(dim workspace run "$workspace_name" bash -- -lc 'printf project-bash-ok')"
 bash_status=$?
 set -e
 if [[ "$bash_status" -ne 0 || "$bash_output" != "project-bash-ok" ]]; then
@@ -165,7 +165,7 @@ wait_for_task() {
   local task="$1"
   local attempt
   for attempt in $(seq 1 60); do
-    if dim run "$workspace_name" "$task" -- --version >/dev/null 2>&1; then
+    if dim workspace run "$workspace_name" "$task" -- --version >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
@@ -175,20 +175,20 @@ wait_for_task() {
 }
 wait_for_task codex
 wait_for_task claude
-codex_version="$(dim run "$workspace_name" codex -- --version)"
-claude_version="$(dim run "$workspace_name" claude -- --version)"
+codex_version="$(dim workspace run "$workspace_name" codex -- --version)"
+claude_version="$(dim workspace run "$workspace_name" claude -- --version)"
 echo "$codex_version" | grep -q "^codex-cli "
 echo "$claude_version" | grep -q "(Claude Code)$"
-# Without `--`, `--version` is parsed as a flag on `dim run`/`dim-cli`
+# Without `--`, `--version` is parsed as a flag on `dim workspace run`/`dim-cli`
 # itself, not forwarded to the task -- confirm the documented gotcha in the
 # README is real: it prints dim-cli's own version, not codex's.
-test "$(dim run "$workspace_name" codex --version)" != "$codex_version"
+test "$(dim workspace run "$workspace_name" codex --version)" != "$codex_version"
 
-dev_git_identity="$(dim run "$workspace_name" bash -- \
+dev_git_identity="$(dim workspace run "$workspace_name" bash -- \
   -lc 'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
 test "$dev_git_identity" = \
   "Example Host Developer <host-developer@dim.invalid>|Example Host Developer <host-developer@dim.invalid>"
-agent_commit_identity="$(dim run "$workspace_name" bash -- -lc '
+agent_commit_identity="$(dim workspace run "$workspace_name" bash -- -lc '
   printf "%s\n" "agent commit" > agent-commit.txt
   git add agent-commit.txt
   git commit -m "verify host identity" >/dev/null
@@ -196,21 +196,21 @@ agent_commit_identity="$(dim run "$workspace_name" bash -- -lc '
 ')"
 test "$agent_commit_identity" = "$dev_git_identity"
 
-agent_container="$(dim exec "$workspace_name" -- \
+agent_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-$workspace_name" \
   --file .dim/docker-compose.yml ps --quiet agent)"
 test -n "$agent_container"
-dim exec "$workspace_name" -- docker inspect "$agent_container" \
+dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
   --format '{{.HostConfig.Privileged}}' | grep -qx false
-! dim exec "$workspace_name" -- docker inspect "$agent_container" \
+! dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
   --format '{{json .Mounts}}' | grep -q /var/run/docker.sock
-dind_container="$(dim exec "$workspace_name" -- \
+dind_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-$workspace_name" \
   --file .dim/docker-compose.yml ps --quiet agent-dind)"
 test -n "$dind_container"
-dim exec "$workspace_name" -- docker inspect "$dind_container" \
+dim workspace exec "$workspace_name" -- docker inspect "$dind_container" \
   --format '{{.HostConfig.Privileged}}' | grep -qx true
-dim run "$workspace_name" bash -- -lc '
+dim workspace run "$workspace_name" bash -- -lc '
   docker info --format "{{json .SecurityOptions}}" | grep -q rootless
   rm -rf /mnt/workspace-shared-dind/bind-smoke
   mkdir -m 0777 /mnt/workspace-shared-dind/bind-smoke
@@ -223,12 +223,12 @@ dim run "$workspace_name" bash -- -lc '
 '
 
 echo "[example-project] 8. create a nested container from inside the dev container"
-nested_output="$(dim run "$workspace_name" bash -- \
+nested_output="$(dim workspace run "$workspace_name" bash -- \
   -lc 'docker run --rm hello-world')"
 echo "$nested_output" | grep -q "Hello from Docker!"
 
 echo "[example-project] 9. reach another managed repository"
-web_content="$(dim exec "$workspace_name" -- sh -c \
+web_content="$(dim workspace exec "$workspace_name" -- sh -c \
   'git clone "$DIM_GIT_BASE_URL/web.git" /tmp/web >/dev/null 2>&1 && cat /tmp/web/app.txt')"
 test "$web_content" = "hello from example-web"
 
@@ -237,29 +237,29 @@ DIM_BIN="$dim_bin" EXAMPLE_SECRET=not-a-real-secret \
   bash "$repo_root/examples/projects/multi-repository/deploy-secret.bash" \
   "$workspace_name" >/dev/null
 
-root_health="$(dim exec "$workspace_name" -- \
+root_health="$(dim workspace exec "$workspace_name" -- \
   sh ops/secret-service.sh secret-health)"
 echo "$root_health" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
 
-dev_health="$(dim run "$workspace_name" bash -- \
+dev_health="$(dim workspace run "$workspace_name" bash -- \
   -lc 'wget -qO- http://secret:7099/healthz')"
 echo "$dev_health" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
 
 # The agent container has a different Docker daemon and cannot see the
 # root-level controller's secret-bearing container or raw secret.
-agent_containers="$(dim run "$workspace_name" bash -- \
+agent_containers="$(dim workspace run "$workspace_name" bash -- \
   -lc "docker ps --format '{{.Names}}'")"
 if grep -q secret <<<"$agent_containers"; then
   echo "agent Docker daemon unexpectedly sees the secret-bearing container" >&2
   exit 1
 fi
-leaked="$(dim run "$workspace_name" bash -- \
+leaked="$(dim workspace run "$workspace_name" bash -- \
   -lc 'env | grep -c EXAMPLE_SECRET || true')"
 test "$leaked" = "0"
 
-dim exec "$workspace_name" -- sh ops/secret-service.sh remove-secret >/dev/null
+dim workspace exec "$workspace_name" -- sh ops/secret-service.sh remove-secret >/dev/null
 
 echo "[example-project] 11. clean up"
-dim discard "$workspace_name" --yes >/dev/null
+dim workspace discard "$workspace_name" --yes >/dev/null
 
 echo "multi-repository-example-smoke-ok"

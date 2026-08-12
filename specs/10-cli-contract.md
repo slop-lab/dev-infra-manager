@@ -201,21 +201,22 @@ executor may later implement the same runner contract and advertise
 ## Workspaces
 
 ```bash
-dim create PROJECT WORKSPACE \
+dim workspace create PROJECT WORKSPACE \
   [--profile PROFILE ...] \
   [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
 
-dim ls
-dim show WORKSPACE
-dim resources WORKSPACE [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
-dim exec WORKSPACE -- COMMAND [ARGS...]
-dim run WORKSPACE TASK [ARGS...]
-dim setup WORKSPACE
-dim update WORKSPACE [--profile PROFILE ... | --clear-profiles]
-dim start WORKSPACE
-dim restart WORKSPACE
-dim stop WORKSPACE
-dim discard WORKSPACE --yes
+dim workspace list
+dim workspace show WORKSPACE
+dim workspace resources WORKSPACE [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
+dim workspace align WORKSPACE [--reset --yes]
+dim workspace exec WORKSPACE -- COMMAND [ARGS...]
+dim workspace run WORKSPACE TASK [ARGS...]
+dim workspace setup WORKSPACE
+dim workspace update WORKSPACE [--profile PROFILE ... | --clear-profiles]
+dim workspace start WORKSPACE
+dim workspace restart WORKSPACE
+dim workspace stop WORKSPACE
+dim workspace discard WORKSPACE --yes
 ```
 
 `create` clones the Project root repository/ref at `/workspace/project` and
@@ -239,6 +240,14 @@ changes. `start` applies the configured root ref to a stopped workspace before
 setup. `restart` stops a running workspace and performs the same start,
 fast-forward, and setup sequence. Dirty root checkouts and non-fast-forward
 updates are rejected without reset.
+
+`workspace align` is the checkout-only recovery path. It fetches the
+configured root ref, switches a clean checkout back to the corresponding
+local branch, and fast-forwards it without running Project setup or changing
+containers. `--reset --yes` instead resets that configured branch to the
+fetched ref; other local branches remain available. Top-level `dim run` and
+`dim exec` are convenience aliases for `dim workspace run` and `dim workspace
+exec`. Other workspace lifecycle commands exist only below `dim workspace`.
 
 `run` dispatches through `.dim/entrypoint.sh` when present. `exec` always
 bypasses it. `discard` requires `--yes`, attempts project teardown, and removes

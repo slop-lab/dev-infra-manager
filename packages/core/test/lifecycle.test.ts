@@ -7,6 +7,7 @@ import { LifecycleState, validateLifecycleName } from "../src/lifecycleState.js"
 import type { ProjectRecord, WorkspaceRecord } from "../src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../src/types.js";
 import {
+  alignWorkspaceRoot,
   detectWorkspaceKvm,
   updateWorkspaceResources,
   validateWorkspaceProfiles,
@@ -314,8 +315,14 @@ describe("project and workspace lifecycle", () => {
     const runner: StreamingCommandRunner = {
       async run(command: string, args: string[]): Promise<CommandResult> {
         calls.push([command, ...args]);
-        if (args[0] === "container" && args[1] === "inspect") {
+        if (args.includes("{{.State.Running}}")) {
+          return { command, args, stdout: "true\n", stderr: "", exitCode: 0 };
+        }
+        if ((args[0] === "container" && args[1] === "inspect") || args[0] === "inspect") {
           return { command, args, stdout: "true|work-1|workspace\n", stderr: "", exitCode: 0 };
+        }
+        if (args.includes("--porcelain")) {
+          return { command, args, stdout: "", stderr: "", exitCode: 0 };
         }
         return { command, args, stdout: "dim-ws-work-1\n", stderr: "", exitCode: 0 };
       },
@@ -343,6 +350,17 @@ describe("project and workspace lifecycle", () => {
       "--pids-limit", "1024",
       "dim-ws-work-1"
     ]);
+
+    await alignWorkspaceRoot(runner, options, "work-1");
+    expect(calls.some((call) => call.slice(-3).join(" ") === "git switch main")).toBe(true);
+    expect(calls.some((call) => call.slice(-4).join(" ") === "git merge --ff-only FETCH_HEAD")).toBe(true);
+
+    calls.length = 0;
+    await alignWorkspaceRoot(runner, options, "work-1", true);
+    expect(calls.some((call) =>
+      call.slice(-5).join(" ") === "git switch --force-create main FETCH_HEAD"
+    )).toBe(true);
+    expect(calls.some((call) => call.includes("merge"))).toBe(false);
   });
 
   it("selects persistent workspace runtime backends", () => {

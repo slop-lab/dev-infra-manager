@@ -4,15 +4,15 @@ DIM applies CPU, memory, and PID limits to the trusted workspace. Project-owned
 services, including an optional development agent, share that aggregate cgroup
 boundary unless the Project's Compose definition adds stricter child limits.
 An operator may change this aggregate boundary after creation with
-`dim resources WORKSPACE` and any combination of `--cpus`, `--memory`, and
+`dim workspace resources WORKSPACE` and any combination of `--cpus`, `--memory`, and
 `--pids-limit`; omitted limits remain unchanged.
 
 A reviewed Project may create threaded cgroup v2 children below that workspace
 boundary and delegate selected CPU/PID controls to an unprivileged agent. This
 can keep a lightweight command or runtime-server path in the agent container's
 default group while moving expensive tool processes into a lower-weight child.
-The canonical self-Project does this for Codex: `dim run WORKSPACE bash` stays
-in the default agent group, while `dim run WORKSPACE codex` and its descendants
+The canonical self-Project does this for Codex: `dim workspace run WORKSPACE bash` stays
+in the default agent group, while `dim workspace run WORKSPACE codex` and its descendants
 run in `tools-0`. The workspace parent still bounds the aggregate. Memory and
 I/O remain workspace-wide because threaded children cannot receive those
 domain controllers.

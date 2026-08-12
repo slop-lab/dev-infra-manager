@@ -63,7 +63,7 @@ pnpm run cli -- create "$project_name" "$workspace_name" \
   --pids-limit 1024 \
   >/dev/null
 # The workspace's actual Docker resource names are an implementation detail
-# owned by `dim show --json`, not something to reconstruct by hand: never
+# owned by `dim workspace show --json`, not something to reconstruct by hand: never
 # assume a `dim-ws-<name>`-shaped prefix in test code or docs.
 container_name="$(pnpm run --silent cli -- show "$workspace_name" --json | jq -r .containerName)"
 test "$(docker inspect --format '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.PidsLimit}}' "$container_name")" \

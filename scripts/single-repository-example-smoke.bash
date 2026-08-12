@@ -30,7 +30,7 @@ dim() { "$dim_bin" "$@"; }
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    dim discard "$workspace_name" --yes >/dev/null 2>&1 || true
+    dim workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
   fi
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     local credentials admin_username admin_password
@@ -73,49 +73,49 @@ test ! -e "$source_root/app/.dim/repos.yml"
 rm -rf "$source_root"
 
 echo "[single-repository] create a resource-bounded persistent workspace"
-if ! dim create "$project_name" "$workspace_name" \
+if ! dim workspace create "$project_name" "$workspace_name" \
   --cpus 2 --memory 2g --pids-limit 512 >/dev/null; then
-  dim exec "$workspace_name" -- \
+  dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml ps --all >&2 || true
-  dim exec "$workspace_name" -- \
+  dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml logs agent agent-dind >&2 || true
   exit 1
 fi
-workspace_json="$(dim show "$workspace_name" --json)"
+workspace_json="$(dim workspace show "$workspace_name" --json)"
 test "$(jq -r .cpuCount <<<"$workspace_json")" = "2"
 test "$(jq -r .memory <<<"$workspace_json")" = "2g"
 test "$(jq -r .pidsLimit <<<"$workspace_json")" = "512"
-test "$(dim run "$workspace_name" bash -- -lc 'curl --fail --silent http://127.0.0.1:3000')" = \
+test "$(dim workspace run "$workspace_name" bash -- -lc 'curl --fail --silent http://127.0.0.1:3000')" = \
   "hello from a single-repository DIM workspace"
 
-agent_container="$(dim exec "$workspace_name" -- \
+agent_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-$workspace_name" \
   --file .dim/docker-compose.yml ps --quiet agent)"
 test -n "$agent_container"
-dim exec "$workspace_name" -- docker inspect "$agent_container" \
+dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
   --format '{{.HostConfig.Privileged}}' | grep -qx false
-! dim exec "$workspace_name" -- docker inspect "$agent_container" \
+! dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
   --format '{{json .Mounts}}' | grep -q /var/run/docker.sock
-dind_container="$(dim exec "$workspace_name" -- \
+dind_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-$workspace_name" \
   --file .dim/docker-compose.yml ps --quiet agent-dind)"
 test -n "$dind_container"
-dim exec "$workspace_name" -- docker inspect "$dind_container" \
+dim workspace exec "$workspace_name" -- docker inspect "$dind_container" \
   --format '{{.HostConfig.Privileged}}' | grep -qx true
-dim run "$workspace_name" bash -- -lc '
+dim workspace run "$workspace_name" bash -- -lc '
   docker info --format "{{json .SecurityOptions}}" | grep -q rootless
   docker run --rm hello-world
 ' >/dev/null
 
 echo "[single-repository] push main directly from the no-secret workspace"
-dim run "$workspace_name" bash -- -lc '
+dim workspace run "$workspace_name" bash -- -lc '
   printf "\nagent update\n" >>README.md
   git add README.md
   git commit -m "agent updates main" >/dev/null
   git push origin main >/dev/null
 '
 
-dim discard "$workspace_name" --yes >/dev/null
+dim workspace discard "$workspace_name" --yes >/dev/null
 echo "single-repository-example-smoke-ok"

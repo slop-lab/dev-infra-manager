@@ -103,12 +103,12 @@ private Docker daemon without receiving either host Docker socket or the
 trusted workspace's Docker socket.
 
 The agent's `/home/dim-agent` is a Project-owned named volume. Separate
-`dim run` invocations therefore share Codex configuration and other user-home
+`dim workspace run` invocations therefore share Codex configuration and other user-home
 state until the workspace is discarded; source remains in `/workspace`.
 
 The setup also delegates four threaded cgroup slots (`tools-0` through
 `tools-3`) below the workspace's existing host-enforced resource cgroup.
-`dim run ... bash` stays in the agent service's default group as a responsive
+`dim workspace run ... bash` stays in the agent service's default group as a responsive
 management path; the `codex` task automatically starts Codex and all of its
 tool descendants in `tools-0`. Another workload can use a separate slot:
 
@@ -129,8 +129,8 @@ a persistent workspace:
 just build-project-workspace
 dim project create dim-self \
   --url /path/to/dev-infra-manager --ref development --apply-repos
-dim create dim-self dim-self-dev
-dim run dim-self-dev codex
+dim workspace create dim-self dim-self-dev
+dim workspace run dim-self-dev codex
 ```
 
 `run` dispatches the repository's checked-in `.dim/entrypoint.sh` task
@@ -141,7 +141,7 @@ private-Docker state uses a separate Project volume; no host checkout or
 Docker socket is mounted.
 
 On a host with accessible KVM, creation records and exposes `/dev/kvm`
-automatically. Run `dim exec dim-self-dev -- sh .dim/kvm.sh` to verify the
+automatically. Run `dim workspace exec dim-self-dev -- sh .dim/kvm.sh` to verify the
 trusted workspace's effective KVM capability; `/dev/kvm` is intentionally not
 passed to the ordinary agent. The `verify` agent task remains portable to
 hosts without KVM.

@@ -18,6 +18,7 @@ import {
   showProjectRepository
 } from "./projectRegistry.js";
 import {
+  alignWorkspaceRoot,
   createWorkspace,
   discardWorkspace,
   listWorkspaces,
@@ -234,6 +235,7 @@ async function builtinCall(
       });
     case "workspace.list": return listWorkspaces(lifecycle);
     case "workspace.show": return showWorkspace(lifecycle, text("name"));
+    case "workspace.align": return alignWorkspaceRoot(runner, lifecycle, text("name"), input.reset === true);
     case "workspace.setup": return setupWorkspace(runner, lifecycle, text("name"));
     case "workspace.update":
       return updateWorkspace(

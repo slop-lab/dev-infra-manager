@@ -130,26 +130,26 @@ environment variables or require one container per repository.
 ## Workspaces
 
 ```bash
-dim create example dev --profile development
-dim exec dev -- bash
-dim run dev codex
+dim workspace create example dev --profile development
+dim workspace exec dev -- bash
+dim workspace run dev codex
 ```
 
 Project or remote changes never alter a running workspace automatically.
 
 ```bash
-dim restart dev   # stop, start, root fast-forward, setup
-dim stop dev
-dim start dev     # root fast-forward and setup
+dim workspace restart dev   # stop, start, root fast-forward, setup
+dim workspace stop dev
+dim workspace start dev     # root fast-forward and setup
 ```
 
 Dirty root checkouts and non-fast-forward updates are rejected. Stop/start and
 restart preserve the root checkout and inner-engine volume.
 
 ```bash
-dim ls
-dim show dev
-dim discard dev --yes
+dim workspace list
+dim workspace show dev
+dim workspace discard dev --yes
 ```
 
 ## State compatibility

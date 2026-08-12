@@ -45,12 +45,12 @@ Runtime backend selection is documented in
 [Runtime Backends](runtime-backends.md). Project and workspace settings are
 persisted by their lifecycle commands rather than copied into user config.
 The CPU, memory, and PID settings are defaults for new workspace records.
-`dim create --cpus`, `--memory`, and `--pids-limit` persist per-workspace
+`dim workspace create --cpus`, `--memory`, and `--pids-limit` persist per-workspace
 overrides. Change one or more limits on an existing workspace without
 recreating it:
 
 ```bash
-dim resources WORKSPACE --cpus 4 --memory 8g --pids-limit 2048
+dim workspace resources WORKSPACE --cpus 4 --memory 8g --pids-limit 2048
 ```
 
 Omitted flags keep their recorded values. DIM updates the live or stopped

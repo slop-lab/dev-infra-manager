@@ -22,7 +22,7 @@ root ref is configured, DIM resolves the repository's symbolic `HEAD`;
 workspace creation fails if the repository has no `HEAD`.
 
 A running workspace is never changed automatically when the Project changes.
-`dim start`, `dim restart`, and `dim update` fast-forward the configured root
+`dim workspace start`, `dim workspace restart`, and `dim workspace update` fast-forward the configured root
 ref and run setup. This keeps an active agent session stable while making
 refreshes explicit.
 
@@ -147,14 +147,14 @@ Cloudflare DNS and Caddy HTTPS setup are documented in the
 Create and enter a persistent workspace:
 
 ```bash
-dim create acme feature-123 --profile development
-dim exec feature-123 -- bash
+dim workspace create acme feature-123 --profile development
+dim workspace exec feature-123 -- bash
 ```
 
 Run a task through the root repository's `.dim/entrypoint.sh`:
 
 ```bash
-dim run feature-123 codex
+dim workspace run feature-123 codex
 ```
 
 `exec` is the raw escape hatch; `run` uses the Project-defined task contract.
@@ -162,15 +162,15 @@ dim run feature-123 codex
 ## Everyday lifecycle
 
 ```bash
-dim ls
-dim show feature-123
-dim resources feature-123 --cpus 4 --memory 8g --pids-limit 4096
-dim stop feature-123
-dim start feature-123
-dim restart feature-123
-dim update feature-123
-dim setup feature-123
-dim discard feature-123 --yes
+dim workspace list
+dim workspace show feature-123
+dim workspace resources feature-123 --cpus 4 --memory 8g --pids-limit 4096
+dim workspace stop feature-123
+dim workspace start feature-123
+dim workspace restart feature-123
+dim workspace update feature-123
+dim workspace setup feature-123
+dim workspace discard feature-123 --yes
 ```
 
 - `stop` preserves the checkout and nested container-engine storage.
@@ -344,8 +344,8 @@ The resource environment variables are defaults. Set persistent limits for an
 individual workspace at creation time or change them later:
 
 ```bash
-dim create acme feature-123 --cpus 4 --memory 8g --pids-limit 4096
-dim resources feature-123 --memory 12g
+dim workspace create acme feature-123 --cpus 4 --memory 8g --pids-limit 4096
+dim workspace resources feature-123 --memory 12g
 ```
 
 DIM is pre-stable and does not migrate incompatible state between `0.x`

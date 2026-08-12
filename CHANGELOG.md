@@ -17,6 +17,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Grouped workspace lifecycle commands under `dim workspace`; only the
+  frequently used `dim run` and `dim exec` forms remain as top-level aliases.
+  Added `workspace align` to switch a clean root checkout back to its
+  configured ref without running Project setup or recreating containers, with
+  an explicit `--reset --yes` mode for discarding local commits on that branch.
+
 - Split complete examples into single- and multi-repository Project shapes.
   The new default example intentionally uses no `.dim/repos.yml`, protected
   ref, or secret service while demonstrating a resource-bounded workspace,
@@ -86,7 +92,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added a common example verifier with current-host and disposable QEMU
   backends, explicit dirty-checkout policies, and automatic `repos/<alias>`
   Git fixture materialization and registration.
-- Added `dim resources` to change CPU, memory, and PID limits on an existing
+- Added `dim workspace resources` to change CPU, memory, and PID limits on an existing
   running or stopped workspace without recreating it.
 
 ### Fixed

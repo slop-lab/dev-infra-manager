@@ -36,7 +36,7 @@ not receive KVM.
 
 Agent containers are Project-owned workloads, not a core lifecycle resource.
 Reviewed `.dim/setup.sh` code may build and start one through the nested
-Project engine, while `.dim/entrypoint.sh` maps `dim run` tasks into it. DIM
+Project engine, while `.dim/entrypoint.sh` maps `dim workspace run` tasks into it. DIM
 does not define an agent manifest, image schema, container name, or separate
 resource record.
 

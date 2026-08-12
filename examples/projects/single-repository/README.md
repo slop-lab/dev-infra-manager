@@ -51,11 +51,11 @@ socket. Its `DOCKER_HOST` reaches only `agent-dind`, so coding tools can create
 nested containers without controlling sibling Project services.
 
 ```bash
-dim create single-app single-dev \
+dim workspace create single-app single-dev \
   --cpus 2 --memory 2g --pids-limit 512
-dim run single-dev bash -- -lc 'curl --fail http://127.0.0.1:3000'
-dim run single-dev codex
-dim run single-dev bash -- -lc 'docker run --rm hello-world'
+dim workspace run single-dev bash -- -lc 'curl --fail http://127.0.0.1:3000'
+dim workspace run single-dev codex
+dim workspace run single-dev bash -- -lc 'docker run --rm hello-world'
 ```
 
 An agent running directly in this no-secret workspace receives the
@@ -75,7 +75,7 @@ Revoke the returned URL with `dim external-url revoke URL_ID`, then discard
 the workspace:
 
 ```bash
-dim discard single-dev --yes
+dim workspace discard single-dev --yes
 ```
 
 Agent commits are not automatically reflected in an already-running

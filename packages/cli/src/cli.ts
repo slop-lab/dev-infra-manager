@@ -383,7 +383,9 @@ ciDefaults.command("reset")
     console.log(await setConfiguredCiRunnerDefaults(undefined));
   });
 
-program.command("create")
+const workspace = program.command("workspace").description("Manage persistent development workspaces");
+
+workspace.command("create")
   .description("Create a persistent workspace for a project")
   .argument("<project>")
   .argument("<workspace>")
@@ -410,8 +412,8 @@ program.command("create")
     }), flags);
   });
 
-program.command("ls")
-  .alias("list")
+workspace.command("list")
+  .alias("ls")
   .description("List workspaces")
   .option("--json", "print machine-readable JSON")
   .action(async (flags: JsonFlags) =>
@@ -422,13 +424,13 @@ program.command("ls")
     )
   );
 
-program.command("show")
+workspace.command("show")
   .description("Show a workspace")
   .argument("<workspace>")
   .option("--json", "print machine-readable JSON")
   .action(async (name: string, flags: JsonFlags) => print(await adminCall("workspace.show", { name }), flags));
 
-program.command("resources")
+workspace.command("resources")
   .description("Update resource limits for an existing workspace")
   .argument("<workspace>")
   .option("--cpus <count>", "workspace CPU limit")
@@ -473,7 +475,40 @@ program.command("run")
     });
   });
 
-program.command("setup")
+workspace.command("exec")
+  .description("Execute a raw command in a running workspace")
+  .argument("<workspace>")
+  .argument("<command...>")
+  .allowUnknownOption(true)
+  .action(async (name: string, command: string[]) => {
+    process.exitCode = await execWorkspace(runner, lifecycleOptions(), {
+      name, command, interactive: interactive()
+    });
+  });
+
+workspace.command("run")
+  .description("Run a root project task through .dim/entrypoint.sh")
+  .argument("<workspace>")
+  .argument("<task...>")
+  .allowUnknownOption(true)
+  .action(async (name: string, task: string[]) => {
+    process.exitCode = await runWorkspace(runner, lifecycleOptions(), {
+      name, command: task, interactive: interactive()
+    });
+  });
+
+workspace.command("align")
+  .description("Align the root checkout to its configured ref without running setup")
+  .argument("<workspace>")
+  .option("--reset", "reset the configured local branch to the fetched ref")
+  .option("--yes", "confirm resetting local commits on the configured branch")
+  .option("--json", "print machine-readable JSON")
+  .action(async (name: string, flags: JsonFlags & { reset?: boolean; yes?: boolean }) => {
+    if (flags.reset && !flags.yes) throw new UserError("--reset requires --yes");
+    print(await adminCall("workspace.align", { name, reset: flags.reset ?? false }), flags);
+  });
+
+workspace.command("setup")
   .description("Retry root project environment setup")
   .argument("<workspace>")
   .option("--json", "print machine-readable JSON")
@@ -483,7 +518,7 @@ program.command("setup")
     print(await adminCall("workspace.setup", { name }), flags);
   });
 
-program.command("update")
+workspace.command("update")
   .description("Fast-forward the root ref and run setup")
   .argument("<workspace>")
   .option("--profile <profile>", "replace Compose capability profiles", collect, [])
@@ -501,7 +536,7 @@ program.command("update")
     }), flags);
   });
 
-program.command("start")
+workspace.command("start")
   .description("Start a stopped workspace, fast-forward its root ref, and run setup")
   .argument("<workspace>")
   .option("--json", "print machine-readable JSON")
@@ -511,7 +546,7 @@ program.command("start")
     print(await adminCall("workspace.start", { name }), flags);
   });
 
-program.command("restart")
+workspace.command("restart")
   .description("Restart a workspace, fast-forward its root ref, and run setup")
   .argument("<workspace>")
   .option("--json", "print machine-readable JSON")
@@ -521,12 +556,12 @@ program.command("restart")
     print(await adminCall("workspace.restart", { name }), flags);
   });
 
-program.command("stop")
+workspace.command("stop")
   .description("Stop a workspace while preserving its checkout and inner-engine data")
   .argument("<workspace>")
   .action(async (name: string) => void await adminCall("workspace.stop", { name }));
 
-program.command("discard")
+workspace.command("discard")
   .description("Permanently delete a workspace and unpushed changes")
   .argument("<workspace>")
   .requiredOption("--yes", "confirm permanent deletion")
@@ -967,8 +1002,8 @@ function installerFacadeHelpText(context: AddHelpTextContext): string {
 Typical flow:
   dim project create PROJECT
   dim repo add PROJECT ROOT SOURCE_URL --root --ref main
-  dim create PROJECT WORKSPACE
-  dim exec WORKSPACE -- bash
+  dim workspace create PROJECT WORKSPACE
+  dim workspace exec WORKSPACE -- bash
 
 Run 'dim help --all' to list administrative commands.`;
 

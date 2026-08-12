@@ -25,8 +25,8 @@ dim doctor
 bash create-repository.bash
 bash register-project.bash
 bash configure-ingress.bash
-dim create external external-dev --profile development
-dim exec external-dev -- bash .dim/create-urls.bash
+dim workspace create external external-dev --profile development
+dim workspace exec external-dev -- bash .dim/create-urls.bash
 ```
 
 DIM starts its managed host controller automatically. The last command asks
@@ -62,7 +62,7 @@ nested runtime.
 Discard the workspace when finished:
 
 ```bash
-dim discard external-dev --yes
+dim workspace discard external-dev --yes
 ```
 
 ## HTTPS

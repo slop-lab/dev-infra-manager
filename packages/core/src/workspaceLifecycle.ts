@@ -127,7 +127,7 @@ export async function createWorkspace(
       throw new UserError(`workspace '${name}' is already bound to project '${record.projectName}'`);
     }
     if (record.profiles.join("\0") !== profiles.join("\0")) {
-      throw new UserError(`workspace '${name}' already exists with different profiles; use dim update`);
+      throw new UserError(`workspace '${name}' already exists with different profiles; use dim workspace update`);
     }
     if (record.runtimeBackend !== input.runtimeBackend) {
       throw new UserError(`workspace '${name}' already exists with backend '${record.runtimeBackend}'`);
@@ -188,7 +188,7 @@ export async function runWorkspace(
   input: WorkspaceCommandInput
 ): Promise<number> {
   const record = await runnableWorkspace(runner, options, input.name);
-  if (input.command.length === 0) throw new UserError("dim run requires a task");
+  if (input.command.length === 0) throw new UserError("dim workspace run requires a task");
   const hasEntrypoint = await projectFileExists(runner, record, ".dim/entrypoint.sh");
   const command = hasEntrypoint
     ? ["sh", ".dim/entrypoint.sh", ...input.command]
@@ -203,7 +203,7 @@ export async function execWorkspace(
 ): Promise<number> {
   const record = await showWorkspace(options, input.name);
   await assertContainerRunning(runner, record);
-  if (input.command.length === 0) throw new UserError("dim exec requires a command");
+  if (input.command.length === 0) throw new UserError("dim workspace exec requires a command");
   return streamProjectCommand(runner, record, input.command, input.interactive);
 }
 
@@ -291,6 +291,49 @@ export async function updateWorkspace(
       record,
       oldProfiles.join("\0") !== nextProfiles.join("\0")
     );
+  } finally {
+    await release();
+  }
+}
+
+export async function alignWorkspaceRoot(
+  runner: StreamingCommandRunner,
+  options: LifecycleOptions,
+  name: string,
+  reset = false
+): Promise<WorkspaceRecord> {
+  const workspaceName = validateLifecycleName(name, "workspace");
+  const state = new LifecycleState(options.stateRoot);
+  const release = await state.acquireWorkspaceSetupLock(workspaceName);
+  try {
+    const record = await state.readWorkspace(workspaceName);
+    await assertContainerRunning(runner, record);
+    const status = await projectCommand(runner, record, ["git", "status", "--porcelain"]);
+    if (status.exitCode !== 0) throw commandError("inspect project Git status", status);
+    if (status.stdout.trim()) {
+      throw new UserError(`workspace '${workspaceName}' has uncommitted project changes`);
+    }
+    const fetch = await projectCommand(runner, record, ["git", "fetch", "origin", record.rootRef]);
+    if (fetch.exitCode !== 0) throw commandError(`fetch root ref '${record.rootRef}'`, fetch);
+    if (record.rootRef.startsWith("refs/heads/")) {
+      const branch = record.rootRef.slice("refs/heads/".length);
+      const align = await projectCommand(
+        runner,
+        record,
+        reset
+          ? ["git", "switch", "--force-create", branch, "FETCH_HEAD"]
+          : ["git", "switch", branch]
+      );
+      if (align.exitCode !== 0) throw commandError(`switch to root branch '${branch}'`, align);
+      if (!reset) {
+        const merge = await projectCommand(runner, record, ["git", "merge", "--ff-only", "FETCH_HEAD"]);
+        if (merge.exitCode !== 0) throw commandError(`fast-forward root ref '${record.rootRef}'`, merge);
+      }
+    } else {
+      const checkout = await projectCommand(runner, record, ["git", "switch", "--detach", "FETCH_HEAD"]);
+      if (checkout.exitCode !== 0) throw commandError(`check out root ref '${record.rootRef}'`, checkout);
+    }
+    return record;
   } finally {
     await release();
   }
@@ -506,7 +549,7 @@ async function runnableWorkspace(
 ): Promise<WorkspaceRecord> {
   const record = await showWorkspace(options, name);
   if (record.phase !== "ready") {
-    throw new UserError(`workspace '${record.name}' is not ready (phase: ${record.phase}); run dim setup`);
+    throw new UserError(`workspace '${record.name}' is not ready (phase: ${record.phase}); run dim workspace setup`);
   }
   await assertContainerRunning(runner, record);
   return record;
@@ -515,7 +558,7 @@ async function runnableWorkspace(
 async function assertContainerRunning(runner: StreamingCommandRunner, record: WorkspaceRecord): Promise<void> {
   const inspect = await runner.run("docker", ["container", "inspect", record.containerName, "--format", "{{.State.Running}}"]);
   if (inspect.exitCode !== 0 || inspect.stdout.trim() !== "true") {
-    throw new UserError(`workspace '${record.name}' is stopped; run dim start`);
+    throw new UserError(`workspace '${record.name}' is stopped; run dim workspace start`);
   }
 }
 

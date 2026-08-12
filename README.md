@@ -122,9 +122,9 @@ integrations. It does not expose a generic Git-provider extension point. See
 ```bash
 dim project create project \
   --url /path/to/project --ref main --apply-repos
-dim create project work-1
-dim run work-1 codex
-dim exec work-1 -- bash
+dim workspace create project work-1
+dim workspace run work-1 codex
+dim workspace exec work-1 -- bash
 ```
 
 The selected ref's `.dim/repos.yml` supplies the stable root and non-root
@@ -139,7 +139,7 @@ the host Git CLI and are never parsed to invent a name.
 
 This repository implements the same project contract on itself through
 `.dim/setup.sh` and `.dim/entrypoint.sh`; after pushing it as the Project
-root, `dim run work-1 codex` launches Codex in the persistent DIM workspace,
+root, `dim workspace run work-1 codex` launches Codex in the persistent DIM workspace,
 no separate launcher needed.
 
 For a complete, tested walkthrough that exposes a nested development

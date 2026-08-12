@@ -90,15 +90,29 @@ test("CI runner commands expose lifecycle and configurable defaults", () => {
 });
 
 test("workspace resources command requires at least one live limit", () => {
-  const help = run(["resources", "--help"]);
+  const workspaceHelp = run(["workspace", "--help"]);
+  assert.equal(workspaceHelp.status, 0);
+  for (const command of ["align", "create", "discard", "resources", "update"]) {
+    assert.match(workspaceHelp.stdout, new RegExp(command));
+  }
+
+  const removedRoot = run(["resources", "work-1"]);
+  assert.notEqual(removedRoot.status, 0);
+  assert.match(removedRoot.stderr, /unknown command 'resources'/);
+
+  const help = run(["workspace", "resources", "--help"]);
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--cpus <count>/);
   assert.match(help.stdout, /--memory <size>/);
   assert.match(help.stdout, /--pids-limit <count>/);
 
-  const missing = run(["resources", "work-1"]);
+  const missing = run(["workspace", "resources", "work-1"]);
   assert.notEqual(missing.status, 0);
   assert.match(missing.stderr, /provide at least one resource limit/);
+
+  const unsafeAlign = run(["workspace", "align", "work-1", "--reset"]);
+  assert.notEqual(unsafeAlign.status, 0);
+  assert.match(unsafeAlign.stderr, /--reset requires --yes/);
 });
 
 test("controller serve preserves the active owner and cleans up its runtime files", async () => {

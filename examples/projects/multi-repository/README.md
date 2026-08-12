@@ -26,7 +26,7 @@ Install DIM, then from this directory:
 ```bash
 bash create-repositories.bash
 bash register-project.bash
-dim create example example-dev
+dim workspace create example example-dev
 ```
 
 The registration script runs:
@@ -55,15 +55,15 @@ dim repo url --workspace example secrets
 Run a shell or coding agent:
 
 ```bash
-dim run example-dev bash
-dim run example-dev codex
-dim run example-dev claude
+dim workspace run example-dev bash
+dim workspace run example-dev codex
+dim workspace run example-dev claude
 ```
 
 Arguments can follow `--`:
 
 ```bash
-dim run example-dev bash -- -lc 'git status'
+dim workspace run example-dev bash -- -lc 'git status'
 ```
 
 ## Trust and container boundaries
@@ -112,13 +112,13 @@ EXAMPLE_SECRET=not-a-real-secret bash deploy-secret.bash
 Check it from the trusted workspace:
 
 ```bash
-dim exec example-dev -- sh ops/secret-service.sh secret-health
+dim workspace exec example-dev -- sh ops/secret-service.sh secret-health
 ```
 
 Or through its constrained HTTP interface from the agent:
 
 ```bash
-dim run example-dev bash -- \
+dim workspace run example-dev bash -- \
   -lc 'wget -qO- http://secret:7099/healthz'
 ```
 
@@ -130,8 +130,8 @@ real secret.
 Remove the service and workspace:
 
 ```bash
-dim exec example-dev -- sh ops/secret-service.sh remove-secret
-dim discard example-dev --yes
+dim workspace exec example-dev -- sh ops/secret-service.sh remove-secret
+dim workspace discard example-dev --yes
 ```
 
 ## Development verification

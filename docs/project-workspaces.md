@@ -203,7 +203,7 @@ host credential helpers or SSH configuration apply to the source URL.
 Create a workspace and persist its desired Compose profiles:
 
 ```bash
-dim create example example-dev \
+dim workspace create example example-dev \
   --profile development \
   --profile secrets
 ```
@@ -229,15 +229,15 @@ Creation:
 Run project-defined tasks without repeating setup:
 
 ```bash
-dim run example-dev codex
-dim run example-dev test -- --filter unit
+dim workspace run example-dev codex
+dim workspace run example-dev test -- --filter unit
 ```
 
 Run a raw command in the top-level workspace:
 
 ```bash
-dim exec example-dev -- bash
-dim exec example-dev -- docker compose \
+dim workspace exec example-dev -- bash
+dim workspace exec example-dev -- docker compose \
   --file .dim/docker-compose.yml ps
 ```
 
@@ -247,8 +247,8 @@ is the explicit equivalent.
 Update the project and reconcile its environment:
 
 ```bash
-dim update example-dev
-dim update example-dev \
+dim workspace update example-dev
+dim workspace update example-dev \
   --profile development \
   --profile production
 ```
@@ -263,8 +263,8 @@ the services that own those repositories.
 Stop and resume the environment:
 
 ```bash
-dim stop example-dev
-dim start example-dev
+dim workspace stop example-dev
+dim workspace start example-dev
 ```
 
 `stop` preserves the project checkout and inner-Docker state. `start`
@@ -273,20 +273,20 @@ detached project services return to their desired state. Use `restart` to
 apply the same sequence to a running workspace:
 
 ```bash
-dim restart example-dev
+dim workspace restart example-dev
 ```
 
 Retry setup explicitly:
 
 ```bash
-dim setup example-dev
+dim workspace setup example-dev
 ```
 
 Inspect or discard:
 
 ```bash
-dim show example-dev
-dim discard example-dev --yes
+dim workspace show example-dev
+dim workspace discard example-dev --yes
 ```
 
 Discard stops project services when possible, then removes the top-level
