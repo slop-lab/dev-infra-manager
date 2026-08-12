@@ -25,7 +25,6 @@
   "scripts": {
     "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
     "pack:dry-run": "pnpm run build && bash ../../scripts/pnpm-pack-dry-run.bash ./dist",
-    "publish:package": "pnpm run build && pnpm publish ./dist",
     "check": "tsc -p tsconfig.json --noEmit",
     "cli": "tsx src/cli.ts",
     "test": "pnpm --filter @slop-lab/dim-core run build && node --test test/*.test.ts"

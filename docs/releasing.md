@@ -81,16 +81,21 @@ successfully before publishing.
 
 Publish core and contracts first, then their implementations and plugin, and
 finally the CLI and installer. Workspace package dependencies are exact.
-Run these commands from the release commit:
+Build the publishable packages, then invoke `npm publish` directly from the
+release commit. Do not run `npm publish` through a pnpm script: pnpm exports
+pnpm-only `npm_config_*` values that current npm versions warn about and a
+future npm major may reject.
 
 ```bash
-pnpm --filter @slop-lab/dim-core run publish:package
-pnpm --filter @slop-lab/dim-contracts-external-url run publish:package
-pnpm --filter @slop-lab/dim-controller-proxy run publish:package
-pnpm --filter @slop-lab/dim-plugin-dns-cloudflare run publish:package
-pnpm --filter @slop-lab/dim-plugin-external-urls run publish:package
-pnpm --filter @slop-lab/dim-cli run publish:package
-pnpm --filter @slop-lab/dim-installer run publish:package
+pnpm --recursive run build
+
+npm publish packages/core/dist
+npm publish packages/contracts/external-url/dist
+npm publish packages/controller-proxy/dist
+npm publish packages/plugin/dns-cloudflare/dist
+npm publish packages/plugin/external-urls/dist
+npm publish packages/cli/dist
+npm publish packages/installer/dist
 ```
 
 Verify clean installs of the released version from the registry in an empty

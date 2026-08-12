@@ -23,7 +23,6 @@
     "build": "node ../../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
     "pack:dry-run": "pnpm run build && bash ../../../scripts/pnpm-pack-dry-run.bash ./dist",
-    "publish:package": "pnpm run build && pnpm publish ./dist",
     "test": "vitest run"
   },
   "publishConfig": {
