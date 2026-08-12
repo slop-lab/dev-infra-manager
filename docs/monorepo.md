@@ -102,6 +102,10 @@ service. The agent image supplies Codex, Node.js, pnpm, just, Git, and a
 private Docker daemon without receiving either host Docker socket or the
 trusted workspace's Docker socket.
 
+The agent's `/home/dim-agent` is a Project-owned named volume. Separate
+`dim run` invocations therefore share Codex configuration and other user-home
+state until the workspace is discarded; source remains in `/workspace`.
+
 The setup also delegates four threaded cgroup slots (`tools-0` through
 `tools-3`) below the workspace's existing host-enforced resource cgroup.
 `dim run ... bash` stays in the agent service's default group as a responsive

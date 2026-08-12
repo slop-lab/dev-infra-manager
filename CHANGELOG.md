@@ -42,6 +42,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   and applied it to the canonical agent through a generated Compose override,
   so nested services can resolve approved DIM-managed endpoints such as
   `dim-gitea` without hard-coded addresses or copying the workspace hosts file.
+- Persisted the canonical development agent's home in a Project-owned named
+  volume so Codex configuration and other home state survive separate task
+  invocations and agent service recreation until workspace discard.
 
 ## [0.5.0] - 2026-08-06
 

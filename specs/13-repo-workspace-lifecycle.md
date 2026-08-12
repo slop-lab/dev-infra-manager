@@ -183,6 +183,12 @@ keeps ordinary `bash` task execution in the agent container's default group
 and starts Codex in a delegated tool group so management commands retain a
 responsive execution path.
 
+The canonical self-Project stores the unprivileged agent's home in a
+Project-owned named volume and sets `HOME=/home/dim-agent` for setup and task
+dispatch. Agent configuration persists across task processes and service
+recreation, while workspace discard removes the volume through reviewed
+teardown.
+
 ## Applying changes
 
 DIM never applies Project or root remote changes to a running workspace

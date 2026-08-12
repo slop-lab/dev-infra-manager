@@ -110,6 +110,11 @@ agent_git_identity="$(dim run "$workspace_name" bash -- -lc \
 test "$agent_git_identity" = \
   "DIM Self Host <dim-self-host@dim.invalid>|DIM Self Host <dim-self-host@dim.invalid>"
 dim run "$workspace_name" bash -- -lc '
+  test "$HOME" = /home/dim-agent
+  printf "persistent\n" > "$HOME/dim-home-smoke"
+'
+test "$(dim run "$workspace_name" bash -- -lc 'cat "$HOME/dim-home-smoke"')" = persistent
+dim run "$workspace_name" bash -- -lc '
   test -n "$(getent hosts dim-gitea)"
   git ls-remote origin HEAD >/dev/null
 '
