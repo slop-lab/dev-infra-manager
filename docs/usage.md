@@ -96,7 +96,8 @@ requires writable `/dev/kvm`, `qemu-system-x86_64`, `qemu-img`, and
 `cloud-localds`. The verified Ubuntu cloud image is cached under `.local/kvm`;
 each test uses and deletes a temporary overlay disk. The default output
 identifies each stage and prints only the last 30 lines on failure; append
-`--verbose` to the recipe or direct script to stream complete logs.
+`--verbose` to the recipe or direct script to stream complete logs. The guest
+overlay defaults to 32 GiB and can be changed with `DIM_KVM_SMOKE_DISK_SIZE`.
 
 Install gVisor `runsc` directly for the no-KVM Docker-compatible backend:
 
