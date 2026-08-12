@@ -15,6 +15,7 @@ runner_url="${GITHUB_RUNNER_URL:-https://github.com/slop-lab/dev-infra-manager}"
 runner_labels="${GITHUB_RUNNER_LABELS:-sysbox,kvm}"
 runner_name="${GITHUB_RUNNER_NAME:-dim-qemu-$(hostname)-$$}"
 ssh_port="${DIM_ACTIONS_RUNNER_SSH_PORT:-22223}"
+disk_size="${DIM_ACTIONS_RUNNER_DISK_SIZE:-64G}"
 workdir="$(mktemp -d /tmp/dim-actions-runner-run-XXXXXX)"
 pid=""
 
@@ -32,6 +33,10 @@ pid=""
 }
 [[ "$ssh_port" =~ ^[0-9]+$ ]] || {
   echo "DIM_ACTIONS_RUNNER_SSH_PORT must be numeric" >&2
+  exit 2
+}
+[[ "$disk_size" =~ ^[1-9][0-9]*[GM]$ ]] || {
+  echo "DIM_ACTIONS_RUNNER_DISK_SIZE must be a positive size in G or M" >&2
   exit 2
 }
 
@@ -64,7 +69,7 @@ if [[ "$mode" == run ]]; then
 fi
 
 dim_runner_create_seed "$workdir" "dim-actions-runner-$$" "$ssh_port"
-qemu-img create -q -f qcow2 -F qcow2 -b "$base_image" "$workdir/root.qcow2" 48G
+qemu-img create -q -f qcow2 -F qcow2 -b "$base_image" "$workdir/root.qcow2" "$disk_size"
 dim_runner_start_qemu "$workdir/root.qcow2" "$workdir/seed.img" "$workdir/qemu.log" "$ssh_port"
 pid="$DIM_RUNNER_QEMU_PID"
 dim_runner_wait_for_ssh "$workdir/qemu.log" "actions-runner[$runner_name]"

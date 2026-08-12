@@ -31,6 +31,10 @@ GITHUB_RUNNER_URL=https://github.com/slop-lab/dev-infra-manager \
 just run-github-runner-kvm
 ```
 
+The disposable runner overlay defaults to 64 GiB so the KVM workflow has room
+for its nested guest images and container builds. Set
+`DIM_ACTIONS_RUNNER_DISK_SIZE` to another positive `G` or `M` size when needed.
+
 By default, an authenticated `gh` CLI requests the one-hour repository runner
 registration token. Alternatively, pass it only in the process environment as
 `GITHUB_RUNNER_TOKEN`. The token is sent after boot over SSH; it is not stored
