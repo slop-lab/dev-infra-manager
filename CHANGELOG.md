@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Added managed Caddy static upstream routes for exact hostnames beneath an
+  ingress wildcard domain, with origin-only URL validation and precedence over
+  dynamic workspace routes.
+
 ## [0.6.0] - 2026-08-12
 
 ### Changed

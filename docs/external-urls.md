@@ -223,6 +223,30 @@ One provider instance can serve multiple domains and ingresses.
 The controller rejects a configured Caddy ingress when its referenced provider
 instance or registered driver plugin is missing.
 
+### Static upstream routes
+
+A managed Caddy ingress can reserve exact hostnames under its wildcard domain
+and send them directly to host-reachable HTTP services. Static routes take
+precedence over workspace routes; all other wildcard hostnames continue to use
+the DIM workspace router. For example, add this field to the Caddy ingress
+argument to expose managed Gitea as `https://git.remote.example.com:8443`:
+
+```json
+{
+  "staticRoutes": [
+    { "subdomain": "git", "upstream": "http://127.0.0.1:3300" }
+  ]
+}
+```
+
+Each `subdomain` must be one DNS label and unique within the ingress. Each
+`upstream` must be an origin-only `http://` or `https://` URL without a path,
+query, fragment, or embedded credentials. Because Caddy uses host networking,
+`127.0.0.1` addresses the DIM host. Only expose services intended to cross
+this trust boundary, and configure the upstream application's canonical
+external URL separately when it generates redirects or absolute links. For
+managed Gitea, static routing alone does not change its current `ROOT_URL`.
+
 Because the current config contains credentials, do not provide
 `~/.config/dim/external-urls.json` to an AI agent or include it in diagnostics.
 A separately managed secret store may replace this layout in a later version.

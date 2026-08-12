@@ -22,6 +22,12 @@ export interface CaddyIngressArgument {
   dnsArgument: string;
   acmeEmail?: string;
   routePolicy?: ExternalUrlRoutePolicyConfig;
+  staticRoutes?: CaddyStaticRoute[];
+}
+
+export interface CaddyStaticRoute {
+  subdomain: string;
+  upstream: string;
 }
 
 export function parseCaddyIngressArgument(argument: string): CaddyIngressArgument {
@@ -60,10 +66,48 @@ export function parseCaddyIngressArgument(argument: string): CaddyIngressArgumen
   if (input.acmeEmail !== undefined && typeof input.acmeEmail !== "string") {
     throw caddyArgumentError("field 'acmeEmail' must be a string");
   }
+  const staticRoutes = parseStaticRoutes(input.staticRoutes);
   return {
     ...input,
-    ...(input.routePolicy === undefined ? {} : { routePolicy: parseRoutePolicy(input.routePolicy, caddyArgumentError) })
+    ...(input.routePolicy === undefined ? {} : { routePolicy: parseRoutePolicy(input.routePolicy, caddyArgumentError) }),
+    ...(staticRoutes === undefined ? {} : { staticRoutes })
   } as unknown as CaddyIngressArgument;
+}
+
+function parseStaticRoutes(value: unknown): CaddyStaticRoute[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw caddyArgumentError("field 'staticRoutes' must be an array");
+  const routes = value.map((candidate, index) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      throw caddyArgumentError(`field 'staticRoutes[${index}]' must be an object`);
+    }
+    const route = candidate as Record<string, unknown>;
+    if (typeof route.subdomain !== "string" || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(route.subdomain)) {
+      throw caddyArgumentError(`field 'staticRoutes[${index}].subdomain' must be one DNS label`);
+    }
+    if (typeof route.upstream !== "string") {
+      throw caddyArgumentError(`field 'staticRoutes[${index}].upstream' must be an HTTP(S) URL`);
+    }
+    let upstream: URL;
+    try {
+      upstream = new URL(route.upstream);
+    } catch {
+      throw caddyArgumentError(`field 'staticRoutes[${index}].upstream' must be an HTTP(S) URL`);
+    }
+    if ((upstream.protocol !== "http:" && upstream.protocol !== "https:") || !upstream.hostname
+      || upstream.username || upstream.password || upstream.pathname !== "/" || upstream.search || upstream.hash) {
+      throw caddyArgumentError(
+        `field 'staticRoutes[${index}].upstream' must be an origin-only HTTP(S) URL without credentials`
+      );
+    }
+    return { subdomain: route.subdomain.toLowerCase(), upstream: upstream.origin };
+  });
+  const names = new Set<string>();
+  for (const route of routes) {
+    if (names.has(route.subdomain)) throw caddyArgumentError(`field 'staticRoutes' repeats subdomain '${route.subdomain}'`);
+    names.add(route.subdomain);
+  }
+  return routes;
 }
 
 function caddyArgumentError(detail: string): Error {
@@ -87,6 +131,11 @@ export function renderCaddyDeployment(
   const environment = Object.keys(dns.environment)
     .map((name) => `      ${name}: \${${name}:?set ${name}}`)
     .join("\n");
+  const staticRoutes = (ingress.staticRoutes ?? []).map((route, index) => `
+\t@static${index} host ${route.subdomain}.${ingress.domain}
+\thandle @static${index} {
+\t\treverse_proxy ${route.upstream}
+\t}`).join("\n");
   return {
     dockerfile: `FROM caddy:${CADDY_VERSION}-builder-alpine AS builder
 RUN xcaddy build v${CADDY_VERSION}${modules}
@@ -104,8 +153,11 @@ https://*.${ingress.domain}:${ingress.listenPort} {
 \t\t${dns.directive}
 \t\tresolvers 1.1.1.1
 \t}
+${staticRoutes}
 
-\treverse_proxy 127.0.0.1:${routerPort}
+\thandle {
+\t\treverse_proxy 127.0.0.1:${routerPort}
+\t}
 }
 `,
     compose: `services:

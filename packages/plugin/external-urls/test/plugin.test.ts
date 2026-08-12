@@ -174,7 +174,8 @@ describe("external URLs plugin", () => {
             listenHost: "127.0.0.1",
             listenPort: 9443,
             dnsProvider: "example-main",
-            dnsArgument: "record configuration"
+            dnsArgument: "record configuration",
+            staticRoutes: [{ subdomain: "git", upstream: "http://127.0.0.1:3300" }]
           })
         }
       }
@@ -225,6 +226,8 @@ describe("external URLs plugin", () => {
       "utf8"
     );
     expect(caddyfile).toMatch(/reverse_proxy 127\.0\.0\.1:\d+/);
+    expect(caddyfile).toContain("host git.remote.example.com");
+    expect(caddyfile).toContain("reverse_proxy http://127.0.0.1:3300");
   });
 
   it("starts normally without a configured ingress", async () => {

@@ -273,6 +273,10 @@ Drivers may own host services required by an ingress. Those services are
 reconciled by the managed controller after configuration changes and must not
 require a separate setup command. Driver-private runtime values must be kept
 under DIM state rather than added to the opaque user-supplied argument.
+Managed Caddy may additionally reserve explicitly configured exact hostnames
+beneath its wildcard domain for static HTTP(S) upstreams. Such routes must be
+validated as credential-free origins and take precedence over workspace
+routes without granting workspaces authority to create or change them.
 
 Workspace-scoped URL operations are:
 

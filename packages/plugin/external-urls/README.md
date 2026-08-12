@@ -55,6 +55,12 @@ DNS module, writes runtime files, and owns the Caddy container. Project
 repositories do not deploy Caddy themselves. Configuration includes a named
 DNS provider and that provider's opaque record argument.
 
+The argument may also contain `staticRoutes`, for example
+`[{"subdomain":"git","upstream":"http://127.0.0.1:3300"}]`. These exact
+wildcard-domain hostnames route to host-reachable services before the dynamic
+workspace router. The main External URLs documentation defines validation and
+trust-boundary requirements.
+
 For example, after configuring `cloudflare-main`:
 
 ```bash
