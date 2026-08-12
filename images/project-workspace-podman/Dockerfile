@@ -1,7 +1,8 @@
 FROM quay.io/podman/stable:v5.6.2
 
-RUN dnf clean all \
-  && dnf --refresh install -y \
+RUN for attempt in 1 2 3; do \
+    dnf clean all; \
+    dnf --refresh install -y \
     bash \
     coreutils \
     curl \
@@ -14,6 +15,10 @@ RUN dnf clean all \
     shadow-utils \
     sudo \
     tini \
+    && break; \
+    test "$attempt" -lt 3 || exit 1; \
+    sleep 5; \
+  done \
   && dnf clean all
 
 # An enclosing user namespace can make files installed by the sudo RPM appear
