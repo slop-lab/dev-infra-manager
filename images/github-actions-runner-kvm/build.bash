@@ -52,7 +52,7 @@ if [[ ! -f "$cloud_image" ]]; then
 fi
 
 dim_runner_create_seed "$workdir" dim-actions-runner-build "$ssh_port"
-qemu-img create -q -f qcow2 -F qcow2 -b "$cloud_image" "$workdir/root.qcow2" 48G
+qemu-img create -q -f qcow2 -F qcow2 -b "$cloud_image" "$workdir/root.qcow2" 64G
 dim_runner_start_qemu "$workdir/root.qcow2" "$workdir/seed.img" "$workdir/qemu.log" "$ssh_port"
 pid="$DIM_RUNNER_QEMU_PID"
 dim_runner_wait_for_ssh "$workdir/qemu.log" actions-runner-image
