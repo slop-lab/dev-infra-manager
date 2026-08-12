@@ -15,10 +15,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   unprivileged agent, private rootless DinD, and an optional external URL.
 - Added a root-aware `project create` workflow that imports the root, offers
   its managed `.dim/repos.yml`, supports explicit apply/skip choices, and
-  points skipped applications at the clone-free `repo apply` path.
+  points skipped applications at the clone-free `repo apply` path. Matching
+  failed root imports can be retried with the same root alias and origin;
+  managed-root manifests reject ambiguous relative filesystem URLs and local
+  manifest inputs never replace the tracked root file.
 - Made the npm installer facade bootstrap itself through `mise exec node@24`
   when Node.js 24 or 26 is not already on `PATH`, so a mise installation no
-  longer requires Node.js in the global mise configuration.
+  longer requires Node.js in the global mise configuration. The documented
+  mise install uses `--raw --global` so the low-download review prompt and its
+  `Y` response remain visible.
 
 ## [0.5.0] - 2026-08-06
 

@@ -90,6 +90,9 @@ dim project create acme \
 `repo add` runs source clone through the invoking host Git CLI, so existing
 credential helpers, SSH configuration, and SSH agent work for any Git URL.
 The alias is explicit and scoped to the Project.
+If the source is temporarily unavailable, fix host connectivity or
+credentials and repeat the same `project create` command; DIM resumes only a
+failed root import with the same root alias and origin.
 
 ```bash
 dim repo add acme root https://example.com/acme.git --root --ref main
@@ -103,6 +106,11 @@ dim project create acme \
   --root root --url https://example.com/acme.git \
   --ref main --apply-repos
 ```
+
+Managed-root manifests are read without a checkout, so use network/scp-style
+Git URLs or absolute paths in tracked `.dim/repos.yml`; relative filesystem
+paths are rejected. A local file passed with `--repos` or `repo apply --file`
+is never copied into or written over the tracked root manifest.
 
 Declining or using `--no-apply-repos` does not require another clone. Run
 `dim repo plan acme` and `dim repo apply acme --yes` to read the file from the

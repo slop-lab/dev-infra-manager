@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Runs a disposable verdaccio registry seeded from locally built tarballs, so
-# smoke tests can exercise real `npm install`/`mise use -g npm:...` flows
+# smoke tests can exercise real `npm install`/`mise use --raw --global npm:...` flows
 # against unreleased package versions without touching the real npm
 # registry. Two things learned the hard way while building this:
 #

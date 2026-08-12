@@ -252,6 +252,7 @@ async function installerVersion(): Promise<string> {
 }
 
 function runningUnderMise(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.DIM_INVOKED_VIA_MISE === "1") return true;
   if (Object.keys(env).some((name) => name.startsWith("MISE_"))) return true;
   const entrypoint = process.argv[1] ?? "";
   return entrypoint.split(path.sep).includes("mise");

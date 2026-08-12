@@ -119,6 +119,23 @@ export function validateRepositorySet(value: unknown, label = "repositorySet"): 
   return set;
 }
 
+export function assertRepositorySetUrlsArePortable(set: RepositorySet, label = "repos.yml"): void {
+  for (const [name, upstream] of Object.entries(set.upstreams)) {
+    assertPortableGitUrl(upstream.url, `${label}.upstreams.${name}.url`);
+  }
+  for (const [alias, entry] of Object.entries(set.repositories)) {
+    if (entry.url !== undefined) assertPortableGitUrl(entry.url, `${label}.repositories.${alias}.url`);
+  }
+}
+
+function assertPortableGitUrl(url: string, label: string): void {
+  const hasScheme = /^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(url);
+  const isScpLike = /^(?:[^/@:]+@)?[^/:]+:.+/.test(url);
+  if (!hasScheme && !isScpLike && !url.startsWith("/")) {
+    throw new UserError(`${label} must not be a relative filesystem path in a managed root manifest`);
+  }
+}
+
 export function resolveRepositoryConnection(
   set: RepositorySet,
   alias: string

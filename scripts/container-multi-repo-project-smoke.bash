@@ -4,6 +4,8 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 suffix="$PPID-$$"
 project_name="multi-$suffix"
+custom_project_name="multi-custom-$suffix"
+retry_project_name="multi-retry-$suffix"
 source_namespace="source-$suffix"
 api_repo="api"
 worker_repo="worker"
@@ -27,7 +29,7 @@ cleanup() {
     if [[ -n "$credentials" ]]; then
       admin_username="$(printf '%s' "$credentials" | jq -r .adminUsername)"
       admin_password="$(printf '%s' "$credentials" | jq -r .adminPassword)"
-      for organization in "dim-$project_name" "$source_namespace"; do
+      for organization in "dim-$project_name" "dim-$custom_project_name" "dim-$retry_project_name" "$source_namespace"; do
         curl --fail --silent --show-error \
           --user "$admin_username:$admin_password" \
           --request DELETE \
@@ -194,9 +196,34 @@ export GIT_CONFIG_COUNT=1
 export GIT_CONFIG_KEY_0=credential.helper
 export GIT_CONFIG_VALUE_0="$source_helper"
 export GIT_TERMINAL_PROMPT=0
+
+echo "[multi-repository] retry an interrupted root import with the same command"
+retry_url="$source_root/retry.git"
+if "$dim_bin" project create "$retry_project_name" --root root --url "$retry_url" >/dev/null 2>&1; then
+  echo "missing root source unexpectedly imported" >&2
+  exit 1
+fi
+create_repo retry "retry-source-ok"
+"$dim_bin" project create "$retry_project_name" --root root --url "$retry_url" >/dev/null
+test "$("$dim_bin" repo show "$retry_project_name" root --json | jq -r .phase)" = ready
+"$dim_bin" project purge "$retry_project_name" --yes
+
+echo "[multi-repository] custom bootstrap manifest does not replace the tracked root manifest"
+custom_manifest="$source_root/custom-repos.yml"
+jq '.repositories.root.protect = []' "$project_worktree/.dim/repos.yml" > "$custom_manifest"
+"$dim_bin" project create "$custom_project_name" --repos "$custom_manifest" --yes >/dev/null
+custom_clone="$source_root/custom-managed-root"
+"$dim_bin" x git clone --quiet "$("$dim_bin" repo url "$custom_project_name" root)" "$custom_clone"
+cmp "$project_worktree/.dim/repos.yml" "$custom_clone/.dim/repos.yml"
+"$dim_bin" project purge "$custom_project_name" --yes
+
+echo "[multi-repository] bootstrap from an authenticated private root URL and apply its manifest"
 "$dim_bin" project create "$project_name" \
-  --repos "$project_worktree/.dim/repos.yml" \
-  --yes \
+  --root root \
+  --url "$source_git_base/root" \
+  --ref main \
+  --protect 'release/*' \
+  --apply-repos \
   >/dev/null
 root_url="$("$dim_bin" repo url "$project_name" root)"
 

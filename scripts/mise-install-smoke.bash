@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Exercises the `mise use -g 'npm:@slop-lab/dim-installer@<version>'` install
+# Exercises the `mise use --raw --global 'npm:@slop-lab/dim-installer@<version>'` install
 # path end to end inside a disposable container: a local npm registry is
 # seeded with the freshly built package tarballs (never the real npm
 # registry), mise resolves/installs the installer facade through it, and the
@@ -15,16 +15,13 @@ set -euo pipefail
 # local registry proxy ordinary public dependencies (e.g. commander) that
 # aren't part of this workspace.
 #
-# mise versions >= 2026.7.x refuse to install any npm package below a
-# popularity threshold ("aube": refuses low-download packages), which would
-# always reject an unreleased/low-adoption @slop-lab/dim-installer regardless
-# of registry. There is no working bypass for this in that mise generation
-# yet, so this script pins an older mise release that predates the check
-# purely to keep the install-path smoke test runnable; it is not evidence
-# the check has been solved for real users on current mise.
+# Current mise/aube releases prompt before installing a requested package below
+# the weekly-download threshold. --raw is required for that prompt and its
+# input to reach the terminal; this non-interactive smoke supplies the same Y
+# approval through stdin.
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-mise_version="${DIM_PINNED_MISE_VERSION:-v2026.5.0}"
+mise_version="${DIM_PINNED_MISE_VERSION:-v2026.8.4}"
 image="${DIM_MISE_SMOKE_IMAGE:-node:22-bookworm}"
 
 source_dir="$(mktemp -d /tmp/dim-mise-smoke-src.XXXXXX)"
@@ -82,8 +79,8 @@ curl -fsSL https://mise.run | MISE_VERSION="$PINNED_MISE_VERSION" sh >/tmp/mise-
 export PATH="$HOME/.local/bin:$PATH"
 mise --version
 
-echo "[container] mise use -g npm:@slop-lab/dim-installer@$DIM_PACKAGE_VERSION"
-mise use -g "npm:@slop-lab/dim-installer@$DIM_PACKAGE_VERSION" >/dev/null
+echo "[container] mise use --raw --global npm:@slop-lab/dim-installer@$DIM_PACKAGE_VERSION"
+printf 'Y\n' | mise use --raw --global "npm:@slop-lab/dim-installer@$DIM_PACKAGE_VERSION"
 
 echo "[container] remove the image Node.js from PATH; keep only mise and system utilities"
 export PATH="$HOME/.local/share/mise/shims:$HOME/.local/bin:/usr/bin:/bin"

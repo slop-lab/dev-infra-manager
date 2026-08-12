@@ -149,7 +149,7 @@ Required tests cover:
 - stale config (missing executable, facade self-reference) surfaced as
   actionable errors, not silent fallback to a `PATH`-resolved `dim`;
 - `dim plugin ...` never intercepted by the facade;
-- `mise use -g 'npm:@slop-lab/dim-installer@<version>'` end to end against a
+- `mise use --raw --global 'npm:@slop-lab/dim-installer@<version>'` end to end against a
   disposable local npm registry (`just verify-mise-install-smoke`), covering
   the mise-detected `--no-local-bin` default and an explicit
   `--local-bin` override.

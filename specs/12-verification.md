@@ -172,7 +172,7 @@ probe running a private DinD workload.
 ## Installer Facade Verification
 
 `just verify-mise-install-smoke` requires Docker and network access. It
-verifies `mise use -g 'npm:@slop-lab/dim-installer@<version>'` end to end in a
+verifies `mise use --raw --global 'npm:@slop-lab/dim-installer@<version>'` end to end in a
 disposable container against a local npm registry seeded from freshly built
 tarballs, covering facade-only vs. proxied `--help`/`--version`, the
 mise-detected `--no-local-bin` default, and an explicit `--local-bin`

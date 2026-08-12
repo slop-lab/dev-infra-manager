@@ -91,7 +91,11 @@ property names are Project-scoped aliases. Each value may contain `url`,
 repositories omitted from the file. Reapplying an identical entry is a no-op;
 an existing alias with a different URL, root role/ref, or protection policy is
 a conflict rather than an implicit mutation. With no `--file`, it reads the
-managed root's optional `.dim/repos.yml`.
+managed root's optional `.dim/repos.yml`. Because that file is read without a
+local checkout, its Git URLs must be network/scp-style URLs or absolute
+filesystem paths; relative filesystem paths are rejected as ambiguous. An
+explicit local `--repos`/`--file` manifest is only an input to reconciliation
+and is never written over the root repository's tracked `.dim/repos.yml`.
 
 `repo delete --yes` deletes an unused non-root repository from managed Gitea
 and Project metadata. It rejects the Project root and any Project referenced
@@ -105,6 +109,9 @@ Repository-set planning and all state transitions use the admin API. External
 clone/push transport is a local CLI adapter so current host credential helpers,
 SSH configuration, and SSH agent are used. The managed Gitea credential is
 applied only to the destination push.
+If root transfer fails after Project creation, repeating `project create` with
+the same root alias and origin retries that failed transfer. It does not adopt
+an unrelated existing Project, a ready root, or a different origin.
 
 The built-in admin operations are:
 

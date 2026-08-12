@@ -32,7 +32,7 @@ Implemented:
 - A thin installer facade (`@slop-lab/dim-installer`, also exposing `dim`) that
   installs the CLI and plugins via `install-cli`/`install-plugin` and
   proxies every other command to a separately installed `@slop-lab/dim-cli`,
-  verified through `mise use -g` in a disposable container and against the
+  verified through `mise use --raw --global` in a disposable container and against the
   canonical Project example.
 - Root-ref refresh on workspace start/restart without live mutation of running
   workspaces.

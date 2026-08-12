@@ -15,7 +15,7 @@ hosts are not supported.
 Two supported ways to run it, both pinned to an exact version:
 
 ```bash
-mise use -g 'npm:@slop-lab/dim-installer@0.5.0'
+mise use --raw --global 'npm:@slop-lab/dim-installer@0.5.0'
 dim install-cli
 ```
 
@@ -39,13 +39,11 @@ CLI symlink bypasses this facade bootstrap and still requires Node.js 24 or
 Never use `latest` for software that controls development containers or
 loads executable plugins — always pin an exact, reviewed version.
 
-> `mise` releases from `2026.7.x` onward reject installing any npm package
-> below a weekly-download popularity threshold (currently 1000). Until
-> `@slop-lab/dim-installer` crosses that threshold on the public npm registry,
-> `mise use -g 'npm:@slop-lab/dim-installer@0.5.0'` may fail with an `aube
-> install failed: ... weekly downloads` error on those `mise` versions, with
-> no known working bypass. Use the `npx` form above, or an older `mise`
-> release, until then.
+> Current `mise` releases ask for confirmation when an npm package is below
+> aube's weekly-download threshold. Use `--raw` as shown above: without it,
+> mise may hide the confirmation prompt and leave no way to enter `Y`. Review
+> the exact pinned DIM release, then approve that direct package when prompted.
+> The approval does not exempt low-download transitive dependencies.
 
 ### Losing access to the installer
 

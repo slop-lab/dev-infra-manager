@@ -104,7 +104,7 @@ verify-container:
 install-dim-local:
     bash scripts/install-dim-local.bash
 
-# Requires Docker and network access; exercises `mise use -g npm:@slop-lab/dim-installer` in a disposable container.
+# Requires Docker and network access; exercises `mise use --raw --global npm:@slop-lab/dim-installer` in a disposable container.
 verify-mise-install-smoke:
     bash scripts/mise-install-smoke.bash
 

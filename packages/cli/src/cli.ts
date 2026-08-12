@@ -107,7 +107,7 @@ project.command("create")
       return;
     }
 
-    await adminCall("project.create", { name });
+    await createOrResumeRootProject(name, flags.root!, flags.url);
     const repository = await addRepository(name, flags.root!, {
       ...(flags.url === undefined ? {} : { url: flags.url }),
       fallback: false,
@@ -1215,6 +1215,29 @@ async function remoteRefs(url: string, pattern: string, env: NodeJS.ProcessEnv):
 async function readRepositorySetFile(file: string): Promise<RepositorySet> {
   const absolute = path.resolve(file);
   return parseRepositorySetYaml(await readFile(absolute, "utf8"), absolute);
+}
+
+async function createOrResumeRootProject(name: string, alias: string, source: string | undefined): Promise<void> {
+  try {
+    await adminCall("project.create", { name });
+    return;
+  } catch (error) {
+    if (!(error instanceof UserError) || !error.message.includes(`project '${name}' already exists`)) throw error;
+  }
+  const project = await adminCall<{
+    rootRepositoryAlias?: string;
+    repositories: Array<{
+      alias: string;
+      phase: string;
+      connections: Array<{ name: string; url: string }>;
+    }>;
+  }>("project.show", { name });
+  const root = project.repositories.find((repository) => repository.alias === alias);
+  const origin = root?.connections.find((connection) => connection.name === "origin")?.url;
+  if (project.rootRepositoryAlias !== alias || root === undefined || root.phase === "ready" || origin !== source) {
+    throw new UserError(`project '${name}' already exists`);
+  }
+  console.error(`Retrying failed root repository import for project '${name}'`);
 }
 
 async function resolveRepositorySet(projectName: string, file?: string): Promise<RepositorySet> {

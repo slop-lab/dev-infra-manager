@@ -162,7 +162,7 @@ scripts/lib/local-npm-registry.bash
 Sourced, not run directly. Provides `dim_start_local_npm_registry WORK_DIR`,
 `dim_publish_to_local_registry TARBALL...`, and
 `dim_stop_local_npm_registry` so a script can install unreleased local
-package builds through ordinary `npm install`/`mise use -g npm:...` instead
+package builds through ordinary `npm install`/`mise use --raw --global npm:...` instead
 of the real npm registry. Runs `verdaccio` via `npx` (no global install, so
 no root/writable-prefix requirement), binds it to `0.0.0.0` explicitly
 (verdaccio defaults to IPv6 loopback only), registers one throwaway user via
@@ -183,7 +183,7 @@ Builds and packs `core`, `dim-cli`, and `install`, publishes them to a
 disposable local npm registry inside a throwaway container, installs a
 pinned `mise` release predating its npm-backend download-popularity gate
 (see [Installer Facade](../14-installer-facade.md)), and runs
-`mise use -g 'npm:@slop-lab/dim-installer@<version>'` followed by facade
+`mise use --raw --global 'npm:@slop-lab/dim-installer@<version>'` followed by facade
 dispatch checks: facade-only vs. proxied `--help`/`--version`, the
 mise-detected `--no-local-bin` default, and an explicit `--local-bin`
 override.

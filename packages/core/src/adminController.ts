@@ -38,6 +38,7 @@ import type { StreamingCommandRunner } from "./types.js";
 import { isUserError, UserError } from "./errors.js";
 import {
   parseRepositorySetYaml,
+  assertRepositorySetUrlsArePortable,
   validateRepositoryRefNamespace,
   validateRepositorySet
 } from "./repositorySet.js";
@@ -193,9 +194,10 @@ async function builtinCall(
       return prepareProjectRepositorySync(runner, lifecycle, text("project"), text("alias"));
     case "repo.root-set": {
       const yaml = await readProjectRootRepositorySetYaml(runner, lifecycle, text("project"));
-      return yaml === undefined
-        ? { found: false }
-        : { found: true, repositorySet: parseRepositorySetYaml(yaml, ".dim/repos.yml") };
+      if (yaml === undefined) return { found: false };
+      const repositorySet = parseRepositorySetYaml(yaml, ".dim/repos.yml");
+      assertRepositorySetUrlsArePortable(repositorySet, ".dim/repos.yml");
+      return { found: true, repositorySet };
     }
     case "repo.list": return listProjectRepositories(lifecycle, text("project"));
     case "repo.show": return showProjectRepository(lifecycle, text("project"), text("alias"));

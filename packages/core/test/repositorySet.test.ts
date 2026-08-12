@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertRepositorySetCanCreateProject,
+  assertRepositorySetUrlsArePortable,
   mapExternalRefToRepository,
   mapRepositoryRefToExternal,
   resolveRepositoryConnection,
@@ -118,5 +119,22 @@ schemaVersion: 1
 repositories:
   api: {url: "https://token@example.test/api"}
 `)).toThrow(/must not contain credentials/);
+  });
+
+  it("rejects relative filesystem URLs only for managed root manifests", () => {
+    const relative = parseRepositorySetYaml(`
+schemaVersion: 1
+repositories:
+  root: {url: ../root.git, root: true}
+`);
+    expect(() => assertRepositorySetUrlsArePortable(relative, ".dim/repos.yml")).toThrow(/relative filesystem path/);
+    for (const url of ["/srv/git/root.git", "ssh://git@intranet/root.git", "git@intranet:root.git"]) {
+      const portable = parseRepositorySetYaml(`
+schemaVersion: 1
+repositories:
+  root: {url: "${url}", root: true}
+`);
+      expect(() => assertRepositorySetUrlsArePortable(portable)).not.toThrow();
+    }
   });
 });

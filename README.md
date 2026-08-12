@@ -75,7 +75,7 @@ disposable KVM guest instead of your own host.
 Pin an exact, reviewed version — never `latest`:
 
 ```bash
-mise use -g 'npm:@slop-lab/dim-installer@0.5.0'
+mise use --raw --global 'npm:@slop-lab/dim-installer@0.5.0'
 dim install-cli
 ```
 

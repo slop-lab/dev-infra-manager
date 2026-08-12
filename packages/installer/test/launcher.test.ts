@@ -77,12 +77,14 @@ printf '%s\n' "$@" >${JSON.stringify(record)}
   it("uses mise exec node@24 when Node.js is absent from PATH", async () => {
     const { bin, launcher, record } = await fixture();
     await executable(join(bin, "mise"), `#!/bin/sh
+printf '%s\n' "\${DIM_INVOKED_VIA_MISE:-}" >${JSON.stringify(`${record}.env`)}
 printf '%s\n' "$@" >${JSON.stringify(record)}
 `);
 
     const result = await run(launcher, ["install-cli"], bin);
 
     expect(result.code).toBe(0);
+    expect((await readFile(`${record}.env`, "utf8")).trim()).toBe("1");
     expect((await readFile(record, "utf8")).trim().split("\n")).toEqual([
       "exec",
       "node@24",
