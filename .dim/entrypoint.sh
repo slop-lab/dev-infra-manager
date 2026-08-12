@@ -9,7 +9,9 @@ case "$task" in
     set -- bash "$@"
     ;;
   codex)
-    set -- codex --dangerously-bypass-approvals-and-sandbox "$@"
+    # Keep ad-hoc DIM tasks in the agent service's default cgroup so they stay
+    # responsive when Codex and the commands it starts are busy.
+    set -- dim-tool-cgroup tools-0 codex --dangerously-bypass-approvals-and-sandbox "$@"
     ;;
   check)
     set -- pnpm run workspace:check "$@"

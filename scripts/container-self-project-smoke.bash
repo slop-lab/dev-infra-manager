@@ -109,6 +109,23 @@ agent_git_identity="$(dim run "$workspace_name" bash -- -lc \
   'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
 test "$agent_git_identity" = \
   "DIM Self Host <dim-self-host@dim.invalid>|DIM Self Host <dim-self-host@dim.invalid>"
+default_agent_cgroup="$(dim run "$workspace_name" bash -- -lc \
+  "awk -F: '\$1 == 0 { print \$3 }' /proc/self/cgroup")"
+tool_agent_cgroup="$(dim run "$workspace_name" bash -- -lc \
+  "dim-tool-cgroup tools-1 awk -F: '\$1 == 0 { print \$3 }' /proc/self/cgroup")"
+test "$default_agent_cgroup" != "$tool_agent_cgroup"
+case "$tool_agent_cgroup" in
+  */dim-agent/tools-1) ;;
+  *) echo "unexpected delegated tool cgroup: $tool_agent_cgroup" >&2; exit 1 ;;
+esac
+dim run "$workspace_name" bash -- -lc '
+  echo 25 > /run/dim/cgroup/tools-1/cpu.weight
+  echo 256 > /run/dim/cgroup/tools-1/pids.max
+  test "$(cat /run/dim/cgroup/tools-1/cpu.weight)" = 25
+  test "$(cat /run/dim/cgroup/tools-1/pids.max)" = 256
+  echo 100 > /run/dim/cgroup/tools-1/cpu.weight
+  echo max > /run/dim/cgroup/tools-1/pids.max
+'
 agent_commit_identity="$(dim run "$workspace_name" bash -- -lc '
   printf "%s\n" "self agent commit" > self-agent-commit.txt
   git add self-agent-commit.txt

@@ -102,14 +102,29 @@ service. The agent image supplies Codex, Node.js, pnpm, just, Git, and a
 private Docker daemon without receiving either host Docker socket or the
 trusted workspace's Docker socket.
 
+The setup also delegates four threaded cgroup slots (`tools-0` through
+`tools-3`) below the workspace's existing host-enforced resource cgroup.
+`dim run ... bash` stays in the agent service's default group as a responsive
+management path; the `codex` task automatically starts Codex and all of its
+tool descendants in `tools-0`. Another workload can use a separate slot:
+
+```bash
+echo 25 > /run/dim/cgroup/tools-1/cpu.weight
+echo 256 > /run/dim/cgroup/tools-1/pids.max
+dim-tool-cgroup tools-1 bash -lc 'run-another-workload'
+```
+
+The tool and its children inherit the selected threaded group. The workspace
+parent continues to enforce its overall CPU, memory, and pids limits; memory
+is intentionally not delegated to individual threaded slots.
+
 Build the image once, create a Project root, push this repository, and create
 a persistent workspace:
 
 ```bash
 just build-project-workspace
-dim project create dim-self
-dim repo add dim-self root /path/to/dev-infra-manager \
-  --root --ref development
+dim project create dim-self \
+  --url /path/to/dev-infra-manager --ref development --apply-repos
 dim create dim-self dim-self-dev
 dim run dim-self-dev codex
 ```

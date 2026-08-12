@@ -28,6 +28,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   longer requires Node.js in the global mise configuration. The documented
   mise install uses `--raw --global` so the low-download review prompt and its
   `Y` response remain visible.
+- Delegated Project-owned threaded CPU/PID cgroups inside the canonical
+  self-development agent. Ordinary `bash` tasks retain a responsive default
+  execution path while Codex and its descendants run in a separately tunable
+  child, still bounded by the workspace-wide CPU, memory, and PID limits.
 
 ## [0.5.0] - 2026-08-06
 

@@ -206,6 +206,11 @@ directory and verifies the manifest-aware `project create --url
 protected refs, workspace, Project-owned agent, host Git identity, managed
 repository access, nested Docker, and secret-bearing service boundary.
 
+`scripts/container-self-project-smoke.bash` must additionally prove that an
+ordinary agent `bash` task remains in the service's default cgroup, a command
+started through `dim-tool-cgroup` enters a pre-created delegated child, and
+the unprivileged agent can tune that child's CPU weight and PID limit.
+
 `just verify-example BACKEND DIRTY single-repository` verifies the default
 one-repository shape under `examples/projects/single-repository/`: no
 `.dim/repos.yml`, no protected ref or secret service, a direct agent-style

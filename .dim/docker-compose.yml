@@ -1,5 +1,6 @@
 services:
   agent:
+    image: "dim-${DIM_WORKSPACE_NAME:?}-agent"
     build:
       context: dev
     environment:
@@ -18,10 +19,15 @@ services:
     volumes:
       - ..:/workspace
       - agent-dind-shared:/mnt/workspace-shared-dind
+      - type: bind
+        source: /sys/fs/cgroup/dim-agent
+        target: /run/dim/cgroup
     networks:
       - default
       - agent-dind
     working_dir: /workspace
+    cgroup: host
+    cgroup_parent: /dim-agent
     depends_on:
       agent-dind:
         condition: service_healthy
