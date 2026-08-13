@@ -13,6 +13,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   ingress wildcard domain, with origin-only URL validation and precedence over
   dynamic workspace routes.
 
+### Changed
+
+- Added a development-only compatibility fallback to the canonical Project
+  setup for locally installed pre-release DIM builds that do not yet emit the
+  `hostAliases` manifest field. The fallback derives the managed Gitea address
+  from `DIM_GIT_BASE_URL` and is intended for removal once those builds are no
+  longer in use.
+
 ## [0.6.0] - 2026-08-12
 
 ### Changed

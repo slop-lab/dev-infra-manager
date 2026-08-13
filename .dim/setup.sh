@@ -9,8 +9,22 @@ if [ -n "${DIM_PROJECT_MANIFEST:-}" ]; then
 fi
 
 compose_host_aliases=/tmp/dim-project-compose-host-aliases.json
-jq '{services:{agent:{extra_hosts:[.hostAliases | to_entries[] | .key as $host | .value[] | "\($host)=\(.)"]}}}' \
-  "$DIM_PROJECT_MANIFEST" > "$compose_host_aliases"
+if jq -e '.hostAliases | type == "object"' "$DIM_PROJECT_MANIFEST" >/dev/null; then
+  jq '{services:{agent:{extra_hosts:[.hostAliases | to_entries[] | .key as $host | .value[] | "\($host)=\(.)"]}}}' \
+    "$DIM_PROJECT_MANIFEST" > "$compose_host_aliases"
+else
+  # DEVELOPMENT-ONLY COMPATIBILITY: the installed pre-release DIM may not yet
+  # emit hostAliases. Derive its controller-resolved Gitea address without
+  # hard-coding it; remove this fallback once that DIM build is no longer used.
+  gitea_authority="${DIM_GIT_BASE_URL#*://}"
+  gitea_authority="${gitea_authority%%/*}"
+  gitea_address="${gitea_authority%%:*}"
+  test -n "$gitea_address"
+  test "$gitea_address" != "$DIM_GIT_BASE_URL"
+  jq -n --arg address "$gitea_address" \
+    '{services:{agent:{extra_hosts:["dim-gitea=\($address)"]}}}' \
+    > "$compose_host_aliases"
+fi
 
 case "${DIM_WORKSPACE_KVM:-}" in
   1)
