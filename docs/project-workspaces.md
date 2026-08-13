@@ -230,7 +230,7 @@ Run project-defined tasks without repeating setup:
 
 ```bash
 dim workspace run example-dev codex
-dim workspace run example-dev test -- --filter unit
+dim workspace run example-dev bash -- -lc 'just test'
 ```
 
 Run a raw command in the top-level workspace:

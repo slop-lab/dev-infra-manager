@@ -167,9 +167,13 @@ dim workspace run "$workspace_name" bash -- -lc '
       "test \"\$(cat /shared/input)\" = from-agent; printf \"from-dind\\n\" > /shared/output"
   test "$(cat /mnt/workspace-shared-dind/bind-smoke/output)" = from-dind
 '
-dim workspace run "$workspace_name" check >/dev/null
+dim workspace run "$workspace_name" bash -- -lc 'just typecheck' >/dev/null
 test "$(dim workspace run "$workspace_name" codex -- --version)" != ""
-dim workspace run "$workspace_name" verify >/dev/null
+if dim workspace run "$workspace_name" check >/dev/null 2>&1; then
+  echo "removed check task unexpectedly succeeded" >&2
+  exit 1
+fi
+dim workspace run "$workspace_name" bash -- -lc 'just check' >/dev/null
 
 dim workspace discard "$workspace_name" --yes >/dev/null
 

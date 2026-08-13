@@ -134,7 +134,15 @@ dim workspace run dim-self-dev codex
 ```
 
 `run` dispatches the repository's checked-in `.dim/entrypoint.sh` task
-contract into the Project-owned agent.
+contract into the Project-owned agent. The canonical contract deliberately
+exposes only these tasks:
+
+- `codex` starts Codex in the delegated tool cgroup.
+- `bash` starts Bash inside the unprivileged Project-owned agent container,
+  not in the trusted workspace container.
+
+Use `bash -- -lc 'just RECIPE'` for repository recipes instead of adding a
+task alias for each recipe.
 `exec dim-self-dev -- bash` remains the raw trusted-workspace recovery or
 interactive shell path. The agent bind-mounts the workspace checkout and its
 private-Docker state uses a separate Project volume; no host checkout or

@@ -15,6 +15,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Reduced the canonical self-Project task surface to `codex` and an explicit
+  agent-container `bash`; repository just recipes now run through the bash
+  task instead of duplicating recipe-specific entrypoint aliases.
 - Added a development-only compatibility fallback to the canonical Project
   setup for locally installed pre-release DIM builds that do not yet emit the
   `hostAliases` manifest field. The fallback derives the managed Gitea address

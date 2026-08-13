@@ -13,24 +13,6 @@ case "$task" in
     # responsive when Codex and the commands it starts are busy.
     set -- dim-tool-cgroup tools-0 codex --dangerously-bypass-approvals-and-sandbox "$@"
     ;;
-  check)
-    set -- pnpm run workspace:check "$@"
-    ;;
-  test)
-    set -- pnpm run workspace:test "$@"
-    ;;
-  build)
-    set -- pnpm run workspace:build "$@"
-    ;;
-  verify)
-    set -- just check "$@"
-    ;;
-  verify-container-runc)
-    set -- just verify-container-runc "$@"
-    ;;
-  verify-container-sysbox)
-    set -- just verify-container-sysbox "$@"
-    ;;
   *)
     echo "unknown DIM project task: $task" >&2
     exit 2
