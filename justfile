@@ -86,14 +86,26 @@ ci:
     just verify-container
     bash scripts/container-cgroup-smoke.bash
 
+# Run the strongest gate supported inside this repository's DIM development agent.
+verify-agent:
+    just check
+    just verify-plugin-install
+    just verify-package-packs
+    just verify-agent-docker
+
+# Verify the private rootless Docker sidecar exposed to the development agent.
+verify-agent-docker:
+    bash scripts/agent-docker-smoke.bash
+
 # Reproduce GitHub Actions locally; pass --manual to include dispatched workflows.
 ci-matrix *args:
     bash scripts/local-ci-matrix.bash {{args}}
 
-# Backend-independent container integration; may run against nested Docker in a development container.
+# Backend-independent container integration; requires cgroup-capable Docker for its nested runtime.
 verify-container:
     docker info >/dev/null
     docker compose version >/dev/null
+    bash scripts/container-integration-preflight.bash
     just build-project-workspace
     bash scripts/container-inner-docker-smoke.bash
     bash scripts/container-lifecycle-smoke.bash

@@ -11,12 +11,19 @@ just typecheck       # TypeScript checks only
 just test            # unit tests
 just build           # publishable package builds
 just check           # typecheck + test + build; only Node.js and pnpm required
+just verify-agent    # strongest gate supported inside this repository's DIM agent
 just ci              # complete CI gate with the active Node.js version
 just ci-matrix       # exact Node.js 24/26 CI workflow matrix via mise
 just ci-matrix --manual # also include manually dispatched Sysbox/KVM workflows
 just doctor          # host readiness: dev tools, Docker, selected backend, cgroup v2
 just cli -- --help   # build core, then run dim from source without installing it
 ```
+
+`just verify-agent` checks the source and package shapes, then verifies image
+builds, container lifecycle, volumes, DNS, outbound networking, and peer
+networking through the development agent's private rootless-DinD sidecar. It
+does not replace `verify-container`, which starts a DIM workspace and exercises
+that workspace's own nested runtime.
 
 `just ci-matrix` requires mise, Docker with Compose v2, and the same host
 capabilities as the container integration tests. It installs the locked

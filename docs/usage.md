@@ -199,6 +199,21 @@ prefix and uses only that installed `dim` binary to exercise:
 - Capability-profile replacement, project fast-forward update, stop/start
   persistence, and discard cleanup.
 
+Inside this repository's DIM development agent, use the private rootless-DinD
+sidecar gate instead:
+
+```bash
+just verify-agent
+```
+
+This runs the source and publishable-package gates and verifies the sidecar's
+image build, container lifecycle, volume, DNS, outbound-network, and peer-network
+behavior. The sidecar deliberately does not expose the host Docker socket. A
+rootless sidecar without cgroup delegation cannot run `verify-container`: that
+gate adds another nested Docker daemon and requires it to create cgroups. Run
+the full container integration gate on a cgroup-capable Docker host or in its
+CI lane; do not treat `verify-agent` as equivalent coverage.
+
 Three additional standalone checks cover installation and the copyable
 examples against a real Docker daemon:
 
