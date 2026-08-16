@@ -37,8 +37,7 @@ fi
 test -r /dev/kvm && test -w /dev/kvm || { echo "/dev/kvm is not accessible" >&2; exit 2; }
 repo_root="$(cd -- "$script_dir/.." && pwd)"
 if [[ -n "$(git -C "$repo_root" status --porcelain)" ]]; then
-  echo "warning: working tree changes are excluded; KVM verification uses committed HEAD $(git -C "$repo_root" rev-parse --short HEAD)" >&2
-  echo "warning: commit the changes before running this verification if they should be included" >&2
+  echo "warning: KVM verification includes a temporary snapshot of current worktree changes" >&2
 fi
 workdir="$(mktemp -d /tmp/dim-kvm-install-XXXXXX)"; cache="${DIM_KVM_IMAGE_CACHE:-$repo_root/.local/kvm}"; mkdir -p "$cache"
 step_log="$workdir/step.log"
@@ -141,7 +140,7 @@ if [[ "$backend" == runc ]]; then
     '
   run_step "verify canonical self Project and private rootless DinD" \
     ssh "${ssh_args[@]}" dim@127.0.0.1 \
-      "cd dim && just verify-self-development"
+      "cd dim && DIM_SELF_VERIFY_AGENT=1 just verify-self-development"
 fi
 if [[ "$backend" == sysbox ]]; then
   run_step "install trusted-workspace build tools" \

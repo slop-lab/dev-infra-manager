@@ -19,7 +19,7 @@ bash "$script_dir/configure-user-backend.bash" runc
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    pnpm run cli -- discard "$workspace_name" --yes >/dev/null 2>&1 || true
+    pnpm run cli -- workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
   fi
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     local credentials admin_username admin_password
@@ -57,7 +57,7 @@ pnpm run cli -- repo add "$project_name" disposable >/dev/null
 pnpm run cli -- repo delete "$project_name" disposable --yes >/dev/null
 test "$(pnpm run --silent cli -- repo list "$project_name" --json | jq \
   --arg alias disposable '[.[] | select(.alias == $alias)] | length')" = 0
-pnpm run cli -- create "$project_name" "$workspace_name" \
+pnpm run cli -- workspace create "$project_name" "$workspace_name" \
   --cpus 1.5 \
   --memory 3g \
   --pids-limit 1024 \
@@ -65,7 +65,7 @@ pnpm run cli -- create "$project_name" "$workspace_name" \
 # The workspace's actual Docker resource names are an implementation detail
 # owned by `dim workspace show --json`, not something to reconstruct by hand: never
 # assume a `dim-ws-<name>`-shaped prefix in test code or docs.
-container_name="$(pnpm run --silent cli -- show "$workspace_name" --json | jq -r .containerName)"
+container_name="$(pnpm run --silent cli -- workspace show "$workspace_name" --json | jq -r .containerName)"
 test "$(docker inspect --format '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.PidsLimit}}' "$container_name")" \
   = "1500000000|3221225472|1024"
 pnpm run cli -- exec "$workspace_name" -- sh -c "
@@ -85,14 +85,14 @@ pnpm run cli -- exec "$workspace_name" -- sh -c "
     'test -n \"\$DIM_GIT_USERNAME\"; test -n \"\$DIM_GIT_TOKEN\"; wget -qO- https://example.com >/dev/null'
 " >/dev/null
 
-volume_name="$(pnpm run --silent cli -- show "$workspace_name" --json | jq -r .dockerVolumeName)"
+volume_name="$(pnpm run --silent cli -- workspace show "$workspace_name" --json | jq -r .dockerVolumeName)"
 test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/docker"}}{{.Type}}:{{.Name}}:{{.Destination}}{{end}}{{end}}' "$container_name")" \
   = "volume:$volume_name:/var/lib/docker"
-pnpm run cli -- stop "$workspace_name" >/dev/null
-pnpm run cli -- start "$workspace_name" >/dev/null
+pnpm run cli -- workspace stop "$workspace_name" >/dev/null
+pnpm run cli -- workspace start "$workspace_name" >/dev/null
 pnpm run cli -- exec "$workspace_name" -- sh -c \
   "test -d .git; docker image inspect alpine:3.22 >/dev/null" >/dev/null
-pnpm run cli -- discard "$workspace_name" --yes >/dev/null
+pnpm run cli -- workspace discard "$workspace_name" --yes >/dev/null
 pnpm run cli -- project purge "$project_name" --yes >/dev/null
 
 echo "container-lifecycle-smoke-ok"

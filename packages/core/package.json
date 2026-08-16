@@ -1,6 +1,6 @@
 {
   "name": "@slop-lab/dim-core",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Project, managed Git, and persistent workspace lifecycle APIs for DIM",
   "license": "MIT",
   "repository": {

@@ -18,7 +18,7 @@ bash "$script_dir/configure-user-backend.bash" runc
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    "$dim_bin" discard "$workspace_name" --yes >/dev/null 2>&1 || true
+    "$dim_bin" workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
   fi
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     local credentials admin_username admin_password
@@ -82,29 +82,29 @@ repo_url="$("$dim_bin" repo url "$project_name" root)"
 # remains available while the workspace clones and builds the project.
 find "$source_root" -depth -delete
 
-"$dim_bin" create "$project_name" "$workspace_name" >/dev/null
+"$dim_bin" workspace create "$project_name" "$workspace_name" >/dev/null
 
 output="$("$dim_bin" run "$workspace_name" verify)"
 test "$output" = "hello-from-project-image"
 
 "$dim_bin" exec "$workspace_name" -- touch .dim/fail-setup
-if "$dim_bin" setup "$workspace_name" >/dev/null 2>&1; then
+if "$dim_bin" workspace setup "$workspace_name" >/dev/null 2>&1; then
   echo "failing project setup unexpectedly succeeded" >&2
   exit 1
 fi
-test "$("$dim_bin" show "$workspace_name" --json | jq -r .phase)" = "setup-error"
+test "$("$dim_bin" workspace show "$workspace_name" --json | jq -r .phase)" = "setup-error"
 "$dim_bin" exec "$workspace_name" -- rm .dim/fail-setup
-"$dim_bin" setup "$workspace_name" >/dev/null
-test "$("$dim_bin" show "$workspace_name" --json | jq -r .phase)" = "ready"
+"$dim_bin" workspace setup "$workspace_name" >/dev/null
+test "$("$dim_bin" workspace show "$workspace_name" --json | jq -r .phase)" = "ready"
 
-"$dim_bin" stop "$workspace_name" >/dev/null
-"$dim_bin" start "$workspace_name" >/dev/null
+"$dim_bin" workspace stop "$workspace_name" >/dev/null
+"$dim_bin" workspace start "$workspace_name" >/dev/null
 "$dim_bin" exec "$workspace_name" -- \
   docker image inspect "$image_name" >/dev/null
 
 output="$("$dim_bin" run "$workspace_name" verify)"
 test "$output" = "hello-from-project-image"
 
-"$dim_bin" discard "$workspace_name" --yes >/dev/null
+"$dim_bin" workspace discard "$workspace_name" --yes >/dev/null
 
 echo "container-project-smoke-ok"

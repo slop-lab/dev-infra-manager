@@ -23,6 +23,7 @@ import {
   assertRepositorySetCanCreateProject,
   mapExternalRefToRepository,
   mapRepositoryRefToExternal,
+  normalizeRootRef,
   resolveRepositoryConnection,
   type RepositoryRefNamespace,
   type RepositorySet,
@@ -47,7 +48,7 @@ const program = new Command();
 program
   .name("dim")
   .description("Isolated, persistent development workspaces")
-  .version("0.6.0")
+  .version("0.7.0")
   .showSuggestionAfterError()
   .configureHelp({ sortSubcommands: true, sortOptions: true })
   .addHelpText("afterAll", installerFacadeHelpText);
@@ -122,7 +123,8 @@ project.command("create")
       }
     }
     const rootEntry = rootSet?.repositories[rootAlias];
-    if (flags.ref !== undefined && rootEntry?.rootRef !== undefined && flags.ref !== rootEntry.rootRef) {
+    if (flags.ref !== undefined && rootEntry?.rootRef !== undefined
+      && normalizeRootRef(flags.ref) !== normalizeRootRef(rootEntry.rootRef)) {
       throw new UserError(
         `--ref '${flags.ref}' conflicts with manifest root ref '${rootEntry.rootRef}' for '${rootAlias}'`
       );

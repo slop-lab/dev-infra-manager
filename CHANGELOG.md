@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-16
+
 ### Added
 
 - Added managed Caddy static upstream routes for exact hostnames beneath an
@@ -15,42 +17,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
-- Reduced the canonical self-Project task surface to `codex` and an explicit
-  agent-container `bash`; repository just recipes now run through the bash
-  task instead of duplicating recipe-specific entrypoint aliases.
-- Added a development-only compatibility fallback to the canonical Project
-  setup for locally installed pre-release DIM builds that do not yet emit the
-  `hostAliases` manifest field. The fallback derives the managed Gitea address
-  from `DIM_GIT_BASE_URL` and is intended for removal once those builds are no
-  longer in use.
-
-## [0.6.0] - 2026-08-12
-
-### Changed
-
 - Grouped workspace lifecycle commands under `dim workspace`; only the
   frequently used `dim run` and `dim exec` forms remain as top-level aliases.
   Added `workspace align` to switch a clean root checkout back to its
   configured ref without running Project setup or recreating containers, with
   an explicit `--reset --yes` mode for discarding local commits on that branch.
-
-- Split complete examples into single- and multi-repository Project shapes.
-  The new default example intentionally uses no `.dim/repos.yml`, protected
-  ref, or secret service while demonstrating a resource-bounded workspace,
-  unprivileged agent, private rootless DinD, and an optional external URL.
-- Added a manifest-aware `project create --url` workflow that reads the
-  selected external ref's `.dim/repos.yml` before creating Project state, so
-  repository code fixes the root alias and policy instead of duplicating them
-  on the command line. It supports explicit apply/skip choices and points
-  skipped applications at the clone-free `repo apply` path. Matching failed
-  root imports can be retried with the same manifest-derived alias and origin;
-  managed-root manifests reject ambiguous relative filesystem URLs and local
-  manifest inputs never replace the tracked root file.
-- Made the npm installer facade bootstrap itself through `mise exec node@24`
-  when Node.js 24 or 26 is not already on `PATH`, so a mise installation no
-  longer requires Node.js in the global mise configuration. The documented
-  mise install uses `--raw --global` so the low-download review prompt and its
-  `Y` response remain visible.
+- Made `project create --url` read the selected external ref's
+  `.dim/repos.yml` before creating Project state, so repository code fixes the
+  root alias and policy instead of duplicating them on the command line.
 - Delegated Project-owned threaded CPU/PID cgroups inside the canonical
   self-development agent. Ordinary `bash` tasks retain a responsive default
   execution path while Codex and its descendants run in a separately tunable
@@ -62,6 +36,37 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Persisted the canonical development agent's home in a Project-owned named
   volume so Codex configuration and other home state survive separate task
   invocations and agent service recreation until workspace discard.
+- Reduced the canonical self-Project task surface to `codex` and an explicit
+  agent-container `bash`; repository just recipes now run through the bash
+  task instead of duplicating recipe-specific entrypoint aliases.
+
+### Fixed
+
+- Treated short root branch names such as `main` as equivalent to their full
+  `refs/heads/main` form when checking `project create --url --ref` against the
+  root repository manifest.
+- Ran the complete agent-container gate inside the disposable runc KVM
+  self-Project verification, including its private rootless-DinD behavior.
+
+## [0.6.0] - 2026-08-12
+
+### Changed
+
+- Split complete examples into single- and multi-repository Project shapes.
+  The new default example intentionally uses no `.dim/repos.yml`, protected
+  ref, or secret service while demonstrating a resource-bounded workspace,
+  unprivileged agent, private rootless DinD, and an optional external URL.
+- Added a root-aware `project create` workflow that imports the root, offers
+  its managed `.dim/repos.yml`, supports explicit apply/skip choices, and
+  points skipped applications at the clone-free `repo apply` path. Matching
+  failed root imports can be retried with the same root alias and origin;
+  managed-root manifests reject ambiguous relative filesystem URLs and local
+  manifest inputs never replace the tracked root file.
+- Made the npm installer facade bootstrap itself through `mise exec node@24`
+  when Node.js 24 or 26 is not already on `PATH`, so a mise installation no
+  longer requires Node.js in the global mise configuration. The documented
+  mise install uses `--raw --global` so the low-download review prompt and its
+  `Y` response remain visible.
 
 ## [0.5.0] - 2026-08-06
 
@@ -339,7 +344,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Versioned plugin API and standalone plugin installer.
 - Container, lifecycle, multi-repository, packaging, and self-project smoke tests.
 
-[Unreleased]: https://github.com/slop-lab/dev-infra-manager/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/slop-lab/dev-infra-manager/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/slop-lab/dev-infra-manager/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/slop-lab/dev-infra-manager/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/slop-lab/dev-infra-manager/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/slop-lab/dev-infra-manager/compare/v0.3.0...v0.4.0

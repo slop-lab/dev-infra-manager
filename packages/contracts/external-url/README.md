@@ -12,7 +12,7 @@ instead.
 Pin the same reviewed DIM release as the controller and plugin:
 
 ```bash
-npm install --save-exact '@slop-lab/dim-contracts-external-url@0.6.0'
+npm install --save-exact '@slop-lab/dim-contracts-external-url@0.7.0'
 ```
 
 The package is ESM-only, requires Node.js 24 or 26, and includes TypeScript

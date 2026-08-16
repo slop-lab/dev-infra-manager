@@ -3,7 +3,8 @@
 ## Prerequisites
 
 - The release commit is pushed and CI is green.
-- The manually dispatched Sysbox smoke workflow passes on the release commit.
+- The manually dispatched Sysbox and KVM installer workflows pass on the
+  release commit using fresh ephemeral self-hosted runners.
 - `npm whoami` succeeds for an account allowed to publish the `@slop-lab` scope.
 - The version and changelog agree, and the release tag does not already exist.
 

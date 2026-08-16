@@ -21,7 +21,7 @@ bash "$script_dir/configure-user-backend.bash" runc
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    "$dim_bin" discard "$workspace_name" --yes >/dev/null 2>&1 || true
+    "$dim_bin" workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
   fi
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     local credentials admin_username admin_password
@@ -226,7 +226,7 @@ echo "[multi-repository] bootstrap from an authenticated private root URL and ap
 test "$("$dim_bin" project show "$project_name" --json | jq -r .rootRepositoryAlias)" = atlas
 root_url="$("$dim_bin" repo url "$project_name" atlas)"
 
-"$dim_bin" create "$project_name" "$workspace_name" \
+"$dim_bin" workspace create "$project_name" "$workspace_name" \
   --profile development \
   --profile documentation \
   >/dev/null
@@ -235,9 +235,9 @@ root_url="$("$dim_bin" repo url "$project_name" atlas)"
 # COMPOSE_PROJECT_NAME, which `dim` documents and exports for exactly this
 # purpose -- read it back from `show --json` rather than assuming a
 # `dim-<name>`-shaped prefix here too.
-compose_project_name="$("$dim_bin" show "$workspace_name" --json | jq -r .composeProjectName)"
+compose_project_name="$("$dim_bin" workspace show "$workspace_name" --json | jq -r .composeProjectName)"
 
-test "$("$dim_bin" show "$workspace_name" --json | jq -c .profiles)" = '["development","documentation"]'
+test "$("$dim_bin" workspace show "$workspace_name" --json | jq -c .profiles)" = '["development","documentation"]'
 test "$("$dim_bin" exec "$workspace_name" -- ls -1 /workspace)" = "project"
 git ls-remote "$("$dim_bin" repo url "$project_name" api)" \
   "refs/heads/agent/$workspace_name" | grep -q .
@@ -264,14 +264,14 @@ git -C "$project_worktree" commit -m 'update project version' >/dev/null
 "$dim_bin" x git -C "$project_worktree" push managed main >/dev/null
 
 test "$("$dim_bin" run "$workspace_name" version)" = "v1"
-"$dim_bin" restart "$workspace_name" >/dev/null
+"$dim_bin" workspace restart "$workspace_name" >/dev/null
 test "$("$dim_bin" run "$workspace_name" version)" = "v2"
 
-"$dim_bin" update "$workspace_name" --profile production >/dev/null
+"$dim_bin" workspace update "$workspace_name" --profile production >/dev/null
 "$dim_bin" exec "$workspace_name" -- \
   docker container inspect "${compose_project_name}-production-only-1" >/dev/null
 
-"$dim_bin" update "$workspace_name" \
+"$dim_bin" workspace update "$workspace_name" \
   --profile development \
   --profile documentation \
   >/dev/null
@@ -285,11 +285,11 @@ test "$output" = "multi-repo-project-ok"
 
 find "$source_root" -depth -delete
 
-"$dim_bin" stop "$workspace_name" >/dev/null
-"$dim_bin" start "$workspace_name" >/dev/null
+"$dim_bin" workspace stop "$workspace_name" >/dev/null
+"$dim_bin" workspace start "$workspace_name" >/dev/null
 output="$("$dim_bin" run "$workspace_name" verify)"
 test "$output" = "multi-repo-project-ok"
 
-"$dim_bin" discard "$workspace_name" --yes >/dev/null
+"$dim_bin" workspace discard "$workspace_name" --yes >/dev/null
 
 echo "container-multi-repo-project-smoke-ok"

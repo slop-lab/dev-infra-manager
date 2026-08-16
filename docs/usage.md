@@ -214,6 +214,12 @@ gate adds another nested Docker daemon and requires it to create cgroups. Run
 the full container integration gate on a cgroup-capable Docker host or in its
 CI lane; do not treat `verify-agent` as equivalent coverage.
 
+The runc guest in `just verify-environments-kvm` also creates the canonical
+self-Project and runs `just verify-agent` inside its actual agent container.
+This verifies the same private rootless-DinD gate from a clean Ubuntu install;
+when the source checkout is dirty, the KVM verifier uses a temporary snapshot
+that includes the current worktree changes.
+
 Three additional standalone checks cover installation and the copyable
 examples against a real Docker daemon:
 
