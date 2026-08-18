@@ -12,6 +12,7 @@ import {
   installDimCli,
   installPlugins,
   queryCliVersion,
+  readLocalPackageBundle,
   validateConfiguredCli
 } from "./install.js";
 import { localBinPrompt } from "./installMode.js";
@@ -134,6 +135,7 @@ async function installCliCommand(commandArgs: string[]): Promise<void> {
       help: { type: "boolean", short: "h" },
       "no-local-bin": { type: "boolean" },
       "local-bin": { type: "boolean" },
+      "local-packages": { type: "string" },
       prefix: { type: "string" }
     }
   });
@@ -153,6 +155,23 @@ async function installCliCommand(commandArgs: string[]): Promise<void> {
   const binDirectory = parsed.values.prefix
     ? path.join(path.resolve(parsed.values.prefix), "bin")
     : defaultBinDirectory();
+  const bundle = parsed.values["local-packages"]
+    ? await readLocalPackageBundle(parsed.values["local-packages"])
+    : undefined;
+  if (bundle) {
+    const installed = await installDimCli({
+      ...bundle,
+      exposeOnPath,
+      binDirectory
+    });
+    console.log(`Installed local DIM CLI ${installed.version} at ${installed.executable}`);
+    if (installed.symlink) {
+      console.log(`Linked ${installed.symlink} -> ${installed.executable}`);
+    } else {
+      console.log("DIM CLI will be invoked through the installer facade; no local bin symlink was created");
+    }
+    return;
+  }
   await installCli(exposeOnPath, binDirectory);
 }
 
@@ -282,7 +301,7 @@ Run 'dim install-cli --help' for installation modes.`);
 function printInstallerHelp(): void {
   console.log(`Usage:
   dim installer
-  dim install-cli [--no-local-bin | --local-bin] [--prefix PATH]
+  dim install-cli [--no-local-bin | --local-bin] [--prefix PATH] [--local-packages PATH]
   dim install-plugin [--plugin-home PATH] PACKAGE@EXACT_VERSION...
 
 The installer owns only installer, install-cli, and install-plugin.
@@ -296,6 +315,8 @@ Options:
   --no-local-bin  Install privately for facade use without ~/.local/bin/dim
   --local-bin     Create a managed dim symlink in the user bin directory
   --prefix PATH   Use PATH/bin for the managed symlink (default: ~/.local)
+  --local-packages PATH
+                  Install a packages.json bundle produced by this repository
   -h, --help      Show this help
 
 Under mise, --no-local-bin is the default. Elsewhere, --local-bin is the default.

@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 
 export interface InstallOptions {
   pluginHome: string;
@@ -12,11 +13,19 @@ export interface InstallOptions {
 
 export interface CliInstallOptions {
   version: string;
+  installationId?: string;
+  packageSpecifiers?: string[];
   exposeOnPath: boolean;
   binDirectory?: string;
   configPath?: string;
   dataHome?: string;
   npmCommand?: string;
+}
+
+export interface LocalPackageBundle {
+  version: string;
+  installationId: string;
+  packageSpecifiers: string[];
 }
 
 export interface InstalledCli {
@@ -92,7 +101,7 @@ export async function configuredCli(env: NodeJS.ProcessEnv = process.env): Promi
 
 export async function installDimCli(options: CliInstallOptions): Promise<InstalledCli> {
   const dataHome = path.resolve(options.dataHome ?? defaultDataHome());
-  const versionDirectory = cliVersionDirectory(options.version, dataHome);
+  const versionDirectory = cliVersionDirectory(options.installationId ?? options.version, dataHome);
   await mkdir(versionDirectory, { recursive: true, mode: 0o700 });
   await run(options.npmCommand ?? "npm", [
     "install",
@@ -101,11 +110,15 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
     "--save-exact",
     "--no-fund",
     "--no-audit",
-    `@slop-lab/dim-cli@${options.version}`
+    ...(options.packageSpecifiers ?? [`@slop-lab/dim-cli@${options.version}`])
   ], versionDirectory);
 
-  const executable = cliExecutable(options.version, dataHome);
+  const executable = cliExecutable(options.installationId ?? options.version, dataHome);
   await access(executable, constants.X_OK);
+  const installedVersion = await queryCliVersion(executable);
+  if (installedVersion !== options.version) {
+    throw new Error(`installed DIM CLI reports ${installedVersion}, expected ${options.version}`);
+  }
 
   const mode = options.exposeOnPath ? "direct" : "proxied";
   let installedSymlink: string | undefined;
@@ -132,6 +145,48 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
     mode,
     version: options.version,
     ...(installedSymlink ? { symlink: installedSymlink } : {})
+  };
+}
+
+export async function readLocalPackageBundle(directory: string): Promise<LocalPackageBundle> {
+  const bundleDirectory = path.resolve(directory);
+  const manifestPath = path.join(bundleDirectory, "packages.json");
+  const raw = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    schemaVersion?: unknown;
+    packages?: Array<{ name?: unknown; version?: unknown; file?: unknown }>;
+  };
+  if (raw.schemaVersion !== 1 || !Array.isArray(raw.packages)) {
+    throw new Error(`invalid local package bundle manifest: ${manifestPath}`);
+  }
+
+  const packages = raw.packages.filter((entry) => entry.name !== "@slop-lab/dim-installer");
+  const cli = packages.find((entry) => entry.name === "@slop-lab/dim-cli");
+  if (!cli || typeof cli.version !== "string" || cli.version.length === 0) {
+    throw new Error("local package bundle does not contain @slop-lab/dim-cli");
+  }
+
+  const names = new Set<string>();
+  const hash = createHash("sha256");
+  const packageSpecifiers: string[] = [];
+  for (const entry of packages) {
+    if (typeof entry.name !== "string" || typeof entry.version !== "string" || typeof entry.file !== "string") {
+      throw new Error(`invalid local package entry in ${manifestPath}`);
+    }
+    if (names.has(entry.name)) throw new Error(`duplicate local package '${entry.name}'`);
+    names.add(entry.name);
+    if (path.basename(entry.file) !== entry.file || !entry.file.endsWith(".tgz")) {
+      throw new Error(`invalid local package filename '${entry.file}'`);
+    }
+    const tarball = path.join(bundleDirectory, entry.file);
+    const contents = await readFile(tarball);
+    hash.update(entry.name).update("\0").update(entry.version).update("\0").update(contents);
+    packageSpecifiers.push(tarball);
+  }
+
+  return {
+    version: cli.version,
+    installationId: `local-${hash.digest("hex").slice(0, 16)}`,
+    packageSpecifiers
   };
 }
 

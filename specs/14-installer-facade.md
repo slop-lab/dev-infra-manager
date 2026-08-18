@@ -111,6 +111,13 @@ installer version. Interactive yes/no questions must phrase the recommended
 mode positively and use `Y` as their displayed default, so repeatedly answering
 `y` or pressing Enter preserves the environment-specific recommended mode.
 
+`install-cli --local-packages PATH` must accept a schema-1 `packages.json`
+bundle produced by the repository package script. It installs every tarball
+except `@slop-lab/dim-installer` in one npm transaction, verifies the installed
+CLI's reported version, and uses a content-derived `local-<hash>` directory so
+an unpublished build cannot overwrite the same-version registry installation.
+The normal direct/proxied selection still applies.
+
 ## Proxy contract
 
 When forwarding a command to the configured `@slop-lab/dim-cli`, the facade
@@ -144,7 +151,7 @@ Required tests cover:
 - bare `dim` opens the interactive installer only when no CLI is
   configured, and proxies through like any other command once one is;
 - `install-cli`/`install-plugin` argument parsing, including conflicting
-  `--local-bin`/`--no-local-bin`;
+  `--local-bin`/`--no-local-bin`, and local package bundle validation;
 - managed-symlink create, idempotent replace, and rejection of an
   unmanaged/foreign path at the same location;
 - proxy argv/cwd/env/stdio/exit-code fidelity;

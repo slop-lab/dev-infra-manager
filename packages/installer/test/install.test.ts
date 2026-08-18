@@ -14,6 +14,7 @@ import {
   installPlugins,
   packageNameFromSpecifier,
   queryCliVersion,
+  readLocalPackageBundle,
   readUserConfig,
   validateConfiguredCli
 } from "../src/install.js";
@@ -197,6 +198,40 @@ describe("@slop-lab/dim-installer", () => {
         version: "2.0.0",
         executable: join(root, "data-home", "cli", "2.0.0", "node_modules", ".bin", "dim")
       });
+    });
+  });
+
+  describe("readLocalPackageBundle", () => {
+    it("selects every locally built package except the installer and derives a content-addressed install", async () => {
+      const root = await tempDir("dim-local-bundle-");
+      await writeFile(join(root, "core.tgz"), "core contents");
+      await writeFile(join(root, "cli.tgz"), "cli contents");
+      await writeFile(join(root, "installer.tgz"), "installer contents");
+      await writeFile(join(root, "packages.json"), JSON.stringify({
+        schemaVersion: 1,
+        packages: [
+          { name: "@slop-lab/dim-core", version: "0.7.0", file: "core.tgz" },
+          { name: "@slop-lab/dim-cli", version: "0.7.0", file: "cli.tgz" },
+          { name: "@slop-lab/dim-installer", version: "0.7.0", file: "installer.tgz" }
+        ]
+      }));
+
+      const bundle = await readLocalPackageBundle(root);
+      expect(bundle.version).toBe("0.7.0");
+      expect(bundle.installationId).toMatch(/^local-[0-9a-f]{16}$/);
+      expect(bundle.packageSpecifiers).toEqual([join(root, "core.tgz"), join(root, "cli.tgz")]);
+    });
+
+    it("rejects bundles without the CLI or with unsafe filenames", async () => {
+      const root = await tempDir("dim-invalid-local-bundle-");
+      await writeFile(join(root, "packages.json"), JSON.stringify({ schemaVersion: 1, packages: [] }));
+      await expect(readLocalPackageBundle(root)).rejects.toThrow(/does not contain/);
+
+      await writeFile(join(root, "packages.json"), JSON.stringify({
+        schemaVersion: 1,
+        packages: [{ name: "@slop-lab/dim-cli", version: "0.7.0", file: "../cli.tgz" }]
+      }));
+      await expect(readLocalPackageBundle(root)).rejects.toThrow(/invalid local package filename/);
     });
   });
 

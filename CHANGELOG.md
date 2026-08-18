@@ -9,6 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Added content-addressed local package bundle installation through the DIM
+  installer facade. `just install-dim-local` now preserves a mise-managed
+  facade automatically and retains its direct-PATH fallback when mise is not
+  available.
 - Added a dedicated host-mode label for the container-integration workflow
   job and made `ci runner enable` replace its stored provider registration so
   runner label changes take effect. The host mode is scoped to the isolated

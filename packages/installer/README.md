@@ -173,6 +173,18 @@ executable path in its config and proxies every non-installer command to it.
 dim install-cli --no-local-bin
 ```
 
+For local DIM development, build a package bundle and install it behind the
+same facade without publishing or replacing the mise shim:
+
+```bash
+bash scripts/pack-local-packages.bash /tmp/dim-packages
+dim install-cli --local-packages /tmp/dim-packages --no-local-bin
+```
+
+Local bundles use a content-addressed `local-<hash>` directory, separate from
+registry versions. The bundle's installer package is ignored so the currently
+selected facade remains responsible for dispatch.
+
 **Default**: under `mise`, `--no-local-bin` is the default; everywhere else,
 `--local-bin` is the default. The explicit flag always wins over this
 detection. The interactive installer prints the direct-mode risks before it

@@ -11,19 +11,23 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$repo_root"
-pnpm run workspace:build
-pnpm --dir packages/core/dist pack --pack-destination "$package_root" --json >/dev/null
-pnpm --dir packages/contracts/external-url/dist pack --pack-destination "$package_root" --json >/dev/null
-pnpm --dir packages/plugin/dns-cloudflare/dist pack --pack-destination "$package_root" --json >/dev/null
-pnpm --dir packages/cli/dist pack --pack-destination "$package_root" --json >/dev/null
-core_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dim-core*.tgz' -print -quit)"
-cli_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dim-cli*.tgz' -print -quit)"
-contracts_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*dim-contracts-external-url*.tgz' -print -quit)"
-cloudflare_tarball="$(find "$package_root" -maxdepth 1 -type f -name '*plugin-dns-cloudflare*.tgz' -print -quit)"
-test -n "$core_tarball"
-test -n "$cli_tarball"
-test -n "$contracts_tarball" -a -n "$cloudflare_tarball"
+bash scripts/pack-local-packages.bash "$package_root"
 
-npm install --global --prefix "$install_prefix" \
-  "$core_tarball" "$contracts_tarball" "$cloudflare_tarball" "$cli_tarball"
+if command -v mise >/dev/null 2>&1; then
+  echo "[packages] install through the mise-managed DIM installer facade"
+  mise exec -- dim install-cli --local-packages "$package_root" --no-local-bin
+  echo "Installed the local DIM build behind the mise-managed dim facade"
+  exit 0
+fi
+
+local_tarballs=()
+while IFS= read -r tarball; do
+  case "$(basename "$tarball")" in
+    *dim-installer*) ;;
+    *) local_tarballs+=("$tarball") ;;
+  esac
+done < <(find "$package_root" -maxdepth 1 -type f -name '*.tgz' -print | sort)
+test "${#local_tarballs[@]}" -gt 0
+
+npm install --global --prefix "$install_prefix" "${local_tarballs[@]}"
 echo "Installed $install_prefix/bin/dim (ensure $install_prefix/bin is in PATH)"

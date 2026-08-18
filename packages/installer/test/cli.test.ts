@@ -4,7 +4,7 @@ import { constants } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { makeTempDir, writeStubCli } from "./support.js";
+import { makeTempDir, writeFakeCliNpm, writeStubCli } from "./support.js";
 
 /**
  * cli.ts runs `dispatch()` at module top level via top-level await, so it
@@ -166,6 +166,45 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("--local-bin under mise may shadow its dim shim");
     expect(result.stdout).toContain("bypass the installer facade");
+  });
+
+  it("installs a local package bundle behind the facade without creating a PATH symlink", async () => {
+    const root = await tempDir("dim-cli-local-bundle-");
+    const { env, configPath, dataHome } = await baseEnv(root);
+    const bin = join(root, "bin");
+    const bundle = join(root, "bundle");
+    const npmArgs = join(root, "npm-args.json");
+    await mkdir(bin, { recursive: true });
+    await mkdir(bundle, { recursive: true });
+    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "0.7.0" });
+    await writeFile(join(bundle, "core.tgz"), "core");
+    await writeFile(join(bundle, "cli.tgz"), "cli");
+    await writeFile(join(bundle, "installer.tgz"), "installer");
+    await writeFile(join(bundle, "packages.json"), JSON.stringify({
+      schemaVersion: 1,
+      packages: [
+        { name: "@slop-lab/dim-core", version: "0.7.0", file: "core.tgz" },
+        { name: "@slop-lab/dim-cli", version: "0.7.0", file: "cli.tgz" },
+        { name: "@slop-lab/dim-installer", version: "0.7.0", file: "installer.tgz" }
+      ]
+    }));
+
+    const result = await runCli(
+      ["install-cli", "--local-packages", bundle, "--no-local-bin"],
+      tsxPath!,
+      { ...env, PATH: `${bin}:${env.PATH}` },
+      root
+    );
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Installed local DIM CLI 0.7.0");
+    const config = JSON.parse(await readFile(configPath, "utf8"));
+    expect(config.cli).toMatchObject({ mode: "proxied", version: "0.7.0" });
+    expect(config.cli.executable).toMatch(new RegExp(`^${dataHome}/cli/local-[0-9a-f]{16}/`));
+    expect(JSON.parse(await readFile(npmArgs, "utf8"))).toEqual(expect.arrayContaining([
+      join(bundle, "core.tgz"),
+      join(bundle, "cli.tgz")
+    ]));
+    expect(JSON.parse(await readFile(npmArgs, "utf8"))).not.toContain(join(bundle, "installer.tgz"));
   });
 
   it("proxies unrecognized args, cwd, and facade env vars through to the configured CLI", async () => {

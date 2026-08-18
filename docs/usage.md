@@ -231,6 +231,11 @@ just verify-example runc use
 just verify-example sysbox use ci-runner
 ```
 
+For local development, `just install-dim-local` builds the publishable package
+tarballs. When mise is available it automatically invokes the mise-selected
+installer facade and keeps `dim` proxied through that facade; without mise it
+retains the direct installation under `${DIM_INSTALL_PREFIX:-~/.local}`.
+
 The example recipe accepts `current-installed` or
 `{sysbox,gvisor,rootless-podman,runc}` as its backend. A named backend creates
 one disposable QEMU guest per selected example and invokes
