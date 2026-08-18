@@ -176,7 +176,9 @@ dim install-cli --no-local-bin
 **Default**: under `mise`, `--no-local-bin` is the default; everywhere else,
 `--local-bin` is the default. The explicit flag always wins over this
 detection. The interactive installer prints the direct-mode risks before it
-offers `--local-bin` behavior under mise.
+offers `--local-bin` behavior under mise. Its yes/no question phrases the
+recommended mode positively, so answering `Y` or pressing Enter chooses the
+environment-specific default.
 
 ## `dim --help` / `dim --version`
 

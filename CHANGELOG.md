@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- Rephrased the interactive installer's local symlink question so `Y` and
+  Enter both select the recommended mode, including mise's facade-managed
+  default.
+
 ## [0.7.0] - 2026-08-16
 
 ### Added

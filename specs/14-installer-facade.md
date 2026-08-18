@@ -107,7 +107,9 @@ default; every other environment defaults to `--local-bin`. An explicit
 Before the interactive installer offers direct mode in a detected mise
 environment, it must warn that the symlink can shadow the mise shim, bypass
 the installer facade, and decouple the invoked CLI from mise's selected
-installer version.
+installer version. Interactive yes/no questions must phrase the recommended
+mode positively and use `Y` as their displayed default, so repeatedly answering
+`y` or pressing Enter preserves the environment-specific recommended mode.
 
 ## Proxy contract
 

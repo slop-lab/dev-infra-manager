@@ -14,6 +14,7 @@ import {
   queryCliVersion,
   validateConfiguredCli
 } from "./install.js";
+import { localBinPrompt } from "./installMode.js";
 
 const args = process.argv.slice(2);
 
@@ -102,13 +103,11 @@ async function interactiveInstall(): Promise<void> {
       if (noLocalBin) {
         console.warn(`Warning: exposing ~/.local/bin/dim can shadow the mise-managed dim, depending on PATH order.
 The symlink runs the CLI directly, bypassing the installer facade and mise version selection.
-Installer commands may then require an explicit pinned npx invocation. Keeping the default N is recommended.`);
+Installer commands may then require an explicit pinned npx invocation. Keeping DIM managed by mise is recommended.`);
       }
-      const mode = (await prompt.question(
-        `Expose ~/.local/bin/dim symlink? [${noLocalBin ? "y/N" : "Y/n"}]: `
-      )).trim().toLowerCase();
-      const exposeOnPath = mode === "" ? !noLocalBin : mode === "y" || mode === "yes";
-      await installCli(exposeOnPath, defaultBinDirectory());
+      const localBin = localBinPrompt(noLocalBin);
+      const mode = await prompt.question(localBin.question);
+      await installCli(localBin.exposeOnPath(mode), defaultBinDirectory());
     }
 
     if (choice === "2" || choice === "3") {
