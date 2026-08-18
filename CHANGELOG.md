@@ -53,6 +53,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Skipped RootlessKit AppArmor profile loading in containerized CI jobs that
+  can see the host restriction sysctl but cannot access its securityfs policy
+  interface.
 - Treated short root branch names such as `main` as equivalent to their full
   `refs/heads/main` form when checking `project create --url --ref` against the
   root repository manifest.

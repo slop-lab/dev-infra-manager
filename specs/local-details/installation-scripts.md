@@ -24,6 +24,10 @@ Behavior:
    AppArmor, install the path-scoped `/usr/local/bin/rootlesskit` profile via
    `scripts/install-rootlesskit-apparmor-profile-ubuntu.bash`. The container
    CI lane invokes the same script before exercising rootless-DinD sidecars.
+   When a container can observe the host restriction sysctl but has no
+   writable AppArmor securityfs policy interface, the script leaves policy
+   loading to the runner host instead of invoking a parser that cannot reach
+   the kernel interface.
 7. For `sysbox`, create a uniquely named, invoking-user-owned temporary file, download the
    Sysbox CE deb into it, and remove it when the script exits.
 8. For `sysbox`, verify SHA-256.

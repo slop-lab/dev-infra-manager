@@ -7,6 +7,10 @@ if [[ "${EUID}" -ne 0 ]]; then
 fi
 [[ -r /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]] || exit 0
 command -v apparmor_parser >/dev/null || exit 0
+# Containerized CI jobs can see the host's restriction sysctl without being
+# given the securityfs policy interface. In that case the runner host owns
+# policy loading, and invoking apparmor_parser here can only fail.
+[[ -w /sys/kernel/security/apparmor/.load ]] || exit 0
 
 profile="/etc/apparmor.d/usr.local.bin.rootlesskit"
 cat >"$profile" <<'EOF'
