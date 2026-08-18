@@ -184,6 +184,14 @@ container-engine socket. The initial adapter also maps `ubuntu-24.04` to its
 compatible job image so a workflow shared with GitHub does not require a
 provider-specific `runs-on` edit.
 
+The runner also advertises `dim-container-integration` in host mode. Here
+"host" is the isolated Project CI runner container, not the DIM host. This
+mode is reserved for the reviewed container-integration workflow job because
+its controller Unix sockets and nested Docker bind sources must share the
+runner container's filesystem namespace. Ordinary check jobs remain in
+disposable job containers. Re-enabling a runner replaces its provider
+registration so the declared label contract is reconciled.
+
 Effective resources resolve in this order: Project overrides, configured user
 defaults, then the built-in `4 CPU / 8 GiB / 2048 PID` fallback. `enable` with
 resource flags records a Project override. Without flags it inherits defaults;

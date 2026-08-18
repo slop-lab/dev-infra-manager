@@ -9,6 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Added a dedicated host-mode label for the container-integration workflow
+  job and made `ci runner enable` replace its stored provider registration so
+  runner label changes take effect. The host mode is scoped to the isolated
+  runner container; ordinary checks remain in disposable job containers.
 - Rephrased the interactive installer's local symlink question so `Y` and
   Enter both select the recommended mode, including mise's facade-managed
   default.

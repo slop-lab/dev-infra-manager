@@ -33,6 +33,14 @@ jobs:
 For compatibility with workflows shared with GitHub, the initial adapter also
 maps `ubuntu-24.04` to the same job image.
 
+The `dim-container-integration` label runs directly in the isolated runner
+container (Gitea runner "host" mode). It is reserved for the repository's
+container-integration workflow, whose controller sockets and nested Docker
+bind mounts must share one filesystem namespace. Other workflow jobs remain
+in disposable job containers. After upgrading DIM across a label change,
+run `dim ci runner enable PROJECT` once to replace the stored runner
+registration and publish the new labels.
+
 The runner has concurrency one. Its nested daemon, disposable job
 containers, registration data, and resource limits live outside workspace
 state. It does not mount the host Docker socket or receive DIM workspace

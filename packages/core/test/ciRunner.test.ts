@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   BUILTIN_CI_RUNNER_DEFAULTS,
+  CI_RUNNER_LABELS,
   ciRunnerContainerArgs,
   ciRunnerContainerName,
   effectiveCiRunnerResources
@@ -75,6 +76,8 @@ describe("CI runner resources", () => {
     expect(args.join(" ")).not.toContain("/var/run/docker.sock");
     expect(args.join(" ")).toContain("dim:docker://gitea/runner-images:ubuntu-24.04");
     expect(args.join(" ")).toContain("ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04");
+    expect(args).toContain(`GITEA_RUNNER_LABELS=${CI_RUNNER_LABELS}`);
+    expect(CI_RUNNER_LABELS).toContain("dim-container-integration:host");
   });
 });
 

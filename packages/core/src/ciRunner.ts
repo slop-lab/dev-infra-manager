@@ -13,6 +13,12 @@ export const BUILTIN_CI_RUNNER_DEFAULTS: CiRunnerResources = {
   pidsLimit: "2048"
 };
 
+export const CI_RUNNER_LABELS = [
+  "dim:docker://gitea/runner-images:ubuntu-24.04",
+  "ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04",
+  "dim-container-integration:host"
+].join(",");
+
 export interface EnableCiRunnerInput {
   project: string;
   resources?: Partial<CiRunnerResources>;
@@ -94,10 +100,11 @@ export async function enableCiRunner(
     try {
       await removeContainer(runner, record.containerName);
       await ensureVolume(runner, record.volumeName);
-      const hasRegistration = await registrationExists(runner, record.volumeName);
-      const registration = hasRegistration
-        ? undefined
-        : await giteaCiCoordinator.prepareRunner(runner, options, project);
+      if (await registrationExists(runner, record.volumeName)) {
+        await giteaCiCoordinator.removeRunner(runner, options, project, record.containerName);
+        await removeRegistration(runner, record.volumeName);
+      }
+      const registration = await giteaCiCoordinator.prepareRunner(runner, options, project);
       if (registration) record = { ...record, provider: registration.provider };
       await startContainer(runner, record, registration);
       record = { ...record, phase: "ready", updatedAt: new Date().toISOString() };
@@ -196,7 +203,7 @@ export function ciRunnerContainerArgs(
     "--label", "dim.resource=ci-runner",
     "--label", `dim.project=${record.projectName}`,
     "--env", `GITEA_RUNNER_NAME=${record.containerName}`,
-    "--env", "GITEA_RUNNER_LABELS=dim:docker://gitea/runner-images:ubuntu-24.04,ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04",
+    "--env", `GITEA_RUNNER_LABELS=${CI_RUNNER_LABELS}`,
     ...(registration ? [
       "--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`,
       "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`
@@ -233,4 +240,17 @@ async function registrationExists(runner: StreamingCommandRunner, volume: string
     "-c", "test -s /data/.runner"
   ]);
   return result.exitCode === 0;
+}
+
+async function removeRegistration(runner: StreamingCommandRunner, volume: string): Promise<void> {
+  const result = await runner.run("docker", [
+    "run", "--rm",
+    "--mount", `type=volume,source=${volume},target=/data`,
+    "--entrypoint", "sh",
+    "alpine:3.22",
+    "-c", "rm -f /data/.runner"
+  ]);
+  if (result.exitCode !== 0) {
+    throw new UserError(`failed to reset CI runner registration: ${result.stderr.trim()}`);
+  }
 }
