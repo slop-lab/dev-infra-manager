@@ -11,8 +11,7 @@ Allowed backend names:
 
 - `sysbox`: privileged `runc` workspace plus a host-side, unprivileged
   `sysbox-runc` agent with private Docker.
-- `gvisor`: `runsc`, project Docker image, nested Docker with the containerd
-  snapshotter disabled.
+- `gvisor`: `runsc`, project Docker image, nested Docker.
 - `rootless-podman`: `runc`, project Podman image, nested rootless Podman.
 - `runc`: privileged `runc`, project Docker image, intended for CI and nested
   development environments.
@@ -23,6 +22,10 @@ label differs from the workspace record.
 
 The agent-engine volume target is `/var/lib/docker` for Docker backends and
 `/home/dim/.local/share/containers` for rootless Podman.
+All Docker-backed workspace daemons must disable Docker's containerd
+snapshotter. Docker 29 stores its containerd image data outside DIM's managed
+`/var/lib/docker` volume, and nested snapshotters may discard file capability
+xattrs required by Project-owned rootless container engines.
 Rootless Podman must receive `/dev/fuse` and requires host support for nested
 unprivileged user namespaces. Its outer container must not require
 `--privileged`; it must instead receive the specific capabilities that

@@ -369,7 +369,8 @@ describe("project and workspace lifecycle", () => {
       dockerRuntime: "runc",
       image: "dev-infra-project-workspace:latest",
       privileged: true,
-      engine: "docker"
+      engine: "docker",
+      env: { DIM_DOCKERD_FLAGS: "--feature containerd-snapshotter=false" }
     });
     expect(workspaceRuntimePlan("gvisor", options)).toMatchObject({
       dockerRuntime: "runsc",
@@ -392,7 +393,8 @@ describe("project and workspace lifecycle", () => {
     expect(workspaceRuntimePlan("runc", options)).toMatchObject({
       dockerRuntime: "runc",
       privileged: true,
-      engine: "docker"
+      engine: "docker",
+      env: { DIM_DOCKERD_FLAGS: "--feature containerd-snapshotter=false" }
     });
   });
 

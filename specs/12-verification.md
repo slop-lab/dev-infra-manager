@@ -112,6 +112,9 @@ distinct Docker daemon, cannot list the trusted workspace's secret-bearing
 child, does not mount either Docker socket, and does not receive the child's
 raw secret environment. Its shared bind-mount probe must work when the agent
 UID differs from the rootless-DinD UID.
+The single- and multi-repository example gates must also verify that their
+fresh rootless-DinD images retain executable UID/GID mapping helpers with a
+setuid fallback before exercising the private daemon.
 
 ## Fast Isolation Gate
 

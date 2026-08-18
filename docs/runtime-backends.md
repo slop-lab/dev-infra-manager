@@ -45,6 +45,11 @@ Project-owned services share that budget unless their Compose definition adds
 stricter child limits. DIM does not impose a per-workspace disk quota.
 `discard --yes` removes the workspace container and its nested-engine storage
 volume.
+Docker-backed workspaces disable Docker's containerd image store so all nested
+engine state remains in that managed `/var/lib/docker` volume. This also avoids
+losing file capability metadata when images are unpacked through nested
+snapshotters. Official rootless-DinD examples additionally install the
+`newuidmap` and `newgidmap` setuid fallback.
 Environment values provide creation defaults; individual workspaces can store
 different limits through `dim workspace create` resource options.
 

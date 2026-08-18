@@ -19,6 +19,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Disabled Docker 29's containerd snapshotter in every Docker-backed workspace
+  so fresh workspace engines keep image data in DIM's managed volume and
+  preserve rootless-DinD UID/GID helper privileges. Official examples now also
+  install and verify the helpers' setuid fallback.
 - Made CI runner state reads and listings validate their schema 1 contract
   instead of incorrectly requiring the project/workspace schema version 3.
 

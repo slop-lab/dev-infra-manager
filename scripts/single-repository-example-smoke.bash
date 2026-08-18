@@ -104,6 +104,8 @@ dind_container="$(dim workspace exec "$workspace_name" -- \
 test -n "$dind_container"
 dim workspace exec "$workspace_name" -- docker inspect "$dind_container" \
   --format '{{.HostConfig.Privileged}}' | grep -qx true
+dim workspace exec "$workspace_name" -- docker exec "$dind_container" \
+  sh -eu -c 'test -u /usr/bin/newuidmap; test -u /usr/bin/newgidmap'
 dim workspace run "$workspace_name" bash -- -lc '
   docker info --format "{{json .SecurityOptions}}" | grep -q rootless
   docker run --rm hello-world
