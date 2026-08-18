@@ -1,6 +1,7 @@
 export interface LifecycleOptions {
   stateRoot: string;
   giteaImage: string;
+  giteaHost: string;
   giteaPort: number;
   giteaAdminUsername: string;
   gitUsername: string;

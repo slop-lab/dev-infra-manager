@@ -1,0 +1,43 @@
+import { once } from "node:events";
+import { createServer, type Server } from "node:http";
+import { afterEach, describe, expect, it } from "vitest";
+import { giteaNestedBaseUrl, giteaRequest, type GiteaConnection } from "../src/gitea.js";
+import type { CommandRunner } from "../src/types.js";
+
+describe("Gitea control endpoint", () => {
+  const servers: Server[] = [];
+
+  afterEach(async () => {
+    await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolve) => server.close(() => resolve()))));
+  });
+
+  it("resolves the managed container address from Docker", async () => {
+    const runner: CommandRunner = {
+      async run(command, args) {
+        return { command, args, stdout: "172.20.0.4\n", stderr: "", exitCode: 0 };
+      }
+    };
+
+    await expect(giteaNestedBaseUrl(runner)).resolves.toBe("http://172.20.0.4:3000");
+  });
+
+  it("sends management API requests to the resolved control endpoint", async () => {
+    const server = createServer((request, response) => {
+      response.writeHead(request.url === "/api/v1/version" ? 200 : 404).end();
+    });
+    servers.push(server);
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing address");
+    const connection: GiteaConnection = {
+      adminUsername: "admin",
+      adminPassword: "password",
+      writerUsername: "writer",
+      writerPassword: "password",
+      apiBaseUrl: `http://127.0.0.1:${address.port}/api/v1`
+    };
+
+    await expect(giteaRequest(connection, "GET", "/version")).resolves.toMatchObject({ status: 200 });
+  });
+});

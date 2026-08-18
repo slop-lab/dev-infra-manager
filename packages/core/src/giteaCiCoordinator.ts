@@ -12,7 +12,6 @@ export const giteaCiCoordinator: CiCoordinator = {
     const credentials = await ensureGitea(runner, options);
     const base = giteaCiRunnerApiBase(project);
     const response = await giteaRequest(
-      options,
       credentials,
       "POST",
       `${base}/registration-token`
@@ -29,12 +28,12 @@ export const giteaCiCoordinator: CiCoordinator = {
   async removeRunner(runner, options, project, runnerName): Promise<void> {
     const credentials = await ensureGitea(runner, options);
     const base = giteaCiRunnerApiBase(project);
-    const response = await giteaRequest(options, credentials, "GET", base);
+    const response = await giteaRequest(credentials, "GET", base);
     if (!response.ok) throw new UserError(`failed to list CI coordinator runners: ${response.status}`);
     const body = await response.json() as { runners?: Array<{ id: number; name: string }> };
     for (const candidate of body.runners ?? []) {
       if (candidate.name !== runnerName) continue;
-      const removed = await giteaRequest(options, credentials, "DELETE", `${base}/${candidate.id}`);
+      const removed = await giteaRequest(credentials, "DELETE", `${base}/${candidate.id}`);
       if (!removed.ok && removed.status !== 404) {
         throw new UserError(`failed to remove CI coordinator runner '${runnerName}': ${removed.status}`);
       }

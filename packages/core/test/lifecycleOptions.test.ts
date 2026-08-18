@@ -23,4 +23,13 @@ describe("lifecycle options", () => {
       /^\/run\/user\/1000\/dim\/[a-f0-9]{16}\/admin\.sock$/
     );
   });
+
+  it("uses the remote TCP Docker host for host-facing Gitea traffic", () => {
+    const options = lifecycleOptionsForBackend("runc", {
+      HOME: "/home/developer",
+      DOCKER_HOST: "tcp://agent-dind:2375"
+    });
+
+    expect(options.giteaHost).toBe("agent-dind");
+  });
 });

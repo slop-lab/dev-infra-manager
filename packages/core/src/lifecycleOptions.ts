@@ -34,6 +34,7 @@ export function lifecycleOptionsForBackend(
   return {
     stateRoot,
     giteaImage: env.DIM_GITEA_IMAGE ?? "gitea/gitea:1.27.0",
+    giteaHost: env.DIM_GITEA_HOST ?? dockerHostName(env.DOCKER_HOST) ?? "127.0.0.1",
     giteaPort: positiveInteger(env.DIM_GITEA_PORT ?? "3300", "DIM_GITEA_PORT"),
     giteaAdminUsername: env.DIM_GITEA_ADMIN_USERNAME ?? "dim-admin",
     gitUsername: env.DIM_GIT_USERNAME ?? "dim-workspace",
@@ -55,6 +56,11 @@ export function lifecycleOptionsForBackend(
     adminControllerSocketPath: env.DIM_ADMIN_CONTROLLER_SOCKET
       ?? path.join(controllerDirectory, "admin.sock")
   };
+}
+
+function dockerHostName(value: string | undefined): string | undefined {
+  if (!value?.startsWith("tcp://")) return undefined;
+  return new URL(value).hostname;
 }
 
 function positiveInteger(value: string, name: string): number {

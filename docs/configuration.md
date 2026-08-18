@@ -23,6 +23,7 @@ Common settings:
 ```text
 DIM_STATE_ROOT
 DIM_GITEA_IMAGE
+DIM_GITEA_HOST
 DIM_GITEA_PORT
 DIM_GITEA_ADMIN_USERNAME
 DIM_GITEA_ADMIN_PASSWORD
@@ -40,6 +41,10 @@ DIM_CI_RUNNER_CPUS
 DIM_CI_RUNNER_MEMORY
 DIM_CI_RUNNER_PIDS
 ```
+
+`DIM_GITEA_HOST` defaults to the hostname in a TCP `DOCKER_HOST`, or to
+`127.0.0.1` for a local Docker daemon. Override it when the Docker daemon's
+published ports are reachable through a different hostname or address.
 
 Runtime backend selection is documented in
 [Runtime Backends](runtime-backends.md). Project and workspace settings are

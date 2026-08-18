@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { lookup } from "node:dns/promises";
 import { UserError } from "./errors.js";
 import { LifecycleState } from "./lifecycleState.js";
 import type { GiteaCredentials, GiteaServiceRecord, LifecycleOptions } from "./lifecycleTypes.js";
@@ -9,7 +10,11 @@ export const GITEA_NETWORK = "dim-control";
 export const GITEA_VOLUME = "dim-gitea-data";
 const CREDENTIAL_PATH = "/data/dim/credentials.json";
 
-export async function ensureGitea(runner: CommandRunner, options: LifecycleOptions): Promise<GiteaCredentials> {
+export interface GiteaConnection extends GiteaCredentials {
+  apiBaseUrl: string;
+}
+
+export async function ensureGitea(runner: CommandRunner, options: LifecycleOptions): Promise<GiteaConnection> {
   const state = new LifecycleState(options.stateRoot);
   const now = new Date().toISOString();
   let record: GiteaServiceRecord;
@@ -56,7 +61,7 @@ export async function ensureGitea(runner: CommandRunner, options: LifecycleOptio
   }
 }
 
-async function ensureGiteaResources(runner: CommandRunner, options: LifecycleOptions): Promise<GiteaCredentials> {
+async function ensureGiteaResources(runner: CommandRunner, options: LifecycleOptions): Promise<GiteaConnection> {
   await ensureResource(runner, ["network", "inspect", GITEA_NETWORK, "--format", "{{index .Labels \"dim.managed\"}}"], [
     "network", "create", "--label", "dim.managed=true", "--label", "dim.resource=network", GITEA_NETWORK
   ], GITEA_NETWORK);
@@ -69,19 +74,20 @@ async function ensureGiteaResources(runner: CommandRunner, options: LifecycleOpt
     "--format", "{{index .Config.Labels \"dim.managed\"}}|{{.State.Running}}"
   ]);
   if (inspect.exitCode !== 0) {
+    const publishAddress = (await lookup(options.giteaHost)).address;
     const created = await runner.run("docker", [
       "run", "--detach",
       "--name", GITEA_CONTAINER,
       "--restart", "unless-stopped",
       "--network", GITEA_NETWORK,
       "--network-alias", "dim-gitea",
-      "--publish", `127.0.0.1:${options.giteaPort}:3000`,
+      "--publish", `${publishAddress}:${options.giteaPort}:3000`,
       "--mount", `type=volume,source=${GITEA_VOLUME},target=/data`,
       "--label", "dim.managed=true",
       "--label", "dim.resource=gitea",
       "--env", "GITEA__database__DB_TYPE=sqlite3",
       "--env", "GITEA__server__DISABLE_SSH=true",
-      "--env", `GITEA__server__ROOT_URL=http://127.0.0.1:${options.giteaPort}/`,
+      "--env", `GITEA__server__ROOT_URL=${giteaHostBaseUrl(options)}/`,
       "--env", "GITEA__service__DISABLE_REGISTRATION=true",
       "--env", "GITEA__security__INSTALL_LOCK=true",
       options.giteaImage
@@ -91,14 +97,12 @@ async function ensureGiteaResources(runner: CommandRunner, options: LifecycleOpt
     const [managed, running] = inspect.stdout.trim().split("|");
     if (managed !== "true") throw new UserError(`Docker resource '${GITEA_CONTAINER}' exists but is not managed by dim`);
     if (running === "true") {
-      await waitForGitea(options.giteaPort);
-      return ensureCredentials(runner, options);
+      return readyGiteaConnection(runner, options);
     }
     assertCommand(await runner.run("docker", ["start", GITEA_CONTAINER]), "start existing Gitea");
   }
 
-  await waitForGitea(options.giteaPort);
-  return ensureCredentials(runner, options);
+  return readyGiteaConnection(runner, options);
 }
 
 export function giteaInternalCloneUrl(owner: string, repo: string): string {
@@ -106,7 +110,7 @@ export function giteaInternalCloneUrl(owner: string, repo: string): string {
 }
 
 export function giteaHostCloneUrl(options: LifecycleOptions, owner: string, repo: string): string {
-  return `http://127.0.0.1:${options.giteaPort}/${owner}/${repo}.git`;
+  return `${giteaHostBaseUrl(options)}/${owner}/${repo}.git`;
 }
 
 export async function giteaNestedBaseUrl(runner: CommandRunner): Promise<string> {
@@ -121,14 +125,13 @@ export async function giteaNestedBaseUrl(runner: CommandRunner): Promise<string>
 }
 
 export async function giteaRequest(
-  options: LifecycleOptions,
-  credentials: GiteaCredentials,
+  connection: GiteaConnection,
   method: string,
   apiPath: string,
   body?: unknown
 ): Promise<Response> {
-  const authorization = Buffer.from(`${credentials.adminUsername}:${credentials.adminPassword}`).toString("base64");
-  return fetch(`http://127.0.0.1:${options.giteaPort}/api/v1${apiPath}`, {
+  const authorization = Buffer.from(`${connection.adminUsername}:${connection.adminPassword}`).toString("base64");
+  return fetch(`${connection.apiBaseUrl}${apiPath}`, {
     method,
     headers: {
       Authorization: `Basic ${authorization}`,
@@ -149,11 +152,25 @@ async function ensureResource(runner: CommandRunner, inspectArgs: string[], crea
   assertCommand(await runner.run("docker", createArgs), `create Docker ${createArgs[0]}`);
 }
 
-async function waitForGitea(port: number): Promise<void> {
+async function readyGiteaConnection(
+  runner: CommandRunner,
+  options: LifecycleOptions
+): Promise<GiteaConnection> {
+  const baseUrl = giteaHostBaseUrl(options);
+  await waitForGitea(baseUrl);
+  return { ...await ensureCredentials(runner, options), apiBaseUrl: `${baseUrl}/api/v1` };
+}
+
+function giteaHostBaseUrl(options: LifecycleOptions): string {
+  const host = options.giteaHost.includes(":") ? `[${options.giteaHost}]` : options.giteaHost;
+  return `http://${host}:${options.giteaPort}`;
+}
+
+async function waitForGitea(baseUrl: string): Promise<void> {
   let lastError = "not ready";
   for (let attempt = 0; attempt < 90; attempt += 1) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/healthz`);
+      const response = await fetch(`${baseUrl}/api/healthz`);
       if (response.ok) return;
       lastError = `${response.status} ${await response.text()}`;
     } catch (error) {

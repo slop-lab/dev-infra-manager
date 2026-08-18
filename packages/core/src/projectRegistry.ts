@@ -9,6 +9,7 @@ import {
   giteaInternalCloneUrl,
   giteaRequest
 } from "./gitea.js";
+import type { GiteaConnection } from "./gitea.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type {
   GiteaCredentials,
@@ -64,7 +65,7 @@ export async function createProject(
   const release = await state.acquireProjectLock(name);
   try {
     const credentials = await ensureGitea(runner, options);
-    await ensureOrganization(options, credentials, record.gitNamespace);
+    await ensureOrganization(credentials, record.gitNamespace);
     record = { ...record, phase: "ready", updatedAt: new Date().toISOString() };
     await state.writeProject(record);
     return record;
@@ -112,7 +113,6 @@ export async function purgeProject(
     const credentials = await ensureGitea(runner, options);
     for (const repo of project.repositories) {
       const deleted = await giteaRequest(
-        options,
         credentials,
         "DELETE",
         `/repos/${project.gitNamespace}/${repo.alias}`
@@ -121,7 +121,7 @@ export async function purgeProject(
         throw await apiError(`delete Gitea repo '${project.gitNamespace}/${repo.alias}'`, deleted);
       }
     }
-    const response = await giteaRequest(options, credentials, "DELETE", `/orgs/${project.gitNamespace}`);
+    const response = await giteaRequest(credentials, "DELETE", `/orgs/${project.gitNamespace}`);
     if (!response.ok && response.status !== 404) {
       throw await apiError(`delete Gitea organization '${project.gitNamespace}'`, response);
     }
@@ -187,8 +187,8 @@ export async function createProjectRepository(
 
     try {
       const credentials = await ensureGitea(runner, options);
-      await createGiteaRepository(options, credentials, project.gitNamespace, alias);
-      await grantWriter(options, credentials, project.gitNamespace, alias);
+      await createGiteaRepository(credentials, project.gitNamespace, alias);
+      await grantWriter(credentials, project.gitNamespace, alias);
       repo = { ...repo, phase: "ready", updatedAt: new Date().toISOString() };
       project = replaceRepository(project, repo);
       await state.writeProject(project);
@@ -401,8 +401,8 @@ export async function prepareProjectRepositoryTransfer(
         : [...project.repositories, repository],
       updatedAt: now
     };
-    await createGiteaRepository(options, credentials, project.gitNamespace, alias);
-    await grantWriter(options, credentials, project.gitNamespace, alias);
+    await createGiteaRepository(credentials, project.gitNamespace, alias);
+    await grantWriter(credentials, project.gitNamespace, alias);
     await state.writeProject(project);
     return {
       ...(transferId === undefined ? {} : { transferId }),
@@ -514,7 +514,6 @@ export async function deleteProjectRepository(
     const project = await deletableProjectRepository(state, projectName, alias);
     const credentials = await ensureGitea(runner, options);
     const response = await giteaRequest(
-      options,
       credentials,
       "DELETE",
       `/repos/${project.gitNamespace}/${alias}`
@@ -593,7 +592,7 @@ export async function applyProjectRepositoryProtection(
       await ensureSingleBranchHead(runner, options, credentials, project.gitNamespace, repo);
     }
     for (const pattern of repo.protectedPatterns) {
-      await protectBranch(options, credentials, project.gitNamespace, alias, pattern);
+      await protectBranch(credentials, project.gitNamespace, alias, pattern);
     }
     repo = { ...repo, protectionPhase: "applied", updatedAt: new Date().toISOString() };
     project = replaceRepository(project, repo);
@@ -607,11 +606,11 @@ export async function applyProjectRepositoryProtection(
 async function ensureSingleBranchHead(
   runner: CommandRunner,
   options: LifecycleOptions,
-  credentials: GiteaCredentials,
+  credentials: GiteaConnection,
   organization: string,
   repo: ProjectRepositoryRecord
 ): Promise<void> {
-  const repository = await giteaRequest(options, credentials, "GET", `/repos/${organization}/${repo.alias}`);
+  const repository = await giteaRequest(credentials, "GET", `/repos/${organization}/${repo.alias}`);
   if (!repository.ok) throw await apiError(`inspect repo '${organization}/${repo.alias}'`, repository);
   const metadata = await repository.json() as { default_branch?: string };
   const listed = await runner.run("git", ["ls-remote", "--heads", repo.hostUrl], {
@@ -624,7 +623,7 @@ async function ensureSingleBranchHead(
     .filter((name): name is string => typeof name === "string" && name.length > 0);
   if (metadata.default_branch && names.includes(metadata.default_branch)) return;
   if (names.length !== 1) return;
-  const updated = await giteaRequest(options, credentials, "PATCH", `/repos/${organization}/${repo.alias}`, {
+  const updated = await giteaRequest(credentials, "PATCH", `/repos/${organization}/${repo.alias}`, {
     default_branch: names[0]
   });
   if (!updated.ok) throw await apiError(`set root HEAD for '${organization}/${repo.alias}'`, updated);
@@ -649,50 +648,46 @@ function assertReadyProject(project: ProjectRecord): void {
 }
 
 async function ensureOrganization(
-  options: LifecycleOptions,
-  credentials: GiteaCredentials,
+  credentials: GiteaConnection,
   organization: string
 ): Promise<void> {
-  const response = await giteaRequest(options, credentials, "POST", "/orgs", {
+  const response = await giteaRequest(credentials, "POST", "/orgs", {
     username: organization,
     full_name: organization,
     visibility: "public"
   });
   if (response.ok) return;
   if (response.status === 422) {
-    const existing = await giteaRequest(options, credentials, "GET", `/orgs/${organization}`);
+    const existing = await giteaRequest(credentials, "GET", `/orgs/${organization}`);
     if (existing.ok) return;
   }
   throw await apiError(`create Gitea organization '${organization}'`, response);
 }
 
 async function createGiteaRepository(
-  options: LifecycleOptions,
-  credentials: GiteaCredentials,
+  credentials: GiteaConnection,
   organization: string,
   alias: string
 ): Promise<void> {
-  const response = await giteaRequest(options, credentials, "POST", `/orgs/${organization}/repos`, {
+  const response = await giteaRequest(credentials, "POST", `/orgs/${organization}/repos`, {
     name: alias,
     private: false,
     auto_init: false
   });
   if (response.ok) return;
   if (response.status === 409 || response.status === 422) {
-    const existing = await giteaRequest(options, credentials, "GET", `/repos/${organization}/${alias}`);
+    const existing = await giteaRequest(credentials, "GET", `/repos/${organization}/${alias}`);
     if (existing.ok) return;
   }
   throw await apiError(`create repo '${organization}/${alias}'`, response);
 }
 
 async function grantWriter(
-  options: LifecycleOptions,
-  credentials: GiteaCredentials,
+  credentials: GiteaConnection,
   organization: string,
   alias: string
 ): Promise<void> {
   const response = await giteaRequest(
-    options,
     credentials,
     "PUT",
     `/repos/${organization}/${alias}/collaborators/${credentials.writerUsername}`,
@@ -704,14 +699,12 @@ async function grantWriter(
 }
 
 async function protectBranch(
-  options: LifecycleOptions,
-  credentials: GiteaCredentials,
+  credentials: GiteaConnection,
   organization: string,
   alias: string,
   pattern: string
 ): Promise<void> {
   const response = await giteaRequest(
-    options,
     credentials,
     "POST",
     `/repos/${organization}/${alias}/branch_protections`,

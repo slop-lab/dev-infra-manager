@@ -53,6 +53,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Derived the host-facing Gitea endpoint from a remote TCP `DOCKER_HOST` so
+  containerized CI jobs reach the Docker daemon host instead of mistaking
+  their own loopback for it.
 - Skipped RootlessKit AppArmor profile loading in containerized CI jobs that
   can see the host restriction sysctl but cannot access its securityfs policy
   interface.
