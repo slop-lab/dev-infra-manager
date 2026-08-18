@@ -13,6 +13,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Enter both select the recommended mode, including mise's facade-managed
   default.
 
+### Fixed
+
+- Made CI runner state reads and listings validate their schema 1 contract
+  instead of incorrectly requiring the project/workspace schema version 3.
+
 ## [0.7.0] - 2026-08-16
 
 ### Added

@@ -76,7 +76,12 @@ export class LifecycleState {
   }
 
   async readCiRunner(project: string): Promise<CiRunnerRecord> {
-    return readJson(this.ciRunnerPath(project), `CI runner for project '${project}' not found`);
+    const record = await readJson<CiRunnerRecord>(
+      this.ciRunnerPath(project),
+      `CI runner for project '${project}' not found`
+    );
+    assertSchemaVersion(record, "CI runner", project, 1);
+    return record;
   }
 
   async writeCiRunner(record: CiRunnerRecord): Promise<void> {
@@ -88,7 +93,7 @@ export class LifecycleState {
   }
 
   async listCiRunners(): Promise<CiRunnerRecord[]> {
-    return listRecords<CiRunnerRecord>(path.join(this.root, "ci-runners"), "CI runner");
+    return listRecords<CiRunnerRecord>(path.join(this.root, "ci-runners"), "CI runner", 1);
   }
 
   async acquireCiRunnerLock(project: string): Promise<() => Promise<void>> {
@@ -159,7 +164,7 @@ export class LifecycleState {
   }
 
   async listWorkspaces(): Promise<WorkspaceRecord[]> {
-    return listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace");
+    return listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace", 3);
   }
 
   async claimProject(record: ProjectRecord): Promise<void> {
@@ -188,7 +193,7 @@ export class LifecycleState {
   }
 
   async listProjects(): Promise<ProjectRecord[]> {
-    return listRecords<ProjectRecord>(path.join(this.root, "projects"), "project");
+    return listRecords<ProjectRecord>(path.join(this.root, "projects"), "project", 3);
   }
 
   async removeProject(name: string): Promise<void> {
@@ -243,7 +248,8 @@ async function readJson<T>(target: string, missingMessage: string): Promise<T> {
 
 async function listRecords<T extends { schemaVersion: number; name: string }>(
   directory: string,
-  kind: string
+  kind: string,
+  expectedSchemaVersion: number
 ): Promise<T[]> {
   let entries: string[];
   try {
@@ -254,14 +260,18 @@ async function listRecords<T extends { schemaVersion: number; name: string }>(
   }
   const records = await Promise.all(entries.filter((entry) => entry.endsWith(".json")).map(async (entry) => {
     const record = await readJson<T>(path.join(directory, entry), `invalid ${kind} record: ${entry}`);
-    assertSchemaVersion(record, kind, record.name);
+    assertSchemaVersion(record, kind, record.name, expectedSchemaVersion);
     return record;
   }));
   return records.sort((left, right) => left.name.localeCompare(right.name));
 }
 
-function assertSchemaVersion(record: { schemaVersion?: number }, kind: string, name: string): void {
-  const expected = 3;
+function assertSchemaVersion(
+  record: { schemaVersion?: number },
+  kind: string,
+  name: string,
+  expected = 3
+): void {
   if (record.schemaVersion !== expected) {
     throw new UserError(
       `${kind} '${name}' uses unsupported state schema ${String(record.schemaVersion)}; `
