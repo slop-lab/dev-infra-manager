@@ -23,6 +23,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Split automatic GitHub and Gitea CI definitions so GitHub container
+  integration uses a hosted Ubuntu VM instead of waiting indefinitely for the
+  Gitea-only `dim-container-integration` runner label. GitHub's manual Sysbox
+  and KVM release workflows remain unchanged.
 - Disabled Docker 29's containerd snapshotter in every Docker-backed workspace
   so fresh workspace engines keep image data in DIM's managed volume and
   preserve rootless-DinD UID/GID helper privileges. Official examples now also

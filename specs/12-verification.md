@@ -90,6 +90,12 @@ lifecycle behavior, and packed CLI project workflows. It may run against the
 nested Docker daemon in a development container and must not claim to verify a
 host runtime backend boundary.
 
+Automatic workflow definitions must preserve the filesystem namespace needed
+by this gate without requiring a cross-provider runner label. Gitea runs it via
+the managed `dim-container-integration` host-mode label from `.gitea/workflows`,
+while GitHub runs it directly on a standard hosted Ubuntu VM from
+`.github/workflows`. Manual Sysbox and KVM release workflows remain GitHub-only.
+
 ## Container Backend Gates
 
 `scripts/container-cgroup-smoke.bash` requires direct access to the target Docker
