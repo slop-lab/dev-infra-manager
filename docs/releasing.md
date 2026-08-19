@@ -3,7 +3,8 @@
 ## Prerequisites
 
 - The release commit is pushed to both the development Gitea repository and
-  the public GitHub repository, and automatic CI is green at that exact commit.
+  the public GitHub repository. The complete automatic Gitea CI and lightweight
+  automatic GitHub CI are green at that exact commit.
 - The manually dispatched Sysbox and KVM installer workflows pass on the
   release commit using fresh ephemeral self-hosted runners.
 - `npm whoami` succeeds for an account allowed to publish the `@slop-lab` scope.
@@ -51,11 +52,12 @@ test "$(git rev-parse FETCH_HEAD)" = "$release_sha"
 ```
 
 Replace `GITHUB_REMOTE` with the configured GitHub remote name. Confirm the
-automatic GitHub `CI` and `Container integration` runs both report
-`headSha == release_sha`; a green run for the same branch name at another SHA
-does not satisfy the release gate. Gitea remains the development CI authority,
-while these GitHub-hosted runs validate the public mirror and hosted-runner
-path used by downstream users.
+automatic GitHub `CI` run reports `headSha == release_sha`; a green run for the
+same branch name at another SHA does not satisfy the release gate. This
+GitHub-hosted workflow intentionally performs only Node.js type checks and
+tests without APT or Docker setup. Gitea remains the complete automatic CI
+authority, while the local matrix and manual GitHub workflows cover package,
+container, Sysbox, and KVM release gates.
 
 Build and verify the reviewed runner image once:
 

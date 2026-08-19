@@ -1,6 +1,6 @@
 {
   "name": "@slop-lab/dim-contracts-external-url",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Configuration and extension contracts for DIM external URL integrations",
   "license": "MIT",
   "repository": {

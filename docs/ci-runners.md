@@ -42,8 +42,9 @@ run `dim ci runner enable PROJECT` once to replace the stored runner
 registration and publish the new labels.
 
 DIM's own automatic workflows are provider-specific: `.gitea/workflows/ci.yml`
-uses that host-mode label, while `.github/workflows/ci.yml` runs the equivalent
-gate directly on a GitHub-hosted Ubuntu VM. GitHub-only manual Sysbox and KVM
+uses that host-mode label for the complete container gate, while
+`.github/workflows/ci.yml` intentionally runs only lightweight Node.js type
+checks and tests without APT or Docker setup. GitHub-only manual Sysbox and KVM
 release workflows remain under `.github/workflows` and are not copied into the
 managed development Gitea instance.
 

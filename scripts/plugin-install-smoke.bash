@@ -26,7 +26,7 @@ printf '%s\n' \
   '  "type": "module",' \
   '  "exports": "./index.js",' \
   '  "peerDependencies": {' \
-  '    "@slop-lab/dim-core": "0.7.0"' \
+  '    "@slop-lab/dim-core": "0.8.0"' \
   '  }' \
   '}' \
   > "$plugin_source/package.json"

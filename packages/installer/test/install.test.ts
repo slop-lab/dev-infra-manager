@@ -269,7 +269,7 @@ describe("@slop-lab/dim-installer", () => {
 
       await writeFile(join(root, "packages.json"), JSON.stringify({
         schemaVersion: 1,
-        packages: [{ name: "@slop-lab/dim-cli", version: "0.7.0", file: "../cli.tgz" }]
+        packages: [{ name: "@slop-lab/dim-cli", version: "0.8.0", file: "../cli.tgz" }]
       }));
       await expect(readLocalPackageBundle(root)).rejects.toThrow(/invalid local package filename/);
     });

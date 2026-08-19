@@ -192,8 +192,8 @@ Configure the Cloudflare adapter and both ingresses:
 
 ```bash
 dim install-plugin \
-  '@slop-lab/dim-plugin-dns-cloudflare@0.7.0' \
-  '@slop-lab/dim-plugin-external-urls@0.7.0'
+  '@slop-lab/dim-plugin-dns-cloudflare@0.8.0' \
+  '@slop-lab/dim-plugin-external-urls@0.8.0'
 
 dim external-url dns-provider add cloudflare \
   --name cloudflare-main \

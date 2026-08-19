@@ -8,7 +8,7 @@ new restricted socket is mounted into the child container.
 ## Installation
 
 ```bash
-npm install --save-exact '@slop-lab/dim-controller-proxy@0.7.0'
+npm install --save-exact '@slop-lab/dim-controller-proxy@0.8.0'
 ```
 
 The package is ESM-only, requires Node.js 24 or 26, includes TypeScript

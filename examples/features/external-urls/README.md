@@ -18,8 +18,8 @@ Wildcard DNS for `*.host.tail.test` must resolve to this host. Then run:
 
 ```bash
 dim install-plugin \
-  '@slop-lab/dim-plugin-dns-cloudflare@0.7.0' \
-  '@slop-lab/dim-plugin-external-urls@0.7.0'
+  '@slop-lab/dim-plugin-dns-cloudflare@0.8.0' \
+  '@slop-lab/dim-plugin-external-urls@0.8.0'
 dim plugin list
 dim doctor
 bash create-repository.bash

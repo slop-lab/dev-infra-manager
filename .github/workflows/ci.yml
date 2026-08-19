@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   check:
-    name: check (Node.js ${{ matrix.node-version }})
+    name: lightweight check (Node.js ${{ matrix.node-version }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
@@ -26,23 +26,6 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
-      - run: sudo apt-get update && sudo apt-get install --yes just jq
       - run: pnpm install --frozen-lockfile
-      - run: just ci-check
-
-  container-integration:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10.13.1
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          cache: pnpm
-      - run: sudo apt-get update && sudo apt-get install --yes apparmor just jq
-      - run: pnpm install --frozen-lockfile
-      - run: sudo bash scripts/install-rootlesskit-apparmor-profile-ubuntu.bash
-      - run: just ci-container
+      - run: pnpm run workspace:check
+      - run: pnpm run workspace:test

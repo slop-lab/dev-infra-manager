@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-19
+
 ### Changed
 
 - Added installer-owned plugin enable, disable, and removal commands, and made
@@ -31,10 +33,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   project. Replacements are installed and verified in staging, failed switches
   restore the previous runtime, and exact core peer dependencies let npm reject
   incompatible plugin combinations before activation.
-- Split automatic GitHub and Gitea CI definitions so GitHub container
-  integration uses a hosted Ubuntu VM instead of waiting indefinitely for the
-  Gitea-only `dim-container-integration` runner label. GitHub's manual Sysbox
-  and KVM release workflows remain unchanged.
+- Split automatic GitHub and Gitea CI definitions. GitHub now runs only
+  lightweight Node.js type checks and tests without APT or Docker setup;
+  Gitea remains the complete automatic CI authority, and GitHub's manual
+  Sysbox and KVM release workflows retain the heavier release gates.
 - Disabled Docker 29's containerd snapshotter in every Docker-backed workspace
   so fresh workspace engines keep image data in DIM's managed volume and
   preserve rootless-DinD UID/GID helper privileges. Official examples now also
@@ -385,7 +387,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Versioned plugin API and standalone plugin installer.
 - Container, lifecycle, multi-repository, packaging, and self-project smoke tests.
 
-[Unreleased]: https://github.com/slop-lab/dev-infra-manager/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/slop-lab/dev-infra-manager/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/slop-lab/dev-infra-manager/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/slop-lab/dev-infra-manager/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/slop-lab/dev-infra-manager/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/slop-lab/dev-infra-manager/compare/v0.4.0...v0.5.0
