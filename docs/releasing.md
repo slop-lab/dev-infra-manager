@@ -2,7 +2,8 @@
 
 ## Prerequisites
 
-- The release commit is pushed and CI is green.
+- The release commit is pushed to both the development Gitea repository and
+  the public GitHub repository, and automatic CI is green at that exact commit.
 - The manually dispatched Sysbox and KVM installer workflows pass on the
   release commit using fresh ephemeral self-hosted runners.
 - `npm whoami` succeeds for an account allowed to publish the `@slop-lab` scope.
@@ -39,6 +40,23 @@ Finally, run the two manual GitHub workflows on actual ephemeral self-hosted
 runners. The workflow definitions must already be present on the repository's
 default branch, and the release commit must be pushed before dispatch.
 
+Record the candidate SHA once and use it for every dispatch and comparison:
+
+```bash
+release_sha="$(git rev-parse HEAD)"
+test -z "$(git status --porcelain)"
+test "$(git rev-parse origin/development)" = "$release_sha"
+git fetch GITHUB_REMOTE development
+test "$(git rev-parse FETCH_HEAD)" = "$release_sha"
+```
+
+Replace `GITHUB_REMOTE` with the configured GitHub remote name. Confirm the
+automatic GitHub `CI` and `Container integration` runs both report
+`headSha == release_sha`; a green run for the same branch name at another SHA
+does not satisfy the release gate. Gitea remains the development CI authority,
+while these GitHub-hosted runs validate the public mirror and hosted-runner
+path used by downstream users.
+
 Build and verify the reviewed runner image once:
 
 ```bash
@@ -59,19 +77,21 @@ Then dispatch exactly one workflow at the pushed release ref from a second
 terminal and watch it to completion:
 
 ```bash
-gh workflow run sysbox-smoke.yml --ref RELEASE_REF
-run_id="$(gh run list --workflow sysbox-smoke.yml --branch RELEASE_REF \
+gh workflow run sysbox-smoke.yml --ref "$release_sha"
+run_id="$(gh run list --workflow sysbox-smoke.yml --commit "$release_sha" \
   --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')"
 gh run watch "$run_id" --exit-status
+test "$(gh run view "$run_id" --json headSha --jq .headSha)" = "$release_sha"
 ```
 
 Start a fresh ephemeral runner, then repeat for the KVM installer workflow:
 
 ```bash
-gh workflow run kvm-backend-install.yml --ref RELEASE_REF
-run_id="$(gh run list --workflow kvm-backend-install.yml --branch RELEASE_REF \
+gh workflow run kvm-backend-install.yml --ref "$release_sha"
+run_id="$(gh run list --workflow kvm-backend-install.yml --commit "$release_sha" \
   --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')"
 gh run watch "$run_id" --exit-status
+test "$(gh run view "$run_id" --json headSha --jq .headSha)" = "$release_sha"
 ```
 
 Each runner accepts one job and deletes its VM overlay and SSH key afterward.
