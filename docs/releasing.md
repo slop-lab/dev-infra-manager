@@ -44,10 +44,11 @@ default branch, and the release commit must be pushed before dispatch.
 Record the candidate SHA once and use it for every dispatch and comparison:
 
 ```bash
+release_ref=development
 release_sha="$(git rev-parse HEAD)"
 test -z "$(git status --porcelain)"
-test "$(git rev-parse origin/development)" = "$release_sha"
-git fetch GITHUB_REMOTE development
+test "$(git rev-parse "origin/$release_ref")" = "$release_sha"
+git fetch GITHUB_REMOTE "$release_ref"
 test "$(git rev-parse FETCH_HEAD)" = "$release_sha"
 ```
 
@@ -58,6 +59,10 @@ GitHub-hosted workflow intentionally performs only Node.js type checks and
 tests without APT or Docker setup. Gitea remains the complete automatic CI
 authority, while the local matrix and manual GitHub workflows cover package,
 container, Sysbox, and KVM release gates.
+
+GitHub workflow dispatch accepts a branch or tag ref, not an arbitrary commit
+SHA. Dispatch with the verified `release_ref`, then require the resulting
+run's `headSha` to equal `release_sha` as shown below.
 
 Build and verify the reviewed runner image once:
 
@@ -79,7 +84,7 @@ Then dispatch exactly one workflow at the pushed release ref from a second
 terminal and watch it to completion:
 
 ```bash
-gh workflow run sysbox-smoke.yml --ref "$release_sha"
+gh workflow run sysbox-smoke.yml --ref "$release_ref"
 run_id="$(gh run list --workflow sysbox-smoke.yml --commit "$release_sha" \
   --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')"
 gh run watch "$run_id" --exit-status
@@ -89,7 +94,7 @@ test "$(gh run view "$run_id" --json headSha --jq .headSha)" = "$release_sha"
 Start a fresh ephemeral runner, then repeat for the KVM installer workflow:
 
 ```bash
-gh workflow run kvm-backend-install.yml --ref "$release_sha"
+gh workflow run kvm-backend-install.yml --ref "$release_ref"
 run_id="$(gh run list --workflow kvm-backend-install.yml --commit "$release_sha" \
   --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')"
 gh run watch "$run_id" --exit-status
