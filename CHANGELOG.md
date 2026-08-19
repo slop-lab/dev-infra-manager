@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- Added a deny-by-default agent controller-proxy helper and preset, plus a
+  workspace-scoped asynchronous self-restart route demonstrated and verified
+  by the single-repository Project example.
+
 ## [0.8.0] - 2026-08-19
 
 ### Changed

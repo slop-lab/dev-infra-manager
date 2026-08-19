@@ -14,6 +14,37 @@ npm install --save-exact '@slop-lab/dim-controller-proxy@0.8.0'
 The package is ESM-only, requires Node.js 24 or 26, includes TypeScript
 declarations, and installs the `dim-controller-proxy` executable.
 
+## Agent preset
+
+The agent preset builds an exact-route, deny-by-default policy, filters
+controller discovery to that allowlist, and removes host-input discovery. This
+form allows an agent to request a restart of only the workspace identified by
+the trusted upstream grant:
+
+```bash
+dim-controller-proxy agent \
+  --listen /run/dim/agent-controller/controller.sock \
+  --allow-workspace-restart
+```
+
+The same helper is available to reviewed Node.js policy code:
+
+```ts
+import { createAgentControllerProxy } from "@slop-lab/dim-controller-proxy";
+
+const proxy = createAgentControllerProxy({
+  listen: "/run/dim/agent-controller/controller.sock",
+  routes: [{ method: "POST", path: "/api/workspace/restart" }]
+});
+await proxy.listen();
+```
+
+Request bodies are denied by default. A route that needs one must set an
+explicit `maxBodyBytes` limit.
+Allowing self-restart lets the agent trigger reviewed Project setup again and
+may affect availability. Project root code must opt in deliberately; the agent
+still cannot select another workspace or access a host-admin route.
+
 ## External URL preset
 
 The built-in preset permits discovery, listing, creation, and individual

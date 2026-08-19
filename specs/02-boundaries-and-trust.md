@@ -30,6 +30,10 @@ Agent containers:
 - Must not mount the host runtime socket or Project runtime socket.
 - Must not mount secret-bearing runtime volumes.
 - May run nested containers through an agent-specific inner runtime.
+- May receive a reviewed, deny-by-default controller proxy. A self-restart
+  capability must derive its target from the trusted workspace grant and must
+  not expose that grant, the original workspace socket, another workspace
+  name, or any host-admin route to the agent.
 - Must belong to a named workspace and be declared by reviewed Project code;
   DIM core does not define an agent resource.
 - Must remain inside the resource-limited outer workspace boundary. A Project
@@ -64,6 +68,8 @@ Trusted Project lifecycle code:
 - Runs in the workspace container, outside the agent container.
 - Owns the Project runtime.
 - Defines, starts, and reconciles agent and secret-bearing Project services.
+- Explicitly decides whether an agent may trigger its reviewed setup again by
+  exposing the workspace self-restart route through a constrained proxy.
 - Keeps the agent's inner runtime separate from its own runtime.
 - Deploys secret-bearing containers only from approved refs.
 - Receives an available host `/dev/kvm` automatically when its backend

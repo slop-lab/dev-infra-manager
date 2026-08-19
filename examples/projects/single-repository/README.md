@@ -50,6 +50,21 @@ The agent receives neither the host Docker socket nor the Project runtime
 socket. Its `DOCKER_HOST` reaches only `agent-dind`, so coding tools can create
 nested containers without controlling sibling Project services.
 
+Reviewed setup code also creates a deny-by-default agent controller proxy. The
+agent receives only its derived socket, not the workspace grant or original
+controller socket. This example allows one exact operation: asynchronously
+restart the authenticated workspace.
+
+```bash
+dim workspace run single-dev bash -- -lc '
+  curl --fail --silent --unix-socket "$DIM_CONTROLLER_SOCKET" \
+    --request POST http://dim-controller/api/workspace/restart
+'
+```
+
+The request cannot name or restart another workspace. The host controller
+derives the target from the scoped grant held by the trusted proxy.
+
 ```bash
 dim workspace create single-app single-dev \
   --cpus 2 --memory 2g --pids-limit 512

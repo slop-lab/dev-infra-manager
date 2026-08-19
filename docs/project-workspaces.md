@@ -107,6 +107,13 @@ Git configuration reader. Providers run in DIM's managed host controller on
 every request, and DIM does not cache their results. The controller socket and
 grant are not inherited by Compose services.
 
+The workspace API also accepts an asynchronous self-restart request at
+`POST /api/workspace/restart`. The scoped grant determines the workspace; the
+request has no workspace-name field and cannot target another workspace.
+Agent containers should receive only a reviewed `dim-controller-proxy` socket,
+not this original socket or grant. The runnable single-repository Project
+example uses the standard agent proxy helper to expose only self-restart.
+
 ### `.dim/docker-compose.yml`
 
 When `.dim/setup.sh` is absent and this file exists, `dim` performs the default

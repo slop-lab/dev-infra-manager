@@ -87,6 +87,7 @@ workspace_json="$(dim workspace show "$workspace_name" --json)"
 test "$(jq -r .cpuCount <<<"$workspace_json")" = "2"
 test "$(jq -r .memory <<<"$workspace_json")" = "2g"
 test "$(jq -r .pidsLimit <<<"$workspace_json")" = "512"
+container_name="$(jq -r .containerName <<<"$workspace_json")"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'curl --fail --silent http://127.0.0.1:3000')" = \
   "hello from a single-repository DIM workspace"
 
@@ -98,6 +99,41 @@ dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
   --format '{{.HostConfig.Privileged}}' | grep -qx false
 ! dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
   --format '{{json .Mounts}}' | grep -q /var/run/docker.sock
+controller_discovery="$(dim workspace run "$workspace_name" bash -- -lc '
+  curl --fail --silent --unix-socket "$DIM_CONTROLLER_SOCKET" http://dim-controller/api
+')"
+test "$(jq -r '.routes | length' <<<"$controller_discovery")" = "1"
+test "$(jq -r '.routes[0] | "\(.method) \(.path)"' <<<"$controller_discovery")" = \
+  "POST /api/workspace/restart"
+test "$(jq -r '.hostInputProviders | length' <<<"$controller_discovery")" = "0"
+test "$(dim workspace run "$workspace_name" bash -- -lc '
+  curl --silent --output /dev/null --write-out "%{http_code}" \
+    --unix-socket "$DIM_CONTROLLER_SOCKET" --request POST \
+    http://dim-controller/api/host-inputs/builtin.git-author
+')" = "403"
+
+echo "[single-repository] request a scoped self-restart through the agent proxy"
+started_at="$(docker inspect "$container_name" --format '{{.State.StartedAt}}')"
+restart_response="$(dim workspace run "$workspace_name" bash -- -lc '
+  curl --fail --silent --unix-socket "$DIM_CONTROLLER_SOCKET" \
+    --request POST http://dim-controller/api/workspace/restart
+')"
+echo "$restart_response" | jq -e \
+  --arg workspace "$workspace_name" '.accepted == true and .workspace == $workspace' >/dev/null
+for attempt in $(seq 1 120); do
+  current_started_at="$(docker inspect "$container_name" --format '{{.State.StartedAt}}' 2>/dev/null || true)"
+  running="$(docker inspect "$container_name" --format '{{.State.Running}}' 2>/dev/null || true)"
+  if [[ "$current_started_at" != "$started_at" && "$running" == true ]] && \
+    dim workspace run "$workspace_name" bash -- -lc \
+      'curl --fail --silent http://127.0.0.1:3000' >/dev/null 2>&1; then
+    break
+  fi
+  if [[ "$attempt" -eq 120 ]]; then
+    echo "timed out waiting for the agent-requested workspace restart" >&2
+    exit 1
+  fi
+  sleep 1
+done
 dind_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-$workspace_name" \
   --file .dim/docker-compose.yml ps --quiet agent-dind)"

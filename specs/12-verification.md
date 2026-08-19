@@ -227,7 +227,9 @@ one-repository shape under `examples/projects/single-repository/`: no
 `.dim/repos.yml`, no protected ref or secret service, a direct agent-style
 push to `main`, explicit workspace resource limits, and an unprivileged
 Project-owned agent serving the application through its private rootless DinD
-sidecar boundary.
+sidecar boundary. It must also prove that the agent receives a filtered
+controller proxy with only bodyless self-restart permission, cannot reach host
+inputs, and can request an asynchronous restart of its own workspace.
 
 ## Documentation Verification
 

@@ -3,7 +3,7 @@ import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { createControllerProxy } from "../src/index.js";
+import { createAgentControllerProxy, createControllerProxy } from "../src/index.js";
 import { externalUrlProxy } from "../src/external-url.js";
 
 describe("controller proxy", () => {
@@ -84,6 +84,49 @@ describe("controller proxy", () => {
     expect((await request(listen, "DELETE", "/api/urls/denied-id")).status).toBe(403);
     expect((await request(listen, "DELETE", "/api/urls/allowed-id")).status).toBe(201);
     expect(requests.every((entry) => entry.authorization === "Bearer workspace.secret")).toBe(true);
+  });
+
+  it("creates a deny-by-default agent proxy from exact route policies", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "dim-agent-controller-proxy-"));
+    cleanup.push(() => rm(root, { recursive: true, force: true }));
+    const sourceSocket = path.join(root, "source.sock");
+    const listen = path.join(root, "proxy.sock");
+    const upstream = http.createServer((request, response) => {
+      if (request.method === "GET" && request.url === "/api") {
+        response.setHeader("content-type", "application/json");
+        response.end(JSON.stringify({
+          apiVersion: 1,
+          routes: [
+            { method: "POST", path: "/api/workspace/restart" },
+            { method: "POST", path: "/api/urls" }
+          ],
+          hostInputProviders: ["builtin.git-author"]
+        }));
+        return;
+      }
+      response.writeHead(202).end('{"accepted":true}\n');
+    });
+    await listenServer(upstream, sourceSocket);
+    cleanup.push(() => closeServer(upstream));
+
+    const proxy = createAgentControllerProxy({
+      sourceSocket,
+      token: "workspace.secret",
+      listen,
+      routes: [{ method: "POST", path: "/api/workspace/restart" }]
+    });
+    await proxy.listen();
+    cleanup.push(() => proxy.close());
+
+    const discovery = await request(listen, "GET", "/api");
+    expect(JSON.parse(discovery.body)).toMatchObject({
+      routes: [{ method: "POST", path: "/api/workspace/restart" }],
+      hostInputProviders: []
+    });
+    expect((await request(listen, "POST", "/api/workspace/restart")).status).toBe(202);
+    expect((await request(listen, "POST", "/api/workspace/restart", { force: true })).status).toBe(403);
+    expect((await request(listen, "POST", "/api/urls")).status).toBe(403);
+    expect((await request(listen, "POST", "/api/host-inputs/builtin.git-author", { key: "name" })).status).toBe(403);
   });
 });
 

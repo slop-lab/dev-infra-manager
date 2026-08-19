@@ -5,6 +5,7 @@ import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
 import { ProcessRunner } from "./runner.js";
 import type { StreamingCommandRunner } from "./types.js";
+import { restartWorkspace as restartWorkspaceLifecycle } from "./workspaceLifecycle.js";
 
 export type ControllerMethod = "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
 
@@ -73,6 +74,7 @@ export interface DimControllerOptions {
     target: WorkspaceTarget,
     mode: "container-dns" | "container-ip"
   ): Promise<ResolvedWorkspaceTarget>;
+  restartWorkspace?(workspace: ControllerWorkspace): Promise<void>;
   maxBodyBytes?: number;
 }
 
@@ -99,6 +101,11 @@ export function configuredDimController(
       const record = await state.readWorkspace(workspace.name);
       if (record.projectId !== workspace.projectId) throw new UserError("workspace identity changed");
       return resolveWorkspaceTarget(runner, record, target, mode);
+    },
+    restartWorkspace: async (workspace) => {
+      const record = await state.readWorkspace(workspace.name);
+      if (record.projectId !== workspace.projectId) throw new UserError("workspace identity changed");
+      await restartWorkspaceLifecycle(runner, lifecycle, workspace.name);
     }
   });
 }
@@ -133,8 +140,9 @@ export async function initializeControllerRoutes(
 }
 
 export function createDimController(options: DimControllerOptions): Server {
+  const pendingRestarts = new Set<string>();
   return createServer((request, response) => {
-    void handleRequest(options, request, response).catch((error) => {
+    void handleRequest(options, pendingRestarts, request, response).catch((error) => {
       sendJson(response, isUserError(error) ? 400 : 500, {
         error: error instanceof Error ? error.message : String(error)
       });
@@ -144,6 +152,7 @@ export function createDimController(options: DimControllerOptions): Server {
 
 async function handleRequest(
   options: DimControllerOptions,
+  pendingRestarts: Set<string>,
   request: IncomingMessage,
   response: ServerResponse
 ): Promise<void> {
@@ -157,15 +166,40 @@ async function handleRequest(
     return sendJson(response, 200, {
       apiVersion: 1,
       workspace: { name: workspace.name, project: workspace.projectName },
-      routes: options.routes.map(({ method, path, summary, discovery, plugin }) => ({
-        method,
-        path: `/api${path}`,
-        summary,
-        ...(plugin ? { plugin } : {}),
-        ...(discovery ? { discovery } : {})
-      })),
+      routes: [
+        ...(options.restartWorkspace ? [{
+          method: "POST",
+          path: "/api/workspace/restart",
+          summary: "Restart the authenticated workspace"
+        }] : []),
+        ...options.routes.map(({ method, path, summary, discovery, plugin }) => ({
+          method,
+          path: `/api${path}`,
+          summary,
+          ...(plugin ? { plugin } : {}),
+          ...(discovery ? { discovery } : {})
+        }))
+      ],
       hostInputProviders: [...(options.hostInputProviders?.keys() ?? [])]
     });
+  }
+  if (request.method === "POST" && url.pathname === "/api/workspace/restart" && options.restartWorkspace) {
+    if ((request.headers["content-length"] !== undefined && request.headers["content-length"] !== "0")
+      || request.headers["transfer-encoding"] !== undefined) {
+      throw new UserError("workspace restart request must not include a body");
+    }
+    if (!pendingRestarts.has(workspace.id)) {
+      pendingRestarts.add(workspace.id);
+      response.once("finish", () => {
+        setImmediate(() => {
+          void options.restartWorkspace!(workspace)
+            .catch((error) => console.error(`DIM workspace '${workspace.name}' self-restart failed`, error))
+            .finally(() => pendingRestarts.delete(workspace.id));
+        });
+      });
+    }
+    sendJson(response, 202, { accepted: true, workspace: workspace.name });
+    return;
   }
   if (request.method === "POST" && url.pathname.startsWith("/api/host-inputs/")) {
     const name = decodeURIComponent(url.pathname.slice("/api/host-inputs/".length));

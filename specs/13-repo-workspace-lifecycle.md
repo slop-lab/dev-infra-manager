@@ -152,6 +152,11 @@ rather than the socket inode alone, keeps existing workspace mounts valid when
 the controller restarts. Nested Project services do not inherit the mount or
 grant.
 
+`POST /api/workspace/restart` accepts no body, derives the target exclusively
+from the authenticated workspace grant, returns `202` before lifecycle work
+begins, and asynchronously performs the ordinary stop, root fast-forward, and
+setup sequence. A caller cannot name or restart another workspace.
+
 The standard workspace image provides `dim-controller-proxy`. Reviewed root
 lifecycle code may create a second Unix socket for a development container.
 The proxy keeps the original controller socket and workspace grant outside
@@ -160,6 +165,9 @@ upstream, and denies every request not accepted by an explicitly configured
 capability. The External URL preset additionally validates the requested
 ingress and filters discovery/list/revoke operations to its ingress allowlist. Projects
 mount only the derived proxy socket directory into development containers.
+The standard agent-policy helper accepts exact method/path rules, defaults
+each route to an empty request body, filters discovery to those rules, and
+removes host-input discovery.
 
 Plugins register host administration routes separately from workspace routes.
 Administration routes run only on the host-admin socket. A workspace route is

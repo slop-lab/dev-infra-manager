@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url";
 import path from "node:path";
-import { createControllerProxy } from "./index.js";
+import { createAgentControllerProxy, createControllerProxy } from "./index.js";
 import { externalUrlProxy } from "./external-url.js";
 
 async function main(arguments_: string[]): Promise<void> {
@@ -11,26 +11,42 @@ async function main(arguments_: string[]): Promise<void> {
     await import(pathToFileURL(path.resolve(config)).href);
     return;
   }
-  if (arguments_[0] !== "external-url") usage();
+  const preset = arguments_[0];
+  if (preset !== "external-url" && preset !== "agent") usage();
   let listen: string | undefined;
   let socketMode = 0o660;
   let directoryMode = 0o700;
   const ingresses: string[] = [];
+  let allowWorkspaceRestart = false;
   for (let index = 1; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
     if (argument === "--listen") listen = requiredValue(arguments_, ++index, argument);
     else if (argument === "--ingress") ingresses.push(requiredValue(arguments_, ++index, argument));
+    else if (argument === "--allow-workspace-restart") allowWorkspaceRestart = true;
     else if (argument === "--socket-mode") socketMode = mode(requiredValue(arguments_, ++index, argument));
     else if (argument === "--directory-mode") directoryMode = mode(requiredValue(arguments_, ++index, argument));
     else usage();
   }
-  if (!listen || ingresses.length === 0) usage();
-  const proxy = createControllerProxy({
-    listen,
-    socketMode,
-    directoryMode,
-    capabilities: [externalUrlProxy({ allowedIngresses: ingresses })]
-  });
+  if (!listen) usage();
+  if ((preset === "external-url" && ingresses.length === 0)
+    || (preset === "agent" && !allowWorkspaceRestart)
+    || (preset === "external-url" && allowWorkspaceRestart)
+    || (preset === "agent" && ingresses.length > 0)) usage();
+  const proxy = preset === "external-url"
+    ? createControllerProxy({
+      listen,
+      socketMode,
+      directoryMode,
+      capabilities: [externalUrlProxy({ allowedIngresses: ingresses })]
+    })
+    : createAgentControllerProxy({
+      listen,
+      socketMode,
+      directoryMode,
+      routes: allowWorkspaceRestart
+        ? [{ method: "POST", path: "/api/workspace/restart" }]
+        : []
+    });
   await proxy.listen();
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.once(signal, () => void proxy.close().finally(() => process.exit(0)));
@@ -52,6 +68,8 @@ function requiredValue(arguments_: string[], index: number, option: string): str
 function usage(): never {
   throw new Error(
     "usage: dim-controller-proxy external-url --listen SOCKET --ingress NAME [--ingress NAME ...]\n"
+    + "       [--directory-mode MODE] [--socket-mode MODE]\n"
+    + "   or: dim-controller-proxy agent --listen SOCKET --allow-workspace-restart\n"
     + "       [--directory-mode MODE] [--socket-mode MODE]\n"
     + "   or: dim-controller-proxy --config FILE.mjs"
   );

@@ -42,6 +42,66 @@ export interface ControllerProxy {
   close(): Promise<void>;
 }
 
+export interface AgentControllerRoutePolicy {
+  readonly method: string;
+  readonly path: string;
+  readonly maxBodyBytes?: number;
+}
+
+export interface AgentControllerProxyOptions extends Omit<ControllerProxyOptions, "capabilities"> {
+  readonly routes: readonly AgentControllerRoutePolicy[];
+}
+
+// Creates a deny-by-default proxy for the common case where an agent needs a
+// small set of exact workspace-controller routes. Discovery is reduced to the
+// same allowlist and never exposes host-input providers.
+export function createAgentControllerProxy(options: AgentControllerProxyOptions): ControllerProxy {
+  return createControllerProxy({
+    ...options,
+    capabilities: [agentControllerPolicy(options.routes)]
+  });
+}
+
+export function agentControllerPolicy(
+  routes: readonly AgentControllerRoutePolicy[]
+): ControllerProxyCapability {
+  if (routes.length === 0) throw new Error("agent controller proxy requires at least one allowed route");
+  const allowed = routes.map((route) => {
+    const method = route.method.toUpperCase();
+    if (!method || !route.path.startsWith("/api/")) {
+      throw new Error("agent controller routes require a method and an /api/ path");
+    }
+    const maxBodyBytes = route.maxBodyBytes ?? 0;
+    if (!Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 0) {
+      throw new Error("agent controller route maxBodyBytes must be a non-negative integer");
+    }
+    return { method, path: route.path, maxBodyBytes };
+  });
+  return {
+    authorize(request) {
+      if (request.method === "GET" && request.path === "/api" && request.body.length === 0) return true;
+      return allowed.some((route) => route.method === request.method
+        && route.path === request.path
+        && request.body.length <= route.maxBodyBytes);
+    },
+    filterResponse(request, response) {
+      if (request.method !== "GET" || request.path !== "/api" || response.status !== 200) return response;
+      const body = jsonObject(response.body);
+      const discovered = Array.isArray(body.routes)
+        ? body.routes.filter((candidate) => isObject(candidate)
+          && typeof candidate.method === "string"
+          && typeof candidate.path === "string"
+          && allowed.some((route) => route.method === candidate.method && route.path === candidate.path))
+        : [];
+      return {
+        status: response.status,
+        headers: { ...response.headers, "content-type": "application/json; charset=utf-8" },
+        body: Buffer.from(`${JSON.stringify({ ...body, routes: discovered, hostInputProviders: [] })}\n`)
+      };
+    }
+  };
+}
+
 export function createControllerProxy(options: ControllerProxyOptions): ControllerProxy {
   const sourceSocket = options.sourceSocket ?? process.env.DIM_CONTROLLER_SOCKET;
   const token = options.token ?? process.env.DIM_CONTROLLER_TOKEN;
@@ -194,4 +254,16 @@ async function removeStaleSocket(target: string): Promise<void> {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   }
+}
+
+function jsonObject(body: Buffer): Record<string, unknown> {
+  try {
+    const value = JSON.parse(body.toString("utf8")) as unknown;
+    if (isObject(value)) return value;
+  } catch {}
+  throw new Error("controller proxy expected a JSON object");
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
