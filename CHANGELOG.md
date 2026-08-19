@@ -9,6 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Added installer-owned plugin enable, disable, and removal commands, and made
+  local plugin tarballs durable under the managed runtime so CLI replacement
+  never depends on a caller's temporary build path.
+
 - Added local package bundle installation through the DIM installer facade.
   `just install-dim-local` now preserves a mise-managed
   facade automatically and retains its direct-PATH fallback when mise is not

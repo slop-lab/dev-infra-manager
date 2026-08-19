@@ -11,8 +11,10 @@ import {
   defaultPluginHome,
   installDimCli,
   installPlugins,
+  removePlugins,
   queryCliVersion,
   readLocalPackageBundle,
+  setPluginsEnabled,
   validateConfiguredCli
 } from "./install.js";
 import { localBinPrompt } from "./installMode.js";
@@ -43,6 +45,10 @@ async function dispatch(commandArgs: string[]): Promise<number> {
   }
   if (first === "install-plugin") {
     await installPluginCommand(commandArgs.slice(1));
+    return 0;
+  }
+  if (first === "enable-plugin" || first === "disable-plugin" || first === "remove-plugin") {
+    await pluginLifecycleCommand(first, commandArgs.slice(1));
     return 0;
   }
 
@@ -214,6 +220,30 @@ async function installPluginPackages(specifiers: string[]): Promise<void> {
   console.log(`Plugin home: ${home}`);
 }
 
+async function pluginLifecycleCommand(
+  command: "enable-plugin" | "disable-plugin" | "remove-plugin",
+  commandArgs: string[]
+): Promise<void> {
+  const parsed = parseArgs({
+    args: commandArgs,
+    allowPositionals: true,
+    strict: true,
+    options: { help: { type: "boolean", short: "h" } }
+  });
+  if (parsed.values.help) {
+    console.log(`Usage: dim ${command} PACKAGE...`);
+    return;
+  }
+  if (parsed.positionals.length === 0) throw new Error(`${command} requires at least one package`);
+  if (await configuredCli() === undefined) throw new Error("DIM CLI is not installed");
+  const options = { pluginHome: defaultPluginHome() };
+  if (command === "remove-plugin") await removePlugins(parsed.positionals, options);
+  else await setPluginsEnabled(parsed.positionals, command === "enable-plugin", options);
+  for (const name of parsed.positionals) {
+    console.log(`${command === "enable-plugin" ? "Enabled" : command === "disable-plugin" ? "Disabled" : "Removed"} ${name}`);
+  }
+}
+
 async function proxyCli(executable: string, commandArgs: string[], version: string): Promise<number> {
   return new Promise<number>((resolve, reject) => {
     const child = spawn(executable, commandArgs, {
@@ -289,6 +319,9 @@ Usage:
   dim installer               Open the interactive installer
   dim install-cli [options]   Install DIM CLI
   dim install-plugin [options] PACKAGE@EXACT_VERSION...
+  dim enable-plugin PACKAGE...
+  dim disable-plugin PACKAGE...
+  dim remove-plugin PACKAGE...
 
 Run 'dim install-cli --help' for installation modes.`);
 }
@@ -298,8 +331,11 @@ function printInstallerHelp(): void {
   dim installer
   dim install-cli [--no-local-bin | --local-bin] [--prefix PATH] [--local-packages PATH]
   dim install-plugin PACKAGE@EXACT_VERSION...
+  dim enable-plugin PACKAGE...
+  dim disable-plugin PACKAGE...
+  dim remove-plugin PACKAGE...
 
-The installer owns only installer, install-cli, and install-plugin.
+The installer owns installation and installed-plugin lifecycle commands.
 All other commands are forwarded unchanged to the installed DIM CLI.`);
 }
 

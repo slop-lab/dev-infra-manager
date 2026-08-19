@@ -96,12 +96,23 @@ npx '@slop-lab/dim-installer@0.7.0' install-plugin '@example/dim-plugin@1.2.3'
 dim plugin list
 ```
 
+If a plugin prevents controller startup, disable it without importing it, then
+enable it after correction or remove it entirely:
+
+```bash
+dim disable-plugin '@example/dim-plugin'
+dim enable-plugin '@example/dim-plugin'
+dim remove-plugin '@example/dim-plugin'
+```
+
 The installer maintains one npm project under
 `$XDG_DATA_HOME/dim/runtime/current` (falling back to
 `~/.local/share/dim/runtime/current`) for the CLI, core, and plugins. It installs
 exact plugin dependencies there and atomically records enabled package names in
 the adjacent `plugins.json`. `DIM_PLUGIN_HOME` exists only as an explicit test
 or portable-runtime override; normal installation has no separate plugin home.
+Tarball inputs are copied to `runtime/sources`, so deleting the original local
+build artifact does not break a later CLI replacement.
 
 The package name recorded by the installer and the plugin's diagnostic `name`
 field need not follow the same prefix. Resolution always uses the exact

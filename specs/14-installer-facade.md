@@ -3,9 +3,10 @@
 ## Scope
 
 `@slop-lab/dim-installer` exposes an executable also named `dim`. It is a thin
-facade: it owns exactly three commands and proxies everything else to a
+facade: it owns installation and installed-plugin lifecycle commands and proxies everything else to a
 separately installed `@slop-lab/dim-cli`. `@slop-lab/dim-cli` must not
-implement `installer`, `install-cli`, or `install-plugin`, and the facade
+implement `installer`, `install-cli`, `install-plugin`, `enable-plugin`,
+`disable-plugin`, or `remove-plugin`, and the facade
 must not duplicate `@slop-lab/dim-cli`'s command tree or reimplement its
 behavior.
 
@@ -19,12 +20,15 @@ a supported Node.js on `PATH`.
 
 ## Command ownership
 
-The facade owns only:
+The facade owns:
 
 ```bash
 dim installer                # interactive installer (TTY only), always
 dim install-cli [options]
 dim install-plugin PACKAGE@EXACT_VERSION...
+dim enable-plugin PACKAGE...
+dim disable-plugin PACKAGE...
+dim remove-plugin PACKAGE...
 ```
 
 `dim` with no arguments at all is an alias for `dim installer` only while no
@@ -35,8 +39,7 @@ and an already-set-up one, without requiring an already-set-up user to type
 `dim installer` explicitly just to avoid the wizard.
 
 Every other invocation, including `dim plugin ...` (a `dim-cli` command),
-is forwarded unchanged. The facade must not reserve any other name,
-including other `install-*` names, for future use.
+is forwarded unchanged.
 
 ## Dispatch
 
@@ -128,6 +131,11 @@ npm rejects an incompatible host before activation. CLI replacement reinstalls
 the enabled plugin set in staging and must succeed as one dependency graph
 before promotion. `plugins.json` lives in `runtime/current`; no independent
 plugin installation root or persisted `pluginHome` setting exists.
+Local plugin tarballs are copied into `runtime/sources` before installation;
+the runtime must not depend on the caller's source path remaining available.
+Disabling a plugin removes it only from `plugins.json`; enabling requires an
+installed direct dependency, and removal deletes both dependency and manifest
+entry and prunes unreferenced managed tarballs.
 
 ## Proxy contract
 
@@ -151,6 +159,8 @@ byte-identical output to unset when unset.
 
 `dim install-plugin` requires an installed CLI because plugins join its npm
 project and npm must validate their core peer dependency against that runtime.
+`enable-plugin`, `disable-plugin`, and `remove-plugin` provide recovery without
+hand-editing the managed npm project or activation manifest.
 
 ## Verification
 
@@ -160,7 +170,7 @@ Required tests cover:
   including the version-mismatch warning;
 - bare `dim` opens the interactive installer only when no CLI is
   configured, and proxies through like any other command once one is;
-- `install-cli`/`install-plugin` argument parsing, including conflicting
+- installation and plugin-lifecycle argument parsing, including conflicting
   `--local-bin`/`--no-local-bin`, and local package bundle validation;
 - managed-symlink create, idempotent replace, and rejection of an
   unmanaged/foreign path at the same location;
@@ -169,6 +179,9 @@ Required tests cover:
 - stale config (missing executable, facade self-reference) surfaced as
   actionable errors, not silent fallback to a `PATH`-resolved `dim`;
 - `dim plugin ...` never intercepted by the facade;
+- local tarball sources survive deletion and CLI replacement, plugin
+  enable/disable/remove changes both activation and installation state, and a
+  peer dependency failure leaves the existing runtime usable;
 - `mise use --raw --global 'npm:@slop-lab/dim-installer@<version>'` end to end against a
   disposable local npm registry (`just verify-mise-install-smoke`), covering
   the mise-detected `--no-local-bin` default and an explicit

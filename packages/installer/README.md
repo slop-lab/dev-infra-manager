@@ -65,12 +65,12 @@ If both a mise-provided facade and a direct-PATH `dim` are on `PATH`, normal
 particular, `~/.local/bin/dim` may shadow mise's shim. That direct symlink
 runs the CLI without the installer facade, so installer commands are no
 longer available through that `dim`, and changing the version selected by
-mise does not change the directly linked CLI. Keep the mise default (`N` /
-`--no-local-bin`) unless that separation is intentional.
+mise does not change the directly linked CLI. Keep the mise-managed facade
+default unless that separation is intentional.
 
 ## Commands
 
-The installer owns exactly three root commands. Everything else is passed
+The installer owns installation and installed-plugin lifecycle commands. Everything else is passed
 through unchanged to the installed DIM CLI (for example `dim plugin ...` is
 always a DIM CLI command, never handled here).
 
@@ -79,6 +79,9 @@ dim installer                Open the interactive installer (TTY only)
 dim install-cli [options]    Install/upgrade the DIM CLI
 dim install-plugin PACKAGE@EXACT_VERSION...
                               Install and enable one or more plugins
+dim enable-plugin PACKAGE... Enable installed plugins
+dim disable-plugin PACKAGE... Disable installed plugins without uninstalling
+dim remove-plugin PACKAGE... Uninstall plugins
 ```
 
 Bare `dim` (no arguments) is an alias for `dim installer` only while no DIM
@@ -133,6 +136,19 @@ does not resolve `latest` or ranges. Installed packages are recorded in
 `plugins.json` under the unified runtime. Install the CLI first; plugin
 installation fails without it because npm has no host core against which to
 validate the plugin's peer dependency.
+
+Local `.tgz` inputs are copied into DIM's managed `runtime/sources` directory,
+so a later CLI replacement does not depend on the original download or build
+directory. Manage an installed plugin without editing runtime files directly:
+
+```bash
+dim disable-plugin '@example/dim-plugin'
+dim enable-plugin '@example/dim-plugin'
+dim remove-plugin '@example/dim-plugin'
+```
+
+Disable keeps the package installed but stops loading it. Enable requires an
+installed package. Remove uninstalls it and deletes its activation entry.
 
 ## CLI install modes
 
