@@ -68,9 +68,9 @@ Either log out and back in, or run:
 
 Then run:
 
-  just verify-environments-kvm
+  just verify environments-kvm
 EOF
 else
   test -r /dev/kvm -a -w /dev/kvm
-  echo "KVM verification dependencies installed. Run: just verify-environments-kvm"
+  echo "KVM verification dependencies installed. Run: just verify environments-kvm"
 fi

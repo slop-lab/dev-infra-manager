@@ -140,6 +140,6 @@ DIM contributors can materialize all three repositories and verify this exact
 example:
 
 ```bash
-just verify-example current-installed auto multi-repository
-just verify-example runc use multi-repository
+just verify example current-installed auto multi-repository
+just verify example runc use multi-repository
 ```

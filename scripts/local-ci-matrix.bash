@@ -6,13 +6,13 @@ for arg in "$@"; do
   case "$arg" in
     --manual) manual=true ;;
     -h|--help)
-      echo "usage: just ci-matrix [--manual]"
+      echo "usage: just ci matrix [--manual]"
       echo "  --manual  also run the manually dispatched Sysbox and KVM workflows"
       exit 0
       ;;
     *)
       echo "error: unknown local CI option: $arg" >&2
-      echo "usage: just ci-matrix [--manual]" >&2
+      echo "usage: just ci matrix [--manual]" >&2
       exit 2
       ;;
   esac
@@ -31,15 +31,15 @@ run_node() {
 }
 
 run_node 24 pnpm install --frozen-lockfile
-run_node 24 just ci-check
+run_node 24 just ci check
 
 run_node 26 pnpm install --frozen-lockfile
-run_node 26 just ci-check
-run_node 26 just ci-container
+run_node 26 just ci check
+run_node 26 just ci container
 
 if [[ "$manual" == true ]]; then
-  run_node 26 just ci-sysbox
-  run_node 26 just ci-kvm
+  run_node 26 just ci sysbox
+  run_node 26 just ci kvm
   echo "[local-ci] automatic matrix and manual workflows passed"
 else
   echo "[local-ci] Node.js 24/26 automatic matrix passed"

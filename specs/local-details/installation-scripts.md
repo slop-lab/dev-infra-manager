@@ -82,7 +82,7 @@ group; it does not install a runtime backend. It requires the exact
 confirmation `yes` and explains that the login session must be refreshed
 before the new group membership is active.
 `scripts/kvm-host-install-smoke.bash BACKEND [--verbose]` verifies one backend,
-while `just verify-environments-kvm [--verbose]` verifies every backend in a
+while `just verify environments-kvm [--verbose]` verifies every backend in a
 separate VM. Each check boots a checksum-verified Ubuntu cloud-image VM with
 `/dev/kvm`, clones the committed repository state from a Git bundle, installs
 the selected backend in isolation, verifies its runtime, and deletes the VM
@@ -90,7 +90,7 @@ overlay and SSH key on exit. A full source checkout retains its history; a
 shallow checkout is converted to a self-contained single-commit repository
 before bundling. Uncommitted and untracked files are intentionally excluded.
 The runc check installs the source verification toolchain after the host
-installer and runs `just verify-self-development`, covering the canonical
+installer and runs `just verify self-development`, covering the canonical
 Project's unprivileged agent, private rootless-DinD sidecar, and installed
 RootlessKit AppArmor profile end to end. The QEMU verification user has the
 explicit UID 1001, keeping it distinct from the rootless-DinD image's UID 1000
@@ -133,7 +133,7 @@ Behavior:
 5. Install the selected Ubuntu host backend (Sysbox by default).
 6. Install project dependencies with frozen lockfile.
 7. Run `just check`.
-8. Run `just verify-plugin-install`.
+8. Run `just verify plugin-install`.
 9. Build the Docker and rootless Podman project workspace images.
 10. Run `doctor` for the backend persisted by the installer.
 11. Exit non-zero if that backend doctor reports host runtime gaps.
@@ -182,7 +182,7 @@ Script:
 scripts/mise-install-smoke.bash
 ```
 
-`just verify-mise-install-smoke`. Requires Docker and network access.
+`just verify mise-install-smoke`. Requires Docker and network access.
 Builds and packs `core`, `dim-cli`, and `install`, publishes them to a
 disposable local npm registry inside a throwaway container, installs a
 pinned `mise` release predating its npm-backend download-popularity gate
@@ -213,7 +213,7 @@ Script:
 scripts/external-url-example-smoke.bash
 ```
 
-`just verify-example current-installed auto external-urls`. Requires Docker. Executes
+`just verify example current-installed auto external-urls`. Requires Docker. Executes
 [examples/features/external-urls/README.md](../../examples/features/external-urls/README.md)
 against real containers: builds local packages and the workspace image,
 starts a project-root container, starts the nested `dev` Compose service and
@@ -226,7 +226,7 @@ script must change together.
 ## Multi-Repository Project Example Smoke
 
 `scripts/multi-repository-example-smoke.bash`, invoked by
-`just verify-example current-installed auto multi-repository`, builds and installs local packages,
+`just verify example current-installed auto multi-repository`, builds and installs local packages,
 copies `examples/projects/multi-repository/repos/` to a temporary directory, initializes and
 pushes real Git repositories, and
 verifies the documented workspace and secret boundary against managed Gitea.
@@ -236,7 +236,7 @@ cannot see that service and its environment does not contain the raw secret.
 
 ## Single-Repository Project Example Smoke
 
-`scripts/single-repository-example-smoke.bash`, invoked by `just verify-example
+`scripts/single-repository-example-smoke.bash`, invoked by `just verify example
 current-installed auto single-repository`, verifies the default
 one-repository/no-secret shape, including an unprotected direct `main` push,
 explicit workspace resource limits, an unprivileged Project-owned agent, its

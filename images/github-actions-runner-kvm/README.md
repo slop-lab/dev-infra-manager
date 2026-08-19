@@ -11,8 +11,8 @@ The defaults allocate 6 vCPUs, 12 GiB RAM, and a 48 GiB overlay.
 Build the reviewed base image:
 
 ```bash
-just build-github-runner-kvm
-just verify-github-runner-kvm
+just runner build
+just runner verify
 ```
 
 The build pins the Actions runner version and SHA-256 in `build.bash`. Override
@@ -21,14 +21,14 @@ both together when deliberately updating it:
 ```bash
 ACTIONS_RUNNER_VERSION=VERSION \
 ACTIONS_RUNNER_SHA256=SHA256 \
-just build-github-runner-kvm
+just runner build
 ```
 
 Start an ephemeral runner:
 
 ```bash
 GITHUB_RUNNER_URL=https://github.com/slop-lab/dev-infra-manager \
-just run-github-runner-kvm
+just runner run
 ```
 
 The disposable runner overlay defaults to 64 GiB so the KVM workflow has room

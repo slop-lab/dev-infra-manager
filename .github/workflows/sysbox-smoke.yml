@@ -6,6 +6,9 @@ on:
 permissions:
   contents: read
 
+env:
+  JUST_UNSTABLE: "1"
+
 jobs:
   smoke:
     runs-on: [self-hosted, linux, sysbox]
@@ -20,4 +23,4 @@ jobs:
           node-version: 26
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: just ci-sysbox
+      - run: just ci sysbox

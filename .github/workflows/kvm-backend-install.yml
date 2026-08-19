@@ -6,6 +6,9 @@ on:
 permissions:
   contents: read
 
+env:
+  JUST_UNSTABLE: "1"
+
 jobs:
   verify-backend-installers:
     runs-on: [self-hosted, linux, x64, kvm]
@@ -13,4 +16,4 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: command -v just
-      - run: just ci-kvm
+      - run: just ci kvm

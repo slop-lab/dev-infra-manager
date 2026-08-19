@@ -175,7 +175,7 @@ if dim workspace run "$workspace_name" check >/dev/null 2>&1; then
 fi
 dim workspace run "$workspace_name" bash -- -lc 'just check' >/dev/null
 if [[ "${DIM_SELF_VERIFY_AGENT:-0}" == 1 ]]; then
-  dim workspace run "$workspace_name" bash -- -lc 'just verify-agent'
+  dim workspace run "$workspace_name" bash -- -lc 'just verify agent'
 fi
 
 dim workspace discard "$workspace_name" --yes >/dev/null

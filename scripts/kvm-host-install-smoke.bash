@@ -140,7 +140,7 @@ if [[ "$backend" == runc ]]; then
     '
   run_step "verify canonical self Project and private rootless DinD" \
     ssh "${ssh_args[@]}" dim@127.0.0.1 \
-      "cd dim && DIM_SELF_VERIFY_AGENT=1 just verify-self-development"
+      "cd dim && DIM_SELF_VERIFY_AGENT=1 JUST_UNSTABLE=1 just verify self-development"
 fi
 if [[ "$backend" == sysbox ]]; then
   run_step "install trusted-workspace build tools" \
@@ -233,6 +233,6 @@ if [[ "$backend" == sysbox ]]; then
     '
   run_step "verify non-root repository CI workflow" \
     ssh "${ssh_args[@]}" dim@127.0.0.1 \
-      "cd dim && DIM_CI_RUNNER_EXAMPLE_ATTEMPTS=300 just verify-example current-installed auto ci-runner"
+      "cd dim && DIM_CI_RUNNER_EXAMPLE_ATTEMPTS=300 JUST_UNSTABLE=1 just verify example current-installed auto ci-runner"
 fi
 echo "kvm-host-install-smoke-ok: $backend"

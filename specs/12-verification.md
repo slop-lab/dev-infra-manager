@@ -22,7 +22,7 @@ verification run's disposable managed Gitea.
 
 The QEMU wrapper owns only guest and toolchain provisioning. After installing
 the selected backend, Node.js, pnpm, and `just`, it must invoke repository
-verification through `just install` and `just verify-example`.
+verification through `just install` and `just verify example`.
 
 ## Source Check Gate
 
@@ -53,12 +53,12 @@ Docker runtime, CPU quota, memory limit, PID limit, non-privileged flag, and
 absence of a host Docker-socket mount. It must then run the CI runner feature
 smoke against a non-root repository.
 
-`just verify-example sysbox DIRTY ci-runner` must register one
+`just verify example sysbox DIRTY ci-runner` must register one
 organization-scoped runner
 for a multi-repository Project, open a pull request in a non-root repository,
 and wait for that repository's real workflow to succeed.
 
-`just verify-plugin-install` builds the publishable packages and verifies
+`just verify plugin-install` builds the publishable packages and verifies
 plugin installation through their packaged shape. It is separate because it
 tests an installation workflow rather than source correctness.
 
@@ -84,7 +84,7 @@ because it depends on operator-owned Tailnet DNS and TLS.
 
 ## Container Integration Gate
 
-`just verify-container` requires Docker with Compose v2 and support for
+`just verify container` requires Docker with Compose v2 and support for
 privileged nested containers. It covers workspace image builds, nested Docker,
 lifecycle behavior, and packed CLI project workflows. It may run against the
 nested Docker daemon in a development container and must not claim to verify a
@@ -126,7 +126,7 @@ setuid fallback before exercising the private daemon.
 
 ## Fast Isolation Gate
 
-`just isolation-check` must run without contacting Docker or creating a
+`just verify isolation` must run without contacting Docker or creating a
 container. It verifies generated runtime arguments, including:
 
 - Outer CPU, memory, and PID limits.
@@ -134,7 +134,7 @@ container. It verifies generated runtime arguments, including:
 - Absence of the host `/var/lib/docker` as a mount source.
 - Absence of the host `/var/run/docker.sock`.
 
-`just isolation-check-json` runs the same tests with Vitest's JSON reporter so
+`just verify isolation-json` runs the same tests with Vitest's JSON reporter so
 CI can consume a single JSON document from stdout. These static checks do not
 replace `scripts/container-sysbox-isolation-smoke.bash`, which verifies actual
 Sysbox and cgroup behavior.
@@ -167,9 +167,9 @@ Host installation scripts must be verified by:
 - Docker runtime registration check when the script registers a runtime.
 
 `scripts/kvm-host-install-smoke.bash BACKEND` verifies one backend installer in
-a disposable VM. `just verify-environments-kvm` requires QEMU and writable
+a disposable VM. `just verify environments-kvm` requires QEMU and writable
 `/dev/kvm` and runs the gate for every backend in a separate VM.
-The runc guest must additionally run `just verify-self-development` after the
+The runc guest must additionally run `just verify self-development` after the
 host installer completes. This verifies the canonical DIM Project, its
 unprivileged agent and private rootless-DinD sidecar, and the path-scoped
 RootlessKit AppArmor profile together on a clean Ubuntu host. The guest
@@ -182,7 +182,7 @@ probe running a private DinD workload.
 
 ## Installer Facade Verification
 
-`just verify-mise-install-smoke` requires Docker and network access. It
+`just verify mise-install-smoke` requires Docker and network access. It
 verifies `mise use --raw --global 'npm:@slop-lab/dim-installer@<version>'` end to end in a
 disposable container against a local npm registry seeded from freshly built
 tarballs, covering facade-only vs. proxied `--help`/`--version`, the
@@ -193,7 +193,7 @@ Node.js 24 or 26, its `mise exec node@24` fallback when the available Node.js
 is absent or unsupported, npm `.bin` symlink resolution, argv preservation,
 and its actionable failure when neither runtime path is available.
 
-`just verify-example BACKEND DIRTY external-urls` requires Docker. It proves
+`just verify example BACKEND DIRTY external-urls` requires Docker. It proves
 `examples/features/external-urls/README.md` end to end: a host DIM controller,
 plugin loading before any external URL config exists, the example's checked-in
 ingress and URL scripts, dnsmasq wildcard DNS, a project-root workspace,
@@ -210,7 +210,7 @@ provider cleanup without external credentials.
 Ingress discovery, creation, and revocation must run through the public
 `dim external-url` CLI rather than project-specific curl wrappers.
 
-`just verify-example BACKEND DIRTY multi-repository` requires Docker and managed Gitea. It
+`just verify example BACKEND DIRTY multi-repository` requires Docker and managed Gitea. It
 materializes the repositories under `examples/projects/multi-repository/repos/` in a temporary
 directory and verifies the manifest-aware `project create --url
 --apply-repos` flow,
@@ -222,7 +222,7 @@ ordinary agent `bash` task remains in the service's default cgroup, a command
 started through `dim-tool-cgroup` enters a pre-created delegated child, and
 the unprivileged agent can tune that child's CPU weight and PID limit.
 
-`just verify-example BACKEND DIRTY single-repository` verifies the default
+`just verify example BACKEND DIRTY single-repository` verifies the default
 one-repository shape under `examples/projects/single-repository/`: no
 `.dim/repos.yml`, no protected ref or secret service, a direct agent-style
 push to `main`, explicit workspace resource limits, and an unprivileged

@@ -17,7 +17,7 @@ release scheduled to become LTS (currently Node.js 24 and 26). Container and
 Sysbox integration checks use the newest validated line.
 
 ```bash
-just ci-matrix
+just ci matrix
 ```
 
 This uses mise to reproduce the Node.js 24/26 CI workflow matrix and the
@@ -27,14 +27,14 @@ contains its README, MIT license, runtime files, and publishable manifest.
 Run the manual backend gates locally from the committed release candidate:
 
 ```bash
-just ci-sysbox
-just verify-environments-kvm
+just ci sysbox
+just verify environments-kvm
 ```
 
 The KVM gate uses a separate clean Ubuntu guest for each backend. Its runc
 guest installs the RootlessKit AppArmor profile through the host installer and
 runs the canonical self-Project verification, including the unprivileged agent
-and its private rootless-DinD sidecar. `just ci-matrix --manual` is the combined
+and its private rootless-DinD sidecar. `just ci matrix --manual` is the combined
 local shorthand for the automatic matrix and both manual backend gates.
 
 Finally, run the two manual GitHub workflows on actual ephemeral self-hosted
@@ -67,8 +67,8 @@ run's `headSha` to equal `release_sha` as shown below.
 Build and verify the reviewed runner image once:
 
 ```bash
-just build-github-runner-kvm
-just verify-github-runner-kvm
+just runner build
+just runner verify
 gh auth status
 ```
 
@@ -77,7 +77,7 @@ until it reports that it is registered and waiting for one job:
 
 ```bash
 GITHUB_RUNNER_URL=https://github.com/slop-lab/dev-infra-manager \
-just run-github-runner-kvm
+just runner run
 ```
 
 Then dispatch exactly one workflow at the pushed release ref from a second

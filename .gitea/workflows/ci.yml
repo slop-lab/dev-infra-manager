@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  JUST_UNSTABLE: "1"
+
 jobs:
   check:
     name: check (Node.js ${{ matrix.node-version }})
@@ -28,7 +31,7 @@ jobs:
           cache: pnpm
       - run: sudo apt-get update && sudo apt-get install --yes just jq
       - run: pnpm install --frozen-lockfile
-      - run: just ci-check
+      - run: just ci check
 
   container-integration:
     runs-on: dim-container-integration
@@ -39,4 +42,4 @@ jobs:
       - run: npm install --global pnpm@10.13.1
       - run: pnpm install --frozen-lockfile
       - run: bash scripts/install-rootlesskit-apparmor-profile-ubuntu.bash
-      - run: just ci-container
+      - run: just ci container

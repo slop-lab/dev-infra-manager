@@ -52,7 +52,7 @@ cleanup() {
 trap cleanup EXIT
 
 test -f "$base_image" || {
-  echo "runner base image not found: $base_image (run: just build-github-runner-kvm)" >&2
+  echo "runner base image not found: $base_image (run: just runner build)" >&2
   exit 2
 }
 dim_runner_require_qemu_host

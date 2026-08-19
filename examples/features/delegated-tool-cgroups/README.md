@@ -38,5 +38,5 @@ arbitrary hierarchy outside its delegated subtree.
 Run the linked end-to-end verification with:
 
 ```bash
-just verify-self-development
+just verify self-development
 ```

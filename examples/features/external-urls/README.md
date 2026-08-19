@@ -113,6 +113,6 @@ isolation, generated Caddy configuration, and Cloudflare-style DNS creation
 and cleanup without using a real DNS account:
 
 ```bash
-just verify-example current-installed auto external-urls
-just verify-example runc use external-urls
+just verify example current-installed auto external-urls
+just verify example runc use external-urls
 ```

@@ -11,24 +11,24 @@ just typecheck       # TypeScript checks only
 just test            # unit tests
 just build           # publishable package builds
 just check           # typecheck + test + build; only Node.js and pnpm required
-just verify-agent    # strongest gate supported inside this repository's DIM agent
-just ci              # complete CI gate with the active Node.js version
-just ci-matrix       # exact Node.js 24/26 CI workflow matrix via mise
-just ci-matrix --manual # also include manually dispatched Sysbox/KVM workflows
+just verify agent    # strongest gate supported inside this repository's DIM agent
+just ci all          # complete CI gate with the active Node.js version
+just ci matrix       # exact Node.js 24/26 CI workflow matrix via mise
+just ci matrix --manual # also include manually dispatched Sysbox/KVM workflows
 just doctor          # host readiness: dev tools, Docker, selected backend, cgroup v2
 just cli -- --help   # build core, then run dim from source without installing it
 ```
 
-`just verify-agent` checks the source and package shapes, then verifies image
+`just verify agent` checks the source and package shapes, then verifies image
 builds, container lifecycle, volumes, DNS, outbound networking, and peer
 networking through the development agent's private rootless-DinD sidecar. It
-does not replace `verify-container`, which starts a DIM workspace and exercises
+does not replace `just verify container`, which starts a DIM workspace and exercises
 that workspace's own nested runtime.
 
-`just ci-matrix` requires mise, Docker with Compose v2, and the same host
+`just ci matrix` requires mise, Docker with Compose v2, and the same host
 capabilities as the container integration tests. It installs the locked
-dependencies under Node.js 24 and 26, then runs the same `just ci-check` and
-`just ci-container` recipes used by the hosted CI workflows. Use `just ci` when one run
+dependencies under Node.js 24 and 26, then runs the same `just ci check` and
+`just ci container` recipes used by the hosted CI workflows. Use `just ci all` when one run
 with the currently active Node.js version is enough. The `--manual` option also
 runs the same Sysbox isolation and KVM backend-installer recipes as the
 manually dispatched workflows; it requires a registered `sysbox-runc` runtime,
@@ -43,7 +43,7 @@ bash scripts/install-kvm-verify-deps-ubuntu.bash
 
 The full setup, verification-gate, and installer-testing walkthrough — host
 backend installers, KVM-based installer/backend smoke tests, the
-`verify-container` integration suite, the direct host-backend smoke scripts,
+`just verify container` integration suite, the direct host-backend smoke scripts,
 and the installer/example smoke tests — is [docs/usage.md](docs/usage.md).
 
 ## Repository layout

@@ -52,6 +52,6 @@ Contributors can run the linked end-to-end verification locally or in a
 disposable QEMU VM:
 
 ```bash
-just verify-example current-installed auto shared-upstream
-just verify-example runc use shared-upstream
+just verify example current-installed auto shared-upstream
+just verify example runc use shared-upstream
 ```

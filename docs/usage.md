@@ -85,8 +85,8 @@ every installer without requiring the runtimes to coexist on one host.
 Test installation destructively inside a disposable KVM-backed Ubuntu VM, without installing a backend on the host:
 
 ```bash
-just verify-environments-kvm       # all backends, one clean VM each
-just verify-environments-kvm --verbose
+just verify environments-kvm       # all backends, one clean VM each
+just verify environments-kvm --verbose
 bash scripts/kvm-host-install-smoke.bash gvisor --verbose # one backend, direct script
 ```
 
@@ -131,7 +131,7 @@ just build-project-workspace
 Run the integration smoke test:
 
 ```bash
-just verify-container
+just verify container
 bash scripts/container-sysbox-isolation-smoke.bash
 ```
 
@@ -147,13 +147,13 @@ For a fast check that does not contact Docker or create containers, validate
 the generated isolation arguments only:
 
 ```bash
-just isolation-check
+just verify isolation
 ```
 
 CI can request the same test result as JSON on stdout:
 
 ```bash
-just isolation-check-json
+just verify isolation-json
 ```
 
 This verifies resource flags and rejects host Docker storage or socket mounts;
@@ -171,13 +171,13 @@ only Node.js and pnpm, not Docker, an installed DIM CLI, or a runtime backend.
 Run the packaged plugin installation flow separately:
 
 ```bash
-just verify-plugin-install
+just verify plugin-install
 ```
 
 When Docker has Compose v2 and supports privileged runc containers, run:
 
 ```bash
-just verify-container
+just verify container
 bash scripts/container-cgroup-smoke.bash
 ```
 
@@ -203,19 +203,19 @@ Inside this repository's DIM development agent, use the private rootless-DinD
 sidecar gate instead:
 
 ```bash
-just verify-agent
+just verify agent
 ```
 
 This runs the source and publishable-package gates and verifies the sidecar's
 image build, container lifecycle, volume, DNS, outbound-network, and peer-network
 behavior. The sidecar deliberately does not expose the host Docker socket. A
-rootless sidecar without cgroup delegation cannot run `verify-container`: that
+rootless sidecar without cgroup delegation cannot run `just verify container`: that
 gate adds another nested Docker daemon and requires it to create cgroups. Run
 the full container integration gate on a cgroup-capable Docker host or in its
-CI lane; do not treat `verify-agent` as equivalent coverage.
+CI lane; do not treat `just verify agent` as equivalent coverage.
 
-The runc guest in `just verify-environments-kvm` also creates the canonical
-self-Project and runs `just verify-agent` inside its actual agent container.
+The runc guest in `just verify environments-kvm` also creates the canonical
+self-Project and runs `just verify agent` inside its actual agent container.
 This verifies the same private rootless-DinD gate from a clean Ubuntu install;
 when the source checkout is dirty, the KVM verifier uses a temporary snapshot
 that includes the current worktree changes.
@@ -224,11 +224,11 @@ Three additional standalone checks cover installation and the copyable
 examples against a real Docker daemon:
 
 ```bash
-just verify-mise-install-smoke   # mise use --raw --global npm:@slop-lab/dim-installer, in a disposable container
-just verify-example current-installed auto single-repository
-just verify-example current-installed auto multi-repository
-just verify-example runc use
-just verify-example sysbox use ci-runner
+just verify mise-install-smoke   # mise use --raw --global npm:@slop-lab/dim-installer, in a disposable container
+just verify example current-installed auto single-repository
+just verify example current-installed auto multi-repository
+just verify example runc use
+just verify example sysbox use ci-runner
 ```
 
 For local development, `just install-dim-local` builds the publishable package
@@ -239,12 +239,12 @@ retains the direct installation under `${DIM_INSTALL_PREFIX:-~/.local}`.
 The example recipe accepts `current-installed` or
 `{sysbox,gvisor,rootless-podman,runc}` as its backend. A named backend creates
 one disposable QEMU guest per selected example and invokes
-`just verify-example current-installed` inside it.
+`just verify example current-installed` inside it.
 The dirty-repository policy defaults to `auto` (reject), while `use` snapshots
 the worktree and `discard` verifies committed `HEAD`. The optional final
 argument selects one example instead of the compatible suite.
 
-All require Docker and network access; `verify-mise-install-smoke` also
+All require Docker and network access; `just verify mise-install-smoke` also
 needs to reach the real npm registry to install `mise` itself. The
 `external-urls` example uses Docker and dnsmasq but does not require a real
 Tailscale account. The multi-repository verification also requires the managed

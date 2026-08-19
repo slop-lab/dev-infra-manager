@@ -31,6 +31,6 @@ source is cloned inside the top-level workspace container.
 
 [`images/github-actions-runner-kvm`](../images/github-actions-runner-kvm)
 builds a reviewed Ubuntu qcow2 base image with Sysbox, QEMU, and nested KVM.
-`just run-github-runner-kvm` starts an ephemeral overlay, registers one
+`just runner run` starts an ephemeral overlay, registers one
 `sysbox,kvm` self-hosted runner job, and discards the overlay afterward. Runner
 registration tokens are passed after boot and are never baked into the image.
