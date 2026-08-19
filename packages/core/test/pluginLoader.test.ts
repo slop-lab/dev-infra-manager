@@ -26,21 +26,12 @@ describe("plugin loader configuration", () => {
     expect(await readPluginManifest(root)).toEqual({ schemaVersion: 1, plugins: [] });
   });
 
-  it("prefers the plugin home recorded by the installer over later environment values", async () => {
-    const configHome = join(root, "config");
-    const configuredHome = join(root, "configured-plugins");
-    await mkdir(join(configHome, "dim"), { recursive: true });
-    await writeFile(
-      join(configHome, "dim", "config.json"),
-      JSON.stringify({ schemaVersion: 1, installPrefix: join(root, "prefix"), pluginHome: configuredHome })
+  it("uses the unified runtime by default and permits an explicit test override", async () => {
+    expect(await resolvePluginHome({ HOME: root })).toBe(join(root, ".local", "share", "dim", "runtime", "current"));
+    expect(await resolvePluginHome({ HOME: root, DIM_DATA_HOME: join(root, "data") })).toBe(
+      join(root, "data", "runtime", "current")
     );
-    expect(dimUserConfigPath({ XDG_CONFIG_HOME: configHome })).toBe(join(configHome, "dim", "config.json"));
-    expect(await resolvePluginHome({ XDG_CONFIG_HOME: configHome })).toBe(configuredHome);
-    expect(await resolvePluginHome({ XDG_CONFIG_HOME: configHome, DIM_PLUGIN_HOME: root })).toBe(configuredHome);
-    expect(await resolvePluginHome({
-      XDG_CONFIG_HOME: join(root, "missing-config"),
-      DIM_PLUGIN_HOME: root
-    })).toBe(root);
+    expect(await resolvePluginHome({ HOME: root, DIM_PLUGIN_HOME: root })).toBe(root);
   });
 
   it("reads the installed workspace backend from the shared user config", async () => {

@@ -77,7 +77,7 @@ always a DIM CLI command, never handled here).
 ```text
 dim installer                Open the interactive installer (TTY only)
 dim install-cli [options]    Install/upgrade the DIM CLI
-dim install-plugin [options] PACKAGE@EXACT_VERSION...
+dim install-plugin PACKAGE@EXACT_VERSION...
                               Install and enable one or more plugins
 ```
 
@@ -97,8 +97,8 @@ npx '@slop-lab/dim-installer@0.7.0'
 ```
 
 Prompts for what to install (CLI, plugin(s), or both), then — for the CLI —
-whether to expose a `~/.local/bin/dim` symlink, and — for plugins — the
-plugin home and space-separated, exact-version package specifiers.
+whether to expose a `~/.local/bin/dim` symlink, and — for plugins —
+space-separated, exact-version package specifiers.
 
 ### `dim install-cli`
 
@@ -118,41 +118,41 @@ modes" below for what each one does and which is the default.
 ### `dim install-plugin`
 
 ```text
-Usage: dim install-plugin [options] PACKAGE@EXACT_VERSION...
+Usage: dim install-plugin PACKAGE@EXACT_VERSION...
 
 Options:
-  --plugin-home PATH  Override the plugin installation directory
-  -h, --help          Show this help
+  -h, --help  Show this help
 ```
 
 ```bash
 dim install-plugin '@example/dim-plugin@1.2.3'
-dim install-plugin --plugin-home "$HOME/.local/share/dim/plugins" '@example/dim-plugin@1.2.3'
 ```
 
 Specifiers must be pinned to an exact version (`name@x.y.z`); this command
 does not resolve `latest` or ranges. Installed packages are recorded in
-`plugins.json` under the plugin home. If the DIM CLI is not installed yet,
-the command still installs and enables the plugin(s), but prints a warning
-that there is no CLI yet to use them.
+`plugins.json` under the unified runtime. Install the CLI first; plugin
+installation fails without it because npm has no host core against which to
+validate the plugin's peer dependency.
 
 ## CLI install modes
 
-Either mode installs the real `@slop-lab/dim-cli` package into a private,
-versioned data directory that is never on `PATH` directly:
+Either mode installs the CLI, core, and enabled plugins into one private,
+stable npm project that is never on `PATH` directly:
 
 ```text
-$XDG_DATA_HOME/dim/cli/0.7.0/node_modules/.bin/dim
+$XDG_DATA_HOME/dim/runtime/current/node_modules/.bin/dim
 ```
 
-(falling back to `~/.local/share/dim/cli/0.7.0/...` when `XDG_DATA_HOME` is
-unset). The installed version matches the installer's own version.
+(falling back to `~/.local/share/dim/runtime/current/...` when `XDG_DATA_HOME` is
+unset). Registry installs must match the installer's own version. Replacements
+are installed and verified in a temporary sibling directory before `current`
+is switched; temporary and backup directories are removed after success.
 
 **Direct PATH (`--local-bin`)** additionally creates or replaces a symlink
 in the bin directory pointing at that versioned executable:
 
 ```text
-~/.local/bin/dim -> $XDG_DATA_HOME/dim/cli/0.7.0/node_modules/.bin/dim
+~/.local/bin/dim -> $XDG_DATA_HOME/dim/runtime/current/node_modules/.bin/dim
 ```
 
 Use `--prefix PATH` to use `PATH/bin/dim` instead of `~/.local/bin/dim`. Once
@@ -160,12 +160,12 @@ this symlink is what `PATH` resolves, `dim` runs the real CLI directly and
 the facade/installer commands are no longer reached that way (see above).
 
 The installer only ever creates, replaces, or removes a `dim` at that path
-if it is already a symlink pointing inside its own managed versioned data
+if it is already a symlink pointing inside its own managed runtime data
 directory. If some other file or symlink is already there — including a
 different `dim` installation — it stops with a conflict error instead of
 overwriting it; inspect and clean up the existing path yourself, then re-run.
 
-**Proxied (`--no-local-bin`)** installs to the same versioned directory but
+**Proxied (`--no-local-bin`)** installs to the same stable directory but
 does not touch `PATH` at all. The facade instead records the absolute
 executable path in its config and proxies every non-installer command to it.
 
@@ -181,9 +181,11 @@ bash scripts/pack-local-packages.bash /tmp/dim-packages
 dim install-cli --local-packages /tmp/dim-packages --no-local-bin
 ```
 
-Local bundles use a content-addressed `local-<hash>` directory, separate from
-registry versions. The bundle's installer package is ignored so the currently
-selected facade remains responsible for dispatch.
+The bundle's installer package is ignored so the currently selected facade
+remains responsible for dispatch. The installed CLI reports the version stored
+in config; package-manifest versions are not used to construct paths. Plugins
+share the runtime's `@slop-lab/dim-core`, whose exact peer dependency is
+checked by npm before installation succeeds.
 
 **Default**: under `mise`, `--no-local-bin` is the default; everywhere else,
 `--local-bin` is the default. The explicit flag always wins over this

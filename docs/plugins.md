@@ -96,19 +96,12 @@ npx '@slop-lab/dim-installer@0.7.0' install-plugin '@example/dim-plugin@1.2.3'
 dim plugin list
 ```
 
-The installer creates a private npm project under
-`${DIM_PLUGIN_HOME:-$XDG_DATA_HOME/dim/plugins}` (falling back to
-`~/.local/share/dim/plugins`), installs exact direct dependencies there, and
-atomically records enabled package names in `plugins.json`. `dim plugin list`
-loads that explicit manifest and reports the enabled packages.
-
-The selected plugin home is persisted in
-`${XDG_CONFIG_HOME:-~/.config}/dim/config.json`, so a CLI installed with a
-custom `--prefix` resolves the same plugin location in later processes.
-The persisted plugin home takes precedence over a later `DIM_PLUGIN_HOME`.
-That environment variable supplies an initial default only when no selection
-has been recorded. `DIM_CONFIG_PATH` remains an explicit testing or portable
-installation override for the otherwise fixed XDG config location.
+The installer maintains one npm project under
+`$XDG_DATA_HOME/dim/runtime/current` (falling back to
+`~/.local/share/dim/runtime/current`) for the CLI, core, and plugins. It installs
+exact plugin dependencies there and atomically records enabled package names in
+the adjacent `plugins.json`. `DIM_PLUGIN_HOME` exists only as an explicit test
+or portable-runtime override; normal installation has no separate plugin home.
 
 The package name recorded by the installer and the plugin's diagnostic `name`
 field need not follow the same prefix. Resolution always uses the exact
@@ -121,3 +114,9 @@ are disposed in reverse order. A plugin may return an async disposer from
 `register`. Each controller owns its route and extension registry instances;
 there is no global capability singleton. `GET /api` discovers registered plugin routes
 for an authenticated workspace.
+
+Plugin packages declare the exact supported `@slop-lab/dim-core` as a peer
+dependency. npm therefore rejects an incompatible CLI/core/plugin graph during
+installation, while `DIM_PLUGIN_API_VERSION` remains the runtime protocol check.
+Behavioral compatibility still requires integration tests for the pinned
+combination; semver and peer resolution cannot prove behavior.

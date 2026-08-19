@@ -24,7 +24,7 @@ The facade owns only:
 ```bash
 dim installer                # interactive installer (TTY only), always
 dim install-cli [options]
-dim install-plugin [options] PACKAGE@EXACT_VERSION...
+dim install-plugin PACKAGE@EXACT_VERSION...
 ```
 
 `dim` with no arguments at all is an alias for `dim installer` only while no
@@ -66,8 +66,7 @@ State lives at `$DIM_CONFIG_PATH`, defaulting to
 ```json
 {
   "schemaVersion": 1,
-  "cli": { "mode": "direct" | "proxied", "version": "0.7.0", "executable": "/abs/path" },
-  "pluginHome": "/abs/path"
+  "cli": { "mode": "direct" | "proxied", "version": "0.7.0", "executable": "/abs/path" }
 }
 ```
 
@@ -83,17 +82,23 @@ to fall back to.
 
 ## Install modes
 
-Both modes install `@slop-lab/dim-cli` into a private, versioned directory
-outside `PATH`:
+Both modes install the DIM runtime—CLI, core, and enabled plugins—into one
+private stable directory outside `PATH`:
 
 ```text
-$XDG_DATA_HOME/dim/cli/<version>/node_modules/.bin/dim
+$XDG_DATA_HOME/dim/runtime/current/node_modules/.bin/dim
 ```
+
+The installer prepares each replacement in a temporary sibling directory,
+verifies its executable, and then promotes it to `current`. It must restore the
+previous `current` directory when promotion or configuration fails, and remove
+temporary and backup directories after success. DIM
+exposes no CLI version-selection or rollback contract.
 
 **Direct** (`--local-bin`) additionally creates or replaces a symlink at
 `<prefix>/bin/dim` (prefix defaults to `~/.local`) pointing at that
 executable. The facade must only create, replace, or remove a path there if
-it is already a symlink resolving inside its own managed versioned
+it is already a symlink resolving inside its own managed runtime
 directory; any other existing file or symlink is a conflict that stops
 installation without modification. The installer does not infer ownership or
 attempt migration from the contents of an unmanaged path.
@@ -113,10 +118,16 @@ mode positively and use `Y` as their displayed default, so repeatedly answering
 
 `install-cli --local-packages PATH` must accept a schema-1 `packages.json`
 bundle produced by the repository package script. It installs every tarball
-except `@slop-lab/dim-installer` in one npm transaction, verifies the installed
-CLI's reported version, and uses a content-derived `local-<hash>` directory so
-an unpublished build cannot overwrite the same-version registry installation.
-The normal direct/proxied selection still applies.
+except `@slop-lab/dim-installer` in one npm transaction and records the version
+reported by the installed CLI. The normal direct/proxied selection still
+applies; manifest versions do not select filesystem paths.
+
+Plugins install into the same `runtime/current` npm project. Plugin packages
+must declare the exact compatible `@slop-lab/dim-core` as a peer dependency so
+npm rejects an incompatible host before activation. CLI replacement reinstalls
+the enabled plugin set in staging and must succeed as one dependency graph
+before promotion. `plugins.json` lives in `runtime/current`; no independent
+plugin installation root or persisted `pluginHome` setting exists.
 
 ## Proxy contract
 
@@ -138,9 +149,8 @@ byte-identical output to unset when unset.
 
 ## Plugin installation
 
-`dim install-plugin` must succeed whether or not `@slop-lab/dim-cli` is
-installed; if it isn't, the command still installs and enables the
-plugin(s) but must warn that nothing can use them yet.
+`dim install-plugin` requires an installed CLI because plugins join its npm
+project and npm must validate their core peer dependency against that runtime.
 
 ## Verification
 
@@ -154,6 +164,7 @@ Required tests cover:
   `--local-bin`/`--no-local-bin`, and local package bundle validation;
 - managed-symlink create, idempotent replace, and rejection of an
   unmanaged/foreign path at the same location;
+- successful CLI replacement prunes old managed installation directories;
 - proxy argv/cwd/env/stdio/exit-code fidelity;
 - stale config (missing executable, facade self-reference) surfaced as
   actionable errors, not silent fallback to a `PATH`-resolved `dim`;

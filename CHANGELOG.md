@@ -9,8 +9,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
-- Added content-addressed local package bundle installation through the DIM
-  installer facade. `just install-dim-local` now preserves a mise-managed
+- Added local package bundle installation through the DIM installer facade.
+  `just install-dim-local` now preserves a mise-managed
   facade automatically and retains its direct-PATH fallback when mise is not
   available.
 - Added a dedicated host-mode label for the container-integration workflow
@@ -23,6 +23,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Unified the CLI, core, and plugins in one stable `runtime/current` npm
+  project. Replacements are installed and verified in staging, failed switches
+  restore the previous runtime, and exact core peer dependencies let npm reject
+  incompatible plugin combinations before activation.
 - Split automatic GitHub and Gitea CI definitions so GitHub container
   integration uses a hosted Ubuntu VM instead of waiting indefinitely for the
   Gitea-only `dim-container-integration` runner label. GitHub's manual Sysbox

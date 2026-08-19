@@ -1,20 +1,18 @@
-import { access, lstat, mkdir, readFile, readlink, realpath, rename, symlink, unlink, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
 
 export interface InstallOptions {
   pluginHome: string;
-  configPath?: string;
   npmCommand?: string;
 }
 
 export interface CliInstallOptions {
-  version: string;
-  installationId?: string;
+  version?: string;
   packageSpecifiers?: string[];
+  packageNames?: string[];
   exposeOnPath: boolean;
   binDirectory?: string;
   configPath?: string;
@@ -23,9 +21,8 @@ export interface CliInstallOptions {
 }
 
 export interface LocalPackageBundle {
-  version: string;
-  installationId: string;
   packageSpecifiers: string[];
+  packageNames: string[];
 }
 
 export interface InstalledCli {
@@ -49,7 +46,6 @@ interface DimCliConfig {
 export interface DimUserConfig {
   schemaVersion: 1;
   installPrefix?: string;
-  pluginHome?: string;
   cli?: DimCliConfig;
   workspaceBackend?: "sysbox" | "gvisor" | "rootless-podman" | "runc";
   [key: string]: unknown;
@@ -70,7 +66,7 @@ export function defaultDataHome(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 export function defaultPluginHome(env: NodeJS.ProcessEnv = process.env): string {
-  return path.resolve(env.DIM_PLUGIN_HOME ?? path.join(defaultDataHome(env), "plugins"));
+  return path.resolve(env.DIM_PLUGIN_HOME ?? path.join(defaultDataHome(env), "runtime", "current"));
 }
 
 export function defaultInstallPrefix(env: NodeJS.ProcessEnv = process.env): string {
@@ -81,17 +77,8 @@ export function defaultBinDirectory(env: NodeJS.ProcessEnv = process.env): strin
   return path.join(defaultInstallPrefix(env), "bin");
 }
 
-export function cliVersionDirectory(version: string, dataHome = defaultDataHome()): string {
-  return path.join(path.resolve(dataHome), "cli", version);
-}
-
-export function cliExecutable(version: string, dataHome = defaultDataHome()): string {
-  return path.join(cliVersionDirectory(version, dataHome), "node_modules", ".bin", "dim");
-}
-
-export async function configuredPluginHome(env: NodeJS.ProcessEnv = process.env): Promise<string> {
-  const config = await readUserConfig(defaultUserConfigPath(env));
-  return path.resolve(config.pluginHome ?? defaultPluginHome(env));
+export function cliExecutable(dataHome = defaultDataHome()): string {
+  return path.join(path.resolve(dataHome), "runtime", "current", "node_modules", ".bin", "dim");
 }
 
 export async function configuredCli(env: NodeJS.ProcessEnv = process.env): Promise<DimCliConfig | undefined> {
@@ -101,51 +88,88 @@ export async function configuredCli(env: NodeJS.ProcessEnv = process.env): Promi
 
 export async function installDimCli(options: CliInstallOptions): Promise<InstalledCli> {
   const dataHome = path.resolve(options.dataHome ?? defaultDataHome());
-  const versionDirectory = cliVersionDirectory(options.installationId ?? options.version, dataHome);
-  await mkdir(versionDirectory, { recursive: true, mode: 0o700 });
-  await run(options.npmCommand ?? "npm", [
-    "install",
-    "--prefix",
-    versionDirectory,
-    "--save-exact",
-    "--no-fund",
-    "--no-audit",
-    ...(options.packageSpecifiers ?? [`@slop-lab/dim-cli@${options.version}`])
-  ], versionDirectory);
-
-  const executable = cliExecutable(options.installationId ?? options.version, dataHome);
-  await access(executable, constants.X_OK);
-  const installedVersion = await queryCliVersion(executable);
-  if (installedVersion !== options.version) {
-    throw new Error(`installed DIM CLI reports ${installedVersion}, expected ${options.version}`);
-  }
-
-  const mode = options.exposeOnPath ? "direct" : "proxied";
-  let installedSymlink: string | undefined;
-  if (options.exposeOnPath) {
-    const binDirectory = path.resolve(options.binDirectory ?? defaultBinDirectory());
-    installedSymlink = path.join(binDirectory, "dim");
-    await installManagedSymlink(installedSymlink, executable, path.join(dataHome, "cli"));
-  }
-
-  const configPath = options.configPath ?? defaultUserConfigPath();
-  const config = await readUserConfig(configPath);
-  await writeUserConfig(configPath, {
-    ...config,
-    cli: {
-      mode,
-      version: options.version,
-      executable: path.resolve(executable)
-    },
-    pluginHome: config.pluginHome ?? defaultPluginHome()
+  const managedRoot = path.join(dataHome, "runtime");
+  const currentDirectory = path.join(managedRoot, "current");
+  await mkdir(managedRoot, { recursive: true, mode: 0o700 });
+  const stagingDirectory = await mkdtemp(path.join(managedRoot, ".staging-"));
+  const requestedPackages = options.packageSpecifiers
+    ?? (options.version ? [`@slop-lab/dim-cli@${options.version}`] : undefined);
+  if (!requestedPackages) throw new Error("a CLI version or local package bundle is required");
+  const previousManifest = await readManifest(path.join(currentDirectory, "plugins.json"));
+  const previousPackage = await readPackageJson(path.join(currentDirectory, "package.json"));
+  const providedNames = new Set(options.packageNames ?? []);
+  const pluginSpecifiers = previousManifest.plugins.filter((name) => !providedNames.has(name)).map((name) => {
+    const version = previousPackage?.dependencies?.[name];
+    if (!version) throw new Error(`enabled plugin '${name}' is not installed in the DIM runtime`);
+    return `${name}@${version}`;
   });
+  const packageSpecifiers = [...requestedPackages, ...pluginSpecifiers];
+  const configPath = options.configPath ?? defaultUserConfigPath();
+  const backupDirectory = path.join(managedRoot, `.previous-${process.pid}-${Date.now()}`);
+  let previousMoved = false;
+  let promoted = false;
+  let committed = false;
+  let installedSymlink: string | undefined;
+  try {
+    await run(options.npmCommand ?? "npm", [
+      "install", "--prefix", stagingDirectory, "--save-exact", "--no-fund", "--no-audit",
+      ...packageSpecifiers
+    ], stagingDirectory);
+    const stagingExecutable = path.join(stagingDirectory, "node_modules", ".bin", "dim");
+    await access(stagingExecutable, constants.X_OK);
+    const installedVersion = await queryCliVersion(stagingExecutable);
+    if (options.version && installedVersion !== options.version) {
+      throw new Error(`installed DIM CLI reports ${installedVersion}, expected ${options.version}`);
+    }
+    await atomicWrite(path.join(stagingDirectory, "plugins.json"), previousManifest);
 
-  return {
-    executable: path.resolve(executable),
-    mode,
-    version: options.version,
-    ...(installedSymlink ? { symlink: installedSymlink } : {})
-  };
+    try {
+      await rename(currentDirectory, backupDirectory);
+      previousMoved = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    await rename(stagingDirectory, currentDirectory);
+    promoted = true;
+
+    const executable = cliExecutable(dataHome);
+    await access(executable, constants.X_OK);
+    const mode = options.exposeOnPath ? "direct" : "proxied";
+    if (options.exposeOnPath) {
+      const binDirectory = path.resolve(options.binDirectory ?? defaultBinDirectory());
+      installedSymlink = path.join(binDirectory, "dim");
+      await installManagedSymlink(installedSymlink, executable, managedRoot);
+    }
+    const config = await readUserConfig(configPath);
+    await writeUserConfig(configPath, {
+      ...config,
+      cli: { mode, version: installedVersion, executable }
+    });
+    committed = true;
+    await cleanupRuntimeSiblings(managedRoot);
+    return {
+      executable,
+      mode,
+      version: installedVersion,
+      ...(installedSymlink ? { symlink: installedSymlink } : {})
+    };
+  } catch (error) {
+    if (!committed) {
+      if (promoted) await rm(currentDirectory, { recursive: true, force: true });
+      if (previousMoved) await rename(backupDirectory, currentDirectory);
+      else if (installedSymlink) await unlink(installedSymlink).catch(() => undefined);
+    }
+    throw error;
+  } finally {
+    await rm(stagingDirectory, { recursive: true, force: true });
+  }
+}
+
+async function cleanupRuntimeSiblings(managedRoot: string): Promise<void> {
+  const entries = await readdir(managedRoot, { withFileTypes: true });
+  await Promise.all(entries
+    .filter((entry) => entry.isDirectory() && entry.name !== "current")
+    .map((entry) => rm(path.join(managedRoot, entry.name), { recursive: true, force: true })));
 }
 
 export async function readLocalPackageBundle(directory: string): Promise<LocalPackageBundle> {
@@ -153,23 +177,21 @@ export async function readLocalPackageBundle(directory: string): Promise<LocalPa
   const manifestPath = path.join(bundleDirectory, "packages.json");
   const raw = JSON.parse(await readFile(manifestPath, "utf8")) as {
     schemaVersion?: unknown;
-    packages?: Array<{ name?: unknown; version?: unknown; file?: unknown }>;
+    packages?: Array<{ name?: unknown; file?: unknown }>;
   };
   if (raw.schemaVersion !== 1 || !Array.isArray(raw.packages)) {
     throw new Error(`invalid local package bundle manifest: ${manifestPath}`);
   }
 
   const packages = raw.packages.filter((entry) => entry.name !== "@slop-lab/dim-installer");
-  const cli = packages.find((entry) => entry.name === "@slop-lab/dim-cli");
-  if (!cli || typeof cli.version !== "string" || cli.version.length === 0) {
+  if (!packages.some((entry) => entry.name === "@slop-lab/dim-cli")) {
     throw new Error("local package bundle does not contain @slop-lab/dim-cli");
   }
 
   const names = new Set<string>();
-  const hash = createHash("sha256");
   const packageSpecifiers: string[] = [];
   for (const entry of packages) {
-    if (typeof entry.name !== "string" || typeof entry.version !== "string" || typeof entry.file !== "string") {
+    if (typeof entry.name !== "string" || typeof entry.file !== "string") {
       throw new Error(`invalid local package entry in ${manifestPath}`);
     }
     if (names.has(entry.name)) throw new Error(`duplicate local package '${entry.name}'`);
@@ -178,15 +200,13 @@ export async function readLocalPackageBundle(directory: string): Promise<LocalPa
       throw new Error(`invalid local package filename '${entry.file}'`);
     }
     const tarball = path.join(bundleDirectory, entry.file);
-    const contents = await readFile(tarball);
-    hash.update(entry.name).update("\0").update(entry.version).update("\0").update(contents);
+    await access(tarball, constants.R_OK);
     packageSpecifiers.push(tarball);
   }
 
   return {
-    version: cli.version,
-    installationId: `local-${hash.digest("hex").slice(0, 16)}`,
-    packageSpecifiers
+    packageSpecifiers,
+    packageNames: [...names]
   };
 }
 
@@ -291,9 +311,6 @@ export async function installPlugins(specifiers: string[], options: InstallOptio
   const manifest = await readManifest(manifestPath);
   const plugins = [...new Set([...manifest.plugins, ...installed])].sort();
   await atomicWrite(manifestPath, { schemaVersion: 1, plugins });
-  const configPath = options.configPath ?? defaultUserConfigPath();
-  const config = await readUserConfig(configPath);
-  await writeUserConfig(configPath, { ...config, pluginHome: path.resolve(options.pluginHome) });
   return installed;
 }
 

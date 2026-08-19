@@ -6,42 +6,25 @@ import { pathToFileURL } from "node:url";
 import { UserError } from "./errors.js";
 import { registerPlugins, type DimPlugin, type RegisteredDimPlugins } from "./plugin.js";
 import { builtInHostInputPlugin } from "./hostInputs.js";
-import { dimUserConfigPath } from "./userConfig.js";
 
 export interface PluginManifest {
   schemaVersion: 1;
   plugins: string[];
 }
 
-interface DimUserConfig {
-  schemaVersion: 1;
-  installPrefix?: string;
-  pluginHome?: string;
-}
-
 export function pluginHome(env: NodeJS.ProcessEnv = process.env): string {
   const home = env.HOME ?? os.homedir();
   return path.resolve(
     env.DIM_PLUGIN_HOME
-      ?? path.join(env.XDG_DATA_HOME ?? path.join(home, ".local", "share"), "dim", "plugins")
+      ?? path.join(
+        env.DIM_DATA_HOME ?? path.join(env.XDG_DATA_HOME ?? path.join(home, ".local", "share"), "dim"),
+        "runtime",
+        "current"
+      )
   );
 }
 
 export async function resolvePluginHome(env: NodeJS.ProcessEnv = process.env): Promise<string> {
-  try {
-    const config = JSON.parse(await readFile(dimUserConfigPath(env), "utf8")) as DimUserConfig;
-    if (config.schemaVersion !== 1) {
-      throw new UserError(`invalid DIM user config at ${dimUserConfigPath(env)}`);
-    }
-    if (config.pluginHome !== undefined) {
-      if (typeof config.pluginHome !== "string" || config.pluginHome.length === 0) {
-        throw new UserError(`invalid pluginHome in DIM user config at ${dimUserConfigPath(env)}`);
-      }
-      return path.resolve(config.pluginHome);
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
   return pluginHome(env);
 }
 

@@ -7,8 +7,8 @@ import { createInterface } from "node:readline/promises";
 import { parseArgs } from "node:util";
 import {
   configuredCli,
-  configuredPluginHome,
   defaultBinDirectory,
+  defaultPluginHome,
   installDimCli,
   installPlugins,
   queryCliVersion,
@@ -112,14 +112,12 @@ Installer commands may then require an explicit pinned npx invocation. Keeping D
     }
 
     if (choice === "2" || choice === "3") {
-      const defaultHome = await configuredPluginHome();
-      const homeInput = (await prompt.question(`Plugin home [${defaultHome}]: `)).trim();
       const specifierInput = (await prompt.question(
         "Plugin package(s), space-separated and pinned to exact versions (e.g. @scope/pkg@1.2.3): "
       )).trim();
       const specifiers = specifierInput.split(/\s+/).filter(Boolean);
       if (specifiers.length === 0) throw new Error("at least one plugin package is required");
-      await installPluginPackages(specifiers, path.resolve(homeInput || defaultHome));
+      await installPluginPackages(specifiers);
     }
   } finally {
     prompt.close();
@@ -196,27 +194,24 @@ async function installPluginCommand(commandArgs: string[]): Promise<void> {
     args: commandArgs,
     allowPositionals: true,
     strict: true,
-    options: {
-      help: { type: "boolean", short: "h" },
-      "plugin-home": { type: "string" }
-    }
+    options: { help: { type: "boolean", short: "h" } }
   });
   if (parsed.values.help) {
     printInstallPluginHelp();
     return;
   }
   if (parsed.positionals.length === 0) throw new Error("install-plugin requires at least one package");
-  const home = path.resolve(parsed.values["plugin-home"] ?? await configuredPluginHome());
-  await installPluginPackages(parsed.positionals, home);
+  await installPluginPackages(parsed.positionals);
 }
 
-async function installPluginPackages(specifiers: string[], home: string): Promise<void> {
+async function installPluginPackages(specifiers: string[]): Promise<void> {
+  if (await configuredCli() === undefined) {
+    throw new Error("DIM CLI must be installed before plugins so npm can validate the shared runtime");
+  }
+  const home = defaultPluginHome();
   const installed = await installPlugins(specifiers, { pluginHome: home });
   for (const name of installed) console.log(`Installed and enabled ${name}`);
   console.log(`Plugin home: ${home}`);
-  if (await configuredCli() === undefined) {
-    console.warn("Warning: DIM CLI is not installed yet; install it before using this plugin");
-  }
 }
 
 async function proxyCli(executable: string, commandArgs: string[], version: string): Promise<number> {
@@ -302,7 +297,7 @@ function printInstallerHelp(): void {
   console.log(`Usage:
   dim installer
   dim install-cli [--no-local-bin | --local-bin] [--prefix PATH] [--local-packages PATH]
-  dim install-plugin [--plugin-home PATH] PACKAGE@EXACT_VERSION...
+  dim install-plugin PACKAGE@EXACT_VERSION...
 
 The installer owns only installer, install-cli, and install-plugin.
 All other commands are forwarded unchanged to the installed DIM CLI.`);
@@ -325,9 +320,8 @@ and make mise version selection differ from the CLI that actually runs.`);
 }
 
 function printInstallPluginHelp(): void {
-  console.log(`Usage: dim install-plugin [options] PACKAGE@EXACT_VERSION...
+  console.log(`Usage: dim install-plugin PACKAGE@EXACT_VERSION...
 
 Options:
-  --plugin-home PATH  Override the plugin installation directory
-  -h, --help          Show this help`);
+  -h, --help  Show this help`);
 }

@@ -1,9 +1,8 @@
-import { chmod, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   configuredCli,
-  configuredPluginHome,
   defaultBinDirectory,
   defaultDataHome,
   defaultInstallPrefix,
@@ -49,7 +48,7 @@ describe("@slop-lab/dim-installer", () => {
       expect(defaultInstallPrefix(env)).toBe("/home/example/.local");
       expect(defaultBinDirectory(env)).toBe("/home/example/.local/bin");
       expect(defaultDataHome(env)).toBe("/home/example/.local/share/dim");
-      expect(defaultPluginHome(env)).toBe("/home/example/.local/share/dim/plugins");
+      expect(defaultPluginHome(env)).toBe("/home/example/.local/share/dim/runtime/current");
       expect(defaultUserConfigPath(env)).toBe("/home/example/.config/dim/config.json");
     });
 
@@ -101,8 +100,6 @@ describe("@slop-lab/dim-installer", () => {
 
       const dataHome = join(root, "data-home");
       const configPath = join(root, "config", "dim", "config.json");
-      const pluginHome = join(root, "plugin-home");
-      vi.stubEnv("DIM_PLUGIN_HOME", pluginHome);
       await mkdir(dirname(configPath), { recursive: true });
       await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "gvisor" }));
 
@@ -114,26 +111,27 @@ describe("@slop-lab/dim-installer", () => {
         configPath
       });
 
-      const versionDirectory = join(dataHome, "cli", "9.9.9");
-      expect(JSON.parse(await readFile(argumentsFile, "utf8"))).toEqual([
+      const npmArgs = JSON.parse(await readFile(argumentsFile, "utf8")) as string[];
+      const stagingDirectory = npmArgs[npmArgs.indexOf("--prefix") + 1];
+      expect(stagingDirectory).toMatch(new RegExp(`^${join(dataHome, "runtime", ".staging-")}`));
+      expect(npmArgs).toEqual([
         "install",
         "--prefix",
-        versionDirectory,
+        stagingDirectory,
         "--save-exact",
         "--no-fund",
         "--no-audit",
         "@slop-lab/dim-cli@9.9.9"
       ]);
 
-      const executable = join(versionDirectory, "node_modules", ".bin", "dim");
+      const executable = join(dataHome, "runtime", "current", "node_modules", ".bin", "dim");
       expect(installed).toEqual({ executable, mode: "proxied", version: "9.9.9" });
       expect("symlink" in installed).toBe(false);
 
       expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
         schemaVersion: 1,
         workspaceBackend: "gvisor",
-        cli: { mode: "proxied", version: "9.9.9", executable },
-        pluginHome
+        cli: { mode: "proxied", version: "9.9.9", executable }
       });
       expect(await configuredCli({ DIM_CONFIG_PATH: configPath })).toEqual({
         mode: "proxied",
@@ -161,7 +159,7 @@ describe("@slop-lab/dim-installer", () => {
         configPath
       });
 
-      const executable = join(dataHome, "cli", "1.0.0", "node_modules", ".bin", "dim");
+      const executable = join(dataHome, "runtime", "current", "node_modules", ".bin", "dim");
       const linkPath = join(binDirectory, "dim");
       expect(installed).toEqual({ executable, mode: "direct", version: "1.0.0", symlink: linkPath });
       expect(await readlink(linkPath)).toBe(executable);
@@ -179,7 +177,7 @@ describe("@slop-lab/dim-installer", () => {
       await mkdir(root, { recursive: true });
       await writeFile(
         configPath,
-        JSON.stringify({ schemaVersion: 1, futureFeature: { enabled: true }, pluginHome: "/kept/plugin/home" })
+        JSON.stringify({ schemaVersion: 1, futureFeature: { enabled: true } })
       );
 
       await installDimCli({
@@ -192,17 +190,58 @@ describe("@slop-lab/dim-installer", () => {
 
       const written = JSON.parse(await readFile(configPath, "utf8"));
       expect(written.futureFeature).toEqual({ enabled: true });
-      expect(written.pluginHome).toBe("/kept/plugin/home");
       expect(written.cli).toEqual({
         mode: "proxied",
         version: "2.0.0",
-        executable: join(root, "data-home", "cli", "2.0.0", "node_modules", ".bin", "dim")
+        executable: join(root, "data-home", "runtime", "current", "node_modules", ".bin", "dim")
       });
+    });
+
+    it("does not prune the previous installation when the replacement fails verification", async () => {
+      const root = await tempDir("dim-install-failed-replacement-");
+      const npm = join(root, "npm.mjs");
+      await writeFakeCliNpm(npm, { argsFile: join(root, "arguments.json"), versionOutput: "wrong-version" });
+      const dataHome = join(root, "data-home");
+      const previous = join(dataHome, "runtime", "current");
+      await mkdir(previous, { recursive: true });
+      await writeFile(join(previous, "sentinel"), "previous install");
+
+      await expect(installDimCli({
+        version: "2.0.0",
+        exposeOnPath: false,
+        npmCommand: npm,
+        dataHome,
+        configPath: join(root, "dim.json")
+      })).rejects.toThrow(/reports wrong-version, expected 2.0.0/);
+
+      expect(await readFile(join(previous, "sentinel"), "utf8")).toBe("previous install");
+    });
+
+    it("restores current when configuration fails after promotion", async () => {
+      const root = await tempDir("dim-install-failed-config-");
+      const npm = join(root, "npm.mjs");
+      await writeFakeCliNpm(npm, { argsFile: join(root, "arguments.json"), versionOutput: "2.0.0" });
+      const dataHome = join(root, "data-home");
+      const current = join(dataHome, "runtime", "current");
+      await mkdir(current, { recursive: true });
+      await writeFile(join(current, "sentinel"), "previous install");
+      const configPath = join(root, "dim.json");
+      await writeFile(configPath, "not json");
+
+      await expect(installDimCli({
+        version: "2.0.0",
+        exposeOnPath: false,
+        npmCommand: npm,
+        dataHome,
+        configPath
+      })).rejects.toThrow();
+
+      expect(await readFile(join(current, "sentinel"), "utf8")).toBe("previous install");
     });
   });
 
   describe("readLocalPackageBundle", () => {
-    it("selects every locally built package except the installer and derives a content-addressed install", async () => {
+    it("selects every locally built package except the installer", async () => {
       const root = await tempDir("dim-local-bundle-");
       await writeFile(join(root, "core.tgz"), "core contents");
       await writeFile(join(root, "cli.tgz"), "cli contents");
@@ -210,16 +249,17 @@ describe("@slop-lab/dim-installer", () => {
       await writeFile(join(root, "packages.json"), JSON.stringify({
         schemaVersion: 1,
         packages: [
-          { name: "@slop-lab/dim-core", version: "0.7.0", file: "core.tgz" },
-          { name: "@slop-lab/dim-cli", version: "0.7.0", file: "cli.tgz" },
-          { name: "@slop-lab/dim-installer", version: "0.7.0", file: "installer.tgz" }
+          { name: "@slop-lab/dim-core", file: "core.tgz" },
+          { name: "@slop-lab/dim-cli", file: "cli.tgz" },
+          { name: "@slop-lab/dim-installer", file: "installer.tgz" }
         ]
       }));
 
       const bundle = await readLocalPackageBundle(root);
-      expect(bundle.version).toBe("0.7.0");
-      expect(bundle.installationId).toMatch(/^local-[0-9a-f]{16}$/);
-      expect(bundle.packageSpecifiers).toEqual([join(root, "core.tgz"), join(root, "cli.tgz")]);
+      expect(bundle).toEqual({
+        packageSpecifiers: [join(root, "core.tgz"), join(root, "cli.tgz")],
+        packageNames: ["@slop-lab/dim-core", "@slop-lab/dim-cli"]
+      });
     });
 
     it("rejects bundles without the CLI or with unsafe filenames", async () => {
@@ -355,11 +395,9 @@ describe("@slop-lab/dim-installer", () => {
       await writeFakePluginNpm(npm, { argsFile: argumentsFile });
 
       const pluginHome = join(root, "plugins");
-      const configPath = join(root, "dim.json");
-
       const installed = await installPlugins(
         ["@dev-infra-manager/plugin-github@1.0.0", "dim-plugin-example@2.0.0"],
-        { pluginHome, npmCommand: npm, configPath }
+        { pluginHome, npmCommand: npm }
       );
 
       expect(new Set(installed)).toEqual(new Set(["@dev-infra-manager/plugin-github", "dim-plugin-example"]));
@@ -377,11 +415,6 @@ describe("@slop-lab/dim-installer", () => {
         schemaVersion: 1,
         plugins: ["@dev-infra-manager/plugin-github", "dim-plugin-example"]
       });
-
-      expect(JSON.parse(await readFile(configPath, "utf8"))).toMatchObject({
-        schemaVersion: 1,
-        pluginHome
-      });
     });
 
     it("dedupes and sorts plugins.json across repeated installs, and merges with an existing manifest", async () => {
@@ -396,26 +429,10 @@ describe("@slop-lab/dim-installer", () => {
       const npm = join(root, "npm.mjs");
       await writeFakePluginNpm(npm, { argsFile: join(root, "arguments.json") });
 
-      await installPlugins(["aaa-new-plugin@1.0.0"], { pluginHome, npmCommand: npm, configPath: join(root, "dim.json") });
+      await installPlugins(["aaa-new-plugin@1.0.0"], { pluginHome, npmCommand: npm });
 
       const manifest = JSON.parse(await readFile(join(pluginHome, "plugins.json"), "utf8"));
       expect(manifest.plugins).toEqual(["aaa-new-plugin", "zzz-existing-plugin"]);
-    });
-
-    it("preserves unknown fields in the user config when updating pluginHome", async () => {
-      const root = await tempDir("dim-install-plugins-preserve-");
-      const pluginHome = join(root, "plugins");
-      const configPath = join(root, "dim.json");
-      await writeFile(configPath, JSON.stringify({ schemaVersion: 1, futureField: 42 }));
-
-      const npm = join(root, "npm.mjs");
-      await writeFakePluginNpm(npm, { argsFile: join(root, "arguments.json") });
-
-      await installPlugins(["dim-plugin-example@1.0.0"], { pluginHome, npmCommand: npm, configPath });
-
-      const written = JSON.parse(await readFile(configPath, "utf8"));
-      expect(written.futureField).toBe(42);
-      expect(written.pluginHome).toBe(pluginHome);
     });
 
     it("throws when npm does not add a requested package as a direct dependency", async () => {
@@ -428,7 +445,7 @@ describe("@slop-lab/dim-installer", () => {
       });
 
       await expect(
-        installPlugins(["dim-plugin-example@1.0.0"], { pluginHome, npmCommand: npm, configPath: join(root, "dim.json") })
+        installPlugins(["dim-plugin-example@1.0.0"], { pluginHome, npmCommand: npm })
       ).rejects.toThrow(/did not install 'dim-plugin-example' as a direct plugin dependency/);
     });
 
@@ -437,13 +454,10 @@ describe("@slop-lab/dim-installer", () => {
     });
   });
 
-  describe("configuredPluginHome / configuredCli", () => {
-    it("fall back to defaults when no config file exists", async () => {
+  describe("configuredCli", () => {
+    it("falls back when no config file exists", async () => {
       const dir = await tempDir("dim-configured-defaults-");
       const configPath = join(dir, "dim.json");
-      expect(await configuredPluginHome({ DIM_CONFIG_PATH: configPath, HOME: dir })).toBe(
-        defaultPluginHome({ HOME: dir })
-      );
       expect(await configuredCli({ DIM_CONFIG_PATH: configPath, HOME: dir })).toBeUndefined();
     });
   });

@@ -134,7 +134,7 @@ fi
 echo "[container] explicit --local-bin overrides the mise auto-detected default"
 dim install-cli --local-bin
 test -L "$HOME/.local/bin/dim"
-readlink -f "$HOME/.local/bin/dim" | grep -q "/dim/cli/$DIM_PACKAGE_VERSION/"
+readlink -f "$HOME/.local/bin/dim" | grep -q "/dim/runtime/current/"
 
 export PATH="$HOME/.local/bin:$PATH"
 which_count="$(which -a dim | sort -u | wc -l)"

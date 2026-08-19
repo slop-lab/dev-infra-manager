@@ -159,6 +159,14 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(result.stderr).toContain("dim:");
   });
 
+  it("dim install-plugin requires the shared CLI runtime first", async () => {
+    const root = await tempDir("dim-plugin-before-cli-");
+    const { env } = await baseEnv(root);
+    const result = await runCli(["install-plugin", "@example/plugin@1.0.0"], tsxPath!, env, root);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("CLI must be installed before plugins");
+  });
+
   it("dim install-cli help warns about direct mode under mise", async () => {
     const root = await tempDir("dim-cli-mise-help-");
     const { env } = await baseEnv(root);
@@ -199,7 +207,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(result.stdout).toContain("Installed local DIM CLI 0.7.0");
     const config = JSON.parse(await readFile(configPath, "utf8"));
     expect(config.cli).toMatchObject({ mode: "proxied", version: "0.7.0" });
-    expect(config.cli.executable).toMatch(new RegExp(`^${dataHome}/cli/local-[0-9a-f]{16}/`));
+    expect(config.cli.executable).toBe(join(dataHome, "runtime", "current", "node_modules", ".bin", "dim"));
     expect(JSON.parse(await readFile(npmArgs, "utf8"))).toEqual(expect.arrayContaining([
       join(bundle, "core.tgz"),
       join(bundle, "cli.tgz")
