@@ -101,6 +101,22 @@ agent-facing `.dim/entrypoint.sh` task surface. Secret values enter only the
 controller/secret-bearing boundary, not agent-controlled files, Project state,
 or the agent container.
 
+## Execution and Promotion Domains
+
+DIM separates three roles with different lifecycle and trust properties:
+
+| Domain | Lifecycle | Trust and credentials | Purpose |
+| --- | --- | --- | --- |
+| Agent workspace | Persistent until explicit discard | Untrusted agent execution; no raw project/runtime secrets | Implementation, builds, services, and nested containers |
+| Verification runner | Project-scoped runner with separate checkouts and disposable job containers | Runs untrusted proposed input; no host Docker socket or DIM workspace credentials | Tests, lint, builds, and review evidence |
+| Trusted Project runtime | Project-defined lifecycle; services may persist | Reviewed lifecycle code; scoped secrets may be supplied to separate services | Protected updates and other secret-bearing operations |
+
+These are roles, not a claim that every current boundary is a VM-strength
+security boundary. In particular, services sharing the current privileged
+workspace are operationally separated but depend on reviewed Project policy.
+The review gate applies when output is promoted into protected or
+secret-bearing state; the mutable agent workspace itself is not review-gated.
+
 ## Managed Git Host
 
 The built-in managed Git host is a DIM-owned Gitea service. Each Project owns

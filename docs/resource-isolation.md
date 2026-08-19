@@ -17,7 +17,7 @@ run in `tools-0`. The workspace parent still bounds the aggregate. Memory and
 I/O remain workspace-wide because threaded children cannot receive those
 domain controllers.
 
-The production default is Sysbox. gVisor provides a Docker-compatible
+The default nested-container backend is Sysbox. gVisor provides a Docker-compatible
 no-KVM alternative, rootless Podman supports compatible lower-privilege
 workloads, and privileged runc is reserved for CI or nested development
 containers.

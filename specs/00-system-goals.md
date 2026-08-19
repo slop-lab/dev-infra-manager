@@ -2,7 +2,9 @@
 
 ## Purpose
 
-`dev-infra-manager` provides host-side infrastructure for persistent AI-assisted development workspaces in isolated, review-gated environments.
+`dev-infra-manager` provides a host-side execution and trust layer for
+persistent AI-assisted development workspaces, separate verification, and
+review-gated promotion into protected or secret-bearing state.
 
 The system must let an untrusted agent:
 

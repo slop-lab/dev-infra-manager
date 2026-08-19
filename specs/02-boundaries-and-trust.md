@@ -97,7 +97,7 @@ host-side administrative operations.
 
 Runtime backend choice changes the strength and shape of isolation.
 
-- `sysbox` is the default production backend for Docker-compatible nested workloads.
+- `sysbox` is the default nested-container backend for Docker-compatible workloads.
 - `gvisor` is the no-KVM Docker-compatible backend.
 - `rootless-podman` is the lower-privilege backend for Podman-compatible workloads.
 

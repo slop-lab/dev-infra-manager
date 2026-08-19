@@ -1,6 +1,8 @@
 # dev-infra-manager Documentation
 
-`dev-infra-manager` provides persistent, isolated, review-gated workspaces for AI-assisted development.
+`dev-infra-manager` is a self-hosted execution and trust layer for coding-agent
+development: persistent workspaces, separate verification, and reviewed
+promotion into protected or secret-bearing state.
 
 ## Glossary
 
@@ -46,6 +48,12 @@ Docker/Git terms aren't repeated here.
   builds and deploys it from a human-reviewed ref. It may receive raw secrets;
   the agent container receives neither those secrets nor control of this
   container.
+- **Verification runner** — a Project-scoped CI resource outside workspace
+  state. It checks a separate repository checkout in disposable job containers
+  without the host Docker socket or DIM workspace credentials.
+- **Promotion** — the reviewed transition from an agent-authored proposal to a
+  protected ref or trusted operation. DIM review-gates this transition, not
+  ordinary mutation inside an agent workspace.
 
 The documentation is split by concern:
 

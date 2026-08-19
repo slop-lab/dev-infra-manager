@@ -1,7 +1,112 @@
 # dev-infra-manager
 
-`dev-infra-manager` (DIM) provides persistent, isolated, review-gated
-workspaces for AI-assisted development.
+**Persistent workspaces. Clean verification. Reviewed promotion.**
+
+`dev-infra-manager` (DIM) is a self-hosted execution and trust layer for
+coding-agent development on Linux.
+
+DIM turns a Linux host into Project-scoped development infrastructure where
+coding agents can install tools, run services, and build or run nested
+containers without receiving direct control of the host container runtime.
+Each Project can combine:
+
+- Workspaces that persist across agent turns and retries and are removed only
+  through an explicit discard lifecycle.
+- Docker-capable workspaces backed by selectable isolation runtimes, without
+  exposing the host container daemon directly to the agent.
+- Managed Git and CI as the promotion boundary between mutable workspaces and
+  protected Project state.
+- A reviewed Project contract that defines a complete multi-repository
+  workspace and its lifecycle.
+- Separation between agent-controlled code and operations that receive
+  secrets.
+- Per-workspace CPU, memory, and process limits.
+
+DIM sits below interactive coding agents and autonomous orchestrators. Codex,
+Claude Code, or another agent can run in a DIM workspace. An orchestrator such
+as OpenAI Symphony can map a task to a persistent DIM workspace while DIM owns
+the workspace, repository, verification, and trust boundaries.
+
+DIM does not decide what work an agent should do, replace an issue tracker, or
+prescribe an agent workflow. It controls where work runs, what infrastructure
+it can reach, and which reviewed path can promote its output.
+
+## The trust path
+
+A typical DIM Project separates mutable development from trusted promotion:
+
+```text
+agent workspace
+  persistent across turns and retries
+  no raw project/runtime secrets
+        |
+        | commit and push
+        v
+project-scoped Git branch
+        |
+        | isolated verification in a separate checkout
+        v
+CI result and review evidence
+        |
+        | explicit review gate
+        v
+protected ref or trusted Project runtime
+        |
+        | scoped secret-bearing operation
+        v
+artifact, signing, publishing, or deployment
+```
+
+The current reference stack uses a DIM-managed Gitea service and
+`act_runner`-based CI. Those are implementation backends rather than the
+long-term Project contract and may be replaced before a stable release.
+
+Workspaces persist. Verification runs separately in disposable job containers.
+Secret-bearing Project services must be built and deployed from reviewed refs.
+
+## Typical uses
+
+### Interactive coding-agent workspaces
+
+Keep a workspace across multiple agent sessions, run nested Docker workloads
+inside it, and explicitly discard it when the work is finished.
+
+### Orchestrated autonomous implementation
+
+Let an external control plane own task selection, scheduling, retries, and
+agent sessions while DIM owns workspace isolation, repository state, CI
+verification, and promotion gates. DIM does not yet ship a Symphony-specific
+adapter or stable orchestrator API.
+
+### Agent-authored changes with separate CI
+
+Allow an agent to modify arbitrary code in its workspace while repeating
+checks in a separate runner checkout and disposable job container that has no
+host Docker socket or DIM workspace credentials.
+
+### Reviewed secret-bearing operations
+
+Keep signing, publication, deployment, and other privileged work outside the
+agent container. Current Projects implement this with reviewed lifecycle code
+and separate services; DIM does not claim that container separation alone is a
+strong boundary inside a privileged workspace.
+
+### Multi-repository projects
+
+Use a reviewed root Project contract to provide stable repository aliases,
+lifecycle hooks, protected refs, and coordinated workspaces for changes that
+span multiple repositories.
+
+## Security and release status
+
+> [!WARNING]
+> DIM has no stable release and is part of the host trust boundary. Adoption
+> requires human review of the exact DIM revision, the Project contract, and
+> every input that can influence a secret-bearing runtime. Pin exact versions
+> and immutable source revisions.
+
+Pre-stable `0.x` releases may change CLI, API, configuration, state, backend,
+and plugin contracts without compatibility shims or implicit migration.
 
 DIM supports Linux hosts only. macOS and Windows are not supported host
 platforms, including through Docker Desktop.
@@ -9,24 +114,10 @@ platforms, including through Docker Desktop.
 Licensed under the [MIT License](LICENSE). Release history is recorded in the
 [changelog](CHANGELOG.md).
 
-DIM has no stable release yet. Pre-stable `0.x` releases may change CLI, API,
-configuration, state, and plugin contracts without backward-compatibility
-shims or implicit migration. Pin and review an exact release.
-
 Before using DIM in another project, read the mandatory [adoption and trust
 requirements](docs/adoption.md). They require full human review of DIM, the
 project repository, and every secret-bearing environment, plus immutable
 version pinning.
-
-DIM focuses on the container and infrastructure boundary around agent
-workspaces:
-
-- Persistent, explicitly discarded agent workspaces.
-- Backend-selectable nested container isolation.
-- Secret-bearing runtime separation.
-- Project-scoped managed Git repositories and protected branches.
-- Root-repository lifecycle hooks for multi-repository projects.
-- Workspace-level CPU, memory, and PID limits.
 
 This page covers using DIM. Building or contributing to DIM itself —
 running its own test/verification suite, publishing packages, testing host
@@ -39,8 +130,9 @@ anywhere except this repository yet, so a one-time clone is needed even if
 you'll install the `dim` CLI itself from npm below:
 
 ```bash
-git clone <this-repository>
+git clone --no-checkout <this-repository>
 cd dev-infra-manager
+git checkout --detach <reviewed-tag-or-full-commit>
 just build-project-workspace
 bash scripts/install-host-ubuntu.bash sysbox
 ```
@@ -49,6 +141,12 @@ Run `just` as your normal user, including when it is managed by mise. The
 installer invokes `sudo` only for host changes, and adds the invoking user to
 the `docker` group; log out and back in or run `newgrp docker` once after the
 first installation.
+
+> [!WARNING]
+> Access to the host Docker daemon, including membership in the `docker` group,
+> is effectively root-level host access. Use a dedicated DIM host or service
+> identity if that trust assumption is not acceptable. Agent containers must
+> never receive the host Docker socket.
 
 The installer shows every package and host-level change before doing anything
 and proceeds only after you enter `yes`. It is a development convenience, not
@@ -60,10 +158,10 @@ development host.
 Choose the backend your workspaces will use:
 
 ```bash
-bash scripts/install-host-ubuntu.bash sysbox          # production default
-bash scripts/install-host-ubuntu.bash gvisor          # no-KVM sandboxed fallback
-bash scripts/install-host-ubuntu.bash rootless-podman # lower-privilege Podman workloads
-bash scripts/install-host-ubuntu.bash runc            # nested development/CI only
+bash scripts/install-host-ubuntu.bash sysbox          # default nested-container backend
+bash scripts/install-host-ubuntu.bash gvisor          # sandboxed fallback without KVM
+bash scripts/install-host-ubuntu.bash rootless-podman # lower-host-privilege workloads
+bash scripts/install-host-ubuntu.bash runc            # trusted development/CI only
 ```
 
 See [docs/runtime-backends.md](docs/runtime-backends.md) for how these

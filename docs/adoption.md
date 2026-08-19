@@ -21,6 +21,11 @@ Agent output, automated checks, and a review limited to the changed lines do
 not replace this full human trust review. Repeat the review whenever any of
 these inputs or their pinned versions change.
 
+The review gate protects promotion into a protected ref or secret-bearing
+runtime. It does not make the mutable agent workspace trusted. Verification
+jobs also execute untrusted proposed input and must not be treated as a place
+for long-lived project secrets.
+
 ### What actually keeps secrets safe
 
 The full review above establishes overall trust in DIM — correctness,

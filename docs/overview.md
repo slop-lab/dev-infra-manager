@@ -2,9 +2,14 @@
 
 ## Goal
 
-`dev-infra-manager` provides infrastructure for running AI agents in isolated,
-persistent development workspaces while protecting secrets from agents that
-may attempt to exfiltrate credentials or misuse their execution privileges.
+`dev-infra-manager` is a self-hosted execution and trust layer for coding-agent
+development. It combines persistent development workspaces with separate
+verification and a reviewed promotion path into protected refs and trusted
+operations.
+
+DIM does not choose or schedule agent work. Interactive agents and external
+orchestrators own that control-plane policy; DIM owns the execution,
+repository, verification, and trust boundaries in which they operate.
 
 The infrastructure separates agent-controlled execution from secret-bearing
 interfaces. Projects may run an agent as a nested service with its own private
@@ -23,7 +28,10 @@ In scope:
 - Secret-bearing containers.
 - Controller-managed deployment of secret-bearing containers.
 - Managed Git hosting primitives used by agents to propose changes.
-- Backend-selectable container isolation, with Sysbox as the default production backend.
+- Backend-selectable container isolation, with Sysbox as the default
+  nested-container backend.
+- Project-scoped CI runners that verify separate checkouts outside workspace
+  state.
 - Resource limits for agent workspaces and nested workloads.
 - Persistent read-write project workspaces.
 - Injection of non-secret and approved workspace configuration.
@@ -40,6 +48,7 @@ Out of scope:
 - Agent command audit logs.
 - Model request audit logs.
 - Project-specific product code.
+- Task selection, issue-tracker integration, scheduling, and retry policy.
 
 ## Threat Model
 

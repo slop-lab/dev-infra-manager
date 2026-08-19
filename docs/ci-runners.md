@@ -1,9 +1,10 @@
 # Managed CI runners
 
-DIM workspaces remain the primary development and verification environment.
-Managed CI runners repeat pull-request checks in a separate checkout and
-container environment so their result can be used as independent review
-evidence.
+DIM workspaces are the persistent development environment. Managed CI runners
+repeat pull-request checks in a separate checkout and disposable job container
+so their result can be used as independent review evidence. The Project-scoped
+runner itself remains managed until it is disabled; DIM does not currently
+claim a fresh outer runner for every job.
 
 Enable the single runner for a Project:
 
