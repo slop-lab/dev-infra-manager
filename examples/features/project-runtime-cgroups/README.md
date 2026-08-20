@@ -7,11 +7,11 @@ named subtree without learning a host cgroup path.
 
 The variants below show the supported driver-specific contracts:
 
-- [`cgroupfs`](cgroupfs/README.md): a trusted parent delegates a writable
+- [`cgroupfs`](cgroupfs.md): a trusted parent delegates a writable
   cgroup v2 subtree directly.
-- [`systemd`](systemd/README.md): systemd owns the service boundary and grants
+- [`systemd`](systemd.md): systemd owns the service boundary and grants
   its descendants with `Delegate=`.
-- [`unsupported`](unsupported/README.md): `none`, cgroup v1, read-only roots,
+- [`unsupported`](unsupported.md): `none`, cgroup v1, read-only roots,
   and missing controllers fail closed with an actionable reason.
 
 These are boundary examples, not alternative Project formats. Ordinary
@@ -22,3 +22,8 @@ Run the contract smoke with:
 ```bash
 bash scripts/project-runtime-cgroups-example-smoke.bash
 ```
+
+The driver-specific executable checks are `verify-cgroupfs.bash`,
+`verify-systemd.bash`, and `verify-unsupported.bash`. Keeping the variants as
+files makes `project-runtime-cgroups` one leaf feature example, consistent
+with the other `examples/features/<example>` entries.

@@ -17,4 +17,5 @@ is identical to the cgroupfs variant:
 sudo dim-project-cgroup create agent-dind 1000 1000 cpu memory pids
 ```
 
-See [`verify.bash`](verify.bash) for the executable contract check.
+See [`verify-systemd.bash`](verify-systemd.bash) for the executable contract
+check.

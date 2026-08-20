@@ -24,6 +24,12 @@ The QEMU wrapper owns only guest and toolchain provisioning. After installing
 the selected backend, Node.js, pnpm, and `just`, it must invoke repository
 verification through `just install` and `just verify example`.
 
+`project-runtime-cgroups` is one leaf feature example. Its systemd, cgroupfs,
+and unsupported variants are files within that leaf and the common example
+runner must dispatch its contract smoke for both direct selection and the
+compatible `all` suite. Because the contract smoke is backend-independent, a
+named backend may run it without provisioning a dedicated QEMU guest.
+
 ## Source Check Gate
 
 `just check` must run:

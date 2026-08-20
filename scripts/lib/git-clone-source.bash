@@ -48,9 +48,11 @@ dim_prepare_clone_source() {
   mkdir -p "$snapshot_dir"
   git -C "$source_repo" archive "$snapshot_tree" | tar -x -C "$snapshot_dir"
   if [[ "$dirty_policy" == use && "${#untracked_files[@]}" -gt 0 ]]; then
-    printf '%s\0' "${untracked_files[@]}" |
-      tar -C "$source_repo" --null --files-from=- -cf - |
-      tar -x -C "$snapshot_dir"
+    local untracked_file
+    for untracked_file in "${untracked_files[@]}"; do
+      mkdir -p "$snapshot_dir/$(dirname -- "$untracked_file")"
+      cp -a "$source_repo/$untracked_file" "$snapshot_dir/$untracked_file"
+    done
   fi
   git -C "$snapshot_dir" init --initial-branch=main >/dev/null
   git -C "$snapshot_dir" add .

@@ -58,8 +58,8 @@ The second argument controls a dirty source checkout:
 - `discard` verifies committed `HEAD` without modifying the checkout.
 
 The optional third argument selects one example (`single-repository`,
-`multi-repository`, `ci-runner`, `external-urls`, or `shared-upstream`) instead
-of the compatible suite.
+`multi-repository`, `ci-runner`, `external-urls`, `shared-upstream`, or
+`project-runtime-cgroups`) instead of the compatible suite.
 
 Complete adoption shapes belong under `projects/`; capability-focused and
 one-off examples belong under `features/`.

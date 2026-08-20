@@ -31,7 +31,7 @@ BACKEND:
   current-installed | sysbox | gvisor | rootless-podman | runc
 
 EXAMPLE:
-  all | single-repository | multi-repository | ci-runner | external-urls | shared-upstream
+  all | single-repository | multi-repository | ci-runner | external-urls | shared-upstream | project-runtime-cgroups
 
 POLICY:
   auto     reject a dirty source repository
@@ -69,8 +69,8 @@ case "$dirty_policy" in
   *) echo "dirty repository policy must be auto, use, or discard" >&2; exit 2 ;;
 esac
 case "$selection" in
-  all|single-repository|multi-repository|ci-runner|external-urls|shared-upstream) ;;
-  *) echo "example must be all, single-repository, multi-repository, ci-runner, external-urls, or shared-upstream" >&2; exit 2 ;;
+  all|single-repository|multi-repository|ci-runner|external-urls|shared-upstream|project-runtime-cgroups) ;;
+  *) echo "example must be all, single-repository, multi-repository, ci-runner, external-urls, shared-upstream, or project-runtime-cgroups" >&2; exit 2 ;;
 esac
 work_dir="$(mktemp -d /tmp/dim-example-verification.XXXXXX)"
 cleanup() {
@@ -82,6 +82,13 @@ dim_prepare_clone_source "$repo_root" "$work_dir/source" "$dirty_policy"
 verification_source="$DIM_GIT_CLONE_SOURCE"
 
 if [[ "$backend" != current-installed ]]; then
+  if [[ "$selection" == all || "$selection" == project-runtime-cgroups ]]; then
+    echo "example[$backend]: verify project-runtime-cgroups contract"
+    bash "$verification_source/scripts/project-runtime-cgroups-example-smoke.bash"
+    if [[ "$selection" == project-runtime-cgroups ]]; then
+      exit
+    fi
+  fi
   export DIM_KVM_IMAGE_CACHE="${DIM_KVM_IMAGE_CACHE:-$repo_root/.local/kvm}"
   if [[ "$selection" == all ]]; then
     qemu_examples=(single-repository multi-repository external-urls shared-upstream)
@@ -110,7 +117,7 @@ if [[ ! -d node_modules/.pnpm ]]; then
 fi
 
 if [[ "$selection" == all ]]; then
-  examples=(single-repository multi-repository external-urls shared-upstream)
+  examples=(single-repository multi-repository external-urls shared-upstream project-runtime-cgroups)
   if docker info --format '{{json .Runtimes}}' | grep -q '"sysbox-runc"'; then
     examples+=(ci-runner)
   else
@@ -131,6 +138,7 @@ for example in "${examples[@]}"; do
     ci-runner) smoke="ci-runner-example-smoke.bash" ;;
     external-urls) smoke="external-url-example-smoke.bash" ;;
     shared-upstream) smoke="shared-upstream-example-smoke.bash" ;;
+    project-runtime-cgroups) smoke="project-runtime-cgroups-example-smoke.bash" ;;
   esac
   echo "example[current-installed]: verify $example"
   bash "scripts/$smoke"

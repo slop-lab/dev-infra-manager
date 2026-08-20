@@ -16,4 +16,5 @@ The returned path may be mounted into the Project-owned runtime. Do not mount
 the host cgroup root and do not give an agent write access to the workspace's
 aggregate `cpu.max`, `memory.max`, or `pids.max` files.
 
-See [`verify.bash`](verify.bash) for the executable contract check.
+See [`verify-cgroupfs.bash`](verify-cgroupfs.bash) for the executable contract
+check.

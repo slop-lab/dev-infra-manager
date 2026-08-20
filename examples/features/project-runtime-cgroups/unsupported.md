@@ -14,4 +14,5 @@ Reviewed setup should fail before starting Project services:
 dim-project-cgroup require
 ```
 
-See [`verify.bash`](verify.bash) for the negative contract check.
+See [`verify-unsupported.bash`](verify-unsupported.bash) for the negative
+contract check.
