@@ -122,7 +122,10 @@ raw secret environment. Its shared bind-mount probe must work when the agent
 UID differs from the rootless-DinD UID.
 The single- and multi-repository example gates must also verify that their
 fresh rootless-DinD images retain executable UID/GID mapping helpers with a
-setuid fallback before exercising the private daemon.
+setuid fallback before exercising the private daemon. Rootless-DinD sidecars
+must use the host user namespace at their outer container boundary so that
+RootlessKit, rather than an outer Docker daemon's userns-remap configuration,
+owns the sidecar's subordinate UID/GID mapping.
 
 ## Fast Isolation Gate
 

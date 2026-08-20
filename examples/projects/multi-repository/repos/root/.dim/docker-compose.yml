@@ -32,6 +32,9 @@ services:
     build:
       context: dind
     privileged: true
+    # RootlessKit must create the sidecar's user namespace itself. Do not
+    # inherit an outer Docker daemon's userns-remap mapping.
+    userns_mode: host
     environment:
       DOCKER_HOST: "tcp://127.0.0.1:2375"
       DOCKER_TLS_CERTDIR: ""
