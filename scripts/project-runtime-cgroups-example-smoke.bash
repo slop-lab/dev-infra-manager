@@ -10,7 +10,7 @@ helper="$repo_root/images/project-workspace/project-cgroup.bash"
 write_manifest() {
   local driver="$1" status="$2" reason="${3:-}"
   jq -n --arg driver "$driver" --arg status "$status" --arg reason "$reason" '
-    {schemaVersion:2,runtime:{cgroups:{version:1,driver:$driver,status:$status,
+    {schemaVersion:1,runtime:{cgroups:{version:1,driver:$driver,status:$status,
       controllers:["cpu","memory","pids"]}}}
     | if $reason == "" then . else .runtime.cgroups.reason = $reason end' \
     >"$work_dir/manifest.json"

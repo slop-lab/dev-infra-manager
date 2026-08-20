@@ -84,12 +84,14 @@ DIM_CONTROLLER_TOKEN
 ```
 
 The read-only `DIM_PROJECT_MANIFEST` also publishes the nested engine's cgroup
-boundary under `runtime.cgroups`. `status: delegated` means Project setup may
+boundary under `runtime.cgroups`. DIM exposes delegation automatically when it
+is safe. `status: delegated` means Project setup may
 use `/usr/local/bin/dim-project-cgroup` to create named descendants beneath the
 workspace aggregate boundary. The record identifies the `systemd` or
 `cgroupfs` driver and the available controllers. `status: unavailable` carries
-an actionable reason; Project setup must not silently treat it as an
-unrestricted runtime. See the
+an actionable reason but does not block ordinary Project setup. Projects that
+require resource enforcement can opt into fail-closed setup with
+`dim-project-cgroup require`. See the
 [Project runtime cgroups example](../examples/features/project-runtime-cgroups/README.md).
 
 Selected profiles are passed as repeated arguments:

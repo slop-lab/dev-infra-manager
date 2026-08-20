@@ -1,8 +1,6 @@
 #!/usr/bin/env sh
 set -eu
 
-dim-project-cgroup require
-
 git_name="$(dim-host-input builtin.git-author name)"
 git_email="$(dim-host-input builtin.git-author email)"
 

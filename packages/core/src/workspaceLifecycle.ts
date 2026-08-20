@@ -779,7 +779,7 @@ async function writeProjectManifest(
 ): Promise<void> {
   const cgroups = await inspectProjectRuntimeCgroups(runner, record.containerName, nestedEngine(record));
   const manifest = {
-    schemaVersion: 2,
+    schemaVersion: 1,
     project: { id: project.id, name: project.name },
     root: { repository: record.rootRepositoryAlias, ref: record.rootRef, path: record.projectPath },
     gitBaseUrl: record.gitBaseUrl,

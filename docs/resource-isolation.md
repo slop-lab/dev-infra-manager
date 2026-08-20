@@ -8,11 +8,12 @@ An operator may change this aggregate boundary after creation with
 `--pids-limit`; omitted limits remain unchanged.
 
 After the nested engine starts, DIM records its cgroup driver and the writable
-cgroup v2 boundary in the read-only Project manifest. Reviewed setup uses
-`dim-project-cgroup` to allocate descendants below that boundary. systemd and
+cgroup v2 boundary in the read-only Project manifest. DIM exposes safe
+delegation automatically; reviewed setup may use `dim-project-cgroup` to
+allocate descendants below that boundary. systemd and
 cgroupfs are explicit providers of the same Project contract; driver `none`
-and incomplete boundaries are reported as unavailable rather than accepting
-ineffective limits.
+and incomplete boundaries are reported as unavailable without blocking a
+Project that did not explicitly require resource enforcement.
 
 The default nested-container backend is Sysbox. gVisor provides a Docker-compatible
 no-KVM alternative, rootless Podman supports compatible lower-privilege
