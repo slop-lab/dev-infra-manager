@@ -37,7 +37,7 @@ jobs:
     runs-on: dim-container-integration
     timeout-minutes: 30
     steps:
-      - run: apk add --no-cache curl jq just nodejs npm
+      - run: apk add --no-cache apparmor curl jq just nodejs npm
       - uses: actions/checkout@v7
       - run: npm install --global pnpm@10.13.1
       - run: pnpm install --frozen-lockfile
