@@ -23,7 +23,9 @@ Behavior:
    On Ubuntu hosts that restrict unprivileged user namespaces through
    AppArmor, install the path-scoped `/usr/local/bin/rootlesskit` profile via
    `scripts/install-rootlesskit-apparmor-profile-ubuntu.bash`. The container
-   CI lane invokes the same script before exercising rootless-DinD sidecars.
+   CI lane invokes the script with `--docker-host`, which runs the fixed
+   profile loader in a privileged helper against the target Docker host's
+   AppArmor policy interface before exercising rootless-DinD sidecars.
    When a container can observe the host restriction sysctl but has no
    writable AppArmor securityfs policy interface, the script leaves policy
    loading to the runner host instead of invoking a parser that cannot reach
