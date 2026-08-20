@@ -66,18 +66,24 @@ export async function configureGiteaWebhookAllowedHosts(
   options: LifecycleOptions,
   hosts: string[]
 ): Promise<void> {
-  const value = ["external", ...new Set(hosts)].join(",");
-  const edited = await runner.run("docker", [
-    "exec", "--user", "git", GITEA_CONTAINER,
-    "gitea", "config", "edit-ini",
-    "--config", "/data/gitea/conf/app.ini",
-    "--section", "webhook",
-    "--key", "ALLOWED_HOST_LIST",
-    "--value", value
-  ]);
+  const edited = await runner.run("docker", giteaWebhookConfigArgs(hosts));
   assertCommand(edited, "configure Gitea webhook targets");
   assertCommand(await runner.run("docker", ["restart", GITEA_CONTAINER]), "restart Gitea after webhook configuration");
   await ensureGitea(runner, options);
+}
+
+export function giteaWebhookConfigArgs(hosts: string[]): string[] {
+  const value = ["external", ...new Set(hosts)].join(",");
+  return [
+    "exec",
+    "--env", `GITEA__webhook__ALLOWED_HOST_LIST=${value}`,
+    "--user", "git",
+    GITEA_CONTAINER,
+    "gitea", "config", "edit-ini",
+    "--config", "/data/gitea/conf/app.ini",
+    "--apply-env",
+    "--in-place"
+  ];
 }
 
 async function ensureGiteaResources(runner: CommandRunner, options: LifecycleOptions): Promise<GiteaConnection> {

@@ -1,7 +1,7 @@
 import { once } from "node:events";
 import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
-import { giteaNestedBaseUrl, giteaRequest, type GiteaConnection } from "../src/gitea.js";
+import { giteaNestedBaseUrl, giteaRequest, giteaWebhookConfigArgs, type GiteaConnection } from "../src/gitea.js";
 import type { CommandRunner } from "../src/types.js";
 
 describe("Gitea control endpoint", () => {
@@ -39,5 +39,18 @@ describe("Gitea control endpoint", () => {
     };
 
     await expect(giteaRequest(connection, "GET", "/version")).resolves.toMatchObject({ status: 200 });
+  });
+
+  it("applies exact webhook targets through Gitea's environment-to-INI contract", () => {
+    const args = giteaWebhookConfigArgs([
+      "dim-ci-example-qemu-supervisor",
+      "dim-ci-example-qemu-supervisor",
+      "dim-ci-other-qemu-supervisor"
+    ]);
+    expect(args).toContain(
+      "GITEA__webhook__ALLOWED_HOST_LIST=external,dim-ci-example-qemu-supervisor,dim-ci-other-qemu-supervisor"
+    );
+    expect(args).toEqual(expect.arrayContaining(["--apply-env", "--in-place"]));
+    expect(args).not.toEqual(expect.arrayContaining(["--section", "--key", "--value"]));
   });
 });

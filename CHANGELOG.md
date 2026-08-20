@@ -30,6 +30,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Corrected managed Gitea webhook allowlist reconciliation to use Gitea
+  1.27's environment-to-INI editing contract instead of unsupported
+  `config edit-ini` section/key flags.
+
 - Made the container self-Project smoke reuse a locked, recoverable identity
   and purge its repositories and organization through the DIM lifecycle,
   preventing failed cleanup from accumulating `dim-dim-self-*` organizations.
