@@ -93,10 +93,13 @@ host runtime backend boundary.
 Gitea runs this gate automatically via the managed
 `dim-container-integration` host-mode label from `.gitea/workflows`; its
 controller sockets and nested Docker bind mounts must share one filesystem
-namespace. GitHub automatic CI is intentionally limited to Node.js type checks
-and tests that need no APT packages or container runtime. Container, Sysbox,
-and KVM release gates run locally and through the manually dispatched GitHub
-workflows instead.
+namespace. The managed runner's Sysbox boundary does not support another
+user-namespace mapping inside its inner Docker, so this automatic lane excludes
+the canonical self-Project's rootless-DinD sidecar. The runc QEMU gate retains
+that verification on a compatible clean host. GitHub automatic CI is
+intentionally limited to Node.js type checks and tests that need no APT packages
+or container runtime. Container, Sysbox, and KVM release gates run locally and
+through the manually dispatched GitHub workflows instead.
 
 ## Container Backend Gates
 

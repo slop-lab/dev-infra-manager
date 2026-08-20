@@ -3,14 +3,9 @@
 images/*
 !images/project-workspace/
 !images/project-workspace/**
-!images/rootlesskit-apparmor-loader/
-!images/rootlesskit-apparmor-loader/**
 !packages/
 packages/*
 !packages/controller-proxy/
 packages/controller-proxy/*
 !packages/controller-proxy/dist/
 !packages/controller-proxy/dist/**
-!scripts/
-scripts/*
-!scripts/install-rootlesskit-apparmor-profile-ubuntu.bash

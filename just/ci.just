@@ -10,7 +10,7 @@ check:
 # Docker lane, after dependencies have been installed.
 container:
     just check
-    just verify container
+    just verify container-ci
     cd .. && bash scripts/container-cgroup-smoke.bash
 
 # Manually dispatched Sysbox lane, after dependencies have been installed.
