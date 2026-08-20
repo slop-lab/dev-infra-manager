@@ -11,7 +11,7 @@ to create or update a PR provides that authorization for the named change.
 
 ## Resolve the forge
 
-Run `scripts/forge-pr.bash detect` from the target repository before using
+Run `scripts/detect-forge.bash` from the target repository before using
 provider-specific PR tooling. It returns the provider and repository identity
 as JSON. Do not infer the provider from installed CLIs, credential variable
 names, or a familiar repository name.
@@ -32,7 +32,7 @@ force-push unless the user explicitly requested it.
 For Gitea, write the PR body to a temporary file and run:
 
 ```bash
-scripts/forge-pr.bash ensure-gitea \
+scripts/ensure-gitea-pr.bash \
   --base BASE --head HEAD --title TITLE --body-file BODY_FILE
 ```
 
@@ -46,7 +46,7 @@ Report local verification separately from remote CI. For Gitea, wait on the
 exact pushed SHA rather than only a branch name:
 
 ```bash
-scripts/forge-pr.bash wait-gitea --sha HEAD_SHA --timeout 3600
+scripts/wait-gitea-ci.bash --sha HEAD_SHA --timeout 3600
 ```
 
 Stop when all reported statuses succeed, any status fails, or the timeout is
