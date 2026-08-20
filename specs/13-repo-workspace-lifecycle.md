@@ -120,6 +120,16 @@ generates a Compose override that applies the mapping to its agent service.
 This is a static bootstrap registry: address changes take effect when setup
 reconciles the workspace and recreates the affected Project service.
 
+The Project manifest uses schema version `2` and publishes the workspace
+runtime's cgroup capability at `runtime.cgroups`. The record is fail-closed:
+it reports `status: delegated` only for a writable cgroup v2 hierarchy whose
+nested runtime uses a supported `systemd` or `cgroupfs` driver and exposes the
+`pids` controller. `none`, unknown drivers, cgroup v1, read-only hierarchies,
+and missing required controllers report `status: unavailable` with a reason.
+Project code may use `dim-project-cgroup` to inspect or require this contract
+and, when running as root, create a delegated descendant without changing the
+limits DIM applies to the Project boundary.
+
 The workspace container additionally carries Git integration variables for
 its whole lifetime (not only during setup/entrypoint/exec dispatch):
 

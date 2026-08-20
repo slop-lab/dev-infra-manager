@@ -24,11 +24,16 @@ agent:
     just check
     just verify plugin-install
     just verify package-packs
+    just verify project-runtime-cgroups
     just verify agent-docker
 
 # Verify the private rootless Docker sidecar exposed to the development agent.
 agent-docker:
     cd .. && bash scripts/agent-docker-smoke.bash
+
+# Verify the systemd, cgroupfs, and unsupported Project runtime cgroup contracts.
+project-runtime-cgroups:
+    cd .. && bash scripts/project-runtime-cgroups-example-smoke.bash
 
 # Backend-independent container integration; requires cgroup-capable Docker for its nested runtime.
 container:

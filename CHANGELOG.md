@@ -9,6 +9,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added a driver-aware Project runtime cgroup manifest contract, a standard
+  descendant-allocation helper, and systemd, cgroupfs, and unsupported feature
+  examples that fail closed when delegation is unavailable.
 - Added a deny-by-default agent controller-proxy helper and preset, plus a
   workspace-scoped asynchronous self-restart route demonstrated and verified
   by the single-repository Project example.

@@ -133,6 +133,12 @@ store and workspace-container lifecycle. Canonical setup must explicitly
 rebuild both Project images so an updated DinD entrypoint can repair an
 existing workspace whose cached sidecar image can no longer start.
 
+Project-runtime cgroup verification MUST cover both supported delegation
+shapes (`systemd` and `cgroupfs`) and the unsupported `none` driver. The
+checked-in feature examples MUST consume the same versioned Project manifest
+contract and helper used by Project setup, and the negative example MUST fail
+closed rather than silently running without resource enforcement.
+
 ## Fast Isolation Gate
 
 `just verify isolation` must run without contacting Docker or creating a

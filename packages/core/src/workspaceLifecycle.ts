@@ -14,6 +14,7 @@ import type {
 } from "./lifecycleTypes.js";
 import { workspaceRuntimePlan } from "./runtimeBackends.js";
 import type { StreamingCommandRunner } from "./types.js";
+import { inspectProjectRuntimeCgroups } from "./projectRuntimeCgroups.js";
 
 // The unprivileged OS user every workspace image (images/project-workspace,
 // images/project-workspace-podman) creates and runs project commands as.
@@ -776,12 +777,14 @@ async function writeProjectManifest(
   record: WorkspaceRecord,
   project: ProjectRecord
 ): Promise<void> {
+  const cgroups = await inspectProjectRuntimeCgroups(runner, record.containerName, nestedEngine(record));
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     project: { id: project.id, name: project.name },
     root: { repository: record.rootRepositoryAlias, ref: record.rootRef, path: record.projectPath },
     gitBaseUrl: record.gitBaseUrl,
-    hostAliases: record.hostAliases
+    hostAliases: record.hostAliases,
+    runtime: { cgroups }
   };
   const encoded = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`).toString("base64");
   const result = await runner.run("docker", [

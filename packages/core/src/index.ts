@@ -12,6 +12,7 @@ export * from "./plugin.js";
 export * from "./hostInputs.js";
 export * from "./pluginLoader.js";
 export * from "./projectRegistry.js";
+export * from "./projectRuntimeCgroups.js";
 export * from "./repositorySet.js";
 export * from "./runner.js";
 export * from "./runtimeBackends.js";

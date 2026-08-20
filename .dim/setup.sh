@@ -8,6 +8,10 @@ if [ -n "${DIM_PROJECT_MANIFEST:-}" ]; then
   test "$(jq -r '.root.path' "$DIM_PROJECT_MANIFEST")" = "${DIM_PROJECT_ROOT:-$PWD}"
 fi
 
+# Nested container resource controls are only meaningful when the workspace
+# runtime delegated a writable cgroup v2 boundary to this Project.
+dim-project-cgroup require
+
 compose_host_aliases=/tmp/dim-project-compose-host-aliases.json
 jq -e '.hostAliases | type == "object"' "$DIM_PROJECT_MANIFEST" >/dev/null
 jq '{services:{agent:{extra_hosts:[.hostAliases | to_entries[] | .key as $host | .value[] | "\($host)=\(.)"]}}}' \
