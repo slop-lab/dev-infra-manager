@@ -44,7 +44,7 @@ compose() {
     --file .dim/docker-compose.yml --file "$compose_host_aliases" "$@"
 }
 agent_image="dim-${DIM_WORKSPACE_NAME}-agent"
-compose build --quiet agent
+compose build --quiet agent agent-dind
 # An outer workspace stop terminates nested containers without letting their
 # daemon preserve a restartable process state. Recreate Project containers on
 # every setup while retaining their named data and home volumes.

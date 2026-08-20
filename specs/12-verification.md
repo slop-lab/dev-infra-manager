@@ -129,7 +129,9 @@ setuid fallback before exercising the private daemon.
 The canonical self-Project gate must verify the same helper fallback and
 healthy private daemon both after workspace creation and after the first
 workspace restart, proving the fallback survives the persistent nested image
-store and workspace-container lifecycle.
+store and workspace-container lifecycle. Canonical setup must explicitly
+rebuild both Project images so an updated DinD entrypoint can repair an
+existing workspace whose cached sidecar image can no longer start.
 
 ## Fast Isolation Gate
 
