@@ -2,9 +2,10 @@
 
 ## Prerequisites
 
-- The release commit is pushed to both the development Gitea repository and
-  the public GitHub repository. The complete automatic Gitea CI and lightweight
-  automatic GitHub CI are green at that exact commit.
+- Following the [development repository model](development-repositories.md),
+  the release commit is pushed to both the active DIM-managed development
+  repository (currently Gitea) and the canonical public GitHub repository.
+  Both providers' automatic CI is green at that exact commit.
 - The manually dispatched Sysbox and KVM installer workflows pass on the
   release commit using fresh ephemeral self-hosted runners.
 - `npm whoami` succeeds for an account allowed to publish the `@slop-lab` scope.
@@ -56,9 +57,11 @@ Replace `GITHUB_REMOTE` with the configured GitHub remote name. Confirm the
 automatic GitHub `CI` run reports `headSha == release_sha`; a green run for the
 same branch name at another SHA does not satisfy the release gate. This
 GitHub-hosted workflow intentionally performs only Node.js type checks and
-tests without APT or Docker setup. Gitea remains the complete automatic CI
-authority, while the local matrix and manual GitHub workflows cover package,
-container, Sysbox, and KVM release gates.
+tests without APT or Docker setup. The current managed Gitea remains the
+complete automatic CI authority, while the local matrix and manual GitHub
+workflows cover package, container, Sysbox, and KVM release gates. This split
+implements the [development repository model](development-repositories.md);
+it is not a permanent Gitea contract.
 
 GitHub workflow dispatch accepts a branch or tag ref, not an arbitrary commit
 SHA. Dispatch with the verified `release_ref`, then require the resulting

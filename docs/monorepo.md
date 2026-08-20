@@ -66,7 +66,9 @@ External source and destination transport still runs through the host Git CLI
 and is provider-neutral. A future replacement for managed Gitea must preserve
 the Project/repository records, protected-ref boundary, and separate
 host/workspace endpoint contract without leaking provider details into
-Project-owned repository configuration.
+Project-owned repository configuration. See
+[DIM Development Repositories](development-repositories.md) for how that
+replaceable managed host relates to the canonical public source repository.
 
 The DIM controller API authenticates an agent workspace and lets installed
 plugins register routes. External URL ingresses accept only a constrained

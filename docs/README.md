@@ -61,13 +61,14 @@ The documentation is split by concern:
 - [Adopting DIM Safely](adoption.md): mandatory human review, version pinning, and branch policy for consuming projects.
 - [Architecture](architecture.md): core runtime boundaries and Git/review flow.
 - [Monorepo Structure](monorepo.md): workspace layout, dependency direction, and optional hosting provider boundaries.
+- [DIM Development Repositories](development-repositories.md): canonical GitHub source and the provider-neutral DIM-managed development host.
 - [Resource Isolation](resource-isolation.md): resource limits and runtime isolation.
 - [Usage](usage.md): local setup, commands, and operational workflow.
 - [Configuration](configuration.md): configuration file reference.
 - [Runtime Backends](runtime-backends.md): Sysbox, gVisor, rootless Podman, and runc selection.
 - [Runtime Images](runtime-images.md): workspace-root runtime images and their nested workloads.
 - [External workspace URLs](external-urls.md): controller discovery, named ingresses, nested targets, and Caddy/Cloudflare HTTPS.
-- [Repository-backed Workspaces](repo-workspaces.md): local Gitea registration, persistent workspaces, reconciliation, and Git environment.
+- [Repository-backed Workspaces](repo-workspaces.md): managed Git registration, persistent workspaces, reconciliation, and Git environment.
 - [Managed CI Runners](ci-runners.md): independent pull-request verification, resource defaults, and runner lifecycle.
 - [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.
 - [Single-repository Project](../examples/projects/single-repository/README.md): default no-secret shape with no protected ref, resource limits, and an optional external URL.

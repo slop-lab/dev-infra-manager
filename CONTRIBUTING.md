@@ -2,6 +2,9 @@
 
 This covers building and verifying `dev-infra-manager` (DIM) itself from
 source. For using DIM in another project, see [README.md](README.md).
+DIM normally develops itself through its managed Git host while GitHub remains
+the canonical public source; see
+[DIM Development Repositories](docs/development-repositories.md).
 
 ## Quick reference
 

@@ -57,9 +57,11 @@ protected ref or trusted Project runtime
 artifact, signing, publishing, or deployment
 ```
 
-The current reference stack uses a DIM-managed Gitea service and
-`act_runner`-based CI. Those are implementation backends rather than the
-long-term Project contract and may be replaced before a stable release.
+DIM's canonical public source repository is GitHub, while DIM development
+normally uses the active Git host managed by a self-development Project. The
+current reference backend is Gitea with `act_runner`, but neither is part of
+the long-term Project contract. See
+[DIM Development Repositories](docs/development-repositories.md).
 
 Workspaces persist. Verification runs separately in disposable job containers.
 Secret-bearing Project services must be built and deployed from reviewed refs.

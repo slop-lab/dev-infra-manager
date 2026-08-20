@@ -42,7 +42,11 @@ in disposable job containers. After upgrading DIM across a label change,
 run `dim ci runner enable PROJECT` once to replace the stored runner
 registration and publish the new labels.
 
-DIM's own automatic workflows are provider-specific: `.gitea/workflows/ci.yml`
+As described in the
+[development repository model](development-repositories.md), DIM develops
+itself primarily through its active managed Git host while GitHub remains the
+canonical public source. The current automatic workflows are provider-specific:
+`.gitea/workflows/ci.yml`
 uses that host-mode label for the container gate supported within Sysbox. It
 excludes the canonical self-Project's rootless-DinD sidecar because Sysbox does
 not support another user-namespace mapping inside its inner Docker; the runc
