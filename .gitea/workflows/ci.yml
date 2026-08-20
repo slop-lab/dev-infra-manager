@@ -48,7 +48,15 @@ jobs:
     runs-on: dim-release-gate
     timeout-minutes: 120
     steps:
-      - run: apk add --no-cache cloud-utils-localds curl git just openssh-client qemu-system-x86_64 tar
-      - uses: actions/checkout@v7
-      - run: id && ls -ln /dev/kvm && stat -c 'mode=%a uid=%u gid=%g type=%F' /dev/kvm
+      - name: Check out the reviewed commit without a JavaScript action runtime
+        env:
+          GITEA_JOB_TOKEN: ${{ gitea.token }}
+        run: |
+          git init .
+          git remote add origin "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git"
+          git -c http.extraHeader="Authorization: token $GITEA_JOB_TOKEN" \
+            fetch --no-tags --depth=1 origin \
+            "$GITHUB_SHA:refs/remotes/origin/ci-head"
+          git checkout --detach refs/remotes/origin/ci-head
+      - run: command -v just && test -r /dev/kvm -a -w /dev/kvm
       - run: just ci kvm

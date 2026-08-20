@@ -9,9 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
-- Added KVM passthrough and a release-gate label for capable managed CI
-  runners, plus a forge-neutral pull-request skill with scripted GitHub/Gitea
-  detection and Gitea PR/CI operations.
+- Added a disposable QEMU release-gate runner for nested-KVM-capable hosts. A
+  trusted supervisor owns host KVM access while each untrusted job runs in a
+  fresh ephemeral VM. Also added a forge-neutral pull-request skill with
+  scripted GitHub/Gitea detection and Gitea PR/CI operations.
 - Added the KVM backend-installer release gate to non-draft pull requests on
   the active managed development host.
 - Added a driver-aware Project runtime cgroup manifest contract, a standard

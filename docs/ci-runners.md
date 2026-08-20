@@ -1,12 +1,12 @@
 # Managed CI runners
 
 DIM workspaces are the persistent development environment. Managed CI runners
-repeat pull-request checks in a separate checkout and disposable job container
-so their result can be used as independent review evidence. The Project-scoped
-runner itself remains managed until it is disabled; DIM does not currently
-claim a fresh outer runner for every job.
+repeat pull-request checks in separate checkouts and isolated execution
+environments so their result can be used as independent review evidence. The
+Project-scoped Sysbox runner remains managed until it is disabled. On capable
+hosts, release gates instead use a fresh outer QEMU VM for every job.
 
-Enable the single runner for a Project:
+Enable the runner set for a Project:
 
 ```bash
 dim ci runner enable example
@@ -56,11 +56,14 @@ or Docker setup. GitHub-only manual Sysbox and KVM release workflows remain
 under `.github/workflows` and are not copied into the managed development Gitea
 instance.
 
-When host KVM is available, a managed runner also receives `/dev/kvm` and
-advertises `dim-release-gate` in host mode. KVM availability and the execution
-label are properties of the provider-neutral container executor; Gitea
-registration is only the current coordinator adapter, so removing the
-built-in coordinator does not require changing the runner boundary.
+When host KVM is available, DIM starts a separate trusted runc supervisor with
+`/dev/kvm`. It maintains one waiting QEMU VM registered with the
+`dim-release-gate` label. Workflow code runs inside that VM and sees its nested
+KVM device; it never runs in the supervisor or receives the DIM host's device
+directly. Each registration accepts one job, the VM overlay is deleted after
+shutdown, and a fresh VM is prepared for the next job. Gitea registration is
+only the current coordinator adapter, so replacing the built-in coordinator
+does not change this executor boundary.
 
 The DIM repository selects this label for the KVM release gate on non-draft
 pull requests in its managed development host. Draft pull requests and branch
@@ -73,10 +76,15 @@ dim ci runner enable dim
 dim ci runner status dim
 ```
 
-The status must report `kvm: true` and include `dim-release-gate`; otherwise
-the host did not expose a usable `/dev/kvm` when the runner was recreated.
+The status must report `kvm: true`, include `dim-release-gate`, and name the
+QEMU supervisor; otherwise the host did not expose `/dev/kvm` when the runner
+set was reconciled. This detects host KVM, while successful VM readiness also
+requires nested virtualization from the host KVM module. `dim ci runner logs
+dim` follows the normal Sysbox runner;
+use `dim ci runner logs dim --release-gate` when diagnosing VM boot,
+registration, or replacement.
 
-The runner has concurrency one. Its nested daemon, disposable job
+The Sysbox runner has concurrency one. Its nested daemon, disposable job
 containers, registration data, and resource limits live outside workspace
 state. It does not mount the host Docker socket or receive DIM workspace
 credentials. The default outer isolation runtime is `sysbox-runc`; the inner
@@ -86,7 +94,7 @@ nested daemon.
 
 ## Resources
 
-The built-in fallback is 4 CPUs, 8 GiB of memory, and 2048 PIDs. Installation
+The Sysbox runner fallback is 4 CPUs, 8 GiB of memory, and 2048 PIDs. Installation
 defaults can be changed:
 
 ```bash
@@ -102,7 +110,11 @@ dim ci runner enable example --cpus 8 --memory 16GiB --pids-limit 4096
 `restart` and re-enabling without flags preserve an existing Project override.
 Disable and enable again without flags to return to inherited defaults.
 
-The QEMU host-install smoke verifies these effective cgroup limits in a clean
+The QEMU supervisor is separately capped at 6 CPUs, 14 GiB, and 1024 PIDs;
+each VM receives 6 vCPUs, 12 GiB, and a disposable 64 GiB overlay. These fixed
+release-gate resources leave room for its nested backend VMs.
+
+The QEMU host-install smoke verifies the Sysbox limits in a clean
 Ubuntu guest rather than relying on a development workspace's delegated
 cgroup hierarchy.
 
@@ -116,7 +128,7 @@ dim ci runner restart example
 dim ci runner disable example --yes
 ```
 
-The coordinator integration is provider-specific, but the runner state,
-resource model, CLI, and executor are provider-neutral. The initial adapter is
-for managed Gitea Actions. A future QEMU executor can use the same contract
-with a `dim-qemu` label and a disposable VM overlay.
+The coordinator integration is provider-specific, but runner state, lifecycle,
+and executor capabilities are provider-neutral. Managed Gitea Actions is the
+initial adapter; the disposable VM boundary does not depend on Gitea-specific
+execution behavior.

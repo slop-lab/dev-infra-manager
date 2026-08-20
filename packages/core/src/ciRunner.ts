@@ -1,4 +1,6 @@
 import { statSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { stat } from "node:fs/promises";
 import { UserError } from "./errors.js";
 import { GITEA_NETWORK } from "./gitea.js";
@@ -8,6 +10,11 @@ import { showProject } from "./projectRegistry.js";
 import { configuredCiRunnerDefaults } from "./userConfig.js";
 import type { CiRunnerRecord, CiRunnerResources, LifecycleOptions } from "./lifecycleTypes.js";
 import type { StreamingCommandRunner } from "./types.js";
+import {
+  QEMU_CI_SUPERVISOR_DOCKERFILE,
+  QEMU_CI_SUPERVISOR_IMAGE,
+  QEMU_CI_SUPERVISOR_SCRIPT
+} from "./qemuCiRunnerAssets.js";
 
 export const BUILTIN_CI_RUNNER_DEFAULTS: CiRunnerResources = {
   cpus: "4",
@@ -22,13 +29,15 @@ export const CI_RUNNER_LABELS = [
 ].join(",");
 
 export function ciRunnerLabels(kvm: boolean): string {
-  return [CI_RUNNER_LABELS, ...(kvm ? ["dim-release-gate:host"] : [])].join(",");
+  void kvm;
+  return CI_RUNNER_LABELS;
 }
 
 export async function detectCiRunnerKvm(probe: () => Promise<void> = async () => {
   const device = await stat("/dev/kvm");
   if (!device.isCharacterDevice()) throw new Error("/dev/kvm is not a character device");
-}): Promise<boolean> {
+}, architecture = process.arch): Promise<boolean> {
+  if (architecture !== "x64") return false;
   try {
     await probe();
     return true;
@@ -103,10 +112,15 @@ export async function enableCiRunner(
       projectId: project.id,
       projectName,
       provider: existing?.provider ?? "pending",
-      backend: "container",
+      backend: kvm ? "container+qemu" : "container",
       phase: "creating",
       containerName: ciRunnerContainerName(projectName),
       volumeName: ciRunnerVolumeName(projectName),
+      ...(kvm ? {
+        qemuSupervisorName: ciRunnerQemuSupervisorName(projectName),
+        qemuVolumeName: ciRunnerQemuVolumeName(projectName),
+        qemuImage: QEMU_CI_SUPERVISOR_IMAGE
+      } : {}),
       image: options.ciRunnerImage,
       runtime: options.ciRunnerRuntime,
       kvm,
@@ -119,7 +133,13 @@ export async function enableCiRunner(
     await state.writeCiRunner(record);
     try {
       await removeContainer(runner, record.containerName);
+      await removeContainer(runner, ciRunnerQemuSupervisorName(projectName));
+      await giteaCiCoordinator.removeRunner(runner, options, project, ciRunnerQemuRunnerName(projectName));
       await ensureVolume(runner, record.volumeName);
+      if (record.qemuVolumeName) await ensureVolume(runner, record.qemuVolumeName);
+      if (!record.qemuVolumeName && existing?.qemuVolumeName) {
+        await removeVolume(runner, existing.qemuVolumeName, "stale release-gate runner data");
+      }
       if (await registrationExists(runner, record.volumeName)) {
         await giteaCiCoordinator.removeRunner(runner, options, project, record.containerName);
         await removeRegistration(runner, record.volumeName);
@@ -127,6 +147,10 @@ export async function enableCiRunner(
       const registration = await giteaCiCoordinator.prepareRunner(runner, options, project);
       if (registration) record = { ...record, provider: registration.provider };
       await startContainer(runner, record, registration);
+      if (record.kvm) {
+        await buildQemuSupervisorImage(runner, options.stateRoot);
+        await startQemuSupervisor(runner, record, registration);
+      }
       record = { ...record, phase: "ready", updatedAt: new Date().toISOString() };
       delete record.error;
       await state.writeCiRunner(record);
@@ -165,6 +189,12 @@ export async function stopCiRunner(
   if (stopped.exitCode !== 0 && !stopped.stderr.includes("No such container")) {
     throw new UserError(`failed to stop CI runner '${project}': ${stopped.stderr.trim()}`);
   }
+  if (record.qemuSupervisorName) {
+    const qemuStopped = await runner.run("docker", ["stop", record.qemuSupervisorName]);
+    if (qemuStopped.exitCode !== 0 && !qemuStopped.stderr.includes("No such container")) {
+      throw new UserError(`failed to stop release-gate runner '${project}': ${qemuStopped.stderr.trim()}`);
+    }
+  }
   const updated = { ...record, phase: "stopped" as const, updatedAt: new Date().toISOString() };
   await state.writeCiRunner(updated);
   return updated;
@@ -179,11 +209,13 @@ export async function disableCiRunner(
   const name = validateLifecycleName(project, "project");
   const record = await state.readCiRunner(name);
   await removeContainer(runner, record.containerName);
+  await removeContainer(runner, ciRunnerQemuSupervisorName(name));
   const projectRecord = await showProject(options, name);
   await giteaCiCoordinator.removeRunner(runner, options, projectRecord, record.containerName);
-  const removed = await runner.run("docker", ["volume", "rm", record.volumeName]);
-  if (removed.exitCode !== 0 && !removed.stderr.includes("No such volume")) {
-    throw new UserError(`failed to remove CI runner data for '${name}': ${removed.stderr.trim()}`);
+  await giteaCiCoordinator.removeRunner(runner, options, projectRecord, ciRunnerQemuRunnerName(name));
+  await removeVolume(runner, record.volumeName, `CI runner data for '${name}'`);
+  if (record.qemuVolumeName) {
+    await removeVolume(runner, record.qemuVolumeName, `release-gate runner data for '${name}'`);
   }
   await state.removeCiRunner(name);
 }
@@ -194,6 +226,18 @@ export function ciRunnerContainerName(project: string): string {
 
 export function ciRunnerVolumeName(project: string): string {
   return `dim-ci-${validateLifecycleName(project, "project")}-data`;
+}
+
+export function ciRunnerQemuSupervisorName(project: string): string {
+  return `dim-ci-${validateLifecycleName(project, "project")}-qemu-supervisor`;
+}
+
+export function ciRunnerQemuRunnerName(project: string): string {
+  return `dim-ci-${validateLifecycleName(project, "project")}-qemu`;
+}
+
+export function ciRunnerQemuVolumeName(project: string): string {
+  return `dim-ci-${validateLifecycleName(project, "project")}-qemu-data`;
 }
 
 async function startContainer(
@@ -207,8 +251,7 @@ async function startContainer(
 
 export function ciRunnerContainerArgs(
   record: CiRunnerRecord,
-  registration?: { instanceUrl: string; token: string },
-  kvmGroupId: () => number = () => statSync("/dev/kvm").gid
+  registration?: { instanceUrl: string; token: string }
 ): string[] {
   return [
     "run", "--detach",
@@ -224,14 +267,64 @@ export function ciRunnerContainerArgs(
     "--label", "dim.resource=ci-runner",
     "--label", `dim.project=${record.projectName}`,
     "--env", `GITEA_RUNNER_NAME=${record.containerName}`,
-    "--env", `GITEA_RUNNER_LABELS=${ciRunnerLabels(record.kvm)}`,
+    "--env", `GITEA_RUNNER_LABELS=${CI_RUNNER_LABELS}`,
     ...(registration ? [
       "--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`,
       "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`
     ] : []),
-    ...(record.kvm ? ["--device", "/dev/kvm", "--group-add", String(kvmGroupId())] : []),
     record.image
   ];
+}
+
+export function ciRunnerQemuSupervisorArgs(
+  record: CiRunnerRecord,
+  registration: { instanceUrl: string; token: string },
+  kvmGroupId: () => number = () => statSync("/dev/kvm").gid
+): string[] {
+  if (!record.qemuSupervisorName || !record.qemuVolumeName || !record.qemuImage) {
+    throw new UserError(`release-gate runner state is incomplete for '${record.projectName}'`);
+  }
+  return [
+    "run", "--detach",
+    "--name", record.qemuSupervisorName,
+    "--restart", "unless-stopped",
+    "--network", GITEA_NETWORK,
+    "--runtime", "runc",
+    "--cpus", "6",
+    "--memory", "14g",
+    "--pids-limit", "1024",
+    "--device", "/dev/kvm",
+    "--group-add", String(kvmGroupId()),
+    "--mount", `type=volume,source=${record.qemuVolumeName},target=/var/lib/dim-qemu-ci`,
+    "--label", "dim.managed=true",
+    "--label", "dim.resource=ci-qemu-supervisor",
+    "--label", `dim.project=${record.projectName}`,
+    "--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`,
+    "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`,
+    "--env", `GITEA_RUNNER_NAME=${ciRunnerQemuRunnerName(record.projectName)}`,
+    record.qemuImage
+  ];
+}
+
+async function buildQemuSupervisorImage(runner: StreamingCommandRunner, stateRoot: string): Promise<void> {
+  const context = path.join(stateRoot, "assets", "qemu-ci-supervisor");
+  await mkdir(context, { recursive: true, mode: 0o700 });
+  await writeFile(path.join(context, "Dockerfile"), QEMU_CI_SUPERVISOR_DOCKERFILE, { mode: 0o600 });
+  await writeFile(path.join(context, "supervise.bash"), QEMU_CI_SUPERVISOR_SCRIPT, { mode: 0o600 });
+  const built = await runner.run("docker", ["build", "--tag", QEMU_CI_SUPERVISOR_IMAGE, context]);
+  if (built.exitCode !== 0) throw new UserError(`failed to build release-gate supervisor: ${built.stderr.trim()}`);
+}
+
+async function startQemuSupervisor(
+  runner: StreamingCommandRunner,
+  record: CiRunnerRecord,
+  registration?: { instanceUrl: string; token: string }
+): Promise<void> {
+  if (!registration) throw new UserError("release-gate runner requires a coordinator registration");
+  const result = await runner.run("docker", ciRunnerQemuSupervisorArgs(record, registration));
+  if (result.exitCode !== 0) {
+    throw new UserError(`failed to start release-gate runner '${record.projectName}': ${result.stderr.trim()}`);
+  }
 }
 
 async function removeContainer(runner: StreamingCommandRunner, name: string): Promise<void> {
@@ -251,6 +344,13 @@ async function ensureVolume(runner: StreamingCommandRunner, name: string): Promi
     name
   ]);
   if (created.exitCode !== 0) throw new UserError(`failed to create CI runner data volume: ${created.stderr.trim()}`);
+}
+
+async function removeVolume(runner: StreamingCommandRunner, name: string, description: string): Promise<void> {
+  const removed = await runner.run("docker", ["volume", "rm", name]);
+  if (removed.exitCode !== 0 && !removed.stderr.includes("No such volume")) {
+    throw new UserError(`failed to remove ${description}: ${removed.stderr.trim()}`);
+  }
 }
 
 async function registrationExists(runner: StreamingCommandRunner, volume: string): Promise<boolean> {

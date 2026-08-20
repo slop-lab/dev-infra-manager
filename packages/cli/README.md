@@ -255,16 +255,17 @@ dim repo delete acme obsolete --yes
 
 ## Project CI runner
 
-One isolated, Project-scoped runner can serve every repository in a Project's
-managed Git organization:
+One Project-scoped runner set can serve every repository in a Project's managed
+Git organization:
 
 ```bash
 dim ci runner enable acme
 dim ci runner status acme
 dim ci runner logs acme
+dim ci runner logs acme --release-gate
 ```
 
-The runner uses its own Sysbox container and nested Docker daemon outside
+Ordinary jobs use a Sysbox container and nested Docker daemon outside
 development workspaces, with independent cgroup limits. Built-in defaults are
 4 CPUs, 8 GiB memory, and 2,048 PIDs. Change the user-level fallback or
 override one runner:
@@ -274,10 +275,11 @@ dim ci runner defaults set --cpus 2 --memory 4g --pids-limit 1024
 dim ci runner enable acme --cpus 6 --memory 12g --pids-limit 4096
 ```
 
-Use `list`, `restart`, `stop`, and `disable --yes` for lifecycle management.
-The core lifecycle boundary is provider-neutral, but 0.8.0 ships only the
-managed-Gitea coordinator and Sysbox container executor. QEMU is not yet a
-selectable CI runner backend.
+On nested-KVM-capable hosts, the same enable operation starts a trusted QEMU
+supervisor that maintains a fresh ephemeral VM for `dim-release-gate` jobs.
+Workflow code sees only nested KVM inside that VM. Use `list`, `restart`,
+`stop`, and `disable --yes` for the combined lifecycle. The lifecycle boundary
+is provider-neutral; managed Gitea is the current coordinator.
 
 `logs` follows the container log until interrupted. `stop` preserves the
 runner registration and local data; `disable --yes` removes both.

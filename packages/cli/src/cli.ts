@@ -349,9 +349,12 @@ ciRunner.command("stop")
 ciRunner.command("logs")
   .description("Follow project CI runner logs")
   .argument("<project>")
-  .action(async (project: string) => {
-    const record = await adminCall<{ containerName: string }>("ci.runner.show", { project });
-    process.exitCode = await runner.runStreaming("docker", ["logs", "--follow", record.containerName]);
+  .option("--release-gate", "follow the disposable QEMU supervisor logs")
+  .action(async (project: string, flags: { releaseGate?: boolean }) => {
+    const record = await adminCall<{ containerName: string; qemuSupervisorName?: string }>("ci.runner.show", { project });
+    const containerName = flags.releaseGate ? record.qemuSupervisorName : record.containerName;
+    if (!containerName) throw new UserError(`project '${project}' has no QEMU release-gate runner`);
+    process.exitCode = await runner.runStreaming("docker", ["logs", "--follow", containerName]);
   });
 
 ciRunner.command("disable")

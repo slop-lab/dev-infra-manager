@@ -33,10 +33,13 @@ export interface CiRunnerRecord {
   projectId: string;
   projectName: string;
   provider: string;
-  backend: "container";
+  backend: "container" | "container+qemu";
   phase: "creating" | "ready" | "stopped" | "error";
   containerName: string;
   volumeName: string;
+  qemuSupervisorName?: string;
+  qemuVolumeName?: string;
+  qemuImage?: string;
   image: string;
   runtime: string;
   kvm: boolean;

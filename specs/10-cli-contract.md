@@ -165,7 +165,7 @@ only for the separate managed-Gitea command.
 dim ci runner enable PROJECT [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
 dim ci runner list
 dim ci runner status PROJECT
-dim ci runner logs PROJECT
+dim ci runner logs PROJECT [--release-gate]
 dim ci runner restart PROJECT
 dim ci runner stop PROJECT
 dim ci runner disable PROJECT --yes
@@ -174,8 +174,10 @@ dim ci runner defaults set --cpus COUNT --memory SIZE --pids-limit COUNT
 dim ci runner defaults reset
 ```
 
-Each enabled Project has at most one organization-scoped runner with concurrency
-one and the fixed workflow label `dim`. The managed organization contains all
+Each enabled Project has one organization-scoped Sysbox runner with concurrency
+one and the fixed workflow label `dim`. A nested-KVM-capable host also has a
+trusted QEMU supervisor maintaining one waiting ephemeral VM runner with the
+fixed label `dim-release-gate`. The managed organization contains all
 repositories registered to that Project, so root and non-root repositories can
 use the same runner. Its supervisor, nested container
 daemon, job containers, data volume, and resource limits are independent from
@@ -192,11 +194,13 @@ runner container's filesystem namespace. Ordinary check jobs remain in
 disposable job containers. Re-enabling a runner replaces its provider
 registration so the declared label contract is reconciled.
 
-When `/dev/kvm` is available to the DIM host, the container executor MUST pass
-that device and its supplemental group into the managed runner and advertise
-`dim-release-gate` in host mode. It MUST omit both the device and label when
-KVM is unavailable. This capability belongs to the executor contract, not the
-Gitea coordinator adapter.
+When `/dev/kvm` is available to the DIM host, DIM MUST NOT pass it into the
+Sysbox runner. A trusted runc supervisor receives only that device, boots an
+isolated QEMU VM, and registers the runner inside that VM as ephemeral before
+each job. Untrusted workflow code receives nested KVM inside the VM, not the
+host device or container engine. The supervisor deletes the overlay after the
+job and prepares a fresh waiting VM. DIM omits this executor and label when
+host KVM is unavailable.
 
 Effective resources resolve in this order: Project overrides, configured user
 defaults, then the built-in `4 CPU / 8 GiB / 2048 PID` fallback. `enable` with
@@ -208,9 +212,11 @@ coordinator adapter registers against managed Gitea Actions, while lifecycle
 state, CLI, cgroup resources, and the container executor use provider-neutral
 CI terms. Registration credentials are not persisted in DIM state.
 
-The initial executor is a pinned DinD system container isolated by Sysbox. A disposable-QEMU
-executor may later implement the same runner contract and advertise
-`dim-qemu`; it is not part of the initial container-runner lifecycle.
+The normal executor is a pinned DinD system container isolated by Sysbox. The
+release-gate executor uses a pinned supervisor image, a checksum-verified
+Ubuntu cloud image, and a pinned Gitea runner binary. Its reusable registration
+token stays outside the guest and is sent over temporary SSH only for
+registration; Gitea revokes the ephemeral runner credential upon job assignment.
 
 ## Workspaces
 
