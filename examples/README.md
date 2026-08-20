@@ -19,7 +19,6 @@ support process:
 - [External URLs](features/external-urls/README.md)
 - [External URL route policy](features/external-url-route-policy/README.md)
 - [Several managed repositories in one upstream](features/shared-upstream/README.md)
-- [Delegated agent tool cgroups](features/delegated-tool-cgroups/README.md)
 
 ## Verification
 

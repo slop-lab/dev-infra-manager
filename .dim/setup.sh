@@ -39,22 +39,12 @@ export GIT_COMMITTER_EMAIL="$git_email"
 export DOCKER_CONFIG=/tmp/dim-workspace-docker-config
 mkdir -p "$DOCKER_CONFIG"
 
-agent_uid="$(id -u)"
-agent_gid="$(id -g)"
 compose() {
   docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" \
     --file .dim/docker-compose.yml --file "$compose_host_aliases" "$@"
 }
 agent_image="dim-${DIM_WORKSPACE_NAME}-agent"
 compose build --quiet agent
-# Setup runs as the unprivileged workspace account. This short-lived reviewed
-# helper delegates only the agent subtree; the persistent agent stays unprivileged.
-docker run --rm --privileged --cgroupns host \
-  --mount type=bind,source=/sys/fs/cgroup,target=/sys/fs/cgroup \
-  --mount type=bind,source="$PWD/.dim/cgroup-delegation.sh",target=/tmp/cgroup-delegation.sh,readonly \
-  "$agent_image" sh /tmp/cgroup-delegation.sh setup \
-    "$agent_uid" "$agent_gid" --delegate-subtree
-
 compose up --detach agent
 compose exec --no-TTY agent \
   chown -R "$(id -u):$(id -g)" /home/dim-agent

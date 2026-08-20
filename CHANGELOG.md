@@ -13,11 +13,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   workspace-scoped asynchronous self-restart route demonstrated and verified
   by the single-repository Project example.
 
-### Changed
+### Removed
 
-- Replaced the canonical agent's four pre-created tool cgroup slots with an
-  explicit delegated-subtree option and dynamically created, nested CPU/PID
-  tool groups that remain below the workspace resource boundary.
+- Removed the canonical self-Project's delegated tool cgroups. Codex now runs
+  directly in the unprivileged agent service under the workspace-wide resource
+  boundary.
 
 ### Fixed
 

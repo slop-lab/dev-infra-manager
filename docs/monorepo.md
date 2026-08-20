@@ -106,24 +106,6 @@ The agent's `/home/dim-agent` is a Project-owned named volume. Separate
 `dim workspace run` invocations therefore share Codex configuration and other user-home
 state until the workspace is discarded; source remains in `/workspace`.
 
-The setup explicitly opts in to one dynamically extensible threaded subtree
-below the workspace's existing host-enforced resource cgroup.
-`dim workspace run ... bash` stays in the agent service's default group as a responsive
-management path; the `codex` task automatically creates `tools/codex` and
-starts Codex and all of its tool descendants there. Another workload can
-create a nested group on demand:
-
-```bash
-dim-tool-cgroup --create tools/build/one bash -lc 'run-another-workload'
-echo 25 > /run/dim/cgroup/tools/build/one/cpu.weight
-echo 256 > /run/dim/cgroup/tools/build/one/pids.max
-```
-
-The tool and its children inherit the selected threaded group. Validated
-relative paths cannot escape `/run/dim/cgroup`; the workspace
-parent continues to enforce its overall CPU, memory, and pids limits; memory
-is intentionally not delegated to individual threaded slots.
-
 Build the image once, create a Project root, push this repository, and create
 a persistent workspace:
 
@@ -139,7 +121,7 @@ dim workspace run dim-self-dev codex
 contract into the Project-owned agent. The canonical contract deliberately
 exposes only these tasks:
 
-- `codex` starts Codex in the delegated tool cgroup.
+- `codex` starts Codex inside the unprivileged Project-owned agent container.
 - `bash` starts Bash inside the unprivileged Project-owned agent container,
   not in the trusted workspace container.
 
