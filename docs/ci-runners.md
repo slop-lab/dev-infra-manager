@@ -52,6 +52,12 @@ or Docker setup. GitHub-only manual Sysbox and KVM release workflows remain
 under `.github/workflows` and are not copied into the managed development Gitea
 instance.
 
+When host KVM is available, a managed runner also receives `/dev/kvm` and
+advertises `dim-release-gate` in host mode. KVM availability and the execution
+label are properties of the provider-neutral container executor; Gitea
+registration is only the current coordinator adapter, so removing the
+built-in coordinator does not require changing the runner boundary.
+
 The runner has concurrency one. Its nested daemon, disposable job
 containers, registration data, and resource limits live outside workspace
 state. It does not mount the host Docker socket or receive DIM workspace

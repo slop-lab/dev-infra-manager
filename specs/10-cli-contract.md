@@ -192,6 +192,12 @@ runner container's filesystem namespace. Ordinary check jobs remain in
 disposable job containers. Re-enabling a runner replaces its provider
 registration so the declared label contract is reconciled.
 
+When `/dev/kvm` is available to the DIM host, the container executor MUST pass
+that device and its supplemental group into the managed runner and advertise
+`dim-release-gate` in host mode. It MUST omit both the device and label when
+KVM is unavailable. This capability belongs to the executor contract, not the
+Gitea coordinator adapter.
+
 Effective resources resolve in this order: Project overrides, configured user
 defaults, then the built-in `4 CPU / 8 GiB / 2048 PID` fallback. `enable` with
 resource flags records a Project override. Without flags it inherits defaults;

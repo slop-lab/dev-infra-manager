@@ -9,6 +9,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added KVM passthrough and a release-gate label for capable managed CI
+  runners, plus a forge-neutral pull-request skill with scripted GitHub/Gitea
+  detection and Gitea PR/CI operations.
 - Added a driver-aware Project runtime cgroup manifest contract, a standard
   descendant-allocation helper, and systemd, cgroupfs, and unsupported feature
   examples with optional-by-default and explicitly required modes.

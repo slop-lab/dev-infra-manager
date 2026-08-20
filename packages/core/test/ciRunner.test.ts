@@ -7,6 +7,8 @@ import {
   CI_RUNNER_LABELS,
   ciRunnerContainerArgs,
   ciRunnerContainerName,
+  ciRunnerLabels,
+  detectCiRunnerKvm,
   effectiveCiRunnerResources
 } from "../src/ciRunner.js";
 import { giteaCiRunnerApiBase } from "../src/giteaCiCoordinator.js";
@@ -66,6 +68,7 @@ describe("CI runner resources", () => {
       volumeName: "dim-ci-example-data",
       image: "runner:image",
       runtime: "sysbox-runc",
+      kvm: false,
       resources: { cpus: "4", memory: "8g", pidsLimit: "2048" }
     } as CiRunnerRecord;
     const args = ciRunnerContainerArgs(record, { instanceUrl: "http://coordinator", token: "secret" });
@@ -78,6 +81,24 @@ describe("CI runner resources", () => {
     expect(args.join(" ")).toContain("ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04");
     expect(args).toContain(`GITEA_RUNNER_LABELS=${CI_RUNNER_LABELS}`);
     expect(CI_RUNNER_LABELS).toContain("dim-container-integration:host");
+    expect(ciRunnerLabels(false)).not.toContain("dim-release-gate");
+  });
+
+  it("passes KVM only to capable runners and advertises the release gate", async () => {
+    await expect(detectCiRunnerKvm(async () => {})).resolves.toBe(true);
+    await expect(detectCiRunnerKvm(async () => { throw new Error("missing"); })).resolves.toBe(false);
+    const record = {
+      projectName: "example",
+      containerName: "dim-ci-example",
+      volumeName: "dim-ci-example-data",
+      image: "runner:image",
+      runtime: "sysbox-runc",
+      kvm: true,
+      resources: { cpus: "4", memory: "8g", pidsLimit: "2048" }
+    } as CiRunnerRecord;
+    const args = ciRunnerContainerArgs(record, undefined, () => 108);
+    expect(args).toEqual(expect.arrayContaining(["--device", "/dev/kvm", "--group-add", "108"]));
+    expect(args).toContain(`GITEA_RUNNER_LABELS=${ciRunnerLabels(true)}`);
   });
 });
 
@@ -98,6 +119,7 @@ describe("CI runner state", () => {
       volumeName: "dim-ci-example-data",
       image: "runner:image",
       runtime: "sysbox-runc",
+      kvm: false,
       resources: { cpus: "4", memory: "8g", pidsLimit: "2048" },
       inheritsResources: true,
       labels: ["dim"],

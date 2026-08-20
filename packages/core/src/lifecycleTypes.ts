@@ -39,6 +39,7 @@ export interface CiRunnerRecord {
   volumeName: string;
   image: string;
   runtime: string;
+  kvm: boolean;
   resources: CiRunnerResources;
   inheritsResources: boolean;
   labels: string[];

@@ -28,6 +28,12 @@ Changes to secret access, trusted/untrusted boundaries, protected refs,
 runtime-backend assumptions, resource enforcement, or deployment authority
 require especially careful review against `specs/`.
 
+## Pull requests
+
+For pull-request creation, updates, or CI monitoring, use the repository-local
+`pull-request` skill. Resolve the forge with its helper before invoking
+provider-specific tools; do not assume that `origin` is GitHub.
+
 ## Pre-stable compatibility
 
 DIM has not had a stable release. Current releases are pre-stable `0.x`

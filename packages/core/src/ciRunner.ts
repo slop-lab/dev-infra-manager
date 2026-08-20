@@ -1,3 +1,5 @@
+import { statSync } from "node:fs";
+import { stat } from "node:fs/promises";
 import { UserError } from "./errors.js";
 import { GITEA_NETWORK } from "./gitea.js";
 import { giteaCiCoordinator } from "./giteaCiCoordinator.js";
@@ -18,6 +20,22 @@ export const CI_RUNNER_LABELS = [
   "ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04",
   "dim-container-integration:host"
 ].join(",");
+
+export function ciRunnerLabels(kvm: boolean): string {
+  return [CI_RUNNER_LABELS, ...(kvm ? ["dim-release-gate:host"] : [])].join(",");
+}
+
+export async function detectCiRunnerKvm(probe: () => Promise<void> = async () => {
+  const device = await stat("/dev/kvm");
+  if (!device.isCharacterDevice()) throw new Error("/dev/kvm is not a character device");
+}): Promise<boolean> {
+  try {
+    await probe();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export interface EnableCiRunnerInput {
   project: string;
@@ -78,6 +96,7 @@ export async function enableCiRunner(
     const effective = existing && input.resources === undefined && !existing.inheritsResources
       ? { resources: existing.resources, inheritsResources: false }
       : effectiveCiRunnerResources(options, input.resources);
+    const kvm = await detectCiRunnerKvm();
     let record: CiRunnerRecord = {
       schemaVersion: 1,
       name: projectName,
@@ -90,9 +109,10 @@ export async function enableCiRunner(
       volumeName: ciRunnerVolumeName(projectName),
       image: options.ciRunnerImage,
       runtime: options.ciRunnerRuntime,
+      kvm,
       resources: effective.resources,
       inheritsResources: effective.inheritsResources,
-      labels: ["dim"],
+      labels: ["dim", ...(kvm ? ["dim-release-gate"] : [])],
       createdAt: existing?.createdAt ?? now,
       updatedAt: now
     };
@@ -187,7 +207,8 @@ async function startContainer(
 
 export function ciRunnerContainerArgs(
   record: CiRunnerRecord,
-  registration?: { instanceUrl: string; token: string }
+  registration?: { instanceUrl: string; token: string },
+  kvmGroupId: () => number = () => statSync("/dev/kvm").gid
 ): string[] {
   return [
     "run", "--detach",
@@ -203,11 +224,12 @@ export function ciRunnerContainerArgs(
     "--label", "dim.resource=ci-runner",
     "--label", `dim.project=${record.projectName}`,
     "--env", `GITEA_RUNNER_NAME=${record.containerName}`,
-    "--env", `GITEA_RUNNER_LABELS=${CI_RUNNER_LABELS}`,
+    "--env", `GITEA_RUNNER_LABELS=${ciRunnerLabels(record.kvm)}`,
     ...(registration ? [
       "--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`,
       "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`
     ] : []),
+    ...(record.kvm ? ["--device", "/dev/kvm", "--group-add", String(kvmGroupId())] : []),
     record.image
   ];
 }

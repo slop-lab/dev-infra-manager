@@ -25,6 +25,7 @@ agent:
     just verify plugin-install
     just verify package-packs
     just verify project-runtime-cgroups
+    just verify pull-request-skill
     just verify agent-docker
 
 # Verify the private rootless Docker sidecar exposed to the development agent.
@@ -34,6 +35,10 @@ agent-docker:
 # Verify the systemd, cgroupfs, and unsupported Project runtime cgroup contracts.
 project-runtime-cgroups:
     cd .. && bash scripts/project-runtime-cgroups-example-smoke.bash
+
+# Verify forge detection without relying on a live GitHub or Gitea instance.
+pull-request-skill:
+    cd .. && bash scripts/pull-request-skill-smoke.bash
 
 # Backend-independent container integration; requires cgroup-capable Docker for its nested runtime.
 container:
