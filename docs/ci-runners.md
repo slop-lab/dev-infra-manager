@@ -62,6 +62,20 @@ label are properties of the provider-neutral container executor; Gitea
 registration is only the current coordinator adapter, so removing the
 built-in coordinator does not require changing the runner boundary.
 
+The DIM repository selects this label for the KVM release gate on non-draft
+pull requests in its managed development host. Draft pull requests and branch
+pushes skip the expensive gate. The job runs `just ci kvm`, matching the KVM
+backend-installer verification required for a release. After installing a DIM
+version that adds or changes runner labels, re-enable the runner once:
+
+```bash
+dim ci runner enable dim
+dim ci runner status dim
+```
+
+The status must report `kvm: true` and include `dim-release-gate`; otherwise
+the host did not expose a usable `/dev/kvm` when the runner was recreated.
+
 The runner has concurrency one. Its nested daemon, disposable job
 containers, registration data, and resource limits live outside workspace
 state. It does not mount the host Docker socket or receive DIM workspace

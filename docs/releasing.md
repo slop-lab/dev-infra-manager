@@ -8,6 +8,10 @@
   Both providers' automatic CI is green at that exact commit.
 - The manually dispatched Sysbox and KVM installer workflows pass on the
   release commit using fresh ephemeral self-hosted runners.
+- The active DIM-managed development repository's non-draft pull request has
+  passed its automatic `release-gate` job. This runs the same `just ci kvm`
+  backend-installer verification through the managed runner; the manual
+  GitHub run remains an independent release check on a fresh runner.
 - `npm whoami` succeeds for an account allowed to publish the `@slop-lab` scope.
 - The version and changelog agree, and the release tag does not already exist.
 
