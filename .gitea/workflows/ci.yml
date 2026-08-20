@@ -50,4 +50,5 @@ jobs:
     steps:
       - run: apk add --no-cache cloud-utils-localds curl git just openssh-client qemu-system-x86_64 tar
       - uses: actions/checkout@v7
+      - run: id && ls -ln /dev/kvm && stat -c 'mode=%a uid=%u gid=%g type=%F' /dev/kvm
       - run: just ci kvm
