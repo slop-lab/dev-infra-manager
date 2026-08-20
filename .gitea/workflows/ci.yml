@@ -45,7 +45,7 @@ jobs:
 
   release-gate:
     if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }}
-    runs-on: dim-release-gate
+    runs-on: dim-qemu
     timeout-minutes: 120
     steps:
       - name: Check out the reviewed commit without a JavaScript action runtime

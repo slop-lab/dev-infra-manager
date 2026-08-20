@@ -3,10 +3,72 @@ export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.1";
 export const QEMU_CI_SUPERVISOR_DOCKERFILE = `FROM ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 RUN apt-get update \\
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\
-      ca-certificates cloud-image-utils curl openssh-client qemu-system-x86 qemu-utils xz-utils \\
+      ca-certificates cloud-image-utils curl openssh-client python3 qemu-system-x86 qemu-utils xz-utils \\
  && rm -rf /var/lib/apt/lists/*
 COPY supervise.bash /usr/local/bin/dim-qemu-ci-supervise
-ENTRYPOINT ["bash", "/usr/local/bin/dim-qemu-ci-supervise"]
+COPY webhook.py /usr/local/bin/dim-qemu-ci-webhook
+ENTRYPOINT ["python3", "/usr/local/bin/dim-qemu-ci-webhook"]
+`;
+
+export const QEMU_CI_WEBHOOK_SCRIPT = `#!/usr/bin/env python3
+import hmac
+import json
+import os
+import queue
+import subprocess
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+authorization = os.environ["DIM_QEMU_WEBHOOK_AUTHORIZATION"]
+jobs = queue.Queue()
+known = set()
+lock = threading.Lock()
+
+def worker():
+    while True:
+        job_id = jobs.get()
+        try:
+            subprocess.run(["bash", "/usr/local/bin/dim-qemu-ci-supervise"], check=True)
+        finally:
+            with lock:
+                known.discard(job_id)
+            jobs.task_done()
+
+class Handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        if self.path != "/workflow-job" or not hmac.compare_digest(
+            self.headers.get("Authorization", ""), authorization
+        ):
+            self.send_error(404)
+            return
+        if self.headers.get("X-Gitea-Event") != "workflow_job":
+            self.send_error(400)
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if length < 1 or length > 1048576:
+                raise ValueError("invalid payload size")
+            payload = json.loads(self.rfile.read(length))
+            workflow_job = payload["workflow_job"]
+            job_id = int(workflow_job["id"])
+            queued = payload.get("action") == "queued"
+            selected = "dim-qemu" in workflow_job.get("labels", [])
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            self.send_error(400)
+            return
+        if queued and selected:
+            with lock:
+                if job_id not in known:
+                    known.add(job_id)
+                    jobs.put(job_id)
+        self.send_response(202)
+        self.end_headers()
+
+    def log_message(self, format, *args):
+        print("qemu-ci-webhook:", format % args, flush=True)
+
+threading.Thread(target=worker, daemon=True).start()
+ThreadingHTTPServer(("0.0.0.0", 8080), Handler).serve_forever()
 `;
 
 export const QEMU_CI_SUPERVISOR_SCRIPT = `#!/usr/bin/env bash
@@ -45,11 +107,10 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-while true; do
-  cleanup_dir="$(mktemp -d "$run_root/job-XXXXXX")"
-  ssh-keygen -q -t ed25519 -N '' -f "$cleanup_dir/id"
-  public_key="$(cat "$cleanup_dir/id.pub")"
-  cat >"$cleanup_dir/meta-data" <<EOF
+cleanup_dir="$(mktemp -d "$run_root/job-XXXXXX")"
+ssh-keygen -q -t ed25519 -N '' -f "$cleanup_dir/id"
+public_key="$(cat "$cleanup_dir/id.pub")"
+cat >"$cleanup_dir/meta-data" <<EOF
 instance-id: dim-qemu-ci-$(date +%s%N)
 local-hostname: dim-qemu-ci
 EOF
@@ -107,11 +168,10 @@ EOF
   fi
   echo "qemu-ci: register one-job ephemeral runner"
   printf '%s\\n' "$GITEA_RUNNER_REGISTRATION_TOKEN" | ssh "\${ssh_args[@]}" dim@127.0.0.1 \\
-    "read -r token; cd /var/lib/gitea-runner; sudo /usr/local/bin/gitea-runner register --no-interactive --ephemeral --instance '$GITEA_INSTANCE_URL' --token \"\\$token\" --name '$GITEA_RUNNER_NAME' --labels dim-release-gate:host; unset token; sudo /usr/local/bin/gitea-runner daemon; sudo poweroff"
+    "read -r token; cd /var/lib/gitea-runner; sudo /usr/local/bin/gitea-runner register --no-interactive --ephemeral --instance '$GITEA_INSTANCE_URL' --token \"\\$token\" --name '$GITEA_RUNNER_NAME' --labels dim-qemu:host; unset token; sudo /usr/local/bin/gitea-runner daemon; sudo poweroff"
   wait "$qemu_pid" || true
   qemu_pid=""
-  echo "qemu-ci: disposable runner VM exited; replace it"
+  echo "qemu-ci: disposable runner VM exited"
   rm -rf -- "$cleanup_dir"
-  cleanup_dir=""
-done
+cleanup_dir=""
 `;

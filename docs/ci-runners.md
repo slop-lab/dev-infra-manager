@@ -6,10 +6,11 @@ environments so their result can be used as independent review evidence. The
 Project-scoped Sysbox runner remains managed until it is disabled. On capable
 hosts, release gates instead use a fresh outer QEMU VM for every job.
 
-Enable the runner set for a Project:
+Enable only the executors that a Project needs:
 
 ```bash
-dim ci runner enable example
+dim ci runner enable example sysbox
+dim ci runner enable example qemu
 dim ci runner status example
 ```
 
@@ -39,7 +40,7 @@ container (Gitea runner "host" mode). It is reserved for the repository's
 Gitea container-integration workflow, whose controller sockets and nested Docker
 bind mounts must share one filesystem namespace. Other workflow jobs remain
 in disposable job containers. After upgrading DIM across a label change,
-run `dim ci runner enable PROJECT` once to replace the stored runner
+run `dim ci runner enable PROJECT sysbox` once to replace the stored runner
 registration and publish the new labels.
 
 As described in the
@@ -56,12 +57,15 @@ or Docker setup. GitHub-only manual Sysbox and KVM release workflows remain
 under `.github/workflows` and are not copied into the managed development Gitea
 instance.
 
-When host KVM is available, DIM starts a separate trusted runc supervisor with
-`/dev/kvm`. It maintains one waiting QEMU VM registered with the
-`dim-release-gate` label. Workflow code runs inside that VM and sees its nested
+When explicitly enabled on a host with KVM, DIM starts a small trusted runc
+supervisor with `/dev/kvm`. A Gitea `workflow_job` webhook asks it to boot a
+QEMU VM only after a queued job selects the `dim-qemu` label. Workflow code
+runs inside that VM and sees its nested
 KVM device; it never runs in the supervisor or receives the DIM host's device
-directly. Each registration accepts one job, the VM overlay is deleted after
-shutdown, and a fresh VM is prepared for the next job. Gitea registration is
+directly. Each registration accepts one job and the VM overlay is deleted after
+shutdown. While idle, no guest exists; only the small webhook process remains.
+The container limit still leaves room for its QEMU child while a job runs.
+Gitea registration is
 only the current coordinator adapter, so replacing the built-in coordinator
 does not change this executor boundary.
 
@@ -72,16 +76,15 @@ backend-installer verification required for a release. After installing a DIM
 version that adds or changes runner labels, re-enable the runner once:
 
 ```bash
-dim ci runner enable dim
+dim ci runner enable dim qemu
 dim ci runner status dim
 ```
 
-The status must report `kvm: true`, include `dim-release-gate`, and name the
-QEMU supervisor; otherwise the host did not expose `/dev/kvm` when the runner
-set was reconciled. This detects host KVM, while successful VM readiness also
+The status must include a ready `executors.qemu` record with `dim-qemu` and a
+supervisor name. Enabling detects host KVM, while successful VM readiness also
 requires nested virtualization from the host KVM module. `dim ci runner logs
-dim` follows the normal Sysbox runner;
-use `dim ci runner logs dim --release-gate` when diagnosing VM boot,
+dim sysbox` follows the normal Sysbox runner;
+use `dim ci runner logs dim qemu` when diagnosing VM boot,
 registration, or replacement.
 
 The Sysbox runner has concurrency one. Its nested daemon, disposable job
@@ -104,15 +107,16 @@ dim ci runner defaults set --cpus 6 --memory 12GiB --pids-limit 4096
 A Project can override them:
 
 ```bash
-dim ci runner enable example --cpus 8 --memory 16GiB --pids-limit 4096
+dim ci runner enable example sysbox --cpus 8 --memory 16GiB --pids-limit 4096
 ```
 
 `restart` and re-enabling without flags preserve an existing Project override.
 Disable and enable again without flags to return to inherited defaults.
 
-The QEMU supervisor is separately capped at 6 CPUs, 14 GiB, and 1024 PIDs;
-each VM receives 6 vCPUs, 12 GiB, and a disposable 64 GiB overlay. These fixed
-release-gate resources leave room for its nested backend VMs.
+The QEMU supervisor container is capped at 6 CPUs, 14 GiB, and 1024 PIDs so
+its QEMU child can receive 6 vCPUs and 12 GiB during a selected job. These are
+limits, not reservations; while idle there is no VM or guest memory. Each job
+uses a disposable 64 GiB overlay.
 
 The QEMU host-install smoke verifies the Sysbox limits in a clean
 Ubuntu guest rather than relying on a development workspace's delegated
@@ -122,13 +126,19 @@ cgroup hierarchy.
 
 ```bash
 dim ci runner list
-dim ci runner logs example
-dim ci runner stop example
-dim ci runner restart example
-dim ci runner disable example --yes
+dim ci runner logs example sysbox
+dim ci runner stop example sysbox
+dim ci runner restart example sysbox
+dim ci runner disable example sysbox --yes
 ```
 
 The coordinator integration is provider-specific, but runner state, lifecycle,
 and executor capabilities are provider-neutral. Managed Gitea Actions is the
-initial adapter; the disposable VM boundary does not depend on Gitea-specific
-execution behavior.
+initial adapter. `dim-qemu` is an executor capability that any Project workflow
+may select; the disposable VM boundary and label do not encode DIM's particular
+release policy or depend on Gitea-specific execution behavior.
+
+The executor argument is required for lifecycle operations, so managing one
+executor never starts, replaces, or deletes the other. As a pre-stable state
+contract, the earlier combined runner record is not migrated automatically;
+remove it before upgrading or clean up its managed resources manually.

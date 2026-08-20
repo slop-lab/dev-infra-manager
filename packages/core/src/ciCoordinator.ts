@@ -19,4 +19,16 @@ export interface CiCoordinator {
     project: ProjectRecord,
     runnerName: string
   ): Promise<void>;
+  ensureWorkflowJobWebhook(
+    runner: CommandRunner,
+    options: LifecycleOptions,
+    project: ProjectRecord,
+    input: { name: string; url: string; authorizationHeader: string }
+  ): Promise<void>;
+  removeWorkflowJobWebhook(
+    runner: CommandRunner,
+    options: LifecycleOptions,
+    project: ProjectRecord,
+    name: string
+  ): Promise<void>;
 }

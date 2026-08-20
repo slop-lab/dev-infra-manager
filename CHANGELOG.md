@@ -9,7 +9,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
-- Added a disposable QEMU release-gate runner for nested-KVM-capable hosts. A
+- Added a disposable QEMU managed runner for nested-KVM-capable hosts. A
   trusted supervisor owns host KVM access while each untrusted job runs in a
   fresh ephemeral VM. Also added a forge-neutral pull-request skill with
   scripted GitHub/Gitea detection and Gitea PR/CI operations.
@@ -29,6 +29,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   boundary.
 
 ### Fixed
+
+- Split managed CI lifecycle operations by `sysbox` and `qemu` executor, and
+  boot disposable QEMU guests only for queued `dim-qemu` jobs instead of
+  retaining a 12 GiB waiting guest while idle.
 
 - Recreated canonical self-Project containers during setup and restored the
   rootless-DinD UID/GID helper setuid fallback on every sidecar start, fixing

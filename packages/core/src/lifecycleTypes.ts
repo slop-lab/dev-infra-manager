@@ -27,25 +27,44 @@ export interface CiRunnerResources {
   pidsLimit: string;
 }
 
+export type CiRunnerExecutorKind = "sysbox" | "qemu";
+export type CiRunnerPhase = "creating" | "ready" | "stopped" | "error";
+
+export interface SysboxCiRunnerExecutor {
+  kind: "sysbox";
+  phase: CiRunnerPhase;
+  containerName: string;
+  volumeName: string;
+  image: string;
+  runtime: string;
+  resources: CiRunnerResources;
+  inheritsResources: boolean;
+  labels: string[];
+  updatedAt: string;
+  error?: string;
+}
+
+export interface QemuCiRunnerExecutor {
+  kind: "qemu";
+  phase: CiRunnerPhase;
+  supervisorName: string;
+  volumeName: string;
+  image: string;
+  labels: string[];
+  updatedAt: string;
+  error?: string;
+}
+
 export interface CiRunnerRecord {
-  schemaVersion: 1;
+  schemaVersion: 2;
   name: string;
   projectId: string;
   projectName: string;
   provider: string;
-  backend: "container" | "container+qemu";
-  phase: "creating" | "ready" | "stopped" | "error";
-  containerName: string;
-  volumeName: string;
-  qemuSupervisorName?: string;
-  qemuVolumeName?: string;
-  qemuImage?: string;
-  image: string;
-  runtime: string;
-  kvm: boolean;
-  resources: CiRunnerResources;
-  inheritsResources: boolean;
-  labels: string[];
+  executors: {
+    sysbox?: SysboxCiRunnerExecutor;
+    qemu?: QemuCiRunnerExecutor;
+  };
   createdAt: string;
   updatedAt: string;
   error?: string;

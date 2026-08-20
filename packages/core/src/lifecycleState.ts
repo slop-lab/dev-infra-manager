@@ -80,7 +80,7 @@ export class LifecycleState {
       this.ciRunnerPath(project),
       `CI runner for project '${project}' not found`
     );
-    assertSchemaVersion(record, "CI runner", project, 1);
+    assertSchemaVersion(record, "CI runner", project, 2);
     return record;
   }
 
@@ -93,7 +93,7 @@ export class LifecycleState {
   }
 
   async listCiRunners(): Promise<CiRunnerRecord[]> {
-    return listRecords<CiRunnerRecord>(path.join(this.root, "ci-runners"), "CI runner", 1);
+    return listRecords<CiRunnerRecord>(path.join(this.root, "ci-runners"), "CI runner", 2);
   }
 
   async acquireCiRunnerLock(project: string): Promise<() => Promise<void>> {

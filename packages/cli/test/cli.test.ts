@@ -79,6 +79,11 @@ test("CI runner commands expose lifecycle and configurable defaults", () => {
   assert.match(enable.stdout, /--cpus <count>/);
   assert.match(enable.stdout, /--memory <size>/);
   assert.match(enable.stdout, /--pids-limit <count>/);
+  assert.match(enable.stdout, /<project> <executor>/);
+
+  const invalidExecutor = run(["ci", "runner", "enable", "example", "other"]);
+  assert.notEqual(invalidExecutor.status, 0);
+  assert.match(invalidExecutor.stderr, /must be 'sysbox' or 'qemu'/);
 
   const defaults = run(["ci", "runner", "defaults", "set", "--help"]);
   assert.equal(defaults.status, 0);

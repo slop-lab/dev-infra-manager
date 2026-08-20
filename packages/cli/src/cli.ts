@@ -297,15 +297,18 @@ const ci = program.command("ci").description("Manage isolated CI execution");
 const ciRunner = ci.command("runner").description("Manage project CI runners");
 
 ciRunner.command("enable")
-  .description("Enable or reconcile the isolated container runner for a project")
+  .description("Enable or reconcile one CI executor for a project")
   .argument("<project>")
+  .argument("<executor>", "sysbox or qemu")
   .option("--cpus <count>")
   .option("--memory <size>")
   .option("--pids-limit <count>")
   .option("--json", "print machine-readable JSON")
-  .action(async (project: string, flags: ResourceFlags & JsonFlags) => {
+  .action(async (project: string, executor: string, flags: ResourceFlags & JsonFlags) => {
+    executor = ciExecutor(executor);
+    if (executor === "qemu" && hasResourceFlags(flags)) throw new UserError("resource flags apply only to the sysbox executor");
     print(await adminCall("ci.runner.enable", {
-      project,
+      project, executor,
       ...(hasResourceFlags(flags) ? { resources: resourceInput(flags) } : {})
     }), flags);
   });
@@ -317,7 +320,7 @@ ciRunner.command("list")
   .action(async (flags: JsonFlags) =>
     printList(
       await adminCall<Record<string, unknown>[]>("ci.runner.list"),
-      ["projectName", "phase", "backend", "resources", "inheritsResources"],
+      ["projectName", "provider", "executors"],
       flags
     )
   );
@@ -331,37 +334,41 @@ ciRunner.command("status")
   );
 
 ciRunner.command("restart")
-  .description("Reconcile and restart a project CI runner")
+  .description("Reconcile and restart one project CI executor")
   .argument("<project>")
+  .argument("<executor>", "sysbox or qemu")
   .option("--json", "print machine-readable JSON")
-  .action(async (project: string, flags: JsonFlags) =>
-    print(await adminCall("ci.runner.enable", { project }), flags)
+  .action(async (project: string, executor: string, flags: JsonFlags) =>
+    print(await adminCall("ci.runner.enable", { project, executor: ciExecutor(executor) }), flags)
   );
 
 ciRunner.command("stop")
-  .description("Stop a project CI runner without deleting its registration")
+  .description("Stop one project CI executor without deleting its local data")
   .argument("<project>")
+  .argument("<executor>", "sysbox or qemu")
   .option("--json", "print machine-readable JSON")
-  .action(async (project: string, flags: JsonFlags) =>
-    print(await adminCall("ci.runner.stop", { project }), flags)
+  .action(async (project: string, executor: string, flags: JsonFlags) =>
+    print(await adminCall("ci.runner.stop", { project, executor: ciExecutor(executor) }), flags)
   );
 
 ciRunner.command("logs")
   .description("Follow project CI runner logs")
   .argument("<project>")
-  .option("--release-gate", "follow the disposable QEMU supervisor logs")
-  .action(async (project: string, flags: { releaseGate?: boolean }) => {
-    const record = await adminCall<{ containerName: string; qemuSupervisorName?: string }>("ci.runner.show", { project });
-    const containerName = flags.releaseGate ? record.qemuSupervisorName : record.containerName;
-    if (!containerName) throw new UserError(`project '${project}' has no QEMU release-gate runner`);
+  .argument("<executor>", "sysbox or qemu")
+  .action(async (project: string, executor: string) => {
+    executor = ciExecutor(executor);
+    const record = await adminCall<{ executors: { sysbox?: { containerName: string }; qemu?: { supervisorName: string } } }>("ci.runner.show", { project });
+    const containerName = executor === "sysbox" ? record.executors.sysbox?.containerName : executor === "qemu" ? record.executors.qemu?.supervisorName : undefined;
+    if (!containerName) throw new UserError(`project '${project}' has no ${executor} CI executor`);
     process.exitCode = await runner.runStreaming("docker", ["logs", "--follow", containerName]);
   });
 
 ciRunner.command("disable")
   .description("Remove a project CI runner and its local data")
   .argument("<project>")
+  .argument("<executor>", "sysbox or qemu")
   .requiredOption("--yes", "confirm runner and local data deletion")
-  .action(async (project: string) => void await adminCall("ci.runner.disable", { project }));
+  .action(async (project: string, executor: string) => void await adminCall("ci.runner.disable", { project, executor: ciExecutor(executor) }));
 
 const ciDefaults = ciRunner.command("defaults").description("Manage inherited CI runner resource defaults");
 
@@ -1531,6 +1538,11 @@ async function readStdin(): Promise<string> {
 
 function hasResourceFlags(flags: ResourceFlags): boolean {
   return flags.cpus !== undefined || flags.memory !== undefined || flags.pidsLimit !== undefined;
+}
+
+function ciExecutor(value: string): "sysbox" | "qemu" {
+  if (value !== "sysbox" && value !== "qemu") throw new UserError("CI executor must be 'sysbox' or 'qemu'");
+  return value;
 }
 
 function resourceInput(flags: ResourceFlags): { cpus?: string; memory?: string; pidsLimit?: string } {

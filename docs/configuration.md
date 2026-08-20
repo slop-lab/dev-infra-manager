@@ -71,7 +71,7 @@ dim ci runner defaults show
 dim ci runner defaults reset
 ```
 
-Project-specific flags on `dim ci runner enable` override these defaults.
+Project-specific flags on `dim ci runner enable PROJECT sysbox` override these defaults.
 
 DIM is pre-stable. Incompatible configuration and state are rejected rather
 than migrated implicitly; compatibility behavior is added only when a release

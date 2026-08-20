@@ -8,7 +8,6 @@ import {
   CI_RUNNER_LABELS,
   ciRunnerContainerArgs,
   ciRunnerContainerName,
-  ciRunnerLabels,
   ciRunnerQemuRunnerName,
   ciRunnerQemuSupervisorArgs,
   ciRunnerQemuSupervisorName,
@@ -21,7 +20,8 @@ import { LifecycleState } from "../src/lifecycleState.js";
 import type { CiRunnerRecord, LifecycleOptions } from "../src/lifecycleTypes.js";
 import {
   QEMU_CI_SUPERVISOR_DOCKERFILE,
-  QEMU_CI_SUPERVISOR_SCRIPT
+  QEMU_CI_SUPERVISOR_SCRIPT,
+  QEMU_CI_WEBHOOK_SCRIPT
 } from "../src/qemuCiRunnerAssets.js";
 
 const options = {
@@ -74,16 +74,17 @@ describe("CI runner resources", () => {
   });
 
   it("applies the runner boundary without mounting the host Docker socket", () => {
-    const record = {
-      projectName: "example",
+    const record = { projectName: "example" };
+    const executor = {
+      kind: "sysbox" as const, phase: "ready" as const,
       containerName: "dim-ci-example",
       volumeName: "dim-ci-example-data",
       image: "runner:image",
       runtime: "sysbox-runc",
-      kvm: false,
-      resources: { cpus: "4", memory: "8g", pidsLimit: "2048" }
-    } as CiRunnerRecord;
-    const args = ciRunnerContainerArgs(record, { instanceUrl: "http://coordinator", token: "secret" });
+      resources: { cpus: "4", memory: "8g", pidsLimit: "2048" },
+      inheritsResources: true, labels: ["dim"], updatedAt: "now"
+    };
+    const args = ciRunnerContainerArgs(record, executor, { instanceUrl: "http://coordinator", token: "secret" });
     expect(args).toContain("sysbox-runc");
     expect(args).toContain("4");
     expect(args).toContain("8g");
@@ -93,38 +94,33 @@ describe("CI runner resources", () => {
     expect(args.join(" ")).toContain("ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04");
     expect(args).toContain(`GITEA_RUNNER_LABELS=${CI_RUNNER_LABELS}`);
     expect(CI_RUNNER_LABELS).toContain("dim-container-integration:host");
-    expect(ciRunnerLabels(false)).not.toContain("dim-release-gate");
+    expect(CI_RUNNER_LABELS).not.toContain("dim-qemu");
   });
 
   it("keeps KVM out of the Sysbox runner and configures a trusted QEMU supervisor", async () => {
     await expect(detectCiRunnerKvm(async () => {})).resolves.toBe(true);
     await expect(detectCiRunnerKvm(async () => { throw new Error("missing"); })).resolves.toBe(false);
     await expect(detectCiRunnerKvm(async () => {}, "arm64")).resolves.toBe(false);
-    const record = {
-      projectName: "example",
-      containerName: "dim-ci-example",
-      volumeName: "dim-ci-example-data",
-      image: "runner:image",
-      runtime: "sysbox-runc",
-      kvm: true,
-      qemuSupervisorName: "dim-ci-example-qemu-supervisor",
-      qemuVolumeName: "dim-ci-example-qemu-data",
-      qemuImage: "qemu-supervisor:image",
-      resources: { cpus: "4", memory: "8g", pidsLimit: "2048" }
-    } as CiRunnerRecord;
-    const containerArgs = ciRunnerContainerArgs(record);
+    const record = { projectName: "example" };
+    const sysbox = { kind: "sysbox" as const, phase: "ready" as const, containerName: "dim-ci-example", volumeName: "dim-ci-example-data", image: "runner:image", runtime: "sysbox-runc", resources: { cpus: "4", memory: "8g", pidsLimit: "2048" }, inheritsResources: true, labels: ["dim"], updatedAt: "now" };
+    const qemu = { kind: "qemu" as const, phase: "ready" as const, supervisorName: "dim-ci-example-qemu-supervisor", volumeName: "dim-ci-example-qemu-data", image: "qemu-supervisor:image", labels: ["dim-qemu"], updatedAt: "now" };
+    const containerArgs = ciRunnerContainerArgs(record, sysbox);
     expect(containerArgs).not.toContain("/dev/kvm");
     expect(containerArgs).toContain(`GITEA_RUNNER_LABELS=${CI_RUNNER_LABELS}`);
 
     const qemuArgs = ciRunnerQemuSupervisorArgs(
       record,
+      qemu,
       { instanceUrl: "http://coordinator", token: "secret" },
+      "Bearer webhook-secret",
       () => 108
     );
     expect(qemuArgs).toEqual(expect.arrayContaining([
       "--runtime", "runc", "--device", "/dev/kvm", "--group-add", "108"
     ]));
     expect(qemuArgs).toContain("GITEA_RUNNER_NAME=dim-ci-example-qemu");
+    expect(qemuArgs).toContain("DIM_QEMU_WEBHOOK_AUTHORIZATION=Bearer webhook-secret");
+    expect(qemuArgs).toEqual(expect.arrayContaining(["--memory", "14g"]));
     expect(qemuArgs).toContain("qemu-supervisor:image");
   });
 
@@ -136,30 +132,23 @@ describe("CI runner resources", () => {
     expect(userData).not.toContain("GITEA_RUNNER_REGISTRATION_TOKEN");
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain("--ephemeral");
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain("printf '%s\\n' \"$GITEA_RUNNER_REGISTRATION_TOKEN\" | ssh");
+    expect(QEMU_CI_WEBHOOK_SCRIPT).toContain('selected = "dim-qemu" in workflow_job.get("labels", [])');
+    expect(QEMU_CI_WEBHOOK_SCRIPT).toContain('payload.get("action") == "queued"');
   });
 });
 
 describe("CI runner state", () => {
-  it("reads and lists schema 1 runner records", async () => {
+  it("reads and lists schema 2 executor records", async () => {
     const root = await mkdtemp(join(tmpdir(), "dim-ci-runner-state-"));
     temporaryDirectories.push(root);
     const state = new LifecycleState(root);
     const record = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: "example",
       projectId: "project-id",
       projectName: "example",
       provider: "gitea",
-      backend: "container",
-      phase: "ready",
-      containerName: "dim-ci-example",
-      volumeName: "dim-ci-example-data",
-      image: "runner:image",
-      runtime: "sysbox-runc",
-      kvm: false,
-      resources: { cpus: "4", memory: "8g", pidsLimit: "2048" },
-      inheritsResources: true,
-      labels: ["dim"],
+      executors: { sysbox: { kind: "sysbox", phase: "ready", containerName: "dim-ci-example", volumeName: "dim-ci-example-data", image: "runner:image", runtime: "sysbox-runc", resources: { cpus: "4", memory: "8g", pidsLimit: "2048" }, inheritsResources: true, labels: ["dim"], updatedAt: "2026-08-18T00:00:00.000Z" } },
       createdAt: "2026-08-18T00:00:00.000Z",
       updatedAt: "2026-08-18T00:00:00.000Z"
     } satisfies CiRunnerRecord;
@@ -178,7 +167,7 @@ describe("CI runner state", () => {
     await writeFile(join(directory, "example.json"), JSON.stringify({ schemaVersion: 3, name: "example" }));
 
     await expect(new LifecycleState(root).listCiRunners()).rejects.toThrow(
-      "CI runner 'example' uses unsupported state schema 3; expected 1"
+      "CI runner 'example' uses unsupported state schema 3; expected 2"
     );
   });
 });

@@ -162,22 +162,22 @@ only for the separate managed-Gitea command.
 ## CI runners
 
 ```bash
-dim ci runner enable PROJECT [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
+dim ci runner enable PROJECT EXECUTOR [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
 dim ci runner list
 dim ci runner status PROJECT
-dim ci runner logs PROJECT [--release-gate]
-dim ci runner restart PROJECT
-dim ci runner stop PROJECT
-dim ci runner disable PROJECT --yes
+dim ci runner logs PROJECT EXECUTOR
+dim ci runner restart PROJECT EXECUTOR
+dim ci runner stop PROJECT EXECUTOR
+dim ci runner disable PROJECT EXECUTOR --yes
 dim ci runner defaults show
 dim ci runner defaults set --cpus COUNT --memory SIZE --pids-limit COUNT
 dim ci runner defaults reset
 ```
 
-Each enabled Project has one organization-scoped Sysbox runner with concurrency
-one and the fixed workflow label `dim`. A nested-KVM-capable host also has a
-trusted QEMU supervisor maintaining one waiting ephemeral VM runner with the
-fixed label `dim-release-gate`. The managed organization contains all
+`EXECUTOR` is `sysbox` or `qemu`, each with an independent lifecycle. The
+organization-scoped Sysbox runner has concurrency one and label `dim`. The
+QEMU executor boots a disposable VM only after a queued job selects label
+`dim-qemu`. The managed organization contains all
 repositories registered to that Project, so root and non-root repositories can
 use the same runner. Its supervisor, nested container
 daemon, job containers, data volume, and resource limits are independent from
@@ -199,8 +199,8 @@ Sysbox runner. A trusted runc supervisor receives only that device, boots an
 isolated QEMU VM, and registers the runner inside that VM as ephemeral before
 each job. Untrusted workflow code receives nested KVM inside the VM, not the
 host device or container engine. The supervisor deletes the overlay after the
-job and prepares a fresh waiting VM. DIM omits this executor and label when
-host KVM is unavailable.
+job and has no waiting VM while idle. Enabling this executor fails when host
+KVM is unavailable.
 
 Effective resources resolve in this order: Project overrides, configured user
 defaults, then the built-in `4 CPU / 8 GiB / 2048 PID` fallback. `enable` with
@@ -213,7 +213,7 @@ state, CLI, cgroup resources, and the container executor use provider-neutral
 CI terms. Registration credentials are not persisted in DIM state.
 
 The normal executor is a pinned DinD system container isolated by Sysbox. The
-release-gate executor uses a pinned supervisor image, a checksum-verified
+QEMU executor uses a pinned supervisor image, a checksum-verified
 Ubuntu cloud image, and a pinned Gitea runner binary. Its reusable registration
 token stays outside the guest and is sent over temporary SSH only for
 registration; Gitea revokes the ephemeral runner credential upon job assignment.

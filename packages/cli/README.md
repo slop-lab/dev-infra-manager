@@ -259,10 +259,11 @@ One Project-scoped runner set can serve every repository in a Project's managed
 Git organization:
 
 ```bash
-dim ci runner enable acme
+dim ci runner enable acme sysbox
+dim ci runner enable acme qemu
 dim ci runner status acme
-dim ci runner logs acme
-dim ci runner logs acme --release-gate
+dim ci runner logs acme sysbox
+dim ci runner logs acme qemu
 ```
 
 Ordinary jobs use a Sysbox container and nested Docker daemon outside
@@ -272,13 +273,13 @@ override one runner:
 
 ```bash
 dim ci runner defaults set --cpus 2 --memory 4g --pids-limit 1024
-dim ci runner enable acme --cpus 6 --memory 12g --pids-limit 4096
+dim ci runner enable acme sysbox --cpus 6 --memory 12g --pids-limit 4096
 ```
 
-On nested-KVM-capable hosts, the same enable operation starts a trusted QEMU
-supervisor that maintains a fresh ephemeral VM for `dim-release-gate` jobs.
+On nested-KVM-capable hosts, enabling `qemu` starts a small trusted webhook
+supervisor that boots a fresh ephemeral VM only for a queued `dim-qemu` job.
 Workflow code sees only nested KVM inside that VM. Use `list`, `restart`,
-`stop`, and `disable --yes` for the combined lifecycle. The lifecycle boundary
+`stop`, and `disable --yes` with an explicit executor. The lifecycle boundary
 is provider-neutral; managed Gitea is the current coordinator.
 
 `logs` follows the container log until interrupted. `stop` preserves the

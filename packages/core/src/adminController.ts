@@ -32,7 +32,7 @@ import {
 } from "./workspaceLifecycle.js";
 import { ensureGitea } from "./gitea.js";
 import { runDoctor } from "./doctor.js";
-import type { LifecycleOptions, WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
+import type { CiRunnerExecutorKind, LifecycleOptions, WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
 import { ProcessRunner } from "./runner.js";
 import type { StreamingCommandRunner } from "./types.js";
@@ -215,12 +215,13 @@ async function builtinCall(
     case "ci.runner.enable":
       return enableCiRunner(runner, lifecycle, {
         project: text("project"),
+        executor: ciExecutor(input.executor),
         ...(input.resources === undefined ? {} : { resources: ciResources(input.resources) })
       });
     case "ci.runner.list": return listCiRunners(lifecycle);
     case "ci.runner.show": return showCiRunner(lifecycle, text("project"));
-    case "ci.runner.stop": return stopCiRunner(runner, lifecycle, text("project"));
-    case "ci.runner.disable": await disableCiRunner(runner, lifecycle, text("project")); return {};
+    case "ci.runner.stop": return stopCiRunner(runner, lifecycle, text("project"), ciExecutor(input.executor));
+    case "ci.runner.disable": await disableCiRunner(runner, lifecycle, text("project"), ciExecutor(input.executor)); return {};
     case "workspace.create":
       return createWorkspace(runner, lifecycle, {
         project: text("project"),
@@ -338,6 +339,11 @@ function stringArray(value: unknown): string[] {
     throw new UserError("expected an array of strings");
   }
   return value as string[];
+}
+
+function ciExecutor(value: unknown): CiRunnerExecutorKind {
+  if (value !== "sysbox" && value !== "qemu") throw new UserError("CI executor must be 'sysbox' or 'qemu'");
+  return value;
 }
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {

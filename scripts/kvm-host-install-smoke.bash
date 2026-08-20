@@ -202,7 +202,7 @@ if [[ "$backend" == sysbox ]]; then
       source=/tmp/dim-ci-source
       cleanup() {
         cd ~/dim
-        pnpm run --silent cli -- ci runner disable "$project" --yes >/dev/null 2>&1 || true
+        pnpm run --silent cli -- ci runner disable "$project" sysbox --yes >/dev/null 2>&1 || true
         pnpm run --silent cli -- project purge "$project" --yes >/dev/null 2>&1 || true
         sudo docker rm -f dim-ci-ci-smoke >/dev/null 2>&1 || true
         sudo rm -rf "$DIM_STATE_ROOT" "$source"
@@ -217,8 +217,8 @@ if [[ "$backend" == sysbox ]]; then
       cd ~/dim
       pnpm run --silent cli -- project create "$project" \
         --repos "$source/repository/root/.dim/repos.yml" --yes >/dev/null
-      pnpm run --silent cli -- ci runner enable "$project" >/dev/null
-      container="$(pnpm run --silent cli -- ci runner status "$project" --json | jq -r .containerName)"
+      pnpm run --silent cli -- ci runner enable "$project" sysbox >/dev/null
+      container="$(pnpm run --silent cli -- ci runner status "$project" --json | jq -r .executors.sysbox.containerName)"
       test "$(sudo docker inspect --format "{{.HostConfig.Runtime}}" "$container")" = sysbox-runc
       test "$(sudo docker inspect --format "{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.PidsLimit}}" "$container")" \
         = "1500000000|1073741824|1024"
