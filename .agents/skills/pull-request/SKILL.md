@@ -11,10 +11,13 @@ to create or update a PR provides that authorization for the named change.
 
 ## Resolve the forge
 
-Run `scripts/detect-forge.bash` from the target repository before using
-provider-specific PR tooling. It returns the provider and repository identity
-as JSON. Do not infer the provider from installed CLIs, credential variable
-names, or a familiar repository name.
+Resolve `<skill-dir>` to the directory containing this `SKILL.md`. Skill
+loading does not change the shell working directory or make relative script
+paths resolve against the skill automatically. From the target repository,
+run `bash <skill-dir>/scripts/detect-forge.bash` before using provider-specific
+PR tooling. It returns the provider and repository identity as JSON. Do not
+infer the provider from installed CLIs, credential variable names, or a
+familiar repository name.
 
 - For `github`, use available GitHub tooling and preserve the requested draft
   state. Do not default to draft unless repository guidance requires it.
@@ -32,7 +35,7 @@ force-push unless the user explicitly requested it.
 For Gitea, write the PR body to a temporary file and run:
 
 ```bash
-scripts/ensure-gitea-pr.bash \
+bash <skill-dir>/scripts/ensure-gitea-pr.bash \
   --base BASE --head HEAD --title TITLE --body-file BODY_FILE
 ```
 
@@ -46,7 +49,7 @@ Report local verification separately from remote CI. For Gitea, wait on the
 exact pushed SHA rather than only a branch name:
 
 ```bash
-scripts/wait-gitea-ci.bash --sha HEAD_SHA --timeout 3600
+bash <skill-dir>/scripts/wait-gitea-ci.bash --sha HEAD_SHA --timeout 3600
 ```
 
 Stop when all reported statuses succeed, any status fails, or the timeout is
