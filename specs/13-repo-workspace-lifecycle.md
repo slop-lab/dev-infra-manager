@@ -184,14 +184,15 @@ workspace; callers must read them from `dim workspace show WORKSPACE --json` rat
 than reconstructing a naming scheme, which is not part of this contract and
 may change.
 
-Reviewed Project lifecycle code may delegate pre-created threaded cgroup v2
-children beneath the workspace cgroup to an unprivileged agent. Only the
-delegated subtree and selected control files may be writable in the agent;
+Reviewed Project lifecycle code may explicitly opt in to delegating a threaded
+cgroup v2 subtree beneath the workspace cgroup to an unprivileged agent. The
+agent may dynamically create descendants only below that root. Only the
+delegated subtree and selected CPU/PID control files may be writable in the agent;
 the workspace's aggregate host-enforced limits remain the parent boundary.
 Threaded children may control CPU scheduling and PID counts, but must not be
 presented as independent memory or I/O boundaries. The canonical self-Project
 keeps ordinary `bash` task execution in the agent container's default group
-and starts Codex in a delegated tool group so management commands retain a
+and starts Codex in a dynamically created tool group so management commands retain a
 responsive execution path.
 
 The canonical self-Project stores the unprivileged agent's home in a

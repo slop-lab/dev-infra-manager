@@ -121,19 +121,20 @@ dim workspace run "$workspace_name" bash -- -lc '
 default_agent_cgroup="$(dim workspace run "$workspace_name" bash -- -lc \
   "awk -F: '\$1 == 0 { print \$3 }' /proc/self/cgroup")"
 tool_agent_cgroup="$(dim workspace run "$workspace_name" bash -- -lc \
-  "dim-tool-cgroup tools-1 awk -F: '\$1 == 0 { print \$3 }' /proc/self/cgroup")"
+  "dim-tool-cgroup --create tools/build/one awk -F: '\$1 == 0 { print \$3 }' /proc/self/cgroup")"
 test "$default_agent_cgroup" != "$tool_agent_cgroup"
 case "$tool_agent_cgroup" in
-  */dim-agent/tools-1) ;;
+  */dim-agent/tools/build/one) ;;
   *) echo "unexpected delegated tool cgroup: $tool_agent_cgroup" >&2; exit 1 ;;
 esac
 dim workspace run "$workspace_name" bash -- -lc '
-  echo 25 > /run/dim/cgroup/tools-1/cpu.weight
-  echo 256 > /run/dim/cgroup/tools-1/pids.max
-  test "$(cat /run/dim/cgroup/tools-1/cpu.weight)" = 25
-  test "$(cat /run/dim/cgroup/tools-1/pids.max)" = 256
-  echo 100 > /run/dim/cgroup/tools-1/cpu.weight
-  echo max > /run/dim/cgroup/tools-1/pids.max
+  echo 25 > /run/dim/cgroup/tools/build/one/cpu.weight
+  echo 256 > /run/dim/cgroup/tools/build/one/pids.max
+  test "$(cat /run/dim/cgroup/tools/build/one/cpu.weight)" = 25
+  test "$(cat /run/dim/cgroup/tools/build/one/pids.max)" = 256
+  echo 100 > /run/dim/cgroup/tools/build/one/cpu.weight
+  echo max > /run/dim/cgroup/tools/build/one/pids.max
+  ! dim-tool-cgroup --create ../outside true
 '
 agent_commit_identity="$(dim workspace run "$workspace_name" bash -- -lc '
   printf "%s\n" "self agent commit" > self-agent-commit.txt
