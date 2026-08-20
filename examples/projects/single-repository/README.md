@@ -96,3 +96,18 @@ dim workspace discard single-dev --yes
 Agent commits are not automatically reflected in an already-running
 workspace yet. A future workspace-scoped update API can add that workflow
 without changing this single-repository Project shape.
+
+Verify the complete example with:
+
+```bash
+just verify example current-installed auto single-repository
+```
+
+When the Docker CLI talks to a daemon in a sibling DinD container, the daemon
+must see DIM's bind sources at the same absolute paths. Point the verification
+work root at a directory mounted into both containers, for example:
+
+```bash
+DIM_EXAMPLE_WORK_ROOT=/mnt/workspace-shared-dind \
+  just verify example current-installed auto single-repository
+```

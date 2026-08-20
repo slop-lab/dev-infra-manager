@@ -13,6 +13,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   workspace-scoped asynchronous self-restart route demonstrated and verified
   by the single-repository Project example.
 
+### Fixed
+
+- Let the single-repository example smoke place its state and controller
+  sockets under a shared work root, so sibling DinD daemons resolve bind
+  sources at the same absolute paths.
+
 ## [0.8.0] - 2026-08-19
 
 ### Changed

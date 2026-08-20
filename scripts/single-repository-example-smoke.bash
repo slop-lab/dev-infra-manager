@@ -11,7 +11,9 @@ source "$script_dir/lib/example-dim-install.bash"
 suffix="$PPID-$$"
 project_name="single-$suffix"
 workspace_name="single-dev-$suffix"
-work_dir="$(mktemp -d /tmp/dim-single-repository.XXXXXX)"
+work_root="${DIM_EXAMPLE_WORK_ROOT:-/tmp}"
+mkdir -p "$work_root"
+work_dir="$(mktemp -d "$work_root/dim-single-repository.XXXXXX")"
 state_root="$work_dir/state"
 source_root="$work_dir/source"
 install_prefix="$work_dir/install"
@@ -20,6 +22,8 @@ dim_bin="$install_prefix/bin/dim"
 export DIM_STATE_ROOT="$state_root"
 export DIM_CONFIG_PATH="$work_dir/config/dim.json"
 export DIM_DATA_HOME="$work_dir/data"
+export DIM_CONTROLLER_SOCKET="$work_dir/controller/controller.sock"
+export DIM_ADMIN_CONTROLLER_SOCKET="$work_dir/controller/admin.sock"
 export GIT_CONFIG_GLOBAL="$work_dir/host.gitconfig"
 git config --file "$GIT_CONFIG_GLOBAL" user.name "Single Repository Agent"
 git config --file "$GIT_CONFIG_GLOBAL" user.email "agent@dim.invalid"
@@ -75,10 +79,16 @@ rm -rf "$source_root"
 echo "[single-repository] create a resource-bounded persistent workspace"
 if ! dim workspace create "$project_name" "$workspace_name" \
   --cpus 2 --memory 2g --pids-limit 512 >/dev/null; then
-  dim workspace exec "$workspace_name" -- \
+  failed_workspace="$(dim workspace show "$workspace_name" --json)"
+  failed_container="$(jq -r .containerName <<<"$failed_workspace")"
+  failed_project_path="$(jq -r .projectPath <<<"$failed_workspace")"
+  docker start "$failed_container" >/dev/null 2>&1 || true
+  docker exec --user dim "$failed_container" \
+    sh -c 'cat /tmp/dim-agent-controller/agent.log 2>/dev/null || true' >&2 || true
+  docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml ps --all >&2 || true
-  dim workspace exec "$workspace_name" -- \
+  docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml logs agent agent-dind >&2 || true
   exit 1
