@@ -126,6 +126,10 @@ UID differs from the rootless-DinD UID.
 The single- and multi-repository example gates must also verify that their
 fresh rootless-DinD images retain executable UID/GID mapping helpers with a
 setuid fallback before exercising the private daemon.
+The canonical self-Project gate must verify the same helper fallback and
+healthy private daemon both after workspace creation and after the first
+workspace restart, proving the fallback survives the persistent nested image
+store and workspace-container lifecycle.
 
 ## Fast Isolation Gate
 

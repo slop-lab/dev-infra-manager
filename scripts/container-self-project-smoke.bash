@@ -81,6 +81,36 @@ if ! dim workspace create "$project_name" "$workspace_name" >/dev/null; then
 fi
 
 workspace_json="$(dim workspace show "$workspace_name" --json)"
+test "$(jq -r .phase <<<"$workspace_json")" = ready
+
+verify_rootless_dind() {
+  local dind_container
+  dind_container="$(dim workspace exec "$workspace_name" -- \
+    docker compose --project-name "dim-$workspace_name" \
+    --file .dim/docker-compose.yml ps --quiet agent-dind)"
+  test -n "$dind_container"
+  dim workspace exec "$workspace_name" -- \
+    docker inspect --format '{{.State.Health.Status}}' "$dind_container" | grep -qx healthy
+  dim workspace exec "$workspace_name" -- \
+    docker compose --project-name "dim-$workspace_name" \
+    --file .dim/docker-compose.yml exec --no-TTY --user root agent-dind \
+    sh -eu -c 'test -u /usr/bin/newuidmap; test -u /usr/bin/newgidmap'
+}
+
+verify_rootless_dind
+if ! dim workspace restart "$workspace_name" >/dev/null; then
+  dim workspace exec "$workspace_name" -- \
+    docker compose --project-name "dim-$workspace_name" \
+    --file .dim/docker-compose.yml ps --all >&2 || true
+  dim workspace exec "$workspace_name" -- \
+    docker compose --project-name "dim-$workspace_name" \
+    --file .dim/docker-compose.yml logs --no-color agent-dind >&2 || true
+  exit 1
+fi
+workspace_json="$(dim workspace show "$workspace_name" --json)"
+test "$(jq -r .phase <<<"$workspace_json")" = ready
+verify_rootless_dind
+
 original_cpus="$(jq -r .cpuCount <<<"$workspace_json")"
 original_memory="$(jq -r .memory <<<"$workspace_json")"
 original_pids="$(jq -r .pidsLimit <<<"$workspace_json")"
@@ -136,7 +166,6 @@ dim workspace exec "$workspace_name" -- docker inspect --format '{{.HostConfig.P
 dind_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-$workspace_name" \
   --file .dim/docker-compose.yml ps --quiet agent-dind)"
-test -n "$dind_container"
 dim workspace exec "$workspace_name" -- docker inspect --format '{{.HostConfig.Privileged}}' \
   "$dind_container" | grep -qx true
 dim workspace run "$workspace_name" bash -- -lc '

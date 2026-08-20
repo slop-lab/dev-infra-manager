@@ -21,6 +21,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Recreated canonical self-Project containers during setup and restored the
+  rootless-DinD UID/GID helper setuid fallback on every sidecar start, fixing
+  workspace restart while preserving named home and daemon-data volumes.
 - Let the single-repository example smoke place its state and controller
   sockets under a shared work root, so sibling DinD daemons resolve bind
   sources at the same absolute paths.

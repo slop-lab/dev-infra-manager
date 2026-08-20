@@ -45,7 +45,10 @@ compose() {
 }
 agent_image="dim-${DIM_WORKSPACE_NAME}-agent"
 compose build --quiet agent
-compose up --detach agent
+# An outer workspace stop terminates nested containers without letting their
+# daemon preserve a restartable process state. Recreate Project containers on
+# every setup while retaining their named data and home volumes.
+compose up --detach --force-recreate agent-dind agent
 compose exec --no-TTY agent \
   chown -R "$(id -u):$(id -g)" /home/dim-agent
 compose exec --no-TTY \
