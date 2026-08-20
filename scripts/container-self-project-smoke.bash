@@ -4,13 +4,18 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/git-clone-source.bash
 source "$script_dir/lib/git-clone-source.bash"
 
-suffix="$PPID-$$"
-project_name="dim-self-$suffix"
-workspace_name="dim-self-$suffix"
-state_root="$(mktemp -d /tmp/dim-self-state.XXXXXX)"
-source_root="$(mktemp -d /tmp/dim-self-source.XXXXXX)"
+project_name="dim-self-smoke"
+workspace_name="dim-self-smoke"
+state_root="/tmp/dim-self-smoke-state"
+source_root="/tmp/dim-self-smoke-source"
 dim_bin="${DIM_BIN:-$PWD/packages/cli/dist/cli.js}"
 project_source="$PWD"
+
+exec 9> /tmp/dim-self-smoke.lock
+if ! flock --nonblock 9; then
+  echo "another container self-project smoke is already running" >&2
+  exit 1
+fi
 
 dim() {
   if [[ -n "${DIM_BIN:-}" ]]; then
@@ -24,6 +29,35 @@ export DIM_STATE_ROOT="$state_root"
 export DIM_CONFIG_PATH="$state_root/dim.json"
 export DIM_PLUGIN_HOME="$state_root/plugins"
 export GIT_CONFIG_GLOBAL="$state_root/host.gitconfig"
+
+cleanup_managed_resources() {
+  local failed=0
+  if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
+    if ! dim workspace discard "$workspace_name" --yes; then
+      echo "failed to discard self-project smoke workspace '$workspace_name'" >&2
+      failed=1
+    fi
+  fi
+  if [[ -f "$state_root/projects/$project_name.json" ]]; then
+    if ! dim project purge "$project_name" --yes; then
+      echo "failed to purge self-project smoke Project '$project_name'" >&2
+      failed=1
+    fi
+  fi
+  return "$failed"
+}
+
+if [[ -d "$state_root" ]]; then
+  echo "recover previous container self-project smoke state"
+  if ! cleanup_managed_resources; then
+    echo "retained DIM_STATE_ROOT=$state_root for manual recovery" >&2
+    exit 1
+  fi
+  find "$state_root" -depth -delete
+  find "$source_root" -depth -delete 2>/dev/null || true
+fi
+
+mkdir -p "$state_root" "$source_root"
 git config --file "$GIT_CONFIG_GLOBAL" user.name "DIM Self Host"
 git config --file "$GIT_CONFIG_GLOBAL" user.email "dim-self-host@dim.invalid"
 mkdir -p "$DIM_PLUGIN_HOME"
@@ -31,24 +65,16 @@ printf '%s\n' '{"schemaVersion":1,"plugins":[]}' > "$DIM_PLUGIN_HOME/plugins.jso
 bash "$script_dir/configure-user-backend.bash" runc
 
 cleanup() {
-  if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    dim workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
+  local status=$?
+  trap - EXIT
+  if cleanup_managed_resources; then
+    find "$state_root" -depth -delete 2>/dev/null || true
+    find "$source_root" -depth -delete 2>/dev/null || true
+  else
+    echo "retained DIM_STATE_ROOT=$state_root for manual recovery" >&2
+    status=1
   fi
-  if docker container inspect dim-gitea >/dev/null 2>&1; then
-    local credentials admin_username admin_password
-    credentials="$(docker exec dim-gitea cat /data/dim/credentials.json 2>/dev/null || true)"
-    if [[ -n "$credentials" ]]; then
-      admin_username="$(printf '%s' "$credentials" | jq -r .adminUsername)"
-      admin_password="$(printf '%s' "$credentials" | jq -r .adminPassword)"
-      curl --fail --silent --show-error \
-        --user "$admin_username:$admin_password" \
-        --request DELETE \
-        "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs/dim-$project_name" \
-        >/dev/null 2>&1 || true
-    fi
-  fi
-  find "$state_root" -depth -delete 2>/dev/null || true
-  find "$source_root" -depth -delete 2>/dev/null || true
+  exit "$status"
 }
 trap cleanup EXIT
 
@@ -191,5 +217,6 @@ if [[ "${DIM_SELF_VERIFY_AGENT:-0}" == 1 ]]; then
 fi
 
 dim workspace discard "$workspace_name" --yes >/dev/null
+dim project purge "$project_name" --yes >/dev/null
 
 echo "container-self-project-smoke-ok"

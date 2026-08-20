@@ -30,6 +30,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Made the container self-Project smoke reuse a locked, recoverable identity
+  and purge its repositories and organization through the DIM lifecycle,
+  preventing failed cleanup from accumulating `dim-dim-self-*` organizations.
+
 - Split managed CI lifecycle operations by `sysbox` and `qemu` executor, and
   boot disposable QEMU guests only for queued `dim-qemu` jobs instead of
   retaining a 12 GiB waiting guest while idle.
