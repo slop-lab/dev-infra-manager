@@ -69,6 +69,10 @@ Gitea registration is
 only the current coordinator adapter, so replacing the built-in coordinator
 does not change this executor boundary.
 
+Enabling a QEMU executor adds only its managed supervisor hostname to Gitea's
+webhook allowlist and restarts the managed Gitea service to apply that setting.
+DIM does not enable unrestricted private-network webhook delivery.
+
 The DIM repository selects this label for the KVM release gate on non-draft
 pull requests in its managed development host. Draft pull requests and branch
 pushes skip the expensive gate. The job runs `just ci kvm`, matching the KVM

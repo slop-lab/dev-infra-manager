@@ -33,6 +33,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Made the container self-Project smoke reuse a locked, recoverable identity
   and purge its repositories and organization through the DIM lifecycle,
   preventing failed cleanup from accumulating `dim-dim-self-*` organizations.
+- Reconciled Gitea's webhook allowlist to the exact enabled QEMU supervisor
+  hostnames so queued `dim-qemu` jobs can reach their on-demand runner without
+  permitting arbitrary private-network webhook targets.
 
 - Split managed CI lifecycle operations by `sysbox` and `qemu` executor, and
   boot disposable QEMU guests only for queued `dim-qemu` jobs instead of

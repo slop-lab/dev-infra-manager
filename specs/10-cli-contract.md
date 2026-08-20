@@ -202,6 +202,10 @@ host device or container engine. The supervisor deletes the overlay after the
 job and has no waiting VM while idle. Enabling this executor fails when host
 KVM is unavailable.
 
+The managed Gitea adapter MUST allow webhook delivery only to exact enabled
+QEMU supervisor hostnames. It MUST NOT broaden Gitea's webhook allowlist to
+arbitrary private-network targets.
+
 Effective resources resolve in this order: Project overrides, configured user
 defaults, then the built-in `4 CPU / 8 GiB / 2048 PID` fallback. `enable` with
 resource flags records a Project override. Without flags it inherits defaults;

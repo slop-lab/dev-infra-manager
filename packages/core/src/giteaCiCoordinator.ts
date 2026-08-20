@@ -1,5 +1,6 @@
 import { UserError } from "./errors.js";
-import { ensureGitea, giteaNestedBaseUrl, giteaRequest } from "./gitea.js";
+import { configureGiteaWebhookAllowedHosts, ensureGitea, giteaNestedBaseUrl, giteaRequest } from "./gitea.js";
+import { LifecycleState } from "./lifecycleState.js";
 import type { CiCoordinator, CiRunnerRegistration } from "./ciCoordinator.js";
 import type { ProjectRecord } from "./lifecycleTypes.js";
 
@@ -57,6 +58,9 @@ export const giteaCiCoordinator: CiCoordinator = {
     }
   },
   async ensureWorkflowJobWebhook(runner, options, project, input): Promise<void> {
+    const records = await new LifecycleState(options.stateRoot).listCiRunners();
+    const allowedHosts = records.flatMap((record) => record.executors.qemu?.supervisorName ?? []);
+    await configureGiteaWebhookAllowedHosts(runner, options, allowedHosts);
     const credentials = await ensureGitea(runner, options);
     await removeNamedHook(credentials, project, input.name);
     const response = await giteaRequest(credentials, "POST", giteaOrgHooksApiBase(project), {
