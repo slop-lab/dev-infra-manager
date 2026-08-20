@@ -171,4 +171,3 @@ case "$command_name" in
     ;;
   *) usage ;;
 esac
-

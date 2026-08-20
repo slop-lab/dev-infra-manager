@@ -35,4 +35,3 @@ test "$(jq -r .provider <<<"$gitea")" = gitea
 test "$(jq -r .repository <<<"$gitea")" = team/project
 
 echo pull-request-skill-smoke-ok
-

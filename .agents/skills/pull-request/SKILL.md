@@ -52,4 +52,3 @@ scripts/forge-pr.bash wait-gitea --sha HEAD_SHA --timeout 3600
 Stop when all reported statuses succeed, any status fails, or the timeout is
 reached. A timeout or unavailable required runner is not success. For GitHub,
 use the provider tooling's equivalent exact-SHA checks.
-
