@@ -12,15 +12,23 @@ function giteaOrgHooksApiBase(project: Pick<ProjectRecord, "gitNamespace">): str
   return `/orgs/${encodeURIComponent(project.gitNamespace)}/hooks`;
 }
 
-async function removeNamedHook(credentials: Awaited<ReturnType<typeof ensureGitea>>, project: ProjectRecord, name: string): Promise<void> {
+interface GiteaHookSummary {
+  id: number;
+  config?: { url?: string };
+}
+
+export function giteaHookIdsForUrl(hooks: GiteaHookSummary[], url: string): number[] {
+  return hooks.filter((hook) => hook.config?.url === url).map((hook) => hook.id);
+}
+
+async function removeHooksForUrl(credentials: Awaited<ReturnType<typeof ensureGitea>>, project: ProjectRecord, url: string): Promise<void> {
   const base = giteaOrgHooksApiBase(project);
   const response = await giteaRequest(credentials, "GET", base);
   if (!response.ok) throw new UserError(`failed to list CI coordinator webhooks: ${response.status}`);
-  const hooks = await response.json() as Array<{ id: number; name?: string; config?: { url?: string } }>;
-  for (const hook of hooks) {
-    if (hook.name !== name) continue;
-    const removed = await giteaRequest(credentials, "DELETE", `${base}/${hook.id}`);
-    if (!removed.ok && removed.status !== 404) throw new UserError(`failed to remove CI coordinator webhook '${name}': ${removed.status}`);
+  const hooks = await response.json() as GiteaHookSummary[];
+  for (const id of giteaHookIdsForUrl(hooks, url)) {
+    const removed = await giteaRequest(credentials, "DELETE", `${base}/${id}`);
+    if (!removed.ok && removed.status !== 404) throw new UserError(`failed to remove CI coordinator webhook target '${url}': ${removed.status}`);
   }
 }
 
@@ -59,7 +67,7 @@ export const giteaCiCoordinator: CiCoordinator = {
   async ensureWorkflowJobWebhook(runner, options, project, input): Promise<void> {
     await this.reconcileWorkflowJobWebhookTargets(runner, options);
     const credentials = await ensureGitea(runner, options);
-    await removeNamedHook(credentials, project, input.name);
+    await removeHooksForUrl(credentials, project, input.url);
     const response = await giteaRequest(credentials, "POST", giteaOrgHooksApiBase(project), {
       type: "gitea",
       active: true,
@@ -69,8 +77,8 @@ export const giteaCiCoordinator: CiCoordinator = {
     });
     if (!response.ok) throw new UserError(`failed to create CI coordinator webhook: ${response.status}`);
   },
-  async removeWorkflowJobWebhook(runner, options, project, name): Promise<void> {
-    await removeNamedHook(await ensureGitea(runner, options), project, name);
+  async removeWorkflowJobWebhook(runner, options, project, url): Promise<void> {
+    await removeHooksForUrl(await ensureGitea(runner, options), project, url);
   },
   async reconcileWorkflowJobWebhookTargets(runner, options): Promise<void> {
     const records = await new LifecycleState(options.stateRoot).listCiRunners();

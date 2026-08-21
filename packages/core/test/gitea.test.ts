@@ -2,6 +2,7 @@ import { once } from "node:events";
 import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { giteaNestedBaseUrl, giteaRequest, giteaWebhookConfigArgs, type GiteaConnection } from "../src/gitea.js";
+import { giteaHookIdsForUrl } from "../src/giteaCiCoordinator.js";
 import type { CommandRunner } from "../src/types.js";
 
 describe("Gitea control endpoint", () => {
@@ -52,5 +53,15 @@ describe("Gitea control endpoint", () => {
     );
     expect(args).toEqual(expect.arrayContaining(["--apply-env", "--in-place"]));
     expect(args).not.toEqual(expect.arrayContaining(["--section", "--key", "--value"]));
+  });
+
+  it("identifies every duplicate webhook by its exact target URL", () => {
+    const target = "http://dim-ci-example-qemu-supervisor:8080/workflow-job";
+    expect(giteaHookIdsForUrl([
+      { id: 1, config: { url: target } },
+      { id: 2, config: { url: "http://other:8080/workflow-job" } },
+      { id: 3, config: { url: target } },
+      { id: 4 }
+    ], target)).toEqual([1, 3]);
   });
 });

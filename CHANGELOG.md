@@ -38,6 +38,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Reconciled QEMU coordinator webhooks by their exact target URL instead of
+  Gitea's provider-type `name`, removing stale duplicates and their rejected
+  authorization headers when a managed runner is restarted or deleted.
 - Made `workspace align --reset --yes` discard dirty root-checkout changes and
   non-ignored untracked setup output, restoring the documented CLI-only
   recovery path after Project setup fails.

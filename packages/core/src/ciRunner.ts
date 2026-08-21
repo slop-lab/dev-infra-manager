@@ -112,9 +112,9 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
     if (!await detectCiRunnerKvm()) throw new UserError("the qemu CI executor requires x86-64 and host /dev/kvm access");
     const executor: QemuCiRunnerExecutor = { kind: "qemu", phase: "creating", supervisorName: ciRunnerQemuSupervisorName(projectName, name), volumeName: ciRunnerQemuVolumeName(projectName, name), image: QEMU_CI_SUPERVISOR_IMAGE, labels: ["dim-qemu"], updatedAt: now };
     record = await saveExecutor(state, existing ?? newRecord(project, name, executor, now), executor);
-    const webhookName = ciRunnerQemuWebhookName(projectName, name);
+    const webhookUrl = ciRunnerQemuWebhookUrl(executor);
     try {
-      await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, project, webhookName);
+      await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, project, webhookUrl);
       await removeContainer(runner, executor.supervisorName);
       await giteaCiCoordinator.removeRunner(runner, options, project, ciRunnerQemuRunnerName(projectName, name));
       await ensureVolume(runner, executor.volumeName);
@@ -123,7 +123,7 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       await buildQemuSupervisorImage(runner, options.stateRoot);
       const started = await runner.run("docker", ciRunnerQemuSupervisorArgs(record, executor, registration, authorization));
       if (started.exitCode !== 0) throw new UserError(`failed to start QEMU CI runner '${projectName}/${name}': ${started.stderr.trim()}`);
-      await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, { name: webhookName, url: `http://${executor.supervisorName}:8080/workflow-job`, authorizationHeader: authorization });
+      await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, { url: webhookUrl, authorizationHeader: authorization });
       record = { ...record, provider: registration.provider };
       return saveExecutor(state, record, ready(executor));
     } catch (error) { await saveExecutor(state, record, failed(executor, error)); throw error; }
@@ -138,7 +138,7 @@ export async function stopCiRunner(runner: StreamingCommandRunner, options: Life
   const release = await state.acquireCiRunnerLock(project);
   try {
     const record = await state.readCiRunner(project, name); const executor = record.executor;
-    if (executor.kind === "qemu") await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, await showProject(options, project), ciRunnerQemuWebhookName(project, name));
+    if (executor.kind === "qemu") await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, await showProject(options, project), ciRunnerQemuWebhookUrl(executor));
     const container = executor.kind === "sysbox" ? executor.containerName : executor.supervisorName;
     const stopped = await runner.run("docker", ["stop", container]);
     if (stopped.exitCode !== 0 && !stopped.stderr.includes("No such container")) throw new UserError(`failed to stop CI runner '${project}/${name}': ${stopped.stderr.trim()}`);
@@ -156,7 +156,7 @@ export async function deleteCiRunner(runner: StreamingCommandRunner, options: Li
     if (executor.kind === "sysbox") {
       await removeContainer(runner, executor.containerName); await giteaCiCoordinator.removeRunner(runner, options, projectRecord, executor.containerName); await removeVolume(runner, executor.volumeName, `sysbox CI runner data for '${project}/${name}'`);
     } else {
-      await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, projectRecord, ciRunnerQemuWebhookName(project, name)); await removeContainer(runner, executor.supervisorName); await giteaCiCoordinator.removeRunner(runner, options, projectRecord, ciRunnerQemuRunnerName(project, name)); await removeVolume(runner, executor.volumeName, `QEMU runner data for '${project}/${name}'`);
+      await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, projectRecord, ciRunnerQemuWebhookUrl(executor)); await removeContainer(runner, executor.supervisorName); await giteaCiCoordinator.removeRunner(runner, options, projectRecord, ciRunnerQemuRunnerName(project, name)); await removeVolume(runner, executor.volumeName, `QEMU runner data for '${project}/${name}'`);
     }
     await state.removeCiRunner(project, name);
     if (executor.kind === "qemu") await giteaCiCoordinator.reconcileWorkflowJobWebhookTargets(runner, options);
@@ -175,7 +175,7 @@ export function ciRunnerVolumeName(project: string, name: string): string { retu
 export function ciRunnerQemuSupervisorName(project: string, name: string): string { return `${runnerResourcePrefix(project, name)}-qemu-supervisor`; }
 export function ciRunnerQemuRunnerName(project: string, name: string): string { return `${runnerResourcePrefix(project, name)}-qemu`; }
 export function ciRunnerQemuVolumeName(project: string, name: string): string { return `${runnerResourcePrefix(project, name)}-qemu-data`; }
-export function ciRunnerQemuWebhookName(project: string, name: string): string { return `dim-qemu-${validateLifecycleName(project, "project")}-${validateLifecycleName(name, "CI runner")}`; }
+function ciRunnerQemuWebhookUrl(executor: QemuCiRunnerExecutor): string { return `http://${executor.supervisorName}:8080/workflow-job`; }
 
 export function ciRunnerContainerArgs(record: Pick<CiRunnerRecord, "projectName" | "name">, executor: SysboxCiRunnerExecutor, registration?: { instanceUrl: string; token: string }): string[] {
   return ["run", "--detach", "--name", executor.containerName, "--restart", "unless-stopped", "--network", GITEA_NETWORK, "--runtime", executor.runtime, "--cpus", executor.resources.cpus, "--memory", executor.resources.memory, "--pids-limit", executor.resources.pidsLimit, "--mount", `type=volume,source=${executor.volumeName},target=/data`, "--label", "dim.managed=true", "--label", "dim.resource=ci-runner", "--label", `dim.project=${record.projectName}`, "--label", `dim.ci-runner=${record.name}`, "--env", `GITEA_RUNNER_NAME=${executor.containerName}`, "--env", `GITEA_RUNNER_LABELS=${CI_RUNNER_LABELS}`, ...(registration ? ["--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`, "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`] : []), executor.image];
