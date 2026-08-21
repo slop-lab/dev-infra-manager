@@ -2038,7 +2038,7 @@ WantedBy=default.target
       );
     }
   }
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < managedControllerStartAttempts; attempt += 1) {
     if (await managedControllerReady(options)) return;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }

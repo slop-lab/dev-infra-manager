@@ -30,6 +30,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Let the systemd-managed controller use the full startup readiness window,
+  avoiding false `dim controller restart` failures while ingress services are
+  still becoming ready.
 - Made the pull-request skill's bundled Gitea publication, CI waiting, and job
   log workflows self-contained, and documented that DIM-managed issue numbers
   belong in development PR bodies, not PR titles or commit subjects that may
