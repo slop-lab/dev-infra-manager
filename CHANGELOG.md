@@ -30,9 +30,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
-- Made the pull-request skill's bundled Gitea workflow self-contained and
-  documented that DIM-managed issue numbers belong in development PR bodies,
-  not PR titles or commit subjects that may enter canonical public history.
+- Made the pull-request skill's bundled Gitea publication, CI waiting, and job
+  log workflows self-contained, and documented that DIM-managed issue numbers
+  belong in development PR bodies, not PR titles or commit subjects that may
+  enter canonical public history.
 
 - Corrected managed Gitea webhook allowlist reconciliation to use Gitea
   1.27's environment-to-INI editing contract instead of unsupported

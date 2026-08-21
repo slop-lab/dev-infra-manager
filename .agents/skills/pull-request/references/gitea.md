@@ -42,6 +42,13 @@ The helper prints status changes and returns success only when all reported
 contexts succeed. It returns failure on a failed context or timeout. A job
 waiting for an unavailable executor is not success.
 
+When a reported context fails, take the numeric job ID from its `target_url`
+and retrieve the logs without constructing an API request:
+
+```bash
+bash <skill-dir>/scripts/get-gitea-job-logs.bash --job-id JOB_ID
+```
+
 ## Failure meanings
 
 - `detected 'unknown'`: report the remote identity from `detect-forge.bash`;
