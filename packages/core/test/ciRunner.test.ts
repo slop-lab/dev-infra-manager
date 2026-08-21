@@ -1,7 +1,8 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   BUILTIN_CI_RUNNER_DEFAULTS,
@@ -32,6 +33,7 @@ const options = {
 } as LifecycleOptions;
 
 const temporaryDirectories: string[] = [];
+const hasPython = spawnSync("python3", ["--version"]).status === 0;
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
@@ -136,8 +138,110 @@ describe("CI runner resources", () => {
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain("printf '%s\\n' \"$GITEA_RUNNER_REGISTRATION_TOKEN\" | ssh");
     expect(QEMU_CI_WEBHOOK_SCRIPT).toContain('selected = "dim-qemu" in workflow_job.get("labels", [])');
     expect(QEMU_CI_WEBHOOK_SCRIPT).toContain('payload.get("action") == "queued"');
+    expect(QEMU_CI_WEBHOOK_SCRIPT).toContain("except subprocess.CalledProcessError as error:");
+    expect(QEMU_CI_WEBHOOK_SCRIPT).toContain("supervisor failed for job {job_id}");
+  });
+
+  it.runIf(hasPython)("keeps accepting queued jobs after a supervisor failure", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dim-qemu-webhook-"));
+    temporaryDirectories.push(directory);
+    const webhookPath = join(directory, "webhook.py");
+    const supervisorPath = join(directory, "supervise.bash");
+    const attemptsPath = join(directory, "attempts");
+    const successPath = join(directory, "success");
+    const port = await availablePort();
+    await writeFile(webhookPath, QEMU_CI_WEBHOOK_SCRIPT
+      .replace("/usr/local/bin/dim-qemu-ci-supervise", supervisorPath)
+      .replace("(\"0.0.0.0\", 8080)", `(\"127.0.0.1\", ${port})`));
+    await writeFile(supervisorPath, `#!/usr/bin/env bash
+set -eu
+attempts=0
+test ! -f '${attemptsPath}' || attempts="$(cat '${attemptsPath}')"
+attempts="$((attempts + 1))"
+printf '%s\\n' "$attempts" >'${attemptsPath}'
+if [[ "$attempts" -eq 1 ]]; then exit 23; fi
+touch '${successPath}'
+`);
+    const webhook = spawn("python3", [webhookPath], {
+      env: { ...process.env, DIM_QEMU_WEBHOOK_AUTHORIZATION: "Bearer test" },
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let output = "";
+    webhook.stdout.setEncoding("utf8");
+    webhook.stderr.setEncoding("utf8");
+    webhook.stdout.on("data", (chunk: string) => { output += chunk; });
+    webhook.stderr.on("data", (chunk: string) => { output += chunk; });
+    try {
+      await waitFor(async () => {
+        try {
+          const response = await fetch(`http://127.0.0.1:${port}/missing`);
+          return response.status === 501;
+        } catch {
+          return false;
+        }
+      });
+      await sendQueuedJob(port, 101);
+      await waitFor(async () => (await readFileIfPresent(attemptsPath)) === "1\n");
+      await sendQueuedJob(port, 102);
+      await waitFor(async () => (await readFileIfPresent(successPath)) !== undefined);
+      expect(await readFileIfPresent(attemptsPath)).toBe("2\n");
+      expect(output).toContain("supervisor failed for job 101: exit 23");
+      expect(output).toContain("queued job 102");
+    } finally {
+      if (webhook.exitCode === null) {
+        const closed = new Promise<void>((resolve) => webhook.once("close", () => resolve()));
+        webhook.kill("SIGTERM");
+        await closed;
+      }
+    }
   });
 });
+
+async function availablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close();
+        reject(new Error("failed to allocate webhook test port"));
+        return;
+      }
+      server.close((error) => error ? reject(error) : resolve(address.port));
+    });
+  });
+}
+
+async function sendQueuedJob(port: number, id: number): Promise<void> {
+  const response = await fetch(`http://127.0.0.1:${port}/workflow-job`, {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer test",
+      "Content-Type": "application/json",
+      "X-Gitea-Event": "workflow_job"
+    },
+    body: JSON.stringify({ action: "queued", workflow_job: { id, labels: ["dim-qemu"] } })
+  });
+  expect(response.status).toBe(202);
+}
+
+async function readFileIfPresent(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+    throw error;
+  }
+}
+
+async function waitFor(condition: () => Promise<boolean>): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (await condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("timed out waiting for QEMU webhook test condition");
+}
 
 describe("CI runner state", () => {
   it("reads and lists independently named schema 3 runners", async () => {

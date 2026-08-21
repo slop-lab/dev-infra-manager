@@ -93,6 +93,14 @@ dim primary` follows the normal Sysbox runner;
 use `dim ci runner logs dim release` when diagnosing VM boot,
 registration, or replacement.
 
+An individual VM boot, provisioning, registration, or job failure is scoped
+to that queued job. The webhook service logs the job ID and supervisor exit
+status, removes it from the in-flight set, and continues processing later
+queued jobs. Repeated webhook responses without a corresponding
+`qemu-ci: start disposable runner VM` line indicate that the event did not
+select `dim-qemu`; a previous supervisor failure must not disable demand
+processing.
+
 The Sysbox runner has concurrency one. Its nested daemon, disposable job
 containers, registration data, and resource limits live outside workspace
 state. It does not mount the host Docker socket or receive DIM workspace

@@ -29,6 +29,16 @@ def worker():
         job_id = jobs.get()
         try:
             subprocess.run(["bash", "/usr/local/bin/dim-qemu-ci-supervise"], check=True)
+        except subprocess.CalledProcessError as error:
+            print(
+                f"qemu-ci-webhook: supervisor failed for job {job_id}: exit {error.returncode}",
+                flush=True,
+            )
+        except Exception as error:
+            print(
+                f"qemu-ci-webhook: supervisor failed for job {job_id}: {error}",
+                flush=True,
+            )
         finally:
             with lock:
                 known.discard(job_id)
@@ -61,6 +71,7 @@ class Handler(BaseHTTPRequestHandler):
                 if job_id not in known:
                     known.add(job_id)
                     jobs.put(job_id)
+                    print(f"qemu-ci-webhook: queued job {job_id}", flush=True)
         self.send_response(202)
         self.end_headers()
 
