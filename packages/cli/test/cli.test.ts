@@ -8,10 +8,11 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 const cli = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
+const cliSupport = fileURLToPath(new URL("../src/cli-support.ts", import.meta.url));
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
 
 test("managed controller restarts preserve the workspace-mounted runtime directory", async () => {
-  const source = await readFile(cli, "utf8");
+  const source = `${await readFile(cli, "utf8")}\n${await readFile(cliSupport, "utf8")}`;
   assert.match(source, /^RuntimeDirectory=dim$/m);
   assert.match(source, /^RuntimeDirectoryPreserve=restart$/m);
   assert.doesNotMatch(source, /^RuntimeDirectoryPreserve=yes$/m);
@@ -163,6 +164,8 @@ test("controller serve preserves the active owner and cleans up its runtime file
     `${JSON.stringify({ schemaVersion: 1, workspaceBackend: "runc" })}\n`
   );
   const args = [
+    "--import",
+    "tsx",
     cli,
     "controller",
     "serve",
@@ -217,7 +220,7 @@ test("controller serve preserves the active owner and cleans up its runtime file
 });
 
 function run(args: string[]): ReturnType<typeof spawnSync> {
-  return spawnSync(process.execPath, [cli, ...args], {
+  return spawnSync(process.execPath, ["--import", "tsx", cli, ...args], {
     cwd: packageDirectory,
     encoding: "utf8"
   });
