@@ -280,7 +280,9 @@ updates are rejected without reset.
 configured root ref, switches a clean checkout back to the corresponding
 local branch, and fast-forwards it without running Project setup or changing
 containers. `--reset --yes` instead resets that configured branch to the
-fetched ref; other local branches remain available. Top-level `dim run` and
+fetched ref, discarding tracked changes and non-ignored untracked files so it
+can recover after a failed setup; ignored files and other local branches remain
+available. Top-level `dim run` and
 `dim exec` are convenience aliases for `dim workspace run` and `dim workspace
 exec`. Other workspace lifecycle commands exist only below `dim workspace`.
 

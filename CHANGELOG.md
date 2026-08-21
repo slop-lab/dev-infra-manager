@@ -38,6 +38,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Made `workspace align --reset --yes` discard dirty root-checkout changes and
+  non-ignored untracked setup output, restoring the documented CLI-only
+  recovery path after Project setup fails.
 - Let the systemd-managed controller use the full startup readiness window,
   avoiding false `dim controller restart` failures while ingress services are
   still becoming ready.

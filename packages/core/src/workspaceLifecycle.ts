@@ -311,7 +311,7 @@ export async function alignWorkspaceRoot(
     await assertContainerRunning(runner, record);
     const status = await projectCommand(runner, record, ["git", "status", "--porcelain"]);
     if (status.exitCode !== 0) throw commandError("inspect project Git status", status);
-    if (status.stdout.trim()) {
+    if (!reset && status.stdout.trim()) {
       throw new UserError(`workspace '${workspaceName}' has uncommitted project changes`);
     }
     const fetch = await projectCommand(runner, record, ["git", "fetch", "origin", record.rootRef]);
@@ -322,7 +322,7 @@ export async function alignWorkspaceRoot(
         runner,
         record,
         reset
-          ? ["git", "switch", "--force-create", branch, "FETCH_HEAD"]
+          ? ["git", "switch", "--discard-changes", "--force-create", branch, "FETCH_HEAD"]
           : ["git", "switch", branch]
       );
       if (align.exitCode !== 0) throw commandError(`switch to root branch '${branch}'`, align);
@@ -331,8 +331,18 @@ export async function alignWorkspaceRoot(
         if (merge.exitCode !== 0) throw commandError(`fast-forward root ref '${record.rootRef}'`, merge);
       }
     } else {
-      const checkout = await projectCommand(runner, record, ["git", "switch", "--detach", "FETCH_HEAD"]);
+      const checkout = await projectCommand(
+        runner,
+        record,
+        reset
+          ? ["git", "switch", "--discard-changes", "--detach", "FETCH_HEAD"]
+          : ["git", "switch", "--detach", "FETCH_HEAD"]
+      );
       if (checkout.exitCode !== 0) throw commandError(`check out root ref '${record.rootRef}'`, checkout);
+    }
+    if (reset) {
+      const clean = await projectCommand(runner, record, ["git", "clean", "-fd"]);
+      if (clean.exitCode !== 0) throw commandError("clean reset project checkout", clean);
     }
     return record;
   } finally {

@@ -312,6 +312,7 @@ describe("project and workspace lifecycle", () => {
     };
     await state.claimWorkspace(record);
     const calls: string[][] = [];
+    let projectStatus = "";
     const runner: StreamingCommandRunner = {
       async run(command: string, args: string[]): Promise<CommandResult> {
         calls.push([command, ...args]);
@@ -322,7 +323,7 @@ describe("project and workspace lifecycle", () => {
           return { command, args, stdout: "true|work-1|workspace\n", stderr: "", exitCode: 0 };
         }
         if (args.includes("--porcelain")) {
-          return { command, args, stdout: "", stderr: "", exitCode: 0 };
+          return { command, args, stdout: projectStatus, stderr: "", exitCode: 0 };
         }
         return { command, args, stdout: "dim-ws-work-1\n", stderr: "", exitCode: 0 };
       },
@@ -356,10 +357,16 @@ describe("project and workspace lifecycle", () => {
     expect(calls.some((call) => call.slice(-4).join(" ") === "git merge --ff-only FETCH_HEAD")).toBe(true);
 
     calls.length = 0;
+    projectStatus = " M .dim/setup.bash\n?? setup-output\n";
+    await expect(alignWorkspaceRoot(runner, options, "work-1")).rejects.toThrow(/uncommitted project changes/);
+    expect(calls.some((call) => call.includes("fetch"))).toBe(false);
+
+    calls.length = 0;
     await alignWorkspaceRoot(runner, options, "work-1", true);
     expect(calls.some((call) =>
-      call.slice(-5).join(" ") === "git switch --force-create main FETCH_HEAD"
+      call.slice(-6).join(" ") === "git switch --discard-changes --force-create main FETCH_HEAD"
     )).toBe(true);
+    expect(calls.some((call) => call.slice(-3).join(" ") === "git clean -fd")).toBe(true);
     expect(calls.some((call) => call.includes("merge"))).toBe(false);
   });
 
