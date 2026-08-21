@@ -221,7 +221,10 @@ The runc guest in `just verify environments-kvm` also creates the canonical
 self-Project and runs `just verify agent` inside its actual agent container.
 This verifies the same private rootless-DinD gate from a clean Ubuntu install;
 when the source checkout is dirty, the KVM verifier uses a temporary snapshot
-that includes the current worktree changes.
+that includes the current worktree changes. The sidecar entrypoint initializes
+its volume-mounted data root and runtime directory for UID 1000 before
+dropping privileges, rather than depending on nested Docker to copy ownership
+from the image into a newly created volume.
 
 Three additional standalone checks cover installation and the copyable
 examples against a real Docker daemon:

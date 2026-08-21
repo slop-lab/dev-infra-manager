@@ -120,7 +120,13 @@ verify_rootless_dind() {
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml exec --no-TTY --user root agent-dind \
-    sh -eu -c 'test -u /usr/bin/newuidmap; test -u /usr/bin/newgidmap'
+    sh -eu -c '
+      test -u /usr/bin/newuidmap
+      test -u /usr/bin/newgidmap
+      test "$(stat -c %u:%g /home/rootless/.local/share/docker)" = 1000:1000
+      test "$(stat -c %u:%g /run/user/1000)" = 1000:1000
+      test "$(stat -c %a /run/user/1000)" = 700
+    '
 }
 
 verify_rootless_dind

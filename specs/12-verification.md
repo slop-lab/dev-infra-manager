@@ -137,7 +137,10 @@ healthy private daemon both after workspace creation and after the first
 workspace restart, proving the fallback survives the persistent nested image
 store and workspace-container lifecycle. Canonical setup must explicitly
 rebuild both Project images so an updated DinD entrypoint can repair an
-existing workspace whose cached sidecar image can no longer start.
+existing workspace whose cached sidecar image can no longer start. The root
+entrypoint MUST initialize the volume-mounted Docker data directory and
+`XDG_RUNTIME_DIR` for the rootless UID after mounts are applied, and the gate
+MUST verify their ownership and private runtime-directory mode.
 
 Project-runtime cgroup verification MUST cover both supported delegation
 shapes (`systemd` and `cgroupfs`) and the unsupported `none` driver. The
