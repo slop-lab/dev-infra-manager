@@ -16,6 +16,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Replaced the QEMU runner's one-webhook/one-VM launcher with a persistent
+  single-capacity demand scheduler. Queued jobs now survive supervisor
+  failures and restarts, and remain scheduled until Gitea reports that they
+  started or completed instead of being stranded when an ephemeral runner
+  consumes a different task.
 - Removed an empty per-Project CI runner state directory with the directory
   API, preventing a successful final runner deletion from ending in `EISDIR`
   and an admin-controller 500 response.

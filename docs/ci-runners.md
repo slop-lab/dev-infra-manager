@@ -71,6 +71,16 @@ Gitea registration is
 only the current coordinator adapter, so replacing the built-in coordinator
 does not change this executor boundary.
 
+The supervisor also acts as a single-capacity Project scheduler. It persists
+the IDs and states of selected workflow jobs in the runner data volume before
+acknowledging their webhooks. A VM exit does not itself consume queued demand:
+the scheduler waits for Gitea to report that a job started or completed, and
+starts another disposable VM with bounded retry delay while demand remains.
+This matters because an organization runner cannot bind its next fetch to the
+job ID that caused the webhook and may receive another coordinator task.
+Persisted queued demand resumes after a supervisor restart, so webhook
+redelivery is not required.
+
 Creating a QEMU runner adds only its managed supervisor hostname to Gitea's
 webhook allowlist and restarts the managed Gitea service to apply that setting.
 DIM does not enable unrestricted private-network webhook delivery.
@@ -169,9 +179,10 @@ never starts, replaces, or deletes another. Multiple Sysbox runners provide
 parallel capacity while retaining concurrency one per runner. QEMU is limited
 to one named runner per Project today because Gitea broadcasts the same queued
 job webhook to every supervisor, which would otherwise boot multiple VMs for
-one job. A future Project-scoped scheduler can own the single webhook and
-dispatch queued demand across named QEMU capacity; runner identity and state do
-not need to change when that scheduler is added.
+one job. Its Project scheduler currently has capacity one. A later centralized
+scheduler can own the single webhook and dispatch the same demand across
+multiple named QEMU capacities; runner identity does not need to change when
+that is added.
 
 As a pre-stable state contract, earlier CI runner state is not migrated
 automatically. Schema 4 records effective QEMU resources so overrides survive

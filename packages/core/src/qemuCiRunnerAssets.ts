@@ -1,4 +1,4 @@
-export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.1";
+export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.2";
 
 export const QEMU_CI_SUPERVISOR_DOCKERFILE = `FROM ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 RUN apt-get update \\
@@ -14,35 +14,72 @@ export const QEMU_CI_WEBHOOK_SCRIPT = `#!/usr/bin/env python3
 import hmac
 import json
 import os
-import queue
 import subprocess
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 authorization = os.environ["DIM_QEMU_WEBHOOK_AUTHORIZATION"]
-jobs = queue.Queue()
-known = set()
-lock = threading.Lock()
+state_path = os.environ.get(
+    "DIM_QEMU_SCHEDULER_STATE",
+    "/var/lib/dim-qemu-ci/scheduler-demand.json",
+)
+condition = threading.Condition()
+
+def load_state():
+    try:
+        with open(state_path, encoding="utf-8") as source:
+            value = json.load(source)
+        return set(map(int, value.get("queued", []))), set(map(int, value.get("running", [])))
+    except FileNotFoundError:
+        return set(), set()
+    except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        print(f"qemu-ci-scheduler: ignoring invalid state: {error}", flush=True)
+        return set(), set()
+
+queued, running = load_state()
+
+def save_state():
+    directory = os.path.dirname(state_path)
+    os.makedirs(directory, exist_ok=True)
+    temporary = state_path + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as output:
+        json.dump({"queued": sorted(queued), "running": sorted(running)}, output)
+        output.flush()
+        os.fsync(output.fileno())
+    os.replace(temporary, state_path)
 
 def worker():
+    failures = 0
     while True:
-        job_id = jobs.get()
+        with condition:
+            condition.wait_for(lambda: bool(queued))
+            demand = sorted(queued)
+        print(f"qemu-ci-scheduler: starting VM for queued jobs {demand}", flush=True)
         try:
             subprocess.run(["bash", "/usr/local/bin/dim-qemu-ci-supervise"], check=True)
+            failures = 0
         except subprocess.CalledProcessError as error:
             print(
-                f"qemu-ci-webhook: supervisor failed for job {job_id}: exit {error.returncode}",
+                f"qemu-ci-scheduler: supervisor failed: exit {error.returncode}",
                 flush=True,
             )
+            failures += 1
         except Exception as error:
             print(
-                f"qemu-ci-webhook: supervisor failed for job {job_id}: {error}",
+                f"qemu-ci-scheduler: supervisor failed: {error}",
                 flush=True,
             )
-        finally:
-            with lock:
-                known.discard(job_id)
-            jobs.task_done()
+            failures += 1
+        with condition:
+            retry = bool(queued)
+        if retry:
+            delay = min(2 ** max(failures, 1), 30)
+            print(
+                f"qemu-ci-scheduler: queued demand remains; retrying in {delay}s",
+                flush=True,
+            )
+            time.sleep(delay)
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -61,17 +98,25 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length))
             workflow_job = payload["workflow_job"]
             job_id = int(workflow_job["id"])
-            queued = payload.get("action") == "queued"
+            action = payload.get("action")
             selected = "dim-qemu" in workflow_job.get("labels", [])
         except (KeyError, TypeError, ValueError, json.JSONDecodeError):
             self.send_error(400)
             return
-        if queued and selected:
-            with lock:
-                if job_id not in known:
-                    known.add(job_id)
-                    jobs.put(job_id)
-                    print(f"qemu-ci-webhook: queued job {job_id}", flush=True)
+        if selected and action in ("queued", "in_progress", "completed"):
+            with condition:
+                if action == "queued":
+                    queued.add(job_id)
+                    running.discard(job_id)
+                elif action == "in_progress":
+                    queued.discard(job_id)
+                    running.add(job_id)
+                else:
+                    queued.discard(job_id)
+                    running.discard(job_id)
+                save_state()
+                condition.notify_all()
+            print(f"qemu-ci-scheduler: {action} job {job_id}", flush=True)
         self.send_response(202)
         self.end_headers()
 

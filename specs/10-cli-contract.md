@@ -197,10 +197,15 @@ container-engine socket. The initial adapter also maps `ubuntu-24.04` to its
 compatible job image so a workflow shared with GitHub does not require a
 provider-specific `runs-on` edit.
 
-A failed disposable VM supervisor invocation MUST be reported with its job ID
-and MUST NOT terminate the webhook demand worker. The failed job is removed
-from the in-flight set, and later queued `dim-qemu` jobs continue to launch
-fresh supervisor invocations.
+The QEMU supervisor includes a single-capacity Project scheduler. It MUST
+persist selected `queued`, `in_progress`, and `completed` workflow-job state in
+the managed QEMU data volume before acknowledging each webhook. Queued demand
+MUST remain pending until the coordinator reports that the job entered
+progress or completed; a disposable VM exiting, including after consuming a
+different stale coordinator task, MUST NOT silently discard that demand.
+Supervisor failures use bounded retry delay and MUST NOT terminate the webhook
+server. After a supervisor or container restart, persisted queued demand MUST
+resume without another webhook delivery. Completed demand MUST NOT start a VM.
 
 The runner also advertises `dim-container-integration` in host mode. Here
 "host" is the isolated Project CI runner container, not the DIM host. This

@@ -153,9 +153,10 @@ describe("CI runner resources", () => {
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain("--ephemeral");
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain("printf '%s\\n' \"$GITEA_RUNNER_REGISTRATION_TOKEN\" | ssh");
     expect(QEMU_CI_WEBHOOK_SCRIPT).toContain('selected = "dim-qemu" in workflow_job.get("labels", [])');
-    expect(QEMU_CI_WEBHOOK_SCRIPT).toContain('payload.get("action") == "queued"');
+    expect(QEMU_CI_WEBHOOK_SCRIPT).toContain('action in ("queued", "in_progress", "completed")');
+    expect(QEMU_CI_WEBHOOK_SCRIPT).toContain('"/var/lib/dim-qemu-ci/scheduler-demand.json"');
     expect(QEMU_CI_WEBHOOK_SCRIPT).toContain("except subprocess.CalledProcessError as error:");
-    expect(QEMU_CI_WEBHOOK_SCRIPT).toContain("supervisor failed for job {job_id}");
+    expect(QEMU_CI_WEBHOOK_SCRIPT).toContain("queued demand remains; retrying");
   });
 
   it.runIf(hasPython)("keeps accepting queued jobs after a supervisor failure", async () => {
@@ -165,6 +166,8 @@ describe("CI runner resources", () => {
     const supervisorPath = join(directory, "supervise.bash");
     const attemptsPath = join(directory, "attempts");
     const successPath = join(directory, "success");
+    const releasePath = join(directory, "release");
+    const statePath = join(directory, "scheduler-demand.json");
     const port = await availablePort();
     await writeFile(webhookPath, QEMU_CI_WEBHOOK_SCRIPT
       .replace("/usr/local/bin/dim-qemu-ci-supervise", supervisorPath)
@@ -177,9 +180,10 @@ attempts="$((attempts + 1))"
 printf '%s\\n' "$attempts" >'${attemptsPath}'
 if [[ "$attempts" -eq 1 ]]; then exit 23; fi
 touch '${successPath}'
+while [[ ! -f '${releasePath}' ]]; do sleep 0.05; done
 `);
     const webhook = spawn("python3", [webhookPath], {
-      env: { ...process.env, DIM_QEMU_WEBHOOK_AUTHORIZATION: "Bearer test" },
+      env: { ...process.env, DIM_QEMU_WEBHOOK_AUTHORIZATION: "Bearer test", DIM_QEMU_SCHEDULER_STATE: statePath },
       stdio: ["ignore", "pipe", "pipe"]
     });
     let output = "";
@@ -196,13 +200,59 @@ touch '${successPath}'
           return false;
         }
       });
-      await sendQueuedJob(port, 101);
+      await sendWorkflowJob(port, 101, "queued");
       await waitFor(async () => (await readFileIfPresent(attemptsPath)) === "1\n");
-      await sendQueuedJob(port, 102);
+      await sendWorkflowJob(port, 101, "completed");
+      await sendWorkflowJob(port, 102, "queued");
       await waitFor(async () => (await readFileIfPresent(successPath)) !== undefined);
       expect(await readFileIfPresent(attemptsPath)).toBe("2\n");
-      expect(output).toContain("supervisor failed for job 101: exit 23");
+      await sendWorkflowJob(port, 102, "in_progress");
+      await writeFile(releasePath, "\n");
+      expect(output).toContain("supervisor failed: exit 23");
       expect(output).toContain("queued job 102");
+    } finally {
+      if (webhook.exitCode === null) {
+        const closed = new Promise<void>((resolve) => webhook.once("close", () => resolve()));
+        webhook.kill("SIGTERM");
+        await closed;
+      }
+    }
+  });
+
+  it.runIf(hasPython)("retains queued demand until Gitea reports that a job started", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dim-qemu-scheduler-"));
+    temporaryDirectories.push(directory);
+    const webhookPath = join(directory, "webhook.py");
+    const supervisorPath = join(directory, "supervise.bash");
+    const attemptsPath = join(directory, "attempts");
+    const releasePath = join(directory, "release");
+    const statePath = join(directory, "scheduler-demand.json");
+    const port = await availablePort();
+    await writeFile(statePath, JSON.stringify({ queued: [201], running: [] }));
+    await writeFile(webhookPath, QEMU_CI_WEBHOOK_SCRIPT
+      .replace("/usr/local/bin/dim-qemu-ci-supervise", supervisorPath)
+      .replace("(\"0.0.0.0\", 8080)", `(\"127.0.0.1\", ${port})`));
+    await writeFile(supervisorPath, `#!/usr/bin/env bash
+set -eu
+attempts=0
+test ! -f '${attemptsPath}' || attempts="$(cat '${attemptsPath}')"
+attempts="$((attempts + 1))"
+printf '%s\n' "$attempts" >'${attemptsPath}'
+if [[ "$attempts" -eq 1 ]]; then exit 0; fi
+while [[ ! -f '${releasePath}' ]]; do sleep 0.05; done
+`);
+    const webhook = spawn("python3", [webhookPath], {
+      env: { ...process.env, DIM_QEMU_WEBHOOK_AUTHORIZATION: "Bearer test", DIM_QEMU_SCHEDULER_STATE: statePath },
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    try {
+      await waitFor(async () => (await readFileIfPresent(attemptsPath)) === "2\n");
+      expect(JSON.parse(await readFile(statePath, "utf8"))).toEqual({ queued: [201], running: [] });
+      await sendWorkflowJob(port, 201, "in_progress");
+      await waitFor(async () => JSON.parse((await readFileIfPresent(statePath)) ?? "{}").running?.[0] === 201);
+      await writeFile(releasePath, "\n");
+      await sendWorkflowJob(port, 201, "completed");
+      await waitFor(async () => (await readFile(statePath, "utf8")) === '{"queued": [], "running": []}');
     } finally {
       if (webhook.exitCode === null) {
         const closed = new Promise<void>((resolve) => webhook.once("close", () => resolve()));
@@ -229,7 +279,7 @@ async function availablePort(): Promise<number> {
   });
 }
 
-async function sendQueuedJob(port: number, id: number): Promise<void> {
+async function sendWorkflowJob(port: number, id: number, action: "queued" | "in_progress" | "completed"): Promise<void> {
   const response = await fetch(`http://127.0.0.1:${port}/workflow-job`, {
     method: "POST",
     headers: {
@@ -237,7 +287,7 @@ async function sendQueuedJob(port: number, id: number): Promise<void> {
       "Content-Type": "application/json",
       "X-Gitea-Event": "workflow_job"
     },
-    body: JSON.stringify({ action: "queued", workflow_job: { id, labels: ["dim-qemu"] } })
+    body: JSON.stringify({ action, workflow_job: { id, labels: ["dim-qemu"] } })
   });
   expect(response.status).toBe(202);
 }
