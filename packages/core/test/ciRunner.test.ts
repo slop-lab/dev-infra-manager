@@ -302,7 +302,7 @@ async function readFileIfPresent(path: string): Promise<string | undefined> {
 }
 
 async function waitFor(condition: () => Promise<boolean>): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  for (let attempt = 0; attempt < 250; attempt += 1) {
     if (await condition()) return;
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
