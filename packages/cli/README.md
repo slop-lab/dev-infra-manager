@@ -157,6 +157,10 @@ Run a task through the root repository's `.dim/entrypoint.sh`:
 dim workspace run feature-123 codex
 ```
 
+Task stdin is forwarded even when redirected or piped, so Project-defined
+streaming tasks can use contracts such as `dim workspace run feature-123
+restore <backup.tar.gz`. A TTY is allocated only for an interactive terminal.
+
 `exec` is the raw escape hatch; `run` uses the Project-defined task contract.
 
 ## Everyday lifecycle

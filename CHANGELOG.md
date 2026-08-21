@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Fixed
+
+- Forwarded stdin through `dim workspace run` and `dim workspace exec` even
+  when input is redirected instead of attached to a TTY, allowing streaming
+  Project tasks such as agent-home restore to consume piped archives.
+
 ### Added
 
 - Added Project-owned streaming `backup` and `restore` tasks to the canonical

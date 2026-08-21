@@ -194,7 +194,7 @@ export async function runWorkspace(
   const command = hasEntrypoint
     ? ["sh", ".dim/entrypoint.sh", ...input.command]
     : input.command;
-  return streamProjectCommand(runner, record, command, input.interactive);
+  return streamProjectCommand(runner, record, command, input.interactive, true);
 }
 
 export async function execWorkspace(
@@ -205,7 +205,7 @@ export async function execWorkspace(
   const record = await showWorkspace(options, input.name);
   await assertContainerRunning(runner, record);
   if (input.command.length === 0) throw new UserError("dim workspace exec requires a command");
-  return streamProjectCommand(runner, record, input.command, input.interactive);
+  return streamProjectCommand(runner, record, input.command, input.interactive, true);
 }
 
 export async function setupWorkspace(
@@ -998,13 +998,15 @@ async function streamProjectCommand(
   runner: StreamingCommandRunner,
   record: WorkspaceRecord,
   command: string[],
-  interactive: boolean
+  tty: boolean,
+  attachStdin = false
 ): Promise<number> {
   const args = [
     "exec", "--user", WORKSPACE_USER, "--workdir", record.projectPath,
     ...projectEnvironment(record)
   ];
-  if (interactive) args.push("--interactive", "--tty");
+  if (attachStdin) args.push("--interactive");
+  if (tty) args.push("--tty");
   args.push(record.containerName, ...command);
   return runner.runStreaming("docker", args);
 }

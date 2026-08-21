@@ -258,7 +258,9 @@ operations. A Project can use stdin/stdout streaming for its chosen format and
 scope. The canonical examples stop the agent while a networkless temporary
 container archives only its named home volume. Backup mounts that volume
 read-only; restore replaces its contents through a read-write mount. The agent
-is restarted afterward if it was running before the task.
+is restarted afterward if it was running before the task. `workspace run` and
+`workspace exec` forward stdin for redirected and interactive invocations;
+only an actual terminal session requests a TTY from the workspace runtime.
 
 Run a raw command in the top-level workspace:
 
