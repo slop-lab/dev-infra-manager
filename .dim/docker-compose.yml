@@ -2,7 +2,7 @@ services:
   agent:
     image: "dim-${DIM_WORKSPACE_NAME:?}-agent"
     build:
-      context: dev
+      context: agent
     environment:
       DOCKER_HOST: "tcp://agent-dind:2375"
       DIM_GIT_USERNAME: "${DIM_GIT_USERNAME:?}"

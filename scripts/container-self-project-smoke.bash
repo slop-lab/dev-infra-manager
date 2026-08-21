@@ -174,6 +174,10 @@ agent_git_identity="$(dim workspace run "$workspace_name" bash -- -lc \
 test "$agent_git_identity" = \
   "DIM Self Host <dim-self-host@dim.invalid>|DIM Self Host <dim-self-host@dim.invalid>"
 dim workspace run "$workspace_name" bash -- -lc '
+  grep -q "Ubuntu 24.04" /etc/os-release
+  node --version | grep -Eq "^v24\."
+  docker compose version >/dev/null
+  just --version >/dev/null
   test "$HOME" = /home/dim-agent
   printf "persistent\n" > "$HOME/dim-home-smoke"
 '

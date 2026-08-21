@@ -87,7 +87,7 @@ This repository uses the same project-facing contract as an external project:
 
 ```text
 .dim/
-├── dev/
+├── agent/
 │   ├── Dockerfile
 │   └── start.sh
 ├── docker-compose.yml
@@ -100,7 +100,8 @@ This repository uses the same project-facing contract as an external project:
 The role-neutral `images/project-workspace` image is the trusted lifecycle
 container. The reviewed `.dim/setup.sh` obtains the host Git author through
 the narrow host-input API and starts the repository-owned Compose `agent`
-service. The agent image supplies Codex, Node.js, pnpm, just, Git, and a
+service. Its pinned Ubuntu 24.04 image supplies Codex, Node.js 24, pnpm, just,
+Git, and a
 private Docker daemon without receiving either host Docker socket or the
 trusted workspace's Docker socket.
 

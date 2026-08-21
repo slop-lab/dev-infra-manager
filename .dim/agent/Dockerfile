@@ -4,17 +4,14 @@ FROM ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      bash ca-certificates curl git jq tini \
+      bash ca-certificates curl git jq just tini \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=node /usr/local/ /usr/local/
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker-cli /usr/local/bin/docker-compose /usr/local/bin/docker-compose
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose \
   /usr/local/libexec/docker/cli-plugins/docker-compose
-RUN npm install --global --allow-scripts=@anthropic-ai/claude-code \
-      @openai/codex@0.149.0 @anthropic-ai/claude-code@2.1.238
-
-COPY start.sh /usr/local/bin/start-single-app
+RUN npm install --global pnpm@10.13.1 @openai/codex@0.149.0
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["sh", "/usr/local/bin/start-single-app"]
+CMD ["sleep", "infinity"]

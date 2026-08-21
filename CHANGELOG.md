@@ -9,6 +9,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Switched the canonical and runnable-example agent images from Alpine-based
+  Docker CLI images to pinned Ubuntu 24.04 images, while retaining pinned Node
+  24, Docker CLI/Compose, and agent tooling through isolated build stages.
+- Normalized tracked Bash source files to non-executable mode; callers invoke
+  them explicitly with Bash and runtime images set executable mode where an
+  installed entrypoint requires it.
 - Split the managed development release gate into independent Sysbox, gVisor,
   rootless-Podman, and runc QEMU jobs so named host capacities can verify the
   backends concurrently while workflows retain the shared `dim-qemu` label.
