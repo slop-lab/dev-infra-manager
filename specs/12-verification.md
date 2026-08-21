@@ -43,7 +43,7 @@ Current commands:
 ```bash
 just typecheck
 just test
-just build
+just build-packages
 ```
 
 This gate must require only Node.js and pnpm, not Docker, a runtime backend,

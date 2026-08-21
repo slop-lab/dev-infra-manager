@@ -4,7 +4,7 @@ The Docker-compatible project workspace image is built from
 [`images/project-workspace`](../images/project-workspace):
 
 ```bash
-just build-project-workspace
+just build-workspace-image
 ```
 
 The build first packages `@slop-lab/dim-controller-proxy` and includes its

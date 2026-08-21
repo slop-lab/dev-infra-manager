@@ -117,5 +117,5 @@ ssh "${ssh_args[@]}" dim@127.0.0.1 '
 guest_environment="DIM_EXAMPLE_WORKSPACE_BACKEND=$backend DIM_CI_RUNNER_EXAMPLE_ATTEMPTS=300"
 echo "example[$backend]: run verification"
 ssh "${ssh_args[@]}" dim@127.0.0.1 \
-  "cd dim && JUST_UNSTABLE=1 just install && $guest_environment JUST_UNSTABLE=1 just verify example current-installed auto '$selection'"
+  "cd dim && JUST_UNSTABLE=1 just install-dependencies && $guest_environment JUST_UNSTABLE=1 just verify example current-installed auto '$selection'"
 echo "example-qemu-smoke-ok: $backend/$selection"

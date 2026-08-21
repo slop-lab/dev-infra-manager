@@ -6,7 +6,7 @@ environments-kvm verbose="":
 
 # Build packages and verify plugin installation through the published package shape.
 plugin-install:
-    just build
+    just build-packages
     cd .. && bash scripts/plugin-install-smoke.bash
 
 # Verify every publishable package through the same dry-run used before release.
@@ -21,7 +21,7 @@ package-packs:
 
 # Run the strongest gate supported inside this repository's DIM development agent.
 agent:
-    just check
+    just check-source
     just verify plugin-install
     just verify package-packs
     just verify project-runtime-cgroups
@@ -50,7 +50,7 @@ container-ci:
     docker info >/dev/null
     docker compose version >/dev/null
     cd .. && bash scripts/container-integration-preflight.bash
-    just build-project-workspace
+    just build-workspace-image
     cd .. && bash scripts/container-inner-docker-smoke.bash
     cd .. && bash scripts/container-lifecycle-smoke.bash
     cd .. && bash scripts/container-packed-project-smoke.bash
@@ -67,8 +67,8 @@ example backend="current-installed" dirty_repo="auto" example="all":
 self-development:
     docker info >/dev/null
     docker compose version >/dev/null
-    just build
-    just build-project-workspace
+    just build-packages
+    just build-workspace-image
     cd .. && bash scripts/container-self-project-smoke.bash
 
 # Run lifecycle isolation tests without Docker or workspace creation.

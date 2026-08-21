@@ -27,6 +27,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Renamed ambiguous root Just recipes to describe their actual scope:
+  `install-dependencies`, `build-packages`, `check-source`, `run-cli`,
+  `install-local-cli`, and `build-workspace-image`.
 - Replaced named CI runner `enable`/`disable` with explicit
   `create`/`start`/`restart`/`stop`/`delete` lifecycle commands.
 

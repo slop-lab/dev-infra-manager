@@ -47,7 +47,7 @@ Install and verify one Ubuntu host runtime backend:
 
 ```bash
 bash scripts/install-host-ubuntu.bash sysbox
-just cli doctor
+just run-cli doctor
 ```
 
 Projects may start a development-agent service from `.dim/setup.sh` and route
@@ -78,7 +78,7 @@ bash scripts/install-host-ubuntu.bash runc
 
 The script records its backend in DIM user configuration and builds the
 rootless Podman workspace image when that backend is selected. From this
-source checkout, run `just cli doctor` after installation. Sysbox and gVisor are intentionally not
+source checkout, run `just run-cli doctor` after installation. Sysbox and gVisor are intentionally not
 installed together by the convenience script. Use the KVM gate below to test
 every installer without requiring the runtimes to coexist on one host.
 
@@ -125,7 +125,7 @@ non-zero after printing the gaps.
 Build the included runtime images:
 
 ```bash
-just build-project-workspace
+just build-workspace-image
 ```
 
 Run the integration smoke test:
@@ -163,7 +163,7 @@ it does not replace the Sysbox runtime behavior covered by
 Run the full local verification suite:
 
 ```bash
-just check
+just check-source
 ```
 
 `just check` runs `just typecheck`, `just test`, and `just build`. It requires
@@ -284,7 +284,7 @@ runtime backend, and cgroup v2 support.
 Run the same check from source against the installed backend configuration:
 
 ```bash
-just cli doctor
+just run-cli doctor
 ```
 
 `just cli` builds `@slop-lab/dim-core` first, then runs `dim`

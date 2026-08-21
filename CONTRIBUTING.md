@@ -9,17 +9,17 @@ the canonical public source; see
 ## Quick reference
 
 ```bash
-pnpm install
+just install-dependencies # locked monorepo dependencies
 just typecheck       # TypeScript checks only
 just test            # unit tests
-just build           # publishable package builds
-just check           # typecheck + test + build; only Node.js and pnpm required
+just build-packages  # publishable package builds
+just check-source    # typecheck + test + package builds; only Node.js and pnpm required
 just verify agent    # strongest gate supported inside this repository's DIM agent
 just ci all          # complete CI gate with the active Node.js version
 just ci matrix       # exact Node.js 24/26 CI workflow matrix via mise
 just ci matrix --manual # also include manually dispatched Sysbox/KVM workflows
 just doctor          # host readiness: dev tools, Docker, selected backend, cgroup v2
-just cli -- --help   # build core, then run dim from source without installing it
+just run-cli -- --help # build core, then run dim from source without installing it
 ```
 
 `just verify agent` checks the source and package shapes, then verifies image
@@ -79,9 +79,10 @@ backend, project dependencies, and runs `verify` plus `doctor`. See
 ## Linking a locally built `dim` for testing against another project
 
 ```bash
-just install-dim-local
+just install-local-cli
 ```
 
-Builds `core`/`dim-cli` from source and installs the result globally,
-bypassing the installer facade — for iterating on DIM itself, not the normal
-install path (see [README.md](README.md#install-the-dim-cli) for that).
+Builds local package tarballs and installs them through the mise-managed
+installer facade when available, with a direct global npm-prefix fallback —
+for iterating on DIM itself, not the normal release install path (see
+[README.md](README.md#install-the-dim-cli) for that).

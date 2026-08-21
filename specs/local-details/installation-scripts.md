@@ -46,7 +46,7 @@ Behavior:
 
 Unsupported Sysbox architectures must fail. Each invocation installs exactly
 one backend and records it in DIM user configuration. From a source checkout,
-the operator runs `just cli doctor` afterward. Testing every installer uses a separate KVM guest per
+the operator runs `just run-cli doctor` afterward. Testing every installer uses a separate KVM guest per
 backend rather than requiring Sysbox and gVisor to coexist on one host.
 
 ## gVisor runsc Install

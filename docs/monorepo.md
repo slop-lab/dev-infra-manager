@@ -112,7 +112,7 @@ Build the image once, create a Project root, push this repository, and create
 a persistent workspace:
 
 ```bash
-just build-project-workspace
+just build-workspace-image
 dim project create dim-self \
   --url /path/to/dev-infra-manager --ref development --apply-repos
 dim workspace create dim-self dim-self-dev
@@ -154,7 +154,7 @@ hosts without KVM.
 Run the current manager verification:
 
 ```bash
-just check
+just check-source
 ```
 
 This runs the matching check, test, and build scripts in every workspace

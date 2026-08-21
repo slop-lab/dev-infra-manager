@@ -135,7 +135,7 @@ you'll install the `dim` CLI itself from npm below:
 git clone --no-checkout <this-repository>
 cd dev-infra-manager
 git checkout --detach <reviewed-tag-or-full-commit>
-just build-project-workspace
+just build-workspace-image
 bash scripts/install-host-ubuntu.bash sysbox
 ```
 

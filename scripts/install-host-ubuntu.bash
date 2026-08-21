@@ -122,7 +122,7 @@ Either log out and back in, or run:
 
 Then run:
 
-  just cli doctor
+  just run-cli doctor
 EOF
 }
 
@@ -148,5 +148,5 @@ install_selected_backend
 configure_dim_backend
 configure_install_user
 if [[ -z "$install_user" ]]; then
-  echo "Host install complete. Run: just cli doctor"
+  echo "Host install complete. Run: just run-cli doctor"
 fi
