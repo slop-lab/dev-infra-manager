@@ -9,6 +9,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added Project-owned streaming `backup` and `restore` tasks to the canonical
+  self-Project and runnable Project examples, archiving only the agent home
+  without adding backup-format knowledge to DIM core.
 - Added independently named Project CI runners, allowing multiple Sysbox
   instances with separate lifecycle, state, resources, logs, and coordinator
   registrations while retaining one on-demand QEMU runner per Project.

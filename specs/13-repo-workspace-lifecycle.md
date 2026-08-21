@@ -151,8 +151,10 @@ declare one in `.dim/docker-compose.yml`, start it from `.dim/setup.sh`, and
 dispatch fixed tasks into it from `.dim/entrypoint.sh`. Core owns none of its
 image, service, volume, privilege, or task configuration. `dim workspace run WORKSPACE
 TASK` always follows the checked-in `.dim/entrypoint.sh` contract when present.
-The canonical self-Project exposes `codex` and an agent-container `bash` task.
-Repository commands, including just recipes, run explicitly through that bash
+The canonical self-Project exposes `codex`, an agent-container `bash` task,
+and Project-owned `backup`/`restore` tasks that stream a gzip tar archive of
+the agent home over stdout/stdin. DIM does not interpret or persist the archive.
+Repository commands, including just recipes, run explicitly through the bash
 task rather than growing one entrypoint task per recipe.
 
 Before `create`, `start`, `setup`, or `update` runs Project setup, DIM must

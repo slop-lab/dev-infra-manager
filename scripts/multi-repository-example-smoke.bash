@@ -157,6 +157,13 @@ if [[ "$bash_status" -ne 0 || "$bash_output" != "project-bash-ok" ]]; then
   echo "bash task failed ($bash_status), output: '$bash_output'" >&2
   exit 1
 fi
+dim workspace run "$workspace_name" bash -- -lc 'printf "multi-home\n" >"$HOME/archive-smoke"'
+home_backup="$work_dir/agent-home.tar.gz"
+dim workspace run "$workspace_name" backup >"$home_backup"
+gzip -t "$home_backup"
+dim workspace run "$workspace_name" bash -- -lc 'rm "$HOME/archive-smoke"'
+dim workspace run "$workspace_name" restore <"$home_backup"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/archive-smoke"')" = multi-home
 
 echo "[example-project] 7. run a coding agent in the dev container"
 # The dev container installs codex/claude via its own startup command, which

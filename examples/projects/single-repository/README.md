@@ -73,6 +73,15 @@ dim workspace run single-dev codex
 dim workspace run single-dev bash -- -lc 'docker run --rm hello-world'
 ```
 
+The Project also owns a simple streaming backup contract for the agent home.
+Backup data uses stdout and restore data uses stdin; diagnostics remain on
+stderr, so DIM does not need to understand the archive format:
+
+```bash
+dim workspace run single-dev backup >single-dev-home.tar.gz
+dim workspace run single-dev restore <single-dev-home.tar.gz
+```
+
 An agent running directly in this no-secret workspace receives the
 Project-scoped Git writer and may push `main` because this example configured
 no protected patterns.

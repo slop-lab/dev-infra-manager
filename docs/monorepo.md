@@ -126,6 +126,8 @@ exposes only these tasks:
 - `codex` starts Codex inside the unprivileged Project-owned agent container.
 - `bash` starts Bash inside the unprivileged Project-owned agent container,
   not in the trusted workspace container.
+- `backup` writes a gzip tar stream of the agent home to stdout, and `restore`
+  reads that stream from stdin. The Project owns the archive contract.
 
 Use `bash -- -lc 'just RECIPE'` for repository recipes instead of adding a
 task alias for each recipe.

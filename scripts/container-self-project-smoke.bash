@@ -170,6 +170,12 @@ dim workspace run "$workspace_name" bash -- -lc '
   printf "persistent\n" > "$HOME/dim-home-smoke"
 '
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/dim-home-smoke"')" = persistent
+home_backup="$state_root/agent-home.tar.gz"
+dim workspace run "$workspace_name" backup >"$home_backup"
+gzip -t "$home_backup"
+dim workspace run "$workspace_name" bash -- -lc 'rm "$HOME/dim-home-smoke"'
+dim workspace run "$workspace_name" restore <"$home_backup"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/dim-home-smoke"')" = persistent
 dim workspace run "$workspace_name" bash -- -lc '
   test -n "$(getent hosts dim-gitea)"
   git ls-remote origin HEAD >/dev/null

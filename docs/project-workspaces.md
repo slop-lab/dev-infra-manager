@@ -249,7 +249,13 @@ Run project-defined tasks without repeating setup:
 ```bash
 dim workspace run example-dev codex
 dim workspace run example-dev bash -- -lc 'just test'
+dim workspace run example-dev backup >example-dev-home.tar.gz
+dim workspace run example-dev restore <example-dev-home.tar.gz
 ```
+
+Backup and restore are Project-defined tasks rather than DIM lifecycle
+operations. A Project can use stdin/stdout streaming for its chosen format and
+scope; the canonical examples archive only the agent service's home directory.
 
 Run a raw command in the top-level workspace:
 

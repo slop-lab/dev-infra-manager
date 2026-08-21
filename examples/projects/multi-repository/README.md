@@ -66,6 +66,16 @@ Arguments can follow `--`:
 dim workspace run example-dev bash -- -lc 'git status'
 ```
 
+Export or restore only the Project-owned agent home as a gzip tar stream:
+
+```bash
+dim workspace run example-dev backup >example-dev-home.tar.gz
+dim workspace run example-dev restore <example-dev-home.tar.gz
+```
+
+The Project defines this format and task mapping; DIM only streams stdin,
+stdout, stderr, and the task exit status.
+
 ## Trust and container boundaries
 
 The trusted root checkout owns `.dim/setup.sh`, Compose configuration, and the

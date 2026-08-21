@@ -100,6 +100,13 @@ test "$(jq -r .pidsLimit <<<"$workspace_json")" = "512"
 container_name="$(jq -r .containerName <<<"$workspace_json")"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'curl --fail --silent http://127.0.0.1:3000')" = \
   "hello from a single-repository DIM workspace"
+dim workspace run "$workspace_name" bash -- -lc 'printf "single-home\n" >"$HOME/archive-smoke"'
+home_backup="$work_dir/agent-home.tar.gz"
+dim workspace run "$workspace_name" backup >"$home_backup"
+gzip -t "$home_backup"
+dim workspace run "$workspace_name" bash -- -lc 'rm "$HOME/archive-smoke"'
+dim workspace run "$workspace_name" restore <"$home_backup"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/archive-smoke"')" = single-home
 
 agent_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-$workspace_name" \
