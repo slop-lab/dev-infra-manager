@@ -21,8 +21,9 @@ familiar repository name.
 
 - For `github`, use available GitHub tooling and preserve the requested draft
   state. Do not default to draft unless repository guidance requires it.
-- For `gitea`, use `ensure-gitea`. It creates a non-draft PR or updates the
-  existing open PR for the same head and base.
+- For `gitea`, read [references/gitea.md](references/gitea.md), then use the
+  bundled helpers. They contain the supported Gitea API workflow; do not
+  search for Gitea usage or handcraft equivalent API requests.
 - For `unknown`, report the remote and the helper's error without trying
   provider APIs speculatively.
 
@@ -32,25 +33,22 @@ Inspect the worktree and target branch, verify the intended change, stage exact
 paths, commit, and push the head branch. Never overwrite unrelated work or
 force-push unless the user explicitly requested it.
 
-For Gitea, write the PR body to a temporary file and run:
+Before committing, distinguish the canonical public source from a development
+forge. DIM-managed Git hosts are development and review locations, currently
+backed by Gitea; GitHub is DIM's canonical public source. For a development
+forge, do not put its local issue numbers (for example `#123`) in commit
+subjects or PR titles because those strings may later enter public history.
+Use a descriptive standalone subject. A local issue reference may remain in
+the PR body when useful for review inside that forge.
 
-```bash
-bash <skill-dir>/scripts/ensure-gitea-pr.bash \
-  --base BASE --head HEAD --title TITLE --body-file BODY_FILE
-```
-
-The helper discovers the remote and credentials through Git. `GITEA_TOKEN` is
-an optional standard override. Never expose credentials in output, arguments,
-remote URLs, PR text, or persistent files. Remove temporary body files.
+For Gitea, follow the referenced helper contract. Never expose credentials in
+output, arguments, remote URLs, PR text, or persistent files.
 
 ## Verify CI
 
-Report local verification separately from remote CI. For Gitea, wait on the
-exact pushed SHA rather than only a branch name:
-
-```bash
-bash <skill-dir>/scripts/wait-gitea-ci.bash --sha HEAD_SHA --timeout 3600
-```
+Report local verification separately from remote CI. For Gitea, use the
+referenced helper to wait on the exact pushed SHA rather than only a branch
+name.
 
 Stop when all reported statuses succeed, any status fails, or the timeout is
 reached. A timeout or unavailable required runner is not success. For GitHub,

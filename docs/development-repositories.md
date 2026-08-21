@@ -25,3 +25,9 @@ agent instructions to name Gitea.
 Release preparation verifies the exact candidate commit in both locations
 before publishing. See [Releasing](releasing.md) for that synchronization and
 verification procedure.
+
+Because the managed development host is not the canonical public issue or
+source location, its local issue numbers must not appear in commit subjects or
+PR titles that may later become public history. Use standalone descriptive
+subjects; reference a managed-host issue in the development PR body when that
+context is useful locally.
