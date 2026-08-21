@@ -319,11 +319,11 @@ requiring the controller to be running.
 Host configuration is managed through:
 
 ```text
-dim external-url dns-provider add DRIVER --name NAME [--argument STRING]
+dim external-url dns-provider add DRIVER --name NAME [DRIVER_ARGUMENT...]
 dim external-url dns-provider list [--json]
 dim external-url dns-provider remove NAME
 dim external-url ingress add DRIVER --name NAME --description TEXT
-  --scheme SCHEME [--argument STRING]
+  --scheme SCHEME [DRIVER_ARGUMENT...]
 dim external-url ingress list [--json]
 dim external-url ingress verify NAME
 dim external-url ingress remove NAME [--cleanup-dns]
@@ -355,7 +355,9 @@ dim external-url revoke URL_ID [--workspace WORKSPACE]
 dim host-input get PROVIDER KEY [--parameters STRING]
 ```
 
-The ingress `argument` is an opaque string interpreted only by its driver.
+Provider and ingress arguments are forwarded as an ordered string array and
+interpreted only by the selected plugin driver. The CLI does not encode a
+driver-specific JSON schema.
 DNS provider plugins register named drivers through the instance-scoped DIM
 plugin extension registry. Provider configuration and Caddy's per-record
 `dnsArgument` remain opaque strings interpreted only by that driver; the

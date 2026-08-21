@@ -23,6 +23,7 @@ declarations.
 A provider plugin registers an `ExternalUrlDnsProviderDriver` under
 `EXTERNAL_URL_DNS_PROVIDER_EXTENSION`. The driver:
 
+- parses its provider-specific CLI argument array into the stored form;
 - validates and normalizes its opaque provider and DNS-record arguments;
 - creates, verifies, and removes one wildcard record for an ingress;
 - describes any Caddy DNS-01 modules, directive, and environment it requires.
@@ -38,6 +39,7 @@ import {
 } from "@slop-lab/dim-contracts-external-url";
 
 const driver: ExternalUrlDnsProviderDriver = {
+  parseProviderArguments: (arguments_) => JSON.stringify({ token: arguments_[0] }),
   normalizeProviderArgument: (argument) => argument,
   normalizeRecordArgument: (argument) => argument,
   async ensure(operation) { /* reconcile wildcard DNS */ },

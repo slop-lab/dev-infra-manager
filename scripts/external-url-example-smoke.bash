@@ -235,7 +235,10 @@ DIM_ADMIN_CONTROLLER_SOCKET="$admin_socket" \
     --name local-loopback \
     --description "loopback-only negative-test ingress" \
     --scheme http \
-    --argument "{\"domain\":\"loopback.tail.test\",\"publicPort\":$loopback_port,\"listenHost\":\"127.0.0.1\",\"listenPort\":$loopback_port}" \
+    --domain loopback.tail.test \
+    --public-port "$loopback_port" \
+    --listen-host 127.0.0.1 \
+    --listen-port "$loopback_port" \
     >/dev/null
 controller_pid="$(cat "$(dirname -- "$controller_socket")/controller.pid")"
 
@@ -337,15 +340,17 @@ cloudflare_cli=(
 )
 "${cloudflare_cli[@]}" dns-provider add cloudflare \
   --name local-cloudflare \
-  --argument '{"credential":"smoke-token"}' >/dev/null
+  --credential smoke-token >/dev/null
 "${cloudflare_cli[@]}" ingress add caddy \
   --name local-https \
   --description "local Cloudflare-compatible DNS smoke ingress" \
   --scheme https \
-  --argument "$(jq -cn --arg target "$gateway" \
-    --arg dnsArgument "$(jq -cn --arg value "$gateway" \
-      '{zone:"smoke.test",value:$value,proxied:false}')" \
-    '{domain:"dev.smoke.test",listenHost:"127.0.0.1",listenPort:"auto",dnsProvider:"local-cloudflare",dnsArgument:$dnsArgument}')" >/dev/null
+  --domain dev.smoke.test \
+  --listen-host 127.0.0.1 \
+  --listen-port auto \
+  --dns-provider local-cloudflare \
+  --dns-argument "$(jq -cn --arg value "$gateway" \
+    '{zone:"smoke.test",value:$value,proxied:false}')" >/dev/null
 managed_caddy="$state_root/plugins/external-urls/caddy/local-https"
 test -f "$managed_caddy/Caddyfile"
 test -f "$managed_caddy/.env"

@@ -287,13 +287,28 @@ async function externalUrlAdmin(
     if (typeof result !== "string") throw new UserError(`${name} must be a string`);
     return result;
   };
+  const strings = (name: string) => {
+    const result = input[name];
+    if (!Array.isArray(result) || result.some((item) => typeof item !== "string")) {
+      throw new UserError(`${name} must be an array of strings`);
+    }
+    return result as string[];
+  };
   const config = await readExternalUrlConfig();
   switch (action) {
     case "dns-provider-add": {
       const driver = text("driver");
+      const implementation = dnsDriver(host, driver);
+      if (typeof implementation.parseProviderArguments !== "function") {
+        throw new UserError(`external URL DNS provider driver '${driver}' does not expose CLI arguments`);
+      }
       config.dnsProviders[text("name")] = {
         driver,
-        argument: normalizeDnsProviderArgument(host, driver, text("argument"))
+        argument: normalizeDnsProviderArgument(
+          host,
+          driver,
+          implementation.parseProviderArguments(strings("arguments"))
+        )
       };
       await writeExternalUrlConfig(config);
       return {};
@@ -318,7 +333,7 @@ async function externalUrlAdmin(
       const driver = text("driver");
       const scheme = text("scheme");
       if (scheme !== "http" && scheme !== "https") throw new UserError("scheme must be http or https");
-      let argument = await configureIngressArgument(driver, scheme, text("argument"));
+      let argument = await configureIngressArguments(driver, scheme, strings("arguments"));
       if (driver === "caddy") {
         const parsed = parseCaddyIngressArgument(argument);
         const dnsProvider = parsed.dnsProvider;
@@ -528,11 +543,12 @@ function dnsOperation(provider: ExternalUrlDnsProviderConfig, ingress: ReturnTyp
   };
 }
 
-async function configureIngressArgument(
+async function configureIngressArguments(
   driver: string,
   scheme: "http" | "https",
-  argument: string
+  arguments_: readonly string[]
 ): Promise<string> {
+  const argument = JSON.stringify(parseIngressCliArguments(driver, arguments_));
   if (driver === "caddy") {
     if (scheme !== "https") {
       throw new UserError(
@@ -559,6 +575,39 @@ async function configureIngressArgument(
     ...parsed,
     listenPort: parsed.listenPort === "auto" ? await availableTcpPort(parsed.listenHost) : parsed.listenPort
   });
+}
+
+function parseIngressCliArguments(driver: string, arguments_: readonly string[]): Record<string, unknown> {
+  const allowed = driver === "caddy"
+    ? new Set(["domain", "listen-host", "listen-port", "upstream-mode", "dns-provider", "dns-argument", "acme-email"])
+    : driver === "http"
+      ? new Set(["domain", "listen-host", "listen-port", "public-port", "upstream-mode"])
+      : undefined;
+  if (!allowed) {
+    throw new UserError(`unsupported external URL ingress driver '${driver}'; supported drivers: http, caddy`);
+  }
+  const result: Record<string, unknown> = {};
+  for (let index = 0; index < arguments_.length; index += 1) {
+    const option = arguments_[index]!;
+    if (!option.startsWith("--") || !allowed.has(option.slice(2))) {
+      throw new UserError(`unknown ${driver} ingress argument '${option}'`);
+    }
+    const value = arguments_[++index];
+    if (value === undefined) throw new UserError(`${option} requires a value`);
+    const key = option.slice(2).replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
+    result[key] = option === "--listen-port" && value === "auto"
+      ? value
+      : option === "--listen-port" || option === "--public-port"
+        ? cliInteger(value, option)
+        : value;
+  }
+  return result;
+}
+
+function cliInteger(value: string, option: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) throw new UserError(`${option} requires an integer`);
+  return parsed;
 }
 
 async function availableTcpPort(host: string, excluded: ReadonlySet<number> = new Set()): Promise<number> {
@@ -627,7 +676,7 @@ const INGRESS_DOCUMENTATION_URL =
   "https://github.com/slop-lab/dev-infra-manager/blob/main/docs/external-urls.md#named-ingresses";
 
 function httpIngressArgumentError(detail: string): UserError {
-  return new UserError(`http ingress --argument ${detail}. See ${INGRESS_DOCUMENTATION_URL}`);
+  return new UserError(`http ingress arguments ${detail}. See ${INGRESS_DOCUMENTATION_URL}`);
 }
 
 async function listUrls(context: ControllerRouteContext) {

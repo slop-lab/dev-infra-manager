@@ -74,19 +74,20 @@ a driver-managed loopback router:
 ```bash
 dim external-url dns-provider add cloudflare \
   --name cloudflare-main \
-  --argument "$(jq -cn --arg credential "$CF_API_TOKEN" '{credential:$credential}')"
+  --credential "$CF_API_TOKEN"
 
 dim external-url ingress add http --name public-http \
   --description "Public HTTP development URL" \
   --scheme http \
-  --argument '{"domain":"remote.example.com","publicPort":8080,"listenHost":"0.0.0.0","listenPort":8080}'
+  --domain remote.example.com --public-port 8080 \
+  --listen-host 0.0.0.0 --listen-port 8080
 
 dim external-url ingress add caddy --name public-https \
   --description "Public HTTPS development URL" \
   --scheme https \
-  --argument "$(jq -cn \
-    --arg dnsArgument '{"zone":"example.com","value":"203.0.113.10","proxied":false}' \
-    '{domain:"remote.example.com",listenHost:"100.64.0.10",listenPort:8443,dnsProvider:"cloudflare-main",dnsArgument:$dnsArgument}')"
+  --domain remote.example.com --listen-host 100.64.0.10 --listen-port 8443 \
+  --dns-provider cloudflare-main \
+  --dns-argument '{"zone":"example.com","value":"203.0.113.10","proxied":false}'
 ```
 
 The ingress change restarts the managed controller. It reconciles

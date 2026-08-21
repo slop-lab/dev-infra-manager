@@ -28,8 +28,8 @@ dim external-url ingress add http \
   --name local-http \
   --description "Local development URLs" \
   --scheme http \
-  --argument \
-  '{"domain":"dev.test","publicPort":8080,"listenHost":"0.0.0.0","listenPort":"auto"}'
+  --domain dev.test --public-port 8080 \
+  --listen-host 0.0.0.0 --listen-port auto
 ```
 
 Then request a URL from a workspace:
@@ -68,8 +68,10 @@ dim external-url ingress add caddy \
   --name public \
   --description "Public development URLs" \
   --scheme https \
-  --argument \
-  '{"domain":"dev.example.com","listenHost":"0.0.0.0","listenPort":443,"dnsProvider":"cloudflare-main","dnsArgument":"{\"zone\":\"example.com\",\"value\":\"203.0.113.10\",\"proxied\":false}","acmeEmail":"admin@example.com"}'
+  --domain dev.example.com --listen-host 0.0.0.0 --listen-port 443 \
+  --dns-provider cloudflare-main \
+  --dns-argument '{"zone":"example.com","value":"203.0.113.10","proxied":false}' \
+  --acme-email admin@example.com
 ```
 
 Use `dim external-url ingress verify NAME` to verify DNS provider state and

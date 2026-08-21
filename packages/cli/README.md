@@ -131,7 +131,8 @@ tasks:
 dim external-url ingress add http --name local-http \
   --description "Local development URL" \
   --scheme http \
-  --argument '{"domain":"dev.test","publicPort":8080,"listenHost":"0.0.0.0","listenPort":"auto"}'
+  --domain dev.test --public-port 8080 \
+  --listen-host 0.0.0.0 --listen-port auto
 
 dim external-url discover
 dim external-url request --ingress local-http --container dev --port 3000

@@ -29,7 +29,7 @@ intended zone. Store it as a named reusable provider:
 ```bash
 dim external-url dns-provider add cloudflare \
   --name cloudflare-main \
-  --argument '{"credential":"REPLACE_WITH_API_TOKEN"}'
+  --credential "REPLACE_WITH_API_TOKEN"
 ```
 
 The credential is stored in DIM's mode-`0600` External URL configuration and

@@ -53,18 +53,17 @@ shared route registry. It combines:
 - the target resolution mode; and
 - the name and description shown to workspaces.
 
-Ingresses are host resources shared by every workspace. `--argument` is an
-opaque string owned and interpreted by the selected driver; DIM's common
-contract does not add driver-specific JSON fields. Omitting it passes an empty
-string, which the driver may accept as its default configuration or reject
-with a driver-specific error. HTTP and HTTPS entry points are configured as
-separate named ingresses:
+Ingresses are host resources shared by every workspace. Arguments after the
+common options are owned and interpreted by the selected plugin driver; DIM's
+common CLI does not encode driver-specific JSON. HTTP and HTTPS entry points
+are configured as separate named ingresses:
 
 ```bash
 dim external-url ingress add http --name local-http \
   --description "Local development URL" \
   --scheme http \
-  --argument '{"domain":"dev.test","publicPort":8080,"listenHost":"0.0.0.0","listenPort":"auto"}'
+  --domain dev.test --public-port 8080 \
+  --listen-host 0.0.0.0 --listen-port auto
 ```
 
 The CLI sends provider and ingress requests to the plugin's admin API. The
@@ -197,19 +196,20 @@ dim install-plugin \
 
 dim external-url dns-provider add cloudflare \
   --name cloudflare-main \
-  --argument "$(jq -cn --arg credential "$CF_API_TOKEN" '{credential:$credential}')"
+  --credential "$CF_API_TOKEN"
 
 dim external-url ingress add http --name public-http \
   --description "Public HTTP development URL" \
   --scheme http \
-  --argument '{"domain":"remote.example.com","publicPort":8080,"listenHost":"0.0.0.0","listenPort":"auto"}'
+  --domain remote.example.com --public-port 8080 \
+  --listen-host 0.0.0.0 --listen-port auto
 
 dim external-url ingress add caddy --name public-https \
   --description "Public HTTPS development URL" \
   --scheme https \
-  --argument "$(jq -cn \
-    --arg dnsArgument '{"zone":"example.com","value":"203.0.113.10","proxied":false}' \
-    '{domain:"remote.example.com",listenHost:"100.64.0.10",listenPort:8443,dnsProvider:"cloudflare-main",dnsArgument:$dnsArgument}')"
+  --domain remote.example.com --listen-host 100.64.0.10 --listen-port 8443 \
+  --dns-provider cloudflare-main \
+  --dns-argument '{"zone":"example.com","value":"203.0.113.10","proxied":false}'
 ```
 
 The Cloudflare DNS provider owns only its credential. The driver requires

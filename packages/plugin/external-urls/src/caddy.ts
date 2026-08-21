@@ -111,7 +111,7 @@ function parseStaticRoutes(value: unknown): CaddyStaticRoute[] | undefined {
 }
 
 function caddyArgumentError(detail: string): Error {
-  return new Error(`Caddy ingress --argument ${detail}. See ${CADDY_INGRESS_DOCUMENTATION_URL}`);
+  return new Error(`Caddy ingress arguments ${detail}. See ${CADDY_INGRESS_DOCUMENTATION_URL}`);
 }
 
 function normalizeDomain(value: string): string {

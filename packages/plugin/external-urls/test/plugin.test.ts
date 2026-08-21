@@ -33,6 +33,7 @@ describe("external URLs plugin", () => {
     close.push(() => rm(stateRoot, { recursive: true, force: true }));
     process.env.DIM_EXTERNAL_URL_CONFIG = path.join(stateRoot, "external-urls.json");
     const driver: ExternalUrlDnsProviderDriver = {
+      parseProviderArguments: (arguments_) => arguments_.join(" "),
       normalizeProviderArgument: (argument) => `provider:${argument}`,
       normalizeRecordArgument: (argument) => `record:${argument}`,
       ensure: vi.fn(),
@@ -63,7 +64,7 @@ describe("external URLs plugin", () => {
       body: JSON.stringify({
         driver: "missing",
         name: "missing",
-        argument: ""
+        arguments: []
       })
     });
     expect(missingDriver.status).toBe(400);
@@ -77,12 +78,12 @@ describe("external URLs plugin", () => {
       body: JSON.stringify({
         driver: "example",
         name: "example-main",
-        argument: "connection"
+        arguments: ["connection"]
       })
     });
     expect(providerResponse.status).toBe(200);
 
-    const request = (scheme: "http" | "https", argument: string, driver = "http") =>
+    const request = (scheme: "http" | "https", arguments_: string[], driver = "http") =>
       fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -91,39 +92,28 @@ describe("external URLs plugin", () => {
           name: "test",
           description: "Test ingress",
           scheme,
-          argument
+          arguments: arguments_
         })
       });
 
-    const invalidJson = await request("http", "");
-    expect(invalidJson.status).toBe(400);
-    expect((await invalidJson.json() as { error: string }).error).toContain("docs/external-urls.md#named-ingresses");
+    const unknownArgument = await request("http", ["--unknown", "value"]);
+    expect(unknownArgument.status).toBe(400);
+    expect((await unknownArgument.json() as { error: string }).error).toContain("unknown http ingress argument");
 
-    const missingDomain = await request("http", '{"listenHost":"0.0.0.0","listenPort":"auto"}');
+    const missingDomain = await request("http", ["--listen-host", "0.0.0.0", "--listen-port", "auto"]);
     expect(missingDomain.status).toBe(400);
     expect((await missingDomain.json() as { error: string }).error).toContain("docs/external-urls.md#named-ingresses");
 
-    const caddyHttp = await request("http", "{}", "caddy");
+    const caddyHttp = await request("http", [], "caddy");
     expect(caddyHttp.status).toBe(400);
     expect((await caddyHttp.json() as { error: string }).error).toContain(
       "docs/external-urls.md#http-and-https-with-cloudflare-dns-and-caddy"
     );
 
-    const invalidCaddyJson = await request("https", "", "caddy");
-    expect(invalidCaddyJson.status).toBe(400);
-    expect((await invalidCaddyJson.json() as { error: string }).error).toContain(
-      "docs/external-urls.md#http-and-https-with-cloudflare-dns-and-caddy"
-    );
-
     const missingDnsProvider = await request(
       "https",
-      JSON.stringify({
-        domain: "remote.example.com",
-        listenHost: "127.0.0.1",
-        listenPort: 9443,
-        dnsProvider: "missing",
-        dnsArgument: "{}"
-      }),
+      ["--domain", "remote.example.com", "--listen-host", "127.0.0.1", "--listen-port", "9443",
+        "--dns-provider", "missing", "--dns-argument", "{}"],
       "caddy"
     );
     expect(missingDnsProvider.status).toBe(400);
@@ -133,13 +123,8 @@ describe("external URLs plugin", () => {
 
     const configuredCaddy = await request(
       "https",
-      JSON.stringify({
-        domain: "remote.example.com",
-        listenHost: "127.0.0.1",
-        listenPort: 9443,
-        dnsProvider: "example-main",
-        dnsArgument: "record configuration"
-      }),
+      ["--domain", "remote.example.com", "--listen-host", "127.0.0.1", "--listen-port", "9443",
+        "--dns-provider", "example-main", "--dns-argument", "record configuration"],
       "caddy"
     );
     expect(configuredCaddy.status).toBe(200);

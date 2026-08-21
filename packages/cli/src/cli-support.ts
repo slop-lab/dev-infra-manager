@@ -64,14 +64,12 @@ export interface WorkspaceCreateFlags extends JsonFlags {
 
 export interface DnsProviderAddFlags {
   name: string;
-  argument: string;
 }
 
 export interface IngressAddFlags {
   name: string;
   description: string;
   scheme: "http" | "https";
-  argument: string;
 }
 
 export interface ExternalUrlCreateFlags extends JsonFlags {
@@ -1153,4 +1151,3 @@ export function systemdQuote(value: string): string {
   if (/[\r\n]/.test(value)) throw new UserError("systemd controller arguments must not contain newlines");
   return `"${value.replaceAll("%", "%%").replaceAll("\\", "\\\\").replaceAll("\"", "\\\"")}"`;
 }
-

@@ -20,6 +20,7 @@ export interface ExternalUrlCaddyDnsModule {
 }
 
 export interface ExternalUrlDnsProviderDriver {
+  parseProviderArguments?(arguments_: readonly string[]): string;
   normalizeProviderArgument(argument: string): string;
   normalizeRecordArgument(argument: string): string;
   ensure(operation: ExternalUrlDnsOperation): Promise<void>;

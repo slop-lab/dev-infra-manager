@@ -711,13 +711,14 @@ const externalUrlDnsProvider = externalUrl.command("dns-provider").description("
 externalUrlDnsProvider.command("add")
   .description("Add or replace an external URL DNS provider")
   .argument("<driver>")
+  .argument("[driver-argument...]", "arguments interpreted by the selected plugin driver")
   .requiredOption("--name <name>")
-  .option("--argument <string>", "opaque driver-specific argument", "")
-  .action(async (driver: string, flags: DnsProviderAddFlags) => {
+  .allowUnknownOption()
+  .action(async (driver: string, driverArguments: string[], flags: DnsProviderAddFlags) => {
     await externalUrlAdmin("dns-provider-add", {
       driver,
       name: flags.name,
-      argument: flags.argument
+      arguments: driverArguments
     });
     console.log(`Configured external URL DNS provider '${flags.name}'`);
   });
@@ -727,18 +728,19 @@ const externalUrlIngress = externalUrl.command("ingress").description("Manage ho
 externalUrlIngress.command("add")
   .description("Add or replace a named external URL ingress")
   .argument("<driver>")
+  .argument("[driver-argument...]", "arguments interpreted by the selected plugin driver")
   .requiredOption("--name <name>")
   .requiredOption("--description <text>")
   .requiredOption("--scheme <scheme>", "http or https")
-  .option("--argument <string>", "opaque driver-specific argument", "")
-  .action(async (driver: string, flags: IngressAddFlags) => {
+  .allowUnknownOption()
+  .action(async (driver: string, driverArguments: string[], flags: IngressAddFlags) => {
     if (flags.scheme !== "http" && flags.scheme !== "https") throw new UserError("--scheme must be http or https");
     await externalUrlAdmin("ingress-add", {
       driver,
       name: flags.name,
       description: flags.description,
       scheme: flags.scheme,
-      argument: flags.argument
+      arguments: driverArguments
     });
     await restartManagedController(lifecycleOptions());
     console.log(`Configured external URL ingress '${flags.name}'`);

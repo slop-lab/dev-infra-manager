@@ -80,7 +80,7 @@ export function parseCloudflareDnsProviderArgument(argument: string): Cloudflare
 }
 
 function cloudflareArgumentError(detail: string): Error {
-  return new Error(`Cloudflare DNS provider --argument ${detail}. See ${CLOUDFLARE_DNS_PROVIDER_DOCUMENTATION_URL}`);
+  return new Error(`Cloudflare DNS provider arguments ${detail}. See ${CLOUDFLARE_DNS_PROVIDER_DOCUMENTATION_URL}`);
 }
 
 export interface CloudflareDnsRecordState {
@@ -270,6 +270,20 @@ function state(
 }
 
 export const cloudflareDnsProviderDriver: ExternalUrlDnsProviderDriver = {
+  parseProviderArguments(arguments_) {
+    let credential: string | undefined;
+    for (let index = 0; index < arguments_.length; index += 1) {
+      const argument = arguments_[index];
+      if (argument === "--credential") {
+        credential = arguments_[++index];
+        if (!credential) throw cloudflareArgumentError("--credential requires a value");
+      } else {
+        throw cloudflareArgumentError(`unknown argument '${argument}'`);
+      }
+    }
+    if (!credential) throw cloudflareArgumentError("requires --credential");
+    return JSON.stringify({ credential });
+  },
   normalizeProviderArgument(argument) {
     return JSON.stringify(parseCloudflareDnsProviderArgument(argument));
   },

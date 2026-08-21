@@ -22,11 +22,12 @@ test("managed controller restarts preserve the workspace-mounted runtime directo
   );
 });
 
-test("DNS provider add exposes the common driver-owned argument contract", () => {
+test("DNS provider add passes extra arguments to the selected plugin driver", () => {
   const help = run(["external-url", "dns-provider", "add", "cloudflare", "--help"]);
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--name <name>/);
-  assert.match(help.stdout, /--argument <string>/);
+  assert.match(help.stdout, /\[driver-argument\.\.\.\]/);
+  assert.doesNotMatch(help.stdout, /--argument <string>/);
   assert.doesNotMatch(help.stdout, /--zone|--record-type|--target|--credential-env/);
 
   const missingName = run(["external-url", "dns-provider", "add", "cloudflare"]);
