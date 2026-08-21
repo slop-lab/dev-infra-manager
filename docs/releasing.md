@@ -9,8 +9,8 @@
 - The manually dispatched Sysbox and KVM installer workflows pass on the
   release commit using fresh ephemeral self-hosted runners.
 - The active DIM-managed development repository's non-draft pull request has
-  passed its automatic `release-gate` job. This runs the same `just ci kvm`
-  backend-installer verification through the managed runner; the manual
+  passed every automatic `release-gate (BACKEND)` job. These run the same
+  `just ci kvm BACKEND` verification through managed runners; the manual
   GitHub run remains an independent release check on a fresh runner.
 - `npm whoami` succeeds for an account allowed to publish the `@slop-lab` scope.
 - The version and changelog agree, and the release tag does not already exist.
@@ -36,7 +36,9 @@ just ci sysbox
 just verify environments-kvm
 ```
 
-The KVM gate uses a separate clean Ubuntu guest for each backend. Its runc
+The KVM gate uses a separate clean Ubuntu guest for each backend. The managed
+development workflow schedules those backend gates independently, while the
+local command runs all of them. Its runc
 guest installs the RootlessKit AppArmor profile through the host installer and
 runs the canonical self-Project verification, including the unprivileged agent
 and its private rootless-DinD sidecar. `just ci matrix --manual` is the combined

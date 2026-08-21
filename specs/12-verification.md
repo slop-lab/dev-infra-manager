@@ -195,9 +195,12 @@ Host installation scripts must be verified by:
 - Runtime version command after installation.
 - Docker runtime registration check when the script registers a runtime.
 
-`scripts/kvm-host-install-smoke.bash BACKEND` verifies one backend installer in
-a disposable VM. `just verify environments-kvm` requires QEMU and writable
-`/dev/kvm` and runs the gate for every backend in a separate VM.
+`scripts/kvm-host-install-smoke.bash BACKEND` and
+`just verify environments-kvm BACKEND` verify one backend installer in a
+disposable VM. Omitting `BACKEND` runs every backend in a separate VM. Managed
+development CI MUST schedule each backend as an independent `dim-qemu` job so
+available host capacities can run them concurrently without exposing capacity
+names in tracked workflow code.
 The runc guest must additionally run `just verify self-development` after the
 host installer completes. This verifies the canonical DIM Project, its
 unprivileged agent and private rootless-DinD sidecar, and the path-scoped

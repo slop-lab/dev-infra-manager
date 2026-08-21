@@ -19,10 +19,10 @@ sysbox:
     just verify container
     cd .. && bash scripts/container-sysbox-isolation-smoke.bash
 
-# Manually dispatched KVM backend-installer lane.
-kvm:
+# KVM backend-installer lane; pass one backend to run an independent shard.
+kvm backend="all":
     test -r /dev/kvm -a -w /dev/kvm
-    just verify environments-kvm
+    just verify environments-kvm "{{backend}}"
 
 # Run the complete CI gate once with the active Node.js version.
 all:

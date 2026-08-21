@@ -89,6 +89,7 @@ Test installation destructively inside a disposable KVM-backed Ubuntu VM, withou
 
 ```bash
 just verify environments-kvm       # all backends, one clean VM each
+just verify environments-kvm gvisor # one backend, suitable for a CI shard
 just verify environments-kvm --verbose
 bash scripts/kvm-host-install-smoke.bash gvisor --verbose # one backend, direct script
 ```

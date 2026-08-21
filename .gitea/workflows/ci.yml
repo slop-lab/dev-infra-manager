@@ -44,9 +44,14 @@ jobs:
       - run: just ci container
 
   release-gate:
+    name: release-gate (${{ matrix.backend }})
     if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }}
     runs-on: dim-qemu
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [sysbox, gvisor, rootless-podman, runc]
     steps:
       - name: Check out the reviewed commit without a JavaScript action runtime
         env:
@@ -59,4 +64,4 @@ jobs:
             "$GITHUB_SHA:refs/remotes/origin/ci-head"
           git checkout --detach refs/remotes/origin/ci-head
       - run: command -v just && test -r /dev/kvm -a -w /dev/kvm
-      - run: just ci kvm
+      - run: just ci kvm "${{ matrix.backend }}"

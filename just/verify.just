@@ -1,8 +1,8 @@
 set shell := ["bash", "-uc"]
 
-# Requires QEMU and writable /dev/kvm; uses one clean VM per supported backend.
-environments-kvm verbose="":
-    cd .. && bash scripts/kvm-host-install-smoke.bash all "{{verbose}}"
+# Requires QEMU and writable /dev/kvm; uses one clean VM for the selected backend.
+environments-kvm backend="all" verbose="":
+    cd .. && bash scripts/kvm-host-install-smoke.bash "{{backend}}" "{{verbose}}"
 
 # Build packages and verify plugin installation through the published package shape.
 plugin-install:

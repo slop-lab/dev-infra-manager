@@ -89,8 +89,10 @@ DIM does not enable unrestricted private-network webhook delivery.
 
 The DIM repository selects this label for the KVM release gate on non-draft
 pull requests in its managed development host. Draft pull requests and branch
-pushes skip the expensive gate. The job runs `just ci kvm`, matching the KVM
-backend-installer verification required for a release. After installing a DIM
+pushes skip the expensive gate. Four independent jobs run `just ci kvm BACKEND`
+for Sysbox, gVisor, rootless Podman, and runc, matching the KVM backend-installer
+verification required for a release. Named host capacities claim these common
+`dim-qemu` jobs without appearing in the workflow. After installing a DIM
 version that adds or changes runner labels, restart the runner once:
 
 ```bash
