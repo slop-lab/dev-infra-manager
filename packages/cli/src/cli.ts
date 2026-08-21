@@ -303,11 +303,11 @@ ciRunner.command("create")
   .argument("<executor>", "sysbox or qemu")
   .option("--cpus <count>")
   .option("--memory <size>")
-  .option("--pids-limit <count>")
+  .option("--processes <count>")
   .option("--json", "print machine-readable JSON")
   .action(async (project: string, name: string, executor: string, flags: ResourceFlags & JsonFlags) => {
     executor = ciExecutor(executor);
-    if (executor === "qemu" && hasResourceFlags(flags)) throw new UserError("resource flags apply only to the sysbox executor");
+    if (executor === "qemu" && flags.processes !== undefined) throw new UserError("--processes applies only to the sysbox executor");
     print(await adminCall("ci.runner.create", {
       project, name, executor,
       ...(hasResourceFlags(flags) ? { resources: resourceInput(flags) } : {})
@@ -401,7 +401,7 @@ ciDefaults.command("show")
 ciDefaults.command("set")
   .requiredOption("--cpus <count>")
   .requiredOption("--memory <size>")
-  .requiredOption("--pids-limit <count>")
+  .requiredOption("--processes <count>")
   .action(async (flags: Required<ResourceFlags>) => {
     console.log(await setConfiguredCiRunnerDefaults(resourceInput(flags) as Required<ReturnType<typeof resourceInput>>));
   });
@@ -422,7 +422,7 @@ workspace.command("create")
   .option("--git-user-email <email>")
   .option("--cpus <count>", "workspace CPU limit")
   .option("--memory <size>", "workspace memory limit")
-  .option("--pids-limit <count>", "workspace PID limit")
+  .option("--processes <count>", "workspace process limit")
   .option("--json", "print machine-readable JSON")
   .action(async (projectName: string, name: string, flags: WorkspaceCreateFlags) => {
     const options = lifecycleOptions();
@@ -434,7 +434,7 @@ workspace.command("create")
       runtimeBackend: options.defaultWorkspaceBackend,
       cpuCount: flags.cpus ?? options.cpuCount,
       memory: flags.memory ?? options.memory,
-      pidsLimit: flags.pidsLimit ?? options.pidsLimit,
+      pidsLimit: flags.processes ?? options.pidsLimit,
       ...(flags.gitUserName ? { gitUserName: flags.gitUserName } : {}),
       ...(flags.gitUserEmail ? { gitUserEmail: flags.gitUserEmail } : {})
     }), flags);
@@ -463,7 +463,7 @@ workspace.command("resources")
   .argument("<workspace>")
   .option("--cpus <count>", "workspace CPU limit")
   .option("--memory <size>", "workspace memory limit")
-  .option("--pids-limit <count>", "workspace PID limit")
+  .option("--processes <count>", "workspace process limit")
   .option("--json", "print machine-readable JSON")
   .action(async (name: string, flags: ResourceFlags & JsonFlags) => {
     if (!hasResourceFlags(flags)) throw new UserError("provide at least one resource limit");
@@ -473,7 +473,7 @@ workspace.command("resources")
       name,
       ...(flags.cpus === undefined ? {} : { cpuCount: flags.cpus }),
       ...(flags.memory === undefined ? {} : { memory: flags.memory }),
-      ...(flags.pidsLimit === undefined ? {} : { pidsLimit: flags.pidsLimit })
+      ...(flags.processes === undefined ? {} : { pidsLimit: flags.processes })
     }), flags);
   });
 
@@ -977,7 +977,7 @@ interface JsonFlags {
 interface ResourceFlags {
   cpus?: string;
   memory?: string;
-  pidsLimit?: string;
+  processes?: string;
 }
 
 interface WorkspaceCreateFlags extends JsonFlags {
@@ -986,7 +986,7 @@ interface WorkspaceCreateFlags extends JsonFlags {
   gitUserEmail?: string;
   cpus?: string;
   memory?: string;
-  pidsLimit?: string;
+  processes?: string;
 }
 
 interface DnsProviderAddFlags {
@@ -1553,7 +1553,7 @@ async function readStdin(): Promise<string> {
 }
 
 function hasResourceFlags(flags: ResourceFlags): boolean {
-  return flags.cpus !== undefined || flags.memory !== undefined || flags.pidsLimit !== undefined;
+  return flags.cpus !== undefined || flags.memory !== undefined || flags.processes !== undefined;
 }
 
 function ciExecutor(value: string): "sysbox" | "qemu" {
@@ -1565,7 +1565,7 @@ function resourceInput(flags: ResourceFlags): { cpus?: string; memory?: string; 
   return {
     ...(flags.cpus === undefined ? {} : { cpus: flags.cpus }),
     ...(flags.memory === undefined ? {} : { memory: flags.memory }),
-    ...(flags.pidsLimit === undefined ? {} : { pidsLimit: flags.pidsLimit })
+    ...(flags.processes === undefined ? {} : { pidsLimit: flags.processes })
   };
 }
 

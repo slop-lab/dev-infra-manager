@@ -162,7 +162,7 @@ only for the separate managed-Gitea command.
 ## CI runners
 
 ```bash
-dim ci runner create PROJECT RUNNER EXECUTOR [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
+dim ci runner create PROJECT RUNNER EXECUTOR [--cpus COUNT] [--memory SIZE] [--processes COUNT]
 dim ci runner list
 dim ci runner status PROJECT RUNNER
 dim ci runner logs PROJECT RUNNER
@@ -171,7 +171,7 @@ dim ci runner restart PROJECT RUNNER
 dim ci runner stop PROJECT RUNNER
 dim ci runner delete PROJECT RUNNER --yes
 dim ci runner defaults show
-dim ci runner defaults set --cpus COUNT --memory SIZE --pids-limit COUNT
+dim ci runner defaults set --cpus COUNT --memory SIZE --processes COUNT
 dim ci runner defaults reset
 ```
 
@@ -223,9 +223,13 @@ QEMU supervisor hostnames. It MUST NOT broaden Gitea's webhook allowlist to
 arbitrary private-network targets.
 
 Effective resources resolve in this order: runner overrides, configured user
-defaults, then the built-in `4 CPU / 8 GiB / 2048 PID` fallback. `enable` with
-resource flags records a runner override. Without flags it inherits defaults;
-`restart` preserves an existing override.
+defaults, then the built-in `4 CPU / 8 GiB / 2048 process` fallback. `create`
+with resource flags records a runner override. Without flags it inherits
+defaults; `restart` preserves an existing override. Sysbox applies all three
+limits to its container cgroup. QEMU requires an integer CPU count and maps CPU
+and memory to guest vCPUs and RAM; its supervisor receives the same CPU limit
+and guest RAM plus 2 GiB. A process override is rejected for QEMU because the
+supervisor's process cgroup is not a guest process limit.
 
 The CI coordinator and execution backend are separate contracts. The initial
 coordinator adapter registers against managed Gitea Actions, while lifecycle
@@ -243,11 +247,11 @@ registration; Gitea revokes the ephemeral runner credential upon job assignment.
 ```bash
 dim workspace create PROJECT WORKSPACE \
   [--profile PROFILE ...] \
-  [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
+  [--cpus COUNT] [--memory SIZE] [--processes COUNT]
 
 dim workspace list
 dim workspace show WORKSPACE
-dim workspace resources WORKSPACE [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
+dim workspace resources WORKSPACE [--cpus COUNT] [--memory SIZE] [--processes COUNT]
 dim workspace align WORKSPACE [--reset --yes]
 dim workspace exec WORKSPACE -- COMMAND [ARGS...]
 dim workspace run WORKSPACE TASK [ARGS...]

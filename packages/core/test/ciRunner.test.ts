@@ -15,7 +15,9 @@ import {
   ciRunnerQemuVolumeName,
   detectCiRunnerKvm,
   createCiRunner,
-  effectiveCiRunnerResources
+  effectiveCiRunnerResources,
+  effectiveQemuCiRunnerResources,
+  qemuMemoryMiB
 } from "../src/ciRunner.js";
 import { giteaCiRunnerApiBase } from "../src/giteaCiCoordinator.js";
 import { LifecycleState } from "../src/lifecycleState.js";
@@ -60,6 +62,18 @@ describe("CI runner resources", () => {
       resources: { cpus: "6", memory: "16GiB", pidsLimit: "4096" },
       inheritsResources: false
     });
+  });
+
+  it("maps CPU and memory overrides to QEMU guest resources", () => {
+    expect(effectiveQemuCiRunnerResources(options, { cpus: "6", memory: "12GiB" }, {
+      cpus: "4", memory: "8g", pidsLimit: "2048"
+    })).toEqual({
+      resources: { cpus: "6", memory: "12GiB" },
+      inheritsResources: false
+    });
+    expect(qemuMemoryMiB("12GiB")).toBe(12288);
+    expect(() => effectiveQemuCiRunnerResources(options, { cpus: "1.5" })).toThrow(/positive integer/);
+    expect(() => effectiveQemuCiRunnerResources(options, { pidsLimit: "512" })).toThrow(/sysbox/);
   });
 
   it("derives stable managed resource names", () => {
@@ -107,7 +121,7 @@ describe("CI runner resources", () => {
     await expect(detectCiRunnerKvm(async () => {}, "arm64")).resolves.toBe(false);
     const record = { projectName: "example", name: "kvm-1" };
     const sysbox = { kind: "sysbox" as const, phase: "ready" as const, containerName: "dim-ci-example", volumeName: "dim-ci-example-data", image: "runner:image", runtime: "sysbox-runc", resources: { cpus: "4", memory: "8g", pidsLimit: "2048" }, inheritsResources: true, labels: ["dim"], updatedAt: "now" };
-    const qemu = { kind: "qemu" as const, phase: "ready" as const, supervisorName: "dim-ci-example-qemu-supervisor", volumeName: "dim-ci-example-qemu-data", image: "qemu-supervisor:image", labels: ["dim-qemu"], updatedAt: "now" };
+    const qemu = { kind: "qemu" as const, phase: "ready" as const, supervisorName: "dim-ci-example-qemu-supervisor", volumeName: "dim-ci-example-qemu-data", image: "qemu-supervisor:image", resources: { cpus: "6", memory: "12g" }, inheritsResources: false, labels: ["dim-qemu"], updatedAt: "now" };
     const containerArgs = ciRunnerContainerArgs(record, sysbox);
     expect(containerArgs).not.toContain("/dev/kvm");
     expect(containerArgs).toContain(`GITEA_RUNNER_LABELS=${CI_RUNNER_LABELS}`);
@@ -123,8 +137,10 @@ describe("CI runner resources", () => {
       "--runtime", "runc", "--device", "/dev/kvm", "--group-add", "108"
     ]));
     expect(qemuArgs).toContain("GITEA_RUNNER_NAME=dim-ci-example-kvm-1-qemu");
+    expect(qemuArgs).toContain("DIM_QEMU_CI_CPUS=6");
+    expect(qemuArgs).toContain("DIM_QEMU_CI_MEMORY_MB=12288");
     expect(qemuArgs).toContain("DIM_QEMU_WEBHOOK_AUTHORIZATION=Bearer webhook-secret");
-    expect(qemuArgs).toEqual(expect.arrayContaining(["--memory", "14g"]));
+    expect(qemuArgs).toEqual(expect.arrayContaining(["--memory", "14336m"]));
     expect(qemuArgs).toContain("qemu-supervisor:image");
   });
 
@@ -244,12 +260,12 @@ async function waitFor(condition: () => Promise<boolean>): Promise<void> {
 }
 
 describe("CI runner state", () => {
-  it("reads and lists independently named schema 3 runners", async () => {
+  it("reads and lists independently named schema 4 runners", async () => {
     const root = await mkdtemp(join(tmpdir(), "dim-ci-runner-state-"));
     temporaryDirectories.push(root);
     const state = new LifecycleState(root);
     const record = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       name: "fast-1",
       projectId: "project-id",
       projectName: "example",
@@ -281,10 +297,10 @@ describe("CI runner state", () => {
     temporaryDirectories.push(root);
     const directory = join(root, "ci-runners", "example");
     await mkdir(directory, { recursive: true });
-    await writeFile(join(directory, "fast-1.json"), JSON.stringify({ schemaVersion: 2, name: "fast-1" }));
+    await writeFile(join(directory, "fast-1.json"), JSON.stringify({ schemaVersion: 3, name: "fast-1" }));
 
     await expect(new LifecycleState(root).listCiRunners()).rejects.toThrow(
-      "CI runner 'fast-1' uses unsupported state schema 2; expected 3"
+      "CI runner 'fast-1' uses unsupported state schema 3; expected 4"
     );
   });
 
@@ -306,7 +322,7 @@ describe("CI runner state", () => {
       updatedAt: now
     } satisfies ProjectRecord);
     await state.writeCiRunner({
-      schemaVersion: 3,
+      schemaVersion: 4,
       name: "release-1",
       projectId: "project-id",
       projectName: "example",
@@ -317,6 +333,8 @@ describe("CI runner state", () => {
         supervisorName: "dim-ci-example-release-1-qemu-supervisor",
         volumeName: "dim-ci-example-release-1-qemu-data",
         image: "qemu-supervisor:image",
+        resources: { cpus: "4", memory: "8g" },
+        inheritsResources: true,
         labels: ["dim-qemu"],
         updatedAt: now
       },

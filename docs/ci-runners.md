@@ -111,26 +111,30 @@ nested daemon.
 
 ## Resources
 
-The Sysbox runner fallback is 4 CPUs, 8 GiB of memory, and 2048 PIDs. Installation
-defaults can be changed:
+The runner fallback is 4 CPUs and 8 GiB of memory. Sysbox runners additionally
+default to 2048 processes. Installation defaults can be changed:
 
 ```bash
-dim ci runner defaults set --cpus 6 --memory 12GiB --pids-limit 4096
+dim ci runner defaults set --cpus 6 --memory 12GiB --processes 4096
 ```
 
 A named runner can override them:
 
 ```bash
-dim ci runner create example primary sysbox --cpus 8 --memory 16GiB --pids-limit 4096
+dim ci runner create example primary sysbox --cpus 8 --memory 16GiB --processes 4096
+dim ci runner create example release qemu --cpus 6 --memory 12GiB
 ```
 
 `restart` preserves an existing runner override. Delete and create the runner
 again without flags to return to inherited defaults.
 
-The QEMU supervisor container is capped at 6 CPUs, 14 GiB, and 1024 PIDs so
-its QEMU child can receive 6 vCPUs and 12 GiB during a selected job. These are
-limits, not reservations; while idle there is no VM or guest memory. Each job
-uses a disposable 64 GiB overlay.
+For QEMU, `--cpus` must be an integer and maps to guest vCPUs; `--memory` maps
+to guest memory. The supervisor container receives the same CPU limit, the
+guest memory plus 2 GiB of overhead, and a fixed 1024-process boundary. A
+process override applies only to Sysbox because the supervisor's host cgroup
+does not define the guest's process policy. These are limits, not
+reservations; while idle there is no VM or guest memory. Each job uses a
+disposable 64 GiB overlay.
 
 The QEMU host-install smoke verifies the Sysbox limits in a clean
 Ubuntu guest rather than relying on a development workspace's delegated
@@ -169,7 +173,8 @@ one job. A future Project-scoped scheduler can own the single webhook and
 dispatch queued demand across named QEMU capacity; runner identity and state do
 not need to change when that scheduler is added.
 
-As a pre-stable state contract, the earlier combined per-Project record is not
-migrated automatically. Before upgrading, use the installed older CLI to
-disable each executor with that older CLI, or clean up its managed containers, volumes, provider
-registrations, and state manually.
+As a pre-stable state contract, earlier CI runner state is not migrated
+automatically. Schema 4 records effective QEMU resources so overrides survive
+restart. Before upgrading from schema 3, use the installed older CLI to delete
+each runner, then recreate it with the new CLI; alternatively clean up its
+managed containers, volumes, provider registrations, and state manually.

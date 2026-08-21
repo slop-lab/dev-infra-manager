@@ -85,7 +85,7 @@ export class LifecycleState {
       this.ciRunnerPath(project, name),
       `CI runner '${project}/${name}' not found`
     );
-    assertSchemaVersion(record, "CI runner", `${project}/${name}`, 3);
+    assertSchemaVersion(record, "CI runner", `${project}/${name}`, 4);
     return record;
   }
 
@@ -117,7 +117,7 @@ export class LifecycleState {
       records.push(...await listRecords<CiRunnerRecord>(
         path.join(directory, project.name),
         "CI runner",
-        3
+        4
       ));
     }
     return records.sort((left, right) =>

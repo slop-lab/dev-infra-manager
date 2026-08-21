@@ -7,6 +7,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+
+- Applied CI runner CPU and memory defaults or overrides to QEMU guest vCPUs
+  and RAM, persisted those values in CI runner state schema 4, and renamed the
+  user-facing `--pids-limit` option to `--processes`. Process limits remain a
+  Sysbox-only override.
+
 ### Fixed
 
 - Kept the on-demand QEMU webhook worker alive after an individual disposable

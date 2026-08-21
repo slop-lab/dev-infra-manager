@@ -148,7 +148,7 @@ else
   dim workspace exec "$workspace_name" -- sh -c 'test ! -e /dev/kvm'
 fi
 updated_resources="$(dim workspace resources "$workspace_name" \
-  --cpus 1.25 --memory 2g --pids-limit 1024 --json)"
+  --cpus 1.25 --memory 2g --processes 1024 --json)"
 test "$(jq -r .cpuCount <<<"$updated_resources")" = "1.25"
 test "$(jq -r .memory <<<"$updated_resources")" = "2g"
 test "$(jq -r .pidsLimit <<<"$updated_resources")" = "1024"
@@ -157,7 +157,7 @@ test "$(docker inspect "$container_name" --format \
   '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}')" = \
   "1250000000|2147483648|2147483648|1024"
 dim workspace resources "$workspace_name" \
-  --cpus "$original_cpus" --memory "$original_memory" --pids-limit "$original_pids" >/dev/null
+  --cpus "$original_cpus" --memory "$original_memory" --processes "$original_pids" >/dev/null
 dim workspace exec "$workspace_name" -- \
   sh -c 'test -r .dim/setup.sh && test ! -x .dim/setup.sh && test -r .dim/entrypoint.sh && test ! -x .dim/entrypoint.sh && test -r .dim/docker-compose.yml && test "$DIM_GIT_BASE_URL" = "$(jq -r .gitBaseUrl "$DIM_PROJECT_MANIFEST")" && test -n "$(jq -r ".hostAliases[\"dim-gitea\"][0]" "$DIM_PROJECT_MANIFEST")"'
 test "$(dim workspace show "$workspace_name" --json | jq -r .rootRef)" = "refs/heads/$root_ref"

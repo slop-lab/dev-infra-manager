@@ -35,6 +35,24 @@ export function effectiveCiRunnerResources(options: LifecycleOptions, overrides?
   return { resources, inheritsResources: !overrides || Object.values(overrides).every((value) => value === undefined) };
 }
 
+export function effectiveQemuCiRunnerResources(options: LifecycleOptions, overrides?: Partial<CiRunnerResources>, configured = configuredCiRunnerDefaults()): { resources: Pick<CiRunnerResources, "cpus" | "memory">; inheritsResources: boolean } {
+  if (overrides?.pidsLimit !== undefined) throw new UserError("process limits apply only to the sysbox CI executor");
+  const effective = effectiveCiRunnerResources(options, {
+    ...(overrides?.cpus === undefined ? {} : { cpus: overrides.cpus }),
+    ...(overrides?.memory === undefined ? {} : { memory: overrides.memory })
+  }, configured);
+  if (!/^[1-9][0-9]*$/.test(effective.resources.cpus)) {
+    throw new UserError("QEMU CI runner CPUs must be a positive integer");
+  }
+  if (qemuMemoryMiB(effective.resources.memory) < 512) {
+    throw new UserError("QEMU CI runner memory must be at least 512 MiB");
+  }
+  return {
+    resources: { cpus: effective.resources.cpus, memory: effective.resources.memory },
+    inheritsResources: effective.inheritsResources
+  };
+}
+
 export async function createCiRunner(runner: StreamingCommandRunner, options: LifecycleOptions, input: CreateCiRunnerInput): Promise<CiRunnerRecord> {
   return reconcileCiRunner(runner, options, input, "create");
 }
@@ -67,8 +85,8 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
     }
     const executorKind = input.executor ?? existing?.executor.kind;
     if (!executorKind) throw new UserError("creating a CI runner requires an executor");
-    if (executorKind === "qemu" && input.resources) {
-      throw new UserError("resource overrides apply only to the sysbox CI executor");
+    if (executorKind === "qemu" && input.resources?.pidsLimit !== undefined) {
+      throw new UserError("process limits apply only to the sysbox CI executor");
     }
     if (mode === "start" && existing?.executor.kind === "sysbox") {
       const started = await runner.run("docker", ["start", existing.executor.containerName]);
@@ -110,7 +128,11 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       } catch (error) { await saveExecutor(state, record, failed(executor, error)); throw error; }
     }
     if (!await detectCiRunnerKvm()) throw new UserError("the qemu CI executor requires x86-64 and host /dev/kvm access");
-    const executor: QemuCiRunnerExecutor = { kind: "qemu", phase: "creating", supervisorName: ciRunnerQemuSupervisorName(projectName, name), volumeName: ciRunnerQemuVolumeName(projectName, name), image: QEMU_CI_SUPERVISOR_IMAGE, labels: ["dim-qemu"], updatedAt: now };
+    const previous = existing?.executor.kind === "qemu" ? existing.executor : undefined;
+    const effective = previous && input.resources === undefined && !previous.inheritsResources
+      ? { resources: previous.resources, inheritsResources: false }
+      : effectiveQemuCiRunnerResources(options, input.resources);
+    const executor: QemuCiRunnerExecutor = { kind: "qemu", phase: "creating", supervisorName: ciRunnerQemuSupervisorName(projectName, name), volumeName: ciRunnerQemuVolumeName(projectName, name), image: QEMU_CI_SUPERVISOR_IMAGE, ...effective, labels: ["dim-qemu"], updatedAt: now };
     record = await saveExecutor(state, existing ?? newRecord(project, name, executor, now), executor);
     const webhookUrl = ciRunnerQemuWebhookUrl(executor);
     try {
@@ -164,7 +186,7 @@ export async function deleteCiRunner(runner: StreamingCommandRunner, options: Li
 }
 
 async function readOptional(state: LifecycleState, project: string, name: string): Promise<CiRunnerRecord | undefined> { try { return await state.readCiRunner(project, name); } catch (error) { if (error instanceof UserError && error.message.includes("not found")) return undefined; throw error; } }
-function newRecord(project: { id: string; name: string }, name: string, executor: SysboxCiRunnerExecutor | QemuCiRunnerExecutor, now: string): CiRunnerRecord { return { schemaVersion: 3, name, projectId: project.id, projectName: project.name, provider: "pending", executor, createdAt: now, updatedAt: now }; }
+function newRecord(project: { id: string; name: string }, name: string, executor: SysboxCiRunnerExecutor | QemuCiRunnerExecutor, now: string): CiRunnerRecord { return { schemaVersion: 4, name, projectId: project.id, projectName: project.name, provider: "pending", executor, createdAt: now, updatedAt: now }; }
 async function saveExecutor(state: LifecycleState, record: CiRunnerRecord, executor: SysboxCiRunnerExecutor | QemuCiRunnerExecutor): Promise<CiRunnerRecord> { const updated = { ...record, executor, updatedAt: new Date().toISOString() }; await state.writeCiRunner(updated); return updated; }
 function ready<T extends SysboxCiRunnerExecutor | QemuCiRunnerExecutor>(executor: T): T { const value = { ...executor, phase: "ready", updatedAt: new Date().toISOString() }; delete value.error; return value; }
 function failed<T extends SysboxCiRunnerExecutor | QemuCiRunnerExecutor>(executor: T, error: unknown): T { return { ...executor, phase: "error", updatedAt: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) }; }
@@ -181,7 +203,17 @@ export function ciRunnerContainerArgs(record: Pick<CiRunnerRecord, "projectName"
   return ["run", "--detach", "--name", executor.containerName, "--restart", "unless-stopped", "--network", GITEA_NETWORK, "--runtime", executor.runtime, "--cpus", executor.resources.cpus, "--memory", executor.resources.memory, "--pids-limit", executor.resources.pidsLimit, "--mount", `type=volume,source=${executor.volumeName},target=/data`, "--label", "dim.managed=true", "--label", "dim.resource=ci-runner", "--label", `dim.project=${record.projectName}`, "--label", `dim.ci-runner=${record.name}`, "--env", `GITEA_RUNNER_NAME=${executor.containerName}`, "--env", `GITEA_RUNNER_LABELS=${CI_RUNNER_LABELS}`, ...(registration ? ["--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`, "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`] : []), executor.image];
 }
 export function ciRunnerQemuSupervisorArgs(record: Pick<CiRunnerRecord, "projectName" | "name">, executor: QemuCiRunnerExecutor, registration: { instanceUrl: string; token: string }, authorization: string, kvmGroupId: () => number = () => statSync("/dev/kvm").gid): string[] {
-  return ["run", "--detach", "--name", executor.supervisorName, "--restart", "unless-stopped", "--network", GITEA_NETWORK, "--runtime", "runc", "--cpus", "6", "--memory", "14g", "--pids-limit", "1024", "--device", "/dev/kvm", "--group-add", String(kvmGroupId()), "--mount", `type=volume,source=${executor.volumeName},target=/var/lib/dim-qemu-ci`, "--label", "dim.managed=true", "--label", "dim.resource=ci-qemu-supervisor", "--label", `dim.project=${record.projectName}`, "--label", `dim.ci-runner=${record.name}`, "--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`, "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`, "--env", `GITEA_RUNNER_NAME=${ciRunnerQemuRunnerName(record.projectName, record.name)}`, "--env", `DIM_QEMU_WEBHOOK_AUTHORIZATION=${authorization}`, executor.image];
+  const guestMemoryMiB = qemuMemoryMiB(executor.resources.memory);
+  return ["run", "--detach", "--name", executor.supervisorName, "--restart", "unless-stopped", "--network", GITEA_NETWORK, "--runtime", "runc", "--cpus", executor.resources.cpus, "--memory", `${guestMemoryMiB + 2048}m`, "--pids-limit", "1024", "--device", "/dev/kvm", "--group-add", String(kvmGroupId()), "--mount", `type=volume,source=${executor.volumeName},target=/var/lib/dim-qemu-ci`, "--label", "dim.managed=true", "--label", "dim.resource=ci-qemu-supervisor", "--label", `dim.project=${record.projectName}`, "--label", `dim.ci-runner=${record.name}`, "--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`, "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`, "--env", `GITEA_RUNNER_NAME=${ciRunnerQemuRunnerName(record.projectName, record.name)}`, "--env", `DIM_QEMU_CI_CPUS=${executor.resources.cpus}`, "--env", `DIM_QEMU_CI_MEMORY_MB=${guestMemoryMiB}`, "--env", `DIM_QEMU_WEBHOOK_AUTHORIZATION=${authorization}`, executor.image];
+}
+
+export function qemuMemoryMiB(memory: string): number {
+  const match = /^([1-9][0-9]*)([kmgt]?)(?:i?b?)?$/i.exec(memory);
+  if (!match) throw new UserError("QEMU CI runner memory must be a positive memory size");
+  const value = Number(match[1]);
+  const unit = (match[2] ?? "").toLowerCase();
+  const multiplier = unit === "t" ? 1024 * 1024 : unit === "g" ? 1024 : unit === "m" ? 1 : unit === "k" ? 1 / 1024 : 1 / (1024 * 1024);
+  return Math.ceil(value * multiplier);
 }
 
 async function buildQemuSupervisorImage(runner: StreamingCommandRunner, stateRoot: string): Promise<void> { const context = path.join(stateRoot, "assets", "qemu-ci-supervisor"); await mkdir(context, { recursive: true, mode: 0o700 }); await writeFile(path.join(context, "Dockerfile"), QEMU_CI_SUPERVISOR_DOCKERFILE, { mode: 0o600 }); await writeFile(path.join(context, "supervise.bash"), QEMU_CI_SUPERVISOR_SCRIPT, { mode: 0o600 }); await writeFile(path.join(context, "webhook.py"), QEMU_CI_WEBHOOK_SCRIPT, { mode: 0o600 }); const result = await runner.run("docker", ["build", "--tag", QEMU_CI_SUPERVISOR_IMAGE, context]); if (result.exitCode !== 0) throw new UserError(`failed to build QEMU runner supervisor: ${result.stderr.trim()}`); }

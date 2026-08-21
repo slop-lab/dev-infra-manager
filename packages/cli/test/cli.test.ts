@@ -78,12 +78,17 @@ test("CI runner commands expose lifecycle and configurable defaults", () => {
   assert.equal(create.status, 0);
   assert.match(create.stdout, /--cpus <count>/);
   assert.match(create.stdout, /--memory <size>/);
-  assert.match(create.stdout, /--pids-limit <count>/);
+  assert.match(create.stdout, /--processes <count>/);
+  assert.doesNotMatch(create.stdout, /--pids-limit/);
   assert.match(create.stdout, /<project> <runner> <executor>/);
 
   const invalidExecutor = run(["ci", "runner", "create", "example", "primary", "other"]);
   assert.notEqual(invalidExecutor.status, 0);
   assert.match(invalidExecutor.stderr, /must be 'sysbox' or 'qemu'/);
+
+  const qemuProcesses = run(["ci", "runner", "create", "example", "release", "qemu", "--processes", "512"]);
+  assert.notEqual(qemuProcesses.status, 0);
+  assert.match(qemuProcesses.stderr, /--processes applies only to the sysbox executor/);
 
   const defaults = run(["ci", "runner", "defaults", "set", "--help"]);
   assert.equal(defaults.status, 0);
@@ -109,7 +114,8 @@ test("workspace resources command requires at least one live limit", () => {
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--cpus <count>/);
   assert.match(help.stdout, /--memory <size>/);
-  assert.match(help.stdout, /--pids-limit <count>/);
+  assert.match(help.stdout, /--processes <count>/);
+  assert.doesNotMatch(help.stdout, /--pids-limit/);
 
   const missing = run(["workspace", "resources", "work-1"]);
   assert.notEqual(missing.status, 0);

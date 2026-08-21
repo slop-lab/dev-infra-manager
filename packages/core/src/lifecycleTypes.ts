@@ -50,13 +50,15 @@ export interface QemuCiRunnerExecutor {
   supervisorName: string;
   volumeName: string;
   image: string;
+  resources: Pick<CiRunnerResources, "cpus" | "memory">;
+  inheritsResources: boolean;
   labels: string[];
   updatedAt: string;
   error?: string;
 }
 
 export interface CiRunnerRecord {
-  schemaVersion: 3;
+  schemaVersion: 4;
   name: string;
   projectId: string;
   projectName: string;
