@@ -140,7 +140,10 @@ rebuild both Project images so an updated DinD entrypoint can repair an
 existing workspace whose cached sidecar image can no longer start. The root
 entrypoint MUST initialize the volume-mounted Docker data directory and
 `XDG_RUNTIME_DIR` for the rootless UID after mounts are applied, and the gate
-MUST verify their ownership and private runtime-directory mode.
+MUST verify their ownership and private runtime-directory mode. It MUST repair
+the existing data tree once under a versioned marker so cached root-owned
+containerd state is recovered without recursively changing a large image store
+on every sidecar restart.
 
 Project-runtime cgroup verification MUST cover both supported delegation
 shapes (`systemd` and `cgroupfs`) and the unsupported `none` driver. The

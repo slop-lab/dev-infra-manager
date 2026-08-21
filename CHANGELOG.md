@@ -18,8 +18,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Initialized the canonical rootless-DinD sidecar's volume-mounted data path,
   home, and runtime directory for its unprivileged UID before starting Docker,
-  avoiding nested-runc failures when a new volume does not inherit image
-  ownership.
+  including a marker-versioned one-time repair of existing containerd state,
+  avoiding nested-runc failures when a volume does not inherit image ownership.
 - Preserved the systemd controller runtime directory across an atomic service
   restart, keeping its directory bind mount live in existing workspaces when
   the controller replaces its Unix sockets.

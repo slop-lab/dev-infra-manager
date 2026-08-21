@@ -224,7 +224,8 @@ when the source checkout is dirty, the KVM verifier uses a temporary snapshot
 that includes the current worktree changes. The sidecar entrypoint initializes
 its volume-mounted data root and runtime directory for UID 1000 before
 dropping privileges, rather than depending on nested Docker to copy ownership
-from the image into a newly created volume.
+from the image into a newly created volume. A versioned marker makes recursive
+repair of an existing image store a one-time operation.
 
 Three additional standalone checks cover installation and the copyable
 examples against a real Docker daemon:
