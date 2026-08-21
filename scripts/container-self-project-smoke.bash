@@ -232,9 +232,9 @@ if dim workspace run "$workspace_name" check >/dev/null 2>&1; then
   echo "removed check task unexpectedly succeeded" >&2
   exit 1
 fi
-dim workspace run "$workspace_name" bash -- -lc 'just check-source' >/dev/null
+dim workspace run "$workspace_name" bash -- -lc 'JUST_UNSTABLE=1 just check-source' >/dev/null
 if [[ "${DIM_SELF_VERIFY_AGENT:-0}" == 1 ]]; then
-  dim workspace run "$workspace_name" bash -- -lc 'just verify agent'
+  dim workspace run "$workspace_name" bash -- -lc 'JUST_UNSTABLE=1 just verify agent'
 fi
 
 dim workspace discard "$workspace_name" --yes >/dev/null
