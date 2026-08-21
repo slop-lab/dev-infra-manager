@@ -31,4 +31,8 @@ export interface CiCoordinator {
     project: ProjectRecord,
     name: string
   ): Promise<void>;
+  reconcileWorkflowJobWebhookTargets(
+    runner: CommandRunner,
+    options: LifecycleOptions
+  ): Promise<void>;
 }

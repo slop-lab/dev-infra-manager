@@ -162,20 +162,25 @@ only for the separate managed-Gitea command.
 ## CI runners
 
 ```bash
-dim ci runner enable PROJECT EXECUTOR [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
+dim ci runner enable PROJECT RUNNER EXECUTOR [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
 dim ci runner list
-dim ci runner status PROJECT
-dim ci runner logs PROJECT EXECUTOR
-dim ci runner restart PROJECT EXECUTOR
-dim ci runner stop PROJECT EXECUTOR
-dim ci runner disable PROJECT EXECUTOR --yes
+dim ci runner status PROJECT RUNNER
+dim ci runner logs PROJECT RUNNER
+dim ci runner restart PROJECT RUNNER
+dim ci runner stop PROJECT RUNNER
+dim ci runner disable PROJECT RUNNER --yes
 dim ci runner defaults show
 dim ci runner defaults set --cpus COUNT --memory SIZE --pids-limit COUNT
 dim ci runner defaults reset
 ```
 
-`EXECUTOR` is `sysbox` or `qemu`, each with an independent lifecycle. The
-organization-scoped Sysbox runner has concurrency one and label `dim`. The
+`RUNNER` is a Project-scoped stable identity and `EXECUTOR` is `sysbox` or
+`qemu`. A Project may enable any number of independently managed Sysbox
+runners. The executor kind is fixed until that runner is disabled. A Project
+may currently enable one QEMU runner because each QEMU supervisor receives the
+same organization workflow-job event; starting more than one would fan one job
+out to multiple disposable VMs. The organization-scoped Sysbox runner has
+concurrency one and label `dim`. The
 QEMU executor boots a disposable VM only after a queued job selects label
 `dim-qemu`. The managed organization contains all
 repositories registered to that Project, so root and non-root repositories can
@@ -206,9 +211,9 @@ The managed Gitea adapter MUST allow webhook delivery only to exact enabled
 QEMU supervisor hostnames. It MUST NOT broaden Gitea's webhook allowlist to
 arbitrary private-network targets.
 
-Effective resources resolve in this order: Project overrides, configured user
+Effective resources resolve in this order: runner overrides, configured user
 defaults, then the built-in `4 CPU / 8 GiB / 2048 PID` fallback. `enable` with
-resource flags records a Project override. Without flags it inherits defaults;
+resource flags records a runner override. Without flags it inherits defaults;
 `restart` preserves an existing override.
 
 The CI coordinator and execution backend are separate contracts. The initial

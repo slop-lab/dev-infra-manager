@@ -9,6 +9,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added independently named Project CI runners, allowing multiple Sysbox
+  instances with separate lifecycle, state, resources, logs, and coordinator
+  registrations while retaining one on-demand QEMU runner per Project.
 - Added a disposable QEMU managed runner for nested-KVM-capable hosts. A
   trusted supervisor owns host KVM access while each untrusted job runs in a
   fresh ephemeral VM. Also added a forge-neutral pull-request skill with

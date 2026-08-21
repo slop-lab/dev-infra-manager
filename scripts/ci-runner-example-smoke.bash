@@ -13,6 +13,7 @@ source "$script_dir/lib/example-dim-install.bash"
 
 suffix="$PPID-$$"
 project_name="ci-runner-example-$suffix"
+runner_name="primary"
 work_dir="$(mktemp -d /tmp/dim-ci-runner-example.XXXXXX)"
 source_repositories="$work_dir/repositories"
 source_app="$source_repositories/app"
@@ -67,8 +68,8 @@ gitea_api() {
 }
 
 cleanup() {
-  if [[ -f "$state_root/ci-runners/$project_name.json" ]]; then
-    dim ci runner disable "$project_name" sysbox --yes >/dev/null 2>&1 || true
+  if [[ -f "$state_root/ci-runners/$project_name/$runner_name.json" ]]; then
+    dim ci runner disable "$project_name" "$runner_name" --yes >/dev/null 2>&1 || true
   fi
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     gitea_api DELETE "/orgs/$organization" >/dev/null 2>&1 || true
@@ -91,11 +92,11 @@ DIM_BIN="$dim_bin" bash \
   "$project_name" "$source_repositories" >/dev/null
 
 echo "[ci-runner-example] 3. enable an isolated runner"
-runner_json="$(dim ci runner enable "$project_name" sysbox \
+runner_json="$(dim ci runner enable "$project_name" "$runner_name" sysbox \
   --cpus 1.5 --memory 1g --pids-limit 512 --json)"
-container_name="$(jq -r .executors.sysbox.containerName <<<"$runner_json")"
-test "$(jq -r .executors.sysbox.phase <<<"$runner_json")" = "ready"
-test "$(jq -r .executors.sysbox.runtime <<<"$runner_json")" = "sysbox-runc"
+container_name="$(jq -r .executor.containerName <<<"$runner_json")"
+test "$(jq -r .executor.phase <<<"$runner_json")" = "ready"
+test "$(jq -r .executor.runtime <<<"$runner_json")" = "sysbox-runc"
 
 inspect_json="$(docker container inspect "$container_name")"
 test "$(jq -r '.[0].HostConfig.NanoCpus' <<<"$inspect_json")" = "1500000000"
@@ -158,7 +159,7 @@ if [[ "$workflow_result" != *"|success" ]]; then
 fi
 
 echo "[ci-runner-example] 6. disable the runner"
-dim ci runner disable "$project_name" sysbox --yes
-test ! -e "$state_root/ci-runners/$project_name.json"
+dim ci runner disable "$project_name" "$runner_name" --yes
+test ! -e "$state_root/ci-runners/$project_name/$runner_name.json"
 
 echo "ci-runner-example-smoke-ok"

@@ -56,18 +56,14 @@ export interface QemuCiRunnerExecutor {
 }
 
 export interface CiRunnerRecord {
-  schemaVersion: 2;
+  schemaVersion: 3;
   name: string;
   projectId: string;
   projectName: string;
   provider: string;
-  executors: {
-    sysbox?: SysboxCiRunnerExecutor;
-    qemu?: QemuCiRunnerExecutor;
-  };
+  executor: SysboxCiRunnerExecutor | QemuCiRunnerExecutor;
   createdAt: string;
   updatedAt: string;
-  error?: string;
 }
 
 export type WorkspaceRuntimeBackendKind = "sysbox" | "gvisor" | "rootless-podman" | "runc";

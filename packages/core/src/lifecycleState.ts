@@ -71,33 +71,62 @@ export class LifecycleState {
     return path.join(this.root, "services", "gitea.json");
   }
 
-  ciRunnerPath(project: string): string {
-    return path.join(this.root, "ci-runners", `${validateLifecycleName(project, "project")}.json`);
+  ciRunnerPath(project: string, name: string): string {
+    return path.join(
+      this.root,
+      "ci-runners",
+      validateLifecycleName(project, "project"),
+      `${validateLifecycleName(name, "CI runner")}.json`
+    );
   }
 
-  async readCiRunner(project: string): Promise<CiRunnerRecord> {
+  async readCiRunner(project: string, name: string): Promise<CiRunnerRecord> {
     const record = await readJson<CiRunnerRecord>(
-      this.ciRunnerPath(project),
-      `CI runner for project '${project}' not found`
+      this.ciRunnerPath(project, name),
+      `CI runner '${project}/${name}' not found`
     );
-    assertSchemaVersion(record, "CI runner", project, 2);
+    assertSchemaVersion(record, "CI runner", `${project}/${name}`, 3);
     return record;
   }
 
   async writeCiRunner(record: CiRunnerRecord): Promise<void> {
-    await atomicWrite(this.ciRunnerPath(record.projectName), record);
+    await atomicWrite(this.ciRunnerPath(record.projectName, record.name), record);
   }
 
-  async removeCiRunner(project: string): Promise<void> {
-    await rm(this.ciRunnerPath(project), { force: true });
+  async removeCiRunner(project: string, name: string): Promise<void> {
+    const target = this.ciRunnerPath(project, name);
+    await rm(target, { force: true });
+    try { await rm(path.dirname(target)); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOTEMPTY"
+        && (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
   }
 
   async listCiRunners(): Promise<CiRunnerRecord[]> {
-    return listRecords<CiRunnerRecord>(path.join(this.root, "ci-runners"), "CI runner", 2);
+    const directory = path.join(this.root, "ci-runners");
+    let projects;
+    try { projects = await readdir(directory, { withFileTypes: true }); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
+    const records: CiRunnerRecord[] = [];
+    for (const project of projects) {
+      if (!project.isDirectory()) {
+        throw new UserError("legacy CI runner state is unsupported; disable old runners before upgrading");
+      }
+      records.push(...await listRecords<CiRunnerRecord>(
+        path.join(directory, project.name),
+        "CI runner",
+        3
+      ));
+    }
+    return records.sort((left, right) =>
+      left.projectName.localeCompare(right.projectName) || left.name.localeCompare(right.name));
   }
 
   async acquireCiRunnerLock(project: string): Promise<() => Promise<void>> {
-    return acquireLock(this.root, `ci-runner-${validateLifecycleName(project, "project")}`, `CI runner '${project}' reconciliation`);
+    project = validateLifecycleName(project, "project");
+    return acquireLock(this.root, `ci-runner-${project}`, `CI runners for project '${project}' reconciliation`);
   }
 
   async claimGiteaService(record: GiteaServiceRecord): Promise<void> {

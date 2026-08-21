@@ -13,8 +13,8 @@ Install DIM and Sysbox, then run from this directory:
 ```bash
 bash create-repository.bash
 bash register-project.bash
-dim ci runner enable ci-runner-example sysbox
-dim ci runner status ci-runner-example
+dim ci runner enable ci-runner-example primary sysbox
+dim ci runner status ci-runner-example primary
 ```
 
 The non-root `app` repository contains
@@ -33,17 +33,17 @@ adapter uses managed Gitea, Project scripts and resource settings do not need
 to name Gitea.
 
 The example uses the configured runner defaults. To override them only for
-this Project:
+this named runner:
 
 ```bash
-dim ci runner enable ci-runner-example sysbox \
+dim ci runner enable ci-runner-example primary sysbox \
   --cpus 2 --memory 4g --pids-limit 1024
 ```
 
 Remove the runner and its registration data when finished:
 
 ```bash
-dim ci runner disable ci-runner-example sysbox --yes
+dim ci runner disable ci-runner-example primary --yes
 ```
 
 ## Development verification

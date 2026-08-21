@@ -17,9 +17,8 @@ async function removeNamedHook(credentials: Awaited<ReturnType<typeof ensureGite
   const response = await giteaRequest(credentials, "GET", base);
   if (!response.ok) throw new UserError(`failed to list CI coordinator webhooks: ${response.status}`);
   const hooks = await response.json() as Array<{ id: number; name?: string; config?: { url?: string } }>;
-  const expectedUrl = `http://dim-ci-${project.name}-qemu-supervisor:8080/workflow-job`;
   for (const hook of hooks) {
-    if (hook.name !== name && hook.config?.url !== expectedUrl) continue;
+    if (hook.name !== name) continue;
     const removed = await giteaRequest(credentials, "DELETE", `${base}/${hook.id}`);
     if (!removed.ok && removed.status !== 404) throw new UserError(`failed to remove CI coordinator webhook '${name}': ${removed.status}`);
   }
@@ -58,9 +57,7 @@ export const giteaCiCoordinator: CiCoordinator = {
     }
   },
   async ensureWorkflowJobWebhook(runner, options, project, input): Promise<void> {
-    const records = await new LifecycleState(options.stateRoot).listCiRunners();
-    const allowedHosts = records.flatMap((record) => record.executors.qemu?.supervisorName ?? []);
-    await configureGiteaWebhookAllowedHosts(runner, options, allowedHosts);
+    await this.reconcileWorkflowJobWebhookTargets(runner, options);
     const credentials = await ensureGitea(runner, options);
     await removeNamedHook(credentials, project, input.name);
     const response = await giteaRequest(credentials, "POST", giteaOrgHooksApiBase(project), {
@@ -74,5 +71,13 @@ export const giteaCiCoordinator: CiCoordinator = {
   },
   async removeWorkflowJobWebhook(runner, options, project, name): Promise<void> {
     await removeNamedHook(await ensureGitea(runner, options), project, name);
+  },
+  async reconcileWorkflowJobWebhookTargets(runner, options): Promise<void> {
+    const records = await new LifecycleState(options.stateRoot).listCiRunners();
+    const allowedHosts = records.flatMap((record) =>
+      record.executor.kind === "qemu" && record.executor.phase !== "stopped"
+        ? [record.executor.supervisorName]
+        : []);
+    await configureGiteaWebhookAllowedHosts(runner, options, allowedHosts);
   }
 };

@@ -2,16 +2,18 @@
 
 DIM workspaces are the persistent development environment. Managed CI runners
 repeat pull-request checks in separate checkouts and isolated execution
-environments so their result can be used as independent review evidence. The
-Project-scoped Sysbox runner remains managed until it is disabled. On capable
-hosts, release gates instead use a fresh outer QEMU VM for every job.
+environments so their result can be used as independent review evidence. Each
+named Project-scoped runner remains managed until it is disabled. On capable
+hosts, release gates may instead use a fresh outer QEMU VM for every job.
 
-Enable only the executors that a Project needs:
+Enable only the named runners that a Project needs. Names are stable local
+identities; multiple Sysbox runners provide parallel capacity:
 
 ```bash
-dim ci runner enable example sysbox
-dim ci runner enable example qemu
-dim ci runner status example
+dim ci runner enable example primary sysbox
+dim ci runner enable example secondary sysbox
+dim ci runner enable example release qemu
+dim ci runner status example primary
 ```
 
 The initial Gitea coordinator registers it at the Project's managed
@@ -40,7 +42,7 @@ container (Gitea runner "host" mode). It is reserved for the repository's
 Gitea container-integration workflow, whose controller sockets and nested Docker
 bind mounts must share one filesystem namespace. Other workflow jobs remain
 in disposable job containers. After upgrading DIM across a label change,
-run `dim ci runner enable PROJECT sysbox` once to replace the stored runner
+run `dim ci runner enable PROJECT RUNNER sysbox` once to replace the stored runner
 registration and publish the new labels.
 
 As described in the
@@ -80,15 +82,15 @@ backend-installer verification required for a release. After installing a DIM
 version that adds or changes runner labels, re-enable the runner once:
 
 ```bash
-dim ci runner enable dim qemu
-dim ci runner status dim
+dim ci runner enable dim release qemu
+dim ci runner status dim release
 ```
 
-The status must include a ready `executors.qemu` record with `dim-qemu` and a
+The status must include a ready QEMU `executor` record with `dim-qemu` and a
 supervisor name. Enabling detects host KVM, while successful VM readiness also
 requires nested virtualization from the host KVM module. `dim ci runner logs
-dim sysbox` follows the normal Sysbox runner;
-use `dim ci runner logs dim qemu` when diagnosing VM boot,
+dim primary` follows the normal Sysbox runner;
+use `dim ci runner logs dim release` when diagnosing VM boot,
 registration, or replacement.
 
 The Sysbox runner has concurrency one. Its nested daemon, disposable job
@@ -108,13 +110,13 @@ defaults can be changed:
 dim ci runner defaults set --cpus 6 --memory 12GiB --pids-limit 4096
 ```
 
-A Project can override them:
+A named runner can override them:
 
 ```bash
-dim ci runner enable example sysbox --cpus 8 --memory 16GiB --pids-limit 4096
+dim ci runner enable example primary sysbox --cpus 8 --memory 16GiB --pids-limit 4096
 ```
 
-`restart` and re-enabling without flags preserve an existing Project override.
+`restart` and re-enabling without flags preserve an existing runner override.
 Disable and enable again without flags to return to inherited defaults.
 
 The QEMU supervisor container is capped at 6 CPUs, 14 GiB, and 1024 PIDs so
@@ -130,10 +132,10 @@ cgroup hierarchy.
 
 ```bash
 dim ci runner list
-dim ci runner logs example sysbox
-dim ci runner stop example sysbox
-dim ci runner restart example sysbox
-dim ci runner disable example sysbox --yes
+dim ci runner logs example primary
+dim ci runner stop example primary
+dim ci runner restart example primary
+dim ci runner disable example primary --yes
 ```
 
 The coordinator integration is provider-specific, but runner state, lifecycle,
@@ -142,7 +144,17 @@ initial adapter. `dim-qemu` is an executor capability that any Project workflow
 may select; the disposable VM boundary and label do not encode DIM's particular
 release policy or depend on Gitea-specific execution behavior.
 
-The executor argument is required for lifecycle operations, so managing one
-executor never starts, replaces, or deletes the other. As a pre-stable state
-contract, the earlier combined runner record is not migrated automatically;
-remove it before upgrading or clean up its managed resources manually.
+The executor is selected when a runner is first enabled. Later lifecycle
+operations address the stable Project/runner identity, so managing one runner
+never starts, replaces, or deletes another. Multiple Sysbox runners provide
+parallel capacity while retaining concurrency one per runner. QEMU is limited
+to one named runner per Project today because Gitea broadcasts the same queued
+job webhook to every supervisor, which would otherwise boot multiple VMs for
+one job. A future Project-scoped scheduler can own the single webhook and
+dispatch queued demand across named QEMU capacity; runner identity and state do
+not need to change when that scheduler is added.
+
+As a pre-stable state contract, the earlier combined per-Project record is not
+migrated automatically. Before upgrading, use the installed older CLI to
+disable each executor, or clean up its managed containers, volumes, provider
+registrations, and state manually.

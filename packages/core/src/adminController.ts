@@ -215,13 +215,14 @@ async function builtinCall(
     case "ci.runner.enable":
       return enableCiRunner(runner, lifecycle, {
         project: text("project"),
+        name: text("name"),
         executor: ciExecutor(input.executor),
         ...(input.resources === undefined ? {} : { resources: ciResources(input.resources) })
       });
     case "ci.runner.list": return listCiRunners(lifecycle);
-    case "ci.runner.show": return showCiRunner(lifecycle, text("project"));
-    case "ci.runner.stop": return stopCiRunner(runner, lifecycle, text("project"), ciExecutor(input.executor));
-    case "ci.runner.disable": await disableCiRunner(runner, lifecycle, text("project"), ciExecutor(input.executor)); return {};
+    case "ci.runner.show": return showCiRunner(lifecycle, text("project"), text("name"));
+    case "ci.runner.stop": return stopCiRunner(runner, lifecycle, text("project"), text("name"));
+    case "ci.runner.disable": await disableCiRunner(runner, lifecycle, text("project"), text("name")); return {};
     case "workspace.create":
       return createWorkspace(runner, lifecycle, {
         project: text("project"),

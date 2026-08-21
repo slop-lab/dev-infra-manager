@@ -13,11 +13,12 @@ import {
   ciRunnerQemuSupervisorName,
   ciRunnerQemuVolumeName,
   detectCiRunnerKvm,
+  enableCiRunner,
   effectiveCiRunnerResources
 } from "../src/ciRunner.js";
 import { giteaCiRunnerApiBase } from "../src/giteaCiCoordinator.js";
 import { LifecycleState } from "../src/lifecycleState.js";
-import type { CiRunnerRecord, LifecycleOptions } from "../src/lifecycleTypes.js";
+import type { CiRunnerRecord, LifecycleOptions, ProjectRecord } from "../src/lifecycleTypes.js";
 import {
   QEMU_CI_SUPERVISOR_DOCKERFILE,
   QEMU_CI_SUPERVISOR_SCRIPT,
@@ -60,11 +61,12 @@ describe("CI runner resources", () => {
   });
 
   it("derives stable managed resource names", () => {
-    expect(ciRunnerContainerName("example")).toBe("dim-ci-example");
-    expect(ciRunnerQemuSupervisorName("example")).toBe("dim-ci-example-qemu-supervisor");
-    expect(ciRunnerQemuRunnerName("example")).toBe("dim-ci-example-qemu");
-    expect(ciRunnerQemuVolumeName("example")).toBe("dim-ci-example-qemu-data");
-    expect(() => ciRunnerContainerName("../bad")).toThrow(/project name/);
+    expect(ciRunnerContainerName("example", "fast-1")).toBe("dim-ci-example-fast-1");
+    expect(ciRunnerQemuSupervisorName("example", "kvm-1")).toBe("dim-ci-example-kvm-1-qemu-supervisor");
+    expect(ciRunnerQemuRunnerName("example", "kvm-1")).toBe("dim-ci-example-kvm-1-qemu");
+    expect(ciRunnerQemuVolumeName("example", "kvm-1")).toBe("dim-ci-example-kvm-1-qemu-data");
+    expect(() => ciRunnerContainerName("../bad", "fast-1")).toThrow(/project name/);
+    expect(() => ciRunnerContainerName("example", "../bad")).toThrow(/CI runner name/);
   });
 
   it("registers the Project runner at organization scope", () => {
@@ -74,7 +76,7 @@ describe("CI runner resources", () => {
   });
 
   it("applies the runner boundary without mounting the host Docker socket", () => {
-    const record = { projectName: "example" };
+    const record = { projectName: "example", name: "fast-1" };
     const executor = {
       kind: "sysbox" as const, phase: "ready" as const,
       containerName: "dim-ci-example",
@@ -101,7 +103,7 @@ describe("CI runner resources", () => {
     await expect(detectCiRunnerKvm(async () => {})).resolves.toBe(true);
     await expect(detectCiRunnerKvm(async () => { throw new Error("missing"); })).resolves.toBe(false);
     await expect(detectCiRunnerKvm(async () => {}, "arm64")).resolves.toBe(false);
-    const record = { projectName: "example" };
+    const record = { projectName: "example", name: "kvm-1" };
     const sysbox = { kind: "sysbox" as const, phase: "ready" as const, containerName: "dim-ci-example", volumeName: "dim-ci-example-data", image: "runner:image", runtime: "sysbox-runc", resources: { cpus: "4", memory: "8g", pidsLimit: "2048" }, inheritsResources: true, labels: ["dim"], updatedAt: "now" };
     const qemu = { kind: "qemu" as const, phase: "ready" as const, supervisorName: "dim-ci-example-qemu-supervisor", volumeName: "dim-ci-example-qemu-data", image: "qemu-supervisor:image", labels: ["dim-qemu"], updatedAt: "now" };
     const containerArgs = ciRunnerContainerArgs(record, sysbox);
@@ -118,7 +120,7 @@ describe("CI runner resources", () => {
     expect(qemuArgs).toEqual(expect.arrayContaining([
       "--runtime", "runc", "--device", "/dev/kvm", "--group-add", "108"
     ]));
-    expect(qemuArgs).toContain("GITEA_RUNNER_NAME=dim-ci-example-qemu");
+    expect(qemuArgs).toContain("GITEA_RUNNER_NAME=dim-ci-example-kvm-1-qemu");
     expect(qemuArgs).toContain("DIM_QEMU_WEBHOOK_AUTHORIZATION=Bearer webhook-secret");
     expect(qemuArgs).toEqual(expect.arrayContaining(["--memory", "14g"]));
     expect(qemuArgs).toContain("qemu-supervisor:image");
@@ -138,36 +140,96 @@ describe("CI runner resources", () => {
 });
 
 describe("CI runner state", () => {
-  it("reads and lists schema 2 executor records", async () => {
+  it("reads and lists independently named schema 3 runners", async () => {
     const root = await mkdtemp(join(tmpdir(), "dim-ci-runner-state-"));
     temporaryDirectories.push(root);
     const state = new LifecycleState(root);
     const record = {
-      schemaVersion: 2,
-      name: "example",
+      schemaVersion: 3,
+      name: "fast-1",
       projectId: "project-id",
       projectName: "example",
       provider: "gitea",
-      executors: { sysbox: { kind: "sysbox", phase: "ready", containerName: "dim-ci-example", volumeName: "dim-ci-example-data", image: "runner:image", runtime: "sysbox-runc", resources: { cpus: "4", memory: "8g", pidsLimit: "2048" }, inheritsResources: true, labels: ["dim"], updatedAt: "2026-08-18T00:00:00.000Z" } },
+      executor: { kind: "sysbox", phase: "ready", containerName: "dim-ci-example-fast-1", volumeName: "dim-ci-example-fast-1-data", image: "runner:image", runtime: "sysbox-runc", resources: { cpus: "4", memory: "8g", pidsLimit: "2048" }, inheritsResources: true, labels: ["dim"], updatedAt: "2026-08-18T00:00:00.000Z" },
       createdAt: "2026-08-18T00:00:00.000Z",
       updatedAt: "2026-08-18T00:00:00.000Z"
     } satisfies CiRunnerRecord;
+    const second = {
+      ...record,
+      name: "fast-2",
+      executor: {
+        ...record.executor,
+        containerName: "dim-ci-example-fast-2",
+        volumeName: "dim-ci-example-fast-2-data"
+      }
+    } satisfies CiRunnerRecord;
 
     await state.writeCiRunner(record);
+    await state.writeCiRunner(second);
 
-    await expect(state.readCiRunner("example")).resolves.toEqual(record);
-    await expect(state.listCiRunners()).resolves.toEqual([record]);
+    await expect(state.readCiRunner("example", "fast-1")).resolves.toEqual(record);
+    await expect(state.readCiRunner("example", "fast-2")).resolves.toEqual(second);
+    await expect(state.listCiRunners()).resolves.toEqual([record, second]);
   });
 
   it("rejects a runner record with a different schema version", async () => {
     const root = await mkdtemp(join(tmpdir(), "dim-ci-runner-state-invalid-"));
     temporaryDirectories.push(root);
-    const directory = join(root, "ci-runners");
+    const directory = join(root, "ci-runners", "example");
     await mkdir(directory, { recursive: true });
-    await writeFile(join(directory, "example.json"), JSON.stringify({ schemaVersion: 3, name: "example" }));
+    await writeFile(join(directory, "fast-1.json"), JSON.stringify({ schemaVersion: 2, name: "fast-1" }));
 
     await expect(new LifecycleState(root).listCiRunners()).rejects.toThrow(
-      "CI runner 'example' uses unsupported state schema 3; expected 2"
+      "CI runner 'fast-1' uses unsupported state schema 2; expected 3"
     );
+  });
+
+  it("allows only one QEMU runner per Project until scheduling is centralized", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dim-ci-runner-qemu-capacity-"));
+    temporaryDirectories.push(root);
+    const state = new LifecycleState(root);
+    const now = "2026-08-21T00:00:00.000Z";
+    await state.claimProject({
+      schemaVersion: 3,
+      id: "project-id",
+      name: "example",
+      gitNamespace: "dim-example",
+      phase: "ready",
+      rootRepositoryAlias: "root",
+      rootRef: "refs/heads/main",
+      repositories: [],
+      createdAt: now,
+      updatedAt: now
+    } satisfies ProjectRecord);
+    await state.writeCiRunner({
+      schemaVersion: 3,
+      name: "release-1",
+      projectId: "project-id",
+      projectName: "example",
+      provider: "gitea-actions",
+      executor: {
+        kind: "qemu",
+        phase: "ready",
+        supervisorName: "dim-ci-example-release-1-qemu-supervisor",
+        volumeName: "dim-ci-example-release-1-qemu-data",
+        image: "qemu-supervisor:image",
+        labels: ["dim-qemu"],
+        updatedAt: now
+      },
+      createdAt: now,
+      updatedAt: now
+    });
+    const runner = {
+      async run(command: string, args: string[]) {
+        return { command, args, stdout: "", stderr: "", exitCode: 0 };
+      },
+      async runStreaming() { return 0; }
+    };
+
+    await expect(enableCiRunner(runner, { ...options, stateRoot: root }, {
+      project: "example",
+      name: "release-2",
+      executor: "qemu"
+    })).rejects.toThrow(/already has QEMU CI runner 'release-1'/);
   });
 });
