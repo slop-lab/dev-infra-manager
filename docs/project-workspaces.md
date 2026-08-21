@@ -255,7 +255,10 @@ dim workspace run example-dev restore <example-dev-home.tar.gz
 
 Backup and restore are Project-defined tasks rather than DIM lifecycle
 operations. A Project can use stdin/stdout streaming for its chosen format and
-scope; the canonical examples archive only the agent service's home directory.
+scope. The canonical examples stop the agent while a networkless temporary
+container archives only its named home volume. Backup mounts that volume
+read-only; restore replaces its contents through a read-write mount. The agent
+is restarted afterward if it was running before the task.
 
 Run a raw command in the top-level workspace:
 

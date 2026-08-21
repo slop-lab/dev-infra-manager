@@ -75,7 +75,9 @@ dim workspace run single-dev bash -- -lc 'docker run --rm hello-world'
 
 The Project also owns a simple streaming backup contract for the agent home.
 Backup data uses stdout and restore data uses stdin; diagnostics remain on
-stderr, so DIM does not need to understand the archive format:
+stderr, so DIM does not need to understand the archive format. The task stops
+the agent for consistency and gives a networkless temporary container only the
+named home volume (read-only for backup and read-write for restore):
 
 ```bash
 dim workspace run single-dev backup >single-dev-home.tar.gz

@@ -153,7 +153,10 @@ image, service, volume, privilege, or task configuration. `dim workspace run WOR
 TASK` always follows the checked-in `.dim/entrypoint.sh` contract when present.
 The canonical self-Project exposes `codex`, an agent-container `bash` task,
 and Project-owned `backup`/`restore` tasks that stream a gzip tar archive of
-the agent home over stdout/stdin. DIM does not interpret or persist the archive.
+the agent home over stdout/stdin. Those canonical tasks temporarily stop the
+agent and mount only its named home volume into a networkless archive
+container, read-only for backup and read-write for restore. DIM does not
+interpret or persist the archive.
 Repository commands, including just recipes, run explicitly through the bash
 task rather than growing one entrypoint task per recipe.
 

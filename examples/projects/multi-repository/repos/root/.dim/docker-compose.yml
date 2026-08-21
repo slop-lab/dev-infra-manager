@@ -19,6 +19,7 @@ services:
       GIT_CONFIG_VALUE_1: /workspace
     volumes:
       - ..:/workspace
+      - agent-home:/home/dim-agent
       - agent-dind-shared:/mnt/workspace-shared-dind
     networks:
       - default
@@ -55,6 +56,7 @@ services:
       - "7099:7099"
 
 volumes:
+  agent-home:
   agent-dind-data:
   # The agent and rootless DinD may use different host UIDs. The private
   # shared volume therefore has a sticky writable root, and bind-source

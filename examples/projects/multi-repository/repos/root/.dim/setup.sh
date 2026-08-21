@@ -11,3 +11,6 @@ export GIT_COMMITTER_EMAIL="$git_email"
 
 docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" \
   --file .dim/docker-compose.yml up --detach --build agent
+docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" \
+  --file .dim/docker-compose.yml exec --no-TTY agent \
+  chown -R "$(id -u):$(id -g)" /home/dim-agent

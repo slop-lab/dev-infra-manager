@@ -74,7 +74,9 @@ dim workspace run example-dev restore <example-dev-home.tar.gz
 ```
 
 The Project defines this format and task mapping; DIM only streams stdin,
-stdout, stderr, and the task exit status.
+stdout, stderr, and the task exit status. The task stops the agent for
+consistency and uses a networkless temporary container with only the named
+home volume mounted read-only for backup or read-write for restore.
 
 ## Trust and container boundaries
 

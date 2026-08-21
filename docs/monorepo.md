@@ -127,7 +127,10 @@ exposes only these tasks:
 - `bash` starts Bash inside the unprivileged Project-owned agent container,
   not in the trusted workspace container.
 - `backup` writes a gzip tar stream of the agent home to stdout, and `restore`
-  reads that stream from stdin. The Project owns the archive contract.
+  reads that stream from stdin. Both stop the agent for consistency and use a
+  networkless temporary container that receives only the named home volume;
+  backup mounts it read-only and restore mounts it read-write. The Project owns
+  the archive contract.
 
 Use `bash -- -lc 'just RECIPE'` for repository recipes instead of adding a
 task alias for each recipe.

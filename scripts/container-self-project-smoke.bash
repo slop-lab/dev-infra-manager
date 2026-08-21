@@ -191,6 +191,9 @@ agent_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-$workspace_name" \
   --file .dim/docker-compose.yml ps --quiet agent)"
 test -n "$agent_container"
+test "$(dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
+  --format '{{range .Mounts}}{{if eq .Destination "/home/dim-agent"}}{{.Type}}|{{.RW}}{{end}}{{end}}')" = \
+  "volume|true"
 dim workspace exec "$workspace_name" -- docker inspect --format '{{.HostConfig.Privileged}}' \
   "$agent_container" | grep -qx false
 ! dim workspace exec "$workspace_name" -- docker inspect --format '{{json .Mounts}}' \
