@@ -3,18 +3,13 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/.." && pwd)"
-# shellcheck source=lib/local-npm-registry.bash
-source "$script_dir/lib/local-npm-registry.bash"
-# shellcheck source=lib/example-dim-install.bash
-source "$script_dir/lib/example-dim-install.bash"
-
 suffix="$PPID-$$"
 project_name="shared-upstream-$suffix"
 work_dir="$(mktemp -d /tmp/dim-shared-upstream-example.XXXXXX)"
 materialized="$work_dir/materialized"
 state_root="$work_dir/state"
-install_prefix="$work_dir/install"
-dim_bin="$install_prefix/bin/dim"
+dim_cli="$repo_root/packages/cli/dist/cli.js"
+dim_bin="$work_dir/dim"
 
 export DIM_STATE_ROOT="$state_root"
 export DIM_CONFIG_PATH="$work_dir/config/dim.json"
@@ -26,7 +21,7 @@ git config --file "$GIT_CONFIG_GLOBAL" user.name "Shared Upstream Example"
 git config --file "$GIT_CONFIG_GLOBAL" user.email "shared-upstream@dim.invalid"
 bash "$script_dir/configure-user-backend.bash" "${DIM_EXAMPLE_WORKSPACE_BACKEND:-runc}"
 
-dim() { "$dim_bin" "$@"; }
+dim() { node "$dim_cli" "$@"; }
 cleanup() {
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     local credentials username password
@@ -36,14 +31,15 @@ cleanup() {
     curl --fail --silent --user "$username:$password" --request DELETE \
       "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs/dim-$project_name" >/dev/null 2>&1 || true
   fi
-  dim_stop_local_npm_registry
   rm -rf "$work_dir"
 }
 trap cleanup EXIT
 
 cd "$repo_root"
-echo "[shared-upstream-example] 1. build and install DIM"
-dim_install_example_cli "$repo_root" "$work_dir" "$install_prefix"
+echo "[shared-upstream-example] 1. build DIM packages"
+pnpm run workspace:build >/dev/null
+printf '#!/usr/bin/env bash\nexec node %q "$@"\n' "$dim_cli" >"$dim_bin"
+chmod 0700 "$dim_bin"
 
 echo "[shared-upstream-example] 2. materialize one upstream and register two repositories"
 bash examples/features/shared-upstream/create-repository.bash "$materialized" >/dev/null
