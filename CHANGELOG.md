@@ -16,6 +16,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Removed an empty per-Project CI runner state directory with the directory
+  API, preventing a successful final runner deletion from ending in `EISDIR`
+  and an admin-controller 500 response.
 - Kept the on-demand QEMU webhook worker alive after an individual disposable
   VM supervisor failure, so later queued jobs no longer receive `202` without
   starting a runner VM.

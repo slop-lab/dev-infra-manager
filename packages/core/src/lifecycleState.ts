@@ -1,5 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdir, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "./errors.js";
 import type { CiRunnerRecord, GiteaServiceRecord, ProjectRecord, WorkspaceRecord } from "./lifecycleTypes.js";
@@ -96,7 +96,7 @@ export class LifecycleState {
   async removeCiRunner(project: string, name: string): Promise<void> {
     const target = this.ciRunnerPath(project, name);
     await rm(target, { force: true });
-    try { await rm(path.dirname(target)); } catch (error) {
+    try { await rmdir(path.dirname(target)); } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOTEMPTY"
         && (error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }

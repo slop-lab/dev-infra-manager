@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -290,6 +290,36 @@ describe("CI runner state", () => {
     await expect(state.readCiRunner("example", "fast-1")).resolves.toEqual(record);
     await expect(state.readCiRunner("example", "fast-2")).resolves.toEqual(second);
     await expect(state.listCiRunners()).resolves.toEqual([record, second]);
+  });
+
+  it("removes the Project state directory only after its last runner", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dim-ci-runner-remove-"));
+    temporaryDirectories.push(root);
+    const state = new LifecycleState(root);
+    const record = {
+      schemaVersion: 4,
+      name: "primary",
+      projectId: "project-id",
+      projectName: "example",
+      provider: "gitea-actions",
+      executor: { kind: "sysbox", phase: "ready", containerName: "primary", volumeName: "primary-data", image: "runner:image", runtime: "sysbox-runc", resources: { cpus: "4", memory: "8g", pidsLimit: "2048" }, inheritsResources: true, labels: ["dim"], updatedAt: "now" },
+      createdAt: "now",
+      updatedAt: "now"
+    } satisfies CiRunnerRecord;
+    await state.writeCiRunner(record);
+    await state.writeCiRunner({
+      ...record,
+      name: "secondary",
+      executor: { ...record.executor, containerName: "secondary", volumeName: "secondary-data" }
+    });
+
+    await expect(state.removeCiRunner("example", "primary")).resolves.toBeUndefined();
+    await expect(state.listCiRunners()).resolves.toEqual([expect.objectContaining({ name: "secondary" })]);
+    await expect(stat(join(root, "ci-runners", "example"))).resolves.toBeDefined();
+
+    await expect(state.removeCiRunner("example", "secondary")).resolves.toBeUndefined();
+    await expect(state.listCiRunners()).resolves.toEqual([]);
+    await expect(stat(join(root, "ci-runners", "example"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("rejects a runner record with a different schema version", async () => {
