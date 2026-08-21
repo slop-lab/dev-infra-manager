@@ -125,6 +125,7 @@ verify_rootless_dind() {
       test -u /usr/bin/newgidmap
       test "$(stat -c %u:%g /home/rootless/.local/share/docker)" = 1000:1000
       test "$(stat -c %u:%g /home/rootless/.local/share/docker/.dim-rootless-owner-v1)" = 1000:1000
+      test "$(stat -c %u:%g /home/rootless/.local/share/docker/containerd/daemon)" = 1000:1000
       test "$(stat -c %u:%g /run/user/1000)" = 1000:1000
       test "$(stat -c %a /run/user/1000)" = 700
     '

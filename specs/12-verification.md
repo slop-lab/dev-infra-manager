@@ -143,7 +143,9 @@ entrypoint MUST initialize the volume-mounted Docker data directory and
 MUST verify their ownership and private runtime-directory mode. It MUST repair
 the existing data tree once under a versioned marker so cached root-owned
 containerd state is recovered without recursively changing a large image store
-on every sidecar restart.
+on every sidecar restart. It MUST additionally validate creation of
+`containerd/daemon` as the rootless UID and repeat the repair if a partial
+prior start added an inaccessible descendant after the marker was written.
 
 Project-runtime cgroup verification MUST cover both supported delegation
 shapes (`systemd` and `cgroupfs`) and the unsupported `none` driver. The
