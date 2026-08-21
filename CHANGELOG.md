@@ -12,6 +12,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Split the managed development release gate into independent Sysbox, gVisor,
   rootless-Podman, and runc QEMU jobs so named host capacities can verify the
   backends concurrently while workflows retain the shared `dim-qemu` label.
+- Added managed workspace state, Compose service status, and bounded service
+  logs when the multi-repository container smoke's Project setup fails.
 - Applied CI runner CPU and memory defaults or overrides to QEMU guest vCPUs
   and RAM, persisted those values in CI runner state schema 4, and renamed the
   user-facing `--pids-limit` option to `--processes`. Process limits remain a
