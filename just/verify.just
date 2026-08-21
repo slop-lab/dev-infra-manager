@@ -54,6 +54,7 @@ container-ci:
     cd .. && bash scripts/container-inner-docker-smoke.bash
     cd .. && bash scripts/container-lifecycle-smoke.bash
     cd .. && bash scripts/container-packed-project-smoke.bash
+    cd .. && bash scripts/shared-upstream-example-smoke.bash
 
 # Requires Docker and network access; exercises `mise use --raw --global npm:@slop-lab/dim-installer` in a disposable container.
 mise-install-smoke:

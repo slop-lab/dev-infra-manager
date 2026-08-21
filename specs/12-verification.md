@@ -107,6 +107,11 @@ intentionally limited to Node.js type checks and tests that need no APT packages
 or container runtime. Container, Sysbox, and KVM release gates run locally and
 through the manually dispatched GitHub workflows instead.
 
+The automatic container gate must also run the shared-upstream example smoke.
+That smoke proves that two logical DIM repositories can share one external Git
+upstream while fetch and push map only the branches and tags owned by each
+repository namespace.
+
 ## Container Backend Gates
 
 `scripts/container-cgroup-smoke.bash` requires direct access to the target Docker
