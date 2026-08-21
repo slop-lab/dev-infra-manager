@@ -41,6 +41,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Allowed multiple named QEMU CI capacities per Project behind the existing
+  `dim-qemu` workflow capability. Supervisors now atomically dispatch shared
+  demand with renewable claims, so provider webhook fan-out cannot duplicate a
+  VM and tracked workflows do not depend on capacity names or Gitea topology.
 - Added Project-owned streaming `backup` and `restore` tasks to the canonical
   self-Project and runnable Project examples, archiving only the agent home
   without adding backup-format knowledge to DIM core. The tasks stop the agent
@@ -48,7 +52,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   only the home volume mounted read-only for backup or read-write for restore.
 - Added independently named Project CI runners, allowing multiple Sysbox
   instances with separate lifecycle, state, resources, logs, and coordinator
-  registrations while retaining one on-demand QEMU runner per Project.
+  registrations.
 - Added a disposable QEMU managed runner for nested-KVM-capable hosts. A
   trusted supervisor owns host KVM access while each untrusted job runs in a
   fresh ephemeral VM. Also added a forge-neutral pull-request skill with

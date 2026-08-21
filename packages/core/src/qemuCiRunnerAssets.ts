@@ -1,4 +1,4 @@
-export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.2";
+export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.3";
 
 export const QEMU_CI_SUPERVISOR_DOCKERFILE = `FROM ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 RUN apt-get update \\
@@ -12,6 +12,7 @@ ENTRYPOINT ["python3", "/usr/local/bin/dim-qemu-ci-webhook"]
 
 export const QEMU_CI_WEBHOOK_SCRIPT = `#!/usr/bin/env python3
 import hmac
+import fcntl
 import json
 import os
 import subprocess
@@ -20,44 +21,83 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 authorization = os.environ["DIM_QEMU_WEBHOOK_AUTHORIZATION"]
+capacity = os.environ["DIM_QEMU_CI_CAPACITY"]
 state_path = os.environ.get(
     "DIM_QEMU_SCHEDULER_STATE",
-    "/var/lib/dim-qemu-ci/scheduler-demand.json",
+    "/var/lib/dim-qemu-ci-dispatch/demand.json",
 )
-condition = threading.Condition()
+lock_path = state_path + ".lock"
+lease_seconds = 30
+heartbeat_seconds = float(os.environ.get("DIM_QEMU_SCHEDULER_HEARTBEAT_SECONDS", "5"))
 
-def load_state():
+def load_state_unlocked():
     try:
         with open(state_path, encoding="utf-8") as source:
             value = json.load(source)
-        return set(map(int, value.get("queued", []))), set(map(int, value.get("running", [])))
+        return {
+            "queued": set(map(int, value.get("queued", []))),
+            "running": set(map(int, value.get("running", []))),
+            "claims": {int(key): claim for key, claim in value.get("claims", {}).items()},
+        }
     except FileNotFoundError:
-        return set(), set()
+        return {"queued": set(), "running": set(), "claims": {}}
     except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
         print(f"qemu-ci-scheduler: ignoring invalid state: {error}", flush=True)
-        return set(), set()
+        return {"queued": set(), "running": set(), "claims": {}}
 
-queued, running = load_state()
-
-def save_state():
+def save_state_unlocked(state):
     directory = os.path.dirname(state_path)
     os.makedirs(directory, exist_ok=True)
-    temporary = state_path + ".tmp"
+    temporary = f"{state_path}.{capacity}.{os.getpid()}.tmp"
     with open(temporary, "w", encoding="utf-8") as output:
-        json.dump({"queued": sorted(queued), "running": sorted(running)}, output)
+        json.dump({
+            "queued": sorted(state["queued"]),
+            "running": sorted(state["running"]),
+            "claims": {str(key): value for key, value in state["claims"].items()},
+        }, output)
         output.flush()
         os.fsync(output.fileno())
     os.replace(temporary, state_path)
 
+def locked_update(update):
+    os.makedirs(os.path.dirname(state_path), exist_ok=True)
+    with open(lock_path, "a+", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        state = load_state_unlocked()
+        result = update(state)
+        save_state_unlocked(state)
+        return result
+
 def worker():
     failures = 0
     while True:
-        with condition:
-            condition.wait_for(lambda: bool(queued))
-            demand = sorted(queued)
-        print(f"qemu-ci-scheduler: starting VM for queued jobs {demand}", flush=True)
+        now = time.time()
+        def claim_one(state):
+            for job_id, claim in list(state["claims"].items()):
+                if job_id not in state["queued"] or now - float(claim.get("updated", 0)) > lease_seconds:
+                    del state["claims"][job_id]
+            available = sorted(state["queued"] - state["claims"].keys())
+            if not available:
+                return None
+            job_id = available[0]
+            state["claims"][job_id] = {"owner": capacity, "updated": now}
+            return job_id
+        job_id = locked_update(claim_one)
+        if job_id is None:
+            time.sleep(1)
+            continue
+        print(f"qemu-ci-scheduler: capacity {capacity} claimed queued job {job_id}", flush=True)
         try:
-            subprocess.run(["bash", "/usr/local/bin/dim-qemu-ci-supervise"], check=True)
+            process = subprocess.Popen(["bash", "/usr/local/bin/dim-qemu-ci-supervise"])
+            while process.poll() is None:
+                time.sleep(heartbeat_seconds)
+                def renew(state):
+                    claim = state["claims"].get(job_id)
+                    if claim and claim.get("owner") == capacity:
+                        claim["updated"] = time.time()
+                locked_update(renew)
+            if process.returncode != 0:
+                raise subprocess.CalledProcessError(process.returncode, process.args)
             failures = 0
         except subprocess.CalledProcessError as error:
             print(
@@ -71,8 +111,12 @@ def worker():
                 flush=True,
             )
             failures += 1
-        with condition:
-            retry = bool(queued)
+        def release_claim(state):
+            claim = state["claims"].get(job_id)
+            if claim and claim.get("owner") == capacity:
+                del state["claims"][job_id]
+            return job_id in state["queued"]
+        retry = locked_update(release_claim)
         if retry:
             delay = min(2 ** max(failures, 1), 30)
             print(
@@ -104,18 +148,18 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(400)
             return
         if selected and action in ("queued", "in_progress", "completed"):
-            with condition:
+            def record_event(state):
                 if action == "queued":
-                    queued.add(job_id)
-                    running.discard(job_id)
+                    state["queued"].add(job_id)
+                    state["running"].discard(job_id)
                 elif action == "in_progress":
-                    queued.discard(job_id)
-                    running.add(job_id)
+                    state["queued"].discard(job_id)
+                    state["running"].add(job_id)
                 else:
-                    queued.discard(job_id)
-                    running.discard(job_id)
-                save_state()
-                condition.notify_all()
+                    state["queued"].discard(job_id)
+                    state["running"].discard(job_id)
+                    state["claims"].pop(job_id, None)
+            locked_update(record_event)
             print(f"qemu-ci-scheduler: {action} job {job_id}", flush=True)
         self.send_response(202)
         self.end_headers()

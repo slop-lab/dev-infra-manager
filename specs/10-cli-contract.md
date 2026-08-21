@@ -181,11 +181,8 @@ be `stopped`. `delete` is the only command that removes provider registration,
 local data, and lifecycle state.
 
 `RUNNER` is a Project-scoped stable identity and `EXECUTOR` is `sysbox` or
-`qemu`. A Project may enable any number of independently managed Sysbox
-runners. The executor kind is fixed until that runner is deleted. A Project
-may currently create one QEMU runner because each QEMU supervisor receives the
-same organization workflow-job event; starting more than one would fan one job
-out to multiple disposable VMs. The organization-scoped Sysbox runner has
+`qemu`. A Project may enable any number of independently managed runners. The
+executor kind is fixed until that runner is deleted. The organization-scoped Sysbox runner has
 concurrency one and label `dim`. The
 QEMU executor boots a disposable VM only after a queued job selects label
 `dim-qemu`. The managed organization contains all
@@ -197,15 +194,20 @@ container-engine socket. The initial adapter also maps `ubuntu-24.04` to its
 compatible job image so a workflow shared with GitHub does not require a
 provider-specific `runs-on` edit.
 
-The QEMU supervisor includes a single-capacity Project scheduler. It MUST
-persist selected `queued`, `in_progress`, and `completed` workflow-job state in
-the managed QEMU data volume before acknowledging each webhook. Queued demand
+The QEMU supervisors form a Project-scoped scheduler with one capacity per
+named runner. They MUST coordinate through a shared managed dispatch volume and
+atomically claim demand so duplicate provider deliveries cannot boot more than
+one VM for a job. The scheduler MUST persist selected `queued`, `in_progress`,
+and `completed` workflow-job state before acknowledging each webhook. Queued demand
 MUST remain pending until the coordinator reports that the job entered
 progress or completed; a disposable VM exiting, including after consuming a
 different stale coordinator task, MUST NOT silently discard that demand.
 Supervisor failures use bounded retry delay and MUST NOT terminate the webhook
 server. After a supervisor or container restart, persisted queued demand MUST
-resume without another webhook delivery. Completed demand MUST NOT start a VM.
+resume without another webhook delivery. Claims MUST use renewable leases so a
+removed or failed capacity cannot strand demand. Completed demand MUST NOT
+start a VM. Workflows select only the forge-neutral `dim-qemu` capability and
+MUST NOT name a managed capacity.
 
 The runner also advertises `dim-container-integration` in host mode. Here
 "host" is the isolated Project CI runner container, not the DIM host. This

@@ -10,18 +10,18 @@ import {
   ciRunnerContainerArgs,
   ciRunnerContainerName,
   ciRunnerQemuRunnerName,
+  ciRunnerQemuDispatchVolumeName,
   ciRunnerQemuSupervisorArgs,
   ciRunnerQemuSupervisorName,
   ciRunnerQemuVolumeName,
   detectCiRunnerKvm,
-  createCiRunner,
   effectiveCiRunnerResources,
   effectiveQemuCiRunnerResources,
   qemuMemoryMiB
 } from "../src/ciRunner.js";
 import { giteaCiRunnerApiBase } from "../src/giteaCiCoordinator.js";
 import { LifecycleState } from "../src/lifecycleState.js";
-import type { CiRunnerRecord, LifecycleOptions, ProjectRecord } from "../src/lifecycleTypes.js";
+import type { CiRunnerRecord, LifecycleOptions } from "../src/lifecycleTypes.js";
 import {
   QEMU_CI_SUPERVISOR_DOCKERFILE,
   QEMU_CI_SUPERVISOR_SCRIPT,
@@ -80,6 +80,7 @@ describe("CI runner resources", () => {
     expect(ciRunnerContainerName("example", "fast-1")).toBe("dim-ci-example-fast-1");
     expect(ciRunnerQemuSupervisorName("example", "kvm-1")).toBe("dim-ci-example-kvm-1-qemu-supervisor");
     expect(ciRunnerQemuRunnerName("example", "kvm-1")).toBe("dim-ci-example-kvm-1-qemu");
+    expect(ciRunnerQemuDispatchVolumeName("example")).toBe("dim-ci-example-qemu-dispatch");
     expect(ciRunnerQemuVolumeName("example", "kvm-1")).toBe("dim-ci-example-kvm-1-qemu-data");
     expect(() => ciRunnerContainerName("../bad", "fast-1")).toThrow(/project name/);
     expect(() => ciRunnerContainerName("example", "../bad")).toThrow(/CI runner name/);
@@ -137,6 +138,8 @@ describe("CI runner resources", () => {
       "--runtime", "runc", "--device", "/dev/kvm", "--group-add", "108"
     ]));
     expect(qemuArgs).toContain("GITEA_RUNNER_NAME=dim-ci-example-kvm-1-qemu");
+    expect(qemuArgs).toContain("DIM_QEMU_CI_CAPACITY=kvm-1");
+    expect(qemuArgs.join(" ")).toContain("dim-ci-example-qemu-dispatch");
     expect(qemuArgs).toContain("DIM_QEMU_CI_CPUS=6");
     expect(qemuArgs).toContain("DIM_QEMU_CI_MEMORY_MB=12288");
     expect(qemuArgs).toContain("DIM_QEMU_WEBHOOK_AUTHORIZATION=Bearer webhook-secret");
@@ -154,7 +157,8 @@ describe("CI runner resources", () => {
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain("printf '%s\\n' \"$GITEA_RUNNER_REGISTRATION_TOKEN\" | ssh");
     expect(QEMU_CI_WEBHOOK_SCRIPT).toContain('selected = "dim-qemu" in workflow_job.get("labels", [])');
     expect(QEMU_CI_WEBHOOK_SCRIPT).toContain('action in ("queued", "in_progress", "completed")');
-    expect(QEMU_CI_WEBHOOK_SCRIPT).toContain('"/var/lib/dim-qemu-ci/scheduler-demand.json"');
+    expect(QEMU_CI_WEBHOOK_SCRIPT).toContain('"/var/lib/dim-qemu-ci-dispatch/demand.json"');
+    expect(QEMU_CI_WEBHOOK_SCRIPT).toContain("fcntl.flock(lock, fcntl.LOCK_EX)");
     expect(QEMU_CI_WEBHOOK_SCRIPT).toContain("except subprocess.CalledProcessError as error:");
     expect(QEMU_CI_WEBHOOK_SCRIPT).toContain("queued demand remains; retrying");
   });
@@ -183,7 +187,7 @@ touch '${successPath}'
 while [[ ! -f '${releasePath}' ]]; do sleep 0.05; done
 `);
     const webhook = spawn("python3", [webhookPath], {
-      env: { ...process.env, DIM_QEMU_WEBHOOK_AUTHORIZATION: "Bearer test", DIM_QEMU_SCHEDULER_STATE: statePath },
+      env: { ...process.env, DIM_QEMU_WEBHOOK_AUTHORIZATION: "Bearer test", DIM_QEMU_CI_CAPACITY: "test-1", DIM_QEMU_SCHEDULER_HEARTBEAT_SECONDS: "0.05", DIM_QEMU_SCHEDULER_STATE: statePath },
       stdio: ["ignore", "pipe", "pipe"]
     });
     let output = "";
@@ -217,7 +221,7 @@ while [[ ! -f '${releasePath}' ]]; do sleep 0.05; done
         await closed;
       }
     }
-  });
+  }, 15_000);
 
   it.runIf(hasPython)("retains queued demand until Gitea reports that a job started", async () => {
     const directory = await mkdtemp(join(tmpdir(), "dim-qemu-scheduler-"));
@@ -228,7 +232,7 @@ while [[ ! -f '${releasePath}' ]]; do sleep 0.05; done
     const releasePath = join(directory, "release");
     const statePath = join(directory, "scheduler-demand.json");
     const port = await availablePort();
-    await writeFile(statePath, JSON.stringify({ queued: [201], running: [] }));
+    await writeFile(statePath, JSON.stringify({ queued: [201], running: [], claims: {} }));
     await writeFile(webhookPath, QEMU_CI_WEBHOOK_SCRIPT
       .replace("/usr/local/bin/dim-qemu-ci-supervise", supervisorPath)
       .replace("(\"0.0.0.0\", 8080)", `(\"127.0.0.1\", ${port})`));
@@ -242,17 +246,17 @@ if [[ "$attempts" -eq 1 ]]; then exit 0; fi
 while [[ ! -f '${releasePath}' ]]; do sleep 0.05; done
 `);
     const webhook = spawn("python3", [webhookPath], {
-      env: { ...process.env, DIM_QEMU_WEBHOOK_AUTHORIZATION: "Bearer test", DIM_QEMU_SCHEDULER_STATE: statePath },
+      env: { ...process.env, DIM_QEMU_WEBHOOK_AUTHORIZATION: "Bearer test", DIM_QEMU_CI_CAPACITY: "test-1", DIM_QEMU_SCHEDULER_HEARTBEAT_SECONDS: "0.05", DIM_QEMU_SCHEDULER_STATE: statePath },
       stdio: ["ignore", "pipe", "pipe"]
     });
     try {
       await waitFor(async () => (await readFileIfPresent(attemptsPath)) === "2\n");
-      expect(JSON.parse(await readFile(statePath, "utf8"))).toEqual({ queued: [201], running: [] });
+      expect(JSON.parse(await readFile(statePath, "utf8"))).toMatchObject({ queued: [201], running: [] });
       await sendWorkflowJob(port, 201, "in_progress");
       await waitFor(async () => JSON.parse((await readFileIfPresent(statePath)) ?? "{}").running?.[0] === 201);
       await writeFile(releasePath, "\n");
       await sendWorkflowJob(port, 201, "completed");
-      await waitFor(async () => (await readFile(statePath, "utf8")) === '{"queued": [], "running": []}');
+      await waitFor(async () => JSON.parse(await readFile(statePath, "utf8")).queued.length === 0);
     } finally {
       if (webhook.exitCode === null) {
         const closed = new Promise<void>((resolve) => webhook.once("close", () => resolve()));
@@ -260,7 +264,51 @@ while [[ ! -f '${releasePath}' ]]; do sleep 0.05; done
         await closed;
       }
     }
-  });
+  }, 15_000);
+
+  it.runIf(hasPython)("claims duplicate demand on only one named QEMU capacity", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "dim-qemu-shared-dispatch-"));
+    temporaryDirectories.push(directory);
+    const statePath = join(directory, "demand.json");
+    const releasePath = join(directory, "release");
+    const processes: ReturnType<typeof spawn>[] = [];
+    const ports = [await availablePort(), await availablePort()];
+    for (const [index, port] of ports.entries()) {
+      const webhookPath = join(directory, `webhook-${index}.py`);
+      const supervisorPath = join(directory, `supervise-${index}.bash`);
+      await writeFile(webhookPath, QEMU_CI_WEBHOOK_SCRIPT
+        .replace("/usr/local/bin/dim-qemu-ci-supervise", supervisorPath)
+        .replace("(\"0.0.0.0\", 8080)", `(\"127.0.0.1\", ${port})`));
+      await writeFile(supervisorPath, `#!/usr/bin/env bash
+set -eu
+touch '${join(directory, `started-${index}`)}'
+while [[ ! -f '${releasePath}' ]]; do sleep 0.05; done
+`);
+      processes.push(spawn("python3", [webhookPath], {
+        env: { ...process.env, DIM_QEMU_WEBHOOK_AUTHORIZATION: "Bearer test", DIM_QEMU_CI_CAPACITY: `capacity-${index}`, DIM_QEMU_SCHEDULER_HEARTBEAT_SECONDS: "0.05", DIM_QEMU_SCHEDULER_STATE: statePath },
+        stdio: "ignore"
+      }));
+    }
+    try {
+      await Promise.all(ports.map((port) => waitFor(async () => {
+        try { return (await fetch(`http://127.0.0.1:${port}/missing`)).status === 501; }
+        catch { return false; }
+      })));
+      await Promise.all(ports.map((port) => sendWorkflowJob(port, 301, "queued")));
+      await waitFor(async () => [0, 1].filter((index) => spawnSync("test", ["-f", join(directory, `started-${index}`)]).status === 0).length === 1);
+      expect([0, 1].filter((index) => spawnSync("test", ["-f", join(directory, `started-${index}`)]).status === 0)).toHaveLength(1);
+      await Promise.all(ports.map((port) => sendWorkflowJob(port, 301, "in_progress")));
+      await writeFile(releasePath, "\n");
+    } finally {
+      await writeFile(releasePath, "\n");
+      await Promise.all(processes.map(async (process) => {
+        if (process.exitCode !== null) return;
+        const closed = new Promise<void>((resolve) => process.once("close", () => resolve()));
+        process.kill("SIGTERM");
+        await closed;
+      }));
+    }
+  }, 15_000);
 });
 
 async function availablePort(): Promise<number> {
@@ -384,59 +432,4 @@ describe("CI runner state", () => {
     );
   });
 
-  it("allows only one QEMU runner per Project until scheduling is centralized", async () => {
-    const root = await mkdtemp(join(tmpdir(), "dim-ci-runner-qemu-capacity-"));
-    temporaryDirectories.push(root);
-    const state = new LifecycleState(root);
-    const now = "2026-08-21T00:00:00.000Z";
-    await state.claimProject({
-      schemaVersion: 3,
-      id: "project-id",
-      name: "example",
-      gitNamespace: "dim-example",
-      phase: "ready",
-      rootRepositoryAlias: "root",
-      rootRef: "refs/heads/main",
-      repositories: [],
-      createdAt: now,
-      updatedAt: now
-    } satisfies ProjectRecord);
-    await state.writeCiRunner({
-      schemaVersion: 4,
-      name: "release-1",
-      projectId: "project-id",
-      projectName: "example",
-      provider: "gitea-actions",
-      executor: {
-        kind: "qemu",
-        phase: "ready",
-        supervisorName: "dim-ci-example-release-1-qemu-supervisor",
-        volumeName: "dim-ci-example-release-1-qemu-data",
-        image: "qemu-supervisor:image",
-        resources: { cpus: "4", memory: "8g" },
-        inheritsResources: true,
-        labels: ["dim-qemu"],
-        updatedAt: now
-      },
-      createdAt: now,
-      updatedAt: now
-    });
-    const runner = {
-      async run(command: string, args: string[]) {
-        return { command, args, stdout: "", stderr: "", exitCode: 0 };
-      },
-      async runStreaming() { return 0; }
-    };
-
-    await expect(createCiRunner(runner, { ...options, stateRoot: root }, {
-      project: "example",
-      name: "release-1",
-      executor: "qemu"
-    })).rejects.toThrow(/already exists/);
-    await expect(createCiRunner(runner, { ...options, stateRoot: root }, {
-      project: "example",
-      name: "release-2",
-      executor: "qemu"
-    })).rejects.toThrow(/already has QEMU CI runner 'release-1'/);
-  });
 });

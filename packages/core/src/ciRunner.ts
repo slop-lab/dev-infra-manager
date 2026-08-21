@@ -95,14 +95,14 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       }
       return saveExecutor(state, existing, ready(existing.executor));
     }
-    if (executorKind === "qemu") {
-      const other = (await state.listCiRunners()).find((candidate) =>
+    if (mode === "create" && executorKind === "qemu") {
+      const stale = (await state.listCiRunners()).find((candidate) =>
         candidate.projectName === projectName
-          && candidate.name !== name
-          && candidate.executor.kind === "qemu");
-      if (other) {
+          && candidate.executor.kind === "qemu"
+          && candidate.executor.image !== QEMU_CI_SUPERVISOR_IMAGE);
+      if (stale) {
         throw new UserError(
-          `project '${projectName}' already has QEMU CI runner '${other.name}'; delete it before creating another`
+          `restart QEMU CI runner '${projectName}/${stale.name}' with this DIM version before adding another capacity`
         );
       }
     }
@@ -140,6 +140,7 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       await removeContainer(runner, executor.supervisorName);
       await giteaCiCoordinator.removeRunner(runner, options, project, ciRunnerQemuRunnerName(projectName, name));
       await ensureVolume(runner, executor.volumeName);
+      await ensureVolume(runner, ciRunnerQemuDispatchVolumeName(projectName));
       const registration = await giteaCiCoordinator.prepareRunner(runner, options, project);
       const authorization = `Bearer ${randomBytes(32).toString("hex")}`;
       await buildQemuSupervisorImage(runner, options.stateRoot);
@@ -181,6 +182,10 @@ export async function deleteCiRunner(runner: StreamingCommandRunner, options: Li
       await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, projectRecord, ciRunnerQemuWebhookUrl(executor)); await removeContainer(runner, executor.supervisorName); await giteaCiCoordinator.removeRunner(runner, options, projectRecord, ciRunnerQemuRunnerName(project, name)); await removeVolume(runner, executor.volumeName, `QEMU runner data for '${project}/${name}'`);
     }
     await state.removeCiRunner(project, name);
+    if (executor.kind === "qemu" && !(await state.listCiRunners()).some((candidate) =>
+      candidate.projectName === project && candidate.executor.kind === "qemu")) {
+      await removeVolume(runner, ciRunnerQemuDispatchVolumeName(project), `QEMU dispatch data for '${project}'`);
+    }
     if (executor.kind === "qemu") await giteaCiCoordinator.reconcileWorkflowJobWebhookTargets(runner, options);
   } finally { await release(); }
 }
@@ -197,6 +202,7 @@ export function ciRunnerVolumeName(project: string, name: string): string { retu
 export function ciRunnerQemuSupervisorName(project: string, name: string): string { return `${runnerResourcePrefix(project, name)}-qemu-supervisor`; }
 export function ciRunnerQemuRunnerName(project: string, name: string): string { return `${runnerResourcePrefix(project, name)}-qemu`; }
 export function ciRunnerQemuVolumeName(project: string, name: string): string { return `${runnerResourcePrefix(project, name)}-qemu-data`; }
+export function ciRunnerQemuDispatchVolumeName(project: string): string { return `dim-ci-${validateLifecycleName(project, "project")}-qemu-dispatch`; }
 function ciRunnerQemuWebhookUrl(executor: QemuCiRunnerExecutor): string { return `http://${executor.supervisorName}:8080/workflow-job`; }
 
 export function ciRunnerContainerArgs(record: Pick<CiRunnerRecord, "projectName" | "name">, executor: SysboxCiRunnerExecutor, registration?: { instanceUrl: string; token: string }): string[] {
@@ -204,7 +210,7 @@ export function ciRunnerContainerArgs(record: Pick<CiRunnerRecord, "projectName"
 }
 export function ciRunnerQemuSupervisorArgs(record: Pick<CiRunnerRecord, "projectName" | "name">, executor: QemuCiRunnerExecutor, registration: { instanceUrl: string; token: string }, authorization: string, kvmGroupId: () => number = () => statSync("/dev/kvm").gid): string[] {
   const guestMemoryMiB = qemuMemoryMiB(executor.resources.memory);
-  return ["run", "--detach", "--name", executor.supervisorName, "--restart", "unless-stopped", "--network", GITEA_NETWORK, "--runtime", "runc", "--cpus", executor.resources.cpus, "--memory", `${guestMemoryMiB + 2048}m`, "--pids-limit", "1024", "--device", "/dev/kvm", "--group-add", String(kvmGroupId()), "--mount", `type=volume,source=${executor.volumeName},target=/var/lib/dim-qemu-ci`, "--label", "dim.managed=true", "--label", "dim.resource=ci-qemu-supervisor", "--label", `dim.project=${record.projectName}`, "--label", `dim.ci-runner=${record.name}`, "--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`, "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`, "--env", `GITEA_RUNNER_NAME=${ciRunnerQemuRunnerName(record.projectName, record.name)}`, "--env", `DIM_QEMU_CI_CPUS=${executor.resources.cpus}`, "--env", `DIM_QEMU_CI_MEMORY_MB=${guestMemoryMiB}`, "--env", `DIM_QEMU_WEBHOOK_AUTHORIZATION=${authorization}`, executor.image];
+  return ["run", "--detach", "--name", executor.supervisorName, "--restart", "unless-stopped", "--network", GITEA_NETWORK, "--runtime", "runc", "--cpus", executor.resources.cpus, "--memory", `${guestMemoryMiB + 2048}m`, "--pids-limit", "1024", "--device", "/dev/kvm", "--group-add", String(kvmGroupId()), "--mount", `type=volume,source=${executor.volumeName},target=/var/lib/dim-qemu-ci`, "--mount", `type=volume,source=${ciRunnerQemuDispatchVolumeName(record.projectName)},target=/var/lib/dim-qemu-ci-dispatch`, "--label", "dim.managed=true", "--label", "dim.resource=ci-qemu-supervisor", "--label", `dim.project=${record.projectName}`, "--label", `dim.ci-runner=${record.name}`, "--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`, "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`, "--env", `GITEA_RUNNER_NAME=${ciRunnerQemuRunnerName(record.projectName, record.name)}`, "--env", `DIM_QEMU_CI_CAPACITY=${record.name}`, "--env", `DIM_QEMU_CI_CPUS=${executor.resources.cpus}`, "--env", `DIM_QEMU_CI_MEMORY_MB=${guestMemoryMiB}`, "--env", `DIM_QEMU_WEBHOOK_AUTHORIZATION=${authorization}`, executor.image];
 }
 
 export function qemuMemoryMiB(memory: string): number {
