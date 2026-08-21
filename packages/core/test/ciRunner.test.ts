@@ -13,7 +13,7 @@ import {
   ciRunnerQemuSupervisorName,
   ciRunnerQemuVolumeName,
   detectCiRunnerKvm,
-  enableCiRunner,
+  createCiRunner,
   effectiveCiRunnerResources
 } from "../src/ciRunner.js";
 import { giteaCiRunnerApiBase } from "../src/giteaCiCoordinator.js";
@@ -226,7 +226,12 @@ describe("CI runner state", () => {
       async runStreaming() { return 0; }
     };
 
-    await expect(enableCiRunner(runner, { ...options, stateRoot: root }, {
+    await expect(createCiRunner(runner, { ...options, stateRoot: root }, {
+      project: "example",
+      name: "release-1",
+      executor: "qemu"
+    })).rejects.toThrow(/already exists/);
+    await expect(createCiRunner(runner, { ...options, stateRoot: root }, {
       project: "example",
       name: "release-2",
       executor: "qemu"

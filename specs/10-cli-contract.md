@@ -162,22 +162,28 @@ only for the separate managed-Gitea command.
 ## CI runners
 
 ```bash
-dim ci runner enable PROJECT RUNNER EXECUTOR [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
+dim ci runner create PROJECT RUNNER EXECUTOR [--cpus COUNT] [--memory SIZE] [--pids-limit COUNT]
 dim ci runner list
 dim ci runner status PROJECT RUNNER
 dim ci runner logs PROJECT RUNNER
+dim ci runner start PROJECT RUNNER
 dim ci runner restart PROJECT RUNNER
 dim ci runner stop PROJECT RUNNER
-dim ci runner disable PROJECT RUNNER --yes
+dim ci runner delete PROJECT RUNNER --yes
 dim ci runner defaults show
 dim ci runner defaults set --cpus COUNT --memory SIZE --pids-limit COUNT
 dim ci runner defaults reset
 ```
 
+`create` rejects an existing Project/runner identity. `start`, `restart`, and
+`stop` require an existing runner; `start` additionally requires its phase to
+be `stopped`. `delete` is the only command that removes provider registration,
+local data, and lifecycle state.
+
 `RUNNER` is a Project-scoped stable identity and `EXECUTOR` is `sysbox` or
 `qemu`. A Project may enable any number of independently managed Sysbox
-runners. The executor kind is fixed until that runner is disabled. A Project
-may currently enable one QEMU runner because each QEMU supervisor receives the
+runners. The executor kind is fixed until that runner is deleted. A Project
+may currently create one QEMU runner because each QEMU supervisor receives the
 same organization workflow-job event; starting more than one would fan one job
 out to multiple disposable VMs. The organization-scoped Sysbox runner has
 concurrency one and label `dim`. The
@@ -204,7 +210,7 @@ Sysbox runner. A trusted runc supervisor receives only that device, boots an
 isolated QEMU VM, and registers the runner inside that VM as ephemeral before
 each job. Untrusted workflow code receives nested KVM inside the VM, not the
 host device or container engine. The supervisor deletes the overlay after the
-job and has no waiting VM while idle. Enabling this executor fails when host
+job and has no waiting VM while idle. Creating this runner fails when host
 KVM is unavailable.
 
 The managed Gitea adapter MUST allow webhook delivery only to exact enabled

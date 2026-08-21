@@ -3,16 +3,16 @@
 DIM workspaces are the persistent development environment. Managed CI runners
 repeat pull-request checks in separate checkouts and isolated execution
 environments so their result can be used as independent review evidence. Each
-named Project-scoped runner remains managed until it is disabled. On capable
+named Project-scoped runner remains managed until it is deleted. On capable
 hosts, release gates may instead use a fresh outer QEMU VM for every job.
 
 Enable only the named runners that a Project needs. Names are stable local
 identities; multiple Sysbox runners provide parallel capacity:
 
 ```bash
-dim ci runner enable example primary sysbox
-dim ci runner enable example secondary sysbox
-dim ci runner enable example release qemu
+dim ci runner create example primary sysbox
+dim ci runner create example secondary sysbox
+dim ci runner create example release qemu
 dim ci runner status example primary
 ```
 
@@ -42,7 +42,7 @@ container (Gitea runner "host" mode). It is reserved for the repository's
 Gitea container-integration workflow, whose controller sockets and nested Docker
 bind mounts must share one filesystem namespace. Other workflow jobs remain
 in disposable job containers. After upgrading DIM across a label change,
-run `dim ci runner enable PROJECT RUNNER sysbox` once to replace the stored runner
+run `dim ci runner restart PROJECT RUNNER` once to replace the stored runner
 registration and publish the new labels.
 
 As described in the
@@ -59,7 +59,7 @@ or Docker setup. GitHub-only manual Sysbox and KVM release workflows remain
 under `.github/workflows` and are not copied into the managed development Gitea
 instance.
 
-When explicitly enabled on a host with KVM, DIM starts a small trusted runc
+When explicitly created on a host with KVM, DIM starts a small trusted runc
 supervisor with `/dev/kvm`. A Gitea `workflow_job` webhook asks it to boot a
 QEMU VM only after a queued job selects the `dim-qemu` label. Workflow code
 runs inside that VM and sees its nested
@@ -71,7 +71,7 @@ Gitea registration is
 only the current coordinator adapter, so replacing the built-in coordinator
 does not change this executor boundary.
 
-Enabling a QEMU executor adds only its managed supervisor hostname to Gitea's
+Creating a QEMU runner adds only its managed supervisor hostname to Gitea's
 webhook allowlist and restarts the managed Gitea service to apply that setting.
 DIM does not enable unrestricted private-network webhook delivery.
 
@@ -79,15 +79,15 @@ The DIM repository selects this label for the KVM release gate on non-draft
 pull requests in its managed development host. Draft pull requests and branch
 pushes skip the expensive gate. The job runs `just ci kvm`, matching the KVM
 backend-installer verification required for a release. After installing a DIM
-version that adds or changes runner labels, re-enable the runner once:
+version that adds or changes runner labels, restart the runner once:
 
 ```bash
-dim ci runner enable dim release qemu
+dim ci runner create dim release qemu
 dim ci runner status dim release
 ```
 
 The status must include a ready QEMU `executor` record with `dim-qemu` and a
-supervisor name. Enabling detects host KVM, while successful VM readiness also
+supervisor name. Creation detects host KVM, while successful VM readiness also
 requires nested virtualization from the host KVM module. `dim ci runner logs
 dim primary` follows the normal Sysbox runner;
 use `dim ci runner logs dim release` when diagnosing VM boot,
@@ -113,11 +113,11 @@ dim ci runner defaults set --cpus 6 --memory 12GiB --pids-limit 4096
 A named runner can override them:
 
 ```bash
-dim ci runner enable example primary sysbox --cpus 8 --memory 16GiB --pids-limit 4096
+dim ci runner create example primary sysbox --cpus 8 --memory 16GiB --pids-limit 4096
 ```
 
-`restart` and re-enabling without flags preserve an existing runner override.
-Disable and enable again without flags to return to inherited defaults.
+`restart` preserves an existing runner override. Delete and create the runner
+again without flags to return to inherited defaults.
 
 The QEMU supervisor container is capped at 6 CPUs, 14 GiB, and 1024 PIDs so
 its QEMU child can receive 6 vCPUs and 12 GiB during a selected job. These are
@@ -133,10 +133,17 @@ cgroup hierarchy.
 ```bash
 dim ci runner list
 dim ci runner logs example primary
+dim ci runner start example primary
 dim ci runner stop example primary
 dim ci runner restart example primary
-dim ci runner disable example primary --yes
+dim ci runner delete example primary --yes
 ```
+
+`create` requires a new Project/runner identity. `start` requires a stopped
+runner and preserves its state; for QEMU it recreates the supervisor and
+webhook because `stop` removes the webhook credential. `restart` reconciles an
+existing runner while preserving its executor and resource override. `delete`
+permanently removes its provider registration, container, volume, and state.
 
 The coordinator integration is provider-specific, but runner state, lifecycle,
 and executor capabilities are provider-neutral. Managed Gitea Actions is the
@@ -144,7 +151,7 @@ initial adapter. `dim-qemu` is an executor capability that any Project workflow
 may select; the disposable VM boundary and label do not encode DIM's particular
 release policy or depend on Gitea-specific execution behavior.
 
-The executor is selected when a runner is first enabled. Later lifecycle
+The executor is selected when a runner is created. Later lifecycle
 operations address the stable Project/runner identity, so managing one runner
 never starts, replaces, or deletes another. Multiple Sysbox runners provide
 parallel capacity while retaining concurrency one per runner. QEMU is limited
@@ -156,5 +163,5 @@ not need to change when that scheduler is added.
 
 As a pre-stable state contract, the earlier combined per-Project record is not
 migrated automatically. Before upgrading, use the installed older CLI to
-disable each executor, or clean up its managed containers, volumes, provider
+disable each executor with that older CLI, or clean up its managed containers, volumes, provider
 registrations, and state manually.

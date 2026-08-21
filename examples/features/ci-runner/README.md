@@ -13,7 +13,7 @@ Install DIM and Sysbox, then run from this directory:
 ```bash
 bash create-repository.bash
 bash register-project.bash
-dim ci runner enable ci-runner-example primary sysbox
+dim ci runner create ci-runner-example primary sysbox
 dim ci runner status ci-runner-example primary
 ```
 
@@ -36,14 +36,14 @@ The example uses the configured runner defaults. To override them only for
 this named runner:
 
 ```bash
-dim ci runner enable ci-runner-example primary sysbox \
+dim ci runner create ci-runner-example primary sysbox \
   --cpus 2 --memory 4g --pids-limit 1024
 ```
 
 Remove the runner and its registration data when finished:
 
 ```bash
-dim ci runner disable ci-runner-example primary --yes
+dim ci runner delete ci-runner-example primary --yes
 ```
 
 ## Development verification

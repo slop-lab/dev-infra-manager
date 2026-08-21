@@ -296,8 +296,8 @@ repo.command("url")
 const ci = program.command("ci").description("Manage isolated CI execution");
 const ciRunner = ci.command("runner").description("Manage project CI runners");
 
-ciRunner.command("enable")
-  .description("Enable or reconcile a named CI runner")
+ciRunner.command("create")
+  .description("Create a named CI runner")
   .argument("<project>")
   .argument("<runner>")
   .argument("<executor>", "sysbox or qemu")
@@ -308,7 +308,7 @@ ciRunner.command("enable")
   .action(async (project: string, name: string, executor: string, flags: ResourceFlags & JsonFlags) => {
     executor = ciExecutor(executor);
     if (executor === "qemu" && hasResourceFlags(flags)) throw new UserError("resource flags apply only to the sysbox executor");
-    print(await adminCall("ci.runner.enable", {
+    print(await adminCall("ci.runner.create", {
       project, name, executor,
       ...(hasResourceFlags(flags) ? { resources: resourceInput(flags) } : {})
     }), flags);
@@ -349,10 +349,16 @@ ciRunner.command("restart")
   .argument("<project>")
   .argument("<runner>")
   .option("--json", "print machine-readable JSON")
-  .action(async (project: string, name: string, flags: JsonFlags) => {
-    const record = await adminCall<{ executor: { kind: string } }>("ci.runner.show", { project, name });
-    print(await adminCall("ci.runner.enable", { project, name, executor: ciExecutor(record.executor.kind) }), flags);
-  });
+  .action(async (project: string, name: string, flags: JsonFlags) =>
+    print(await adminCall("ci.runner.restart", { project, name }), flags));
+
+ciRunner.command("start")
+  .description("Start a stopped named CI runner")
+  .argument("<project>")
+  .argument("<runner>")
+  .option("--json", "print machine-readable JSON")
+  .action(async (project: string, name: string, flags: JsonFlags) =>
+    print(await adminCall("ci.runner.start", { project, name }), flags));
 
 ciRunner.command("stop")
   .description("Stop a named CI runner without deleting its local data")
@@ -373,12 +379,12 @@ ciRunner.command("logs")
     process.exitCode = await runner.runStreaming("docker", ["logs", "--follow", containerName]);
   });
 
-ciRunner.command("disable")
+ciRunner.command("delete")
   .description("Remove a named CI runner and its local data")
   .argument("<project>")
   .argument("<runner>")
   .requiredOption("--yes", "confirm runner and local data deletion")
-  .action(async (project: string, name: string) => void await adminCall("ci.runner.disable", { project, name }));
+  .action(async (project: string, name: string) => void await adminCall("ci.runner.delete", { project, name }));
 
 const ciDefaults = ciRunner.command("defaults").description("Manage inherited CI runner resource defaults");
 

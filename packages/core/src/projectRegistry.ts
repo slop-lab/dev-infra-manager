@@ -797,7 +797,7 @@ async function assertProjectUnused(state: LifecycleState, name: string): Promise
   const runners = (await state.listCiRunners()).filter((runner) => runner.projectName === name);
   if (runners.length > 0) {
     throw new UserError(
-      `project '${name}' has enabled CI runner${runners.length === 1 ? "" : "s"} ${runners.map((runner) => `'${runner.name}'`).join(", ")}; disable ${runners.length === 1 ? "it" : "them"} first`
+      `project '${name}' has CI runner${runners.length === 1 ? "" : "s"} ${runners.map((runner) => `'${runner.name}'`).join(", ")}; delete ${runners.length === 1 ? "it" : "them"} first`
     );
   }
   const references = (await state.listWorkspaces()).filter((workspace) => workspace.projectName === name);

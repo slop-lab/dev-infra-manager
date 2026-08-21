@@ -260,8 +260,8 @@ managed Git organization. Enable multiple runners, including multiple runners
 of the same executor kind, when the Project needs parallel capacity:
 
 ```bash
-dim ci runner enable acme primary sysbox
-dim ci runner enable acme release qemu
+dim ci runner create acme primary sysbox
+dim ci runner create acme release qemu
 dim ci runner status acme primary
 dim ci runner logs acme primary
 dim ci runner logs acme release
@@ -274,17 +274,17 @@ override one runner:
 
 ```bash
 dim ci runner defaults set --cpus 2 --memory 4g --pids-limit 1024
-dim ci runner enable acme primary sysbox --cpus 6 --memory 12g --pids-limit 4096
+dim ci runner create acme primary sysbox --cpus 6 --memory 12g --pids-limit 4096
 ```
 
 On nested-KVM-capable hosts, enabling `qemu` starts a small trusted webhook
 supervisor that boots a fresh ephemeral VM only for a queued `dim-qemu` job.
-Workflow code sees only nested KVM inside that VM. Use `list`, `restart`,
-`stop`, and `disable --yes` with the Project and runner name. The lifecycle boundary
+Workflow code sees only nested KVM inside that VM. Use `list`, `start`,
+`restart`, `stop`, and `delete --yes` with the Project and runner name. The lifecycle boundary
 is provider-neutral; managed Gitea is the current coordinator.
 
 `logs` follows the container log until interrupted. `stop` preserves the
-runner registration and local data; `disable --yes` removes both.
+runner registration and local data; `delete --yes` removes both.
 
 ## Managed Git credentials
 

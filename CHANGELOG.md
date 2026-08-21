@@ -25,6 +25,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   workspace-scoped asynchronous self-restart route demonstrated and verified
   by the single-repository Project example.
 
+### Changed
+
+- Replaced named CI runner `enable`/`disable` with explicit
+  `create`/`start`/`restart`/`stop`/`delete` lifecycle commands.
+
 ### Removed
 
 - Removed the canonical self-Project's delegated tool cgroups. Codex now runs

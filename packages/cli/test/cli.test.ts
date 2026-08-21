@@ -70,18 +70,18 @@ test("project create exposes root bootstrap and explicit repository-set choices"
 test("CI runner commands expose lifecycle and configurable defaults", () => {
   const help = run(["ci", "runner", "--help"]);
   assert.equal(help.status, 0);
-  for (const command of ["enable", "status", "logs", "restart", "stop", "disable", "defaults"]) {
+  for (const command of ["create", "status", "logs", "start", "restart", "stop", "delete", "defaults"]) {
     assert.match(help.stdout, new RegExp(command));
   }
 
-  const enable = run(["ci", "runner", "enable", "--help"]);
-  assert.equal(enable.status, 0);
-  assert.match(enable.stdout, /--cpus <count>/);
-  assert.match(enable.stdout, /--memory <size>/);
-  assert.match(enable.stdout, /--pids-limit <count>/);
-  assert.match(enable.stdout, /<project> <runner> <executor>/);
+  const create = run(["ci", "runner", "create", "--help"]);
+  assert.equal(create.status, 0);
+  assert.match(create.stdout, /--cpus <count>/);
+  assert.match(create.stdout, /--memory <size>/);
+  assert.match(create.stdout, /--pids-limit <count>/);
+  assert.match(create.stdout, /<project> <runner> <executor>/);
 
-  const invalidExecutor = run(["ci", "runner", "enable", "example", "primary", "other"]);
+  const invalidExecutor = run(["ci", "runner", "create", "example", "primary", "other"]);
   assert.notEqual(invalidExecutor.status, 0);
   assert.match(invalidExecutor.stderr, /must be 'sysbox' or 'qemu'/);
 

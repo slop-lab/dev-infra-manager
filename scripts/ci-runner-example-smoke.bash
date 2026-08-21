@@ -69,7 +69,7 @@ gitea_api() {
 
 cleanup() {
   if [[ -f "$state_root/ci-runners/$project_name/$runner_name.json" ]]; then
-    dim ci runner disable "$project_name" "$runner_name" --yes >/dev/null 2>&1 || true
+    dim ci runner delete "$project_name" "$runner_name" --yes >/dev/null 2>&1 || true
   fi
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     gitea_api DELETE "/orgs/$organization" >/dev/null 2>&1 || true
@@ -92,7 +92,7 @@ DIM_BIN="$dim_bin" bash \
   "$project_name" "$source_repositories" >/dev/null
 
 echo "[ci-runner-example] 3. enable an isolated runner"
-runner_json="$(dim ci runner enable "$project_name" "$runner_name" sysbox \
+runner_json="$(dim ci runner create "$project_name" "$runner_name" sysbox \
   --cpus 1.5 --memory 1g --pids-limit 512 --json)"
 container_name="$(jq -r .executor.containerName <<<"$runner_json")"
 test "$(jq -r .executor.phase <<<"$runner_json")" = "ready"
@@ -159,7 +159,7 @@ if [[ "$workflow_result" != *"|success" ]]; then
 fi
 
 echo "[ci-runner-example] 6. disable the runner"
-dim ci runner disable "$project_name" "$runner_name" --yes
+dim ci runner delete "$project_name" "$runner_name" --yes
 test ! -e "$state_root/ci-runners/$project_name/$runner_name.json"
 
 echo "ci-runner-example-smoke-ok"

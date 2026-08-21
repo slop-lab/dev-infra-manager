@@ -23,7 +23,8 @@ export async function detectCiRunnerKvm(probe: () => Promise<void> = async () =>
   try { await probe(); return true; } catch { return false; }
 }
 
-export interface EnableCiRunnerInput { project: string; name: string; executor: CiRunnerExecutorKind; resources?: Partial<CiRunnerResources> }
+export interface CreateCiRunnerInput { project: string; name: string; executor: CiRunnerExecutorKind; resources?: Partial<CiRunnerResources> }
+interface CiRunnerIdentity { project: string; name: string }
 
 export function effectiveCiRunnerResources(options: LifecycleOptions, overrides?: Partial<CiRunnerResources>, configured = configuredCiRunnerDefaults()): { resources: CiRunnerResources; inheritsResources: boolean } {
   const defaults = configured ?? { cpus: options.ciRunnerDefaultCpus || BUILTIN_CI_RUNNER_DEFAULTS.cpus, memory: options.ciRunnerDefaultMemory || BUILTIN_CI_RUNNER_DEFAULTS.memory, pidsLimit: options.ciRunnerDefaultPidsLimit || BUILTIN_CI_RUNNER_DEFAULTS.pidsLimit };
@@ -34,35 +35,62 @@ export function effectiveCiRunnerResources(options: LifecycleOptions, overrides?
   return { resources, inheritsResources: !overrides || Object.values(overrides).every((value) => value === undefined) };
 }
 
-export async function enableCiRunner(runner: StreamingCommandRunner, options: LifecycleOptions, input: EnableCiRunnerInput): Promise<CiRunnerRecord> {
+export async function createCiRunner(runner: StreamingCommandRunner, options: LifecycleOptions, input: CreateCiRunnerInput): Promise<CiRunnerRecord> {
+  return reconcileCiRunner(runner, options, input, "create");
+}
+
+export async function restartCiRunner(runner: StreamingCommandRunner, options: LifecycleOptions, input: CiRunnerIdentity): Promise<CiRunnerRecord> {
+  return reconcileCiRunner(runner, options, input, "restart");
+}
+
+export async function startCiRunner(runner: StreamingCommandRunner, options: LifecycleOptions, input: CiRunnerIdentity): Promise<CiRunnerRecord> {
+  return reconcileCiRunner(runner, options, input, "start");
+}
+
+async function reconcileCiRunner(runner: StreamingCommandRunner, options: LifecycleOptions, input: CiRunnerIdentity & { executor?: CiRunnerExecutorKind; resources?: Partial<CiRunnerResources> }, mode: "create" | "restart" | "start"): Promise<CiRunnerRecord> {
   const projectName = validateLifecycleName(input.project, "project");
   const name = validateLifecycleName(input.name, "CI runner");
-  if (input.executor === "qemu" && input.resources) throw new UserError("resource overrides apply only to the sysbox CI executor");
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireCiRunnerLock(projectName);
   try {
     const project = await showProject(options, projectName);
     if (!project.rootRepositoryAlias) throw new UserError(`project '${projectName}' has no root repository`);
     const existing = await readOptional(state, projectName, name);
-    if (existing && existing.executor.kind !== input.executor) {
-      throw new UserError(
-        `CI runner '${projectName}/${name}' uses executor '${existing.executor.kind}'; disable it before changing executor`
-      );
+    if (mode === "create" && existing) {
+      throw new UserError(`CI runner '${projectName}/${name}' already exists`);
     }
-    if (input.executor === "qemu") {
+    if (mode !== "create" && !existing) {
+      throw new UserError(`CI runner '${projectName}/${name}' not found`);
+    }
+    if (mode === "start" && existing?.executor.phase !== "stopped") {
+      throw new UserError(`CI runner '${projectName}/${name}' is not stopped`);
+    }
+    const executorKind = input.executor ?? existing?.executor.kind;
+    if (!executorKind) throw new UserError("creating a CI runner requires an executor");
+    if (executorKind === "qemu" && input.resources) {
+      throw new UserError("resource overrides apply only to the sysbox CI executor");
+    }
+    if (mode === "start" && existing?.executor.kind === "sysbox") {
+      const started = await runner.run("docker", ["start", existing.executor.containerName]);
+      if (started.exitCode !== 0) {
+        throw new UserError(`failed to start CI runner '${projectName}/${name}': ${started.stderr.trim()}`);
+      }
+      return saveExecutor(state, existing, ready(existing.executor));
+    }
+    if (executorKind === "qemu") {
       const other = (await state.listCiRunners()).find((candidate) =>
         candidate.projectName === projectName
           && candidate.name !== name
           && candidate.executor.kind === "qemu");
       if (other) {
         throw new UserError(
-          `project '${projectName}' already has QEMU CI runner '${other.name}'; disable it before enabling another`
+          `project '${projectName}' already has QEMU CI runner '${other.name}'; delete it before creating another`
         );
       }
     }
     const now = new Date().toISOString();
     let record: CiRunnerRecord;
-    if (input.executor === "sysbox") {
+    if (executorKind === "sysbox") {
       const previous = existing?.executor.kind === "sysbox" ? existing.executor : undefined;
       const effective = previous && input.resources === undefined && !previous.inheritsResources ? { resources: previous.resources, inheritsResources: false } : effectiveCiRunnerResources(options, input.resources);
       const executor: SysboxCiRunnerExecutor = { kind: "sysbox", phase: "creating", containerName: ciRunnerContainerName(projectName, name), volumeName: ciRunnerVolumeName(projectName, name), image: options.ciRunnerImage, runtime: options.ciRunnerRuntime, ...effective, labels: ["dim"], updatedAt: now };
@@ -120,7 +148,7 @@ export async function stopCiRunner(runner: StreamingCommandRunner, options: Life
   } finally { await release(); }
 }
 
-export async function disableCiRunner(runner: StreamingCommandRunner, options: LifecycleOptions, project: string, name: string): Promise<void> {
+export async function deleteCiRunner(runner: StreamingCommandRunner, options: LifecycleOptions, project: string, name: string): Promise<void> {
   const state = new LifecycleState(options.stateRoot); project = validateLifecycleName(project, "project"); name = validateLifecycleName(name, "CI runner");
   const release = await state.acquireCiRunnerLock(project);
   try {

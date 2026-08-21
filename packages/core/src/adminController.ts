@@ -44,10 +44,12 @@ import {
   validateRepositorySet
 } from "./repositorySet.js";
 import {
-  disableCiRunner,
-  enableCiRunner,
+  createCiRunner,
+  deleteCiRunner,
   listCiRunners,
+  restartCiRunner,
   showCiRunner,
+  startCiRunner,
   stopCiRunner
 } from "./ciRunner.js";
 
@@ -212,8 +214,8 @@ async function builtinCall(
           ? await projectRepositoryWorkspaceUrl(lifecycle, text("project"), text("alias"))
           : await projectRepositoryHostUrl(lifecycle, text("project"), text("alias"))
       };
-    case "ci.runner.enable":
-      return enableCiRunner(runner, lifecycle, {
+    case "ci.runner.create":
+      return createCiRunner(runner, lifecycle, {
         project: text("project"),
         name: text("name"),
         executor: ciExecutor(input.executor),
@@ -221,8 +223,10 @@ async function builtinCall(
       });
     case "ci.runner.list": return listCiRunners(lifecycle);
     case "ci.runner.show": return showCiRunner(lifecycle, text("project"), text("name"));
+    case "ci.runner.start": return startCiRunner(runner, lifecycle, { project: text("project"), name: text("name") });
+    case "ci.runner.restart": return restartCiRunner(runner, lifecycle, { project: text("project"), name: text("name") });
     case "ci.runner.stop": return stopCiRunner(runner, lifecycle, text("project"), text("name"));
-    case "ci.runner.disable": await disableCiRunner(runner, lifecycle, text("project"), text("name")); return {};
+    case "ci.runner.delete": await deleteCiRunner(runner, lifecycle, text("project"), text("name")); return {};
     case "workspace.create":
       return createWorkspace(runner, lifecycle, {
         project: text("project"),
