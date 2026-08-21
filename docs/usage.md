@@ -33,7 +33,10 @@ journalctl --user --unit dim-controller.service --lines 100
 `dim controller restart` rewrites the unit for the currently installed CLI,
 reloads systemd, and restarts it. Custom state roots used by disposable tests
 retain an isolated foreground-compatible controller instead of sharing this
-host service.
+host service. The managed unit preserves its runtime directory across that
+restart because existing workspaces bind-mount the directory, not an
+individual socket inode; the replacement controller socket therefore becomes
+visible without recreating those workspaces.
 
 ## Setup
 

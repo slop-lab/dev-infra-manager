@@ -16,6 +16,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Preserved the systemd controller runtime directory across an atomic service
+  restart, keeping its directory bind mount live in existing workspaces when
+  the controller replaces its Unix sockets.
 - Replaced the QEMU runner's one-webhook/one-VM launcher with a persistent
   single-capacity demand scheduler. Queued jobs now survive supervisor
   failures and restarts, and remain scheduled until Gitea reports that they

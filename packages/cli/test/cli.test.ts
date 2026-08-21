@@ -10,6 +10,17 @@ import test from "node:test";
 const cli = fileURLToPath(new URL("../src/cli.ts", import.meta.url));
 const packageDirectory = fileURLToPath(new URL("..", import.meta.url));
 
+test("managed controller restarts preserve the workspace-mounted runtime directory", async () => {
+  const source = await readFile(cli, "utf8");
+  assert.match(source, /^RuntimeDirectory=dim$/m);
+  assert.match(source, /^RuntimeDirectoryPreserve=restart$/m);
+  assert.doesNotMatch(source, /^RuntimeDirectoryPreserve=yes$/m);
+  assert.doesNotMatch(
+    source,
+    /if \(usesSystemdManagedController\(options\)\) \{\s+await stopManagedController/
+  );
+});
+
 test("DNS provider add exposes the common driver-owned argument contract", () => {
   const help = run(["external-url", "dns-provider", "add", "cloudflare", "--help"]);
   assert.equal(help.status, 0);

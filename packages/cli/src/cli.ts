@@ -1923,9 +1923,6 @@ async function stopManagedController(options: LifecycleOptions): Promise<void> {
 
 async function restartManagedController(options: LifecycleOptions): Promise<void> {
   if (usesSystemdManagedController(options)) {
-    await stopManagedController(options);
-    await rm(options.controllerSocketPath, { force: true });
-    await rm(options.adminControllerSocketPath, { force: true });
     await startSystemdManagedController(options);
     return;
   }
@@ -2030,6 +2027,7 @@ RestartSec=1s
 KillMode=control-group
 RuntimeDirectory=dim
 RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=restart
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=dim-controller
