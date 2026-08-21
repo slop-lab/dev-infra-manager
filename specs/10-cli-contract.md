@@ -303,8 +303,12 @@ available. Top-level `dim run` and
 exec`. Other workspace lifecycle commands exist only below `dim workspace`.
 
 `run` dispatches through `.dim/entrypoint.sh` when present. `exec` always
-bypasses it. `discard` requires `--yes`, attempts project teardown, and removes
-the top-level container, inner-engine volume, and workspace state.
+bypasses it. `discard` attempts project teardown and removes the top-level
+container, inner-engine volume, and workspace state.
+
+Commands that permanently delete Projects, repositories, CI runners, or
+workspaces accept confirmation from an interactive terminal. In a
+non-interactive shell they require the explicit `--yes` option.
 
 `doctor` can diagnose the host without a configured workspace backend.
 `doctor configure-backend [BACKEND]` verifies and records a backend without

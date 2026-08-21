@@ -168,8 +168,11 @@ project.command("remove")
 project.command("purge")
   .description("Delete an unused project and its DIM-managed Git organization")
   .argument("<project>")
-  .requiredOption("--yes", "confirm permanent repository deletion")
-  .action(async (name: string) => void await adminCall("project.purge", { name }));
+  .option("--yes", "confirm permanent repository deletion")
+  .action(async (name: string, flags: { yes?: boolean }) => {
+    await confirmAction(flags.yes ?? false, `Permanently delete project '${name}' and its managed repositories?`);
+    await adminCall("project.purge", { name });
+  });
 
 const repo = program.command("repo").description("Manage project-scoped repositories");
 
@@ -249,8 +252,9 @@ repo.command("delete")
   .description("Delete an unused non-root repository from DIM and managed Gitea")
   .argument("<project>")
   .argument("<alias>")
-  .requiredOption("--yes", "confirm permanent repository deletion")
-  .action(async (project: string, alias: string) => {
+  .option("--yes", "confirm permanent repository deletion")
+  .action(async (project: string, alias: string, flags: { yes?: boolean }) => {
+    await confirmAction(flags.yes ?? false, `Permanently delete repository '${project}/${alias}'?`);
     await adminCall("repo.delete", { project, alias });
   });
 
@@ -383,8 +387,11 @@ ciRunner.command("delete")
   .description("Remove a named CI runner and its local data")
   .argument("<project>")
   .argument("<runner>")
-  .requiredOption("--yes", "confirm runner and local data deletion")
-  .action(async (project: string, name: string) => void await adminCall("ci.runner.delete", { project, name }));
+  .option("--yes", "confirm runner and local data deletion")
+  .action(async (project: string, name: string, flags: { yes?: boolean }) => {
+    await confirmAction(flags.yes ?? false, `Permanently delete CI runner '${project}/${name}' and its local data?`);
+    await adminCall("ci.runner.delete", { project, name });
+  });
 
 const ciDefaults = ciRunner.command("defaults").description("Manage inherited CI runner resource defaults");
 
@@ -592,8 +599,9 @@ workspace.command("stop")
 workspace.command("discard")
   .description("Permanently delete a workspace and unpushed changes")
   .argument("<workspace>")
-  .requiredOption("--yes", "confirm permanent deletion")
-  .action(async (name: string) => {
+  .option("--yes", "confirm permanent deletion")
+  .action(async (name: string, flags: { yes?: boolean }) => {
+    await confirmAction(flags.yes ?? false, `Permanently discard workspace '${name}'?`);
     const options = lifecycleOptions();
     await ensureManagedController(options);
     await externalUrlControllerRequest("/api/urls", { method: "DELETE" }, name).catch((error) => {
@@ -1057,6 +1065,18 @@ available:
 
 function interactive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+async function confirmAction(yes: boolean, question: string): Promise<void> {
+  if (yes) return;
+  if (!interactive()) throw new UserError("confirmation requires --yes in a non-interactive shell");
+  const prompt = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (await prompt.question(`${question} [y/N] `)).trim().toLowerCase();
+    if (answer !== "y" && answer !== "yes") throw new UserError("operation was not confirmed");
+  } finally {
+    prompt.close();
+  }
 }
 
 function parseWorkspaceBackend(value: string): WorkspaceRuntimeBackendKind {

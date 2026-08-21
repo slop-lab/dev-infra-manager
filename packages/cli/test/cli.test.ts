@@ -137,6 +137,20 @@ test("workspace resources command requires at least one live limit", () => {
   assert.match(unsafeAlign.stderr, /--reset requires --yes/);
 });
 
+test("destructive commands require --yes only in non-interactive use", () => {
+  for (const args of [
+    ["project", "purge", "example"],
+    ["repo", "delete", "example", "root"],
+    ["ci", "runner", "delete", "example", "primary"],
+    ["workspace", "discard", "work-1"]
+  ]) {
+    const result = run(args);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /confirmation requires --yes in a non-interactive shell/);
+    assert.doesNotMatch(result.stderr, /required option '--yes'/);
+  }
+});
+
 test("controller serve preserves the active owner and cleans up its runtime files", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "dim-controller-test-"));
   const socket = path.join(root, "controller.sock");
