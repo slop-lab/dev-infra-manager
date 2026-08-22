@@ -236,6 +236,7 @@ examples against a real Docker daemon:
 just verify mise-install-smoke   # mise use --raw --global npm:@slop-lab/dim-installer, in a disposable container
 just verify example current-installed auto single-repository
 just verify example current-installed auto multi-repository
+just verify example current-installed auto full-development-flow
 just verify example runc use
 just verify example sysbox use ci-runner
 ```
@@ -256,8 +257,10 @@ argument selects one example instead of the compatible suite.
 All require Docker and network access; `just verify mise-install-smoke` also
 needs to reach the real npm registry to install `mise` itself. The
 `external-urls` example uses Docker and dnsmasq but does not require a real
-Tailscale account. The multi-repository verification also requires the managed
-Gitea service.
+Tailscale account. The multi-repository and full-development-flow verification
+also require the managed Gitea service. The full flow exercises state changes
+from creation through reviewed updates, restart rejection and recovery,
+controller replacement, setup-error recovery, and backup/discard/restore.
 
 ## Project Workspaces
 
@@ -265,6 +268,8 @@ For installing `dim` and the minimal single-repository "create a Project"
 shape, see the root [README](../README.md#install-the-dim-cli). For a
 complete, tested nested-container walkthrough with named external URL ingresses, see
 [Example: External URLs](../examples/features/external-urls/README.md).
+For a combined, stateful adoption and recovery walkthrough, see
+[Full development flow](../examples/projects/full-development-flow/README.md).
 
 `run` does not repeat setup. Environment reconciliation happens on `create`,
 `start`, `restart`, `setup`, and after a fast-forward-only `update`. Only the

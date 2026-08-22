@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "repositories": {
+    "root": {
+      "url": "__DIM_EXAMPLE_ROOT_URL__",
+      "root": true,
+      "ref": "main",
+      "protect": ["main"]
+    },
+    "web": {
+      "url": "__DIM_EXAMPLE_WEB_URL__",
+      "protect": ["main"]
+    },
+    "secrets": {
+      "url": "__DIM_EXAMPLE_SECRETS_URL__",
+      "protect": ["main"]
+    }
+  }
+}

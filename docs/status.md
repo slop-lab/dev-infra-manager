@@ -43,6 +43,11 @@ Implemented:
 - Reproducible local Node.js 24/26, container, Sysbox, and KVM CI entrypoints.
 - A common example verifier that creates a separate disposable QEMU guest for
   each selected example and runtime backend.
+- A full-development-flow Project example and continuous stateful journey from
+  creation through reviewed updates, safe restart rejection, controller
+  replacement, setup recovery, and backup/discard/restore. Test-only registry
+  and failure hooks are injected into its disposable materialization rather
+  than embedded in the copyable example.
 - Project-scoped managed CI runners shared by all repositories in the Project,
   with Sysbox-isolated DinD, independent resource limits, and a
   provider-neutral coordinator boundary.

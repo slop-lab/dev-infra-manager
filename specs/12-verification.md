@@ -126,6 +126,15 @@ verify rejection without a container stop, Project-service replacement, Git
 state change, workspace-record change, or setup invocation, then clean the
 checkout and exercise the successful fast-forward restart path.
 
+The stateful development-flow smoke MUST materialize
+`examples/projects/full-development-flow` and exercise one continuous journey:
+profiled resource-bounded creation, private nested Docker, dirty restart
+rejection, a reviewed root update, stop/start persistence, controller socket
+replacement, setup-error recovery, agent-home backup, discard, recreation,
+restore, and final managed-state/resource cleanup. Failure hooks and managed CI
+cache configuration MUST be injected only into its temporary repositories;
+the checked-in example remains a normal user-facing Project.
+
 ## Container Backend Gates
 
 `scripts/container-cgroup-smoke.bash` requires direct access to the target Docker
@@ -278,6 +287,11 @@ controller proxy with only bodyless self-restart permission, cannot reach host
 inputs, and can request an asynchronous restart of its own workspace. The
 smoke accepts `DIM_EXAMPLE_WORK_ROOT` so a remote or sibling DinD daemon can
 resolve controller-socket bind sources through a shared absolute path.
+
+`just verify example BACKEND DIRTY full-development-flow` verifies the
+multi-repository reference Project and the complete stateful journey described
+above. CI runner lifecycle remains separate because it is a Project-external
+host capability rather than Project-owned development configuration.
 
 ## Documentation Verification
 

@@ -73,6 +73,7 @@ The documentation is split by concern:
 - [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.
 - [Single-repository Project](../examples/projects/single-repository/README.md): default no-secret shape with no protected ref, resource limits, and an optional external URL.
 - [Multi-repository Project](../examples/projects/multi-repository/README.md): Project-owned agent, host Git identity, independent repositories, and a reviewed secret service.
+- [Full development flow](../examples/projects/full-development-flow/README.md): combined multi-repository, private-DinD, controller-proxy, profile, resource, secret, and backup/restore adoption shape.
 - [Example: External URLs](../examples/features/external-urls/README.md): named ingress discovery and real root/dev/deep reverse-proxy routing.
 - [Advanced example: External URL route policy](../examples/features/external-url-route-policy/README.md): a checked-in Unix-socket policy webhook.
 - [Plugins](plugins.md): explicit plugin loading, named extensions, and

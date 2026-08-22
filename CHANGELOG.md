@@ -59,6 +59,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added a full-development-flow reference Project and a stateful release
+  journey covering reviewed updates, restart safety, controller replacement,
+  setup recovery, backup/discard/recreate/restore, and cleanup without putting
+  verification-only hooks in the checked-in example.
 - Extended the managed CI registry-cache relay through nested KVM guests and
   test-created DinD daemons while keeping ordinary Project examples independent
   of that CI infrastructure.

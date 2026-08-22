@@ -9,6 +9,9 @@ Project examples are complete, copyable adoption shapes:
   a Project-owned agent/private DinD pair, and an optional external URL.
 - [`projects/multi-repository/`](projects/multi-repository/README.md) adds
   independent repository and secret-bearing review boundaries.
+- [`projects/full-development-flow/`](projects/full-development-flow/README.md)
+  combines the principal Project capabilities in one adoption shape and is
+  exercised by a stateful create-to-recovery journey.
 
 ## Feature examples
 
@@ -58,8 +61,9 @@ The second argument controls a dirty source checkout:
 - `discard` verifies committed `HEAD` without modifying the checkout.
 
 The optional third argument selects one example (`single-repository`,
-`multi-repository`, `ci-runner`, `external-urls`, `shared-upstream`, or
-`project-runtime-cgroups`) instead of the compatible suite.
+`multi-repository`, `full-development-flow`, `ci-runner`, `external-urls`,
+`shared-upstream`, or `project-runtime-cgroups`) instead of the compatible
+suite.
 
 Complete adoption shapes belong under `projects/`; capability-focused and
 one-off examples belong under `features/`.

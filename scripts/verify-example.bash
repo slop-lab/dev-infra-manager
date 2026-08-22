@@ -31,7 +31,7 @@ BACKEND:
   current-installed | sysbox | gvisor | rootless-podman | runc
 
 EXAMPLE:
-  all | single-repository | multi-repository | ci-runner | external-urls | shared-upstream | project-runtime-cgroups
+  all | single-repository | multi-repository | full-development-flow | ci-runner | external-urls | shared-upstream | project-runtime-cgroups
 
 POLICY:
   auto     reject a dirty source repository
@@ -69,8 +69,8 @@ case "$dirty_policy" in
   *) echo "dirty repository policy must be auto, use, or discard" >&2; exit 2 ;;
 esac
 case "$selection" in
-  all|single-repository|multi-repository|ci-runner|external-urls|shared-upstream|project-runtime-cgroups) ;;
-  *) echo "example must be all, single-repository, multi-repository, ci-runner, external-urls, shared-upstream, or project-runtime-cgroups" >&2; exit 2 ;;
+  all|single-repository|multi-repository|full-development-flow|ci-runner|external-urls|shared-upstream|project-runtime-cgroups) ;;
+  *) echo "example must be all, single-repository, multi-repository, full-development-flow, ci-runner, external-urls, shared-upstream, or project-runtime-cgroups" >&2; exit 2 ;;
 esac
 work_dir="$(mktemp -d /tmp/dim-example-verification.XXXXXX)"
 cleanup() {
@@ -91,7 +91,7 @@ if [[ "$backend" != current-installed ]]; then
   fi
   export DIM_KVM_IMAGE_CACHE="${DIM_KVM_IMAGE_CACHE:-$repo_root/.local/kvm}"
   if [[ "$selection" == all ]]; then
-    qemu_examples=(single-repository multi-repository external-urls shared-upstream)
+    qemu_examples=(single-repository multi-repository full-development-flow external-urls shared-upstream)
     if [[ "$backend" == sysbox ]]; then
       qemu_examples+=(ci-runner)
     else
@@ -117,7 +117,7 @@ if [[ ! -d node_modules/.pnpm ]]; then
 fi
 
 if [[ "$selection" == all ]]; then
-  examples=(single-repository multi-repository external-urls shared-upstream project-runtime-cgroups)
+  examples=(single-repository multi-repository full-development-flow external-urls shared-upstream project-runtime-cgroups)
   if docker info --format '{{json .Runtimes}}' | grep -q '"sysbox-runc"'; then
     examples+=(ci-runner)
   else
@@ -135,6 +135,7 @@ for example in "${examples[@]}"; do
   case "$example" in
     single-repository) smoke="single-repository-example-smoke.bash" ;;
     multi-repository) smoke="multi-repository-example-smoke.bash" ;;
+    full-development-flow) smoke="stateful-development-flow-smoke.bash" ;;
     ci-runner) smoke="ci-runner-example-smoke.bash" ;;
     external-urls) smoke="external-url-example-smoke.bash" ;;
     shared-upstream) smoke="shared-upstream-example-smoke.bash" ;;
