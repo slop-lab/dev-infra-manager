@@ -52,6 +52,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added a host-scoped, credential-free CNCF Distribution pull-through cache
+  for Docker Hub layers used by managed CI. Sysbox daemons connect on the DIM
+  control network and disposable QEMU guests use a supervisor-local relay,
+  without publishing the cache or attaching it to workspace networks.
 - Added a Project-scoped Packer cache for disposable QEMU CI runners. Named
   capacities now share an atomically published, version-keyed Ubuntu base with
   common packages and the pinned coordinator runner preinstalled, while job

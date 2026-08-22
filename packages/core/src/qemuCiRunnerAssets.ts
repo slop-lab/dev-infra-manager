@@ -1,9 +1,9 @@
-export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.4";
+export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.5";
 
 export const QEMU_CI_SUPERVISOR_DOCKERFILE = `FROM ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 RUN apt-get update \\
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\
-      ca-certificates cloud-image-utils curl openssh-client python3 qemu-system-x86 qemu-utils unzip util-linux xz-utils \\
+      ca-certificates cloud-image-utils curl openssh-client python3 qemu-system-x86 qemu-utils socat unzip util-linux xz-utils \\
  && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSLo /tmp/packer.zip https://releases.hashicorp.com/packer/1.16.0/packer_1.16.0_linux_amd64.zip \\
  && echo "5edcd14ab59b535040c512dbecd6ec9ef976a000b073c19d93e4c431c948581e  /tmp/packer.zip" | sha256sum --check \\
@@ -292,10 +292,15 @@ exec 9>&-
 
 cleanup_dir=""
 qemu_pid=""
+registry_relay_pid=""
 cleanup() {
   if [[ -n "$qemu_pid" ]]; then
     kill "$qemu_pid" >/dev/null 2>&1 || true
     wait "$qemu_pid" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$registry_relay_pid" ]]; then
+    kill "$registry_relay_pid" >/dev/null 2>&1 || true
+    wait "$registry_relay_pid" >/dev/null 2>&1 || true
   fi
   [[ -z "$cleanup_dir" ]] || rm -rf -- "$cleanup_dir"
 }
@@ -304,6 +309,8 @@ trap cleanup EXIT INT TERM
 cleanup_dir="$(mktemp -d "$run_root/job-XXXXXX")"
 ssh-keygen -q -t ed25519 -N '' -f "$cleanup_dir/id"
 public_key="$(cat "$cleanup_dir/id.pub")"
+socat TCP-LISTEN:5000,fork,reuseaddr TCP:dim-registry-cache:5000 &
+registry_relay_pid=$!
 cat >"$cleanup_dir/meta-data" <<EOF
 instance-id: dim-qemu-ci-$(date +%s%N)
 local-hostname: dim-qemu-ci
@@ -317,7 +324,16 @@ users:
     shell: /bin/bash
     ssh_authorized_keys:
       - $public_key
+write_files:
+  - path: /etc/docker/daemon.json
+    permissions: '0644'
+    content: |
+      {
+        "registry-mirrors": ["http://10.0.2.2:5000"],
+        "insecure-registries": ["10.0.2.2:5000"]
+      }
 runcmd:
+  - [systemctl, restart, docker]
   - [bash, -lc, "modprobe kvm && { grep -qw vmx /proc/cpuinfo && modprobe kvm_intel || modprobe kvm_amd; } && usermod -aG kvm dim"]
   - [bash, -lc, "touch /run/dim-qemu-ci-ready"]
 EOF

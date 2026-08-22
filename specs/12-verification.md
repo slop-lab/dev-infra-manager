@@ -51,7 +51,9 @@ QEMU, KVM, or an installed DIM CLI.
 
 CI runner unit coverage must verify resource-default precedence, stable managed
 names, and that default container arguments use the configured isolation
-runtime without mounting the host Docker socket.
+runtime without mounting the host Docker socket. It must also verify that the
+host-scoped pull-through cache has no published port and that Sysbox and QEMU
+runner daemon configuration selects only the internal cache endpoints.
 
 The Sysbox lane of `scripts/kvm-host-install-smoke.bash` must enable a real
 Project CI runner inside its disposable QEMU guest and inspect the effective

@@ -2,11 +2,12 @@ import { randomBytes } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { UserError } from "./errors.js";
 import { LifecycleState } from "./lifecycleState.js";
+import { CONTROL_NETWORK } from "./registryCache.js";
 import type { GiteaCredentials, GiteaServiceRecord, LifecycleOptions } from "./lifecycleTypes.js";
 import type { CommandRunner } from "./types.js";
 
 export const GITEA_CONTAINER = "dim-gitea";
-export const GITEA_NETWORK = "dim-control";
+export const GITEA_NETWORK = CONTROL_NETWORK;
 export const GITEA_VOLUME = "dim-gitea-data";
 const CREDENTIAL_PATH = "/data/dim/credentials.json";
 

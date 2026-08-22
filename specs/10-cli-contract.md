@@ -194,6 +194,14 @@ container-engine socket. The initial adapter also maps `ubuntu-24.04` to its
 compatible job image so a workflow shared with GitHub does not require a
 provider-specific `runs-on` edit.
 
+Managed CI runner Docker daemons MUST use a host-scoped, managed Docker Hub
+pull-through cache. The cache MUST have persistent filesystem storage, MUST NOT
+publish a host port or contain upstream credentials, and MUST remain outside
+Project workspace networks. Sysbox runners may reach it on the control network;
+QEMU guests may reach it only through a supervisor-local relay. Cache use MUST
+NOT expose a host container-engine socket or make disposable runner state
+persistent. Cache misses remain ordinary anonymous upstream pulls.
+
 The QEMU supervisors form a Project-scoped scheduler with one capacity per
 named runner. They MUST coordinate through a shared managed dispatch volume and
 atomically claim demand so duplicate provider deliveries cannot boot more than

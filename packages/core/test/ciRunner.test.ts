@@ -107,12 +107,13 @@ describe("CI runner resources", () => {
       resources: { cpus: "4", memory: "8g", pidsLimit: "2048" },
       inheritsResources: true, labels: ["dim"], updatedAt: "now"
     };
-    const args = ciRunnerContainerArgs(record, executor, { instanceUrl: "http://coordinator", token: "secret" });
+    const args = ciRunnerContainerArgs(record, executor, { instanceUrl: "http://coordinator", token: "secret" }, true);
     expect(args).toContain("sysbox-runc");
     expect(args).toContain("4");
     expect(args).toContain("8g");
     expect(args).toContain("2048");
     expect(args.join(" ")).not.toContain("/var/run/docker.sock");
+    expect(args.join(" ")).toContain("target=/etc/docker/daemon.json,volume-subpath=docker-daemon.json,readonly");
     expect(args.join(" ")).toContain("dim:docker://gitea/runner-images:ubuntu-24.04");
     expect(args.join(" ")).toContain("ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04");
     expect(args).toContain(`GITEA_RUNNER_LABELS=${CI_RUNNER_LABELS}`);
@@ -160,6 +161,8 @@ describe("CI runner resources", () => {
     expect(QEMU_CI_PACKER_TEMPLATE).toContain('source  = "github.com/hashicorp/qemu"');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('flock 9');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('/var/lib/dim-qemu-ci-cache');
+    expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('TCP:dim-registry-cache:5000');
+    expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('"registry-mirrors": ["http://10.0.2.2:5000"]');
     const userData = QEMU_CI_SUPERVISOR_SCRIPT.match(/cat >"\$cleanup_dir\/user-data" <<EOF\n([\s\S]*?)\nEOF/)?.[1];
     expect(userData).toBeDefined();
     expect(userData).not.toContain("GITEA_RUNNER_REGISTRATION_TOKEN");

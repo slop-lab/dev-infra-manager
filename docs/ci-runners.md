@@ -45,6 +45,24 @@ in disposable job containers. After upgrading DIM across a label change,
 run `dim ci runner restart PROJECT RUNNER` once to replace the stored runner
 registration and publish the new labels.
 
+DIM starts one host-scoped CNCF Distribution registry as an anonymous Docker
+Hub pull-through cache when the first managed CI runner is reconciled. Sysbox
+runner daemons use it directly on the private `dim-control` network. Each QEMU
+supervisor exposes only a local TCP relay to its disposable guest, whose Docker
+daemon uses the relay at `10.0.2.2:5000`. The registry has no published host
+port, accepts no pushes in proxy mode, stores no Docker Hub credentials, and
+is not attached to Project workspace networks. Its managed filesystem volume
+is shared across Projects and runner executors, so common public layers survive
+runner and VM disposal. A cache miss still reaches Docker Hub and remains
+subject to its upstream policy; pin frequently used images by digest where
+practical.
+
+After upgrading an existing installation to a DIM version that introduces or
+changes this cache configuration, run `dim ci runner restart PROJECT RUNNER`
+once for each existing Sysbox runner. QEMU supervisor image-version changes are
+reconciled automatically, but an explicit restart is also safe when immediate
+replacement is preferred.
+
 As described in the
 [development repository model](development-repositories.md), DIM develops
 itself primarily through its active managed Git host while GitHub remains the
