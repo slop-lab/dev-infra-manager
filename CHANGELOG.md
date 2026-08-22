@@ -56,6 +56,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Extended the managed CI registry-cache relay through nested KVM guests and
+  test-created DinD daemons while keeping ordinary Project examples independent
+  of that CI infrastructure.
 - Added a separate host-only managed Git maintainer capability for `dim x git`
   and `dim git setup`. Existing managed credentials and protected-branch rules
   are reconciled so trusted host Git may push protected refs without granting

@@ -1,4 +1,4 @@
-export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.5";
+export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.6";
 
 export const QEMU_CI_SUPERVISOR_DOCKERFILE = `FROM ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 RUN apt-get update \\
@@ -80,7 +80,7 @@ runner_version=3.2.0
 runner_checksum=335d0f12e4fdf2cdc2310e9ce8ad33303d0f6889fe2efa2e1999d2f5614d440f
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\
-  cloud-image-utils curl git jq just openssh-client qemu-system-x86 qemu-utils xz-utils
+  cloud-image-utils curl git jq just openssh-client qemu-system-x86 qemu-utils socat xz-utils
 rm -rf /var/lib/apt/lists/*
 curl -fsSLo /usr/local/bin/gitea-runner.xz \\
   "https://gitea.com/gitea/runner/releases/download/v$runner_version/gitea-runner-$runner_version-linux-amd64.xz"
@@ -262,7 +262,7 @@ set -euo pipefail
 data_root=/var/lib/dim-qemu-ci
 cache_root=/var/lib/dim-qemu-ci-cache
 run_root="$data_root/runs"
-cache_key=ubuntu-noble-6e40c07a-amd64-packer-1.16.0-qemu-1.1.6-gitea-runner-3.2.0-v1
+cache_key=ubuntu-noble-6e40c07a-amd64-packer-1.16.0-qemu-1.1.6-gitea-runner-3.2.0-v2
 runner_image="$cache_root/images/$cache_key/runner-base.qcow2"
 mkdir -p "$cache_root" "$run_root"
 
@@ -364,7 +364,7 @@ EOF
   fi
   echo "qemu-ci: register one-job ephemeral runner"
   printf '%s\\n' "$GITEA_RUNNER_REGISTRATION_TOKEN" | ssh "\${ssh_args[@]}" dim@127.0.0.1 \\
-    "read -r token; cd /var/lib/gitea-runner; sudo /usr/local/bin/gitea-runner register --no-interactive --ephemeral --instance '$GITEA_INSTANCE_URL' --token \"\\$token\" --name '$GITEA_RUNNER_NAME' --labels dim-qemu:host; unset token; sudo /usr/local/bin/gitea-runner daemon; sudo poweroff"
+    "read -r token; cd /var/lib/gitea-runner; sudo /usr/local/bin/gitea-runner register --no-interactive --ephemeral --instance '$GITEA_INSTANCE_URL' --token \"\\$token\" --name '$GITEA_RUNNER_NAME' --labels dim-qemu:host; unset token; sudo env DIM_CI_REGISTRY_CACHE_UPSTREAM=10.0.2.2:5000 /usr/local/bin/gitea-runner daemon; sudo poweroff"
   wait "$qemu_pid" || true
   qemu_pid=""
   echo "qemu-ci: disposable runner VM exited"

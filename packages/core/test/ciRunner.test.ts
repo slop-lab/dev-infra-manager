@@ -128,9 +128,10 @@ describe("CI runner resources", () => {
     const record = { projectName: "example", name: "kvm-1" };
     const sysbox = { kind: "sysbox" as const, phase: "ready" as const, containerName: "dim-ci-example", volumeName: "dim-ci-example-data", image: "runner:image", runtime: "sysbox-runc", resources: { cpus: "4", memory: "8g", pidsLimit: "2048" }, inheritsResources: true, labels: ["dim"], updatedAt: "now" };
     const qemu = { kind: "qemu" as const, phase: "ready" as const, supervisorName: "dim-ci-example-qemu-supervisor", volumeName: "dim-ci-example-qemu-data", image: "qemu-supervisor:image", resources: { cpus: "6", memory: "12g" }, inheritsResources: false, labels: ["dim-qemu"], updatedAt: "now" };
-    const containerArgs = ciRunnerContainerArgs(record, sysbox);
+    const containerArgs = ciRunnerContainerArgs(record, sysbox, undefined, true);
     expect(containerArgs).not.toContain("/dev/kvm");
     expect(containerArgs).toContain(`GITEA_RUNNER_LABELS=${CI_RUNNER_LABELS}`);
+    expect(containerArgs).toContain("DIM_CI_REGISTRY_CACHE_UPSTREAM=dim-registry-cache:5000");
 
     const qemuArgs = ciRunnerQemuSupervisorArgs(
       record,
@@ -163,6 +164,7 @@ describe("CI runner resources", () => {
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('/var/lib/dim-qemu-ci-cache');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('TCP:dim-registry-cache:5000');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('"registry-mirrors": ["http://10.0.2.2:5000"]');
+    expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain("DIM_CI_REGISTRY_CACHE_UPSTREAM=10.0.2.2:5000");
     const userData = QEMU_CI_SUPERVISOR_SCRIPT.match(/cat >"\$cleanup_dir\/user-data" <<EOF\n([\s\S]*?)\nEOF/)?.[1];
     expect(userData).toBeDefined();
     expect(userData).not.toContain("GITEA_RUNNER_REGISTRATION_TOKEN");

@@ -198,7 +198,10 @@ Managed CI runner Docker daemons MUST use a host-scoped, managed Docker Hub
 pull-through cache. The cache MUST have persistent filesystem storage, MUST NOT
 publish a host port or contain upstream credentials, and MUST remain outside
 Project workspace networks. Sysbox runners may reach it on the control network;
-QEMU guests may reach it only through a supervisor-local relay. Cache use MUST
+QEMU guests may reach it only through a supervisor-local relay. Verification
+harnesses MAY extend that relay into nested KVM guests and test-created DinD
+daemons, but ordinary Project and example definitions MUST NOT depend on the
+managed cache. Cache use MUST
 NOT expose a host container-engine socket or make disposable runner state
 persistent. Cache misses remain ordinary anonymous upstream pulls.
 

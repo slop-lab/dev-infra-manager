@@ -30,6 +30,13 @@ if [[ "$backend" == all ]]; then
   exit 0
 fi
 for cmd in qemu-system-x86_64 qemu-img curl ssh ssh-keygen tar; do command -v "$cmd" >/dev/null || { echo "missing KVM smoke dependency: $cmd (run: bash scripts/install-kvm-verify-deps-ubuntu.bash)" >&2; exit 2; }; done
+registry_mirror="${DIM_KVM_REGISTRY_MIRROR:-}"
+if [[ -n "$registry_mirror" ]]; then
+  [[ "$registry_mirror" =~ ^http://([A-Za-z0-9.-]+):([1-9][0-9]*)$ ]] || {
+    echo "invalid DIM_KVM_REGISTRY_MIRROR: $registry_mirror" >&2
+    exit 2
+  }
+fi
 if ! command -v cloud-localds >/dev/null && ! command -v genisoimage >/dev/null; then
   echo "missing KVM smoke dependency: cloud-localds or genisoimage" >&2
   exit 2
@@ -74,6 +81,18 @@ fi
 ssh-keygen -q -t ed25519 -N '' -f "$workdir/id"; key="$(cat "$workdir/id.pub")"
 printf 'instance-id: dim-kvm-smoke\nlocal-hostname: dim-kvm-smoke\n' > "$workdir/meta-data"
 printf '#cloud-config\nusers:\n  - name: dim\n    uid: 1001\n    sudo: ALL=(ALL) NOPASSWD:ALL\n    shell: /bin/bash\n    ssh_authorized_keys:\n      - %s\n' "$key" > "$workdir/user-data"
+if [[ -n "$registry_mirror" ]]; then
+  cat >>"$workdir/user-data" <<EOF
+write_files:
+  - path: /etc/docker/daemon.json
+    permissions: '0644'
+    content: |
+      {
+        "registry-mirrors": ["$registry_mirror"],
+        "insecure-registries": ["${registry_mirror#http://}"]
+      }
+EOF
+fi
 if command -v cloud-localds >/dev/null; then
   cloud-localds "$workdir/seed.img" "$workdir/user-data" "$workdir/meta-data"
 else
@@ -111,12 +130,20 @@ if [[ "$guest_ready" == false ]]; then
   exit 1
 fi
 run_step "install guest prerequisites" ssh "${ssh_args[@]}" dim@127.0.0.1 \
-  "sudo apt-get update && sudo apt-get install -y git just"
+  "sudo apt-get update && sudo apt-get install -y git just${registry_mirror:+ socat}"
+if [[ -n "$registry_mirror" ]]; then
+  run_step "relay registry cache to nested containers" ssh "${ssh_args[@]}" dim@127.0.0.1 \
+    "sudo systemd-run --quiet --unit=dim-registry-cache-relay --property=Restart=always socat TCP-LISTEN:5000,fork,reuseaddr TCP:${registry_mirror#http://}"
+fi
 tar -C "$workdir" -czf "$workdir/repo.tar.gz" repo.bundle
 run_step "clone repository" clone_repository
 run_step "install $backend backend" install_backend
 run_step "verify stored backend" ssh "${ssh_args[@]}" dim@127.0.0.1 \
   "test \"\$(jq -r .workspaceBackend ~/.config/dim/config.json)\" = '$backend'"
+if [[ -n "$registry_mirror" ]]; then
+  run_step "verify nested guest registry mirror" ssh "${ssh_args[@]}" dim@127.0.0.1 \
+    "sudo docker info --format '{{json .RegistryConfig.Mirrors}}' | grep -Fq '$registry_mirror'"
+fi
 # Rootless Podman's workload runs the outer container with the exact
 # capability set workspaceRuntimePlan() grants (packages/core/src/runtimeBackends.ts)
 # instead of --privileged, so this is the real verification that those
@@ -140,7 +167,7 @@ if [[ "$backend" == runc ]]; then
     '
   run_step "verify canonical self Project and private rootless DinD" \
     ssh "${ssh_args[@]}" dim@127.0.0.1 \
-      "cd dim && DIM_SELF_VERIFY_AGENT=1 JUST_UNSTABLE=1 just verify self-development"
+      "cd dim && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' DIM_SELF_VERIFY_AGENT=1 JUST_UNSTABLE=1 just verify self-development"
 fi
 if [[ "$backend" == sysbox ]]; then
   run_step "install trusted-workspace build tools" \
@@ -156,7 +183,8 @@ if [[ "$backend" == sysbox ]]; then
     '
   if [[ "${DIM_KVM_SKIP_TRUSTED_WORKSPACE:-0}" != 1 ]]; then
     run_step "verify trusted KVM workspace and Sysbox isolation probe" \
-      ssh "${ssh_args[@]}" dim@127.0.0.1 '
+      ssh "${ssh_args[@]}" dim@127.0.0.1 \
+      "DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' bash -s" <<'EOF'
       set -e
       trusted=dim-kvm-trusted
       agent=dim-kvm-agent
@@ -181,14 +209,29 @@ if [[ "$backend" == sysbox ]]; then
       sudo docker exec -u root "$trusted" timeout 2 qemu-system-x86_64 \
         -machine q35,accel=kvm -cpu host -m 128 -smp 1 -nodefaults -nographic -S || status=$?
       test "$status" -eq 124
-      sudo docker run -d --name "$agent" --runtime=sysbox-runc docker:29.1.3-dind >/dev/null
+      dind_mirror_flags=()
+      if [[ -n "${DIM_DOCKER_REGISTRY_MIRROR:-}" ]]; then
+        dind_mirror_flags=(
+          --add-host host.docker.internal:host-gateway
+          docker:29.1.3-dind
+          --registry-mirror "$DIM_DOCKER_REGISTRY_MIRROR"
+          --insecure-registry "${DIM_DOCKER_REGISTRY_MIRROR#http://}"
+        )
+      else
+        dind_mirror_flags=(docker:29.1.3-dind)
+      fi
+      sudo docker run -d --name "$agent" --runtime=sysbox-runc "${dind_mirror_flags[@]}" >/dev/null
       for _ in $(seq 1 60); do
         sudo docker exec "$agent" docker info >/dev/null 2>&1 && break
         sleep 1
       done
+      if [[ -n "${DIM_DOCKER_REGISTRY_MIRROR:-}" ]]; then
+        sudo docker exec "$agent" docker info --format '{{json .RegistryConfig.Mirrors}}' |
+          grep -Fq "$DIM_DOCKER_REGISTRY_MIRROR"
+      fi
       sudo docker exec "$agent" docker run --rm hello-world >/dev/null
       test "$(sudo docker inspect -f "{{.HostConfig.Privileged}}" "$agent")" = false
-      '
+EOF
   fi
   run_step "verify managed CI runner cgroup boundary" \
     ssh "${ssh_args[@]}" dim@127.0.0.1 '

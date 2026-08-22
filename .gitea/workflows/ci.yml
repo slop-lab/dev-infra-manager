@@ -37,11 +37,11 @@ jobs:
     runs-on: dim-container-integration
     timeout-minutes: 30
     steps:
-      - run: apk add --no-cache curl jq just nodejs npm
+      - run: apk add --no-cache curl jq just nodejs npm socat
       - uses: actions/checkout@v7
       - run: npm install --global pnpm@10.13.1
       - run: pnpm install --frozen-lockfile
-      - run: just ci container
+      - run: bash scripts/with-ci-registry-cache.bash just ci container
 
   release-gate:
     name: release-gate (${{ matrix.backend }})
@@ -64,4 +64,5 @@ jobs:
             "$GITHUB_SHA:refs/remotes/origin/ci-head"
           git checkout --detach refs/remotes/origin/ci-head
       - run: command -v just && test -r /dev/kvm -a -w /dev/kvm
-      - run: just ci kvm "${{ matrix.backend }}"
+      - run: command -v socat >/dev/null || (sudo apt-get update && sudo apt-get install --yes socat)
+      - run: bash scripts/with-ci-registry-cache.bash just ci kvm "${{ matrix.backend }}"

@@ -3,6 +3,8 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/git-clone-source.bash
 source "$script_dir/lib/git-clone-source.bash"
+# shellcheck source=lib/test-registry-mirror.bash
+source "$script_dir/lib/test-registry-mirror.bash"
 
 project_name="dim-self-smoke"
 workspace_name="dim-self-smoke"
@@ -81,12 +83,13 @@ trap cleanup EXIT
 dim_prepare_clone_source "$project_source" "$source_root/snapshot"
 git clone "$DIM_GIT_CLONE_SOURCE" "$source_root/materialized" >/dev/null
 project_source="$source_root/materialized"
+dim_apply_test_registry_mirror "$project_source"
 
 temporary_manifest="$project_source/.dim/repos.yml.tmp"
 sed "s#^    url:.*#    url: $source_root/project.git#" \
   "$project_source/.dim/repos.yml" >"$temporary_manifest"
 mv "$temporary_manifest" "$project_source/.dim/repos.yml"
-git -C "$project_source" add .dim/repos.yml
+git -C "$project_source" add .dim
 git -C "$project_source" \
   -c user.name="DIM Snapshot" \
   -c user.email="snapshot@dim.invalid" \
@@ -117,6 +120,11 @@ verify_rootless_dind() {
   test -n "$dind_container"
   dim workspace exec "$workspace_name" -- \
     docker inspect --format '{{.State.Health.Status}}' "$dind_container" | grep -qx healthy
+  if [[ -n "${DIM_DOCKER_REGISTRY_MIRROR:-}" ]]; then
+    dim workspace exec "$workspace_name" -- \
+      docker exec "$dind_container" docker info --format '{{json .RegistryConfig.Mirrors}}' |
+      grep -Fq "$DIM_DOCKER_REGISTRY_MIRROR"
+  fi
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml exec --no-TTY --user root agent-dind \

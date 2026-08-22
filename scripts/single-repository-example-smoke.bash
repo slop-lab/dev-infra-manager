@@ -7,6 +7,8 @@ repo_root="$(cd -- "$script_dir/.." && pwd)"
 source "$script_dir/lib/local-npm-registry.bash"
 # shellcheck source=lib/example-dim-install.bash
 source "$script_dir/lib/example-dim-install.bash"
+# shellcheck source=lib/test-registry-mirror.bash
+source "$script_dir/lib/test-registry-mirror.bash"
 
 suffix="$PPID-$$"
 project_name="single-$suffix"
@@ -66,6 +68,11 @@ docker build \
   "$repo_root" >/dev/null
 bash "$repo_root/examples/projects/single-repository/create-repository.bash" \
   "$source_root" >/dev/null
+dim_apply_test_registry_mirror "$source_root/app"
+if [[ -n "${DIM_DOCKER_REGISTRY_MIRROR:-}" ]]; then
+  git -C "$source_root/app" add .dim/setup.sh .dim/ci-registry-mirror.override.yml
+  git -C "$source_root/app" commit -m "configure test registry mirror" >/dev/null
+fi
 
 echo "[single-repository] register without .dim/repos.yml or branch protection"
 DIM_BIN="$dim_bin" bash \
@@ -158,6 +165,11 @@ dind_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-$workspace_name" \
   --file .dim/docker-compose.yml ps --quiet agent-dind)"
 test -n "$dind_container"
+if [[ -n "${DIM_DOCKER_REGISTRY_MIRROR:-}" ]]; then
+  dim workspace exec "$workspace_name" -- \
+    docker exec "$dind_container" docker info --format '{{json .RegistryConfig.Mirrors}}' |
+    grep -Fq "$DIM_DOCKER_REGISTRY_MIRROR"
+fi
 dim workspace exec "$workspace_name" -- docker inspect "$dind_container" \
   --format '{{.HostConfig.Privileged}}' | grep -qx true
 dim workspace exec "$workspace_name" -- docker exec "$dind_container" \

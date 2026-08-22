@@ -49,7 +49,10 @@ DIM starts one host-scoped CNCF Distribution registry as an anonymous Docker
 Hub pull-through cache when the first managed CI runner is reconciled. Sysbox
 runner daemons use it directly on the private `dim-control` network. Each QEMU
 supervisor exposes only a local TCP relay to its disposable guest, whose Docker
-daemon uses the relay at `10.0.2.2:5000`. The registry has no published host
+daemon uses the relay at `10.0.2.2:5000`. DIM's CI harness extends that relay
+across each additional test-only NAT boundary, so a nested KVM guest and DinD
+daemon use the same cache without adding cache configuration to Project
+examples. The registry has no published host
 port, accepts no pushes in proxy mode, stores no Docker Hub credentials, and
 is not attached to Project workspace networks. Its managed filesystem volume
 is shared across Projects and runner executors, so common public layers survive

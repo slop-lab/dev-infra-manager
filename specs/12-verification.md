@@ -53,7 +53,9 @@ CI runner unit coverage must verify resource-default precedence, stable managed
 names, and that default container arguments use the configured isolation
 runtime without mounting the host Docker socket. It must also verify that the
 host-scoped pull-through cache has no published port and that Sysbox and QEMU
-runner daemon configuration selects only the internal cache endpoints.
+runner daemon configuration selects only the internal cache endpoints. The
+managed CI journey must also verify that its test-only relay reaches nested KVM
+guest and DinD image pulls without embedding the cache in Project examples.
 
 Managed Git verification must distinguish the host maintainer from the
 workspace writer and verify that protected-ref push options allowlist only the
