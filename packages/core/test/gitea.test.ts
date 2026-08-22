@@ -1,7 +1,7 @@
 import { once } from "node:events";
 import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
-import { giteaNestedBaseUrl, giteaRequest, giteaWebhookConfigArgs, type GiteaConnection } from "../src/gitea.js";
+import { giteaChangePasswordArgs, giteaNestedBaseUrl, giteaRequest, giteaWebhookConfigArgs, type GiteaConnection } from "../src/gitea.js";
 import { giteaHookIdsForUrl } from "../src/giteaCiCoordinator.js";
 import type { CommandRunner } from "../src/types.js";
 
@@ -56,6 +56,14 @@ describe("Gitea control endpoint", () => {
     );
     expect(args).toEqual(expect.arrayContaining(["--apply-env", "--in-place"]));
     expect(args).not.toEqual(expect.arrayContaining(["--section", "--key", "--value"]));
+  });
+
+  it("recovers managed users without requiring an interactive password change", () => {
+    expect(giteaChangePasswordArgs("dim-host", "secret")).toEqual(expect.arrayContaining([
+      "--username", "dim-host",
+      "--password", "secret",
+      "--must-change-password=false"
+    ]));
   });
 
   it("identifies every duplicate webhook by its exact target URL", () => {

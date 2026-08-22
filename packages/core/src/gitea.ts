@@ -271,15 +271,20 @@ async function createUser(runner: CommandRunner, username: string, password: str
     if (!`${result.stdout}\n${result.stderr}`.includes("already exists")) {
       assertCommand(result, `create Gitea user ${username}`);
     }
-    const reset = await runner.run("docker", [
+    const reset = await runner.run("docker", giteaChangePasswordArgs(username, password));
+    assertCommand(reset, `recover Gitea user ${username}`);
+  }
+}
+
+export function giteaChangePasswordArgs(username: string, password: string): string[] {
+  return [
       "exec", "--user", "git", GITEA_CONTAINER,
       "gitea", "admin", "user", "change-password",
       "--config", "/data/gitea/conf/app.ini",
       "--username", username,
-      "--password", password
-    ]);
-    assertCommand(reset, `recover Gitea user ${username}`);
-  }
+      "--password", password,
+      "--must-change-password=false"
+  ];
 }
 
 function assertCommand(result: { exitCode: number; stdout?: string; stderr: string }, action: string): void {
