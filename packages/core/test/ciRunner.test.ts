@@ -10,6 +10,7 @@ import {
   ciRunnerContainerArgs,
   ciRunnerContainerName,
   ciRunnerQemuRunnerName,
+  ciRunnerQemuCacheVolumeName,
   ciRunnerQemuDispatchVolumeName,
   ciRunnerQemuSupervisorArgs,
   ciRunnerQemuSupervisorName,
@@ -23,6 +24,8 @@ import { giteaCiRunnerApiBase } from "../src/giteaCiCoordinator.js";
 import { LifecycleState } from "../src/lifecycleState.js";
 import type { CiRunnerRecord, LifecycleOptions } from "../src/lifecycleTypes.js";
 import {
+  QEMU_CI_PACKER_PROVISION_SCRIPT,
+  QEMU_CI_PACKER_TEMPLATE,
   QEMU_CI_SUPERVISOR_DOCKERFILE,
   QEMU_CI_SUPERVISOR_SCRIPT,
   QEMU_CI_WEBHOOK_SCRIPT
@@ -81,6 +84,7 @@ describe("CI runner resources", () => {
     expect(ciRunnerQemuSupervisorName("example", "kvm-1")).toBe("dim-ci-example-kvm-1-qemu-supervisor");
     expect(ciRunnerQemuRunnerName("example", "kvm-1")).toBe("dim-ci-example-kvm-1-qemu");
     expect(ciRunnerQemuDispatchVolumeName("example")).toBe("dim-ci-example-qemu-dispatch");
+    expect(ciRunnerQemuCacheVolumeName("example")).toBe("dim-ci-example-qemu-cache");
     expect(ciRunnerQemuVolumeName("example", "kvm-1")).toBe("dim-ci-example-kvm-1-qemu-data");
     expect(() => ciRunnerContainerName("../bad", "fast-1")).toThrow(/project name/);
     expect(() => ciRunnerContainerName("example", "../bad")).toThrow(/CI runner name/);
@@ -140,6 +144,7 @@ describe("CI runner resources", () => {
     expect(qemuArgs).toContain("GITEA_RUNNER_NAME=dim-ci-example-kvm-1-qemu");
     expect(qemuArgs).toContain("DIM_QEMU_CI_CAPACITY=kvm-1");
     expect(qemuArgs.join(" ")).toContain("dim-ci-example-qemu-dispatch");
+    expect(qemuArgs.join(" ")).toContain("dim-ci-example-qemu-cache");
     expect(qemuArgs).toContain("DIM_QEMU_CI_CPUS=6");
     expect(qemuArgs).toContain("DIM_QEMU_CI_MEMORY_MB=12288");
     expect(qemuArgs).toContain("DIM_QEMU_WEBHOOK_AUTHORIZATION=Bearer webhook-secret");
@@ -150,6 +155,11 @@ describe("CI runner resources", () => {
   it("ships a pinned, syntactically valid supervisor without putting the registration token in cloud-init", () => {
     expect(QEMU_CI_SUPERVISOR_DOCKERFILE).toMatch(/^FROM ubuntu@sha256:[0-9a-f]{64}$/m);
     expect(spawnSync("bash", ["-n"], { input: QEMU_CI_SUPERVISOR_SCRIPT }).status).toBe(0);
+    expect(spawnSync("bash", ["-n"], { input: QEMU_CI_PACKER_PROVISION_SCRIPT }).status).toBe(0);
+    expect(QEMU_CI_PACKER_TEMPLATE).toContain('version = "= 1.1.6"');
+    expect(QEMU_CI_PACKER_TEMPLATE).toContain('source  = "github.com/hashicorp/qemu"');
+    expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('flock 9');
+    expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('/var/lib/dim-qemu-ci-cache');
     const userData = QEMU_CI_SUPERVISOR_SCRIPT.match(/cat >"\$cleanup_dir\/user-data" <<EOF\n([\s\S]*?)\nEOF/)?.[1];
     expect(userData).toBeDefined();
     expect(userData).not.toContain("GITEA_RUNNER_REGISTRATION_TOKEN");

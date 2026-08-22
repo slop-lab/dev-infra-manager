@@ -83,6 +83,17 @@ job ID that caused the webhook and may receive another coordinator task.
 Persisted queued demand resumes after a supervisor restart, so webhook
 redelivery is not required.
 
+The first QEMU job for a Project builds a version-keyed runner base image with
+Packer. The image contains the common Ubuntu packages and the current
+coordinator adapter's runner binary, but no registration token, runner name, or
+job data. Named QEMU capacities share the completed qcow2 through a
+Project-scoped cache volume; a cross-container file lock serializes the first
+build and the completed image is published atomically. Every job still boots a
+fresh overlay and receives its ephemeral registration only after boot. Deleting
+the final QEMU capacity removes both shared dispatch state and this image cache.
+Changing a pinned image input selects a new cache key rather than modifying an
+image that another capacity may be using.
+
 Creating a QEMU runner adds only its managed supervisor hostname to Gitea's
 webhook allowlist and restarts the managed Gitea service to apply that setting.
 DIM does not enable unrestricted private-network webhook delivery.

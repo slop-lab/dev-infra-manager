@@ -1,13 +1,94 @@
-export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.3";
+export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.4";
 
 export const QEMU_CI_SUPERVISOR_DOCKERFILE = `FROM ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 RUN apt-get update \\
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\
-      ca-certificates cloud-image-utils curl openssh-client python3 qemu-system-x86 qemu-utils xz-utils \\
+      ca-certificates cloud-image-utils curl openssh-client python3 qemu-system-x86 qemu-utils unzip util-linux xz-utils \\
  && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSLo /tmp/packer.zip https://releases.hashicorp.com/packer/1.16.0/packer_1.16.0_linux_amd64.zip \\
+ && echo "5edcd14ab59b535040c512dbecd6ec9ef976a000b073c19d93e4c431c948581e  /tmp/packer.zip" | sha256sum --check \\
+ && unzip /tmp/packer.zip -d /usr/local/bin packer \\
+ && rm /tmp/packer.zip
 COPY supervise.bash /usr/local/bin/dim-qemu-ci-supervise
 COPY webhook.py /usr/local/bin/dim-qemu-ci-webhook
+COPY runner-base.pkr.hcl /usr/local/share/dim-qemu-ci/runner-base.pkr.hcl
+COPY provision-runner-base.bash /usr/local/share/dim-qemu-ci/provision-runner-base.bash
 ENTRYPOINT ["python3", "/usr/local/bin/dim-qemu-ci-webhook"]
+`;
+
+export const QEMU_CI_PACKER_TEMPLATE = `packer {
+  required_plugins {
+    qemu = {
+      version = "= 1.1.6"
+      source  = "github.com/hashicorp/qemu"
+    }
+  }
+}
+
+variable "output_directory" { type = string }
+variable "ssh_private_key_file" { type = string }
+variable "ssh_public_key_file" { type = string }
+
+source "qemu" "runner_base" {
+  accelerator          = "kvm"
+  cd_label             = "cidata"
+  cd_content = {
+    "meta-data" = "instance-id: dim-qemu-ci-packer\\nlocal-hostname: dim-qemu-ci-packer\\n"
+    "user-data" = <<-EOF
+      #cloud-config
+      users:
+        - name: dim
+          uid: 1001
+          sudo: ALL=(ALL) NOPASSWD:ALL
+          shell: /bin/bash
+          ssh_authorized_keys:
+            - \${trimspace(file(var.ssh_public_key_file))}
+      EOF
+  }
+  disk_compression     = true
+  disk_image           = true
+  disk_interface       = "virtio"
+  disk_size            = "64G"
+  format               = "qcow2"
+  headless             = true
+  iso_checksum         = "sha256:6e40c07ae715f744f84af0bec76415cc1987dd115b4b8de437818561f01a3733"
+  iso_url              = "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+  net_device           = "virtio-net"
+  output_directory     = var.output_directory
+  qemuargs             = [["-cpu", "host"]]
+  shutdown_command     = "sudo shutdown -P now"
+  ssh_private_key_file = var.ssh_private_key_file
+  ssh_clear_authorized_keys = true
+  ssh_timeout          = "10m"
+  ssh_username         = "dim"
+  vm_name              = "runner-base.qcow2"
+}
+
+build {
+  sources = ["source.qemu.runner_base"]
+  provisioner "shell" {
+    execute_command = "chmod +x {{ .Path }}; sudo {{ .Vars }} {{ .Path }}"
+    script          = "/usr/local/share/dim-qemu-ci/provision-runner-base.bash"
+  }
+}
+`;
+
+export const QEMU_CI_PACKER_PROVISION_SCRIPT = `#!/usr/bin/env bash
+set -euo pipefail
+
+runner_version=3.2.0
+runner_checksum=335d0f12e4fdf2cdc2310e9ce8ad33303d0f6889fe2efa2e1999d2f5614d440f
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\
+  cloud-image-utils curl git jq just openssh-client qemu-system-x86 qemu-utils xz-utils
+rm -rf /var/lib/apt/lists/*
+curl -fsSLo /usr/local/bin/gitea-runner.xz \\
+  "https://gitea.com/gitea/runner/releases/download/v$runner_version/gitea-runner-$runner_version-linux-amd64.xz"
+echo "$runner_checksum  /usr/local/bin/gitea-runner.xz" | sha256sum --check
+xz -d /usr/local/bin/gitea-runner.xz
+chmod 0755 /usr/local/bin/gitea-runner
+install -d -o dim -g dim /var/lib/gitea-runner
+cloud-init clean --logs --seed
 `;
 
 export const QEMU_CI_WEBHOOK_SCRIPT = `#!/usr/bin/env python3
@@ -179,22 +260,35 @@ set -euo pipefail
 : "\${GITEA_RUNNER_NAME:?GITEA_RUNNER_NAME is required}"
 
 data_root=/var/lib/dim-qemu-ci
-cache_root="$data_root/cache"
+cache_root=/var/lib/dim-qemu-ci-cache
 run_root="$data_root/runs"
-cloud_image="$cache_root/noble-server-cloudimg-amd64.img"
-runner_version=3.2.0
-runner_checksum=335d0f12e4fdf2cdc2310e9ce8ad33303d0f6889fe2efa2e1999d2f5614d440f
+cache_key=ubuntu-noble-6e40c07a-amd64-packer-1.16.0-qemu-1.1.6-gitea-runner-3.2.0-v1
+runner_image="$cache_root/images/$cache_key/runner-base.qcow2"
 mkdir -p "$cache_root" "$run_root"
 
-if [[ ! -f "$cloud_image" ]]; then
-  echo "qemu-ci: download verified Ubuntu 24.04 cloud image"
-  curl -fsSL -o "$cloud_image.tmp" https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
-  curl -fsSL -o "$cache_root/SHA256SUMS" https://cloud-images.ubuntu.com/noble/current/SHA256SUMS
-  checksum="$(awk '$2 ~ /noble-server-cloudimg-amd64.img$/ { print $1 }' "$cache_root/SHA256SUMS")"
-  [[ "$checksum" =~ ^[0-9a-f]{64}$ ]] || { echo "qemu-ci: cloud image checksum is missing" >&2; exit 1; }
-  echo "$checksum  $cloud_image.tmp" | sha256sum -c -
-  mv "$cloud_image.tmp" "$cloud_image"
+exec 9>"$cache_root/build.lock"
+flock 9
+if [[ ! -f "$runner_image" ]]; then
+  echo "qemu-ci: build shared Packer runner image key=$cache_key"
+  (
+    build_dir="$cache_root/build-$cache_key-$$"
+    trap 'rm -rf -- "$build_dir"' EXIT
+    rm -rf -- "$build_dir"
+    mkdir -p "$build_dir/output" "$cache_root/plugins" "$(dirname "$runner_image")"
+    ssh-keygen -q -t ed25519 -N '' -f "$build_dir/id"
+    export PACKER_PLUGIN_PATH="$cache_root/plugins"
+    packer init /usr/local/share/dim-qemu-ci/runner-base.pkr.hcl
+    packer build -color=false -force \
+      -var "output_directory=$build_dir/output" \
+      -var "ssh_private_key_file=$build_dir/id" \
+      -var "ssh_public_key_file=$build_dir/id.pub" \
+      /usr/local/share/dim-qemu-ci/runner-base.pkr.hcl
+    test -s "$build_dir/output/runner-base.qcow2"
+    mv "$build_dir/output/runner-base.qcow2" "$runner_image"
+  )
 fi
+flock -u 9
+exec 9>&-
 
 cleanup_dir=""
 qemu_pid=""
@@ -223,26 +317,12 @@ users:
     shell: /bin/bash
     ssh_authorized_keys:
       - $public_key
-package_update: true
-packages:
-  - cloud-image-utils
-  - curl
-  - git
-  - jq
-  - just
-  - openssh-client
-  - qemu-system-x86
-  - qemu-utils
-  - xz-utils
 runcmd:
-  - [bash, -lc, "curl -fsSL -o /usr/local/bin/gitea-runner.xz https://gitea.com/gitea/runner/releases/download/v$runner_version/gitea-runner-$runner_version-linux-amd64.xz"]
-  - [bash, -lc, "echo '$runner_checksum  /usr/local/bin/gitea-runner.xz' | sha256sum -c -"]
-  - [bash, -lc, "xz -d /usr/local/bin/gitea-runner.xz && chmod 0755 /usr/local/bin/gitea-runner"]
   - [bash, -lc, "modprobe kvm && { grep -qw vmx /proc/cpuinfo && modprobe kvm_intel || modprobe kvm_amd; } && usermod -aG kvm dim"]
-  - [bash, -lc, "install -d -o dim -g dim /var/lib/gitea-runner && touch /run/dim-qemu-ci-ready"]
+  - [bash, -lc, "touch /run/dim-qemu-ci-ready"]
 EOF
   cloud-localds "$cleanup_dir/seed.img" "$cleanup_dir/user-data" "$cleanup_dir/meta-data"
-  qemu-img create -q -f qcow2 -F qcow2 -b "$cloud_image" "$cleanup_dir/root.qcow2" "\${DIM_QEMU_CI_DISK_SIZE:-64G}"
+  qemu-img create -q -f qcow2 -F qcow2 -b "$runner_image" "$cleanup_dir/root.qcow2" "\${DIM_QEMU_CI_DISK_SIZE:-64G}"
   echo "qemu-ci: start disposable runner VM name=$GITEA_RUNNER_NAME"
   qemu-system-x86_64 -enable-kvm -cpu host -m "\${DIM_QEMU_CI_MEMORY_MB:-12288}" -smp "\${DIM_QEMU_CI_CPUS:-6}" \\
     -nographic -no-reboot \\

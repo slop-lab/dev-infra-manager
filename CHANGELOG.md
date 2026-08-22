@@ -52,6 +52,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added a Project-scoped Packer cache for disposable QEMU CI runners. Named
+  capacities now share an atomically published, version-keyed Ubuntu base with
+  common packages and the pinned coordinator runner preinstalled, while job
+  registration and overlays remain ephemeral.
 - Allowed multiple named QEMU CI capacities per Project behind the existing
   `dim-qemu` workflow capability. Supervisors now atomically dispatch shared
   demand with renewable claims, so provider webhook fan-out cannot duplicate a
