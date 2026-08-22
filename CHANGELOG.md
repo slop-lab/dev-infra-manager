@@ -27,6 +27,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Made running-workspace restart validate dirty and divergent root checkouts
+  before stopping the container. Rejection now preserves Git, workspace state,
+  setup history, and Project services while pointing to the explicit reset
+  recovery command.
 - Initialized the canonical rootless-DinD sidecar's volume-mounted data path,
   home, and runtime directory for its unprivileged UID before starting Docker,
   including a marker-versioned one-time repair of existing containerd state,

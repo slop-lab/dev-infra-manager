@@ -232,6 +232,13 @@ automatically.
 - `setup` retries setup without fetching.
 
 Dirty roots and non-fast-forward updates fail without modifying user work.
+For a running workspace, `restart` MUST perform both checks while holding the
+workspace setup lock and before stopping its container, changing its phase or
+setup record, or interrupting Project services. A rejection MUST preserve the
+checkout, workspace record, and running container identities and MUST name the
+explicit `workspace align --reset --yes` recovery command. A successful
+restart MAY apply the exact fetched commit accepted by this preflight so the
+stop/start boundary does not repeat a mutable remote-ref decision.
 Stop/start and restart preserve the checkout and named inner-engine volume.
 
 ## Cleanup

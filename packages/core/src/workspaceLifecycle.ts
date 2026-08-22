@@ -359,19 +359,41 @@ export async function startWorkspace(
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
-    const record = await state.readWorkspace(workspaceName);
-    if (record.phase !== "stopped") {
-      throw new UserError(`workspace '${workspaceName}' is not stopped; use restart to apply project changes`);
-    }
-    const project = await readyProject(state, record.projectName);
-    if (project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
-    const repo = readyRootRepository(project);
-    const reconciled = await reconcileProject(runner, options, state, record, project, repo);
-    await fastForwardRoot(runner, reconciled);
-    return await setupWorkspaceLocked(runner, options, state, reconciled);
+    return await startWorkspaceLocked(runner, options, state, workspaceName);
   } finally {
     await release();
   }
+}
+
+interface RootFastForwardPlan {
+  rootRef: string;
+  commit: string;
+}
+
+async function startWorkspaceLocked(
+  runner: StreamingCommandRunner,
+  options: LifecycleOptions,
+  state: LifecycleState,
+  workspaceName: string,
+  target?: RootFastForwardPlan
+): Promise<WorkspaceRecord> {
+  const record = await state.readWorkspace(workspaceName);
+  if (record.phase !== "stopped") {
+    throw new UserError(`workspace '${workspaceName}' is not stopped; use restart to apply project changes`);
+  }
+  const project = await readyProject(state, record.projectName);
+  if (project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
+  const repo = readyRootRepository(project);
+  const reconciled = await reconcileProject(runner, options, state, record, project, repo);
+  if (target !== undefined && reconciled.rootRef !== target.rootRef) {
+    throw new UserError(`workspace '${workspaceName}' root ref changed while restart was in progress; retry restart`);
+  }
+  if (target === undefined) {
+    await fastForwardRoot(runner, reconciled);
+  } else {
+    await applyFastForwardRoot(runner, reconciled, target);
+  }
+  return setupWorkspaceLocked(runner, options, state, reconciled);
 }
 
 export async function restartWorkspace(
@@ -379,9 +401,23 @@ export async function restartWorkspace(
   options: LifecycleOptions,
   name: string
 ): Promise<WorkspaceRecord> {
-  const record = await showWorkspace(options, name);
-  if (record.phase !== "stopped") await stopWorkspace(runner, options, name);
-  return startWorkspace(runner, options, name);
+  const workspaceName = validateLifecycleName(name, "workspace");
+  const state = new LifecycleState(options.stateRoot);
+  const release = await state.acquireWorkspaceSetupLock(workspaceName);
+  try {
+    const record = await state.readWorkspace(workspaceName);
+    if (record.phase === "stopped") {
+      return await startWorkspaceLocked(runner, options, state, workspaceName);
+    }
+    const project = await readyProject(state, record.projectName);
+    if (project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
+    await assertContainerRunning(runner, record);
+    const target = await planFastForwardRoot(runner, record);
+    await stopWorkspaceLocked(runner, state, record);
+    return await startWorkspaceLocked(runner, options, state, workspaceName, target);
+  } finally {
+    await release();
+  }
 }
 
 export async function showWorkspace(options: LifecycleOptions, name: string): Promise<WorkspaceRecord> {
@@ -448,18 +484,27 @@ export async function stopWorkspace(runner: StreamingCommandRunner, options: Lif
   const workspaceName = validateLifecycleName(name, "workspace");
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
-    let record = await state.readWorkspace(workspaceName);
-    const inspect = await runner.run("docker", ["container", "inspect", record.containerName, "--format", "{{.State.Running}}"]);
-    if (inspect.exitCode === 0 && inspect.stdout.trim() === "true") {
-      const exitCode = await runner.runStreaming("docker", ["stop", record.containerName]);
-      if (exitCode !== 0) throw new UserError(`failed to stop workspace '${name}'`);
-    }
-    record = { ...record, phase: "stopped", updatedAt: new Date().toISOString() };
-    delete record.error;
-    await state.writeWorkspace(record);
+    await stopWorkspaceLocked(runner, state, await state.readWorkspace(workspaceName));
   } finally {
     await release();
   }
+}
+
+async function stopWorkspaceLocked(
+  runner: StreamingCommandRunner,
+  state: LifecycleState,
+  initialRecord: WorkspaceRecord
+): Promise<void> {
+  const inspect = await runner.run("docker", [
+    "container", "inspect", initialRecord.containerName, "--format", "{{.State.Running}}"
+  ]);
+  if (inspect.exitCode === 0 && inspect.stdout.trim() === "true") {
+    const exitCode = await runner.runStreaming("docker", ["stop", initialRecord.containerName]);
+    if (exitCode !== 0) throw new UserError(`failed to stop workspace '${initialRecord.name}'`);
+  }
+  const record = { ...initialRecord, phase: "stopped" as const, updatedAt: new Date().toISOString() };
+  delete record.error;
+  await state.writeWorkspace(record);
 }
 
 export async function discardWorkspace(runner: StreamingCommandRunner, options: LifecycleOptions, name: string): Promise<void> {
@@ -771,14 +816,47 @@ async function fastForwardRoot(
   runner: StreamingCommandRunner,
   record: WorkspaceRecord
 ): Promise<void> {
+  await applyFastForwardRoot(runner, record, await planFastForwardRoot(runner, record));
+}
+
+async function planFastForwardRoot(
+  runner: StreamingCommandRunner,
+  record: WorkspaceRecord
+): Promise<RootFastForwardPlan> {
   const status = await projectCommand(runner, record, ["git", "status", "--porcelain"]);
   if (status.exitCode !== 0) throw commandError("inspect project Git status", status);
   if (status.stdout.trim()) {
-    throw new UserError(`workspace '${record.name}' has uncommitted project changes`);
+    throw new UserError(
+      `workspace '${record.name}' has uncommitted project changes; commit or remove them, or run `
+      + `dim workspace align ${record.name} --reset --yes to discard them`
+    );
   }
-  const fetch = await projectCommand(runner, record, ["git", "fetch", "origin", record.rootRef]);
+  const remote = await projectCommand(runner, record, ["git", "ls-remote", "--exit-code", "origin", record.rootRef]);
+  if (remote.exitCode !== 0) throw commandError(`resolve root ref '${record.rootRef}'`, remote);
+  const [candidate, resolvedRef, ...extra] = remote.stdout.trim().split(/\s+/);
+  if (extra.length !== 0 || resolvedRef !== record.rootRef || !/^[0-9a-f]{40,64}$/.test(candidate ?? "")) {
+    throw new UserError(`managed root ref '${record.rootRef}' returned an invalid Git object ID`);
+  }
+  const commit = candidate as string;
+  const fetch = await projectCommand(runner, record, ["git", "fetch", "--no-write-fetch-head", "origin", commit]);
   if (fetch.exitCode !== 0) throw commandError(`fetch root ref '${record.rootRef}'`, fetch);
-  const merge = await projectCommand(runner, record, ["git", "merge", "--ff-only", "FETCH_HEAD"]);
+  const ancestor = await projectCommand(runner, record, ["git", "merge-base", "--is-ancestor", "HEAD", commit]);
+  if (ancestor.exitCode === 1) {
+    throw new UserError(
+      `workspace '${record.name}' cannot fast-forward to '${record.rootRef}'; run `
+      + `dim workspace align ${record.name} --reset --yes to discard divergent local commits`
+    );
+  }
+  if (ancestor.exitCode !== 0) throw commandError(`check fast-forward to root ref '${record.rootRef}'`, ancestor);
+  return { rootRef: record.rootRef, commit };
+}
+
+async function applyFastForwardRoot(
+  runner: StreamingCommandRunner,
+  record: WorkspaceRecord,
+  target: RootFastForwardPlan
+): Promise<void> {
+  const merge = await projectCommand(runner, record, ["git", "merge", "--ff-only", target.commit]);
   if (merge.exitCode !== 0) throw commandError(`fast-forward root ref '${record.rootRef}'`, merge);
 }
 

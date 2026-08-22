@@ -106,6 +106,9 @@ printf '%s\n' \
 
 printf '%s\n' \
   'services:' \
+  '  lifecycle-sentinel:' \
+  '    image: alpine:3.22' \
+  '    command: ["sleep", "infinity"]' \
   '  api-checkout:' \
   '    profiles: [development]' \
   '    image: alpine:3.22' \
@@ -258,6 +261,34 @@ git ls-remote "$("$dim_bin" repo url "$project_name" api)" \
 output="$("$dim_bin" run "$workspace_name" verify)"
 test "$output" = "multi-repo-project-ok"
 test "$("$dim_bin" run "$workspace_name" version)" = "v1"
+
+echo "[multi-repository] dirty restart rejects before lifecycle mutation"
+workspace_before="$("$dim_bin" workspace show "$workspace_name" --json)"
+container_name="$(jq -r .containerName <<<"$workspace_before")"
+sentinel_name="${compose_project_name}-lifecycle-sentinel-1"
+outer_started_before="$(docker inspect --format '{{.State.StartedAt}}' "$container_name")"
+sentinel_id_before="$("$dim_bin" workspace exec "$workspace_name" -- docker inspect --format '{{.Id}}' "$sentinel_name")"
+sentinel_started_before="$("$dim_bin" workspace exec "$workspace_name" -- docker inspect --format '{{.State.StartedAt}}' "$sentinel_name")"
+"$dim_bin" workspace exec "$workspace_name" -- sh -c \
+  'printf "dirty\n" >> version.txt && printf "untracked\n" > restart-untracked.txt'
+git_state_before="$("$dim_bin" workspace exec "$workspace_name" -- sh -c \
+  'git rev-parse HEAD; git write-tree; git status --porcelain=v1; sha256sum version.txt restart-untracked.txt')"
+if restart_error="$("$dim_bin" workspace restart "$workspace_name" 2>&1)"; then
+  echo "dirty workspace restart unexpectedly succeeded" >&2
+  exit 1
+fi
+grep -q "dim workspace align $workspace_name --reset --yes" <<<"$restart_error"
+test "$("$dim_bin" workspace exec "$workspace_name" -- sh -c \
+  'git rev-parse HEAD; git write-tree; git status --porcelain=v1; sha256sum version.txt restart-untracked.txt')" = \
+  "$git_state_before"
+test "$("$dim_bin" workspace show "$workspace_name" --json)" = "$workspace_before"
+test "$(docker inspect --format '{{.State.Running}}|{{.State.StartedAt}}' "$container_name")" = \
+  "true|$outer_started_before"
+test "$("$dim_bin" workspace exec "$workspace_name" -- docker inspect \
+  --format '{{.Id}}|{{.State.Running}}|{{.State.StartedAt}}' "$sentinel_name")" = \
+  "$sentinel_id_before|true|$sentinel_started_before"
+"$dim_bin" workspace exec "$workspace_name" -- sh -c \
+  'git restore version.txt && rm restart-untracked.txt'
 
 if "$dim_bin" exec "$workspace_name" -- \
   docker container inspect "${compose_project_name}-production-only-1" >/dev/null 2>&1; then

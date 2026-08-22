@@ -118,6 +118,12 @@ That smoke proves that two logical DIM repositories can share one external Git
 upstream while fetch and push map only the branches and tags owned by each
 repository namespace.
 
+The multi-repository container smoke MUST dirty both a tracked file and a
+non-ignored untracked file before requesting a workspace restart. It MUST
+verify rejection without a container stop, Project-service replacement, Git
+state change, workspace-record change, or setup invocation, then clean the
+checkout and exercise the successful fast-forward restart path.
+
 ## Container Backend Gates
 
 `scripts/container-cgroup-smoke.bash` requires direct access to the target Docker

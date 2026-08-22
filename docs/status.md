@@ -37,6 +37,8 @@ Implemented:
   canonical Project example.
 - Root-ref refresh on workspace start/restart without live mutation of running
   workspaces.
+- Atomic running-workspace restart preflight: dirty and divergent roots are
+  rejected before the workspace or its Project services are stopped.
 - TypeScript unit tests and nested-container lifecycle smoke tests.
 - Reproducible local Node.js 24/26, container, Sysbox, and KVM CI entrypoints.
 - A common example verifier that creates a separate disposable QEMU guest for

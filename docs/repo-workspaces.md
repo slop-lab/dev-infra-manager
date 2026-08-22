@@ -143,8 +143,12 @@ dim workspace stop dev
 dim workspace start dev     # root fast-forward and setup
 ```
 
-Dirty root checkouts and non-fast-forward updates are rejected. Stop/start and
-restart preserve the root checkout and inner-engine volume.
+Dirty root checkouts and non-fast-forward updates are rejected. For a running
+workspace, restart performs these checks before it stops anything. A rejected
+restart leaves the workspace and its Project services running and prints the
+explicit `dim workspace align WORKSPACE --reset --yes` recovery command when
+discarding the local state is intended. Stop/start and restart preserve the
+root checkout and inner-engine volume.
 
 ```bash
 dim workspace list
