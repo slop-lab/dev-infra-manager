@@ -133,7 +133,10 @@ rejection, a reviewed root update, stop/start persistence, controller socket
 replacement, setup-error recovery, agent-home backup, discard, recreation,
 restore, and final managed-state/resource cleanup. Failure hooks and managed CI
 cache configuration MUST be injected only into its temporary repositories;
-the checked-in example remains a normal user-facing Project.
+the checked-in example remains a normal user-facing Project. The release gate
+MUST execute this journey in the clean runc KVM guest, where unprivileged user
+namespace mappings required by its private rootless DinD are supported; a
+doubly nested generic Actions job container is not an equivalent environment.
 
 ## Container Backend Gates
 
