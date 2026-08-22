@@ -224,7 +224,10 @@ DIM never applies Project or root remote changes to a running workspace
 automatically.
 
 - `start` starts a stopped runtime, fetches the configured root ref,
-  fast-forward merges it, and runs setup.
+  fast-forward merges it, and runs setup. The built-in Compose fallback MUST
+  force-recreate services because stopping the outer workspace also terminates
+  their runtime processes; Project-owned setup remains responsible for its own
+  equivalent reconciliation.
 - `restart` stops a running runtime and performs the same start/apply/setup
   sequence.
 - `update` performs the fast-forward and setup without a stop and may also

@@ -27,6 +27,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Recreated fallback Compose services when starting a stopped workspace so
+  persistent nested containers cannot retain stale runtime state after their
+  outer container stopped.
 - Made running-workspace restart validate dirty and divergent root checkouts
   before stopping the container. Rejection now preserves Git, workspace state,
   setup history, and Project services while pointing to the explicit reset

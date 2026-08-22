@@ -229,7 +229,8 @@ async function setupWorkspaceLocked(
   options: LifecycleOptions,
   state: LifecycleState,
   initialRecord: WorkspaceRecord,
-  profilesChanged = false
+  profilesChanged = false,
+  forceRecreate = false
 ): Promise<WorkspaceRecord> {
   let record = initialRecord;
   await assertContainerRunning(runner, record);
@@ -243,7 +244,7 @@ async function setupWorkspaceLocked(
   delete record.error;
   await state.writeWorkspace(record);
 
-  const exitCode = await runProjectSetup(runner, record, profilesChanged);
+  const exitCode = await runProjectSetup(runner, record, profilesChanged, forceRecreate);
   const completedAt = new Date().toISOString();
   if (exitCode !== 0) {
     const setupError = `project setup exited with ${exitCode}`;
@@ -393,7 +394,7 @@ async function startWorkspaceLocked(
   } else {
     await applyFastForwardRoot(runner, reconciled, target);
   }
-  return setupWorkspaceLocked(runner, options, state, reconciled);
+  return setupWorkspaceLocked(runner, options, state, reconciled, false, true);
 }
 
 export async function restartWorkspace(
@@ -932,7 +933,8 @@ async function installHostInputHelper(
 async function runProjectSetup(
   runner: StreamingCommandRunner,
   record: WorkspaceRecord,
-  profilesChanged: boolean
+  profilesChanged: boolean,
+  forceRecreate: boolean
 ): Promise<number> {
   const engine = nestedEngine(record);
   const profileArgs = repeatedProfileArgs(record.profiles);
@@ -952,7 +954,7 @@ async function runProjectSetup(
     engine, "compose", "--project-name", record.composeProjectName,
     "--file", ".dim/docker-compose.yml",
     ...composeProfileArgs(record.profiles),
-    "up", "--detach", "--build"
+    "up", "--detach", "--build", ...(forceRecreate ? ["--force-recreate"] : [])
   ], false);
 }
 
