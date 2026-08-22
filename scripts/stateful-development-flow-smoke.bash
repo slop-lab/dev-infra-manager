@@ -99,8 +99,26 @@ DIM_BIN="$dim_bin" bash examples/projects/full-development-flow/register-project
   "$project_name" "$repositories" >/dev/null
 
 echo "[full-development-flow] create a profiled, resource-bounded workspace"
-dim workspace create "$project_name" "$workspace_name" \
-  --profile documentation --cpus 2 --memory 3g --processes 768 >/dev/null
+if ! dim workspace create "$project_name" "$workspace_name" \
+  --profile documentation --cpus 2 --memory 3g --processes 768 >/dev/null; then
+  failed_workspace="$(dim workspace show "$workspace_name" --json)"
+  failed_container="$(jq -r .containerName <<<"$failed_workspace")"
+  failed_project_path="$(jq -r .projectPath <<<"$failed_workspace")"
+  failed_compose=(--file .dim/docker-compose.yml)
+  if [[ -f "$failed_project_path/.dim/ci-registry-mirror.override.yml" ]]; then
+    failed_compose+=(--file .dim/ci-registry-mirror.override.yml)
+  fi
+  docker start "$failed_container" >/dev/null 2>&1 || true
+  docker exec --user dim "$failed_container" \
+    sh -c 'cat /tmp/dim-agent-controller/agent.log 2>/dev/null || true' >&2 || true
+  docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
+    docker compose --project-name "dim-$workspace_name" \
+    "${failed_compose[@]}" ps --all >&2 || true
+  docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
+    docker compose --project-name "dim-$workspace_name" \
+    "${failed_compose[@]}" logs >&2 || true
+  exit 1
+fi
 workspace_json="$(dim workspace show "$workspace_name" --json)"
 container_name="$(jq -r .containerName <<<"$workspace_json")"
 compose_name="$(jq -r .composeProjectName <<<"$workspace_json")"
