@@ -232,6 +232,9 @@ automatically.
 - `setup` retries setup without fetching.
 
 Dirty roots and non-fast-forward updates fail without modifying user work.
+An otherwise clean local branch that is ahead of the reviewed root remains
+compatible, matching `git merge --ff-only REVIEWED_COMMIT`; divergence means
+neither commit is an ancestor of the other.
 For a running workspace, `restart` MUST perform both checks while holding the
 workspace setup lock and before stopping its container, changing its phase or
 setup record, or interrupting Project services. A rejection MUST preserve the

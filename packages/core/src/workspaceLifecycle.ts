@@ -840,14 +840,22 @@ async function planFastForwardRoot(
   const commit = candidate as string;
   const fetch = await projectCommand(runner, record, ["git", "fetch", "--no-write-fetch-head", "origin", commit]);
   if (fetch.exitCode !== 0) throw commandError(`fetch root ref '${record.rootRef}'`, fetch);
-  const ancestor = await projectCommand(runner, record, ["git", "merge-base", "--is-ancestor", "HEAD", commit]);
-  if (ancestor.exitCode === 1) {
+  const behind = await projectCommand(runner, record, ["git", "merge-base", "--is-ancestor", "HEAD", commit]);
+  if (behind.exitCode !== 0 && behind.exitCode !== 1) {
+    throw commandError(`check fast-forward to root ref '${record.rootRef}'`, behind);
+  }
+  const ahead = behind.exitCode === 1
+    ? await projectCommand(runner, record, ["git", "merge-base", "--is-ancestor", commit, "HEAD"])
+    : undefined;
+  if (ahead !== undefined && ahead.exitCode === 1) {
     throw new UserError(
       `workspace '${record.name}' cannot fast-forward to '${record.rootRef}'; run `
       + `dim workspace align ${record.name} --reset --yes to discard divergent local commits`
     );
   }
-  if (ancestor.exitCode !== 0) throw commandError(`check fast-forward to root ref '${record.rootRef}'`, ancestor);
+  if (ahead !== undefined && ahead.exitCode !== 0) {
+    throw commandError(`check local root compatibility with '${record.rootRef}'`, ahead);
+  }
   return { rootRef: record.rootRef, commit };
 }
 

@@ -254,6 +254,7 @@ describe("project and workspace lifecycle", () => {
     expect(calls.some((call) => call.includes("merge"))).toBe(false);
     expect(calls.flat()).not.toContain("FETCH_HEAD");
     expect(calls.some((call) => call.includes("--no-write-fetch-head"))).toBe(true);
+    expect(calls.filter((call) => call.includes("merge-base"))).toHaveLength(2);
     expect(await state.readWorkspace(workspace.name)).toEqual(workspace);
   });
 
