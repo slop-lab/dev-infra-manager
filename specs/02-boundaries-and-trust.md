@@ -99,6 +99,13 @@ Agents must not directly update protected refs.
 Protected refs must be updated through Git-host review/merge or trusted
 host-side administrative operations.
 
+The host-side operation MUST use a distinct managed maintainer credential.
+That credential MUST NOT be returned by the workspace controller or injected
+into a workspace, agent, nested container, or CI runner. Protected-ref push
+policy MAY allow the maintainer identity but MUST continue to reject the
+workspace writer identity. The maintainer capability is provider-neutral even
+when the current adapter realizes it as a managed Gitea user.
+
 ## Backend Boundary
 
 Runtime backend choice changes the strength and shape of isolation.

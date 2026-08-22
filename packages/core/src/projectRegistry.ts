@@ -13,6 +13,7 @@ import type { GiteaConnection } from "./gitea.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type {
   GiteaCredentials,
+  HostGitCredential,
   LifecycleOptions,
   ProjectRecord,
   ProjectRepositoryRecord
@@ -188,7 +189,7 @@ export async function createProjectRepository(
     try {
       const credentials = await ensureGitea(runner, options);
       await createGiteaRepository(credentials, project.gitNamespace, alias);
-      await grantWriter(credentials, project.gitNamespace, alias);
+      await grantRepositoryUsers(credentials, project.gitNamespace, alias);
       repo = { ...repo, phase: "ready", updatedAt: new Date().toISOString() };
       project = replaceRepository(project, repo);
       await state.writeProject(project);
@@ -402,7 +403,7 @@ export async function prepareProjectRepositoryTransfer(
       updatedAt: now
     };
     await createGiteaRepository(credentials, project.gitNamespace, alias);
-    await grantWriter(credentials, project.gitNamespace, alias);
+    await grantRepositoryUsers(credentials, project.gitNamespace, alias);
     await state.writeProject(project);
     return {
       ...(transferId === undefined ? {} : { transferId }),
@@ -586,7 +587,6 @@ export async function applyProjectRepositoryProtection(
     let repo = project.repositories.find((candidate) => candidate.alias === alias);
     if (!repo) throw new UserError(`repo '${projectName}/${alias}' not found`);
     if (repo.phase !== "ready") throw new UserError(`repo '${projectName}/${alias}' is not ready`);
-    if (repo.protectionPhase === "applied") return repo;
     const credentials = await ensureGitea(runner, options);
     if (project.rootRepositoryAlias === alias && project.rootRef === undefined) {
       await ensureSingleBranchHead(runner, options, credentials, project.gitNamespace, repo);
@@ -682,20 +682,45 @@ async function createGiteaRepository(
   throw await apiError(`create repo '${organization}/${alias}'`, response);
 }
 
-async function grantWriter(
+async function grantRepositoryUsers(
   credentials: GiteaConnection,
   organization: string,
   alias: string
 ): Promise<void> {
-  const response = await giteaRequest(
-    credentials,
-    "PUT",
-    `/repos/${organization}/${alias}/collaborators/${credentials.writerUsername}`,
-    { permission: "write" }
-  );
-  if (!response.ok && response.status !== 204) {
-    throw await apiError(`grant writer access to '${organization}/${alias}'`, response);
+  for (const [role, username] of [
+    ["writer", credentials.writerUsername],
+    ["host maintainer", credentials.maintainerUsername]
+  ] as const) {
+    const response = await giteaRequest(
+      credentials,
+      "PUT",
+      `/repos/${organization}/${alias}/collaborators/${username}`,
+      { permission: "write" }
+    );
+    if (!response.ok && response.status !== 204) {
+      throw await apiError(`grant ${role} access to '${organization}/${alias}'`, response);
+    }
   }
+}
+
+export async function prepareHostGitCredential(
+  runner: CommandRunner,
+  options: LifecycleOptions
+): Promise<HostGitCredential> {
+  const credentials = await ensureGitea(runner, options);
+  const projects = await new LifecycleState(options.stateRoot).listProjects();
+  for (const project of projects.filter((candidate) => candidate.phase === "ready")) {
+    for (const repo of project.repositories.filter((candidate) => candidate.phase === "ready")) {
+      await grantRepositoryUsers(credentials, project.gitNamespace, repo.alias);
+      for (const pattern of repo.protectedPatterns) {
+        await protectBranch(credentials, project.gitNamespace, repo.alias, pattern);
+      }
+    }
+  }
+  return {
+    username: credentials.maintainerUsername,
+    password: credentials.maintainerPassword
+  };
 }
 
 async function protectBranch(
@@ -704,23 +729,40 @@ async function protectBranch(
   alias: string,
   pattern: string
 ): Promise<void> {
-  const response = await giteaRequest(
+  const protection = branchProtectionOptions(credentials);
+  const updated = await giteaRequest(
+    credentials,
+    "PATCH",
+    `/repos/${organization}/${alias}/branch_protections/${encodeURIComponent(pattern)}`,
+    protection
+  );
+  if (updated.ok) return;
+  if (updated.status !== 404) throw await apiError(`update branch protection pattern '${pattern}'`, updated);
+  const created = await giteaRequest(
     credentials,
     "POST",
     `/repos/${organization}/${alias}/branch_protections`,
-    {
-      branch_name: pattern,
-      enable_push: false,
-      enable_merge_whitelist: true,
-      merge_whitelist_usernames: [credentials.adminUsername],
-      required_approvals: 1,
-      block_on_rejected_reviews: true,
-      dismiss_stale_approvals: true
-    }
+    { branch_name: pattern, ...protection }
   );
-  if (!response.ok && response.status !== 409 && response.status !== 422) {
-    throw await apiError(`protect branch pattern '${pattern}'`, response);
+  if (!created.ok && created.status !== 409 && created.status !== 422) {
+    throw await apiError(`protect branch pattern '${pattern}'`, created);
   }
+}
+
+export function branchProtectionOptions(
+  credentials: Pick<GiteaCredentials, "adminUsername" | "maintainerUsername">
+): Record<string, unknown> {
+  return {
+    enable_push: true,
+    enable_push_whitelist: true,
+    push_whitelist_usernames: [credentials.maintainerUsername],
+    enable_force_push: false,
+    enable_merge_whitelist: true,
+    merge_whitelist_usernames: [credentials.adminUsername],
+    required_approvals: 1,
+    block_on_rejected_reviews: true,
+    dismiss_stale_approvals: true
+  };
 }
 
 function replaceRepository(

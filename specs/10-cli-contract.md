@@ -389,14 +389,19 @@ dim x git ARGS...
 dim git setup
 ```
 
-Runs the local Git CLI with managed Gitea credentials supplied through
-environment and a one-command credential helper. It does not put credentials
-in argv or repository URLs. Existing Git credential helpers and SSH agents
-remain valid alternatives.
+Runs the local Git CLI with a host-only managed maintainer credential supplied
+through environment and a one-command credential helper. The admin API returns
+the provider-neutral `username` and `password` credential shape; it does not
+expose the workspace writer or provider-administrator credential. The command
+does not put credentials in argv or repository URLs. Existing Git credential
+helpers and SSH agents remain valid alternatives. The maintainer may push
+protected refs through the provider's explicit push allowlist; force-push
+policy is unchanged.
 
 `git setup` installs a URL-scoped, path-aware global Git credential helper for
 ordinary host-side Git commands. The requested URL path remains available for
-future Project-aware gateway routing.
+future Project-aware gateway routing. Credential retrieval also reconciles
+the host maintainer's repository access and existing protected-ref allowlists.
 
 ## Diagnostics and administration
 

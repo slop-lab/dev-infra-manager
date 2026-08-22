@@ -5,6 +5,7 @@ import {
   listProjectRepositories,
   listProjects,
   planProjectRepositorySet,
+  prepareHostGitCredential,
   prepareProjectRepositorySync,
   prepareProjectRepositoryTransfer,
   completeProjectRepositoryTransfer,
@@ -262,9 +263,9 @@ async function builtinCall(
     case "workspace.discard": await discardWorkspace(runner, lifecycle, text("name")); return {};
     case "doctor": return runDoctor(runner, lifecycle.defaultWorkspaceBackend, lifecycle);
     case "service.ensure": return ensureGitea(runner, lifecycle);
-    case "git.credentials": return ensureGitea(runner, lifecycle);
+    case "git.credentials": return prepareHostGitCredential(runner, lifecycle);
     case "git.setup": {
-      await ensureGitea(runner, lifecycle);
+      await prepareHostGitCredential(runner, lifecycle);
       const baseUrl = `http://127.0.0.1:${lifecycle.giteaPort}`;
       const helper = await runner.run("git", [
         "config", "--global", "--replace-all",

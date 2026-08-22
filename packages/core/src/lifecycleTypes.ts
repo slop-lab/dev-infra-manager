@@ -5,6 +5,7 @@ export interface LifecycleOptions {
   giteaPort: number;
   giteaAdminUsername: string;
   gitUsername: string;
+  gitMaintainerUsername: string;
   defaultWorkspaceBackend: WorkspaceRuntimeBackendKind;
   workspaceImage?: string;
   workspaceRuntime?: string;
@@ -75,6 +76,13 @@ export interface GiteaCredentials {
   adminPassword: string;
   writerUsername: string;
   writerPassword: string;
+  maintainerUsername: string;
+  maintainerPassword: string;
+}
+
+export interface HostGitCredential {
+  username: string;
+  password: string;
 }
 
 export interface GiteaServiceRecord {

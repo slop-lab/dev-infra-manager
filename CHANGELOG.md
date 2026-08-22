@@ -52,6 +52,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added a separate host-only managed Git maintainer capability for `dim x git`
+  and `dim git setup`. Existing managed credentials and protected-branch rules
+  are reconciled so trusted host Git may push protected refs without granting
+  that authority to workspace writers or exposing a provider-specific payload
+  through the CLI contract.
 - Added a host-scoped, credential-free CNCF Distribution pull-through cache
   for Docker Hub layers used by managed CI. Sysbox daemons connect on the DIM
   control network and disposable QEMU guests use a supervisor-local relay,

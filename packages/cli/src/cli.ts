@@ -963,17 +963,17 @@ service.command("credentials")
 
 const x = program.command("x").description("Run a command with DIM-provided integration settings");
 x.command("git")
-  .description("Run Git with managed Gitea credentials")
+  .description("Run Git with the managed host-maintainer credential")
   .argument("<args...>")
   .allowUnknownOption(true)
   .action(async (args: string[]) => {
-    const credentials = await adminCall<{ writerUsername: string; writerPassword: string }>("git.credentials");
+    const credentials = await adminCall<{ username: string; password: string }>("git.credentials");
     const helper = "!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f";
     process.exitCode = await runner.runStreaming("git", ["-c", `credential.helper=${helper}`, ...args], {
       env: {
         ...process.env,
-        DIM_GIT_USERNAME: credentials.writerUsername,
-        DIM_GIT_TOKEN: credentials.writerPassword,
+        DIM_GIT_USERNAME: credentials.username,
+        DIM_GIT_TOKEN: credentials.password,
         GIT_TERMINAL_PROMPT: "0"
       }
     });
@@ -1002,9 +1002,9 @@ gitIntegration.command("credential-helper", { hidden: true })
       }));
     const options = lifecycleOptions();
     if (fields.protocol !== "http" || fields.host !== `127.0.0.1:${options.giteaPort}`) return;
-    const credentials = await adminCall<{ writerUsername: string; writerPassword: string }>("git.credentials");
-    console.log(`username=${credentials.writerUsername}`);
-    console.log(`password=${credentials.writerPassword}`);
+    const credentials = await adminCall<{ username: string; password: string }>("git.credentials");
+    console.log(`username=${credentials.username}`);
+    console.log(`password=${credentials.password}`);
   });
 
 program.command("help")

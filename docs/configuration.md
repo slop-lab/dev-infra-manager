@@ -29,6 +29,8 @@ DIM_GITEA_ADMIN_USERNAME
 DIM_GITEA_ADMIN_PASSWORD
 DIM_GIT_USERNAME
 DIM_GIT_TOKEN
+DIM_GIT_MAINTAINER_USERNAME
+DIM_GIT_MAINTAINER_TOKEN
 DIM_WORKSPACE_IMAGE
 DIM_WORKSPACE_RUNTIME
 DIM_WORKSPACE_PRIVILEGED
@@ -41,6 +43,14 @@ DIM_CI_RUNNER_CPUS
 DIM_CI_RUNNER_MEMORY
 DIM_CI_RUNNER_PIDS
 ```
+
+`DIM_GIT_USERNAME` and `DIM_GIT_TOKEN` identify the constrained writer exposed
+to untrusted workspaces. `DIM_GIT_MAINTAINER_USERNAME` and
+`DIM_GIT_MAINTAINER_TOKEN` identify the separate host-only credential used by
+`dim x git` and `dim git setup`; they default to a generated token for the
+`dim-host` identity. The host credential may push protected refs, while the
+workspace writer remains excluded by branch protection. Neither credential is
+embedded in repository URLs.
 
 `DIM_GITEA_HOST` defaults to the hostname in a TCP `DOCKER_HOST`, or to
 `127.0.0.1` for a local Docker daemon. Override it when the Docker daemon's

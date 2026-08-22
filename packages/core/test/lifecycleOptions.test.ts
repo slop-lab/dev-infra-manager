@@ -10,6 +10,7 @@ describe("lifecycle options", () => {
 
     expect(options.controllerSocketPath).toBe("/run/user/1000/dim/controller.sock");
     expect(options.adminControllerSocketPath).toBe("/run/user/1000/dim/admin.sock");
+    expect(options.gitMaintainerUsername).toBe("dim-host");
   });
 
   it("namespaces sockets for a custom state root", () => {

@@ -38,6 +38,7 @@ export function lifecycleOptionsForBackend(
     giteaPort: positiveInteger(env.DIM_GITEA_PORT ?? "3300", "DIM_GITEA_PORT"),
     giteaAdminUsername: env.DIM_GITEA_ADMIN_USERNAME ?? "dim-admin",
     gitUsername: env.DIM_GIT_USERNAME ?? "dim-workspace",
+    gitMaintainerUsername: env.DIM_GIT_MAINTAINER_USERNAME ?? "dim-host",
     defaultWorkspaceBackend,
     ...(env.DIM_WORKSPACE_IMAGE === undefined ? {} : { workspaceImage: env.DIM_WORKSPACE_IMAGE }),
     ...(env.DIM_WORKSPACE_RUNTIME === undefined ? {} : { workspaceRuntime: env.DIM_WORKSPACE_RUNTIME }),

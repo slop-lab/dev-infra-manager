@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { LifecycleState } from "../src/lifecycleState.js";
 import type { LifecycleOptions, ProjectRecord } from "../src/lifecycleTypes.js";
 import {
+  branchProtectionOptions,
   deleteProjectRepository,
   normalizeRootRef,
   prepareProjectRepositoryTransfer,
@@ -28,6 +29,21 @@ describe("project registry", () => {
     expect(normalizeRootRef("refs/heads/release/next")).toBe("refs/heads/release/next");
     expect(() => normalizeRootRef("refs/tags/v1")).toThrow(/root ref/);
     expect(() => normalizeRootRef("bad..ref")).toThrow(/root ref/);
+  });
+
+  it("allows only the host maintainer to push protected refs", () => {
+    const options = branchProtectionOptions({
+      adminUsername: "dim-admin",
+      maintainerUsername: "dim-host"
+    });
+    expect(options).toMatchObject({
+      enable_push: true,
+      enable_push_whitelist: true,
+      push_whitelist_usernames: ["dim-host"],
+      enable_force_push: false,
+      merge_whitelist_usernames: ["dim-admin"]
+    });
+    expect(JSON.stringify(options)).not.toContain("dim-workspace");
   });
 
   it("rejects deleting the project root repository", async () => {

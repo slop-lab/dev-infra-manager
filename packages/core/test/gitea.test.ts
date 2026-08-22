@@ -36,10 +36,13 @@ describe("Gitea control endpoint", () => {
       adminPassword: "password",
       writerUsername: "writer",
       writerPassword: "password",
+      maintainerUsername: "host",
+      maintainerPassword: "password",
       apiBaseUrl: `http://127.0.0.1:${address.port}/api/v1`
     };
 
     await expect(giteaRequest(connection, "GET", "/version")).resolves.toMatchObject({ status: 200 });
+    expect(connection.maintainerUsername).not.toBe(connection.writerUsername);
   });
 
   it("applies exact webhook targets through Gitea's environment-to-INI contract", () => {

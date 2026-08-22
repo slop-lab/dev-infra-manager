@@ -210,24 +210,49 @@ async function waitForGitea(baseUrl: string): Promise<void> {
 async function ensureCredentials(runner: CommandRunner, options: LifecycleOptions): Promise<GiteaCredentials> {
   const existing = await runner.run("docker", ["exec", GITEA_CONTAINER, "cat", CREDENTIAL_PATH]);
   if (existing.exitCode === 0) {
-    return JSON.parse(existing.stdout) as GiteaCredentials;
+    const stored = JSON.parse(existing.stdout) as Partial<GiteaCredentials>;
+    if (stored.adminUsername && stored.adminPassword && stored.writerUsername && stored.writerPassword) {
+      const credentials: GiteaCredentials = {
+        adminUsername: stored.adminUsername,
+        adminPassword: stored.adminPassword,
+        writerUsername: stored.writerUsername,
+        writerPassword: stored.writerPassword,
+        maintainerUsername: stored.maintainerUsername ?? options.gitMaintainerUsername,
+        maintainerPassword: stored.maintainerPassword
+          ?? process.env.DIM_GIT_MAINTAINER_TOKEN
+          ?? randomBytes(24).toString("base64url")
+      };
+      await createUser(runner, credentials.maintainerUsername, credentials.maintainerPassword, false);
+      if (!stored.maintainerUsername || !stored.maintainerPassword) {
+        await storeCredentials(runner, credentials);
+      }
+      return credentials;
+    }
+    throw new UserError("Managed Gitea credentials are incomplete");
   }
 
   const credentials: GiteaCredentials = {
     adminUsername: options.giteaAdminUsername,
     adminPassword: process.env.DIM_GITEA_ADMIN_PASSWORD ?? randomBytes(24).toString("base64url"),
     writerUsername: options.gitUsername,
-    writerPassword: process.env.DIM_GIT_TOKEN ?? randomBytes(24).toString("base64url")
+    writerPassword: process.env.DIM_GIT_TOKEN ?? randomBytes(24).toString("base64url"),
+    maintainerUsername: options.gitMaintainerUsername,
+    maintainerPassword: process.env.DIM_GIT_MAINTAINER_TOKEN ?? randomBytes(24).toString("base64url")
   };
   await createUser(runner, credentials.adminUsername, credentials.adminPassword, true);
   await createUser(runner, credentials.writerUsername, credentials.writerPassword, false);
+  await createUser(runner, credentials.maintainerUsername, credentials.maintainerPassword, false);
+  await storeCredentials(runner, credentials);
+  return credentials;
+}
+
+async function storeCredentials(runner: CommandRunner, credentials: GiteaCredentials): Promise<void> {
   const encoded = Buffer.from(JSON.stringify(credentials)).toString("base64");
   const stored = await runner.run("docker", [
     "exec", "--env", `DIM_CREDENTIALS=${encoded}`, GITEA_CONTAINER,
     "sh", "-c", `umask 077; mkdir -p /data/dim; printf %s "$DIM_CREDENTIALS" | base64 -d > ${CREDENTIAL_PATH}`
   ]);
-  assertCommand(stored, "store Gitea workspace credentials");
-  return credentials;
+  assertCommand(stored, "store managed Gitea credentials");
 }
 
 async function createUser(runner: CommandRunner, username: string, password: string, admin: boolean): Promise<void> {

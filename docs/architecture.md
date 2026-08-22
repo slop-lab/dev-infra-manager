@@ -122,7 +122,11 @@ secret-bearing state; the mutable agent workspace itself is not review-gated.
 The built-in managed Git host is a DIM-owned Gitea service. Each Project owns
 a reserved `dim-<project>` organization and repository aliases below it.
 Gitea branch protection rejects direct workspace pushes to configured refs;
-review and merge happen through the Git host.
+review and merge happen through the Git host. DIM gives the trusted host CLI a
+separate maintainer capability whose credential is available only through the
+host-admin socket. A protected-ref push allowlist contains that identity, not
+the untrusted workspace writer. This host capability is part of DIM's managed
+Git boundary rather than its current Gitea account representation.
 
 ## Workspace Lifecycle
 
