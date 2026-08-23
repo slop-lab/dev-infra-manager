@@ -90,10 +90,7 @@ printf '%s\n' \
 git -C "$repositories/root" add .dim
 git -C "$repositories/root" commit -m "add stateful journey hooks" >/dev/null
 
-docker build --quiet \
-  --build-arg "DIM_UID=$(id -u)" --build-arg "DIM_GID=$(id -g)" \
-  --tag dev-infra-project-workspace:latest \
-  --file images/project-workspace/Dockerfile . >/dev/null
+just build-workspace-image
 start_controller
 DIM_BIN="$dim_bin" bash examples/projects/full-development-flow/register-project.bash \
   "$project_name" "$repositories" >/dev/null
