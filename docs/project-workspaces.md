@@ -94,6 +94,14 @@ require resource enforcement can opt into fail-closed setup with
 `dim-project-cgroup require`. See the
 [Project runtime cgroups example](../examples/features/project-runtime-cgroups/README.md).
 
+The manifest's `repositories` object is the runtime catalog of repositories
+actually registered in the Project. Each alias maps to its credential-free
+`workspaceUrl`, current `phase`, and root role. Project lifecycle or an
+untrusted development environment may clone every readable source repository;
+DIM protects promotion and execution authority rather than source visibility.
+Consumers should clone only `phase: ready` entries and choose their own paths.
+DIM does not synthesize a monorepo layout or execute hooks from those clones.
+
 Selected profiles are passed as repeated arguments:
 
 ```bash

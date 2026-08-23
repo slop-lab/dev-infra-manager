@@ -9,6 +9,7 @@ import type { CommandResult, RunOptions, StreamingCommandRunner } from "../src/t
 import {
   alignWorkspaceRoot,
   detectWorkspaceKvm,
+  projectRuntimeManifest,
   resolveWorkspaceKvm,
   restartWorkspace,
   updateWorkspaceResources,
@@ -132,6 +133,79 @@ describe("project and workspace lifecycle", () => {
     await releaseSetup();
     await secondSetup;
     expect(secondSetupAcquired).toBe(true);
+  });
+
+  it("publishes the actual Project repository catalog without credentials", () => {
+    const now = new Date().toISOString();
+    const repository = (alias: string, phase: "ready" | "error") => ({
+      alias,
+      providerRepoId: `dim-project/${alias}`,
+      owner: "dim-project",
+      hostUrl: `http://127.0.0.1:3300/dim-project/${alias}.git`,
+      workspaceUrl: `http://dim-gitea:3000/dim-project/${alias}.git`,
+      phase,
+      connections: [],
+      protectedPatterns: [],
+      protectionPhase: "applied" as const,
+      createdAt: now,
+      updatedAt: now
+    });
+    const project = {
+      schemaVersion: 3 as const,
+      id: "project-id",
+      name: "project",
+      gitNamespace: "dim-project",
+      phase: "ready" as const,
+      rootRepositoryAlias: "root",
+      rootRef: "refs/heads/main",
+      repositories: [repository("source", "ready"), repository("root", "ready"), repository("pending", "error")],
+      createdAt: now,
+      updatedAt: now
+    };
+    const workspace = {
+      schemaVersion: 3 as const,
+      name: "work",
+      projectId: project.id,
+      projectName: project.name,
+      rootRepositoryAlias: "root",
+      rootRef: "refs/heads/main",
+      projectPath: "/workspace/project",
+      phase: "ready" as const,
+      profiles: [],
+      composeProjectName: "dim-work",
+      containerName: "dim-ws-work",
+      networkName: "dim-control",
+      dockerVolumeName: "dim-ws-work-docker",
+      runtimeBackend: "runc" as const,
+      kvm: false,
+      cpuCount: "2",
+      memory: "4g",
+      pidsLimit: "2048",
+      routes: [],
+      gitUserName: "Agent",
+      gitUserEmail: "agent@example.invalid",
+      gitBaseUrl: "http://dim-gitea:3000/dim-project",
+      hostAliases: {},
+      projectManifestPath: "/run/dim/project.json",
+      createdAt: now,
+      updatedAt: now
+    };
+
+    const manifest = projectRuntimeManifest(workspace, project, {
+      version: 1,
+      status: "unavailable",
+      driver: "none",
+      controllers: [],
+      reason: "test"
+    });
+
+    expect(manifest.repositories).toEqual({
+      pending: { workspaceUrl: "http://dim-gitea:3000/dim-project/pending.git", phase: "error", root: false },
+      root: { workspaceUrl: "http://dim-gitea:3000/dim-project/root.git", phase: "ready", root: true },
+      source: { workspaceUrl: "http://dim-gitea:3000/dim-project/source.git", phase: "ready", root: false }
+    });
+    expect(JSON.stringify(manifest)).not.toContain("token");
+    expect(JSON.stringify(manifest)).not.toContain("password");
   });
 
   it("auto-detects KVM except for the gVisor workspace runtime", async () => {

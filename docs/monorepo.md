@@ -4,6 +4,10 @@
 
 This repository is a pnpm workspace.
 
+This is the current physical layout, not the intended permanent security
+review unit. See [DIM Self-development Boundaries](self-development-boundaries.md)
+for the extraction plan and repository naming policy.
+
 ```text
 .
 ├── .dim/                this repository's DIM project contract

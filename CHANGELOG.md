@@ -9,6 +9,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Published the actual Project repository catalog in the read-only workspace
+  manifest and documented the planned `root`, `core`, `development`, and
+  independently selected plugin boundaries for DIM self-development.
 - Limited automatic disposable-QEMU release gates to non-draft managed-host
   pull requests targeting `main`, kept routine development gates on
   `development`, and pinned the self Project's protected branches and

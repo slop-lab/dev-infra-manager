@@ -126,6 +126,15 @@ generates a Compose override that applies the mapping to its agent service.
 This is a static bootstrap registry: address changes take effect when setup
 reconciles the workspace and recreates the affected Project service.
 
+The runtime manifest MUST also contain a `repositories` object derived from
+actual Project state rather than only the desired root `.dim/repos.yml`.
+Entries are keyed by validated repository alias and expose the credential-free
+workspace URL, lifecycle phase, and root role. This catalog is readable by
+Project lifecycle and agent environments; source visibility is not a protected
+boundary. It MUST NOT expose external credentials or grant protected-ref,
+merge, trusted-runtime, or host authority. DIM clones only the root and leaves
+selection, checkout paths, and integrated development layout to Project code.
+
 The Project manifest retains schema version `1` and publishes the workspace
 runtime's optional cgroup capability at `runtime.cgroups`. DIM enables the
 capability automatically when the boundary is safe: the record reports

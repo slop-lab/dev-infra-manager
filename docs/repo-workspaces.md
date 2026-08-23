@@ -133,10 +133,12 @@ fallback. Unmatched refs are ignored when no fallback is declared. See the
 [shared-upstream feature example](../examples/features/shared-upstream/README.md).
 
 DIM directly clones only the configured root. The root `.dim` lifecycle reads
-`DIM_PROJECT_MANIFEST` and the Project-specific `DIM_GIT_BASE_URL`, then
-constructs stable URLs such as `$DIM_GIT_BASE_URL/product.git`. The Project
-owns checkout paths and nested services; DIM does not create per-repository
-environment variables or require one container per repository.
+the `repositories` catalog in `DIM_PROJECT_MANIFEST` for the actual registered
+aliases, phases, and credential-free workspace URLs. The Project-specific
+`DIM_GIT_BASE_URL` remains available for compatibility with simple alias-based
+URL construction. The Project owns checkout selection, paths, integrated build
+layout, and nested services; DIM does not create per-repository environment
+variables or require one container per repository.
 
 ## Workspaces
 

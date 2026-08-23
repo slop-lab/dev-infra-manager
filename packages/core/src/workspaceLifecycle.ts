@@ -14,7 +14,7 @@ import type {
 } from "./lifecycleTypes.js";
 import { workspaceRuntimePlan } from "./runtimeBackends.js";
 import type { StreamingCommandRunner } from "./types.js";
-import { inspectProjectRuntimeCgroups } from "./projectRuntimeCgroups.js";
+import { inspectProjectRuntimeCgroups, type ProjectRuntimeCgroups } from "./projectRuntimeCgroups.js";
 import { ensureRegistryCache, REGISTRY_CACHE_ENDPOINT } from "./registryCache.js";
 
 // The unprivileged OS user every workspace image (images/project-workspace,
@@ -904,14 +904,7 @@ async function writeProjectManifest(
   project: ProjectRecord
 ): Promise<void> {
   const cgroups = await inspectProjectRuntimeCgroups(runner, record.containerName, nestedEngine(record));
-  const manifest = {
-    schemaVersion: 1,
-    project: { id: project.id, name: project.name },
-    root: { repository: record.rootRepositoryAlias, ref: record.rootRef, path: record.projectPath },
-    gitBaseUrl: record.gitBaseUrl,
-    hostAliases: record.hostAliases,
-    runtime: { cgroups }
-  };
+  const manifest = projectRuntimeManifest(record, project, cgroups);
   const encoded = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`).toString("base64");
   const result = await runner.run("docker", [
     "exec", "--user", "root",
@@ -921,6 +914,29 @@ async function writeProjectManifest(
     `mkdir -p /run/dim && printf %s "$DIM_PROJECT_MANIFEST_B64" | base64 -d > ${record.projectManifestPath} && chown ${WORKSPACE_USER}:${WORKSPACE_USER} ${record.projectManifestPath} && chmod 0444 ${record.projectManifestPath}`
   ]);
   if (result.exitCode !== 0) throw commandError("write project runtime manifest", result);
+}
+
+export function projectRuntimeManifest(
+  record: WorkspaceRecord,
+  project: ProjectRecord,
+  cgroups: ProjectRuntimeCgroups
+): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    project: { id: project.id, name: project.name },
+    root: { repository: record.rootRepositoryAlias, ref: record.rootRef, path: record.projectPath },
+    repositories: Object.fromEntries(project.repositories
+      .slice()
+      .sort((left, right) => left.alias.localeCompare(right.alias))
+      .map((repository) => [repository.alias, {
+        workspaceUrl: repository.workspaceUrl,
+        phase: repository.phase,
+        root: repository.alias === record.rootRepositoryAlias
+      }])),
+    gitBaseUrl: record.gitBaseUrl,
+    hostAliases: record.hostAliases,
+    runtime: { cgroups }
+  };
 }
 
 const HOST_INPUT_HELPER = `#!/usr/bin/env sh
