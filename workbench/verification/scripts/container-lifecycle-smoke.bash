@@ -47,9 +47,12 @@ git -C "$worktree" add README.md
 git -C "$worktree" commit -m initial >/dev/null
 git clone --bare "$worktree" "$bare_repo" >/dev/null
 
+echo "container-lifecycle: create Project"
 pnpm run cli -- project create "$project_name" >/dev/null
+echo "container-lifecycle: add root repository"
 pnpm run cli -- repo add "$project_name" root "$bare_repo" --root --ref main --protect main >/dev/null
 repo_url="$(pnpm run --silent cli -- repo url "$project_name" root)"
+echo "container-lifecycle: import repository"
 pnpm run cli -- repo add "$project_name" imported "$bare_repo" >/dev/null
 git ls-remote "$(pnpm run --silent cli -- repo url "$project_name" imported)" \
   refs/heads/main | grep -q .
@@ -57,6 +60,7 @@ pnpm run cli -- repo add "$project_name" disposable >/dev/null
 pnpm run cli -- repo delete "$project_name" disposable --yes >/dev/null
 test "$(pnpm run --silent cli -- repo list "$project_name" --json | jq \
   --arg alias disposable '[.[] | select(.alias == $alias)] | length')" = 0
+echo "container-lifecycle: create workspace"
 pnpm run cli -- workspace create "$project_name" "$workspace_name" \
   --cpus 1.5 \
   --memory 3g \
@@ -68,6 +72,7 @@ pnpm run cli -- workspace create "$project_name" "$workspace_name" \
 container_name="$(pnpm run --silent cli -- workspace show "$workspace_name" --json | jq -r .containerName)"
 test "$(docker inspect --format '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.PidsLimit}}' "$container_name")" \
   = "1500000000|3221225472|1024"
+echo "container-lifecycle: exercise workspace Git and nested Docker"
 pnpm run cli -- exec "$workspace_name" -- sh -c "
   test \"\\\$(git config user.name)\" = 'dim/$workspace_name'
   git checkout -b 'agent/$workspace_name'
