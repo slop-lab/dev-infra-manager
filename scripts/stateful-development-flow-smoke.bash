@@ -69,6 +69,8 @@ diagnose_workspace_setup() {
   fi
   docker exec --user dim "$failed_container" \
     sh -c 'cat /tmp/dim-agent-controller/agent.log 2>/dev/null || true' >&2 || true
+  docker exec --user dim "$failed_container" \
+    sh -c 'cat /tmp/dim-stateful-setup.log 2>/dev/null || true' >&2 || true
   docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
     docker compose --project-name "dim-$workspace_name" \
     "${failed_compose[@]}" ps --all >&2 || true
@@ -109,7 +111,13 @@ printf '%s\n' \
   '  echo "intentional stateful journey setup failure" >&2' \
   '  exit 42' \
   'fi' \
-  'exec sh .dim/setup-real.sh "$@"' \
+  'if sh .dim/setup-real.sh "$@" >/tmp/dim-stateful-setup.log 2>&1; then' \
+  '  cat /tmp/dim-stateful-setup.log' \
+  'else' \
+  '  status=$?' \
+  '  cat /tmp/dim-stateful-setup.log >&2' \
+  '  exit "$status"' \
+  'fi' \
   >"$repositories/root/.dim/setup.sh"
 git -C "$repositories/root" add .dim
 git -C "$repositories/root" commit -m "add stateful journey hooks" >/dev/null
@@ -133,8 +141,10 @@ test "$(jq -r .memory <<<"$workspace_json")" = 3g
 test "$(jq -r .pidsLimit <<<"$workspace_json")" = 768
 dim workspace exec "$workspace_name" -- docker inspect \
   "${compose_name}-documentation-preview-1" >/dev/null
+dim workspace exec "$workspace_name" -- sh -c \
+  "docker image save alpine:3.22 | docker compose --project-name '$compose_name' --file .dim/docker-compose.yml exec --no-TTY agent docker image load >/dev/null"
 dim workspace run "$workspace_name" bash -- -lc \
-  'docker info --format "{{json .SecurityOptions}}" | grep -q rootless; docker run --rm hello-world >/dev/null'
+  'docker info --format "{{json .SecurityOptions}}" | grep -q rootless; docker run --rm alpine:3.22 true'
 
 echo "[full-development-flow] preserve work across dirty rejection and reviewed restart"
 dim workspace run "$workspace_name" bash -- -lc \
