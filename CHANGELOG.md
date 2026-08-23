@@ -9,6 +9,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Replaced the misleading `just install-local-cli` development recipe with
+  `just install-local`, which installs the local package set and immediately
+  reconciles the managed controller to the newly installed CLI.
 - Configured DIM-owned workspace Docker and Podman engines to share the
   persistent anonymous Docker Hub pull-through cache used by managed CI,
   without adding cache details to reviewed Project definitions.

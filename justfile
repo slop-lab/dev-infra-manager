@@ -29,9 +29,10 @@ check-source:
     just test
     just build-packages
 
-# Build and install the local dim CLI package set for use from other projects.
-install-local-cli:
+# Build and install the local DIM package set, then replace the managed controller.
+install-local:
     bash scripts/install-dim-local.bash
+    if command -v mise >/dev/null 2>&1; then mise exec -- dim controller restart; else "${DIM_INSTALL_PREFIX:-$HOME/.local}/bin/dim" controller restart; fi
 
 # Builds core first, then runs the local dim CLI from source (no install needed).
 run-cli *args:

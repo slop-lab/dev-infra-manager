@@ -79,7 +79,7 @@ backend, project dependencies, and runs `verify` plus `doctor`. See
 ## Linking a locally built `dim` for testing against another project
 
 ```bash
-just install-local-cli
+just install-local
 ```
 
 Builds local package tarballs and installs them through the mise-managed
