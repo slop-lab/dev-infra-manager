@@ -132,8 +132,8 @@ pnpm --recursive run build
 npm publish core/packages/core/dist
 npm publish core/packages/contracts/external-url/dist
 npm publish core/packages/controller-proxy/dist
-npm publish plugins/dns-cloudflare/dist
-npm publish plugins/external-urls/dist
+npm publish plugin-dns-cloudflare/dist
+npm publish plugin-external-urls/dist
 npm publish core/packages/cli/dist
 npm publish core/packages/installer/dist
 ```

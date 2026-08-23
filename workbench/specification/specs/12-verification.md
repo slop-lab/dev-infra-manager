@@ -6,7 +6,7 @@ This specification defines the minimum verification gates for development.
 
 ## Example runner
 
-`scripts/verify-example.bash` is the common entrypoint for runnable examples.
+`verification/scripts/verify-example.bash` is the common entrypoint for runnable examples.
 It accepts `current-installed` and `{sysbox,gvisor,rootless-podman,runc}`
 backends. A named backend provisions an independent disposable QEMU guest for
 each selected example, while an optional example selector narrows the
@@ -61,7 +61,7 @@ Managed Git verification must distinguish the host maintainer from the
 workspace writer and verify that protected-ref push options allowlist only the
 maintainer while force pushes remain disabled.
 
-The Sysbox lane of `scripts/kvm-host-install-smoke.bash` must enable a real
+The Sysbox lane of `verification/scripts/kvm-host-install-smoke.bash` must enable a real
 Project CI runner inside its disposable QEMU guest and inspect the effective
 Docker runtime, CPU quota, memory limit, PID limit, non-privileged flag, and
 absence of a host Docker-socket mount. It must then run the CI runner feature
@@ -88,7 +88,7 @@ A configured Tailnet
 ingress can additionally run:
 
 ```bash
-scripts/tailscale-external-url-smoke.sh
+verification/scripts/tailscale-external-url-smoke.sh
 ```
 
 That smoke starts a workspace service, provisions a Tailscale URL through the
@@ -141,11 +141,11 @@ doubly nested generic Actions job container is not an equivalent environment.
 
 ## Container Backend Gates
 
-`scripts/container-cgroup-smoke.bash` requires direct access to the target Docker
+`verification/scripts/container-cgroup-smoke.bash` requires direct access to the target Docker
 host and must cover exact runc cgroup v2 CPU, memory, swap, and PID limits,
 including live resource updates.
 
-`scripts/container-sysbox-isolation-smoke.bash` requires a prebuilt workspace
+`verification/scripts/container-sysbox-isolation-smoke.bash` requires a prebuilt workspace
 image and direct access to a Docker host with `sysbox-runc`. It must cover:
 
 - Sysbox system-container execution with explicit CPU, memory, and PID limits.
@@ -200,7 +200,7 @@ container. It verifies generated runtime arguments, including:
 
 `just verify isolation-json` runs the same tests with Vitest's JSON reporter so
 CI can consume a single JSON document from stdout. These static checks do not
-replace `scripts/container-sysbox-isolation-smoke.bash`, which verifies actual
+replace `verification/scripts/container-sysbox-isolation-smoke.bash`, which verifies actual
 Sysbox and cgroup behavior.
 
 ## Backend Verification
@@ -230,7 +230,7 @@ Host installation scripts must be verified by:
 - Runtime version command after installation.
 - Docker runtime registration check when the script registers a runtime.
 
-`scripts/kvm-host-install-smoke.bash BACKEND` and
+`verification/scripts/kvm-host-install-smoke.bash BACKEND` and
 `just verify environments-kvm BACKEND` verify one backend installer in a
 disposable VM. Omitting `BACKEND` runs every backend in a separate VM. Managed
 development CI MUST schedule each backend as an independent `dim-qemu` job so

@@ -136,7 +136,7 @@ git clone --no-checkout <this-repository>
 cd dev-infra-manager
 git checkout --detach <reviewed-tag-or-full-commit>
 just build-workspace-image
-bash scripts/install-host-ubuntu.bash sysbox
+bash verification/scripts/install-host-ubuntu.bash sysbox
 ```
 
 Run `just` as your normal user, including when it is managed by mise. The
@@ -160,10 +160,10 @@ development host.
 Choose the backend your workspaces will use:
 
 ```bash
-bash scripts/install-host-ubuntu.bash sysbox          # default nested-container backend
-bash scripts/install-host-ubuntu.bash gvisor          # sandboxed fallback without KVM
-bash scripts/install-host-ubuntu.bash rootless-podman # lower-host-privilege workloads
-bash scripts/install-host-ubuntu.bash runc            # trusted development/CI only
+bash verification/scripts/install-host-ubuntu.bash sysbox          # default nested-container backend
+bash verification/scripts/install-host-ubuntu.bash gvisor          # sandboxed fallback without KVM
+bash verification/scripts/install-host-ubuntu.bash rootless-podman # lower-host-privilege workloads
+bash verification/scripts/install-host-ubuntu.bash runc            # trusted development/CI only
 ```
 
 See [docs/runtime-backends.md](specification/docs/runtime-backends.md) for how these

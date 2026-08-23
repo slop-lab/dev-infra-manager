@@ -14,7 +14,11 @@ scoped by the DIM Project or canonical organization:
 | --- | --- | --- |
 | `root` | Minimal reviewed `.dim` bootstrap, capability grants, promotion policy, and pinned host deployment inputs | Human review before trusted lifecycle or host authority changes |
 | `core` | Self-contained source required to build DIM's controller, CLI, public contracts, and installer | Independently buildable and reviewable by a DIM user |
-| `development` | Agent development stack, examples, integration tests, QEMU gates, and contributor orchestration | Agent-changeable; not part of the core build review closure |
+| `development` | Common agent development stack and contributor orchestration | Agent-changeable; not part of a production build review closure |
+| `core-development` | Core tests, fixtures, and test-only tooling | Exercises `core` without becoming part of its build closure |
+| one `*-development` repository per plugin | Tests and test-only tooling for the paired plugin | Exercises the plugin without becoming part of its build closure |
+| `verification` | Cross-component, container, host, KVM, and release-gate checks | May consume all source repositories but is not a production input |
+| `examples` | Reviewed, runnable Project examples | Demonstrates Project contracts independently of the verification harness |
 | `specification` | User documentation, normative contracts, and accepted design rationale | Reviewed contract changes without implementation or host authority |
 | one repository per plugin | One independently selected and installed provider implementation | Reviewed only when that plugin is selected |
 
@@ -62,10 +66,11 @@ A transitional agent checkout is:
 └── workbench/            agent cwd and future `development` root
     ├── core/
     ├── specification/
-    └── plugins/
-    ├── managed-git-gitea/
-    ├── external-urls/
-    └── dns-cloudflare/
+    ├── core-development/        core tests and test-only dependencies
+    ├── plugin-*/                minimal plugin build inputs
+    ├── plugin-*-development/    paired plugin tests
+    ├── examples/                Project examples
+    └── verification/            cross-repository and host checks
 ```
 
 This remains a Project-owned layout rather than a stable DIM core contract.

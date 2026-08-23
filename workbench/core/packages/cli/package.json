@@ -25,9 +25,7 @@
   "scripts": {
     "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
     "pack:dry-run": "pnpm run build && bash ../../scripts/pnpm-pack-dry-run.bash ./dist",
-    "check": "tsc -p tsconfig.json --noEmit",
-    "cli": "tsx src/cli.ts",
-    "test": "pnpm --filter @slop-lab/dim-core run build && tsx --test test/*.test.ts"
+    "check": "tsc -p tsconfig.json --noEmit"
   },
   "engines": {
     "node": "^24.0.0 || ^26.0.0"
@@ -42,7 +40,6 @@
   "devDependencies": {
     "@types/node": "24.13.3",
     "package.json-minifier": "0.0.6",
-    "tsx": "4.20.3",
     "typescript": "5.8.3"
   }
 }

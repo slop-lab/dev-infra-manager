@@ -12,7 +12,7 @@ sudo apt-get install -y \
   curl git jq just libatomic1 \
   qemu-system-x86 qemu-utils cloud-image-utils openssh-client
 
-printf 'yes\n' | bash "$source_root/scripts/install-host-ubuntu.bash" sysbox
+printf 'yes\n' | bash "$source_root/verification/scripts/install-host-ubuntu.bash" sysbox
 
 sudo modprobe kvm
 if grep -qw vmx /proc/cpuinfo; then

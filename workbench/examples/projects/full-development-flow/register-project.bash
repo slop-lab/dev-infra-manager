@@ -5,8 +5,8 @@ project="${1:-full-development-flow}"
 repositories="${2:-$PWD/full-development-flow-repositories}"
 dim_bin="${DIM_BIN:-dim}"
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
-# shellcheck source=../../../scripts/lib/example-repositories.bash
-source "$repo_root/scripts/lib/example-repositories.bash"
+# shellcheck source=../../../verification/scripts/lib/example-repositories.bash
+source "$repo_root/verification/scripts/lib/example-repositories.bash"
 
 dim_register_example_repositories "$project" "$repositories" "$dim_bin"
 "$dim_bin" repo plan "$project" --json >/dev/null

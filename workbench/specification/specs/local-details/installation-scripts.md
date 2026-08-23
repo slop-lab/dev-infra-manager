@@ -5,7 +5,7 @@
 Script:
 
 ```text
-scripts/install-host-ubuntu.bash <sysbox|gvisor|rootless-podman|runc>
+verification/scripts/install-host-ubuntu.bash <sysbox|gvisor|rootless-podman|runc>
 ```
 
 Behavior:
@@ -22,7 +22,7 @@ Behavior:
    build the rootless workspace image when rootless Podman is selected.
    On Ubuntu hosts that restrict unprivileged user namespaces through
    AppArmor, install the path-scoped `/usr/local/bin/rootlesskit` profile via
-   `scripts/install-rootlesskit-apparmor-profile-ubuntu.bash`. The container
+   `verification/scripts/install-rootlesskit-apparmor-profile-ubuntu.bash`. The container
    CI lane invokes the same script before exercising rootless-DinD sidecars.
    When a container can observe the host restriction sysctl but has no
    writable AppArmor securityfs policy interface, the script leaves policy
@@ -54,7 +54,7 @@ backend rather than requiring Sysbox and gVisor to coexist on one host.
 Script:
 
 ```text
-scripts/install-runsc-linux.bash
+verification/scripts/install-runsc-linux.bash
 ```
 
 Behavior:
@@ -76,12 +76,12 @@ Behavior:
 
 ## KVM Host-install Smoke
 
-`scripts/install-kvm-verify-deps-ubuntu.bash` installs QEMU, qcow2,
+`verification/scripts/install-kvm-verify-deps-ubuntu.bash` installs QEMU, qcow2,
 cloud-image, and SSH tooling and adds the invoking non-root user to the `kvm`
 group; it does not install a runtime backend. It requires the exact
 confirmation `yes` and explains that the login session must be refreshed
 before the new group membership is active.
-`scripts/kvm-host-install-smoke.bash BACKEND [--verbose]` verifies one backend,
+`verification/scripts/kvm-host-install-smoke.bash BACKEND [--verbose]` verifies one backend,
 while `just verify environments-kvm [--verbose]` verifies every backend in a
 separate VM. Each check boots a checksum-verified Ubuntu cloud-image VM with
 `/dev/kvm`, clones the committed repository state from a Git bundle, installs
@@ -104,7 +104,7 @@ capability set `workspaceRuntimePlan()` grants
 (`core/packages/core/src/runtimeBackends.ts`) instead of `--privileged`, so
 it also disables Docker system-path confinement to let the nested rootless
 runtime mount its own procfs, and
-`scripts/kvm-host-install-smoke.bash rootless-podman` is the real verification that
+`verification/scripts/kvm-host-install-smoke.bash rootless-podman` is the real verification that
 those capabilities are sufficient for nested unprivileged user namespaces on
 a genuinely fresh (singly-nested) host — something a doubly-nested dev
 sandbox cannot exercise, since even `--privileged` nested user-namespace
@@ -117,7 +117,7 @@ recorded as its backend.
 Script:
 
 ```text
-scripts/bootstrap-ubuntu.bash
+verification/scripts/bootstrap-ubuntu.bash
 ```
 
 Behavior:
@@ -143,7 +143,7 @@ Behavior:
 Script:
 
 ```text
-scripts/container-sysbox-isolation-smoke.bash
+verification/scripts/container-sysbox-isolation-smoke.bash
 ```
 
 Behavior:
@@ -160,7 +160,7 @@ Behavior:
 Script:
 
 ```text
-scripts/lib/local-npm-registry.bash
+verification/scripts/lib/local-npm-registry.bash
 ```
 
 Sourced, not run directly. Provides `dim_start_local_npm_registry WORK_DIR`,
@@ -179,7 +179,7 @@ than the caller's real npm config.
 Script:
 
 ```text
-scripts/mise-install-smoke.bash
+verification/scripts/mise-install-smoke.bash
 ```
 
 `just verify mise-install-smoke`. Requires Docker and network access.
@@ -197,7 +197,7 @@ override.
 Script:
 
 ```text
-scripts/plugin-install-smoke.bash
+verification/scripts/plugin-install-smoke.bash
 ```
 
 Packs a synthetic plugin package and the `install` package, installs the
@@ -210,7 +210,7 @@ run directly against the packed CLI) reports it enabled.
 Script:
 
 ```text
-scripts/external-url-example-smoke.bash
+verification/scripts/external-url-example-smoke.bash
 ```
 
 `just verify example current-installed auto external-urls`. Requires Docker. Executes
@@ -225,7 +225,7 @@ script must change together.
 
 ## Multi-Repository Project Example Smoke
 
-`scripts/multi-repository-example-smoke.bash`, invoked by
+`verification/scripts/multi-repository-example-smoke.bash`, invoked by
 `just verify example current-installed auto multi-repository`, builds and installs local packages,
 copies `examples/projects/multi-repository/repos/` to a temporary directory, initializes and
 pushes real Git repositories, and
@@ -236,7 +236,7 @@ cannot see that service and its environment does not contain the raw secret.
 
 ## Single-Repository Project Example Smoke
 
-`scripts/single-repository-example-smoke.bash`, invoked by `just verify example
+`verification/scripts/single-repository-example-smoke.bash`, invoked by `just verify example
 current-installed auto single-repository`, verifies the default
 one-repository/no-secret shape, including an unprotected direct `main` push,
 explicit workspace resource limits, an unprivileged Project-owned agent, its

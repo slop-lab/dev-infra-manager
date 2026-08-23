@@ -193,7 +193,7 @@ For local DIM development, build a package bundle and install it behind the
 same facade without publishing or replacing the mise shim:
 
 ```bash
-bash scripts/pack-local-packages.bash /tmp/dim-packages
+bash verification/scripts/pack-local-packages.bash /tmp/dim-packages
 dim install-cli --local-packages /tmp/dim-packages --no-local-bin
 ```
 

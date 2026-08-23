@@ -68,6 +68,6 @@ EXAMPLE_SECRET=replace-me \
   bash examples/projects/full-development-flow/deploy-secret.bash full-dev
 ```
 
-See `scripts/stateful-development-flow-smoke.bash` for the disposable
+See `verification/scripts/stateful-development-flow-smoke.bash` for the disposable
 end-to-end release journey. It materializes this example and injects failures
 only into its temporary copy.

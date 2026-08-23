@@ -4,6 +4,11 @@ packages:
   - core/packages/installer
   - core/packages/controller-proxy
   - core/packages/contracts/*
-  - plugins/*
+  - core-development
+  - plugin-dns-cloudflare
+  - plugin-dns-cloudflare-development
+  - plugin-external-urls
+  - plugin-external-urls-development
+  - verification
 
 linkWorkspacePackages: true

@@ -49,7 +49,7 @@ pnpm install
 Install and verify one Ubuntu host runtime backend:
 
 ```bash
-bash scripts/install-host-ubuntu.bash sysbox
+bash verification/scripts/install-host-ubuntu.bash sysbox
 just run-cli doctor
 ```
 
@@ -73,10 +73,10 @@ the user namespace needed by Project-owned rootless-DinD sidecars.
 Choose exactly one backend:
 
 ```bash
-bash scripts/install-host-ubuntu.bash sysbox
-bash scripts/install-host-ubuntu.bash gvisor
-bash scripts/install-host-ubuntu.bash rootless-podman
-bash scripts/install-host-ubuntu.bash runc
+bash verification/scripts/install-host-ubuntu.bash sysbox
+bash verification/scripts/install-host-ubuntu.bash gvisor
+bash verification/scripts/install-host-ubuntu.bash rootless-podman
+bash verification/scripts/install-host-ubuntu.bash runc
 ```
 
 The script records its backend in DIM user configuration and builds the
@@ -91,11 +91,11 @@ Test installation destructively inside a disposable KVM-backed Ubuntu VM, withou
 just verify environments-kvm       # all backends, one clean VM each
 just verify environments-kvm gvisor # one backend, suitable for a CI shard
 just verify environments-kvm --verbose
-bash scripts/kvm-host-install-smoke.bash gvisor --verbose # one backend, direct script
+bash verification/scripts/kvm-host-install-smoke.bash gvisor --verbose # one backend, direct script
 ```
 
 Prepare those dependencies with
-`bash scripts/install-kvm-verify-deps-ubuntu.bash`. This
+`bash verification/scripts/install-kvm-verify-deps-ubuntu.bash`. This
 requires writable `/dev/kvm`, `qemu-system-x86_64`, `qemu-img`, and
 `cloud-localds`. The verified Ubuntu cloud image is cached under `.local/kvm`;
 each test uses and deletes a temporary overlay disk. The default output
@@ -106,7 +106,7 @@ overlay defaults to 32 GiB and can be changed with `DIM_KVM_SMOKE_DISK_SIZE`.
 Install gVisor `runsc` directly for the no-KVM Docker-compatible backend:
 
 ```bash
-bash scripts/install-runsc-linux.bash
+bash verification/scripts/install-runsc-linux.bash
 ```
 
 This downloads the latest official gVisor release binaries, verifies their SHA-512 checksums, installs them under `/usr/local/bin`, registers `runsc` with Docker, and restarts Docker.
@@ -136,10 +136,10 @@ Run the integration smoke test:
 
 ```bash
 just verify container
-bash scripts/container-sysbox-isolation-smoke.bash
+bash verification/scripts/container-sysbox-isolation-smoke.bash
 ```
 
-Use `bash scripts/container-sysbox-isolation-smoke.bash --verbose` to show
+Use `bash verification/scripts/container-sysbox-isolation-smoke.bash --verbose` to show
 detailed output for each labeled Sysbox stage.
 
 The container integration gate builds the included image and exercises
@@ -162,7 +162,7 @@ just verify isolation-json
 
 This verifies resource flags and rejects host Docker storage or socket mounts;
 it does not replace the Sysbox runtime behavior covered by
-`scripts/container-sysbox-isolation-smoke.bash`.
+`verification/scripts/container-sysbox-isolation-smoke.bash`.
 
 Run the full local verification suite:
 
@@ -182,7 +182,7 @@ When Docker has Compose v2 and supports privileged runc containers, run:
 
 ```bash
 just verify container
-bash scripts/container-cgroup-smoke.bash
+bash verification/scripts/container-cgroup-smoke.bash
 ```
 
 The first command builds the role-neutral DIM project workspace image and uses

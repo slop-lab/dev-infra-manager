@@ -20,7 +20,7 @@ Projects consume the same manifest and helper regardless of the provider.
 Run the contract smoke with:
 
 ```bash
-bash scripts/project-runtime-cgroups-example-smoke.bash
+bash verification/scripts/project-runtime-cgroups-example-smoke.bash
 ```
 
 The driver-specific executable checks are `verify-cgroupfs.bash`,

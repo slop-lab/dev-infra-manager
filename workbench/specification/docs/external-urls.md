@@ -287,7 +287,7 @@ Build the unpublished packages locally:
 
 ```bash
 pnpm install --frozen-lockfile
-bash scripts/pack-local-packages.bash /tmp/dim-packages
+bash verification/scripts/pack-local-packages.bash /tmp/dim-packages
 ```
 
 The directory contains every publishable package tarball plus `packages.json`,
@@ -318,7 +318,7 @@ after `dim external-url ingress add`.
 ## Verification
 
 [The external URL example](../../examples/features/external-urls/README.md) and
-`scripts/external-url-example-smoke.bash` verify:
+`verification/scripts/external-url-example-smoke.bash` verify:
 
 ```text
 dnsmasq wildcard DNS
@@ -334,4 +334,4 @@ The example smoke test also runs a local Cloudflare-compatible API backed by
 authoritative CoreDNS, then checks provider reconciliation, wildcard
 resolution, and cleanup without external credentials.
 A separately configured Tailnet ingress can run
-`scripts/tailscale-external-url-smoke.sh`.
+`verification/scripts/tailscale-external-url-smoke.sh`.

@@ -9,10 +9,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
-- Staged the future `root`, `development`, `core`, `specification`, and
-  per-plugin repositories as explicit physical subtrees. The self-development
-  agent now works from `workbench`, and a tracked ownership policy rejects
-  files that do not belong to a future repository or named transition area.
+- Staged the future `root`, `development`, `core`, paired core/plugin
+  development, plugin, `verification`, `examples`, and `specification`
+  repositories as explicit physical subtrees. Production source repositories
+  now contain only their self-contained build inputs; tests, fixtures, and
+  test-only dependencies live in paired development repositories. The tracked
+  ownership and extraction gate rejects unowned files and independently builds
+  production sources before running their sibling development suites.
 - Reduced the canonical self-development outer Compose graph to a
   `private-docker` rootless runtime and moved the agent inside it, so the agent
   can manage its development containers without access to the trusted
@@ -515,7 +518,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   reasons unrelated to this change. Validate with `just
   verify-host-backend-kvm rootless-podman` (now exercises the same
   capability set) and `DIM_WORKSPACE_BACKEND=rootless-podman bash
-  scripts/container-lifecycle-smoke.bash` before relying on it.
+  verification/scripts/container-lifecycle-smoke.bash` before relying on it.
 
 - Split the root `README.md` into user-facing content (installing and using
   `dim`) and [CONTRIBUTING.md](CONTRIBUTING.md) (building/verifying DIM

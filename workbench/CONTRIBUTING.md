@@ -41,7 +41,7 @@ On Ubuntu, install the QEMU tooling and grant the invoking user persistent KVM
 access with:
 
 ```bash
-bash scripts/install-kvm-verify-deps-ubuntu.bash
+bash verification/scripts/install-kvm-verify-deps-ubuntu.bash
 ```
 
 The full setup, verification-gate, and installer-testing walkthrough — host

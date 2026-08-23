@@ -14,17 +14,18 @@ for the review model and extraction order.
 ├── repository-boundaries.json future-repository ownership contract
 └── workbench/                  future `development` repository root
     ├── agent/                  agent development image
-    ├── core/                   future `core` repository
-    │   ├── packages/           controller, CLI, contracts, and installer
-    │   └── images/             Project runtime images
-    ├── plugins/                one future repository per child
-    ├── specification/          future documentation/specification repository
-    ├── examples/               cross-repository examples
-    └── scripts/                development and verification orchestration
+    ├── core/                   minimal buildable `core` source repository
+    ├── core-development/       core unit and integration tests
+    ├── plugin-*/               minimal buildable plugin source repository
+    ├── plugin-*-development/   matching plugin tests and test tooling
+    ├── specification/          documentation/specification repository
+    ├── examples/               reviewed Project examples repository
+    └── verification/           cross-repository and host verification
 ```
 
-The `workbench` package is workspace orchestration only. It contains no
-application source or tests. `core/packages/cli` imports only the public
+The future `development` repository is the remaining `workbench` orchestration
+and development-environment code. It contains no application source or tests.
+`core/packages/cli` imports only the public
 `@slop-lab/dim-core` entrypoint; core never imports the CLI.
 Workbench-level `just` and pnpm commands forward to workspace packages for
 operator convenience. Every tracked path is assigned by
@@ -33,15 +34,16 @@ repositories override the development owner of the surrounding workbench.
 The contract records the target repository and stripped source prefix rather
 than leaving migration layout to an ad-hoc history-filter command.
 
-`core` owns its package workspace, lockfile, TypeScript base configuration,
-and package build helpers. Each plugin similarly owns its lockfile, TypeScript
-configuration, and build helpers. The source gate materializes every
-non-transition repository into a temporary directory. It runs the complete
-core check, test, and build, then checks and builds both plugins against that
-extracted core. Plugin tests still run in the integrated source gate, where a
-single release version can represent the coordinated pre-publication source.
-Consequently builds cannot accidentally resolve a tool or configuration file
-from the surrounding development checkout.
+`core` owns only the files needed to install, check, build, and package its
+production artifacts. Each plugin source repository follows the same rule.
+Tests, fixtures, and test-only dependencies live in the corresponding
+`*-development` repository and consume the source as a sibling checkout.
+Cross-component, container, host, KVM, and example-flow checks live in
+`verification`; runnable examples live in `examples`. The source gate
+materializes every repository into siblings, verifies production repositories
+without the development repositories, and then runs each paired development
+suite. Consequently a reviewer can audit the exact production build inputs
+without first trusting test or development-environment code.
 Transition-only forge workflows and local agent instructions are deliberately
 not copied; they must be replaced by each destination repository's reviewed
 hosting policy during the actual migration.
@@ -51,9 +53,9 @@ hosting policy during the actual migration.
 ```text
 core/packages/cli ──> core/packages/core
 core/packages/controller-proxy (Node built-ins only)
-plugins/external-urls
+plugin-external-urls
   ──> core/packages/{core,contracts/external-url}
-plugins/dns-cloudflare
+plugin-dns-cloudflare
   ──> core/packages/{core,contracts/external-url}
 ```
 
