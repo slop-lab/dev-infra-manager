@@ -9,8 +9,8 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    name: lightweight check (Node.js ${{ matrix.node-version }})
+  source-compatibility:
+    name: source compatibility (Node.js ${{ matrix.node-version }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
@@ -18,14 +18,20 @@ jobs:
       matrix:
         node-version: [24, 26]
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - name: Check out source
+        uses: actions/checkout@v7
+      - name: Select pnpm
+        uses: pnpm/action-setup@v6
         with:
           version: 10.13.1
-      - uses: actions/setup-node@v7
+      - name: Select Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run workspace:check
-      - run: pnpm run workspace:test
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Type-check source
+        run: pnpm run workspace:check
+      - name: Run source tests
+        run: pnpm run workspace:test

@@ -30,8 +30,8 @@ that workspace's own nested runtime.
 
 `just ci matrix` requires mise, Docker with Compose v2, and the same host
 capabilities as the container integration tests. It installs the locked
-dependencies under Node.js 24 and 26, then runs the same `just ci check` and
-`just ci container` recipes used by the hosted CI workflows. Use `just ci all` when one run
+dependencies under Node.js 24 and 26, then runs the same `just ci source` and
+`just ci workspace` recipes used by the hosted CI workflows. Use `just ci all` when one run
 with the currently active Node.js version is enough. The `--manual` option also
 runs the same Sysbox isolation and KVM backend-installer recipes as the
 manually dispatched workflows; it requires a registered `sysbox-runc` runtime,

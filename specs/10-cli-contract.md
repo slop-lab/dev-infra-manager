@@ -222,7 +222,7 @@ MUST NOT name a managed capacity.
 
 The runner also advertises `dim-container-integration` in host mode. Here
 "host" is the isolated Project CI runner container, not the DIM host. This
-mode is reserved for the reviewed container-integration workflow job because
+mode is reserved for the reviewed managed-workspace integration job because
 its controller Unix sockets and nested Docker bind sources must share the
 runner container's filesystem namespace. Ordinary check jobs remain in
 disposable job containers. Re-enabling a runner replaces its provider

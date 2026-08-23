@@ -12,8 +12,8 @@ env:
   JUST_UNSTABLE: "1"
 
 jobs:
-  check:
-    name: check (Node.js ${{ matrix.node-version }})
+  source-compatibility:
+    name: source compatibility (Node.js ${{ matrix.node-version }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
@@ -21,30 +21,42 @@ jobs:
       matrix:
         node-version: [24, 26]
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - name: Check out source
+        uses: actions/checkout@v7
+      - name: Select pnpm
+        uses: pnpm/action-setup@v6
         with:
           version: 10.13.1
-      - uses: actions/setup-node@v7
+      - name: Select Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
-      - run: sudo apt-get update && sudo apt-get install --yes just jq
-      - run: pnpm install --frozen-lockfile
-      - run: just ci check
+      - name: Install source-gate system tools
+        run: sudo apt-get update && sudo apt-get install --yes just jq
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Type-check, test, build, and verify packages
+        run: just ci source
 
-  container-integration:
+  workspace-integration:
+    name: managed workspace integration
     runs-on: dim-container-integration
     timeout-minutes: 30
     steps:
-      - run: apk add --no-cache curl jq just nodejs npm socat
-      - uses: actions/checkout@v7
-      - run: npm install --global pnpm@10.13.1
-      - run: pnpm install --frozen-lockfile
-      - run: bash scripts/with-ci-registry-cache.bash just ci container
+      - name: Install workspace-gate system tools
+        run: apk add --no-cache curl jq just nodejs npm socat
+      - name: Check out source
+        uses: actions/checkout@v7
+      - name: Select pnpm
+        run: npm install --global pnpm@10.13.1
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify managed workspace lifecycle and container boundaries
+        run: bash scripts/with-ci-registry-cache.bash just ci workspace
 
-  release-gate:
-    name: release-gate (${{ matrix.backend }})
+  host-backend:
+    name: host backend (${{ matrix.backend }})
     if: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == false }}
     runs-on: dim-qemu
     timeout-minutes: 120
@@ -63,6 +75,9 @@ jobs:
             fetch --no-tags --depth=1 origin \
             "$GITHUB_SHA:refs/remotes/origin/ci-head"
           git checkout --detach refs/remotes/origin/ci-head
-      - run: command -v just && test -r /dev/kvm -a -w /dev/kvm
-      - run: command -v socat >/dev/null || (sudo apt-get update && sudo apt-get install --yes socat)
-      - run: bash scripts/with-ci-registry-cache.bash just ci kvm "${{ matrix.backend }}"
+      - name: Verify disposable runner KVM access
+        run: command -v just && test -r /dev/kvm -a -w /dev/kvm
+      - name: Install registry-relay prerequisite
+        run: command -v socat >/dev/null || (sudo apt-get update && sudo apt-get install --yes socat)
+      - name: Install and verify the ${{ matrix.backend }} host backend in a nested VM
+        run: bash scripts/with-ci-registry-cache.bash just ci kvm "${{ matrix.backend }}"

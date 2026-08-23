@@ -9,7 +9,7 @@
 - The manually dispatched Sysbox and KVM installer workflows pass on the
   release commit using fresh ephemeral self-hosted runners.
 - The active DIM-managed development repository's non-draft pull request has
-  passed every automatic `release-gate (BACKEND)` job. These run the same
+  passed every automatic `host backend (BACKEND)` job. These run the same
   `just ci kvm BACKEND` verification through managed runners; the manual
   GitHub run remains an independent release check on a fresh runner.
 - `npm whoami` succeeds for an account allowed to publish the `@slop-lab` scope.
@@ -17,8 +17,8 @@
 
 ## Verify
 
-CI runs the package checks on every supported Node.js LTS line and each
-release scheduled to become LTS (currently Node.js 24 and 26). Container and
+CI runs the source compatibility checks on every supported Node.js LTS line
+and each release scheduled to become LTS (currently Node.js 24 and 26). Managed workspace and
 Sysbox integration checks use the newest validated line.
 
 ```bash

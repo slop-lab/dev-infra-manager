@@ -39,7 +39,7 @@ maps `ubuntu-24.04` to the same job image.
 
 The `dim-container-integration` label runs directly in the isolated runner
 container (Gitea runner "host" mode). It is reserved for the repository's
-Gitea container-integration workflow, whose controller sockets and nested Docker
+Gitea managed-workspace integration workflow, whose controller sockets and nested Docker
 bind mounts must share one filesystem namespace. Other workflow jobs remain
 in disposable job containers. After upgrading DIM across a label change,
 run `dim ci runner restart PROJECT RUNNER` once to replace the stored runner
@@ -121,7 +121,7 @@ Creating a QEMU runner adds only its managed supervisor hostname to Gitea's
 webhook allowlist and restarts the managed Gitea service to apply that setting.
 DIM does not enable unrestricted private-network webhook delivery.
 
-The DIM repository selects this label for the KVM release gate on non-draft
+The DIM repository selects this label for automatic host-backend verification on non-draft
 pull requests in its managed development host. Draft pull requests and branch
 pushes skip the expensive gate. Four independent jobs run `just ci kvm BACKEND`
 for Sysbox, gVisor, rootless Podman, and runc, matching the KVM backend-installer

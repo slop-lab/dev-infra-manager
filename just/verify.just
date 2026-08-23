@@ -42,11 +42,11 @@ pull-request-skill:
 
 # Backend-independent container integration; requires cgroup-capable Docker for its nested runtime.
 container:
-    just verify container-ci
+    just verify workspace-runtime
     cd .. && bash scripts/container-self-project-smoke.bash
 
-# Container integration supported inside the Sysbox-isolated managed CI runner.
-container-ci:
+# DIM-owned workspace runtime integration supported inside the Sysbox-isolated managed CI runner.
+workspace-runtime:
     docker info >/dev/null
     docker compose version >/dev/null
     cd .. && bash scripts/container-integration-preflight.bash

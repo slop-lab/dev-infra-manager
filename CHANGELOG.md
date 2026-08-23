@@ -9,6 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Renamed automatic CI around the boundary it verifies: supported-Node source
+  compatibility, managed workspace integration, and disposable host-backend
+  installation. Major workflow phases now appear as named UI steps, while the
+  host-mode runner capability remains provider plumbing rather than a job name.
 - Replaced the misleading `just install-local-cli` development recipe with
   `just install-local`, which installs the local package set and immediately
   reconciles the managed controller to the newly installed CLI.

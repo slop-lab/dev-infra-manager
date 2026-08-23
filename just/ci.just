@@ -1,16 +1,16 @@
 set shell := ["bash", "-uc"]
 
-# Node-only lane, after dependencies have been installed.
-check:
+# Supported-Node source compatibility lane, after dependencies have been installed.
+source:
     just check-source
     just verify plugin-install
     cd .. && pnpm audit --prod
     just verify package-packs
 
-# Docker lane, after dependencies have been installed.
-container:
+# Managed workspace integration lane, after dependencies have been installed.
+workspace:
     just check-source
-    just verify container-ci
+    just verify workspace-runtime
     cd .. && bash scripts/container-cgroup-smoke.bash
 
 # Manually dispatched Sysbox lane, after dependencies have been installed.
@@ -27,7 +27,7 @@ kvm backend="all":
 # Run the complete CI gate once with the active Node.js version.
 all:
     just install-dependencies
-    just ci check
+    just ci source
     just verify container
     cd .. && bash scripts/container-cgroup-smoke.bash
 

@@ -96,26 +96,27 @@ controller API, fetches a unique sentinel through the external URL, and revokes
 the route. It is required verification code but is not part of the static gate
 because it depends on operator-owned Tailnet DNS and TLS.
 
-## Container Integration Gate
+## Managed Workspace Integration Gate
 
-`just verify container` requires Docker with Compose v2 and support for
-privileged nested containers. It covers workspace image builds, nested Docker,
-lifecycle behavior, and packed CLI project workflows. It may run against the
-nested Docker daemon in a development container and must not claim to verify a
-host runtime backend boundary.
+`just ci workspace` requires Docker with Compose v2 and support for privileged
+nested containers. It runs source checks plus workspace image, nested Docker,
+lifecycle, packed-project, shared-upstream, and cgroup verification. The
+broader `just verify container` additionally covers the canonical self Project.
+These recipes may run against the nested Docker daemon in a development
+container and must not claim to verify a host runtime backend boundary.
 
 Gitea runs this gate automatically via the managed
-`dim-container-integration` host-mode label from `.gitea/workflows`; its
+`dim-container-integration` host-mode capability from `.gitea/workflows`; its
 controller sockets and nested Docker bind mounts must share one filesystem
 namespace. The managed runner's Sysbox boundary does not support another
 user-namespace mapping inside its inner Docker, so this automatic lane excludes
 the canonical self-Project's rootless-DinD sidecar. The runc QEMU gate retains
 that verification on a compatible clean host. GitHub automatic CI is
 intentionally limited to Node.js type checks and tests that need no APT packages
-or container runtime. Container, Sysbox, and KVM release gates run locally and
-through the manually dispatched GitHub workflows instead.
+or container runtime. Sysbox and KVM host-backend gates also remain available
+through the manually dispatched GitHub workflows.
 
-The automatic container gate must also run the shared-upstream example smoke.
+The automatic managed-workspace gate must also run the shared-upstream example smoke.
 That smoke proves that two logical DIM repositories can share one external Git
 upstream while fetch and push map only the branches and tags owned by each
 repository namespace.

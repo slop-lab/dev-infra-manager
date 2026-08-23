@@ -31,11 +31,11 @@ run_node() {
 }
 
 run_node 24 pnpm install --frozen-lockfile
-run_node 24 just ci check
+run_node 24 just ci source
 
 run_node 26 pnpm install --frozen-lockfile
-run_node 26 just ci check
-run_node 26 just ci container
+run_node 26 just ci source
+run_node 26 just ci workspace
 
 if [[ "$manual" == true ]]; then
   run_node 26 just ci sysbox
