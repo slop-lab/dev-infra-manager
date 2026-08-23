@@ -70,7 +70,7 @@ DIM-managed Git organization and repositories after explicit confirmation.
 ```bash
 dim repo add PROJECT ALIAS [URL] [--root] [--ref BRANCH] [--protect PATTERNS] [--mirror]
 dim repo fetch PROJECT ALIAS [--prune]
-dim repo push PROJECT ALIAS REF...
+dim repo publish PROJECT [ALIAS]
 dim repo plan PROJECT [--file FILE]
 dim repo apply PROJECT [--file FILE] [--yes]
 dim repo protect PROJECT ALIAS
@@ -151,9 +151,11 @@ an existing tag that points to a different object rejects the fetch.
 `--prune` deletes only managed `upstream/*` branches that disappeared
 externally. It never deletes other managed branches or tags.
 
-`repo push` requires one or more explicit, full `source:destination` branch or
-tag refspecs. It is non-forced and does not infer a destination or strip an
-`upstream/` prefix.
+`repo publish PROJECT [ALIAS]` pushes only the non-forced branch mappings in
+the reviewed repository-set `publish` policy. With no alias it publishes every
+repository that has a non-empty policy, in alias order. A repository without a
+policy cannot be published explicitly. Namespace prefixes are applied only at
+the external boundary.
 
 Both operations use temporary bare Git storage. The invoking host Git process
 supplies credentials for the external URL, while DIM credentials are installed

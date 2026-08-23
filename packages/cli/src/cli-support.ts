@@ -225,6 +225,7 @@ export interface PreparedRepositorySync {
   managedUrl: string;
   writerUsername: string;
   writerPassword: string;
+  publishBranches: Record<string, string>;
 }
 
 export async function fetchRepository(projectName: string, alias: string, prune: boolean): Promise<void> {
@@ -282,20 +283,28 @@ export async function fetchRepository(projectName: string, alias: string, prune:
   }
 }
 
-export async function pushRepository(projectName: string, alias: string, refspecs: string[]): Promise<void> {
-  for (const refspec of refspecs) {
-    const [source, destination, extra] = refspec.split(":");
-    if (extra !== undefined || !source || !destination || source.startsWith("+")) {
-      throw new UserError(`repo push requires non-forced source:destination refspecs; invalid refspec '${refspec}'`);
-    }
-    if (!isBranchOrTagRef(source) || !isBranchOrTagRef(destination)) {
-      throw new UserError(`repo push accepts only full branch or tag refs; invalid refspec '${refspec}'`);
-    }
-  }
+export async function publishRepositories(projectName: string, alias?: string): Promise<string[]> {
+  const aliases = alias === undefined
+    ? (await adminCall<Array<{ alias: string; connections: Array<{ publishBranches?: Record<string, string> }> }>>(
+        "repo.list", { project: projectName }
+      )).filter((repository) => repository.connections.some(
+        (connection) => Object.keys(connection.publishBranches ?? {}).length > 0
+      )).map((repository) => repository.alias)
+    : [alias];
+  if (aliases.length === 0) throw new UserError(`project '${projectName}' has no repositories configured for publish`);
+  for (const repositoryAlias of aliases) await publishRepository(projectName, repositoryAlias);
+  return aliases;
+}
+
+async function publishRepository(projectName: string, alias: string): Promise<void> {
   const prepared = await adminCall<PreparedRepositorySync>("repo.sync-prepare", {
     project: projectName,
     alias
   });
+  const refspecs = Object.entries(prepared.publishBranches).map(([source, destination]) =>
+    `refs/heads/${source}:refs/heads/${destination}`
+  );
+  if (refspecs.length === 0) throw new UserError(`repo '${projectName}/${alias}' has no publish policy`);
   const temporary = await mkdtemp(path.join(tmpdir(), "dim-repo-push-"));
   const gitDirectory = path.join(temporary, "sync.git");
   try {
@@ -523,7 +532,8 @@ export async function addRepository(
     protectedPatterns: entry.protectedPatterns,
     ...(connection === undefined ? {} : {
       source: connection.url,
-      ...(connection.refNamespace === undefined ? {} : { refNamespace: connection.refNamespace })
+      ...(connection.refNamespace === undefined ? {} : { refNamespace: connection.refNamespace }),
+      ...(connection.publishBranches === undefined ? {} : { publishBranches: connection.publishBranches })
     }),
     ...(entry.rootRef === undefined ? {} : { rootRef: entry.rootRef })
   });

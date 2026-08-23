@@ -30,13 +30,15 @@ repositories:
           fallback: false,
           root: true,
           rootRef: "refs/heads/main",
-          protectedPatterns: ["main"]
+          protectedPatterns: ["main"],
+          publishBranches: {}
         },
         api: {
           url: "git@example.test:odd/path-without-dot-git",
           fallback: false,
           root: false,
-          protectedPatterns: []
+          protectedPatterns: [],
+          publishBranches: {}
         }
       }
     });
@@ -74,6 +76,27 @@ repositories:
     expect(mapExternalRefToRepository(api.refNamespace, "refs/heads/main")).toBeUndefined();
     expect(mapRepositoryRefToExternal(api.refNamespace, "refs/tags/v1")).toBe("refs/tags/api/v1");
     expect(() => mapRepositoryRefToExternal(root.refNamespace, "refs/heads/api/main")).toThrow(/another repository/);
+  });
+
+  it("resolves reviewed publish branch mappings", () => {
+    const set = parseRepositorySetYaml(`
+schemaVersion: 1
+repositories:
+  root:
+    url: https://example.test/team/product.git
+    root: true
+    publish:
+      main: development
+`);
+    expect(resolveRepositoryConnection(set, "root")).toEqual({
+      url: "https://example.test/team/product.git",
+      publishBranches: { main: "development" }
+    });
+    expect(() => parseRepositorySetYaml(`
+schemaVersion: 1
+repositories:
+  root: {url: one, root: true, publish: {main: refs/heads/main}}
+`)).toThrow(/safe branch name/);
   });
 
   it("rejects ambiguous shared-upstream ownership", () => {

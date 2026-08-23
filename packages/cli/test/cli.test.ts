@@ -35,15 +35,15 @@ test("DNS provider add passes extra arguments to the selected plugin driver", ()
   assert.match(missingName.stderr, /required option '--name <name>' not specified/);
 });
 
-test("repository sync commands expose safe explicit contracts", () => {
+test("repository sync commands expose safe reviewed contracts", () => {
   const fetchHelp = run(["repo", "fetch", "--help"]);
   assert.equal(fetchHelp.status, 0);
   assert.match(fetchHelp.stdout, /--prune/);
   assert.doesNotMatch(fetchHelp.stdout, /--force/);
 
-  const pushHelp = run(["repo", "push", "--help"]);
-  assert.equal(pushHelp.status, 0);
-  assert.match(pushHelp.stdout, /<refspec\.\.\.>/);
+  const publishHelp = run(["repo", "publish", "--help"]);
+  assert.equal(publishHelp.status, 0);
+  assert.match(publishHelp.stdout, /<project> \[alias\]/);
 
   const addHelp = run(["repo", "add", "--help"]);
   assert.equal(addHelp.status, 0);
@@ -51,7 +51,7 @@ test("repository sync commands expose safe explicit contracts", () => {
 
   const invalid = run(["repo", "push", "project", "root", "main"]);
   assert.notEqual(invalid.status, 0);
-  assert.match(invalid.stderr, /requires non-forced source:destination refspecs/);
+  assert.match(invalid.stderr, /unknown command 'push'/);
 });
 
 test("project create exposes root bootstrap and explicit repository-set choices", () => {

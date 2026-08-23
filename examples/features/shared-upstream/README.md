@@ -40,13 +40,13 @@ its own external repository.
 bash create-repository.bash
 bash register-project.bash
 dim repo fetch shared-upstream-example api
-dim repo push shared-upstream-example api \
-  refs/heads/main:refs/heads/main
+dim repo publish shared-upstream-example api
 ```
 
-The ref names given to `repo push` are the logical refs in the managed
-repository; DIM adds `api/` only at the external boundary. Commits are not
-rewritten, so their object IDs remain unchanged.
+The tracked `publish` policy allows only named branch mappings. DIM adds
+`api/` only at the external boundary. Commits are not rewritten, so their
+object IDs remain unchanged. Omitting `api` publishes every repository with a
+configured policy.
 
 Contributors can run the linked end-to-end verification locally or in a
 disposable QEMU VM:

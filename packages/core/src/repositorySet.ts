@@ -11,6 +11,7 @@ export interface RepositorySetEntry {
   root: boolean;
   rootRef?: string;
   protectedPatterns: string[];
+  publishBranches: Record<string, string>;
 }
 
 export interface RepositorySetUpstream {
@@ -32,6 +33,7 @@ export interface RepositoryRefNamespace {
 export interface ResolvedRepositoryConnection {
   url: string;
   refNamespace?: RepositoryRefNamespace;
+  publishBranches?: Record<string, string>;
 }
 
 export function parseRepositorySetYaml(source: string, label = "repos.yml"): RepositorySet {
@@ -52,7 +54,7 @@ export function normalizeRepositorySet(value: unknown, label = "repository set")
   for (const [aliasInput, entryValue] of Object.entries(repositories)) {
     const alias = validateLifecycleName(aliasInput, "repo alias");
     const entry = object(entryValue, `${label}.repositories.${alias}`);
-    exactKeys(entry, ["url", "upstream", "refPrefix", "fallback", "root", "ref", "protect"], `${label}.repositories.${alias}`);
+    exactKeys(entry, ["url", "upstream", "refPrefix", "fallback", "root", "ref", "protect", "publish"], `${label}.repositories.${alias}`);
     const url = optionalGitUrl(entry.url, `${label}.repositories.${alias}.url`);
     const upstream = optionalLifecycleName(entry.upstream, `${label}.repositories.${alias}.upstream`);
     const refPrefix = optionalRefPrefix(entry.refPrefix, `${label}.repositories.${alias}.refPrefix`);
@@ -71,7 +73,8 @@ export function normalizeRepositorySet(value: unknown, label = "repository set")
       fallback,
       root: rootFlag,
       ...(ref === undefined ? {} : { rootRef: normalizeRootRef(ref) }),
-      protectedPatterns: stringArray(entry.protect, `${label}.repositories.${alias}.protect`)
+      protectedPatterns: stringArray(entry.protect, `${label}.repositories.${alias}.protect`),
+      publishBranches: branchMap(entry.publish, `${label}.repositories.${alias}.publish`)
     };
   }
   if (Object.keys(normalized).length === 0) throw new UserError(`${label}.repositories must not be empty`);
@@ -90,7 +93,7 @@ export function validateRepositorySet(value: unknown, label = "repositorySet"): 
   for (const [aliasInput, entryValue] of Object.entries(repositories)) {
     const alias = validateLifecycleName(aliasInput, "repo alias");
     const entry = object(entryValue, `${label}.repositories.${alias}`);
-    exactKeys(entry, ["url", "upstream", "refPrefix", "fallback", "root", "rootRef", "protectedPatterns"], `${label}.repositories.${alias}`);
+    exactKeys(entry, ["url", "upstream", "refPrefix", "fallback", "root", "rootRef", "protectedPatterns", "publishBranches"], `${label}.repositories.${alias}`);
     const url = optionalGitUrl(entry.url, `${label}.repositories.${alias}.url`);
     const upstream = optionalLifecycleName(entry.upstream, `${label}.repositories.${alias}.upstream`);
     const refPrefix = optionalRefPrefix(entry.refPrefix, `${label}.repositories.${alias}.refPrefix`);
@@ -110,7 +113,8 @@ export function validateRepositorySet(value: unknown, label = "repositorySet"): 
       protectedPatterns: stringArray(
         entry.protectedPatterns,
         `${label}.repositories.${alias}.protectedPatterns`
-      )
+      ),
+      publishBranches: branchMap(entry.publishBranches, `${label}.repositories.${alias}.publishBranches`)
     };
   }
   if (Object.keys(normalized).length === 0) throw new UserError(`${label}.repositories must not be empty`);
@@ -142,12 +146,13 @@ export function resolveRepositoryConnection(
 ): ResolvedRepositoryConnection | undefined {
   const entry = set.repositories[alias];
   if (!entry) throw new UserError(`repository set has no repository '${alias}'`);
-  if (entry.url !== undefined) return { url: entry.url };
+  const publish = Object.keys(entry.publishBranches).length === 0 ? {} : { publishBranches: entry.publishBranches };
+  if (entry.url !== undefined) return { url: entry.url, ...publish };
   if (entry.upstream === undefined) return undefined;
   const upstream = set.upstreams[entry.upstream];
   if (!upstream) throw new UserError(`repository '${alias}' references unknown upstream '${entry.upstream}'`);
   if (entry.refPrefix !== undefined) {
-    return { url: upstream.url, refNamespace: { prefix: entry.refPrefix } };
+    return { url: upstream.url, refNamespace: { prefix: entry.refPrefix }, ...publish };
   }
   return {
     url: upstream.url,
@@ -157,7 +162,8 @@ export function resolveRepositoryConnection(
         .filter((candidate) => candidate.upstream === entry.upstream && candidate.refPrefix !== undefined)
         .map((candidate) => candidate.refPrefix!)
         .sort()
-    }
+    },
+    ...publish
   };
 }
 
@@ -349,4 +355,29 @@ function stringArray(value: unknown, label: string): string[] {
   }
   if (new Set(value).size !== value.length) throw new UserError(`${label} must not contain duplicates`);
   return value as string[];
+}
+
+function branchMap(value: unknown, label: string): Record<string, string> {
+  if (value === undefined) return {};
+  const entries = object(value, label);
+  const result: Record<string, string> = {};
+  for (const [source, destinationValue] of Object.entries(entries)) {
+    const destination = optionalString(destinationValue, `${label}.${source}`)!;
+    for (const [branch, branchLabel] of [[source, `${label} key`], [destination, `${label}.${source}`]] as const) {
+      if (branch.startsWith("refs/")
+        || !/^(?!\/|.*(?:\.\.|@\{|\\|\/\/))[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(branch)
+        || branch.endsWith("/") || branch.endsWith(".")
+        || branch.split("/").some((component) => component.startsWith(".") || component.endsWith(".lock"))) {
+        throw new UserError(`${branchLabel} must be a safe branch name without refs/heads/`);
+      }
+    }
+    if (["__proto__", "constructor", "prototype"].includes(source)) {
+      throw new UserError(`${label} contains unsupported branch name '${source}'`);
+    }
+    if (Object.values(result).includes(destination)) {
+      throw new UserError(`${label} must not publish multiple branches to '${destination}'`);
+    }
+    result[source] = destination;
+  }
+  return result;
 }

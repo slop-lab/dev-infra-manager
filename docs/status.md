@@ -15,7 +15,8 @@ Implemented:
 - Project-scoped repository sets loaded from `repos.yml`, including reviewed
   bulk planning and application.
 - Explicit external repository synchronization through `repo fetch` and
-  `repo push`, without coupling the core Git transport to one provider.
+  reviewed `repo publish` branch mappings, without coupling the core Git
+  transport to one provider.
 - Persistent create, run, exec, setup, update, start, stop, show,
   and discard lifecycle.
 - Backend selection persisted per workspace: Sysbox, gVisor, rootless Podman,

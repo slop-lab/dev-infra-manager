@@ -11,3 +11,5 @@ repositories:
   api:
     upstream: product
     refPrefix: api/
+    publish:
+      feature: feature

@@ -70,7 +70,7 @@ import {
   printDoctorChecks,
   printList,
   prepareControllerSocket,
-  pushRepository,
+  publishRepositories,
   readRemoteRepositorySet,
   readRepositorySetFile,
   readStdin,
@@ -188,6 +188,7 @@ project.command("create")
       ...(selectedRootRef === undefined ? {} : { rootRef: selectedRootRef }),
       protectedPatterns: rootEntry?.protectedPatterns
         ?? (flags.protect === undefined ? [] : commaSeparated(flags.protect)),
+      publishBranches: rootEntry?.publishBranches ?? {},
       mirror: flags.mirror ?? false
     }, rootSet);
     print({ project: name, repository }, flags);
@@ -251,6 +252,7 @@ repo.command("add")
       root: flags.root ?? false,
       ...(flags.ref === undefined ? {} : { rootRef: flags.ref }),
       protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect),
+      publishBranches: {},
       mirror: flags.mirror ?? false
     });
     print(repository, flags);
@@ -326,13 +328,13 @@ repo.command("fetch")
     await fetchRepository(projectName, alias, flags.prune ?? false);
   });
 
-repo.command("push")
-  .description("Push explicit branch or tag refspecs to the external repository")
+repo.command("publish")
+  .description("Publish configured branches for one repository or the whole project")
   .argument("<project>")
-  .argument("<alias>")
-  .argument("<refspec...>", "source:destination branch or tag refspecs")
-  .action(async (projectName: string, alias: string, refspecs: string[]) => {
-    await pushRepository(projectName, alias, refspecs);
+  .argument("[alias]")
+  .action(async (projectName: string, alias?: string) => {
+    const published = await publishRepositories(projectName, alias);
+    for (const item of published) console.log(item);
   });
 
 repo.command("url")

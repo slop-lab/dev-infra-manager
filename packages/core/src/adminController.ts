@@ -164,6 +164,7 @@ async function builtinCall(
             root: input.root === true,
             fallback: false,
             protectedPatterns: stringArray(input.protectedPatterns),
+            publishBranches: input.publishBranches ?? {},
             ...(input.source === undefined ? {} : { url: text("source") }),
             ...(input.rootRef === undefined ? {} : { rootRef: text("rootRef") })
           }
@@ -179,6 +180,7 @@ async function builtinCall(
         ...(input.refNamespace === undefined
           ? {}
           : { refNamespace: validateRepositoryRefNamespace(input.refNamespace, "refNamespace") }),
+        publishBranches: entry.publishBranches,
         ...(entry.rootRef === undefined ? {} : { rootRef: entry.rootRef })
       });
     }

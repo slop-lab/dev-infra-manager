@@ -16,11 +16,13 @@ import type {
   HostGitCredential,
   LifecycleOptions,
   ProjectRecord,
-  ProjectRepositoryRecord
+  ProjectRepositoryRecord,
+  RepositoryConnection
 } from "./lifecycleTypes.js";
 import {
   assertRepositorySetCanCreateProject,
   resolveRepositoryConnection,
+  type ResolvedRepositoryConnection,
   type RepositoryRefNamespace,
   type RepositorySet,
   type RepositorySetEntry
@@ -243,6 +245,11 @@ export async function planProjectRepositorySet(
     if (!existing) return { action: "create", alias, entry };
     const requestedConnection = resolveRepositoryConnection(set, alias);
     const existingConnection = existing.connections.find((connection) => connection.name === "origin");
+    if (sameRepositoryTransport(existingConnection, requestedConnection)
+      && JSON.stringify(existingConnection?.publishBranches ?? {})
+        !== JSON.stringify(requestedConnection?.publishBranches ?? {})) {
+      return { action: "retry", alias, entry, detail: "publish policy differs" };
+    }
     if (JSON.stringify(existingConnection) !== JSON.stringify(requestedConnection === undefined
       ? undefined
       : { name: "origin", ...requestedConnection })) {
@@ -293,6 +300,7 @@ export interface PreparedRepositorySync {
   managedUrl: string;
   writerUsername: string;
   writerPassword: string;
+  publishBranches: Record<string, string>;
 }
 
 export async function prepareProjectRepositorySync(
@@ -313,6 +321,7 @@ export async function prepareProjectRepositorySync(
   return {
     externalUrl: connection.url,
     ...(connection.refNamespace === undefined ? {} : { refNamespace: connection.refNamespace }),
+    publishBranches: connection.publishBranches ?? {},
     managedUrl: repository.hostUrl,
     writerUsername: credentials.writerUsername,
     writerPassword: credentials.writerPassword
@@ -322,7 +331,7 @@ export async function prepareProjectRepositorySync(
 export async function prepareProjectRepositoryTransfer(
   runner: CommandRunner,
   options: LifecycleOptions,
-  input: CreateRepositoryInput & { source?: string; refNamespace?: RepositoryRefNamespace }
+  input: CreateRepositoryInput & { source?: string; refNamespace?: RepositoryRefNamespace; publishBranches?: Record<string, string> }
 ): Promise<PreparedRepositoryTransfer> {
   const projectName = validateLifecycleName(input.project, "project");
   const alias = validateLifecycleName(input.alias, "repo alias");
@@ -334,9 +343,35 @@ export async function prepareProjectRepositoryTransfer(
     const existing = project.repositories.find((repo) => repo.alias === alias);
     const requestedConnection = input.source === undefined
       ? undefined
-      : { name: "origin" as const, url: input.source, ...(input.refNamespace === undefined ? {} : { refNamespace: input.refNamespace }) };
+      : {
+          name: "origin" as const,
+          url: input.source,
+          ...(input.refNamespace === undefined ? {} : { refNamespace: input.refNamespace }),
+          ...(input.publishBranches === undefined || Object.keys(input.publishBranches).length === 0
+            ? {}
+            : { publishBranches: input.publishBranches })
+        };
     const existingConnection = existing?.connections.find((connection) => connection.name === "origin");
     if (existing?.phase === "ready") {
+      if (sameRepositoryTransport(existingConnection, requestedConnection)
+        && JSON.stringify(existingConnection?.publishBranches ?? {})
+          !== JSON.stringify(requestedConnection?.publishBranches ?? {})) {
+        const updated = {
+          ...existing,
+          connections: requestedConnection === undefined ? [] : [requestedConnection],
+          updatedAt: new Date().toISOString()
+        };
+        await state.writeProject({
+          ...project,
+          repositories: project.repositories.map((candidate) => candidate.alias === alias ? updated : candidate),
+          updatedAt: updated.updatedAt
+        });
+        return {
+          repository: updated,
+          ...(input.source === undefined ? {} : { sourceUrl: input.source }),
+          targetUrl: updated.hostUrl
+        };
+      }
       if (JSON.stringify(existingConnection) !== JSON.stringify(requestedConnection)) {
         throw new UserError(`repo '${projectName}/${alias}' already exists with a different origin`);
       }
@@ -418,6 +453,19 @@ export async function prepareProjectRepositoryTransfer(
   } finally {
     await release();
   }
+}
+
+function sameRepositoryTransport(
+  existing: RepositoryConnection | undefined,
+  requested: ResolvedRepositoryConnection | undefined
+): boolean {
+  return JSON.stringify(existing === undefined ? undefined : {
+    url: existing.url,
+    ...(existing.refNamespace === undefined ? {} : { refNamespace: existing.refNamespace })
+  }) === JSON.stringify(requested === undefined ? undefined : {
+    url: requested.url,
+    ...(requested.refNamespace === undefined ? {} : { refNamespace: requested.refNamespace })
+  });
 }
 
 export async function completeProjectRepositoryTransfer(

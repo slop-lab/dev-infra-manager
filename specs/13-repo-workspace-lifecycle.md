@@ -52,7 +52,8 @@ External sources are accessed only through the local Git CLI and its existing
 credential configuration. DIM does not provision external Git providers or
 proxy Git traffic. A repository retains its explicit external connection so
 `repo fetch` can project remote branches under managed `upstream/*` and
-`repo push` can publish explicitly named, non-forced branch or tag refspecs.
+`repo publish` can publish only reviewed, non-forced branch mappings. Omitting
+the repository alias publishes every repository with configured mappings.
 
 ## Root workspace contract
 

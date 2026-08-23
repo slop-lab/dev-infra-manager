@@ -108,6 +108,7 @@ export interface RepositoryConnection {
     fallback?: boolean;
     excludedPrefixes?: string[];
   };
+  publishBranches?: Record<string, string>;
 }
 
 export interface ProjectRepositoryRecord {

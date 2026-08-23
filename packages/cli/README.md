@@ -220,17 +220,16 @@ dim repo fetch acme product
 dim repo fetch acme product --prune
 ```
 
-This preserves DIM-only branches. Non-fast-forward upstream changes are
-rejected. Push back only explicitly named branch or tag refspecs:
+This preserves DIM-only branches. Configure reviewed publish mappings in
+`.dim/repos.yml`, then publish one repository or every configured repository:
 
 ```bash
-dim repo push acme product \
-  refs/heads/main:refs/heads/main \
-  refs/tags/v1.2.3:refs/tags/v1.2.3
+dim repo publish acme product
+dim repo publish acme
 ```
 
-External authentication comes from the invoking host Git process. Pushes are
-non-forced.
+External authentication comes from the invoking host Git process. Publishing
+is non-forced.
 
 To keep DIM repositories separate while synchronizing them with one external
 Git repository, declare a shared upstream in `.dim/repos.yml`:

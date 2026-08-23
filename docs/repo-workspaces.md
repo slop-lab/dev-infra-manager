@@ -43,10 +43,21 @@ dim repo fetch example root
 Use `--prune` to remove only stale `upstream/*` tracking branches. Tags keep
 their original names and conflicting tag updates are rejected.
 
-Pushing back requires explicit full refspecs and is never forced:
+Publishing uses reviewed branch mappings from `.dim/repos.yml` and is never
+forced:
+
+```yaml
+repositories:
+  root:
+    url: https://github.com/example/product.git
+    root: true
+    publish:
+      main: development
+```
 
 ```bash
-dim repo push example root refs/heads/main:refs/heads/main
+dim repo publish example root
+dim repo publish example # every repository with a publish policy
 ```
 
 The default `repo add URL` import copies branches and tags. Use `--mirror` only

@@ -63,14 +63,10 @@ git -C "$api_source" switch -c feature >/dev/null
 printf 'feature\n' >>"$api_source/api.txt"
 git -C "$api_source" commit -am "add API feature" >/dev/null
 feature_sha="$(git -C "$api_source" rev-parse HEAD)"
-git -C "$api_source" tag feature-v1
 dim x git -C "$api_source" push "$(dim repo url "$project_name" api)" \
-  feature:refs/heads/feature refs/tags/feature-v1:refs/tags/feature-v1 >/dev/null
-dim repo push "$project_name" api \
-  refs/heads/feature:refs/heads/feature \
-  refs/tags/feature-v1:refs/tags/feature-v1 >/dev/null
+  feature:refs/heads/feature >/dev/null
+dim repo publish "$project_name" >/dev/null
 test "$(git ls-remote "$upstream" refs/heads/api/feature | cut -f1)" = "$feature_sha"
-test "$(git ls-remote "$upstream" refs/tags/api/feature-v1 | cut -f1)" = "$feature_sha"
 test -z "$(git ls-remote "$upstream" refs/heads/feature)"
 
 echo "[shared-upstream-example] 4. fetch only refs owned by each repository"

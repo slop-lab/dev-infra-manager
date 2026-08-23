@@ -9,6 +9,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Replaced arbitrary external `repo push` refspecs with reviewed repository-set
+  branch mappings and `repo publish PROJECT [ALIAS]`; omitting the alias
+  publishes every configured repository in deterministic order.
 - Renamed automatic CI around the boundary it verifies: supported-Node source
   compatibility, managed workspace integration, and disposable host-backend
   installation. Major workflow phases now appear as named UI steps, while the

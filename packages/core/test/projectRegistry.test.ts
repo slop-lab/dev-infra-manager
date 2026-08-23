@@ -130,4 +130,51 @@ describe("project registry", () => {
     expect(project.rootRepositoryAlias).toBe("root");
     expect(project.rootRef).toBe("refs/heads/main");
   });
+
+  it("updates reviewed publish policy without reimporting the repository", async () => {
+    const stateRoot = await mkdtemp(join(tmpdir(), "dim-project-publish-"));
+    cleanup.push(stateRoot);
+    const state = new LifecycleState(stateRoot);
+    const now = new Date().toISOString();
+    const source = "https://github.com/example/project.git";
+    await state.claimProject({
+      schemaVersion: 3,
+      id: "project-id",
+      name: "example",
+      gitNamespace: "dim-example",
+      phase: "ready",
+      repositories: [{
+        alias: "root",
+        providerRepoId: "dim-example/root",
+        owner: "dim-example",
+        hostUrl: "http://127.0.0.1:3300/dim-example/root.git",
+        workspaceUrl: "http://dim-gitea:3000/dim-example/root.git",
+        phase: "ready",
+        connections: [{ name: "origin", url: source }],
+        protectedPatterns: [],
+        protectionPhase: "applied",
+        createdAt: now,
+        updatedAt: now
+      }],
+      createdAt: now,
+      updatedAt: now
+    });
+
+    const prepared = await prepareProjectRepositoryTransfer(
+      new RecordingRunner(),
+      { stateRoot } as LifecycleOptions,
+      {
+        project: "example",
+        alias: "root",
+        source,
+        root: false,
+        protectedPatterns: [],
+        publishBranches: { main: "development" }
+      }
+    );
+
+    expect(prepared.transferId).toBeUndefined();
+    expect((await state.readProject("example")).repositories[0]?.connections[0]?.publishBranches)
+      .toEqual({ main: "development" });
+  });
 });
