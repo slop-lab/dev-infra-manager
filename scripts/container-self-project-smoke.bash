@@ -111,6 +111,9 @@ fi
 
 workspace_json="$(dim workspace show "$workspace_name" --json)"
 test "$(jq -r .phase <<<"$workspace_json")" = ready
+dim workspace exec "$workspace_name" -- \
+  docker info --format '{{json .RegistryConfig.Mirrors}}' |
+  grep -Fq 'http://dim-registry-cache:5000/'
 
 verify_rootless_dind() {
   local dind_container

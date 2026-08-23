@@ -6,6 +6,23 @@ chown -R dim:dim /workspace /home/dim "$XDG_RUNTIME_DIR"
 chmod 0700 /home/dim/.codex
 chmod 0700 "$XDG_RUNTIME_DIR"
 
+if [[ -n "${DIM_REGISTRY_CACHE_ENDPOINT:-}" ]]; then
+  [[ "$DIM_REGISTRY_CACHE_ENDPOINT" =~ ^[A-Za-z0-9.-]+:[1-9][0-9]*$ ]] || {
+    echo "invalid DIM_REGISTRY_CACHE_ENDPOINT: $DIM_REGISTRY_CACHE_ENDPOINT" >&2
+    exit 2
+  }
+  mkdir -p /etc/containers/registries.conf.d
+  cat >/etc/containers/registries.conf.d/50-dim-cache.conf <<EOF
+[[registry]]
+prefix = "docker.io"
+location = "docker.io"
+
+[[registry.mirror]]
+location = "$DIM_REGISTRY_CACHE_ENDPOINT"
+insecure = true
+EOF
+fi
+
 if [[ "$#" -eq 0 ]]; then
   set -- bash
 fi

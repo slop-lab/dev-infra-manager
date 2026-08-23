@@ -343,6 +343,15 @@ Setup failure is recorded separately from runtime reconciliation failure and
 does not destroy the checkout or inner-Docker cache. Task failure is returned
 to the caller but does not mark the workspace itself unhealthy.
 
+DIM configures its workspace Docker or Podman engine to use the same managed,
+host-scoped anonymous Docker Hub pull-through cache as managed CI runners.
+The cache remains outside Project-defined networks and Project code does not
+need cache-specific configuration. A Project-defined additional container
+engine, such as a DinD Compose service, remains Project-owned and is not
+rewritten by DIM. On the first setup, start, or restart after this runtime
+configuration changes, DIM replaces only the outer workspace container while
+preserving its checkout and engine data volume.
+
 ## Minimal Compose example
 
 DIM does not generate project files. Add `.dim/docker-compose.yml` directly

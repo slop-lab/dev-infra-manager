@@ -9,8 +9,23 @@ chmod 0700 /home/dim/.codex
 rm -rf -- /var/run/docker/containerd
 rm -f -- /var/run/docker.pid /var/run/docker.sock
 
-dockerd --host=unix:///var/run/docker.sock --data-root=/var/lib/docker \
-  --group=dim ${DIM_DOCKERD_FLAGS:-} >/var/log/dockerd.log 2>&1 &
+dockerd_args=(
+  --host=unix:///var/run/docker.sock
+  --data-root=/var/lib/docker
+  --group=dim
+)
+if [[ -n "${DIM_REGISTRY_CACHE_ENDPOINT:-}" ]]; then
+  [[ "$DIM_REGISTRY_CACHE_ENDPOINT" =~ ^[A-Za-z0-9.-]+:[1-9][0-9]*$ ]] || {
+    echo "invalid DIM_REGISTRY_CACHE_ENDPOINT: $DIM_REGISTRY_CACHE_ENDPOINT" >&2
+    exit 2
+  }
+  dockerd_args+=(
+    --registry-mirror="http://$DIM_REGISTRY_CACHE_ENDPOINT"
+    --insecure-registry="$DIM_REGISTRY_CACHE_ENDPOINT"
+  )
+fi
+
+dockerd "${dockerd_args[@]}" ${DIM_DOCKERD_FLAGS:-} >/var/log/dockerd.log 2>&1 &
 for _ in $(seq 1 60); do
   if docker info >/dev/null 2>&1; then
     chgrp dim /var/run/docker.sock

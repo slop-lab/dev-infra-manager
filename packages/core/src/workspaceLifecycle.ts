@@ -15,10 +15,12 @@ import type {
 import { workspaceRuntimePlan } from "./runtimeBackends.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { inspectProjectRuntimeCgroups } from "./projectRuntimeCgroups.js";
+import { ensureRegistryCache, REGISTRY_CACHE_ENDPOINT } from "./registryCache.js";
 
 // The unprivileged OS user every workspace image (images/project-workspace,
 // images/project-workspace-podman) creates and runs project commands as.
 const WORKSPACE_USER = "dim";
+const WORKSPACE_RUNTIME_CONFIG_VERSION = "2";
 
 export interface WorkspaceGitEnvironment {
   username: string;
@@ -648,12 +650,13 @@ async function reconcileContainer(
       throw new UserError(`workspace '${record.name}' requires host /dev/kvm`);
     }
   }
+  await ensureRegistryCache(runner);
   await reconcileDockerVolume(runner, record);
   const controllerGrant = await new LifecycleState(options.stateRoot).ensureWorkspaceGrant(record.name);
   const inspectArgs = [
     "container", "inspect", record.containerName,
     "--format",
-    "{{index .Config.Labels \"dim.managed\"}}|{{index .Config.Labels \"dim.workspace\"}}|{{index .Config.Labels \"dim.project\"}}|{{index .Config.Labels \"dim.repo\"}}|{{index .Config.Labels \"dim.backend\"}}|{{.State.Running}}"
+    "{{index .Config.Labels \"dim.managed\"}}|{{index .Config.Labels \"dim.workspace\"}}|{{index .Config.Labels \"dim.project\"}}|{{index .Config.Labels \"dim.repo\"}}|{{index .Config.Labels \"dim.backend\"}}|{{index .Config.Labels \"dim.runtime-config\"}}|{{.State.Running}}"
   ];
   let inspect = await runner.run("docker", inspectArgs);
   if (inspect.exitCode !== 0) {
@@ -667,7 +670,7 @@ async function reconcileContainer(
       inspect = await runner.run("docker", inspectArgs);
     }
   }
-  const [managed, workspace, projectLabel, repoLabel, backend, running] = inspect.stdout.trim().split("|");
+  let [managed, workspace, projectLabel, repoLabel, backend, runtimeConfig, running] = inspect.stdout.trim().split("|");
   if (
     managed !== "true"
     || workspace !== record.name
@@ -676,6 +679,14 @@ async function reconcileContainer(
     || backend !== record.runtimeBackend
   ) {
     throw new UserError(`Docker resource '${record.containerName}' conflicts with workspace '${record.name}'`);
+  }
+  if (runtimeConfig !== WORKSPACE_RUNTIME_CONFIG_VERSION) {
+    const removed = await runner.run("docker", ["container", "rm", "--force", record.containerName]);
+    if (removed.exitCode !== 0) throw new UserError(`failed to replace workspace container: ${removed.stderr.trim()}`);
+    const created = await runner.run("docker", workspaceContainerArgs(options, record, git, controllerGrant));
+    if (created.exitCode !== 0) throw new UserError(`failed to create workspace container: ${created.stderr.trim()}`);
+    inspect = await runner.run("docker", inspectArgs);
+    [managed, workspace, projectLabel, repoLabel, backend, runtimeConfig, running] = inspect.stdout.trim().split("|");
   }
   if (running !== "true") {
     const started = await runner.run("docker", ["start", record.containerName]);
@@ -739,6 +750,7 @@ export function workspaceContainerArgs(
     "--label", `dim.project=${record.projectName}`,
     "--label", `dim.repo=${record.rootRepositoryAlias}`,
     "--label", `dim.backend=${record.runtimeBackend}`,
+    "--label", `dim.runtime-config=${WORKSPACE_RUNTIME_CONFIG_VERSION}`,
     "--label", "dim.resource=workspace",
     "--env", `DIM_GIT_USERNAME=${git.username}`,
     "--env", `DIM_GIT_TOKEN=${git.token}`,
@@ -751,7 +763,8 @@ export function workspaceContainerArgs(
     "--env", "GIT_CONFIG_KEY_0=user.name",
     "--env", `GIT_CONFIG_VALUE_0=${git.userName}`,
     "--env", "GIT_CONFIG_KEY_1=user.email",
-    "--env", `GIT_CONFIG_VALUE_1=${git.userEmail}`
+    "--env", `GIT_CONFIG_VALUE_1=${git.userEmail}`,
+    "--env", `DIM_REGISTRY_CACHE_ENDPOINT=${REGISTRY_CACHE_ENDPOINT}`
   ];
   if (controllerGrant) args.push("--env", `DIM_CONTROLLER_TOKEN=${controllerGrant}`);
   for (const capability of plan.capabilities) args.push("--cap-add", capability);

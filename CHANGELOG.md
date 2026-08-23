@@ -9,6 +9,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Configured DIM-owned workspace Docker and Podman engines to share the
+  persistent anonymous Docker Hub pull-through cache used by managed CI,
+  without adding cache details to reviewed Project definitions.
 - Switched the canonical and runnable-example agent images from Alpine-based
   Docker CLI images to pinned Ubuntu 24.04 images, while retaining pinned Node
   24, Docker CLI/Compose, and agent tooling through isolated build stages.
