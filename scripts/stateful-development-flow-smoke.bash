@@ -135,7 +135,7 @@ dim workspace run "$workspace_name" bash -- -lc \
 before="$(dim workspace show "$workspace_name" --json)"
 started_before="$(docker inspect --format '{{.State.StartedAt}}' "$container_name")"
 dim workspace exec "$workspace_name" -- sh -c \
-  'printf "dirty\n" >>README.md; printf "untracked\n" >journey-untracked'
+  'printf "# dirty journey probe\n" >>ops/secret-service.sh; printf "untracked\n" >journey-untracked'
 if restart_error="$(dim workspace restart "$workspace_name" 2>&1)"; then
   echo "dirty workspace restart unexpectedly succeeded" >&2
   exit 1
@@ -144,7 +144,7 @@ grep -q "dim workspace align $workspace_name --reset --yes" <<<"$restart_error"
 test "$(dim workspace show "$workspace_name" --json)" = "$before"
 test "$(docker inspect --format '{{.State.StartedAt}}' "$container_name")" = "$started_before"
 dim workspace exec "$workspace_name" -- sh -c \
-  'git restore README.md; rm journey-untracked'
+  'git restore ops/secret-service.sh; rm journey-untracked'
 
 review="$work_dir/review"
 dim x git clone --quiet "$(dim repo url "$project_name" root)" "$review"
