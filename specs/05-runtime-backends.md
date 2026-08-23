@@ -31,8 +31,10 @@ unprivileged user namespaces. Its outer container must not require
 `--privileged`; it must instead receive the specific capabilities that
 nested unprivileged user namespaces and mounts need.
 
-When host `/dev/kvm` exists as a character device, supported workspaces receive
-it and its numeric host group as a supplemental group. Detection must not
+When host `/dev/kvm` exists as a character device, supported workspaces may
+receive it and its numeric host group as a supplemental group according to the
+creation-time KVM policy. Interactive creation recommends but confirms this
+grant; automation can explicitly allow or deny it. Detection must not
 require the DIM process itself to open the device: the container runtime opens
 it, and the supplemental group gives the workspace user access. gVisor does
 not receive KVM.

@@ -237,6 +237,7 @@ async function builtinCall(
         cpuCount: text("cpuCount"),
         memory: text("memory"),
         pidsLimit: text("pidsLimit"),
+        ...(input.kvm === undefined ? {} : { kvm: booleanValue(input.kvm) }),
         ...(input.gitUserName === undefined ? {} : { gitUserName: text("gitUserName") }),
         ...(input.gitUserEmail === undefined ? {} : { gitUserEmail: text("gitUserEmail") })
       });
@@ -345,6 +346,11 @@ function stringArray(value: unknown): string[] {
     throw new UserError("expected an array of strings");
   }
   return value as string[];
+}
+
+function booleanValue(value: unknown): boolean {
+  if (typeof value !== "boolean") throw new UserError("expected a boolean");
+  return value;
 }
 
 function ciExecutor(value: unknown): CiRunnerExecutorKind {

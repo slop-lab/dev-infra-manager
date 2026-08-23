@@ -12,6 +12,7 @@ import {
   configuredDimAdminController,
   configuredDimController,
   configuredWorkspaceBackend,
+  detectWorkspaceKvm,
   execWorkspace,
   inspectWorkspaceBackends,
   lifecycleOptions,
@@ -53,6 +54,7 @@ import {
   collect,
   commaSeparated,
   confirmAction,
+  confirmRecommended,
   controllerRequest,
   createOrResumeRootProject,
   ensureManagedController,
@@ -478,9 +480,19 @@ workspace.command("create")
   .option("--cpus <count>", "workspace CPU limit")
   .option("--memory <size>", "workspace memory limit")
   .option("--processes <count>", "workspace process limit")
+  .option("--kvm", "allow available host KVM access")
+  .option("--no-kvm", "do not pass host KVM into the workspace")
   .option("--json", "print machine-readable JSON")
   .action(async (projectName: string, name: string, flags: WorkspaceCreateFlags) => {
     const options = lifecycleOptions();
+    const availableKvm = await detectWorkspaceKvm(options.defaultWorkspaceBackend);
+    let kvm: boolean | undefined;
+    if (flags.kvm !== undefined) kvm = flags.kvm;
+    else if (availableKvm && interactive()) {
+      kvm = await confirmRecommended(
+        "Allow this trusted workspace to access host KVM? Recommended for VM-backed development and verification."
+      );
+    }
     await ensureManagedController(options);
     print(await adminCall("workspace.create", {
       project: projectName,
@@ -490,6 +502,7 @@ workspace.command("create")
       cpuCount: flags.cpus ?? options.cpuCount,
       memory: flags.memory ?? options.memory,
       pidsLimit: flags.processes ?? options.pidsLimit,
+      ...(kvm === undefined ? {} : { kvm }),
       ...(flags.gitUserName ? { gitUserName: flags.gitUserName } : {}),
       ...(flags.gitUserEmail ? { gitUserEmail: flags.gitUserEmail } : {})
     }), flags);

@@ -140,8 +140,9 @@ interactive shell path. The agent bind-mounts the workspace checkout and its
 private-Docker state uses a separate Project volume; no host checkout or
 Docker socket is mounted.
 
-On a host with accessible KVM, creation records and exposes `/dev/kvm`
-automatically. Run `dim workspace exec dim-self-dev -- sh .dim/kvm.sh` to verify the
+On a host with accessible KVM, interactive creation recommends and confirms
+exposing `/dev/kvm`; automation can use `--kvm` or `--no-kvm`. Run
+`dim workspace exec dim-self-dev -- sh .dim/kvm.sh` to verify the
 trusted workspace's effective KVM capability; `/dev/kvm` is intentionally not
 passed to the ordinary agent. The `verify` agent task remains portable to
 hosts without KVM.

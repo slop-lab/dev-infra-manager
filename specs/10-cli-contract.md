@@ -265,6 +265,7 @@ registration; Gitea revokes the ephemeral runner credential upon job assignment.
 ```bash
 dim workspace create PROJECT WORKSPACE \
   [--profile PROFILE ...] \
+  [--kvm | --no-kvm] \
   [--cpus COUNT] [--memory SIZE] [--processes COUNT]
 
 dim workspace list
@@ -290,9 +291,12 @@ provides their defaults but does not force one limit set on every workspace.
 set to the existing top-level container with `docker update`, and persists
 state only after the runtime accepts the update. Omitted flags retain their
 current per-workspace values. Running and stopped containers are supported.
-At creation, DIM records whether host `/dev/kvm` exists as a character device.
-Supported trusted workspaces receive that device and its host group
-automatically; gVisor workspaces record KVM as unavailable.
+At creation, DIM records the immutable effective KVM policy. When KVM is
+available for the selected backend and neither policy flag is supplied, an
+interactive terminal asks whether to grant it and recommends acceptance.
+Non-interactive creation retains automatic enablement unless `--no-kvm` is
+supplied. `--kvm` requires the device to be available rather than silently
+downgrading. gVisor workspaces cannot receive KVM.
 The runtime backend defaults to the backend recorded during installation.
 Omitting `--profile` stores an empty profile list and starts ordinary
 non-profiled Compose services.

@@ -72,8 +72,9 @@ Trusted Project lifecycle code:
   exposing the workspace self-restart route through a constrained proxy.
 - Keeps the agent's inner runtime separate from its own runtime.
 - Deploys secret-bearing containers only from approved refs.
-- Receives an available host `/dev/kvm` automatically when its backend
-  supports KVM; host devices must not be passed into the untrusted agent
+- May receive available host `/dev/kvm` under the immutable creation-time KVM
+  policy when its backend supports KVM; interactive creation confirms this
+  recommended grant. Host devices must not be passed into the untrusted agent
   container.
 
 ## DIM Host Boundary

@@ -139,6 +139,13 @@ test("workspace resources command requires at least one live limit", () => {
   assert.match(unsafeAlign.stderr, /--reset requires --yes/);
 });
 
+test("workspace creation exposes explicit KVM policy", () => {
+  const help = run(["workspace", "create", "--help"]);
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /--kvm/);
+  assert.match(help.stdout, /--no-kvm/);
+});
+
 test("destructive commands require --yes only in non-interactive use", () => {
   for (const args of [
     ["project", "purge", "example"],

@@ -55,6 +55,7 @@ export interface ResourceFlags {
 
 export interface WorkspaceCreateFlags extends JsonFlags {
   profile: string[];
+  kvm?: boolean;
   gitUserName?: string;
   gitUserEmail?: string;
   cpus?: string;
@@ -139,6 +140,19 @@ export async function confirmAction(yes: boolean, question: string): Promise<voi
   try {
     const answer = (await prompt.question(`${question} [y/N] `)).trim().toLowerCase();
     if (answer !== "y" && answer !== "yes") throw new UserError("operation was not confirmed");
+  } finally {
+    prompt.close();
+  }
+}
+
+export async function confirmRecommended(question: string): Promise<boolean> {
+  if (!interactive()) throw new UserError("recommended confirmation requires an interactive shell");
+  const prompt = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const answer = (await prompt.question(`${question} [Y/n] `)).trim().toLowerCase();
+    if (answer === "" || answer === "y" || answer === "yes") return true;
+    if (answer === "n" || answer === "no") return false;
+    throw new UserError("answer must be yes or no");
   } finally {
     prompt.close();
   }

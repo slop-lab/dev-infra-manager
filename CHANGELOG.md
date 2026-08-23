@@ -59,6 +59,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Added
 
+- Added an interactive, recommended KVM-access confirmation to `dim workspace
+  create`, plus explicit `--kvm` and `--no-kvm` policies for automation.
 - Added a full-development-flow reference Project and a stateful release
   journey covering reviewed updates, restart safety, controller replacement,
   setup recovery, backup/discard/recreate/restore, and cleanup without putting

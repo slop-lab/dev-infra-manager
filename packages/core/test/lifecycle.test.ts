@@ -9,6 +9,7 @@ import type { CommandResult, RunOptions, StreamingCommandRunner } from "../src/t
 import {
   alignWorkspaceRoot,
   detectWorkspaceKvm,
+  resolveWorkspaceKvm,
   restartWorkspace,
   updateWorkspaceResources,
   validateWorkspaceProfiles,
@@ -140,6 +141,17 @@ describe("project and workspace lifecycle", () => {
       throw new Error("missing");
     })).resolves.toBe(false);
     await expect(detectWorkspaceKvm("gvisor", async () => {})).resolves.toBe(false);
+  });
+
+  it("honors explicit workspace KVM policy", async () => {
+    await expect(resolveWorkspaceKvm("runc", undefined, async () => {})).resolves.toBe(true);
+    await expect(resolveWorkspaceKvm("runc", false, async () => {})).resolves.toBe(false);
+    await expect(resolveWorkspaceKvm("runc", true, async () => {})).resolves.toBe(true);
+    await expect(resolveWorkspaceKvm("runc", true, async () => {
+      throw new Error("missing");
+    })).rejects.toThrow(/KVM was requested but is unavailable/);
+    await expect(resolveWorkspaceKvm("gvisor", true, async () => {}))
+      .rejects.toThrow(/KVM was requested but is unavailable/);
   });
 
   it("rejects dirty and divergent restarts before stopping or changing workspace state", async () => {

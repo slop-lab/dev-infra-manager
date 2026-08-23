@@ -82,6 +82,18 @@ export async function detectWorkspaceKvm(
   }
 }
 
+export async function resolveWorkspaceKvm(
+  backend: WorkspaceRecord["runtimeBackend"],
+  requested: boolean | undefined,
+  probe: () => Promise<void> = probeKvmDevice
+): Promise<boolean> {
+  const available = await detectWorkspaceKvm(backend, probe);
+  if (requested === true && !available) {
+    throw new UserError(`workspace KVM was requested but is unavailable for backend '${backend}'`);
+  }
+  return requested ?? available;
+}
+
 async function probeKvmDevice(): Promise<void> {
   const device = await stat("/dev/kvm");
   if (!device.isCharacterDevice()) throw new Error("/dev/kvm is not a character device");
@@ -98,6 +110,7 @@ export async function createWorkspace(
     cpuCount?: string;
     memory?: string;
     pidsLimit?: string;
+    kvm?: boolean;
     gitUserName?: string;
     gitUserEmail?: string;
   }
@@ -133,6 +146,9 @@ export async function createWorkspace(
     if (record.runtimeBackend !== input.runtimeBackend) {
       throw new UserError(`workspace '${name}' already exists with backend '${record.runtimeBackend}'`);
     }
+    if (input.kvm !== undefined && record.kvm !== input.kvm) {
+      throw new UserError(`workspace '${name}' already exists with KVM ${record.kvm ? "enabled" : "disabled"}`);
+    }
     if (
       record.cpuCount !== (input.cpuCount ?? options.cpuCount)
       || record.memory !== (input.memory ?? options.memory)
@@ -142,7 +158,7 @@ export async function createWorkspace(
     }
   } catch (error) {
     if (!(error instanceof UserError) || !error.message.includes("not found")) throw error;
-    const kvm = await detectWorkspaceKvm(input.runtimeBackend);
+    const kvm = await resolveWorkspaceKvm(input.runtimeBackend, input.kvm);
     record = {
       schemaVersion: 3,
       name,

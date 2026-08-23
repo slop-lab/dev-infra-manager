@@ -226,8 +226,10 @@ dim workspace create example example-dev \
   --profile secrets
 ```
 
-When host `/dev/kvm` exists as a character device, DIM automatically passes it
-and its host group into supported trusted workspace backends. The DIM process
+When host `/dev/kvm` exists as a character device, interactive creation asks
+whether to pass it into supported trusted workspace backends and recommends
+acceptance. Use `--kvm` or `--no-kvm` for an explicit choice; non-interactive
+creation continues to enable available KVM by default. The DIM process
 does not need to open the device itself; the container runtime does that and
 the supplemental group gives the workspace user access. gVisor workspaces do
 not receive KVM. DIM records the effective result in workspace state and
