@@ -54,7 +54,7 @@ jobs:
       - name: Install locked dependencies
         run: pnpm --dir workbench install --frozen-lockfile
       - name: Verify managed workspace lifecycle and container boundaries
-        run: cd workbench && bash scripts/with-ci-registry-cache.bash just ci workspace
+        run: cd workbench && bash verification/scripts/with-ci-registry-cache.bash just ci workspace
 
   host-backend:
     name: host backend (${{ matrix.backend }})
@@ -81,4 +81,4 @@ jobs:
       - name: Install registry-relay prerequisite
         run: command -v socat >/dev/null || (sudo apt-get update && sudo apt-get install --yes socat)
       - name: Install and verify the ${{ matrix.backend }} host backend in a nested VM
-        run: cd workbench && bash scripts/with-ci-registry-cache.bash just ci kvm "${{ matrix.backend }}"
+        run: cd workbench && bash verification/scripts/with-ci-registry-cache.bash just ci kvm "${{ matrix.backend }}"
