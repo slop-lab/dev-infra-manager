@@ -144,6 +144,7 @@ describe("CI runner resources", () => {
       "--runtime", "runc", "--device", "/dev/kvm", "--group-add", "108"
     ]));
     expect(qemuArgs).toContain("GITEA_RUNNER_NAME=dim-ci-example-kvm-1-qemu");
+    expect(qemuArgs).toContain("DIM_CI_REGISTRY_CACHE_UPSTREAM=dim-registry-cache:5000");
     expect(qemuArgs).toContain("DIM_QEMU_CI_CAPACITY=kvm-1");
     expect(qemuArgs.join(" ")).toContain("dim-ci-example-qemu-dispatch");
     expect(qemuArgs.join(" ")).toContain("dim-ci-example-qemu-cache");
@@ -162,7 +163,8 @@ describe("CI runner resources", () => {
     expect(QEMU_CI_PACKER_TEMPLATE).toContain('source  = "github.com/hashicorp/qemu"');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('flock 9');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('/var/lib/dim-qemu-ci-cache');
-    expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('TCP:dim-registry-cache:5000');
+    expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('"TCP:$registry_cache_upstream"');
+    expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('http://127.0.0.1:5000/v2/');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('"registry-mirrors": ["http://10.0.2.2:5000"]');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain("DIM_CI_REGISTRY_CACHE_UPSTREAM=10.0.2.2:5000");
     const userData = QEMU_CI_SUPERVISOR_SCRIPT.match(/cat >"\$cleanup_dir\/user-data" <<EOF\n([\s\S]*?)\nEOF/)?.[1];

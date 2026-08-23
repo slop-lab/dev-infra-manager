@@ -52,7 +52,9 @@ supervisor exposes only a local TCP relay to its disposable guest, whose Docker
 daemon uses the relay at `10.0.2.2:5000`. DIM's CI harness extends that relay
 across each additional test-only NAT boundary, so a nested KVM guest and DinD
 daemon use the same cache without adding cache configuration to Project
-examples. The registry has no published host
+examples. The supervisor verifies the relay before booting a guest; an
+unavailable cache is reported as a runner error instead of silently sending
+the guest directly to Docker Hub. The registry has no published host
 port, accepts no pushes in proxy mode, stores no Docker Hub credentials, and
 is not attached to Project workspace networks. Its managed filesystem volume
 is shared across Projects and runner executors, so common public layers survive

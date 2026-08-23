@@ -27,6 +27,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Wired QEMU CI supervisors to the managed registry cache through an explicit
+  endpoint and fail-fast relay readiness check, preventing disposable guests
+  from silently falling back to direct Docker Hub pulls when the cache path is
+  unavailable.
 - Made the stateful full-development-flow gate build its local CLI and package
   artifacts before invoking the CLI from a clean KVM checkout.
 - Recreated fallback Compose services when starting a stopped workspace so

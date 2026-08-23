@@ -1,4 +1,4 @@
-export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.6";
+export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.7";
 
 export const QEMU_CI_SUPERVISOR_DOCKERFILE = `FROM ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 RUN apt-get update \\
@@ -309,8 +309,21 @@ trap cleanup EXIT INT TERM
 cleanup_dir="$(mktemp -d "$run_root/job-XXXXXX")"
 ssh-keygen -q -t ed25519 -N '' -f "$cleanup_dir/id"
 public_key="$(cat "$cleanup_dir/id.pub")"
-socat TCP-LISTEN:5000,fork,reuseaddr TCP:dim-registry-cache:5000 &
+registry_cache_upstream="\${DIM_CI_REGISTRY_CACHE_UPSTREAM:?DIM_CI_REGISTRY_CACHE_UPSTREAM is required}"
+socat TCP-LISTEN:5000,fork,reuseaddr "TCP:$registry_cache_upstream" &
 registry_relay_pid=$!
+registry_cache_ready=false
+for _ in $(seq 1 20); do
+  if curl --fail --silent --show-error http://127.0.0.1:5000/v2/ >/dev/null; then
+    registry_cache_ready=true
+    break
+  fi
+  sleep 0.25
+done
+if [[ "$registry_cache_ready" != true ]]; then
+  echo "qemu-ci: registry cache relay is unavailable: $registry_cache_upstream" >&2
+  exit 1
+fi
 cat >"$cleanup_dir/meta-data" <<EOF
 instance-id: dim-qemu-ci-$(date +%s%N)
 local-hostname: dim-qemu-ci
