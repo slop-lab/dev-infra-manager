@@ -9,6 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Limited automatic disposable-QEMU release gates to non-draft managed-host
+  pull requests targeting `main`, kept routine development gates on
+  `development`, and pinned the self Project's protected branches and
+  `main`-to-canonical-`development` publish mapping in reviewed policy.
 - Replaced arbitrary external `repo push` refspecs with reviewed repository-set
   branch mappings and `repo publish PROJECT [ALIAS]`; omitting the alias
   publishes every configured repository in deterministic order.

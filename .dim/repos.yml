@@ -3,6 +3,9 @@ repositories:
   dim:
     url: https://github.com/slop-lab/dev-infra-manager.git
     root: true
+    ref: development
     protect:
       - main
       - development
+    publish:
+      main: development

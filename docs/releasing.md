@@ -8,8 +8,9 @@
   Both providers' automatic CI is green at that exact commit.
 - The manually dispatched Sysbox and KVM installer workflows pass on the
   release commit using fresh ephemeral self-hosted runners.
-- The active DIM-managed development repository's non-draft pull request has
-  passed every automatic `host backend (BACKEND)` job. These run the same
+- The promotion into the active DIM-managed development repository's `main`
+  branch used a non-draft pull request and passed every automatic
+  `host backend (BACKEND)` job. These run the same
   `just ci kvm BACKEND` verification through managed runners; the manual
   GitHub run remains an independent release check on a fresh runner.
 - `npm whoami` succeeds for an account allowed to publish the `@slop-lab` scope.
@@ -36,9 +37,9 @@ just ci sysbox
 just verify environments-kvm
 ```
 
-The KVM gate uses a separate clean Ubuntu guest for each backend. The managed
-development workflow schedules those backend gates independently, while the
-local command runs all of them. Its runc
+The KVM gate uses a separate clean Ubuntu guest for each backend. Only a
+non-draft managed-host pull request targeting `main` schedules those backend
+gates independently, while the local command runs all of them. Its runc
 guest installs the RootlessKit AppArmor profile through the host installer and
 runs the canonical self-Project verification, including the unprivileged agent
 and its private rootless-DinD sidecar. `just ci matrix --manual` is the combined
@@ -59,7 +60,9 @@ git fetch GITHUB_REMOTE "$release_ref"
 test "$(git rev-parse FETCH_HEAD)" = "$release_sha"
 ```
 
-Replace `GITHUB_REMOTE` with the configured GitHub remote name. Confirm the
+The managed `main` commit is published to GitHub `development` by the reviewed
+self-Project mapping; it never publishes directly to GitHub `main`. Replace
+`GITHUB_REMOTE` with the configured GitHub remote name. Confirm the
 automatic GitHub `CI` run reports `headSha == release_sha`; a green run for the
 same branch name at another SHA does not satisfy the release gate. This
 GitHub-hosted workflow intentionally performs only Node.js type checks and

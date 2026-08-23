@@ -54,6 +54,9 @@ proxy Git traffic. A repository retains its explicit external connection so
 `repo fetch` can project remote branches under managed `upstream/*` and
 `repo publish` can publish only reviewed, non-forced branch mappings. Omitting
 the repository alias publishes every repository with configured mappings.
+DIM's self Project maps its managed promotion branch to the canonical
+development branch, keeping the canonical release branch outside routine
+development publication.
 
 ## Root workspace contract
 

@@ -234,7 +234,11 @@ Host installation scripts must be verified by:
 disposable VM. Omitting `BACKEND` runs every backend in a separate VM. Managed
 development CI MUST schedule each backend as an independent `dim-qemu` job so
 available host capacities can run them concurrently without exposing capacity
-names in tracked workflow code.
+names in tracked workflow code. These expensive jobs MUST run automatically
+only for non-draft pull requests whose base is the managed development
+repository's `main` promotion branch. Routine pull requests into `development`
+retain source and managed-workspace verification without reserving
+disposable-QEMU release capacity.
 The runc guest must additionally run `just verify self-development` after the
 host installer completes. This verifies the canonical DIM Project, its
 unprivileged agent and private rootless-DinD sidecar, and the path-scoped
