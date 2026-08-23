@@ -1,0 +1,7 @@
+packages:
+  - core/packages/core
+  - core/packages/cli
+  - core/packages/installer
+  - core/packages/controller-proxy
+  - core/packages/contracts/*
+  - plugins/*

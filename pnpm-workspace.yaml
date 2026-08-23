@@ -1,7 +1,0 @@
-packages:
-  - packages/core
-  - packages/cli
-  - packages/installer
-  - packages/controller-proxy
-  - packages/contracts/*
-  - packages/plugin/*

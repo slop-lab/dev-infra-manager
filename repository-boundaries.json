@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "owners": {
+    "root": {
+      "files": [".gitignore", "LICENSE", "README.md", "repository-boundaries.json"],
+      "prefixes": [".dim/"]
+    },
+    "development": {
+      "prefixes": ["workbench/"]
+    },
+    "core": {
+      "prefixes": ["workbench/core/"]
+    },
+    "specification": {
+      "prefixes": ["workbench/specification/"]
+    },
+    "plugin-dns-cloudflare": {
+      "prefixes": ["workbench/plugins/dns-cloudflare/"]
+    },
+    "plugin-external-urls": {
+      "prefixes": ["workbench/plugins/external-urls/"]
+    },
+    "transition": {
+      "files": ["AGENTS.md"],
+      "prefixes": [".agents/", ".gitea/", ".github/"]
+    }
+  }
+}

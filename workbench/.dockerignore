@@ -1,0 +1,13 @@
+*
+!core/
+core/*
+!core/images/
+core/images/*
+!core/images/project-workspace/
+!core/images/project-workspace/**
+!core/packages/
+core/packages/*
+!core/packages/controller-proxy/
+core/packages/controller-proxy/*
+!core/packages/controller-proxy/dist/
+!core/packages/controller-proxy/dist/**

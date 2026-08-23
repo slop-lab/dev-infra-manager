@@ -29,9 +29,10 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
+          cache-dependency-path: workbench/pnpm-lock.yaml
       - name: Install locked dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm --dir workbench install --frozen-lockfile
       - name: Type-check source
-        run: pnpm run workspace:check
+        run: pnpm --dir workbench run workspace:check
       - name: Run source tests
-        run: pnpm run workspace:test
+        run: pnpm --dir workbench run workspace:test

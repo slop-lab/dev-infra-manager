@@ -22,5 +22,6 @@ jobs:
         with:
           node-version: 26
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: just ci sysbox
+          cache-dependency-path: workbench/pnpm-lock.yaml
+      - run: pnpm --dir workbench install --frozen-lockfile
+      - run: cd workbench && just ci sysbox

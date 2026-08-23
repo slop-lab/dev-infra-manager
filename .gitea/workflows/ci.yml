@@ -32,12 +32,13 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
           cache: pnpm
+          cache-dependency-path: workbench/pnpm-lock.yaml
       - name: Install source-gate system tools
         run: sudo apt-get update && sudo apt-get install --yes just jq
       - name: Install locked dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm --dir workbench install --frozen-lockfile
       - name: Type-check, test, build, and verify packages
-        run: just ci source
+        run: cd workbench && just ci source
 
   workspace-integration:
     name: managed workspace integration
@@ -51,9 +52,9 @@ jobs:
       - name: Select pnpm
         run: npm install --global pnpm@10.13.1
       - name: Install locked dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm --dir workbench install --frozen-lockfile
       - name: Verify managed workspace lifecycle and container boundaries
-        run: bash scripts/with-ci-registry-cache.bash just ci workspace
+        run: cd workbench && bash scripts/with-ci-registry-cache.bash just ci workspace
 
   host-backend:
     name: host backend (${{ matrix.backend }})
@@ -80,4 +81,4 @@ jobs:
       - name: Install registry-relay prerequisite
         run: command -v socat >/dev/null || (sudo apt-get update && sudo apt-get install --yes socat)
       - name: Install and verify the ${{ matrix.backend }} host backend in a nested VM
-        run: bash scripts/with-ci-registry-cache.bash just ci kvm "${{ matrix.backend }}"
+        run: cd workbench && bash scripts/with-ci-registry-cache.bash just ci kvm "${{ matrix.backend }}"

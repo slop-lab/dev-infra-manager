@@ -16,4 +16,4 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: command -v just
-      - run: just ci kvm
+      - run: cd workbench && just ci kvm
