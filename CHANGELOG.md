@@ -47,6 +47,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Made managed-controller PID ownership publication atomic so concurrent
+  readers cannot mistake a newly created empty PID file for stale ownership.
 - Kept the full-development-flow example's private rootless DinD ownership
   repair aligned with the canonical self Project so its persistent volume
   remains writable after the outer workspace runtime is replaced.

@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import { chmod, mkdir, mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, link, mkdir, mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { createConnection } from "node:net";
 import { homedir, tmpdir } from "node:os";
@@ -946,26 +946,33 @@ export async function controllerHealthy(socketPath: string): Promise<boolean> {
 }
 
 export async function claimControllerPid(pidPath: string): Promise<void> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    try {
-      await writeFile(pidPath, `${process.pid}\n`, { flag: "wx" });
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      let existingPid: number | undefined;
+  const candidateDirectory = await mkdtemp(path.join(path.dirname(pidPath), ".controller-pid-"));
+  const candidatePath = path.join(candidateDirectory, "pid");
+  await writeFile(candidatePath, `${process.pid}\n`, { mode: 0o600 });
+  try {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        existingPid = Number((await readFile(pidPath, "utf8")).trim());
-      } catch (readError) {
-        if ((readError as NodeJS.ErrnoException).code !== "ENOENT") throw readError;
-        continue;
+        await link(candidatePath, pidPath);
+        return;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        let existingPid: number | undefined;
+        try {
+          existingPid = Number((await readFile(pidPath, "utf8")).trim());
+        } catch (readError) {
+          if ((readError as NodeJS.ErrnoException).code !== "ENOENT") throw readError;
+          continue;
+        }
+        if (Number.isSafeInteger(existingPid) && existingPid > 1 && processExists(existingPid)) {
+          throw new UserError(`managed controller process ${existingPid} is already running`);
+        }
+        await rm(pidPath, { force: true });
       }
-      if (Number.isSafeInteger(existingPid) && existingPid > 1 && processExists(existingPid)) {
-        throw new UserError(`managed controller process ${existingPid} is already running`);
-      }
-      await rm(pidPath, { force: true });
     }
+    throw new UserError(`could not claim managed controller PID file at ${pidPath}`);
+  } finally {
+    await rm(candidateDirectory, { recursive: true, force: true });
   }
-  throw new UserError(`could not claim managed controller PID file at ${pidPath}`);
 }
 
 export async function pidFileOwnedByCurrentProcess(pidPath: string): Promise<boolean> {
