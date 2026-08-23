@@ -9,6 +9,7 @@ RUN mkdir -p /mnt/workspace-shared-dind \
   && chmod 4755 /usr/bin/newuidmap /usr/bin/newgidmap \
   && apk add --no-cache su-exec
 COPY entrypoint.sh /usr/local/bin/dim-rootless-dind-entrypoint
-RUN chmod 0755 /usr/local/bin/dim-rootless-dind-entrypoint
+COPY agent.sh /usr/local/bin/dim-private-agent
+RUN chmod 0755 /usr/local/bin/dim-rootless-dind-entrypoint /usr/local/bin/dim-private-agent
 
 ENTRYPOINT ["dim-rootless-dind-entrypoint"]

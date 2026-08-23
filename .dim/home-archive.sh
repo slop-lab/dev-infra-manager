@@ -38,40 +38,41 @@ one_resource() {
   printf '%s\n' "$resources"
 }
 
-agent_container="$(one_resource container --all \
+private_docker_container="$(one_resource container --all \
   --filter "label=com.docker.compose.project=$project" \
-  --filter "label=com.docker.compose.service=agent" \
+  --filter "label=com.docker.compose.service=private-docker" \
   --filter "label=com.docker.compose.oneoff=False")"
 home_volume="$(one_resource volume \
   --filter "label=com.docker.compose.project=$project" \
   --filter "label=com.docker.compose.volume=agent-home")"
-agent_image="$(docker inspect --format '{{.Image}}' "$agent_container")"
-was_running="$(docker inspect --format '{{.State.Running}}' "$agent_container")"
+archive_image="$(docker inspect --format '{{.Image}}' "$private_docker_container")"
+was_running="$(docker exec "$private_docker_container" dim-private-agent inspect \
+  --format '{{.State.Running}}' 2>/dev/null || printf false)"
 
 restart_agent() {
   status="$?"
   trap - 0
   if [ "$was_running" = true ]; then
-    docker start "$agent_container" >&2
+    docker exec "$private_docker_container" dim-private-agent start >&2
   fi
   exit "$status"
 }
 trap restart_agent 0
 
 if [ "$was_running" = true ]; then
-  docker stop "$agent_container" >&2
+  docker exec "$private_docker_container" dim-private-agent stop >&2
 fi
 
 case "$action" in
   backup)
     docker run --rm --network none --read-only \
       --mount "type=volume,src=$home_volume,dst=/home,readonly" \
-      --entrypoint tar "$agent_image" -C /home -czf - .
+      --entrypoint tar "$archive_image" -C /home -czf - .
     ;;
   restore)
     docker run --rm --interactive --network none --read-only \
       --mount "type=volume,src=$home_volume,dst=/home" \
-      --entrypoint sh "$agent_image" -c \
+      --entrypoint sh "$archive_image" -c \
       'find /home -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && tar -C /home -xzf -'
     ;;
 esac

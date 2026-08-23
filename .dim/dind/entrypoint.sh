@@ -6,7 +6,7 @@ chmod 4755 /usr/bin/newuidmap /usr/bin/newgidmap
 
 docker_data=/home/rootless/.local/share/docker
 ownership_marker="$docker_data/.dim-rootless-owner-v1"
-mkdir -p "$docker_data" /run/user/1000
+mkdir -p "$docker_data" /run/user/1000 /mnt/agent-home /mnt/workspace-shared-dind
 if [ ! -f "$ownership_marker" ]; then
   chown -R rootless:rootless "$docker_data"
 fi
@@ -27,8 +27,12 @@ chown rootless:rootless \
   /home/rootless/.local \
   /home/rootless/.local/share \
   "$docker_data" \
-  /run/user/1000
+  /run/user/1000 \
+  /mnt/agent-home \
+  /mnt/workspace-shared-dind
 chmod 0700 /run/user/1000
+chmod 0700 /mnt/agent-home
+chmod 1777 /mnt/workspace-shared-dind
 
 exec su-exec rootless env \
   HOME=/home/rootless \
