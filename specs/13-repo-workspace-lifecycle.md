@@ -122,7 +122,8 @@ The read-only runtime manifest also contains `hostAliases`, a mapping from
 workspace-visible service names to one or more controller-resolved addresses.
 DIM registers only endpoints granted to that workspace; Project lifecycle
 code selects which nested services receive them. The canonical self-Project
-generates a Compose override that applies the mapping to its agent service.
+generates a Compose override that applies the mapping to its private runtime,
+which copies the reviewed aliases onto the agent container it creates.
 This is a static bootstrap registry: address changes take effect when setup
 reconciles the workspace and recreates the affected Project service.
 
@@ -162,10 +163,16 @@ DIM_CONTROLLER_TOKEN
 ```
 
 Agent containers are ordinary, reviewed Project workloads. A Project may
-declare one in `.dim/docker-compose.yml`, start it from `.dim/setup.sh`, and
-dispatch fixed tasks into it from `.dim/entrypoint.sh`. Core owns none of its
-image, service, volume, privilege, or task configuration. `dim workspace run WORKSPACE
-TASK` always follows the checked-in `.dim/entrypoint.sh` contract when present.
+declare one directly in `.dim/docker-compose.yml` or create one inside a
+Project-owned private runtime started by `.dim/setup.sh`, then dispatch fixed
+tasks from `.dim/entrypoint.sh`. Core owns none of its image, service, volume,
+privilege, or task configuration. `dim workspace run WORKSPACE TASK` always
+follows the checked-in `.dim/entrypoint.sh` contract when present.
+The canonical self-Project's outer Compose graph contains only a rootless
+`private-docker` daemon. That daemon owns the agent and ordinary development
+containers, and the agent receives only its private daemon socket. Rebuilding
+or replacing those inner workloads therefore requires no trusted workspace or
+host runtime socket.
 The canonical self-Project exposes `codex`, an agent-container `bash` task,
 and Project-owned `backup`/`restore` tasks that stream a gzip tar archive of
 the agent home over stdout/stdin. Those canonical tasks temporarily stop the
@@ -227,11 +234,12 @@ keeps ordinary `bash` task execution in the agent container's default group
 and starts Codex in a dynamically created tool group so management commands retain a
 responsive execution path.
 
-The canonical self-Project stores the unprivileged agent's home in a
-Project-owned named volume and sets `HOME=/home/dim-agent` for setup and task
-dispatch. Agent configuration persists across task processes and service
-recreation, while workspace discard removes the volume through reviewed
-teardown.
+The canonical self-Project stores the agent's home in a Project-owned outer
+named volume. The private daemon receives that volume at a fixed path and
+bind-mounts it into the inner agent as `/home/dim-agent`; task dispatch sets
+`HOME` to that path. Agent configuration persists across task processes and
+inner-container recreation, while workspace discard removes the volume through
+reviewed teardown.
 
 ## Applying changes
 

@@ -92,8 +92,11 @@ This repository uses the same project-facing contract as an external project:
 ```text
 .dim/
 ├── agent/
+│   └── Dockerfile
+├── dind/
 │   ├── Dockerfile
-│   └── start.sh
+│   ├── agent.sh
+│   └── entrypoint.sh
 ├── docker-compose.yml
 ├── kvm.sh
 ├── setup.sh
@@ -103,13 +106,15 @@ This repository uses the same project-facing contract as an external project:
 
 The role-neutral `images/project-workspace` image is the trusted lifecycle
 container. The reviewed `.dim/setup.sh` obtains the host Git author through
-the narrow host-input API and starts the repository-owned Compose `agent`
-service. Its pinned Ubuntu 24.04 image supplies Codex, Node.js 24, pnpm, just,
-Git, and a
-private Docker daemon without receiving either host Docker socket or the
-trusted workspace's Docker socket.
+the narrow host-input API and starts only the repository-owned Compose
+`private-docker` service. That rootless daemon creates the development agent
+inside its own runtime. The agent's pinned Ubuntu 24.04 image supplies Codex,
+Node.js 24, pnpm, just, Git, and a Docker client connected only to the private
+daemon; it receives neither the host Docker socket nor the trusted workspace's
+Docker socket.
 
-The agent's `/home/dim-agent` is a Project-owned named volume. Separate
+The outer lifecycle mounts a Project-owned named volume into the private
+runtime, which bind-mounts it as the agent's `/home/dim-agent`. Separate
 `dim workspace run` invocations therefore share Codex configuration and other user-home
 state until the workspace is discarded; source remains in `/workspace`.
 

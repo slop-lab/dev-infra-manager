@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 dim_apply_test_registry_mirror() {
-  local project_root="$1" mirror="${DIM_DOCKER_REGISTRY_MIRROR:-}" endpoint setup temporary
+  local project_root="$1" service="${2:-agent-dind}" mirror="${DIM_DOCKER_REGISTRY_MIRROR:-}" endpoint setup temporary
   [[ -n "$mirror" ]] || return 0
   [[ "$mirror" =~ ^http://([A-Za-z0-9.-]+):([1-9][0-9]*)$ ]] || {
     echo "invalid DIM_DOCKER_REGISTRY_MIRROR: $mirror" >&2
@@ -13,7 +13,7 @@ dim_apply_test_registry_mirror() {
 
   cat >"$project_root/.dim/ci-registry-mirror.override.yml" <<EOF
 services:
-  agent-dind:
+  $service:
     command:
       - --registry-mirror=$mirror
       - --insecure-registry=$endpoint

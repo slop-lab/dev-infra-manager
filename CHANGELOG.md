@@ -9,6 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Reduced the canonical self-development outer Compose graph to a
+  `private-docker` rootless runtime and moved the agent inside it, so the agent
+  can manage its development containers without access to the trusted
+  workspace or host runtime socket.
 - Published the actual Project repository catalog in the read-only workspace
   manifest and documented the planned `root`, `core`, `development`, and
   independently selected plugin boundaries for DIM self-development.

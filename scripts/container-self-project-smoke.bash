@@ -83,7 +83,7 @@ trap cleanup EXIT
 dim_prepare_clone_source "$project_source" "$source_root/snapshot"
 git clone "$DIM_GIT_CLONE_SOURCE" "$source_root/materialized" >/dev/null
 project_source="$source_root/materialized"
-dim_apply_test_registry_mirror "$project_source"
+dim_apply_test_registry_mirror "$project_source" private-docker
 
 temporary_manifest="$project_source/.dim/repos.yml.tmp"
 sed "s#^    url:.*#    url: $source_root/project.git#" \
@@ -115,22 +115,22 @@ dim workspace exec "$workspace_name" -- \
   docker info --format '{{json .RegistryConfig.Mirrors}}' |
   grep -Fq 'http://dim-registry-cache:5000/'
 
-verify_rootless_dind() {
-  local dind_container
-  dind_container="$(dim workspace exec "$workspace_name" -- \
+verify_private_docker() {
+  local private_docker_container
+  private_docker_container="$(dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
-    --file .dim/docker-compose.yml ps --quiet agent-dind)"
-  test -n "$dind_container"
+    --file .dim/docker-compose.yml ps --quiet private-docker)"
+  test -n "$private_docker_container"
   dim workspace exec "$workspace_name" -- \
-    docker inspect --format '{{.State.Health.Status}}' "$dind_container" | grep -qx healthy
+    docker inspect --format '{{.State.Health.Status}}' "$private_docker_container" | grep -qx healthy
   if [[ -n "${DIM_DOCKER_REGISTRY_MIRROR:-}" ]]; then
     dim workspace exec "$workspace_name" -- \
-      docker exec "$dind_container" docker info --format '{{json .RegistryConfig.Mirrors}}' |
+      docker exec "$private_docker_container" docker info --format '{{json .RegistryConfig.Mirrors}}' |
       grep -Fq "$DIM_DOCKER_REGISTRY_MIRROR"
   fi
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
-    --file .dim/docker-compose.yml exec --no-TTY --user root agent-dind \
+    --file .dim/docker-compose.yml exec --no-TTY --user root private-docker \
     sh -eu -c '
       test -u /usr/bin/newuidmap
       test -u /usr/bin/newgidmap
@@ -142,19 +142,19 @@ verify_rootless_dind() {
     '
 }
 
-verify_rootless_dind
+verify_private_docker
 if ! dim workspace restart "$workspace_name" >/dev/null; then
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml ps --all >&2 || true
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
-    --file .dim/docker-compose.yml logs --no-color agent-dind >&2 || true
+    --file .dim/docker-compose.yml logs --no-color private-docker >&2 || true
   exit 1
 fi
 workspace_json="$(dim workspace show "$workspace_name" --json)"
 test "$(jq -r .phase <<<"$workspace_json")" = ready
-verify_rootless_dind
+verify_private_docker
 
 original_cpus="$(jq -r .cpuCount <<<"$workspace_json")"
 original_memory="$(jq -r .memory <<<"$workspace_json")"
@@ -210,22 +210,28 @@ agent_commit_identity="$(dim workspace run "$workspace_name" bash -- -lc '
   git log -1 --format="%an <%ae>|%cn <%ce>"
 ')"
 test "$agent_commit_identity" = "$agent_git_identity"
-agent_container="$(dim workspace exec "$workspace_name" -- \
+private_docker_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-$workspace_name" \
-  --file .dim/docker-compose.yml ps --quiet agent)"
-test -n "$agent_container"
-test "$(dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
-  --format '{{range .Mounts}}{{if eq .Destination "/home/dim-agent"}}{{.Type}}|{{.RW}}{{end}}{{end}}')" = \
+  --file .dim/docker-compose.yml ps --quiet private-docker)"
+test -n "$private_docker_container"
+test "$(dim workspace exec "$workspace_name" -- docker inspect "$private_docker_container" \
+  --format '{{range .Mounts}}{{if eq .Destination "/mnt/agent-home"}}{{.Type}}|{{.RW}}{{end}}{{end}}')" = \
   "volume|true"
+test "$(dim workspace exec "$workspace_name" -- \
+  docker exec "$private_docker_container" dim-private-agent inspect \
+  --format '{{range .Mounts}}{{if eq .Destination "/home/dim-agent"}}{{.Type}}|{{.RW}}{{end}}{{end}}')" = \
+  "bind|true"
+dim workspace exec "$workspace_name" -- \
+  docker exec "$private_docker_container" dim-private-agent inspect \
+  --format '{{.HostConfig.Privileged}}' | grep -qx false
+dim workspace exec "$workspace_name" -- \
+  docker exec "$private_docker_container" dim-private-agent inspect \
+  --format '{{json .Mounts}}' | grep -q '"Destination":"/run/docker.sock"'
+! dim workspace exec "$workspace_name" -- \
+  docker exec "$private_docker_container" dim-private-agent inspect \
+  --format '{{json .Mounts}}' | grep -q /var/run/docker.sock
 dim workspace exec "$workspace_name" -- docker inspect --format '{{.HostConfig.Privileged}}' \
-  "$agent_container" | grep -qx false
-! dim workspace exec "$workspace_name" -- docker inspect --format '{{json .Mounts}}' \
-  "$agent_container" | grep -q /var/run/docker.sock
-dind_container="$(dim workspace exec "$workspace_name" -- \
-  docker compose --project-name "dim-$workspace_name" \
-  --file .dim/docker-compose.yml ps --quiet agent-dind)"
-dim workspace exec "$workspace_name" -- docker inspect --format '{{.HostConfig.Privileged}}' \
-  "$dind_container" | grep -qx true
+  "$private_docker_container" | grep -qx true
 dim workspace run "$workspace_name" bash -- -lc '
   docker info --format "{{json .SecurityOptions}}" | grep -q rootless
   rm -rf /mnt/workspace-shared-dind/bind-smoke

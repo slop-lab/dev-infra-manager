@@ -29,10 +29,11 @@ monorepo, makes that review closure directly visible as a Git revision.
 
 ## Agent-owned development environment
 
-The reviewed outer workspace must eventually bootstrap only a private nested
-container runtime and constrained controller capabilities. The agent itself,
-its tools, and ordinary development services then run as containers inside
-that private runtime from source owned by `development`.
+The reviewed outer workspace bootstraps only a private nested container
+runtime and constrained controller capabilities. The agent itself, its tools,
+and ordinary development services run as containers inside that private
+runtime from source currently held in this repository and ultimately owned by
+`development`.
 
 This lets an agent rebuild and restart its development environment without
 turning those definitions into trusted outer lifecycle code. It does not grant
@@ -72,8 +73,8 @@ build, and release boundary.
 
 1. Publish actual Project repositories in the runtime manifest and document
    that code visibility is separate from promotion and execution authority.
-2. Reduce the reviewed outer self-development lifecycle to a private-runtime
-   bootstrap and move the agent into that runtime.
+2. Keep the reviewed outer self-development lifecycle reduced to the current
+   private-runtime bootstrap, with the agent owned by that runtime.
 3. Extract the minimal `root` repository and continuously verify that it does
    not contain ordinary development tooling.
 4. Make the prospective `core` source independently buildable, then extract it
