@@ -30,6 +30,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Kept the full-development-flow example's private rootless DinD ownership
+  repair aligned with the canonical self Project so its persistent volume
+  remains writable after the outer workspace runtime is replaced.
 - Wired QEMU CI supervisors to the managed registry cache through an explicit
   endpoint and fail-fast relay readiness check, preventing disposable guests
   from silently falling back to direct Docker Hub pulls when the cache path is
