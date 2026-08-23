@@ -80,9 +80,9 @@ the same integrated shape.
    that code visibility is separate from promotion and execution authority.
 2. Keep the reviewed outer self-development lifecycle reduced to the current
    private-runtime bootstrap, with the agent owned by that runtime.
-3. Keep every tracked path assigned to its staged future repository, then
-   extract the minimal `root` repository without ordinary development tooling.
-4. Make the prospective `core` source independently buildable, then extract it
+3. Keep every tracked path assigned to its staged future repository and verify
+   temporary extraction of those exact tracked files.
+4. Extract the already independently verified `root` and `core` repositories
    without a dual monorepo compatibility layer.
 5. Extract provider implementations by independently installed plugin and move
    cross-repository examples and release gates to `development`.

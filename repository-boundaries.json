@@ -2,25 +2,38 @@
   "schemaVersion": 1,
   "owners": {
     "root": {
+      "repository": "root",
+      "targetPrefix": "",
       "files": [".gitignore", "LICENSE", "README.md", "repository-boundaries.json"],
       "prefixes": [".dim/"]
     },
     "development": {
+      "repository": "development",
+      "targetPrefix": "workbench/",
       "prefixes": ["workbench/"]
     },
     "core": {
+      "repository": "core",
+      "targetPrefix": "workbench/core/",
       "prefixes": ["workbench/core/"]
     },
     "specification": {
+      "repository": "specification",
+      "targetPrefix": "workbench/specification/",
       "prefixes": ["workbench/specification/"]
     },
     "plugin-dns-cloudflare": {
+      "repository": "plugin-dns-cloudflare",
+      "targetPrefix": "workbench/plugins/dns-cloudflare/",
       "prefixes": ["workbench/plugins/dns-cloudflare/"]
     },
     "plugin-external-urls": {
+      "repository": "plugin-external-urls",
+      "targetPrefix": "workbench/plugins/external-urls/",
       "prefixes": ["workbench/plugins/external-urls/"]
     },
     "transition": {
+      "extract": false,
       "files": ["AGENTS.md"],
       "prefixes": [".agents/", ".gitea/", ".github/"]
     }

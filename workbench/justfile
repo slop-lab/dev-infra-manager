@@ -26,6 +26,7 @@ build-packages:
 # Run the complete source gate; requires only Node.js and pnpm.
 check-source:
     node ../.dim/verify-repository-boundaries.mjs
+    node ../.dim/verify-extracted-repositories.mjs
     just typecheck
     just test
     just build-packages

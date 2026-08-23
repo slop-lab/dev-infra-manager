@@ -5,3 +5,5 @@ packages:
   - core/packages/controller-proxy
   - core/packages/contracts/*
   - plugins/*
+
+linkWorkspacePackages: true

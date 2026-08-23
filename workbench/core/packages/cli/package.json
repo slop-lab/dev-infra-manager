@@ -23,8 +23,8 @@
     "dim": "./dist/cli.js"
   },
   "scripts": {
-    "build": "node ../../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
-    "pack:dry-run": "pnpm run build && bash ../../../scripts/pnpm-pack-dry-run.bash ./dist",
+    "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
+    "pack:dry-run": "pnpm run build && bash ../../scripts/pnpm-pack-dry-run.bash ./dist",
     "check": "tsc -p tsconfig.json --noEmit",
     "cli": "tsx src/cli.ts",
     "test": "pnpm --filter @slop-lab/dim-core run build && tsx --test test/*.test.ts"

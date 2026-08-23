@@ -18,6 +18,12 @@ transition-only coordination files rather than silently assigned to `root`.
 ownership contract, and `.dim/verify-repository-boundaries.mjs` rejects any
 tracked path without exactly one most-specific owner.
 
+The same contract also defines each future repository name and the prefix
+removed during extraction. `.dim/materialize-repository-boundaries.mjs`
+materializes migration-ready repository trees using tracked files only;
+`just check-source` exercises that extraction in a temporary directory and
+builds and tests `core` without any development-repository files.
+
 For the current integrated development workflow, enter the workbench first:
 
 ```bash

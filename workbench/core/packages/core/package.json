@@ -22,8 +22,8 @@
     }
   },
   "scripts": {
-    "build": "node ../../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
-    "pack:dry-run": "pnpm run build && bash ../../../scripts/pnpm-pack-dry-run.bash ./dist",
+    "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
+    "pack:dry-run": "pnpm run build && bash ../../scripts/pnpm-pack-dry-run.bash ./dist",
     "check": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

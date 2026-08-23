@@ -20,11 +20,12 @@
     }
   },
   "scripts": {
-    "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
+    "build": "node scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
-    "pack:dry-run": "pnpm run build && bash ../../scripts/pnpm-pack-dry-run.bash ./dist",
+    "pack:dry-run": "pnpm run build && bash scripts/pnpm-pack-dry-run.bash",
     "test": "vitest run"
   },
+  "packageManager": "pnpm@10.13.1",
   "engines": {
     "node": "^24.0.0 || ^26.0.0"
   },
@@ -32,10 +33,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@slop-lab/dim-contracts-external-url": "workspace:0.8.0"
+    "@slop-lab/dim-contracts-external-url": "0.8.0"
   },
   "peerDependencies": {
-    "@slop-lab/dim-core": "workspace:0.8.0"
+    "@slop-lab/dim-core": "0.8.0"
   },
   "devDependencies": {
     "@types/node": "24.13.3",

@@ -30,6 +30,21 @@ Workbench-level `just` and pnpm commands forward to workspace packages for
 operator convenience. Every tracked path is assigned by
 `repository-boundaries.json`; longest-prefix ownership lets explicit child
 repositories override the development owner of the surrounding workbench.
+The contract records the target repository and stripped source prefix rather
+than leaving migration layout to an ad-hoc history-filter command.
+
+`core` owns its package workspace, lockfile, TypeScript base configuration,
+and package build helpers. Each plugin similarly owns its lockfile, TypeScript
+configuration, and build helpers. The source gate materializes every
+non-transition repository into a temporary directory. It runs the complete
+core check, test, and build, then checks and builds both plugins against that
+extracted core. Plugin tests still run in the integrated source gate, where a
+single release version can represent the coordinated pre-publication source.
+Consequently builds cannot accidentally resolve a tool or configuration file
+from the surrounding development checkout.
+Transition-only forge workflows and local agent instructions are deliberately
+not copied; they must be replaced by each destination repository's reviewed
+hosting policy during the actual migration.
 
 ## Dependency Direction
 
@@ -170,5 +185,6 @@ Run the current manager verification:
 just check-source
 ```
 
-This runs the matching check, test, and build scripts in every workspace
-package, including packages added later.
+This verifies ownership and extraction, proves the extracted core repository
+is self-contained, then runs the matching check, test, and build scripts in
+the integrated development tree.

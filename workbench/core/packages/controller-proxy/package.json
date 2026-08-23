@@ -28,9 +28,9 @@
     "dim-controller-proxy": "./dist/cli.js"
   },
   "scripts": {
-    "build": "node ../../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
+    "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
     "check": "tsc -p tsconfig.json --noEmit",
-    "pack:dry-run": "pnpm run build && bash ../../../scripts/pnpm-pack-dry-run.bash ./dist",
+    "pack:dry-run": "pnpm run build && bash ../../scripts/pnpm-pack-dry-run.bash ./dist",
     "test": "vitest run"
   },
   "engines": {
