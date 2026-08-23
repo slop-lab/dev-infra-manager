@@ -72,6 +72,8 @@ trap cleanup EXIT
 
 cd "$repo_root"
 echo "[full-development-flow] prepare reviewed repositories and controller"
+just build-packages
+just build-workspace-image
 printf '#!/usr/bin/env bash\nexec node %q "$@"\n' "$dim_cli" >"$dim_bin"
 chmod 0700 "$dim_bin"
 bash "$script_dir/configure-user-backend.bash" "${DIM_EXAMPLE_WORKSPACE_BACKEND:-runc}"
@@ -90,7 +92,6 @@ printf '%s\n' \
 git -C "$repositories/root" add .dim
 git -C "$repositories/root" commit -m "add stateful journey hooks" >/dev/null
 
-just build-workspace-image
 start_controller
 DIM_BIN="$dim_bin" bash examples/projects/full-development-flow/register-project.bash \
   "$project_name" "$repositories" >/dev/null

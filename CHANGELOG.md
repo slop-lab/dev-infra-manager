@@ -27,6 +27,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Made the stateful full-development-flow gate build its local CLI and package
+  artifacts before invoking the CLI from a clean KVM checkout.
 - Recreated fallback Compose services when starting a stopped workspace so
   persistent nested containers cannot retain stale runtime state after their
   outer container stopped.
