@@ -34,7 +34,7 @@ export interface CreateRepositoryInput {
   alias: string;
   protectedPatterns: string[];
   root: boolean;
-  rootRef?: string;
+  ref?: string;
 }
 
 export async function createProject(
@@ -159,6 +159,7 @@ export async function createProjectRepository(
           owner: project.gitNamespace,
           hostUrl: giteaHostCloneUrl(options, project.gitNamespace, alias),
           workspaceUrl: giteaInternalCloneUrl(project.gitNamespace, alias),
+          ...(input.ref === undefined ? {} : { ref: normalizeRepositoryRef(input.ref) }),
           phase: "creating",
           connections: [],
           protectedPatterns: input.protectedPatterns,
@@ -168,6 +169,7 @@ export async function createProjectRepository(
         }
       : {
           ...existingRepo,
+          ...(input.ref === undefined ? {} : { ref: normalizeRepositoryRef(input.ref) }),
           phase: "creating",
           updatedAt: now,
           protectedPatterns: input.protectedPatterns
@@ -178,7 +180,7 @@ export async function createProjectRepository(
       ...(input.root
         ? {
             rootRepositoryAlias: alias,
-            ...(input.rootRef === undefined ? {} : { rootRef: normalizeRootRef(input.rootRef) })
+            ...(input.ref === undefined ? {} : { rootRef: normalizeRepositoryRef(input.ref) })
           }
         : {}),
       repositories: existingRepo === undefined
@@ -264,8 +266,8 @@ export async function planProjectRepositorySet(
     if (existingIsRoot !== entry.root) {
       return { action: "conflict", alias, entry, detail: existingIsRoot ? "existing repository is the project root" : "root role differs" };
     }
-    if (entry.rootRef !== undefined && project?.rootRef !== entry.rootRef) {
-      return { action: "conflict", alias, entry, detail: `existing root ref is ${project?.rootRef ?? "(default HEAD)"}` };
+    if (existing.ref !== entry.ref) {
+      return { action: "retry", alias, entry, detail: "checkout ref differs" };
     }
     if (JSON.stringify(existing.protectedPatterns) !== JSON.stringify(entry.protectedPatterns)) {
       return { action: "conflict", alias, entry, detail: "configured protection patterns differ" };
@@ -354,18 +356,30 @@ export async function prepareProjectRepositoryTransfer(
     const existingConnection = existing?.connections.find((connection) => connection.name === "origin");
     if (existing?.phase === "ready") {
       if (sameRepositoryTransport(existingConnection, requestedConnection)
-        && JSON.stringify(existingConnection?.publishBranches ?? {})
-          !== JSON.stringify(requestedConnection?.publishBranches ?? {})) {
-        const updated = {
+        && (JSON.stringify(existingConnection?.publishBranches ?? {})
+          !== JSON.stringify(requestedConnection?.publishBranches ?? {})
+          || existing.ref !== (input.ref === undefined ? undefined : normalizeRepositoryRef(input.ref)))) {
+        const updated: ProjectRepositoryRecord = {
           ...existing,
           connections: requestedConnection === undefined ? [] : [requestedConnection],
           updatedAt: new Date().toISOString()
         };
-        await state.writeProject({
+        if (input.ref === undefined) delete updated.ref;
+        else updated.ref = normalizeRepositoryRef(input.ref);
+        const updatedProject: ProjectRecord = {
           ...project,
           repositories: project.repositories.map((candidate) => candidate.alias === alias ? updated : candidate),
           updatedAt: updated.updatedAt
-        });
+        };
+        if (input.root) {
+          if (project.rootRepositoryAlias !== undefined && project.rootRepositoryAlias !== alias) {
+            throw new UserError(`project '${projectName}' already has root repo '${project.rootRepositoryAlias}'`);
+          }
+          updatedProject.rootRepositoryAlias = alias;
+          if (updated.ref === undefined) delete updatedProject.rootRef;
+          else updatedProject.rootRef = updated.ref;
+        }
+        await state.writeProject(updatedProject);
         return {
           repository: updated,
           ...(input.source === undefined ? {} : { sourceUrl: input.source }),
@@ -382,7 +396,7 @@ export async function prepareProjectRepositoryTransfer(
         project = {
           ...project,
           rootRepositoryAlias: alias,
-          ...(input.rootRef === undefined ? {} : { rootRef: normalizeRootRef(input.rootRef) }),
+          ...(input.ref === undefined ? {} : { rootRef: normalizeRepositoryRef(input.ref) }),
           updatedAt: new Date().toISOString()
         };
         await state.writeProject(project);
@@ -405,6 +419,7 @@ export async function prepareProjectRepositoryTransfer(
     const repository: ProjectRepositoryRecord = existing
       ? {
           ...existing,
+          ...(input.ref === undefined ? {} : { ref: normalizeRepositoryRef(input.ref) }),
           phase: input.source === undefined ? "ready" : "importing",
           protectedPatterns: input.protectedPatterns,
           connections: requestedConnection === undefined ? [] : [requestedConnection],
@@ -417,6 +432,7 @@ export async function prepareProjectRepositoryTransfer(
           owner: project.gitNamespace,
           hostUrl: giteaHostCloneUrl(options, project.gitNamespace, alias),
           workspaceUrl: giteaInternalCloneUrl(project.gitNamespace, alias),
+          ...(input.ref === undefined ? {} : { ref: normalizeRepositoryRef(input.ref) }),
           phase: input.source === undefined ? "ready" : "importing",
           connections: requestedConnection === undefined ? [] : [requestedConnection],
           ...(transferId === undefined ? {} : { transferId }),
@@ -430,7 +446,7 @@ export async function prepareProjectRepositoryTransfer(
       ...project,
       ...(input.root ? {
         rootRepositoryAlias: alias,
-        ...(input.rootRef === undefined ? {} : { rootRef: normalizeRootRef(input.rootRef) })
+        ...(input.ref === undefined ? {} : { rootRef: normalizeRepositoryRef(input.ref) })
       } : {}),
       repositories: existing
         ? project.repositories.map((candidate) => candidate.alias === alias ? repository : candidate)
@@ -681,10 +697,11 @@ export function projectNamespace(name: string): string {
   return `dim-${validateLifecycleName(name, "project")}`;
 }
 
-export function normalizeRootRef(value: string): string {
+export function normalizeRepositoryRef(value: string): string {
+  if (/^[0-9a-f]{40,64}$/.test(value)) return value;
   const ref = value.startsWith("refs/") ? value : `refs/heads/${value}`;
-  if (!/^refs\/heads\/[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(ref) || ref.includes("..") || ref.endsWith("/")) {
-    throw new UserError(`root ref '${value}' is invalid`);
+  if (!/^refs\/(?:heads|tags|pull)\/[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(ref) || ref.includes("..") || ref.endsWith("/")) {
+    throw new UserError(`repository ref '${value}' is invalid`);
   }
   return ref;
 }

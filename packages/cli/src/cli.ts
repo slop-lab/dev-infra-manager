@@ -24,7 +24,7 @@ import {
   assertRepositorySetCanCreateProject,
   mapExternalRefToRepository,
   mapRepositoryRefToExternal,
-  normalizeRootRef,
+  normalizeRepositoryRef,
   resolveRepositoryConnection,
   type RepositoryRefNamespace,
   type RepositorySet,
@@ -176,22 +176,22 @@ project.command("create")
     const rootConnection = rootSet === undefined || rootAlias === undefined
       ? undefined
       : resolveRepositoryConnection(rootSet, rootAlias);
-    const externalManifestRootRef = rootEntry?.rootRef === undefined
+    const externalManifestRootRef = rootEntry?.ref === undefined
       ? undefined
-      : mapRepositoryRefToExternal(rootConnection?.refNamespace, rootEntry.rootRef);
+      : mapRepositoryRefToExternal(rootConnection?.refNamespace, rootEntry.ref);
     if (flags.bootstrapGitRef !== undefined && externalManifestRootRef !== undefined
-      && normalizeRootRef(flags.bootstrapGitRef) !== normalizeRootRef(externalManifestRootRef)) {
+      && normalizeRepositoryRef(flags.bootstrapGitRef) !== normalizeRepositoryRef(externalManifestRootRef)) {
       throw new UserError(
         `--bootstrap-git-ref '${flags.bootstrapGitRef}' conflicts with manifest external root ref '${externalManifestRootRef}' for '${rootAlias}'`
       );
     }
-    const selectedRootRef = rootEntry?.rootRef ?? flags.bootstrapGitRef;
+    const selectedRootRef = rootEntry?.ref ?? flags.bootstrapGitRef;
     await createOrResumeRootProject(name, rootAlias, flags.bootstrapGitUrl);
     const repository = await addRepository(name, rootAlias, {
       ...(flags.bootstrapGitUrl === undefined ? {} : { url: flags.bootstrapGitUrl }),
       fallback: rootEntry?.fallback ?? false,
       root: true,
-      ...(selectedRootRef === undefined ? {} : { rootRef: selectedRootRef }),
+      ...(selectedRootRef === undefined ? {} : { ref: selectedRootRef }),
       protectedPatterns: rootEntry?.protectedPatterns
         ?? (flags.protect === undefined ? [] : commaSeparated(flags.protect)),
       importBranches: rootEntry?.importBranches ?? {},
@@ -257,7 +257,7 @@ repo.command("add")
       ...(url === undefined ? {} : { url }),
       fallback: false,
       root: flags.root ?? false,
-      ...(flags.ref === undefined ? {} : { rootRef: flags.ref }),
+      ...(flags.ref === undefined ? {} : { ref: flags.ref }),
       protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect),
       importBranches: {},
       publishBranches: {},
@@ -296,7 +296,7 @@ repo.command("list")
   .argument("<project>")
   .option("--json", "print machine-readable JSON")
   .action(async (name: string, flags: JsonFlags) =>
-    printList(await adminCall<Record<string, unknown>[]>("repo.list", { project: name }), ["alias", "phase", "hostUrl", "workspaceUrl"], flags)
+    printList(await adminCall<Record<string, unknown>[]>("repo.list", { project: name }), ["alias", "phase", "ref", "hostUrl", "workspaceUrl"], flags)
   );
 
 repo.command("show")
@@ -485,6 +485,7 @@ workspace.command("create")
   .argument("<project>")
   .argument("<workspace>")
   .option("--profile <profile>", "Compose capability profile", collect, [])
+  .option("--repo-ref <alias=ref>", "candidate checkout ref for a non-root repository", collect, [])
   .option("--git-user-name <name>")
   .option("--git-user-email <email>")
   .option("--cpus <count>", "workspace CPU limit")
@@ -508,6 +509,7 @@ workspace.command("create")
       project: projectName,
       name,
       profiles: flags.profile,
+      repositoryRefs: flags.repoRef,
       runtimeBackend: options.defaultWorkspaceBackend,
       cpuCount: flags.cpus ?? options.cpuCount,
       memory: flags.memory ?? options.memory,

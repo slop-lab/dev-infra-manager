@@ -167,7 +167,7 @@ async function builtinCall(
             importBranches: {},
             publishBranches: input.publishBranches ?? {},
             ...(input.source === undefined ? {} : { url: text("source") }),
-            ...(input.rootRef === undefined ? {} : { rootRef: text("rootRef") })
+            ...(input.ref === undefined ? {} : { ref: text("ref") })
           }
         }
       });
@@ -182,7 +182,7 @@ async function builtinCall(
           ? {}
           : { refNamespace: validateRepositoryRefNamespace(input.refNamespace, "refNamespace") }),
         publishBranches: entry.publishBranches,
-        ...(entry.rootRef === undefined ? {} : { rootRef: entry.rootRef })
+        ...(entry.ref === undefined ? {} : { ref: entry.ref })
       });
     }
     case "repo.complete":
@@ -236,6 +236,7 @@ async function builtinCall(
         project: text("project"),
         name: text("name"),
         profiles: stringArray(input.profiles),
+        repositoryRefs: stringArray(input.repositoryRefs),
         runtimeBackend: text("runtimeBackend") as WorkspaceRuntimeBackendKind,
         cpuCount: text("cpuCount"),
         memory: text("memory"),
