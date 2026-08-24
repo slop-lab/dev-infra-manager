@@ -58,8 +58,10 @@ managed CI journey must also verify that its test-only relay reaches nested KVM
 guest and DinD image pulls without embedding the cache in Project examples.
 
 Managed Git verification must distinguish the host maintainer from the
-workspace writer and verify that protected-ref push options allowlist only the
-maintainer while force pushes remain disabled.
+workspace writer and verify that reviewed-ref push options allowlist the host
+maintainer and organization Owners while force pushes remain disabled. It must
+also verify that baseline-protected refs allow ordinary writer pushes but
+reject force pushes.
 
 The Sysbox lane of `verification/scripts/kvm-host-install-smoke.bash` must enable a real
 Project CI runner inside its disposable QEMU guest and inspect the effective

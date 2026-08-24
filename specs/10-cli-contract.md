@@ -97,7 +97,11 @@ branch exists and does not guess when multiple branches exist.
 
 `repos.yml` contains `schemaVersion: 1` and a `repositories` object whose
 property names are Project-scoped aliases. Each value may contain `url`,
-`root`, `ref`, `protect`, `import`, and `publish`. `import` maps managed branch
+`root`, `ref`, `protect`, `blockForcePush`, `import`, and `publish`. `protect`
+selects refs requiring reviewed changes and explicit host/owner push and merge
+allowlists. `blockForcePush` selects refs that retain ordinary writer push and
+merge permissions while rejecting force pushes; a ref named in both receives
+the stronger `protect` policy. `import` maps managed branch
 names to external branch names. `publish` independently authorizes managed
 source branches and connection-relative destinations, which the import
 namespace projects back to external names. An explicit import mapping copies
@@ -145,8 +149,8 @@ repo.root-set   read and parse .dim/repos.yml from the managed root ref
 `repo.prepare` returns an opaque transfer ID and destination-only Gitea
 credential to the host CLI. `repo.complete` accepts only the active transfer
 ID for that Project/alias. API inputs use normalized JSON field names
-`rootRef` and `protectedPatterns`; YAML `ref` and `protect` are file-format
-adapters, not API fields.
+`rootRef`, `protectedPatterns`, and `forcePushBlockedPatterns`; YAML `ref`,
+`protect`, and `blockForcePush` are file-format adapters, not API fields.
 
 Host and workspace URLs never contain credentials.
 
