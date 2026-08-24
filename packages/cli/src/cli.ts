@@ -13,7 +13,6 @@ import {
   configuredDimController,
   configuredWorkspaceBackend,
   detectWorkspaceKvm,
-  execWorkspace,
   inspectWorkspaceBackends,
   lifecycleOptions,
   lifecycleOptionsForBackend,
@@ -33,7 +32,6 @@ import {
   resolvePluginHome,
   runCommonDoctorChecks,
   runDoctor,
-  runWorkspace,
   runtimeBackendChecks,
   setConfiguredWorkspaceBackend,
   configuredCiRunnerDefaults,
@@ -45,6 +43,7 @@ import {
 import {
   addRepository,
   adminCall,
+  adminStreamCall,
   applyRepositorySet,
   approveRepositoryPlan,
   ciExecutor,
@@ -369,12 +368,12 @@ ciRunner.command("create")
   .argument("<executor>", "sysbox or qemu")
   .option("--cpus <count>")
   .option("--memory <size>")
-  .option("--processes <count>")
+  .option("--pids <count>")
   .option("--json", "print machine-readable JSON")
   .action(async (project: string, name: string, executor: string, flags: ResourceFlags & JsonFlags) => {
     executor = ciExecutor(executor);
-    if (executor === "qemu" && flags.processes !== undefined) throw new UserError("--processes applies only to the sysbox executor");
-    print(await adminCall("ci.runner.create", {
+    if (executor === "qemu" && flags.pids !== undefined) throw new UserError("--pids applies only to the sysbox executor");
+    print(await adminStreamCall("ci.runner.create", {
       project, name, executor,
       ...(hasResourceFlags(flags) ? { resources: resourceInput(flags) } : {})
     }), flags);
@@ -416,7 +415,7 @@ ciRunner.command("restart")
   .argument("<runner>")
   .option("--json", "print machine-readable JSON")
   .action(async (project: string, name: string, flags: JsonFlags) =>
-    print(await adminCall("ci.runner.restart", { project, name }), flags));
+    print(await adminStreamCall("ci.runner.restart", { project, name }), flags));
 
 ciRunner.command("start")
   .description("Start a stopped named CI runner")
@@ -424,7 +423,7 @@ ciRunner.command("start")
   .argument("<runner>")
   .option("--json", "print machine-readable JSON")
   .action(async (project: string, name: string, flags: JsonFlags) =>
-    print(await adminCall("ci.runner.start", { project, name }), flags));
+    print(await adminStreamCall("ci.runner.start", { project, name }), flags));
 
 ciRunner.command("stop")
   .description("Stop a named CI runner without deleting its local data")
@@ -432,7 +431,7 @@ ciRunner.command("stop")
   .argument("<runner>")
   .option("--json", "print machine-readable JSON")
   .action(async (project: string, name: string, flags: JsonFlags) =>
-    print(await adminCall("ci.runner.stop", { project, name }), flags)
+    print(await adminStreamCall("ci.runner.stop", { project, name }), flags)
   );
 
 ciRunner.command("logs")
@@ -440,9 +439,8 @@ ciRunner.command("logs")
   .argument("<project>")
   .argument("<runner>")
   .action(async (project: string, name: string) => {
-    const record = await adminCall<{ executor: { kind: "sysbox"; containerName: string } | { kind: "qemu"; supervisorName: string } }>("ci.runner.show", { project, name });
-    const containerName = record.executor.kind === "sysbox" ? record.executor.containerName : record.executor.supervisorName;
-    process.exitCode = await runner.runStreaming("docker", ["logs", "--follow", containerName]);
+    const result = await adminStreamCall<{ exitCode: number }>("ci.runner.logs", { project, name });
+    process.exitCode = result.exitCode;
   });
 
 ciRunner.command("delete")
@@ -452,7 +450,7 @@ ciRunner.command("delete")
   .option("--yes", "confirm runner and local data deletion")
   .action(async (project: string, name: string, flags: { yes?: boolean }) => {
     await confirmAction(flags.yes ?? false, `Permanently delete CI runner '${project}/${name}' and its local data?`);
-    await adminCall("ci.runner.delete", { project, name });
+    await adminStreamCall("ci.runner.delete", { project, name });
   });
 
 const ciDefaults = ciRunner.command("defaults").description("Manage inherited CI runner resource defaults");
@@ -470,7 +468,7 @@ ciDefaults.command("show")
 ciDefaults.command("set")
   .requiredOption("--cpus <count>")
   .requiredOption("--memory <size>")
-  .requiredOption("--processes <count>")
+  .requiredOption("--pids <count>")
   .action(async (flags: Required<ResourceFlags>) => {
     console.log(await setConfiguredCiRunnerDefaults(resourceInput(flags) as Required<ReturnType<typeof resourceInput>>));
   });
@@ -492,7 +490,7 @@ workspace.command("create")
   .option("--git-user-email <email>")
   .option("--cpus <count>", "workspace CPU limit")
   .option("--memory <size>", "workspace memory limit")
-  .option("--processes <count>", "workspace process limit")
+  .option("--pids <count>", "workspace PID limit")
   .option("--kvm", "allow available host KVM access")
   .option("--no-kvm", "do not pass host KVM into the workspace")
   .option("--json", "print machine-readable JSON")
@@ -507,7 +505,7 @@ workspace.command("create")
       );
     }
     await ensureManagedController(options);
-    print(await adminCall("workspace.create", {
+    print(await adminStreamCall("workspace.create", {
       project: projectName,
       name,
       profiles: flags.profile,
@@ -515,7 +513,7 @@ workspace.command("create")
       runtimeBackend: options.defaultWorkspaceBackend,
       cpuCount: flags.cpus ?? options.cpuCount,
       memory: flags.memory ?? options.memory,
-      pidsLimit: flags.processes ?? options.pidsLimit,
+      pidsLimit: flags.pids ?? options.pidsLimit,
       ...(kvm === undefined ? {} : { kvm }),
       ...(flags.gitUserName ? { gitUserName: flags.gitUserName } : {}),
       ...(flags.gitUserEmail ? { gitUserEmail: flags.gitUserEmail } : {})
@@ -545,17 +543,17 @@ workspace.command("resources")
   .argument("<workspace>")
   .option("--cpus <count>", "workspace CPU limit")
   .option("--memory <size>", "workspace memory limit")
-  .option("--processes <count>", "workspace process limit")
+  .option("--pids <count>", "workspace PID limit")
   .option("--json", "print machine-readable JSON")
   .action(async (name: string, flags: ResourceFlags & JsonFlags) => {
     if (!hasResourceFlags(flags)) throw new UserError("provide at least one resource limit");
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await adminCall("workspace.resources", {
+    print(await adminStreamCall("workspace.resources", {
       name,
       ...(flags.cpus === undefined ? {} : { cpuCount: flags.cpus }),
       ...(flags.memory === undefined ? {} : { memory: flags.memory }),
-      ...(flags.processes === undefined ? {} : { pidsLimit: flags.processes })
+      ...(flags.pids === undefined ? {} : { pidsLimit: flags.pids })
     }), flags);
   });
 
@@ -565,11 +563,12 @@ program.command("exec")
   .argument("<command...>")
   .allowUnknownOption(true)
   .action(async (name: string, command: string[]) => {
-    process.exitCode = await execWorkspace(runner, lifecycleOptions(), {
+    const result = await adminStreamCall<{ exitCode: number }>("workspace.exec", {
       name,
       command,
       interactive: interactive()
-    });
+    }, { stdin: true });
+    process.exitCode = result.exitCode;
   });
 
 program.command("run")
@@ -578,11 +577,12 @@ program.command("run")
   .argument("<task...>")
   .allowUnknownOption(true)
   .action(async (name: string, task: string[]) => {
-    process.exitCode = await runWorkspace(runner, lifecycleOptions(), {
+    const result = await adminStreamCall<{ exitCode: number }>("workspace.run", {
       name,
       command: task,
       interactive: interactive()
-    });
+    }, { stdin: true });
+    process.exitCode = result.exitCode;
   });
 
 workspace.command("exec")
@@ -591,9 +591,10 @@ workspace.command("exec")
   .argument("<command...>")
   .allowUnknownOption(true)
   .action(async (name: string, command: string[]) => {
-    process.exitCode = await execWorkspace(runner, lifecycleOptions(), {
+    const result = await adminStreamCall<{ exitCode: number }>("workspace.exec", {
       name, command, interactive: interactive()
-    });
+    }, { stdin: true });
+    process.exitCode = result.exitCode;
   });
 
 workspace.command("run")
@@ -602,9 +603,10 @@ workspace.command("run")
   .argument("<task...>")
   .allowUnknownOption(true)
   .action(async (name: string, task: string[]) => {
-    process.exitCode = await runWorkspace(runner, lifecycleOptions(), {
+    const result = await adminStreamCall<{ exitCode: number }>("workspace.run", {
       name, command: task, interactive: interactive()
-    });
+    }, { stdin: true });
+    process.exitCode = result.exitCode;
   });
 
 workspace.command("align")
@@ -615,7 +617,7 @@ workspace.command("align")
   .option("--json", "print machine-readable JSON")
   .action(async (name: string, flags: JsonFlags & { reset?: boolean; yes?: boolean }) => {
     if (flags.reset && !flags.yes) throw new UserError("--reset requires --yes");
-    print(await adminCall("workspace.align", { name, reset: flags.reset ?? false }), flags);
+    print(await adminStreamCall("workspace.align", { name, reset: flags.reset ?? false }), flags);
   });
 
 workspace.command("setup")
@@ -625,7 +627,7 @@ workspace.command("setup")
   .action(async (name: string, flags: JsonFlags) => {
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await adminCall("workspace.setup", { name }), flags);
+    print(await adminStreamCall("workspace.setup", { name }), flags);
   });
 
 workspace.command("update")
@@ -640,7 +642,7 @@ workspace.command("update")
     }
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await adminCall("workspace.update", {
+    print(await adminStreamCall("workspace.update", {
       name,
       ...(flags.clearProfiles ? { profiles: [] } : flags.profile.length > 0 ? { profiles: flags.profile } : {})
     }), flags);
@@ -653,7 +655,7 @@ workspace.command("start")
   .action(async (name: string, flags: JsonFlags) => {
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await adminCall("workspace.start", { name }), flags);
+    print(await adminStreamCall("workspace.start", { name }), flags);
   });
 
 workspace.command("restart")
@@ -663,13 +665,13 @@ workspace.command("restart")
   .action(async (name: string, flags: JsonFlags) => {
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await adminCall("workspace.restart", { name }), flags);
+    print(await adminStreamCall("workspace.restart", { name }), flags);
   });
 
 workspace.command("stop")
   .description("Stop a workspace while preserving its checkout and inner-engine data")
   .argument("<workspace>")
-  .action(async (name: string) => void await adminCall("workspace.stop", { name }));
+  .action(async (name: string) => void await adminStreamCall("workspace.stop", { name }));
 
 workspace.command("discard")
   .description("Permanently delete a workspace and unpushed changes")
@@ -682,7 +684,7 @@ workspace.command("discard")
     await externalUrlControllerRequest("/api/urls", { method: "DELETE" }, name).catch((error) => {
       if (!(error instanceof Error) || !error.message.includes("(404)")) throw error;
     });
-    await adminCall("workspace.discard", { name });
+    await adminStreamCall("workspace.discard", { name });
     if ((await adminCall<unknown[]>("workspace.list")).length === 0) await stopManagedController(options);
   });
 

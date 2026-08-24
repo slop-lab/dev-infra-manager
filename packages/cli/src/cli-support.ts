@@ -49,7 +49,7 @@ export interface JsonFlags {
 export interface ResourceFlags {
   cpus?: string;
   memory?: string;
-  processes?: string;
+  pids?: string;
 }
 
 export interface WorkspaceCreateFlags extends JsonFlags {
@@ -60,7 +60,7 @@ export interface WorkspaceCreateFlags extends JsonFlags {
   gitUserEmail?: string;
   cpus?: string;
   memory?: string;
-  processes?: string;
+  pids?: string;
 }
 
 export interface DnsProviderAddFlags {
@@ -671,7 +671,7 @@ export async function readStdin(): Promise<string> {
 }
 
 export function hasResourceFlags(flags: ResourceFlags): boolean {
-  return flags.cpus !== undefined || flags.memory !== undefined || flags.processes !== undefined;
+  return flags.cpus !== undefined || flags.memory !== undefined || flags.pids !== undefined;
 }
 
 export function ciExecutor(value: string): "sysbox" | "qemu" {
@@ -683,7 +683,7 @@ export function resourceInput(flags: ResourceFlags): { cpus?: string; memory?: s
   return {
     ...(flags.cpus === undefined ? {} : { cpus: flags.cpus }),
     ...(flags.memory === undefined ? {} : { memory: flags.memory }),
-    ...(flags.processes === undefined ? {} : { pidsLimit: flags.processes })
+    ...(flags.pids === undefined ? {} : { pidsLimit: flags.pids })
   };
 }
 
@@ -738,11 +738,115 @@ export async function adminCall<T = unknown>(
     { method: "POST", body: JSON.stringify(body) }
   );
   if (response.status < 200 || response.status >= 300) {
-    throw new UserError(
-      `admin controller request failed (${response.status})${response.body ? `: ${response.body.trim()}` : ""}`
-    );
+    throw new UserError(adminErrorDetail(response.body) || `admin controller request failed (${response.status})`);
   }
   return (response.status === 204 || response.body.length === 0 ? {} : JSON.parse(response.body)) as T;
+}
+
+export async function adminStreamCall<T = unknown>(
+  operation: string,
+  body: Record<string, unknown> = {},
+  options: { stdin?: boolean } = {}
+): Promise<T> {
+  const lifecycle = lifecycleOptions();
+  await ensureManagedController(lifecycle);
+  const created = await unixHttpRequest(lifecycle.adminControllerSocketPath, "/v1/sessions", {
+    method: "POST",
+    body: JSON.stringify({ operation, input: body })
+  });
+  if (created.status !== 202) throw new UserError(adminErrorDetail(created.body) || `could not start ${operation}`);
+  const id = (JSON.parse(created.body) as { id?: unknown }).id;
+  if (typeof id !== "string") throw new UserError("controller returned an invalid command session");
+
+  let inputHandler: ((chunk: Buffer) => void) | undefined;
+  let inputEndHandler: (() => void) | undefined;
+  let inputQueue = Promise.resolve();
+  const wasRaw = process.stdin.isTTY ? process.stdin.isRaw : false;
+  if (options.stdin) {
+    if (process.stdin.isTTY) process.stdin.setRawMode(true);
+    process.stdin.resume();
+    inputHandler = (chunk: Buffer) => {
+      inputQueue = inputQueue.then(async () => {
+        await unixHttpRequest(lifecycle.adminControllerSocketPath, `/v1/sessions/${encodeURIComponent(id)}/input`, {
+          method: "POST",
+          body: JSON.stringify({ data: Buffer.from(chunk).toString("base64") })
+        });
+      });
+    };
+    inputEndHandler = () => {
+      inputQueue = inputQueue.then(async () => {
+        await unixHttpRequest(lifecycle.adminControllerSocketPath, `/v1/sessions/${encodeURIComponent(id)}/input`, {
+          method: "POST",
+          body: JSON.stringify({ data: "", end: true })
+        });
+      });
+    };
+    process.stdin.on("data", inputHandler);
+    process.stdin.once("end", inputEndHandler);
+  }
+  const cancel = () => {
+    void unixHttpRequest(lifecycle.adminControllerSocketPath, `/v1/sessions/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
+  };
+  process.once("SIGINT", cancel);
+  try {
+    return await readAdminSession<T>(lifecycle.adminControllerSocketPath, id);
+  } finally {
+    process.removeListener("SIGINT", cancel);
+    if (inputHandler) process.stdin.removeListener("data", inputHandler);
+    if (inputEndHandler) process.stdin.removeListener("end", inputEndHandler);
+    if (process.stdin.isTTY) process.stdin.setRawMode(wasRaw);
+    if (options.stdin) process.stdin.pause();
+  }
+}
+
+function readAdminSession<T>(socketPath: string, id: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest({
+      socketPath,
+      path: `/v1/sessions/${encodeURIComponent(id)}/events`,
+      method: "GET",
+      headers: { accept: "text/event-stream" }
+    }, (response) => {
+      if ((response.statusCode ?? 500) !== 200) {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        response.on("end", () => reject(new UserError(adminErrorDetail(Buffer.concat(chunks).toString("utf8")))));
+        return;
+      }
+      let pending = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk: string) => {
+        pending += chunk;
+        let boundary;
+        while ((boundary = pending.indexOf("\n\n")) >= 0) {
+          const block = pending.slice(0, boundary);
+          pending = pending.slice(boundary + 2);
+          const data = block.split("\n").find((line) => line.startsWith("data: "))?.slice(6);
+          if (!data) continue;
+          const event = JSON.parse(data) as { type: string; data?: string; result?: T; error?: string };
+          if (event.type === "stdout" && event.data) process.stdout.write(event.data);
+          else if (event.type === "stderr" && event.data) process.stderr.write(event.data);
+          else if (event.type === "result") resolve(event.result as T);
+          else if (event.type === "error") reject(new UserError(event.error ?? `${id} failed`));
+        }
+      });
+      response.on("error", reject);
+      response.on("end", () => reject(new UserError(`command session '${id}' ended without a result`)));
+    });
+    request.on("error", reject);
+    request.end();
+  });
+}
+
+export function adminErrorDetail(body: string): string {
+  if (!body) return "";
+  try {
+    const value = JSON.parse(body) as { error?: unknown };
+    if (typeof value.error === "string") return value.error;
+  } catch {}
+  return body.trim();
 }
 
 export async function externalUrlAdmin<T = unknown>(
