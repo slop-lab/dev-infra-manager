@@ -11,8 +11,7 @@ esac
 
 repository() {
   alias="$1"
-  ref="$2"
-  path="$3"
+  path="$2"
   entry="$(jq -c --arg alias "$alias" '.repositories[$alias] // empty' "$DIM_PROJECT_MANIFEST")"
   test -n "$entry" || {
     echo "required Project repository is not registered: $alias" >&2
@@ -23,15 +22,31 @@ repository() {
     exit 1
   }
   url="$(printf '%s' "$entry" | jq -r '.workspaceUrl')"
+  ref="$(printf '%s' "$entry" | jq -r '.ref')"
+  commit="$(printf '%s' "$entry" | jq -r '.commit')"
   test -n "$url"
+  test -n "$ref" -a "$ref" != null
+  printf '%s' "$commit" | grep -Eq '^[0-9a-f]{40,64}$'
 
   # Existing checkouts are agent-controlled. The reviewed outer lifecycle must
   # not invoke Git against their local config, hooks, or filters. Agents update
   # and switch their own checkouts from inside the private development runtime.
   test -e "$path" && return
   mkdir -p "$(dirname "$path")"
-  GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
-    git -c core.hooksPath=/dev/null clone --branch "$ref" --single-branch "$url" "$path"
+  case "$ref" in
+    refs/heads/*)
+      branch="${ref#refs/heads/}"
+      GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+        git -c core.hooksPath=/dev/null clone --branch "$branch" --single-branch "$url" "$path"
+      ;;
+    *)
+      GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+        git -c core.hooksPath=/dev/null clone --no-checkout "$url" "$path"
+      GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+        git -C "$path" -c core.hooksPath=/dev/null checkout --detach "$commit"
+      ;;
+  esac
+  test "$(git -C "$path" rev-parse HEAD)" = "$commit"
 }
 
 development_entry="$(jq -c '.repositories.development // empty' "$DIM_PROJECT_MANIFEST")"
@@ -44,11 +59,9 @@ test "$(printf '%s' "$development_entry" | jq -r '.phase')" = ready || {
   exit 1
 }
 if [ ! -e "$integrated_root/.git" ]; then
-  development_url="$(printf '%s' "$development_entry" | jq -r '.workspaceUrl')"
   staging="$integrated_root/.dim-development-clone"
   test ! -e "$staging"
-  GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
-    git -c core.hooksPath=/dev/null clone --branch main --single-branch "$development_url" "$staging"
+  repository development "$staging"
   cp -a "$staging/." "$integrated_root/"
   rm -rf "$staging"
 fi
@@ -64,12 +77,12 @@ do
   grep -Fxq "$path" "$exclude" || printf '%s\n' "$path" >>"$exclude"
 done
 
-repository core main "$integrated_root/core"
-repository core-development main "$integrated_root/core-development"
-repository plugin-dns-cloudflare main "$integrated_root/plugin-dns-cloudflare"
-repository plugin-dns-cloudflare-development main "$integrated_root/plugin-dns-cloudflare-development"
-repository plugin-external-urls main "$integrated_root/plugin-external-urls"
-repository plugin-external-urls-development main "$integrated_root/plugin-external-urls-development"
-repository verification main "$integrated_root/verification"
-repository examples main "$integrated_root/examples"
-repository specification main "$integrated_root/specification"
+repository core "$integrated_root/core"
+repository core-development "$integrated_root/core-development"
+repository plugin-dns-cloudflare "$integrated_root/plugin-dns-cloudflare"
+repository plugin-dns-cloudflare-development "$integrated_root/plugin-dns-cloudflare-development"
+repository plugin-external-urls "$integrated_root/plugin-external-urls"
+repository plugin-external-urls-development "$integrated_root/plugin-external-urls-development"
+repository verification "$integrated_root/verification"
+repository examples "$integrated_root/examples"
+repository specification "$integrated_root/specification"

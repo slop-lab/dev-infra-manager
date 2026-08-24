@@ -11,7 +11,9 @@ lifecycle clones the `development` repository at `/workspace` and the other
 registered repositories as siblings (`core`, `core-development`, plugin
 source and development pairs, `verification`, `examples`, and
 `specification`). Existing agent-controlled checkouts are never modified by
-the trusted outer lifecycle.
+the trusted outer lifecycle. New checkouts use the runtime manifest's resolved
+commit SHA, so candidate refs and moving branches cannot change the materialized
+repository set after DIM creates the snapshot.
 
 Create the split self-development Project from the root branch:
 

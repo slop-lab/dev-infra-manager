@@ -12,42 +12,52 @@ repositories:
     publish: {main: main}
   development:
     upstream: archive
+    ref: main
     import: {main: dev/development}
     protect: [main]
     publish: {main: main}
   core:
     upstream: archive
+    ref: main
     import: {main: dev/core}
     publish: {main: main}
   core-development:
     upstream: archive
+    ref: main
     import: {main: dev/core-development}
     publish: {main: main}
   plugin-dns-cloudflare:
     upstream: archive
+    ref: main
     import: {main: dev/plugin-dns-cloudflare}
     publish: {main: main}
   plugin-dns-cloudflare-development:
     upstream: archive
+    ref: main
     import: {main: dev/plugin-dns-cloudflare-development}
     publish: {main: main}
   plugin-external-urls:
     upstream: archive
+    ref: main
     import: {main: dev/plugin-external-urls}
     publish: {main: main}
   plugin-external-urls-development:
     upstream: archive
+    ref: main
     import: {main: dev/plugin-external-urls-development}
     publish: {main: main}
   verification:
     upstream: archive
+    ref: main
     import: {main: dev/verification}
     publish: {main: main}
   examples:
     upstream: archive
+    ref: main
     import: {main: dev/examples}
     publish: {main: main}
   specification:
     upstream: archive
+    ref: main
     import: {main: dev/specification}
     publish: {main: main}
