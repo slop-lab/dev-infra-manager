@@ -9,6 +9,18 @@ on:
       candidate-ref:
         type: string
         required: true
+      gate:
+        type: string
+        required: false
+        default: source
+      runner-label:
+        type: string
+        required: false
+        default: dim
+      backend:
+        type: string
+        required: false
+        default: runc
   pull_request:
   push:
     branches: [main]
@@ -19,7 +31,7 @@ permissions:
 
 jobs:
   verify:
-    runs-on: dim
+    runs-on: ${{ inputs.runner-label || 'dim' }}
     steps:
       - name: Check out development root
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -80,10 +92,27 @@ jobs:
       - name: Install repository-set dependencies
         working-directory: snapshot
         run: pnpm install --frozen-lockfile
-      - name: Verify exact repository set
+      - name: Record exact repository set
+        run: bash snapshot/verification/scripts/write-repository-set-evidence.bash snapshot
+      - name: Upload repository-set evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: repository-set-${{ gitea.sha }}-${{ inputs.gate || 'source' }}
+          path: snapshot/repository-set.json
+          retention-days: 30
+      - name: Verify source repository set
+        if: ${{ !inputs.gate || inputs.gate == 'source' }}
         working-directory: snapshot
         run: |
           bash verification/scripts/repository-materialization-smoke.bash
           pnpm run workspace:check
           pnpm run workspace:test
           pnpm run workspace:build
+      - name: Verify container integration
+        if: ${{ inputs.gate == 'container' }}
+        working-directory: snapshot
+        run: just ci workspace
+      - name: Verify QEMU backend integration
+        if: ${{ inputs.gate == 'kvm' }}
+        working-directory: snapshot
+        run: just ci kvm "${{ inputs.backend }}"

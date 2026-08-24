@@ -1,0 +1,39 @@
+name: Expensive integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: Integration lane to run
+        type: choice
+        options: [all, container, kvm]
+        default: all
+      backend:
+        description: QEMU runtime backend
+        type: choice
+        options: [runc, sysbox, gvisor, rootless-podman, all]
+        default: runc
+  schedule:
+    - cron: '17 3 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  container:
+    if: ${{ gitea.event_name == 'schedule' || inputs.lane == 'all' || inputs.lane == 'container' }}
+    uses: ./.gitea/workflows/repository-set.yml
+    with:
+      candidate-repository: verification
+      candidate-ref: ${{ gitea.sha }}
+      gate: container
+      runner-label: dim-container-integration
+  kvm:
+    if: ${{ gitea.event_name == 'schedule' || inputs.lane == 'all' || inputs.lane == 'kvm' }}
+    uses: ./.gitea/workflows/repository-set.yml
+    with:
+      candidate-repository: verification
+      candidate-ref: ${{ gitea.sha }}
+      gate: kvm
+      runner-label: dim-container-integration
+      backend: ${{ gitea.event_name == 'schedule' && 'runc' || inputs.backend }}
