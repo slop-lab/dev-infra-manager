@@ -11,6 +11,7 @@ export interface RepositorySetEntry {
   root: boolean;
   rootRef?: string;
   protectedPatterns: string[];
+  importBranches: Record<string, string>;
   publishBranches: Record<string, string>;
 }
 
@@ -28,6 +29,7 @@ export interface RepositoryRefNamespace {
   prefix?: string;
   fallback?: boolean;
   excludedPrefixes?: string[];
+  branches?: Record<string, string>;
 }
 
 export interface ResolvedRepositoryConnection {
@@ -54,7 +56,7 @@ export function normalizeRepositorySet(value: unknown, label = "repository set")
   for (const [aliasInput, entryValue] of Object.entries(repositories)) {
     const alias = validateLifecycleName(aliasInput, "repo alias");
     const entry = object(entryValue, `${label}.repositories.${alias}`);
-    exactKeys(entry, ["url", "upstream", "refPrefix", "fallback", "root", "ref", "protect", "publish"], `${label}.repositories.${alias}`);
+    exactKeys(entry, ["url", "upstream", "refPrefix", "fallback", "root", "ref", "protect", "import", "publish"], `${label}.repositories.${alias}`);
     const url = optionalGitUrl(entry.url, `${label}.repositories.${alias}.url`);
     const upstream = optionalLifecycleName(entry.upstream, `${label}.repositories.${alias}.upstream`);
     const refPrefix = optionalRefPrefix(entry.refPrefix, `${label}.repositories.${alias}.refPrefix`);
@@ -74,6 +76,7 @@ export function normalizeRepositorySet(value: unknown, label = "repository set")
       root: rootFlag,
       ...(ref === undefined ? {} : { rootRef: normalizeRootRef(ref) }),
       protectedPatterns: stringArray(entry.protect, `${label}.repositories.${alias}.protect`),
+      importBranches: branchMap(entry.import, `${label}.repositories.${alias}.import`, "import"),
       publishBranches: branchMap(entry.publish, `${label}.repositories.${alias}.publish`)
     };
   }
@@ -93,7 +96,7 @@ export function validateRepositorySet(value: unknown, label = "repositorySet"): 
   for (const [aliasInput, entryValue] of Object.entries(repositories)) {
     const alias = validateLifecycleName(aliasInput, "repo alias");
     const entry = object(entryValue, `${label}.repositories.${alias}`);
-    exactKeys(entry, ["url", "upstream", "refPrefix", "fallback", "root", "rootRef", "protectedPatterns", "publishBranches"], `${label}.repositories.${alias}`);
+    exactKeys(entry, ["url", "upstream", "refPrefix", "fallback", "root", "rootRef", "protectedPatterns", "importBranches", "publishBranches"], `${label}.repositories.${alias}`);
     const url = optionalGitUrl(entry.url, `${label}.repositories.${alias}.url`);
     const upstream = optionalLifecycleName(entry.upstream, `${label}.repositories.${alias}.upstream`);
     const refPrefix = optionalRefPrefix(entry.refPrefix, `${label}.repositories.${alias}.refPrefix`);
@@ -113,6 +116,11 @@ export function validateRepositorySet(value: unknown, label = "repositorySet"): 
       protectedPatterns: stringArray(
         entry.protectedPatterns,
         `${label}.repositories.${alias}.protectedPatterns`
+      ),
+      importBranches: branchMap(
+        entry.importBranches,
+        `${label}.repositories.${alias}.importBranches`,
+        "import"
       ),
       publishBranches: branchMap(entry.publishBranches, `${label}.repositories.${alias}.publishBranches`)
     };
@@ -147,10 +155,16 @@ export function resolveRepositoryConnection(
   const entry = set.repositories[alias];
   if (!entry) throw new UserError(`repository set has no repository '${alias}'`);
   const publish = Object.keys(entry.publishBranches).length === 0 ? {} : { publishBranches: entry.publishBranches };
-  if (entry.url !== undefined) return { url: entry.url, ...publish };
+  const imported = Object.keys(entry.importBranches).length === 0
+    ? {}
+    : { refNamespace: { branches: entry.importBranches } };
+  if (entry.url !== undefined) return { url: entry.url, ...imported, ...publish };
   if (entry.upstream === undefined) return undefined;
   const upstream = set.upstreams[entry.upstream];
   if (!upstream) throw new UserError(`repository '${alias}' references unknown upstream '${entry.upstream}'`);
+  if (Object.keys(entry.importBranches).length > 0) {
+    return { url: upstream.url, refNamespace: { branches: entry.importBranches }, ...publish };
+  }
   if (entry.refPrefix !== undefined) {
     return { url: upstream.url, refNamespace: { prefix: entry.refPrefix }, ...publish };
   }
@@ -173,6 +187,12 @@ export function mapExternalRefToRepository(
 ): string | undefined {
   const parsed = splitRef(ref);
   if (!namespace) return ref;
+  if (namespace.branches !== undefined) {
+    if (parsed.base !== "refs/heads/") return undefined;
+    const mapped = Object.entries(namespace.branches)
+      .find(([, external]) => external === parsed.name)?.[0];
+    return mapped === undefined ? undefined : `refs/heads/${mapped}`;
+  }
   if (namespace.prefix !== undefined) {
     return parsed.name.startsWith(namespace.prefix)
       ? `${parsed.base}${parsed.name.slice(namespace.prefix.length)}`
@@ -190,6 +210,12 @@ export function mapRepositoryRefToExternal(
 ): string {
   const parsed = splitRef(ref);
   if (!namespace) return ref;
+  if (namespace.branches !== undefined) {
+    if (parsed.base !== "refs/heads/" || namespace.branches[parsed.name] === undefined) {
+      throw new UserError(`ref '${ref}' is not in the reviewed import branch mapping`);
+    }
+    return `refs/heads/${namespace.branches[parsed.name]}`;
+  }
   if (namespace.prefix !== undefined) return `${parsed.base}${namespace.prefix}${parsed.name}`;
   if (namespace.fallback && namespace.excludedPrefixes?.some((prefix) => parsed.name.startsWith(prefix))) {
     throw new UserError(`ref '${ref}' belongs to another repository's prefix`);
@@ -202,22 +228,25 @@ export function validateRepositoryRefNamespace(
   label = "refNamespace"
 ): RepositoryRefNamespace {
   const namespace = object(value, label);
-  exactKeys(namespace, ["prefix", "fallback", "excludedPrefixes"], label);
+  exactKeys(namespace, ["prefix", "fallback", "excludedPrefixes", "branches"], label);
   const prefix = optionalRefPrefix(namespace.prefix, `${label}.prefix`);
   const fallback = namespace.fallback === undefined ? false : boolean(namespace.fallback, `${label}.fallback`);
   const excludedPrefixes = namespace.excludedPrefixes === undefined
     ? []
     : stringArray(namespace.excludedPrefixes, `${label}.excludedPrefixes`)
         .map((item, index) => optionalRefPrefix(item, `${label}.excludedPrefixes[${index}]`)!);
-  if ((prefix === undefined) === !fallback) {
-    throw new UserError(`${label} must contain exactly one of prefix or fallback: true`);
+  const branches = branchMap(namespace.branches, `${label}.branches`, "import");
+  const hasBranches = Object.keys(branches).length > 0;
+  if ([prefix !== undefined, fallback, hasBranches].filter(Boolean).length !== 1) {
+    throw new UserError(`${label} must contain exactly one of prefix, fallback: true, or branches`);
   }
-  if (prefix !== undefined && excludedPrefixes.length > 0) {
+  if (!fallback && excludedPrefixes.length > 0) {
     throw new UserError(`${label}.excludedPrefixes requires fallback: true`);
   }
   return {
     ...(prefix === undefined ? {} : { prefix }),
-    ...(fallback ? { fallback: true, excludedPrefixes: excludedPrefixes.sort() } : {})
+    ...(fallback ? { fallback: true, excludedPrefixes: excludedPrefixes.sort() } : {}),
+    ...(hasBranches ? { branches } : {})
   };
 }
 
@@ -275,12 +304,18 @@ function validateSharedUpstreams(set: RepositorySet, label: string): void {
     if (!set.upstreams[entry.upstream]) {
       throw new UserError(`${entryLabel}.upstream references unknown upstream '${entry.upstream}'`);
     }
-    if ((entry.refPrefix === undefined) === !entry.fallback) {
-      throw new UserError(`${entryLabel} must contain exactly one of refPrefix or fallback: true`);
+    const hasImports = Object.keys(entry.importBranches).length > 0;
+    if ([entry.refPrefix !== undefined, entry.fallback, hasImports].filter(Boolean).length !== 1) {
+      throw new UserError(`${entryLabel} must contain exactly one of refPrefix, fallback: true, or import`);
     }
   }
   for (const upstream of Object.keys(set.upstreams)) {
     const members = Object.entries(set.repositories).filter(([, entry]) => entry.upstream === upstream);
+    const hasExplicitImports = members.some(([, entry]) => Object.keys(entry.importBranches).length > 0);
+    const hasNamespaceImports = members.some(([, entry]) => entry.refPrefix !== undefined || entry.fallback);
+    if (hasExplicitImports && hasNamespaceImports) {
+      throw new UserError(`${label}.upstreams.${upstream} cannot mix explicit import mappings with refPrefix/fallback namespaces`);
+    }
     if (members.filter(([, entry]) => entry.fallback).length > 1) {
       throw new UserError(`${label}.upstreams.${upstream} has more than one fallback repository`);
     }
@@ -292,6 +327,16 @@ function validateSharedUpstreams(set: RepositorySet, label: string): void {
         if (a.prefix.startsWith(b.prefix) || b.prefix.startsWith(a.prefix)) {
           throw new UserError(`${label} has overlapping ref prefixes for '${a.alias}' and '${b.alias}'`);
         }
+      }
+    }
+    const importedBranches = new Map<string, string>();
+    for (const [alias, entry] of members) {
+      for (const external of Object.values(entry.importBranches)) {
+        const existing = importedBranches.get(external);
+        if (existing !== undefined) {
+          throw new UserError(`${label}.upstreams.${upstream} maps external branch '${external}' to both '${existing}' and '${alias}'`);
+        }
+        importedBranches.set(external, alias);
       }
     }
   }
@@ -357,7 +402,7 @@ function stringArray(value: unknown, label: string): string[] {
   return value as string[];
 }
 
-function branchMap(value: unknown, label: string): Record<string, string> {
+function branchMap(value: unknown, label: string, verb = "publish"): Record<string, string> {
   if (value === undefined) return {};
   const entries = object(value, label);
   const result: Record<string, string> = {};
@@ -375,7 +420,7 @@ function branchMap(value: unknown, label: string): Record<string, string> {
       throw new UserError(`${label} contains unsupported branch name '${source}'`);
     }
     if (Object.values(result).includes(destination)) {
-      throw new UserError(`${label} must not publish multiple branches to '${destination}'`);
+      throw new UserError(`${label} must not ${verb} multiple branches to '${destination}'`);
     }
     result[source] = destination;
   }

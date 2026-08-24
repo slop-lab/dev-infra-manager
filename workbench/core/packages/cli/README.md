@@ -107,9 +107,10 @@ dim project create acme \
   --ref main --protect main
 ```
 
-With manifest bootstrap, an interactive invocation offers to apply additional
-repositories. Choose `--apply-repos` or `--no-apply-repos` explicitly in
-scripts.
+With manifest bootstrap, DIM automatically applies additional repositories
+that all use the bootstrap origin. A manifest containing another origin still
+requires interactive confirmation or `--apply-repos`; `--no-apply-repos`
+always skips explicitly.
 
 Managed-root manifests are read without a checkout, so use network/scp-style
 Git URLs or absolute paths in tracked `.dim/repos.yml`; relative filesystem
@@ -230,6 +231,22 @@ dim repo publish acme
 
 External authentication comes from the invoking host Git process. Publishing
 is non-forced.
+
+Use independent `import` and `publish` mappings when a managed repository's
+branch name differs from its external archive branch:
+
+```yaml
+repositories:
+  core:
+    url: https://github.com/example/archive.git
+    import: {main: dev/core}
+    publish: {main: main}
+```
+
+The import creates only managed `main` from external `dev/core`; it does not
+copy unrelated archive branches or tags. The publish destination is
+connection-relative `main`, which maps back to external `dev/core`, and
+separately authorizes that reverse update.
 
 To keep DIM repositories separate while synchronizing them with one external
 Git repository, declare a shared upstream in `.dim/repos.yml`:

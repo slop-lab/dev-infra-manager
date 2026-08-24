@@ -15,7 +15,7 @@ separator=""
 for repository in "${repositories[@]}"; do
   source="$work_dir/sources/$repository.git"
   worktree="$work_dir/$repository"
-  ref="dev/$repository"
+  ref=main
   git init --bare "$source" >/dev/null
   git init --initial-branch="$ref" "$worktree" >/dev/null
   git -C "$worktree" config user.name "Repository materialization smoke"
@@ -39,7 +39,7 @@ for repository in "${repositories[@]}"; do
     development) path="$work_dir/integrated/workbench" ;;
     *) path="$work_dir/integrated/workbench/$repository" ;;
   esac
-  test "$(git -C "$path" branch --show-current)" = "dev/$repository"
+  test "$(git -C "$path" branch --show-current)" = main
   test "$(cat "$path/content.txt")" = "$repository-initial"
 done
 
@@ -48,7 +48,7 @@ done
 # clean checkout using its own Git process.
 printf 'core-updated\n' >"$work_dir/core/content.txt"
 git -C "$work_dir/core" commit -am update >/dev/null
-git -C "$work_dir/core" push origin dev/core >/dev/null
+git -C "$work_dir/core" push origin main >/dev/null
 printf 'agent-work\n' >>"$work_dir/integrated/workbench/core-development/content.txt"
 mkdir "$work_dir/no-git"
 printf '#!/bin/sh\necho "trusted setup invoked Git for an existing checkout" >&2\nexit 99\n' \

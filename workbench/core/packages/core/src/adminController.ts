@@ -164,6 +164,7 @@ async function builtinCall(
             root: input.root === true,
             fallback: false,
             protectedPatterns: stringArray(input.protectedPatterns),
+            importBranches: {},
             publishBranches: input.publishBranches ?? {},
             ...(input.source === undefined ? {} : { url: text("source") }),
             ...(input.rootRef === undefined ? {} : { rootRef: text("rootRef") })

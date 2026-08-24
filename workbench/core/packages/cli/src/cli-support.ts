@@ -624,7 +624,11 @@ export async function offerRootRepositorySet(projectName: string, apply: boolean
   if (!response.found || !response.repositorySet) return;
   const count = Object.keys(response.repositorySet.repositories).length;
   const later = `Apply it later without a local clone: dim repo apply ${projectName} --yes`;
-  if (apply) {
+  const origins = new Set(Object.keys(response.repositorySet.repositories)
+    .map((alias) => resolveRepositoryConnection(response.repositorySet!, alias)?.url)
+    .filter((url): url is string => url !== undefined));
+  const sameOriginSet = origins.size <= 1;
+  if (apply || (apply === undefined && sameOriginSet)) {
     const plan = await repositorySetPlan(projectName, response.repositorySet, false);
     await approveRepositoryPlan(plan, true);
     await applyRepositorySet(projectName, response.repositorySet, plan);

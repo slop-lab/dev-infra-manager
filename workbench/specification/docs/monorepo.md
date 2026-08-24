@@ -46,9 +46,10 @@ without the development repositories, and then runs each paired development
 suite. Consequently a reviewer can audit the exact production build inputs
 without first trusting test or development-environment code.
 Archive-only forge workflows remain outside the extracted source repositories.
-The managed host protects every reviewed `dev/<alias>` ref; repository-specific
-CI policy can move with each destination when the temporary branches become
-separate canonical repositories.
+Every managed repository uses `main`, mapped to its archive `dev/<alias>`;
+only the self Project's `root/main` and `development/main` require protected-ref
+review. Repository-specific CI policy can move with each destination when the
+temporary branches become separate canonical repositories.
 
 ## Dependency Direction
 
@@ -138,7 +139,7 @@ Create the split Project and a persistent workspace:
 ```bash
 dim project create dim-self \
   --url https://github.com/slop-lab/dev-infra-manager.git \
-  --ref dev/root --apply-repos
+  --ref dev/root
 dim workspace create dim-self dim-self-dev
 dim workspace run dim-self-dev codex
 ```

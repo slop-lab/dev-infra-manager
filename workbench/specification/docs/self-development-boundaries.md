@@ -73,8 +73,9 @@ A transitional agent checkout is:
 ```
 
 This remains a Project-owned layout rather than a stable DIM core contract.
-The reviewed root `.dim/repos.yml` registers every alias and its temporary
-canonical `dev/<alias>` ref. Setup reads only the actual runtime catalog,
+The reviewed root `.dim/repos.yml` registers every alias, imports archive
+`dev/<alias>` as that managed repository's `main`, and publishes `main` back to
+the same archive branch. Setup reads only the actual runtime catalog,
 clones missing ready aliases into the fixed layout above, and never invokes
 Git against an existing agent-controlled checkout. Agents fetch, fast-forward,
 switch, or preserve dirty/proposal work through their own inner-runtime Git

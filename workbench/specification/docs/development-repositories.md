@@ -16,49 +16,48 @@ This gives the two repository locations different roles:
 - The active DIM-managed Git host is the preferred development and review
   location when working inside DIM.
 
-During repository extraction, each DIM component uses a protected
-`dev/<alias>` branch in its own managed Project repository. Agents create and
-push proposal branches from the corresponding checkout, then target that
-repository's `dev/<alias>` branch with a pull request. The archive repository's
+During repository extraction, each DIM component uses `main` in its own
+managed Project repository. The reviewed connection imports that branch from
+the archive's `dev/<alias>` and publishes it back to the same external branch.
+The archive repository's
 `development` and `main` gates remain in use until their CI policies are moved
 to the final canonical repositories.
 
-The reviewed self-Project manifest maps every managed `dev/<alias>` branch to
-the same temporary branch in the canonical GitHub repository. After reviewed
-changes merge, publish every exact candidate with:
+Only `root/main` and `development/main` are protected in the self Project:
+those repositories control the trusted outer lifecycle and common inner
+development environment. Component source, paired tests, plugins, examples,
+verification, and specification repositories intentionally leave managed
+`main` agent-writable. External publication is still host-side authority and
+is not granted by an unprotected managed branch. Publish every current managed
+candidate with:
 
 ```bash
 dim repo publish dim
 ```
 
 These mappings cannot update GitHub `main`; that branch remains the public
-release boundary. Every managed `dev/<alias>` is protected, so workspace
-credentials can push proposal branches but cannot publish or bypass review.
-The current Gitea rules implement that provider-neutral Project policy; they
-are not a Gitea-specific contract for contributors or product repositories.
+release boundary. Workspace credentials cannot publish externally. The
+current Gitea rules implement the two protected managed refs; they are not a
+Gitea-specific contract for contributors or product repositories.
 
 External changes can be imported per repository, for example with
 `dim repo fetch dim core`. They appear as
 managed `upstream/*` tracking branches and still require the normal review path
-before changing protected development history.
+before changing managed development history.
 
-After installing a revision that introduces or changes this policy, reconcile
-the self Project once from the host:
+Create the split self Project directly from the archive root branch:
 
 ```bash
-dim repo apply dim --yes
-for repository in root development core core-development \
-  plugin-dns-cloudflare plugin-dns-cloudflare-development \
-  plugin-external-urls plugin-external-urls-development \
-  verification examples specification; do
-  dim repo protect dim "$repository"
-done
+dim project create dim \
+  --url https://github.com/slop-lab/dev-infra-manager.git \
+  --ref dev/root
 ```
 
-`apply` records the reviewed publish mapping without re-importing an unchanged
-origin. `protect` idempotently reconciles the current managed-host rules. No
-Gitea remote name, URL, or API operation is part of the contributor workflow;
-DIM's repository and pull-request commands resolve the active provider.
+Because every entry shares the bootstrap archive origin, this creates all
+managed repositories without another apply flag. Their import, publish, and
+two protected-branch policies are applied from reviewed root content. No Gitea
+remote name, URL, or API operation is part of the contributor workflow; DIM's
+repository and pull-request commands resolve the active provider.
 
 Do not infer the active forge from an installed CLI or assume that a workspace
 remote is GitHub. Development tooling should inspect the Git remote and select

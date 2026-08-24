@@ -16,14 +16,18 @@ describe("DIM development forge policy", () => {
     ];
 
     expect(manifest?.schemaVersion).toBe(1);
+    expect(manifest.upstreams).toEqual({
+      archive: { url: "https://github.com/slop-lab/dev-infra-manager.git" }
+    });
     expect(Object.keys(manifest.repositories).sort()).toEqual(expected.sort());
     for (const alias of expected) {
       const repository = manifest.repositories[alias];
-      const ref = `dev/${alias}`;
-      expect(repository.url).toBe("https://github.com/slop-lab/dev-infra-manager.git");
-      expect(repository.ref).toBe(ref);
-      expect(repository.protect).toEqual([ref]);
-      expect(repository.publish).toEqual({ [ref]: ref });
+      const externalRef = `dev/${alias}`;
+      expect(repository.upstream).toBe("archive");
+      expect(repository.import).toEqual({ main: externalRef });
+      expect(repository.publish).toEqual({ main: "main" });
+      expect(repository.protect ?? []).toEqual(["root", "development"].includes(alias) ? ["main"] : []);
+      expect(repository.ref).toBe(alias === "root" ? "main" : undefined);
       expect(repository.root).toBe(alias === "root" ? true : undefined);
     }
   });

@@ -19,9 +19,10 @@ dim project create example \
 ```
 
 The selected root ref's `.dim/repos.yml` declares the root alias, connection,
-ref, and protection policy. An interactive invocation offers to apply its
-remaining repositories. Use `--apply-repos` to apply them without prompting or
-`--no-apply-repos` to skip it explicitly. Skipping never requires a local
+ref, and protection policy. DIM automatically applies remaining repositories
+when all entries use that bootstrap origin. If another origin appears, an
+interactive invocation asks first and automation uses `--apply-repos`;
+`--no-apply-repos` always skips explicitly. Skipping never requires a local
 clone later:
 
 ```bash
@@ -59,6 +60,24 @@ repositories:
 dim repo publish example root
 dim repo publish example # every repository with a publish policy
 ```
+
+An explicit import mapping can give a managed repository a conventional local
+branch while sourcing it from a differently named archive branch. Import and
+publish authority stay separate even when they intentionally use the same
+mapping:
+
+```yaml
+repositories:
+  core:
+    url: https://github.com/example/archive.git
+    import: {main: dev/core}
+    publish: {main: main}
+```
+
+This creates only managed `core/main` from external `dev/core`; unrelated
+archive branches and tags are not copied into that managed repository. The
+publish destination `main` is connection-relative, so the import mapping
+projects it back to external `dev/core`.
 
 The default `repo add URL` import copies branches and tags. Use `--mirror` only
 when server-private refs must also be copied.

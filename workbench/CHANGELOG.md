@@ -10,12 +10,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Changed
 
 - Made the split DIM self-development repositories directly runnable: the
-  reviewed root catalog registers and protects every `dev/<alias>` ref,
-  publishes all reviewed refs back to their matching canonical branches, and
+  reviewed root catalog imports each archive `dev/<alias>` as an independent
+  managed repository's `main`, publishes each `main` back to its matching
+  canonical branch, and protects only `root/main` and `development/main`, then
   materializes missing registered Project repositories into the integrated
   agent workbench. The trusted outer lifecycle never invokes Git against an
   existing agent-controlled checkout; agents update those checkouts inside
-  their private runtime.
+  their private runtime. `project create --url` now applies a complete
+  same-origin repository set automatically while retaining explicit approval
+  for manifests that introduce another host Git origin.
   The development checkout also carries the agent guidance and repository-local
   PR/release skills used by the existing contributor workflow.
 - Staged the future `root`, `development`, `core`, paired core/plugin

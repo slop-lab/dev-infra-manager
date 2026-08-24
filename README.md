@@ -36,7 +36,7 @@ Create the split self-development Project from the root branch:
 ```bash
 dim project create dim \
   --url https://github.com/slop-lab/dev-infra-manager.git \
-  --ref dev/root --apply-repos
+  --ref dev/root
 dim workspace create dim dim-dev
 dim workspace run dim-dev codex
 ```

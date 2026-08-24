@@ -107,6 +107,7 @@ export interface RepositoryConnection {
     prefix?: string;
     fallback?: boolean;
     excludedPrefixes?: string[];
+    branches?: Record<string, string>;
   };
   publishBranches?: Record<string, string>;
 }

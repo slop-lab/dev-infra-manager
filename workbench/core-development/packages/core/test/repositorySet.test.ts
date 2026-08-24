@@ -31,6 +31,7 @@ repositories:
           root: true,
           rootRef: "refs/heads/main",
           protectedPatterns: ["main"],
+          importBranches: {},
           publishBranches: {}
         },
         api: {
@@ -38,6 +39,7 @@ repositories:
           fallback: false,
           root: false,
           protectedPatterns: [],
+          importBranches: {},
           publishBranches: {}
         }
       }
@@ -99,6 +101,34 @@ repositories:
 `)).toThrow(/safe branch name/);
   });
 
+  it("maps explicit external archive branches onto managed branches", () => {
+    const set = parseRepositorySetYaml(`
+schemaVersion: 1
+upstreams:
+  archive: {url: https://example.test/team/archive.git}
+repositories:
+  root:
+    upstream: archive
+    root: true
+    ref: main
+    import: {main: dev/root}
+    publish: {main: main}
+  core:
+    upstream: archive
+    import: {main: dev/core}
+    publish: {main: main}
+`);
+    const root = resolveRepositoryConnection(set, "root")!;
+    const core = resolveRepositoryConnection(set, "core")!;
+    expect(root.refNamespace).toEqual({ branches: { main: "dev/root" } });
+    expect(core.refNamespace).toEqual({ branches: { main: "dev/core" } });
+    expect(mapExternalRefToRepository(root.refNamespace, "refs/heads/dev/root")).toBe("refs/heads/main");
+    expect(mapExternalRefToRepository(root.refNamespace, "refs/heads/dev/core")).toBeUndefined();
+    expect(mapExternalRefToRepository(root.refNamespace, "refs/tags/v1")).toBeUndefined();
+    expect(mapRepositoryRefToExternal(core.refNamespace, "refs/heads/main")).toBe("refs/heads/dev/core");
+    expect(() => mapRepositoryRefToExternal(core.refNamespace, "refs/heads/other")).toThrow(/reviewed import/);
+  });
+
   it("rejects ambiguous shared-upstream ownership", () => {
     expect(() => parseRepositorySetYaml(`
 schemaVersion: 1
@@ -117,6 +147,22 @@ repositories:
   api: {upstream: product, refPrefix: api/}
   nested: {upstream: product, refPrefix: api/internal/}
 `)).toThrow(/overlapping ref prefixes/);
+    expect(() => parseRepositorySetYaml(`
+schemaVersion: 1
+upstreams:
+  product: {url: one}
+repositories:
+  root: {upstream: product, root: true, import: {main: dev/shared}}
+  api: {upstream: product, import: {main: dev/shared}}
+`)).toThrow(/maps external branch 'dev\/shared'/);
+    expect(() => parseRepositorySetYaml(`
+schemaVersion: 1
+upstreams:
+  product: {url: one}
+repositories:
+  root: {upstream: product, root: true, fallback: true}
+  api: {upstream: product, import: {main: dev/api}}
+`)).toThrow(/cannot mix explicit import/);
   });
 
   it("rejects duplicate keys, unknown fields, and ambiguous project roots", () => {

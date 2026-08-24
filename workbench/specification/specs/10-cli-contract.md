@@ -96,7 +96,12 @@ branch exists and does not guess when multiple branches exist.
 
 `repos.yml` contains `schemaVersion: 1` and a `repositories` object whose
 property names are Project-scoped aliases. Each value may contain `url`,
-`root`, `ref`, and `protect`. `project create --repos` requires exactly one
+`root`, `ref`, `protect`, `import`, and `publish`. `import` maps managed branch
+names to external branch names. `publish` independently authorizes managed
+source branches and connection-relative destinations, which the import
+namespace projects back to external names. An explicit import mapping copies
+only its named external branches and does not import tags.
+`project create --repos` requires exactly one
 `root: true`. `repo apply` updates an existing Project without deleting
 repositories omitted from the file. Reapplying an identical entry is a no-op;
 an existing alias with a different URL, root role/ref, or protection policy is
@@ -111,10 +116,12 @@ and is never written over the root repository's tracked `.dim/repos.yml`.
 and Project metadata. It rejects the Project root and any Project referenced
 by a workspace.
 
-The CLI asks before applying a discovered root file in a TTY. Non-interactive
-use requires `--yes` for `repo apply` or `--apply-repos` during root
-registration; it never answers its own prompt. `--no-apply-repos` explicitly
-skips discovery without disabling later clone-free `repo apply`.
+When every discovered repository resolves to the bootstrap root's external
+origin (or is empty), `project create --url` applies the complete set without
+another prompt because it introduces no additional host Git origin. Otherwise
+the CLI asks in a TTY and non-interactive use requires `--apply-repos`.
+`repo apply` requires `--yes` in non-interactive use. `--no-apply-repos`
+always skips discovery without disabling later clone-free `repo apply`.
 Repository-set planning and all state transitions use the admin API. External
 clone/push transport is a local CLI adapter so current host credential helpers,
 SSH configuration, and SSH agent are used. The managed Gitea credential is
@@ -143,8 +150,10 @@ adapters, not API fields.
 Host and workspace URLs never contain credentials.
 
 `repo fetch` reuses the external `origin` URL recorded by `repo add`. External
-branches are projected into managed branches under `upstream/` (for example,
-external `refs/heads/main` becomes managed `refs/heads/upstream/main`).
+branches selected by an explicit `import` mapping retain their mapped managed
+names beneath `upstream/`; otherwise external branches retain their names
+(for example, external `refs/heads/main` becomes managed
+`refs/heads/upstream/main`).
 Updates to those tracking branches are forced so an external force-push can be
 represented without changing DIM-owned branches. Tags retain their names and
 an existing tag that points to a different object rejects the fetch.

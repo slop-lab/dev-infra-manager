@@ -173,10 +173,16 @@ project.command("create")
       }
     }
     const rootEntry = rootSet?.repositories[rootAlias];
-    if (flags.ref !== undefined && rootEntry?.rootRef !== undefined
-      && normalizeRootRef(flags.ref) !== normalizeRootRef(rootEntry.rootRef)) {
+    const rootConnection = rootSet === undefined || rootAlias === undefined
+      ? undefined
+      : resolveRepositoryConnection(rootSet, rootAlias);
+    const externalManifestRootRef = rootEntry?.rootRef === undefined
+      ? undefined
+      : mapRepositoryRefToExternal(rootConnection?.refNamespace, rootEntry.rootRef);
+    if (flags.ref !== undefined && externalManifestRootRef !== undefined
+      && normalizeRootRef(flags.ref) !== normalizeRootRef(externalManifestRootRef)) {
       throw new UserError(
-        `--ref '${flags.ref}' conflicts with manifest root ref '${rootEntry.rootRef}' for '${rootAlias}'`
+        `--ref '${flags.ref}' conflicts with manifest external root ref '${externalManifestRootRef}' for '${rootAlias}'`
       );
     }
     const selectedRootRef = rootEntry?.rootRef ?? flags.ref;
@@ -188,6 +194,7 @@ project.command("create")
       ...(selectedRootRef === undefined ? {} : { rootRef: selectedRootRef }),
       protectedPatterns: rootEntry?.protectedPatterns
         ?? (flags.protect === undefined ? [] : commaSeparated(flags.protect)),
+      importBranches: rootEntry?.importBranches ?? {},
       publishBranches: rootEntry?.publishBranches ?? {},
       mirror: flags.mirror ?? false
     }, rootSet);
@@ -252,6 +259,7 @@ repo.command("add")
       root: flags.root ?? false,
       ...(flags.ref === undefined ? {} : { rootRef: flags.ref }),
       protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect),
+      importBranches: {},
       publishBranches: {},
       mirror: flags.mirror ?? false
     });

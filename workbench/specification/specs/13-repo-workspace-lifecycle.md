@@ -93,16 +93,23 @@ repositories. DIM supplies a read-only runtime manifest and environment to
 The optional `.dim/repos.yml` is a repository-connection set, not a Project or
 workspace manifest. Its `repositories` mapping keys are stable Project-scoped
 aliases, including the single root alias used by lifecycle code and agents.
-Registering a root may offer to apply this file, but
-non-interactive use must opt in explicitly. Applying it never removes a
-managed repository omitted from the file. A standalone `repos.yml` with
+Registering a root automatically applies this file when every entry uses the
+bootstrap origin (or is empty); additional origins require explicit or
+interactive approval. Applying it never removes a managed repository omitted
+from the file. A standalone `repos.yml` with
 exactly one `root: true` may be passed to `project create --repos`.
 The normal bootstrap uses `project create --url URL` to read `.dim/repos.yml`
 from the selected external ref before creating Project state. The manifest's
 single `root: true` mapping key fixes the root alias. The command can then
-apply, skip, or interactively offer that set without a local clone. A skipped
-set remains available through `repo plan` and `repo apply` with no `--file`.
+automatically apply a same-origin set, or apply, skip, or interactively offer a
+set that adds origins, without a local clone. A skipped set remains available
+through `repo plan` and `repo apply` with no `--file`.
 Manifest-free repositories use the explicit `--root ALIAS --url URL` form.
+The selected external bootstrap ref may differ from the managed root ref when
+the root entry has an explicit `import` mapping. For example, `--ref dev/root`
+with `ref: main` and `import: {main: dev/root}` imports only the external
+`dev/root` branch as managed `main`; subsequent root-manifest reads use managed
+`main`.
 
 ```text
 DIM_PROJECT_ID
