@@ -1,0 +1,22 @@
+{
+  "name": "@slop-lab/dim-core-development",
+  "version": "0.8.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run packages/core/test packages/controller-proxy/test packages/installer/test packages/contracts/external-url/test && pnpm run test:cli",
+    "test:cli": "pnpm --dir ../core/packages/core run build && tsx --test packages/cli/test/*.test.ts"
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "packageManager": "pnpm@10.13.1",
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "tsx": "4.20.3",
+    "typescript": "5.8.3",
+    "vitest": "3.2.4"
+  }
+}
