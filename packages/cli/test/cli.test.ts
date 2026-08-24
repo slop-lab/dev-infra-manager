@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { adminErrorDetail } from "../../../../core/packages/cli/src/cli-support.js";
 
 const cli = fileURLToPath(new URL("../../../../core/packages/cli/src/cli.ts", import.meta.url));
 const cliSupport = fileURLToPath(new URL("../../../../core/packages/cli/src/cli-support.ts", import.meta.url));
@@ -21,6 +22,16 @@ test("managed controller restarts preserve the workspace-mounted runtime directo
     source,
     /if \(usesSystemdManagedController\(options\)\) \{\s+await stopManagedController/
   );
+});
+
+test("CLI uses controller sessions and presents sanitized controller errors", async () => {
+  const source = await readFile(cli, "utf8");
+  for (const operation of ["workspace.exec", "workspace.run", "workspace.setup", "workspace.restart", "ci.runner.logs"]) {
+    assert.match(source, new RegExp(`adminStreamCall[^\\n]*[\\s\\S]{0,160}${operation.replace(".", "\\.")}`));
+  }
+  assert.doesNotMatch(source, /await (?:execWorkspace|runWorkspace)\(/);
+  assert.equal(adminErrorDetail('{"error":"setup failed safely"}'), "setup failed safely");
+  assert.equal(adminErrorDetail("plain failure"), "plain failure");
 });
 
 test("DNS provider add passes extra arguments to the selected plugin driver", () => {
@@ -93,7 +104,8 @@ test("CI runner commands expose lifecycle and configurable defaults", () => {
   assert.equal(create.status, 0);
   assert.match(create.stdout, /--cpus <count>/);
   assert.match(create.stdout, /--memory <size>/);
-  assert.match(create.stdout, /--processes <count>/);
+  assert.match(create.stdout, /--pids <count>/);
+  assert.doesNotMatch(create.stdout, /--processes/);
   assert.doesNotMatch(create.stdout, /--pids-limit/);
   assert.match(create.stdout, /<project> <runner> <executor>/);
 
@@ -101,9 +113,9 @@ test("CI runner commands expose lifecycle and configurable defaults", () => {
   assert.notEqual(invalidExecutor.status, 0);
   assert.match(invalidExecutor.stderr, /must be 'sysbox' or 'qemu'/);
 
-  const qemuProcesses = run(["ci", "runner", "create", "example", "release", "qemu", "--processes", "512"]);
+  const qemuProcesses = run(["ci", "runner", "create", "example", "release", "qemu", "--pids", "512"]);
   assert.notEqual(qemuProcesses.status, 0);
-  assert.match(qemuProcesses.stderr, /--processes applies only to the sysbox executor/);
+  assert.match(qemuProcesses.stderr, /--pids applies only to the sysbox executor/);
 
   const defaults = run(["ci", "runner", "defaults", "set", "--help"]);
   assert.equal(defaults.status, 0);
@@ -129,7 +141,8 @@ test("workspace resources command requires at least one live limit", () => {
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--cpus <count>/);
   assert.match(help.stdout, /--memory <size>/);
-  assert.match(help.stdout, /--processes <count>/);
+  assert.match(help.stdout, /--pids <count>/);
+  assert.doesNotMatch(help.stdout, /--processes/);
   assert.doesNotMatch(help.stdout, /--pids-limit/);
 
   const missing = run(["workspace", "resources", "work-1"]);

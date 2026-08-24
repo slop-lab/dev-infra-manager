@@ -57,6 +57,25 @@ describe("DIM admin controller", () => {
     });
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toEqual({ error: "invalid plugin input" });
+
+    const started = await fetch(`${base}/v1/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ operation: "workspace.exec", input: {} })
+    });
+    expect(started.status).toBe(202);
+    const session = await started.json() as { id: string };
+    const events = await fetch(`${base}/v1/sessions/${session.id}/events`);
+    expect(events.headers.get("content-type")).toContain("text/event-stream");
+    expect(await events.text()).toMatch(/event: error[\s\S]*name must be a string/);
+
+    const rejected = await fetch(`${base}/v1/sessions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ operation: "plugin.unreviewed", input: {} })
+    });
+    expect(rejected.status).toBe(400);
+    expect(await rejected.json()).toEqual({ error: "operation 'plugin.unreviewed' is not streamable" });
     await plugins.dispose();
   });
 });
