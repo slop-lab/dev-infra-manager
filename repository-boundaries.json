@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "owners": {
+    "root": {
+      "repository": "root",
+      "targetPrefix": "",
+      "files": [".gitignore", "LICENSE", "README.md", "repository-boundaries.json"],
+      "prefixes": [".dim/"]
+    },
+    "development": {
+      "repository": "development",
+      "targetPrefix": "workbench/",
+      "prefixes": ["workbench/"]
+    },
+    "core": {
+      "repository": "core",
+      "targetPrefix": "workbench/core/",
+      "prefixes": ["workbench/core/"]
+    },
+    "core-development": {
+      "repository": "core-development",
+      "targetPrefix": "workbench/core-development/",
+      "prefixes": ["workbench/core-development/"]
+    },
+    "specification": {
+      "repository": "specification",
+      "targetPrefix": "workbench/specification/",
+      "prefixes": ["workbench/specification/"]
+    },
+    "plugin-dns-cloudflare": {
+      "repository": "plugin-dns-cloudflare",
+      "targetPrefix": "workbench/plugin-dns-cloudflare/",
+      "prefixes": ["workbench/plugin-dns-cloudflare/"]
+    },
+    "plugin-dns-cloudflare-development": {
+      "repository": "plugin-dns-cloudflare-development",
+      "targetPrefix": "workbench/plugin-dns-cloudflare-development/",
+      "prefixes": ["workbench/plugin-dns-cloudflare-development/"]
+    },
+    "plugin-external-urls": {
+      "repository": "plugin-external-urls",
+      "targetPrefix": "workbench/plugin-external-urls/",
+      "prefixes": ["workbench/plugin-external-urls/"]
+    },
+    "plugin-external-urls-development": {
+      "repository": "plugin-external-urls-development",
+      "targetPrefix": "workbench/plugin-external-urls-development/",
+      "prefixes": ["workbench/plugin-external-urls-development/"]
+    },
+    "verification": {
+      "repository": "verification",
+      "targetPrefix": "workbench/verification/",
+      "prefixes": ["workbench/verification/"]
+    },
+    "examples": {
+      "repository": "examples",
+      "targetPrefix": "workbench/examples/",
+      "prefixes": ["workbench/examples/"]
+    },
+    "transition": {
+      "extract": false,
+      "prefixes": [".gitea/", ".github/"]
+    }
+  }
+}

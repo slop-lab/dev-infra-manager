@@ -1,0 +1,7 @@
+node_modules/
+.pnpm-store/
+dist/
+.dev-infra/
+coverage/
+*.log
+.local/

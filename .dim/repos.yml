@@ -1,0 +1,53 @@
+schemaVersion: 1
+upstreams:
+  archive:
+    url: https://github.com/slop-lab/dev-infra-manager.git
+repositories:
+  root:
+    upstream: archive
+    root: true
+    ref: main
+    import: {main: dev/root}
+    protect: [main]
+    publish: {main: main}
+  development:
+    upstream: archive
+    import: {main: dev/development}
+    protect: [main]
+    publish: {main: main}
+  core:
+    upstream: archive
+    import: {main: dev/core}
+    publish: {main: main}
+  core-development:
+    upstream: archive
+    import: {main: dev/core-development}
+    publish: {main: main}
+  plugin-dns-cloudflare:
+    upstream: archive
+    import: {main: dev/plugin-dns-cloudflare}
+    publish: {main: main}
+  plugin-dns-cloudflare-development:
+    upstream: archive
+    import: {main: dev/plugin-dns-cloudflare-development}
+    publish: {main: main}
+  plugin-external-urls:
+    upstream: archive
+    import: {main: dev/plugin-external-urls}
+    publish: {main: main}
+  plugin-external-urls-development:
+    upstream: archive
+    import: {main: dev/plugin-external-urls-development}
+    publish: {main: main}
+  verification:
+    upstream: archive
+    import: {main: dev/verification}
+    publish: {main: main}
+  examples:
+    upstream: archive
+    import: {main: dev/examples}
+    publish: {main: main}
+  specification:
+    upstream: archive
+    import: {main: dev/specification}
+    publish: {main: main}
