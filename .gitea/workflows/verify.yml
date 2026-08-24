@@ -1,0 +1,17 @@
+name: Verify development repository set
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repository-set:
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@695b27cb5e4bd1573f369e65d99d954b3114a4c2
+    with:
+      candidate-repository: development
+      candidate-ref: ${{ gitea.sha }}
