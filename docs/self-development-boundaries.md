@@ -26,11 +26,10 @@ Concrete plugin names should describe the capability or implementation, such
 as `managed-git-gitea`, `external-urls`, and `dns-cloudflare`; they do not repeat
 the Project name.
 
-The archival Git history stages each repository in a physical subtree governed
-by `repository-boundaries.json`. Orphan `dev/<alias>` refs make each review
-closure directly visible as a Git revision: `core` builds without
-`development`, `root`, or an unselected plugin, while paired development and
-verification repositories consume those production sources as siblings.
+Each repository has its own managed `main`, Git history, and review closure:
+`core` builds without `development`, `root`, or an unselected plugin, while
+paired development and verification repositories consume those production
+sources as siblings.
 
 ## Agent-owned development environment
 
@@ -57,25 +56,23 @@ credentials. The `root` bootstrap or the inner `development` environment may
 clone catalog entries into any useful layout and synthesize pnpm, TypeScript,
 or `just` orchestration across them. DIM core does not define that layout.
 
-A transitional agent checkout is:
+The self-development checkout is:
 
 ```text
-/workspace/
-├── .dim/                 root bootstrap; not the agent cwd
-└── workbench/            agent cwd and `development` checkout
-    ├── core/
-    ├── specification/
-    ├── core-development/        core tests and test-only dependencies
-    ├── plugin-*/                minimal plugin build inputs
-    ├── plugin-*-development/    paired plugin tests
-    ├── examples/                Project examples
-    └── verification/            cross-repository and host checks
+/workspace/                     agent cwd and `development` checkout
+├── project/                    reviewed `root` bootstrap
+├── core/
+├── specification/
+├── core-development/          core tests and test-only dependencies
+├── plugin-*/                  minimal plugin build inputs
+├── plugin-*-development/      paired plugin tests
+├── examples/                  Project examples
+└── verification/              cross-repository and host checks
 ```
 
 This remains a Project-owned layout rather than a stable DIM core contract.
-The reviewed root `.dim/repos.yml` registers every alias, imports archive
-`dev/<alias>` as that managed repository's `main`, and publishes `main` back to
-the same archive branch. Setup reads only the actual runtime catalog,
+The reviewed root `.dim/repos.yml` registers every alias and its external
+import and publish mappings. Setup reads only the actual runtime catalog,
 clones missing ready aliases into the fixed layout above, and never invokes
 Git against an existing agent-controlled checkout. Agents fetch, fast-forward,
 switch, or preserve dirty/proposal work through their own inner-runtime Git
@@ -83,18 +80,6 @@ process. Each checkout has its own origin, branch, pull request, dependency
 lock, build, and publish boundary while retaining the same development
 ergonomics.
 
-## Remaining migration order
-
-The reviewed catalog, independent refs, materialization, and publish path are
-now live. The remaining transition removes the archival checkout without
-adding a dual-layout compatibility layer:
-
-1. Keep the reviewed outer self-development lifecycle reduced to the current
-   private-runtime bootstrap, with the agent owned by that runtime.
-2. Keep every tracked path assigned to its repository and independently verify
-   the exact extracted files.
-3. Replace the temporary branches with separate canonical repositories for
-   the already independently verified `root` and `core` sources
-   without a dual monorepo compatibility layer.
-4. Move provider implementations to their independently installed repositories
-   and move archive-only forge workflows to their final owners.
+The repository split is complete. Further provider extraction or canonical
+repository publication is ordinary follow-up work and must not reintroduce a
+dual monorepo layout.

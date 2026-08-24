@@ -2,38 +2,33 @@
 
 ## Integrated Layout
 
-The archival checkout physically stages the repository boundaries while
-retaining one Git history. The self-development `root` catalog publishes each
-staged subtree independently and its reviewed lifecycle recreates the same
-integrated pnpm tree from the Project runtime repository catalog. See
+DIM development uses independent repositories assembled as siblings by the
+self-development `root` lifecycle. The `development` checkout is the workspace
+root and owns the integrated pnpm and `just` orchestration. See
 [DIM Self-development Boundaries](self-development-boundaries.md) for the
 review model.
 
 ```text
-.
-├── .dim/                       extracted `root` bootstrap
-├── repository-boundaries.json repository ownership contract
-└── workbench/                  extracted `development` repository root
-    ├── agent/                  agent development image
-    ├── core/                   independently cloned `core` repository
-    ├── core-development/       core unit and integration tests
-    ├── plugin-*/               minimal buildable plugin source repository
-    ├── plugin-*-development/   matching plugin tests and test tooling
-    ├── specification/          documentation/specification repository
-    ├── examples/               reviewed Project examples repository
-    └── verification/           cross-repository and host verification
+/workspace/                     `development` repository root
+├── agent/                      agent development image
+├── project/                    reviewed `root` repository
+├── core/                       independently cloned `core` repository
+├── core-development/           core unit and integration tests
+├── plugin-*/                   minimal buildable plugin source repository
+├── plugin-*-development/       matching plugin tests and test tooling
+├── specification/              documentation/specification repository
+├── examples/                   reviewed Project examples repository
+└── verification/               cross-repository and host verification
 ```
 
-The `development` repository is the remaining `workbench` orchestration
+The `development` repository owns the workspace orchestration
 and development-environment code. It contains no application source or tests.
 `core/packages/cli` imports only the public
 `@slop-lab/dim-core` entrypoint; core never imports the CLI.
-Workbench-level `just` and pnpm commands forward to workspace packages for
-operator convenience. Every tracked path is assigned by
-`repository-boundaries.json`; longest-prefix ownership lets explicit child
-repositories override the development owner of the surrounding workbench.
-The contract records the target repository and stripped source prefix rather
-than leaving migration layout to an ad-hoc history-filter command.
+Workspace-level `just` and pnpm commands forward to sibling packages for
+operator convenience. Each checkout owns its tracked files, ignore rules,
+dependency lock, and Git history; the reviewed root `.dim/repos.yml` owns the
+Project repository set and lifecycle placement.
 
 `core` owns only the files needed to install, check, build, and package its
 production artifacts. Each plugin source repository follows the same rule.
@@ -45,8 +40,8 @@ materializes every repository into siblings, verifies production repositories
 without the development repositories, and then runs each paired development
 suite. Consequently a reviewer can audit the exact production build inputs
 without first trusting test or development-environment code.
-Archive-only forge workflows remain outside the extracted source repositories.
-Every managed repository uses `main`, mapped to its archive `dev/<alias>`;
+Every managed repository uses `main`, with external import and publish
+mappings configured by the reviewed root catalog;
 only the self Project's `root/main` and `development/main` require protected-ref
 review. Repository-specific CI policy can move with each destination when the
 temporary branches become separate canonical repositories.
@@ -188,6 +183,5 @@ Run the current manager verification:
 just check-source
 ```
 
-This verifies ownership and extraction, proves the extracted core repository
-is self-contained, then runs the matching check, test, and build scripts in
-the integrated development tree.
+This verifies root lifecycle materialization, then runs the matching check,
+test, and build scripts across the integrated development tree.
