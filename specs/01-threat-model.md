@@ -1,0 +1,75 @@
+# Threat Model
+
+## Primary Threat
+
+The primary threat is an AI agent that attempts to obtain secrets, bypass review, alter trusted deployment paths, or use its execution privileges outside the intended workspace.
+
+The agent may:
+
+- Run arbitrary commands inside its assigned agent container.
+- Read and write arbitrary files visible inside that container.
+- Create nested containers through the selected runtime backend.
+- Push Git refs to managed repositories when credentials or local access allow it.
+- Generate source code, Dockerfiles, scripts, and config files.
+
+The agent must not be trusted with raw secrets or direct control of secret-bearing environments.
+
+## Assets
+
+Protected assets:
+
+- AI inference API keys and other raw secrets.
+- Secret-bearing container filesystem and runtime configuration.
+- Secret-bearing source code before human review.
+- Project lifecycle code and configuration that can deploy secret-bearing
+  containers.
+- Approved Git refs used for trusted deployment.
+- Host container runtime control plane.
+- Project runtime and host container runtime control planes.
+- Host filesystem outside DIM state and Docker-managed workspace resources.
+
+## Attacker Capabilities
+
+The agent is assumed to be capable of:
+
+- Arbitrary command execution inside its agent container.
+- Arbitrary file reads and writes visible inside its agent container.
+- Running build tools and package managers.
+- Creating nested containers if the backend supports it.
+- Attempting network access allowed by the surrounding agent runtime.
+- Attempting to push directly to protected Git refs.
+- Attempting to modify Dockerfiles or deployment scripts.
+
+## Required Defenses
+
+- Do not inject raw product/runtime secrets into agent environment variables,
+  files, volumes, or images. Internal capability credentials explicitly
+  granted to the agent, such as an unprotected-branch Git writer, must be
+  scoped so disclosure cannot grant protected-ref or runtime-secret access.
+- Do not mount the host or Project runtime Docker socket into agent
+  containers.
+- Do not mount secret-bearing volumes into agent containers.
+- Block direct pushes to protected refs in managed bare repositories.
+- Deploy secret-bearing containers only from configured approved refs.
+- Treat Project lifecycle and secret runtime code as trusted-boundary code.
+- Keep named workspaces isolated from one another.
+- Enforce aggregate CPU, memory, pid, and timeout limits at the workspace-root
+  boundary.
+
+## Out-Of-Scope Threats
+
+These are outside this repository's direct scope:
+
+- Model-level prompt injection handling.
+- Network allow/deny policy enforcement by the agent runtime.
+- Human reviewer correctness.
+- Base image review completeness.
+- Kernel or runtime vulnerabilities in Docker, Sysbox, gVisor, Podman, or Linux.
+- Physical host compromise.
+
+## Residual Risk
+
+- DIM does not currently enforce per-workspace disk quotas.
+- A vulnerable selected runtime backend can break the intended boundary.
+- Secret-bearing code review quality depends on human reviewers and project process.
+- Review and merge semantics depend on the managed Git host and its protected branches.
