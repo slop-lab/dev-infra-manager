@@ -40,7 +40,7 @@ jobs:
       - working-directory: snapshot
         run: pnpm --filter @slop-lab/dim-plugin-dns-cloudflare run pack:dry-run
   development:
-    uses: dim-dim/plugin-dns-cloudflare-development/.gitea/workflows/verify.yml@497a88a2ef8ee4c5f98d2d08965c76e47532552c
+    uses: dim-dim/plugin-dns-cloudflare-development/.gitea/workflows/verify.yml@70c22c7842e1cafa243c8b93279eabb31435b73f
     with:
       source-ref: ${{ gitea.sha }}
       development-ref: main
