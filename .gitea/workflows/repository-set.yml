@@ -1,0 +1,89 @@
+name: Verify repository set
+
+on:
+  workflow_call:
+    inputs:
+      candidate-repository:
+        type: string
+        required: true
+      candidate-ref:
+        type: string
+        required: true
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: dim
+    steps:
+      - name: Check out development root
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/development
+          ref: ${{ gitea.event_name == 'workflow_call' && inputs.candidate-repository == 'development' && inputs.candidate-ref || 'main' }}
+          path: snapshot
+      - name: Check out root
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/root
+          ref: ${{ gitea.event_name == 'workflow_call' && inputs.candidate-repository == 'root' && inputs.candidate-ref || 'main' }}
+          path: snapshot/project
+      - name: Check out repositories
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/core
+          path: snapshot/core
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/core-development
+          path: snapshot/core-development
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/plugin-dns-cloudflare
+          path: snapshot/plugin-dns-cloudflare
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/plugin-dns-cloudflare-development
+          path: snapshot/plugin-dns-cloudflare-development
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/plugin-external-urls
+          path: snapshot/plugin-external-urls
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/plugin-external-urls-development
+          path: snapshot/plugin-external-urls-development
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/verification
+          ref: ${{ gitea.event_name == 'workflow_call' && inputs.candidate-repository == 'verification' && inputs.candidate-ref || gitea.event_name != 'workflow_call' && gitea.sha || 'main' }}
+          path: snapshot/verification
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/examples
+          path: snapshot/examples
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/specification
+          path: snapshot/specification
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.13.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Install repository-set dependencies
+        working-directory: snapshot
+        run: pnpm install --frozen-lockfile
+      - name: Verify exact repository set
+        working-directory: snapshot
+        run: |
+          bash verification/scripts/repository-materialization-smoke.bash
+          pnpm run workspace:check
+          pnpm run workspace:test
+          pnpm run workspace:build
