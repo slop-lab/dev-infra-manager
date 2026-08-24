@@ -42,6 +42,7 @@ jobs:
       - name: Check out development tests
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
+          repository: dim-dim/plugin-dns-cloudflare-development
           ref: ${{ gitea.event_name == 'workflow_call' && inputs.development-ref || gitea.sha }}
           path: snapshot/plugin-dns-cloudflare-development
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
