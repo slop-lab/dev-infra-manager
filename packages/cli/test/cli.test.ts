@@ -146,6 +146,7 @@ test("workspace creation exposes explicit KVM policy", () => {
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--kvm/);
   assert.match(help.stdout, /--no-kvm/);
+  assert.match(help.stdout, /--repo-ref <alias=ref>/);
 });
 
 test("destructive commands require --yes only in non-interactive use", () => {

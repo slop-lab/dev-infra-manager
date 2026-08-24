@@ -20,6 +20,7 @@ repositories:
     protect: [main]
   api:
     url: git@example.test:odd/path-without-dot-git
+    ref: release/tested
 `);
     expect(set).toEqual({
       schemaVersion: 1,
@@ -29,7 +30,7 @@ repositories:
           url: "https://example.test/team/source",
           fallback: false,
           root: true,
-          rootRef: "refs/heads/main",
+          ref: "refs/heads/main",
           protectedPatterns: ["main"],
           importBranches: {},
           publishBranches: {}
@@ -38,6 +39,7 @@ repositories:
           url: "git@example.test:odd/path-without-dot-git",
           fallback: false,
           root: false,
+          ref: "refs/heads/release/tested",
           protectedPatterns: [],
           importBranches: {},
           publishBranches: {}

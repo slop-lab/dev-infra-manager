@@ -10,9 +10,11 @@ import {
   alignWorkspaceRoot,
   detectWorkspaceKvm,
   projectRuntimeManifest,
+  resolveRepositorySnapshot,
   resolveWorkspaceKvm,
   restartWorkspace,
   updateWorkspaceResources,
+  validateRepositoryRefOverrides,
   validateWorkspaceProfiles,
   validateWorkspaceResources,
   waitForInnerDocker,
@@ -84,6 +86,7 @@ describe("project and workspace lifecycle", () => {
       projectName: project.name,
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
+      repositoryRefOverrides: {},
       projectPath: "/workspace/project",
       phase: "creating",
       profiles: ["development"],
@@ -135,7 +138,7 @@ describe("project and workspace lifecycle", () => {
     expect(secondSetupAcquired).toBe(true);
   });
 
-  it("publishes the actual Project repository catalog without credentials", () => {
+  it("publishes the actual Project repository catalog without credentials", async () => {
     const now = new Date().toISOString();
     const repository = (alias: string, phase: "ready" | "error") => ({
       alias,
@@ -169,6 +172,7 @@ describe("project and workspace lifecycle", () => {
       projectName: project.name,
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
+      repositoryRefOverrides: { source: "refs/pull/7/head" },
       projectPath: "/workspace/project",
       phase: "ready" as const,
       profiles: [],
@@ -197,15 +201,78 @@ describe("project and workspace lifecycle", () => {
       driver: "none",
       controllers: [],
       reason: "test"
+    }, {
+      root: { requestedRef: "refs/heads/main", ref: "refs/heads/main", commit: "a".repeat(40) },
+      source: { requestedRef: "refs/pull/7/head", ref: "refs/pull/7/head", commit: "b".repeat(40) }
     });
 
     expect(manifest.repositories).toEqual({
       pending: { workspaceUrl: "http://dim-gitea:3000/dim-project/pending.git", phase: "error", root: false },
-      root: { workspaceUrl: "http://dim-gitea:3000/dim-project/root.git", phase: "ready", root: true },
-      source: { workspaceUrl: "http://dim-gitea:3000/dim-project/source.git", phase: "ready", root: false }
+      root: { workspaceUrl: "http://dim-gitea:3000/dim-project/root.git", phase: "ready", root: true, requestedRef: "refs/heads/main", ref: "refs/heads/main", commit: "a".repeat(40) },
+      source: { workspaceUrl: "http://dim-gitea:3000/dim-project/source.git", phase: "ready", root: false, requestedRef: "refs/pull/7/head", ref: "refs/pull/7/head", commit: "b".repeat(40) }
     });
     expect(JSON.stringify(manifest)).not.toContain("token");
     expect(JSON.stringify(manifest)).not.toContain("password");
+
+    const runner: StreamingCommandRunner = {
+      async run(command: string, args: string[]): Promise<CommandResult> {
+        const source = args.includes("refs/pull/7/head");
+        return {
+          command,
+          args,
+          stdout: source
+            ? `${"b".repeat(40)}\trefs/pull/7/head\n`
+            : `${"a".repeat(40)}\trefs/heads/main\n`,
+          stderr: "",
+          exitCode: 0
+        };
+      },
+      async runStreaming(): Promise<number> { return 0; }
+    };
+    await expect(resolveRepositorySnapshot(runner, workspace, project, {
+      adminUsername: "admin",
+      adminPassword: "secret",
+      writerUsername: "writer",
+      writerPassword: "secret",
+      maintainerUsername: "maintainer",
+      maintainerPassword: "secret"
+    })).resolves.toMatchObject({
+      root: { requestedRef: "refs/heads/main", ref: "refs/heads/main", commit: "a".repeat(40) },
+      source: { requestedRef: "refs/pull/7/head", ref: "refs/pull/7/head", commit: "b".repeat(40) }
+    });
+  });
+
+  it("validates non-root candidate repository ref overrides", () => {
+    const project = {
+      schemaVersion: 3 as const,
+      id: "project-id",
+      name: "project",
+      gitNamespace: "dim-project",
+      phase: "ready" as const,
+      rootRepositoryAlias: "root",
+      rootRef: "refs/heads/main",
+      repositories: ["root", "core"].map((alias) => ({
+        alias,
+        providerRepoId: `dim-project/${alias}`,
+        owner: "dim-project",
+        hostUrl: `http://host/${alias}.git`,
+        workspaceUrl: `http://workspace/${alias}.git`,
+        phase: "ready" as const,
+        connections: [],
+        protectedPatterns: [],
+        protectionPhase: "applied" as const,
+        createdAt: "now",
+        updatedAt: "now"
+      })),
+      createdAt: "now",
+      updatedAt: "now"
+    };
+    expect(validateRepositoryRefOverrides(["core=refs/pull/7/head"], project)).toEqual({
+      core: "refs/pull/7/head"
+    });
+    expect(() => validateRepositoryRefOverrides(["root=next"], project)).toThrow(/root repository/);
+    expect(() => validateRepositoryRefOverrides(["missing=next"], project)).toThrow(/no repository/);
+    expect(() => validateRepositoryRefOverrides(["core=one", "core=two"], project)).toThrow(/duplicated/);
   });
 
   it("auto-detects KVM except for the gVisor workspace runtime", async () => {
@@ -262,6 +329,7 @@ describe("project and workspace lifecycle", () => {
       projectName: project.name,
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
+      repositoryRefOverrides: {},
       projectPath: "/workspace/project",
       phase: "ready",
       profiles: ["development"],
@@ -359,6 +427,7 @@ describe("project and workspace lifecycle", () => {
       projectName: "project",
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
+      repositoryRefOverrides: {},
       projectPath: "/workspace/project",
       phase: "creating",
       profiles: [],
@@ -422,6 +491,7 @@ describe("project and workspace lifecycle", () => {
       projectName: "project",
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
+      repositoryRefOverrides: {},
       projectPath: "/workspace/project",
       phase: "ready",
       profiles: [],
@@ -494,6 +564,7 @@ describe("project and workspace lifecycle", () => {
       projectName: "project",
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
+      repositoryRefOverrides: {},
       projectPath: "/workspace/project",
       phase: "ready",
       profiles: [],

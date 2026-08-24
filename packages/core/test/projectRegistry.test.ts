@@ -7,7 +7,7 @@ import type { LifecycleOptions, ProjectRecord } from "../../../../core/packages/
 import {
   branchProtectionOptions,
   deleteProjectRepository,
-  normalizeRootRef,
+  normalizeRepositoryRef,
   prepareProjectRepositoryTransfer,
   projectNamespace
 } from "../../../../core/packages/core/src/projectRegistry.js";
@@ -24,11 +24,13 @@ describe("project registry", () => {
     expect(() => projectNamespace("../acme")).toThrow(/project name/);
   });
 
-  it("normalizes root branches to full refs", () => {
-    expect(normalizeRootRef("main")).toBe("refs/heads/main");
-    expect(normalizeRootRef("refs/heads/release/next")).toBe("refs/heads/release/next");
-    expect(() => normalizeRootRef("refs/tags/v1")).toThrow(/root ref/);
-    expect(() => normalizeRootRef("bad..ref")).toThrow(/root ref/);
+  it("normalizes repository branches, tags, pull refs, and commits", () => {
+    expect(normalizeRepositoryRef("main")).toBe("refs/heads/main");
+    expect(normalizeRepositoryRef("refs/heads/release/next")).toBe("refs/heads/release/next");
+    expect(normalizeRepositoryRef("refs/tags/v1")).toBe("refs/tags/v1");
+    expect(normalizeRepositoryRef("refs/pull/12/head")).toBe("refs/pull/12/head");
+    expect(normalizeRepositoryRef("a".repeat(40))).toBe("a".repeat(40));
+    expect(() => normalizeRepositoryRef("bad..ref")).toThrow(/repository ref/);
   });
 
   it("allows only the host maintainer to push protected refs", () => {
@@ -121,7 +123,7 @@ describe("project registry", () => {
         alias: "root",
         source,
         root: true,
-        rootRef: "main",
+        ref: "main",
         protectedPatterns: []
       }
     );
