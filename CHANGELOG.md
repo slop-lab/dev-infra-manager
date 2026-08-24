@@ -9,6 +9,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Moved long-running workspace and CI operations, including interactive
+  `exec`/`run` and runner logs, behind host-controller command sessions with
+  ordered SSE output, stdin forwarding, cancellation, and reconnectable event
+  replay. This removes the CLI's direct runtime-control exception and provides
+  the transport foundation for a future authenticated web UI.
+- Renamed the user-facing process-limit option from `--processes` to the more
+  precise `--pids` across workspace and CI runner commands.
+
 - Extended reviewed repository sets with a checkout `ref` for every alias.
   Workspace manifests now publish the requested ref, resolved ref, and exact
   commit SHA, while `workspace create --repo-ref ALIAS=REF` can substitute a
