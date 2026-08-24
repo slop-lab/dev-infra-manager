@@ -1,0 +1,16 @@
+{
+  "name": "@slop-lab/dim-core-repository",
+  "version": "0.8.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "pnpm --recursive run check",
+    "build": "pnpm --recursive run build",
+    "verify": "pnpm run check && pnpm run build"
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "packageManager": "pnpm@10.13.1"
+}
