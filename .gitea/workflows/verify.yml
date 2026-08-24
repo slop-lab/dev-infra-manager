@@ -1,0 +1,30 @@
+name: Verify external URLs plugin
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: dim
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.13.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run pack:dry-run
+  development:
+    uses: dim-dim/plugin-external-urls-development/.gitea/workflows/verify.yml@0a67cdc43adec0f73a126c5c3b079254f123547a
+    with:
+      source-ref: ${{ gitea.sha }}
+      development-ref: main
