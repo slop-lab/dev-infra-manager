@@ -9,6 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Renamed `project create --url/--ref` to the unambiguous
+  `--bootstrap-git-url/--bootstrap-git-ref`; the URL names a Git repository,
+  not a raw `.dim/repos.yml` document, and an omitted ref still selects its
+  symbolic `HEAD`.
 - Made the split DIM self-development repositories directly runnable: the
   reviewed root catalog imports each archive `dev/<alias>` as an independent
   managed repository's `main`, publishes each `main` back to its matching
@@ -16,7 +20,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   materializes missing registered Project repositories into the integrated
   agent workbench. The trusted outer lifecycle never invokes Git against an
   existing agent-controlled checkout; agents update those checkouts inside
-  their private runtime. `project create --url` now applies a complete
+  their private runtime. `project create --bootstrap-git-url` now applies a complete
   same-origin repository set automatically while retaining explicit approval
   for manifests that introduce another host Git origin.
   The development checkout also carries the agent guidance and repository-local
@@ -269,7 +273,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Added `workspace align` to switch a clean root checkout back to its
   configured ref without running Project setup or recreating containers, with
   an explicit `--reset --yes` mode for discarding local commits on that branch.
-- Made `project create --url` read the selected external ref's
+- Made `project create --bootstrap-git-url` read the selected external ref's
   `.dim/repos.yml` before creating Project state, so repository code fixes the
   root alias and policy instead of duplicating them on the command line.
 - Delegated Project-owned threaded CPU/PID cgroups inside the canonical
@@ -296,7 +300,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   can see the host restriction sysctl but cannot access its securityfs policy
   interface.
 - Treated short root branch names such as `main` as equivalent to their full
-  `refs/heads/main` form when checking `project create --url --ref` against the
+  `refs/heads/main` form when checking `project create --bootstrap-git-url
+  --bootstrap-git-ref` against the
   root repository manifest.
 - Ran the complete agent-container gate inside the disposable runc KVM
   self-Project verification, including its private rootless-DinD behavior.

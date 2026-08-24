@@ -33,8 +33,8 @@ The registration script runs:
 
 ```bash
 dim project create example \
-  --url example-repositories/root \
-  --ref main \
+  --bootstrap-git-url example-repositories/root \
+  --bootstrap-git-ref main \
   --no-apply-repos
 dim repo apply example --yes
 ```

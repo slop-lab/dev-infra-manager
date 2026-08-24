@@ -202,12 +202,12 @@ export GIT_TERMINAL_PROMPT=0
 
 echo "[multi-repository] retry an interrupted root import with the same command"
 retry_url="$source_root/retry.git"
-if "$dim_bin" project create "$retry_project_name" --root root --url "$retry_url" >/dev/null 2>&1; then
+if "$dim_bin" project create "$retry_project_name" --root root --bootstrap-git-url "$retry_url" >/dev/null 2>&1; then
   echo "missing root source unexpectedly imported" >&2
   exit 1
 fi
 create_repo retry "retry-source-ok"
-"$dim_bin" project create "$retry_project_name" --root root --url "$retry_url" >/dev/null
+"$dim_bin" project create "$retry_project_name" --root root --bootstrap-git-url "$retry_url" >/dev/null
 test "$("$dim_bin" repo show "$retry_project_name" root --json | jq -r .phase)" = ready
 "$dim_bin" project purge "$retry_project_name" --yes
 
@@ -222,8 +222,8 @@ cmp "$project_worktree/.dim/repos.yml" "$custom_clone/.dim/repos.yml"
 
 echo "[multi-repository] bootstrap from an authenticated private root URL and apply its manifest"
 "$dim_bin" project create "$project_name" \
-  --url "$source_git_base/root" \
-  --ref main \
+  --bootstrap-git-url "$source_git_base/root" \
+  --bootstrap-git-ref main \
   --apply-repos \
   >/dev/null
 test "$("$dim_bin" project show "$project_name" --json | jq -r .rootRepositoryAlias)" = atlas

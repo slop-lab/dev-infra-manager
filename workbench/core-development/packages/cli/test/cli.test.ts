@@ -58,12 +58,12 @@ test("repository sync commands expose safe reviewed contracts", () => {
 test("project create exposes root bootstrap and explicit repository-set choices", () => {
   const help = run(["project", "create", "--help"]);
   assert.equal(help.status, 0);
-  for (const option of ["--root <alias>", "--url <url>", "--apply-repos", "--no-apply-repos"]) {
+  for (const option of ["--root <alias>", "--bootstrap-git-url <git-url>", "--bootstrap-git-ref <git-ref>", "--apply-repos", "--no-apply-repos"]) {
     assert.match(help.stdout, new RegExp(option.replace(/[<>]/g, "\\$&")));
   }
 
   const rootOnlyPolicy = run([
-    "project", "create", "example", "--url", "https://example.com/root.git", "--protect", "main"
+    "project", "create", "example", "--bootstrap-git-url", "https://example.com/root.git", "--protect", "main"
   ]);
   assert.notEqual(rootOnlyPolicy.status, 0);
   assert.match(rootOnlyPolicy.stderr, /--protect and --mirror require --root/);
@@ -79,6 +79,12 @@ test("project create exposes root bootstrap and explicit repository-set choices"
   ]);
   assert.notEqual(conflictingSources.status, 0);
   assert.match(conflictingSources.stderr, /--repos cannot be combined/);
+
+  for (const obsolete of [["--url", "https://example.com/root.git"], ["--ref", "main"]]) {
+    const result = run(["project", "create", "example", ...obsolete]);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /unknown option/);
+  }
 });
 
 test("CI runner commands expose lifecycle and configurable defaults", () => {

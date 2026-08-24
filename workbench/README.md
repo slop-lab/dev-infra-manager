@@ -221,7 +221,7 @@ integrations. It does not expose a generic Git-provider extension point. See
 
 ```bash
 dim project create project \
-  --url /path/to/project --ref main --apply-repos
+  --bootstrap-git-url /path/to/project --bootstrap-git-ref main --apply-repos
 dim workspace create project work-1
 dim workspace run work-1 codex
 dim workspace exec work-1 -- bash

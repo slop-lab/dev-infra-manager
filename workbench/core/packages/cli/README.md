@@ -84,8 +84,8 @@ root alias and policy:
 
 ```bash
 dim project create acme \
-  --url /path/to/acme \
-  --ref main --apply-repos
+  --bootstrap-git-url /path/to/acme \
+  --bootstrap-git-ref main --apply-repos
 ```
 
 `repo add` runs source clone through the invoking host Git CLI, so existing
@@ -103,8 +103,8 @@ For a manifest-free repository, provide the root alias and policy explicitly:
 
 ```bash
 dim project create acme \
-  --root root --url https://example.com/acme.git \
-  --ref main --protect main
+  --root root --bootstrap-git-url https://example.com/acme.git \
+  --bootstrap-git-ref main --protect main
 ```
 
 With manifest bootstrap, DIM automatically applies additional repositories

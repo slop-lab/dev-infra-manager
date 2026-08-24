@@ -7,7 +7,7 @@ dim_bin="${DIM_BIN:-dim}"
 
 "$dim_bin" project create "$project" \
   --root app \
-  --url "$repositories/app" \
-  --ref main
+  --bootstrap-git-url "$repositories/app" \
+  --bootstrap-git-ref main
 
 echo "Registered single-repository Project '$project' without branch protection"

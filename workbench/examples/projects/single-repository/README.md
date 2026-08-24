@@ -31,8 +31,8 @@ The registration command is intentionally small:
 ```bash
 dim project create single-app \
   --root app \
-  --url single-repository/app \
-  --ref main
+  --bootstrap-git-url single-repository/app \
+  --bootstrap-git-ref main
 ```
 
 There is no `.dim/repos.yml` because there are no additional repositories.

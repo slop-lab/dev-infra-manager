@@ -98,15 +98,18 @@ bootstrap origin (or is empty); additional origins require explicit or
 interactive approval. Applying it never removes a managed repository omitted
 from the file. A standalone `repos.yml` with
 exactly one `root: true` may be passed to `project create --repos`.
-The normal bootstrap uses `project create --url URL` to read `.dim/repos.yml`
-from the selected external ref before creating Project state. The manifest's
+The normal bootstrap uses `project create --bootstrap-git-url URL` to read
+`.dim/repos.yml` from the selected external ref before creating Project state.
+The manifest's
 single `root: true` mapping key fixes the root alias. The command can then
 automatically apply a same-origin set, or apply, skip, or interactively offer a
 set that adds origins, without a local clone. A skipped set remains available
 through `repo plan` and `repo apply` with no `--file`.
-Manifest-free repositories use the explicit `--root ALIAS --url URL` form.
+Manifest-free repositories use the explicit
+`--root ALIAS --bootstrap-git-url URL` form.
 The selected external bootstrap ref may differ from the managed root ref when
-the root entry has an explicit `import` mapping. For example, `--ref dev/root`
+the root entry has an explicit `import` mapping. For example,
+`--bootstrap-git-ref dev/root`
 with `ref: main` and `import: {main: dev/root}` imports only the external
 `dev/root` branch as managed `main`; subsequent root-manifest reads use managed
 `main`.

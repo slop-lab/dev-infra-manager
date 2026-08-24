@@ -13,8 +13,8 @@ Create Project metadata and import a root using the invoking host Git CLI:
 
 ```bash
 dim project create example \
-  --url https://github.com/example/product \
-  --ref main \
+  --bootstrap-git-url https://github.com/example/product \
+  --bootstrap-git-ref main \
   --apply-repos
 ```
 
@@ -123,8 +123,8 @@ repositories:
 
 ```bash
 dim project create example \
-  --url https://example.com/product \
-  --ref main \
+  --bootstrap-git-url https://example.com/product \
+  --bootstrap-git-ref main \
   --apply-repos
 ```
 

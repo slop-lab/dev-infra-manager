@@ -49,8 +49,8 @@ Create the split self Project directly from the archive root branch:
 
 ```bash
 dim project create dim \
-  --url https://github.com/slop-lab/dev-infra-manager.git \
-  --ref dev/root
+  --bootstrap-git-url https://github.com/slop-lab/dev-infra-manager.git \
+  --bootstrap-git-ref dev/root
 ```
 
 Because every entry shares the bootstrap archive origin, this creates all

@@ -111,7 +111,8 @@ done
 
 root_ref=dev/root
 dim project create "$project_name" \
-  --url "$source_root/remotes/archive.git" --ref "$root_ref" >/dev/null
+  --bootstrap-git-url "$source_root/remotes/archive.git" \
+  --bootstrap-git-ref "$root_ref" >/dev/null
 if ! dim workspace create "$project_name" "$workspace_name" >/dev/null; then
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \

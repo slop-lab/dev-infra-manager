@@ -26,9 +26,9 @@
 
 ```bash
 dim project create PROJECT [--repos FILE] [--yes]
-dim project create PROJECT --url URL [--ref REF]
+dim project create PROJECT --bootstrap-git-url URL [--bootstrap-git-ref REF]
   [--apply-repos | --no-apply-repos]
-dim project create PROJECT --root ALIAS [--url URL] [--ref REF]
+dim project create PROJECT --root ALIAS [--bootstrap-git-url URL] [--bootstrap-git-ref REF]
   [--protect PATTERNS] [--mirror]
   [--apply-repos | --no-apply-repos]
 dim project list
@@ -43,16 +43,17 @@ assembled without a root, but it is not runnable until it has exactly one root
 repository. Its ref is optional and falls back to the repository's symbolic
 `HEAD`; a missing configured ref and missing `HEAD` is an error.
 
-`project create --url` fetches the selected external ref before creating
-Project state and requires `.dim/repos.yml` there. Its single `root: true`
+`project create --bootstrap-git-url` fetches the selected external Git ref
+before creating Project state and requires `.dim/repos.yml` there. Its single
+`root: true`
 mapping key supplies the stable root alias and its URL must match the bootstrap
 URL. The CLI imports that root through the invoking host Git CLI using the
-manifest's protection policy. `--ref` selects the manifest revision and
-sets the root ref when the manifest omits one; a differing manifest root ref is
-an error. `--apply-repos` applies the remaining
-set, `--no-apply-repos` skips it, and omitting both prompts only in a TTY. A
-declined or non-interactive default must print `dim repo apply PROJECT --yes`
-as the clone-free later path.
+manifest's protection policy. `--bootstrap-git-ref` selects the manifest
+revision and sets the root ref when the manifest omits one; a differing
+manifest root ref is an error. A same-origin set applies automatically;
+`--apply-repos` approves a set adding origins and `--no-apply-repos` skips it.
+A declined or non-interactive multi-origin default must print
+`dim repo apply PROJECT --yes` as the clone-free later path.
 
 `project create --root` is the explicit manifest-free form. It creates the
 Project and registers an empty or imported root under the supplied alias.
@@ -117,7 +118,7 @@ and Project metadata. It rejects the Project root and any Project referenced
 by a workspace.
 
 When every discovered repository resolves to the bootstrap root's external
-origin (or is empty), `project create --url` applies the complete set without
+origin (or is empty), `project create --bootstrap-git-url` applies the complete set without
 another prompt because it introduces no additional host Git origin. Otherwise
 the CLI asks in a TTY and non-interactive use requires `--apply-repos`.
 `repo apply` requires `--yes` in non-interactive use. `--no-apply-repos`

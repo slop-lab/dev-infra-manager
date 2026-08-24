@@ -110,8 +110,8 @@ project.command("create")
   .argument("<project>")
   .option("--repos <file>", "create and populate from a repos.yml file")
   .option("--root <alias>", "import or create the root repository with this alias")
-  .option("--url <url>", "discover .dim/repos.yml and import its root from this Git URL or path")
-  .option("--ref <branch-or-ref>", "root branch/ref; defaults to the repository HEAD")
+  .option("--bootstrap-git-url <git-url>", "discover .dim/repos.yml and import its root from this Git repository")
+  .option("--bootstrap-git-ref <git-ref>", "external bootstrap Git ref; defaults to the repository HEAD")
   .option("--protect <patterns>", "comma-separated protected branch patterns")
   .option("--mirror", "import every root ref instead of only branches and tags")
   .option("--apply-repos", "apply the root .dim/repos.yml without prompting")
@@ -121,22 +121,22 @@ project.command("create")
   .action(async (name: string, flags: JsonFlags & {
     repos?: string;
     root?: string;
-    url?: string;
-    ref?: string;
+    bootstrapGitUrl?: string;
+    bootstrapGitRef?: string;
     protect?: string;
     applyRepos?: boolean;
     mirror?: boolean;
     yes?: boolean;
   }) => {
-    const rootOptionsPresent = flags.root !== undefined || flags.url !== undefined || flags.ref !== undefined
+    const rootOptionsPresent = flags.root !== undefined || flags.bootstrapGitUrl !== undefined || flags.bootstrapGitRef !== undefined
       || flags.protect !== undefined
       || flags.mirror !== undefined
       || flags.applyRepos !== undefined;
     if (flags.repos !== undefined && rootOptionsPresent) {
       throw new UserError("--repos cannot be combined with root repository options");
     }
-    if (flags.root === undefined && flags.url === undefined && rootOptionsPresent) {
-      throw new UserError("--root or --url is required with --ref or repository apply options");
+    if (flags.root === undefined && flags.bootstrapGitUrl === undefined && rootOptionsPresent) {
+      throw new UserError("--root or --bootstrap-git-url is required with --bootstrap-git-ref or repository apply options");
     }
     if (flags.root === undefined && (flags.protect !== undefined || flags.mirror !== undefined)) {
       throw new UserError("--protect and --mirror require --root; manifest bootstrap reads root policy from .dim/repos.yml");
@@ -144,7 +144,7 @@ project.command("create")
     if (process.argv.includes("--apply-repos") && process.argv.includes("--no-apply-repos")) {
       throw new UserError("--apply-repos and --no-apply-repos cannot be used together");
     }
-    if (flags.repos === undefined && flags.root === undefined && flags.url === undefined) {
+    if (flags.repos === undefined && flags.root === undefined && flags.bootstrapGitUrl === undefined) {
       print(await adminCall("project.create", { name }), flags);
       return;
     }
@@ -162,13 +162,13 @@ project.command("create")
     let rootAlias = flags.root;
     let rootSet: RepositorySet | undefined;
     if (rootAlias === undefined) {
-      rootSet = await readRemoteRepositorySet(flags.url!, flags.ref);
-      assertRepositorySetCanCreateProject(rootSet, `${flags.url!}:.dim/repos.yml`);
+      rootSet = await readRemoteRepositorySet(flags.bootstrapGitUrl!, flags.bootstrapGitRef);
+      assertRepositorySetCanCreateProject(rootSet, `${flags.bootstrapGitUrl!}:.dim/repos.yml`);
       [rootAlias] = Object.entries(rootSet.repositories).find(([, entry]) => entry.root)!;
       const connection = resolveRepositoryConnection(rootSet, rootAlias);
-      if (connection?.url !== flags.url) {
+      if (connection?.url !== flags.bootstrapGitUrl) {
         throw new UserError(
-          `remote manifest root '${rootAlias}' URL '${connection?.url ?? "(empty)"}' does not match bootstrap URL '${flags.url}'`
+          `remote manifest root '${rootAlias}' URL '${connection?.url ?? "(empty)"}' does not match bootstrap Git URL '${flags.bootstrapGitUrl}'`
         );
       }
     }
@@ -179,16 +179,16 @@ project.command("create")
     const externalManifestRootRef = rootEntry?.rootRef === undefined
       ? undefined
       : mapRepositoryRefToExternal(rootConnection?.refNamespace, rootEntry.rootRef);
-    if (flags.ref !== undefined && externalManifestRootRef !== undefined
-      && normalizeRootRef(flags.ref) !== normalizeRootRef(externalManifestRootRef)) {
+    if (flags.bootstrapGitRef !== undefined && externalManifestRootRef !== undefined
+      && normalizeRootRef(flags.bootstrapGitRef) !== normalizeRootRef(externalManifestRootRef)) {
       throw new UserError(
-        `--ref '${flags.ref}' conflicts with manifest external root ref '${externalManifestRootRef}' for '${rootAlias}'`
+        `--bootstrap-git-ref '${flags.bootstrapGitRef}' conflicts with manifest external root ref '${externalManifestRootRef}' for '${rootAlias}'`
       );
     }
-    const selectedRootRef = rootEntry?.rootRef ?? flags.ref;
-    await createOrResumeRootProject(name, rootAlias, flags.url);
+    const selectedRootRef = rootEntry?.rootRef ?? flags.bootstrapGitRef;
+    await createOrResumeRootProject(name, rootAlias, flags.bootstrapGitUrl);
     const repository = await addRepository(name, rootAlias, {
-      ...(flags.url === undefined ? {} : { url: flags.url }),
+      ...(flags.bootstrapGitUrl === undefined ? {} : { url: flags.bootstrapGitUrl }),
       fallback: rootEntry?.fallback ?? false,
       root: true,
       ...(selectedRootRef === undefined ? {} : { rootRef: selectedRootRef }),
