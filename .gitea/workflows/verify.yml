@@ -23,7 +23,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run verify
   development:
-    uses: dim-dim/core-development/.gitea/workflows/verify.yml@9a3042146cd6bc4604fd0121b70b9881221afa4d
+    uses: dim-dim/core-development/.gitea/workflows/verify.yml@b1a45d1735e90afcbd75327878e0cc7defb43c62
     with:
       source-ref: ${{ gitea.sha }}
       development-ref: main
