@@ -95,7 +95,7 @@ jobs:
       - name: Record exact repository set
         run: bash snapshot/verification/scripts/write-repository-set-evidence.bash snapshot
       - name: Upload repository-set evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
         with:
           name: repository-set-${{ gitea.sha }}-${{ inputs.gate || 'source' }}
           path: snapshot/repository-set.json
