@@ -220,6 +220,7 @@ dim workspace run "$workspace_name" bash -- -lc '
   test -n "$(getent hosts dim-gitea)"
   git ls-remote origin HEAD >/dev/null
   test "$(git branch --show-current)" = main
+  test -z "$(git status --short)"
   test -r AGENTS.md
   test -r .agents/skills/pull-request/SKILL.md
   for repository in core core-development plugin-dns-cloudflare plugin-dns-cloudflare-development plugin-external-urls plugin-external-urls-development verification examples specification; do

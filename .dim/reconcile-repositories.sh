@@ -53,6 +53,17 @@ if [ ! -e "$integrated_root/.git" ]; then
   rm -rf "$staging"
 fi
 
+exclude="$integrated_root/.git/info/exclude"
+for path in \
+  node_modules/ .pnpm-store/ project/ \
+  core/ core-development/ \
+  plugin-dns-cloudflare/ plugin-dns-cloudflare-development/ \
+  plugin-external-urls/ plugin-external-urls-development/ \
+  verification/ examples/ specification/
+do
+  grep -Fxq "$path" "$exclude" || printf '%s\n' "$path" >>"$exclude"
+done
+
 repository core main "$integrated_root/core"
 repository core-development main "$integrated_root/core-development"
 repository plugin-dns-cloudflare main "$integrated_root/plugin-dns-cloudflare"
