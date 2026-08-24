@@ -11,6 +11,7 @@ import type { CiRunnerExecutorKind, CiRunnerRecord, CiRunnerResources, Lifecycle
 import type { StreamingCommandRunner } from "./types.js";
 import { QEMU_CI_PACKER_PROVISION_SCRIPT, QEMU_CI_PACKER_TEMPLATE, QEMU_CI_SUPERVISOR_DOCKERFILE, QEMU_CI_SUPERVISOR_IMAGE, QEMU_CI_SUPERVISOR_SCRIPT, QEMU_CI_WEBHOOK_SCRIPT } from "./qemuCiRunnerAssets.js";
 import { configureSysboxRegistryMirror, CONTROL_NETWORK, ensureRegistryCache, REGISTRY_CACHE_ENDPOINT } from "./registryCache.js";
+import { SYSBOX_CI_RUNNER_DOCKERFILE, SYSBOX_CI_RUNNER_HEALTH_SCRIPT, SYSBOX_CI_RUNNER_IMAGE } from "./sysboxCiRunnerAssets.js";
 
 export const BUILTIN_CI_RUNNER_DEFAULTS: CiRunnerResources = { cpus: "4", memory: "8g", pidsLimit: "2048" };
 export const CI_RUNNER_LABELS = ["dim:docker://gitea/runner-images:ubuntu-24.04", "ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04", "dim-container-integration:host"].join(",");
@@ -115,6 +116,9 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       const executor: SysboxCiRunnerExecutor = { kind: "sysbox", phase: "creating", containerName: ciRunnerContainerName(projectName, name), volumeName: ciRunnerVolumeName(projectName, name), image: options.ciRunnerImage, runtime: options.ciRunnerRuntime, ...effective, labels: ["dim"], updatedAt: now };
       record = await saveExecutor(state, existing ?? newRecord(project, name, executor, now), executor);
       try {
+        if (executor.image === SYSBOX_CI_RUNNER_IMAGE) {
+          await buildSysboxRunnerImage(runner, options.stateRoot);
+        }
         await removeContainer(runner, executor.containerName);
         await ensureVolume(runner, executor.volumeName);
         await configureSysboxRegistryMirror(runner, executor.volumeName);
@@ -229,6 +233,7 @@ export function qemuMemoryMiB(memory: string): number {
 }
 
 async function buildQemuSupervisorImage(runner: StreamingCommandRunner, stateRoot: string): Promise<void> { const context = path.join(stateRoot, "assets", "qemu-ci-supervisor"); await mkdir(context, { recursive: true, mode: 0o700 }); await writeFile(path.join(context, "Dockerfile"), QEMU_CI_SUPERVISOR_DOCKERFILE, { mode: 0o600 }); await writeFile(path.join(context, "supervise.bash"), QEMU_CI_SUPERVISOR_SCRIPT, { mode: 0o600 }); await writeFile(path.join(context, "webhook.py"), QEMU_CI_WEBHOOK_SCRIPT, { mode: 0o600 }); await writeFile(path.join(context, "runner-base.pkr.hcl"), QEMU_CI_PACKER_TEMPLATE, { mode: 0o600 }); await writeFile(path.join(context, "provision-runner-base.bash"), QEMU_CI_PACKER_PROVISION_SCRIPT, { mode: 0o600 }); const result = await runner.run("docker", ["build", "--tag", QEMU_CI_SUPERVISOR_IMAGE, context]); if (result.exitCode !== 0) throw new UserError(`failed to build QEMU runner supervisor: ${result.stderr.trim()}`); }
+async function buildSysboxRunnerImage(runner: StreamingCommandRunner, stateRoot: string): Promise<void> { const context = path.join(stateRoot, "assets", "sysbox-ci-runner"); await mkdir(context, { recursive: true, mode: 0o700 }); await writeFile(path.join(context, "Dockerfile"), SYSBOX_CI_RUNNER_DOCKERFILE, { mode: 0o600 }); await writeFile(path.join(context, "health.bash"), SYSBOX_CI_RUNNER_HEALTH_SCRIPT, { mode: 0o700 }); const result = await runner.run("docker", ["build", "--tag", SYSBOX_CI_RUNNER_IMAGE, context]); if (result.exitCode !== 0) throw new UserError(`failed to build Sysbox CI runner image: ${result.stderr.trim()}`); }
 async function removeContainer(runner: StreamingCommandRunner, name: string): Promise<void> { const result = await runner.run("docker", ["container", "rm", "--force", name]); if (result.exitCode !== 0 && !result.stderr.includes("No such container")) throw new UserError(`failed to replace CI runner container '${name}': ${result.stderr.trim()}`); }
 async function ensureVolume(runner: StreamingCommandRunner, name: string): Promise<void> { if ((await runner.run("docker", ["volume", "inspect", name])).exitCode === 0) return; const result = await runner.run("docker", ["volume", "create", "--label", "dim.managed=true", "--label", "dim.resource=ci-runner-data", name]); if (result.exitCode !== 0) throw new UserError(`failed to create CI runner data volume: ${result.stderr.trim()}`); }
 async function removeVolume(runner: StreamingCommandRunner, name: string, description: string): Promise<void> { const result = await runner.run("docker", ["volume", "rm", name]); if (result.exitCode !== 0 && !result.stderr.includes("No such volume")) throw new UserError(`failed to remove ${description}: ${result.stderr.trim()}`); }

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { UserError } from "./errors.js";
 import type { LifecycleOptions } from "./lifecycleTypes.js";
 import { configuredWorkspaceBackend } from "./userConfig.js";
+import { SYSBOX_CI_RUNNER_IMAGE } from "./sysboxCiRunnerAssets.js";
 
 export function lifecycleOptions(env: NodeJS.ProcessEnv = process.env): LifecycleOptions {
   const defaultWorkspaceBackend = configuredWorkspaceBackend(env);
@@ -47,7 +48,7 @@ export function lifecycleOptionsForBackend(
     memory: env.DIM_WORKSPACE_MEMORY ?? "4g",
     pidsLimit: env.DIM_WORKSPACE_PIDS ?? "2048",
     ciRunnerImage: env.DIM_CI_RUNNER_IMAGE
-      ?? "gitea/act_runner@sha256:578925b4bdec5f60d93b5ba766cf02f2f9f32b1c8a4ec665ddf4d53d45f683c7",
+      ?? SYSBOX_CI_RUNNER_IMAGE,
     ciRunnerRuntime: env.DIM_CI_RUNNER_RUNTIME ?? "sysbox-runc",
     ciRunnerDefaultCpus: env.DIM_CI_RUNNER_CPUS ?? "4",
     ciRunnerDefaultMemory: env.DIM_CI_RUNNER_MEMORY ?? "8g",
