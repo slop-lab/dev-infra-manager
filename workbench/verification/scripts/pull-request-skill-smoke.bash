@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-checkout_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
-helper="$checkout_root/.agents/skills/pull-request/scripts/detect-forge.bash"
-logs_helper="$checkout_root/.agents/skills/pull-request/scripts/get-gitea-job-logs.bash"
+workbench_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+helper="$workbench_root/.agents/skills/pull-request/scripts/detect-forge.bash"
+logs_helper="$workbench_root/.agents/skills/pull-request/scripts/get-gitea-job-logs.bash"
 work_dir="$(mktemp -d /tmp/dim-pull-request-skill.XXXXXX)"
 cleanup() { find "$work_dir" -depth -delete 2>/dev/null || true; }
 trap cleanup EXIT

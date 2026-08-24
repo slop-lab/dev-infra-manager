@@ -35,6 +35,8 @@ export GIT_AUTHOR_EMAIL="$git_email"
 export GIT_COMMITTER_NAME="$git_name"
 export GIT_COMMITTER_EMAIL="$git_email"
 
+sh .dim/reconcile-repositories.sh
+
 # Avoid inheriting buildx activity files created by a root lifecycle helper.
 export DOCKER_CONFIG=/tmp/dim-workspace-docker-config
 mkdir -p "$DOCKER_CONFIG"

@@ -1,11 +1,58 @@
 schemaVersion: 1
 repositories:
-  dim:
+  root:
     url: https://github.com/slop-lab/dev-infra-manager.git
     root: true
-    ref: development
-    protect:
-      - main
-      - development
-    publish:
-      main: development
+    ref: dev/root
+    protect: [dev/root]
+    publish: {dev/root: dev/root}
+  development:
+    url: https://github.com/slop-lab/dev-infra-manager.git
+    ref: dev/development
+    protect: [dev/development]
+    publish: {dev/development: dev/development}
+  core:
+    url: https://github.com/slop-lab/dev-infra-manager.git
+    ref: dev/core
+    protect: [dev/core]
+    publish: {dev/core: dev/core}
+  core-development:
+    url: https://github.com/slop-lab/dev-infra-manager.git
+    ref: dev/core-development
+    protect: [dev/core-development]
+    publish: {dev/core-development: dev/core-development}
+  plugin-dns-cloudflare:
+    url: https://github.com/slop-lab/dev-infra-manager.git
+    ref: dev/plugin-dns-cloudflare
+    protect: [dev/plugin-dns-cloudflare]
+    publish: {dev/plugin-dns-cloudflare: dev/plugin-dns-cloudflare}
+  plugin-dns-cloudflare-development:
+    url: https://github.com/slop-lab/dev-infra-manager.git
+    ref: dev/plugin-dns-cloudflare-development
+    protect: [dev/plugin-dns-cloudflare-development]
+    publish: {dev/plugin-dns-cloudflare-development: dev/plugin-dns-cloudflare-development}
+  plugin-external-urls:
+    url: https://github.com/slop-lab/dev-infra-manager.git
+    ref: dev/plugin-external-urls
+    protect: [dev/plugin-external-urls]
+    publish: {dev/plugin-external-urls: dev/plugin-external-urls}
+  plugin-external-urls-development:
+    url: https://github.com/slop-lab/dev-infra-manager.git
+    ref: dev/plugin-external-urls-development
+    protect: [dev/plugin-external-urls-development]
+    publish: {dev/plugin-external-urls-development: dev/plugin-external-urls-development}
+  verification:
+    url: https://github.com/slop-lab/dev-infra-manager.git
+    ref: dev/verification
+    protect: [dev/verification]
+    publish: {dev/verification: dev/verification}
+  examples:
+    url: https://github.com/slop-lab/dev-infra-manager.git
+    ref: dev/examples
+    protect: [dev/examples]
+    publish: {dev/examples: dev/examples}
+  specification:
+    url: https://github.com/slop-lab/dev-infra-manager.git
+    ref: dev/specification
+    protect: [dev/specification]
+    publish: {dev/specification: dev/specification}

@@ -16,28 +16,29 @@ This gives the two repository locations different roles:
 - The active DIM-managed Git host is the preferred development and review
   location when working inside DIM.
 
-For DIM's own Project, normal changes merge through a pull request into the
-managed host's protected `development` branch. Those pull requests run the
-source and managed-workspace gates. A non-draft pull request targeting its
-protected `main` branch is the promotion boundary and additionally runs every
-disposable-QEMU host-backend gate. Draft promotion pull requests do not reserve
-those runners.
+During repository extraction, each DIM component uses a protected
+`dev/<alias>` branch in its own managed Project repository. Agents create and
+push proposal branches from the corresponding checkout, then target that
+repository's `dev/<alias>` branch with a pull request. The archive repository's
+`development` and `main` gates remain in use until their CI policies are moved
+to the final canonical repositories.
 
-The reviewed self-Project manifest maps managed `main` to canonical
-`development`. After a promotion PR merges, publish the exact candidate with:
+The reviewed self-Project manifest maps every managed `dev/<alias>` branch to
+the same temporary branch in the canonical GitHub repository. After reviewed
+changes merge, publish every exact candidate with:
 
 ```bash
-dim repo publish dim dim
+dim repo publish dim
 ```
 
-This mapping cannot update GitHub `main`; that branch remains the public
-release boundary. Both managed `main` and `development` are declared as
-protected refs in the same manifest, so workspace credentials cannot push
-either branch directly. The current Gitea rules implement that provider-neutral
-Project policy; they are not a Gitea-specific contract for contributors or
-product repositories.
+These mappings cannot update GitHub `main`; that branch remains the public
+release boundary. Every managed `dev/<alias>` is protected, so workspace
+credentials can push proposal branches but cannot publish or bypass review.
+The current Gitea rules implement that provider-neutral Project policy; they
+are not a Gitea-specific contract for contributors or product repositories.
 
-External changes can be imported with `dim repo fetch dim dim`. They appear as
+External changes can be imported per repository, for example with
+`dim repo fetch dim core`. They appear as
 managed `upstream/*` tracking branches and still require the normal review path
 before changing protected development history.
 
@@ -46,7 +47,12 @@ the self Project once from the host:
 
 ```bash
 dim repo apply dim --yes
-dim repo protect dim dim
+for repository in root development core core-development \
+  plugin-dns-cloudflare plugin-dns-cloudflare-development \
+  plugin-external-urls plugin-external-urls-development \
+  verification examples specification; do
+  dim repo protect dim "$repository"
+done
 ```
 
 `apply` records the reviewed publish mapping without re-importing an unchanged

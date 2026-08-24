@@ -81,24 +81,38 @@ cleanup() {
 trap cleanup EXIT
 
 dim_prepare_clone_source "$project_source" "$source_root/snapshot"
-git clone "$DIM_GIT_CLONE_SOURCE" "$source_root/materialized" >/dev/null
-project_source="$source_root/materialized"
+verification_checkout="$DIM_GIT_CLONE_SOURCE"
+node "$verification_checkout/.dim/materialize-repository-boundaries.mjs" \
+  "$source_root/repositories"
+project_source="$source_root/repositories/root"
 dim_apply_test_registry_mirror "$project_source" private-docker
+mkdir -p "$source_root/remotes"
+node --input-type=module - "$project_source/.dim/repos.yml" "$source_root/remotes" <<'EOF'
+import { readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { parse, stringify } from "yaml";
+const [manifestPath, remotes] = process.argv.slice(2);
+const manifest = parse(readFileSync(manifestPath, "utf8"));
+for (const [alias, repository] of Object.entries(manifest.repositories)) {
+  repository.url = path.join(remotes, `${alias}.git`);
+}
+writeFileSync(manifestPath, stringify(manifest));
+EOF
 
-temporary_manifest="$project_source/.dim/repos.yml.tmp"
-sed "s#^    url:.*#    url: $source_root/project.git#" \
-  "$project_source/.dim/repos.yml" >"$temporary_manifest"
-mv "$temporary_manifest" "$project_source/.dim/repos.yml"
-git -C "$project_source" add .dim
-git -C "$project_source" \
-  -c user.name="DIM Snapshot" \
-  -c user.email="snapshot@dim.invalid" \
-  commit -m "point self manifest at smoke source" >/dev/null
+for repository_path in "$source_root"/repositories/*; do
+  repository="$(basename "$repository_path")"
+  git -C "$repository_path" init --initial-branch="dev/$repository" >/dev/null
+  git -C "$repository_path" add -A
+  git -C "$repository_path" \
+    -c user.name="DIM Snapshot" \
+    -c user.email="snapshot@dim.invalid" \
+    commit -m "initialize $repository smoke source" >/dev/null
+  git clone --bare "$repository_path" "$source_root/remotes/$repository.git" >/dev/null
+done
 
-git clone --bare "$project_source" "$source_root/project.git" >/dev/null
-root_ref="$(git -C "$project_source" rev-parse --abbrev-ref HEAD)"
+root_ref=dev/root
 dim project create "$project_name" \
-  --repos "$project_source/.dim/repos.yml" --yes >/dev/null
+  --url "$source_root/remotes/root.git" --ref "$root_ref" --apply-repos >/dev/null
 if ! dim workspace create "$project_name" "$workspace_name" >/dev/null; then
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
@@ -111,6 +125,9 @@ fi
 
 workspace_json="$(dim workspace show "$workspace_name" --json)"
 test "$(jq -r .phase <<<"$workspace_json")" = ready
+expected_repositories='["core","core-development","development","examples","plugin-dns-cloudflare","plugin-dns-cloudflare-development","plugin-external-urls","plugin-external-urls-development","root","specification","verification"]'
+test "$(dim workspace exec "$workspace_name" -- jq -c '.repositories | keys' /run/dim/project.json)" = \
+  "$expected_repositories"
 dim workspace exec "$workspace_name" -- \
   docker info --format '{{json .RegistryConfig.Mirrors}}' |
   grep -Fq 'http://dim-registry-cache:5000/'
@@ -202,6 +219,13 @@ test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/dim-home-smo
 dim workspace run "$workspace_name" bash -- -lc '
   test -n "$(getent hosts dim-gitea)"
   git ls-remote origin HEAD >/dev/null
+  test "$(git branch --show-current)" = dev/development
+  test -r AGENTS.md
+  test -r .agents/skills/pull-request/SKILL.md
+  for repository in core core-development plugin-dns-cloudflare plugin-dns-cloudflare-development plugin-external-urls plugin-external-urls-development verification examples specification; do
+    test -d "/workspace/workbench/$repository/.git"
+    test "$(git -C "/workspace/workbench/$repository" branch --show-current)" = "dev/$repository"
+  done
 '
 agent_commit_identity="$(dim workspace run "$workspace_name" bash -- -lc '
   printf "%s\n" "self agent commit" > self-agent-commit.txt
@@ -210,6 +234,20 @@ agent_commit_identity="$(dim workspace run "$workspace_name" bash -- -lc '
   git log -1 --format="%an <%ae>|%cn <%ce>"
 ')"
 test "$agent_commit_identity" = "$agent_git_identity"
+core_proposal=agent/split-repository-smoke
+dim workspace run "$workspace_name" bash -- -lc "
+  cd /workspace/workbench/core
+  git checkout -b '$core_proposal'
+  printf 'split proposal\n' > split-proposal.txt
+  git add split-proposal.txt
+  git commit -m 'verify split repository proposal' >/dev/null
+  git push origin HEAD:'refs/heads/$core_proposal' >/dev/null
+  if git push origin HEAD:refs/heads/dev/core >/dev/null 2>&1; then
+    echo 'protected split repository ref accepted a workspace push' >&2
+    exit 1
+  fi
+"
+git ls-remote "$(dim repo url "$project_name" core)" "refs/heads/$core_proposal" | grep -q .
 private_docker_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-$workspace_name" \
   --file .dim/docker-compose.yml ps --quiet private-docker)"
@@ -253,6 +291,16 @@ dim workspace run "$workspace_name" bash -- -lc 'just check-source' >/dev/null
 if [[ "${DIM_SELF_VERIFY_AGENT:-0}" == 1 ]]; then
   dim workspace run "$workspace_name" bash -- -lc 'just verify agent'
 fi
+
+# Every reviewed managed development ref can be published back to its matching
+# canonical temporary branch without naming repositories one at a time.
+dim repo publish "$project_name" >/dev/null
+for repository in root development core core-development plugin-dns-cloudflare plugin-dns-cloudflare-development plugin-external-urls plugin-external-urls-development verification examples specification; do
+  managed_sha="$(git ls-remote "$(dim repo url "$project_name" "$repository")" "refs/heads/dev/$repository" | cut -f1)"
+  external_sha="$(git --git-dir="$source_root/remotes/$repository.git" rev-parse "refs/heads/dev/$repository")"
+  test -n "$managed_sha"
+  test "$managed_sha" = "$external_sha"
+done
 
 dim workspace discard "$workspace_name" --yes >/dev/null
 dim project purge "$project_name" --yes >/dev/null

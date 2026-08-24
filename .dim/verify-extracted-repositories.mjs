@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -44,6 +44,8 @@ try {
   const expected = Object.values(policy.owners).filter((rules) => rules.extract !== false).map((rules) => rules.repository).sort();
   const actual = (await readdir(extracted)).sort();
   if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`repository set mismatch: expected ${expected.join(", ")}; got ${actual.join(", ")}`);
+  await access(path.join(extracted, "development", "AGENTS.md"));
+  await access(path.join(extracted, "development", ".agents", "skills", "pull-request", "SKILL.md"));
 
   const core = path.join(extracted, "core");
   await assertProductionSource(core);

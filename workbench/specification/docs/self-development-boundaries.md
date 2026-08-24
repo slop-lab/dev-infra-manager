@@ -26,12 +26,11 @@ Concrete plugin names should describe the capability or implementation, such
 as `managed-git-gitea`, `external-urls`, and `dns-cloudflare`; they do not repeat
 the Project name.
 
-The first extraction target is `root`. The current Git history now stages each
-future repository in a physical subtree governed by
-`repository-boundaries.json`; the final `core` repository must build without
-`development`, `root`, or an unselected plugin. Repository separation, rather
-than a generated allowlist from a larger monorepo, will make that review
-closure directly visible as a Git revision.
+The archival Git history stages each repository in a physical subtree governed
+by `repository-boundaries.json`. Orphan `dev/<alias>` refs make each review
+closure directly visible as a Git revision: `core` builds without
+`development`, `root`, or an unselected plugin, while paired development and
+verification repositories consume those production sources as siblings.
 
 ## Agent-owned development environment
 
@@ -63,7 +62,7 @@ A transitional agent checkout is:
 ```text
 /workspace/
 ├── .dim/                 root bootstrap; not the agent cwd
-└── workbench/            agent cwd and future `development` root
+└── workbench/            agent cwd and `development` checkout
     ├── core/
     ├── specification/
     ├── core-development/        core tests and test-only dependencies
@@ -74,20 +73,27 @@ A transitional agent checkout is:
 ```
 
 This remains a Project-owned layout rather than a stable DIM core contract.
-Before physical repository extraction, the named subtrees share one Git
-checkout; afterward each checkout retains its own commit, branch, pull request,
-dependency lock, build, and release boundary while development materializes
-the same integrated shape.
+The reviewed root `.dim/repos.yml` registers every alias and its temporary
+canonical `dev/<alias>` ref. Setup reads only the actual runtime catalog,
+clones missing ready aliases into the fixed layout above, and never invokes
+Git against an existing agent-controlled checkout. Agents fetch, fast-forward,
+switch, or preserve dirty/proposal work through their own inner-runtime Git
+process. Each checkout has its own origin, branch, pull request, dependency
+lock, build, and publish boundary while retaining the same development
+ergonomics.
 
-## Migration order
+## Remaining migration order
 
-1. Publish actual Project repositories in the runtime manifest and document
-   that code visibility is separate from promotion and execution authority.
-2. Keep the reviewed outer self-development lifecycle reduced to the current
+The reviewed catalog, independent refs, materialization, and publish path are
+now live. The remaining transition removes the archival checkout without
+adding a dual-layout compatibility layer:
+
+1. Keep the reviewed outer self-development lifecycle reduced to the current
    private-runtime bootstrap, with the agent owned by that runtime.
-3. Keep every tracked path assigned to its staged future repository and verify
-   temporary extraction of those exact tracked files.
-4. Extract the already independently verified `root` and `core` repositories
+2. Keep every tracked path assigned to its repository and independently verify
+   the exact extracted files.
+3. Replace the temporary branches with separate canonical repositories for
+   the already independently verified `root` and `core` sources
    without a dual monorepo compatibility layer.
-5. Extract provider implementations by independently installed plugin and move
-   cross-repository examples and release gates to `development`.
+4. Move provider implementations to their independently installed repositories
+   and move archive-only forge workflows to their final owners.

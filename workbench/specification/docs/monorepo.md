@@ -1,20 +1,21 @@
 # Integrated Development Tree
 
-## Current Layout
+## Integrated Layout
 
-The current checkout physically stages the future repository boundaries while
-retaining one Git history. `workbench` is the integrated pnpm development
-tree; its named subtrees can later be extracted without inventing a new agent
-layout. See [DIM Self-development Boundaries](self-development-boundaries.md)
-for the review model and extraction order.
+The archival checkout physically stages the repository boundaries while
+retaining one Git history. The self-development `root` catalog publishes each
+staged subtree independently and its reviewed lifecycle recreates the same
+integrated pnpm tree from the Project runtime repository catalog. See
+[DIM Self-development Boundaries](self-development-boundaries.md) for the
+review model.
 
 ```text
 .
-├── .dim/                       future `root` bootstrap
-├── repository-boundaries.json future-repository ownership contract
-└── workbench/                  future `development` repository root
+├── .dim/                       extracted `root` bootstrap
+├── repository-boundaries.json repository ownership contract
+└── workbench/                  extracted `development` repository root
     ├── agent/                  agent development image
-    ├── core/                   minimal buildable `core` source repository
+    ├── core/                   independently cloned `core` repository
     ├── core-development/       core unit and integration tests
     ├── plugin-*/               minimal buildable plugin source repository
     ├── plugin-*-development/   matching plugin tests and test tooling
@@ -23,7 +24,7 @@ for the review model and extraction order.
     └── verification/           cross-repository and host verification
 ```
 
-The future `development` repository is the remaining `workbench` orchestration
+The `development` repository is the remaining `workbench` orchestration
 and development-environment code. It contains no application source or tests.
 `core/packages/cli` imports only the public
 `@slop-lab/dim-core` entrypoint; core never imports the CLI.
@@ -44,9 +45,10 @@ materializes every repository into siblings, verifies production repositories
 without the development repositories, and then runs each paired development
 suite. Consequently a reviewer can audit the exact production build inputs
 without first trusting test or development-environment code.
-Transition-only forge workflows and local agent instructions are deliberately
-not copied; they must be replaced by each destination repository's reviewed
-hosting policy during the actual migration.
+Archive-only forge workflows remain outside the extracted source repositories.
+The managed host protects every reviewed `dev/<alias>` ref; repository-specific
+CI policy can move with each destination when the temporary branches become
+separate canonical repositories.
 
 ## Dependency Direction
 
@@ -131,14 +133,12 @@ runtime, which bind-mounts it as the agent's `/home/dim-agent`. Separate
 `dim workspace run` invocations therefore share Codex configuration and other user-home
 state until the workspace is discarded; source remains in `/workspace`.
 
-Build the image from the workbench, create a Project root, push this repository,
-and create a persistent workspace:
+Create the split Project and a persistent workspace:
 
 ```bash
-cd workbench
-just build-workspace-image
 dim project create dim-self \
-  --url /path/to/dev-infra-manager --ref development --apply-repos
+  --url https://github.com/slop-lab/dev-infra-manager.git \
+  --ref dev/root --apply-repos
 dim workspace create dim-self dim-self-dev
 dim workspace run dim-self-dev codex
 ```

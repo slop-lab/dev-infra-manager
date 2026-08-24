@@ -59,8 +59,7 @@
     },
     "transition": {
       "extract": false,
-      "files": ["AGENTS.md"],
-      "prefixes": [".agents/", ".gitea/", ".github/"]
+      "prefixes": [".gitea/", ".github/"]
     }
   }
 }
