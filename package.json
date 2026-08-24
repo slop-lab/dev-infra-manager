@@ -1,0 +1,17 @@
+{
+  "name": "@slop-lab/dev-infra-manager-workspace",
+  "version": "0.8.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "cli": "pnpm --filter @slop-lab/dim-core run build && pnpm --filter @slop-lab/dim-cli run build && node core/packages/cli/dist/cli.js",
+    "workspace:check": "pnpm --recursive run check",
+    "workspace:test": "pnpm --workspace-concurrency=1 --recursive run test",
+    "workspace:build": "pnpm --recursive run build"
+  },
+  "engines": {
+    "node": "^24.0.0 || ^26.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "packageManager": "pnpm@10.13.1"
+}
