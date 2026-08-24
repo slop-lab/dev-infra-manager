@@ -30,6 +30,12 @@ import {
   QEMU_CI_SUPERVISOR_SCRIPT,
   QEMU_CI_WEBHOOK_SCRIPT
 } from "../../../../core/packages/core/src/qemuCiRunnerAssets.js";
+import {
+  SYSBOX_CI_RUNNER_BASE_IMAGE,
+  SYSBOX_CI_RUNNER_DOCKERFILE,
+  SYSBOX_CI_RUNNER_HEALTH_SCRIPT,
+  SYSBOX_CI_RUNNER_IMAGE
+} from "../../../../core/packages/core/src/sysboxCiRunnerAssets.js";
 
 const options = {
   ciRunnerDefaultCpus: BUILTIN_CI_RUNNER_DEFAULTS.cpus,
@@ -178,6 +184,19 @@ describe("CI runner resources", () => {
     expect(QEMU_CI_WEBHOOK_SCRIPT).toContain("fcntl.flock(lock, fcntl.LOCK_EX)");
     expect(QEMU_CI_WEBHOOK_SCRIPT).toContain("except subprocess.CalledProcessError as error:");
     expect(QEMU_CI_WEBHOOK_SCRIPT).toContain("queued demand remains; retrying");
+  });
+
+  it("ships a pinned Sysbox runner host image with Node.js for JavaScript actions", () => {
+    expect(SYSBOX_CI_RUNNER_BASE_IMAGE).toMatch(/^gitea\/act_runner@sha256:[0-9a-f]{64}$/);
+    expect(SYSBOX_CI_RUNNER_IMAGE).toMatch(/^dev-infra-manager-ci-runner:/);
+    expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain(`FROM ${SYSBOX_CI_RUNNER_BASE_IMAGE}`);
+    expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("apk add --no-cache nodejs=22.23.2-r0");
+    expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("node --version");
+    expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("dim-ci-runner-health");
+    expect(spawnSync("bash", ["-n"], { input: SYSBOX_CI_RUNNER_HEALTH_SCRIPT }).status).toBe(0);
+    expect(SYSBOX_CI_RUNNER_HEALTH_SCRIPT).toContain("mount -t tmpfs");
+    expect(SYSBOX_CI_RUNNER_HEALTH_SCRIPT).toContain("docker run --rm alpine:3.22 true");
+    expect(SYSBOX_CI_RUNNER_HEALTH_SCRIPT).toContain("kill -TERM 1");
   });
 
   it.runIf(hasPython)("keeps accepting queued jobs after a supervisor failure", async () => {

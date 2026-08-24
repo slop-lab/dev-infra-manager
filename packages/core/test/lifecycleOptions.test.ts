@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
+import { SYSBOX_CI_RUNNER_IMAGE } from "../../../../core/packages/core/src/sysboxCiRunnerAssets.js";
 
 describe("lifecycle options", () => {
   it("uses discoverable sockets for the default state root", () => {
@@ -11,6 +12,7 @@ describe("lifecycle options", () => {
     expect(options.controllerSocketPath).toBe("/run/user/1000/dim/controller.sock");
     expect(options.adminControllerSocketPath).toBe("/run/user/1000/dim/admin.sock");
     expect(options.gitMaintainerUsername).toBe("dim-host");
+    expect(options.ciRunnerImage).toBe(SYSBOX_CI_RUNNER_IMAGE);
   });
 
   it("namespaces sockets for a custom state root", () => {
