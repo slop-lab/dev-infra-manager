@@ -41,6 +41,8 @@ jobs:
         with:
           node-version: 24
       - name: Install locked dependencies
-        run: pnpm --dir plugin-dns-cloudflare-development install --frozen-lockfile
+        run: |
+          pnpm --dir plugin-dns-cloudflare install --frozen-lockfile
+          pnpm --dir plugin-dns-cloudflare-development install --frozen-lockfile
       - name: Verify development tests
         run: pnpm --dir plugin-dns-cloudflare-development run check && pnpm --dir plugin-dns-cloudflare-development run test
