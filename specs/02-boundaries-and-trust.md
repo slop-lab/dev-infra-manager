@@ -91,6 +91,15 @@ DIM host code is trusted infrastructure code only after direct human review of
 the complete pinned DIM revision. The complete root repository and all
 secret-bearing environment code also require human review before deployment.
 
+The CLI is an unprivileged presentation and transport adapter for DIM-owned
+state. Runtime lifecycle, workspace command execution, CI runner logs, and
+secret-sensitive decisions execute in the host controller. The CLI may execute
+external Git transport and controller bootstrap locally because those depend
+on the invoking user's terminal or credential helpers. Controller command
+sessions expose output, input, and cancellation only on the host-admin socket;
+making them reachable from a browser requires a separately reviewed
+authentication and authorization boundary.
+
 ## Git Boundary
 
 Managed Git repositories are the transition point from untrusted agent output to reviewed source.

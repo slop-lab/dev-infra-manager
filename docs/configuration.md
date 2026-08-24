@@ -60,12 +60,12 @@ Runtime backend selection is documented in
 [Runtime Backends](runtime-backends.md). Project and workspace settings are
 persisted by their lifecycle commands rather than copied into user config.
 The CPU, memory, and PID settings are defaults for new workspace records.
-`dim workspace create --cpus`, `--memory`, and `--processes` persist per-workspace
+`dim workspace create --cpus`, `--memory`, and `--pids` persist per-workspace
 overrides. Change one or more limits on an existing workspace without
 recreating it:
 
 ```bash
-dim workspace resources WORKSPACE --cpus 4 --memory 8g --processes 2048
+dim workspace resources WORKSPACE --cpus 4 --memory 8g --pids 2048
 ```
 
 Omitted flags keep their recorded values. DIM updates the live or stopped
@@ -76,7 +76,7 @@ CI runner resource defaults use the built-in `4 CPU`, `8g` memory, and `2048`
 PID fallback unless changed in user configuration:
 
 ```bash
-dim ci runner defaults set --cpus 6 --memory 12GiB --processes 4096
+dim ci runner defaults set --cpus 6 --memory 12GiB --pids 4096
 dim ci runner defaults show
 dim ci runner defaults reset
 ```

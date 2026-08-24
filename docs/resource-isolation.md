@@ -5,7 +5,7 @@ services, including an optional development agent, share that aggregate cgroup
 boundary unless the Project's Compose definition adds stricter child limits.
 An operator may change this aggregate boundary after creation with
 `dim workspace resources WORKSPACE` and any combination of `--cpus`, `--memory`, and
-`--processes`; omitted limits remain unchanged.
+`--pids`; omitted limits remain unchanged.
 
 After the nested engine starts, DIM records its cgroup driver and the writable
 cgroup v2 boundary in the read-only Project manifest. DIM exposes safe

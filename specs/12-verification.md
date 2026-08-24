@@ -317,6 +317,12 @@ host capability rather than Project-owned development configuration.
 
 ## Documentation Verification
 
+Controller API tests must cover command-session creation, ordered SSE replay,
+stdout/stderr separation, input forwarding, completion, sanitized failures,
+and cancellation. CLI contract tests must ensure `exec`, `run`, workspace
+lifecycle, and CI runner log commands use the streaming controller client and
+that the obsolete `--processes` spelling is rejected in favor of `--pids`.
+
 When behavior changes:
 
 - Update affected feature specs.

@@ -11,16 +11,35 @@
 - URL commands print exactly one URL on stdout.
 - DIM rejects incompatible pre-stable project/workspace state and does not
   migrate it implicitly.
-- Except for interactive `exec` and `run`, commands that inspect or mutate DIM
-  state are clients of the managed host-admin controller API. `exec` and `run`
-  remain direct CLI adapters until the controller has a streaming terminal
-  protocol. Local process adapters such as `x git`, the Git credential helper,
-  and controller bootstrap may execute locally, but obtain DIM-owned state and
+- Commands that inspect or mutate DIM state are clients of the managed
+  host-admin controller API. Long-running calls and `exec`/`run` use controller
+  command sessions rather than starting host runtime commands in the CLI.
+  Local process adapters are limited to external Git transport (`repo` import,
+  fetch, publish, and `x git`), the Git credential helper, controller bootstrap,
+  and pre-controller backend diagnosis. They obtain DIM-owned state and
   credentials through the admin API.
 - The managed controller uses separate Unix sockets. The host-admin socket is
   mode `0600` and is never mounted into a workspace. The workspace socket
   accepts workspace-scoped grants and is mounted only into the trusted
   workspace root.
+
+## Streaming command sessions
+
+The host-admin API exposes an asynchronous command-session contract:
+
+- `POST /v1/sessions` starts an allowlisted operation and returns an opaque ID.
+- `GET /v1/sessions/ID/events` streams ordered SSE events for command stages,
+  stdout, stderr, exit status, final result, and sanitized errors.
+- `POST /v1/sessions/ID/input` forwards base64-encoded input bytes and may close
+  stdin.
+- `DELETE /v1/sessions/ID` cancels the active process.
+
+Sessions retain a bounded post-completion lifetime so a reconnecting client can
+replay events by sequence. Command events never contain argv because arguments
+may contain runtime secrets. The CLI is one client of this contract; a future
+web UI can use the same lifecycle after an authenticated transport proxy is
+defined. The session API remains host-admin-only and is not exposed through a
+workspace grant.
 
 ## Projects
 
@@ -178,7 +197,7 @@ only for the separate managed-Gitea command.
 ## CI runners
 
 ```bash
-dim ci runner create PROJECT RUNNER EXECUTOR [--cpus COUNT] [--memory SIZE] [--processes COUNT]
+dim ci runner create PROJECT RUNNER EXECUTOR [--cpus COUNT] [--memory SIZE] [--pids COUNT]
 dim ci runner list
 dim ci runner status PROJECT RUNNER
 dim ci runner logs PROJECT RUNNER
@@ -187,7 +206,7 @@ dim ci runner restart PROJECT RUNNER
 dim ci runner stop PROJECT RUNNER
 dim ci runner delete PROJECT RUNNER --yes
 dim ci runner defaults show
-dim ci runner defaults set --cpus COUNT --memory SIZE --processes COUNT
+dim ci runner defaults set --cpus COUNT --memory SIZE --pids COUNT
 dim ci runner defaults reset
 ```
 
@@ -282,11 +301,11 @@ registration; Gitea revokes the ephemeral runner credential upon job assignment.
 dim workspace create PROJECT WORKSPACE \
   [--profile PROFILE ...] \
   [--kvm | --no-kvm] \
-  [--cpus COUNT] [--memory SIZE] [--processes COUNT]
+  [--cpus COUNT] [--memory SIZE] [--pids COUNT]
 
 dim workspace list
 dim workspace show WORKSPACE
-dim workspace resources WORKSPACE [--cpus COUNT] [--memory SIZE] [--processes COUNT]
+dim workspace resources WORKSPACE [--cpus COUNT] [--memory SIZE] [--pids COUNT]
 dim workspace align WORKSPACE [--reset --yes]
 dim workspace exec WORKSPACE -- COMMAND [ARGS...]
 dim workspace run WORKSPACE TASK [ARGS...]

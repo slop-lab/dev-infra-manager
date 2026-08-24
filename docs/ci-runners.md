@@ -182,13 +182,13 @@ The runner fallback is 4 CPUs and 8 GiB of memory. Sysbox runners additionally
 default to 2048 processes. Installation defaults can be changed:
 
 ```bash
-dim ci runner defaults set --cpus 6 --memory 12GiB --processes 4096
+dim ci runner defaults set --cpus 6 --memory 12GiB --pids 4096
 ```
 
 A named runner can override them:
 
 ```bash
-dim ci runner create example primary sysbox --cpus 8 --memory 16GiB --processes 4096
+dim ci runner create example primary sysbox --cpus 8 --memory 16GiB --pids 4096
 dim ci runner create example release qemu --cpus 6 --memory 12GiB
 ```
 
