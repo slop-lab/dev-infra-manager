@@ -13,18 +13,34 @@ jobs:
   source:
     runs-on: dim
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check out workspace definition
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/development
+          path: snapshot
+      - name: Check out core source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/core
+          path: snapshot/core
+      - name: Check out plugin candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: snapshot/plugin-external-urls
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
           version: 10.13.1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: 24
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run check
-      - run: pnpm run pack:dry-run
+      - working-directory: snapshot
+        run: pnpm install --frozen-lockfile
+      - working-directory: snapshot
+        run: pnpm --filter @slop-lab/dim-plugin-external-urls run check
+      - working-directory: snapshot
+        run: pnpm --filter @slop-lab/dim-plugin-external-urls run pack:dry-run
   development:
-    uses: dim-dim/plugin-external-urls-development/.gitea/workflows/verify.yml@b6a2ea0c6422849098db1e10e2e8066b6241a651
+    uses: dim-dim/plugin-external-urls-development/.gitea/workflows/verify.yml@85501b6d3ea48c41cd2477c4afb44ff635c42282
     with:
       source-ref: ${{ gitea.sha }}
       development-ref: main
