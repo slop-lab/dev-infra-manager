@@ -1,3 +1,5 @@
+import type { Readable, Writable } from "node:stream";
+
 export interface CommandResult {
   command: string;
   args: string[];
@@ -18,4 +20,8 @@ export interface RunOptions {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   sudo?: boolean;
+  signal?: AbortSignal;
+  stdin?: Readable;
+  stdout?: Writable;
+  stderr?: Writable;
 }

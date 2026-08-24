@@ -3,6 +3,7 @@ export * from "./adminController.js";
 export * from "./controller.js";
 export * from "./ciCoordinator.js";
 export * from "./ciRunner.js";
+export * from "./commandSessions.js";
 export * from "./errors.js";
 export * from "./gitea.js";
 export * from "./lifecycleOptions.js";

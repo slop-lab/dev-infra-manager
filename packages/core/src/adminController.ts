@@ -24,6 +24,8 @@ import {
   discardWorkspace,
   listWorkspaces,
   restartWorkspace,
+  runWorkspace,
+  execWorkspace,
   setupWorkspace,
   showWorkspace,
   startWorkspace,
@@ -37,6 +39,7 @@ import type { CiRunnerExecutorKind, LifecycleOptions, WorkspaceRuntimeBackendKin
 import type { RegisteredDimPlugins } from "./plugin.js";
 import { ProcessRunner } from "./runner.js";
 import type { StreamingCommandRunner } from "./types.js";
+import { CommandSessionManager, type CommandSessionEvent } from "./commandSessions.js";
 import { isUserError, UserError } from "./errors.js";
 import {
   parseRepositorySetYaml,
@@ -75,8 +78,9 @@ export function configuredDimAdminController(
   plugins: RegisteredDimPlugins,
   runner: StreamingCommandRunner = new ProcessRunner()
 ): Server {
+  const sessions = new CommandSessionManager(runner);
   return createServer((request, response) => {
-    void handleAdminRequest(lifecycle, plugins, runner, request, response).catch((error) => {
+    void handleAdminRequest(lifecycle, plugins, runner, sessions, request, response).catch((error) => {
       sendJson(response, isUserError(error) ? 400 : 500, {
         error: error instanceof Error ? error.message : String(error)
       });
@@ -88,6 +92,7 @@ async function handleAdminRequest(
   lifecycle: LifecycleOptions,
   plugins: RegisteredDimPlugins,
   runner: StreamingCommandRunner,
+  sessions: CommandSessionManager,
   request: IncomingMessage,
   response: ServerResponse
 ): Promise<void> {
@@ -105,6 +110,35 @@ async function handleAdminRequest(
         ...(plugin ? { plugin } : {})
       }))
     });
+  }
+  if (request.method === "POST" && url.pathname === "/v1/sessions") {
+    const input = record(await readJson(request, 65_536));
+    const operation = requiredString(input.operation, "operation");
+    if (!STREAMABLE_OPERATIONS.has(operation)) throw new UserError(`operation '${operation}' is not streamable`);
+    const body = input.input === undefined ? {} : record(input.input);
+    const id = sessions.start((sessionRunner) => builtinCall(operation, body, lifecycle, sessionRunner, plugins));
+    return sendJson(response, 202, { id });
+  }
+  const sessionMatch = url.pathname.match(/^\/v1\/sessions\/([^/]+)(?:\/(events|input))?$/);
+  if (sessionMatch) {
+    const id = decodeURIComponent(sessionMatch[1]!);
+    const action = sessionMatch[2];
+    if (request.method === "GET" && action === "events") {
+      return sendSessionEvents(response, sessions, id);
+    }
+    if (request.method === "POST" && action === "input") {
+      const input = record(await readJson(request, 1_048_576));
+      if (typeof input.data !== "string") throw new UserError("data must be a string");
+      const encoded = input.data;
+      if (!sessions.input(id, Buffer.from(encoded, "base64"), input.end === true)) {
+        return sendJson(response, 404, { error: "command session not found or complete" });
+      }
+      return void response.writeHead(204).end();
+    }
+    if (request.method === "DELETE" && action === undefined) {
+      if (!sessions.cancel(id)) return sendJson(response, 404, { error: "command session not found or complete" });
+      return void response.writeHead(204).end();
+    }
   }
   if (request.method === "POST" && url.pathname.startsWith("/v1/call/")) {
     const operation = decodeURIComponent(url.pathname.slice("/v1/call/".length));
@@ -229,6 +263,13 @@ async function builtinCall(
       });
     case "ci.runner.list": return listCiRunners(lifecycle);
     case "ci.runner.show": return showCiRunner(lifecycle, text("project"), text("name"));
+    case "ci.runner.logs": {
+      const record = await showCiRunner(lifecycle, text("project"), text("name"));
+      const container = record.executor.kind === "sysbox"
+        ? record.executor.containerName
+        : record.executor.supervisorName;
+      return { exitCode: await runner.runStreaming("docker", ["logs", "--follow", container]) };
+    }
     case "ci.runner.start": return startCiRunner(runner, lifecycle, { project: text("project"), name: text("name") });
     case "ci.runner.restart": return restartCiRunner(runner, lifecycle, { project: text("project"), name: text("name") });
     case "ci.runner.stop": return stopCiRunner(runner, lifecycle, text("project"), text("name"));
@@ -266,6 +307,20 @@ async function builtinCall(
       });
     case "workspace.start": return startWorkspace(runner, lifecycle, text("name"));
     case "workspace.restart": return restartWorkspace(runner, lifecycle, text("name"));
+    case "workspace.exec": return {
+      exitCode: await execWorkspace(runner, lifecycle, {
+        name: text("name"),
+        command: stringArray(input.command),
+        interactive: input.interactive === true
+      })
+    };
+    case "workspace.run": return {
+      exitCode: await runWorkspace(runner, lifecycle, {
+        name: text("name"),
+        command: stringArray(input.command),
+        interactive: input.interactive === true
+      })
+    };
     case "workspace.stop": await stopWorkspace(runner, lifecycle, text("name")); return {};
     case "workspace.discard": await discardWorkspace(runner, lifecycle, text("name")); return {};
     case "doctor": return runDoctor(runner, lifecycle.defaultWorkspaceBackend, lifecycle);
@@ -296,6 +351,41 @@ async function builtinCall(
       };
     default: throw new UserError(`unknown admin operation '${operation}'`);
   }
+}
+
+const STREAMABLE_OPERATIONS = new Set([
+  "project.create", "project.purge", "repo.protect", "ci.runner.create", "ci.runner.logs",
+  "ci.runner.start", "ci.runner.restart", "ci.runner.stop", "ci.runner.delete",
+  "workspace.create", "workspace.align", "workspace.setup", "workspace.update",
+  "workspace.resources", "workspace.start", "workspace.restart", "workspace.stop",
+  "workspace.discard", "workspace.exec", "workspace.run", "service.ensure", "doctor"
+]);
+
+function requiredString(value: unknown, name: string): string {
+  if (typeof value !== "string" || value.length === 0) throw new UserError(`${name} must be a string`);
+  return value;
+}
+
+function sendSessionEvents(
+  response: ServerResponse,
+  sessions: CommandSessionManager,
+  id: string
+): void {
+  const write = (event: CommandSessionEvent) => {
+    response.write(`id: ${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+    if (event.type === "result" || event.type === "error") response.end();
+  };
+  const unsubscribe = sessions.subscribe(id, write);
+  const snapshot = sessions.snapshot(id);
+  if (!unsubscribe || !snapshot) return sendJson(response, 404, { error: "command session not found" });
+  response.writeHead(200, {
+    "content-type": "text/event-stream",
+    "cache-control": "no-cache",
+    connection: "keep-alive"
+  });
+  for (const event of snapshot.events) write(event);
+  if (snapshot.complete && !response.writableEnded) response.end();
+  response.on("close", unsubscribe);
 }
 
 function ciResources(value: unknown): { cpus?: string; memory?: string; pidsLimit?: string } {

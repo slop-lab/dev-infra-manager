@@ -12,6 +12,9 @@ export class ProcessRunner implements StreamingCommandRunner {
         env: options.env,
         stdio: ["ignore", "pipe", "pipe"]
       });
+      const abort = () => child.kill("SIGTERM");
+      if (options.signal?.aborted) abort();
+      else options.signal?.addEventListener("abort", abort, { once: true });
 
       let stdout = "";
       let stderr = "";
@@ -33,6 +36,7 @@ export class ProcessRunner implements StreamingCommandRunner {
         });
       });
       child.on("close", (exitCode) => {
+        options.signal?.removeEventListener("abort", abort);
         resolve({
           command: actualCommand,
           args: actualArgs,
@@ -52,12 +56,19 @@ export class ProcessRunner implements StreamingCommandRunner {
       const child = spawn(actualCommand, actualArgs, {
         cwd: options.cwd,
         env: options.env,
-        stdio: "inherit"
+        stdio: [options.stdin ? "pipe" : "inherit", options.stdout ? "pipe" : "inherit", options.stderr ? "pipe" : "inherit"]
       });
+      if (options.stdin && child.stdin) options.stdin.pipe(child.stdin);
+      if (options.stdout && child.stdout) child.stdout.pipe(options.stdout);
+      if (options.stderr && child.stderr) child.stderr.pipe(options.stderr);
+      const abort = () => child.kill("SIGTERM");
+      if (options.signal?.aborted) abort();
+      else options.signal?.addEventListener("abort", abort, { once: true });
       child.on("error", () => {
         resolve(127);
       });
       child.on("close", (exitCode) => {
+        options.signal?.removeEventListener("abort", abort);
         resolve(exitCode ?? 1);
       });
     });
