@@ -24,7 +24,7 @@ jobs:
       - run: pnpm run check
       - run: pnpm run pack:dry-run
   development:
-    uses: dim-dim/plugin-dns-cloudflare-development/.gitea/workflows/verify.yml@02f4314990c3ebafd1c9fa5d933211de211037dc
+    uses: dim-dim/plugin-dns-cloudflare-development/.gitea/workflows/verify.yml@e229e542ca67e094caa63d24927b6707be4dde42
     with:
       source-ref: ${{ gitea.sha }}
       development-ref: main
