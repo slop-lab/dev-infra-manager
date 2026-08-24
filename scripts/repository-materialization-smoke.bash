@@ -31,8 +31,9 @@ for repository in "${repositories[@]}"; do
   git -C "$worktree" commit -m initial >/dev/null
   git -C "$worktree" remote add origin "$source"
   git -C "$worktree" push origin "$ref" >/dev/null
-  printf '%s"%s":{"workspaceUrl":"%s","phase":"ready","root":false}' \
-    "$separator" "$repository" "$source" >>"$manifest"
+  commit="$(git -C "$worktree" rev-parse HEAD)"
+  printf '%s"%s":{"workspaceUrl":"%s","phase":"ready","root":false,"requestedRef":"refs/heads/%s","ref":"refs/heads/%s","commit":"%s"}' \
+    "$separator" "$repository" "$source" "$ref" "$ref" "$commit" >>"$manifest"
   separator=,
 done
 printf '}}\n' >>"$manifest"

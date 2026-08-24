@@ -27,7 +27,7 @@ describe("DIM development forge policy", () => {
       expect(repository.import).toEqual({ main: externalRef });
       expect(repository.publish).toEqual({ main: "main" });
       expect(repository.protect ?? []).toEqual(["root", "development"].includes(alias) ? ["main"] : []);
-      expect(repository.ref).toBe(alias === "root" ? "main" : undefined);
+      expect(repository.ref).toBe("main");
       expect(repository.root).toBe(alias === "root" ? true : undefined);
     }
   });
