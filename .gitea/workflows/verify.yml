@@ -1,0 +1,29 @@
+name: Verify core
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: dim
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.13.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run verify
+  development:
+    uses: dim-dim/core-development/.gitea/workflows/verify.yml@9a3042146cd6bc4604fd0121b70b9881221afa4d
+    with:
+      source-ref: ${{ gitea.sha }}
+      development-ref: main
