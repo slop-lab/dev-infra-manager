@@ -1,0 +1,29 @@
+# Project runtime cgroups
+
+DIM publishes the nested Project engine's cgroup boundary in
+`/run/dim/project.json` and installs `dim-project-cgroup` in the standard
+workspace image. Reviewed Project setup can require that boundary and create a
+named subtree without learning a host cgroup path.
+
+The variants below show the supported driver-specific contracts:
+
+- [`cgroupfs`](cgroupfs.md): a trusted parent delegates a writable
+  cgroup v2 subtree directly.
+- [`systemd`](systemd.md): systemd owns the service boundary and grants
+  its descendants with `Delegate=`.
+- [`unsupported`](unsupported.md): `none`, cgroup v1, read-only roots,
+  and missing controllers fail closed with an actionable reason.
+
+These are boundary examples, not alternative Project formats. Ordinary
+Projects consume the same manifest and helper regardless of the provider.
+
+Run the contract smoke with:
+
+```bash
+bash verification/scripts/project-runtime-cgroups-example-smoke.bash
+```
+
+The driver-specific executable checks are `verify-cgroupfs.bash`,
+`verify-systemd.bash`, and `verify-unsupported.bash`. Keeping the variants as
+files makes `project-runtime-cgroups` one leaf feature example, consistent
+with the other `examples/features/<example>` entries.
