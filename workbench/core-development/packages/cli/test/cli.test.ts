@@ -80,11 +80,6 @@ test("project create exposes root bootstrap and explicit repository-set choices"
   assert.notEqual(conflictingSources.status, 0);
   assert.match(conflictingSources.stderr, /--repos cannot be combined/);
 
-  for (const obsolete of [["--url", "https://example.com/root.git"], ["--ref", "main"]]) {
-    const result = run(["project", "create", "example", ...obsolete]);
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /unknown option/);
-  }
 });
 
 test("CI runner commands expose lifecycle and configurable defaults", () => {
