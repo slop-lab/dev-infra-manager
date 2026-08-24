@@ -164,6 +164,7 @@ async function builtinCall(
             root: input.root === true,
             fallback: false,
             protectedPatterns: stringArray(input.protectedPatterns),
+            forcePushBlockedPatterns: stringArray(input.forcePushBlockedPatterns),
             importBranches: {},
             publishBranches: input.publishBranches ?? {},
             ...(input.source === undefined ? {} : { url: text("source") }),
@@ -177,6 +178,7 @@ async function builtinCall(
         alias,
         root: entry.root,
         protectedPatterns: entry.protectedPatterns,
+        forcePushBlockedPatterns: entry.forcePushBlockedPatterns,
         ...(entry.url === undefined ? {} : { source: entry.url }),
         ...(input.refNamespace === undefined
           ? {}

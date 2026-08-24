@@ -511,7 +511,11 @@ export async function applyRepositorySet(
   for (const action of plan.actions) {
     if (action.action === "unchanged") continue;
     if (action.action === "conflict") throw new UserError(`repository '${action.alias}' conflicts with existing state`);
-    results.push(await addRepository(projectName, action.alias, action.entry, set));
+    const result = await addRepository(projectName, action.alias, action.entry, set);
+    const repository = (result.repository ?? result) as Record<string, unknown>;
+    results.push(repository.protectionPhase === "pending"
+      ? await adminCall<Record<string, unknown>>("repo.protect", { project: projectName, alias: action.alias })
+      : result);
   }
   return results;
 }
@@ -530,6 +534,7 @@ export async function addRepository(
     alias,
     root: entry.root,
     protectedPatterns: entry.protectedPatterns,
+    forcePushBlockedPatterns: entry.forcePushBlockedPatterns,
     ...(connection === undefined ? {} : {
       source: connection.url,
       ...(connection.refNamespace === undefined ? {} : { refNamespace: connection.refNamespace }),

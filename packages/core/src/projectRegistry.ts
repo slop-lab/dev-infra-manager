@@ -33,6 +33,7 @@ export interface CreateRepositoryInput {
   project: string;
   alias: string;
   protectedPatterns: string[];
+  forcePushBlockedPatterns?: string[];
   root: boolean;
   ref?: string;
 }
@@ -163,6 +164,7 @@ export async function createProjectRepository(
           phase: "creating",
           connections: [],
           protectedPatterns: input.protectedPatterns,
+          forcePushBlockedPatterns: input.forcePushBlockedPatterns ?? [],
           protectionPhase: "pending",
           createdAt: now,
           updatedAt: now
@@ -172,7 +174,8 @@ export async function createProjectRepository(
           ...(input.ref === undefined ? {} : { ref: normalizeRepositoryRef(input.ref) }),
           phase: "creating",
           updatedAt: now,
-          protectedPatterns: input.protectedPatterns
+          protectedPatterns: input.protectedPatterns,
+          forcePushBlockedPatterns: input.forcePushBlockedPatterns ?? []
         };
     delete repo.error;
     project = {
@@ -269,8 +272,9 @@ export async function planProjectRepositorySet(
     if (existing.ref !== entry.ref) {
       return { action: "retry", alias, entry, detail: "checkout ref differs" };
     }
-    if (JSON.stringify(existing.protectedPatterns) !== JSON.stringify(entry.protectedPatterns)) {
-      return { action: "conflict", alias, entry, detail: "configured protection patterns differ" };
+    if (JSON.stringify(existing.protectedPatterns) !== JSON.stringify(entry.protectedPatterns)
+      || JSON.stringify(existing.forcePushBlockedPatterns ?? []) !== JSON.stringify(entry.forcePushBlockedPatterns)) {
+      return { action: "retry", alias, entry, detail: "protection policy differs" };
     }
     if (existing.phase === "ready") return { action: "unchanged", alias, entry };
     return { action: "retry", alias, entry, detail: `current phase is ${existing.phase}` };
@@ -355,13 +359,20 @@ export async function prepareProjectRepositoryTransfer(
         };
     const existingConnection = existing?.connections.find((connection) => connection.name === "origin");
     if (existing?.phase === "ready") {
+      const protectionChanged = JSON.stringify(existing.protectedPatterns) !== JSON.stringify(input.protectedPatterns)
+        || JSON.stringify(existing.forcePushBlockedPatterns ?? [])
+          !== JSON.stringify(input.forcePushBlockedPatterns ?? []);
       if (sameRepositoryTransport(existingConnection, requestedConnection)
         && (JSON.stringify(existingConnection?.publishBranches ?? {})
           !== JSON.stringify(requestedConnection?.publishBranches ?? {})
-          || existing.ref !== (input.ref === undefined ? undefined : normalizeRepositoryRef(input.ref)))) {
+          || existing.ref !== (input.ref === undefined ? undefined : normalizeRepositoryRef(input.ref))
+          || protectionChanged)) {
         const updated: ProjectRepositoryRecord = {
           ...existing,
           connections: requestedConnection === undefined ? [] : [requestedConnection],
+          protectedPatterns: input.protectedPatterns,
+          forcePushBlockedPatterns: input.forcePushBlockedPatterns ?? [],
+          protectionPhase: protectionChanged ? "pending" : existing.protectionPhase,
           updatedAt: new Date().toISOString()
         };
         if (input.ref === undefined) delete updated.ref;
@@ -422,6 +433,7 @@ export async function prepareProjectRepositoryTransfer(
           ...(input.ref === undefined ? {} : { ref: normalizeRepositoryRef(input.ref) }),
           phase: input.source === undefined ? "ready" : "importing",
           protectedPatterns: input.protectedPatterns,
+          forcePushBlockedPatterns: input.forcePushBlockedPatterns ?? [],
           connections: requestedConnection === undefined ? [] : [requestedConnection],
           ...(transferId === undefined ? {} : { transferId }),
           updatedAt: now
@@ -437,6 +449,7 @@ export async function prepareProjectRepositoryTransfer(
           connections: requestedConnection === undefined ? [] : [requestedConnection],
           ...(transferId === undefined ? {} : { transferId }),
           protectedPatterns: input.protectedPatterns,
+          forcePushBlockedPatterns: input.forcePushBlockedPatterns ?? [],
           protectionPhase: "pending",
           createdAt: now,
           updatedAt: now
@@ -656,7 +669,12 @@ export async function applyProjectRepositoryProtection(
       await ensureSingleBranchHead(runner, options, credentials, project.gitNamespace, repo);
     }
     for (const pattern of repo.protectedPatterns) {
-      await protectBranch(credentials, project.gitNamespace, alias, pattern);
+      await protectBranch(credentials, project.gitNamespace, alias, pattern, "reviewed");
+    }
+    for (const pattern of repo.forcePushBlockedPatterns ?? []) {
+      if (!repo.protectedPatterns.includes(pattern)) {
+        await protectBranch(credentials, project.gitNamespace, alias, pattern, "no-force-push");
+      }
     }
     repo = { ...repo, protectionPhase: "applied", updatedAt: new Date().toISOString() };
     project = replaceRepository(project, repo);
@@ -778,7 +796,12 @@ export async function prepareHostGitCredential(
     for (const repo of project.repositories.filter((candidate) => candidate.phase === "ready")) {
       await grantRepositoryUsers(credentials, project.gitNamespace, repo.alias);
       for (const pattern of repo.protectedPatterns) {
-        await protectBranch(credentials, project.gitNamespace, repo.alias, pattern);
+        await protectBranch(credentials, project.gitNamespace, repo.alias, pattern, "reviewed");
+      }
+      for (const pattern of repo.forcePushBlockedPatterns ?? []) {
+        if (!repo.protectedPatterns.includes(pattern)) {
+          await protectBranch(credentials, project.gitNamespace, repo.alias, pattern, "no-force-push");
+        }
       }
     }
   }
@@ -792,9 +815,10 @@ async function protectBranch(
   credentials: GiteaConnection,
   organization: string,
   alias: string,
-  pattern: string
+  pattern: string,
+  policy: "reviewed" | "no-force-push"
 ): Promise<void> {
-  const protection = branchProtectionOptions(credentials);
+  const protection = branchProtectionOptions(credentials, policy);
   const updated = await giteaRequest(
     credentials,
     "PATCH",
@@ -815,18 +839,38 @@ async function protectBranch(
 }
 
 export function branchProtectionOptions(
-  credentials: Pick<GiteaCredentials, "adminUsername" | "maintainerUsername">
+  credentials: Pick<GiteaCredentials, "adminUsername" | "maintainerUsername">,
+  policy: "reviewed" | "no-force-push" = "reviewed"
 ): Record<string, unknown> {
+  if (policy === "no-force-push") {
+    return {
+      enable_push: true,
+      enable_push_whitelist: false,
+      push_whitelist_usernames: [],
+      push_whitelist_teams: [],
+      enable_force_push: false,
+      enable_merge_whitelist: false,
+      merge_whitelist_usernames: [],
+      merge_whitelist_teams: [],
+      required_approvals: 0,
+      block_on_rejected_reviews: false,
+      dismiss_stale_approvals: false,
+      block_admin_merge_override: false
+    };
+  }
   return {
     enable_push: true,
     enable_push_whitelist: true,
     push_whitelist_usernames: [credentials.maintainerUsername],
+    push_whitelist_teams: ["Owners"],
     enable_force_push: false,
     enable_merge_whitelist: true,
     merge_whitelist_usernames: [credentials.adminUsername],
+    merge_whitelist_teams: ["Owners"],
     required_approvals: 1,
     block_on_rejected_reviews: true,
-    dismiss_stale_approvals: true
+    dismiss_stale_approvals: true,
+    block_admin_merge_override: false
   };
 }
 

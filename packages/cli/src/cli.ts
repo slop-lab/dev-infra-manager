@@ -194,6 +194,7 @@ project.command("create")
       ...(selectedRootRef === undefined ? {} : { ref: selectedRootRef }),
       protectedPatterns: rootEntry?.protectedPatterns
         ?? (flags.protect === undefined ? [] : commaSeparated(flags.protect)),
+      forcePushBlockedPatterns: rootEntry?.forcePushBlockedPatterns ?? [],
       importBranches: rootEntry?.importBranches ?? {},
       publishBranches: rootEntry?.publishBranches ?? {},
       mirror: flags.mirror ?? false
@@ -259,6 +260,7 @@ repo.command("add")
       root: flags.root ?? false,
       ...(flags.ref === undefined ? {} : { ref: flags.ref }),
       protectedPatterns: flags.protect === undefined ? [] : commaSeparated(flags.protect),
+      forcePushBlockedPatterns: [],
       importBranches: {},
       publishBranches: {},
       mirror: flags.mirror ?? false

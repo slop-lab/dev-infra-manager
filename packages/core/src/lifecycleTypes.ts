@@ -123,6 +123,7 @@ export interface ProjectRepositoryRecord {
   connections: RepositoryConnection[];
   transferId?: string;
   protectedPatterns: string[];
+  forcePushBlockedPatterns?: string[];
   protectionPhase: "pending" | "applied";
   createdAt: string;
   updatedAt: string;

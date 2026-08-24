@@ -11,6 +11,7 @@ export interface RepositorySetEntry {
   root: boolean;
   ref?: string;
   protectedPatterns: string[];
+  forcePushBlockedPatterns: string[];
   importBranches: Record<string, string>;
   publishBranches: Record<string, string>;
 }
@@ -56,7 +57,7 @@ export function normalizeRepositorySet(value: unknown, label = "repository set")
   for (const [aliasInput, entryValue] of Object.entries(repositories)) {
     const alias = validateLifecycleName(aliasInput, "repo alias");
     const entry = object(entryValue, `${label}.repositories.${alias}`);
-    exactKeys(entry, ["url", "upstream", "refPrefix", "fallback", "root", "ref", "protect", "import", "publish"], `${label}.repositories.${alias}`);
+    exactKeys(entry, ["url", "upstream", "refPrefix", "fallback", "root", "ref", "protect", "blockForcePush", "import", "publish"], `${label}.repositories.${alias}`);
     const url = optionalGitUrl(entry.url, `${label}.repositories.${alias}.url`);
     const upstream = optionalLifecycleName(entry.upstream, `${label}.repositories.${alias}.upstream`);
     const refPrefix = optionalRefPrefix(entry.refPrefix, `${label}.repositories.${alias}.refPrefix`);
@@ -73,6 +74,7 @@ export function normalizeRepositorySet(value: unknown, label = "repository set")
       root: rootFlag,
       ...(ref === undefined ? {} : { ref: normalizeRepositoryRef(ref) }),
       protectedPatterns: stringArray(entry.protect, `${label}.repositories.${alias}.protect`),
+      forcePushBlockedPatterns: stringArray(entry.blockForcePush, `${label}.repositories.${alias}.blockForcePush`),
       importBranches: branchMap(entry.import, `${label}.repositories.${alias}.import`, "import"),
       publishBranches: branchMap(entry.publish, `${label}.repositories.${alias}.publish`)
     };
@@ -93,7 +95,7 @@ export function validateRepositorySet(value: unknown, label = "repositorySet"): 
   for (const [aliasInput, entryValue] of Object.entries(repositories)) {
     const alias = validateLifecycleName(aliasInput, "repo alias");
     const entry = object(entryValue, `${label}.repositories.${alias}`);
-    exactKeys(entry, ["url", "upstream", "refPrefix", "fallback", "root", "ref", "protectedPatterns", "importBranches", "publishBranches"], `${label}.repositories.${alias}`);
+    exactKeys(entry, ["url", "upstream", "refPrefix", "fallback", "root", "ref", "protectedPatterns", "forcePushBlockedPatterns", "importBranches", "publishBranches"], `${label}.repositories.${alias}`);
     const url = optionalGitUrl(entry.url, `${label}.repositories.${alias}.url`);
     const upstream = optionalLifecycleName(entry.upstream, `${label}.repositories.${alias}.upstream`);
     const refPrefix = optionalRefPrefix(entry.refPrefix, `${label}.repositories.${alias}.refPrefix`);
@@ -110,6 +112,10 @@ export function validateRepositorySet(value: unknown, label = "repositorySet"): 
       protectedPatterns: stringArray(
         entry.protectedPatterns,
         `${label}.repositories.${alias}.protectedPatterns`
+      ),
+      forcePushBlockedPatterns: stringArray(
+        entry.forcePushBlockedPatterns,
+        `${label}.repositories.${alias}.forcePushBlockedPatterns`
       ),
       importBranches: branchMap(
         entry.importBranches,
