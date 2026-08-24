@@ -42,7 +42,7 @@ dim workspace run dim-dev codex
 ```
 
 The root lifecycle clones missing registered managed repositories into
-`/workspace/workbench` using the runtime catalog. It never runs Git against an
+`/workspace` using the runtime catalog. It never runs Git against an
 existing agent-controlled checkout; agents fetch, switch, and update those
 repositories from inside their private development runtime. For local source
 checks in this staging checkout, enter the workbench first:

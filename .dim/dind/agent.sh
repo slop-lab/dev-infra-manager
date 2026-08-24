@@ -13,10 +13,10 @@ private_docker() {
 case "${1:?private agent action is required}" in
   setup)
     test -r /run/dim/project.json
-    test -d /workspace/workbench/agent
+    test -d /workspace/agent
     su-exec rootless env HOME=/home/rootless XDG_RUNTIME_DIR=/run/user/1000 \
       DOCKER_HOST="unix://$docker_socket" docker build --quiet \
-      --tag "$agent_image" /workspace/workbench/agent >/dev/null
+      --tag "$agent_image" /workspace/agent >/dev/null
     su-exec rootless env HOME=/home/rootless XDG_RUNTIME_DIR=/run/user/1000 \
       DOCKER_HOST="unix://$docker_socket" docker rm --force "$agent_name" >/dev/null 2>&1 || true
     set -- run --detach --name "$agent_name" --restart unless-stopped \
@@ -38,7 +38,7 @@ case "${1:?private agent action is required}" in
       --mount type=bind,src=/mnt/agent-home,dst=/home/dim-agent \
       --mount type=bind,src=/mnt/workspace-shared-dind,dst=/mnt/workspace-shared-dind \
       --mount "type=bind,src=$docker_socket,dst=/run/docker.sock" \
-      --workdir /workspace/workbench
+      --workdir /workspace
     host_mappings=/tmp/dim-private-agent-hosts
     jq -r '.hostAliases | to_entries[] | .key as $host | .value[] | "\($host)=\(.)"' \
       /run/dim/project.json >"$host_mappings"
@@ -50,7 +50,7 @@ case "${1:?private agent action is required}" in
       DOCKER_HOST="unix://$docker_socket" docker "$@" >/dev/null
     su-exec rootless env HOME=/home/rootless XDG_RUNTIME_DIR=/run/user/1000 \
       DOCKER_HOST="unix://$docker_socket" docker exec \
-      --workdir /workspace/workbench "$agent_name" \
+      --workdir /workspace "$agent_name" \
       pnpm install --frozen-lockfile
     ;;
   exec)

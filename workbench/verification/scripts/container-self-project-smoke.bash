@@ -223,8 +223,8 @@ dim workspace run "$workspace_name" bash -- -lc '
   test -r AGENTS.md
   test -r .agents/skills/pull-request/SKILL.md
   for repository in core core-development plugin-dns-cloudflare plugin-dns-cloudflare-development plugin-external-urls plugin-external-urls-development verification examples specification; do
-    test -d "/workspace/workbench/$repository/.git"
-    test "$(git -C "/workspace/workbench/$repository" branch --show-current)" = main
+    test -d "/workspace/$repository/.git"
+    test "$(git -C "/workspace/$repository" branch --show-current)" = main
   done
 '
 agent_commit_identity="$(dim workspace run "$workspace_name" bash -- -lc '
@@ -242,7 +242,7 @@ if dim workspace run "$workspace_name" bash -- -lc \
 fi
 core_proposal=agent/split-repository-smoke
 dim workspace run "$workspace_name" bash -- -lc "
-  cd /workspace/workbench/core
+  cd /workspace/core
   git checkout -b '$core_proposal'
   printf 'split proposal\n' > split-proposal.txt
   git add split-proposal.txt
