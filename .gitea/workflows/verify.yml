@@ -41,6 +41,8 @@ jobs:
         with:
           node-version: 24
       - name: Install locked dependencies
-        run: pnpm --dir core-development install --frozen-lockfile
+        run: |
+          pnpm --dir core install --frozen-lockfile
+          pnpm --dir core-development install --frozen-lockfile
       - name: Verify development tests
         run: pnpm --dir core-development run check && pnpm --dir core-development run test
