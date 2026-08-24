@@ -111,7 +111,12 @@ jobs:
       - name: Verify container integration
         if: ${{ inputs.gate == 'container' }}
         working-directory: snapshot
-        run: just ci workspace
+        run: |
+          dim-ci-runner-health --recover
+          just ci workspace
+      - name: Verify runner health after container integration
+        if: ${{ always() && inputs.gate == 'container' }}
+        run: dim-ci-runner-health --recover
       - name: Verify QEMU backend integration
         if: ${{ inputs.gate == 'kvm' }}
         working-directory: snapshot

@@ -32,6 +32,10 @@ agent:
 agent-docker:
     cd .. && bash verification/scripts/agent-docker-smoke.bash
 
+# Build the managed Sysbox runner image and prove host-mode JavaScript actions have Node.js.
+sysbox-ci-runner-image:
+    cd .. && bash verification/scripts/sysbox-ci-runner-image-smoke.bash
+
 # Verify the systemd, cgroupfs, and unsupported Project runtime cgroup contracts.
 project-runtime-cgroups:
     cd .. && bash verification/scripts/project-runtime-cgroups-example-smoke.bash
