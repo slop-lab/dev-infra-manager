@@ -9,6 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Extended reviewed repository sets with a checkout `ref` for every alias.
+  Workspace manifests now publish the requested ref, resolved ref, and exact
+  commit SHA, while `workspace create --repo-ref ALIAS=REF` can substitute a
+  non-root candidate without changing Project state.
 - Renamed `project create --url/--ref` to the unambiguous
   `--bootstrap-git-url/--bootstrap-git-ref`; the URL names a Git repository,
   not a raw `.dim/repos.yml` document, and an omitted ref still selects its
