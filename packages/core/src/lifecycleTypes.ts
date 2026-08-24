@@ -114,6 +114,7 @@ export interface RepositoryConnection {
 
 export interface ProjectRepositoryRecord {
   alias: string;
+  ref?: string;
   providerRepoId: string;
   owner: string;
   hostUrl: string;
@@ -158,6 +159,7 @@ export interface WorkspaceRecord {
   projectName: string;
   rootRepositoryAlias: string;
   rootRef: string;
+  repositoryRefOverrides?: Record<string, string>;
   projectPath: string;
   phase: WorkspacePhase;
   profiles: string[];

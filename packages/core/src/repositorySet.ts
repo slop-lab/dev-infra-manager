@@ -1,7 +1,7 @@
 import { parseDocument } from "yaml";
 import { UserError } from "./errors.js";
 import { validateLifecycleName } from "./lifecycleState.js";
-import { normalizeRootRef } from "./projectRegistry.js";
+import { normalizeRepositoryRef } from "./projectRegistry.js";
 
 export interface RepositorySetEntry {
   url?: string;
@@ -9,7 +9,7 @@ export interface RepositorySetEntry {
   refPrefix?: string;
   fallback: boolean;
   root: boolean;
-  rootRef?: string;
+  ref?: string;
   protectedPatterns: string[];
   importBranches: Record<string, string>;
   publishBranches: Record<string, string>;
@@ -65,16 +65,13 @@ export function normalizeRepositorySet(value: unknown, label = "repository set")
       : boolean(entry.fallback, `${label}.repositories.${alias}.fallback`);
     const rootFlag = entry.root === undefined ? false : boolean(entry.root, `${label}.repositories.${alias}.root`);
     const ref = optionalString(entry.ref, `${label}.repositories.${alias}.ref`);
-    if (ref !== undefined && !rootFlag) {
-      throw new UserError(`${label}.repositories.${alias}.ref requires root: true`);
-    }
     normalized[alias] = {
       ...(url === undefined ? {} : { url }),
       ...(upstream === undefined ? {} : { upstream }),
       ...(refPrefix === undefined ? {} : { refPrefix }),
       fallback,
       root: rootFlag,
-      ...(ref === undefined ? {} : { rootRef: normalizeRootRef(ref) }),
+      ...(ref === undefined ? {} : { ref: normalizeRepositoryRef(ref) }),
       protectedPatterns: stringArray(entry.protect, `${label}.repositories.${alias}.protect`),
       importBranches: branchMap(entry.import, `${label}.repositories.${alias}.import`, "import"),
       publishBranches: branchMap(entry.publish, `${label}.repositories.${alias}.publish`)
@@ -96,23 +93,20 @@ export function validateRepositorySet(value: unknown, label = "repositorySet"): 
   for (const [aliasInput, entryValue] of Object.entries(repositories)) {
     const alias = validateLifecycleName(aliasInput, "repo alias");
     const entry = object(entryValue, `${label}.repositories.${alias}`);
-    exactKeys(entry, ["url", "upstream", "refPrefix", "fallback", "root", "rootRef", "protectedPatterns", "importBranches", "publishBranches"], `${label}.repositories.${alias}`);
+    exactKeys(entry, ["url", "upstream", "refPrefix", "fallback", "root", "ref", "protectedPatterns", "importBranches", "publishBranches"], `${label}.repositories.${alias}`);
     const url = optionalGitUrl(entry.url, `${label}.repositories.${alias}.url`);
     const upstream = optionalLifecycleName(entry.upstream, `${label}.repositories.${alias}.upstream`);
     const refPrefix = optionalRefPrefix(entry.refPrefix, `${label}.repositories.${alias}.refPrefix`);
     const fallback = boolean(entry.fallback, `${label}.repositories.${alias}.fallback`);
     const rootFlag = boolean(entry.root, `${label}.repositories.${alias}.root`);
-    const rootRef = optionalString(entry.rootRef, `${label}.repositories.${alias}.rootRef`);
-    if (rootRef !== undefined && !rootFlag) {
-      throw new UserError(`${label}.repositories.${alias}.rootRef requires root: true`);
-    }
+    const ref = optionalString(entry.ref, `${label}.repositories.${alias}.ref`);
     normalized[alias] = {
       ...(url === undefined ? {} : { url }),
       ...(upstream === undefined ? {} : { upstream }),
       ...(refPrefix === undefined ? {} : { refPrefix }),
       fallback,
       root: rootFlag,
-      ...(rootRef === undefined ? {} : { rootRef: normalizeRootRef(rootRef) }),
+      ...(ref === undefined ? {} : { ref: normalizeRepositoryRef(ref) }),
       protectedPatterns: stringArray(
         entry.protectedPatterns,
         `${label}.repositories.${alias}.protectedPatterns`

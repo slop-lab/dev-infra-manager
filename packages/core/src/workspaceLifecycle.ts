@@ -4,7 +4,7 @@ import { stat } from "node:fs/promises";
 import { UserError } from "./errors.js";
 import { ensureGitea, giteaNestedBaseUrl, GITEA_NETWORK } from "./gitea.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
-import { applyProjectRepositoryProtection } from "./projectRegistry.js";
+import { applyProjectRepositoryProtection, normalizeRepositoryRef } from "./projectRegistry.js";
 import type {
   GiteaCredentials,
   LifecycleOptions,
@@ -69,6 +69,29 @@ export function validateWorkspaceProfiles(values: string[]): string[] {
   return [...seen];
 }
 
+export function validateRepositoryRefOverrides(
+  values: string[],
+  project: ProjectRecord
+): Record<string, string> {
+  const overrides: Record<string, string> = {};
+  for (const value of values) {
+    const separator = value.indexOf("=");
+    if (separator <= 0 || separator === value.length - 1) {
+      throw new UserError(`repository ref override '${value}' must use alias=ref`);
+    }
+    const alias = validateLifecycleName(value.slice(0, separator), "repo alias");
+    if (!project.repositories.some((repository) => repository.alias === alias)) {
+      throw new UserError(`project '${project.name}' has no repository '${alias}'`);
+    }
+    if (alias === project.rootRepositoryAlias) {
+      throw new UserError("the root repository ref cannot be overridden by a workspace candidate");
+    }
+    if (overrides[alias] !== undefined) throw new UserError(`repository ref override '${alias}' is duplicated`);
+    overrides[alias] = normalizeRepositoryRef(value.slice(separator + 1));
+  }
+  return overrides;
+}
+
 export async function detectWorkspaceKvm(
   backend: WorkspaceRecord["runtimeBackend"],
   probe: () => Promise<void> = probeKvmDevice
@@ -108,6 +131,7 @@ export async function createWorkspace(
     project: string;
     name: string;
     profiles: string[];
+    repositoryRefs?: string[];
     runtimeBackend: WorkspaceRecord["runtimeBackend"];
     cpuCount?: string;
     memory?: string;
@@ -127,6 +151,7 @@ export async function createWorkspace(
   });
   const state = new LifecycleState(options.stateRoot);
   const projectRecord = await readyProject(state, project);
+  const repositoryRefOverrides = validateRepositoryRefOverrides(input.repositoryRefs ?? [], projectRecord);
   let repo = readyRootRepository(projectRecord);
   const rootRef = await resolveRootRef(runner, options, projectRecord, repo);
   if (repo.protectionPhase !== "applied") {
@@ -144,6 +169,9 @@ export async function createWorkspace(
     }
     if (record.profiles.join("\0") !== profiles.join("\0")) {
       throw new UserError(`workspace '${name}' already exists with different profiles; use dim workspace update`);
+    }
+    if (JSON.stringify(record.repositoryRefOverrides ?? {}) !== JSON.stringify(repositoryRefOverrides)) {
+      throw new UserError(`workspace '${name}' already exists with different repository ref overrides`);
     }
     if (record.runtimeBackend !== input.runtimeBackend) {
       throw new UserError(`workspace '${name}' already exists with backend '${record.runtimeBackend}'`);
@@ -168,6 +196,7 @@ export async function createWorkspace(
       projectName: projectRecord.name,
       rootRepositoryAlias: repo.alias,
       rootRef,
+      repositoryRefOverrides,
       projectPath: "/workspace/project",
       phase: "creating",
       profiles,
@@ -583,7 +612,7 @@ async function reconcileProject(
       await reconcileContainer(runner, options, record, gitEnvironment(record, credentials));
       await installHostInputHelper(runner, record);
       await ensureClone(runner, record, repo.workspaceUrl);
-      await writeProjectManifest(runner, record, project);
+      await writeProjectManifest(runner, record, project, credentials);
       record = { ...record, updatedAt: new Date().toISOString() };
       await state.writeWorkspace(record);
       return record;
@@ -901,10 +930,12 @@ async function applyFastForwardRoot(
 async function writeProjectManifest(
   runner: StreamingCommandRunner,
   record: WorkspaceRecord,
-  project: ProjectRecord
+  project: ProjectRecord,
+  credentials: GiteaCredentials
 ): Promise<void> {
   const cgroups = await inspectProjectRuntimeCgroups(runner, record.containerName, nestedEngine(record));
-  const manifest = projectRuntimeManifest(record, project, cgroups);
+  const repositories = await resolveRepositorySnapshot(runner, record, project, credentials);
+  const manifest = projectRuntimeManifest(record, project, cgroups, repositories);
   const encoded = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`).toString("base64");
   const result = await runner.run("docker", [
     "exec", "--user", "root",
@@ -919,7 +950,8 @@ async function writeProjectManifest(
 export function projectRuntimeManifest(
   record: WorkspaceRecord,
   project: ProjectRecord,
-  cgroups: ProjectRuntimeCgroups
+  cgroups: ProjectRuntimeCgroups,
+  resolvedRepositories: Record<string, { requestedRef: string; ref: string; commit: string }> = {}
 ): Record<string, unknown> {
   return {
     schemaVersion: 1,
@@ -931,12 +963,63 @@ export function projectRuntimeManifest(
       .map((repository) => [repository.alias, {
         workspaceUrl: repository.workspaceUrl,
         phase: repository.phase,
-        root: repository.alias === record.rootRepositoryAlias
+        root: repository.alias === record.rootRepositoryAlias,
+        ...(resolvedRepositories[repository.alias] ?? {})
       }])),
     gitBaseUrl: record.gitBaseUrl,
     hostAliases: record.hostAliases,
     runtime: { cgroups }
   };
+}
+
+export async function resolveRepositorySnapshot(
+  runner: StreamingCommandRunner,
+  record: WorkspaceRecord,
+  project: ProjectRecord,
+  credentials: GiteaCredentials
+): Promise<Record<string, { requestedRef: string; ref: string; commit: string }>> {
+  const resolved: Record<string, { requestedRef: string; ref: string; commit: string }> = {};
+  const helper = "!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f";
+  for (const repository of project.repositories) {
+    if (repository.phase !== "ready") continue;
+    const requestedRef = record.repositoryRefOverrides?.[repository.alias]
+      ?? repository.ref
+      ?? (repository.alias === record.rootRepositoryAlias ? record.rootRef : "HEAD");
+    const requestedCommit = /^[0-9a-f]{40,64}$/.test(requestedRef) ? requestedRef : undefined;
+    const listed = await runner.run(
+      "git",
+      ["-c", `credential.helper=${helper}`, "ls-remote", "--symref", "--exit-code", repository.hostUrl, ...(requestedCommit ? [] : [requestedRef, `${requestedRef}^{}`])],
+      {
+        env: {
+          ...process.env,
+          DIM_GIT_USERNAME: credentials.writerUsername,
+          DIM_GIT_TOKEN: credentials.writerPassword,
+          GIT_TERMINAL_PROMPT: "0"
+        }
+      }
+    );
+    if (listed.exitCode !== 0) {
+      throw commandError(`resolve repository ref '${project.name}/${repository.alias}:${requestedRef}'`, listed);
+    }
+    const lines = listed.stdout.trim().split(/\r?\n/).filter(Boolean);
+    const symbolic = requestedRef === "HEAD"
+      ? lines.find((line) => line.startsWith("ref:"))?.match(/^ref:\s+(refs\/[^\s]+)\s+HEAD$/)?.[1]
+      : undefined;
+    const objectLine = requestedCommit
+      ? lines.find((line) => line.startsWith(`${requestedCommit}\t`))
+      : lines.find((line) => line.endsWith(`\t${requestedRef}^{}`))
+        ?? lines.find((line) => /^[0-9a-f]{40,64}\s+/.test(line));
+    const [commit, reportedRef] = objectLine?.split(/\s+/, 2) ?? [];
+    if (!commit || !reportedRef) {
+      throw new UserError(`repository ref '${project.name}/${repository.alias}:${requestedRef}' returned no commit`);
+    }
+    resolved[repository.alias] = {
+      requestedRef,
+      ref: requestedCommit ?? symbolic ?? reportedRef.replace(/\^\{\}$/, ""),
+      commit
+    };
+  }
+  return resolved;
 }
 
 const HOST_INPUT_HELPER = `#!/usr/bin/env sh

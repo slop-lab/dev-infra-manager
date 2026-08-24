@@ -204,12 +204,19 @@ dim repo list acme
 
 The root lifecycle receives a Project-specific base URL such as
 `http://dim-gitea:3000/dim-acme` in `DIM_GIT_BASE_URL`, plus a small runtime
-manifest at `DIM_PROJECT_MANIFEST`. Project code constructs managed URLs such
-as `$DIM_GIT_BASE_URL/product.git` and decides which repositories, checkout
-names, and services it supports. DIM neither exports a variable per repository
+manifest at `DIM_PROJECT_MANIFEST`. Each ready repository record includes its
+requested ref, resolved ref, and exact commit SHA. Project code decides checkout
+paths and services but materializes that recorded commit. DIM neither exports a variable per repository
 nor assumes a repository-to-container mapping. Projects can independently map
 different upstream repository names without making their normal configuration
 depend on DIM.
+
+Use a non-root candidate ref without changing Project state when creating a
+verification workspace:
+
+```bash
+dim workspace create acme candidate --repo-ref product=refs/pull/42/head
+```
 
 ### Synchronizing an external repository
 

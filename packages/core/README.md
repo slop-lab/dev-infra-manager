@@ -48,7 +48,7 @@ await importProjectRepository(runner, options, {
   alias: "root",
   source: "/path/to/acme",
   root: true,
-  rootRef: "main",
+  ref: "main",
   protectedPatterns: ["main", "development"]
 });
 await createWorkspace(runner, options, {

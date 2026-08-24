@@ -20,7 +20,6 @@ import {
   parseRepositorySetYaml,
   mapExternalRefToRepository,
   mapRepositoryRefToExternal,
-  normalizeRootRef,
   resolveRepositoryConnection,
   type RepositoryRefNamespace,
   type RepositorySet,
@@ -55,6 +54,7 @@ export interface ResourceFlags {
 
 export interface WorkspaceCreateFlags extends JsonFlags {
   profile: string[];
+  repoRef: string[];
   kvm?: boolean;
   gitUserName?: string;
   gitUserEmail?: string;
@@ -535,7 +535,7 @@ export async function addRepository(
       ...(connection.refNamespace === undefined ? {} : { refNamespace: connection.refNamespace }),
       ...(connection.publishBranches === undefined ? {} : { publishBranches: connection.publishBranches })
     }),
-    ...(entry.rootRef === undefined ? {} : { rootRef: entry.rootRef })
+    ...(entry.ref === undefined ? {} : { ref: entry.ref })
   });
   if (!prepared.transferId || !prepared.sourceUrl) return prepared.repository;
   const temporary = await mkdtemp(path.join(tmpdir(), "dim-repo-transfer-"));
