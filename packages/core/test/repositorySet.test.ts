@@ -18,6 +18,7 @@ repositories:
     root: true
     ref: main
     protect: [main]
+    blockForcePush: [main]
   api:
     url: git@example.test:odd/path-without-dot-git
     ref: release/tested
@@ -32,6 +33,7 @@ repositories:
           root: true,
           ref: "refs/heads/main",
           protectedPatterns: ["main"],
+          forcePushBlockedPatterns: ["main"],
           importBranches: {},
           publishBranches: {}
         },
@@ -41,6 +43,7 @@ repositories:
           root: false,
           ref: "refs/heads/release/tested",
           protectedPatterns: [],
+          forcePushBlockedPatterns: [],
           importBranches: {},
           publishBranches: {}
         }

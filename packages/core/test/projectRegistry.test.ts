@@ -42,10 +42,26 @@ describe("project registry", () => {
       enable_push: true,
       enable_push_whitelist: true,
       push_whitelist_usernames: ["dim-host"],
+      push_whitelist_teams: ["Owners"],
       enable_force_push: false,
-      merge_whitelist_usernames: ["dim-admin"]
+      merge_whitelist_usernames: ["dim-admin"],
+      merge_whitelist_teams: ["Owners"],
+      block_admin_merge_override: false
     });
     expect(JSON.stringify(options)).not.toContain("dim-workspace");
+  });
+
+  it("allows ordinary pushes while blocking force pushes for baseline protection", () => {
+    expect(branchProtectionOptions({
+      adminUsername: "dim-admin",
+      maintainerUsername: "dim-host"
+    }, "no-force-push")).toMatchObject({
+      enable_push: true,
+      enable_push_whitelist: false,
+      enable_force_push: false,
+      enable_merge_whitelist: false,
+      required_approvals: 0
+    });
   });
 
   it("rejects deleting the project root repository", async () => {
