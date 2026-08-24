@@ -40,7 +40,7 @@ jobs:
       - working-directory: snapshot
         run: pnpm --filter @slop-lab/dim-plugin-external-urls run pack:dry-run
   development:
-    uses: dim-dim/plugin-external-urls-development/.gitea/workflows/verify.yml@85501b6d3ea48c41cd2477c4afb44ff635c42282
+    uses: dim-dim/plugin-external-urls-development/.gitea/workflows/verify.yml@a22f2a2ba1100387704a88b98ef0eda11b4f7e66
     with:
       source-ref: ${{ gitea.sha }}
       development-ref: main
