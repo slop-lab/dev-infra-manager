@@ -55,7 +55,11 @@ case "${1:?private agent action is required}" in
     ;;
   exec)
     shift
-    private_docker exec --interactive "$agent_name" "$@"
+    if [ -t 0 ] && [ -t 1 ]; then
+      private_docker exec --interactive --tty "$agent_name" "$@"
+    else
+      private_docker exec --interactive "$agent_name" "$@"
+    fi
     ;;
   start|stop)
     action="$1"
