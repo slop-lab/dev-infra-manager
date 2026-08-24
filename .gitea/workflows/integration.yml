@@ -35,5 +35,5 @@ jobs:
       candidate-repository: verification
       candidate-ref: ${{ gitea.sha }}
       gate: kvm
-      runner-label: dim-container-integration
+      runner-label: dim-qemu
       backend: ${{ gitea.event_name == 'schedule' && 'runc' || inputs.backend }}
