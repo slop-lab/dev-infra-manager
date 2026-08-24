@@ -74,6 +74,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
+- Restored the self-development source gate after repository separation by
+  resolving the reviewed root lifecycle from its sibling checkout, removing
+  obsolete archive-extraction checks, and making every independent repository
+  ignore its own generated dependency and build output.
 - Made managed-controller PID ownership publication atomic so concurrent
   readers cannot mistake a newly created empty PID file for stale ownership.
 - Kept the full-development-flow example's private rootless DinD ownership
