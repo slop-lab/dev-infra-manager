@@ -24,7 +24,7 @@ jobs:
       - run: pnpm run check
       - run: pnpm run pack:dry-run
   development:
-    uses: dim-dim/plugin-external-urls-development/.gitea/workflows/verify.yml@0a67cdc43adec0f73a126c5c3b079254f123547a
+    uses: dim-dim/plugin-external-urls-development/.gitea/workflows/verify.yml@b6a2ea0c6422849098db1e10e2e8066b6241a651
     with:
       source-ref: ${{ gitea.sha }}
       development-ref: main
