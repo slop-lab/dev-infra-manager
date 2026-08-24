@@ -116,6 +116,15 @@ intentionally limited to Node.js type checks and tests that need no APT packages
 or container runtime. Sysbox and KVM host-backend gates also remain available
 through the manually dispatched GitHub workflows.
 
+The Sysbox runner host image MUST provide Node.js before any job step runs so
+host-mode JavaScript actions can start. Verification MUST build the generated,
+digest-based runner image and execute Node.js, Git, Docker, and act-runner
+version probes without requiring a DIM installation on the target host.
+The container-integration lane MUST probe mount, unmount, Docker daemon, and
+container creation before and after the expensive gate. When either probe
+detects a broken Sysbox mediation state it MUST fail the job and recycle the
+outer managed runner before another job can use that state.
+
 The automatic managed-workspace gate must also run the shared-upstream example smoke.
 That smoke proves that two logical DIM repositories can share one external Git
 upstream while fetch and push map only the branches and tags owned by each

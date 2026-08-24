@@ -45,6 +45,17 @@ in disposable job containers. After upgrading DIM across a label change,
 run `dim ci runner restart PROJECT RUNNER` once to replace the stored runner
 registration and publish the new labels.
 
+The managed Sysbox runner host image includes Node.js because JavaScript
+actions such as `actions/checkout` execute before a workflow can run
+`actions/setup-node`. DIM builds that image from a digest-pinned act-runner
+base during runner creation or restart. `just verify sysbox-ci-runner-image`
+builds and probes the same generated image without installing DIM on the host.
+The host-mode integration lane probes Sysbox mount mediation and the inner
+Docker daemon both before and after the integration command. A failed probe
+terminates PID 1 after reporting the job failure; the runner container's
+`unless-stopped` policy then starts it with a fresh Sysbox namespace instead
+of allowing mount failures to cascade into unrelated jobs.
+
 DIM starts one host-scoped CNCF Distribution registry as an anonymous Docker
 Hub pull-through cache when the first managed CI runner is reconciled. Sysbox
 runner daemons use it directly on the private `dim-control` network. Each QEMU
