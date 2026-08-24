@@ -23,17 +23,27 @@ jobs:
   verify:
     runs-on: dim
     steps:
+      - name: Check out workspace definition
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/development
+          path: snapshot
+      - name: Check out core source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/core
+          path: snapshot/core
       - name: Check out plugin source
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: dim-dim/plugin-dns-cloudflare
           ref: ${{ gitea.event_name == 'workflow_call' && inputs.source-ref || 'main' }}
-          path: plugin-dns-cloudflare
+          path: snapshot/plugin-dns-cloudflare
       - name: Check out development tests
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ gitea.event_name == 'workflow_call' && inputs.development-ref || gitea.sha }}
-          path: plugin-dns-cloudflare-development
+          path: snapshot/plugin-dns-cloudflare-development
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
           version: 10.13.1
@@ -41,8 +51,8 @@ jobs:
         with:
           node-version: 24
       - name: Install locked dependencies
-        run: |
-          pnpm --dir plugin-dns-cloudflare install --frozen-lockfile
-          pnpm --dir plugin-dns-cloudflare-development install --frozen-lockfile
+        working-directory: snapshot
+        run: pnpm install --frozen-lockfile
       - name: Verify development tests
-        run: pnpm --dir plugin-dns-cloudflare-development run check && pnpm --dir plugin-dns-cloudflare-development run test
+        working-directory: snapshot
+        run: pnpm --filter @slop-lab/dim-plugin-dns-cloudflare-development run check && pnpm --filter @slop-lab/dim-plugin-dns-cloudflare-development run test
