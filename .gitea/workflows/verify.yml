@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   repository-set:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@f00a09d5b67e5c5519a6429c8eb086152526530a
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@cf657a1aef78f05e5aef57f0f4bca81995f3c14b
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
