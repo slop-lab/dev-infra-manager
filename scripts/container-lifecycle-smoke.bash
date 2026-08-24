@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+suffix="$PPID-$$"
+project_name="smoke-$suffix"
+workspace_name="smoke-$suffix"
+state_root="$(mktemp -d /tmp/dim-lifecycle-state.XXXXXX)"
+source_root="$(mktemp -d /tmp/dim-lifecycle-source.XXXXXX)"
+worktree="$source_root/worktree"
+bare_repo="$source_root/project.git"
+
+export DIM_STATE_ROOT="$state_root"
+export DIM_CONFIG_PATH="$state_root/dim.json"
+export DIM_PLUGIN_HOME="$state_root/plugins"
+mkdir -p "$DIM_PLUGIN_HOME"
+printf '%s\n' '{"schemaVersion":1,"plugins":[]}' > "$DIM_PLUGIN_HOME/plugins.json"
+bash "$script_dir/configure-user-backend.bash" runc
+
+cleanup() {
+  if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
+    pnpm run cli -- workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
+  fi
+  if docker container inspect dim-gitea >/dev/null 2>&1; then
+    local credentials admin_username admin_password
+    credentials="$(docker exec dim-gitea cat /data/dim/credentials.json 2>/dev/null || true)"
+    if [[ -n "$credentials" ]]; then
+      admin_username="$(printf '%s' "$credentials" | jq -r .adminUsername)"
+      admin_password="$(printf '%s' "$credentials" | jq -r .adminPassword)"
+      curl --fail --silent --show-error \
+        --user "$admin_username:$admin_password" \
+        --request DELETE \
+        "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs/dim-$project_name" \
+        >/dev/null 2>&1 || true
+    fi
+  fi
+  find "$state_root" -depth -delete 2>/dev/null || true
+  find "$source_root" -depth -delete 2>/dev/null || true
+}
+trap cleanup EXIT
+
+git init --initial-branch=main "$worktree" >/dev/null
+git -C "$worktree" config user.name "Lifecycle Smoke"
+git -C "$worktree" config user.email "smoke@dim.invalid"
+printf 'initial\n' > "$worktree/README.md"
+git -C "$worktree" add README.md
+git -C "$worktree" commit -m initial >/dev/null
+git clone --bare "$worktree" "$bare_repo" >/dev/null
+
+echo "container-lifecycle: create Project"
+pnpm run cli -- project create "$project_name" >/dev/null
+echo "container-lifecycle: add root repository"
+pnpm run cli -- repo add "$project_name" root "$bare_repo" --root --ref main --protect main >/dev/null
+repo_url="$(pnpm run --silent cli -- repo url "$project_name" root)"
+echo "container-lifecycle: import repository"
+pnpm run cli -- repo add "$project_name" imported "$bare_repo" >/dev/null
+git ls-remote "$(pnpm run --silent cli -- repo url "$project_name" imported)" \
+  refs/heads/main | grep -q .
+pnpm run cli -- repo add "$project_name" disposable >/dev/null
+pnpm run cli -- repo delete "$project_name" disposable --yes >/dev/null
+test "$(pnpm run --silent cli -- repo list "$project_name" --json | jq \
+  --arg alias disposable '[.[] | select(.alias == $alias)] | length')" = 0
+echo "container-lifecycle: create workspace"
+pnpm run cli -- workspace create "$project_name" "$workspace_name" \
+  --cpus 1.5 \
+  --memory 3g \
+  --processes 1024 \
+  >/dev/null
+# The workspace's actual Docker resource names are an implementation detail
+# owned by `dim workspace show --json`, not something to reconstruct by hand: never
+# assume a `dim-ws-<name>`-shaped prefix in test code or docs.
+container_name="$(pnpm run --silent cli -- workspace show "$workspace_name" --json | jq -r .containerName)"
+test "$(docker inspect --format '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.PidsLimit}}' "$container_name")" \
+  = "1500000000|3221225472|1024"
+echo "container-lifecycle: exercise workspace Git and nested Docker"
+pnpm run cli -- exec "$workspace_name" -- sh -c "
+  test \"\\\$(git config user.name)\" = 'dim/$workspace_name'
+  git checkout -b 'agent/$workspace_name'
+  printf 'workspace\n' >> README.md
+  git commit -am workspace >/dev/null
+  git push origin HEAD:'refs/heads/agent/$workspace_name' >/dev/null
+  if git push origin HEAD:refs/heads/main >/dev/null 2>&1; then
+    echo 'protected branch accepted a direct workspace push' >&2
+    exit 1
+  fi
+  docker run --rm \
+    --env DIM_GIT_USERNAME \
+    --env DIM_GIT_TOKEN \
+    alpine:3.22 sh -c \
+    'test -n \"\$DIM_GIT_USERNAME\"; test -n \"\$DIM_GIT_TOKEN\"; wget -qO- https://example.com >/dev/null'
+" >/dev/null
+
+volume_name="$(pnpm run --silent cli -- workspace show "$workspace_name" --json | jq -r .dockerVolumeName)"
+test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/var/lib/docker"}}{{.Type}}:{{.Name}}:{{.Destination}}{{end}}{{end}}' "$container_name")" \
+  = "volume:$volume_name:/var/lib/docker"
+pnpm run cli -- workspace stop "$workspace_name" >/dev/null
+pnpm run cli -- workspace start "$workspace_name" >/dev/null
+pnpm run cli -- exec "$workspace_name" -- sh -c \
+  "test -d .git; docker image inspect alpine:3.22 >/dev/null" >/dev/null
+pnpm run cli -- workspace discard "$workspace_name" --yes >/dev/null
+pnpm run cli -- project purge "$project_name" --yes >/dev/null
+
+echo "container-lifecycle-smoke-ok"
