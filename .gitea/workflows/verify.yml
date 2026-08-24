@@ -1,0 +1,46 @@
+name: Verify core development
+
+on:
+  workflow_call:
+    inputs:
+      source-ref:
+        type: string
+        required: false
+        default: main
+      development-ref:
+        type: string
+        required: false
+        default: main
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: dim
+    steps:
+      - name: Check out core source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/core
+          ref: ${{ gitea.event_name == 'workflow_call' && inputs.source-ref || 'main' }}
+          path: core
+      - name: Check out development tests
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ gitea.event_name == 'workflow_call' && inputs.development-ref || gitea.sha }}
+          path: core-development
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.13.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Install locked dependencies
+        run: pnpm --dir core-development install --frozen-lockfile
+      - name: Verify development tests
+        run: pnpm --dir core-development run check && pnpm --dir core-development run test
