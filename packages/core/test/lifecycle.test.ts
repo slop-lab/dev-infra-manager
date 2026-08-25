@@ -700,7 +700,10 @@ describe("project and workspace lifecycle", () => {
     expect(workspaceRuntimePlan("gvisor", options)).toMatchObject({
       dockerRuntime: "runsc",
       privileged: false,
-      env: { DIM_DOCKERD_FLAGS: "--feature containerd-snapshotter=false" }
+      env: {
+        DIM_DOCKERD_FLAGS: "--feature containerd-snapshotter=false",
+        DOCKER_IPTABLES_LEGACY: "1"
+      }
     });
     expect(workspaceRuntimePlan("rootless-podman", options)).toMatchObject({
       image: "dev-infra-project-workspace-podman:latest",

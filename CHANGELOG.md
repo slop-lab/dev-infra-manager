@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Select Docker's bundled legacy iptables implementation for gVisor workspaces
+  so their nested daemon does not require the unsupported nftables protocol.
+
 - Updated the managed Sysbox CI runner to checksum-pinned Node.js 24 and a
   pinned `just` so host-mode actions and DIM's integration recipes use the
   supported toolchain directly.
