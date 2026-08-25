@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile, readlink } from "node:fs/promises";
 import type { CommandResult, CommandRunner, RunOptions, StreamingCommandRunner, TerminalControl, TerminalSize } from "./types.js";
 
 export class ProcessRunner implements StreamingCommandRunner {
@@ -144,12 +144,20 @@ async function resizeTerminalChild(scriptPid: number | undefined, size: Terminal
   if (scriptPid === undefined) return;
   for (let attempt = 0; attempt < 20; attempt += 1) {
     try {
-      const children = await readFile(`/proc/${scriptPid}/task/${scriptPid}/children`, "utf8");
-      const childPid = children.trim().split(/\s+/)[0];
-      if (childPid) {
+      const directory = `/proc/${scriptPid}/fd`;
+      const descriptors = await readdir(directory);
+      let terminalDescriptor: string | undefined;
+      for (const descriptor of descriptors) {
+        const target = await readlink(`${directory}/${descriptor}`);
+        if (/^\/dev\/pts\/\d+$/.test(target)) {
+          terminalDescriptor = `${directory}/${descriptor}`;
+          break;
+        }
+      }
+      if (terminalDescriptor) {
         const exitCode = await new Promise<number | null>((resolve) => {
           const resize = spawn("stty", [
-            "--file", `/proc/${childPid}/fd/0`,
+            "--file", terminalDescriptor,
             "cols", String(size.columns), "rows", String(size.rows)
           ], { stdio: "ignore" });
           resize.on("error", () => resolve(127));
