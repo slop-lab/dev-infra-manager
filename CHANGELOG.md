@@ -9,6 +9,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Kept the top-level just recipes focused on discoverable everyday contributor
+  commands. CI-only lane composition now lives in checked-in workflows and the
+  local matrix script instead of a parallel `just ci` namespace.
+- The canonical agent image now runs as an unprivileged UID with unrestricted
+  passwordless sudo confined to its Project-owned `agent-dind` container.
+
 - Centralized DIM-managed Gitea issues on each Project root for newly created
   repositories, and documented repository ownership for package-specific
   changelogs, maintenance documentation, and specifications.

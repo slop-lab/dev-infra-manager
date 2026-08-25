@@ -1,6 +1,5 @@
 set shell := ["bash", "-uc"]
 
-mod ci 'just/ci.just'
 mod runner 'just/runner.just'
 mod verify 'verification/verify.just'
 

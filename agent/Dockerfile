@@ -5,7 +5,7 @@ ARG TARGETARCH=amd64
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      bash ca-certificates curl git jq tini \
+      bash ca-certificates curl git jq sudo tini \
  && rm -rf /var/lib/apt/lists/*
 RUN set -eux; \
     case "$TARGETARCH" in \
@@ -23,6 +23,15 @@ COPY --from=docker-cli /usr/local/bin/docker-compose /usr/local/bin/docker-compo
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose \
   /usr/local/libexec/docker/cli-plugins/docker-compose
 RUN npm install --global pnpm@10.13.1 @openai/codex@0.149.0
+RUN usermod --login dim-agent ubuntu \
+ && groupmod --new-name dim-agent ubuntu \
+ && usermod --home /home/dim-agent --move-home --shell /bin/bash dim-agent \
+ && chown dim-agent:dim-agent /home/dim-agent \
+ && printf '%s\n' 'dim-agent ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/dim-agent \
+ && chmod 0440 /etc/sudoers.d/dim-agent
+
+USER dim-agent
+WORKDIR /workspace
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["sleep", "infinity"]

@@ -15,9 +15,7 @@ just test            # unit tests
 just build-packages  # publishable package builds
 just check-source    # typecheck + test + package builds; only Node.js and pnpm required
 just verify agent    # strongest gate supported inside this repository's DIM agent
-just ci all          # complete CI gate with the active Node.js version
-just ci matrix       # exact Node.js 24/26 CI workflow matrix via mise
-just ci matrix --manual # also include manually dispatched Sysbox/KVM workflows
+bash verification/scripts/local-ci-matrix.bash # exact Node.js 24/26 CI matrix via mise
 just doctor          # host readiness: dev tools, Docker, selected backend, cgroup v2
 just run-cli -- --help # build core, then run dim from source without installing it
 ```
@@ -28,11 +26,14 @@ networking through the development agent's private rootless Docker runtime. It
 does not replace `just verify container`, which starts a DIM workspace and exercises
 that workspace's own nested runtime.
 
-`just ci matrix` requires mise, Docker with Compose v2, and the same host
+The top-level justfile is an everyday contributor index, not a mirror of every
+CI job. Reusable verification commands remain under `just verify`; hosted lane
+composition lives in workflows and scripts.
+
+`local-ci-matrix.bash` requires mise, Docker with Compose v2, and the same host
 capabilities as the container integration tests. It installs the locked
-dependencies under Node.js 24 and 26, then runs the same `just ci source` and
-`just ci workspace` recipes used by the hosted CI workflows. Use `just ci all` when one run
-with the currently active Node.js version is enough. The `--manual` option also
+dependencies under Node.js 24 and 26, then runs the same source and container
+gates used by the hosted CI workflows. The `--manual` option also
 runs the same Sysbox isolation and KVM backend-installer recipes as the
 manually dispatched workflows; it requires a registered `sysbox-runc` runtime,
 QEMU tooling, and readable/writable `/dev/kvm`.
