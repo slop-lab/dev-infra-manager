@@ -171,7 +171,7 @@ restore <backup.tar.gz`. A TTY is allocated only for an interactive terminal.
 ```bash
 dim workspace list
 dim workspace show feature-123
-dim workspace resources feature-123 --cpus 4 --memory 8g --processes 4096
+dim workspace resources feature-123 --cpus 4 --memory 8g --pids 4096
 dim workspace stop feature-123
 dim workspace start feature-123
 dim workspace restart feature-123
@@ -304,12 +304,12 @@ development workspaces, with independent cgroup limits. Built-in defaults are
 override one runner:
 
 ```bash
-dim ci runner defaults set --cpus 2 --memory 4g --processes 1024
-dim ci runner create acme primary sysbox --cpus 6 --memory 12g --processes 4096
+dim ci runner defaults set --cpus 2 --memory 4g --pids 1024
+dim ci runner create acme primary sysbox --cpus 6 --memory 12g --pids 4096
 dim ci runner create acme release qemu --cpus 6 --memory 12g
 ```
 
-QEMU maps CPU and memory overrides to guest vCPUs and RAM. `--processes`
+QEMU maps CPU and memory overrides to guest vCPUs and RAM. `--pids`
 applies only to Sysbox runners.
 
 On nested-KVM-capable hosts, enabling `qemu` starts a small trusted webhook
@@ -383,7 +383,7 @@ The resource environment variables are defaults. Set persistent limits for an
 individual workspace at creation time or change them later:
 
 ```bash
-dim workspace create acme feature-123 --cpus 4 --memory 8g --processes 4096
+dim workspace create acme feature-123 --cpus 4 --memory 8g --pids 4096
 dim workspace resources feature-123 --memory 12g
 ```
 
