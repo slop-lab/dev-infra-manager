@@ -12,6 +12,7 @@ state_root="/tmp/dim-self-smoke-state"
 source_root="/tmp/dim-self-smoke-source"
 dim_bin="${DIM_BIN:-$PWD/core/packages/cli/dist/cli.js}"
 project_source="$(cd -- "$script_dir/../.." && pwd)"
+integrated_source="$project_source"
 
 exec 9> /tmp/dim-self-smoke.lock
 if ! flock --nonblock 9; then
@@ -102,6 +103,8 @@ project_source="$source_root/repositories/root"
 dim_apply_test_registry_mirror "$project_source" agent-dind
 mkdir -p "$source_root/remotes"
 git init --bare "$source_root/remotes/archive.git" >/dev/null
+(
+cd -- "$integrated_source/verification"
 node --input-type=module - "$project_source/.dim/repos.yml" "$source_root/remotes/archive.git" <<'EOF'
 import { readFileSync, writeFileSync } from "node:fs";
 import { parse, stringify } from "yaml";
@@ -110,6 +113,7 @@ const manifest = parse(readFileSync(manifestPath, "utf8"));
 manifest.upstreams.archive.url = archive;
 writeFileSync(manifestPath, stringify(manifest));
 EOF
+)
 
 for repository_path in "$source_root"/repositories/*; do
   repository="$(basename "$repository_path")"
