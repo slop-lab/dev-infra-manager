@@ -33,7 +33,7 @@ The host-admin API exposes an asynchronous command-session contract:
 - `GET /v1/sessions/ID/events` streams ordered SSE events for command stages,
   stdout, stderr, exit status, final result, and sanitized errors.
 - `POST /v1/sessions/ID/input` forwards base64-encoded input bytes and may close
-  stdin.
+  stdin, or updates the active terminal's validated columns and rows.
 - `DELETE /v1/sessions/ID` cancels the active process.
 
 Sessions retain a bounded post-completion lifetime so a reconnecting client can
@@ -42,6 +42,14 @@ may contain runtime secrets. The CLI is one client of this contract; a future
 web UI can use the same lifecycle after an authenticated transport proxy is
 defined. The session API remains host-admin-only and is not exposed through a
 workspace grant.
+
+An interactive `exec` or `run` session MUST allocate a real pseudoterminal at
+the controller-side process boundary. The CLI sends its initial terminal size,
+forwards raw input bytes, and sends size changes after `SIGWINCH`; the
+controller applies them to the same PTY before invoking the runtime CLI with
+TTY allocation. Non-interactive sessions remain ordinary stdin/stdout/stderr
+pipes. Output from internal non-streaming probes MUST NOT appear in session
+stdout or stderr.
 
 ## Projects
 

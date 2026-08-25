@@ -34,6 +34,8 @@ Always check:
 - pnpm: `pnpm --version`
 - just: `just --version`
 - git: `git --version`
+- PTY helper: `script --version`
+- terminal resize helper: `stty --version`
 - timeout: `timeout --version`
 - Docker CLI: `docker --version`
 - Docker daemon: `docker info --format "{{.ServerVersion}}"`

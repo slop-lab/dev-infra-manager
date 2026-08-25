@@ -275,6 +275,10 @@ read-only; restore replaces its contents through a read-write mount. The agent
 is restarted afterward if it was running before the task. `workspace run` and
 `workspace exec` forward stdin for redirected and interactive invocations;
 only an actual terminal session requests a TTY from the workspace runtime.
+For an interactive invocation, the managed controller creates the host-side
+PTY, applies the CLI's initial dimensions, and forwards later terminal resize
+events. Internal reconciliation and readiness probes are not part of the task
+output stream.
 
 Run a raw command in the top-level workspace:
 

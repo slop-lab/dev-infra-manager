@@ -323,9 +323,13 @@ host capability rather than Project-owned development configuration.
 
 Controller API tests must cover command-session creation, ordered SSE replay,
 stdout/stderr separation, input forwarding, completion, sanitized failures,
-and cancellation. CLI contract tests must ensure `exec`, `run`, workspace
+and cancellation. Linux process tests must exercise a real PTY, initial
+terminal dimensions, live resize, input, output, and exit propagation; session
+tests must prove that internal probe output is not emitted. CLI contract tests
+must ensure `exec`, `run`, workspace
 lifecycle, and CI runner log commands use the streaming controller client and
-that the obsolete `--processes` spelling is rejected in favor of `--pids`.
+forward `SIGWINCH`, and that the obsolete `--processes` spelling is rejected in
+favor of `--pids`.
 
 When behavior changes:
 
