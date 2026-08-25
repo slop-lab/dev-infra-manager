@@ -324,12 +324,11 @@ dim workspace exec "$workspace_name" -- \
   --format '{{json .Mounts}}' | grep -q /var/run/docker.sock
 dim workspace exec "$workspace_name" -- docker inspect --format '{{.HostConfig.Privileged}}' \
   "$agent_dind_container" | grep -qx true
+verification_stage="agent username contract"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'id -un')" = dim-agent
 verification_stage="agent sudo contract"
-dim workspace run "$workspace_name" bash -- -lc '
-  test "$(id -u)" != 0
-  test "$(id -un)" = dim-agent
-  sudo sh -c '\''test "$(id -u)" = 0'\''
-'
+dim workspace run "$workspace_name" bash -- -lc \
+  'sudo sh -c '\''test "$(id -u)" = 0'\'''
 verification_stage="agent private Docker workload"
 dim workspace run "$workspace_name" bash -- -lc '
   ! docker info --format "{{json .SecurityOptions}}" | grep -q rootless
