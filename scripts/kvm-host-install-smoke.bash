@@ -60,9 +60,24 @@ run_step() {
     return 1
   fi
 }
-dim_prepare_clone_source "$repo_root" "$workdir/snapshot"
-clone_source="$DIM_GIT_CLONE_SOURCE"
-git -C "$clone_source" bundle create "$workdir/repo.bundle" --all
+workbench_snapshot="$workdir/workbench"
+mkdir -p "$workbench_snapshot"
+snapshot_repository() {
+  local source="$1" destination="$2"
+  mkdir -p "$destination"
+  git -C "$source" archive HEAD | tar -x -C "$destination"
+  git -C "$destination" init --initial-branch=main >/dev/null
+  git -C "$destination" add -A
+  git -C "$destination" -c user.name="DIM Snapshot" -c user.email="snapshot@dim.invalid" \
+    commit -m "snapshot $(basename "$source")" >/dev/null
+}
+snapshot_repository "$repo_root" "$workbench_snapshot"
+for component in project core core-development plugin-dns-cloudflare \
+  plugin-dns-cloudflare-development plugin-external-urls \
+  plugin-external-urls-development verification examples specification; do
+  snapshot_repository "$repo_root/$component" "$workbench_snapshot/$component"
+done
+tar -C "$workdir" -czf "$workdir/workbench.tar.gz" workbench
 pid=""
 cleanup() {
   if [[ -n "$pid" ]]; then
@@ -103,7 +118,7 @@ qemu-img create -q -f qcow2 -F qcow2 -b "$image" "$workdir/root.qcow2" "${DIM_KV
 qemu-system-x86_64 -enable-kvm -cpu host -m "${DIM_KVM_SMOKE_MEMORY_MB:-4096}" -smp 4 -nographic -drive "file=$workdir/root.qcow2,if=virtio" -drive "file=$workdir/seed.img,format=raw,if=virtio" -netdev user,id=n,hostfwd=tcp:127.0.0.1:22222-:22 -device virtio-net-pci,netdev=n >"$workdir/qemu.log" 2>&1 & pid=$!
 ssh_args=(-i "$workdir/id" -p 22222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=2)
 clone_repository() {
-  ssh "${ssh_args[@]}" dim@127.0.0.1 "tar -C /tmp -xzf - && git clone /tmp/repo.bundle dim" <"$workdir/repo.tar.gz"
+  ssh "${ssh_args[@]}" dim@127.0.0.1 "mkdir -p dim && tar -C dim -xzf -" <"$workdir/workbench.tar.gz"
 }
 install_backend() {
   printf 'yes\n' | ssh "${ssh_args[@]}" dim@127.0.0.1 "cd dim/workbench && bash verification/scripts/install-host-ubuntu.bash '$backend'"
@@ -135,7 +150,6 @@ if [[ -n "$registry_mirror" ]]; then
   run_step "relay registry cache to nested containers" ssh "${ssh_args[@]}" dim@127.0.0.1 \
     "sudo systemd-run --quiet --unit=dim-registry-cache-relay --property=Restart=always socat TCP-LISTEN:5000,fork,reuseaddr TCP:${registry_mirror#http://}"
 fi
-tar -C "$workdir" -czf "$workdir/repo.tar.gz" repo.bundle
 run_step "clone repository" clone_repository
 run_step "install $backend backend" install_backend
 run_step "verify stored backend" ssh "${ssh_args[@]}" dim@127.0.0.1 \

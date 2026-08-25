@@ -80,10 +80,24 @@ cleanup() {
 }
 trap cleanup EXIT
 
-dim_prepare_clone_source "$project_source" "$source_root/snapshot"
-verification_checkout="$DIM_GIT_CLONE_SOURCE"
-node "$verification_checkout/.dim/materialize-repository-boundaries.mjs" \
-  "$source_root/repositories"
+if [[ -d "$project_source/project/.git" ]]; then
+  mkdir -p "$source_root/repositories"
+  for repository in development root core core-development \
+    plugin-dns-cloudflare plugin-dns-cloudflare-development \
+    plugin-external-urls plugin-external-urls-development verification examples specification; do
+    case "$repository" in
+      development) repository_source="$project_source" ;;
+      root) repository_source="$project_source/project" ;;
+      *) repository_source="$project_source/$repository" ;;
+    esac
+    dim_prepare_clone_source "$repository_source" "$source_root/snapshot-$repository"
+    mkdir -p "$source_root/repositories/$repository"
+    git -C "$DIM_GIT_CLONE_SOURCE" archive HEAD | tar -x -C "$source_root/repositories/$repository"
+  done
+else
+  echo "split DIM repository set is required for self-Project verification" >&2
+  exit 2
+fi
 project_source="$source_root/repositories/root"
 dim_apply_test_registry_mirror "$project_source" agent-dind
 mkdir -p "$source_root/remotes"
