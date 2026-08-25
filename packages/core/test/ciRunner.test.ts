@@ -144,7 +144,8 @@ describe("CI runner resources", () => {
       qemu,
       { instanceUrl: "http://coordinator", token: "secret" },
       "Bearer webhook-secret",
-      () => 108
+      () => 108,
+      { path: "/state/projects/example/cache.bash", key: "0123456789abcdef" }
     );
     expect(qemuArgs).toEqual(expect.arrayContaining([
       "--runtime", "runc", "--device", "/dev/kvm", "--group-add", "108"
@@ -154,6 +155,9 @@ describe("CI runner resources", () => {
     expect(qemuArgs).toContain("DIM_QEMU_CI_CAPACITY=kvm-1");
     expect(qemuArgs.join(" ")).toContain("dim-ci-example-qemu-dispatch");
     expect(qemuArgs.join(" ")).toContain("dim-ci-example-qemu-cache");
+    expect(qemuArgs.join(" ")).toContain("target=/var/lib/dim-qemu-ci-project/cache.bash,readonly");
+    expect(qemuArgs.join(" ")).toContain("source=/state/projects/example/cache.bash");
+    expect(qemuArgs).toContain("DIM_QEMU_CI_PROJECT_CACHE_KEY=0123456789abcdef");
     expect(qemuArgs).toContain("DIM_QEMU_CI_CPUS=6");
     expect(qemuArgs).toContain("DIM_QEMU_CI_MEMORY_MB=12288");
     expect(qemuArgs).toContain("DIM_QEMU_WEBHOOK_AUTHORIZATION=Bearer webhook-secret");
@@ -169,9 +173,9 @@ describe("CI runner resources", () => {
     expect(QEMU_CI_PACKER_TEMPLATE).toContain('source  = "github.com/hashicorp/qemu"');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('flock 9');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('/var/lib/dim-qemu-ci-cache');
-    expect(QEMU_CI_PACKER_PROVISION_SCRIPT).toContain("kvm_image_cache=/var/lib/dim-kvm-cache");
-    expect(QEMU_CI_PACKER_PROVISION_SCRIPT).toContain("ubuntu_cloud_image_checksum=6e40c07ae715f744f84af0bec76415cc1987dd115b4b8de437818561f01a3733");
-    expect(QEMU_CI_PACKER_PROVISION_SCRIPT).toContain('chmod 0444 "$kvm_image_cache/$ubuntu_cloud_image"');
+    expect(QEMU_CI_PACKER_TEMPLATE).toContain('variable "project_cache_script_file"');
+    expect(QEMU_CI_PACKER_TEMPLATE).toContain('sudo /tmp/dim-project-qemu-cache.bash /var/lib/dim-kvm-cache');
+    expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain("DIM_QEMU_CI_PROJECT_CACHE_KEY is required");
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain("DIM_KVM_IMAGE_CACHE=/var/lib/dim-kvm-cache");
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('"TCP:$registry_cache_upstream"');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('http://127.0.0.1:5000/v2/');

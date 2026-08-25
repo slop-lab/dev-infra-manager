@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-- Seed the checksum-pinned Ubuntu cloud image into each Project's shared QEMU
-  runner base image so disposable release jobs reuse it without granting
-  workflow code write access to persistent runner cache state.
+- Added protected-root-owned QEMU cache hooks, digest-keyed shared runner
+  bases, and coverage for disposable-job isolation from persistent cache
+  state.
 
 - Command-session tests now cover base64-framed stdout/stderr, including bytes
   that are invalid UTF-8, so streaming `run`/`exec` remains safe for binary
