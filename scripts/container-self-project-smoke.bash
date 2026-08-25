@@ -11,6 +11,7 @@ workspace_name="dim-self-smoke"
 state_root="/tmp/dim-self-smoke-state"
 source_root="/tmp/dim-self-smoke-source"
 agent_verification_log="$state_root/agent-verification.log"
+workspace_creation_log="$state_root/workspace-creation.log"
 verification_stage="initialization"
 dim_bin="${DIM_BIN:-$PWD/core/packages/cli/dist/cli.js}"
 project_source="$(cd -- "$script_dir/../.." && pwd)"
@@ -76,6 +77,10 @@ cleanup() {
     if [[ "$status" -ne 0 ]]; then
       echo "self-Project verification failed during: $verification_stage" >&2
     fi
+    if [[ "$status" -ne 0 && -s "$workspace_creation_log" ]]; then
+      echo "workspace creation failed; last 120 log lines:" >&2
+      tail -n 120 "$workspace_creation_log" >&2
+    fi
     if [[ "$status" -ne 0 && -s "$agent_verification_log" ]]; then
       echo "agent verification failed; last 120 log lines:" >&2
       tail -n 120 "$agent_verification_log" >&2
@@ -140,7 +145,9 @@ root_ref=dev/root
 dim project create "$project_name" \
   --bootstrap-git-url "$source_root/remotes/archive.git" \
   --bootstrap-git-ref "$root_ref" >/dev/null
-if ! dim workspace create "$project_name" "$workspace_name" >/dev/null; then
+verification_stage="workspace creation"
+if ! dim workspace create "$project_name" "$workspace_name" \
+  >"$workspace_creation_log" 2>&1; then
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml ps --all >&2 || true
