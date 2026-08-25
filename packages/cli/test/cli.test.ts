@@ -26,10 +26,14 @@ test("managed controller restarts preserve the workspace-mounted runtime directo
 
 test("CLI uses controller sessions and presents sanitized controller errors", async () => {
   const source = await readFile(cli, "utf8");
+  const support = await readFile(cliSupport, "utf8");
   for (const operation of ["workspace.exec", "workspace.run", "workspace.setup", "workspace.restart", "ci.runner.logs"]) {
     assert.match(source, new RegExp(`adminStreamCall[^\\n]*[\\s\\S]{0,160}${operation.replace(".", "\\.")}`));
   }
   assert.doesNotMatch(source, /await (?:execWorkspace|runWorkspace)\(/);
+  assert.match(source, /terminal: interactive\(\)/);
+  assert.match(support, /process\.on\("SIGWINCH", resizeHandler\)/);
+  assert.match(support, /columns: process\.stdout\.columns \|\| 80/);
   assert.equal(adminErrorDetail('{"error":"setup failed safely"}'), "setup failed safely");
   assert.equal(adminErrorDetail("plain failure"), "plain failure");
 });

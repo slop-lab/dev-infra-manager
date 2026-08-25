@@ -74,6 +74,8 @@ describe("doctor checks", () => {
       result(0, "", "10.0.0"),
       result(0, "", "just 1.0.0"),
       result(0, "", "git version 2.0.0"),
+      result(0, "", "script from util-linux 2.39"),
+      result(0, "", "stty (GNU coreutils) 9.1"),
       result(0),
       result(0, "", "Docker version 1.0.0"),
       result(0, "", "29.0.0"),

@@ -1,15 +1,22 @@
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
 import { CommandSessionManager } from "../../../../core/packages/core/src/commandSessions.js";
+import { ProcessRunner } from "../../../../core/packages/core/src/runner.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 
 class SessionTestRunner implements StreamingCommandRunner {
+  readonly terminalSizes: Array<{ columns: number; rows: number }> = [];
+
   async run(command: string, args: string[]): Promise<CommandResult> {
     return { command, args, stdout: "checked\n", stderr: "", exitCode: 0 };
   }
 
   async runStreaming(_command: string, _args: string[], options: RunOptions = {}): Promise<number> {
     options.stdout?.write("ready\n");
+    if (typeof options.terminal === "object") {
+      this.terminalSizes.push({ columns: options.terminal.columns, rows: options.terminal.rows });
+      options.terminal.onResize((size) => this.terminalSizes.push(size));
+    }
     const input = options.stdin as PassThrough;
     return await new Promise((resolve) => input.once("data", (chunk) => {
       options.stderr?.write(`input:${String(chunk)}`);
@@ -20,21 +27,30 @@ class SessionTestRunner implements StreamingCommandRunner {
 
 describe("command sessions", () => {
   it("buffers command output, accepts input, and reports the final result", async () => {
-    const sessions = new CommandSessionManager(new SessionTestRunner());
+    const runner = new SessionTestRunner();
+    const sessions = new CommandSessionManager(runner);
     const id = sessions.start(async (runner) => {
       await runner.run("inspect", []);
-      return { exitCode: await runner.runStreaming("execute", []) };
-    });
+      return { exitCode: await runner.runStreaming("execute", [], { terminal: true }) };
+    }, { columns: 100, rows: 40 });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sessions.resize(id, { columns: 120, rows: 50 })).toBe(true);
     sessions.input(id, Buffer.from("hello"));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(sessions.snapshot(id)?.events).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: "command", command: "inspect" }),
-      expect.objectContaining({ type: "stdout", data: "checked\n" }),
+      expect.objectContaining({ type: "command", command: "execute" }),
       expect.objectContaining({ type: "stdout", data: "ready\n" }),
       expect.objectContaining({ type: "stderr", data: "input:hello" }),
       expect.objectContaining({ type: "exit", exitCode: 7 }),
       expect.objectContaining({ type: "result", result: { exitCode: 7 } })
     ]));
+    expect(sessions.snapshot(id)?.events).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ data: "checked\n" })
+    ]));
+    expect(runner.terminalSizes).toEqual([
+      { columns: 100, rows: 40 },
+      { columns: 120, rows: 50 }
+    ]);
   });
 
   it("propagates cancellation to the active command", async () => {
@@ -58,5 +74,34 @@ describe("command sessions", () => {
       expect.objectContaining({ type: "exit", exitCode: 143 }),
       expect.objectContaining({ type: "result", result: { exitCode: 143 } })
     ]));
+  });
+
+  it("runs interactive commands in a real resizable Linux PTY", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let text = "";
+    output.setEncoding("utf8");
+    output.on("data", (chunk: string) => { text += chunk; });
+    let resize: ((size: { columns: number; rows: number }) => void) | undefined;
+    const completed = new ProcessRunner().runStreaming("sh", [
+      "-c", "stty size; IFS= read -r line; stty size; printf '<%s>' \"$line\""
+    ], {
+      stdin: input,
+      stdout: output,
+      stderr: output,
+      terminal: {
+        columns: 91,
+        rows: 33,
+        onResize(listener) { resize = listener; return () => { resize = undefined; }; }
+      }
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    resize?.({ columns: 120, rows: 44 });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    input.end("hello\n");
+    await expect(completed).resolves.toBe(0);
+    expect(text).toContain("33 91");
+    expect(text).toContain("44 120");
+    expect(text).toContain("<hello>");
   });
 });
