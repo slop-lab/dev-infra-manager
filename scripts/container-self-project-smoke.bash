@@ -244,6 +244,12 @@ agent_git_identity="$(dim workspace run "$workspace_name" bash -- -lc \
 test "$agent_git_identity" = \
   "DIM Self Host <dim-self-host@dim.invalid>|DIM Self Host <dim-self-host@dim.invalid>"
 verification_stage="agent base toolchain and home persistence"
+workspace_owner_uid="$(dim workspace exec "$workspace_name" -- stat -c %u /workspace)"
+agent_uid="$(dim workspace run "$workspace_name" bash -- -lc 'id -u')"
+test "$agent_uid" = "$workspace_owner_uid"
+if [[ -n "${DIM_SELF_EXPECT_AGENT_UID:-}" ]]; then
+  test "$agent_uid" = "$DIM_SELF_EXPECT_AGENT_UID"
+fi
 dim workspace run "$workspace_name" bash -- -lc '
   grep -q "Ubuntu 24.04" /etc/os-release
   node --version | grep -Eq "^v24\."

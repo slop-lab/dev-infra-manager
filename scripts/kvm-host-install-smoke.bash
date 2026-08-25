@@ -184,7 +184,7 @@ if [[ "$backend" == runc ]]; then
       "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' JUST_UNSTABLE=1 bash verification/scripts/stateful-development-flow-smoke.bash"
   run_step "verify canonical self Project and private rootless DinD" \
     ssh "${ssh_args[@]}" dim@127.0.0.1 \
-      "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' DIM_SELF_VERIFY_AGENT=1 JUST_UNSTABLE=1 just verify self-development"
+      "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' DIM_SELF_EXPECT_AGENT_UID=1001 DIM_SELF_VERIFY_AGENT=1 JUST_UNSTABLE=1 just verify self-development"
 fi
 if [[ "$backend" == sysbox ]]; then
   run_step "install trusted-workspace build tools" \
