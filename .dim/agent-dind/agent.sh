@@ -15,6 +15,7 @@ case "${1:?private agent action is required}" in
     test -d /workspace/agent
     workspace_uid="$(stat -c %u /workspace)"
     workspace_gid="$(stat -c %g /workspace)"
+    docker_gid="$(stat -c %g "$docker_socket")"
     chown -R "$workspace_uid:$workspace_gid" /mnt/agent-home
     docker build --quiet \
       --build-arg "DIM_UID=$workspace_uid" \
@@ -31,6 +32,7 @@ case "${1:?private agent action is required}" in
       --env "GIT_AUTHOR_EMAIL=$GIT_AUTHOR_EMAIL" \
       --env "GIT_COMMITTER_NAME=$GIT_COMMITTER_NAME" \
       --env "GIT_COMMITTER_EMAIL=$GIT_COMMITTER_EMAIL" \
+      --group-add "$docker_gid" \
       --env GIT_CONFIG_COUNT=2 \
       --env GIT_CONFIG_KEY_0=credential.helper \
       --env 'GIT_CONFIG_VALUE_0=!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f' \
@@ -53,7 +55,8 @@ case "${1:?private agent action is required}" in
     # extracted setuid files with the workspace root's outer UID. Normalize
     # sudo's trusted files from the daemon's own root boundary before use.
     docker exec --user 0:0 "$agent_name" sh -eu -c '
-      chown 0:0 /etc/sudo.conf /etc/sudoers /etc/sudoers.d /etc/sudoers.d/dim-agent /usr/bin/sudo
+      chown 0:0 /etc/sudo.conf /etc/sudoers /usr/bin/sudo
+      chown -R 0:0 /etc/sudoers.d
       chmod 0440 /etc/sudoers.d/dim-agent
       chmod 4755 /usr/bin/sudo
     '
