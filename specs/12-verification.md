@@ -258,6 +258,11 @@ only for non-draft pull requests whose base is the managed development
 repository's `main` promotion branch. Routine pull requests into `development`
 retain source and managed-workspace verification without reserving
 disposable-QEMU release capacity.
+The trusted, Project-scoped QEMU runner base-image build MUST seed the
+checksum-pinned Ubuntu cloud image used by nested installer verification and
+provide its fixed cache path to jobs. The persistent base image MUST remain
+outside workflow write authority; job changes are confined to the disposable
+overlay.
 The runc guest must additionally run `just verify self-development` after the
 host installer completes. This verifies the canonical DIM Project and its
 agent inside a private DinD on a clean Ubuntu host. The guest verification
