@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-- Resize through util-linux `script`'s own PTY descriptor, retrying until it is
-  exposed; this avoids Sysbox's non-effective writes through a sandboxed child
-  `/proc/<pid>/fd/0` while preserving ordered resize delivery.
+- Resolve util-linux `script`'s own descriptor to a validated `/dev/pts/N`
+  device and resize that device directly, avoiding Sysbox's non-effective
+  ioctl forwarding through `/proc/<pid>/fd/*` while preserving ordered delivery.
 
 - Materialize reviewed workspace host aliases such as the resolved DIM Gitea
   control-network address in `/etc/hosts`, avoiding runtime-specific embedded
