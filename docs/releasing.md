@@ -37,6 +37,13 @@ just verify container
 just verify environments-kvm
 ```
 
+For the managed Gitea deployment gate, dispatch `QEMU release gate` from the
+integrated `development` repository at the exact candidate ref and set
+`root-ref` to the reviewed root branch, tag, or commit being deployed. The job
+uses the shared `dim-qemu` runner capability and records the exact assembled
+repository set. Require it to pass before host installation or
+`dim workspace restart`.
+
 The KVM gate uses a separate clean Ubuntu guest for each backend. Only a
 non-draft managed-host pull request targeting `main` schedules those backend
 gates independently, while the local command runs all of them. Its runc

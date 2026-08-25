@@ -150,6 +150,13 @@ MUST execute this journey in the clean runc KVM guest, where unprivileged user
 namespace mappings required by its private rootless DinD are supported; a
 doubly nested generic Actions job container is not an equivalent environment.
 
+The integrated development repository MUST expose a manually dispatched QEMU
+release gate. The dispatch MUST pin the exact development commit and accept an
+explicit root ref, while the reusable verification workflow resolves and
+records the exact commit for every repository in the assembled set. It MUST
+run the runc KVM lane on the shared `dim-qemu` capability before that repository
+set is installed on a host or applied by workspace restart.
+
 ## Container Backend Gates
 
 `verification/scripts/container-cgroup-smoke.bash` requires direct access to the target Docker
