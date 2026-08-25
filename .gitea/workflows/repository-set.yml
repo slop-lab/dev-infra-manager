@@ -140,4 +140,4 @@ jobs:
         working-directory: snapshot
         run: |
           test -r /dev/kvm -a -w /dev/kvm
-          just verify environments-kvm "${{ inputs.backend }}"
+          JUST_UNSTABLE=1 just verify environments-kvm "${{ inputs.backend }}"
