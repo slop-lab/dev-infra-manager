@@ -261,7 +261,7 @@ EOF
       project=ci-smoke
       source=/tmp/dim-ci-source
       cleanup() {
-        cd ~/dim
+        cd ~/dim/workbench
         pnpm run --silent cli -- ci runner delete "$project" primary --yes >/dev/null 2>&1 || true
         pnpm run --silent cli -- project purge "$project" --yes >/dev/null 2>&1 || true
         sudo docker rm -f dim-ci-ci-smoke-primary >/dev/null 2>&1 || true
@@ -272,9 +272,9 @@ EOF
       printf "%s\n" "{\"schemaVersion\":1,\"workspaceBackend\":\"sysbox\"}" >"$DIM_CONFIG_PATH"
       git config --global user.name Smoke
       git config --global user.email smoke@dim.invalid
-      cd ~/dim
+      cd ~/dim/workbench
       bash examples/features/ci-runner/create-repository.bash "$source/repository" >/dev/null
-      cd ~/dim
+      cd ~/dim/workbench
       pnpm run --silent cli -- project create "$project" \
         --repos "$source/repository/root/.dim/repos.yml" --yes >/dev/null
       pnpm run --silent cli -- ci runner create "$project" primary sysbox >/dev/null
