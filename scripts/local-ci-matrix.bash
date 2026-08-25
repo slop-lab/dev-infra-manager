@@ -6,13 +6,13 @@ for arg in "$@"; do
   case "$arg" in
     --manual) manual=true ;;
     -h|--help)
-      echo "usage: just ci matrix [--manual]"
+      echo "usage: bash verification/scripts/local-ci-matrix.bash [--manual]"
       echo "  --manual  also run the manually dispatched Sysbox and KVM workflows"
       exit 0
       ;;
     *)
       echo "error: unknown local CI option: $arg" >&2
-      echo "usage: just ci matrix [--manual]" >&2
+      echo "usage: bash verification/scripts/local-ci-matrix.bash [--manual]" >&2
       exit 2
       ;;
   esac
@@ -31,15 +31,15 @@ run_node() {
 }
 
 run_node 24 pnpm install --frozen-lockfile
-run_node 24 just ci source
+run_node 24 bash -lc 'just check-source && just verify plugin-install && pnpm audit --prod && just verify package-packs'
 
 run_node 26 pnpm install --frozen-lockfile
-run_node 26 just ci source
-run_node 26 just ci workspace
+run_node 26 bash -lc 'just check-source && just verify plugin-install && pnpm audit --prod && just verify package-packs'
+run_node 26 bash -lc 'just check-source && just verify workspace-runtime && bash verification/scripts/container-cgroup-smoke.bash'
 
 if [[ "$manual" == true ]]; then
-  run_node 26 just ci sysbox
-  run_node 26 just ci kvm
+  run_node 26 bash -lc 'just check-source && just verify container && bash verification/scripts/container-sysbox-isolation-smoke.bash'
+  run_node 26 bash -lc 'test -r /dev/kvm -a -w /dev/kvm && just verify environments-kvm'
   echo "[local-ci] automatic matrix and manual workflows passed"
 else
   echo "[local-ci] Node.js 24/26 automatic matrix passed"
