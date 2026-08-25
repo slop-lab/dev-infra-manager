@@ -156,6 +156,10 @@ explicit root ref, while the reusable verification workflow resolves and
 records the exact commit for every repository in the assembled set. It MUST
 run the runc KVM lane on the shared `dim-qemu` capability before that repository
 set is installed on a host or applied by workspace restart.
+Because host-mode JavaScript actions require Node.js before `setup-node` can
+run, the QEMU gate MUST either use a runner guest image that provides Node.js
+or bootstrap the supported Node.js line in a native shell step before the first
+JavaScript action.
 
 ## Container Backend Gates
 
