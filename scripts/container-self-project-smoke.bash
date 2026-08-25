@@ -186,13 +186,10 @@ verify_agent_dind() {
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml exec --no-TTY --user root agent-dind \
     sh -eu -c '
-      test -u /usr/bin/newuidmap
-      test -u /usr/bin/newgidmap
-      test "$(stat -c %u:%g /home/rootless/.local/share/docker)" = 1000:1000
-      test "$(stat -c %u:%g /home/rootless/.local/share/docker/.dim-rootless-owner-v1)" = 1000:1000
-      test "$(stat -c %u:%g /home/rootless/.local/share/docker/containerd/daemon)" = 1000:1000
-      test "$(stat -c %u:%g /run/user/1000)" = 1000:1000
-      test "$(stat -c %a /run/user/1000)" = 700
+      test -S /run/docker.sock
+      test -d /var/lib/docker
+      test "$(stat -c %u:%g /mnt/agent-home)" = "$(stat -c %u:%g /workspace)"
+      ! docker info --format "{{json .SecurityOptions}}" | grep -q rootless
     '
 }
 
@@ -329,13 +326,13 @@ dim workspace exec "$workspace_name" -- docker inspect --format '{{.HostConfig.P
   "$agent_dind_container" | grep -qx true
 verification_stage="agent sudo contract"
 dim workspace run "$workspace_name" bash -- -lc '
-  test "$(id -u)" = 1000
+  test "$(id -u)" != 0
   test "$(id -un)" = dim-agent
   sudo sh -c '\''test "$(id -u)" = 0'\''
 '
-verification_stage="agent rootless Docker workload"
+verification_stage="agent private Docker workload"
 dim workspace run "$workspace_name" bash -- -lc '
-  docker info --format "{{json .SecurityOptions}}" | grep -q rootless
+  ! docker info --format "{{json .SecurityOptions}}" | grep -q rootless
   rm -rf /mnt/workspace-shared-dind/bind-smoke
   mkdir -m 0777 /mnt/workspace-shared-dind/bind-smoke
   printf "from-agent\n" > /mnt/workspace-shared-dind/bind-smoke/input
