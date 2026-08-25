@@ -11,8 +11,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Restored a manually dispatched QEMU release gate in the development
   repository. It pins both development and root refs and runs the assembled
-  repository set in a clean runc guest before host installation or workspace
-  restart.
+  repository set in independent clean runc, Sysbox, gVisor, and rootless
+  Podman guest jobs before host installation or workspace restart.
 
 - Kept the top-level just recipes focused on discoverable everyday contributor
   commands. CI-only lane composition now lives in checked-in workflows and the

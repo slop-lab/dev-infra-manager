@@ -23,3 +23,36 @@ jobs:
       gate: kvm
       runner-label: dim-qemu
       backend: runc
+
+  qemu-sysbox:
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@e7c56a17033a677627d94107e2abf79c9a43ba89
+    with:
+      candidate-repository: development
+      candidate-ref: ${{ gitea.sha }}
+      development-ref: ${{ gitea.sha }}
+      root-ref: ${{ inputs.root-ref }}
+      gate: kvm
+      runner-label: dim-qemu
+      backend: sysbox
+
+  qemu-gvisor:
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@e7c56a17033a677627d94107e2abf79c9a43ba89
+    with:
+      candidate-repository: development
+      candidate-ref: ${{ gitea.sha }}
+      development-ref: ${{ gitea.sha }}
+      root-ref: ${{ inputs.root-ref }}
+      gate: kvm
+      runner-label: dim-qemu
+      backend: gvisor
+
+  qemu-rootless-podman:
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@e7c56a17033a677627d94107e2abf79c9a43ba89
+    with:
+      candidate-repository: development
+      candidate-ref: ${{ gitea.sha }}
+      development-ref: ${{ gitea.sha }}
+      root-ref: ${{ inputs.root-ref }}
+      gate: kvm
+      runner-label: dim-qemu
+      backend: rootless-podman
