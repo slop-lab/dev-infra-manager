@@ -55,8 +55,8 @@ run_step() {
   if [[ "$verbose" == true ]]; then
     "$@"
   elif ! "$@" >"$step_log" 2>&1; then
-    echo "kvm[$backend]: $label failed; last 30 log lines:" >&2
-    tail -n 30 "$step_log" >&2
+    echo "kvm[$backend]: $label failed; last 120 log lines:" >&2
+    tail -n 120 "$step_log" >&2
     return 1
   fi
 }
