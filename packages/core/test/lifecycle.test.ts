@@ -701,8 +701,7 @@ describe("project and workspace lifecycle", () => {
       dockerRuntime: "runsc",
       privileged: false,
       env: {
-        DIM_DOCKERD_FLAGS: "--feature containerd-snapshotter=false",
-        DOCKER_IPTABLES_LEGACY: "1"
+        DIM_DOCKERD_FLAGS: "--feature containerd-snapshotter=false --iptables=false --ip6tables=false"
       }
     });
     expect(workspaceRuntimePlan("rootless-podman", options)).toMatchObject({

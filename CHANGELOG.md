@@ -6,11 +6,9 @@
   `just`, Docker-compatible Podman Compose, and the controller proxy used by
   reviewed Project setup scripts.
 
-- Select Docker's bundled legacy iptables implementation for gVisor workspaces
-  so their nested daemon does not require the unsupported nftables protocol.
-
-- Applied the gVisor legacy-iptables selection in DIM's workspace entrypoint
-  before its directly managed nested Docker daemon starts.
+- Disabled nested Docker's iptables and ip6tables rule programming for gVisor
+  workspaces because runsc exposes neither nftables nor legacy NAT tables;
+  release integration still verifies the resulting Project networking path.
 
 - Updated the managed Sysbox CI runner to checksum-pinned Node.js 24 and a
   pinned `just` so host-mode actions and DIM's integration recipes use the
