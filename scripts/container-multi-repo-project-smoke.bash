@@ -240,7 +240,7 @@ if ! "$dim_bin" workspace create "$project_name" "$workspace_name" \
     failed_container="$(printf '%s' "$workspace_json" | jq -r .containerName)"
     failed_compose_project="$(printf '%s' "$workspace_json" | jq -r .composeProjectName)"
     docker exec "$failed_container" sh -lc \
-      "cd /workspace/project && docker compose --project-name '$failed_compose_project' --file .dim/docker-compose.yml --profile '*' ps --all" >&2 || true
+      "cd /workspace/project && docker compose --project-name '$failed_compose_project' --file .dim/docker-compose.yml --profile '*' ps" >&2 || true
     docker exec "$failed_container" sh -lc \
       "cd /workspace/project && docker compose --project-name '$failed_compose_project' --file .dim/docker-compose.yml --profile '*' logs --no-color --tail 100" >&2 || true
   fi

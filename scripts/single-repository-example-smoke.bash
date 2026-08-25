@@ -94,7 +94,7 @@ if ! dim workspace create "$project_name" "$workspace_name" \
     sh -c 'cat /tmp/dim-agent-controller/agent.log 2>/dev/null || true' >&2 || true
   docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
     docker compose --project-name "dim-$workspace_name" \
-    --file .dim/docker-compose.yml ps --all >&2 || true
+    --file .dim/docker-compose.yml ps >&2 || true
   docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml logs agent agent-dind >&2 || true

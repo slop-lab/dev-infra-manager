@@ -64,4 +64,19 @@ describe("DIM development forge policy", () => {
     expect(dockerfile).toContain("/usr/local/bin/dim-controller-proxy");
     expect(dockerfile).toContain("ln -s /usr/bin/podman /usr/local/bin/docker");
   });
+
+  it("keeps example Compose files compatible with Podman Compose", async () => {
+    for (const path of [
+      "examples/projects/full-development-flow/repos/root/.dim/docker-compose.yml",
+      "examples/projects/single-repository/repos/app/.dim/docker-compose.yml",
+      "examples/projects/multi-repository/repos/root/.dim/docker-compose.yml"
+    ]) {
+      const compose = parse(await readFile(resolve(workspaceRoot, path), "utf8"));
+      expect(compose.networks).toHaveProperty("default");
+    }
+    const stateful = await readFile(
+      resolve(workspaceRoot, "verification/scripts/stateful-development-flow-smoke.bash"), "utf8"
+    );
+    expect(stateful).not.toContain("ps --all");
+  });
 });

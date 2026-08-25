@@ -123,7 +123,7 @@ echo "[example-project] 4. create the workspace (a real container)"
 if ! dim workspace create "$project_name" "$workspace_name" >/dev/null; then
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
-    --file .dim/docker-compose.yml ps --all >&2 || true
+    --file .dim/docker-compose.yml ps >&2 || true
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml logs agent-dind >&2 || true

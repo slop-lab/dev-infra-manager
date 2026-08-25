@@ -150,7 +150,7 @@ if ! dim workspace create "$project_name" "$workspace_name" \
   >"$workspace_creation_log" 2>&1; then
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
-    --file .dim/docker-compose.yml ps --all >&2 || true
+    --file .dim/docker-compose.yml ps >&2 || true
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml logs --no-color >&2 || true
@@ -199,7 +199,7 @@ verification_stage="workspace restart"
 if ! dim workspace restart "$workspace_name" >/dev/null; then
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
-    --file .dim/docker-compose.yml ps --all >&2 || true
+    --file .dim/docker-compose.yml ps >&2 || true
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml logs --no-color agent-dind >&2 || true

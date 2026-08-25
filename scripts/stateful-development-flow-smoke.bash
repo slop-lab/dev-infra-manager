@@ -73,7 +73,7 @@ diagnose_workspace_setup() {
     sh -c 'cat /tmp/dim-stateful-setup.log 2>/dev/null || true' >&2 || true
   docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
     docker compose --project-name "dim-$workspace_name" \
-    "${failed_compose[@]}" ps --all >&2 || true
+    "${failed_compose[@]}" ps >&2 || true
   docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
     docker compose --project-name "dim-$workspace_name" \
     "${failed_compose[@]}" logs >&2 || true
