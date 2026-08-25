@@ -43,6 +43,12 @@ web UI can use the same lifecycle after an authenticated transport proxy is
 defined. The session API remains host-admin-only and is not exposed through a
 workspace grant.
 
+Stdout and stderr event payloads are base64-encoded byte chunks with an
+explicit encoding field. Clients MUST decode them before writing to their
+respective streams and MUST reject unknown encodings. The transport must not
+interpret arbitrary command output as UTF-8; redirected archive and other
+binary task streams must remain byte-exact.
+
 An interactive `exec` or `run` session MUST allocate a real pseudoterminal at
 the controller-side process boundary. The CLI sends its initial terminal size,
 forwards raw input bytes, and sends size changes after `SIGWINCH`; the
