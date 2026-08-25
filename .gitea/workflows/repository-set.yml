@@ -104,6 +104,7 @@ jobs:
         with:
           version: 10.13.1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        if: ${{ inputs.gate != 'integration' }}
         with:
           node-version: 24
       - name: Install repository-set dependencies
