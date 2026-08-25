@@ -77,7 +77,7 @@ cleanup() {
     if [[ "$status" -ne 0 ]]; then
       echo "self-Project verification failed during: $verification_stage" >&2
     fi
-    if [[ "$status" -ne 0 && -s "$workspace_creation_log" ]]; then
+    if [[ "$status" -ne 0 && "$verification_stage" == "workspace creation" && -s "$workspace_creation_log" ]]; then
       echo "workspace creation failed; last 120 log lines:" >&2
       tail -n 120 "$workspace_creation_log" >&2
     fi
@@ -235,7 +235,7 @@ dim workspace resources "$workspace_name" \
 verification_stage="workspace reviewed-file contract"
 dim workspace exec "$workspace_name" -- \
   sh -c 'test -r .dim/setup.sh && test ! -x .dim/setup.sh && test -r .dim/entrypoint.sh && test ! -x .dim/entrypoint.sh && test -r .dim/docker-compose.yml && test "$DIM_GIT_BASE_URL" = "$(jq -r .gitBaseUrl "$DIM_PROJECT_MANIFEST")" && test -n "$(jq -r ".hostAliases[\"dim-gitea\"][0]" "$DIM_PROJECT_MANIFEST")"'
-test "$(dim workspace show "$workspace_name" --json | jq -r .rootRef)" = "refs/heads/$root_ref"
+test "$(dim workspace show "$workspace_name" --json | jq -r .rootRef)" = "refs/heads/main"
 agent_git_identity="$(dim workspace run "$workspace_name" bash -- -lc \
   'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
 test "$agent_git_identity" = \
