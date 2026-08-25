@@ -198,7 +198,8 @@ describe("CI runner resources", () => {
     expect(SYSBOX_CI_RUNNER_BASE_IMAGE).toMatch(/^gitea\/act_runner@sha256:[0-9a-f]{64}$/);
     expect(SYSBOX_CI_RUNNER_IMAGE).toMatch(/^dev-infra-manager-ci-runner:/);
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain(`FROM ${SYSBOX_CI_RUNNER_BASE_IMAGE}`);
-    expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("apk add --no-cache nodejs=22.23.2-r0");
+    expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("node-v24.19.0-linux-x64-musl.tar.xz");
+    expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("ebcb19941bf6a34ada2141727ffda66fb2a4bf315f5c02c8f1fc9e48a2045e06");
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("node --version");
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("dim-ci-runner-health");
     expect(spawnSync("bash", ["-n"], { input: SYSBOX_CI_RUNNER_HEALTH_SCRIPT }).status).toBe(0);
