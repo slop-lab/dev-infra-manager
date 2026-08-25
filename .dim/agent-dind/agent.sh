@@ -16,6 +16,8 @@ case "${1:?private agent action is required}" in
     test -d /workspace/agent
     su-exec rootless env HOME=/home/rootless XDG_RUNTIME_DIR=/run/user/1000 \
       DOCKER_HOST="unix://$docker_socket" docker build --quiet \
+      --build-arg "DIM_UID=$(stat -c %u /workspace)" \
+      --build-arg "DIM_GID=$(stat -c %g /workspace)" \
       --tag "$agent_image" /workspace/agent >/dev/null
     su-exec rootless env HOME=/home/rootless XDG_RUNTIME_DIR=/run/user/1000 \
       DOCKER_HOST="unix://$docker_socket" docker rm --force "$agent_name" >/dev/null 2>&1 || true
