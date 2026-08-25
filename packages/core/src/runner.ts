@@ -100,7 +100,10 @@ async function runInTerminal(command: string, args: string[], options: RunOption
     if (options.stdin && child.stdin) options.stdin.pipe(child.stdin);
     if (options.stdout && child.stdout) child.stdout.pipe(options.stdout);
     if (options.stderr && child.stderr) child.stderr.pipe(options.stderr);
-    const resize = (size: TerminalSize) => void resizeTerminalChild(child.pid, size);
+    let resizeChain = Promise.resolve();
+    const resize = (size: TerminalSize) => {
+      resizeChain = resizeChain.then(() => resizeTerminalChild(child.pid, size));
+    };
     const removeResize = typeof options.terminal === "object"
       ? options.terminal.onResize(resize)
       : () => {};
@@ -139,16 +142,24 @@ function localTerminalControl(): TerminalControl {
 
 async function resizeTerminalChild(scriptPid: number | undefined, size: TerminalSize): Promise<void> {
   if (scriptPid === undefined) return;
-  try {
-    const children = await readFile(`/proc/${scriptPid}/task/${scriptPid}/children`, "utf8");
-    const childPid = children.trim().split(/\s+/)[0];
-    if (!childPid) return;
-    const resize = spawn("stty", [
-      "--file", `/proc/${childPid}/fd/0`,
-      "cols", String(size.columns), "rows", String(size.rows)
-    ], { stdio: "ignore" });
-    resize.unref();
-  } catch {}
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      const children = await readFile(`/proc/${scriptPid}/task/${scriptPid}/children`, "utf8");
+      const childPid = children.trim().split(/\s+/)[0];
+      if (childPid) {
+        const exitCode = await new Promise<number | null>((resolve) => {
+          const resize = spawn("stty", [
+            "--file", `/proc/${childPid}/fd/0`,
+            "cols", String(size.columns), "rows", String(size.rows)
+          ], { stdio: "ignore" });
+          resize.on("error", () => resolve(127));
+          resize.on("close", resolve);
+        });
+        if (exitCode === 0) return;
+      }
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 }
 
 function shellQuote(value: string): string {
