@@ -26,8 +26,9 @@ jobs:
     with:
       candidate-repository: verification
       candidate-ref: ${{ gitea.sha }}
-      gate: container
+      gate: integration
       runner-label: dim-container-integration
+      backend: runc
   kvm:
     if: ${{ gitea.event_name == 'schedule' || inputs.lane == 'all' || inputs.lane == 'kvm' }}
     uses: ./.gitea/workflows/repository-set.yml

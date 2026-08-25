@@ -133,8 +133,15 @@ jobs:
           just check-source
           just verify workspace-runtime
           bash verification/scripts/container-cgroup-smoke.bash
+      - name: Verify full development integration
+        if: ${{ inputs.gate == 'integration' }}
+        working-directory: snapshot
+        run: |
+          dim-ci-runner-health --recover
+          just check-source
+          just verify full-development "${{ inputs.backend }}"
       - name: Verify runner health after container integration
-        if: ${{ always() && inputs.gate == 'container' }}
+        if: ${{ always() && (inputs.gate == 'container' || inputs.gate == 'integration') }}
         run: dim-ci-runner-health --recover
       - name: Verify QEMU backend integration
         if: ${{ inputs.gate == 'kvm' }}

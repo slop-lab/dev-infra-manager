@@ -4,6 +4,11 @@ set shell := ["bash", "-uc"]
 environments-kvm backend="all" verbose="":
     cd .. && bash verification/scripts/kvm-host-install-smoke.bash "{{backend}}" "{{verbose}}"
 
+# Run the backend-independent end-to-end contract after a backend is installed.
+full-development backend="runc":
+    cd .. && DIM_EXAMPLE_WORKSPACE_BACKEND="{{backend}}" JUST_UNSTABLE=1 bash verification/scripts/stateful-development-flow-smoke.bash
+    cd .. && DIM_SELF_WORKSPACE_BACKEND="{{backend}}" DIM_SELF_EXPECT_AGENT_UID=1001 DIM_SELF_VERIFY_AGENT=1 JUST_UNSTABLE=1 just verify self-development
+
 # Build packages and verify plugin installation through the published package shape.
 plugin-install:
     just build-packages

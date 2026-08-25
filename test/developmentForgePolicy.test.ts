@@ -41,4 +41,13 @@ describe("DIM development forge policy", () => {
     expect(source).toContain("6e40c07ae715f744f84af0bec76415cc1987dd115b4b8de437818561f01a3733");
     expect(source).toContain("sha256sum --check");
   });
+
+  it("runs the same full-development contract for every QEMU backend", async () => {
+    const kvm = await readFile(resolve(workspaceRoot, "verification/scripts/kvm-host-install-smoke.bash"), "utf8");
+    const recipes = await readFile(resolve(workspaceRoot, "verification/verify.just"), "utf8");
+    expect(kvm).not.toContain('if [[ "$backend" == runc ]]');
+    expect(kvm).toContain("just verify full-development '$backend'");
+    expect(recipes).toContain('DIM_EXAMPLE_WORKSPACE_BACKEND="{{backend}}"');
+    expect(recipes).toContain('DIM_SELF_WORKSPACE_BACKEND="{{backend}}"');
+  });
 });
