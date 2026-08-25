@@ -9,6 +9,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Centralized DIM-managed Gitea issues on each Project root for newly created
+  repositories, and documented repository ownership for package-specific
+  changelogs, maintenance documentation, and specifications.
+
 - Added a dedicated agent controller socket with separate workspace-scoped
   grants and mandatory plugin route audiences. Host-admin, trusted-workspace,
   and agent sockets now live in separate runtime directories; workspace

@@ -34,6 +34,18 @@ For pull-request creation, updates, or CI monitoring, use the repository-local
 `pull-request` skill. Resolve the forge with its helper before invoking
 provider-specific tools; do not assume that `origin` is GitHub.
 
+## Work tracking and repository ownership
+
+- Record DIM-managed Gitea issues only in the Project `root` repository. Pull
+  requests still belong to the repository that owns the changed files, and
+  may reference the root issue in their body.
+- Put package-specific changelog entries, maintenance documentation, design
+  notes, and test specifications in the package's paired `*-development`
+  repository when one exists. Keep only build inputs and documentation shipped
+  with the package, such as its package README, in the production source
+  repository.
+- Put cross-package and Project-level normative contracts in `specification`.
+
 ## Pre-stable compatibility
 
 DIM has not had a stable release. Current releases are pre-stable `0.x`
