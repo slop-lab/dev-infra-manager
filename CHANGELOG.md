@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Completed the rootless-Podman workspace toolchain with supported Node.js,
+  `just`, Docker-compatible Podman Compose, and the controller proxy used by
+  reviewed Project setup scripts.
+
 - Select Docker's bundled legacy iptables implementation for gVisor workspaces
   so their nested daemon does not require the unsupported nftables protocol.
 
