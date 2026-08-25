@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Retry PTY resize delivery until util-linux `script` exposes its terminal
+  child, preventing early resize events from being lost on slower Sysbox
+  process startup.
+
 - Materialize reviewed workspace host aliases such as the resolved DIM Gitea
   control-network address in `/etc/hosts`, avoiding runtime-specific embedded
   DNS behavior while retaining the recorded endpoint boundary.
