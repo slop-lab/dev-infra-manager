@@ -169,6 +169,10 @@ describe("CI runner resources", () => {
     expect(QEMU_CI_PACKER_TEMPLATE).toContain('source  = "github.com/hashicorp/qemu"');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('flock 9');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('/var/lib/dim-qemu-ci-cache');
+    expect(QEMU_CI_PACKER_PROVISION_SCRIPT).toContain("kvm_image_cache=/var/lib/dim-kvm-cache");
+    expect(QEMU_CI_PACKER_PROVISION_SCRIPT).toContain("ubuntu_cloud_image_checksum=6e40c07ae715f744f84af0bec76415cc1987dd115b4b8de437818561f01a3733");
+    expect(QEMU_CI_PACKER_PROVISION_SCRIPT).toContain('chmod 0444 "$kvm_image_cache/$ubuntu_cloud_image"');
+    expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain("DIM_KVM_IMAGE_CACHE=/var/lib/dim-kvm-cache");
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('"TCP:$registry_cache_upstream"');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('http://127.0.0.1:5000/v2/');
     expect(QEMU_CI_SUPERVISOR_SCRIPT).toContain('"registry-mirrors": ["http://10.0.2.2:5000"]');
