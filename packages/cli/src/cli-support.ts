@@ -893,9 +893,9 @@ export async function controllerRequest(
   init: RequestInit = {},
   workspace?: string
 ): Promise<unknown> {
-  let socketPath = process.env.DIM_CONTROLLER_SOCKET;
+  let socketPath = process.env.DIM_CONTROLLER_SOCKET ?? process.env.DIM_AGENT_CONTROLLER_SOCKET;
   let api = process.env.DIM_CONTROLLER_API;
-  let token = process.env.DIM_CONTROLLER_TOKEN;
+  let token = process.env.DIM_CONTROLLER_TOKEN ?? process.env.DIM_AGENT_CONTROLLER_TOKEN;
   if (workspace) {
     const options = lifecycleOptions();
     socketPath ??= options.controllerSocketPath;
@@ -910,7 +910,7 @@ export async function controllerRequest(
   }
   if ((!socketPath && !api) || !token) {
     throw new UserError(
-      "DIM_CONTROLLER_SOCKET and DIM_CONTROLLER_TOKEN are required inside a workspace; use --workspace on the host"
+      "DIM_CONTROLLER_SOCKET/TOKEN or DIM_AGENT_CONTROLLER_SOCKET/TOKEN are required inside a workspace; use --workspace on the host"
     );
   }
   if (socketPath) {
@@ -980,7 +980,7 @@ export async function ensureManagedController(options: LifecycleOptions): Promis
     await startSystemdManagedController(options);
     return;
   }
-  const runtimeDir = path.dirname(options.controllerSocketPath);
+  const runtimeDir = options.controllerRuntimeDirectory;
   const lockDir = path.join(runtimeDir, "ensure.lock");
   await mkdir(runtimeDir, { recursive: true });
   let ownsLock = false;
@@ -1002,6 +1002,7 @@ export async function ensureManagedController(options: LifecycleOptions): Promis
   try {
     if (await managedControllerReady(options)) return;
     await rm(options.controllerSocketPath, { force: true });
+    await rm(options.agentControllerSocketPath, { force: true });
     await rm(options.adminControllerSocketPath, { force: true });
     const log = await open(path.join(runtimeDir, "controller.log"), "a");
     const script = process.argv[1];
@@ -1013,8 +1014,12 @@ export async function ensureManagedController(options: LifecycleOptions): Promis
       "serve",
       "--socket",
       options.controllerSocketPath,
+      "--agent-socket",
+      options.agentControllerSocketPath,
       "--admin-socket",
-      options.adminControllerSocketPath
+      options.adminControllerSocketPath,
+      "--pid-file",
+      path.join(options.controllerRuntimeDirectory, "controller.pid")
     ], {
       detached: true,
       stdio: ["ignore", log.fd, log.fd],
@@ -1035,7 +1040,7 @@ export async function ensureManagedController(options: LifecycleOptions): Promis
 export async function managedControllerReady(options: LifecycleOptions): Promise<boolean> {
   if (!await controllersHealthy(options)) return false;
   try {
-    const value = await readFile(path.join(path.dirname(options.controllerSocketPath), "controller.pid"), "utf8");
+    const value = await readFile(path.join(options.controllerRuntimeDirectory, "controller.pid"), "utf8");
     const pid = Number(value.trim());
     return Number.isSafeInteger(pid) && pid > 1 && processExists(pid);
   } catch (error) {
@@ -1046,6 +1051,7 @@ export async function managedControllerReady(options: LifecycleOptions): Promise
 
 export async function controllersHealthy(options: LifecycleOptions): Promise<boolean> {
   return await controllerHealthy(options.controllerSocketPath)
+    && await controllerHealthy(options.agentControllerSocketPath)
     && await controllerHealthy(options.adminControllerSocketPath);
 }
 
@@ -1141,7 +1147,7 @@ export async function stopManagedController(options: LifecycleOptions): Promise<
     return;
   }
   try {
-    const value = await readFile(path.join(path.dirname(options.controllerSocketPath), "controller.pid"), "utf8");
+    const value = await readFile(path.join(options.controllerRuntimeDirectory, "controller.pid"), "utf8");
     const pid = Number(value.trim());
     if (Number.isSafeInteger(pid) && pid > 1) process.kill(pid, "SIGTERM");
   } catch (error) {
@@ -1157,7 +1163,7 @@ export async function restartManagedController(options: LifecycleOptions): Promi
   }
   let pid: number | undefined;
   try {
-    const value = await readFile(path.join(path.dirname(options.controllerSocketPath), "controller.pid"), "utf8");
+    const value = await readFile(path.join(options.controllerRuntimeDirectory, "controller.pid"), "utf8");
     const parsed = Number(value.trim());
     if (Number.isSafeInteger(parsed) && parsed > 1) pid = parsed;
   } catch (error) {
@@ -1167,6 +1173,7 @@ export async function restartManagedController(options: LifecycleOptions): Promi
   for (let attempt = 0; attempt < managedControllerStartAttempts; attempt += 1) {
     if (pid === undefined || !processExists(pid)) {
       await rm(options.controllerSocketPath, { force: true });
+      await rm(options.agentControllerSocketPath, { force: true });
       await rm(options.adminControllerSocketPath, { force: true });
       await ensureManagedController(options);
       return;
@@ -1185,6 +1192,7 @@ export async function restartManagedController(options: LifecycleOptions): Promi
     if (processExists(pid)) throw new UserError(`managed controller process ${pid} did not stop`);
   }
   await rm(options.controllerSocketPath, { force: true });
+  await rm(options.agentControllerSocketPath, { force: true });
   await rm(options.adminControllerSocketPath, { force: true });
   await ensureManagedController(options);
 }
@@ -1208,8 +1216,10 @@ export function usesSystemdManagedController(options: LifecycleOptions): boolean
   const defaultStateRoot = path.resolve(path.join(homedir(), ".local/state/dim"));
   const runtimeDirectory = path.join(systemdRuntimeRoot, "dim");
   return options.stateRoot === defaultStateRoot
-    && options.controllerSocketPath === path.join(runtimeDirectory, "controller.sock")
-    && options.adminControllerSocketPath === path.join(runtimeDirectory, "admin.sock");
+    && options.controllerRuntimeDirectory === runtimeDirectory
+    && options.controllerSocketPath === path.join(runtimeDirectory, "workspace", "controller.sock")
+    && options.agentControllerSocketPath === path.join(runtimeDirectory, "agent", "controller.sock")
+    && options.adminControllerSocketPath === path.join(runtimeDirectory, "admin", "controller.sock");
 }
 
 export async function startSystemdManagedController(options: LifecycleOptions): Promise<void> {
@@ -1227,6 +1237,9 @@ export async function startSystemdManagedController(options: LifecycleOptions): 
     "DIM_INSTALL_PREFIX",
     "DIM_PLUGIN_HOME",
     "DIM_EXTERNAL_URL_CONFIG",
+    "DIM_CONTROLLER_SOCKET",
+    "DIM_AGENT_CONTROLLER_SOCKET",
+    "DIM_ADMIN_CONTROLLER_SOCKET",
     "DOCKER_HOST",
     "PATH",
     "XDG_CONFIG_HOME",
@@ -1242,8 +1255,12 @@ export async function startSystemdManagedController(options: LifecycleOptions): 
     "serve",
     "--socket",
     options.controllerSocketPath,
+    "--agent-socket",
+    options.agentControllerSocketPath,
     "--admin-socket",
-    options.adminControllerSocketPath
+    options.adminControllerSocketPath,
+    "--pid-file",
+    path.join(options.controllerRuntimeDirectory, "controller.pid")
   ].map(systemdQuote).join(" ");
   const unit = `[Unit]
 Description=DIM managed controller

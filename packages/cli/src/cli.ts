@@ -10,6 +10,7 @@ import path from "node:path";
 import { Command, CommanderError, type AddHelpTextContext } from "commander";
 import {
   configuredDimAdminController,
+  configuredDimAgentController,
   configuredDimController,
   configuredWorkspaceBackend,
   detectWorkspaceKvm,
@@ -887,9 +888,11 @@ controller.command("serve")
   .description("Serve host-admin and trusted-workspace controller APIs")
   .option("--socket <path>", "listen on a Unix socket")
   .option("--admin-socket <path>", "listen for host administration on a Unix socket")
+  .option("--agent-socket <path>", "listen for agent-safe workspace APIs on a Unix socket")
+  .option("--pid-file <path>", "record the managed controller process ID")
   .option("--host <host>", "listen address for explicit TCP mode")
   .option("--port <port>", "listen port for explicit TCP mode")
-  .action(async (flags: { socket?: string; adminSocket?: string; host?: string; port?: string }) => {
+  .action(async (flags: { socket?: string; adminSocket?: string; agentSocket?: string; pidFile?: string; host?: string; port?: string }) => {
     if (flags.socket && (flags.host || flags.port)) {
       throw new UserError("--socket cannot be combined with --host or --port");
     }
@@ -900,13 +903,17 @@ controller.command("serve")
     const adminSocket = flags.socket
       ? flags.adminSocket ?? options.adminControllerSocketPath
       : undefined;
+    const agentSocket = flags.socket
+      ? flags.agentSocket ?? options.agentControllerSocketPath
+      : undefined;
     const pidPath = flags.socket
-      ? path.join(path.dirname(flags.socket), "controller.pid")
+      ? flags.pidFile ?? path.join(path.dirname(flags.socket), "controller.pid")
       : undefined;
     let ownsPid = false;
     let loaded: Awaited<ReturnType<typeof loadInstalledPlugins>> | undefined;
     let server: ReturnType<typeof configuredDimController> | undefined;
     let adminServer: ReturnType<typeof configuredDimAdminController> | undefined;
+    let agentServer: ReturnType<typeof configuredDimAgentController> | undefined;
     try {
       if (pidPath) {
         await mkdir(path.dirname(pidPath), { recursive: true });
@@ -917,7 +924,8 @@ controller.command("serve")
       await initializeControllerRoutes(options, loaded.registered);
       server = configuredDimController(options, loaded.registered);
       adminServer = configuredDimAdminController(options, loaded.registered);
-      if (flags.socket && adminSocket) {
+      agentServer = configuredDimAgentController(options, loaded.registered);
+      if (flags.socket && adminSocket && agentSocket) {
         await prepareControllerSocket(flags.socket);
         const workspaceListening = once(server, "listening");
         server.listen(flags.socket);
@@ -928,7 +936,13 @@ controller.command("serve")
         await adminListening;
         await chmod(adminSocket, 0o600);
         await chmod(flags.socket, 0o666);
+        await prepareControllerSocket(agentSocket);
+        const agentListening = once(agentServer, "listening");
+        agentServer.listen(agentSocket);
+        await agentListening;
+        await chmod(agentSocket, 0o666);
         console.log(`DIM workspace controller listening on ${flags.socket}`);
+        console.log(`DIM agent controller listening on ${agentSocket}`);
         console.log(`DIM admin controller listening on ${adminSocket}`);
       } else {
         const port = Number(flags.port);
@@ -948,11 +962,13 @@ controller.command("serve")
         try {
           await Promise.all([
             closeControllerServer(server),
+            closeControllerServer(agentServer),
             closeControllerServer(adminServer)
           ]);
         } finally {
           if (ownsPid && pidPath && await pidFileOwnedByCurrentProcess(pidPath)) {
             if (flags.socket) await rm(flags.socket, { force: true });
+            if (agentSocket) await rm(agentSocket, { force: true });
             if (adminSocket) await rm(adminSocket, { force: true });
             await rm(pidPath, { force: true });
           }

@@ -20,7 +20,7 @@ import { ensureRegistryCache, REGISTRY_CACHE_ENDPOINT } from "./registryCache.js
 // The unprivileged OS user every workspace image (core/images/project-workspace,
 // core/images/project-workspace-podman) creates and runs project commands as.
 const WORKSPACE_USER = "dim";
-const WORKSPACE_RUNTIME_CONFIG_VERSION = "2";
+const WORKSPACE_RUNTIME_CONFIG_VERSION = "3";
 
 export interface WorkspaceGitEnvironment {
   username: string;
@@ -579,6 +579,7 @@ export async function discardWorkspace(runner: StreamingCommandRunner, options: 
     }
     await state.removeWorkspace(workspaceName);
     await state.removeWorkspaceGrant(workspaceName);
+    await state.removeAgentGrant(workspaceName);
   } finally {
     await release();
   }
@@ -681,7 +682,9 @@ async function reconcileContainer(
   }
   await ensureRegistryCache(runner);
   await reconcileDockerVolume(runner, record);
-  const controllerGrant = await new LifecycleState(options.stateRoot).ensureWorkspaceGrant(record.name);
+  const state = new LifecycleState(options.stateRoot);
+  const controllerGrant = await state.ensureWorkspaceGrant(record.name);
+  const agentGrant = await state.ensureAgentGrant(record.name);
   const inspectArgs = [
     "container", "inspect", record.containerName,
     "--format",
@@ -689,7 +692,7 @@ async function reconcileContainer(
   ];
   let inspect = await runner.run("docker", inspectArgs);
   if (inspect.exitCode !== 0) {
-    const created = await runner.run("docker", workspaceContainerArgs(options, record, git, controllerGrant));
+    const created = await runner.run("docker", workspaceContainerArgs(options, record, git, controllerGrant, undefined, agentGrant));
     if (created.exitCode !== 0) {
       inspect = await runner.run("docker", inspectArgs);
       if (inspect.exitCode !== 0) {
@@ -712,7 +715,7 @@ async function reconcileContainer(
   if (runtimeConfig !== WORKSPACE_RUNTIME_CONFIG_VERSION) {
     const removed = await runner.run("docker", ["container", "rm", "--force", record.containerName]);
     if (removed.exitCode !== 0) throw new UserError(`failed to replace workspace container: ${removed.stderr.trim()}`);
-    const created = await runner.run("docker", workspaceContainerArgs(options, record, git, controllerGrant));
+    const created = await runner.run("docker", workspaceContainerArgs(options, record, git, controllerGrant, undefined, agentGrant));
     if (created.exitCode !== 0) throw new UserError(`failed to create workspace container: ${created.stderr.trim()}`);
     inspect = await runner.run("docker", inspectArgs);
     [managed, workspace, projectLabel, repoLabel, backend, runtimeConfig, running] = inspect.stdout.trim().split("|");
@@ -759,7 +762,8 @@ export function workspaceContainerArgs(
   record: WorkspaceRecord,
   git: WorkspaceGitEnvironment,
   controllerGrant?: string,
-  kvmGroupId: () => number = () => statSync("/dev/kvm").gid
+  kvmGroupId: () => number = () => statSync("/dev/kvm").gid,
+  agentGrant?: string
 ): string[] {
   const plan = workspaceRuntimePlan(record.runtimeBackend, options);
   const args = [
@@ -774,6 +778,7 @@ export function workspaceContainerArgs(
     "--pids-limit", record.pidsLimit,
     "--mount", `type=volume,source=${record.dockerVolumeName},target=${plan.runtimeDataPath}`,
     "--mount", `type=bind,source=${path.dirname(options.controllerSocketPath)},target=/run/dim/controller`,
+    "--mount", `type=bind,source=${path.dirname(options.agentControllerSocketPath)},target=/run/dim/agent-controller`,
     "--label", "dim.managed=true",
     "--label", `dim.workspace=${record.name}`,
     "--label", `dim.project=${record.projectName}`,
@@ -796,6 +801,10 @@ export function workspaceContainerArgs(
     "--env", `DIM_REGISTRY_CACHE_ENDPOINT=${REGISTRY_CACHE_ENDPOINT}`
   ];
   if (controllerGrant) args.push("--env", `DIM_CONTROLLER_TOKEN=${controllerGrant}`);
+  if (agentGrant) {
+    args.push("--env", "DIM_AGENT_CONTROLLER_SOCKET=/run/dim/agent-controller/controller.sock");
+    args.push("--env", `DIM_AGENT_CONTROLLER_TOKEN=${agentGrant}`);
+  }
   for (const capability of plan.capabilities) args.push("--cap-add", capability);
   for (const securityOption of plan.securityOptions) args.push("--security-opt", securityOption);
   for (const device of plan.devices) args.push("--device", device);

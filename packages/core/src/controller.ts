@@ -8,6 +8,7 @@ import type { StreamingCommandRunner } from "./types.js";
 import { restartWorkspace as restartWorkspaceLifecycle } from "./workspaceLifecycle.js";
 
 export type ControllerMethod = "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
+export type ControllerAudience = "workspace" | "agent";
 
 export interface ControllerWorkspace {
   id: string;
@@ -47,6 +48,7 @@ export interface DimControllerRoute {
   readonly method: ControllerMethod;
   readonly path: string;
   readonly summary: string;
+  readonly audiences: readonly ControllerAudience[];
   readonly discovery?: Readonly<Record<string, unknown>>;
   readonly plugin?: string;
   initialize?(context: ControllerRuntimeContext): Promise<void>;
@@ -86,7 +88,7 @@ export function configuredDimController(
   const state = new LifecycleState(lifecycle.stateRoot);
   return createDimController({
     stateRoot: lifecycle.stateRoot,
-    routes: plugins.controllerRoutes,
+    routes: controllerRoutesForAudience(plugins.controllerRoutes, "workspace"),
     hostInputProviders: plugins.hostInputProviders,
     authenticate: async (token) => {
       const workspace = await state.authenticateWorkspaceGrant(token);
@@ -108,6 +110,39 @@ export function configuredDimController(
       await restartWorkspaceLifecycle(runner, lifecycle, workspace.name);
     }
   });
+}
+
+export function configuredDimAgentController(
+  lifecycle: LifecycleOptions,
+  plugins: RegisteredDimPlugins,
+  runner: StreamingCommandRunner = new ProcessRunner()
+): Server {
+  const state = new LifecycleState(lifecycle.stateRoot);
+  return createDimController({
+    stateRoot: lifecycle.stateRoot,
+    routes: controllerRoutesForAudience(plugins.controllerRoutes, "agent"),
+    authenticate: async (token) => {
+      const workspace = await state.authenticateAgentGrant(token);
+      return workspace && {
+        id: `${workspace.projectId}:${workspace.name}`,
+        name: workspace.name,
+        projectId: workspace.projectId,
+        projectName: workspace.projectName
+      };
+    },
+    resolveTarget: async (workspace, target, mode) => {
+      const record = await state.readWorkspace(workspace.name);
+      if (record.projectId !== workspace.projectId) throw new UserError("workspace identity changed");
+      return resolveWorkspaceTarget(runner, record, target, mode);
+    }
+  });
+}
+
+export function controllerRoutesForAudience(
+  routes: readonly DimControllerRoute[],
+  audience: ControllerAudience
+): DimControllerRoute[] {
+  return routes.filter((route) => route.audiences.includes(audience));
 }
 
 export async function initializeControllerRoutes(

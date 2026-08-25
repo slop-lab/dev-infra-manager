@@ -47,6 +47,7 @@ export function lifecycleOptionsForBackend(
     cpuCount: env.DIM_WORKSPACE_CPUS ?? "2",
     memory: env.DIM_WORKSPACE_MEMORY ?? "4g",
     pidsLimit: env.DIM_WORKSPACE_PIDS ?? "2048",
+    controllerRuntimeDirectory: controllerDirectory,
     ciRunnerImage: env.DIM_CI_RUNNER_IMAGE
       ?? SYSBOX_CI_RUNNER_IMAGE,
     ciRunnerRuntime: env.DIM_CI_RUNNER_RUNTIME ?? "sysbox-runc",
@@ -54,9 +55,11 @@ export function lifecycleOptionsForBackend(
     ciRunnerDefaultMemory: env.DIM_CI_RUNNER_MEMORY ?? "8g",
     ciRunnerDefaultPidsLimit: env.DIM_CI_RUNNER_PIDS ?? "2048",
     controllerSocketPath: env.DIM_CONTROLLER_SOCKET
-      ?? path.join(controllerDirectory, "controller.sock"),
+      ?? path.join(controllerDirectory, "workspace", "controller.sock"),
+    agentControllerSocketPath: env.DIM_AGENT_CONTROLLER_SOCKET
+      ?? path.join(controllerDirectory, "agent", "controller.sock"),
     adminControllerSocketPath: env.DIM_ADMIN_CONTROLLER_SOCKET
-      ?? path.join(controllerDirectory, "admin.sock")
+      ?? path.join(controllerDirectory, "admin", "controller.sock")
   };
 }
 

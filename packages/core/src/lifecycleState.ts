@@ -26,9 +26,27 @@ export class LifecycleState {
     return path.join(this.root, "workspace-grants", validateLifecycleName(name, "workspace"));
   }
 
+  agentGrantPath(name: string): string {
+    return path.join(this.root, "agent-grants", validateLifecycleName(name, "workspace"));
+  }
+
   async ensureWorkspaceGrant(name: string): Promise<string> {
-    const workspace = validateLifecycleName(name, "workspace");
-    const target = this.workspaceGrantPath(workspace);
+    return this.ensureGrant(this.workspaceGrantPath(name), validateLifecycleName(name, "workspace"));
+  }
+
+  async ensureAgentGrant(name: string): Promise<string> {
+    return this.ensureGrant(this.agentGrantPath(name), validateLifecycleName(name, "workspace"));
+  }
+
+  async authenticateWorkspaceGrant(token: string): Promise<WorkspaceRecord | undefined> {
+    return this.authenticateGrant(token, (name) => this.workspaceGrantPath(name));
+  }
+
+  async authenticateAgentGrant(token: string): Promise<WorkspaceRecord | undefined> {
+    return this.authenticateGrant(token, (name) => this.agentGrantPath(name));
+  }
+
+  private async ensureGrant(target: string, workspace: string): Promise<string> {
     await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
     try {
       return (await readFile(target, "utf8")).trim();
@@ -47,13 +65,16 @@ export class LifecycleState {
     }
   }
 
-  async authenticateWorkspaceGrant(token: string): Promise<WorkspaceRecord | undefined> {
-    const separator = token.indexOf(".");
+  private async authenticateGrant(
+    token: string,
+    pathFor: (name: string) => string
+  ): Promise<WorkspaceRecord | undefined> {
+    const separator = token.lastIndexOf(".");
     if (separator < 1) return undefined;
     const name = token.slice(0, separator);
     try {
       validateLifecycleName(name, "workspace");
-      const expected = (await readFile(this.workspaceGrantPath(name), "utf8")).trim();
+      const expected = (await readFile(pathFor(name), "utf8")).trim();
       const actualBuffer = Buffer.from(token);
       const expectedBuffer = Buffer.from(expected);
       if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) return undefined;
@@ -65,6 +86,10 @@ export class LifecycleState {
 
   async removeWorkspaceGrant(name: string): Promise<void> {
     await rm(this.workspaceGrantPath(name), { force: true });
+  }
+
+  async removeAgentGrant(name: string): Promise<void> {
+    await rm(this.agentGrantPath(name), { force: true });
   }
 
   giteaServicePath(): string {

@@ -13,7 +13,9 @@ export interface LifecycleOptions {
   cpuCount: string;
   memory: string;
   pidsLimit: string;
+  controllerRuntimeDirectory: string;
   controllerSocketPath: string;
+  agentControllerSocketPath: string;
   adminControllerSocketPath: string;
   ciRunnerImage: string;
   ciRunnerRuntime: string;

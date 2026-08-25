@@ -2,7 +2,7 @@ import { UserError } from "./errors.js";
 import type { DimControllerRoute } from "./controller.js";
 import type { DimAdminRoute } from "./adminController.js";
 
-export const DIM_PLUGIN_API_VERSION = 3 as const;
+export const DIM_PLUGIN_API_VERSION = 4 as const;
 
 export interface HostInputRequest {
   readonly key: string;
@@ -75,6 +75,11 @@ class PluginHost implements DimPluginHost {
     }
     if (typeof route.handle !== "function") {
       throw new UserError(`plugin '${plugin}' registered controller route '${route.path}' without a handler`);
+    }
+    if (!Array.isArray(route.audiences) || route.audiences.length === 0
+      || route.audiences.some((audience) => audience !== "workspace" && audience !== "agent")
+      || new Set(route.audiences).size !== route.audiences.length) {
+      throw new UserError(`plugin '${plugin}' registered controller route '${route.path}' without valid audiences`);
     }
     if (this.routes.some((existing) => existing.method === route.method && existing.path === route.path)) {
       throw new UserError(`controller route '${route.method} ${route.path}' is already registered`);
