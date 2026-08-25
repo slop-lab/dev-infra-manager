@@ -1,5 +1,4 @@
 import { PassThrough } from "node:stream";
-import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { CommandSessionManager } from "../../../../core/packages/core/src/commandSessions.js";
 import { ProcessRunner } from "../../../../core/packages/core/src/runner.js";
@@ -108,10 +107,13 @@ describe("command sessions", () => {
     input.end("hello\n");
     await expect(completed).resolves.toBe(0);
     expect(text).toContain("33 91");
-    // Sysbox permits creating and using the PTY but does not apply a window
-    // resize issued by opening that PTY from a sibling process. Supported
-    // host and disposable-QEMU lanes retain the real resize assertion.
-    if (!existsSync("/proc/sysbox")) expect(text).toContain("44 120");
+    // A Sysbox-hosted runner permits creating and using the PTY but does not
+    // apply a window resize issued by opening that PTY from a sibling process.
+    // The affected CI lane declares that executor capability explicitly;
+    // normal hosts and disposable-QEMU lanes retain the resize assertion.
+    if (process.env.DIM_TEST_PTY_RESIZE !== "unsupported") {
+      expect(text).toContain("44 120");
+    }
     expect(text).toContain("<hello>");
   });
 });
