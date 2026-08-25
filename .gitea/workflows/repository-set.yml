@@ -41,6 +41,14 @@ jobs:
   verify:
     runs-on: ${{ inputs.runner-label || 'dim' }}
     steps:
+      - name: Bootstrap Node.js for host-mode JavaScript actions
+        if: ${{ inputs.gate == 'kvm' }}
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/dim-nodesource-setup.bash
+          sudo bash /tmp/dim-nodesource-setup.bash >/dev/null
+          rm -f /tmp/dim-nodesource-setup.bash
+          sudo apt-get install -y nodejs >/dev/null
+          node --version
       - name: Check out development root
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
