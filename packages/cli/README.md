@@ -150,6 +150,7 @@ Create and enter a persistent workspace:
 
 ```bash
 dim workspace create acme feature-123 --profile development
+dim workspace create acme feature-123 --recommend-capability writable-cgroup
 dim workspace exec feature-123 -- bash
 ```
 
@@ -176,7 +177,7 @@ dim workspace start feature-123
 dim workspace restart feature-123
 dim workspace update feature-123
 dim workspace setup feature-123
-dim workspace discard feature-123 --yes
+dim workspace discard feature-123 --keep-volume --yes
 ```
 
 - `stop` preserves the checkout and nested container-engine storage.
@@ -187,7 +188,9 @@ dim workspace discard feature-123 --yes
   running workspace.
 - `update` fast-forwards the root ref without a stop/start cycle.
 - `setup` retries setup without changing the root ref.
-- `discard` permanently removes the workspace and unpushed changes.
+- `discard` permanently removes the workspace and unpushed changes; use
+  `--keep-volume` to retain DIM-managed nested-engine data for recreation with
+  the same workspace name.
 
 DIM only performs fast-forward root updates. It will not overwrite divergent
 workspace history.

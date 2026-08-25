@@ -155,6 +155,19 @@ export interface WorkspaceSetupRecord {
   error?: string;
 }
 
+export type WorkspaceCapabilityRequirement = "required" | "recommended";
+export interface WorkspaceCapabilityRecord {
+  name: string;
+  requirement: WorkspaceCapabilityRequirement;
+  status: "provided" | "unavailable";
+  plugin?: string;
+  detail?: string;
+  capabilities?: string[];
+  securityOptions?: string[];
+  devices?: string[];
+  environment?: Record<string, string>;
+}
+
 export interface WorkspaceRecord {
   schemaVersion: 3;
   name: string;
@@ -166,6 +179,7 @@ export interface WorkspaceRecord {
   projectPath: string;
   phase: WorkspacePhase;
   profiles: string[];
+  capabilities?: WorkspaceCapabilityRecord[];
   composeProjectName: string;
   containerName: string;
   networkName: string;

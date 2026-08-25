@@ -288,6 +288,8 @@ async function builtinCall(
         project: text("project"),
         name: text("name"),
         profiles: stringArray(input.profiles),
+        requiredCapabilities: stringArray(input.requiredCapabilities),
+        recommendedCapabilities: stringArray(input.recommendedCapabilities),
         repositoryRefs: stringArray(input.repositoryRefs),
         runtimeBackend: text("runtimeBackend") as WorkspaceRuntimeBackendKind,
         cpuCount: text("cpuCount"),
@@ -296,7 +298,7 @@ async function builtinCall(
         ...(input.kvm === undefined ? {} : { kvm: booleanValue(input.kvm) }),
         ...(input.gitUserName === undefined ? {} : { gitUserName: text("gitUserName") }),
         ...(input.gitUserEmail === undefined ? {} : { gitUserEmail: text("gitUserEmail") })
-      });
+      }, plugins);
     case "workspace.list": return listWorkspaces(lifecycle);
     case "workspace.show": return showWorkspace(lifecycle, text("name"));
     case "workspace.align": return alignWorkspaceRoot(runner, lifecycle, text("name"), input.reset === true);
@@ -331,7 +333,7 @@ async function builtinCall(
       })
     };
     case "workspace.stop": await stopWorkspace(runner, lifecycle, text("name")); return {};
-    case "workspace.discard": await discardWorkspace(runner, lifecycle, text("name")); return {};
+    case "workspace.discard": await discardWorkspace(runner, lifecycle, text("name"), input.keepVolume === true); return {};
     case "doctor": return runDoctor(runner, lifecycle.defaultWorkspaceBackend, lifecycle);
     case "service.ensure": return ensureGitea(runner, lifecycle);
     case "git.credentials": return prepareHostGitCredential(runner, lifecycle);

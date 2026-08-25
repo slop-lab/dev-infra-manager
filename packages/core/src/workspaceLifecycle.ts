@@ -10,8 +10,10 @@ import type {
   LifecycleOptions,
   ProjectRecord,
   ProjectRepositoryRecord,
+  WorkspaceCapabilityRecord,
   WorkspaceRecord
 } from "./lifecycleTypes.js";
+import type { RegisteredDimPlugins } from "./plugin.js";
 import { workspaceRuntimePlan } from "./runtimeBackends.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { inspectProjectRuntimeCgroups, type ProjectRuntimeCgroups } from "./projectRuntimeCgroups.js";
@@ -67,6 +69,70 @@ export function validateWorkspaceProfiles(values: string[]): string[] {
     seen.add(value);
   }
   return [...seen];
+}
+
+export async function resolveWorkspaceCapabilities(
+  required: string[],
+  recommended: string[],
+  project: ProjectRecord,
+  workspaceName: string,
+  runtimeBackend: WorkspaceRecord["runtimeBackend"],
+  providers: RegisteredDimPlugins["workspaceCapabilityProviders"]
+): Promise<WorkspaceCapabilityRecord[]> {
+  const requests = [...required.map((name) => ({ name, requirement: "required" as const })),
+    ...recommended.map((name) => ({ name, requirement: "recommended" as const }))];
+  const seen = new Set<string>();
+  const resolved: WorkspaceCapabilityRecord[] = [];
+  for (const request of requests) {
+    if (!/^[a-z0-9][a-z0-9.-]*$/.test(request.name)) {
+      throw new UserError(`workspace capability '${request.name}' has an invalid name`);
+    }
+    if (seen.has(request.name)) throw new UserError(`workspace capability '${request.name}' is duplicated`);
+    seen.add(request.name);
+    const registered = providers.get(request.name);
+    if (!registered) {
+      if (request.requirement === "required") {
+        throw new UserError(`required workspace capability '${request.name}' has no installed provider`);
+      }
+      resolved.push({ ...request, status: "unavailable", detail: "no installed provider" });
+      continue;
+    }
+    try {
+      const provision = await registered.provider.provision({
+        projectId: project.id, projectName: project.name, workspaceName, runtimeBackend
+      });
+      const capabilities = [...(provision.capabilities ?? [])];
+      const securityOptions = [...(provision.securityOptions ?? [])];
+      const devices = [...(provision.devices ?? [])];
+      const environment = { ...(provision.environment ?? {}) };
+      if (capabilities.some((value) => !/^[A-Z][A-Z0-9_]*$/.test(value))) {
+        throw new UserError("provider returned an invalid Linux capability");
+      }
+      if (securityOptions.some((value) => value.length === 0 || value.includes("\0"))) {
+        throw new UserError("provider returned an invalid security option");
+      }
+      if (devices.some((value) => !value.startsWith("/") || value.includes("\0"))) {
+        throw new UserError("provider returned an invalid device path");
+      }
+      if (Object.entries(environment).some(([key, value]) =>
+        !/^[A-Z_][A-Z0-9_]*$/.test(key) || value.includes("\0"))) {
+        throw new UserError("provider returned an invalid environment entry");
+      }
+      resolved.push({ ...request, status: "provided", plugin: registered.plugin,
+        ...(provision.detail ? { detail: provision.detail } : {}),
+        ...(capabilities.length ? { capabilities } : {}),
+        ...(securityOptions.length ? { securityOptions } : {}),
+        ...(devices.length ? { devices } : {}),
+        ...(Object.keys(environment).length ? { environment } : {}) });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      if (request.requirement === "required") {
+        throw new UserError(`required workspace capability '${request.name}' could not be provided: ${detail}`);
+      }
+      resolved.push({ ...request, status: "unavailable", plugin: registered.plugin, detail });
+    }
+  }
+  return resolved;
 }
 
 export function validateRepositoryRefOverrides(
@@ -131,6 +197,8 @@ export async function createWorkspace(
     project: string;
     name: string;
     profiles: string[];
+    requiredCapabilities?: string[];
+    recommendedCapabilities?: string[];
     repositoryRefs?: string[];
     runtimeBackend: WorkspaceRecord["runtimeBackend"];
     cpuCount?: string;
@@ -139,7 +207,8 @@ export async function createWorkspace(
     kvm?: boolean;
     gitUserName?: string;
     gitUserEmail?: string;
-  }
+  },
+  plugins: Pick<RegisteredDimPlugins, "workspaceCapabilityProviders"> = { workspaceCapabilityProviders: new Map() }
 ): Promise<WorkspaceRecord> {
   const project = validateLifecycleName(input.project, "project");
   const name = validateLifecycleName(input.name, "workspace");
@@ -151,6 +220,10 @@ export async function createWorkspace(
   });
   const state = new LifecycleState(options.stateRoot);
   const projectRecord = await readyProject(state, project);
+  const capabilities = await resolveWorkspaceCapabilities(
+    input.requiredCapabilities ?? [], input.recommendedCapabilities ?? [], projectRecord, name,
+    input.runtimeBackend, plugins.workspaceCapabilityProviders
+  );
   const repositoryRefOverrides = validateRepositoryRefOverrides(input.repositoryRefs ?? [], projectRecord);
   let repo = readyRootRepository(projectRecord);
   const rootRef = await resolveRootRef(runner, options, projectRecord, repo);
@@ -169,6 +242,9 @@ export async function createWorkspace(
     }
     if (record.profiles.join("\0") !== profiles.join("\0")) {
       throw new UserError(`workspace '${name}' already exists with different profiles; use dim workspace update`);
+    }
+    if (JSON.stringify(record.capabilities ?? []) !== JSON.stringify(capabilities)) {
+      throw new UserError(`workspace '${name}' already exists with different capability requests`);
     }
     if (JSON.stringify(record.repositoryRefOverrides ?? {}) !== JSON.stringify(repositoryRefOverrides)) {
       throw new UserError(`workspace '${name}' already exists with different repository ref overrides`);
@@ -200,6 +276,7 @@ export async function createWorkspace(
       projectPath: "/workspace/project",
       phase: "creating",
       profiles,
+      capabilities,
       composeProjectName: `dim-${name}`,
       containerName: `dim-ws-${name}`,
       networkName: GITEA_NETWORK,
@@ -555,7 +632,12 @@ async function stopWorkspaceLocked(
   await state.writeWorkspace(record);
 }
 
-export async function discardWorkspace(runner: StreamingCommandRunner, options: LifecycleOptions, name: string): Promise<void> {
+export async function discardWorkspace(
+  runner: StreamingCommandRunner,
+  options: LifecycleOptions,
+  name: string,
+  keepVolume = false
+): Promise<void> {
   const workspaceName = validateLifecycleName(name, "workspace");
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
@@ -573,9 +655,11 @@ export async function discardWorkspace(runner: StreamingCommandRunner, options: 
     if (removed.exitCode !== 0 && !removed.stderr.includes("No such container")) {
       throw new UserError(`failed to remove workspace container: ${removed.stderr.trim()}`);
     }
-    const volume = await runner.run("docker", ["volume", "rm", record.dockerVolumeName]);
-    if (volume.exitCode !== 0 && !volume.stderr.includes("No such volume")) {
-      throw new UserError(`failed to remove workspace Docker volume: ${volume.stderr.trim()}`);
+    if (!keepVolume) {
+      const volume = await runner.run("docker", ["volume", "rm", record.dockerVolumeName]);
+      if (volume.exitCode !== 0 && !volume.stderr.includes("No such volume")) {
+        throw new UserError(`failed to remove workspace Docker volume: ${volume.stderr.trim()}`);
+      }
     }
     await state.removeWorkspace(workspaceName);
     await state.removeWorkspaceGrant(workspaceName);
@@ -806,6 +890,13 @@ export function workspaceContainerArgs(
     args.push("--env", `DIM_AGENT_CONTROLLER_TOKEN=${agentGrant}`);
   }
   for (const capability of plan.capabilities) args.push("--cap-add", capability);
+  for (const provision of record.capabilities ?? []) {
+    if (provision.status !== "provided") continue;
+    for (const capability of provision.capabilities ?? []) args.push("--cap-add", capability);
+    for (const securityOption of provision.securityOptions ?? []) args.push("--security-opt", securityOption);
+    for (const device of provision.devices ?? []) args.push("--device", device);
+    for (const [key, value] of Object.entries(provision.environment ?? {})) args.push("--env", `${key}=${value}`);
+  }
   for (const securityOption of plan.securityOptions) args.push("--security-opt", securityOption);
   for (const device of plan.devices) args.push("--device", device);
   if (record.kvm) {
@@ -977,7 +1068,12 @@ export function projectRuntimeManifest(
       }])),
     gitBaseUrl: record.gitBaseUrl,
     hostAliases: record.hostAliases,
-    runtime: { cgroups }
+    runtime: {
+      cgroups,
+      capabilities: (record.capabilities ?? []).map(({ name, requirement, status, plugin, detail }) => ({
+        name, requirement, status, ...(plugin ? { plugin } : {}), ...(detail ? { detail } : {})
+      }))
+    }
   };
 }
 

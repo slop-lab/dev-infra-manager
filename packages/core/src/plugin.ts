@@ -19,6 +19,30 @@ export interface HostInputProvider {
   resolve(request: HostInputRequest, context: HostInputContext): Promise<string>;
 }
 
+export interface WorkspaceCapabilityContext {
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly workspaceName: string;
+  readonly runtimeBackend: string;
+}
+
+export interface WorkspaceCapabilityProvision {
+  readonly detail?: string;
+  readonly capabilities?: readonly string[];
+  readonly securityOptions?: readonly string[];
+  readonly devices?: readonly string[];
+  readonly environment?: Readonly<Record<string, string>>;
+}
+
+export interface WorkspaceCapabilityProvider {
+  provision(context: WorkspaceCapabilityContext): Promise<WorkspaceCapabilityProvision> | WorkspaceCapabilityProvision;
+}
+
+export interface RegisteredWorkspaceCapabilityProvider {
+  readonly plugin: string;
+  readonly provider: WorkspaceCapabilityProvider;
+}
+
 export interface DimPluginLogger {
   debug(message: string, fields?: Readonly<Record<string, unknown>>): void;
   info(message: string, fields?: Readonly<Record<string, unknown>>): void;
@@ -32,6 +56,7 @@ export interface DimPluginHost {
   registerControllerRoute(route: DimControllerRoute): void;
   registerAdminRoute(route: DimAdminRoute): void;
   registerHostInputProvider(name: string, provider: HostInputProvider): void;
+  registerWorkspaceCapability(name: string, provider: WorkspaceCapabilityProvider): void;
   registerExtension(kind: string, name: string, extension: object): void;
   extension<T extends object>(kind: string, name: string): T | undefined;
 }
@@ -48,6 +73,7 @@ export interface RegisteredDimPlugins {
   readonly controllerRoutes: readonly DimControllerRoute[];
   readonly adminRoutes: readonly DimAdminRoute[];
   readonly hostInputProviders: ReadonlyMap<string, HostInputProvider>;
+  readonly workspaceCapabilityProviders: ReadonlyMap<string, RegisteredWorkspaceCapabilityProvider>;
   dispose(): Promise<void>;
 }
 
@@ -56,6 +82,7 @@ class PluginHost implements DimPluginHost {
   readonly routes: DimControllerRoute[] = [];
   readonly adminRoutes: DimAdminRoute[] = [];
   readonly providers = new Map<string, HostInputProvider>();
+  readonly workspaceCapabilities = new Map<string, RegisteredWorkspaceCapabilityProvider>();
   readonly extensions = new Map<string, Map<string, object>>();
   registeringPlugin: string | undefined;
   acceptingRegistrations = true;
@@ -120,6 +147,23 @@ class PluginHost implements DimPluginHost {
     }
     if (this.providers.has(name)) throw new UserError(`host input provider '${name}' is already registered`);
     this.providers.set(name, provider);
+  }
+
+  registerWorkspaceCapability(name: string, provider: WorkspaceCapabilityProvider): void {
+    const plugin = this.registeringPlugin ?? "unknown plugin";
+    if (!this.acceptingRegistrations) {
+      throw new UserError(`plugin '${plugin}' attempted workspace capability registration after startup`);
+    }
+    if (!validExtensionName(name)) {
+      throw new UserError(`plugin '${plugin}' registered invalid workspace capability '${name}'`);
+    }
+    if (!provider || typeof provider.provision !== "function") {
+      throw new UserError(`plugin '${plugin}' registered invalid workspace capability '${name}'`);
+    }
+    if (this.workspaceCapabilities.has(name)) {
+      throw new UserError(`workspace capability '${name}' is already registered`);
+    }
+    this.workspaceCapabilities.set(name, { plugin, provider });
   }
 
   registerExtension(kind: string, name: string, extension: object): void {
@@ -187,6 +231,7 @@ export async function registerPlugins(
     controllerRoutes: [...host.routes],
     adminRoutes: [...host.adminRoutes],
     hostInputProviders: new Map(host.providers),
+    workspaceCapabilityProviders: new Map(host.workspaceCapabilities),
     async dispose(): Promise<void> {
       if (disposed) return;
       disposed = true;

@@ -486,6 +486,8 @@ workspace.command("create")
   .argument("<project>")
   .argument("<workspace>")
   .option("--profile <profile>", "Compose capability profile", collect, [])
+  .option("--require-capability <name>", "require an installed plugin provider", collect, [])
+  .option("--recommend-capability <name>", "use an installed plugin provider when available", collect, [])
   .option("--repo-ref <alias=ref>", "candidate checkout ref for a non-root repository", collect, [])
   .option("--git-user-name <name>")
   .option("--git-user-email <email>")
@@ -510,6 +512,8 @@ workspace.command("create")
       project: projectName,
       name,
       profiles: flags.profile,
+      requiredCapabilities: flags.requireCapability,
+      recommendedCapabilities: flags.recommendCapability,
       repositoryRefs: flags.repoRef,
       runtimeBackend: options.defaultWorkspaceBackend,
       cpuCount: flags.cpus ?? options.cpuCount,
@@ -675,17 +679,18 @@ workspace.command("stop")
   .action(async (name: string) => void await adminStreamCall("workspace.stop", { name }));
 
 workspace.command("discard")
-  .description("Permanently delete a workspace and unpushed changes")
+  .description("Permanently delete a workspace container and unpushed changes")
   .argument("<workspace>")
   .option("--yes", "confirm permanent deletion")
-  .action(async (name: string, flags: { yes?: boolean }) => {
+  .option("--keep-volume", "retain DIM-managed nested-engine data for recreation with the same name")
+  .action(async (name: string, flags: { yes?: boolean; keepVolume?: boolean }) => {
     await confirmAction(flags.yes ?? false, `Permanently discard workspace '${name}'?`);
     const options = lifecycleOptions();
     await ensureManagedController(options);
     await externalUrlControllerRequest("/api/urls", { method: "DELETE" }, name).catch((error) => {
       if (!(error instanceof Error) || !error.message.includes("(404)")) throw error;
     });
-    await adminStreamCall("workspace.discard", { name });
+    await adminStreamCall("workspace.discard", { name, keepVolume: flags.keepVolume ?? false });
     if ((await adminCall<unknown[]>("workspace.list")).length === 0) await stopManagedController(options);
   });
 
