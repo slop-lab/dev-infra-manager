@@ -2,9 +2,9 @@
 
 ## Unreleased
 
-- Retry PTY resize delivery until util-linux `script` exposes its terminal
-  child, preventing early resize events from being lost on slower Sysbox
-  process startup.
+- Resize through util-linux `script`'s own PTY descriptor, retrying until it is
+  exposed; this avoids Sysbox's non-effective writes through a sandboxed child
+  `/proc/<pid>/fd/0` while preserving ordered resize delivery.
 
 - Materialize reviewed workspace host aliases such as the resolved DIM Gitea
   control-network address in `/etc/hosts`, avoiding runtime-specific embedded
