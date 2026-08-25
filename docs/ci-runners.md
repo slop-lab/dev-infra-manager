@@ -119,16 +119,24 @@ redelivery is not required.
 The first QEMU job for a Project builds a version-keyed runner base image with
 Packer. The image contains the common Ubuntu packages and the current
 coordinator adapter's runner binary, but no registration token, runner name, or
-job data. Trusted Packer provisioning also embeds the checksum-pinned Ubuntu
-cloud image used by nested KVM verification and exports its fixed cache path to
-the ephemeral runner. Workflow changes can modify only their disposable qcow2
-overlay, not the Project's persistent base image. Named QEMU capacities share the completed qcow2 through a
+job data. If the protected Project root contains `.dim/ci/qemu-cache.bash`,
+trusted Packer provisioning executes it inside the base-image guest with the
+cache directory as its only argument. The hook content digest selects the
+Project's base-image cache key. Workflow changes can modify only their
+disposable qcow2 overlay, not the Project's persistent base image. Named QEMU capacities share the completed qcow2 through a
 Project-scoped cache volume; a cross-container file lock serializes the first
 build and the completed image is published atomically. Every job still boots a
 fresh overlay and receives its ephemeral registration only after boot. Deleting
 the final QEMU capacity removes both shared dispatch state and this image cache.
 Changing a pinned image input selects a new cache key rather than modifying an
 image that another capacity may be using.
+
+The cache hook is optional and belongs in the protected root because it is the
+only Project code allowed to populate persistent runner state. Test orchestration
+and artifact-specific verification should remain in ordinary development
+repositories. The hook runs inside the disposable Packer guest, receives no
+host socket or coordinator credential, and cannot access another Project's
+cache volume.
 
 Creating a QEMU runner adds only its managed supervisor hostname to Gitea's
 webhook allowlist and restarts the managed Gitea service to apply that setting.

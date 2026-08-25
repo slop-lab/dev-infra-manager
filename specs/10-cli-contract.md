@@ -271,6 +271,12 @@ removed or failed capacity cannot strand demand. Completed demand MUST NOT
 start a VM. Workflows select only the forge-neutral `dim-qemu` capability and
 MUST NOT name a managed capacity.
 
+QEMU runner reconciliation may read `.dim/ci/qemu-cache.bash` only from the
+configured protected root ref. It executes that reviewed hook as root inside
+the Packer guest, never on the DIM host, and keys the Project-scoped base image
+by the hook digest. The hook receives a fixed cache directory as its first
+argument and no host runtime socket or coordinator credential.
+
 The runner also advertises `dim-container-integration` in host mode. Here
 "host" is the isolated Project CI runner container, not the DIM host. This
 mode is reserved for the reviewed managed-workspace integration job because
