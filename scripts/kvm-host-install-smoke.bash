@@ -181,7 +181,7 @@ if [[ "$backend" == runc ]]; then
     '
   run_step "verify stateful full development flow" \
     ssh "${ssh_args[@]}" dim@127.0.0.1 \
-      "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' bash verification/scripts/stateful-development-flow-smoke.bash"
+      "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' JUST_UNSTABLE=1 bash verification/scripts/stateful-development-flow-smoke.bash"
   run_step "verify canonical self Project and private rootless DinD" \
     ssh "${ssh_args[@]}" dim@127.0.0.1 \
       "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' DIM_SELF_VERIFY_AGENT=1 JUST_UNSTABLE=1 just verify self-development"
