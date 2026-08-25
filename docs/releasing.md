@@ -44,12 +44,13 @@ uses the shared `dim-qemu` runner capability and records the exact assembled
 repository set. Require it to pass before host installation or
 `dim workspace restart`.
 
-The KVM gate uses a separate clean Ubuntu guest for each backend. Only a
-non-draft managed-host pull request targeting `main` schedules those backend
-gates independently, while the local command runs all of them. Its runc
-guest installs the RootlessKit AppArmor profile through the host installer and
-runs the canonical self-Project verification, including the unprivileged agent
-and its private rootless Docker runtime. `bash verification/scripts/local-ci-matrix.bash --manual` is the combined
+The release gate also runs the complete stateful and canonical self-Project
+contract on the managed Sysbox integration runner. The KVM gate uses a separate
+clean Ubuntu guest for each backend, and every guest invokes the same common
+full-development recipe after its backend-specific installation and workload
+probes. Only a non-draft managed-host pull request targeting `main` schedules
+those backend gates independently, while the local command runs all of them.
+`bash verification/scripts/local-ci-matrix.bash --manual` is the combined
 local shorthand for the automatic matrix and both manual backend gates.
 
 Finally, run the two manual GitHub workflows on actual ephemeral self-hosted

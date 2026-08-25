@@ -110,10 +110,9 @@ container and must not claim to verify a host runtime backend boundary.
 Gitea runs this gate automatically via the managed
 `dim-container-integration` host-mode capability from `.gitea/workflows`; its
 controller sockets and nested Docker bind mounts must share one filesystem
-namespace. The managed runner's Sysbox boundary does not support another
-user-namespace mapping inside its inner Docker, so this automatic lane excludes
-the canonical self-Project's private nested runtime. The runc QEMU gate retains
-that verification on a compatible clean host. GitHub automatic CI is
+namespace. The managed runner's Sysbox boundary runs the complete stateful
+development flow and canonical self-Project contract with the runc Project
+backend. GitHub automatic CI is
 intentionally limited to Node.js type checks and tests that need no APT packages
 or container runtime. Sysbox and KVM host-backend gates also remain available
 through the manually dispatched GitHub workflows.
@@ -145,17 +144,17 @@ rejection, a reviewed root update, stop/start persistence, controller socket
 replacement, setup-error recovery, agent-home backup, discard, recreation,
 restore, and final managed-state/resource cleanup. Failure hooks and managed CI
 cache configuration MUST be injected only into its temporary repositories;
-the checked-in example remains a normal user-facing Project. The release gate
-MUST execute this journey in the clean runc KVM guest, where unprivileged user
-namespace mappings required by its private rootless DinD are supported; a
-doubly nested generic Actions job container is not an equivalent environment.
+the checked-in example remains a normal user-facing Project. Every backend lane
+in the release gate MUST execute this same journey through one shared recipe
+after its backend-specific installation and workload probes.
 
 The integrated development repository MUST expose a manually dispatched QEMU
 release gate. The dispatch MUST pin the exact development commit and accept an
 explicit root ref, while the reusable verification workflow resolves and
-records the exact commit for every repository in the assembled set. It MUST
-run the runc KVM lane on the shared `dim-qemu` capability before that repository
-set is installed on a host or applied by workspace restart.
+records the exact commit for every repository in the assembled set. It MUST run
+one full integration lane on `dim-container-integration` and one independent
+KVM lane per supported backend on the shared `dim-qemu` capability before that
+repository set is installed on a host or applied by workspace restart.
 Because host-mode JavaScript actions require Node.js before `setup-node` can
 run, the QEMU gate MUST either use a runner guest image that provides Node.js
 or bootstrap the supported Node.js line in a native shell step before the first
@@ -264,12 +263,12 @@ inside the Packer guest, with a fixed cache-directory argument. Its content
 digest MUST select the shared base-image cache key. The persistent base image
 MUST remain outside workflow write authority; job changes are confined to the
 disposable overlay. A Project without the hook receives an empty cache.
-The runc guest must additionally run `just verify self-development` after the
-host installer completes. This verifies the canonical DIM Project and its
-agent inside a private DinD on a clean Ubuntu host. The guest verification
-user must use UID 1001, and the gate must prove the inner non-root agent adopts
-that UID while its unrestricted sudo and rootful Docker authority remain
-confined to `agent-dind`.
+Every backend guest must run the same stateful development-flow and
+`just verify self-development` recipe after the host installer completes. This
+verifies the canonical DIM Project and its agent inside a private DinD on a
+clean Ubuntu host. The guest verification user must use UID 1001, and the gate
+must prove the inner non-root agent adopts that UID while its unrestricted sudo
+and rootful Docker authority remain confined to `agent-dind`.
 The Sysbox guest must additionally verify a privileged trusted workspace using
 its directly passed `/dev/kvm` with QEMU, absence of Sysbox registration in
 the workspace's Project daemon, and a separate unprivileged Sysbox isolation
