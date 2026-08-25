@@ -74,3 +74,10 @@ source location, its local issue numbers must not appear in commit subjects or
 PR titles that may later become public history. Use standalone descriptive
 subjects; reference a managed-host issue in the development PR body when that
 context is useful locally.
+
+Within a DIM-managed Project, the root repository is the single work-tracking
+location. New managed Gitea repositories therefore enable built-in issues for
+the root and disable them for non-root repositories. This creation-time policy
+does not rewrite existing repository settings. Pull requests remain in the
+repository that owns the changed files, while issue context is referenced from
+their PR bodies.

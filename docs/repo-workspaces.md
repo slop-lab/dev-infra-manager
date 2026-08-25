@@ -2,7 +2,10 @@
 
 DIM models a development project as a managed Git namespace plus
 project-scoped repository aliases. The built-in service creates a reserved
-Gitea organization named `dim-<project>`.
+Gitea organization named `dim-<project>`. The Project root is its single issue
+tracker: newly created root repositories enable Gitea issues and newly created
+non-root repositories disable them. Existing repository settings are not
+changed when this policy is introduced or reapplied.
 
 For a complete, tested, end-to-end walkthrough instead of a reference, see
 [Example: External URLs](../../examples/features/external-urls/README.md).

@@ -93,6 +93,11 @@ repositories. DIM supplies a read-only runtime manifest and environment to
 The optional `.dim/repos.yml` is a repository-connection set, not a Project or
 workspace manifest. Its `repositories` mapping keys are stable Project-scoped
 aliases, including the single root alias used by lifecycle code and agents.
+When the built-in Gitea service creates repositories, it MUST enable the
+built-in issue tracker for the root and disable it for every non-root
+repository. Reconciliation MUST NOT change this setting on an existing
+repository; issue migration and legacy repository settings are outside the
+repository-set lifecycle.
 Registering a root automatically applies this file when every entry uses the
 bootstrap origin (or is empty); additional origins require explicit or
 interactive approval. Applying it never removes a managed repository omitted

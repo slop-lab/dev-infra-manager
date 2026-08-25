@@ -34,6 +34,11 @@ Project repository set and lifecycle placement.
 production artifacts. Each plugin source repository follows the same rule.
 Tests, fixtures, and test-only dependencies live in the corresponding
 `*-development` repository and consume the source as a sibling checkout.
+Package-specific maintenance documentation, changelog entries, and design or
+test specifications also live in that paired development repository when one
+exists. A production source repository retains only documentation required by
+its build or published package, such as package READMEs. Cross-package and
+Project-level contracts remain in `specification`.
 Cross-component, container, host, KVM, and example-flow checks live in
 `verification`; runnable examples live in `examples`. The source gate
 materializes every repository into siblings, verifies production repositories
