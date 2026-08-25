@@ -22,6 +22,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - The canonical agent image now adopts the owning workspace UID and GID instead
   of assuming 1000, so bind-mounted split repositories remain writable on
   hosts with different account IDs.
+- The canonical `agent-dind` now uses a rootful daemon confined to its private
+  privileged sidecar. This preserves arbitrary bind-mount UIDs while still
+  exposing neither the host nor trusted-workspace runtime socket to the agent.
 
 - Centralized DIM-managed Gitea issues on each Project root for newly created
   repositories, and documented repository ownership for package-specific
