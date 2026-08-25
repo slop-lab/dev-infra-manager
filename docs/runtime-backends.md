@@ -44,7 +44,8 @@ CPU, memory, and PID limits apply to the workspace boundary. Nested
 Project-owned services share that budget unless their Compose definition adds
 stricter child limits. DIM does not impose a per-workspace disk quota.
 `discard --yes` removes the workspace container and its nested-engine storage
-volume.
+volume. `discard --keep-volume --yes` retains the labeled DIM-managed volume;
+recreating the same workspace name reuses it after label validation.
 Docker-backed workspaces disable Docker's containerd image store so all nested
 engine state remains in that managed `/var/lib/docker` volume. This also avoids
 losing file capability metadata when images are unpacked through nested

@@ -310,6 +310,7 @@ registration; Gitea revokes the ephemeral runner credential upon job assignment.
 ```bash
 dim workspace create PROJECT WORKSPACE \
   [--profile PROFILE ...] \
+  [--require-capability NAME ...] [--recommend-capability NAME ...] \
   [--kvm | --no-kvm] \
   [--cpus COUNT] [--memory SIZE] [--pids COUNT]
 
@@ -324,7 +325,7 @@ dim workspace update WORKSPACE [--profile PROFILE ... | --clear-profiles]
 dim workspace start WORKSPACE
 dim workspace restart WORKSPACE
 dim workspace stop WORKSPACE
-dim workspace discard WORKSPACE --yes
+dim workspace discard WORKSPACE --yes [--keep-volume]
 ```
 
 `create` clones the Project root repository/ref at `/workspace/project` and
@@ -364,7 +365,9 @@ exec`. Other workspace lifecycle commands exist only below `dim workspace`.
 
 `run` dispatches through `.dim/entrypoint.sh` when present. `exec` always
 bypasses it. `discard` attempts project teardown and removes the top-level
-container, inner-engine volume, and workspace state.
+container, inner-engine volume, and workspace state. `--keep-volume` retains
+the labeled DIM-managed volume; recreating the same workspace name validates
+and reuses it.
 
 Commands that permanently delete Projects, repositories, CI runners, or
 workspaces accept confirmation from an interactive terminal. In a

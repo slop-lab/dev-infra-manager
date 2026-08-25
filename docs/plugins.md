@@ -9,6 +9,13 @@ routes and narrowly scoped host-input providers on the authenticated DIM
 controller API; see
 [External workspace URLs](external-urls.md).
 
+Plugins may also register a named workspace capability provider. Users request
+that exact name with `dim workspace create --require-capability NAME` or
+`--recommend-capability NAME`. Required requests fail closed when no provider
+is installed or provisioning fails; recommended requests remain visible as
+unavailable. `dim workspace show --json` and the read-only Project manifest
+report the effective status and provider.
+
 ## Named extensions
 
 Plugins can provide implementation objects to other plugins without creating

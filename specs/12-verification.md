@@ -100,7 +100,7 @@ because it depends on operator-owned Tailnet DNS and TLS.
 
 ## Managed Workspace Integration Gate
 
-`just ci workspace` requires Docker with Compose v2 and support for privileged
+The container CI lane requires Docker with Compose v2 and support for privileged
 nested containers. It runs source checks plus workspace image, nested Docker,
 lifecycle, packed-project, shared-upstream, and cgroup verification. The
 broader `just verify container` additionally covers the canonical self Project.

@@ -334,11 +334,14 @@ Inspect or discard:
 ```bash
 dim workspace show example-dev
 dim workspace discard example-dev --yes
+dim workspace discard example-dev --keep-volume --yes
 ```
 
 Discard stops project services when possible, then removes the top-level
-runtime, inner-Docker store, project checkout, and workspace journal. It does
-not remove repositories from the managed Git service.
+runtime, inner-Docker store, project checkout, and workspace journal. With
+`--keep-volume`, the managed inner-engine store remains available to a later
+workspace creation using the same name. Discard does not remove repositories
+from the managed Git service.
 
 ## Lifecycle behavior
 

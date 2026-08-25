@@ -11,7 +11,7 @@
 - The promotion into the active DIM-managed development repository's `main`
   branch used a non-draft pull request and passed every automatic
   `host backend (BACKEND)` job. These run the same
-  `just ci kvm BACKEND` verification through managed runners; the manual
+  `just verify environments-kvm BACKEND` verification through managed runners; the manual
   GitHub run remains an independent release check on a fresh runner.
 - `npm whoami` succeeds for an account allowed to publish the `@slop-lab` scope.
 - The version and changelog agree, and the release tag does not already exist.
@@ -23,7 +23,7 @@ and each release scheduled to become LTS (currently Node.js 24 and 26). Managed 
 Sysbox integration checks use the newest validated line.
 
 ```bash
-just ci matrix
+bash verification/scripts/local-ci-matrix.bash
 ```
 
 This uses mise to reproduce the Node.js 24/26 CI workflow matrix and the
@@ -33,7 +33,7 @@ contains its README, MIT license, runtime files, and publishable manifest.
 Run the manual backend gates locally from the committed release candidate:
 
 ```bash
-just ci sysbox
+just verify container
 just verify environments-kvm
 ```
 
@@ -42,7 +42,7 @@ non-draft managed-host pull request targeting `main` schedules those backend
 gates independently, while the local command runs all of them. Its runc
 guest installs the RootlessKit AppArmor profile through the host installer and
 runs the canonical self-Project verification, including the unprivileged agent
-and its private rootless Docker runtime. `just ci matrix --manual` is the combined
+and its private rootless Docker runtime. `bash verification/scripts/local-ci-matrix.bash --manual` is the combined
 local shorthand for the automatic matrix and both manual backend gates.
 
 Finally, run the two manual GitHub workflows on actual ephemeral self-hosted

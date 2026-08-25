@@ -186,10 +186,16 @@ tasks from `.dim/entrypoint.sh`. Core owns none of its image, service, volume,
 privilege, or task configuration. `dim workspace run WORKSPACE TASK` always
 follows the checked-in `.dim/entrypoint.sh` contract when present.
 The canonical self-Project's outer Compose graph contains only a rootless
-`private-docker` daemon. That daemon owns the agent and ordinary development
+`agent-dind` daemon. That daemon owns the agent and ordinary development
 containers, and the agent receives only its private daemon socket. Rebuilding
 or replacing those inner workloads therefore requires no trusted workspace or
 host runtime socket.
+The agent process must be non-root. A Project may grant it unrestricted sudo
+inside the agent container because that privilege remains confined to
+`agent-dind`; it must not grant the agent sudo in the trusted outer workspace.
+Secret-bearing workloads must use a separate `secure-dind` daemon with
+separate runtime storage. The agent daemon socket, agent home, workspace source,
+and workspace Git credentials must not be mounted into that daemon.
 The canonical self-Project exposes `codex`, an agent-container `bash` task,
 and Project-owned `backup`/`restore` tasks that stream a gzip tar archive of
 the agent home over stdout/stdin. Those canonical tasks temporarily stop the
@@ -294,11 +300,20 @@ explicit `workspace align --reset --yes` recovery command. A successful
 restart MAY apply the exact fetched commit accepted by this preflight so the
 stop/start boundary does not repeat a mutable remote-ref decision.
 Stop/start and restart preserve the checkout and named inner-engine volume.
+Create may request plugin-provided workspace capabilities as `required` or
+`recommended`. Provider registration names match request names exactly.
+Missing or failed required capabilities abort creation; recommended ones are
+recorded as unavailable and do not block setup. The workspace record and
+Project runtime manifest expose the effective provider, status, and diagnostic
+detail. DIM validates provider-returned container capabilities, security
+options, devices, and environment entries before applying them.
 
 ## Cleanup
 
 `discard --yes` attempts root teardown and removes only the workspace
-container, named inner-engine volume, and workspace record. It does not delete
+container, named inner-engine volume, and workspace record. With
+`--keep-volume`, it retains the labeled DIM-managed volume so a later create
+with the same workspace name can validate and reuse it. It does not delete
 Project metadata or managed Git repositories.
 
 `project remove` refuses while referenced and otherwise removes metadata only;
