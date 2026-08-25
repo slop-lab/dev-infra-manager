@@ -3,10 +3,11 @@ import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-const outputDirectory = process.argv[2];
-if (!outputDirectory) throw new Error("output directory is required");
-
-const workspaceRoot = "/workspace";
+const workspaceRoot = process.argv[2];
+const outputDirectory = process.argv[3];
+if (!workspaceRoot || !outputDirectory) {
+  throw new Error("source root and output directory are required");
+}
 const packageDirectories = [
   "core/packages/core/dist",
   "core/packages/contracts/external-url/dist",

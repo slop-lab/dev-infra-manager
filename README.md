@@ -36,17 +36,19 @@ pnpm install --frozen-lockfile
 just check-source
 ```
 
-## Install an unreleased workspace build on the host
+## Install an unreleased source build on the host
 
-From a host checkout of this root repository, build only the production source
-repositories in an existing self-development workspace, stream the package
-bundle back through `dim run`, install it, and restart the controller:
+From a host checkout of this root repository, clone the production source
+repositories from the same Git host, build and install them, and restart the
+controller:
 
 ```bash
-just install-workspace-build dim-dev
+just install-local
 ```
 
-This deliberately installs the workspace's current source, including
-uncommitted changes. Review its state before running the recipe. The transfer
-uses the Project task stream and does not depend on DIM's internal Docker
-container name or require a host checkout of the `*-development` repositories.
+The recipe requires Git, Node.js 24 or 26, pnpm 10, and the existing DIM
+installer facade. It clones only `core`, `plugin-dns-cloudflare`, and
+`plugin-external-urls`; no workspace or `*-development` checkout is used. Each
+resolved commit is printed before the build. By default it clones `main` from
+sibling repositories next to this repository's `origin`. Set
+`DIM_SOURCE_REPOSITORY_BASE_URL` or `DIM_SOURCE_REF` to override those inputs.
