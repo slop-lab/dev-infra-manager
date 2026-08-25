@@ -1,11 +1,11 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { statSync } from "node:fs";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "./errors.js";
 import { giteaCiCoordinator } from "./giteaCiCoordinator.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
-import { showProject } from "./projectRegistry.js";
+import { readProjectRootFile, showProject } from "./projectRegistry.js";
 import { configuredCiRunnerDefaults } from "./userConfig.js";
 import type { CiRunnerExecutorKind, CiRunnerRecord, CiRunnerResources, LifecycleOptions, QemuCiRunnerExecutor, SysboxCiRunnerExecutor } from "./lifecycleTypes.js";
 import type { StreamingCommandRunner } from "./types.js";
@@ -151,8 +151,9 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       await ensureVolume(runner, ciRunnerQemuCacheVolumeName(projectName));
       const registration = await giteaCiCoordinator.prepareRunner(runner, options, project);
       const authorization = `Bearer ${randomBytes(32).toString("hex")}`;
+      const projectCache = await prepareQemuProjectCacheHook(runner, options, project);
       await buildQemuSupervisorImage(runner, options.stateRoot);
-      const started = await runner.run("docker", ciRunnerQemuSupervisorArgs(record, executor, registration, authorization));
+      const started = await runner.run("docker", ciRunnerQemuSupervisorArgs(record, executor, registration, authorization, undefined, projectCache));
       if (started.exitCode !== 0) throw new UserError(`failed to start QEMU CI runner '${projectName}/${name}': ${started.stderr.trim()}`);
       await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, { url: webhookUrl, authorizationHeader: authorization });
       record = { ...record, provider: registration.provider };
@@ -218,9 +219,9 @@ function ciRunnerQemuWebhookUrl(executor: QemuCiRunnerExecutor): string { return
 export function ciRunnerContainerArgs(record: Pick<CiRunnerRecord, "projectName" | "name">, executor: SysboxCiRunnerExecutor, registration?: { instanceUrl: string; token: string }, registryMirror = false): string[] {
   return ["run", "--detach", "--name", executor.containerName, "--restart", "unless-stopped", "--network", CONTROL_NETWORK, "--runtime", executor.runtime, "--cpus", executor.resources.cpus, "--memory", executor.resources.memory, "--pids-limit", executor.resources.pidsLimit, "--mount", `type=volume,source=${executor.volumeName},target=/data`, ...(registryMirror ? ["--mount", `type=volume,source=${executor.volumeName},target=/etc/docker/daemon.json,volume-subpath=docker-daemon.json,readonly`, "--env", `DIM_CI_REGISTRY_CACHE_UPSTREAM=${REGISTRY_CACHE_ENDPOINT}`] : []), "--label", "dim.managed=true", "--label", "dim.resource=ci-runner", "--label", `dim.project=${record.projectName}`, "--label", `dim.ci-runner=${record.name}`, "--env", `GITEA_RUNNER_NAME=${executor.containerName}`, "--env", `GITEA_RUNNER_LABELS=${CI_RUNNER_LABELS}`, ...(registration ? ["--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`, "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`] : []), executor.image];
 }
-export function ciRunnerQemuSupervisorArgs(record: Pick<CiRunnerRecord, "projectName" | "name">, executor: QemuCiRunnerExecutor, registration: { instanceUrl: string; token: string }, authorization: string, kvmGroupId: () => number = () => statSync("/dev/kvm").gid): string[] {
+export function ciRunnerQemuSupervisorArgs(record: Pick<CiRunnerRecord, "projectName" | "name">, executor: QemuCiRunnerExecutor, registration: { instanceUrl: string; token: string }, authorization: string, kvmGroupId: (() => number) | undefined = undefined, projectCache: { path: string; key: string } = { path: "/dev/null", key: "none" }): string[] {
   const guestMemoryMiB = qemuMemoryMiB(executor.resources.memory);
-  return ["run", "--detach", "--name", executor.supervisorName, "--restart", "unless-stopped", "--network", CONTROL_NETWORK, "--runtime", "runc", "--cpus", executor.resources.cpus, "--memory", `${guestMemoryMiB + 2048}m`, "--pids-limit", "1024", "--device", "/dev/kvm", "--group-add", String(kvmGroupId()), "--mount", `type=volume,source=${executor.volumeName},target=/var/lib/dim-qemu-ci`, "--mount", `type=volume,source=${ciRunnerQemuDispatchVolumeName(record.projectName)},target=/var/lib/dim-qemu-ci-dispatch`, "--mount", `type=volume,source=${ciRunnerQemuCacheVolumeName(record.projectName)},target=/var/lib/dim-qemu-ci-cache`, "--label", "dim.managed=true", "--label", "dim.resource=ci-qemu-supervisor", "--label", `dim.project=${record.projectName}`, "--label", `dim.ci-runner=${record.name}`, "--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`, "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`, "--env", `GITEA_RUNNER_NAME=${ciRunnerQemuRunnerName(record.projectName, record.name)}`, "--env", `DIM_CI_REGISTRY_CACHE_UPSTREAM=${REGISTRY_CACHE_ENDPOINT}`, "--env", `DIM_QEMU_CI_CAPACITY=${record.name}`, "--env", `DIM_QEMU_CI_CPUS=${executor.resources.cpus}`, "--env", `DIM_QEMU_CI_MEMORY_MB=${guestMemoryMiB}`, "--env", `DIM_QEMU_WEBHOOK_AUTHORIZATION=${authorization}`, executor.image];
+  return ["run", "--detach", "--name", executor.supervisorName, "--restart", "unless-stopped", "--network", CONTROL_NETWORK, "--runtime", "runc", "--cpus", executor.resources.cpus, "--memory", `${guestMemoryMiB + 2048}m`, "--pids-limit", "1024", "--device", "/dev/kvm", "--group-add", String((kvmGroupId ?? (() => statSync("/dev/kvm").gid))()), "--mount", `type=volume,source=${executor.volumeName},target=/var/lib/dim-qemu-ci`, "--mount", `type=volume,source=${ciRunnerQemuDispatchVolumeName(record.projectName)},target=/var/lib/dim-qemu-ci-dispatch`, "--mount", `type=volume,source=${ciRunnerQemuCacheVolumeName(record.projectName)},target=/var/lib/dim-qemu-ci-cache`, "--mount", `type=bind,source=${projectCache.path},target=/var/lib/dim-qemu-ci-project/cache.bash,readonly`, "--label", "dim.managed=true", "--label", "dim.resource=ci-qemu-supervisor", "--label", `dim.project=${record.projectName}`, "--label", `dim.ci-runner=${record.name}`, "--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`, "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`, "--env", `GITEA_RUNNER_NAME=${ciRunnerQemuRunnerName(record.projectName, record.name)}`, "--env", `DIM_CI_REGISTRY_CACHE_UPSTREAM=${REGISTRY_CACHE_ENDPOINT}`, "--env", `DIM_QEMU_CI_PROJECT_CACHE_KEY=${projectCache.key}`, "--env", `DIM_QEMU_CI_CAPACITY=${record.name}`, "--env", `DIM_QEMU_CI_CPUS=${executor.resources.cpus}`, "--env", `DIM_QEMU_CI_MEMORY_MB=${guestMemoryMiB}`, "--env", `DIM_QEMU_WEBHOOK_AUTHORIZATION=${authorization}`, executor.image];
 }
 
 export function qemuMemoryMiB(memory: string): number {
@@ -233,6 +234,30 @@ export function qemuMemoryMiB(memory: string): number {
 }
 
 async function buildQemuSupervisorImage(runner: StreamingCommandRunner, stateRoot: string): Promise<void> { const context = path.join(stateRoot, "assets", "qemu-ci-supervisor"); await mkdir(context, { recursive: true, mode: 0o700 }); await writeFile(path.join(context, "Dockerfile"), QEMU_CI_SUPERVISOR_DOCKERFILE, { mode: 0o600 }); await writeFile(path.join(context, "supervise.bash"), QEMU_CI_SUPERVISOR_SCRIPT, { mode: 0o600 }); await writeFile(path.join(context, "webhook.py"), QEMU_CI_WEBHOOK_SCRIPT, { mode: 0o600 }); await writeFile(path.join(context, "runner-base.pkr.hcl"), QEMU_CI_PACKER_TEMPLATE, { mode: 0o600 }); await writeFile(path.join(context, "provision-runner-base.bash"), QEMU_CI_PACKER_PROVISION_SCRIPT, { mode: 0o600 }); const result = await runner.run("docker", ["build", "--tag", QEMU_CI_SUPERVISOR_IMAGE, context]); if (result.exitCode !== 0) throw new UserError(`failed to build QEMU runner supervisor: ${result.stderr.trim()}`); }
+async function prepareQemuProjectCacheHook(runner: StreamingCommandRunner, options: LifecycleOptions, project: Awaited<ReturnType<typeof showProject>>): Promise<{ path: string; key: string }> {
+  const configured = await readProjectRootFile(runner, options, project.name, ".dim/ci/qemu-cache.bash");
+  if (configured !== undefined) {
+    const root = project.repositories.find((repository) => repository.alias === project.rootRepositoryAlias);
+    const rootRef = project.rootRef ?? "main";
+    const protectedRef = rootRef.replace(/^refs\/heads\//, "");
+    if (!root?.protectedPatterns.some((pattern) => protectedRefMatches(pattern, protectedRef))) {
+      throw new UserError(`Project QEMU cache hook requires protected root ref '${rootRef}'`);
+    }
+  }
+  const script = configured
+    ?? "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p \"${1:?cache directory is required}\"\n";
+  const directory = path.join(options.stateRoot, "assets", "qemu-ci-projects", project.name);
+  const scriptPath = path.join(directory, "cache.bash");
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await writeFile(scriptPath, script, { mode: 0o600 });
+  return { path: scriptPath, key: createHash("sha256").update(script).digest("hex").slice(0, 16) };
+}
+function protectedRefMatches(pattern: string, ref: string): boolean {
+  const expression = pattern
+    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*/g, ".*");
+  return new RegExp(`^${expression}$`).test(ref);
+}
 async function buildSysboxRunnerImage(runner: StreamingCommandRunner, stateRoot: string): Promise<void> { const context = path.join(stateRoot, "assets", "sysbox-ci-runner"); await mkdir(context, { recursive: true, mode: 0o700 }); await writeFile(path.join(context, "Dockerfile"), SYSBOX_CI_RUNNER_DOCKERFILE, { mode: 0o600 }); await writeFile(path.join(context, "health.bash"), SYSBOX_CI_RUNNER_HEALTH_SCRIPT, { mode: 0o700 }); const result = await runner.run("docker", ["build", "--tag", SYSBOX_CI_RUNNER_IMAGE, context]); if (result.exitCode !== 0) throw new UserError(`failed to build Sysbox CI runner image: ${result.stderr.trim()}`); }
 async function removeContainer(runner: StreamingCommandRunner, name: string): Promise<void> { const result = await runner.run("docker", ["container", "rm", "--force", name]); if (result.exitCode !== 0 && !result.stderr.includes("No such container")) throw new UserError(`failed to replace CI runner container '${name}': ${result.stderr.trim()}`); }
 async function ensureVolume(runner: StreamingCommandRunner, name: string): Promise<void> { if ((await runner.run("docker", ["volume", "inspect", name])).exitCode === 0) return; const result = await runner.run("docker", ["volume", "create", "--label", "dim.managed=true", "--label", "dim.resource=ci-runner-data", name]); if (result.exitCode !== 0) throw new UserError(`failed to create CI runner data volume: ${result.stderr.trim()}`); }

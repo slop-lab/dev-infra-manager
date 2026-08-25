@@ -1,4 +1,4 @@
-export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.7";
+export const QEMU_CI_SUPERVISOR_IMAGE = "dim-qemu-ci-supervisor:0.8";
 
 export const QEMU_CI_SUPERVISOR_DOCKERFILE = `FROM ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 RUN apt-get update \\
@@ -28,6 +28,7 @@ export const QEMU_CI_PACKER_TEMPLATE = `packer {
 variable "output_directory" { type = string }
 variable "ssh_private_key_file" { type = string }
 variable "ssh_public_key_file" { type = string }
+variable "project_cache_script_file" { type = string }
 
 source "qemu" "runner_base" {
   accelerator          = "kvm"
@@ -70,6 +71,17 @@ build {
     execute_command = "chmod +x {{ .Path }}; sudo {{ .Vars }} {{ .Path }}"
     script          = "/usr/local/share/dim-qemu-ci/provision-runner-base.bash"
   }
+  provisioner "file" {
+    source      = var.project_cache_script_file
+    destination = "/tmp/dim-project-qemu-cache.bash"
+  }
+  provisioner "shell" {
+    inline = [
+      "chmod 0700 /tmp/dim-project-qemu-cache.bash",
+      "sudo /tmp/dim-project-qemu-cache.bash /var/lib/dim-kvm-cache",
+      "sudo rm /tmp/dim-project-qemu-cache.bash"
+    ]
+  }
 }
 `;
 
@@ -78,9 +90,6 @@ set -euo pipefail
 
 runner_version=3.2.0
 runner_checksum=335d0f12e4fdf2cdc2310e9ce8ad33303d0f6889fe2efa2e1999d2f5614d440f
-kvm_image_cache=/var/lib/dim-kvm-cache
-ubuntu_cloud_image=noble-server-cloudimg-amd64.img
-ubuntu_cloud_image_checksum=6e40c07ae715f744f84af0bec76415cc1987dd115b4b8de437818561f01a3733
 apt-get update
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\
   cloud-image-utils curl git jq just openssh-client qemu-system-x86 qemu-utils socat xz-utils
@@ -91,12 +100,6 @@ echo "$runner_checksum  /usr/local/bin/gitea-runner.xz" | sha256sum --check
 xz -d /usr/local/bin/gitea-runner.xz
 chmod 0755 /usr/local/bin/gitea-runner
 install -d -o dim -g dim /var/lib/gitea-runner
-install -d -m 0755 "$kvm_image_cache"
-curl -fsSLo "$kvm_image_cache/$ubuntu_cloud_image.tmp" \
-  "https://cloud-images.ubuntu.com/noble/current/$ubuntu_cloud_image"
-echo "$ubuntu_cloud_image_checksum  $kvm_image_cache/$ubuntu_cloud_image.tmp" | sha256sum --check
-mv "$kvm_image_cache/$ubuntu_cloud_image.tmp" "$kvm_image_cache/$ubuntu_cloud_image"
-chmod 0444 "$kvm_image_cache/$ubuntu_cloud_image"
 cloud-init clean --logs --seed
 `;
 
@@ -271,7 +274,10 @@ set -euo pipefail
 data_root=/var/lib/dim-qemu-ci
 cache_root=/var/lib/dim-qemu-ci-cache
 run_root="$data_root/runs"
-cache_key=ubuntu-noble-6e40c07a-amd64-packer-1.16.0-qemu-1.1.6-gitea-runner-3.2.0-v3
+project_cache_key="\${DIM_QEMU_CI_PROJECT_CACHE_KEY:?DIM_QEMU_CI_PROJECT_CACHE_KEY is required}"
+project_cache_script=/var/lib/dim-qemu-ci-project/cache.bash
+test -r "$project_cache_script"
+cache_key=ubuntu-noble-6e40c07a-amd64-packer-1.16.0-qemu-1.1.6-gitea-runner-3.2.0-v4-$project_cache_key
 runner_image="$cache_root/images/$cache_key/runner-base.qcow2"
 mkdir -p "$cache_root" "$run_root"
 
@@ -291,6 +297,7 @@ if [[ ! -f "$runner_image" ]]; then
       -var "output_directory=$build_dir/output" \
       -var "ssh_private_key_file=$build_dir/id" \
       -var "ssh_public_key_file=$build_dir/id.pub" \
+      -var "project_cache_script_file=$project_cache_script" \
       /usr/local/share/dim-qemu-ci/runner-base.pkr.hcl
     test -s "$build_dir/output/runner-base.qcow2"
     mv "$build_dir/output/runner-base.qcow2" "$runner_image"

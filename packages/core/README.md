@@ -93,6 +93,13 @@ fails if no `HEAD` exists.
 The default state root is `~/.local/state/dim`; the default managed Gitea port
 is `3300`. DIM does not migrate incompatible pre-stable state.
 
+For QEMU CI capacity, a Project may provide `.dim/ci/qemu-cache.bash` on its
+configured protected root ref. DIM executes the reviewed hook as root inside
+the Packer guest, passing `/var/lib/dim-kvm-cache` as its only argument, and
+uses its content digest in the Project-scoped runner-base cache key. The hook
+does not run on the host and receives no host runtime socket or coordinator
+credential. Reconcile the QEMU capacity after changing it.
+
 ## API scope
 
 The package exports its core modules from the root entry point, including
