@@ -56,7 +56,10 @@ export function workspaceRuntimePlan(
         ],
         runtimeDataPath: "/var/lib/docker",
         engine: "docker",
-        env: { DIM_DOCKERD_FLAGS: nestedDockerFlags }
+        env: {
+          DIM_DOCKERD_FLAGS: nestedDockerFlags,
+          DOCKER_IPTABLES_LEGACY: "1"
+        }
       };
     case "rootless-podman":
       return {
