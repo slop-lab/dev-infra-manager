@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   full-integration:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@b495ae3826cd5fbc094e7067199b59aeaa20c74a
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@4d7e08bd8d72ad23ae629efd65987d3f016fa01a
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
@@ -25,7 +25,7 @@ jobs:
       backend: runc
 
   qemu-runc:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@b495ae3826cd5fbc094e7067199b59aeaa20c74a
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@4d7e08bd8d72ad23ae629efd65987d3f016fa01a
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
@@ -36,7 +36,7 @@ jobs:
       backend: runc
 
   qemu-sysbox:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@b495ae3826cd5fbc094e7067199b59aeaa20c74a
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@4d7e08bd8d72ad23ae629efd65987d3f016fa01a
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
@@ -47,7 +47,7 @@ jobs:
       backend: sysbox
 
   qemu-gvisor:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@b495ae3826cd5fbc094e7067199b59aeaa20c74a
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@4d7e08bd8d72ad23ae629efd65987d3f016fa01a
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
@@ -58,7 +58,7 @@ jobs:
       backend: gvisor
 
   qemu-rootless-podman:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@b495ae3826cd5fbc094e7067199b59aeaa20c74a
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@4d7e08bd8d72ad23ae629efd65987d3f016fa01a
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
