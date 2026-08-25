@@ -20,6 +20,7 @@ describe("plugin contract", () => {
       apiVersion: DIM_PLUGIN_API_VERSION,
       registerControllerRoute: expect.any(Function),
       registerHostInputProvider: expect.any(Function),
+      registerWorkspaceCapability: expect.any(Function),
       registerExtension: expect.any(Function),
       extension: expect.any(Function)
     }));
@@ -157,6 +158,19 @@ describe("plugin contract", () => {
         }
       }
     ])).rejects.toThrow(/already registered/);
+  });
+
+  it("registers workspace capability providers by exact name", async () => {
+    const provider = { provision: vi.fn(async () => ({ capabilities: ["SYS_ADMIN"] })) };
+    const registered = await registerPlugin({
+      name: "capability-plugin",
+      apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) { host.registerWorkspaceCapability("writable-cgroup", provider); }
+    });
+    expect(registered.workspaceCapabilityProviders.get("writable-cgroup")).toEqual({
+      plugin: "capability-plugin", provider
+    });
+    await registered.dispose();
   });
 
   it("shares named extensions between plugins and rejects duplicates", async () => {

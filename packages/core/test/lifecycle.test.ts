@@ -10,6 +10,7 @@ import {
   alignWorkspaceRoot,
   detectWorkspaceKvm,
   projectRuntimeManifest,
+  resolveWorkspaceCapabilities,
   resolveRepositorySnapshot,
   resolveWorkspaceKvm,
   restartWorkspace,
@@ -35,6 +36,22 @@ describe("project and workspace lifecycle", () => {
 
   afterEach(async () => {
     await rm(root, { recursive: true, force: true });
+  });
+
+  it("fails closed for required plugin capabilities and reports missing recommendations", async () => {
+    const project = {
+      schemaVersion: 3, id: "project-id", name: "project", gitNamespace: "dim-project",
+      phase: "ready", rootRepositoryAlias: "root", rootRef: "refs/heads/main",
+      repositories: [], createdAt: "now", updatedAt: "now"
+    } satisfies ProjectRecord;
+    await expect(resolveWorkspaceCapabilities(
+      ["missing"], [], project, "work-1", "runc", new Map()
+    )).rejects.toThrow(/required workspace capability 'missing'/);
+    await expect(resolveWorkspaceCapabilities(
+      [], ["missing"], project, "work-1", "runc", new Map()
+    )).resolves.toEqual([{
+      name: "missing", requirement: "recommended", status: "unavailable", detail: "no installed provider"
+    }]);
   });
 
   it("claims project and workspace names atomically", async () => {
@@ -431,6 +448,16 @@ describe("project and workspace lifecycle", () => {
       projectPath: "/workspace/project",
       phase: "creating",
       profiles: [],
+      capabilities: [{
+        name: "writable-cgroup",
+        requirement: "required",
+        status: "provided",
+        plugin: "capability-plugin",
+        capabilities: ["SYS_ADMIN"],
+        securityOptions: ["seccomp=unconfined"],
+        devices: ["/dev/fuse"],
+        environment: { DIM_WRITABLE_CGROUP: "1" }
+      }],
       composeProjectName: "dim-work-1",
       containerName: "dim-ws-work-1",
       networkName: "dim-control",
@@ -476,6 +503,10 @@ describe("project and workspace lifecycle", () => {
       "--env", "DIM_AGENT_CONTROLLER_TOKEN=work-1.agent.agent-grant",
       "--env", "DIM_REGISTRY_CACHE_ENDPOINT=dim-registry-cache:5000",
       "--env", "GIT_CONFIG_VALUE_0=Agent",
+      "--cap-add", "SYS_ADMIN",
+      "--security-opt", "seccomp=unconfined",
+      "--device", "/dev/fuse",
+      "--env", "DIM_WRITABLE_CGROUP=1",
       "--device", "/dev/kvm",
       "--group-add", "992",
       "--privileged"
