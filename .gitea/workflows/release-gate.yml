@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   qemu-runc:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@a4c18f3b3048ea48204050322977b757f39a2fc9
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@e7c56a17033a677627d94107e2abf79c9a43ba89
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
