@@ -140,7 +140,8 @@ jobs:
         run: |
           dim-ci-runner-health --recover
           just check-source
-          just verify full-development "${{ inputs.backend }}"
+          bash verification/scripts/with-ci-registry-cache.bash \
+            just verify full-development "${{ inputs.backend }}"
       - name: Verify runner health after container integration
         if: ${{ always() && (inputs.gate == 'container' || inputs.gate == 'integration') }}
         run: dim-ci-runner-health --recover
@@ -149,4 +150,5 @@ jobs:
         working-directory: snapshot
         run: |
           test -r /dev/kvm -a -w /dev/kvm
-          JUST_UNSTABLE=1 just verify environments-kvm "${{ inputs.backend }}"
+          bash verification/scripts/with-ci-registry-cache.bash \
+            env JUST_UNSTABLE=1 just verify environments-kvm "${{ inputs.backend }}"

@@ -45,6 +45,7 @@ describe("DIM development forge policy", () => {
   it("runs the same full-development contract for every QEMU backend", async () => {
     const kvm = await readFile(resolve(workspaceRoot, "verification/scripts/kvm-host-install-smoke.bash"), "utf8");
     const recipes = await readFile(resolve(workspaceRoot, "verification/verify.just"), "utf8");
+    const workflow = await readFile(resolve(workspaceRoot, "verification/.gitea/workflows/repository-set.yml"), "utf8");
     expect(kvm).not.toContain('if [[ "$backend" == runc ]]');
     expect(kvm).toContain("just verify full-development '$backend'");
     expect(kvm.indexOf("pnpm --filter @slop-lab/dim-controller-proxy run build")).toBeLessThan(
@@ -52,6 +53,7 @@ describe("DIM development forge policy", () => {
     );
     expect(recipes).toContain('DIM_EXAMPLE_WORKSPACE_BACKEND="{{backend}}"');
     expect(recipes).toContain('DIM_SELF_WORKSPACE_BACKEND="{{backend}}"');
+    expect(workflow.match(/with-ci-registry-cache\.bash/g)).toHaveLength(2);
   });
 
   it("materializes the complete rootless-Podman workspace image", async () => {
