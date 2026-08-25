@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- Updated the managed Sysbox CI runner to checksum-pinned Node.js 24 so
-  host-mode actions and DIM's supported package toolchain use one runtime.
+- Updated the managed Sysbox CI runner to checksum-pinned Node.js 24 and a
+  pinned `just` so host-mode actions and DIM's integration recipes use the
+  supported toolchain directly.
 
 - Added protected-root-owned QEMU cache hooks, digest-keyed shared runner
   bases, and coverage for disposable-job isolation from persistent cache

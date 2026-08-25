@@ -201,6 +201,8 @@ describe("CI runner resources", () => {
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("node-v24.19.0-linux-x64-musl.tar.xz");
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("ebcb19941bf6a34ada2141727ffda66fb2a4bf315f5c02c8f1fc9e48a2045e06");
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("node --version");
+    expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("just=1.40.0-r0");
+    expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("just --version");
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("dim-ci-runner-health");
     expect(spawnSync("bash", ["-n"], { input: SYSBOX_CI_RUNNER_HEALTH_SCRIPT }).status).toBe(0);
     expect(SYSBOX_CI_RUNNER_HEALTH_SCRIPT).toContain("mount -t tmpfs");
