@@ -1,0 +1,25 @@
+name: QEMU release gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      root-ref:
+        description: Exact root branch, tag, or commit to combine with this development ref
+        type: string
+        required: true
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  qemu-runc:
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@a4c18f3b3048ea48204050322977b757f39a2fc9
+    with:
+      candidate-repository: development
+      candidate-ref: ${{ gitea.sha }}
+      development-ref: ${{ gitea.sha }}
+      root-ref: ${{ inputs.root-ref }}
+      gate: kvm
+      runner-label: dim-qemu
+      backend: runc

@@ -30,6 +30,12 @@ The top-level justfile is an everyday contributor index, not a mirror of every
 CI job. Reusable verification commands remain under `just verify`; hosted lane
 composition lives in workflows and scripts.
 
+Before installing or restarting a host with a reviewed repository set,
+dispatch `QEMU release gate` at the exact development ref. Its `root-ref` input
+selects the root candidate to combine with it. The `dim-qemu` runner boots a
+clean runc guest and exercises the stateful development flow plus the canonical
+self-Project; a green source-only PR check is not a substitute for this gate.
+
 `local-ci-matrix.bash` requires mise, Docker with Compose v2, and the same host
 capabilities as the container integration tests. It installs the locked
 dependencies under Node.js 24 and 26, then runs the same source and container
