@@ -50,4 +50,13 @@ describe("DIM development forge policy", () => {
     expect(recipes).toContain('DIM_EXAMPLE_WORKSPACE_BACKEND="{{backend}}"');
     expect(recipes).toContain('DIM_SELF_WORKSPACE_BACKEND="{{backend}}"');
   });
+
+  it("materializes the complete rootless-Podman workspace image", async () => {
+    const ignore = await readFile(resolve(workspaceRoot, ".dockerignore"), "utf8");
+    const dockerfile = await readFile(resolve(workspaceRoot, "core/images/project-workspace-podman/Dockerfile"), "utf8");
+    expect(ignore).toContain("!core/images/project-workspace-podman/**");
+    expect(dockerfile).toContain("node-v24.19.0-linux-x64.tar.xz");
+    expect(dockerfile).toContain("/usr/local/bin/dim-controller-proxy");
+    expect(dockerfile).toContain("ln -s /usr/bin/podman /usr/local/bin/docker");
+  });
 });

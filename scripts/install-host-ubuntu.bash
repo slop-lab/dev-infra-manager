@@ -101,7 +101,8 @@ install_selected_backend() {
       sudo apt-get install -y fuse3 uidmap
       sudo docker build \
         -t dev-infra-project-workspace-podman:latest \
-        "$script_dir/../../core/images/project-workspace-podman"
+        -f "$script_dir/../../core/images/project-workspace-podman/Dockerfile" \
+        "$script_dir/../.."
       ;;
     runc) ;;
   esac
