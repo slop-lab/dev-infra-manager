@@ -146,18 +146,18 @@ async function resizeTerminalChild(scriptPid: number | undefined, size: Terminal
     try {
       const directory = `/proc/${scriptPid}/fd`;
       const descriptors = await readdir(directory);
-      let terminalDescriptor: string | undefined;
+      let terminalPath: string | undefined;
       for (const descriptor of descriptors) {
         const target = await readlink(`${directory}/${descriptor}`);
         if (/^\/dev\/pts\/\d+$/.test(target)) {
-          terminalDescriptor = `${directory}/${descriptor}`;
+          terminalPath = target;
           break;
         }
       }
-      if (terminalDescriptor) {
+      if (terminalPath) {
         const exitCode = await new Promise<number | null>((resolve) => {
           const resize = spawn("stty", [
-            "--file", terminalDescriptor,
+            "--file", terminalPath,
             "cols", String(size.columns), "rows", String(size.rows)
           ], { stdio: "ignore" });
           resize.on("error", () => resolve(127));
