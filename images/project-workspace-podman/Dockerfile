@@ -8,8 +8,7 @@ RUN for attempt in 1 2 3; do \
     curl \
     git \
     jq \
-    nodejs \
-    npm \
+    just \
     openssh-clients \
     podman-compose \
     shadow-utils \
@@ -20,6 +19,12 @@ RUN for attempt in 1 2 3; do \
     sleep 5; \
   done \
   && dnf clean all
+
+RUN curl -fsSLo /tmp/node.tar.xz https://nodejs.org/dist/v24.19.0/node-v24.19.0-linux-x64.tar.xz \
+  && echo "14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647  /tmp/node.tar.xz" | sha256sum --check \
+  && tar -xJf /tmp/node.tar.xz --strip-components=1 -C /usr/local \
+  && rm /tmp/node.tar.xz \
+  && ln -s /usr/bin/podman /usr/local/bin/docker
 
 # An enclosing user namespace can make files installed by the sudo RPM appear
 # to inherit its mapped UID. Restore the package's complete ownership and mode
@@ -36,10 +41,15 @@ RUN useradd -m -s /bin/bash dim \
 
 RUN npm install --global pnpm@10 @openai/codex
 
-COPY entrypoint.bash /usr/local/bin/dim-project-podman-entrypoint
-COPY git-askpass.sh /usr/local/bin/dim-git-askpass
-COPY route-relay.mjs /usr/local/lib/dim/route-relay.mjs
-RUN chmod +x /usr/local/bin/dim-project-podman-entrypoint /usr/local/bin/dim-git-askpass
+COPY core/images/project-workspace-podman/entrypoint.bash /usr/local/bin/dim-project-podman-entrypoint
+COPY core/images/project-workspace-podman/git-askpass.sh /usr/local/bin/dim-git-askpass
+COPY core/images/project-workspace-podman/route-relay.mjs /usr/local/lib/dim/route-relay.mjs
+COPY core/packages/controller-proxy/dist /usr/local/lib/dim/controller-proxy
+RUN chmod +x /usr/local/bin/dim-project-podman-entrypoint /usr/local/bin/dim-git-askpass \
+  /usr/local/lib/dim/controller-proxy/cli.js \
+  && ln -s /usr/local/lib/dim/controller-proxy/cli.js /usr/local/bin/dim-controller-proxy \
+  && node --version \
+  && just --version
 
 ENV HOME="/home/dim" \
     CODEX_HOME="/home/dim/.codex" \
