@@ -151,6 +151,18 @@ if [[ -n "$registry_mirror" ]]; then
     "sudo systemd-run --quiet --unit=dim-registry-cache-relay --property=Restart=always socat TCP-LISTEN:5000,fork,reuseaddr TCP:${registry_mirror#http://}"
 fi
 run_step "clone repository" clone_repository
+run_step "install full-development verification tools" \
+  ssh "${ssh_args[@]}" dim@127.0.0.1 '
+    set -e
+    curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource-setup.bash
+    sudo bash /tmp/nodesource-setup.bash >/dev/null
+    rm -f /tmp/nodesource-setup.bash
+    sudo apt-get install -y nodejs >/dev/null
+    sudo npm install --global pnpm@10.13.1 >/dev/null
+    cd dim/workbench
+    pnpm install --frozen-lockfile >/dev/null
+    pnpm --filter @slop-lab/dim-controller-proxy run build >/dev/null
+  '
 run_step "install $backend backend" install_backend
 run_step "build local backend smoke image" ssh "${ssh_args[@]}" dim@127.0.0.1 '
   set -e
@@ -175,17 +187,6 @@ rootless_podman_caps=(SYS_ADMIN SETUID SETGID SYS_CHROOT SYS_PTRACE AUDIT_WRITE 
 rootless_podman_cap_flags=""
 for cap in "${rootless_podman_caps[@]}"; do rootless_podman_cap_flags+=" --cap-add $cap"; done
 run_step "run $backend workload" ssh "${ssh_args[@]}" dim@127.0.0.1 "set -e; sudo docker info >/dev/null; sudo docker compose version >/dev/null; case '$backend' in all|sysbox) systemctl is-active sysbox; sudo docker run --rm --runtime=sysbox-runc dim-backend-smoke:local true;; esac; case '$backend' in all|gvisor) runsc --version; sudo docker run --rm --runtime=runsc dim-backend-smoke:local true;; esac; case '$backend' in rootless-podman) test -c /dev/fuse; command -v newuidmap; command -v newgidmap; sudo docker image save dim-backend-smoke:local -o /tmp/dim-backend-smoke.tar; sudo chmod 0644 /tmp/dim-backend-smoke.tar; cd dim/workbench; sudo docker build -t dev-infra-project-workspace-podman:latest -f core/images/project-workspace-podman/Dockerfile .; sudo docker run --rm --runtime=runc$rootless_podman_cap_flags --device /dev/fuse --security-opt seccomp=unconfined --security-opt apparmor=unconfined --security-opt systempaths=unconfined --mount type=bind,src=/tmp/dim-backend-smoke.tar,dst=/tmp/dim-backend-smoke.tar,readonly dev-infra-project-workspace-podman:latest sh -c 'podman load -i /tmp/dim-backend-smoke.tar >/dev/null && podman run --rm dim-backend-smoke:local true';; esac; case '$backend' in all|runc) sudo docker run --rm --runtime=runc dim-backend-smoke:local true;; esac"
-run_step "install full-development verification tools" \
-  ssh "${ssh_args[@]}" dim@127.0.0.1 '
-    set -e
-    curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/nodesource-setup.bash
-    sudo bash /tmp/nodesource-setup.bash >/dev/null
-    rm -f /tmp/nodesource-setup.bash
-    sudo apt-get install -y nodejs >/dev/null
-    sudo npm install --global pnpm@10.13.1 >/dev/null
-    cd dim/workbench
-    pnpm install --frozen-lockfile >/dev/null
-  '
 run_step "verify common full-development contract" \
   ssh "${ssh_args[@]}" dim@127.0.0.1 \
     "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' JUST_UNSTABLE=1 just verify full-development '$backend'"
