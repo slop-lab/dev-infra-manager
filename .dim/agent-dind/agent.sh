@@ -49,6 +49,14 @@ case "${1:?private agent action is required}" in
     done <"$host_mappings"
     set -- "$@" "$agent_image" sleep infinity
     docker "$@" >/dev/null
+    # A rootful daemon nested inside a user-namespaced workspace can expose
+    # extracted setuid files with the workspace root's outer UID. Normalize
+    # sudo's trusted files from the daemon's own root boundary before use.
+    docker exec --user 0:0 "$agent_name" sh -eu -c '
+      chown 0:0 /etc/sudo.conf /etc/sudoers /etc/sudoers.d /etc/sudoers.d/dim-agent /usr/bin/sudo
+      chmod 0440 /etc/sudoers.d/dim-agent
+      chmod 4755 /usr/bin/sudo
+    '
     docker exec \
       --workdir /workspace "$agent_name" \
       pnpm install --frozen-lockfile
