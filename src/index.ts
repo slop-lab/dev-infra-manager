@@ -189,6 +189,7 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
         method: "GET",
         path: "/urls",
         summary: "List external URLs for this workspace",
+        audiences: ["workspace", "agent"],
         discovery,
         initialize,
         handle: (context) => listUrls(context)
@@ -197,6 +198,7 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
         method: "POST",
         path: "/urls",
         summary: "Create an external URL using a host-configured ingress",
+        audiences: ["workspace", "agent"],
         discovery,
         handle: (context) => mutations.run(() => createUrl(context, ingresses))
       });
@@ -204,12 +206,14 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
         method: "DELETE",
         path: "/urls",
         summary: "Revoke every external URL for this workspace",
+        audiences: ["workspace", "agent"],
         handle: (context) => mutations.run(() => deleteWorkspaceUrls(context, ingresses))
       });
       host.registerControllerRoute({
         method: "DELETE",
         path: "/urls/:id",
         summary: "Revoke an external URL",
+        audiences: ["workspace", "agent"],
         handle: (context) => mutations.run(() => deleteUrl(context, ingresses))
       });
 
