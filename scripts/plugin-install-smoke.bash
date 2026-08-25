@@ -4,10 +4,18 @@ set -euo pipefail
 root="$(mktemp -d /tmp/dim-plugin-install.XXXXXX)"
 
 cleanup() {
+  status="$?"
+  if [[ "$status" -ne 0 ]]; then
+    runtime_root="${XDG_RUNTIME_DIR:-/tmp/dim-$(id -u)}/dim"
+    find "$runtime_root" -name controller.log -type f -exec sh -c '
+      for log do echo "controller log: $log" >&2; tail -n 120 "$log" >&2; done
+    ' sh {} + 2>/dev/null || true
+  fi
   if [[ -f "$root/state/controller/controller.pid" ]]; then
     kill "$(cat "$root/state/controller/controller.pid")" >/dev/null 2>&1 || true
   fi
   find "$root" -depth -delete 2>/dev/null || true
+  return "$status"
 }
 trap cleanup EXIT
 
