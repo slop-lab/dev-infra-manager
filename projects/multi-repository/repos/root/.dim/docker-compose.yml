@@ -64,4 +64,5 @@ volumes:
   agent-dind-shared:
 
 networks:
+  default:
   agent-dind:
