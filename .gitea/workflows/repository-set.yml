@@ -9,6 +9,14 @@ on:
       candidate-ref:
         type: string
         required: true
+      development-ref:
+        type: string
+        required: false
+        default: ''
+      root-ref:
+        type: string
+        required: false
+        default: ''
       gate:
         type: string
         required: false
@@ -37,13 +45,13 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: dim-dim/development
-          ref: ${{ gitea.event_name == 'workflow_call' && inputs.candidate-repository == 'development' && inputs.candidate-ref || 'main' }}
+          ref: ${{ inputs.development-ref || (gitea.event_name == 'workflow_call' && inputs.candidate-repository == 'development' && inputs.candidate-ref) || 'main' }}
           path: snapshot
       - name: Check out root
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: dim-dim/root
-          ref: ${{ gitea.event_name == 'workflow_call' && inputs.candidate-repository == 'root' && inputs.candidate-ref || 'main' }}
+          ref: ${{ inputs.root-ref || (gitea.event_name == 'workflow_call' && inputs.candidate-repository == 'root' && inputs.candidate-ref) || 'main' }}
           path: snapshot/project
       - name: Check out repositories
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
