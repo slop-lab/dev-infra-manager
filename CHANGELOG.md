@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Materialize reviewed workspace host aliases such as the resolved DIM Gitea
+  control-network address in `/etc/hosts`, avoiding runtime-specific embedded
+  DNS behavior while retaining the recorded endpoint boundary.
+
 - Completed the rootless-Podman workspace toolchain with supported Node.js,
   `just`, Docker-compatible Podman Compose, and the controller proxy used by
   reviewed Project setup scripts.

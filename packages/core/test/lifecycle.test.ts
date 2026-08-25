@@ -495,6 +495,7 @@ describe("project and workspace lifecycle", () => {
       "--env", "DIM_GIT_USERNAME=writer",
       "--env", "DIM_GIT_TOKEN=token",
       "--add-host", "host.docker.internal:host-gateway",
+      "--add-host", "dim-gitea:172.20.0.2",
       "--mount", `type=bind,source=${join(options.controllerSocketPath, "..")},target=/run/dim/controller`,
       "--env", "DIM_CONTROLLER_SOCKET=/run/dim/controller/controller.sock",
       "--env", "DIM_CONTROLLER_TOKEN=work-1.controller-grant",
