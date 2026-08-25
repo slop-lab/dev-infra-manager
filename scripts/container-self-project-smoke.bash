@@ -11,6 +11,7 @@ workspace_name="dim-self-smoke"
 state_root="/tmp/dim-self-smoke-state"
 source_root="/tmp/dim-self-smoke-source"
 agent_verification_log="$state_root/agent-verification.log"
+verification_stage="initialization"
 dim_bin="${DIM_BIN:-$PWD/core/packages/cli/dist/cli.js}"
 project_source="$(cd -- "$script_dir/../.." && pwd)"
 integrated_source="$project_source"
@@ -72,6 +73,9 @@ cleanup() {
   local status=$?
   trap - EXIT
   if cleanup_managed_resources; then
+    if [[ "$status" -ne 0 ]]; then
+      echo "self-Project verification failed during: $verification_stage" >&2
+    fi
     if [[ "$status" -ne 0 && -s "$agent_verification_log" ]]; then
       echo "agent verification failed; last 120 log lines:" >&2
       tail -n 120 "$agent_verification_log" >&2
@@ -182,7 +186,9 @@ verify_agent_dind() {
     '
 }
 
+verification_stage="initial agent-dind contract"
 verify_agent_dind
+verification_stage="workspace restart"
 if ! dim workspace restart "$workspace_name" >/dev/null; then
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
@@ -194,8 +200,10 @@ if ! dim workspace restart "$workspace_name" >/dev/null; then
 fi
 workspace_json="$(dim workspace show "$workspace_name" --json)"
 test "$(jq -r .phase <<<"$workspace_json")" = ready
+verification_stage="restarted agent-dind contract"
 verify_agent_dind
 
+verification_stage="workspace resource update"
 original_cpus="$(jq -r .cpuCount <<<"$workspace_json")"
 original_memory="$(jq -r .memory <<<"$workspace_json")"
 original_pids="$(jq -r .pidsLimit <<<"$workspace_json")"
@@ -217,6 +225,7 @@ test "$(docker inspect "$container_name" --format \
   "1250000000|2147483648|2147483648|1024"
 dim workspace resources "$workspace_name" \
   --cpus "$original_cpus" --memory "$original_memory" --pids "$original_pids" >/dev/null
+verification_stage="workspace reviewed-file contract"
 dim workspace exec "$workspace_name" -- \
   sh -c 'test -r .dim/setup.sh && test ! -x .dim/setup.sh && test -r .dim/entrypoint.sh && test ! -x .dim/entrypoint.sh && test -r .dim/docker-compose.yml && test "$DIM_GIT_BASE_URL" = "$(jq -r .gitBaseUrl "$DIM_PROJECT_MANIFEST")" && test -n "$(jq -r ".hostAliases[\"dim-gitea\"][0]" "$DIM_PROJECT_MANIFEST")"'
 test "$(dim workspace show "$workspace_name" --json | jq -r .rootRef)" = "refs/heads/$root_ref"
@@ -224,6 +233,7 @@ agent_git_identity="$(dim workspace run "$workspace_name" bash -- -lc \
   'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
 test "$agent_git_identity" = \
   "DIM Self Host <dim-self-host@dim.invalid>|DIM Self Host <dim-self-host@dim.invalid>"
+verification_stage="agent base toolchain and home persistence"
 dim workspace run "$workspace_name" bash -- -lc '
   grep -q "Ubuntu 24.04" /etc/os-release
   node --version | grep -Eq "^v24\."
@@ -233,12 +243,14 @@ dim workspace run "$workspace_name" bash -- -lc '
   printf "persistent\n" > "$HOME/dim-home-smoke"
 '
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/dim-home-smoke"')" = persistent
+verification_stage="agent home backup and restore"
 home_backup="$state_root/agent-home.tar.gz"
 dim workspace run "$workspace_name" backup >"$home_backup"
 gzip -t "$home_backup"
 dim workspace run "$workspace_name" bash -- -lc 'rm "$HOME/dim-home-smoke"'
 dim workspace run "$workspace_name" restore <"$home_backup"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/dim-home-smoke"')" = persistent
+verification_stage="agent repository materialization"
 dim workspace run "$workspace_name" bash -- -lc '
   test -n "$(getent hosts dim-gitea)"
   git ls-remote origin HEAD >/dev/null
@@ -258,6 +270,7 @@ agent_commit_identity="$(dim workspace run "$workspace_name" bash -- -lc '
   git log -1 --format="%an <%ae>|%cn <%ce>"
 ')"
 test "$agent_commit_identity" = "$agent_git_identity"
+verification_stage="protected and unprotected repository pushes"
 # Only root and development main are review-gated in the self Project.
 if dim workspace run "$workspace_name" bash -- -lc \
   'git push origin HEAD:refs/heads/main >/dev/null 2>&1'; then
@@ -275,6 +288,7 @@ dim workspace run "$workspace_name" bash -- -lc "
   git push origin HEAD:refs/heads/main >/dev/null
 "
 git ls-remote "$(dim repo url "$project_name" core)" "refs/heads/$core_proposal" | grep -q .
+verification_stage="agent-dind mount and privilege contract"
 agent_dind_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-$workspace_name" \
   --file .dim/docker-compose.yml ps --quiet agent-dind)"
@@ -297,11 +311,13 @@ dim workspace exec "$workspace_name" -- \
   --format '{{json .Mounts}}' | grep -q /var/run/docker.sock
 dim workspace exec "$workspace_name" -- docker inspect --format '{{.HostConfig.Privileged}}' \
   "$agent_dind_container" | grep -qx true
+verification_stage="agent sudo contract"
 dim workspace run "$workspace_name" bash -- -lc '
   test "$(id -u)" = 1000
   test "$(id -un)" = dim-agent
   sudo sh -c '\''test "$(id -u)" = 0'\''
 '
+verification_stage="agent rootless Docker workload"
 dim workspace run "$workspace_name" bash -- -lc '
   docker info --format "{{json .SecurityOptions}}" | grep -q rootless
   rm -rf /mnt/workspace-shared-dind/bind-smoke
@@ -313,20 +329,25 @@ dim workspace run "$workspace_name" bash -- -lc '
       "test \"\$(cat /shared/input)\" = from-agent; printf \"from-dind\\n\" > /shared/output"
   test "$(cat /mnt/workspace-shared-dind/bind-smoke/output)" = from-dind
 '
+verification_stage="agent typecheck"
 dim workspace run "$workspace_name" bash -- -lc 'just typecheck' >/dev/null
+verification_stage="agent Codex command"
 test "$(dim workspace run "$workspace_name" codex -- --version)" != ""
+verification_stage="agent task contract"
 if dim workspace run "$workspace_name" check >/dev/null 2>&1; then
   echo "removed check task unexpectedly succeeded" >&2
   exit 1
 fi
 dim workspace run "$workspace_name" bash -- -lc 'just check-source' >/dev/null
 if [[ "${DIM_SELF_VERIFY_AGENT:-0}" == 1 ]]; then
+  verification_stage="full agent verification"
   dim workspace run "$workspace_name" bash -- -lc 'just verify agent' \
     >"$agent_verification_log" 2>&1
 fi
 
 # Every reviewed managed development ref can be published back to its matching
 # canonical temporary branch without naming repositories one at a time.
+verification_stage="repository publication"
 dim repo publish "$project_name" >/dev/null
 for repository in root development core core-development plugin-dns-cloudflare plugin-dns-cloudflare-development plugin-external-urls plugin-external-urls-development verification examples specification; do
   managed_sha="$(git ls-remote "$(dim repo url "$project_name" "$repository")" refs/heads/main | cut -f1)"
