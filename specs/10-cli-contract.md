@@ -18,10 +18,12 @@
   fetch, publish, and `x git`), the Git credential helper, controller bootstrap,
   and pre-controller backend diagnosis. They obtain DIM-owned state and
   credentials through the admin API.
-- The managed controller uses separate Unix sockets. The host-admin socket is
-  mode `0600` and is never mounted into a workspace. The workspace socket
-  accepts workspace-scoped grants and is mounted only into the trusted
-  workspace root.
+- The managed controller uses separate Unix sockets in separate host runtime
+  directories. The host-admin socket is mode `0600` and is never mounted into
+  a workspace. The workspace socket accepts workspace-scoped grants and is
+  mounted only into the trusted workspace root. The agent socket accepts a
+  distinct agent grant and dispatches only routes explicitly registered for
+  the `agent` audience. A grant from one socket cannot authenticate to another.
 
 ## Streaming command sessions
 

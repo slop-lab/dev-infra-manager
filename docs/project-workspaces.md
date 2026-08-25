@@ -81,6 +81,8 @@ DIM_GIT_USERNAME
 DIM_GIT_TOKEN
 DIM_CONTROLLER_SOCKET
 DIM_CONTROLLER_TOKEN
+DIM_AGENT_CONTROLLER_SOCKET
+DIM_AGENT_CONTROLLER_TOKEN
 ```
 
 The read-only `DIM_PROJECT_MANIFEST` also publishes the nested engine's cgroup
@@ -129,9 +131,11 @@ grant are not inherited by Compose services.
 The workspace API also accepts an asynchronous self-restart request at
 `POST /api/workspace/restart`. The scoped grant determines the workspace; the
 request has no workspace-name field and cannot target another workspace.
-Agent containers should receive only a reviewed `dim-controller-proxy` socket,
-not this original socket or grant. The runnable single-repository Project
-example uses the standard agent proxy helper to expose only self-restart.
+Agent containers may receive the separate `DIM_AGENT_CONTROLLER_*` socket and
+grant for explicitly agent-audience plugin routes. They must not receive this
+stronger workspace socket or grant. The runnable single-repository Project
+uses the standard `dim-controller-proxy` only for the additional self-restart
+capability, which is intentionally absent from the direct agent controller.
 
 ### `.dim/docker-compose.yml`
 

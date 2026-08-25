@@ -30,10 +30,12 @@ Agent containers:
 - Must not mount the host runtime socket or Project runtime socket.
 - Must not mount secret-bearing runtime volumes.
 - May run nested containers through an agent-specific inner runtime.
-- May receive a reviewed, deny-by-default controller proxy. A self-restart
-  capability must derive its target from the trusted workspace grant and must
-  not expose that grant, the original workspace socket, another workspace
-  name, or any host-admin route to the agent.
+- May receive the agent controller socket and its distinct workspace-scoped
+  agent grant. That endpoint exposes only plugin routes explicitly marked for
+  the `agent` audience. Workspace lifecycle, command sessions, host inputs,
+  and administration are absent. A self-restart capability still requires a
+  reviewed, deny-by-default Project proxy which derives its target from the
+  trusted workspace grant and does not expose that grant or socket.
 - Must belong to a named workspace and be declared by reviewed Project code;
   DIM core does not define an agent resource.
 - Must remain inside the resource-limited outer workspace boundary. A Project

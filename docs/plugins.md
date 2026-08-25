@@ -79,6 +79,7 @@ const plugin: DimPlugin = {
       method: "GET",
       path: "/example",
       summary: "Example plugin route",
+      audiences: ["workspace"],
       async handle() {
         return { body: { ok: true } };
       }
@@ -88,6 +89,12 @@ const plugin: DimPlugin = {
 
 export default plugin;
 ```
+
+Every scoped controller route must declare one or both audiences. `workspace`
+is available only through the trusted workspace grant. `agent` is a separate
+security review decision and exposes the route through the agent socket with a
+distinct grant. Missing or unknown audiences reject plugin startup. Host-admin
+routes use `registerAdminRoute` and cannot be exposed by this field.
 
 Install and explicitly enable a plugin package with:
 

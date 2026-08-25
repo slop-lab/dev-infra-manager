@@ -1,8 +1,8 @@
 # External workspace URLs
 
-The external URL plugin extends two controller APIs. Host configuration uses
-the host-only admin socket; workspace URL operations use the authenticated
-workspace socket:
+The external URL plugin extends three controller endpoints. Host configuration
+uses the host-only admin socket; URL operations are available through the
+authenticated workspace and agent sockets:
 
 ```text
 POST   /v1/external-url/:action    # host administration
@@ -13,22 +13,27 @@ POST   /api/urls
 DELETE /api/urls/:id
 ```
 
-DIM automatically starts and health-checks both sockets. The admin socket is
-mode `0600` in the host state directory and is never mounted into a workspace.
-Every workspace root receives only the workspace socket and its scoped grant:
+DIM automatically starts and health-checks the admin, workspace, and agent
+sockets in separate host runtime directories. The admin socket is mode `0600`
+and is never mounted into a workspace. Every trusted workspace root receives
+the workspace socket plus a separately mounted agent socket and distinct
+grants. Agent containers should receive only:
 
 ```text
-DIM_CONTROLLER_SOCKET=/run/dim/controller/controller.sock
-DIM_CONTROLLER_TOKEN=<workspace-scoped grant>
+DIM_AGENT_CONTROLLER_SOCKET=/run/dim/agent-controller/controller.sock
+DIM_AGENT_CONTROLLER_TOKEN=<workspace-scoped agent grant>
 ```
 
-The socket is mounted only into the trusted project-root container. Compose
-services do not inherit either the socket or token unless reviewed `.dim`
-code explicitly passes them through.
+The DIM CLI automatically uses these agent variables when the stronger
+`DIM_CONTROLLER_*` pair is absent. Compose services inherit neither socket nor
+grant unless reviewed `.dim` code explicitly passes them through. External URL
+routes are agent-audience routes and remain scoped to the authenticated
+workspace.
 
-Do not pass the original socket and token into a development container.
-The standard workspace image includes `dim-controller-proxy`; reviewed root
-code can expose an ingress-restricted socket instead:
+Do not pass the stronger workspace socket and token into a development
+container. Passing the agent pair directly is the default. A Project that also
+wants to restrict allowed ingresses can use the standard
+`dim-controller-proxy`:
 
 ```bash
 dim-controller-proxy external-url \

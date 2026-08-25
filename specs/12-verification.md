@@ -307,7 +307,11 @@ Project-owned agent serving the application through its private rootless DinD
 sidecar boundary. It must also prove that the agent receives a filtered
 controller proxy with only bodyless self-restart permission, cannot reach host
 inputs, and can request an asynchronous restart of its own workspace. The
-smoke accepts `DIM_EXAMPLE_WORK_ROOT` so a remote or sibling DinD daemon can
+workspace/agent controller boundary must additionally prove that the agent
+grant cannot authenticate to the workspace socket, the workspace grant cannot
+authenticate to the agent socket, agent discovery omits restart and host
+inputs, and an explicitly agent-audience External URL route remains usable.
+The smoke accepts `DIM_EXAMPLE_WORK_ROOT` so a remote or sibling DinD daemon can
 resolve controller-socket bind sources through a shared absolute path.
 
 `just verify example BACKEND DIRTY full-development-flow` verifies the

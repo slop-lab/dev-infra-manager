@@ -28,8 +28,8 @@ Implemented:
   core-managed agent resource.
 - A unified managed runtime for the CLI, core, and plugins, with exact peer
   dependency validation and persisted plugin activation.
-- Host-shared external URL ingresses with workspace-scoped route requests
-  mediated through a private controller proxy socket.
+- Host-shared external URL ingresses with workspace-scoped route requests on a
+  dedicated agent controller socket and optional Project narrowing proxy.
 - Automatic host KVM forwarding for supported trusted workspace backends.
 - A thin installer facade (`@slop-lab/dim-installer`, also exposing `dim`) that
   installs the unified runtime via `install-cli`/`install-plugin` and

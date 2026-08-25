@@ -170,6 +170,8 @@ GIT_ASKPASS
 GIT_TERMINAL_PROMPT
 DIM_CONTROLLER_SOCKET
 DIM_CONTROLLER_TOKEN
+DIM_AGENT_CONTROLLER_SOCKET
+DIM_AGENT_CONTROLLER_TOKEN
 ```
 
 Agent containers are ordinary, reviewed Project workloads. A Project may
@@ -193,20 +195,27 @@ Repository commands, including just recipes, run explicitly through the bash
 task rather than growing one entrypoint task per recipe.
 
 Before `create`, `start`, `setup`, or `update` runs Project setup, DIM must
-ensure both managed controller APIs are healthy. The host-admin API listens on
-a mode-`0600` state-root-specific Unix socket which never enters a workspace.
-The workspace API listens on a separate Unix socket directory mounted at
-`/run/dim/controller` in the trusted workspace root. Mounting the directory,
-rather than the socket inode alone, keeps existing workspace mounts valid when
-the controller restarts. Nested Project services do not inherit the mount or
-grant.
+ensure all three managed controller APIs are healthy. Host-admin, workspace,
+and agent sockets live in separate state-root-specific runtime directories.
+The mode-`0600` host-admin directory never enters a workspace. The workspace
+socket directory is mounted at `/run/dim/controller` only in the trusted
+workspace root. The agent socket directory is mounted separately at
+`/run/dim/agent-controller`; the root receives a distinct agent grant and may
+pass only that socket and grant to agent containers. Directory mounts keep
+existing workspace mounts valid across controller restarts.
 
 `POST /api/workspace/restart` accepts no body, derives the target exclusively
 from the authenticated workspace grant, returns `202` before lifecycle work
 begins, and asynchronously performs the ordinary stop, root fast-forward, and
 setup sequence. A caller cannot name or restart another workspace.
 
-The standard workspace image provides `dim-controller-proxy`. Reviewed root
+Plugins must declare a non-empty audience set for every scoped controller
+route. Omitted or invalid audiences reject plugin startup. Workspace discovery
+includes only `workspace` routes; agent discovery includes only `agent` routes
+and omits host inputs and the built-in restart route. The External URLs plugin
+marks its workspace-scoped list/create/revoke routes for both audiences.
+
+The standard workspace image also provides `dim-controller-proxy`. Reviewed root
 lifecycle code may create a second Unix socket for a development container.
 The proxy keeps the original controller socket and workspace grant outside
 that container, removes client authorization, injects the trusted grant
@@ -218,11 +227,12 @@ The standard agent-policy helper accepts exact method/path rules, defaults
 each route to an empty request body, filters discovery to those rules, and
 removes host-input discovery.
 
-Plugins register host administration routes separately from workspace routes.
-Administration routes run only on the host-admin socket. A workspace route is
-reachable only with a workspace grant and may be narrowed further by reviewed
+Plugins register host administration routes separately from scoped controller
+routes. Administration routes run only on the host-admin socket. Marking a
+route for `agent` is an explicit security decision and does not expose built-in
+workspace routes. A workspace route may be narrowed further by reviewed
 Project-root proxy policy; registering an admin route never exposes it through
-that proxy.
+either scoped controller.
 
 `DIM_GIT_BASE_URL` is Project-specific. Project lifecycle code appends its
 own stable managed repository names and owns all checkout paths and
