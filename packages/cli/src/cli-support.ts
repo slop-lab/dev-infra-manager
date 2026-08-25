@@ -854,9 +854,15 @@ function readAdminSession<T>(socketPath: string, id: string): Promise<T> {
           pending = pending.slice(boundary + 2);
           const data = block.split("\n").find((line) => line.startsWith("data: "))?.slice(6);
           if (!data) continue;
-          const event = JSON.parse(data) as { type: string; data?: string; result?: T; error?: string };
-          if (event.type === "stdout" && event.data) process.stdout.write(event.data);
-          else if (event.type === "stderr" && event.data) process.stderr.write(event.data);
+          const event = JSON.parse(data) as {
+            type: string; data?: string; encoding?: string; result?: T; error?: string
+          };
+          if ((event.type === "stdout" || event.type === "stderr") && event.data) {
+            if (event.encoding !== "base64") throw new UserError(`command session '${id}' returned invalid stream encoding`);
+            const chunk = Buffer.from(event.data, "base64");
+            if (event.type === "stdout") process.stdout.write(chunk);
+            else process.stderr.write(chunk);
+          }
           else if (event.type === "result") resolve(event.result as T);
           else if (event.type === "error") reject(new UserError(event.error ?? `${id} failed`));
         }

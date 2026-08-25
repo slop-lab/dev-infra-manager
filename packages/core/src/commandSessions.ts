@@ -1,18 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { PassThrough, Writable } from "node:stream";
-import { StringDecoder } from "node:string_decoder";
 import type { CommandResult, RunOptions, StreamingCommandRunner, TerminalControl, TerminalSize } from "./types.js";
 
 export type CommandSessionEvent =
   | { sequence: number; type: "command"; command: string }
-  | { sequence: number; type: "stdout" | "stderr"; data: string }
+  | { sequence: number; type: "stdout" | "stderr"; data: string; encoding: "base64" }
   | { sequence: number; type: "result"; result: unknown }
   | { sequence: number; type: "exit"; exitCode: number }
   | { sequence: number; type: "error"; error: string };
 
 type UnsequencedCommandSessionEvent =
   | { type: "command"; command: string }
-  | { type: "stdout" | "stderr"; data: string }
+  | { type: "stdout" | "stderr"; data: string; encoding: "base64" }
   | { type: "result"; result: unknown }
   | { type: "exit"; exitCode: number }
   | { type: "error"; error: string };
@@ -125,8 +124,8 @@ class SessionRunner implements StreamingCommandRunner {
 
   async runStreaming(command: string, args: string[], options: RunOptions = {}): Promise<number> {
     this.emit({ type: "command", command });
-    const stdout = eventWriter((data) => this.emit({ type: "stdout", data }));
-    const stderr = eventWriter((data) => this.emit({ type: "stderr", data }));
+    const stdout = eventWriter((data) => this.emit({ type: "stdout", data, encoding: "base64" }));
+    const stderr = eventWriter((data) => this.emit({ type: "stderr", data, encoding: "base64" }));
     const exitCode = await this.runner.runStreaming(command, args, {
       ...options,
       signal: this.session.abort.signal,
@@ -151,16 +150,10 @@ class SessionRunner implements StreamingCommandRunner {
 }
 
 function eventWriter(write: (data: string) => void): Writable {
-  const decoder = new StringDecoder("utf8");
   return new Writable({
     write(chunk, _encoding, callback) {
-      const decoded = decoder.write(Buffer.from(chunk));
-      if (decoded) write(decoded);
-      callback();
-    },
-    final(callback) {
-      const decoded = decoder.end();
-      if (decoded) write(decoded);
+      const encoded = Buffer.from(chunk).toString("base64");
+      if (encoded) write(encoded);
       callback();
     }
   });
