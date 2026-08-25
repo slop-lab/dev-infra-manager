@@ -19,6 +19,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   local matrix script instead of a parallel `just ci` namespace.
 - The canonical agent image now runs as an unprivileged UID with unrestricted
   passwordless sudo confined to its Project-owned `agent-dind` container.
+- The canonical agent image now adopts the owning workspace UID and GID instead
+  of assuming 1000, so bind-mounted split repositories remain writable on
+  hosts with different account IDs.
 
 - Centralized DIM-managed Gitea issues on each Project root for newly created
   repositories, and documented repository ownership for package-specific
