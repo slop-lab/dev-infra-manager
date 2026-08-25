@@ -138,8 +138,8 @@ jobs:
         if: ${{ inputs.gate == 'integration' }}
         working-directory: snapshot
         env:
-          # The integration runner is itself a Sysbox container. It supports
-          # real PTY I/O, but not resizing the PTY from a sibling process.
+          # Resize is not observed in the current Sysbox-hosted runner. This
+          # records that CI-environment behavior without assigning its cause.
           DIM_TEST_PTY_RESIZE: unsupported
         run: |
           dim-ci-runner-health --recover
