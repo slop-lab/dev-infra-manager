@@ -2,10 +2,10 @@ export const SYSBOX_CI_RUNNER_BASE_IMAGE =
   "gitea/act_runner@sha256:578925b4bdec5f60d93b5ba766cf02f2f9f32b1c8a4ec665ddf4d53d45f683c7";
 
 export const SYSBOX_CI_RUNNER_IMAGE =
-  "dev-infra-manager-ci-runner:act-runner-node-24.19.0-just-1.40.0";
+  "dev-infra-manager-ci-runner:act-runner-node-24.19.0-just-1.40.0-jq";
 
 export const SYSBOX_CI_RUNNER_DOCKERFILE = `FROM ${SYSBOX_CI_RUNNER_BASE_IMAGE}
-RUN apk add --no-cache just=1.40.0-r0 libgcc=14.2.0-r6 libstdc++=14.2.0-r6 \
+RUN apk add --no-cache jq just=1.40.0-r0 libgcc=14.2.0-r6 libstdc++=14.2.0-r6 \
     && wget -q -O /tmp/node.tar.xz https://unofficial-builds.nodejs.org/download/release/v24.19.0/node-v24.19.0-linux-x64-musl.tar.xz \
     && echo "ebcb19941bf6a34ada2141727ffda66fb2a4bf315f5c02c8f1fc9e48a2045e06  /tmp/node.tar.xz" | sha256sum -c - \
     && tar -xJf /tmp/node.tar.xz --strip-components=1 -C /usr/local \
