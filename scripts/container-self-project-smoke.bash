@@ -150,11 +150,14 @@ if ! dim workspace create "$project_name" "$workspace_name" >/dev/null; then
   exit 1
 fi
 
+verification_stage="workspace ready phase"
 workspace_json="$(dim workspace show "$workspace_name" --json)"
 test "$(jq -r .phase <<<"$workspace_json")" = ready
+verification_stage="workspace repository manifest"
 expected_repositories='["core","core-development","development","examples","plugin-dns-cloudflare","plugin-dns-cloudflare-development","plugin-external-urls","plugin-external-urls-development","root","specification","verification"]'
 test "$(dim workspace exec "$workspace_name" -- jq -c '.repositories | keys' /run/dim/project.json)" = \
   "$expected_repositories"
+verification_stage="workspace registry mirror"
 dim workspace exec "$workspace_name" -- \
   docker info --format '{{json .RegistryConfig.Mirrors}}' |
   grep -Fq 'http://dim-registry-cache:5000/'
