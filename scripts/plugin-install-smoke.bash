@@ -2,14 +2,18 @@
 set -euo pipefail
 
 root="$(mktemp -d /tmp/dim-plugin-install.XXXXXX)"
+export XDG_RUNTIME_DIR="$root/runtime"
+mkdir -m 0700 "$XDG_RUNTIME_DIR"
 
 cleanup() {
   status="$?"
   if [[ "$status" -ne 0 ]]; then
     runtime_root="${XDG_RUNTIME_DIR:-/tmp/dim-$(id -u)}/dim"
-    find "$runtime_root" -name controller.log -type f -exec sh -c '
-      for log do echo "controller log: $log" >&2; tail -n 120 "$log" >&2; done
-    ' sh {} + 2>/dev/null || true
+    if [[ -d "$runtime_root" ]]; then
+      find "$runtime_root" -name controller.log -type f -exec sh -c '
+        for log do echo "controller log: $log" >&2; tail -n 120 "$log" >&2; done
+      ' sh {} + || true
+    fi
   fi
   if [[ -f "$root/state/controller/controller.pid" ]]; then
     kill "$(cat "$root/state/controller/controller.pid")" >/dev/null 2>&1 || true
@@ -42,7 +46,7 @@ printf '%s\n' \
 printf '%s\n' \
   'export default {' \
   '  name: "@example/dim-plugin-smoke",' \
-  '  apiVersion: 3,' \
+  '  apiVersion: 4,' \
   '  register() {}' \
   '};' \
   > "$plugin_source/index.js"
@@ -83,7 +87,7 @@ printf '%s\n' \
   '  "exports": "./index.js",' \
   '  "peerDependencies": { "@slop-lab/dim-core": "99.0.0" }' \
   '}' > "$incompatible_source/package.json"
-printf '%s\n' 'export default { name: "incompatible", apiVersion: 3, register() {} };' > "$incompatible_source/index.js"
+printf '%s\n' 'export default { name: "incompatible", apiVersion: 4, register() {} };' > "$incompatible_source/index.js"
 incompatible_tarball="$(pnpm --dir "$incompatible_source" pack --pack-destination "$root" --json | jq -r '.filename | split("/")[-1]')"
 package_before="$(sha256sum "$plugin_home/package.json")"
 manifest_before="$(sha256sum "$plugin_home/plugins.json")"
