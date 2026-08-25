@@ -3,24 +3,24 @@ set -eu
 
 agent_name="dim-agent"
 agent_image="dim-${DIM_WORKSPACE_NAME:?}-agent"
-docker_socket=/run/user/1000/docker.sock
+docker_socket=/run/docker.sock
 
 agent_dind() {
-  exec su-exec rootless env HOME=/home/rootless XDG_RUNTIME_DIR=/run/user/1000 \
-    DOCKER_HOST="unix://$docker_socket" docker "$@"
+  exec env DOCKER_HOST="unix://$docker_socket" docker "$@"
 }
 
 case "${1:?private agent action is required}" in
   setup)
     test -r /run/dim/project.json
     test -d /workspace/agent
-    su-exec rootless env HOME=/home/rootless XDG_RUNTIME_DIR=/run/user/1000 \
-      DOCKER_HOST="unix://$docker_socket" docker build --quiet \
-      --build-arg "DIM_UID=$(stat -c %u /workspace)" \
-      --build-arg "DIM_GID=$(stat -c %g /workspace)" \
+    workspace_uid="$(stat -c %u /workspace)"
+    workspace_gid="$(stat -c %g /workspace)"
+    chown -R "$workspace_uid:$workspace_gid" /mnt/agent-home
+    docker build --quiet \
+      --build-arg "DIM_UID=$workspace_uid" \
+      --build-arg "DIM_GID=$workspace_gid" \
       --tag "$agent_image" /workspace/agent >/dev/null
-    su-exec rootless env HOME=/home/rootless XDG_RUNTIME_DIR=/run/user/1000 \
-      DOCKER_HOST="unix://$docker_socket" docker rm --force "$agent_name" >/dev/null 2>&1 || true
+    docker rm --force "$agent_name" >/dev/null 2>&1 || true
     set -- run --detach --name "$agent_name" --restart unless-stopped \
       --label dev.dim.role=agent \
       --env DOCKER_HOST=unix:///run/docker.sock \
@@ -48,10 +48,8 @@ case "${1:?private agent action is required}" in
       test -z "$mapping" || set -- "$@" --add-host "$mapping"
     done <"$host_mappings"
     set -- "$@" "$agent_image" sleep infinity
-    su-exec rootless env HOME=/home/rootless XDG_RUNTIME_DIR=/run/user/1000 \
-      DOCKER_HOST="unix://$docker_socket" docker "$@" >/dev/null
-    su-exec rootless env HOME=/home/rootless XDG_RUNTIME_DIR=/run/user/1000 \
-      DOCKER_HOST="unix://$docker_socket" docker exec \
+    docker "$@" >/dev/null
+    docker exec \
       --workdir /workspace "$agent_name" \
       pnpm install --frozen-lockfile
     ;;

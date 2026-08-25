@@ -4,9 +4,9 @@ services:
       context: agent-dind
     privileged: true
     command:
-      - --host=unix:///run/user/1000/docker.sock
+      - --host=unix:///run/docker.sock
     environment:
-      DOCKER_HOST: "unix:///run/user/1000/docker.sock"
+      DOCKER_HOST: "unix:///run/docker.sock"
       DOCKER_TLS_CERTDIR: ""
       DIM_WORKSPACE_NAME: "${DIM_WORKSPACE_NAME:?}"
       DIM_GIT_USERNAME: "${DIM_GIT_USERNAME:?}"
@@ -24,7 +24,7 @@ services:
       - ../..:/workspace
       - "${DIM_PROJECT_MANIFEST:?}:/run/dim/project.json:ro"
       - agent-home:/mnt/agent-home
-      - agent-dind-data:/home/rootless/.local/share/docker
+      - agent-dind-data:/var/lib/docker
       - agent-dind-shared:/mnt/workspace-shared-dind
     working_dir: /workspace
 
