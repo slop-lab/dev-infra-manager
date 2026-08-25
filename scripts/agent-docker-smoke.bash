@@ -17,7 +17,7 @@ cleanup() {
 trap cleanup EXIT
 
 docker info >/dev/null
-docker info --format '{{json .SecurityOptions}}' | grep -q 'rootless'
+! docker info --format '{{json .SecurityOptions}}' | grep -q 'rootless'
 
 docker build --quiet --tag "$build_tag" - <<'EOF' >/dev/null
 FROM alpine:3.22
