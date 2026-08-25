@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -30,5 +31,14 @@ describe("DIM development forge policy", () => {
       expect(repository.ref).toBe("main");
       expect(repository.root).toBe(alias === "root" ? true : undefined);
     }
+  });
+
+  it("keeps persistent QEMU cache mutation in the protected root", async () => {
+    const hook = resolve(workspaceRoot, "project/.dim/ci/qemu-cache.bash");
+    expect(spawnSync("bash", ["-n", hook]).status).toBe(0);
+    const source = await readFile(hook, "utf8");
+    expect(source).toContain("noble-server-cloudimg-amd64.img");
+    expect(source).toContain("6e40c07ae715f744f84af0bec76415cc1987dd115b4b8de437818561f01a3733");
+    expect(source).toContain("sha256sum --check");
   });
 });
