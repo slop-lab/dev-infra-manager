@@ -147,6 +147,9 @@ cache configuration MUST be injected only into its temporary repositories;
 the checked-in example remains a normal user-facing Project. Every backend lane
 in the release gate MUST execute this same journey through one shared recipe
 after its backend-specific installation and workload probes.
+The gVisor lane MUST install runsc with `host-uds=open` and MUST NOT use
+`host-uds=all`, so the journey proves access to DIM's mounted controller socket
+without granting socket creation in host mounts.
 
 The integrated development repository MUST expose a manually dispatched QEMU
 release gate. The dispatch MUST pin the exact development commit and accept an

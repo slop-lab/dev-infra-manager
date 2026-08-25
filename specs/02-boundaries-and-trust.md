@@ -126,6 +126,13 @@ Runtime backend choice changes the strength and shape of isolation.
 - `gvisor` is the no-KVM Docker-compatible backend.
 - `rootless-podman` is the lower-privilege backend for Podman-compatible workloads.
 
+The managed gVisor runtime MUST allow opening, but not creating, host
+Unix-domain sockets (`host-uds=open`). This exception exists only so a
+workspace can connect to the reviewed controller and agent-controller socket
+directories explicitly mounted by DIM. The workspace-scoped grants remain
+mandatory, and DIM MUST NOT mount a host runtime socket or unrelated host
+socket directory into the sandbox.
+
 Storage backend choice changes disk enforcement.
 
 - `directory` does not enforce disk usage.
