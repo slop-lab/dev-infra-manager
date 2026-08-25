@@ -10,6 +10,7 @@ project_name="dim-self-smoke"
 workspace_name="dim-self-smoke"
 state_root="/tmp/dim-self-smoke-state"
 source_root="/tmp/dim-self-smoke-source"
+agent_verification_log="$state_root/agent-verification.log"
 dim_bin="${DIM_BIN:-$PWD/core/packages/cli/dist/cli.js}"
 project_source="$(cd -- "$script_dir/../.." && pwd)"
 integrated_source="$project_source"
@@ -71,6 +72,10 @@ cleanup() {
   local status=$?
   trap - EXIT
   if cleanup_managed_resources; then
+    if [[ "$status" -ne 0 && -s "$agent_verification_log" ]]; then
+      echo "agent verification failed; last 120 log lines:" >&2
+      tail -n 120 "$agent_verification_log" >&2
+    fi
     find "$state_root" -depth -delete 2>/dev/null || true
     find "$source_root" -depth -delete 2>/dev/null || true
   else
@@ -316,7 +321,8 @@ if dim workspace run "$workspace_name" check >/dev/null 2>&1; then
 fi
 dim workspace run "$workspace_name" bash -- -lc 'just check-source' >/dev/null
 if [[ "${DIM_SELF_VERIFY_AGENT:-0}" == 1 ]]; then
-  dim workspace run "$workspace_name" bash -- -lc 'just verify agent'
+  dim workspace run "$workspace_name" bash -- -lc 'just verify agent' \
+    >"$agent_verification_log" 2>&1
 fi
 
 # Every reviewed managed development ref can be published back to its matching
