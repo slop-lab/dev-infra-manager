@@ -14,8 +14,9 @@
   pinned `just` so host-mode actions and DIM's integration recipes use the
   supported toolchain directly.
 
-- Included `jq` in the managed Sysbox CI runner for Project repository
-  materialization during full host-mode integration checks.
+- Included `jq` and `socat` in the managed Sysbox CI runner for Project
+  repository materialization and the root-owned registry-cache relay during
+  full host-mode integration checks.
 
 - Added protected-root-owned QEMU cache hooks, digest-keyed shared runner
   bases, and coverage for disposable-job isolation from persistent cache

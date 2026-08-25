@@ -203,6 +203,7 @@ describe("CI runner resources", () => {
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("node --version");
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("just=1.40.0-r0");
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("jq");
+    expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("socat");
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("just --version");
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("dim-ci-runner-health");
     expect(spawnSync("bash", ["-n"], { input: SYSBOX_CI_RUNNER_HEALTH_SCRIPT }).status).toBe(0);
