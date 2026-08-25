@@ -884,6 +884,9 @@ export function workspaceContainerArgs(
     "--env", `GIT_CONFIG_VALUE_1=${git.userEmail}`,
     "--env", `DIM_REGISTRY_CACHE_ENDPOINT=${REGISTRY_CACHE_ENDPOINT}`
   ];
+  for (const [hostname, addresses] of Object.entries(record.hostAliases)) {
+    for (const address of addresses) args.push("--add-host", `${hostname}:${address}`);
+  }
   if (controllerGrant) args.push("--env", `DIM_CONTROLLER_TOKEN=${controllerGrant}`);
   if (agentGrant) {
     args.push("--env", "DIM_AGENT_CONTROLLER_SOCKET=/run/dim/agent-controller/controller.sock");
