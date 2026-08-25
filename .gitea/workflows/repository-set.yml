@@ -40,7 +40,10 @@ permissions:
 jobs:
   verify:
     runs-on: ${{ inputs.runner-label || 'dim' }}
-    timeout-minutes: 30
+    # The QEMU lanes install a clean host and run the same full integration
+    # contract for every backend. Rootless nested storage can legitimately
+    # take longer than the container/source gates on a cold runner.
+    timeout-minutes: ${{ inputs.gate == 'kvm' && 60 || 30 }}
     steps:
       - name: Bootstrap Node.js for host-mode JavaScript actions
         if: ${{ inputs.gate == 'kvm' }}

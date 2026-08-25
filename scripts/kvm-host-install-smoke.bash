@@ -51,10 +51,10 @@ step_log="$workdir/step.log"
 run_step() {
   local label="$1"
   shift
-  echo "kvm[$backend]: $label"
+  echo "kvm[$backend]: $label ($(date --iso-8601=seconds))"
   if [[ "$verbose" == true ]]; then
     "$@"
-  elif ! "$@" >"$step_log" 2>&1; then
+  elif ! "$@" 2>&1 | tee "$step_log"; then
     echo "kvm[$backend]: $label failed; last 120 log lines:" >&2
     tail -n 120 "$step_log" >&2
     return 1

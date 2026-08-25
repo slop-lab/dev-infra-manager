@@ -48,12 +48,14 @@ describe("DIM development forge policy", () => {
     const workflow = await readFile(resolve(workspaceRoot, "verification/.gitea/workflows/repository-set.yml"), "utf8");
     expect(kvm).not.toContain('if [[ "$backend" == runc ]]');
     expect(kvm).toContain("just verify full-development '$backend'");
+    expect(kvm).toContain('2>&1 | tee "$step_log"');
     expect(kvm.indexOf("pnpm --filter @slop-lab/dim-controller-proxy run build")).toBeLessThan(
       kvm.indexOf('run_step "install $backend backend"')
     );
     expect(recipes).toContain('DIM_EXAMPLE_WORKSPACE_BACKEND="{{backend}}"');
     expect(recipes).toContain('DIM_SELF_WORKSPACE_BACKEND="{{backend}}"');
     expect(workflow.match(/with-ci-registry-cache\.bash/g)).toHaveLength(2);
+    expect(workflow).toContain("inputs.gate == 'kvm' && 60 || 30");
   });
 
   it("materializes the complete rootless-Podman workspace image", async () => {
