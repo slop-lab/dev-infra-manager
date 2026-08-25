@@ -85,7 +85,7 @@ rm -rf "$source_root"
 
 echo "[single-repository] create a resource-bounded persistent workspace"
 if ! dim workspace create "$project_name" "$workspace_name" \
-  --cpus 2 --memory 2g --processes 512 >/dev/null; then
+  --cpus 2 --memory 2g --pids 512 >/dev/null; then
   failed_workspace="$(dim workspace show "$workspace_name" --json)"
   failed_container="$(jq -r .containerName <<<"$failed_workspace")"
   failed_project_path="$(jq -r .projectPath <<<"$failed_workspace")"

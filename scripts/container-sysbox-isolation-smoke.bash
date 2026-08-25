@@ -56,7 +56,7 @@ docker run --rm \
   --runtime sysbox-runc \
   --cpus 1 \
   --memory 256m \
-  --processes 128 \
+  --pids 128 \
   --env HOST_PROBE_IMAGE="$host_probe_image" \
   --env INNER_PROBE_IMAGE="$inner_probe_image" \
   dev-infra-project-workspace:latest \

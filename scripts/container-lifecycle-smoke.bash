@@ -64,7 +64,7 @@ echo "container-lifecycle: create workspace"
 pnpm run cli -- workspace create "$project_name" "$workspace_name" \
   --cpus 1.5 \
   --memory 3g \
-  --processes 1024 \
+  --pids 1024 \
   >/dev/null
 # The workspace's actual Docker resource names are an implementation detail
 # owned by `dim workspace show --json`, not something to reconstruct by hand: never

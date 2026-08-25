@@ -145,7 +145,7 @@ original_cpus="$(jq -r .cpuCount <<<"$workspace_json")"
 original_memory="$(jq -r .memory <<<"$workspace_json")"
 original_pids="$(jq -r .pidsLimit <<<"$workspace_json")"
 updated_resources="$(dim workspace resources "$workspace_name" \
-  --cpus 1.25 --memory 2g --processes 1024 --json)"
+  --cpus 1.25 --memory 2g --pids 1024 --json)"
 test "$(jq -r .cpuCount <<<"$updated_resources")" = "1.25"
 test "$(jq -r .memory <<<"$updated_resources")" = "2g"
 test "$(jq -r .pidsLimit <<<"$updated_resources")" = "1024"
@@ -153,7 +153,7 @@ test "$(docker inspect "$container_name" --format \
   '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}')" = \
   "1250000000|2147483648|2147483648|1024"
 dim workspace resources "$workspace_name" \
-  --cpus "$original_cpus" --memory "$original_memory" --processes "$original_pids" >/dev/null
+  --cpus "$original_cpus" --memory "$original_memory" --pids "$original_pids" >/dev/null
 
 echo "[example-project] 6. run the project task"
 set +e

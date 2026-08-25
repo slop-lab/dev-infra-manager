@@ -93,7 +93,7 @@ DIM_BIN="$dim_bin" bash \
 
 echo "[ci-runner-example] 3. enable an isolated runner"
 runner_json="$(dim ci runner create "$project_name" "$runner_name" sysbox \
-  --cpus 1.5 --memory 1g --processes 512 --json)"
+  --cpus 1.5 --memory 1g --pids 512 --json)"
 container_name="$(jq -r .executor.containerName <<<"$runner_json")"
 test "$(jq -r .executor.phase <<<"$runner_json")" = "ready"
 test "$(jq -r .executor.runtime <<<"$runner_json")" = "sysbox-runc"
