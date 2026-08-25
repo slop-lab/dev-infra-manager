@@ -6,6 +6,10 @@
   device and resize that device directly, avoiding Sysbox's non-effective
   ioctl forwarding through `/proc/<pid>/fd/*` while preserving ordered delivery.
 
+- Keep real PTY creation and I/O coverage in the Sysbox host-mode CI lane while
+  leaving the window-resize assertion to supported hosts and disposable Ubuntu
+  QEMU lanes, because Sysbox does not apply sibling-process PTY resize ioctls.
+
 - Materialize reviewed workspace host aliases such as the resolved DIM Gitea
   control-network address in `/etc/hosts`, avoiding runtime-specific embedded
   DNS behavior while retaining the recorded endpoint boundary.
