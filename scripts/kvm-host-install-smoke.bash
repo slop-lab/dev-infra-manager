@@ -293,6 +293,6 @@ EOF
     '
   run_step "verify non-root repository CI workflow" \
     ssh "${ssh_args[@]}" dim@127.0.0.1 \
-      "cd dim/workbench && DIM_CI_RUNNER_EXAMPLE_ATTEMPTS=300 JUST_UNSTABLE=1 just verify example current-installed auto ci-runner"
+      "cd dim/workbench && DIM_CI_RUNNER_EXAMPLE_ATTEMPTS=300 JUST_UNSTABLE=1 just verify example current-installed discard ci-runner"
 fi
 echo "kvm-host-install-smoke-ok: $backend"
