@@ -49,9 +49,11 @@ just install-local
 The recipe requires Git, Node.js 24 or 26, pnpm 10, and the existing DIM
 installer facade. It clones only `core`, `plugin-dns-cloudflare`, and
 `plugin-external-urls`; no workspace or `*-development` checkout is used. Each
-resolved commit is printed before the build. By default it clones `main` from
-sibling repositories next to this repository's `origin`. Set
-`DIM_SOURCE_REPOSITORY_BASE_URL` or `DIM_SOURCE_REF` to override those inputs.
+resolved commit is printed before the build. A split `root.git` origin clones
+`main` from sibling repositories. A canonical monorepo origin instead clones
+the matching `dev/core` and `dev/plugin-*` branches from that same origin. Set
+`DIM_SOURCE_ROOT_URL`, `DIM_SOURCE_REPOSITORY_BASE_URL`, or `DIM_SOURCE_REF` to
+override source resolution.
 Cloned sources and package tarballs remain under `.local/production-source`
 and `.local/dim-packages` for inspection after the command completes; the next
 run replaces their contents.

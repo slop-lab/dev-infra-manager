@@ -14,19 +14,26 @@ source_root="$repo_root/.local/production-source"
 mkdir -p "$source_root"
 find "$source_root" -mindepth 1 -depth -delete
 
-origin_url="$(git -C "$repo_root" remote get-url origin)"
-case "$origin_url" in
-  *.git) repository_base="${origin_url%/*}" ;;
-  *) repository_base="${origin_url%/*}" ;;
-esac
-repository_base="${DIM_SOURCE_REPOSITORY_BASE_URL:-$repository_base}"
-source_ref="${DIM_SOURCE_REF:-main}"
+origin_url="${DIM_SOURCE_ROOT_URL:-$(git -C "$repo_root" remote get-url origin)}"
+origin_without_suffix="${origin_url%.git}"
+origin_repository="${origin_without_suffix##*/}"
+repository_base="${origin_url%/*}"
 repositories=(core plugin-dns-cloudflare plugin-external-urls)
 
 for repository in "${repositories[@]}"; do
+  if [[ -n "${DIM_SOURCE_REPOSITORY_BASE_URL:-}" ]]; then
+    source_url="${DIM_SOURCE_REPOSITORY_BASE_URL%/}/$repository.git"
+    source_ref="${DIM_SOURCE_REF:-main}"
+  elif [[ "$origin_repository" == root ]]; then
+    source_url="$repository_base/$repository.git"
+    source_ref="${DIM_SOURCE_REF:-main}"
+  else
+    source_url="$origin_url"
+    source_ref="${DIM_SOURCE_REF:-dev/$repository}"
+  fi
   echo "[source] clone $repository@$source_ref"
   git clone --quiet --single-branch --branch "$source_ref" \
-    "$repository_base/$repository.git" "$source_root/$repository"
+    "$source_url" "$source_root/$repository"
   printf '[source] %s %s\n' "$repository" \
     "$(git -C "$source_root/$repository" rev-parse HEAD)"
 done
