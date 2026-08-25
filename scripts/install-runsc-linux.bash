@@ -22,6 +22,13 @@ chmod a+rx runsc containerd-shim-runsc-v1
 
 sudo mv runsc containerd-shim-runsc-v1 /usr/local/bin/
 sudo /usr/local/bin/runsc install
+daemon_config="$(mktemp /tmp/dim-runsc-daemon-XXXXXX.json)"
+sudo jq '
+  .runtimes.runsc.runtimeArgs =
+    (((.runtimes.runsc.runtimeArgs // []) + ["--host-uds=open"]) | unique)
+' /etc/docker/daemon.json >"$daemon_config"
+sudo install -m 0644 "$daemon_config" /etc/docker/daemon.json
+rm -f "$daemon_config"
 sudo systemctl restart docker
 
 /usr/local/bin/runsc --version

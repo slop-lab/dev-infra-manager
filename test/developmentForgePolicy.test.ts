@@ -79,4 +79,12 @@ describe("DIM development forge policy", () => {
     );
     expect(stateful).not.toContain("ps --all");
   });
+
+  it("limits gVisor host socket access to opening reviewed mounted endpoints", async () => {
+    const installer = await readFile(
+      resolve(workspaceRoot, "verification/scripts/install-runsc-linux.bash"), "utf8"
+    );
+    expect(installer).toContain('"--host-uds=open"');
+    expect(installer).not.toContain("--host-uds=all");
+  });
 });
