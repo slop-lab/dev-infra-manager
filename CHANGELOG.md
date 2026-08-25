@@ -8,9 +8,10 @@
 
 - Keep real PTY creation and I/O coverage in the explicitly identified Sysbox
   host-mode CI lane while leaving the window-resize assertion to supported
-  hosts and disposable Ubuntu QEMU lanes, because Sysbox does not apply
-  sibling-process PTY resize ioctls; do not infer this boundary from an
-  optional `/proc/sysbox` marker.
+  hosts and disposable Ubuntu QEMU lanes. Treat the missing resize as an
+  observation of the current CI environment pending investigation, rather
+  than a documented Sysbox limitation or something inferred from an optional
+  `/proc/sysbox` marker.
 
 - Materialize reviewed workspace host aliases such as the resolved DIM Gitea
   control-network address in `/etc/hosts`, avoiding runtime-specific embedded
