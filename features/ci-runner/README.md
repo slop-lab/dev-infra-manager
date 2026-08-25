@@ -37,7 +37,7 @@ this named runner:
 
 ```bash
 dim ci runner create ci-runner-example primary sysbox \
-  --cpus 2 --memory 4g --processes 1024
+  --cpus 2 --memory 4g --pids 1024
 ```
 
 Remove the runner and its registration data when finished:

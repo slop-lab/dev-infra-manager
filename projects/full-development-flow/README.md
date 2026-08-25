@@ -33,7 +33,7 @@ root before restarting or updating a workspace.
 ```bash
 dim workspace create full-development full-dev \
   --profile documentation \
-  --cpus 4 --memory 8g --processes 2048
+  --cpus 4 --memory 8g --pids 2048
 
 dim workspace run full-dev bash
 dim workspace run full-dev codex

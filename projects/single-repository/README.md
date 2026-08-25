@@ -67,7 +67,7 @@ derives the target from the scoped grant held by the trusted proxy.
 
 ```bash
 dim workspace create single-app single-dev \
-  --cpus 2 --memory 2g --processes 512
+  --cpus 2 --memory 2g --pids 512
 dim workspace run single-dev bash -- -lc 'curl --fail http://127.0.0.1:3000'
 dim workspace run single-dev codex
 dim workspace run single-dev bash -- -lc 'docker run --rm hello-world'
