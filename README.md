@@ -35,3 +35,18 @@ checks from the assembled development workspace:
 pnpm install --frozen-lockfile
 just check-source
 ```
+
+## Install an unreleased workspace build on the host
+
+From a host checkout of this root repository, build only the production source
+repositories in an existing self-development workspace, stream the package
+bundle back through `dim run`, install it, and restart the controller:
+
+```bash
+just install-workspace-build dim-dev
+```
+
+This deliberately installs the workspace's current source, including
+uncommitted changes. Review its state before running the recipe. The transfer
+uses the Project task stream and does not depend on DIM's internal Docker
+container name or require a host checkout of the `*-development` repositories.

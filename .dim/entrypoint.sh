@@ -8,6 +8,10 @@ case "$task" in
     test "$#" -eq 0 || { echo "$task does not accept arguments" >&2; exit 2; }
     exec sh .dim/home-archive.sh "$task"
     ;;
+  package-local)
+    test "$#" -eq 0 || { echo "package-local does not accept arguments" >&2; exit 2; }
+    set -- sh /workspace/project/.dim/package-local.sh
+    ;;
   bash)
     set -- bash "$@"
     ;;
