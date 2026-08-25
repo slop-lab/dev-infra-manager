@@ -9,10 +9,6 @@ chmod 0700 /home/dim/.codex
 rm -rf -- /var/run/docker/containerd
 rm -f -- /var/run/docker.pid /var/run/docker.sock
 
-if [[ -n "${DOCKER_IPTABLES_LEGACY:-}" ]]; then
-  export PATH="/usr/local/sbin/.iptables-legacy:$PATH"
-fi
-
 dockerd_args=(
   --host=unix:///var/run/docker.sock
   --data-root=/var/lib/docker
