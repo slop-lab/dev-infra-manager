@@ -1,13 +1,12 @@
 services:
-  private-docker:
+  agent-dind:
     build:
-      context: dind
+      context: agent-dind
     privileged: true
     command:
       - --host=unix:///run/user/1000/docker.sock
-      - --host=tcp://0.0.0.0:2375
     environment:
-      DOCKER_HOST: "tcp://127.0.0.1:2375"
+      DOCKER_HOST: "unix:///run/user/1000/docker.sock"
       DOCKER_TLS_CERTDIR: ""
       DIM_WORKSPACE_NAME: "${DIM_WORKSPACE_NAME:?}"
       DIM_GIT_USERNAME: "${DIM_GIT_USERNAME:?}"
@@ -25,14 +24,36 @@ services:
       - ../..:/workspace
       - "${DIM_PROJECT_MANIFEST:?}:/run/dim/project.json:ro"
       - agent-home:/mnt/agent-home
-      - private-docker-data:/home/rootless/.local/share/docker
-      - private-docker-shared:/mnt/workspace-shared-dind
+      - agent-dind-data:/home/rootless/.local/share/docker
+      - agent-dind-shared:/mnt/workspace-shared-dind
     working_dir: /workspace
+
+  secure-dind:
+    profiles: [secure]
+    build:
+      context: secure-dind
+    privileged: true
+    command:
+      - --host=unix:///run/user/1000/docker.sock
+    environment:
+      DOCKER_HOST: "unix:///run/user/1000/docker.sock"
+      DOCKER_TLS_CERTDIR: ""
+      DIM_WORKSPACE_NAME: "${DIM_WORKSPACE_NAME:?}"
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+    volumes:
+      - secure-dind-data:/home/rootless/.local/share/docker
+      - secure-dind-shared:/mnt/workspace-shared-dind
 
 volumes:
   agent-home:
-  private-docker-data:
+  agent-dind-data:
   # Inner workloads may use different mapped UIDs. The private shared volume
   # therefore has a sticky writable root, and bind-source directories below it
   # must grant access to their intended containers.
-  private-docker-shared:
+  agent-dind-shared:
+  secure-dind-data:
+  secure-dind-shared:

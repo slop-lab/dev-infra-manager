@@ -1,11 +1,11 @@
 #!/bin/sh
 set -eu
 
-agent_name="dim-private-agent"
+agent_name="dim-agent"
 agent_image="dim-${DIM_WORKSPACE_NAME:?}-agent"
 docker_socket=/run/user/1000/docker.sock
 
-private_docker() {
+agent_dind() {
   exec su-exec rootless env HOME=/home/rootless XDG_RUNTIME_DIR=/run/user/1000 \
     DOCKER_HOST="unix://$docker_socket" docker "$@"
 }
@@ -39,7 +39,7 @@ case "${1:?private agent action is required}" in
       --mount type=bind,src=/mnt/workspace-shared-dind,dst=/mnt/workspace-shared-dind \
       --mount "type=bind,src=$docker_socket,dst=/run/docker.sock" \
       --workdir /workspace
-    host_mappings=/tmp/dim-private-agent-hosts
+    host_mappings=/tmp/dim-agent-hosts
     jq -r '.hostAliases | to_entries[] | .key as $host | .value[] | "\($host)=\(.)"' \
       /run/dim/project.json >"$host_mappings"
     while IFS= read -r mapping; do
@@ -56,22 +56,22 @@ case "${1:?private agent action is required}" in
   exec)
     shift
     if [ -t 0 ] && [ -t 1 ]; then
-      private_docker exec --interactive --tty "$agent_name" "$@"
+      agent_dind exec --interactive --tty "$agent_name" "$@"
     else
-      private_docker exec --interactive "$agent_name" "$@"
+      agent_dind exec --interactive "$agent_name" "$@"
     fi
     ;;
   start|stop)
     action="$1"
-    private_docker "$action" "$agent_name"
+    agent_dind "$action" "$agent_name"
     ;;
   inspect)
     shift
-    private_docker inspect "$agent_name" "$@"
+    agent_dind inspect "$agent_name" "$@"
     ;;
   docker)
     shift
-    private_docker "$@"
+    agent_dind "$@"
     ;;
   *)
     echo "unknown private agent action: $1" >&2

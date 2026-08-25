@@ -25,6 +25,12 @@ dim workspace create dim dim-dev
 dim workspace run dim-dev codex
 ```
 
+The canonical Project runs the non-root development agent inside
+`agent-dind`; passwordless sudo is confined to that inner container. Selecting
+the `secure` workspace profile starts a separate `secure-dind` daemon with its
+own storage and without agent home, source, or Git credential mounts for
+Project-defined secret-bearing workloads.
+
 The root lifecycle clones missing registered managed repositories into
 `/workspace` using the runtime catalog. It never runs Git against an
 existing agent-controlled checkout; agents fetch, switch, and update those

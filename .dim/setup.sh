@@ -10,7 +10,7 @@ fi
 
 compose_host_aliases=/tmp/dim-project-compose-host-aliases.json
 jq -e '.hostAliases | type == "object"' "$DIM_PROJECT_MANIFEST" >/dev/null
-jq '{services:{"private-docker":{extra_hosts:[.hostAliases | to_entries[] | .key as $host | .value[] | "\($host)=\(.)"]}}}' \
+jq '{services:{"agent-dind":{extra_hosts:[.hostAliases | to_entries[] | .key as $host | .value[] | "\($host)=\(.)"]}}}' \
   "$DIM_PROJECT_MANIFEST" > "$compose_host_aliases"
 
 case "${DIM_WORKSPACE_KVM:-}" in
@@ -45,9 +45,15 @@ compose() {
   docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" \
     --file .dim/docker-compose.yml --file "$compose_host_aliases" "$@"
 }
-compose build --quiet private-docker
+compose build --quiet agent-dind
 # An outer workspace stop terminates nested containers without letting their
 # daemon preserve a restartable process state. Recreate Project containers on
 # every setup while retaining their named data and home volumes.
-compose up --detach --force-recreate --wait private-docker
-compose exec --no-TTY --user root private-docker dim-private-agent setup
+compose up --detach --force-recreate --wait agent-dind
+compose exec --no-TTY --user root agent-dind dim-agent-dind setup
+case ",${COMPOSE_PROFILES:-}," in
+  *,secure,*)
+    compose build --quiet secure-dind
+    compose up --detach --force-recreate --wait secure-dind
+    ;;
+esac

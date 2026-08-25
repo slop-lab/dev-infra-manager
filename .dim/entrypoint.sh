@@ -23,4 +23,4 @@ esac
 exec docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" \
   --file .dim/docker-compose.yml \
   --file /tmp/dim-project-compose-host-aliases.json exec \
-  --user root private-docker dim-private-agent exec "$@"
+  --user root agent-dind dim-agent-dind exec "$@"

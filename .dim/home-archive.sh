@@ -38,29 +38,29 @@ one_resource() {
   printf '%s\n' "$resources"
 }
 
-private_docker_container="$(one_resource container --all \
+agent_dind_container="$(one_resource container --all \
   --filter "label=com.docker.compose.project=$project" \
-  --filter "label=com.docker.compose.service=private-docker" \
+  --filter "label=com.docker.compose.service=agent-dind" \
   --filter "label=com.docker.compose.oneoff=False")"
 home_volume="$(one_resource volume \
   --filter "label=com.docker.compose.project=$project" \
   --filter "label=com.docker.compose.volume=agent-home")"
-archive_image="$(docker inspect --format '{{.Image}}' "$private_docker_container")"
-was_running="$(docker exec "$private_docker_container" dim-private-agent inspect \
+archive_image="$(docker inspect --format '{{.Image}}' "$agent_dind_container")"
+was_running="$(docker exec "$agent_dind_container" dim-agent-dind inspect \
   --format '{{.State.Running}}' 2>/dev/null || printf false)"
 
 restart_agent() {
   status="$?"
   trap - 0
   if [ "$was_running" = true ]; then
-    docker exec "$private_docker_container" dim-private-agent start >&2
+    docker exec "$agent_dind_container" dim-agent-dind start >&2
   fi
   exit "$status"
 }
 trap restart_agent 0
 
 if [ "$was_running" = true ]; then
-  docker exec "$private_docker_container" dim-private-agent stop >&2
+  docker exec "$agent_dind_container" dim-agent-dind stop >&2
 fi
 
 case "$action" in
