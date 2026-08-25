@@ -28,9 +28,24 @@ describe("plugin contract", () => {
   it("rejects unsupported plugin API versions", async () => {
     await expect(registerPlugin({
       name: "@example/future-plugin",
-      apiVersion: 4 as typeof DIM_PLUGIN_API_VERSION,
+      apiVersion: 5 as typeof DIM_PLUGIN_API_VERSION,
       register: vi.fn()
     })).rejects.toThrow(/unsupported DIM plugin API/);
+  });
+
+  it("rejects controller routes without an explicit audience", async () => {
+    await expect(registerPlugin({
+      name: "missing-audience",
+      apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) {
+        host.registerControllerRoute({
+          method: "GET",
+          path: "/unsafe",
+          summary: "unsafe",
+          handle: async () => undefined
+        } as never);
+      }
+    })).rejects.toThrow(/without valid audiences/);
   });
 
   it("collects capabilities and disposes plugins in reverse order", async () => {
@@ -44,6 +59,7 @@ describe("plugin contract", () => {
             method: "GET",
             path: "/first",
             summary: "first route",
+            audiences: ["workspace"],
             handle: async () => ({ body: { ok: true } })
           });
           return () => { disposed.push("first"); };
@@ -57,6 +73,7 @@ describe("plugin contract", () => {
             method: "POST",
             path: "/second/:id",
             summary: "second route",
+            audiences: ["agent"],
             handle: async () => ({ status: 204 })
           });
           return () => { disposed.push("second"); };
@@ -83,6 +100,7 @@ describe("plugin contract", () => {
             method: "GET",
             path: "/same",
             summary: "same",
+            audiences: ["workspace"],
             handle: async () => {}
           });
         }
@@ -95,6 +113,7 @@ describe("plugin contract", () => {
             method: "GET",
             path: "/same",
             summary: "same again",
+            audiences: ["workspace"],
             handle: async () => {}
           });
         }
@@ -115,6 +134,7 @@ describe("plugin contract", () => {
       method: "GET",
       path: "/late",
       summary: "late",
+      audiences: ["workspace"],
       handle: async () => {}
     })).toThrow(/after startup/);
     await registered.dispose();

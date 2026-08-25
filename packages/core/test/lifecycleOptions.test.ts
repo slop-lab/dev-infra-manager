@@ -9,8 +9,10 @@ describe("lifecycle options", () => {
       XDG_RUNTIME_DIR: "/run/user/1000"
     });
 
-    expect(options.controllerSocketPath).toBe("/run/user/1000/dim/controller.sock");
-    expect(options.adminControllerSocketPath).toBe("/run/user/1000/dim/admin.sock");
+    expect(options.controllerRuntimeDirectory).toBe("/run/user/1000/dim");
+    expect(options.controllerSocketPath).toBe("/run/user/1000/dim/workspace/controller.sock");
+    expect(options.agentControllerSocketPath).toBe("/run/user/1000/dim/agent/controller.sock");
+    expect(options.adminControllerSocketPath).toBe("/run/user/1000/dim/admin/controller.sock");
     expect(options.gitMaintainerUsername).toBe("dim-host");
     expect(options.ciRunnerImage).toBe(SYSBOX_CI_RUNNER_IMAGE);
   });
@@ -23,7 +25,7 @@ describe("lifecycle options", () => {
     });
 
     expect(options.adminControllerSocketPath).toMatch(
-      /^\/run\/user\/1000\/dim\/[a-f0-9]{16}\/admin\.sock$/
+      /^\/run\/user\/1000\/dim\/[a-f0-9]{16}\/admin\/controller\.sock$/
     );
   });
 

@@ -66,7 +66,7 @@ describe("plugin loader configuration", () => {
     await writeFile(join(packageRoot, "index.js"), `
       export default {
         name: "@example/github",
-        apiVersion: 3,
+        apiVersion: 4,
         register() {}
       };
     `);

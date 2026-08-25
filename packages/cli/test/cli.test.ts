@@ -180,6 +180,7 @@ test("controller serve preserves the active owner and cleans up its runtime file
   const root = await mkdtemp(path.join(tmpdir(), "dim-controller-test-"));
   const socket = path.join(root, "controller.sock");
   const adminSocket = path.join(root, "admin.sock");
+  const agentSocket = path.join(root, "agent.sock");
   const pidPath = path.join(root, "controller.pid");
   const configHome = path.join(root, "config");
   await mkdir(path.join(configHome, "dim"), { recursive: true });
@@ -196,11 +197,14 @@ test("controller serve preserves the active owner and cleans up its runtime file
     "--socket",
     socket,
     "--admin-socket",
-    adminSocket
+    adminSocket,
+    "--agent-socket",
+    agentSocket
   ];
   const env = {
     ...process.env,
     DIM_ADMIN_CONTROLLER_SOCKET: adminSocket,
+    DIM_AGENT_CONTROLLER_SOCKET: agentSocket,
     DIM_CONTROLLER_SOCKET: socket,
     DIM_PLUGIN_HOME: path.join(root, "plugins"),
     DIM_STATE_ROOT: path.join(root, "state"),
@@ -237,6 +241,7 @@ test("controller serve preserves the active owner and cleans up its runtime file
   try {
     await assert.rejects(access(pidPath), { code: "ENOENT" });
     await assert.rejects(access(socket), { code: "ENOENT" });
+    await assert.rejects(access(agentSocket), { code: "ENOENT" });
     await assert.rejects(access(adminSocket), { code: "ENOENT" });
   } finally {
     await rm(root, { recursive: true, force: true });

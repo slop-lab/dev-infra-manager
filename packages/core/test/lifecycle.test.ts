@@ -454,13 +454,13 @@ describe("project and workspace lifecycle", () => {
       token: "token",
       userName: "Agent",
       userEmail: "agent@example.invalid"
-    }, "work-1.controller-grant", () => 992);
+    }, "work-1.controller-grant", () => 992, "work-1.agent.agent-grant");
     expect(args).toEqual(expect.arrayContaining([
       "--name", "dim-ws-work-1",
       "--label", "dim.managed=true",
       "--label", "dim.project=project",
       "--label", "dim.repo=root",
-      "--label", "dim.runtime-config=2",
+      "--label", "dim.runtime-config=3",
       "--mount", "type=volume,source=dim-ws-work-1-docker,target=/var/lib/docker",
       "--cpus", "1.5",
       "--memory", "3g",
@@ -471,6 +471,9 @@ describe("project and workspace lifecycle", () => {
       "--mount", `type=bind,source=${join(options.controllerSocketPath, "..")},target=/run/dim/controller`,
       "--env", "DIM_CONTROLLER_SOCKET=/run/dim/controller/controller.sock",
       "--env", "DIM_CONTROLLER_TOKEN=work-1.controller-grant",
+      "--mount", `type=bind,source=${join(options.agentControllerSocketPath, "..")},target=/run/dim/agent-controller`,
+      "--env", "DIM_AGENT_CONTROLLER_SOCKET=/run/dim/agent-controller/controller.sock",
+      "--env", "DIM_AGENT_CONTROLLER_TOKEN=work-1.agent.agent-grant",
       "--env", "DIM_REGISTRY_CACHE_ENDPOINT=dim-registry-cache:5000",
       "--env", "GIT_CONFIG_VALUE_0=Agent",
       "--device", "/dev/kvm",
@@ -479,6 +482,7 @@ describe("project and workspace lifecycle", () => {
     ]));
     expect(args).not.toContain("--rm");
     expect(args.join(" ")).not.toContain("docker.sock");
+    expect(args.join(" ")).not.toContain(join(options.adminControllerSocketPath, ".."));
   });
 
   it("creates and authenticates a workspace-scoped external URL grant", async () => {
@@ -519,8 +523,15 @@ describe("project and workspace lifecycle", () => {
     expect(await state.ensureWorkspaceGrant(record.name)).toBe(grant);
     expect(await state.authenticateWorkspaceGrant(grant)).toEqual(record);
     expect(await state.authenticateWorkspaceGrant(`${grant}x`)).toBeUndefined();
+    const agentGrant = await state.ensureAgentGrant(record.name);
+    expect(agentGrant).toMatch(/^work-1\./);
+    expect(await state.authenticateAgentGrant(agentGrant)).toEqual(record);
+    expect(await state.authenticateWorkspaceGrant(agentGrant)).toBeUndefined();
+    expect(await state.authenticateAgentGrant(grant)).toBeUndefined();
     await state.removeWorkspaceGrant(record.name);
+    await state.removeAgentGrant(record.name);
     expect(await state.authenticateWorkspaceGrant(grant)).toBeUndefined();
+    expect(await state.authenticateAgentGrant(agentGrant)).toBeUndefined();
   });
 
   it("validates names and container-only option overrides", () => {
