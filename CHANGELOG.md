@@ -9,6 +9,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Added a dedicated agent controller socket with separate workspace-scoped
+  grants and mandatory plugin route audiences. Host-admin, trusted-workspace,
+  and agent sockets now live in separate runtime directories; workspace
+  containers never mount the admin directory, and agent discovery omits host
+  inputs, lifecycle, and command sessions. External URL routes explicitly opt
+  into both workspace and agent audiences.
+
 - Moved long-running workspace and CI operations, including interactive
   `exec`/`run` and runner logs, behind host-controller command sessions with
   ordered SSE output, stdin forwarding, cancellation, and reconnectable event
