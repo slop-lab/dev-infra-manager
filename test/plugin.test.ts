@@ -28,6 +28,15 @@ describe("external URLs plugin", () => {
     await Promise.all(close.splice(0).map((item) => item()));
   });
 
+  it("marks every workspace URL route safe for the scoped agent controller", async () => {
+    const registered = await registerPlugins([createExternalUrlsPlugin({ ingresses: {} })]);
+    close.push(() => registered.dispose());
+    expect(registered.controllerRoutes).toHaveLength(4);
+    expect(registered.controllerRoutes.every((route) =>
+      route.audiences.includes("workspace") && route.audiences.includes("agent")))
+      .toBe(true);
+  });
+
   it("reports ingress argument mistakes as actionable client errors", async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-admin-"));
     close.push(() => rm(stateRoot, { recursive: true, force: true }));
