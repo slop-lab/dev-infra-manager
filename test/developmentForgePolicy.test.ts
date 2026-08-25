@@ -16,9 +16,9 @@ describe("DIM development forge policy", () => {
     ];
 
     expect(manifest?.schemaVersion).toBe(1);
-    expect(manifest.upstreams).toEqual({
-      archive: { url: "https://github.com/slop-lab/dev-infra-manager.git" }
-    });
+    const archiveUrl = process.env.DIM_EXPECT_ARCHIVE_URL ??
+      "https://github.com/slop-lab/dev-infra-manager.git";
+    expect(manifest.upstreams).toEqual({ archive: { url: archiveUrl } });
     expect(Object.keys(manifest.repositories).sort()).toEqual(expected.sort());
     for (const alias of expected) {
       const repository = manifest.repositories[alias];

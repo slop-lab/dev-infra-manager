@@ -350,10 +350,12 @@ if dim workspace run "$workspace_name" check >/dev/null 2>&1; then
   echo "removed check task unexpectedly succeeded" >&2
   exit 1
 fi
-dim workspace run "$workspace_name" bash -- -lc 'just check-source' >/dev/null
+dim workspace run "$workspace_name" bash -- -lc \
+  "DIM_EXPECT_ARCHIVE_URL='$source_root/remotes/archive.git' just check-source" >/dev/null
 if [[ "${DIM_SELF_VERIFY_AGENT:-0}" == 1 ]]; then
   verification_stage="full agent verification"
-  dim workspace run "$workspace_name" bash -- -lc 'just verify agent' \
+  dim workspace run "$workspace_name" bash -- -lc \
+    "DIM_EXPECT_ARCHIVE_URL='$source_root/remotes/archive.git' just verify agent" \
     >"$agent_verification_log" 2>&1
 fi
 

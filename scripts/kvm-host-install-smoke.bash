@@ -31,7 +31,6 @@ if [[ "$backend" == all ]]; then
 fi
 for cmd in qemu-system-x86_64 qemu-img curl ssh ssh-keygen tar; do command -v "$cmd" >/dev/null || { echo "missing KVM smoke dependency: $cmd (run: bash verification/scripts/install-kvm-verify-deps-ubuntu.bash)" >&2; exit 2; }; done
 registry_mirror="${DIM_KVM_REGISTRY_MIRROR:-}"
-registry_cache_image='registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33'
 if [[ -n "$registry_mirror" ]]; then
   [[ "$registry_mirror" =~ ^http://([A-Za-z0-9.-]+):([1-9][0-9]*)$ ]] || {
     echo "invalid DIM_KVM_REGISTRY_MIRROR: $registry_mirror" >&2
@@ -124,10 +123,6 @@ clone_repository() {
 install_backend() {
   printf 'yes\n' | ssh "${ssh_args[@]}" dim@127.0.0.1 "cd dim/workbench && bash verification/scripts/install-host-ubuntu.bash '$backend'"
 }
-load_registry_cache_image() {
-  docker image save "$registry_cache_image" |
-    ssh "${ssh_args[@]}" dim@127.0.0.1 sudo docker image load
-}
 guest_ready=false
 echo "kvm[$backend]: wait for guest SSH"
 for _ in $(seq 1 120); do
@@ -179,7 +174,7 @@ fi
 rootless_podman_caps=(SYS_ADMIN SETUID SETGID SYS_CHROOT SYS_PTRACE AUDIT_WRITE CHOWN DAC_OVERRIDE FOWNER FSETID KILL MKNOD NET_ADMIN NET_BIND_SERVICE NET_RAW SETFCAP SETPCAP)
 rootless_podman_cap_flags=""
 for cap in "${rootless_podman_caps[@]}"; do rootless_podman_cap_flags+=" --cap-add $cap"; done
-run_step "run $backend workload" ssh "${ssh_args[@]}" dim@127.0.0.1 "set -e; sudo docker info >/dev/null; sudo docker compose version >/dev/null; case '$backend' in all|sysbox) systemctl is-active sysbox; sudo docker run --rm --runtime=sysbox-runc dim-backend-smoke:local true;; esac; case '$backend' in all|gvisor) runsc --version; sudo docker run --rm --runtime=runsc dim-backend-smoke:local true;; esac; case '$backend' in rootless-podman) test -c /dev/fuse; command -v newuidmap; command -v newgidmap; sudo docker image save dim-backend-smoke:local -o /tmp/dim-backend-smoke.tar; cd dim/workbench; sudo docker build -t dev-infra-project-workspace-podman:latest core/images/project-workspace-podman; sudo docker run --rm --runtime=runc$rootless_podman_cap_flags --device /dev/fuse --security-opt seccomp=unconfined --security-opt apparmor=unconfined --security-opt systempaths=unconfined --mount type=bind,src=/tmp/dim-backend-smoke.tar,dst=/tmp/dim-backend-smoke.tar,readonly dev-infra-project-workspace-podman:latest sh -c 'podman load -i /tmp/dim-backend-smoke.tar >/dev/null && podman run --rm dim-backend-smoke:local true';; esac; case '$backend' in all|runc) sudo docker run --rm --runtime=runc dim-backend-smoke:local true;; esac"
+run_step "run $backend workload" ssh "${ssh_args[@]}" dim@127.0.0.1 "set -e; sudo docker info >/dev/null; sudo docker compose version >/dev/null; case '$backend' in all|sysbox) systemctl is-active sysbox; sudo docker run --rm --runtime=sysbox-runc dim-backend-smoke:local true;; esac; case '$backend' in all|gvisor) runsc --version; sudo docker run --rm --runtime=runsc dim-backend-smoke:local true;; esac; case '$backend' in rootless-podman) test -c /dev/fuse; command -v newuidmap; command -v newgidmap; sudo docker image save dim-backend-smoke:local -o /tmp/dim-backend-smoke.tar; sudo chmod 0644 /tmp/dim-backend-smoke.tar; cd dim/workbench; sudo docker build -t dev-infra-project-workspace-podman:latest core/images/project-workspace-podman; sudo docker run --rm --runtime=runc$rootless_podman_cap_flags --device /dev/fuse --security-opt seccomp=unconfined --security-opt apparmor=unconfined --security-opt systempaths=unconfined --mount type=bind,src=/tmp/dim-backend-smoke.tar,dst=/tmp/dim-backend-smoke.tar,readonly dev-infra-project-workspace-podman:latest sh -c 'podman load -i /tmp/dim-backend-smoke.tar >/dev/null && podman run --rm dim-backend-smoke:local true';; esac; case '$backend' in all|runc) sudo docker run --rm --runtime=runc dim-backend-smoke:local true;; esac"
 if [[ "$backend" == runc ]]; then
   run_step "install self-project verification tools" \
     ssh "${ssh_args[@]}" dim@127.0.0.1 '
@@ -200,9 +195,6 @@ if [[ "$backend" == runc ]]; then
       "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' DIM_SELF_EXPECT_AGENT_UID=1001 DIM_SELF_VERIFY_AGENT=1 JUST_UNSTABLE=1 just verify self-development"
 fi
 if [[ "$backend" == sysbox ]]; then
-  if [[ -n "$registry_mirror" ]]; then
-    run_step "seed managed registry cache image" load_registry_cache_image
-  fi
   run_step "install trusted-workspace build tools" \
     ssh "${ssh_args[@]}" dim@127.0.0.1 '
       set -e
@@ -311,6 +303,6 @@ EOF
     '
   run_step "verify non-root repository CI workflow" \
     ssh "${ssh_args[@]}" dim@127.0.0.1 \
-      "cd dim/workbench && DIM_CI_RUNNER_EXAMPLE_ATTEMPTS=300 JUST_UNSTABLE=1 just verify example current-installed discard ci-runner"
+      "cd dim/workbench && DIM_CI_RUNNER_EXAMPLE_ATTEMPTS=300 bash verification/scripts/ci-runner-example-smoke.bash"
 fi
 echo "kvm-host-install-smoke-ok: $backend"
