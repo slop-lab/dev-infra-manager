@@ -13,6 +13,7 @@ class SessionTestRunner implements StreamingCommandRunner {
 
   async runStreaming(_command: string, _args: string[], options: RunOptions = {}): Promise<number> {
     options.stdout?.write("ready\n");
+    options.stdout?.write(Buffer.from([0x1f, 0x8b, 0xff]));
     if (typeof options.terminal === "object") {
       this.terminalSizes.push({ columns: options.terminal.columns, rows: options.terminal.rows });
       options.terminal.onResize((size) => this.terminalSizes.push(size));
@@ -39,13 +40,18 @@ describe("command sessions", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(sessions.snapshot(id)?.events).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: "command", command: "execute" }),
-      expect.objectContaining({ type: "stdout", data: "ready\n" }),
-      expect.objectContaining({ type: "stderr", data: "input:hello" }),
+      expect.objectContaining({ type: "stdout", data: Buffer.from("ready\n").toString("base64"), encoding: "base64" }),
+      expect.objectContaining({
+        type: "stdout", data: Buffer.from([0x1f, 0x8b, 0xff]).toString("base64"), encoding: "base64"
+      }),
+      expect.objectContaining({
+        type: "stderr", data: Buffer.from("input:hello").toString("base64"), encoding: "base64"
+      }),
       expect.objectContaining({ type: "exit", exitCode: 7 }),
       expect.objectContaining({ type: "result", result: { exitCode: 7 } })
     ]));
     expect(sessions.snapshot(id)?.events).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ data: "checked\n" })
+      expect.objectContaining({ data: Buffer.from("checked\n").toString("base64") })
     ]));
     expect(runner.terminalSizes).toEqual([
       { columns: 100, rows: 40 },

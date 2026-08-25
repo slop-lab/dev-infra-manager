@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Command-session tests now cover base64-framed stdout/stderr, including bytes
+  that are invalid UTF-8, so streaming `run`/`exec` remains safe for binary
+  backup and restore tasks.
+
 - Added coverage for exact-name workspace capability providers, required
   fail-closed behavior, recommended availability reporting, and validated
   provider additions to workspace container arguments.
