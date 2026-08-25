@@ -15,6 +15,12 @@ the trusted outer lifecycle. New checkouts use the runtime manifest's resolved
 commit SHA, so candidate refs and moving branches cannot change the materialized
 repository set after DIM creates the snapshot.
 
+The reviewed [QEMU cache hook](.dim/ci/qemu-cache.bash) seeds the pinned Ubuntu
+image used by DIM's nested installer verification into the Project-scoped
+runner base. It runs only while Packer builds that base; pull-request jobs see
+the result through their disposable overlay and cannot modify the persistent
+cache.
+
 Create the split self-development Project from the root branch:
 
 ```bash
