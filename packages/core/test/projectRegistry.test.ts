@@ -7,6 +7,7 @@ import type { LifecycleOptions, ProjectRecord } from "../../../../core/packages/
 import {
   branchProtectionOptions,
   deleteProjectRepository,
+  giteaRepositoryCreationOptions,
   normalizeRepositoryRef,
   prepareProjectRepositoryTransfer,
   projectNamespace
@@ -22,6 +23,17 @@ describe("project registry", () => {
   it("derives reserved managed namespaces", () => {
     expect(projectNamespace("acme")).toBe("dim-acme");
     expect(() => projectNamespace("../acme")).toThrow(/project name/);
+  });
+
+  it("centralizes new managed issue trackers on the project root", () => {
+    expect(giteaRepositoryCreationOptions("root", true)).toMatchObject({
+      name: "root",
+      has_issues: true
+    });
+    expect(giteaRepositoryCreationOptions("component", false)).toMatchObject({
+      name: "component",
+      has_issues: false
+    });
   });
 
   it("normalizes repository branches, tags, pull refs, and commits", () => {
