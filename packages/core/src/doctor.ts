@@ -26,6 +26,8 @@ export async function runDoctor(
   checks.push(await commandCheck(runner, "pnpm", ["--version"], "pnpm"));
   checks.push(await commandCheck(runner, "just", ["--version"], "just"));
   checks.push(await commandCheck(runner, "git", ["--version"], "git"));
+  checks.push(await commandCheck(runner, "script", ["--version"], "PTY helper"));
+  checks.push(await commandCheck(runner, "stty", ["--version"], "terminal resize helper"));
   checks.push(await userSystemdCheck(runner));
   checks.push(await commandCheck(runner, "docker", ["--version"], "Docker CLI"));
   checks.push(await dockerDaemonCheck(runner));
@@ -57,6 +59,8 @@ export async function runCommonDoctorChecks(runner: CommandRunner): Promise<Doct
     await commandCheck(runner, "pnpm", ["--version"], "pnpm"),
     await commandCheck(runner, "just", ["--version"], "just"),
     await commandCheck(runner, "git", ["--version"], "git"),
+    await commandCheck(runner, "script", ["--version"], "PTY helper"),
+    await commandCheck(runner, "stty", ["--version"], "terminal resize helper"),
     await userSystemdCheck(runner),
     await commandCheck(runner, "docker", ["--version"], "Docker CLI"),
     await dockerDaemonCheck(runner),

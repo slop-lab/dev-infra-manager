@@ -568,7 +568,7 @@ program.command("exec")
       name,
       command,
       interactive: interactive()
-    }, { stdin: true });
+    }, { stdin: true, terminal: interactive() });
     process.exitCode = result.exitCode;
   });
 
@@ -582,7 +582,7 @@ program.command("run")
       name,
       command: task,
       interactive: interactive()
-    }, { stdin: true });
+    }, { stdin: true, terminal: interactive() });
     process.exitCode = result.exitCode;
   });
 
@@ -594,7 +594,7 @@ workspace.command("exec")
   .action(async (name: string, command: string[]) => {
     const result = await adminStreamCall<{ exitCode: number }>("workspace.exec", {
       name, command, interactive: interactive()
-    }, { stdin: true });
+    }, { stdin: true, terminal: interactive() });
     process.exitCode = result.exitCode;
   });
 
@@ -606,7 +606,7 @@ workspace.command("run")
   .action(async (name: string, task: string[]) => {
     const result = await adminStreamCall<{ exitCode: number }>("workspace.run", {
       name, command: task, interactive: interactive()
-    }, { stdin: true });
+    }, { stdin: true, terminal: interactive() });
     process.exitCode = result.exitCode;
   });
 

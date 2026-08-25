@@ -1233,7 +1233,7 @@ async function streamProjectCommand(
   if (attachStdin) args.push("--interactive");
   if (tty) args.push("--tty");
   args.push(record.containerName, ...command);
-  return runner.runStreaming("docker", args);
+  return runner.runStreaming("docker", args, { terminal: tty });
 }
 
 function commandError(action: string, result: { stderr: string; stdout: string }): UserError {

@@ -16,6 +16,15 @@ export interface StreamingCommandRunner extends CommandRunner {
   runStreaming(command: string, args: string[], options?: RunOptions): Promise<number>;
 }
 
+export interface TerminalSize {
+  columns: number;
+  rows: number;
+}
+
+export interface TerminalControl extends TerminalSize {
+  onResize(listener: (size: TerminalSize) => void): () => void;
+}
+
 export interface RunOptions {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
@@ -24,4 +33,5 @@ export interface RunOptions {
   stdin?: Readable;
   stdout?: Writable;
   stderr?: Writable;
+  terminal?: boolean | TerminalControl;
 }

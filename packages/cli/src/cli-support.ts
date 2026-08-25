@@ -746,13 +746,22 @@ export async function adminCall<T = unknown>(
 export async function adminStreamCall<T = unknown>(
   operation: string,
   body: Record<string, unknown> = {},
-  options: { stdin?: boolean } = {}
+  options: { stdin?: boolean; terminal?: boolean } = {}
 ): Promise<T> {
   const lifecycle = lifecycleOptions();
   await ensureManagedController(lifecycle);
+  const sessionInput = options.terminal
+    ? {
+        ...body,
+        terminal: {
+          columns: process.stdout.columns || 80,
+          rows: process.stdout.rows || 24
+        }
+      }
+    : body;
   const created = await unixHttpRequest(lifecycle.adminControllerSocketPath, "/v1/sessions", {
     method: "POST",
-    body: JSON.stringify({ operation, input: body })
+    body: JSON.stringify({ operation, input: sessionInput })
   });
   if (created.status !== 202) throw new UserError(adminErrorDetail(created.body) || `could not start ${operation}`);
   const id = (JSON.parse(created.body) as { id?: unknown }).id;
@@ -760,10 +769,11 @@ export async function adminStreamCall<T = unknown>(
 
   let inputHandler: ((chunk: Buffer) => void) | undefined;
   let inputEndHandler: (() => void) | undefined;
+  let resizeHandler: (() => void) | undefined;
   let inputQueue = Promise.resolve();
   const wasRaw = process.stdin.isTTY ? process.stdin.isRaw : false;
   if (options.stdin) {
-    if (process.stdin.isTTY) process.stdin.setRawMode(true);
+    if (options.terminal && process.stdin.isTTY) process.stdin.setRawMode(true);
     process.stdin.resume();
     inputHandler = (chunk: Buffer) => {
       inputQueue = inputQueue.then(async () => {
@@ -784,6 +794,22 @@ export async function adminStreamCall<T = unknown>(
     process.stdin.on("data", inputHandler);
     process.stdin.once("end", inputEndHandler);
   }
+  if (options.terminal) {
+    resizeHandler = () => {
+      inputQueue = inputQueue.then(async () => {
+        await unixHttpRequest(lifecycle.adminControllerSocketPath, `/v1/sessions/${encodeURIComponent(id)}/input`, {
+          method: "POST",
+          body: JSON.stringify({
+            resize: {
+              columns: process.stdout.columns || 80,
+              rows: process.stdout.rows || 24
+            }
+          })
+        });
+      });
+    };
+    process.on("SIGWINCH", resizeHandler);
+  }
   const cancel = () => {
     void unixHttpRequest(lifecycle.adminControllerSocketPath, `/v1/sessions/${encodeURIComponent(id)}`, {
       method: "DELETE"
@@ -796,7 +822,8 @@ export async function adminStreamCall<T = unknown>(
     process.removeListener("SIGINT", cancel);
     if (inputHandler) process.stdin.removeListener("data", inputHandler);
     if (inputEndHandler) process.stdin.removeListener("end", inputEndHandler);
-    if (process.stdin.isTTY) process.stdin.setRawMode(wasRaw);
+    if (resizeHandler) process.removeListener("SIGWINCH", resizeHandler);
+    if (options.terminal && process.stdin.isTTY) process.stdin.setRawMode(wasRaw);
     if (options.stdin) process.stdin.pause();
   }
 }

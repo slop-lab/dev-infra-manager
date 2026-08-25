@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { PassThrough, Writable } from "node:stream";
 import { StringDecoder } from "node:string_decoder";
-import type { CommandResult, RunOptions, StreamingCommandRunner } from "./types.js";
+import type { CommandResult, RunOptions, StreamingCommandRunner, TerminalControl, TerminalSize } from "./types.js";
 
 export type CommandSessionEvent =
   | { sequence: number; type: "command"; command: string }
@@ -25,6 +25,8 @@ interface CommandSession {
   listeners: Set<(event: CommandSessionEvent) => void>;
   nextSequence: number;
   complete: boolean;
+  terminal: TerminalSize;
+  resizeListeners: Set<(size: TerminalSize) => void>;
 }
 
 export class CommandSessionManager {
@@ -32,7 +34,10 @@ export class CommandSessionManager {
 
   constructor(private readonly runner: StreamingCommandRunner) {}
 
-  start(execute: (runner: StreamingCommandRunner) => Promise<unknown>): string {
+  start(
+    execute: (runner: StreamingCommandRunner) => Promise<unknown>,
+    terminal: TerminalSize = { columns: 80, rows: 24 }
+  ): string {
     const session: CommandSession = {
       id: randomUUID(),
       input: new PassThrough(),
@@ -40,7 +45,9 @@ export class CommandSessionManager {
       events: [],
       listeners: new Set(),
       nextSequence: 0,
-      complete: false
+      complete: false,
+      terminal,
+      resizeListeners: new Set()
     };
     this.#sessions.set(session.id, session);
     const runner = new SessionRunner(this.runner, session, (event) => this.#emit(session, event));
@@ -78,6 +85,14 @@ export class CommandSessionManager {
     return true;
   }
 
+  resize(id: string, size: TerminalSize): boolean {
+    const session = this.#sessions.get(id);
+    if (!session || session.complete) return false;
+    session.terminal = size;
+    for (const listener of session.resizeListeners) listener(size);
+    return true;
+  }
+
   cancel(id: string): boolean {
     const session = this.#sessions.get(id);
     if (!session || session.complete) return false;
@@ -102,14 +117,10 @@ class SessionRunner implements StreamingCommandRunner {
   ) {}
 
   async run(command: string, args: string[], options: RunOptions = {}): Promise<CommandResult> {
-    this.emit({ type: "command", command });
-    const result = await this.runner.run(command, args, {
+    return await this.runner.run(command, args, {
       ...options,
       signal: this.session.abort.signal
     });
-    if (result.stdout) this.emit({ type: "stdout", data: result.stdout });
-    if (result.stderr) this.emit({ type: "stderr", data: result.stderr });
-    return result;
   }
 
   async runStreaming(command: string, args: string[], options: RunOptions = {}): Promise<number> {
@@ -121,10 +132,21 @@ class SessionRunner implements StreamingCommandRunner {
       signal: this.session.abort.signal,
       stdin: this.session.input,
       stdout,
-      stderr
+      stderr,
+      ...(options.terminal ? { terminal: this.#terminalControl() } : {})
     });
     this.emit({ type: "exit", exitCode });
     return exitCode;
+  }
+
+  #terminalControl(): TerminalControl {
+    return {
+      ...this.session.terminal,
+      onResize: (listener) => {
+        this.session.resizeListeners.add(listener);
+        return () => this.session.resizeListeners.delete(listener);
+      }
+    };
   }
 }
 

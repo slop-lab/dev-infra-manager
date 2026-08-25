@@ -116,7 +116,10 @@ async function handleAdminRequest(
     const operation = requiredString(input.operation, "operation");
     if (!STREAMABLE_OPERATIONS.has(operation)) throw new UserError(`operation '${operation}' is not streamable`);
     const body = input.input === undefined ? {} : record(input.input);
-    const id = sessions.start((sessionRunner) => builtinCall(operation, body, lifecycle, sessionRunner, plugins));
+    const id = sessions.start(
+      (sessionRunner) => builtinCall(operation, body, lifecycle, sessionRunner, plugins),
+      terminalSize(body.terminal)
+    );
     return sendJson(response, 202, { id });
   }
   const sessionMatch = url.pathname.match(/^\/v1\/sessions\/([^/]+)(?:\/(events|input))?$/);
@@ -128,6 +131,12 @@ async function handleAdminRequest(
     }
     if (request.method === "POST" && action === "input") {
       const input = record(await readJson(request, 1_048_576));
+      if (input.resize !== undefined) {
+        if (!sessions.resize(id, terminalSize(input.resize))) {
+          return sendJson(response, 404, { error: "command session not found or complete" });
+        }
+        return void response.writeHead(204).end();
+      }
       if (typeof input.data !== "string") throw new UserError("data must be a string");
       const encoded = input.data;
       if (!sessions.input(id, Buffer.from(encoded, "base64"), input.end === true)) {
@@ -364,6 +373,19 @@ const STREAMABLE_OPERATIONS = new Set([
 function requiredString(value: unknown, name: string): string {
   if (typeof value !== "string" || value.length === 0) throw new UserError(`${name} must be a string`);
   return value;
+}
+
+function terminalSize(value: unknown): { columns: number; rows: number } {
+  if (value === undefined) return { columns: 80, rows: 24 };
+  const input = record(value);
+  const columns = input.columns;
+  const rows = input.rows;
+  if (!Number.isSafeInteger(columns) || !Number.isSafeInteger(rows)
+    || Number(columns) < 1 || Number(columns) > 1_000
+    || Number(rows) < 1 || Number(rows) > 1_000) {
+    throw new UserError("terminal columns and rows must be integers between 1 and 1000");
+  }
+  return { columns: Number(columns), rows: Number(rows) };
 }
 
 function sendSessionEvents(
