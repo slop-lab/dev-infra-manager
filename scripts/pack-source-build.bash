@@ -10,12 +10,9 @@ repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 output_directory="$1"
 mkdir -p "$output_directory"
 output_directory="$(cd -- "$output_directory" && pwd)"
-source_root="$(mktemp -d /tmp/dim-production-source.XXXXXX)"
-
-cleanup() {
-  find "$source_root" -depth -delete 2>/dev/null || true
-}
-trap cleanup EXIT HUP INT TERM
+source_root="$repo_root/.local/production-source"
+mkdir -p "$source_root"
+find "$source_root" -mindepth 1 -depth -delete
 
 origin_url="$(git -C "$repo_root" remote get-url origin)"
 case "$origin_url" in

@@ -7,15 +7,9 @@ if [[ "$#" -ne 0 ]]; then
 fi
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-work_dir="$(mktemp -d /tmp/dim-source-install.XXXXXX)"
-package_root="$work_dir/packages"
-
-cleanup() {
-  find "$work_dir" -depth -delete 2>/dev/null || true
-}
-trap cleanup EXIT HUP INT TERM
-
-mkdir "$package_root"
+package_root="$repo_root/.local/dim-packages"
+mkdir -p "$package_root"
+find "$package_root" -mindepth 1 -depth -delete
 bash "$repo_root/scripts/pack-source-build.bash" "$package_root"
 
 if command -v mise >/dev/null 2>&1; then

@@ -52,3 +52,6 @@ installer facade. It clones only `core`, `plugin-dns-cloudflare`, and
 resolved commit is printed before the build. By default it clones `main` from
 sibling repositories next to this repository's `origin`. Set
 `DIM_SOURCE_REPOSITORY_BASE_URL` or `DIM_SOURCE_REF` to override those inputs.
+Cloned sources and package tarballs remain under `.local/production-source`
+and `.local/dim-packages` for inspection after the command completes; the next
+run replaces their contents.
