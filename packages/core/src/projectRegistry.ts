@@ -195,7 +195,7 @@ export async function createProjectRepository(
 
     try {
       const credentials = await ensureGitea(runner, options);
-      await createGiteaRepository(credentials, project.gitNamespace, alias);
+      await createGiteaRepository(credentials, project.gitNamespace, alias, input.root);
       await grantRepositoryUsers(credentials, project.gitNamespace, alias);
       repo = { ...repo, phase: "ready", updatedAt: new Date().toISOString() };
       project = replaceRepository(project, repo);
@@ -466,7 +466,7 @@ export async function prepareProjectRepositoryTransfer(
         : [...project.repositories, repository],
       updatedAt: now
     };
-    await createGiteaRepository(credentials, project.gitNamespace, alias);
+    await createGiteaRepository(credentials, project.gitNamespace, alias, input.root);
     await grantRepositoryUsers(credentials, project.gitNamespace, alias);
     await state.writeProject(project);
     return {
@@ -750,19 +750,30 @@ async function ensureOrganization(
 async function createGiteaRepository(
   credentials: GiteaConnection,
   organization: string,
-  alias: string
+  alias: string,
+  root: boolean
 ): Promise<void> {
-  const response = await giteaRequest(credentials, "POST", `/orgs/${organization}/repos`, {
-    name: alias,
-    private: false,
-    auto_init: false
-  });
+  const response = await giteaRequest(
+    credentials,
+    "POST",
+    `/orgs/${organization}/repos`,
+    giteaRepositoryCreationOptions(alias, root)
+  );
   if (response.ok) return;
   if (response.status === 409 || response.status === 422) {
     const existing = await giteaRequest(credentials, "GET", `/repos/${organization}/${alias}`);
     if (existing.ok) return;
   }
   throw await apiError(`create repo '${organization}/${alias}'`, response);
+}
+
+export function giteaRepositoryCreationOptions(alias: string, root: boolean): Record<string, unknown> {
+  return {
+    name: alias,
+    private: false,
+    auto_init: false,
+    has_issues: root
+  };
 }
 
 async function grantRepositoryUsers(
