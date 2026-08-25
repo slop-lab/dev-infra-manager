@@ -112,7 +112,7 @@ Gitea runs this gate automatically via the managed
 controller sockets and nested Docker bind mounts must share one filesystem
 namespace. The managed runner's Sysbox boundary does not support another
 user-namespace mapping inside its inner Docker, so this automatic lane excludes
-the canonical self-Project's private rootless runtime. The runc QEMU gate retains
+the canonical self-Project's private nested runtime. The runc QEMU gate retains
 that verification on a compatible clean host. GitHub automatic CI is
 intentionally limited to Node.js type checks and tests that need no APT packages
 or container runtime. Sysbox and KVM host-backend gates also remain available
@@ -186,23 +186,19 @@ UID differs from the rootless-DinD UID.
 The single- and multi-repository example gates must also verify that their
 fresh rootless-DinD images retain executable UID/GID mapping helpers with a
 setuid fallback before exercising the private daemon.
-The canonical self-Project gate must verify the same helper fallback and
-healthy private daemon and its inner agent both after workspace creation and after the first
-workspace restart, proving the fallback survives the persistent nested image
-store and workspace-container lifecycle. It MUST also inspect the DIM-owned
+The canonical self-Project gate must verify its healthy private rootful daemon
+and inner non-root agent both after workspace creation and after the first
+workspace restart, proving the persistent nested image store and
+workspace-container lifecycle. The agent image UID and GID MUST match the
+reviewed workspace checkout owner, and the disposable-QEMU lane MUST use UID
+1001 so a default UID 1000 assumption cannot pass unnoticed. It MUST also inspect the DIM-owned
 workspace engine and verify that it selects the managed pull-through cache
 without adding cache configuration to the Project definition. Canonical setup must explicitly
 rebuild the outer private-runtime image and reconcile the inner agent image so
-an updated entrypoint can repair an existing workspace whose cached daemon
-image can no longer start. The root
-entrypoint MUST initialize the volume-mounted Docker data directory and
-`XDG_RUNTIME_DIR` for the rootless UID after mounts are applied, and the gate
-MUST verify their ownership and private runtime-directory mode. It MUST repair
-the existing data tree once under a versioned marker so cached root-owned
-containerd state is recovered without recursively changing a large image store
-on every private-runtime restart. It MUST additionally validate creation of
-`containerd/daemon` as the rootless UID and repeat the repair if a partial
-prior start added an inaccessible descendant after the marker was written.
+an updated entrypoint cannot leave stale inner workloads running. The agent
+home volume MUST be owned by the selected agent UID/GID. The daemon's rootful
+socket and data directory remain inside `agent-dind` and MUST NOT be replaced
+with a host or trusted-workspace runtime socket.
 
 Project-runtime cgroup verification MUST cover both supported delegation
 shapes (`systemd` and `cgroupfs`) and the unsupported `none` driver. The
@@ -263,11 +259,11 @@ repository's `main` promotion branch. Routine pull requests into `development`
 retain source and managed-workspace verification without reserving
 disposable-QEMU release capacity.
 The runc guest must additionally run `just verify self-development` after the
-host installer completes. This verifies the canonical DIM Project, its
-agent inside its private rootless runtime, and the path-scoped
-RootlessKit AppArmor profile together on a clean Ubuntu host. The guest
-verification user must use UID 1001 so this gate does not accidentally depend
-on matching the rootless-DinD image's UID 1000.
+host installer completes. This verifies the canonical DIM Project and its
+agent inside a private DinD on a clean Ubuntu host. The guest verification
+user must use UID 1001, and the gate must prove the inner non-root agent adopts
+that UID while its unrestricted sudo and rootful Docker authority remain
+confined to `agent-dind`.
 The Sysbox guest must additionally verify a privileged trusted workspace using
 its directly passed `/dev/kvm` with QEMU, absence of Sysbox registration in
 the workspace's Project daemon, and a separate unprivileged Sysbox isolation

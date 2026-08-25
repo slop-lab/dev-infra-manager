@@ -85,8 +85,7 @@ itself primarily through its active managed Git host while GitHub remains the
 canonical public source. The current automatic workflows are provider-specific:
 `.gitea/workflows/ci.yml`
 uses that host-mode label for the container gate supported within Sysbox. It
-excludes the canonical self-Project's private rootless runtime because Sysbox does
-not support another user-namespace mapping inside its inner Docker; the runc
+excludes the canonical self-Project's private nested runtime; the runc
 QEMU gate covers that boundary on a compatible clean host. `.github/workflows/ci.yml`
 intentionally runs only lightweight Node.js type checks and tests without APT
 or Docker setup. GitHub-only manual Sysbox and KVM release workflows remain

@@ -123,12 +123,13 @@ This repository uses the same project-facing contract as an external project:
 The role-neutral `core/images/project-workspace` image is the trusted lifecycle
 container. The reviewed `.dim/setup.sh` obtains the host Git author through
 the narrow host-input API and starts only the repository-owned Compose
-`agent-dind` service. That rootless daemon creates the development agent
+`agent-dind` service. That private rootful daemon creates the development agent
 inside its own runtime. Its pinned `workbench/agent` image supplies Codex,
 Node.js 24, pnpm, just, Git, and a Docker client connected only to the private
 daemon; it receives neither the host Docker socket nor the trusted workspace's
-Docker socket. The agent runs as an unprivileged user with passwordless sudo
-only inside that inner agent container.
+Docker socket. The agent adopts the reviewed workspace checkout's UID/GID and
+runs as an unprivileged user with passwordless sudo only inside that inner
+agent container.
 
 Projects that run secret-bearing workloads use the separate `secure-dind`
 Compose profile. Its daemon has distinct storage and no agent-home, source, or

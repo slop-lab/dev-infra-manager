@@ -185,11 +185,12 @@ Project-owned private runtime started by `.dim/setup.sh`, then dispatch fixed
 tasks from `.dim/entrypoint.sh`. Core owns none of its image, service, volume,
 privilege, or task configuration. `dim workspace run WORKSPACE TASK` always
 follows the checked-in `.dim/entrypoint.sh` contract when present.
-The canonical self-Project's outer Compose graph contains only a rootless
-`agent-dind` daemon. That daemon owns the agent and ordinary development
+The canonical self-Project's outer Compose graph contains only a private
+rootful `agent-dind` daemon. That daemon owns the agent and ordinary development
 containers, and the agent receives only its private daemon socket. Rebuilding
 or replacing those inner workloads therefore requires no trusted workspace or
-host runtime socket.
+host runtime socket. Rootful operation is confined to this privileged sidecar
+so bind-mounted repository ownership remains stable for arbitrary host UIDs.
 The agent process must be non-root. A Project may grant it unrestricted sudo
 inside the agent container because that privilege remains confined to
 `agent-dind`; it must not grant the agent sudo in the trusted outer workspace.

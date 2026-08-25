@@ -203,8 +203,8 @@ prefix and uses only that installed `dim` binary to exercise:
 - Capability-profile replacement, project fast-forward update, stop/start
   persistence, and discard cleanup.
 
-Inside this repository's DIM development agent, use the private rootless
-runtime gate instead:
+Inside this repository's DIM development agent, use the private agent-runtime
+gate instead:
 
 ```bash
 just verify agent
@@ -213,21 +213,18 @@ just verify agent
 This runs the source and publishable-package gates and verifies the private runtime's
 image build, container lifecycle, volume, DNS, outbound-network, and peer-network
 behavior. The private runtime deliberately does not expose the host Docker
-socket. A rootless runtime without cgroup delegation cannot run `just verify container`: that
+socket. A rootless outer runtime without cgroup delegation cannot run `just verify container`: that
 gate adds another nested Docker daemon and requires it to create cgroups. Run
 the full container integration gate on a cgroup-capable Docker host or in its
 CI lane; do not treat `just verify agent` as equivalent coverage.
 
 The runc guest in `just verify environments-kvm` also creates the canonical
 self-Project and runs `just verify agent` inside its agent container.
-This verifies the same private rootless runtime from a clean Ubuntu install;
+This verifies the same private rootful `agent-dind` from a clean Ubuntu install;
 when the source checkout is dirty, the KVM verifier uses a temporary snapshot
-that includes the current worktree changes. The private-runtime entrypoint initializes
-its volume-mounted data root and runtime directory for UID 1000 before
-dropping privileges, rather than depending on nested Docker to copy ownership
-from the image into a newly created volume. A versioned marker makes recursive
-repair of an existing image store normally a one-time operation; startup also
-validates the managed-containerd directory and repairs partial prior state.
+that includes the current worktree changes. The guest runs as UID 1001 and
+proves the inner non-root agent adopts that UID while its rootful daemon and
+unrestricted sudo remain confined to the private sidecar.
 
 Three additional standalone checks cover installation and the copyable
 examples against a real Docker daemon:
