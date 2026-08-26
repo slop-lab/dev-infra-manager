@@ -34,6 +34,7 @@ import {
   updateWorkspaceResources
 } from "./workspaceLifecycle.js";
 import { ensureGitea } from "./gitea.js";
+import { hostLifecycleStatus, shutdownHost, startHost } from "./hostLifecycle.js";
 import { runDoctor } from "./doctor.js";
 import type { CiRunnerExecutorKind, LifecycleOptions, WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
@@ -98,7 +99,17 @@ async function handleAdminRequest(
 ): Promise<void> {
   const url = new URL(request.url ?? "/", "http://dim-admin");
   if (request.method === "GET" && url.pathname === "/healthz") {
-    return sendJson(response, 200, { ok: true, apiVersion: 1 });
+    const host = await hostLifecycleStatus(lifecycle);
+    return sendJson(response, 200, { ok: true, ready: host.phase === "ready", hostPhase: host.phase, apiVersion: 1 });
+  }
+  if (request.method === "GET" && url.pathname === "/readyz") {
+    const host = await hostLifecycleStatus(lifecycle);
+    return sendJson(response, host.phase === "ready" ? 200 : 503, {
+      ready: host.phase === "ready",
+      hostPhase: host.phase,
+      ...(host.error === undefined ? {} : { error: host.error }),
+      apiVersion: 1
+    });
   }
   if (request.method === "GET" && url.pathname === "/v1") {
     return sendJson(response, 200, {
@@ -154,6 +165,10 @@ async function handleAdminRequest(
     const body = await readJson(request, 65_536);
     return sendJson(response, 200, await builtinCall(operation, record(body), lifecycle, runner, plugins));
   }
+  const host = await hostLifecycleStatus(lifecycle);
+  if (host.phase !== "ready") {
+    return sendJson(response, 503, { error: `DIM host is ${host.phase}; run dim host start` });
+  }
   for (const route of plugins.adminRoutes) {
     if (route.method !== request.method) continue;
     const params = matchRoute(route.path, url.pathname);
@@ -184,6 +199,10 @@ async function builtinCall(
     if (typeof value !== "string") throw new UserError(`${name} must be a string`);
     return value;
   };
+  const host = await hostLifecycleStatus(lifecycle);
+  if (host.phase !== "ready" && operation !== "host.status" && operation !== "host.start") {
+    throw new UserError(`DIM host is ${host.phase}; run dim host start before '${operation}'`);
+  }
   switch (operation) {
     case "project.create": return createProject(runner, lifecycle, text("name"));
     case "project.list": return listProjects(lifecycle);
@@ -336,6 +355,9 @@ async function builtinCall(
     case "workspace.discard": await discardWorkspace(runner, lifecycle, text("name"), input.keepVolume === true); return {};
     case "doctor": return runDoctor(runner, lifecycle.defaultWorkspaceBackend, lifecycle);
     case "service.ensure": return ensureGitea(runner, lifecycle);
+    case "host.status": return hostLifecycleStatus(lifecycle);
+    case "host.shutdown": return shutdownHost(runner, lifecycle);
+    case "host.start": return startHost(runner, lifecycle);
     case "git.credentials": return prepareHostGitCredential(runner, lifecycle);
     case "git.setup": {
       await prepareHostGitCredential(runner, lifecycle);
@@ -369,7 +391,8 @@ const STREAMABLE_OPERATIONS = new Set([
   "ci.runner.start", "ci.runner.restart", "ci.runner.stop", "ci.runner.delete",
   "workspace.create", "workspace.align", "workspace.setup", "workspace.update",
   "workspace.resources", "workspace.start", "workspace.restart", "workspace.stop",
-  "workspace.discard", "workspace.exec", "workspace.run", "service.ensure", "doctor"
+  "workspace.discard", "workspace.exec", "workspace.run", "service.ensure",
+  "host.shutdown", "host.start", "doctor"
 ]);
 
 function requiredString(value: unknown, name: string): string {

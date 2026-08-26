@@ -24,6 +24,16 @@ export interface LifecycleOptions {
   ciRunnerDefaultPidsLimit: string;
 }
 
+export interface HostLifecycleRecord {
+  schemaVersion: 1;
+  phase: "ready" | "stopping" | "stopped" | "starting" | "error";
+  resumeWorkspaces: string[];
+  resumeCiRunners: Array<{ project: string; name: string }>;
+  resumeManagedContainers: string[];
+  updatedAt: string;
+  error?: string;
+}
+
 export interface CiRunnerResources {
   cpus: string;
   memory: string;

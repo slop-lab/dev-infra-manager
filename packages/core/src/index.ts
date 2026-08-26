@@ -11,6 +11,7 @@ export * from "./lifecycleState.js";
 export * from "./lifecycleTypes.js";
 export * from "./plugin.js";
 export * from "./hostInputs.js";
+export * from "./hostLifecycle.js";
 export * from "./pluginLoader.js";
 export * from "./projectRegistry.js";
 export * from "./projectRuntimeCgroups.js";

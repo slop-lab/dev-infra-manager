@@ -2,7 +2,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, open, readFile, readdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "./errors.js";
-import type { CiRunnerRecord, GiteaServiceRecord, ProjectRecord, WorkspaceRecord } from "./lifecycleTypes.js";
+import type { CiRunnerRecord, GiteaServiceRecord, HostLifecycleRecord, ProjectRecord, WorkspaceRecord } from "./lifecycleTypes.js";
 
 export function validateLifecycleName(value: string, kind: string): string {
   if (!/^[a-z0-9][a-z0-9_.-]{0,47}$/.test(value)) {
@@ -94,6 +94,29 @@ export class LifecycleState {
 
   giteaServicePath(): string {
     return path.join(this.root, "services", "gitea.json");
+  }
+
+  hostLifecyclePath(): string {
+    return path.join(this.root, "host.json");
+  }
+
+  async readHostLifecycle(): Promise<HostLifecycleRecord | undefined> {
+    try {
+      const record = await readJson<HostLifecycleRecord>(this.hostLifecyclePath(), "host lifecycle state not found");
+      assertSchemaVersion(record, "host lifecycle", "host", 1);
+      return record;
+    } catch (error) {
+      if (error instanceof UserError && error.message.includes("not found")) return undefined;
+      throw error;
+    }
+  }
+
+  async writeHostLifecycle(record: HostLifecycleRecord): Promise<void> {
+    await atomicWrite(this.hostLifecyclePath(), record);
+  }
+
+  async acquireHostLifecycleLock(): Promise<() => Promise<void>> {
+    return acquireLock(this.root, "host-lifecycle", "host lifecycle reconciliation");
   }
 
   ciRunnerPath(project: string, name: string): string {

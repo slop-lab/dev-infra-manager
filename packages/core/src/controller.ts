@@ -4,6 +4,7 @@ import { LifecycleState } from "./lifecycleState.js";
 import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
 import { ProcessRunner } from "./runner.js";
+import { hostLifecycleStatus } from "./hostLifecycle.js";
 import type { StreamingCommandRunner } from "./types.js";
 import {
   listWorkspaces as listWorkspaceRecords,
@@ -82,6 +83,7 @@ export interface DimControllerOptions {
   ): Promise<ResolvedWorkspaceTarget>;
   restartWorkspace?(workspace: ControllerWorkspace): Promise<void>;
   maxBodyBytes?: number;
+  hostReady?(): Promise<boolean>;
 }
 
 export function configuredDimController(
@@ -94,6 +96,7 @@ export function configuredDimController(
     stateRoot: lifecycle.stateRoot,
     routes: controllerRoutesForAudience(plugins.controllerRoutes, "workspace"),
     hostInputProviders: plugins.hostInputProviders,
+    hostReady: async () => (await hostLifecycleStatus(lifecycle)).phase === "ready",
     authenticate: async (token) => {
       const workspace = await state.authenticateWorkspaceGrant(token);
       return workspace && {
@@ -125,6 +128,7 @@ export function configuredDimAgentController(
   return createDimController({
     stateRoot: lifecycle.stateRoot,
     routes: controllerRoutesForAudience(plugins.controllerRoutes, "agent"),
+    hostReady: async () => (await hostLifecycleStatus(lifecycle)).phase === "ready",
     authenticate: async (token) => {
       const workspace = await state.authenticateAgentGrant(token);
       return workspace && {
@@ -197,7 +201,11 @@ async function handleRequest(
 ): Promise<void> {
   const url = new URL(request.url ?? "/", "http://dim-controller");
   if (request.method === "GET" && url.pathname === "/healthz") {
-    return sendJson(response, 200, { ok: true, apiVersion: 1 });
+    const ready = options.hostReady === undefined || await options.hostReady();
+    return sendJson(response, 200, { ok: true, ready, apiVersion: 1 });
+  }
+  if (options.hostReady !== undefined && !await options.hostReady()) {
+    return sendJson(response, 503, { error: "DIM host is not ready" });
   }
   const workspace = await authenticate(options, request);
   if (!workspace) return sendJson(response, 401, { error: "invalid workspace grant" });
