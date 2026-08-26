@@ -4,6 +4,10 @@ set shell := ["bash", "-uc"]
 environments-kvm verbose="":
     cd .. && bash verification/scripts/kvm-host-install-smoke.bash "{{verbose}}"
 
+# Installs DIM in a clean VM and proves an agent container can launch QEMU through the protected socket.
+agent-control-kvm verbose="":
+    cd .. && bash verification/scripts/qemu-agent-control-smoke.bash "{{verbose}}"
+
 # Run the backend-independent end-to-end contract after a backend is installed.
 full-development:
     cd .. && DIM_EXAMPLE_WORKSPACE_BACKEND=sysbox JUST_UNSTABLE=1 bash verification/scripts/stateful-development-flow-smoke.bash

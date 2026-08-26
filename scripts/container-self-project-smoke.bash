@@ -219,6 +219,10 @@ if [[ -c /dev/kvm ]]; then
   verification_stage="agent-controlled QEMU probe"
   test "$(dim workspace run "$workspace_name" bash -- -lc \
     'node /workspace/project/.dim/qemu-client.mjs probe')" = "qemu-control-probe-ok"
+  if [[ "${DIM_SELF_STOP_AFTER_QEMU_PROBE:-0}" == 1 ]]; then
+    echo "agent-qemu-control-smoke-ok"
+    exit 0
+  fi
 fi
 verification_stage="workspace restart"
 if ! restart_error="$(dim workspace restart "$workspace_name" 2>&1)"; then

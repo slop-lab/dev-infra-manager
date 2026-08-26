@@ -37,10 +37,10 @@ jobs:
   verify:
     runs-on: ${{ inputs.runner-label || 'dim' }}
     # The QEMU lane installs a clean host and verifies the Sysbox contract.
-    timeout-minutes: ${{ inputs.gate == 'kvm' && 60 || 30 }}
+    timeout-minutes: ${{ (inputs.gate == 'kvm' || inputs.gate == 'kvm-control') && 60 || 30 }}
     steps:
       - name: Bootstrap Node.js for host-mode JavaScript actions
-        if: ${{ inputs.gate == 'kvm' }}
+        if: ${{ inputs.gate == 'kvm' || inputs.gate == 'kvm-control' }}
         run: |
           curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/dim-nodesource-setup.bash
           sudo bash /tmp/dim-nodesource-setup.bash >/dev/null
@@ -157,3 +157,10 @@ jobs:
           test -r /dev/kvm -a -w /dev/kvm
           bash verification/scripts/with-ci-registry-cache.bash \
             env JUST_UNSTABLE=1 just verify environments-kvm
+      - name: Verify agent-controlled QEMU host integration
+        if: ${{ inputs.gate == 'kvm-control' }}
+        working-directory: snapshot
+        run: |
+          test -r /dev/kvm -a -w /dev/kvm
+          bash verification/scripts/with-ci-registry-cache.bash \
+            env JUST_UNSTABLE=1 just verify agent-control-kvm
