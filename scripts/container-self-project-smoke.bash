@@ -215,6 +215,11 @@ verify_agent_dind() {
 
 verification_stage="initial agent-dind contract"
 verify_agent_dind
+if [[ -c /dev/kvm ]]; then
+  verification_stage="agent-controlled QEMU probe"
+  test "$(dim workspace run "$workspace_name" bash -- -lc \
+    'node /workspace/project/.dim/qemu-client.mjs probe')" = "qemu-control-probe-ok"
+fi
 verification_stage="workspace restart"
 if ! restart_error="$(dim workspace restart "$workspace_name" 2>&1)"; then
   printf '%s\n' "$restart_error" >&2
