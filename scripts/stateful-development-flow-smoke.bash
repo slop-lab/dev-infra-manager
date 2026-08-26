@@ -128,7 +128,7 @@ DIM_BIN="$dim_bin" bash examples/projects/full-development-flow/register-project
 
 echo "[full-development-flow] create a profiled, resource-bounded workspace"
 if ! dim workspace create "$project_name" "$workspace_name" \
-  --profile documentation --cpus 2 --memory 3g --pids 768 >/dev/null; then
+  --profile documentation --cpus 2 --memory 3g --pids 768; then
   diagnose_workspace_setup
   exit 1
 fi
@@ -209,7 +209,7 @@ test -z "$(docker ps -aq --filter "name=^/dim-ws-$workspace_name$")"
 test -z "$(docker volume ls -q --filter "name=^dim-ws-$workspace_name-docker$")"
 
 dim workspace create "$project_name" "$workspace_name" \
-  --profile documentation --cpus 2 --memory 3g --pids 768 >/dev/null
+  --profile documentation --cpus 2 --memory 3g --pids 768
 dim workspace run "$workspace_name" restore <"$backup"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/journey-home"')" = persistent-home
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat reviewed-version.txt')" = reviewed-v2
