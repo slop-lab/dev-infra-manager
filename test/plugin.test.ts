@@ -202,7 +202,7 @@ describe("external URLs plugin", () => {
     };
     await initializeControllerRoutes({
       stateRoot,
-      defaultWorkspaceBackend: "runc"
+      defaultWorkspaceBackend: "sysbox"
     } as LifecycleOptions, registered, streamingRunner);
 
     expect(ensure).toHaveBeenCalledOnce();
