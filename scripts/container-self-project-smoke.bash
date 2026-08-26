@@ -223,6 +223,26 @@ verify_agent_dind() {
 
 verification_stage="initial agent-dind contract"
 verify_agent_dind
+verification_stage="workspace task TTY propagation"
+tty_error="$state_root/tty-required.stderr"
+if dim workspace run "$workspace_name" bash -- -lc \
+  'bash /workspace/examples/features/tty-entrypoint/require-tty.bash' \
+  2>"$tty_error"; then
+  echo "TTY-required feature unexpectedly accepted a non-interactive task" >&2
+  exit 1
+fi
+grep -Fqx "tty-required requires a terminal on stdin and stdout" "$tty_error"
+command -v script >/dev/null
+if [[ -n "${DIM_BIN:-}" ]]; then
+  tty_arguments=("$dim_bin")
+else
+  tty_arguments=(node "$dim_bin")
+fi
+tty_arguments+=(workspace run "$workspace_name" bash -- -lc \
+  'bash /workspace/examples/features/tty-entrypoint/require-tty.bash')
+printf -v tty_command '%q ' "${tty_arguments[@]}"
+tty_output="$(script --quiet --return --command "$tty_command" /dev/null | tr -d '\r')"
+grep -Fqx "tty-required-ok" <<<"$tty_output"
 if [[ -c /dev/kvm ]]; then
   verification_stage="agent-controlled QEMU probe"
   if ! qemu_probe_output="$(dim workspace run "$workspace_name" bash -- -lc \
