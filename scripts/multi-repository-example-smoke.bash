@@ -122,10 +122,10 @@ rm -rf "$source_root"
 echo "[example-project] 4. create the workspace (a real container)"
 if ! dim workspace create "$project_name" "$workspace_name" >/dev/null; then
   dim workspace exec "$workspace_name" -- \
-    docker compose --project-name "dim-$workspace_name" \
+    docker compose --project-name "dim-project" \
     --file .dim/docker-compose.yml ps >&2 || true
   dim workspace exec "$workspace_name" -- \
-    docker compose --project-name "dim-$workspace_name" \
+    docker compose --project-name "dim-project" \
     --file .dim/docker-compose.yml logs agent-dind >&2 || true
   exit 1
 fi
@@ -211,7 +211,7 @@ agent_commit_identity="$(dim workspace run "$workspace_name" bash -- -lc '
 test "$agent_commit_identity" = "$dev_git_identity"
 
 agent_container="$(dim workspace exec "$workspace_name" -- \
-  docker compose --project-name "dim-$workspace_name" \
+  docker compose --project-name "dim-project" \
   --file .dim/docker-compose.yml ps --quiet agent)"
 test -n "$agent_container"
 test "$(dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
@@ -222,7 +222,7 @@ dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
 ! dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
   --format '{{json .Mounts}}' | grep -q /var/run/docker.sock
 dind_container="$(dim workspace exec "$workspace_name" -- \
-  docker compose --project-name "dim-$workspace_name" \
+  docker compose --project-name "dim-project" \
   --file .dim/docker-compose.yml ps --quiet agent-dind)"
 test -n "$dind_container"
 if [[ -n "${DIM_DOCKER_REGISTRY_MIRROR:-}" ]]; then

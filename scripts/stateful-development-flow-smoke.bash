@@ -72,10 +72,10 @@ diagnose_workspace_setup() {
   docker exec --user dim "$failed_container" \
     sh -c 'cat /tmp/dim-stateful-setup.log 2>/dev/null || true' >&2 || true
   docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
-    docker compose --project-name "dim-$workspace_name" \
+    docker compose --project-name "dim-project" \
     "${failed_compose[@]}" ps >&2 || true
   docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
-    docker compose --project-name "dim-$workspace_name" \
+    docker compose --project-name "dim-project" \
     "${failed_compose[@]}" logs >&2 || true
 }
 
@@ -134,7 +134,7 @@ if ! dim workspace create "$project_name" "$workspace_name" \
 fi
 workspace_json="$(dim workspace show "$workspace_name" --json)"
 container_name="$(jq -r .containerName <<<"$workspace_json")"
-compose_name="$(jq -r .composeProjectName <<<"$workspace_json")"
+compose_name=dim-project
 test "$(jq -c .profiles <<<"$workspace_json")" = '["documentation"]'
 test "$(jq -r .cpuCount <<<"$workspace_json")" = 2
 test "$(jq -r .memory <<<"$workspace_json")" = 3g
@@ -181,6 +181,11 @@ test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/journey-home
 echo "[full-development-flow] survive stop/start and controller replacement"
 dim workspace stop "$workspace_name" >/dev/null
 dim workspace start "$workspace_name" >/dev/null
+test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/journey-home"')" = persistent-home
+docker stop "$container_name" >/dev/null
+test "$(dim workspace show "$workspace_name" --json | jq -r .phase)" = stopped
+dim workspace restart "$workspace_name" >/dev/null
+test "$(dim workspace show "$workspace_name" --json | jq -r .phase)" = ready
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/journey-home"')" = persistent-home
 stop_controller
 start_controller

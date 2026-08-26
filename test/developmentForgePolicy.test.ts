@@ -99,4 +99,14 @@ describe("DIM development forge policy", () => {
       expect(script).toContain('DOCKER_CONFIG="/tmp/dim-workspace-docker-config-$(id -u)"');
     }
   });
+
+  it("keeps the inner Compose identity independent of the workspace name", async () => {
+    const lifecycle = await readFile(
+      resolve(workspaceRoot, "core/packages/core/src/workspaceLifecycle.ts"),
+      "utf8"
+    );
+    expect(lifecycle).toContain('const PROJECT_COMPOSE_NAME = "dim-project"');
+    expect(lifecycle).toContain('`COMPOSE_PROJECT_NAME=${PROJECT_COMPOSE_NAME}`');
+    expect(lifecycle).not.toContain('`COMPOSE_PROJECT_NAME=${record.composeProjectName}`');
+  });
 });

@@ -93,10 +93,10 @@ if ! dim workspace create "$project_name" "$workspace_name" \
   docker exec --user dim "$failed_container" \
     sh -c 'cat /tmp/dim-agent-controller/agent.log 2>/dev/null || true' >&2 || true
   docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
-    docker compose --project-name "dim-$workspace_name" \
+    docker compose --project-name "dim-project" \
     --file .dim/docker-compose.yml ps >&2 || true
   docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
-    docker compose --project-name "dim-$workspace_name" \
+    docker compose --project-name "dim-project" \
     --file .dim/docker-compose.yml logs agent agent-dind >&2 || true
   exit 1
 fi
@@ -116,7 +116,7 @@ dim workspace run "$workspace_name" restore <"$home_backup"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/archive-smoke"')" = single-home
 
 agent_container="$(dim workspace exec "$workspace_name" -- \
-  docker compose --project-name "dim-$workspace_name" \
+  docker compose --project-name "dim-project" \
   --file .dim/docker-compose.yml ps --quiet agent)"
 test -n "$agent_container"
 test "$(dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
@@ -162,7 +162,7 @@ for attempt in $(seq 1 120); do
   sleep 1
 done
 dind_container="$(dim workspace exec "$workspace_name" -- \
-  docker compose --project-name "dim-$workspace_name" \
+  docker compose --project-name "dim-project" \
   --file .dim/docker-compose.yml ps --quiet agent-dind)"
 test -n "$dind_container"
 if [[ -n "${DIM_DOCKER_REGISTRY_MIRROR:-}" ]]; then

@@ -149,10 +149,10 @@ verification_stage="workspace creation"
 if ! dim workspace create "$project_name" "$workspace_name" \
   >"$workspace_creation_log" 2>&1; then
   dim workspace exec "$workspace_name" -- \
-    docker compose --project-name "dim-$workspace_name" \
+    docker compose --project-name "dim-project" \
     --file .dim/docker-compose.yml ps >&2 || true
   dim workspace exec "$workspace_name" -- \
-    docker compose --project-name "dim-$workspace_name" \
+    docker compose --project-name "dim-project" \
     --file .dim/docker-compose.yml logs --no-color >&2 || true
   exit 1
 fi
@@ -176,7 +176,7 @@ dim workspace exec "$workspace_name" -- sh -eu -c '
 verify_agent_dind() {
   local agent_dind_container
   agent_dind_container="$(dim workspace exec "$workspace_name" -- \
-    docker compose --project-name "dim-$workspace_name" \
+    docker compose --project-name "dim-project" \
     --file .dim/docker-compose.yml ps --quiet agent-dind)"
   test -n "$agent_dind_container"
   dim workspace exec "$workspace_name" -- \
@@ -191,7 +191,7 @@ verify_agent_dind() {
     }
   fi
   dim workspace exec "$workspace_name" -- \
-    docker compose --project-name "dim-$workspace_name" \
+    docker compose --project-name "dim-project" \
     --file .dim/docker-compose.yml exec --no-TTY --user root agent-dind \
     sh -eu -c '
       socket="${DOCKER_HOST#unix://}"
@@ -246,10 +246,10 @@ if ! restart_error="$(dim workspace restart "$workspace_name" 2>&1)"; then
   dim workspace show "$workspace_name" >&2 || true
   dim workspace exec "$workspace_name" -- git -C /workspace/project status --short >&2 || true
   dim workspace exec "$workspace_name" -- \
-    docker compose --project-name "dim-$workspace_name" \
+    docker compose --project-name "dim-project" \
     --file .dim/docker-compose.yml ps >&2 || true
   dim workspace exec "$workspace_name" -- \
-    docker compose --project-name "dim-$workspace_name" \
+    docker compose --project-name "dim-project" \
     --file .dim/docker-compose.yml logs --no-color agent-dind >&2 || true
   exit 1
 fi
@@ -351,7 +351,7 @@ dim workspace run "$workspace_name" bash -- -lc "
 git ls-remote "$(dim repo url "$project_name" core)" "refs/heads/$core_proposal" | grep -q .
 verification_stage="agent-dind mount and privilege contract"
 agent_dind_container="$(dim workspace exec "$workspace_name" -- \
-  docker compose --project-name "dim-$workspace_name" \
+  docker compose --project-name "dim-project" \
   --file .dim/docker-compose.yml ps --quiet agent-dind)"
 test -n "$agent_dind_container"
 test "$(dim workspace exec "$workspace_name" -- docker inspect "$agent_dind_container" \
