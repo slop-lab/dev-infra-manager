@@ -130,6 +130,17 @@ test("CI runner commands expose lifecycle and configurable defaults", () => {
   assert.match(missingDefaults.stderr, /required option/);
 });
 
+test("host lifecycle commands expose volume-preserving maintenance", () => {
+  const help = run(["host", "--help"]);
+  assert.equal(help.status, 0);
+  for (const command of ["status", "shutdown", "start"]) {
+    assert.match(help.stdout, new RegExp(command));
+  }
+  const shutdown = run(["host", "shutdown", "--help"]);
+  assert.equal(shutdown.status, 0);
+  assert.match(shutdown.stdout, /preserving all managed volumes/);
+});
+
 test("workspace resources command requires at least one live limit", () => {
   const workspaceHelp = run(["workspace", "--help"]);
   assert.equal(workspaceHelp.status, 0);

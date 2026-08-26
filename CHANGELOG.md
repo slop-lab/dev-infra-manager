@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add a volume-preserving host shutdown/start lifecycle that leaves the
+  controller available, records previously ready workspaces, CI runners, and
+  plugin-managed host containers, restores infrastructure before execution
+  runtimes, and reports maintenance readiness until every target recovers.
+
 - Give reviewed Project Compose runtimes a stable workspace-local identity
   independent of the outer DIM workspace name, and reconcile a stale `ready`
   phase to `stopped` when the managed outer container is no longer running.

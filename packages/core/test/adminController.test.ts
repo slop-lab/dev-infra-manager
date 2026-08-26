@@ -1,6 +1,10 @@
 import { once } from "node:events";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { configuredDimAdminController } from "../../../../core/packages/core/src/adminController.js";
+import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { LifecycleOptions } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/core/src/plugin.js";
 
@@ -12,6 +16,7 @@ describe("DIM admin controller", () => {
   });
 
   it("reports health and dispatches plugin-owned admin routes", async () => {
+    const stateRoot = await mkdtemp(join(tmpdir(), "dim-admin-controller-"));
     const plugins = await registerPlugin({
       name: "test.admin",
       apiVersion: DIM_PLUGIN_API_VERSION,
@@ -31,7 +36,7 @@ describe("DIM admin controller", () => {
         });
       }
     });
-    const server = configuredDimAdminController({} as LifecycleOptions, plugins);
+    const server = configuredDimAdminController({ stateRoot } as LifecycleOptions, plugins);
     servers.push(server);
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
@@ -39,7 +44,12 @@ describe("DIM admin controller", () => {
     if (!address || typeof address === "string") throw new Error("missing address");
     const base = `http://127.0.0.1:${address.port}`;
 
-    expect(await (await fetch(`${base}/healthz`)).json()).toEqual({ ok: true, apiVersion: 1 });
+    expect(await (await fetch(`${base}/healthz`)).json()).toEqual({
+      ok: true,
+      ready: true,
+      hostPhase: "ready",
+      apiVersion: 1
+    });
     const discovery = await fetch(`${base}/v1`);
     expect(await discovery.json()).toMatchObject({
       routes: [{ method: "POST", path: "/v1/test/:name", plugin: "test.admin" }]
@@ -76,6 +86,21 @@ describe("DIM admin controller", () => {
     });
     expect(rejected.status).toBe(400);
     expect(await rejected.json()).toEqual({ error: "operation 'plugin.unreviewed' is not streamable" });
+    await new LifecycleState(stateRoot).writeHostLifecycle({
+      schemaVersion: 1,
+      phase: "stopped",
+      resumeWorkspaces: ["work"],
+      resumeCiRunners: [],
+      resumeManagedContainers: [],
+      updatedAt: new Date().toISOString()
+    });
+    expect(await (await fetch(`${base}/healthz`)).json()).toMatchObject({
+      ok: true,
+      ready: false,
+      hostPhase: "stopped"
+    });
+    expect((await fetch(`${base}/readyz`)).status).toBe(503);
+    await rm(stateRoot, { recursive: true, force: true });
     await plugins.dispose();
   });
 });
