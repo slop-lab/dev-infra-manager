@@ -185,14 +185,18 @@ tasks from `.dim/entrypoint.sh`. Core owns none of its image, service, volume,
 privilege, or task configuration. `dim workspace run WORKSPACE TASK` always
 follows the checked-in `.dim/entrypoint.sh` contract when present.
 The canonical self-Project's outer Compose graph contains only a private
-rootful `agent-dind` daemon. That daemon owns the agent and ordinary development
+rootless `agent-dind` daemon. Its daemon user adopts the numeric UID/GID that
+owns the workspace checkout. That daemon owns the agent and ordinary development
 containers, and the agent receives only its private daemon socket. Rebuilding
 or replacing those inner workloads therefore requires no trusted workspace or
-host runtime socket. Rootful operation is confined to this privileged sidecar
-so bind-mounted repository ownership remains stable for arbitrary host UIDs.
-The agent process must be non-root. A Project may grant it unrestricted sudo
-inside the agent container because that privilege remains confined to
-`agent-dind`; it must not grant the agent sudo in the trusted outer workspace.
+host runtime socket. The agent may run as UID 0 inside the rootless daemon's
+user namespace: that UID maps to the non-root daemon UID which owns the
+checkout, rather than to root in the trusted workspace or on the host.
+The requirement that an agent process be non-root applies to containers whose
+root identity carries host or trusted-workspace authority. It does not prohibit
+UID 0 inside an explicitly rootless, subordinate-ID-mapped agent daemon.
+Projects must not run the agent directly as root, or grant it sudo, in the
+trusted outer workspace.
 Secret-bearing workloads must use a separate `secure-dind` daemon with
 separate runtime storage. The agent daemon socket, agent home, workspace source,
 and workspace Git credentials must not be mounted into that daemon.

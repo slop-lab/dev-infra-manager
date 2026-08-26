@@ -35,6 +35,9 @@ Properties:
   Project-owned mount.
 - Allows command execution inside the workspace.
 - Allows nested container creation through an agent-specific inner runtime.
+- May be UID 0 only inside a rootless, subordinate-ID-mapped agent runtime;
+  agent code remains non-root in every host-authoritative or
+  trusted-workspace-authoritative container.
 - May receive approved Git identity and constrained managed-Git credentials.
 - Can access the managed Git host for pushing branches and opening pull requests through the configured workflow.
 - Can include Git configuration environment variables required for Git operations.

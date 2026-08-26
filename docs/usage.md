@@ -202,11 +202,11 @@ CI lane; do not treat `just verify agent` as equivalent coverage.
 
 The runc guest in `just verify environments-kvm` also creates the canonical
 self-Project and runs `just verify agent` inside its agent container.
-This verifies the same private rootful `agent-dind` from a clean Ubuntu install;
+This verifies the same private rootless `agent-dind` from a clean Ubuntu install;
 when the source checkout is dirty, the KVM verifier uses a temporary snapshot
 that includes the current worktree changes. The guest runs as UID 1001 and
-proves the inner non-root agent adopts that UID while its rootful daemon and
-unrestricted sudo remain confined to the private sidecar.
+proves the rootless daemon adopts that UID while the agent sees UID 0 only
+inside the daemon's subordinate-ID-mapped namespace.
 
 Three additional standalone checks cover installation and the copyable
 examples against a real Docker daemon:

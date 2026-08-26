@@ -30,6 +30,10 @@ Agent containers:
 - Must not mount the host runtime socket or Project runtime socket.
 - Must not mount secret-bearing runtime volumes.
 - May run nested containers through an agent-specific inner runtime.
+- Must not run as root in a container whose root identity carries host or
+  trusted-workspace authority. UID 0 is permitted inside an explicitly
+  rootless agent runtime when its user namespace maps that identity to the
+  non-root workspace owner and the mapping is verified.
 - May receive the agent controller socket and its distinct workspace-scoped
   agent grant. That endpoint exposes only plugin routes explicitly marked for
   the `agent` audience. Workspace lifecycle, command sessions, host inputs,

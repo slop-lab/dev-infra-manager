@@ -63,10 +63,9 @@ shallow checkout is converted to a self-contained single-commit repository
 before bundling. Uncommitted and untracked files are intentionally excluded.
 The check installs the source verification toolchain after the host installer
 and runs `just verify self-development`, covering the canonical
-Project's agent inside its private rootful DinD end to end. The QEMU
-verification user has the explicit UID 1001; the gate proves the inner agent
-adopts that non-default UID while rootful authority remains inside the private
-sidecar.
+Project's agent inside its private rootless DinD end to end. The QEMU
+verification user has the explicit UID 1001; the gate proves that the daemon
+adopts that non-default UID and maps its inner UID-0 agent onto it.
 The base cloud image is cached under `.local/kvm`. Default output names each
 stage and emits only the final 30 lines of a failing stage; `--verbose`
 streams full guest, build, and workload logs.

@@ -184,18 +184,20 @@ UID differs from the rootless-DinD UID.
 The single- and multi-repository example gates must also verify that their
 fresh rootless-DinD images retain executable UID/GID mapping helpers with a
 setuid fallback before exercising the private daemon.
-The canonical self-Project gate must verify its healthy private rootful daemon
-and inner non-root agent both after workspace creation and after the first
+The canonical self-Project gate must verify its healthy private rootless daemon
+and inner UID-0 agent both after workspace creation and after the first
 workspace restart, proving the persistent nested image store and
-workspace-container lifecycle. The agent image UID and GID MUST match the
-reviewed workspace checkout owner, and the disposable-QEMU lane MUST use UID
-1001 so a default UID 1000 assumption cannot pass unnoticed. It MUST also inspect the DIM-owned
+workspace-container lifecycle. The daemon UID and GID MUST match the reviewed
+workspace checkout owner while the inner agent sees that checkout as UID 0,
+and the disposable-QEMU lane MUST use UID 1001 so a default UID 1000 assumption
+cannot pass unnoticed. It MUST also inspect the DIM-owned
 workspace engine and verify that it selects the managed pull-through cache
 without adding cache configuration to the Project definition. Canonical setup must explicitly
 rebuild the outer private-runtime image and reconcile the inner agent image so
 an updated entrypoint cannot leave stale inner workloads running. The agent
-home volume MUST be owned by the selected agent UID/GID. The daemon's rootful
-socket and data directory remain inside `agent-dind` and MUST NOT be replaced
+home volume MUST be writable by inner UID 0 through the daemon's mapped
+workspace-owner UID/GID. The daemon's rootless socket and data directory remain
+inside `agent-dind` and MUST NOT be replaced
 with a host or trusted-workspace runtime socket.
 
 Project-runtime cgroup verification MUST cover both supported delegation
@@ -261,9 +263,11 @@ disposable overlay. A Project without the hook receives an empty cache.
 Every backend guest must run the same stateful development-flow and
 `just verify self-development` recipe after the host installer completes. This
 verifies the canonical DIM Project and its agent inside a private DinD on a
-clean Ubuntu host. The guest verification user must use UID 1001, and the gate
-must prove the inner non-root agent adopts that UID while its unrestricted sudo
-and rootful Docker authority remain confined to `agent-dind`.
+clean Ubuntu host. The guest verification user must use UID 1001. The gate
+must prove that the canonical agent is UID 0 only inside its rootless
+daemon, that the daemon's outer UID equals the non-root UID owning the checkout
+(including verification UID 1001), and that Docker reports rootless security.
+It must not treat inner UID 0 as host or trusted-workspace root authority.
 The Sysbox guest must additionally verify a privileged trusted workspace using
 its directly passed `/dev/kvm` with QEMU, absence of Sysbox registration in
 the workspace's Project daemon, and a separate unprivileged Sysbox isolation
