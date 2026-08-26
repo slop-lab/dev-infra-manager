@@ -1,14 +1,48 @@
-FROM docker:29.1.3-dind
+FROM docker:29.1.3-cli
 
-# Reproduce the official rootless variant on top of the ordinary DinD image
-# without inheriting file-capability xattrs that gVisor cannot register in its
-# nested image store. newuidmap/newgidmap use their setuid fallback below.
-RUN apk add --no-cache iproute2 fuse-overlayfs slirp4netns \
+# Assemble DinD without file-capability xattrs: nested gVisor image stores
+# cannot register them, while the uid-map helpers support a setuid fallback.
+RUN apk add --no-cache \
+    btrfs-progs e2fsprogs e2fsprogs-extra fuse-overlayfs git ip6tables \
+    iproute2 iptables iptables-legacy openssl pigz shadow-libs slirp4netns \
+    su-exec xfsprogs xz zfs \
   && mkdir -p /run/user \
   && chmod 1777 /run/user \
   && adduser -h /home/rootless -g 'Rootless' -D -u 1000 rootless \
   && echo 'rootless:100000:65536' >> /etc/subuid \
   && echo 'rootless:100000:65536' >> /etc/subgid
+
+RUN set -eu; \
+  case "$(apk --print-arch)" in \
+    x86_64) shadow_sha256=dba2556ce07825e4da14383e40968f4569b89b69c558f2589e005761a46d121e ;; \
+    aarch64) shadow_sha256=92dbdb422814ffe64e4e7a943eebdc4c373e981743c01ce2bfdb4755f4072c7c ;; \
+    *) echo "unsupported rootless DinD architecture" >&2; exit 2 ;; \
+  esac; \
+  wget -O /tmp/shadow-subids.apk \
+    "https://dl-cdn.alpinelinux.org/alpine/v3.23/community/$(apk --print-arch)/shadow-subids-4.18.0-r0.apk"; \
+  echo "$shadow_sha256  /tmp/shadow-subids.apk" | sha256sum -c -; \
+  tar -xzf /tmp/shadow-subids.apk -C / usr/bin/newuidmap usr/bin/newgidmap; \
+  rm /tmp/shadow-subids.apk; \
+  chmod 4755 /usr/bin/newuidmap /usr/bin/newgidmap
+
+RUN set -eu; \
+  case "$(apk --print-arch)" in \
+    x86_64) docker_arch=x86_64 ;; \
+    aarch64) docker_arch=aarch64 ;; \
+    *) echo "unsupported rootless DinD architecture" >&2; exit 2 ;; \
+  esac; \
+  wget -O /tmp/docker.tgz \
+    "https://download.docker.com/linux/static/stable/$docker_arch/docker-29.1.3.tgz"; \
+  tar -xzf /tmp/docker.tgz --strip-components 1 -C /usr/local/bin \
+    --exclude docker/docker; \
+  rm /tmp/docker.tgz; \
+  dockerd --version
+
+RUN set -eu; \
+  wget -O /usr/local/bin/dockerd-entrypoint.sh \
+    "https://raw.githubusercontent.com/docker-library/docker/a6130b3dd7f1c3e938c497c29e671b3532de2bc9/29/dind/dockerd-entrypoint.sh"; \
+  echo 'a63266692950dec182182893c5d03d575e88d9246dc81987c9cfab21da1f29de  /usr/local/bin/dockerd-entrypoint.sh' | sha256sum -c -; \
+  chmod 0755 /usr/local/bin/dockerd-entrypoint.sh
 
 RUN set -eu; \
   case "$(apk --print-arch)" in \
@@ -38,7 +72,6 @@ RUN mkdir -p /home/rootless/.local/share/docker /mnt/workspace-shared-dind \
 
 VOLUME /home/rootless/.local/share/docker
 
-RUN apk add --no-cache su-exec
 COPY entrypoint.sh /usr/local/bin/dim-rootless-dind-entrypoint
 RUN chmod 0755 /usr/local/bin/dim-rootless-dind-entrypoint
 
