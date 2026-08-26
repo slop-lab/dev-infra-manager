@@ -376,6 +376,9 @@ describe("project and workspace lifecycle", () => {
         if (args.includes("{{.State.Running}}")) {
           return { command, args, stdout: "true\n", stderr: "", exitCode: 0 };
         }
+        if (args.some((arg) => arg.includes("{{.State.Running}}"))) {
+          return { command, args, stdout: "true|work-1|true\n", stderr: "", exitCode: 0 };
+        }
         if (args.includes("--porcelain")) {
           return {
             command,

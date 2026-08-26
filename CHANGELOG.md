@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Give reviewed Project Compose runtimes a stable workspace-local identity
+  independent of the outer DIM workspace name, and reconcile a stale `ready`
+  phase to `stopped` when the managed outer container is no longer running.
+
 - Remove the pre-stable gVisor, rootless-Podman, and privileged-runc workspace
   backends. Sysbox is now the sole workspace backend; ordinary runc remains an
   internal runtime for trusted infrastructure, obsolete configuration and
