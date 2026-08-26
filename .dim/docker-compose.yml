@@ -2,11 +2,11 @@ services:
   agent-dind:
     build:
       context: agent-dind
+      args:
+        DIM_UID: "${DIM_WORKSPACE_UID:-1000}"
+        DIM_GID: "${DIM_WORKSPACE_GID:-1000}"
     privileged: true
-    command:
-      - --host=unix:///run/docker.sock
     environment:
-      DOCKER_HOST: "unix:///run/docker.sock"
       DOCKER_TLS_CERTDIR: ""
       DIM_WORKSPACE_NAME: "${DIM_WORKSPACE_NAME:?}"
       DIM_GIT_USERNAME: "${DIM_GIT_USERNAME:?}"
@@ -24,7 +24,7 @@ services:
       - ../..:/workspace
       - "${DIM_PROJECT_MANIFEST:?}:/run/dim/project.json:ro"
       - agent-home:/mnt/agent-home
-      - agent-dind-data:/var/lib/docker
+      - agent-dind-rootless-data:/home/rootless/.local/share/docker
       - agent-dind-shared:/mnt/workspace-shared-dind
     working_dir: /workspace
 
@@ -50,7 +50,7 @@ services:
 
 volumes:
   agent-home:
-  agent-dind-data:
+  agent-dind-rootless-data:
   # Inner workloads may use different mapped UIDs. The private shared volume
   # therefore has a sticky writable root, and bind-source directories below it
   # must grant access to their intended containers.

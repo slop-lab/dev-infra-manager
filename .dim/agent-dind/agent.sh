@@ -3,7 +3,7 @@ set -eu
 
 agent_name="dim-agent"
 agent_image="dim-${DIM_WORKSPACE_NAME:?}-agent"
-docker_socket=/run/docker.sock
+docker_socket="${DOCKER_HOST#unix://}"
 
 agent_dind() {
   exec env DOCKER_HOST="unix://$docker_socket" docker "$@"
@@ -15,12 +15,8 @@ case "${1:?private agent action is required}" in
     test -d /workspace/agent
     workspace_uid="$(stat -c %u /workspace)"
     workspace_gid="$(stat -c %g /workspace)"
-    docker_gid="$(stat -c %g "$docker_socket")"
     chown -R "$workspace_uid:$workspace_gid" /mnt/agent-home
-    docker build --quiet \
-      --build-arg "DIM_UID=$workspace_uid" \
-      --build-arg "DIM_GID=$workspace_gid" \
-      --tag "$agent_image" /workspace/agent >/dev/null
+    docker build --quiet --tag "$agent_image" /workspace/agent >/dev/null
     docker rm --force "$agent_name" >/dev/null 2>&1 || true
     set -- run --detach --name "$agent_name" --restart unless-stopped \
       --label dev.dim.role=agent \
@@ -32,7 +28,7 @@ case "${1:?private agent action is required}" in
       --env "GIT_AUTHOR_EMAIL=$GIT_AUTHOR_EMAIL" \
       --env "GIT_COMMITTER_NAME=$GIT_COMMITTER_NAME" \
       --env "GIT_COMMITTER_EMAIL=$GIT_COMMITTER_EMAIL" \
-      --group-add "$docker_gid" \
+      --user 0:0 \
       --env GIT_CONFIG_COUNT=2 \
       --env GIT_CONFIG_KEY_0=credential.helper \
       --env 'GIT_CONFIG_VALUE_0=!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f' \
@@ -51,15 +47,8 @@ case "${1:?private agent action is required}" in
     done <"$host_mappings"
     set -- "$@" "$agent_image" sleep infinity
     docker "$@" >/dev/null
-    # A rootful daemon nested inside a user-namespaced workspace can expose
-    # extracted setuid files with the workspace root's outer UID. Normalize
-    # sudo's trusted files from the daemon's own root boundary before use.
-    docker exec --user 0:0 "$agent_name" sh -eu -c '
-      chown 0:0 /etc/sudo.conf /etc/sudoers /usr/bin/sudo
-      chown -R 0:0 /etc/sudoers.d
-      chmod 0440 /etc/sudoers.d/dim-agent
-      chmod 4755 /usr/bin/sudo
-    '
+    test "$(docker exec "$agent_name" id -u)" = 0
+    test "$(docker exec "$agent_name" stat -c %u /workspace)" = 0
     docker exec \
       --workdir /workspace "$agent_name" \
       pnpm install --frozen-lockfile

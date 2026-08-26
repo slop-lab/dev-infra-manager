@@ -31,9 +31,11 @@ dim workspace create dim dim-dev
 dim workspace run dim-dev codex
 ```
 
-The canonical Project runs the non-root development agent at the workspace
-checkout's UID/GID inside a private rootful `agent-dind`; passwordless sudo and
-Docker authority are confined to that inner boundary. Selecting
+The canonical Project runs its development agent as UID 0 only inside a
+private rootless `agent-dind`. The daemon adopts the workspace checkout's
+non-root UID/GID, so inner UID 0 maps to that owner rather than to root in the
+trusted workspace or host. Docker authority is confined to that inner
+rootless boundary. Selecting
 the `secure` workspace profile starts a separate `secure-dind` daemon with its
 own storage and without agent home, source, or Git credential mounts for
 Project-defined secret-bearing workloads.
