@@ -18,11 +18,11 @@ case "$task" in
 esac
 
 if [ -t 0 ] && [ -t 1 ]; then
-  exec docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" \
+  exec docker compose \
     --file .dim/docker-compose.yml exec \
     --user "$(id -u):$(id -g)" --env HOME=/home/dim-agent agent "$@"
 else
-  exec docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" \
+  exec docker compose \
     --file .dim/docker-compose.yml exec --no-TTY \
     --user "$(id -u):$(id -g)" --env HOME=/home/dim-agent agent "$@"
 fi

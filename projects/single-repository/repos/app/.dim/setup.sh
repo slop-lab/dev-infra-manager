@@ -30,8 +30,8 @@ if ! curl --fail --silent --unix-socket "$proxy_socket" \
   done
 fi
 
-docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" \
+docker compose \
   --file .dim/docker-compose.yml up --detach --build agent
-docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" \
+docker compose \
   --file .dim/docker-compose.yml exec --no-TTY agent \
   chown -R "$(id -u):$(id -g)" /home/dim-agent
