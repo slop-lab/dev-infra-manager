@@ -87,6 +87,10 @@ fi
 export DOCKER_CONFIG="/tmp/dim-workspace-docker-config-$(id -u)"
 mkdir -p "$DOCKER_CONFIG"
 chmod 0700 "$DOCKER_CONFIG"
+# Compose v5's Bake path can lose setuid ownership and mode bits when BuildKit
+# snapshots this image through nested overlay2. Keep the classic Compose build
+# path for these security-sensitive images.
+export COMPOSE_BAKE=false
 
 compose() {
   compose_files=".dim/docker-compose.yml:$compose_host_aliases"
@@ -95,7 +99,22 @@ compose() {
   fi
   COMPOSE_FILE="$compose_files" docker compose "$@"
 }
+
+verify_idmap_helpers() {
+  service="$1"
+  compose run --rm --no-deps --entrypoint sh "$service" -eu -c '
+    for helper in /usr/bin/newuidmap /usr/bin/newgidmap; do
+      identity="$(stat -c %u:%g:%a "$helper")"
+      test "$identity" = 0:0:4755 || {
+        echo "$helper must be owned by root:root with mode 4755; found $identity" >&2
+        exit 1
+      }
+    done
+  '
+}
+
 compose build --quiet agent-dind
+verify_idmap_helpers agent-dind
 # An outer workspace stop terminates nested containers without letting their
 # daemon preserve a restartable process state. Recreate Project containers on
 # every setup while retaining their named data and home volumes.
@@ -104,6 +123,7 @@ compose exec --no-TTY --user root agent-dind dim-agent-dind setup
 case ",${COMPOSE_PROFILES:-}," in
   *,secure,*)
     compose build --quiet secure-dind
+    verify_idmap_helpers secure-dind
     compose up --detach --force-recreate --wait secure-dind
     ;;
 esac
