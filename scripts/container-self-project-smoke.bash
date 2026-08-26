@@ -216,7 +216,8 @@ verify_agent_dind() {
 verification_stage="initial agent-dind contract"
 verify_agent_dind
 verification_stage="workspace restart"
-if ! dim workspace restart "$workspace_name" >/dev/null; then
+if ! restart_error="$(dim workspace restart "$workspace_name" 2>&1)"; then
+  printf '%s\n' "$restart_error" >&2
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml ps >&2 || true
