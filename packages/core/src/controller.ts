@@ -5,7 +5,11 @@ import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
 import { ProcessRunner } from "./runner.js";
 import type { StreamingCommandRunner } from "./types.js";
-import { restartWorkspace as restartWorkspaceLifecycle } from "./workspaceLifecycle.js";
+import {
+  listWorkspaces as listWorkspaceRecords,
+  PROJECT_COMPOSE_NAME,
+  restartWorkspace as restartWorkspaceLifecycle
+} from "./workspaceLifecycle.js";
 
 export type ControllerMethod = "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
 export type ControllerAudience = "workspace" | "agent";
@@ -154,7 +158,7 @@ export async function initializeControllerRoutes(
   const runtime: ControllerRuntimeContext = {
     stateRoot: lifecycle.stateRoot,
     runner,
-    listWorkspaces: async () => (await state.listWorkspaces()).map((workspace) => ({
+    listWorkspaces: async () => (await listWorkspaceRecords(runner, lifecycle)).map((workspace) => ({
       id: `${workspace.projectId}:${workspace.name}`,
       name: workspace.name,
       projectId: workspace.projectId,
@@ -416,7 +420,7 @@ async function innerContainer(
   ]);
   if (inspected.exitCode !== 0) {
     const found = await workspaceDocker(runner, record, [
-      "ps", "--filter", `label=com.docker.compose.project=${record.composeProjectName}`,
+      "ps", "--filter", `label=com.docker.compose.project=${PROJECT_COMPOSE_NAME}`,
       "--filter", `label=com.docker.compose.service=${nameOrService}`,
       "--format", "{{.Names}}"
     ]);

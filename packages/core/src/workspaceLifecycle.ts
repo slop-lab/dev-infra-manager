@@ -26,6 +26,7 @@ import {
 // The unprivileged OS user the workspace image creates and runs project commands as.
 const WORKSPACE_USER = "dim";
 const WORKSPACE_RUNTIME_CONFIG_VERSION = "4";
+export const PROJECT_COMPOSE_NAME = "dim-project";
 
 export interface WorkspaceGitEnvironment {
   username: string;
@@ -327,7 +328,7 @@ export async function execWorkspace(
   options: LifecycleOptions,
   input: WorkspaceCommandInput
 ): Promise<number> {
-  const record = await showWorkspace(options, input.name);
+  const record = await showWorkspace(runner, options, input.name);
   await assertContainerRunning(runner, record);
   if (input.command.length === 0) throw new UserError("dim workspace exec requires a command");
   return streamProjectCommand(runner, record, input.command, input.interactive, true);
@@ -503,7 +504,7 @@ async function startWorkspaceLocked(
   workspaceName: string,
   target?: RootFastForwardPlan
 ): Promise<WorkspaceRecord> {
-  const record = await state.readWorkspace(workspaceName);
+  const record = await reconcileWorkspaceRuntimeState(runner, state, await state.readWorkspace(workspaceName));
   if (record.phase !== "stopped") {
     throw new UserError(`workspace '${workspaceName}' is not stopped; use restart to apply project changes`);
   }
@@ -531,7 +532,7 @@ export async function restartWorkspace(
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
-    const record = await state.readWorkspace(workspaceName);
+    const record = await reconcileWorkspaceRuntimeState(runner, state, await state.readWorkspace(workspaceName));
     if (record.phase === "stopped") {
       return await startWorkspaceLocked(runner, options, state, workspaceName);
     }
@@ -546,12 +547,37 @@ export async function restartWorkspace(
   }
 }
 
-export async function showWorkspace(options: LifecycleOptions, name: string): Promise<WorkspaceRecord> {
-  return new LifecycleState(options.stateRoot).readWorkspace(validateLifecycleName(name, "workspace"));
+export async function showWorkspace(
+  runner: StreamingCommandRunner,
+  options: LifecycleOptions,
+  name: string
+): Promise<WorkspaceRecord> {
+  const state = new LifecycleState(options.stateRoot);
+  const workspaceName = validateLifecycleName(name, "workspace");
+  const release = await state.acquireWorkspaceSetupLock(workspaceName);
+  try {
+    return await reconcileWorkspaceRuntimeState(runner, state, await state.readWorkspace(workspaceName));
+  } finally {
+    await release();
+  }
 }
 
-export async function listWorkspaces(options: LifecycleOptions): Promise<WorkspaceRecord[]> {
-  return new LifecycleState(options.stateRoot).listWorkspaces();
+export async function listWorkspaces(
+  runner: StreamingCommandRunner,
+  options: LifecycleOptions
+): Promise<WorkspaceRecord[]> {
+  const state = new LifecycleState(options.stateRoot);
+  const records = await state.listWorkspaces();
+  const reconciled: WorkspaceRecord[] = [];
+  for (const record of records) {
+    const release = await state.acquireWorkspaceSetupLock(record.name);
+    try {
+      reconciled.push(await reconcileWorkspaceRuntimeState(runner, state, await state.readWorkspace(record.name)));
+    } finally {
+      await release();
+    }
+  }
+  return reconciled;
 }
 
 export async function updateWorkspaceResources(
@@ -737,12 +763,41 @@ async function runnableWorkspace(
   options: LifecycleOptions,
   name: string
 ): Promise<WorkspaceRecord> {
-  const record = await showWorkspace(options, name);
+  const record = await showWorkspace(runner, options, name);
   if (record.phase !== "ready") {
     throw new UserError(`workspace '${record.name}' is not ready (phase: ${record.phase}); run dim workspace setup`);
   }
   await assertContainerRunning(runner, record);
   return record;
+}
+
+async function reconcileWorkspaceRuntimeState(
+  runner: StreamingCommandRunner,
+  state: LifecycleState,
+  record: WorkspaceRecord
+): Promise<WorkspaceRecord> {
+  if (record.phase !== "ready" && record.phase !== "stopped") return record;
+  const inspect = await runner.run("docker", [
+    "container", "inspect", record.containerName,
+    "--format", "{{index .Config.Labels \"dim.managed\"}}|{{index .Config.Labels \"dim.workspace\"}}|{{.State.Running}}"
+  ]);
+  let running = false;
+  if (inspect.exitCode === 0) {
+    const value = inspect.stdout.trim();
+    if (value !== `true|${record.name}|true` && value !== `true|${record.name}|false`) {
+      throw new UserError(`Docker resource '${record.containerName}' conflicts with workspace '${record.name}'`);
+    }
+    running = value.endsWith("|true");
+  } else if (!/no such (?:container|object)/i.test(inspect.stderr)) {
+    throw new UserError(`cannot inspect workspace '${record.name}': ${inspect.stderr.trim()}`);
+  }
+  // A running outer container is not sufficient evidence that reviewed Project
+  // setup completed. Only DIM setup may promote a workspace back to ready.
+  if (running || record.phase === "stopped") return record;
+  const reconciled = { ...record, phase: "stopped" as const, updatedAt: new Date().toISOString() };
+  delete reconciled.error;
+  await state.writeWorkspace(reconciled);
+  return reconciled;
 }
 
 async function assertContainerRunning(runner: StreamingCommandRunner, record: WorkspaceRecord): Promise<void> {
@@ -1187,14 +1242,14 @@ async function runProjectSetup(
   if (!(await projectFileExists(runner, record, ".dim/docker-compose.yml"))) return 0;
   if (profilesChanged) {
     const down = await streamProjectCommand(runner, record, [
-      engine, "compose", "--project-name", record.composeProjectName,
+      engine, "compose", "--project-name", PROJECT_COMPOSE_NAME,
       "--file", ".dim/docker-compose.yml", "--profile", "*",
       "down", "--remove-orphans"
     ], false);
     if (down !== 0) return down;
   }
   return streamProjectCommand(runner, record, [
-    engine, "compose", "--project-name", record.composeProjectName,
+    engine, "compose", "--project-name", PROJECT_COMPOSE_NAME,
     "--file", ".dim/docker-compose.yml",
     ...composeProfileArgs(record.profiles),
     "up", "--detach", "--build", ...(forceRecreate ? ["--force-recreate"] : [])
@@ -1208,7 +1263,7 @@ async function runProjectTeardown(runner: StreamingCommandRunner, record: Worksp
   }
   if (await projectFileExists(runner, record, ".dim/docker-compose.yml")) {
     await streamProjectCommand(runner, record, [
-      nestedEngine(record), "compose", "--project-name", record.composeProjectName,
+      nestedEngine(record), "compose", "--project-name", PROJECT_COMPOSE_NAME,
       "--file", ".dim/docker-compose.yml", "--profile", "*",
       "down", "--remove-orphans"
     ], false);
@@ -1230,7 +1285,7 @@ function projectEnvironment(record: WorkspaceRecord): string[] {
     "--env", `DIM_PROJECT_ROOT=${record.projectPath}`,
     "--env", `DIM_PROJECT_MANIFEST=${record.projectManifestPath}`,
     "--env", `DIM_WORKSPACE_NAME=${record.name}`,
-    "--env", `COMPOSE_PROJECT_NAME=${record.composeProjectName}`,
+    "--env", `COMPOSE_PROJECT_NAME=${PROJECT_COMPOSE_NAME}`,
     "--env", `DIM_WORKSPACE_BACKEND=${record.runtimeBackend}`,
     "--env", `DIM_WORKSPACE_KVM=${record.kvm ? "1" : "0"}`,
     "--env", `DIM_NESTED_ENGINE=${nestedEngine(record)}`,

@@ -299,8 +299,8 @@ async function builtinCall(
         ...(input.gitUserName === undefined ? {} : { gitUserName: text("gitUserName") }),
         ...(input.gitUserEmail === undefined ? {} : { gitUserEmail: text("gitUserEmail") })
       }, plugins);
-    case "workspace.list": return listWorkspaces(lifecycle);
-    case "workspace.show": return showWorkspace(lifecycle, text("name"));
+    case "workspace.list": return listWorkspaces(runner, lifecycle);
+    case "workspace.show": return showWorkspace(runner, lifecycle, text("name"));
     case "workspace.align": return alignWorkspaceRoot(runner, lifecycle, text("name"), input.reset === true);
     case "workspace.setup": return setupWorkspace(runner, lifecycle, text("name"));
     case "workspace.update":
