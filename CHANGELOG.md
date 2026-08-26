@@ -17,6 +17,10 @@
   control-network address in `/etc/hosts`, avoiding runtime-specific embedded
   DNS behavior while retaining the recorded endpoint boundary.
 
+- Materialize the DIM-owned registry cache's inspected control-network address
+  in workspace `/etc/hosts`, so gVisor workspaces use the host-governed mirror
+  without depending on runsc's nested embedded-DNS behavior.
+
 - Completed the rootless-Podman workspace toolchain with supported Node.js,
   `just`, Docker-compatible Podman Compose, and the controller proxy used by
   reviewed Project setup scripts.

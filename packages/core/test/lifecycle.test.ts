@@ -481,13 +481,13 @@ describe("project and workspace lifecycle", () => {
       token: "token",
       userName: "Agent",
       userEmail: "agent@example.invalid"
-    }, "work-1.controller-grant", () => 992, "work-1.agent.agent-grant");
+    }, "work-1.controller-grant", () => 992, "work-1.agent.agent-grant", "172.20.0.3");
     expect(args).toEqual(expect.arrayContaining([
       "--name", "dim-ws-work-1",
       "--label", "dim.managed=true",
       "--label", "dim.project=project",
       "--label", "dim.repo=root",
-      "--label", "dim.runtime-config=3",
+      "--label", "dim.runtime-config=4",
       "--mount", "type=volume,source=dim-ws-work-1-docker,target=/var/lib/docker",
       "--cpus", "1.5",
       "--memory", "3g",
@@ -496,6 +496,7 @@ describe("project and workspace lifecycle", () => {
       "--env", "DIM_GIT_TOKEN=token",
       "--add-host", "host.docker.internal:host-gateway",
       "--add-host", "dim-gitea:172.20.0.2",
+      "--add-host", "dim-registry-cache:172.20.0.3",
       "--mount", `type=bind,source=${join(options.controllerSocketPath, "..")},target=/run/dim/controller`,
       "--env", "DIM_CONTROLLER_SOCKET=/run/dim/controller/controller.sock",
       "--env", "DIM_CONTROLLER_TOKEN=work-1.controller-grant",
