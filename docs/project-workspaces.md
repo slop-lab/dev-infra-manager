@@ -366,6 +366,13 @@ Setup failure is recorded separately from runtime reconciliation failure and
 does not destroy the checkout or inner-Docker cache. Task failure is returned
 to the caller but does not mark the workspace itself unhealthy.
 
+For Docker or host maintenance, `dim host shutdown` stops all DIM runtimes
+without removing their named volumes and leaves the controller available in a
+not-ready maintenance state. After maintenance, `dim host start` restores
+Gitea and the registry cache before restarting only the workspaces and CI
+runners that were ready at shutdown. `dim host status --json` reports the
+phase and any pending recovery error.
+
 DIM configures its workspace Docker engine to use the same managed,
 host-scoped anonymous Docker Hub pull-through cache as managed CI runners.
 The cache remains outside Project-defined networks and Project code does not

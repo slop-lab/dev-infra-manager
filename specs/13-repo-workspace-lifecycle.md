@@ -224,6 +224,14 @@ workspace root. The agent socket directory is mounted separately at
 pass only that socket and grant to agent containers. Directory mounts keep
 existing workspace mounts valid across controller restarts.
 
+Host maintenance uses a controller-owned lifecycle record independent of
+workspace state. While that record is not `ready`, `/healthz` remains a live
+controller response carrying `ready: false`, `/readyz` returns `503`, and only
+host status/start administration is accepted. Shutdown uses stop semantics,
+never Project teardown or volume removal. A previously ready workspace is
+restored through the ordinary start/setup path, so a merely running outer
+container cannot make the host ready.
+
 `POST /api/workspace/restart` accepts no body, derives the target exclusively
 from the authenticated workspace grant, returns `202` before lifecycle work
 begins, and asynchronously performs the ordinary stop, root fast-forward, and

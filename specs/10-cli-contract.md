@@ -474,9 +474,21 @@ the host maintainer's repository access and existing protected-ref allowlists.
 
 ```bash
 dim doctor
+dim host status [--json]
+dim host shutdown
+dim host start
 dim plugin list
 dim admin service ensure
 dim admin service credentials --show-secrets
 ```
 
 Administrative commands are omitted from the default root help.
+
+`dim host shutdown` MUST atomically record the workspaces and CI runners that
+were ready and every other running `dim.managed=true` host container. It then
+stops execution runtimes, other managed services, the registry cache, and
+managed Gitea. It MUST NOT remove containers, volumes, repositories, or state.
+The controller remains live but reports the host as not ready. `dim host
+start` MUST restore Gitea and the registry cache first, then only the recorded
+workspaces and runners. The host returns to ready only after every target is
+restored; partial failure remains retryable and blocks other administration.
