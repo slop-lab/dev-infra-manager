@@ -85,6 +85,18 @@ just verify environments-kvm --verbose
 bash verification/scripts/kvm-host-install-smoke.bash --verbose
 ```
 
+The canonical DIM Project additionally lets its agent request that gate through
+the protected root launcher:
+
+```bash
+node project/.dim/qemu-client.mjs run
+node project/.dim/qemu-client.mjs run --input fixtures=/workspace/local-fixtures
+```
+
+The client also provides `start`, `status`, `follow`, and `cancel`. QEMU and
+`/dev/kvm` remain in the trusted workspace. Inputs are snapshots restricted to
+paths already beneath `/workspace`, not live host bind mounts.
+
 Prepare those dependencies with
 `bash verification/scripts/install-kvm-verify-deps-ubuntu.bash`. This
 requires writable `/dev/kvm`, `qemu-system-x86_64`, `qemu-img`, and

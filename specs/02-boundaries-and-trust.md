@@ -30,6 +30,10 @@ Agent containers:
 - Must not mount the host runtime socket or Project runtime socket.
 - Must not mount secret-bearing runtime volumes.
 - May run nested containers through an agent-specific inner runtime.
+- May request the protected Project root's fixed local-QEMU verification task.
+  The agent receives neither `/dev/kvm` nor a QEMU binary. Candidate worktrees
+  and explicitly named inputs are copied into the guest as untrusted data; no
+  candidate-controlled program runs in the trusted workspace.
 - Must not run as root in a container whose root identity carries host or
   trusted-workspace authority. UID 0 is permitted inside an explicitly
   rootless agent runtime when its user namespace maps that identity to the

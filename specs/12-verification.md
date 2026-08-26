@@ -273,6 +273,16 @@ its directly passed `/dev/kvm` with QEMU, absence of Sysbox registration in
 the workspace's Project daemon, and a separate unprivileged Sysbox isolation
 probe running a private DinD workload.
 
+The canonical Project MUST also expose the same protected QEMU launcher through
+a workspace-local, single-run service. The agent may start, follow, inspect, or
+cancel that fixed launcher, but cannot supply a command, launcher path, QEMU
+argument, or path outside the assembled `/workspace`. Additional
+`NAME=/workspace/PATH` inputs are realpath-checked, copied without dereferencing
+symlinks, and appear only as guest snapshots under `/mnt/dim-inputs/NAME`.
+The service and QEMU process run in the trusted workspace; `/dev/kvm`, QEMU
+binaries, the launcher copy, and its base-image cache MUST NOT be mounted
+writable into the agent. Candidate verification code executes only in the VM.
+
 ## Installer Facade Verification
 
 `just verify mise-install-smoke` requires Docker and network access. It
