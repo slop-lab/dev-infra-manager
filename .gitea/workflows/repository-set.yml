@@ -132,6 +132,10 @@ jobs:
       - name: Verify container integration
         if: ${{ inputs.gate == 'container' }}
         working-directory: snapshot
+        env:
+          # Resize is not observed in the current Sysbox-hosted runner. This
+          # records that CI-environment behavior without assigning its cause.
+          DIM_TEST_PTY_RESIZE: unsupported
         run: |
           dim-ci-runner-health --recover
           just check-source

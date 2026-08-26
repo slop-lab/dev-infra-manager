@@ -55,6 +55,7 @@ describe("DIM development forge policy", () => {
     expect(recipes).toContain('DIM_EXAMPLE_WORKSPACE_BACKEND="{{backend}}"');
     expect(recipes).toContain('DIM_SELF_WORKSPACE_BACKEND="{{backend}}"');
     expect(workflow.match(/with-ci-registry-cache\.bash/g)).toHaveLength(2);
+    expect(workflow.match(/DIM_TEST_PTY_RESIZE: unsupported/g)).toHaveLength(2);
     expect(workflow).toContain("inputs.gate == 'kvm' && 60 || 30");
     expect(workflow).toContain("inputs.gate != 'integration' && inputs.gate != 'container'");
   });
@@ -90,8 +91,10 @@ describe("DIM development forge policy", () => {
       "examples/projects/multi-repository/repos/root/.dim/dind/Dockerfile"
     ]) {
       const dockerfile = await readFile(resolve(workspaceRoot, path), "utf8");
-      expect(dockerfile).toContain("FROM docker:29.1.3-dind");
-      expect(dockerfile).not.toContain("FROM docker:29.1.3-dind-rootless");
+      expect(dockerfile).toContain("FROM docker:29.1.3-cli");
+      expect(dockerfile).not.toContain("FROM docker:29.1.3-dind");
+      expect(dockerfile).toContain("shadow-subids-4.18.0-r0.apk");
+      expect(dockerfile).not.toContain("apk add --no-cache shadow-uidmap");
       expect(dockerfile).toContain("docker-rootless-extras-29.1.3.tgz");
       expect(dockerfile).toContain("rootless_sha256=");
       expect(dockerfile).toContain("chmod 4755 /usr/bin/newuidmap /usr/bin/newgidmap");
