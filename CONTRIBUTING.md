@@ -76,11 +76,10 @@ libraries, then `dim-cli`, then `dim-installer`).
 
 ```bash
 just bootstrap-ubuntu
-just bootstrap-ubuntu gvisor
 ```
 
-Installs Node.js/pnpm/`just` (via mise when available), the selected host
-backend, project dependencies, and runs `verify` plus `doctor`. See
+Installs Node.js/pnpm/`just` (via mise when available), Sysbox, project
+dependencies, and runs `verify` plus `doctor`. See
 [docs/usage.md](specification/docs/usage.md#setup) for what each step does.
 
 ## Linking a locally built `dim` for testing against another project

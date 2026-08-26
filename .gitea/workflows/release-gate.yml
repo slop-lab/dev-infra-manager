@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   container-integration:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@5318a2800d5e4c49b54eb24562aa376534e4f39b
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@50b6b8e0688d9732e0c517667513047cda034bd3
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
@@ -22,21 +22,9 @@ jobs:
       root-ref: ${{ inputs.root-ref }}
       gate: container
       runner-label: dim-container-integration
-      backend: runc
-
-  qemu-runc:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@5318a2800d5e4c49b54eb24562aa376534e4f39b
-    with:
-      candidate-repository: development
-      candidate-ref: ${{ gitea.sha }}
-      development-ref: ${{ gitea.sha }}
-      root-ref: ${{ inputs.root-ref }}
-      gate: kvm
-      runner-label: dim-qemu
-      backend: runc
 
   qemu-sysbox:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@5318a2800d5e4c49b54eb24562aa376534e4f39b
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@50b6b8e0688d9732e0c517667513047cda034bd3
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
@@ -44,26 +32,3 @@ jobs:
       root-ref: ${{ inputs.root-ref }}
       gate: kvm
       runner-label: dim-qemu
-      backend: sysbox
-
-  qemu-gvisor:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@5318a2800d5e4c49b54eb24562aa376534e4f39b
-    with:
-      candidate-repository: development
-      candidate-ref: ${{ gitea.sha }}
-      development-ref: ${{ gitea.sha }}
-      root-ref: ${{ inputs.root-ref }}
-      gate: kvm
-      runner-label: dim-qemu
-      backend: gvisor
-
-  qemu-rootless-podman:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@5318a2800d5e4c49b54eb24562aa376534e4f39b
-    with:
-      candidate-repository: development
-      candidate-ref: ${{ gitea.sha }}
-      development-ref: ${{ gitea.sha }}
-      root-ref: ${{ inputs.root-ref }}
-      gate: kvm
-      runner-label: dim-qemu
-      backend: rootless-podman

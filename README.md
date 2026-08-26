@@ -157,17 +157,14 @@ exceptions for Sysbox FUSE mounts and rootless DinD's
 `/usr/local/bin/rootlesskit` user namespace before using it outside a
 development host.
 
-Choose the backend your workspaces will use:
+Install the supported workspace backend:
 
 ```bash
-bash verification/scripts/install-host-ubuntu.bash sysbox          # default nested-container backend
-bash verification/scripts/install-host-ubuntu.bash gvisor          # sandboxed fallback without KVM
-bash verification/scripts/install-host-ubuntu.bash rootless-podman # lower-host-privilege workloads
-bash verification/scripts/install-host-ubuntu.bash runc            # trusted development/CI only
+bash verification/scripts/install-host-ubuntu.bash sysbox
 ```
 
-See [docs/runtime-backends.md](specification/docs/runtime-backends.md) for how these
-differ, and [CONTRIBUTING.md](CONTRIBUTING.md) for testing an installer in a
+See [docs/runtime-backends.md](specification/docs/runtime-backends.md) for the
+trusted-runc and untrusted-Sysbox boundary, and [CONTRIBUTING.md](CONTRIBUTING.md) for testing the installer in a
 disposable KVM guest instead of your own host.
 
 ## Install the `dim` CLI

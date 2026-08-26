@@ -5,8 +5,6 @@ core/*
 core/images/*
 !core/images/project-workspace/
 !core/images/project-workspace/**
-!core/images/project-workspace-podman/
-!core/images/project-workspace-podman/**
 !core/packages/
 core/packages/*
 !core/packages/controller-proxy/
