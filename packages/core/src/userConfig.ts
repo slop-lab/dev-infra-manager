@@ -46,12 +46,7 @@ export function configuredWorkspaceBackend(
   if (value === undefined) return undefined;
   if (value.schemaVersion !== 1) throw new UserError(`invalid DIM user config at ${target}`);
   if (value.workspaceBackend === undefined) return undefined;
-  if (
-    value.workspaceBackend !== "sysbox"
-    && value.workspaceBackend !== "gvisor"
-    && value.workspaceBackend !== "rootless-podman"
-    && value.workspaceBackend !== "runc"
-  ) {
+  if (value.workspaceBackend !== "sysbox") {
     throw new UserError(`invalid workspaceBackend in DIM user config at ${target}`);
   }
   return value.workspaceBackend;

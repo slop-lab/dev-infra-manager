@@ -71,7 +71,7 @@ export interface CiRunnerRecord {
   updatedAt: string;
 }
 
-export type WorkspaceRuntimeBackendKind = "sysbox" | "gvisor" | "rootless-podman" | "runc";
+export type WorkspaceRuntimeBackendKind = "sysbox";
 
 export interface GiteaCredentials {
   adminUsername: string;

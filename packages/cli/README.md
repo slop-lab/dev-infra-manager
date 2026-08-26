@@ -33,14 +33,14 @@ refreshes explicit.
 - Node.js 24 or 26.
 - Git and a working Docker CLI/daemon. DIM always uses Docker to manage the
   outer workspace container, regardless of the selected backend.
-- A supported workspace backend: Sysbox, gVisor, rootless Podman, or
-  privileged runc.
-- The DIM workspace image appropriate for that backend.
+- The Sysbox workspace backend and its registered `sysbox-runc` Docker runtime.
+- The DIM workspace image.
 
 The repository contains host-backend installers and image build recipes. Read
 the [setup guide](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/usage.md)
-before using the CLI on a new host. Privileged runc is provided for
-compatibility and CI smoke testing; it is not the preferred isolation boundary.
+before using the CLI on a new host. Docker's ordinary runc runtime remains an
+internal dependency for trusted infrastructure; it is not a selectable
+workspace isolation boundary.
 
 ## Installation
 

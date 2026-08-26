@@ -161,10 +161,8 @@ export async function confirmRecommended(question: string): Promise<boolean> {
 }
 
 export function parseWorkspaceBackend(value: string): WorkspaceRuntimeBackendKind {
-  if (value === "sysbox" || value === "gvisor" || value === "rootless-podman" || value === "runc") {
-    return value;
-  }
-  throw new UserError("backend must be sysbox, gvisor, rootless-podman, or runc");
+  if (value === "sysbox") return value;
+  throw new UserError("backend must be sysbox");
 }
 
 export async function selectInstalledWorkspaceBackend(): Promise<WorkspaceRuntimeBackendKind> {
@@ -174,25 +172,7 @@ export async function selectInstalledWorkspaceBackend(): Promise<WorkspaceRuntim
   if (installed.length === 0) {
     throw new UserError("no installed workspace backend detected; install a host backend first");
   }
-  if (installed.length === 1) return installed[0]!;
-  if (!interactive()) {
-    throw new UserError(
-      `multiple installed workspace backends detected (${installed.join(", ")}); specify one explicitly`
-    );
-  }
-  console.log("Select an installed workspace backend:");
-  installed.forEach((backend, index) => console.log(`  ${index + 1}) ${backend}`));
-  const prompt = createInterface({ input: process.stdin, output: process.stdout });
-  try {
-    const answer = (await prompt.question("Selection: ")).trim();
-    const index = Number(answer) - 1;
-    if (!Number.isSafeInteger(index) || index < 0 || index >= installed.length) {
-      throw new UserError("invalid backend selection");
-    }
-    return installed[index]!;
-  } finally {
-    prompt.close();
-  }
+  return installed[0]!;
 }
 
 export function printDoctorChecks(checks: Array<{ name: string; ok: boolean; detail: string }>): void {

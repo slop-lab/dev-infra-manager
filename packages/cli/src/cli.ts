@@ -719,15 +719,14 @@ const doctor = program.command("doctor")
 
 doctor.command("configure-backend")
   .description("Detect, verify, and record an installed workspace backend")
-  .argument("[backend]", "sysbox, gvisor, rootless-podman, or runc")
+  .argument("[backend]", "sysbox")
   .action(async (backendArgument: string | undefined) => {
     const backend = backendArgument === undefined
       ? await selectInstalledWorkspaceBackend()
       : parseWorkspaceBackend(backendArgument);
     const checks = await runtimeBackendChecks(runner, backend, lifecycleOptionsForBackend(backend));
-    const requiredChecks = checks.filter((check) => check.name !== "KVM device");
-    printDoctorChecks(requiredChecks);
-    if (requiredChecks.some((check) => !check.ok)) {
+    printDoctorChecks(checks);
+    if (checks.some((check) => !check.ok)) {
       throw new UserError(`workspace backend '${backend}' is not installed and ready`);
     }
     const target = await setConfiguredWorkspaceBackend(backend);

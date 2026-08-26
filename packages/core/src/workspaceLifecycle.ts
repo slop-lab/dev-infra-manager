@@ -23,8 +23,7 @@ import {
   REGISTRY_CACHE_ENDPOINT
 } from "./registryCache.js";
 
-// The unprivileged OS user every workspace image (core/images/project-workspace,
-// core/images/project-workspace-podman) creates and runs project commands as.
+// The unprivileged OS user the workspace image creates and runs project commands as.
 const WORKSPACE_USER = "dim";
 const WORKSPACE_RUNTIME_CONFIG_VERSION = "4";
 
@@ -166,9 +165,7 @@ export async function detectWorkspaceKvm(
   backend: WorkspaceRecord["runtimeBackend"],
   probe: () => Promise<void> = probeKvmDevice
 ): Promise<boolean> {
-  // runsc does not expose the KVM ioctl surface. Explicit device forwarding
-  // remains useful for runc-backed privileged and rootless-Podman workspaces.
-  if (backend === "gvisor") return false;
+  if (backend !== "sysbox") return false;
   try {
     await probe();
     return true;
@@ -929,7 +926,7 @@ export async function waitForInnerDocker(runner: StreamingCommandRunner, contain
 export async function waitForWorkspaceRuntime(
   runner: StreamingCommandRunner,
   containerName: string,
-  engine: "docker" | "podman"
+  engine: "docker"
 ): Promise<void> {
   let lastError = "not ready";
   for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -1300,8 +1297,8 @@ function rootBranch(ref: string): string {
   return ref.slice(prefix.length);
 }
 
-function nestedEngine(record: WorkspaceRecord): "docker" | "podman" {
-  return record.runtimeBackend === "rootless-podman" ? "podman" : "docker";
+function nestedEngine(_record: WorkspaceRecord): "docker" {
+  return "docker";
 }
 
 async function projectFileExists(

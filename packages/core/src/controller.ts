@@ -493,8 +493,8 @@ async function workspaceDocker(
   return runner.run("docker", ["exec", "--user", "root", record.containerName, nestedEngine(record), ...args]);
 }
 
-function nestedEngine(record: WorkspaceRecord): "docker" | "podman" {
-  return record.runtimeBackend === "rootless-podman" ? "podman" : "docker";
+function nestedEngine(_record: WorkspaceRecord): "docker" {
+  return "docker";
 }
 
 function stableHash(value: string): number {

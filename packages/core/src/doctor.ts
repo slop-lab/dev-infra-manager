@@ -1,4 +1,4 @@
-import { access, constants, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { lifecycleOptions, lifecycleOptionsForBackend } from "./lifecycleOptions.js";
 import type { LifecycleOptions, WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
 import { workspaceRuntimePlan } from "./runtimeBackends.js";
@@ -40,14 +40,14 @@ export async function inspectWorkspaceBackends(
   runner: CommandRunner,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<WorkspaceBackendInspection[]> {
-  const backends: WorkspaceRuntimeBackendKind[] = ["sysbox", "gvisor", "rootless-podman", "runc"];
+  const backends: WorkspaceRuntimeBackendKind[] = ["sysbox"];
   const inspections: WorkspaceBackendInspection[] = [];
   for (const backend of backends) {
     const checks = await runtimeBackendChecks(runner, backend, lifecycleOptionsForBackend(backend, env));
     inspections.push({
       backend,
       checks,
-      ok: checks.filter((check) => check.name !== "KVM device").every((check) => check.ok)
+      ok: checks.every((check) => check.ok)
     });
   }
   return inspections;
@@ -73,36 +73,13 @@ export async function runtimeBackendChecks(
   backend: WorkspaceRuntimeBackendKind,
   options: LifecycleOptions
 ): Promise<DoctorCheck[]> {
-  const plan = workspaceRuntimePlan(backend, options);
-  switch (backend) {
-    case "sysbox": {
-      return [
-        await commandCheck(runner, "sysbox-runc", ["--version"], "sysbox-runc"),
-        await systemdUnitCheck(runner, "sysbox.service", "Sysbox service"),
-        await dockerRuntimeCheck(runner, "sysbox-runc", "Docker sysbox-runc runtime"),
-        await dockerRuntimeExecutionCheck(runner, "sysbox-runc", "Sysbox container execution"),
-        await pathCheck("/dev/kvm", "KVM device")
-      ];
-    }
-    case "gvisor": {
-      return [
-        await commandCheck(runner, "runsc", ["--version"], "runsc"),
-        await dockerRuntimeCheck(runner, plan.dockerRuntime, `Docker ${plan.dockerRuntime} runtime`),
-        await dockerRuntimeExecutionCheck(runner, plan.dockerRuntime, "gVisor container execution")
-      ];
-    }
-    case "rootless-podman":
-      return [
-        await dockerImageCheck(runner, plan.image, "Rootless Podman workspace image"),
-        await dockerAgentCommandCheck(runner, plan.image, ["podman", "--version"], "Podman in workspace image"),
-        await pathCheck("/dev/fuse", "FUSE device")
-      ];
-    case "runc":
-      return [
-        await dockerRuntimeCheck(runner, plan.dockerRuntime, `Docker ${plan.dockerRuntime} runtime`),
-        await dockerRuntimeExecutionCheck(runner, plan.dockerRuntime, "runc container execution")
-      ];
-  }
+  workspaceRuntimePlan(backend, options);
+  return [
+    await commandCheck(runner, "sysbox-runc", ["--version"], "sysbox-runc"),
+    await systemdUnitCheck(runner, "sysbox.service", "Sysbox service"),
+    await dockerRuntimeCheck(runner, "sysbox-runc", "Docker sysbox-runc runtime"),
+    await dockerRuntimeExecutionCheck(runner, "sysbox-runc", "Sysbox container execution")
+  ];
 }
 
 async function commandCheck(runner: CommandRunner, command: string, args: string[], name: string): Promise<DoctorCheck> {
@@ -113,15 +90,6 @@ async function commandCheck(runner: CommandRunner, command: string, args: string
     ok: result.exitCode === 0,
     detail: result.exitCode === 0 ? output : `${command} not available`
   };
-}
-
-async function pathCheck(path: string, name: string): Promise<DoctorCheck> {
-  try {
-    await access(path, constants.R_OK | constants.W_OK);
-    return { name, ok: true, detail: path };
-  } catch {
-    return { name, ok: false, detail: `${path} is not accessible` };
-  }
 }
 
 async function dockerDaemonCheck(runner: CommandRunner): Promise<DoctorCheck> {
@@ -167,30 +135,6 @@ export async function dockerRuntimeExecutionCheck(runner: CommandRunner, runtime
 
 export async function sysboxExecutionCheck(runner: CommandRunner): Promise<DoctorCheck> {
   return dockerRuntimeExecutionCheck(runner, "sysbox-runc", "Sysbox container execution");
-}
-
-async function dockerImageCheck(runner: CommandRunner, image: string, name: string): Promise<DoctorCheck> {
-  let result = await runner.run("docker", ["image", "inspect", image, "--format", "{{.Id}}"]);
-  if (result.exitCode !== 0 && `${result.stderr}${result.stdout}`.includes("permission denied")) {
-    result = await runner.run("docker", ["image", "inspect", image, "--format", "{{.Id}}"], { sudo: true });
-  }
-  return {
-    name,
-    ok: result.exitCode === 0,
-    detail: result.exitCode === 0 ? "present" : firstLine(`${result.stderr}${result.stdout}`) || "image not present"
-  };
-}
-
-async function dockerAgentCommandCheck(runner: CommandRunner, image: string, commandArgs: string[], name: string): Promise<DoctorCheck> {
-  let result = await runner.run("docker", ["run", "--rm", image, ...commandArgs]);
-  if (result.exitCode !== 0 && `${result.stderr}${result.stdout}`.includes("permission denied")) {
-    result = await runner.run("docker", ["run", "--rm", image, ...commandArgs], { sudo: true });
-  }
-  return {
-    name,
-    ok: result.exitCode === 0,
-    detail: result.exitCode === 0 ? firstLine(`${result.stdout}${result.stderr}`) : firstLine(`${result.stderr}${result.stdout}`) || "agent command failed"
-  };
 }
 
 async function systemdUnitCheck(runner: CommandRunner, unit: string, name: string): Promise<DoctorCheck> {

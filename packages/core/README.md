@@ -8,7 +8,7 @@ implements:
 - provider-neutral Project CI runner lifecycle with an initial managed-Gitea
   coordinator adapter and isolated container executor;
 - persistent workspace create/start/restart/update/discard lifecycle;
-- Sysbox, gVisor, rootless Podman, and runc runtime plans;
+- a Sysbox workspace runtime plan with runc reserved for trusted infrastructure;
 - host-readiness checks;
 - plugin manifest loading and version validation.
 

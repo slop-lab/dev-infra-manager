@@ -47,9 +47,9 @@ export function classifyProjectRuntimeCgroups(input: {
 export async function inspectProjectRuntimeCgroups(
   runner: CommandRunner,
   containerName: string,
-  engine: "docker" | "podman"
+  engine: "docker"
 ): Promise<ProjectRuntimeCgroups> {
-  const driverFormat = engine === "docker" ? "{{.CgroupDriver}}" : "{{.Host.CgroupManager}}";
+  const driverFormat = "{{.CgroupDriver}}";
   const result = await runner.run("docker", [
     "exec", "--user", "root", containerName, "sh", "-c",
     [

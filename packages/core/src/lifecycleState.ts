@@ -202,6 +202,7 @@ export class LifecycleState {
       `workspace '${name}' not found`
     );
     assertSchemaVersion(raw, "workspace", name);
+    assertSysboxWorkspace(raw, name);
     return raw;
   }
 
@@ -218,7 +219,9 @@ export class LifecycleState {
   }
 
   async listWorkspaces(): Promise<WorkspaceRecord[]> {
-    return listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace", 3);
+    const records = await listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace", 3);
+    for (const record of records) assertSysboxWorkspace(record, record.name);
+    return records;
   }
 
   async claimProject(record: ProjectRecord): Promise<void> {
@@ -330,6 +333,15 @@ function assertSchemaVersion(
     throw new UserError(
       `${kind} '${name}' uses unsupported state schema ${String(record.schemaVersion)}; `
       + `expected ${expected} and DIM does not migrate existing state`
+    );
+  }
+}
+
+function assertSysboxWorkspace(record: { runtimeBackend?: unknown }, name: string): void {
+  if (record.runtimeBackend !== "sysbox") {
+    throw new UserError(
+      `workspace '${name}' uses unsupported backend '${String(record.runtimeBackend)}'; `
+      + "DIM supports only sysbox workspaces"
     );
   }
 }
