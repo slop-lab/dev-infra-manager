@@ -43,12 +43,15 @@ describe("DIM development forge policy", () => {
   });
 
   it("runs the full-development contract in the Sysbox QEMU lane", async () => {
-    const kvm = await readFile(resolve(workspaceRoot, "verification/scripts/kvm-host-install-smoke.bash"), "utf8");
+    const gate = await readFile(resolve(workspaceRoot, "verification/scripts/kvm-host-install-smoke.bash"), "utf8");
+    const kvm = await readFile(resolve(workspaceRoot, "project/.dim/qemu-verify.bash"), "utf8");
     const recipes = await readFile(resolve(workspaceRoot, "verification/verify.just"), "utf8");
     const workflow = await readFile(resolve(workspaceRoot, "verification/.gitea/workflows/repository-set.yml"), "utf8");
     expect(kvm).toContain('backend="sysbox"');
     expect(kvm).toContain("just verify full-development");
     expect(kvm).toContain('2>&1 | tee "$step_log"');
+    expect(gate).toContain("project/.dim/qemu-service.mjs");
+    expect(gate).toContain('node "$client" run');
     expect(kvm.indexOf("pnpm --filter @slop-lab/dim-controller-proxy run build")).toBeLessThan(
       kvm.indexOf('run_step "install $backend backend"')
     );
