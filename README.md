@@ -37,6 +37,7 @@ QEMU gate without receiving `/dev/kvm` or a QEMU binary itself:
 ```bash
 node project/.dim/qemu-client.mjs run
 node project/.dim/qemu-client.mjs run --input fixtures=/workspace/local-fixtures
+node project/.dim/qemu-client.mjs probe
 ```
 
 Additional inputs must resolve beneath `/workspace`. They are copied into the

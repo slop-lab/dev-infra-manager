@@ -2,16 +2,33 @@
 set -euo pipefail
 backend="sysbox"
 verbose=false
+probe=false
+agent_control=false
 for arg in "$@"; do
   case "$arg" in
     "") ;;
     -v|--verbose) verbose=true ;;
+    --probe) probe=true ;;
+    --agent-control) agent_control=true ;;
     *)
-      echo "usage: $0 [-v|--verbose]" >&2
+      echo "usage: $0 [-v|--verbose] [--probe | --agent-control]" >&2
       exit 2
       ;;
   esac
 done
+[[ "$probe" == false || "$agent_control" == false ]] || { echo "--probe and --agent-control are mutually exclusive" >&2; exit 2; }
+if [[ "$probe" == true ]]; then
+  [[ "$verbose" == false ]] || { echo "--probe does not accept --verbose" >&2; exit 2; }
+  command -v qemu-system-x86_64 >/dev/null || { echo "missing QEMU control probe dependency: qemu-system-x86_64" >&2; exit 2; }
+  test -r /dev/kvm && test -w /dev/kvm || { echo "/dev/kvm is not accessible" >&2; exit 2; }
+  status=0
+  timeout 2 qemu-system-x86_64 \
+    -machine q35,accel=kvm -cpu host -m 128 -smp 1 \
+    -nodefaults -nographic -S || status=$?
+  test "$status" -eq 124
+  echo "qemu-control-probe-ok"
+  exit 0
+fi
 for cmd in qemu-system-x86_64 qemu-img curl ssh ssh-keygen tar; do command -v "$cmd" >/dev/null || { echo "missing KVM smoke dependency: $cmd (run: bash verification/scripts/install-kvm-verify-deps-ubuntu.bash)" >&2; exit 2; }; done
 registry_mirror="${DIM_KVM_REGISTRY_MIRROR:-}"
 if [[ -n "$registry_mirror" ]]; then
@@ -179,9 +196,15 @@ if [[ -n "$registry_mirror" ]]; then
 fi
 run_step "run Sysbox workload" ssh "${ssh_args[@]}" dim@127.0.0.1 \
   "set -e; sudo docker info >/dev/null; sudo docker compose version >/dev/null; systemctl is-active sysbox; sudo docker run --rm --runtime=sysbox-runc dim-backend-smoke:local true"
+if [[ "$agent_control" == true ]]; then
+  run_step "verify agent control of protected QEMU process" \
+    ssh "${ssh_args[@]}" dim@127.0.0.1 \
+    "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' DIM_TEST_REGISTRY_MIRROR_ADDRESS=10.0.2.2 DIM_SELF_EXPECT_AGENT_UID=1001 DIM_SELF_VERIFY_AGENT=1 DIM_SELF_STOP_AFTER_QEMU_PROBE=1 JUST_UNSTABLE=1 just verify self-development"
+  exit 0
+fi
 run_step "verify common full-development contract" \
   ssh "${ssh_args[@]}" dim@127.0.0.1 \
-    "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' JUST_UNSTABLE=1 just verify full-development"
+    "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' DIM_TEST_REGISTRY_MIRROR_ADDRESS=10.0.2.2 JUST_UNSTABLE=1 just verify full-development"
   if [[ "${DIM_KVM_SKIP_TRUSTED_WORKSPACE:-0}" != 1 ]]; then
     run_step "verify trusted KVM workspace and Sysbox isolation probe" \
       ssh "${ssh_args[@]}" dim@127.0.0.1 \

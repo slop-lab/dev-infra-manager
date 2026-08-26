@@ -11,7 +11,16 @@ permissions:
 
 jobs:
   repository-set:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@cf657a1aef78f05e5aef57f0f4bca81995f3c14b
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@4fbb5f7498ace1e299b6b15894afea62848851fd
     with:
       candidate-repository: root
       candidate-ref: ${{ gitea.sha }}
+
+  local-qemu-host-gate:
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@4fbb5f7498ace1e299b6b15894afea62848851fd
+    with:
+      candidate-repository: root
+      candidate-ref: ${{ gitea.sha }}
+      gate: kvm-control
+      runner-label: dim-qemu
+      backend: sysbox

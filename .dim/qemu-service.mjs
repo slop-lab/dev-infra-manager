@@ -39,7 +39,11 @@ async function handle(request, response) {
     if (state.status === "running") return sendJson(response, 409, { error: "QEMU verification is already running" });
     const body = await readJson(request);
     const inputs = await validateInputs(body.inputs ?? []);
-    start(inputs);
+    if (body.verbose !== undefined && typeof body.verbose !== "boolean") throw new Error("verbose must be a boolean");
+    const mode = body.mode ?? "run";
+    if (mode !== "run" && mode !== "probe") throw new Error("mode must be 'run' or 'probe'");
+    if (mode === "probe" && (inputs.length > 0 || body.verbose === true)) throw new Error("probe does not accept inputs or verbose output");
+    start(inputs, body.verbose === true, mode);
     return sendJson(response, 202, state);
   }
   if (request.method === "DELETE" && url.pathname === "/v1/run") {
@@ -70,10 +74,10 @@ async function validateInputs(value) {
   }));
 }
 
-function start(inputs) {
+function start(inputs, verbose, mode) {
   output = "";
-  state = { status: "running", startedAt: new Date().toISOString(), inputs: inputs.map(({ name }) => name) };
-  child = spawn("bash", [launcher], {
+  state = { status: "running", startedAt: new Date().toISOString(), inputs: inputs.map(({ name }) => name), verbose, mode };
+  child = spawn("bash", [launcher, ...(mode === "probe" ? ["--probe"] : verbose ? ["--verbose"] : [])], {
     cwd: sourceRoot,
     env: { ...process.env, DIM_QEMU_SOURCE_ROOT: sourceRoot, DIM_QEMU_EXTRA_INPUTS_JSON: JSON.stringify(inputs) },
     detached: true,

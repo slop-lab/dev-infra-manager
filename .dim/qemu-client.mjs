@@ -3,16 +3,24 @@ import http from "node:http";
 const socketPath = process.env.DIM_QEMU_VERIFICATION_SOCKET ?? "/run/dim/qemu-verification/service.sock";
 const [command = "run", ...arguments_] = process.argv.slice(2);
 const inputs = [];
+let verbose = false;
 for (let index = 0; index < arguments_.length; index += 1) {
+  if (arguments_[index] === "") continue;
+  if (arguments_[index] === "--verbose") {
+    verbose = true;
+    continue;
+  }
   if (arguments_[index] !== "--input" || !arguments_[index + 1]?.includes("=")) usage();
   const [name, ...pathParts] = arguments_[++index].split("=");
   inputs.push({ name, path: pathParts.join("=") });
 }
 
-if (command === "run" || command === "start") {
-  const response = await request("POST", "/v1/run", Buffer.from(JSON.stringify({ inputs })));
+if (command === "run" || command === "start" || command === "probe") {
+  if (command === "probe" && (inputs.length > 0 || verbose)) usage();
+  const mode = command === "probe" ? "probe" : "run";
+  const response = await request("POST", "/v1/run", Buffer.from(JSON.stringify({ inputs, verbose, mode })));
   if (response.status !== 202) fail(response);
-  if (command === "run") {
+  if (command !== "start") {
     const events = await stream("/v1/events");
     const status = await request("GET", "/v1/status");
     if (events !== 0 || status.status !== 200 || JSON.parse(status.body).status !== "success") process.exitCode = 1;
@@ -65,5 +73,5 @@ function fail(response) {
 }
 
 function usage() {
-  throw new Error("usage: qemu-client.mjs run|start [--input NAME=/absolute/path ...] | status | follow | cancel");
+  throw new Error("usage: qemu-client.mjs run|start [--verbose] [--input NAME=/absolute/path ...] | probe | status | follow | cancel");
 }

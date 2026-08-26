@@ -52,11 +52,14 @@ if [ "${DIM_WORKSPACE_KVM}" = 1 ]; then
     case "$old_pid" in
       *[!0-9]*|'') ;;
       *)
-        kill "$old_pid" 2>/dev/null || true
-        for _ in $(seq 1 50); do
-          kill -0 "$old_pid" 2>/dev/null || break
-          sleep 0.1
-        done
+        if [ -r "/proc/$old_pid/cmdline" ] &&
+          tr '\000' ' ' <"/proc/$old_pid/cmdline" | grep -Fq '.dim/qemu-service.mjs'; then
+          kill "$old_pid" 2>/dev/null || true
+          for _ in $(seq 1 50); do
+            kill -0 "$old_pid" 2>/dev/null || break
+            sleep 0.1
+          done
+        fi
         ;;
     esac
   fi
@@ -85,8 +88,11 @@ export DOCKER_CONFIG=/tmp/dim-workspace-docker-config
 mkdir -p "$DOCKER_CONFIG"
 
 compose() {
-  docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" \
-    --file .dim/docker-compose.yml --file "$compose_host_aliases" "$@"
+  compose_files=".dim/docker-compose.yml:$compose_host_aliases"
+  if [ -r .dim/ci-registry-mirror.override.yml ]; then
+    compose_files="$compose_files:.dim/ci-registry-mirror.override.yml"
+  fi
+  COMPOSE_FILE="$compose_files" docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" "$@"
 }
 compose build --quiet agent-dind
 # An outer workspace stop terminates nested containers without letting their

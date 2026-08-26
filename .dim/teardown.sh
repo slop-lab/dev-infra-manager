@@ -7,11 +7,14 @@ if [ -r "$qemu_service_dir/service.pid" ]; then
   case "$qemu_pid" in
     *[!0-9]*|'') ;;
     *)
-      kill "$qemu_pid" 2>/dev/null || true
-      for _ in $(seq 1 100); do
-        kill -0 "$qemu_pid" 2>/dev/null || break
-        sleep 0.1
-      done
+      if [ -r "/proc/$qemu_pid/cmdline" ] &&
+        tr '\000' ' ' <"/proc/$qemu_pid/cmdline" | grep -Fq '.dim/qemu-service.mjs'; then
+        kill "$qemu_pid" 2>/dev/null || true
+        for _ in $(seq 1 100); do
+          kill -0 "$qemu_pid" 2>/dev/null || break
+          sleep 0.1
+        done
+      fi
       ;;
   esac
 fi
