@@ -25,10 +25,6 @@ on:
         type: string
         required: false
         default: dim
-      backend:
-        type: string
-        required: false
-        default: runc
   pull_request:
   push:
     branches: [main]
@@ -40,9 +36,7 @@ permissions:
 jobs:
   verify:
     runs-on: ${{ inputs.runner-label || 'dim' }}
-    # The QEMU lanes install a clean host and run the same full integration
-    # contract for every backend. Rootless nested storage can legitimately
-    # take longer than the container/source gates on a cold runner.
+    # The QEMU lane installs a clean host and verifies the Sysbox contract.
     timeout-minutes: ${{ inputs.gate == 'kvm' && 60 || 30 }}
     steps:
       - name: Bootstrap Node.js for host-mode JavaScript actions
@@ -152,7 +146,7 @@ jobs:
           dim-ci-runner-health --recover
           just check-source
           bash verification/scripts/with-ci-registry-cache.bash \
-            just verify full-development "${{ inputs.backend }}"
+            just verify full-development
       - name: Verify runner health after container integration
         if: ${{ always() && (inputs.gate == 'container' || inputs.gate == 'integration') }}
         run: dim-ci-runner-health --recover
@@ -162,4 +156,4 @@ jobs:
         run: |
           test -r /dev/kvm -a -w /dev/kvm
           bash verification/scripts/with-ci-registry-cache.bash \
-            env JUST_UNSTABLE=1 just verify environments-kvm "${{ inputs.backend }}"
+            env JUST_UNSTABLE=1 just verify environments-kvm

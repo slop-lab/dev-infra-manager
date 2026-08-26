@@ -114,7 +114,7 @@ jq -n '{schemaVersion:1,plugins:[
 dim_bin="$cli_home/node_modules/.bin/dim"
 
 echo "[external-url-example] load the freshly installed plugin before any ingress exists"
-printf '%s\n' '{"schemaVersion":1,"workspaceBackend":"runc"}' > "$state_root/dim.json"
+printf '%s\n' '{"schemaVersion":1,"workspaceBackend":"sysbox"}' > "$state_root/dim.json"
 DIM_STATE_ROOT="$state_root" \
 DIM_PLUGIN_HOME="$plugin_home" \
 DIM_CONFIG_PATH="$state_root/dim.json" \
@@ -199,7 +199,7 @@ jq -n \
     containerName: $container,
     networkName: $network,
     dockerVolumeName: "unused-in-smoke",
-    runtimeBackend: "runc",
+    runtimeBackend: "sysbox",
     kvm: false,
     cpuCount: "2",
     memory: "4g",

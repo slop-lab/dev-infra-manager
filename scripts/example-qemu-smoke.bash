@@ -2,6 +2,7 @@
 set -euo pipefail
 
 backend="${1:?backend is required}"
+[[ "$backend" == sysbox ]] || { echo "only the sysbox backend is supported" >&2; exit 2; }
 source_repo="${2:?source repository is required}"
 selection="${3:-all}"
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"

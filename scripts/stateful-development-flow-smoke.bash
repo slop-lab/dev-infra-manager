@@ -100,7 +100,7 @@ just build-packages
 just build-workspace-image
 printf '#!/usr/bin/env bash\nexec node %q "$@"\n' "$dim_cli" >"$dim_bin"
 chmod 0700 "$dim_bin"
-bash "$script_dir/configure-user-backend.bash" "${DIM_EXAMPLE_WORKSPACE_BACKEND:-runc}"
+bash "$script_dir/configure-user-backend.bash" "${DIM_EXAMPLE_WORKSPACE_BACKEND:-sysbox}"
 bash examples/projects/full-development-flow/create-repositories.bash "$repositories" >/dev/null
 dim_apply_test_registry_mirror "$repositories/root"
 mv "$repositories/root/.dim/setup.sh" "$repositories/root/.dim/setup-real.sh"

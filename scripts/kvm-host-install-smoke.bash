@@ -1,34 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/runtime-backends.bash
-source "$script_dir/lib/runtime-backends.bash"
 # shellcheck source=lib/git-clone-source.bash
 source "$script_dir/lib/git-clone-source.bash"
-backend="all"
+backend="sysbox"
 verbose=false
 for arg in "$@"; do
   case "$arg" in
     "") ;;
     -v|--verbose) verbose=true ;;
-    all) backend="$arg" ;;
     *)
-      if dim_is_runtime_backend "$arg"; then
-        backend="$arg"
-      else
-        echo "usage: $0 [all|$(dim_runtime_backend_choices)] [-v|--verbose]" >&2
-        exit 2
-      fi
+      echo "usage: $0 [-v|--verbose]" >&2
+      exit 2
       ;;
   esac
 done
-if [[ "$backend" == all ]]; then
-  verbose_arg=()
-  [[ "$verbose" == false ]] || verbose_arg=(--verbose)
-  for selected in "${DIM_RUNTIME_BACKENDS[@]}"; do bash "$0" "$selected" "${verbose_arg[@]}"; done
-  echo "kvm-host-install-smoke-ok: all"
-  exit 0
-fi
 for cmd in qemu-system-x86_64 qemu-img curl ssh ssh-keygen tar; do command -v "$cmd" >/dev/null || { echo "missing KVM smoke dependency: $cmd (run: bash verification/scripts/install-kvm-verify-deps-ubuntu.bash)" >&2; exit 2; }; done
 registry_mirror="${DIM_KVM_REGISTRY_MIRROR:-}"
 if [[ -n "$registry_mirror" ]]; then
@@ -178,19 +164,11 @@ if [[ -n "$registry_mirror" ]]; then
   run_step "verify nested guest registry mirror" ssh "${ssh_args[@]}" dim@127.0.0.1 \
     "sudo docker info --format '{{json .RegistryConfig.Mirrors}}' | grep -Fq '$registry_mirror'"
 fi
-# Rootless Podman's workload runs the outer container with the exact
-# capability set workspaceRuntimePlan() grants (core/packages/core/src/runtimeBackends.ts)
-# instead of --privileged, so this is the real verification that those
-# specific capabilities are sufficient for nested unprivileged user
-# namespaces -- something a doubly-nested dev sandbox cannot exercise.
-rootless_podman_caps=(SYS_ADMIN SETUID SETGID SYS_CHROOT SYS_PTRACE AUDIT_WRITE CHOWN DAC_OVERRIDE FOWNER FSETID KILL MKNOD NET_ADMIN NET_BIND_SERVICE NET_RAW SETFCAP SETPCAP)
-rootless_podman_cap_flags=""
-for cap in "${rootless_podman_caps[@]}"; do rootless_podman_cap_flags+=" --cap-add $cap"; done
-run_step "run $backend workload" ssh "${ssh_args[@]}" dim@127.0.0.1 "set -e; sudo docker info >/dev/null; sudo docker compose version >/dev/null; case '$backend' in all|sysbox) systemctl is-active sysbox; sudo docker run --rm --runtime=sysbox-runc dim-backend-smoke:local true;; esac; case '$backend' in all|gvisor) runsc --version; sudo docker run --rm --runtime=runsc dim-backend-smoke:local true;; esac; case '$backend' in rootless-podman) test -c /dev/fuse; command -v newuidmap; command -v newgidmap; sudo docker image save dim-backend-smoke:local -o /tmp/dim-backend-smoke.tar; sudo chmod 0644 /tmp/dim-backend-smoke.tar; cd dim/workbench; sudo docker build -t dev-infra-project-workspace-podman:latest -f core/images/project-workspace-podman/Dockerfile .; sudo docker run --rm --runtime=runc$rootless_podman_cap_flags --device /dev/fuse --security-opt seccomp=unconfined --security-opt apparmor=unconfined --security-opt systempaths=unconfined --mount type=bind,src=/tmp/dim-backend-smoke.tar,dst=/tmp/dim-backend-smoke.tar,readonly dev-infra-project-workspace-podman:latest sh -c 'podman load -i /tmp/dim-backend-smoke.tar >/dev/null && podman run --rm dim-backend-smoke:local true';; esac; case '$backend' in all|runc) sudo docker run --rm --runtime=runc dim-backend-smoke:local true;; esac"
+run_step "run Sysbox workload" ssh "${ssh_args[@]}" dim@127.0.0.1 \
+  "set -e; sudo docker info >/dev/null; sudo docker compose version >/dev/null; systemctl is-active sysbox; sudo docker run --rm --runtime=sysbox-runc dim-backend-smoke:local true"
 run_step "verify common full-development contract" \
   ssh "${ssh_args[@]}" dim@127.0.0.1 \
-    "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' JUST_UNSTABLE=1 just verify full-development '$backend'"
-if [[ "$backend" == sysbox ]]; then
+    "cd dim/workbench && DIM_DOCKER_REGISTRY_MIRROR='${DIM_DOCKER_REGISTRY_MIRROR:-}' JUST_UNSTABLE=1 just verify full-development"
   if [[ "${DIM_KVM_SKIP_TRUSTED_WORKSPACE:-0}" != 1 ]]; then
     run_step "verify trusted KVM workspace and Sysbox isolation probe" \
       ssh "${ssh_args[@]}" dim@127.0.0.1 \
@@ -289,5 +267,4 @@ EOF
   run_step "verify non-root repository CI workflow" \
     ssh "${ssh_args[@]}" dim@127.0.0.1 \
       "cd dim/workbench && DIM_CI_RUNNER_EXAMPLE_ATTEMPTS=300 bash verification/scripts/ci-runner-example-smoke.bash"
-fi
 echo "kvm-host-install-smoke-ok: $backend"

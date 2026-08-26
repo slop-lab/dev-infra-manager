@@ -14,7 +14,7 @@ dim_bin="${DIM_BIN:-dim}"
 
 export DIM_STATE_ROOT="$state_root"
 export DIM_CONFIG_PATH="$state_root/dim.json"
-bash "$script_dir/configure-user-backend.bash" runc
+bash "$script_dir/configure-user-backend.bash" sysbox
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then

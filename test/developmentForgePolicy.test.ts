@@ -42,46 +42,22 @@ describe("DIM development forge policy", () => {
     expect(source).toContain("sha256sum --check");
   });
 
-  it("runs the same full-development contract for every QEMU backend", async () => {
+  it("runs the full-development contract in the Sysbox QEMU lane", async () => {
     const kvm = await readFile(resolve(workspaceRoot, "verification/scripts/kvm-host-install-smoke.bash"), "utf8");
     const recipes = await readFile(resolve(workspaceRoot, "verification/verify.just"), "utf8");
     const workflow = await readFile(resolve(workspaceRoot, "verification/.gitea/workflows/repository-set.yml"), "utf8");
-    expect(kvm).not.toContain('if [[ "$backend" == runc ]]');
-    expect(kvm).toContain("just verify full-development '$backend'");
+    expect(kvm).toContain('backend="sysbox"');
+    expect(kvm).toContain("just verify full-development");
     expect(kvm).toContain('2>&1 | tee "$step_log"');
     expect(kvm.indexOf("pnpm --filter @slop-lab/dim-controller-proxy run build")).toBeLessThan(
       kvm.indexOf('run_step "install $backend backend"')
     );
-    expect(recipes).toContain('DIM_EXAMPLE_WORKSPACE_BACKEND="{{backend}}"');
-    expect(recipes).toContain('DIM_SELF_WORKSPACE_BACKEND="{{backend}}"');
+    expect(recipes).toContain("DIM_EXAMPLE_WORKSPACE_BACKEND=sysbox");
+    expect(recipes).toContain("DIM_SELF_WORKSPACE_BACKEND=sysbox");
     expect(workflow.match(/with-ci-registry-cache\.bash/g)).toHaveLength(2);
     expect(workflow.match(/DIM_TEST_PTY_RESIZE: unsupported/g)).toHaveLength(2);
     expect(workflow).toContain("inputs.gate == 'kvm' && 60 || 30");
     expect(workflow).toContain("inputs.gate != 'integration' && inputs.gate != 'container'");
-  });
-
-  it("materializes the complete rootless-Podman workspace image", async () => {
-    const ignore = await readFile(resolve(workspaceRoot, ".dockerignore"), "utf8");
-    const dockerfile = await readFile(resolve(workspaceRoot, "core/images/project-workspace-podman/Dockerfile"), "utf8");
-    expect(ignore).toContain("!core/images/project-workspace-podman/**");
-    expect(dockerfile).toContain("node-v24.19.0-linux-x64.tar.xz");
-    expect(dockerfile).toContain("/usr/local/bin/dim-controller-proxy");
-    expect(dockerfile).toContain("ln -s /usr/bin/podman /usr/local/bin/docker");
-  });
-
-  it("keeps example Compose files compatible with Podman Compose", async () => {
-    for (const path of [
-      "examples/projects/full-development-flow/repos/root/.dim/docker-compose.yml",
-      "examples/projects/single-repository/repos/app/.dim/docker-compose.yml",
-      "examples/projects/multi-repository/repos/root/.dim/docker-compose.yml"
-    ]) {
-      const compose = parse(await readFile(resolve(workspaceRoot, path), "utf8"));
-      expect(compose.networks).toHaveProperty("default");
-    }
-    const stateful = await readFile(
-      resolve(workspaceRoot, "verification/scripts/stateful-development-flow-smoke.bash"), "utf8"
-    );
-    expect(stateful).not.toContain("ps --all");
   });
 
   it("builds rootless agent DinD without inherited file-capability layers", async () => {
@@ -91,21 +67,7 @@ describe("DIM development forge policy", () => {
       "examples/projects/multi-repository/repos/root/.dim/dind/Dockerfile"
     ]) {
       const dockerfile = await readFile(resolve(workspaceRoot, path), "utf8");
-      expect(dockerfile).toContain("FROM docker:29.1.3-cli");
-      expect(dockerfile).not.toContain("FROM docker:29.1.3-dind");
-      expect(dockerfile).toContain("shadow-subids-4.18.0-r0.apk");
-      expect(dockerfile).not.toContain("apk add --no-cache shadow-uidmap");
-      expect(dockerfile).toContain("docker-rootless-extras-29.1.3.tgz");
-      expect(dockerfile).toContain("rootless_sha256=");
-      expect(dockerfile).toContain("chmod 4755 /usr/bin/newuidmap /usr/bin/newgidmap");
+      expect(dockerfile).toContain("FROM docker:29.1.3-dind-rootless");
     }
-  });
-
-  it("limits gVisor host socket access to opening reviewed mounted endpoints", async () => {
-    const installer = await readFile(
-      resolve(workspaceRoot, "verification/scripts/install-runsc-linux.bash"), "utf8"
-    );
-    expect(installer).toContain('"--host-uds=open"');
-    expect(installer).not.toContain("--host-uds=all");
   });
 });

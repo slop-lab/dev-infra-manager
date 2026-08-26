@@ -29,7 +29,7 @@ export DIM_DATA_HOME="$work_dir/data"
 export GIT_CONFIG_GLOBAL="$work_dir/host.gitconfig"
 git config --file "$GIT_CONFIG_GLOBAL" user.name "CI Runner Example"
 git config --file "$GIT_CONFIG_GLOBAL" user.email "ci-runner-example@dim.invalid"
-workspace_backend="${DIM_EXAMPLE_WORKSPACE_BACKEND:-runc}"
+workspace_backend="${DIM_EXAMPLE_WORKSPACE_BACKEND:-sysbox}"
 bash "$script_dir/configure-user-backend.bash" "$workspace_backend"
 
 dim() { "$dim_bin" "$@"; }

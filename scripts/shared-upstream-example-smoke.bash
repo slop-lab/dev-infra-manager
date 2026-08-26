@@ -19,7 +19,7 @@ export DIM_CONTROLLER_SOCKET="$state_root/controller/controller.sock"
 export DIM_ADMIN_CONTROLLER_SOCKET="$state_root/controller/admin.sock"
 git config --file "$GIT_CONFIG_GLOBAL" user.name "Shared Upstream Example"
 git config --file "$GIT_CONFIG_GLOBAL" user.email "shared-upstream@dim.invalid"
-bash "$script_dir/configure-user-backend.bash" "${DIM_EXAMPLE_WORKSPACE_BACKEND:-runc}"
+bash "$script_dir/configure-user-backend.bash" "${DIM_EXAMPLE_WORKSPACE_BACKEND:-sysbox}"
 
 dim() { node "$dim_cli" "$@"; }
 cleanup() {

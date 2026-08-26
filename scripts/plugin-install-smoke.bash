@@ -64,7 +64,7 @@ DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/nod
   "$root/$plugin_tarball" \
   >/dev/null
 
-jq '.workspaceBackend = "runc"' "$config_path" > "$root/config.json"
+jq '.workspaceBackend = "sysbox"' "$config_path" > "$root/config.json"
 mv "$root/config.json" "$config_path"
 result="$(DIM_STATE_ROOT="$root/state" DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" node core/packages/cli/dist/cli.js plugin list --json)"
 test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smoke"

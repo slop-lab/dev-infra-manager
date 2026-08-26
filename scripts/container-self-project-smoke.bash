@@ -68,7 +68,7 @@ git config --file "$GIT_CONFIG_GLOBAL" user.name "DIM Self Host"
 git config --file "$GIT_CONFIG_GLOBAL" user.email "dim-self-host@dim.invalid"
 mkdir -p "$DIM_PLUGIN_HOME"
 printf '%s\n' '{"schemaVersion":1,"plugins":[]}' > "$DIM_PLUGIN_HOME/plugins.json"
-bash "$script_dir/configure-user-backend.bash" "${DIM_SELF_WORKSPACE_BACKEND:-runc}"
+bash "$script_dir/configure-user-backend.bash" "${DIM_SELF_WORKSPACE_BACKEND:-sysbox}"
 
 cleanup() {
   local status=$?

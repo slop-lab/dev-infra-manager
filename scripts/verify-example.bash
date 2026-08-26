@@ -29,7 +29,7 @@ while [[ "$#" -gt 0 ]]; do
 usage: verification/scripts/verify-example.bash [--backend BACKEND] [--dirty-repo POLICY] [--example EXAMPLE]
 
 BACKEND:
-  current-installed | sysbox | gvisor | rootless-podman | runc
+  current-installed | sysbox
 
 EXAMPLE:
   all | single-repository | multi-repository | full-development-flow | ci-runner | external-urls | shared-upstream | project-runtime-cgroups
@@ -62,7 +62,7 @@ EOF
 done
 
 case "$backend" in
-  current-installed|sysbox|gvisor|rootless-podman|runc) ;;
+  current-installed|sysbox) ;;
   *) echo "unsupported example backend: $backend" >&2; exit 2 ;;
 esac
 case "$dirty_policy" in
@@ -94,17 +94,9 @@ if [[ "$backend" != current-installed ]]; then
   export DIM_KVM_IMAGE_CACHE="${DIM_KVM_IMAGE_CACHE:-$repo_root/.local/kvm}"
   if [[ "$selection" == all ]]; then
     qemu_examples=(single-repository multi-repository full-development-flow external-urls shared-upstream)
-    if [[ "$backend" == sysbox ]]; then
-      qemu_examples+=(ci-runner)
-    else
-      echo "example[$backend]: skip ci-runner (the runner requires sysbox)"
-    fi
+    qemu_examples+=(ci-runner)
   else
     qemu_examples=("$selection")
-  fi
-  if [[ "$selection" == ci-runner && "$backend" != sysbox ]]; then
-    echo "the ci-runner example requires the sysbox backend" >&2
-    exit 2
   fi
   for example in "${qemu_examples[@]}"; do
     bash "$verification_source/verification/scripts/example-qemu-smoke.bash" \

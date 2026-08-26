@@ -15,7 +15,7 @@ export DIM_CONFIG_PATH="$state_root/dim.json"
 export DIM_PLUGIN_HOME="$state_root/plugins"
 mkdir -p "$DIM_PLUGIN_HOME"
 printf '%s\n' '{"schemaVersion":1,"plugins":[]}' > "$DIM_PLUGIN_HOME/plugins.json"
-bash "$script_dir/configure-user-backend.bash" runc
+bash "$script_dir/configure-user-backend.bash" sysbox
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then

@@ -29,7 +29,7 @@ export DIM_ADMIN_CONTROLLER_SOCKET="$work_dir/controller/admin.sock"
 export GIT_CONFIG_GLOBAL="$work_dir/host.gitconfig"
 git config --file "$GIT_CONFIG_GLOBAL" user.name "Single Repository Agent"
 git config --file "$GIT_CONFIG_GLOBAL" user.email "agent@dim.invalid"
-workspace_backend="${DIM_EXAMPLE_WORKSPACE_BACKEND:-runc}"
+workspace_backend="${DIM_EXAMPLE_WORKSPACE_BACKEND:-sysbox}"
 bash "$script_dir/configure-user-backend.bash" "$workspace_backend"
 
 dim() { "$dim_bin" "$@"; }

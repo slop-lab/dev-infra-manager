@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-readonly -a DIM_RUNTIME_BACKENDS=(sysbox gvisor rootless-podman runc)
+readonly -a DIM_RUNTIME_BACKENDS=(sysbox)
 
 dim_is_runtime_backend() {
   local candidate="$1"

@@ -35,12 +35,8 @@ Review and adapt every change before using it on a production host.
 It will:
   - install common APT packages: apparmor, curl, docker.io, docker-compose-v2, jq
   - when required by Ubuntu, allow /usr/local/bin/rootlesskit to create its user namespace
-  - install and configure only the ${backend} backend
+  - install and configure the Sysbox backend
 EOF
-  if [[ "$backend" == rootless-podman ]]; then
-    echo "  - install rootless Podman host dependencies: fuse3, uidmap"
-    echo "  - build dev-infra-project-workspace-podman:latest"
-  fi
   if [[ -n "$install_user" ]]; then
     echo "  - permanently add user '$install_user' to the docker group"
   fi
@@ -94,18 +90,7 @@ install_sysbox() {
 }
 
 install_selected_backend() {
-  case "$backend" in
-    sysbox) install_sysbox ;;
-    gvisor) bash "$script_dir/install-runsc-linux.bash" ;;
-    rootless-podman)
-      sudo apt-get install -y fuse3 uidmap
-      sudo docker build \
-        -t dev-infra-project-workspace-podman:latest \
-        -f "$script_dir/../../core/images/project-workspace-podman/Dockerfile" \
-        "$script_dir/../.."
-      ;;
-    runc) ;;
-  esac
+  install_sysbox
 }
 
 configure_install_user() {

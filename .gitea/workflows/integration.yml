@@ -8,11 +8,6 @@ on:
         type: choice
         options: [all, container, kvm]
         default: all
-      backend:
-        description: QEMU runtime backend
-        type: choice
-        options: [runc, sysbox, gvisor, rootless-podman, all]
-        default: runc
   schedule:
     - cron: '17 3 * * 1'
 
@@ -28,7 +23,6 @@ jobs:
       candidate-ref: ${{ gitea.sha }}
       gate: integration
       runner-label: dim-container-integration
-      backend: runc
   kvm:
     if: ${{ gitea.event_name == 'schedule' || inputs.lane == 'all' || inputs.lane == 'kvm' }}
     uses: ./.gitea/workflows/repository-set.yml
@@ -37,4 +31,3 @@ jobs:
       candidate-ref: ${{ gitea.sha }}
       gate: kvm
       runner-label: dim-qemu
-      backend: ${{ gitea.event_name == 'schedule' && 'runc' || inputs.backend }}
