@@ -93,7 +93,7 @@ compose() {
   if [ -r .dim/ci-registry-mirror.override.yml ]; then
     compose_files="$compose_files:.dim/ci-registry-mirror.override.yml"
   fi
-  COMPOSE_FILE="$compose_files" docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" "$@"
+  COMPOSE_FILE="$compose_files" docker compose "$@"
 }
 compose build --quiet agent-dind
 # An outer workspace stop terminates nested containers without letting their

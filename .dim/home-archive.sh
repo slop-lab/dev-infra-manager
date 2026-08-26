@@ -6,7 +6,7 @@ mkdir -p "$DOCKER_CONFIG"
 chmod 0700 "$DOCKER_CONFIG"
 
 action="${1:?home archive action is required}"
-project="dim-${DIM_WORKSPACE_NAME:?DIM_WORKSPACE_NAME is required}"
+project="${COMPOSE_PROJECT_NAME:?COMPOSE_PROJECT_NAME is required}"
 
 case "$action" in
   backup)

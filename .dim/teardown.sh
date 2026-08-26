@@ -23,7 +23,7 @@ if [ -r "$qemu_service_dir/service.pid" ]; then
   esac
 fi
 
-docker compose --project-name "dim-${DIM_WORKSPACE_NAME}" \
+docker compose \
   --file .dim/docker-compose.yml \
   --file /tmp/dim-project-compose-host-aliases.json \
   down --volumes --remove-orphans
