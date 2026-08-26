@@ -34,13 +34,14 @@ Resolve the exact pushed commit and wait for its statuses:
 ```bash
 head_sha="$(git rev-parse HEAD)"
 bash <skill-dir>/scripts/wait-gitea-ci.bash \
-  --sha "$head_sha" \
-  --timeout 3600
+  --sha "$head_sha"
 ```
 
 The helper prints status changes and returns success only when all reported
-contexts succeed. It returns failure on a failed context or timeout. A job
-waiting for an unavailable executor is not success.
+contexts succeed. By default it waits up to 15 minutes; pass `--timeout
+SECONDS` when a repository has a deliberately longer gate. It returns failure
+on a failed context or timeout. A job waiting for an unavailable executor is
+not success.
 
 When a reported context fails, take the numeric job ID from its `target_url`
 and retrieve the logs without constructing an API request:

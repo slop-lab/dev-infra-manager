@@ -7,7 +7,7 @@ source "$script_dir/forge-common.bash"
 
 remote=origin
 sha=""
-timeout=3600
+timeout=900
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --remote) remote="${2:?--remote requires a value}"; shift 2 ;;

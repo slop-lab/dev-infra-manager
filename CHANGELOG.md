@@ -9,6 +9,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- The Gitea pull-request helper now waits up to 15 minutes by default for an
+  exact commit's CI statuses, without periodic agent wake-ups while jobs remain
+  pending. Longer repository-specific gates can still override the timeout.
 - Narrow workspace support to the Sysbox agent boundary, remove the gVisor,
   rootless-Podman, and privileged-runc backend installation and release lanes,
   and keep Docker runc only for trusted infrastructure and QEMU supervision.
