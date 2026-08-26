@@ -217,8 +217,16 @@ verification_stage="initial agent-dind contract"
 verify_agent_dind
 if [[ -c /dev/kvm ]]; then
   verification_stage="agent-controlled QEMU probe"
-  test "$(dim workspace run "$workspace_name" bash -- -lc \
-    'node /workspace/project/.dim/qemu-client.mjs probe')" = "qemu-control-probe-ok"
+  if ! qemu_probe_output="$(dim workspace run "$workspace_name" bash -- -lc \
+    'node /workspace/project/.dim/qemu-client.mjs probe' 2>&1)"; then
+    printf '%s\n' "$qemu_probe_output" >&2
+    exit 1
+  fi
+  if ! grep -Fqx 'qemu-control-probe-ok' <<<"$qemu_probe_output"; then
+    echo "agent-controlled QEMU probe did not report success:" >&2
+    printf '%s\n' "$qemu_probe_output" >&2
+    exit 1
+  fi
   if [[ "${DIM_SELF_STOP_AFTER_QEMU_PROBE:-0}" == 1 ]]; then
     echo "agent-qemu-control-smoke-ok"
     exit 0
