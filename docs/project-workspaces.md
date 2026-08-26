@@ -243,8 +243,7 @@ whether to pass it into supported trusted workspace backends and recommends
 acceptance. Use `--kvm` or `--no-kvm` for an explicit choice; non-interactive
 creation continues to enable available KVM by default. The DIM process
 does not need to open the device itself; the container runtime does that and
-the supplemental group gives the workspace user access. gVisor workspaces do
-not receive KVM. DIM records the effective result in workspace state and
+the supplemental group gives the workspace user access. DIM records the effective result in workspace state and
 exposes it as `DIM_WORKSPACE_KVM=0|1`. It does not place the workspace
 container in a VM. A VM started there is therefore the first virtualization
 layer and may use host-supported nested virtualization itself.
@@ -362,7 +361,7 @@ Setup failure is recorded separately from runtime reconciliation failure and
 does not destroy the checkout or inner-Docker cache. Task failure is returned
 to the caller but does not mark the workspace itself unhealthy.
 
-DIM configures its workspace Docker or Podman engine to use the same managed,
+DIM configures its workspace Docker engine to use the same managed,
 host-scoped anonymous Docker Hub pull-through cache as managed CI runners.
 The cache remains outside Project-defined networks and Project code does not
 need cache-specific configuration. A Project-defined additional container

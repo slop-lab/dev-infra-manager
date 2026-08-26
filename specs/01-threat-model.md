@@ -64,7 +64,7 @@ These are outside this repository's direct scope:
 - Network allow/deny policy enforcement by the agent runtime.
 - Human reviewer correctness.
 - Base image review completeness.
-- Kernel or runtime vulnerabilities in Docker, Sysbox, gVisor, Podman, or Linux.
+- Kernel or runtime vulnerabilities in Docker, Sysbox, runc, or Linux.
 - Physical host compromise.
 
 ## Residual Risk

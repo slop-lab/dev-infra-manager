@@ -5,21 +5,20 @@
 Script:
 
 ```text
-verification/scripts/install-host-ubuntu.bash <sysbox|gvisor|rootless-podman|runc>
+verification/scripts/install-host-ubuntu.bash sysbox
 ```
 
 Behavior:
 
-1. Validate the selected backend and print a development-only warning and a summary of packages, downloads,
+1. Validate `sysbox` and print a development-only warning and a summary of packages, downloads,
    service changes, group changes, and the AppArmor exception.
 2. Continue only when the user enters exactly `yes`.
-3. For `sysbox`, determine `SYSBOX_VERSION`, default `0.7.0`.
-4. For `sysbox`, determine `SYSBOX_ARCH`, default `dpkg --print-architecture`.
-5. For `sysbox`, select pinned SHA-256 for supported architectures:
+3. Determine `SYSBOX_VERSION`, default `0.7.0`.
+4. Determine `SYSBOX_ARCH`, default `dpkg --print-architecture`.
+5. Select pinned SHA-256 for supported architectures:
    - `arm64`
    - `amd64`
-6. Install `apparmor`, `curl`, `docker.io`, and `jq`; install `fuse3` and `uidmap` and
-   build the rootless workspace image when rootless Podman is selected.
+6. Install `apparmor`, `curl`, `docker.io`, and `jq`.
    On Ubuntu hosts that restrict unprivileged user namespaces through
    AppArmor, install the path-scoped `/usr/local/bin/rootlesskit` profile via
    `verification/scripts/install-rootlesskit-apparmor-profile-ubuntu.bash`. The container
@@ -28,51 +27,25 @@ Behavior:
    writable AppArmor securityfs policy interface, the script leaves policy
    loading to the runner host instead of invoking a parser that cannot reach
    the kernel interface.
-7. For `sysbox`, create a uniquely named, invoking-user-owned temporary file, download the
+7. Create a uniquely named, invoking-user-owned temporary file, download the
    Sysbox CE deb into it, and remove it when the script exits.
-8. For `sysbox`, verify SHA-256.
-9. For `sysbox`, install the deb.
-10. For `sysbox`, add an idempotent local `fusermount3` AppArmor rule limited to FUSE
+8. Verify SHA-256.
+9. Install the deb.
+10. Add an idempotent local `fusermount3` AppArmor rule limited to FUSE
     mounts below `/var/lib/sysboxfs/`, then reload that profile.
-11. For `sysbox`, reload systemd.
-12. For `sysbox`, restart Docker.
-13. For `sysbox`, restart Sysbox so AppArmor changes take effect and stale in-memory
+11. Reload systemd.
+12. Restart Docker.
+13. Restart Sysbox so AppArmor changes take effect and stale in-memory
     container registrations are cleared.
 14. Record the selected backend as `workspaceBackend` in the invoking user's
     DIM configuration.
-15. For every selection, add the invoking non-root user to the `docker` group.
-16. For every selection, explain that the user must log in again or run `newgrp docker` once
+15. Add the invoking non-root user to the `docker` group.
+16. Explain that the user must log in again or run `newgrp docker` once
     before the current session can use Docker without `sudo`.
 
-Unsupported Sysbox architectures must fail. Each invocation installs exactly
-one backend and records it in DIM user configuration. From a source checkout,
-the operator runs `just run-cli doctor` afterward. Testing every installer uses a separate KVM guest per
-backend rather than requiring Sysbox and gVisor to coexist on one host.
-
-## gVisor runsc Install
-
-Script:
-
-```text
-verification/scripts/install-runsc-linux.bash
-```
-
-Behavior:
-
-1. Determine `GVISOR_CHANNEL`, default `release/latest`.
-2. Determine `GVISOR_ARCH`, default `uname -m`.
-3. Download from `https://storage.googleapis.com/gvisor/releases/<channel>/<arch>`.
-4. Download:
-   - `runsc`
-   - `runsc.sha512`
-   - `containerd-shim-runsc-v1`
-   - `containerd-shim-runsc-v1.sha512`
-5. Verify SHA-512 sums.
-6. Mark binaries executable.
-7. Move binaries to `/usr/local/bin`.
-8. Run `/usr/local/bin/runsc install`.
-9. Restart Docker.
-10. Print `runsc --version`.
+Unsupported Sysbox architectures must fail. Installation records `sysbox` in
+DIM user configuration. From a source checkout, the operator runs
+`just run-cli doctor` afterward.
 
 ## KVM Host-install Smoke
 
@@ -81,16 +54,15 @@ cloud-image, and SSH tooling and adds the invoking non-root user to the `kvm`
 group; it does not install a runtime backend. It requires the exact
 confirmation `yes` and explains that the login session must be refreshed
 before the new group membership is active.
-`verification/scripts/kvm-host-install-smoke.bash BACKEND [--verbose]` verifies one backend,
-while `just verify environments-kvm [--verbose]` verifies every backend in a
-separate VM. Each check boots a checksum-verified Ubuntu cloud-image VM with
+`verification/scripts/kvm-host-install-smoke.bash [--verbose]` and
+`just verify environments-kvm [--verbose]` verify Sysbox in a clean VM. The check boots a checksum-verified Ubuntu cloud-image VM with
 `/dev/kvm`, clones the committed repository state from a Git bundle, installs
-the selected backend in isolation, verifies its runtime, and deletes the VM
+Sysbox, verifies its runtime, and deletes the VM
 overlay and SSH key on exit. A full source checkout retains its history; a
 shallow checkout is converted to a self-contained single-commit repository
 before bundling. Uncommitted and untracked files are intentionally excluded.
-The runc check installs the source verification toolchain after the host
-installer and runs `just verify self-development`, covering the canonical
+The check installs the source verification toolchain after the host installer
+and runs `just verify self-development`, covering the canonical
 Project's agent inside its private rootful DinD end to end. The QEMU
 verification user has the explicit UID 1001; the gate proves the inner agent
 adopts that non-default UID while rootful authority remains inside the private
@@ -98,19 +70,6 @@ sidecar.
 The base cloud image is cached under `.local/kvm`. Default output names each
 stage and emits only the final 30 lines of a failing stage; `--verbose`
 streams full guest, build, and workload logs.
-
-The `rootless-podman` workload runs the outer container with the exact
-capability set `workspaceRuntimePlan()` grants
-(`core/packages/core/src/runtimeBackends.ts`) instead of `--privileged`, so
-it also disables Docker system-path confinement to let the nested rootless
-runtime mount its own procfs, and
-`verification/scripts/kvm-host-install-smoke.bash rootless-podman` is the real verification that
-those capabilities are sufficient for nested unprivileged user namespaces on
-a genuinely fresh (singly-nested) host — something a doubly-nested dev
-sandbox cannot exercise, since even `--privileged` nested user-namespace
-creation fails there for unrelated reasons. Full DIM contract verification
-must run in the same environment after rootless Podman is installed and
-recorded as its backend.
 
 ## Ubuntu Bootstrap
 
@@ -134,7 +93,7 @@ Behavior:
 6. Install project dependencies with frozen lockfile.
 7. Run `just check`.
 8. Run `just verify plugin-install`.
-9. Build the Docker and rootless Podman project workspace images.
+9. Build the Docker project workspace image.
 10. Run `doctor` for the backend persisted by the installer.
 11. Exit non-zero if that backend doctor reports host runtime gaps.
 

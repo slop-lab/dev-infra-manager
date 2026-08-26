@@ -71,10 +71,9 @@ Creation records an immutable effective KVM capability. An interactive create
 asks before granting available KVM and recommends it; explicit `--kvm` and
 `--no-kvm` make automation deterministic. Non-interactive omission preserves
 automatic enablement. When host `/dev/kvm` is readable and writable and the
-selected backend supports it, DIM passes the device directly into the trusted workspace container. For non-privileged
-rootless-Podman workspaces it also adds the device's host GID as a supplemental
-group. gVisor workspaces record KVM as unavailable. DIM does not place the
-workspace container in a VM.
+Sysbox workspace supports it, DIM passes the device directly into the trusted
+workspace container and adds the device's host GID as a supplemental group.
+DIM does not place the workspace container in a VM.
 
 The root repository owns the optional:
 

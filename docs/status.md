@@ -19,10 +19,10 @@ Implemented:
   transport to one provider.
 - Persistent create, run, exec, setup, update, start, stop, show,
   and discard lifecycle.
-- Backend selection persisted per workspace: Sysbox, gVisor, rootless Podman,
-  and privileged runc.
+- Sysbox backend identity persisted per workspace, with obsolete backend state
+  rejected.
 - CPU, memory, and PID limits at the top-level workspace boundary.
-- Nested Docker or Podman storage isolated in a labeled volume.
+- Nested Docker storage isolated in a labeled volume.
 - Optional `.dim` setup, task entrypoint, teardown, and Compose contract.
 - Project-owned development-agent containers and task dispatch, without a
   core-managed agent resource.

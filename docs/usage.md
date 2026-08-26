@@ -14,10 +14,8 @@ Runtime hosts also need the tools used by DIM:
 - A Linux host running a systemd user manager. macOS, Windows, and Docker
   Desktop hosts are not supported.
 - Docker-compatible CLI.
-- The selected workspace runtime backend installed and registered. The default
-  backend requires Sysbox as `sysbox-runc`; the gVisor backend requires
-  `runsc`.
-- KVM access for the default Sysbox production runtime.
+- Sysbox installed and registered as `sysbox-runc`.
+- Optional KVM access for workspaces that request it.
 - Linux cgroup v2.
 - `sudo` access for mount, unmount, ownership, and filesystem setup operations.
 
@@ -70,28 +68,21 @@ On Ubuntu 24.04 and later, the common install also loads the official-style
 AppArmor exception that permits only `/usr/local/bin/rootlesskit` to create
 the user namespace needed by Project-owned rootless-DinD sidecars.
 
-Choose exactly one backend:
+Install the supported backend:
 
 ```bash
 bash verification/scripts/install-host-ubuntu.bash sysbox
-bash verification/scripts/install-host-ubuntu.bash gvisor
-bash verification/scripts/install-host-ubuntu.bash rootless-podman
-bash verification/scripts/install-host-ubuntu.bash runc
 ```
 
-The script records its backend in DIM user configuration and builds the
-rootless Podman workspace image when that backend is selected. From this
-source checkout, run `just run-cli doctor` after installation. Sysbox and gVisor are intentionally not
-installed together by the convenience script. Use the KVM gate below to test
-every installer without requiring the runtimes to coexist on one host.
+The script records `sysbox` in DIM user configuration. From this source
+checkout, run `just run-cli doctor` after installation.
 
 Test installation destructively inside a disposable KVM-backed Ubuntu VM, without installing a backend on the host:
 
 ```bash
-just verify environments-kvm       # all backends, one clean VM each
-just verify environments-kvm gvisor # one backend, suitable for a CI shard
+just verify environments-kvm       # Sysbox in one clean VM
 just verify environments-kvm --verbose
-bash verification/scripts/kvm-host-install-smoke.bash gvisor --verbose # one backend, direct script
+bash verification/scripts/kvm-host-install-smoke.bash --verbose
 ```
 
 Prepare those dependencies with
@@ -103,25 +94,16 @@ identifies each stage and prints only the last 30 lines on failure; append
 `--verbose` to the recipe or direct script to stream complete logs. The guest
 overlay defaults to 32 GiB and can be changed with `DIM_KVM_SMOKE_DISK_SIZE`.
 
-Install gVisor `runsc` directly for the no-KVM Docker-compatible backend:
-
-```bash
-bash verification/scripts/install-runsc-linux.bash
-```
-
-This downloads the latest official gVisor release binaries, verifies their SHA-512 checksums, installs them under `/usr/local/bin`, registers `runsc` with Docker, and restarts Docker.
-
-Run the Ubuntu bootstrap with one selected backend (Sysbox by default):
+Run the Ubuntu bootstrap for Sysbox:
 
 ```bash
 just bootstrap-ubuntu
-just bootstrap-ubuntu gvisor
 ```
 
 When mise is available, bootstrap runs `mise install` and uses the Node.js,
 pnpm, and `just` versions declared by this repository. Otherwise it installs
 Node.js, npm, and `just` through APT and installs the pinned pnpm version. It
-then installs the selected host runtime and project dependencies, runs
+then installs Sysbox and project dependencies, runs
 verification, builds the included runtime images, and runs `doctor` for that
 backend. If `doctor` reports missing host capabilities, bootstrap exits
 non-zero after printing the gaps.
@@ -234,7 +216,7 @@ just verify mise-install-smoke   # mise use --raw --global npm:@slop-lab/dim-ins
 just verify example current-installed auto single-repository
 just verify example current-installed auto multi-repository
 just verify example current-installed auto full-development-flow
-just verify example runc use
+just verify example sysbox use
 just verify example sysbox use ci-runner
 ```
 
@@ -243,8 +225,7 @@ tarballs. When mise is available it automatically invokes the mise-selected
 installer facade and keeps `dim` proxied through that facade; without mise it
 retains the direct installation under `${DIM_INSTALL_PREFIX:-~/.local}`.
 
-The example recipe accepts `current-installed` or
-`{sysbox,gvisor,rootless-podman,runc}` as its backend. A named backend creates
+The example recipe accepts `current-installed` or `sysbox`. The named backend creates
 one disposable QEMU guest per selected example and invokes
 `just verify example current-installed` inside it.
 The dirty-repository policy defaults to `auto` (reject), while `use` snapshots
@@ -307,13 +288,5 @@ The Sysbox registration check only proves that Docker knows about
 `sysbox-runc`. The Sysbox container execution check runs `hello-world:latest`
 with `--runtime=sysbox-runc`; this is the direct readiness signal for Sysbox
 workspace-root containers.
-For gVisor, `doctor` checks `runsc` and Docker runtime execution when gVisor
-is the installed selection. For rootless Podman, `doctor` checks the workspace
-image and verifies that `podman` is present in it. Podman runs rootless as
-`dim` inside the workspace. The outer Docker workspace container is not
-privileged; it instead receives the specific capabilities (`SYS_ADMIN`,
-`SETUID`/`SETGID`, `SYS_CHROOT`, `SYS_PTRACE`, and the rest of the set shared
-with `gvisor`) that nested unprivileged user namespaces and mounts need, since
-Docker's default capability set and seccomp profile normally block them. Set
-`DIM_WORKSPACE_PRIVILEGED=true` to fall back to a fully privileged outer
-container if a host's kernel/seccomp configuration needs it.
+KVM is checked separately when a workspace requests it; it is not a Sysbox
+installation prerequisite.

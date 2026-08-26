@@ -7,8 +7,7 @@ This specification defines the minimum verification gates for development.
 ## Example runner
 
 `verification/scripts/verify-example.bash` is the common entrypoint for runnable examples.
-It accepts `current-installed` and `{sysbox,gvisor,rootless-podman,runc}`
-backends. A named backend provisions an independent disposable QEMU guest for
+It accepts `current-installed` and `sysbox`. The named backend provisions an independent disposable QEMU guest for
 each selected example, while an optional example selector narrows the
 otherwise compatible suite. Its dirty-repository policy is `auto`, `use`, or
 `discard`: `auto`
@@ -21,7 +20,7 @@ entries in the root `repos.yml`, and register that reviewed set in the
 verification run's disposable managed Gitea.
 
 The QEMU wrapper owns only guest and toolchain provisioning. After installing
-the selected backend, Node.js, pnpm, and `just`, it must invoke repository
+Sysbox, Node.js, pnpm, and `just`, it must invoke repository
 verification through `just install` and `just verify example`.
 
 `project-runtime-cgroups` is one leaf feature example. Its systemd, cgroupfs,
@@ -144,19 +143,16 @@ rejection, a reviewed root update, stop/start persistence, controller socket
 replacement, setup-error recovery, agent-home backup, discard, recreation,
 restore, and final managed-state/resource cleanup. Failure hooks and managed CI
 cache configuration MUST be injected only into its temporary repositories;
-the checked-in example remains a normal user-facing Project. Every backend lane
-in the release gate MUST execute this same journey through one shared recipe
-after its backend-specific installation and workload probes.
-The gVisor lane MUST install runsc with `host-uds=open` and MUST NOT use
-`host-uds=all`, so the journey proves access to DIM's mounted controller socket
-without granting socket creation in host mounts.
+the checked-in example remains a normal user-facing Project. The Sysbox lane
+in the release gate MUST execute this same journey after installation and
+workload probes.
 
 The integrated development repository MUST expose a manually dispatched QEMU
 release gate. The dispatch MUST pin the exact development commit and accept an
 explicit root ref, while the reusable verification workflow resolves and
 records the exact commit for every repository in the assembled set. It MUST run
 one full integration lane on `dim-container-integration` and one independent
-KVM lane per supported backend on the shared `dim-qemu` capability before that
+Sysbox KVM lane on the shared `dim-qemu` capability before that
 repository set is installed on a host or applied by workspace restart.
 Because host-mode JavaScript actions require Node.js before `setup-node` can
 run, the QEMU gate MUST either use a runner guest image that provides Node.js
@@ -229,14 +225,10 @@ Runtime backend verification should include:
 
 - `doctor` for the installed backend.
 - Workspace create, task execution, stop/start persistence, and discard.
-- Nested container smoke when the backend claims nested Docker or Podman support.
+- Nested rootless Docker smoke inside the Sysbox agent boundary.
 
 Current verified host evidence:
 
-- Rootless Podman can create a workspace on a compatible host.
-- gVisor can pass `doctor` when recorded as the installed backend.
-- gVisor can create a workspace and run nested Docker.
-- gVisor inner Docker can run nested `hello-world`.
 - Sysbox inner Docker can run nested `hello-world` without access to the host
   Docker image store.
 - Sysbox exposes the outer agent CPU, memory, and PID cgroup limits to the

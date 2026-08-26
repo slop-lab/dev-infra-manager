@@ -9,17 +9,11 @@ args select its UID/GID, both defaulting to 1000). This is the workspace
 container's trusted account, not the identity of an agent process; see [Trust
 Boundaries](../02-boundaries-and-trust.md#trusted-project-lifecycle-boundary).
 
-`DIM_DOCKERD_FLAGS` may add backend-specific daemon flags. The image must not
+`DIM_DOCKERD_FLAGS` may add managed daemon flags. The image must not
 mount or contact the host Docker socket.
 
 Before starting `dockerd`, the entrypoint removes managed containerd runtime
 state below `/var/run/docker/containerd`. That state belongs to the previous
 PID namespace and must not survive stop/start of the same workspace container.
 
-## Rootless Podman image
-
-`core/images/project-workspace-podman` prepares `dim`'s home, Codex home,
-`XDG_RUNTIME_DIR`, and rootless Podman storage before executing the requested
-command as `dim`, the same unprivileged user as the Docker-compatible image.
-
-Both images include the DIM Git askpass helper and project development tools.
+The image includes the DIM Git askpass helper and project development tools.

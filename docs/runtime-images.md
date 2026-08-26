@@ -1,36 +1,23 @@
-# Workspace Runtime Images
+# Workspace Runtime Image
 
-The Docker-compatible project workspace image is built from
+The project workspace image is built from
 [`core/images/project-workspace`](../../core/images/project-workspace):
 
 ```bash
 just build-workspace-image
 ```
 
-The build first packages `@slop-lab/dim-controller-proxy` and includes its
-restricted controller-socket helper in the image.
+The build packages `@slop-lab/dim-controller-proxy` and includes its restricted
+controller-socket helper. The image contains Node.js, pnpm, Codex, Git, and a
+nested Docker daemon. It receives neither the host Docker socket nor a host
+checkout; Project source is cloned inside the trusted workspace container.
 
-It contains Node.js, pnpm, Codex, Git, and a nested Docker daemon. Sysbox,
-gVisor, and privileged-runc workspaces use this image.
-
-The rootless Podman image is built from
-[`core/images/project-workspace-podman`](../../core/images/project-workspace-podman):
-
-```bash
-docker build -t dev-infra-project-workspace-podman:latest core/images/project-workspace-podman
-```
-
-It contains the same project tooling with Podman and podman-compose. Its
-container storage is persisted in the workspace runtime volume at
-`/home/dim/.local/share/containers`.
-
-Neither image receives the host Docker socket or a host checkout. Project
-source is cloned inside the top-level workspace container.
+Project-owned agent examples use the reviewed official
+`docker:29.1.3-dind-rootless` image inside the Sysbox boundary.
 
 ## GitHub Actions QEMU runner
 
 [`images/github-actions-runner-kvm`](../../images/github-actions-runner-kvm)
 builds a reviewed Ubuntu qcow2 base image with Sysbox, QEMU, and nested KVM.
-`just runner run` starts an ephemeral overlay, registers one
-`sysbox,kvm` self-hosted runner job, and discards the overlay afterward. Runner
-registration tokens are passed after boot and are never baked into the image.
+`just runner run` starts an ephemeral overlay, registers one `sysbox,kvm`
+self-hosted runner job, and discards the overlay afterward.

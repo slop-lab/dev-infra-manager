@@ -144,9 +144,8 @@ DIM does not enable unrestricted private-network webhook delivery.
 
 The DIM repository selects this label for automatic host-backend verification on non-draft
 pull requests in its managed development host. Draft pull requests and branch
-pushes skip the expensive gate. Four independent jobs run `just ci kvm BACKEND`
-for Sysbox, gVisor, rootless Podman, and runc, matching the KVM backend-installer
-verification required for a release. Named host capacities claim these common
+pushes skip the expensive gate. One job installs and verifies Sysbox in a clean
+QEMU guest. Named host capacities claim these common
 `dim-qemu` jobs without appearing in the workflow. After installing a DIM
 version that adds or changes runner labels, restart the runner once:
 

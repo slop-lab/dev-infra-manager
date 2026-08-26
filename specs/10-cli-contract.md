@@ -354,8 +354,8 @@ available for the selected backend and neither policy flag is supplied, an
 interactive terminal asks whether to grant it and recommends acceptance.
 Non-interactive creation retains automatic enablement unless `--no-kvm` is
 supplied. `--kvm` requires the device to be available rather than silently
-downgrading. gVisor workspaces cannot receive KVM.
-The runtime backend defaults to the backend recorded during installation.
+downgrading. The runtime backend is always the Sysbox backend recorded during
+installation.
 Omitting `--profile` stores an empty profile list and starts ordinary
 non-profiled Compose services.
 

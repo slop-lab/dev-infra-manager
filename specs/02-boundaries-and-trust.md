@@ -120,18 +120,10 @@ when the current adapter realizes it as a managed Gitea user.
 
 ## Backend Boundary
 
-Runtime backend choice changes the strength and shape of isolation.
-
-- `sysbox` is the default nested-container backend for Docker-compatible workloads.
-- `gvisor` is the no-KVM Docker-compatible backend.
-- `rootless-podman` is the lower-privilege backend for Podman-compatible workloads.
-
-The managed gVisor runtime MUST allow opening, but not creating, host
-Unix-domain sockets (`host-uds=open`). This exception exists only so a
-workspace can connect to the reviewed controller and agent-controller socket
-directories explicitly mounted by DIM. The workspace-scoped grants remain
-mandatory, and DIM MUST NOT mount a host runtime socket or unrelated host
-socket directory into the sandbox.
+Sysbox defines the untrusted agent boundary. The trusted workspace
+infrastructure uses ordinary runc, while the agent and its private rootless
+Docker run in an unprivileged `sysbox-runc` container. DIM MUST reject any
+other configured or recorded workspace backend.
 
 Storage backend choice changes disk enforcement.
 

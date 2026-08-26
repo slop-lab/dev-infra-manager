@@ -15,10 +15,9 @@ cgroupfs are explicit providers of the same Project contract; driver `none`
 and incomplete boundaries are reported as unavailable without blocking a
 Project that did not explicitly require resource enforcement.
 
-The default nested-container backend is Sysbox. gVisor provides a Docker-compatible
-no-KVM alternative, rootless Podman supports compatible lower-privilege
-workloads, and privileged runc is reserved for CI or nested development
-containers.
+The workspace backend is Sysbox. Docker's ordinary runc runtime remains the
+internal execution mechanism for trusted infrastructure and is not exposed as
+a workspace isolation choice.
 
 DIM does not currently impose a per-workspace disk quota. Project checkout
 data lives in workspace storage and nested-engine data lives in labeled Docker

@@ -26,7 +26,7 @@ Docker/Git terms aren't repeated here.
   may call this the “workspace root” or “project-root container”; use
   “workspace container” when the distinction from the root repository
   matters.
-- **Project runtime** — the nested Docker or Podman runtime owned by trusted
+- **Project runtime** — the nested Docker runtime owned by trusted
   Project lifecycle code in the workspace container. It runs trusted Project
   services, including secret-bearing containers. It is distinct from an agent
   container's private nested runtime.
@@ -66,7 +66,7 @@ The documentation is split by concern:
 - [Resource Isolation](resource-isolation.md): resource limits and runtime isolation.
 - [Usage](usage.md): local setup, commands, and operational workflow.
 - [Configuration](configuration.md): configuration file reference.
-- [Runtime Backends](runtime-backends.md): Sysbox, gVisor, rootless Podman, and runc selection.
+- [Runtime Backend](runtime-backends.md): Sysbox agent isolation and trusted runc infrastructure.
 - [Runtime Images](runtime-images.md): workspace-root runtime images and their nested workloads.
 - [External workspace URLs](external-urls.md): controller discovery, named ingresses, nested targets, and Caddy/Cloudflare HTTPS.
 - [Repository-backed Workspaces](repo-workspaces.md): managed Git registration, persistent workspaces, reconciliation, and Git environment.
