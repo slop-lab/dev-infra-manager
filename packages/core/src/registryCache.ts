@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { UserError } from "./errors.js";
 import type { StreamingCommandRunner } from "./types.js";
 
@@ -9,6 +10,7 @@ export const REGISTRY_CACHE_ENDPOINT = `${REGISTRY_CACHE_CONTAINER}:5000`;
 
 export interface RegistryCacheConnection {
   endpoint: string;
+  address: string;
 }
 
 export async function ensureRegistryCache(
@@ -42,7 +44,15 @@ export async function ensureRegistryCache(
     await startRegistryCache(runner);
   }
 
-  return { endpoint: REGISTRY_CACHE_ENDPOINT };
+  const address = await runner.run("docker", [
+    "container", "inspect", REGISTRY_CACHE_CONTAINER,
+    "--format", `{{with index .NetworkSettings.Networks "${CONTROL_NETWORK}"}}{{.IPAddress}}{{end}}`
+  ]);
+  assertCommand(address, "resolve registry cache control-network address");
+  if (isIP(address.stdout.trim()) !== 4) {
+    throw new UserError("registry cache has no valid control-network address");
+  }
+  return { endpoint: REGISTRY_CACHE_ENDPOINT, address: address.stdout.trim() };
 }
 
 export async function configureSysboxRegistryMirror(

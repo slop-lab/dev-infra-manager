@@ -17,12 +17,16 @@ import type { RegisteredDimPlugins } from "./plugin.js";
 import { workspaceRuntimePlan } from "./runtimeBackends.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { inspectProjectRuntimeCgroups, type ProjectRuntimeCgroups } from "./projectRuntimeCgroups.js";
-import { ensureRegistryCache, REGISTRY_CACHE_ENDPOINT } from "./registryCache.js";
+import {
+  ensureRegistryCache,
+  REGISTRY_CACHE_CONTAINER,
+  REGISTRY_CACHE_ENDPOINT
+} from "./registryCache.js";
 
 // The unprivileged OS user every workspace image (core/images/project-workspace,
 // core/images/project-workspace-podman) creates and runs project commands as.
 const WORKSPACE_USER = "dim";
-const WORKSPACE_RUNTIME_CONFIG_VERSION = "3";
+const WORKSPACE_RUNTIME_CONFIG_VERSION = "4";
 
 export interface WorkspaceGitEnvironment {
   username: string;
@@ -764,7 +768,7 @@ async function reconcileContainer(
       throw new UserError(`workspace '${record.name}' requires host /dev/kvm`);
     }
   }
-  await ensureRegistryCache(runner);
+  const registryCache = await ensureRegistryCache(runner);
   await reconcileDockerVolume(runner, record);
   const state = new LifecycleState(options.stateRoot);
   const controllerGrant = await state.ensureWorkspaceGrant(record.name);
@@ -776,7 +780,9 @@ async function reconcileContainer(
   ];
   let inspect = await runner.run("docker", inspectArgs);
   if (inspect.exitCode !== 0) {
-    const created = await runner.run("docker", workspaceContainerArgs(options, record, git, controllerGrant, undefined, agentGrant));
+    const created = await runner.run("docker", workspaceContainerArgs(
+      options, record, git, controllerGrant, undefined, agentGrant, registryCache.address
+    ));
     if (created.exitCode !== 0) {
       inspect = await runner.run("docker", inspectArgs);
       if (inspect.exitCode !== 0) {
@@ -799,7 +805,9 @@ async function reconcileContainer(
   if (runtimeConfig !== WORKSPACE_RUNTIME_CONFIG_VERSION) {
     const removed = await runner.run("docker", ["container", "rm", "--force", record.containerName]);
     if (removed.exitCode !== 0) throw new UserError(`failed to replace workspace container: ${removed.stderr.trim()}`);
-    const created = await runner.run("docker", workspaceContainerArgs(options, record, git, controllerGrant, undefined, agentGrant));
+    const created = await runner.run("docker", workspaceContainerArgs(
+      options, record, git, controllerGrant, undefined, agentGrant, registryCache.address
+    ));
     if (created.exitCode !== 0) throw new UserError(`failed to create workspace container: ${created.stderr.trim()}`);
     inspect = await runner.run("docker", inspectArgs);
     [managed, workspace, projectLabel, repoLabel, backend, runtimeConfig, running] = inspect.stdout.trim().split("|");
@@ -847,7 +855,8 @@ export function workspaceContainerArgs(
   git: WorkspaceGitEnvironment,
   controllerGrant?: string,
   kvmGroupId: () => number = () => statSync("/dev/kvm").gid,
-  agentGrant?: string
+  agentGrant?: string,
+  registryCacheAddress?: string
 ): string[] {
   const plan = workspaceRuntimePlan(record.runtimeBackend, options);
   const args = [
@@ -855,6 +864,7 @@ export function workspaceContainerArgs(
     "--name", record.containerName,
     "--network", record.networkName,
     "--add-host", "host.docker.internal:host-gateway",
+    ...(registryCacheAddress ? ["--add-host", `${REGISTRY_CACHE_CONTAINER}:${registryCacheAddress}`] : []),
     "--runtime", plan.dockerRuntime,
     "--cpus", record.cpuCount,
     "--memory", record.memory,
