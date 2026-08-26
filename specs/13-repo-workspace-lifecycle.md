@@ -132,6 +132,11 @@ COMPOSE_PROFILES
 DIM_GIT_BASE_URL
 ```
 
+`COMPOSE_PROJECT_NAME` identifies the reviewed Project runtime inside the
+workspace container. DIM sets it to the stable workspace-local value
+`dim-project`; it MUST NOT encode the DIM workspace name. The outer workspace
+runtime remains independently identified by DIM-managed state.
+
 The read-only runtime manifest also contains `hostAliases`, a mapping from
 workspace-visible service names to one or more controller-resolved addresses.
 DIM registers only endpoints granted to that workspace; Project lifecycle

@@ -85,6 +85,11 @@ DIM_AGENT_CONTROLLER_SOCKET
 DIM_AGENT_CONTROLLER_TOKEN
 ```
 
+`COMPOSE_PROJECT_NAME` is the stable workspace-local name `dim-project`.
+Project lifecycle scripts should use that environment value (or let Compose
+consume it automatically), rather than deriving an inner Compose identity
+from `DIM_WORKSPACE_NAME`.
+
 The read-only `DIM_PROJECT_MANIFEST` also publishes the nested engine's cgroup
 boundary under `runtime.cgroups`. DIM exposes delegation automatically when it
 is safe. `status: delegated` means Project setup may
