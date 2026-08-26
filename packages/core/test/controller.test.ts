@@ -57,7 +57,7 @@ describe("DIM controller", () => {
       containerName: "dim-ws-work",
       networkName: "dim-control",
       dockerVolumeName: "dim-ws-work-docker",
-      runtimeBackend: "runc",
+      runtimeBackend: "sysbox",
       kvm: false,
       cpuCount: "2",
       memory: "4g",

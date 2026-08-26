@@ -2,8 +2,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { runDoctor, sysboxExecutionCheck } from "../../../../core/packages/core/src/doctor.js";
-import { lifecycleOptions } from "../../../../core/packages/core/src/lifecycleOptions.js";
+import { runtimeBackendChecks, sysboxExecutionCheck } from "../../../../core/packages/core/src/doctor.js";
+import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import type { CommandResult, CommandRunner, RunOptions } from "../../../../core/packages/core/src/types.js";
 
 class QueueRunner implements CommandRunner {
@@ -63,29 +63,21 @@ describe("doctor checks", () => {
     });
   });
 
-  it("runs gVisor checks without Sysbox service checks", async () => {
+  it("checks Sysbox without making KVM a backend prerequisite", async () => {
     const root = await mkdtemp(join(tmpdir(), "dim-doctor-"));
     temporaryDirectories.push(root);
     const configPath = join(root, "dim.json");
-    await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "gvisor" }));
-    const options = lifecycleOptions({ DIM_CONFIG_PATH: configPath });
+    await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" }));
+    const options = lifecycleOptionsForBackend("sysbox", { DIM_CONFIG_PATH: configPath });
     const runner = new QueueRunner([
-      result(0, "", "v22.0.0"),
-      result(0, "", "10.0.0"),
-      result(0, "", "just 1.0.0"),
-      result(0, "", "git version 2.0.0"),
-      result(0, "", "script from util-linux 2.39"),
-      result(0, "", "stty (GNU coreutils) 9.1"),
-      result(0),
-      result(0, "", "Docker version 1.0.0"),
-      result(0, "", "29.0.0"),
-      result(0, "", "runsc version release"),
-      result(0, "", '{"runsc":{}}'),
+      result(0, "", "sysbox-runc version"),
+      result(0, "", "active"),
+      result(0, "", '{"sysbox-runc":{}}'),
       result(0)
     ]);
 
-    const checks = await runDoctor(runner, "gvisor", options);
-    expect(checks.map((check) => check.name)).toContain("gVisor container execution");
-    expect(checks.map((check) => check.name)).not.toContain("Sysbox service");
+    const checks = await runtimeBackendChecks(runner, "sysbox", options);
+    expect(checks.map((check) => check.name)).toContain("Sysbox container execution");
+    expect(checks.map((check) => check.name)).not.toContain("KVM device");
   });
 });

@@ -25,12 +25,12 @@ describe("DIM user config", () => {
       pluginHome: "/plugins"
     }));
 
-    await expect(setConfiguredWorkspaceBackend("runc", { DIM_CONFIG_PATH: target })).resolves.toBe(target);
-    expect(configuredWorkspaceBackend({ DIM_CONFIG_PATH: target })).toBe("runc");
+    await expect(setConfiguredWorkspaceBackend("sysbox", { DIM_CONFIG_PATH: target })).resolves.toBe(target);
+    expect(configuredWorkspaceBackend({ DIM_CONFIG_PATH: target })).toBe("sysbox");
     expect(JSON.parse(await readFile(target, "utf8"))).toEqual({
       schemaVersion: 1,
       pluginHome: "/plugins",
-      workspaceBackend: "runc"
+      workspaceBackend: "sysbox"
     });
   });
 

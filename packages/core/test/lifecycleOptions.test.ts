@@ -4,7 +4,7 @@ import { SYSBOX_CI_RUNNER_IMAGE } from "../../../../core/packages/core/src/sysbo
 
 describe("lifecycle options", () => {
   it("uses discoverable sockets for the default state root", () => {
-    const options = lifecycleOptionsForBackend("runc", {
+    const options = lifecycleOptionsForBackend("sysbox", {
       HOME: "/home/developer",
       XDG_RUNTIME_DIR: "/run/user/1000"
     });
@@ -18,7 +18,7 @@ describe("lifecycle options", () => {
   });
 
   it("namespaces sockets for a custom state root", () => {
-    const options = lifecycleOptionsForBackend("runc", {
+    const options = lifecycleOptionsForBackend("sysbox", {
       HOME: "/home/developer",
       XDG_RUNTIME_DIR: "/run/user/1000",
       DIM_STATE_ROOT: "/tmp/alternate-dim-state"
@@ -30,7 +30,7 @@ describe("lifecycle options", () => {
   });
 
   it("uses the remote TCP Docker host for host-facing Gitea traffic", () => {
-    const options = lifecycleOptionsForBackend("runc", {
+    const options = lifecycleOptionsForBackend("sysbox", {
       HOME: "/home/developer",
       DOCKER_HOST: "tcp://agent-dind:2375"
     });

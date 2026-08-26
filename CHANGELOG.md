@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Remove the pre-stable gVisor, rootless-Podman, and privileged-runc workspace
+  backends. Sysbox is now the sole workspace backend; ordinary runc remains an
+  internal runtime for trusted infrastructure, obsolete configuration and
+  state are rejected, and KVM is no longer a Sysbox doctor prerequisite.
+
 - Resolve util-linux `script`'s own descriptor to a validated `/dev/pts/N`
   device and resize that device directly, avoiding Sysbox's non-effective
   ioctl forwarding through `/proc/<pid>/fd/*` while preserving ordered delivery.

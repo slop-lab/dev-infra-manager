@@ -45,10 +45,10 @@ describe("project and workspace lifecycle", () => {
       repositories: [], createdAt: "now", updatedAt: "now"
     } satisfies ProjectRecord;
     await expect(resolveWorkspaceCapabilities(
-      ["missing"], [], project, "work-1", "runc", new Map()
+      ["missing"], [], project, "work-1", "sysbox", new Map()
     )).rejects.toThrow(/required workspace capability 'missing'/);
     await expect(resolveWorkspaceCapabilities(
-      [], ["missing"], project, "work-1", "runc", new Map()
+      [], ["missing"], project, "work-1", "sysbox", new Map()
     )).resolves.toEqual([{
       name: "missing", requirement: "recommended", status: "unavailable", detail: "no installed provider"
     }]);
@@ -111,7 +111,7 @@ describe("project and workspace lifecycle", () => {
       containerName: "dim-ws-work-1",
       networkName: "dim-control",
       dockerVolumeName: "dim-ws-work-1-docker",
-      runtimeBackend: "runc",
+      runtimeBackend: "sysbox",
       kvm: false,
       cpuCount: "2",
       memory: "4g",
@@ -197,7 +197,7 @@ describe("project and workspace lifecycle", () => {
       containerName: "dim-ws-work",
       networkName: "dim-control",
       dockerVolumeName: "dim-ws-work-docker",
-      runtimeBackend: "runc" as const,
+      runtimeBackend: "sysbox" as const,
       kvm: false,
       cpuCount: "2",
       memory: "4g",
@@ -292,24 +292,20 @@ describe("project and workspace lifecycle", () => {
     expect(() => validateRepositoryRefOverrides(["core=one", "core=two"], project)).toThrow(/duplicated/);
   });
 
-  it("auto-detects KVM except for the gVisor workspace runtime", async () => {
-    await expect(detectWorkspaceKvm("runc", async () => {})).resolves.toBe(true);
-    await expect(detectWorkspaceKvm("rootless-podman", async () => {})).resolves.toBe(true);
-    await expect(detectWorkspaceKvm("runc", async () => {
+  it("auto-detects optional KVM for Sysbox workspaces", async () => {
+    await expect(detectWorkspaceKvm("sysbox", async () => {})).resolves.toBe(true);
+    await expect(detectWorkspaceKvm("sysbox", async () => {
       throw new Error("missing");
     })).resolves.toBe(false);
-    await expect(detectWorkspaceKvm("gvisor", async () => {})).resolves.toBe(false);
   });
 
   it("honors explicit workspace KVM policy", async () => {
-    await expect(resolveWorkspaceKvm("runc", undefined, async () => {})).resolves.toBe(true);
-    await expect(resolveWorkspaceKvm("runc", false, async () => {})).resolves.toBe(false);
-    await expect(resolveWorkspaceKvm("runc", true, async () => {})).resolves.toBe(true);
-    await expect(resolveWorkspaceKvm("runc", true, async () => {
+    await expect(resolveWorkspaceKvm("sysbox", undefined, async () => {})).resolves.toBe(true);
+    await expect(resolveWorkspaceKvm("sysbox", false, async () => {})).resolves.toBe(false);
+    await expect(resolveWorkspaceKvm("sysbox", true, async () => {})).resolves.toBe(true);
+    await expect(resolveWorkspaceKvm("sysbox", true, async () => {
       throw new Error("missing");
     })).rejects.toThrow(/KVM was requested but is unavailable/);
-    await expect(resolveWorkspaceKvm("gvisor", true, async () => {}))
-      .rejects.toThrow(/KVM was requested but is unavailable/);
   });
 
   it("rejects dirty and divergent restarts before stopping or changing workspace state", async () => {
@@ -354,7 +350,7 @@ describe("project and workspace lifecycle", () => {
       containerName: "dim-ws-work-1",
       networkName: "dim-control",
       dockerVolumeName: "dim-ws-work-1-docker",
-      runtimeBackend: "runc",
+      runtimeBackend: "sysbox",
       kvm: false,
       cpuCount: "2",
       memory: "4g",
@@ -462,7 +458,7 @@ describe("project and workspace lifecycle", () => {
       containerName: "dim-ws-work-1",
       networkName: "dim-control",
       dockerVolumeName: "dim-ws-work-1-docker",
-      runtimeBackend: "runc",
+      runtimeBackend: "sysbox",
       kvm: true,
       cpuCount: "1.5",
       memory: "3g",
@@ -536,7 +532,7 @@ describe("project and workspace lifecycle", () => {
       containerName: "dim-ws-work-1",
       networkName: "dim-control",
       dockerVolumeName: "dim-ws-work-1-docker",
-      runtimeBackend: "runc",
+      runtimeBackend: "sysbox",
       kvm: false,
       cpuCount: "2",
       memory: "4g",
@@ -616,7 +612,7 @@ describe("project and workspace lifecycle", () => {
       containerName: "dim-ws-work-1",
       networkName: "dim-control",
       dockerVolumeName: "dim-ws-work-1-docker",
-      runtimeBackend: "runc",
+      runtimeBackend: "sysbox",
       kvm: false,
       cpuCount: "2",
       memory: "4g",
@@ -699,32 +695,6 @@ describe("project and workspace lifecycle", () => {
       engine: "docker",
       env: { DIM_DOCKERD_FLAGS: "--feature containerd-snapshotter=false" }
     });
-    expect(workspaceRuntimePlan("gvisor", options)).toMatchObject({
-      dockerRuntime: "runsc",
-      privileged: false,
-      env: {
-        DIM_DOCKERD_FLAGS: "--feature containerd-snapshotter=false --iptables=false --ip6tables=false"
-      }
-    });
-    expect(workspaceRuntimePlan("rootless-podman", options)).toMatchObject({
-      image: "dev-infra-project-workspace-podman:latest",
-      runtimeDataPath: "/home/dim/.local/share/containers",
-      engine: "podman",
-      privileged: false,
-      capabilities: expect.arrayContaining(["SYS_ADMIN", "SETUID", "SETGID", "SYS_CHROOT"]),
-      securityOptions: [
-        "seccomp=unconfined",
-        "apparmor=unconfined",
-        "systempaths=unconfined"
-      ],
-      devices: ["/dev/fuse"]
-    });
-    expect(workspaceRuntimePlan("runc", options)).toMatchObject({
-      dockerRuntime: "runc",
-      privileged: true,
-      engine: "docker",
-      env: { DIM_DOCKERD_FLAGS: "--feature containerd-snapshotter=false" }
-    });
   });
 
   it("rejects legacy workspace records without modifying them", async () => {
@@ -744,6 +714,19 @@ describe("project and workspace lifecycle", () => {
     }));
 
     await expect(state.readWorkspace("legacy")).rejects.toThrow(/does not migrate existing state/);
+  });
+
+  it("rejects workspace state from removed backends", async () => {
+    const state = new LifecycleState(root);
+    await mkdir(join(root, "workspaces"), { recursive: true });
+    await writeFile(join(root, "workspaces", "obsolete.json"), JSON.stringify({
+      schemaVersion: 3,
+      name: "obsolete",
+      runtimeBackend: "runc"
+    }));
+
+    await expect(state.readWorkspace("obsolete")).rejects.toThrow(/supports only sysbox/);
+    await expect(state.listWorkspaces()).rejects.toThrow(/supports only sysbox/);
   });
 
   it("reports stopped workspace state and entrypoint logs when inner Docker fails", async () => {

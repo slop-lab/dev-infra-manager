@@ -101,7 +101,7 @@ describe("@slop-lab/dim-installer", () => {
       const dataHome = join(root, "data-home");
       const configPath = join(root, "config", "dim", "config.json");
       await mkdir(dirname(configPath), { recursive: true });
-      await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "gvisor" }));
+      await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" }));
 
       const installed = await installDimCli({
         version: "9.9.9",
@@ -130,7 +130,7 @@ describe("@slop-lab/dim-installer", () => {
 
       expect(JSON.parse(await readFile(configPath, "utf8"))).toEqual({
         schemaVersion: 1,
-        workspaceBackend: "gvisor",
+        workspaceBackend: "sysbox",
         cli: { mode: "proxied", version: "9.9.9", executable }
       });
       expect(await configuredCli({ DIM_CONFIG_PATH: configPath })).toEqual({

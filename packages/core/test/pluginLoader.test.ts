@@ -36,10 +36,10 @@ describe("plugin loader configuration", () => {
 
   it("reads the installed workspace backend from the shared user config", async () => {
     const configPath = join(root, "dim.json");
-    await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "gvisor" }));
-    expect(configuredWorkspaceBackend({ DIM_CONFIG_PATH: configPath })).toBe("gvisor");
+    await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" }));
+    expect(configuredWorkspaceBackend({ DIM_CONFIG_PATH: configPath })).toBe("sysbox");
     expect(configuredWorkspaceBackend({ DIM_CONFIG_PATH: join(root, "missing.json") })).toBeUndefined();
-    await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "unknown" }));
+    await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "gvisor" }));
     expect(() => configuredWorkspaceBackend({ DIM_CONFIG_PATH: configPath })).toThrow(/invalid workspaceBackend/);
   });
 

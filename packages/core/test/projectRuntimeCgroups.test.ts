@@ -41,15 +41,4 @@ describe("project runtime cgroups", () => {
     expect(calls[0]).toEqual(expect.arrayContaining(["exec", "--user", "root", "dim-ws-example"]));
     expect(calls[0]?.at(-1)).toContain("docker info --format '{{.CgroupDriver}}'");
   });
-
-  it("uses the Podman cgroup-manager field for Podman workspaces", async () => {
-    const calls: string[][] = [];
-    await inspectProjectRuntimeCgroups({
-      run: async (_command, args) => {
-        calls.push(args);
-        return { command: "docker", args, stdout: "cgroupfs\ncgroup2fs\nyes\npids\n", stderr: "", exitCode: 0 };
-      }
-    }, "dim-ws-podman", "podman");
-    expect(calls[0]?.at(-1)).toContain("podman info --format '{{.Host.CgroupManager}}'");
-  });
 });

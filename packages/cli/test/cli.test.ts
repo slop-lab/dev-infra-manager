@@ -195,7 +195,7 @@ test("controller serve preserves the active owner and cleans up its runtime file
   await mkdir(path.join(configHome, "dim"), { recursive: true });
   await writeFile(
     path.join(configHome, "dim", "config.json"),
-    `${JSON.stringify({ schemaVersion: 1, workspaceBackend: "runc" })}\n`
+    `${JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" })}\n`
   );
   const args = [
     "--import",
