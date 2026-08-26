@@ -15,6 +15,28 @@ state_root="$(mktemp -d /tmp/dim-multi-state.XXXXXX)"
 source_root="$(mktemp -d /tmp/dim-multi-source.XXXXXX)"
 dim_bin="${DIM_BIN:-dim}"
 
+gitea_request() {
+  local method="$1" url="$2" username="$3" password="$4" body="${5:-}"
+  GITEA_API_USERNAME="$username" GITEA_API_PASSWORD="$password" GITEA_API_BODY="$body" \
+    node -e '
+      const [method, url] = process.argv.slice(1);
+      const authorization = Buffer.from(
+        `${process.env.GITEA_API_USERNAME}:${process.env.GITEA_API_PASSWORD}`
+      ).toString("base64");
+      const body = process.env.GITEA_API_BODY || undefined;
+      fetch(url, {
+        method,
+        headers: {
+          authorization: `Basic ${authorization}`,
+          ...(body ? { "content-type": "application/json" } : {})
+        },
+        body
+      }).then((response) => {
+        if (!response.ok) throw new Error(`${method} ${url}: HTTP ${response.status}`);
+      });
+    ' "$method" "$url"
+}
+
 export DIM_STATE_ROOT="$state_root"
 export DIM_CONFIG_PATH="$state_root/dim.json"
 bash "$script_dir/configure-user-backend.bash" sysbox
@@ -30,10 +52,9 @@ cleanup() {
       admin_username="$(printf '%s' "$credentials" | jq -r .adminUsername)"
       admin_password="$(printf '%s' "$credentials" | jq -r .adminPassword)"
       for organization in "dim-$project_name" "dim-$custom_project_name" "dim-$retry_project_name" "$source_namespace"; do
-        curl --fail --silent --show-error \
-          --user "$admin_username:$admin_password" \
-          --request DELETE \
+        gitea_request DELETE \
           "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs/$organization" \
+          "$admin_username" "$admin_password" \
           >/dev/null 2>&1 || true
       done
     fi
@@ -68,11 +89,10 @@ export SOURCE_GIT_TOKEN
 SOURCE_GIT_USERNAME="$(printf '%s' "$source_credentials" | jq -r .adminUsername)"
 SOURCE_GIT_TOKEN="$(printf '%s' "$source_credentials" | jq -r .adminPassword)"
 source_git_base="http://127.0.0.1:${DIM_GITEA_PORT:-3300}/$source_namespace"
-curl --fail --silent --show-error \
-  --user "$SOURCE_GIT_USERNAME:$SOURCE_GIT_TOKEN" \
-  --header 'Content-Type: application/json' \
-  --data "$(jq -n --arg name "$source_namespace" '{username:$name,visibility:"private"}')" \
-  "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs" >/dev/null
+gitea_request POST \
+  "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs" \
+  "$SOURCE_GIT_USERNAME" "$SOURCE_GIT_TOKEN" \
+  "$(jq -n --arg name "$source_namespace" '{username:$name,visibility:"private"}')"
 
 project_worktree="$source_root/root"
 project_bare="$source_root/root.git"
@@ -184,11 +204,10 @@ git clone --bare "$project_worktree" "$project_bare" >/dev/null
 
 source_helper='!f() { echo username=$SOURCE_GIT_USERNAME; echo password=$SOURCE_GIT_TOKEN; }; f'
 for name in root "$api_repo" "$worker_repo" "$docs_repo"; do
-  curl --fail --silent --show-error \
-    --user "$SOURCE_GIT_USERNAME:$SOURCE_GIT_TOKEN" \
-    --header 'Content-Type: application/json' \
-    --data "$(jq -n --arg name "$name" '{name:$name,private:true}')" \
-    "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs/$source_namespace/repos" >/dev/null
+  gitea_request POST \
+    "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs/$source_namespace/repos" \
+    "$SOURCE_GIT_USERNAME" "$SOURCE_GIT_TOKEN" \
+    "$(jq -n --arg name "$name" '{name:$name,private:true}')"
   git --git-dir "$source_root/$name.git" \
     -c credential.helper= \
     -c "credential.helper=$source_helper" \
