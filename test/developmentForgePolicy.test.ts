@@ -56,6 +56,7 @@ describe("DIM development forge policy", () => {
     expect(recipes).toContain('DIM_SELF_WORKSPACE_BACKEND="{{backend}}"');
     expect(workflow.match(/with-ci-registry-cache\.bash/g)).toHaveLength(2);
     expect(workflow).toContain("inputs.gate == 'kvm' && 60 || 30");
+    expect(workflow).toContain("inputs.gate != 'integration' && inputs.gate != 'container'");
   });
 
   it("materializes the complete rootless-Podman workspace image", async () => {
@@ -80,6 +81,21 @@ describe("DIM development forge policy", () => {
       resolve(workspaceRoot, "verification/scripts/stateful-development-flow-smoke.bash"), "utf8"
     );
     expect(stateful).not.toContain("ps --all");
+  });
+
+  it("builds rootless agent DinD without inherited file-capability layers", async () => {
+    for (const path of [
+      "examples/projects/full-development-flow/repos/root/.dim/dind/Dockerfile",
+      "examples/projects/single-repository/repos/app/.dim/dind/Dockerfile",
+      "examples/projects/multi-repository/repos/root/.dim/dind/Dockerfile"
+    ]) {
+      const dockerfile = await readFile(resolve(workspaceRoot, path), "utf8");
+      expect(dockerfile).toContain("FROM docker:29.1.3-dind");
+      expect(dockerfile).not.toContain("FROM docker:29.1.3-dind-rootless");
+      expect(dockerfile).toContain("docker-rootless-extras-29.1.3.tgz");
+      expect(dockerfile).toContain("rootless_sha256=");
+      expect(dockerfile).toContain("chmod 4755 /usr/bin/newuidmap /usr/bin/newgidmap");
+    }
   });
 
   it("limits gVisor host socket access to opening reviewed mounted endpoints", async () => {
