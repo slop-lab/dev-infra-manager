@@ -58,7 +58,7 @@ describe("external URLs plugin", () => {
       }
     }]);
     close.push(() => registered.dispose());
-    const server = configuredDimAdminController({} as LifecycleOptions, registered);
+    const server = configuredDimAdminController({ stateRoot } as LifecycleOptions, registered);
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
     close.push(() => new Promise((resolve) => server.close(() => resolve())));
