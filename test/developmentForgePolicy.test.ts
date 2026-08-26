@@ -84,6 +84,16 @@ describe("DIM development forge policy", () => {
     expect(dind).toContain("chown root:root /usr/bin/newuidmap /usr/bin/newgidmap");
     expect(compose).toContain('DIM_UID: "${DIM_WORKSPACE_UID:-1000}"');
     expect(setup).toContain('DIM_WORKSPACE_UID="$(stat -c %u /workspace)"');
+    expect(setup).toContain("export COMPOSE_BAKE=false");
+    expect(setup).toContain("verify_idmap_helpers agent-dind");
+    expect(setup).toContain("verify_idmap_helpers secure-dind");
+    expect(setup).toContain('test "$identity" = 0:0:4755');
+    expect(setup.indexOf("compose build --quiet agent-dind")).toBeLessThan(
+      setup.indexOf("verify_idmap_helpers agent-dind")
+    );
+    expect(setup.indexOf("compose build --quiet secure-dind")).toBeLessThan(
+      setup.indexOf("verify_idmap_helpers secure-dind")
+    );
     expect(agent).toContain("--user 0:0");
     expect(agent).toContain('stat -c %u /workspace)" = 0');
   });
