@@ -109,4 +109,22 @@ describe("DIM development forge policy", () => {
     expect(lifecycle).toContain('`COMPOSE_PROJECT_NAME=${PROJECT_COMPOSE_NAME}`');
     expect(lifecycle).not.toContain('`COMPOSE_PROJECT_NAME=${record.composeProjectName}`');
   });
+
+  it("verifies volume-preserving host shutdown and restore", async () => {
+    const lifecycle = await readFile(
+      resolve(workspaceRoot, "core/packages/core/src/hostLifecycle.ts"),
+      "utf8"
+    );
+    const smoke = await readFile(
+      resolve(workspaceRoot, "verification/scripts/stateful-development-flow-smoke.bash"),
+      "utf8"
+    );
+    expect(lifecycle).toContain("resumeWorkspaces");
+    expect(lifecycle).toContain("resumeCiRunners");
+    expect(lifecycle).toContain("resumeManagedContainers");
+    expect(lifecycle).not.toMatch(/docker[^\n]*(?:volume rm|container rm|\brm\b)/);
+    expect(smoke).toContain("dim host shutdown");
+    expect(smoke).toContain("volumes_before=");
+    expect(smoke).toContain("dim host start");
+  });
 });

@@ -194,6 +194,22 @@ controller_discovery="$(dim workspace run "$workspace_name" bash -- -lc \
 test "$(jq -r '.routes[0] | "\(.method) \(.path)"' <<<"$controller_discovery")" = \
   'POST /api/workspace/restart'
 
+echo "[full-development-flow] preserve volumes across host shutdown and restore"
+volumes_before="$(docker volume ls --filter label=dim.managed=true --format '{{.Name}}' | sort)"
+dim host shutdown >/dev/null
+test "$(dim host status --json | jq -r .phase)" = stopped
+test "$(docker inspect --format '{{.State.Running}}' "$container_name")" = false
+test "$(docker volume ls --filter label=dim.managed=true --format '{{.Name}}' | sort)" = "$volumes_before"
+if dim workspace show "$workspace_name" >/dev/null 2>&1; then
+  echo "workspace operations remained available while the DIM host was stopped" >&2
+  exit 1
+fi
+dim host start >/dev/null
+test "$(dim host status --json | jq -r .phase)" = ready
+test "$(dim workspace show "$workspace_name" --json | jq -r .phase)" = ready
+test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/journey-home"')" = persistent-home
+test -n "$(dim project list --json | jq -r '.[0].name')"
+
 echo "[full-development-flow] recover from setup-error"
 dim workspace exec "$workspace_name" -- touch /tmp/dim-stateful-setup-error
 if dim workspace setup "$workspace_name" >/dev/null 2>&1; then
