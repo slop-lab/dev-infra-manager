@@ -81,9 +81,22 @@ describe("DIM development forge policy", () => {
     const setup = await readFile(resolve(workspaceRoot, "project/.dim/setup.sh"), "utf8");
     const agent = await readFile(resolve(workspaceRoot, "project/.dim/agent-dind/agent.sh"), "utf8");
     expect(dind).toContain("FROM docker:29.1.3-dind-rootless");
+    expect(dind).toContain("chown root:root /usr/bin/newuidmap /usr/bin/newgidmap");
     expect(compose).toContain('DIM_UID: "${DIM_WORKSPACE_UID:-1000}"');
     expect(setup).toContain('DIM_WORKSPACE_UID="$(stat -c %u /workspace)"');
     expect(agent).toContain("--user 0:0");
     expect(agent).toContain('stat -c %u /workspace)" = 0');
+  });
+
+  it("isolates outer Docker configuration from the workspace user home", async () => {
+    for (const path of [
+      "project/.dim/setup.sh",
+      "project/.dim/teardown.sh",
+      "project/.dim/home-archive.sh",
+      "project/.dim/entrypoint.sh"
+    ]) {
+      const script = await readFile(resolve(workspaceRoot, path), "utf8");
+      expect(script).toContain('DOCKER_CONFIG="/tmp/dim-workspace-docker-config-$(id -u)"');
+    }
   });
 });

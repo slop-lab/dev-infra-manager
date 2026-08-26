@@ -168,6 +168,10 @@ verification_stage="workspace registry mirror"
 dim workspace exec "$workspace_name" -- \
   docker info --format '{{json .RegistryConfig.Mirrors}}' |
   grep -Fq 'http://dim-registry-cache:5000/'
+verification_stage="workspace Docker config ownership"
+dim workspace exec "$workspace_name" -- sh -eu -c '
+  test ! -e "$HOME/.docker" || test "$(stat -c %u "$HOME/.docker")" = "$(id -u)"
+'
 
 verify_agent_dind() {
   local agent_dind_container
@@ -210,6 +214,10 @@ verify_agent_dind() {
         echo "agent-dind rootless UID $rootless_uid does not match workspace UID $workspace_uid" >&2
         exit 1
       }
+      test "$(stat -c %u:%g /usr/bin/newuidmap)" = 0:0
+      test "$(stat -c %u:%g /usr/bin/newgidmap)" = 0:0
+      test "$(stat -c %a /usr/bin/newuidmap)" = 4755
+      test "$(stat -c %a /usr/bin/newgidmap)" = 4755
     '
 }
 
