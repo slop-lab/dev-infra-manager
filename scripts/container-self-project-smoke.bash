@@ -186,10 +186,12 @@ verify_agent_dind() {
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml exec --no-TTY --user root agent-dind \
     sh -eu -c '
-      test -S /run/docker.sock
-      test -d /var/lib/docker
+      socket="${DOCKER_HOST#unix://}"
+      test -S "$socket"
+      test -d /home/rootless/.local/share/docker
       test "$(stat -c %u:%g /mnt/agent-home)" = "$(stat -c %u:%g /workspace)"
-      ! docker info --format "{{json .SecurityOptions}}" | grep -q rootless
+      docker info --format "{{json .SecurityOptions}}" | grep -q rootless
+      test "$(stat -c %u /workspace)" = "$(id -u rootless)"
     '
 }
 
@@ -243,9 +245,9 @@ test "$agent_git_identity" = \
 verification_stage="agent base toolchain and home persistence"
 workspace_owner_uid="$(dim workspace exec "$workspace_name" -- stat -c %u /workspace)"
 agent_uid="$(dim workspace run "$workspace_name" bash -- -lc 'id -u')"
-test "$agent_uid" = "$workspace_owner_uid"
+test "$agent_uid" = 0
 if [[ -n "${DIM_SELF_EXPECT_AGENT_UID:-}" ]]; then
-  test "$agent_uid" = "$DIM_SELF_EXPECT_AGENT_UID"
+  test "$workspace_owner_uid" = "$DIM_SELF_EXPECT_AGENT_UID"
 fi
 dim workspace run "$workspace_name" bash -- -lc '
   grep -q "Ubuntu 24.04" /etc/os-release
@@ -325,13 +327,15 @@ dim workspace exec "$workspace_name" -- \
 dim workspace exec "$workspace_name" -- docker inspect --format '{{.HostConfig.Privileged}}' \
   "$agent_dind_container" | grep -qx true
 verification_stage="agent username contract"
-test "$(dim workspace run "$workspace_name" bash -- -lc 'id -un')" = dim-agent
-verification_stage="agent sudo contract"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'id -un')" = root
+verification_stage="agent rootless UID mapping contract"
 dim workspace run "$workspace_name" bash -- -lc \
-  'sudo sh -c '\''test "$(id -u)" = 0'\'''
+  'test "$(id -u)" = 0 && test "$(stat -c %u /workspace)" = 0'
+test "$(dim workspace exec "$workspace_name" -- docker exec "$agent_dind_container" id -u rootless)" = \
+  "$workspace_owner_uid"
 verification_stage="agent private Docker workload"
 dim workspace run "$workspace_name" bash -- -lc '
-  ! docker info --format "{{json .SecurityOptions}}" | grep -q rootless
+  docker info --format "{{json .SecurityOptions}}" | grep -q rootless
   rm -rf /mnt/workspace-shared-dind/bind-smoke
   mkdir -m 0777 /mnt/workspace-shared-dind/bind-smoke
   printf "from-agent\n" > /mnt/workspace-shared-dind/bind-smoke/input

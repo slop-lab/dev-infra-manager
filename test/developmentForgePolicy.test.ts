@@ -70,4 +70,16 @@ describe("DIM development forge policy", () => {
       expect(dockerfile).toContain("FROM docker:29.1.3-dind-rootless");
     }
   });
+
+  it("maps the canonical inner root agent to the workspace owner through rootless DinD", async () => {
+    const dind = await readFile(resolve(workspaceRoot, "project/.dim/agent-dind/Dockerfile"), "utf8");
+    const compose = await readFile(resolve(workspaceRoot, "project/.dim/docker-compose.yml"), "utf8");
+    const setup = await readFile(resolve(workspaceRoot, "project/.dim/setup.sh"), "utf8");
+    const agent = await readFile(resolve(workspaceRoot, "project/.dim/agent-dind/agent.sh"), "utf8");
+    expect(dind).toContain("FROM docker:29.1.3-dind-rootless");
+    expect(compose).toContain('DIM_UID: "${DIM_WORKSPACE_UID:-1000}"');
+    expect(setup).toContain('DIM_WORKSPACE_UID="$(stat -c %u /workspace)"');
+    expect(agent).toContain("--user 0:0");
+    expect(agent).toContain('stat -c %u /workspace)" = 0');
+  });
 });
