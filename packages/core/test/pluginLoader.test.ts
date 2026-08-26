@@ -39,7 +39,7 @@ describe("plugin loader configuration", () => {
     await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" }));
     expect(configuredWorkspaceBackend({ DIM_CONFIG_PATH: configPath })).toBe("sysbox");
     expect(configuredWorkspaceBackend({ DIM_CONFIG_PATH: join(root, "missing.json") })).toBeUndefined();
-    await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "gvisor" }));
+    await writeFile(configPath, JSON.stringify({ schemaVersion: 1, workspaceBackend: "removed-backend" }));
     expect(() => configuredWorkspaceBackend({ DIM_CONFIG_PATH: configPath })).toThrow(/invalid workspaceBackend/);
   });
 
