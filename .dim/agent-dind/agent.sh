@@ -22,6 +22,7 @@ case "${1:?private agent action is required}" in
       --label dev.dim.role=agent \
       --env DOCKER_HOST=unix:///run/docker.sock \
       --env HOME=/home/dim-agent \
+      --env DIM_QEMU_VERIFICATION_SOCKET=/run/dim/qemu-verification/service.sock \
       --env "DIM_GIT_USERNAME=$DIM_GIT_USERNAME" \
       --env "DIM_GIT_TOKEN=$DIM_GIT_TOKEN" \
       --env "GIT_AUTHOR_NAME=$GIT_AUTHOR_NAME" \
@@ -37,6 +38,7 @@ case "${1:?private agent action is required}" in
       --mount type=bind,src=/workspace,dst=/workspace \
       --mount type=bind,src=/mnt/agent-home,dst=/home/dim-agent \
       --mount type=bind,src=/mnt/workspace-shared-dind,dst=/mnt/workspace-shared-dind \
+      --mount type=bind,src=/run/dim/qemu-verification,dst=/run/dim/qemu-verification,readonly \
       --mount "type=bind,src=$docker_socket,dst=/run/docker.sock" \
       --workdir /workspace
     host_mappings=/tmp/dim-agent-hosts

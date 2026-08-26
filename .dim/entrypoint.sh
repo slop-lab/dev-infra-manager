@@ -14,6 +14,9 @@ case "$task" in
   codex)
     set -- codex --dangerously-bypass-approvals-and-sandbox "$@"
     ;;
+  verify-qemu)
+    set -- node /workspace/project/.dim/qemu-client.mjs run "$@"
+    ;;
   *)
     echo "unknown DIM project task: $task" >&2
     exit 2

@@ -26,6 +26,7 @@ services:
       - agent-home:/mnt/agent-home
       - agent-dind-rootless-data:/home/rootless/.local/share/docker
       - agent-dind-shared:/mnt/workspace-shared-dind
+      - /tmp/dim-qemu-verification:/run/dim/qemu-verification:ro
     working_dir: /workspace
 
   secure-dind:

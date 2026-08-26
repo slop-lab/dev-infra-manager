@@ -31,6 +31,19 @@ dim workspace create dim dim-dev
 dim workspace run dim-dev codex
 ```
 
+When the workspace was created with KVM, the agent can run the reviewed local
+QEMU gate without receiving `/dev/kvm` or a QEMU binary itself:
+
+```bash
+node project/.dim/qemu-client.mjs run
+node project/.dim/qemu-client.mjs run --input fixtures=/workspace/local-fixtures
+```
+
+Additional inputs must resolve beneath `/workspace`. They are copied into the
+guest under `/mnt/dim-inputs/NAME`; they are not host bind mounts and cannot
+escape the agent-visible source boundary. `status`, `follow`, and `cancel`
+subcommands control the single workspace-scoped run.
+
 The canonical Project runs its development agent as UID 0 only inside a
 private rootless `agent-dind`. The daemon adopts the workspace checkout's
 non-root UID/GID, so inner UID 0 maps to that owner rather than to root in the
