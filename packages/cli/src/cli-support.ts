@@ -170,7 +170,7 @@ export async function selectInstalledWorkspaceBackend(): Promise<WorkspaceRuntim
     .filter((inspection) => inspection.ok)
     .map((inspection) => inspection.backend);
   if (installed.length === 0) {
-    throw new UserError("no installed workspace backend detected; install a host backend first");
+    throw new UserError("no installed workspace backend detected; install a host backend dependency first (sysbox, runc)");
   }
   return installed[0]!;
 }
