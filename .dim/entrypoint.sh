@@ -1,6 +1,10 @@
 #!/usr/bin/env sh
 set -eu
 
+export DOCKER_CONFIG="/tmp/dim-workspace-docker-config-$(id -u)"
+mkdir -p "$DOCKER_CONFIG"
+chmod 0700 "$DOCKER_CONFIG"
+
 task="${1:?task is required}"
 shift
 case "$task" in

@@ -1,6 +1,10 @@
 #!/usr/bin/env sh
 set -eu
 
+export DOCKER_CONFIG="/tmp/dim-workspace-docker-config-$(id -u)"
+mkdir -p "$DOCKER_CONFIG"
+chmod 0700 "$DOCKER_CONFIG"
+
 qemu_service_dir=/tmp/dim-qemu-verification
 if [ -r "$qemu_service_dir/service.pid" ]; then
   qemu_pid="$(cat "$qemu_service_dir/service.pid")"

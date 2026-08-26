@@ -84,8 +84,9 @@ else
 fi
 
 # Avoid inheriting buildx activity files created by a root lifecycle helper.
-export DOCKER_CONFIG=/tmp/dim-workspace-docker-config
+export DOCKER_CONFIG="/tmp/dim-workspace-docker-config-$(id -u)"
 mkdir -p "$DOCKER_CONFIG"
+chmod 0700 "$DOCKER_CONFIG"
 
 compose() {
   compose_files=".dim/docker-compose.yml:$compose_host_aliases"

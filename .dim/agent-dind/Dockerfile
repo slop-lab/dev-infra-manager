@@ -11,6 +11,7 @@ RUN apk add --no-cache jq shadow su-exec \
   && chown -R rootless:rootless /home/rootless \
   && mkdir -p /mnt/workspace-shared-dind \
   && chmod 1777 /mnt/workspace-shared-dind \
+  && chown root:root /usr/bin/newuidmap /usr/bin/newgidmap \
   && chmod 4755 /usr/bin/newuidmap /usr/bin/newgidmap
 ENV HOME=/home/rootless \
     XDG_RUNTIME_DIR=/run/user/${DIM_UID} \
