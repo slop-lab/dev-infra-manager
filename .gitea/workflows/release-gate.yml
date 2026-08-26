@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   container-integration:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@3ed44e63b9389e9d27dc09f9f7221cb645af1a5a
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@ffb80941c355b02ebcc42eecb08e495198567ff2
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
@@ -24,7 +24,7 @@ jobs:
       runner-label: dim-container-integration
 
   qemu-sysbox:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@3ed44e63b9389e9d27dc09f9f7221cb645af1a5a
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@ffb80941c355b02ebcc42eecb08e495198567ff2
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
