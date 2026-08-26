@@ -20,8 +20,10 @@ services:
     extra_hosts:
       - "${BASH_REMATCH[1]}:host-gateway"
 EOF
-  temporary="$setup.tmp"
-  sed 's#--file \.dim/docker-compose\.yml#--file .dim/docker-compose.yml --file .dim/ci-registry-mirror.override.yml#g' \
-    "$setup" >"$temporary"
-  mv "$temporary" "$setup"
+  if ! grep -Fq 'ci-registry-mirror.override.yml' "$setup"; then
+    temporary="$setup.tmp"
+    sed 's#--file \.dim/docker-compose\.yml#--file .dim/docker-compose.yml --file .dim/ci-registry-mirror.override.yml#g' \
+      "$setup" >"$temporary"
+    mv "$temporary" "$setup"
+  fi
 }
