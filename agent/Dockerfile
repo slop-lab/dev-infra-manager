@@ -2,12 +2,10 @@ FROM node@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc0
 FROM docker@sha256:4fa0ee1f3a7e4354c4ea34558b6d4ee32859baf4973d4c8ccc8e7fe3dd730c04 AS docker-cli
 FROM ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 ARG TARGETARCH=amd64
-ARG DIM_UID=1000
-ARG DIM_GID=1000
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      bash ca-certificates curl git jq sudo tini \
+      bash ca-certificates curl git jq tini \
  && rm -rf /var/lib/apt/lists/*
 RUN set -eux; \
     case "$TARGETARCH" in \
@@ -25,14 +23,7 @@ COPY --from=docker-cli /usr/local/bin/docker-compose /usr/local/bin/docker-compo
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose \
   /usr/local/libexec/docker/cli-plugins/docker-compose
 RUN npm install --global pnpm@10.13.1 @openai/codex@0.149.0
-RUN groupmod --new-name dim-agent --gid "${DIM_GID}" ubuntu \
- && usermod --login dim-agent --uid "${DIM_UID}" --gid dim-agent ubuntu \
- && usermod --home /home/dim-agent --move-home --shell /bin/bash dim-agent \
- && chown dim-agent:dim-agent /home/dim-agent \
- && printf '%s\n' 'dim-agent ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/dim-agent \
- && chmod 0440 /etc/sudoers.d/dim-agent
-
-USER dim-agent
+RUN mkdir -p /home/dim-agent
 WORKDIR /workspace
 
 ENTRYPOINT ["/usr/bin/tini", "--"]

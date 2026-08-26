@@ -9,6 +9,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- The canonical Project now maps an inner UID-0 agent onto the non-root
+  workspace owner through a private rootless `agent-dind`. The non-root agent
+  requirement now applies specifically to containers whose root identity has
+  host or trusted-workspace authority; UID 0 inside the subordinate-ID-mapped
+  daemon is permitted and verified with a non-1000 workspace owner.
+
 - The Gitea pull-request helper now waits up to 15 minutes by default for an
   exact commit's CI statuses, without periodic agent wake-ups while jobs remain
   pending. Longer repository-specific gates can still override the timeout.
@@ -24,15 +30,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Kept the top-level just recipes focused on discoverable everyday contributor
   commands. CI-only lane composition now lives in checked-in workflows and the
   local matrix script instead of a parallel `just ci` namespace.
-- The canonical agent image now runs as an unprivileged UID with unrestricted
-  passwordless sudo confined to its Project-owned `agent-dind` container.
-- The canonical agent image now adopts the owning workspace UID and GID instead
-  of assuming 1000, so bind-mounted split repositories remain writable on
-  hosts with different account IDs.
-- The canonical `agent-dind` now uses a rootful daemon confined to its private
-  privileged sidecar. This preserves arbitrary bind-mount UIDs while still
-  exposing neither the host nor trusted-workspace runtime socket to the agent.
-
 - Centralized DIM-managed Gitea issues on each Project root for newly created
   repositories, and documented repository ownership for package-specific
   changelogs, maintenance documentation, and specifications.
