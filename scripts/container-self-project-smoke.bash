@@ -178,20 +178,38 @@ verify_agent_dind() {
   dim workspace exec "$workspace_name" -- \
     docker inspect --format '{{.State.Health.Status}}' "$agent_dind_container" | grep -qx healthy
   if [[ -n "${DIM_DOCKER_REGISTRY_MIRROR:-}" ]]; then
-    dim workspace exec "$workspace_name" -- \
+    actual_mirrors="$(dim workspace exec "$workspace_name" -- \
       docker exec "$agent_dind_container" docker info --format '{{json .RegistryConfig.Mirrors}}' |
-      grep -Fq "$DIM_DOCKER_REGISTRY_MIRROR"
+      tr -d '\r')"
+    grep -Fq "$DIM_DOCKER_REGISTRY_MIRROR" <<<"$actual_mirrors" || {
+      echo "agent-dind registry mirror mismatch: expected $DIM_DOCKER_REGISTRY_MIRROR in $actual_mirrors" >&2
+      return 1
+    }
   fi
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-$workspace_name" \
     --file .dim/docker-compose.yml exec --no-TTY --user root agent-dind \
     sh -eu -c '
       socket="${DOCKER_HOST#unix://}"
-      test -S "$socket"
-      test -d /home/rootless/.local/share/docker
-      test "$(stat -c %u:%g /mnt/agent-home)" = "$(stat -c %u:%g /workspace)"
-      docker info --format "{{json .SecurityOptions}}" | grep -q rootless
-      test "$(stat -c %u /workspace)" = "$(id -u rootless)"
+      test -S "$socket" || { echo "agent-dind Docker socket is missing: $socket" >&2; exit 1; }
+      test -d /home/rootless/.local/share/docker || { echo "agent-dind data directory is missing" >&2; exit 1; }
+      home_owner="$(stat -c %u:%g /mnt/agent-home)"
+      workspace_owner="$(stat -c %u:%g /workspace)"
+      test "$home_owner" = "$workspace_owner" || {
+        echo "agent home owner $home_owner does not match workspace owner $workspace_owner" >&2
+        exit 1
+      }
+      security_options="$(docker info --format "{{json .SecurityOptions}}")"
+      printf "%s\n" "$security_options" | grep -q rootless || {
+        echo "agent-dind is not rootless: $security_options" >&2
+        exit 1
+      }
+      rootless_uid="$(id -u rootless)"
+      workspace_uid="${workspace_owner%%:*}"
+      test "$workspace_uid" = "$rootless_uid" || {
+        echo "agent-dind rootless UID $rootless_uid does not match workspace UID $workspace_uid" >&2
+        exit 1
+      }
     '
 }
 
