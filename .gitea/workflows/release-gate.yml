@@ -13,19 +13,19 @@ permissions:
   contents: read
 
 jobs:
-  full-integration:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@2a38c1a285ad6517471703d0796af3190e0d7fa1
+  container-integration:
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@d15a483e76148669ade0ecbfd9b8cff0dc11c6aa
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
       development-ref: ${{ gitea.sha }}
       root-ref: ${{ inputs.root-ref }}
-      gate: integration
+      gate: container
       runner-label: dim-container-integration
       backend: runc
 
   qemu-runc:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@2a38c1a285ad6517471703d0796af3190e0d7fa1
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@d15a483e76148669ade0ecbfd9b8cff0dc11c6aa
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
@@ -36,7 +36,7 @@ jobs:
       backend: runc
 
   qemu-sysbox:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@2a38c1a285ad6517471703d0796af3190e0d7fa1
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@d15a483e76148669ade0ecbfd9b8cff0dc11c6aa
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
@@ -47,7 +47,7 @@ jobs:
       backend: sysbox
 
   qemu-gvisor:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@2a38c1a285ad6517471703d0796af3190e0d7fa1
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@d15a483e76148669ade0ecbfd9b8cff0dc11c6aa
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
@@ -58,7 +58,7 @@ jobs:
       backend: gvisor
 
   qemu-rootless-podman:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@2a38c1a285ad6517471703d0796af3190e0d7fa1
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@d15a483e76148669ade0ecbfd9b8cff0dc11c6aa
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
