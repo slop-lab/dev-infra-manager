@@ -6,7 +6,7 @@ ARG DIM_GID=1000
 # A nested user namespace can make files created while assigning DIM_UID
 # appear to inherit that UID. Reassert sudo's required root ownership after
 # all user-account writes, independently of the chosen workspace UID.
-RUN apk add --no-cache bash ca-certificates coreutils curl git jq just nodejs npm openssh-client shadow sudo tini \
+RUN apk add --no-cache bash ca-certificates cdrkit coreutils curl git jq just nodejs npm openssh-client qemu-img qemu-system-x86_64 shadow sudo tini \
   && groupadd --non-unique --gid "${DIM_GID}" dim \
   && useradd --non-unique --uid "${DIM_UID}" --gid dim --create-home --shell /bin/bash dim \
   && echo "dim ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dim \
