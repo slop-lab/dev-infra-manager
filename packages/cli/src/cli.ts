@@ -621,7 +621,9 @@ workspace.command("align")
   .option("--yes", "confirm resetting local commits on the configured branch")
   .option("--json", "print machine-readable JSON")
   .action(async (name: string, flags: JsonFlags & { reset?: boolean; yes?: boolean }) => {
-    if (flags.reset && !flags.yes) throw new UserError("--reset requires --yes");
+    if (flags.reset) {
+      await confirmAction(flags.yes ?? false, `Discard local commits in workspace '${name}'?`);
+    }
     print(await adminStreamCall("workspace.align", { name, reset: flags.reset ?? false }), flags);
   });
 
