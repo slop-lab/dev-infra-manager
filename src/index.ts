@@ -164,11 +164,21 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
         const store = new ExternalUrlStore(runtime.stateRoot);
         for (const workspace of await runtime.listWorkspaces()) {
           for (const entry of deduplicateRoutes(await store.list(workspace.id))) {
-            const ingress = required(ingresses, entry.ingress);
-            const upstream = await runtime.resolveTarget(workspace, entry.target, ingress.listener.upstreamMode);
-            const reconciled = await ingress.listener.provision(workspace, storedRequest(entry), upstream);
-            if (reconciled.authority !== entry.route.authority) {
-              throw new Error(`external route '${entry.route.id}' changed authority during reconciliation`);
+            try {
+              const ingress = required(ingresses, entry.ingress);
+              const upstream = await runtime.resolveTarget(workspace, entry.target, ingress.listener.upstreamMode);
+              const reconciled = await ingress.listener.provision(workspace, storedRequest(entry), upstream);
+              if (reconciled.authority !== entry.route.authority) {
+                await ingress.listener.revoke(reconciled).catch(() => {});
+                throw new Error(`external route '${entry.route.id}' changed authority during reconciliation`);
+              }
+            } catch (error) {
+              host.logger.error("DIM external URL route reconciliation failed", {
+                workspace: workspace.name,
+                route: entry.route.id,
+                ingress: entry.ingress,
+                error: error instanceof Error ? error.message : String(error)
+              });
             }
           }
         }
