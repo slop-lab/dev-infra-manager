@@ -283,10 +283,14 @@ describe("external URLs plugin", () => {
     const initialize = registered.controllerRoutes.find((route) => route.initialize)?.initialize;
     expect(initialize).toBeDefined();
     const resolveTarget = vi.fn(async () => ({ protocol: "http" as const, host: "127.0.0.1", port: 8080 }));
+    const runner = new RecordingRunner();
 
     await expect(initialize!({
       stateRoot,
-      runner: new RecordingRunner(),
+      runner: {
+        run: runner.run.bind(runner),
+        runStreaming: vi.fn(async () => 0)
+      },
       listWorkspaces: async () => [workspace],
       resolveTarget
     })).resolves.toBeUndefined();
