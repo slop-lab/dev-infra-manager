@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -222,6 +222,82 @@ describe("external URLs plugin", () => {
     expect(caddyfile).toMatch(/reverse_proxy 127\.0\.0\.1:\d+/);
     expect(caddyfile).toContain("host git.remote.example.com");
     expect(caddyfile).toContain("reverse_proxy http://127.0.0.1:3300");
+  });
+
+  it("isolates a stored route reconciliation failure from the remaining routes", async () => {
+    const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-reconcile-"));
+    close.push(() => rm(stateRoot, { recursive: true, force: true }));
+    const workspace = {
+      id: "project-id:work-1",
+      name: "work-1",
+      projectId: "project-id",
+      projectName: "project"
+    };
+    const directory = path.join(
+      stateRoot,
+      "plugins",
+      "external-urls",
+      Buffer.from(workspace.id).toString("base64url")
+    );
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, "00000000-0000-4000-8000-000000000000.json"), JSON.stringify({
+      id: "00000000-0000-4000-8000-000000000000",
+      workspace: workspace.name,
+      workspaceId: workspace.id,
+      ingress: "removed",
+      subdomain: "broken",
+      target: { containers: ["broken"], port: 8080, protocol: "http" },
+      route: { id: "broken-route", ingress: "removed", authority: "broken.example.test" },
+      url: "http://broken.example.test/",
+      createdAt: "2026-08-25T00:00:00.000Z"
+    }));
+    await writeFile(path.join(directory, "11111111-1111-4111-8111-111111111111.json"), JSON.stringify({
+      id: "11111111-1111-4111-8111-111111111111",
+      workspace: workspace.name,
+      workspaceId: workspace.id,
+      ingress: "public",
+      subdomain: "healthy",
+      target: { containers: ["healthy"], port: 8080, protocol: "http" },
+      route: { id: "healthy-route", ingress: "public", authority: "healthy.example.test" },
+      url: "http://healthy.example.test/",
+      createdAt: "2026-08-25T00:00:00.000Z"
+    }));
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn()
+    };
+    const registered = await registerPlugins([createExternalUrlsPlugin({
+      ingresses: {
+        public: {
+          description: "Public HTTP",
+          scheme: "http",
+          domain: "example.test",
+          listenHost: "127.0.0.1",
+          listenPort: 0
+        }
+      }
+    })], { logger });
+    close.push(() => registered.dispose());
+    const initialize = registered.controllerRoutes.find((route) => route.initialize)?.initialize;
+    expect(initialize).toBeDefined();
+    const resolveTarget = vi.fn(async () => ({ protocol: "http" as const, host: "127.0.0.1", port: 8080 }));
+
+    await expect(initialize!({
+      stateRoot,
+      runner: new RecordingRunner(),
+      listWorkspaces: async () => [workspace],
+      resolveTarget
+    })).resolves.toBeUndefined();
+
+    expect(resolveTarget).toHaveBeenCalledOnce();
+    expect(logger.error).toHaveBeenCalledWith("DIM external URL route reconciliation failed", {
+      workspace: "work-1",
+      route: "broken-route",
+      ingress: "removed",
+      error: "external URL ingress 'removed' is not configured"
+    });
   });
 
   it("starts normally without a configured ingress", async () => {
