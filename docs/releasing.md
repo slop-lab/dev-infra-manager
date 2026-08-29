@@ -1,5 +1,22 @@
 # Releasing
 
+## Changelog policy
+
+Changelogs describe user-visible release outcomes, not the sequence of commits
+that produced them. Add an entry for a behavior, contract, operational
+requirement, or migration that a release consumer needs to understand. Group
+related implementation, test, and documentation commits under that outcome;
+do not add entries for internal refactors or verification-only changes that do
+not change the released contract.
+
+Keep each unreleased outcome as one evolving entry. A fix or refinement to a
+feature introduced in the same unreleased version updates that feature's
+existing entry instead of adding a second entry describing the intermediate
+defect. Once an affected version has been released, record a later user-visible
+fix as its own outcome. Package-specific entries belong in the paired
+`*-development` repository when one exists; cross-package release outcomes
+belong in the development repository changelog.
+
 ## Prerequisites
 
 - Following the [development repository model](development-repositories.md),
