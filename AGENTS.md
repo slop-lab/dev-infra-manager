@@ -46,6 +46,17 @@ provider-specific tools; do not assume that `origin` is GitHub.
   repository.
 - Put cross-package and Project-level normative contracts in `specification`.
 
+## Changelogs
+
+- Write changelog entries for user-visible release outcomes, not individual
+  implementation, test, documentation, or refactoring commits.
+- Keep one evolving entry for an outcome within an unreleased version. Fold
+  fixes and refinements into that entry instead of documenting intermediate
+  defects that users never received.
+- Add a separate fix entry when the affected behavior was already released.
+- Follow the normative policy in `specification/docs/releasing.md` and the
+  repository ownership rules above.
+
 ## Pre-stable compatibility
 
 DIM has not had a stable release. Current releases are pre-stable `0.x`
