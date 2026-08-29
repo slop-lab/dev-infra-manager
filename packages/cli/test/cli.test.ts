@@ -164,9 +164,6 @@ test("workspace resources command requires at least one live limit", () => {
   assert.notEqual(missing.status, 0);
   assert.match(missing.stderr, /provide at least one resource limit/);
 
-  const unsafeAlign = run(["workspace", "align", "work-1", "--reset"]);
-  assert.notEqual(unsafeAlign.status, 0);
-  assert.match(unsafeAlign.stderr, /--reset requires --yes/);
 });
 
 test("workspace creation exposes explicit KVM policy", () => {
@@ -187,13 +184,36 @@ test("destructive commands require --yes only in non-interactive use", () => {
     ["project", "purge", "example"],
     ["repo", "delete", "example", "root"],
     ["ci", "runner", "delete", "example", "primary"],
-    ["workspace", "discard", "work-1"]
+    ["workspace", "discard", "work-1"],
+    ["workspace", "align", "work-1", "--reset"]
   ]) {
     const result = run(args);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /confirmation requires --yes in a non-interactive shell/);
     assert.doesNotMatch(result.stderr, /required option '--yes'/);
   }
+});
+
+test("workspace align reset prompts in an interactive terminal", () => {
+  const command = [
+    process.execPath,
+    "--import",
+    tsxImport,
+    cli,
+    "workspace",
+    "align",
+    "work-1",
+    "--reset"
+  ].map(shellArgument).join(" ");
+  const result = spawnSync("script", ["--quiet", "--return", "--command", command, "/dev/null"], {
+    cwd: packageDirectory,
+    input: "n\n",
+    encoding: "utf8"
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, /Discard local commits in workspace 'work-1'\? \[y\/N\]/);
+  assert.match(result.stdout, /operation was not confirmed/);
+  assert.doesNotMatch(result.stdout, /confirmation requires --yes/);
 });
 
 test("controller serve preserves the active owner and cleans up its runtime files", async () => {
@@ -273,6 +293,10 @@ function run(args: string[]): ReturnType<typeof spawnSync> {
     cwd: packageDirectory,
     encoding: "utf8"
   });
+}
+
+function shellArgument(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
 async function waitForPath(target: string): Promise<void> {
