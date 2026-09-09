@@ -1,5 +1,6 @@
 import { copyFile, readFile, writeFile } from "node:fs/promises";
 import { minifyPackageJson } from "package.json-minifier";
+import { publishPackageVersion } from "../../../scripts/publish-package-version.mjs";
 
 const sourcePath = new URL("../package.json", import.meta.url);
 const outputPath = new URL("../dist/package.json", import.meta.url);
@@ -13,6 +14,7 @@ const output = minifyPackageJson(source, {
   stripPackagePathPrefix: "./dist/",
   includeFields: ["publishConfig", "exports", "types"]
 });
+output.version = publishPackageVersion(source.version);
 
 output.types = "./index.d.ts";
 output.exports = {
