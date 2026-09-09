@@ -1,5 +1,6 @@
 import { copyFile, readFile, writeFile } from "node:fs/promises";
 import { minifyPackageJson } from "package.json-minifier";
+import { publishPackageVersion } from "./publish-package-version.mjs";
 
 const sourcePath = new URL("../package.json", import.meta.url);
 const outputPath = new URL("../dist/package.json", import.meta.url);
@@ -9,8 +10,9 @@ const output = minifyPackageJson(source, {
   stripPackagePathPrefix: "./dist/",
   includeFields: ["exports", "types", "publishConfig"]
 });
-output.dependencies["@slop-lab/dim-contracts-external-url"] = source.version;
-output.peerDependencies["@slop-lab/dim-core"] = source.version;
+output.version = publishPackageVersion(source.version);
+output.dependencies["@slop-lab/dim-contracts-external-url"] = output.version;
+output.peerDependencies["@slop-lab/dim-core"] = output.version;
 output.types = "./index.d.ts";
 output.exports = { ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" } };
 delete output.private;
