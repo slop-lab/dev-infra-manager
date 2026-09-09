@@ -287,7 +287,6 @@ if [[ -c /dev/kvm ]]; then
   test "$(dim workspace exec "$workspace_name" -- sh .dim/kvm.sh)" = "workspace-kvm-ok"
 else
   test "$(jq -r .kvm <<<"$workspace_json")" = "false"
-  dim workspace exec "$workspace_name" -- sh -c 'test ! -e /dev/kvm'
 fi
 updated_resources="$(dim workspace resources "$workspace_name" \
   --cpus 1.25 --memory 2g --pids 1024 --json)"
@@ -308,10 +307,14 @@ agent_git_identity="$(dim workspace run "$workspace_name" bash -- -lc \
   'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
 test "$agent_git_identity" = \
   "DIM Self Host <dim-self-host@dim.invalid>|DIM Self Host <dim-self-host@dim.invalid>"
-verification_stage="agent base toolchain and home persistence"
+verification_stage="agent identity"
 workspace_owner_uid="$(dim workspace exec "$workspace_name" -- stat -c %u /workspace)"
 agent_uid="$(dim workspace run "$workspace_name" bash -- -lc 'id -u')"
 test "$agent_uid" = 0
+verification_stage="agent KVM isolation"
+dim workspace run "$workspace_name" bash -- -lc \
+  'test ! -e /dev/kvm && test ! -r /dev/kvm && test ! -w /dev/kvm'
+verification_stage="agent base toolchain and home persistence"
 if [[ -n "${DIM_SELF_EXPECT_AGENT_UID:-}" ]]; then
   test "$workspace_owner_uid" = "$DIM_SELF_EXPECT_AGENT_UID"
 fi
