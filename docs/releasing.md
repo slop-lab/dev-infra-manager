@@ -151,6 +151,14 @@ release commit. Do not run `npm publish` through a pnpm script: pnpm exports
 pnpm-only `npm_config_*` values that current npm versions warn about and a
 future npm major may reject.
 
+Tracked publishable-package manifests remain `private: true`; builds generate
+minimal publish manifests without development scripts or dependencies. A
+normal release build preserves the exact tracked version. Local installation
+bundle builders set `DIM_LOCAL_BUILD_VERSION` to
+`VERSION-local-GIT_SHA[-dirty]` for every package in the bundle and rewrite
+exact internal dependencies to that same version, preventing a package manager
+from treating different local source states as an already-installed release.
+
 ```bash
 pnpm --recursive run build
 
