@@ -1,6 +1,9 @@
 #!/bin/sh
 set -eu
 
+chown root:root /usr/bin/newuidmap /usr/bin/newgidmap
+chmod 4755 /usr/bin/newuidmap /usr/bin/newgidmap
+
 runtime_dir="/run/user/$(id -u rootless)"
 docker_data=/home/rootless/.local/share/docker
 mkdir -p "$runtime_dir" "$docker_data" /mnt/agent-home /mnt/workspace-shared-dind

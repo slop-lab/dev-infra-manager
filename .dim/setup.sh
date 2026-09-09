@@ -102,7 +102,7 @@ compose() {
 
 verify_idmap_helpers() {
   service="$1"
-  compose run --rm --no-deps --entrypoint sh "$service" -eu -c '
+  compose exec --no-TTY --user root "$service" sh -eu -c '
     for helper in /usr/bin/newuidmap /usr/bin/newgidmap; do
       identity="$(stat -c %u:%g:%a "$helper")"
       test "$identity" = 0:0:4755 || {
@@ -114,16 +114,16 @@ verify_idmap_helpers() {
 }
 
 compose build --quiet agent-dind
-verify_idmap_helpers agent-dind
 # An outer workspace stop terminates nested containers without letting their
 # daemon preserve a restartable process state. Recreate Project containers on
 # every setup while retaining their named data and home volumes.
 compose up --detach --force-recreate --wait agent-dind
+verify_idmap_helpers agent-dind
 compose exec --no-TTY --user root agent-dind dim-agent-dind setup
 case ",${COMPOSE_PROFILES:-}," in
   *,secure,*)
     compose build --quiet secure-dind
-    verify_idmap_helpers secure-dind
     compose up --detach --force-recreate --wait secure-dind
+    verify_idmap_helpers secure-dind
     ;;
 esac
