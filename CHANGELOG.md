@@ -9,6 +9,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Local source installations now package every DIM component under a shared
+  version containing the production commit and dirty-worktree state, avoiding
+  stale package-manager reuse when different local builds share a release
+  version.
+
 - The canonical Project now maps an inner UID-0 agent onto the non-root
   workspace owner through a private rootless `agent-dind`. The non-root agent
   requirement now applies specifically to containers whose root identity has
