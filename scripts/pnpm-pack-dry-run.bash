@@ -2,4 +2,4 @@
 set -euo pipefail
 output="$(mktemp -d /tmp/dim-pnpm-pack-XXXXXX)"
 trap 'rm -rf "$output"' EXIT
-pnpm pack --pack-destination "$output"
+pnpm --dir dist pack --pack-destination "$output"
