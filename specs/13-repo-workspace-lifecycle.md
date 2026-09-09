@@ -74,6 +74,10 @@ automatic enablement. When host `/dev/kvm` is readable and writable and the
 Sysbox workspace supports it, DIM passes the device directly into the trusted
 workspace container and adds the device's host GID as a supplemental group.
 DIM does not place the workspace container in a VM.
+With KVM disabled, DIM MUST omit that explicit device and supplemental-group
+grant. Because the trusted Project lifecycle container is privileged, device
+path visibility inside it is not an isolation contract and MUST NOT be used as
+a lifecycle, setup, readiness, or restart check.
 
 The root repository owns the optional:
 

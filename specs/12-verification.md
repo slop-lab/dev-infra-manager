@@ -272,6 +272,13 @@ The Sysbox guest must additionally verify a privileged trusted workspace using
 its directly passed `/dev/kvm` with QEMU, absence of Sysbox registration in
 the workspace's Project daemon, and a separate unprivileged Sysbox isolation
 probe running a private DinD workload.
+The self-Project integration gate MUST verify, after Project setup completes,
+that the untrusted agent container has neither a `/dev/kvm` device nor readable
+or writable access to that path. This is an agent-boundary regression test run
+through a Project task; it MUST NOT run from Project setup or any workspace
+lifecycle, readiness, start, or restart operation. KVM-disabled lifecycle
+coverage instead asserts that DIM omits the explicit device and supplemental
+group from the workspace creation arguments.
 
 The canonical Project MUST also expose the same protected QEMU launcher through
 a workspace-local, single-run service. The agent may start, follow, inspect, or

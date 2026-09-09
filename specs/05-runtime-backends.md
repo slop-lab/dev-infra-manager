@@ -26,6 +26,11 @@ When host `/dev/kvm` exists as a character device, a workspace may receive it
 and its numeric host group according to the creation-time KVM policy. KVM is an
 optional workspace capability and MUST NOT be required by Sysbox installation
 or backend doctor checks.
+Disabling KVM requires DIM to omit its explicit device and group grant; it does
+not promise that a privileged trusted runc container lacks the device path.
+Device isolation is mandatory at the untrusted agent boundary and is verified
+after that Project-owned container exists, outside workspace lifecycle and
+setup operations.
 
 Agent containers are Project-owned workloads, not core lifecycle resources.
 Reviewed `.dim/setup.sh` code may build and start one through the nested Project

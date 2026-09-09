@@ -252,6 +252,12 @@ the supplemental group gives the workspace user access. DIM records the effectiv
 exposes it as `DIM_WORKSPACE_KVM=0|1`. It does not place the workspace
 container in a VM. A VM started there is therefore the first virtualization
 layer and may use host-supported nested virtualization itself.
+When disabled, DIM omits its explicit KVM device and group grant. The trusted
+Project lifecycle container is privileged, so `/dev/kvm` may nevertheless be
+visible there on an ordinary runc host; path absence in that trusted container
+is not a lifecycle or setup guarantee. The untrusted agent must never receive
+the device, and CI verifies that boundary from inside the completed agent
+container rather than during workspace lifecycle operations.
 
 Creation:
 
