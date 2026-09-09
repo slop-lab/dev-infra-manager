@@ -7,6 +7,21 @@ import { parse } from "yaml";
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 
 describe("DIM development forge policy", () => {
+  it("gives local install bundles a source-specific package version", async () => {
+    for (const path of [
+      "project/scripts/pack-source-build.bash",
+      "verification/scripts/pack-local-packages.bash"
+    ]) {
+      const source = await readFile(resolve(workspaceRoot, path), "utf8");
+      expect(source).toContain("git -C");
+      expect(source).toContain("rev-parse --short=12 HEAD");
+      expect(source).toContain("status --porcelain");
+      expect(source).toContain("DIM_LOCAL_BUILD_VERSION");
+      expect(source).toContain("-local-");
+      expect(source).toContain("-dirty");
+    }
+  });
+
   it("pins every split repository to its reviewed development and publish ref", async () => {
     const manifest = parse(await readFile(resolve(workspaceRoot, "project/.dim/repos.yml"), "utf8"));
     const expected = [
