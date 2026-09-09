@@ -1,0 +1,11 @@
+import { describe, expect, it } from "vitest";
+import { publishPackageVersion } from "../../plugin-external-urls/scripts/publish-package-version.mjs";
+
+describe("publish package version", () => {
+  it("accepts only local versions derived from the tracked release version", () => {
+    expect(publishPackageVersion("0.8.0", undefined)).toBe("0.8.0");
+    expect(publishPackageVersion("0.8.0", "0.8.0-local-abcdef1-dirty"))
+      .toBe("0.8.0-local-abcdef1-dirty");
+    expect(() => publishPackageVersion("0.8.0", "latest")).toThrow(/DIM_LOCAL_BUILD_VERSION/);
+  });
+});
