@@ -1,6 +1,7 @@
 services:
   agent:
     image: "dim-${DIM_WORKSPACE_NAME:?}-agent"
+    command: ["sleep", "infinity"]
     build:
       context: dev
     environment:
