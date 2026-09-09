@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { adminErrorDetail } from "../../../../core/packages/cli/src/cli-support.js";
+import { adminErrorDetail, printActionResult } from "../../../../core/packages/cli/src/cli-support.js";
 
 const cli = fileURLToPath(new URL("../../../../core/packages/cli/src/cli.ts", import.meta.url));
 const cliSupport = fileURLToPath(new URL("../../../../core/packages/cli/src/cli-support.ts", import.meta.url));
@@ -36,6 +36,23 @@ test("CLI uses controller sessions and presents sanitized controller errors", as
   assert.match(support, /columns: process\.stdout\.columns \|\| 80/);
   assert.equal(adminErrorDetail('{"error":"setup failed safely"}'), "setup failed safely");
   assert.equal(adminErrorDetail("plain failure"), "plain failure");
+});
+
+test("workspace actions hide lifecycle records unless JSON is requested", () => {
+  const lines: string[] = [];
+  const original = console.log;
+  console.log = (...items: unknown[]) => lines.push(items.map(String).join(" "));
+  try {
+    const record = { name: "work-1", phase: "ready", internal: { token: "secret" } };
+    printActionResult(record, {}, "Restarted workspace 'work-1'");
+    assert.deepEqual(lines, ["Restarted workspace 'work-1'"]);
+    lines.length = 0;
+    printActionResult(record, { json: true }, "Restarted workspace 'work-1'");
+    assert.equal(lines.length, 1);
+    assert.deepEqual(JSON.parse(lines[0]!), record);
+  } finally {
+    console.log = original;
+  }
 });
 
 test("DNS provider add passes extra arguments to the selected plugin driver", () => {
