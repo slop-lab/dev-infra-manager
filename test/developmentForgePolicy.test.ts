@@ -7,25 +7,34 @@ import { parse } from "yaml";
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 
 describe("DIM development forge policy", () => {
-  it("pins every split repository to its reviewed development and publish ref", async () => {
+  it("pins every split repository to its standalone upstream and main branch", async () => {
     const manifest = parse(await readFile(resolve(workspaceRoot, "project/.dim/repos.yml"), "utf8"));
-    const expected = [
-      "root", "development", "core", "core-development",
-      "plugin-dns-cloudflare", "plugin-dns-cloudflare-development",
-      "plugin-external-urls", "plugin-external-urls-development",
-      "verification", "examples", "specification"
-    ];
+    const expectedUpstreams = {
+      root: "https://gitlab.com/slop-lab/dim/root.git",
+      development: "https://gitlab.com/slop-lab/dim/essential-dev/root.git",
+      core: "https://gitlab.com/slop-lab/dim/essential/core.git",
+      "core-development": "https://gitlab.com/slop-lab/dim/essential-dev/core.git",
+      "plugin-dns-cloudflare": "https://gitlab.com/slop-lab/dim/essential/plugin-dns-cloudflare.git",
+      "plugin-dns-cloudflare-development":
+        "https://gitlab.com/slop-lab/dim/essential-dev/plugin-dns-cloudflare.git",
+      "plugin-external-urls": "https://gitlab.com/slop-lab/dim/essential/plugin-external-urls.git",
+      "plugin-external-urls-development":
+        "https://gitlab.com/slop-lab/dim/essential-dev/plugin-external-urls.git",
+      verification: "https://gitlab.com/slop-lab/dim/dev/verification.git",
+      examples: "https://gitlab.com/slop-lab/dim/dev/examples.git",
+      specification: "https://gitlab.com/slop-lab/dim/dev/specification.git"
+    };
+    const expected = Object.keys(expectedUpstreams);
 
     expect(manifest?.schemaVersion).toBe(1);
-    const archiveUrl = process.env.DIM_EXPECT_ARCHIVE_URL ??
-      "https://github.com/slop-lab/dev-infra-manager.git";
-    expect(manifest.upstreams).toEqual({ archive: { url: archiveUrl } });
+    expect(manifest.upstreams).toEqual(
+      Object.fromEntries(Object.entries(expectedUpstreams).map(([alias, url]) => [alias, { url }]))
+    );
     expect(Object.keys(manifest.repositories).sort()).toEqual(expected.sort());
     for (const alias of expected) {
       const repository = manifest.repositories[alias];
-      const externalRef = `dev/${alias}`;
-      expect(repository.upstream).toBe("archive");
-      expect(repository.import).toEqual({ main: externalRef });
+      expect(repository.upstream).toBe(alias);
+      expect(repository.import).toEqual({ main: "main" });
       expect(repository.publish).toEqual({ main: "main" });
       expect(repository.protect ?? []).toEqual(["root", "development"].includes(alias) ? ["main"] : []);
       expect(repository.ref).toBe("main");
