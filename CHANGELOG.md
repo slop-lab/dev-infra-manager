@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Give locally built installation packages a validated version containing the
+  production source commit and dirty-worktree state, so package managers do
+  not reuse different local contents under the release version. Tracked
+  manifests remain private and release builds retain the exact release
+  version.
+
 - Add a volume-preserving host shutdown/start lifecycle that leaves the
   controller available, records previously ready workspaces, CI runners, and
   plugin-managed host containers, restores infrastructure before execution
