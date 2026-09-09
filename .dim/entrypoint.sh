@@ -30,7 +30,7 @@ esac
 if [ -t 0 ] && [ -t 1 ]; then
   exec docker compose \
     --file .dim/docker-compose.yml \
-    --file /tmp/dim-project-compose-host-aliases.json exec \
+    --file /tmp/dim-project-compose-host-aliases.json exec --interactive --tty \
     --user root agent-dind dim-agent-dind exec "$@"
 else
   exec docker compose \
