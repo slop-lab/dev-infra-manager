@@ -515,6 +515,15 @@ describe("project and workspace lifecycle", () => {
     expect(args).not.toContain("--rm");
     expect(args.join(" ")).not.toContain("docker.sock");
     expect(args.join(" ")).not.toContain(join(options.adminControllerSocketPath, ".."));
+
+    const withoutKvm = workspaceContainerArgs(options, { ...record, kvm: false }, {
+      username: "writer",
+      token: "token",
+      userName: "Agent",
+      userEmail: "agent@example.invalid"
+    }, "work-1.controller-grant", () => 992, "work-1.agent.agent-grant", "172.20.0.3");
+    expect(withoutKvm).not.toContain("/dev/kvm");
+    expect(withoutKvm).not.toContain("--group-add");
   });
 
   it("creates and authenticates a workspace-scoped external URL grant", async () => {
