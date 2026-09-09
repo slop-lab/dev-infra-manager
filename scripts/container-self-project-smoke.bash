@@ -146,6 +146,9 @@ agent_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-$workspace_name" \
   --file .dim/docker-compose.yml ps --quiet agent)"
 test -n "$agent_container"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" = 1000
+test "$(dim workspace run "$workspace_name" bash -- -lc \
+  'getent passwd "$(id -u)" | cut -d: -f1,6')" = "dim-agent:/home/dim-agent"
 dim workspace exec "$workspace_name" -- docker inspect --format '{{.HostConfig.Privileged}}' \
   "$agent_container" | grep -qx false
 ! dim workspace exec "$workspace_name" -- docker inspect --format '{{json .Mounts}}' \
@@ -169,6 +172,26 @@ dim workspace run "$workspace_name" bash -- -lc '
 '
 dim workspace run "$workspace_name" bash -- -lc 'just typecheck' >/dev/null
 test "$(dim workspace run "$workspace_name" codex -- --version)" != ""
+
+# Build the agent with IDs that deliberately differ from the invoking host.
+# This catches accidental dependence on the common host/container value 1000.
+mismatched_uid=23142
+mismatched_gid=23143
+test "$(id -u)" != "$mismatched_uid"
+test "$(id -g)" != "$mismatched_gid"
+mismatched_agent_image="dim-agent-id-mismatch-$suffix"
+docker build --quiet --force-rm \
+  --build-arg "DIM_UID=$mismatched_uid" \
+  --build-arg "DIM_GID=$mismatched_gid" \
+  --tag "$mismatched_agent_image" .dim/dev >/dev/null
+docker run --rm --user "$mismatched_uid:$mismatched_gid" \
+  --env HOME=/home/dim-agent "$mismatched_agent_image" \
+  bash -lc 'test "$(id -u)" != 1000
+    test "$(getent passwd "$(id -u)" | cut -d: -f1,6)" = "dim-agent:/home/dim-agent"
+    test -w "$HOME"
+    printf "mapped\n" > "$HOME/id-mismatch-smoke"
+    test "$(cat "$HOME/id-mismatch-smoke")" = mapped'
+docker image rm "$mismatched_agent_image" >/dev/null
 if dim workspace run "$workspace_name" check >/dev/null 2>&1; then
   echo "removed check task unexpectedly succeeded" >&2
   exit 1
