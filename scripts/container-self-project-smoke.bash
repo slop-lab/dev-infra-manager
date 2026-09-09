@@ -241,7 +241,7 @@ fi
 tty_arguments+=(workspace run "$workspace_name" bash -- -lc \
   'bash /workspace/examples/features/tty-entrypoint/require-tty.bash')
 printf -v tty_command '%q ' "${tty_arguments[@]}"
-tty_output="$(script --quiet --return --command "$tty_command" /dev/null | tr -d '\r')"
+tty_output="$(script --quiet --return --command "$tty_command" /dev/null </dev/null | tr -d '\r')"
 grep -Fqx "tty-required-ok" <<<"$tty_output"
 if [[ -c /dev/kvm ]]; then
   verification_stage="agent-controlled QEMU probe"
