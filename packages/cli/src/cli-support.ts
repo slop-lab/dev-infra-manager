@@ -680,6 +680,11 @@ export function print(value: unknown, flags: JsonFlags = {}): void {
   }
 }
 
+export function printActionResult(value: unknown, flags: JsonFlags, message: string): void {
+  if (flags.json) print(value, flags);
+  else console.log(message);
+}
+
 export function printList<T extends object>(records: T[], fields: string[], flags: JsonFlags = {}): void {
   if (flags.json) {
     print(records, flags);

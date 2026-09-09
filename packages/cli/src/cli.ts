@@ -67,6 +67,7 @@ import {
   offerRootRepositorySet,
   parseWorkspaceBackend,
   print,
+  printActionResult,
   printDoctorChecks,
   printList,
   prepareControllerSocket,
@@ -508,7 +509,7 @@ workspace.command("create")
       );
     }
     await ensureManagedController(options);
-    print(await adminStreamCall("workspace.create", {
+    const result = await adminStreamCall("workspace.create", {
       project: projectName,
       name,
       profiles: flags.profile,
@@ -522,7 +523,8 @@ workspace.command("create")
       ...(kvm === undefined ? {} : { kvm }),
       ...(flags.gitUserName ? { gitUserName: flags.gitUserName } : {}),
       ...(flags.gitUserEmail ? { gitUserEmail: flags.gitUserEmail } : {})
-    }), flags);
+    });
+    printActionResult(result, flags, `Workspace '${name}' is ready`);
   });
 
 workspace.command("list")
@@ -554,12 +556,13 @@ workspace.command("resources")
     if (!hasResourceFlags(flags)) throw new UserError("provide at least one resource limit");
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await adminStreamCall("workspace.resources", {
+    const result = await adminStreamCall("workspace.resources", {
       name,
       ...(flags.cpus === undefined ? {} : { cpuCount: flags.cpus }),
       ...(flags.memory === undefined ? {} : { memory: flags.memory }),
       ...(flags.pids === undefined ? {} : { pidsLimit: flags.pids })
-    }), flags);
+    });
+    printActionResult(result, flags, `Updated resources for workspace '${name}'`);
   });
 
 program.command("exec")
@@ -624,7 +627,8 @@ workspace.command("align")
     if (flags.reset) {
       await confirmAction(flags.yes ?? false, `Discard local commits in workspace '${name}'?`);
     }
-    print(await adminStreamCall("workspace.align", { name, reset: flags.reset ?? false }), flags);
+    const result = await adminStreamCall("workspace.align", { name, reset: flags.reset ?? false });
+    printActionResult(result, flags, `Aligned workspace '${name}'`);
   });
 
 workspace.command("setup")
@@ -634,7 +638,8 @@ workspace.command("setup")
   .action(async (name: string, flags: JsonFlags) => {
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await adminStreamCall("workspace.setup", { name }), flags);
+    const result = await adminStreamCall("workspace.setup", { name });
+    printActionResult(result, flags, `Workspace '${name}' is ready`);
   });
 
 workspace.command("update")
@@ -649,10 +654,11 @@ workspace.command("update")
     }
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await adminStreamCall("workspace.update", {
+    const result = await adminStreamCall("workspace.update", {
       name,
       ...(flags.clearProfiles ? { profiles: [] } : flags.profile.length > 0 ? { profiles: flags.profile } : {})
-    }), flags);
+    });
+    printActionResult(result, flags, `Updated workspace '${name}'`);
   });
 
 workspace.command("start")
@@ -662,7 +668,8 @@ workspace.command("start")
   .action(async (name: string, flags: JsonFlags) => {
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await adminStreamCall("workspace.start", { name }), flags);
+    const result = await adminStreamCall("workspace.start", { name });
+    printActionResult(result, flags, `Started workspace '${name}'`);
   });
 
 workspace.command("restart")
@@ -672,7 +679,8 @@ workspace.command("restart")
   .action(async (name: string, flags: JsonFlags) => {
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    print(await adminStreamCall("workspace.restart", { name }), flags);
+    const result = await adminStreamCall("workspace.restart", { name });
+    printActionResult(result, flags, `Restarted workspace '${name}'`);
   });
 
 workspace.command("stop")
