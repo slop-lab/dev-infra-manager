@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Give locally built installation packages a validated version containing the
+  production source commit and dirty-worktree state, so package managers do
+  not reuse different local contents under the release version. Tracked
+  manifests remain private and release builds retain the exact release
+  version.
+
 - Keep routine workspace lifecycle output concise by default instead of
   printing complete internal records, while preserving the full documented
   machine-readable result behind `--json`.
