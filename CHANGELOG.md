@@ -8,6 +8,10 @@
   manifests remain private and release builds retain the exact release
   version.
 
+- Keep routine workspace lifecycle output concise by default instead of
+  printing complete internal records, while preserving the full documented
+  machine-readable result behind `--json`.
+
 - Add a volume-preserving host shutdown/start lifecycle that leaves the
   controller available, records previously ready workspaces, CI runners, and
   plugin-managed host containers, restores infrastructure before execution
