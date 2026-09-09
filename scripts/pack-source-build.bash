@@ -57,6 +57,16 @@ echo "[source] install production build dependencies"
 pnpm --dir "$source_root" install --lockfile=false
 
 echo "[source] build production packages"
+source_version="$(node -p "require('$source_root/core/package.json').version")"
+source_sha="$(git -C "$source_root/core" rev-parse --short=12 HEAD)"
+local_dirty=""
+for repository in "${repositories[@]}"; do
+  if [[ -n "$(git -C "$source_root/$repository" status --porcelain)" ]]; then
+    local_dirty=-dirty
+    break
+  fi
+done
+export DIM_LOCAL_BUILD_VERSION="$source_version-local-$source_sha$local_dirty"
 pnpm --dir "$source_root/core" run build
 pnpm --dir "$source_root/plugin-dns-cloudflare" run build
 pnpm --dir "$source_root/plugin-external-urls" run build
