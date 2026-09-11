@@ -1,74 +1,94 @@
 schemaVersion: 1
 upstreams:
-  archive:
-    url: https://github.com/slop-lab/dev-infra-manager.git
+  root:
+    url: https://gitlab.com/slop-lab/dim/root.git
+  development:
+    url: https://gitlab.com/slop-lab/dim/essential-dev/root.git
+  core:
+    url: https://gitlab.com/slop-lab/dim/essential/core.git
+  core-development:
+    url: https://gitlab.com/slop-lab/dim/essential-dev/core.git
+  plugin-dns-cloudflare:
+    url: https://gitlab.com/slop-lab/dim/essential/plugin-dns-cloudflare.git
+  plugin-dns-cloudflare-development:
+    url: https://gitlab.com/slop-lab/dim/essential-dev/plugin-dns-cloudflare.git
+  plugin-external-urls:
+    url: https://gitlab.com/slop-lab/dim/essential/plugin-external-urls.git
+  plugin-external-urls-development:
+    url: https://gitlab.com/slop-lab/dim/essential-dev/plugin-external-urls.git
+  verification:
+    url: https://gitlab.com/slop-lab/dim/dev/verification.git
+  examples:
+    url: https://gitlab.com/slop-lab/dim/dev/examples.git
+  specification:
+    url: https://gitlab.com/slop-lab/dim/dev/specification.git
 repositories:
   root:
-    upstream: archive
+    upstream: root
     root: true
     ref: main
-    import: {main: dev/root}
+    import: {main: main}
     protect: [main]
     blockForcePush: [main]
     publish: {main: main}
   development:
-    upstream: archive
+    upstream: development
     ref: main
-    import: {main: dev/development}
+    import: {main: main}
     protect: [main]
     blockForcePush: [main]
     publish: {main: main}
   core:
-    upstream: archive
+    upstream: core
     ref: main
     blockForcePush: [main]
-    import: {main: dev/core}
+    import: {main: main}
     publish: {main: main}
   core-development:
-    upstream: archive
+    upstream: core-development
     ref: main
     blockForcePush: [main]
-    import: {main: dev/core-development}
+    import: {main: main}
     publish: {main: main}
   plugin-dns-cloudflare:
-    upstream: archive
+    upstream: plugin-dns-cloudflare
     ref: main
     blockForcePush: [main]
-    import: {main: dev/plugin-dns-cloudflare}
+    import: {main: main}
     publish: {main: main}
   plugin-dns-cloudflare-development:
-    upstream: archive
+    upstream: plugin-dns-cloudflare-development
     ref: main
     blockForcePush: [main]
-    import: {main: dev/plugin-dns-cloudflare-development}
+    import: {main: main}
     publish: {main: main}
   plugin-external-urls:
-    upstream: archive
+    upstream: plugin-external-urls
     ref: main
     blockForcePush: [main]
-    import: {main: dev/plugin-external-urls}
+    import: {main: main}
     publish: {main: main}
   plugin-external-urls-development:
-    upstream: archive
+    upstream: plugin-external-urls-development
     ref: main
     blockForcePush: [main]
-    import: {main: dev/plugin-external-urls-development}
+    import: {main: main}
     publish: {main: main}
   verification:
-    upstream: archive
+    upstream: verification
     ref: main
     blockForcePush: [main]
-    import: {main: dev/verification}
+    import: {main: main}
     publish: {main: main}
   examples:
-    upstream: archive
+    upstream: examples
     ref: main
     blockForcePush: [main]
-    import: {main: dev/examples}
+    import: {main: main}
     publish: {main: main}
   specification:
-    upstream: archive
+    upstream: specification
     ref: main
     blockForcePush: [main]
-    import: {main: dev/specification}
+    import: {main: main}
     publish: {main: main}
