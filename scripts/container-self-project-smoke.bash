@@ -124,7 +124,11 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { parse, stringify } from "yaml";
 const [manifestPath, archive] = process.argv.slice(2);
 const manifest = parse(readFileSync(manifestPath, "utf8"));
-manifest.upstreams.archive.url = archive;
+for (const [repository, config] of Object.entries(manifest.repositories)) {
+  const upstream = config.upstream;
+  manifest.upstreams[upstream].url = archive;
+  config.import = { main: `dev/${repository}` };
+}
 writeFileSync(manifestPath, stringify(manifest));
 EOF
 )
