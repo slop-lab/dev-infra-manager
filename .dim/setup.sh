@@ -44,6 +44,37 @@ export DIM_WORKSPACE_UID DIM_WORKSPACE_GID
 
 sh .dim/reconcile-repositories.sh
 
+external_url_proxy_dir=/tmp/dim-external-url
+external_url_proxy_socket="$external_url_proxy_dir/controller.sock"
+if ! curl --fail --silent --unix-socket "$external_url_proxy_socket" \
+  http://dim-controller/api >/dev/null 2>&1; then
+  if [ -r "$external_url_proxy_dir/proxy.pid" ]; then
+    old_proxy_pid="$(cat "$external_url_proxy_dir/proxy.pid")"
+    case "$old_proxy_pid" in
+      ''|*[!0-9]*) ;;
+      *) kill "$old_proxy_pid" 2>/dev/null || true ;;
+    esac
+  fi
+  rm -rf "$external_url_proxy_dir"
+  mkdir -p "$external_url_proxy_dir"
+  dim-controller-proxy external-url \
+    --listen "$external_url_proxy_socket" \
+    --ingress https-ts \
+    --ingress http-ts \
+    --directory-mode 0755 \
+    --socket-mode 0666 \
+    >"$external_url_proxy_dir/proxy.log" 2>&1 &
+  echo "$!" >"$external_url_proxy_dir/proxy.pid"
+  for _ in $(seq 1 50); do
+    test -S "$external_url_proxy_socket" && break
+    sleep 0.1
+  done
+  test -S "$external_url_proxy_socket" || {
+    cat "$external_url_proxy_dir/proxy.log" >&2
+    exit 1
+  }
+fi
+
 qemu_service_dir=/tmp/dim-qemu-verification
 if [ "${DIM_WORKSPACE_KVM}" = 1 ]; then
   mkdir -p "$qemu_service_dir"
