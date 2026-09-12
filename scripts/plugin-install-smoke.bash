@@ -30,6 +30,8 @@ config_path="$root/config/dim/config.json"
 installer_prefix="$root/installer"
 package_bundle="$root/packages"
 mkdir -p "$plugin_source"
+bash verification/scripts/pack-local-packages.bash "$package_bundle" >/dev/null
+core_version="$(jq -er '.packages[] | select(.name == "@slop-lab/dim-core") | .version' "$package_bundle/packages.json")"
 
 printf '%s\n' \
   '{' \
@@ -38,7 +40,7 @@ printf '%s\n' \
   '  "type": "module",' \
   '  "exports": "./index.js",' \
   '  "peerDependencies": {' \
-  '    "@slop-lab/dim-core": "0.8.0"' \
+  "    \"@slop-lab/dim-core\": \"$core_version\"" \
   '  }' \
   '}' \
   > "$plugin_source/package.json"
@@ -54,7 +56,6 @@ printf '%s\n' \
 plugin_tarball="$(pnpm --dir "$plugin_source" pack --pack-destination "$root" --json | jq -r '.filename | split("/")[-1]')"
 installer_tarball="$(pnpm --dir core/packages/installer/dist pack --pack-destination "$root" --json | jq -r '.filename | split("/")[-1]')"
 npm install --prefix "$installer_prefix" "$root/$installer_tarball" >/dev/null
-bash verification/scripts/pack-local-packages.bash "$package_bundle" >/dev/null
 
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
   install-cli --local-packages "$package_bundle" --no-local-bin >/dev/null
