@@ -10,9 +10,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 ### Changed
 
 - Local source installations now package every DIM component under a shared
-  version containing the production commit and dirty-worktree state, avoiding
-  stale package-manager reuse when different local builds share a release
-  version.
+  version containing the production commit and dirty-worktree state, and
+  automatically rebuild the trusted `dev-infra-project-workspace:latest` image
+  from the same cloned production source snapshot before installing the CLI or
+  restarting the controller. This avoids stale package-manager reuse when
+  different local builds share a release version and prevents stale workspace
+  images from being left behind.
 
 - The canonical Project now maps an inner UID-0 agent onto the non-root
   workspace owner through a private rootless `agent-dind`. The non-root agent
