@@ -82,7 +82,7 @@ describe("DIM development forge policy", () => {
     expect(recipes).toContain("DIM_EXAMPLE_WORKSPACE_BACKEND=sysbox");
     expect(recipes).toContain("DIM_SELF_WORKSPACE_BACKEND=sysbox");
     expect(workflow.match(/with-ci-registry-cache\.bash/g)).toHaveLength(3);
-    expect(workflow.match(/DIM_TEST_PTY_RESIZE: unsupported/g)).toHaveLength(2);
+    expect(workflow.match(/DIM_TEST_PTY_RESIZE: unsupported/g)).toHaveLength(3);
     expect(workflow).toContain("inputs.gate == 'kvm' || inputs.gate == 'kvm-control'");
     expect(workflow).toContain("just verify agent-control-kvm");
     expect(workflow).toContain("inputs.gate != 'integration' && inputs.gate != 'container'");
