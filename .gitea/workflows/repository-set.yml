@@ -118,6 +118,10 @@ jobs:
       - name: Verify source repository set
         if: ${{ !inputs.gate || inputs.gate == 'source' }}
         working-directory: snapshot
+        env:
+          # Resize is not observed in the current Sysbox-hosted runner. This
+          # records that CI-environment behavior without assigning its cause.
+          DIM_TEST_PTY_RESIZE: unsupported
         run: |
           bash verification/scripts/repository-materialization-smoke.bash
           pnpm run workspace:check
