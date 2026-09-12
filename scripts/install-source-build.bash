@@ -8,9 +8,20 @@ fi
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 package_root="$repo_root/.local/dim-packages"
+source_root="$repo_root/.local/production-source"
 mkdir -p "$package_root"
 find "$package_root" -mindepth 1 -depth -delete
 bash "$repo_root/scripts/pack-source-build.bash" "$package_root"
+
+echo "[host] build trusted workspace image"
+docker build \
+  --quiet \
+  --force-rm \
+  --build-arg "DIM_UID=$(id -u)" \
+  --build-arg "DIM_GID=$(id -g)" \
+  -t dev-infra-project-workspace:latest \
+  -f "$source_root/core/images/project-workspace/Dockerfile" \
+  "$source_root" >/dev/null
 
 if command -v mise >/dev/null 2>&1; then
   dim_command=(mise exec -- dim)
