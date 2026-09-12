@@ -7,17 +7,34 @@ mkdir -m 0700 "$XDG_RUNTIME_DIR"
 
 cleanup() {
   status="$?"
+  runtime_root="${XDG_RUNTIME_DIR:-/tmp/dim-$(id -u)}/dim"
   if [[ "$status" -ne 0 ]]; then
-    runtime_root="${XDG_RUNTIME_DIR:-/tmp/dim-$(id -u)}/dim"
     if [[ -d "$runtime_root" ]]; then
       find "$runtime_root" -name controller.log -type f -exec sh -c '
         for log do echo "controller log: $log" >&2; tail -n 120 "$log" >&2; done
       ' sh {} + || true
     fi
   fi
-  if [[ -f "$root/state/controller/controller.pid" ]]; then
-    kill "$(cat "$root/state/controller/controller.pid")" >/dev/null 2>&1 || true
-  fi
+  while IFS= read -r pid_file; do
+    pid="$(cat "$pid_file")"
+    case "$pid" in
+      ''|*[!0-9]*) status=1 ;;
+      *)
+        if [[ -r "/proc/$pid/cmdline" ]] &&
+          tr '\000' ' ' <"/proc/$pid/cmdline" | grep -Fq -- "--pid-file $pid_file"; then
+          kill "$pid" >/dev/null 2>&1 || status=1
+          for _ in $(seq 1 50); do
+            kill -0 "$pid" >/dev/null 2>&1 || break
+            sleep 0.1
+          done
+          if kill -0 "$pid" >/dev/null 2>&1; then
+            echo "temporary DIM controller did not stop: $pid" >&2
+            status=1
+          fi
+        fi
+        ;;
+    esac
+  done < <(find "$runtime_root" -name controller.pid -type f -print 2>/dev/null)
   find "$root" -depth -delete 2>/dev/null || true
   return "$status"
 }
