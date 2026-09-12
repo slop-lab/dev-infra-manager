@@ -68,21 +68,25 @@ just check-source
 ## Install an unreleased source build on the host
 
 From a host checkout of this root repository, clone the production source
-repositories from the same Git host, build and install them, and restart the
-controller:
+repositories from the same Git host, build them, rebuild the trusted workspace
+image, install the CLI, and restart the controller:
 
 ```bash
 just install-local
 ```
 
-The recipe requires Git, Node.js 24 or 26, pnpm 10, and the existing DIM
-installer facade. It clones only `core`, `plugin-dns-cloudflare`, and
+The recipe requires Git, Docker, Node.js 24 or 26, pnpm 10, and the existing
+DIM installer facade. It clones only `core`, `plugin-dns-cloudflare`, and
 `plugin-external-urls`; no workspace or `*-development` checkout is used. Each
 resolved commit is printed before the build. A split `root.git` origin clones
 `main` from sibling repositories. A canonical monorepo origin instead clones
 the matching `dev/core` and `dev/plugin-*` branches from that same origin. Set
 `DIM_SOURCE_ROOT_URL`, `DIM_SOURCE_REPOSITORY_BASE_URL`, or `DIM_SOURCE_REF` to
 override source resolution.
+The recipe builds the exact `dev-infra-project-workspace:latest` image from the
+same `.local/production-source` snapshot before it installs the CLI or restarts
+the controller. It does not replace existing workspaces; recreate them
+explicitly when they need the refreshed image.
 Cloned sources and package tarballs remain under `.local/production-source`
 and `.local/dim-packages` for inspection after the command completes; the next
 run replaces their contents.
