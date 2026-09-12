@@ -6,9 +6,13 @@ export XDG_RUNTIME_DIR="$root/runtime"
 mkdir -m 0700 "$XDG_RUNTIME_DIR"
 
 cleanup() {
-  status="$?"
+  body_status="$?"
+  trap - EXIT
+  set +e
+  cleanup_failed=false
+  retain_root=false
   runtime_root="${XDG_RUNTIME_DIR:-/tmp/dim-$(id -u)}/dim"
-  if [[ "$status" -ne 0 ]]; then
+  if [[ "$body_status" -ne 0 ]]; then
     if [[ -d "$runtime_root" ]]; then
       find "$runtime_root" -name controller.log -type f -exec sh -c '
         for log do echo "controller log: $log" >&2; tail -n 120 "$log" >&2; done
@@ -16,27 +20,79 @@ cleanup() {
     fi
   fi
   while IFS= read -r pid_file; do
-    pid="$(cat "$pid_file")"
+    pid=""
+    pid="$(cat "$pid_file" 2>/dev/null)" || continue
     case "$pid" in
-      ''|*[!0-9]*) status=1 ;;
+      ''|*[!0-9]*|0|1) cleanup_failed=true ;;
       *)
-        if [[ -r "/proc/$pid/cmdline" ]] &&
-          tr '\000' ' ' <"/proc/$pid/cmdline" | grep -Fq -- "--pid-file $pid_file"; then
-          kill "$pid" >/dev/null 2>&1 || status=1
+        if ! kill -0 "$pid" >/dev/null 2>&1; then
+          continue
+        fi
+        command_args=()
+        if ! readarray -d '' -t command_args <"/proc/$pid/cmdline"; then
+          if kill -0 "$pid" >/dev/null 2>&1; then
+            echo "temporary DIM controller argv could not be read: $pid" >&2
+            cleanup_failed=true
+            retain_root=true
+          fi
+          continue
+        fi
+        controller_runtime_directory="${pid_file%/controller.pid}"
+        expected_args=(
+          "$(node -p 'process.execPath')"
+          "$(realpath core/packages/cli/dist/cli.js)"
+          controller serve
+          --socket "$controller_runtime_directory/workspace/controller.sock"
+          --agent-socket "$controller_runtime_directory/agent/controller.sock"
+          --admin-socket "$controller_runtime_directory/admin/controller.sock"
+          --pid-file "$pid_file"
+        )
+        argv_matches=true
+        if [[ "${#command_args[@]}" -ne "${#expected_args[@]}" ]]; then
+          argv_matches=false
+        else
+          for ((index = 0; index < ${#expected_args[@]}; index += 1)); do
+            if [[ "${command_args[index]}" != "${expected_args[index]}" ]]; then
+              argv_matches=false
+              break
+            fi
+          done
+        fi
+        if [[ "$argv_matches" == true ]]; then
+          if ! kill -TERM "$pid" >/dev/null 2>&1; then
+            kill -0 "$pid" >/dev/null 2>&1 || continue
+            cleanup_failed=true
+          fi
           for _ in $(seq 1 50); do
             kill -0 "$pid" >/dev/null 2>&1 || break
             sleep 0.1
           done
           if kill -0 "$pid" >/dev/null 2>&1; then
-            echo "temporary DIM controller did not stop: $pid" >&2
-            status=1
+            kill -KILL "$pid" >/dev/null 2>&1 || true
+            for _ in $(seq 1 50); do
+              kill -0 "$pid" >/dev/null 2>&1 || break
+              sleep 0.1
+            done
+            if kill -0 "$pid" >/dev/null 2>&1; then
+              echo "temporary DIM controller did not stop: $pid" >&2
+              cleanup_failed=true
+              retain_root=true
+            fi
           fi
+        else
+          echo "temporary DIM controller identity did not match PID file: $pid_file" >&2
+          cleanup_failed=true
         fi
         ;;
     esac
   done < <(find "$runtime_root" -name controller.pid -type f -print 2>/dev/null)
-  find "$root" -depth -delete 2>/dev/null || true
-  return "$status"
+  if [[ "$retain_root" == false ]]; then
+    find "$root" -depth -delete 2>/dev/null || true
+  fi
+  if [[ "$body_status" -eq 0 && "$cleanup_failed" == true ]]; then
+    exit 1
+  fi
+  exit "$body_status"
 }
 trap cleanup EXIT
 
