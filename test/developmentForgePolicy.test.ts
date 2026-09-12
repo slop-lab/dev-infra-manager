@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
@@ -19,6 +20,69 @@ describe("DIM development forge policy", () => {
       expect(source).toContain("DIM_LOCAL_BUILD_VERSION");
       expect(source).toContain("-local-");
       expect(source).toContain("-dirty");
+    }
+  });
+
+  it.each([
+    { name: "succeeds", dockerFailure: "0", expectedStatus: 0, expectedDimInvocationCount: 3 },
+    { name: "fails", dockerFailure: "1", expectedStatus: 42, expectedDimInvocationCount: 0 }
+  ])("rebuilds the trusted workspace image before installation when the Docker build $name", async (scenario) => {
+    // Given
+    const fixtureRoot = await mkdtemp(resolve(tmpdir(), "dim-root-install-"));
+    const scriptsDirectory = resolve(fixtureRoot, "scripts");
+    const toolsDirectory = resolve(fixtureRoot, "tools");
+    const invocationLog = resolve(fixtureRoot, "invocations.log");
+    const packageDirectory = resolve(fixtureRoot, ".local/dim-packages");
+    const productionSource = resolve(fixtureRoot, ".local/production-source");
+    const dockerfile = resolve(productionSource, "core/images/project-workspace/Dockerfile");
+    try {
+      await mkdir(scriptsDirectory, { recursive: true });
+      await mkdir(toolsDirectory, { recursive: true });
+      await mkdir(resolve(productionSource, "core/images/project-workspace"), { recursive: true });
+      await copyFile(
+        resolve(workspaceRoot, "project/scripts/install-source-build.bash"),
+        resolve(scriptsDirectory, "install-source-build.bash")
+      );
+      await writeFile(resolve(scriptsDirectory, "pack-source-build.bash"), "#!/usr/bin/env bash\nprintf 'pack-source-build %s\\n' \"$1\" >> \"$DIM_INVOCATIONS\"\n");
+      await writeFile(dockerfile, "FROM scratch\n");
+      await writeFile(
+        resolve(toolsDirectory, "docker"),
+        "#!/usr/bin/env bash\n{\n  printf 'docker'\n  printf ' %s' \"$@\"\n  printf '\\n'\n} >> \"$DIM_INVOCATIONS\"\nif [[ \"$DIM_DOCKER_FAILURE\" == 1 ]]; then\n  exit 42\nfi\n"
+      );
+      await writeFile(resolve(toolsDirectory, "dim"), "#!/usr/bin/env bash\n{\n  printf 'dim'\n  printf ' %s' \"$@\"\n  printf '\\n'\n} >> \"$DIM_INVOCATIONS\"\n");
+      await writeFile(resolve(toolsDirectory, "id"), "#!/usr/bin/env bash\nprintf 'id %s\\n' \"$1\" >> \"$DIM_INVOCATIONS\"\ncase \"$1\" in\n  -u) printf '1234\\n' ;;\n  -g) printf '5678\\n' ;;\nesac\n");
+      await Promise.all(["docker", "dim", "id"].map((tool) => chmod(resolve(toolsDirectory, tool), 0o755)));
+      const expectedBuild = [
+        `pack-source-build ${packageDirectory}`,
+        "id -u",
+        "id -g",
+        `docker build --quiet --force-rm --build-arg DIM_UID=1234 --build-arg DIM_GID=5678 -t dev-infra-project-workspace:latest -f ${dockerfile} ${productionSource}`
+      ];
+      const dimInvocations = [
+        `dim install-cli --local-packages ${packageDirectory} --no-local-bin`,
+        "dim controller restart",
+        "dim --version"
+      ];
+
+      // When
+      const result = spawnSync("/usr/bin/bash", [resolve(scriptsDirectory, "install-source-build.bash")], {
+        encoding: "utf8",
+        env: {
+          PATH: `${toolsDirectory}:/usr/bin:/bin`,
+          DIM_INVOCATIONS: invocationLog,
+          DIM_DOCKER_FAILURE: scenario.dockerFailure
+        }
+      });
+      const invocations = (await readFile(invocationLog, "utf8")).trim().split("\n");
+
+      // Then
+      expect(result.status).toBe(scenario.expectedStatus);
+      expect(invocations).toEqual([
+        ...expectedBuild,
+        ...dimInvocations.slice(0, scenario.expectedDimInvocationCount)
+      ]);
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
     }
   });
 
