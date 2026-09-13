@@ -26,7 +26,7 @@ importers:
   core/packages/cli:
     dependencies:
       '@slop-lab/dim-core':
-        specifier: workspace:0.8.0
+        specifier: workspace:0.9.0
         version: link:../core
       commander:
         specifier: 14.0.0
@@ -97,10 +97,10 @@ importers:
   plugin-dns-cloudflare:
     dependencies:
       '@slop-lab/dim-contracts-external-url':
-        specifier: 0.8.0
+        specifier: 0.9.0
         version: link:../core/packages/contracts/external-url
       '@slop-lab/dim-core':
-        specifier: 0.8.0
+        specifier: 0.9.0
         version: link:../core/packages/core
     devDependencies:
       '@types/node':
@@ -116,10 +116,10 @@ importers:
   plugin-dns-cloudflare-development:
     devDependencies:
       '@slop-lab/dim-contracts-external-url':
-        specifier: 0.8.0
+        specifier: 0.9.0
         version: link:../core/packages/contracts/external-url
       '@slop-lab/dim-core':
-        specifier: 0.8.0
+        specifier: 0.9.0
         version: link:../core/packages/core
       '@types/node':
         specifier: 24.13.3
@@ -134,10 +134,10 @@ importers:
   plugin-external-urls:
     dependencies:
       '@slop-lab/dim-contracts-external-url':
-        specifier: 0.8.0
+        specifier: 0.9.0
         version: link:../core/packages/contracts/external-url
       '@slop-lab/dim-core':
-        specifier: 0.8.0
+        specifier: 0.9.0
         version: link:../core/packages/core
     devDependencies:
       '@types/node':
@@ -153,10 +153,10 @@ importers:
   plugin-external-urls-development:
     devDependencies:
       '@slop-lab/dim-contracts-external-url':
-        specifier: 0.8.0
+        specifier: 0.9.0
         version: link:../core/packages/contracts/external-url
       '@slop-lab/dim-core':
-        specifier: 0.8.0
+        specifier: 0.9.0
         version: link:../core/packages/core
       '@types/node':
         specifier: 24.13.3
