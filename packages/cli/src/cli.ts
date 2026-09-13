@@ -99,7 +99,7 @@ const program = new Command();
 program
   .name("dim")
   .description("Isolated, persistent development workspaces")
-  .version("0.8.0")
+  .version("0.9.0")
   .showSuggestionAfterError()
   .configureHelp({ sortSubcommands: true, sortOptions: true })
   .addHelpText("afterAll", installerFacadeHelpText(program));
