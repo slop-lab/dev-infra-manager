@@ -106,7 +106,7 @@ routes use `registerAdminRoute` and cannot be exposed by this field.
 Install and explicitly enable a plugin package with:
 
 ```bash
-npx '@slop-lab/dim-installer@0.8.0' install-plugin '@example/dim-plugin@1.2.3'
+npx '@slop-lab/dim-installer@0.9.0' install-plugin '@example/dim-plugin@1.2.3'
 dim plugin list
 ```
 
