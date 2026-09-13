@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.9.0 - 2026-09-13
+
 - Give locally built installation packages a validated version containing the
   production source commit and dirty-worktree state, so package managers do
   not reuse different local contents under the release version. Tracked
