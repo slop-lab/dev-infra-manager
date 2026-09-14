@@ -90,18 +90,40 @@ Implemented:
 
 Acceptance verification on 2026-09-14: `just verify agent` exited 0.
 Core-development Vitest reported 784 passed and 40 intentionally skipped; the
-CLI reported 63 passed; verification reported 118 passed; and the plugin
-development suites reported 6 and 14 passed. Repository materialization,
+CLI reported 63 passed; verification reported 138 passed across 29 files; and
+the plugin development suites reported 6 and 14 passed. Repository materialization,
 TypeScript checks, builds, seven package dry-runs, plugin installation,
 `project-runtime-cgroups`, `pull-request-skill`, and the `agent-docker` smoke
 passed. `just check-run-cli`, the SSH policy check, and shell syntax checks
-passed. The verification suite includes QEMU admission, immutable snapshot,
-shutdown, service-replacement, and socket-readiness regressions, including
-nested executable files and unsupported FIFOs, plus full-development
-fixed-shell authority and bounded SSH-readiness policy coverage. Direct
-Unix-socket QEMU service tests and static full-development Compose validation
-also passed. All changed repository diffs passed `git diff --check` before the
-evidence update was committed.
+passed. Independently observed third-wave QEMU verification passed all 10 files
+and 38 tests. Before the final race fix, the focused owner, record, setup, and
+startup group passed three consecutive runs of 13 tests. After the fix, the
+expanded owner, startup, shutdown, and setup group passed all 17 tests, and the
+full verification test run passed all 29 files and 138 tests. The new
+regressions cover structured ownership and bounded resource behaviors,
+alongside QEMU admission, immutable snapshots, shutdown, service replacement,
+socket readiness, nested executable files, unsupported FIFOs,
+full-development fixed-shell authority, and bounded SSH-readiness policy.
+Direct Unix-socket QEMU service tests, static full-development Compose
+validation, Node and shell syntax checks, and changed-file diff checks passed.
+The broader `just` gates were not rerun for this third wave.
+
+A follow-up QEMU ownership hardening pass on 2026-09-14 added an adjacent
+hard-link lease for the bound socket inode, descriptor-bound owner inspection
+and publication identity, a root-owned service-directory boundary, staged run
+directory activation, and launcher-first shutdown ordering. The final
+verification run passed all 32 files and 162 tests. Focused publication
+verification also passed after exact `0600` and `0666` mode assertions were
+tightened. Workspace TypeScript checks, changed QEMU module syntax checks,
+changed-file diff checks, pure-source line limits, fixture cleanup, and a
+direct rejection probe for a sticky-bit service directory passed. The added
+regressions cover lease collisions and mismatches, partial ownership triads,
+open-listener inode pinning, deterministic owner-path replacement, all four
+service namespace preflight paths, staged-run rollback, and active-launcher
+termination before a lease-failure exit. TypeScript LSP diagnostics were
+unavailable because no server is installed; the executable typecheck was used
+instead. The broader `just verify agent`, live Sysbox, KVM, and
+full-development gates were not rerun for this follow-up.
 
 OpenSSH 9.6 and Docker buildx 0.30.1 were installed in the development agent to
 exercise the capable-host entrypoint. The full-development journey built all
