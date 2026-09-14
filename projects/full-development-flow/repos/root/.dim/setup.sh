@@ -38,7 +38,7 @@ if ! curl --fail --silent --unix-socket "$proxy_socket" \
 fi
 
 docker compose \
-  --file .dim/docker-compose.yml "$@" up --detach --build --force-recreate
+  --file .dim/docker-compose.yml "$@" up --detach --build --force-recreate --wait --wait-timeout 60
 docker compose \
   --file .dim/docker-compose.yml exec --no-TTY agent \
   chown -R "$DIM_WORKSPACE_UID:$DIM_WORKSPACE_GID" /home/dim-agent

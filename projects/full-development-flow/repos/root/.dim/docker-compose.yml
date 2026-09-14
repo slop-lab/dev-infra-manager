@@ -33,6 +33,11 @@ services:
     networks:
       - default
     working_dir: /workspace
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 22"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
     depends_on:
       agent-dind:
         condition: service_healthy
