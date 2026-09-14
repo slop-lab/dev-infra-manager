@@ -129,6 +129,37 @@ describe("QEMU service snapshots", () => {
     expect(cancelled.status).toBe(202);
   });
 
+  it("streams nested multi-entry directories without using readdir", async () => {
+    // Given
+    const fixture = await startService("hold", { rejectReaddir: true });
+    const input = resolve(fixture.sourceRoot, "streamed-input");
+    const nested = resolve(input, "nested");
+    await mkdir(nested, { recursive: true });
+    await writeFile(resolve(input, "root.txt"), "root\n");
+    await writeFile(resolve(nested, "first.txt"), "first\n");
+    await writeFile(resolve(nested, "second.txt"), "second\n");
+
+    // When
+    const started = await http(fixture, {
+      body: { inputs: [{ name: "streamed", path: input }] }, method: "POST", path: "/v1/run"
+    });
+    if (started.status !== 202) throw new TypeError(`snapshot admission failed: ${started.body}`);
+    await readEvents(fixture, "ready\n");
+    const passed = (await launchRecords(fixture))[0]?.[0];
+    if (passed === undefined) throw new TypeError("launcher did not receive the streamed input");
+    const copied = await Promise.all([
+      readFile(resolve(passed.path, "root.txt"), "utf8"),
+      readFile(resolve(passed.path, "nested/first.txt"), "utf8"),
+      readFile(resolve(passed.path, "nested/second.txt"), "utf8")
+    ]);
+    const cancelled = await http(fixture, { method: "DELETE", path: "/v1/run" });
+    await readEvents(fixture);
+
+    // Then
+    expect.soft(copied).toEqual(["root\n", "first\n", "second\n"]);
+    expect(cancelled.status).toBe(202);
+  });
+
   it("rejects a FIFO without starting a snapshot or launcher subprocess", async () => {
     // Given
     const fixture = await startService("exit");
