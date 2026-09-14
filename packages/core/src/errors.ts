@@ -5,6 +5,10 @@ export class UserError extends Error {
   }
 }
 
+export class MissingRecordError extends UserError {
+  readonly name = "MissingRecordError";
+}
+
 export function isUserError(error: unknown): error is Error {
   return error instanceof Error && (error instanceof UserError || error.name === "UserError");
 }

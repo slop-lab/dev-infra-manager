@@ -80,10 +80,11 @@ export const giteaCiCoordinator: CiCoordinator = {
   async removeWorkflowJobWebhook(runner, options, project, url): Promise<void> {
     await removeHooksForUrl(await ensureGitea(runner, options), project, url);
   },
-  async reconcileWorkflowJobWebhookTargets(runner, options): Promise<void> {
+  async reconcileWorkflowJobWebhookTargets(runner, options, excluding): Promise<void> {
     const records = await new LifecycleState(options.stateRoot).listCiRunners();
     const allowedHosts = records.flatMap((record) =>
       record.executor.kind === "qemu" && record.executor.phase !== "stopped"
+        && (excluding === undefined || record.projectName !== excluding.project || record.name !== excluding.name)
         ? [record.executor.supervisorName]
         : []);
     await configureGiteaWebhookAllowedHosts(runner, options, allowedHosts);

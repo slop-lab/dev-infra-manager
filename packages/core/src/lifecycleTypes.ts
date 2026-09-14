@@ -25,10 +25,10 @@ export interface LifecycleOptions {
 }
 
 export interface HostLifecycleRecord {
-  schemaVersion: 1;
+  schemaVersion: 2;
   phase: "ready" | "stopping" | "stopped" | "starting" | "error";
   resumeWorkspaces: string[];
-  resumeCiRunners: Array<{ project: string; name: string }>;
+  restartCiRunners: Array<{ project: string; name: string }>;
   resumeManagedContainers: string[];
   updatedAt: string;
   error?: string;
@@ -42,6 +42,19 @@ export interface CiRunnerResources {
 
 export type CiRunnerExecutorKind = "sysbox" | "qemu";
 export type CiRunnerPhase = "creating" | "ready" | "stopped" | "error";
+
+export interface QemuCiProjectHookProvenance {
+  sourceRef: string;
+  sourceCommit: string;
+  kind: "present" | "absent";
+  digest: string;
+}
+
+export interface CiRunnerConfigProvenance {
+  sourceRef: string;
+  sourceCommit: string;
+  configDigest: string;
+}
 
 export interface SysboxCiRunnerExecutor {
   kind: "sysbox";
@@ -63,19 +76,22 @@ export interface QemuCiRunnerExecutor {
   supervisorName: string;
   volumeName: string;
   image: string;
+  projectHook: QemuCiProjectHookProvenance;
   resources: Pick<CiRunnerResources, "cpus" | "memory">;
   inheritsResources: boolean;
   labels: string[];
+  jobImage: string;
   updatedAt: string;
   error?: string;
 }
 
 export interface CiRunnerRecord {
-  schemaVersion: 4;
+  schemaVersion: 8;
   name: string;
   projectId: string;
   projectName: string;
   provider: string;
+  config: CiRunnerConfigProvenance;
   executor: SysboxCiRunnerExecutor | QemuCiRunnerExecutor;
   createdAt: string;
   updatedAt: string;
@@ -143,10 +159,11 @@ export interface ProjectRepositoryRecord {
 }
 
 export interface ProjectRecord {
-  schemaVersion: 3;
+  schemaVersion: 4;
   id: string;
   name: string;
   gitNamespace: string;
+  giteaOrganizationId: number | null;
   phase: ProjectPhase;
   rootRepositoryAlias?: string;
   rootRef?: string;
@@ -178,14 +195,28 @@ export interface WorkspaceCapabilityRecord {
   environment?: Record<string, string>;
 }
 
+export type WorkspaceRepositorySnapshotEntry = {
+  readonly workspaceUrl: string;
+  readonly phase: "ready";
+  readonly root: boolean;
+  readonly requestedRef: string;
+  readonly ref: string;
+  readonly commit: string;
+};
+
+export type WorkspaceRepositorySnapshot = Readonly<Record<string, WorkspaceRepositorySnapshotEntry>>;
+
 export interface WorkspaceRecord {
-  schemaVersion: 3;
+  schemaVersion: 5;
   name: string;
   projectId: string;
   projectName: string;
   rootRepositoryAlias: string;
   rootRef: string;
+  rootCommit: string;
+  rootSnapshotPath: string;
   repositoryRefOverrides?: Record<string, string>;
+  repositorySnapshot: WorkspaceRepositorySnapshot;
   projectPath: string;
   phase: WorkspacePhase;
   profiles: string[];

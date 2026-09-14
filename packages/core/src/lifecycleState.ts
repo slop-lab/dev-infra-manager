@@ -1,18 +1,18 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdir, open, readFile, readdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rm, rmdir } from "node:fs/promises";
 import path from "node:path";
-import { UserError } from "./errors.js";
+import { MissingRecordError, UserError } from "./errors.js";
+import { parseHostLifecycleRecord } from "./hostLifecycleRecord.js";
+import { acquireLifecycleLock, type LifecycleLockOptions } from "./lifecycleLock.js";
+import { assertSchemaVersion, assertSysboxWorkspace, atomicWrite, listRecords, readJson, validateLifecycleName } from "./lifecycleRecord.js";
 import type { CiRunnerRecord, GiteaServiceRecord, HostLifecycleRecord, ProjectRecord, WorkspaceRecord } from "./lifecycleTypes.js";
+import { parseProjectRecord } from "./projectRecord.js";
+import { assertWorkspaceRepositorySnapshot } from "./workspaceRepositorySnapshot.js";
 
-export function validateLifecycleName(value: string, kind: string): string {
-  if (!/^[a-z0-9][a-z0-9_.-]{0,47}$/.test(value)) {
-    throw new UserError(`${kind} name must match [a-z0-9][a-z0-9_.-]{0,47}`);
-  }
-  return value;
-}
+export { validateLifecycleName } from "./lifecycleRecord.js";
 
 export class LifecycleState {
-  constructor(readonly root: string) {}
+  constructor(readonly root: string, private readonly lockOptions: LifecycleLockOptions = {}) {}
 
   projectPath(name: string): string {
     return path.join(this.root, "projects", `${validateLifecycleName(name, "project")}.json`);
@@ -84,13 +84,9 @@ export class LifecycleState {
     }
   }
 
-  async removeWorkspaceGrant(name: string): Promise<void> {
-    await rm(this.workspaceGrantPath(name), { force: true });
-  }
+  async removeWorkspaceGrant(name: string): Promise<void> { await rm(this.workspaceGrantPath(name), { force: true }); }
 
-  async removeAgentGrant(name: string): Promise<void> {
-    await rm(this.agentGrantPath(name), { force: true });
-  }
+  async removeAgentGrant(name: string): Promise<void> { await rm(this.agentGrantPath(name), { force: true }); }
 
   giteaServicePath(): string {
     return path.join(this.root, "services", "gitea.json");
@@ -102,11 +98,10 @@ export class LifecycleState {
 
   async readHostLifecycle(): Promise<HostLifecycleRecord | undefined> {
     try {
-      const record = await readJson<HostLifecycleRecord>(this.hostLifecyclePath(), "host lifecycle state not found");
-      assertSchemaVersion(record, "host lifecycle", "host", 1);
-      return record;
+      const record = await readJson<unknown>(this.hostLifecyclePath(), "host lifecycle state not found");
+      return parseHostLifecycleRecord(record);
     } catch (error) {
-      if (error instanceof UserError && error.message.includes("not found")) return undefined;
+      if (error instanceof MissingRecordError) return undefined;
       throw error;
     }
   }
@@ -116,8 +111,12 @@ export class LifecycleState {
   }
 
   async acquireHostLifecycleLock(): Promise<() => Promise<void>> {
-    return acquireLock(this.root, "host-lifecycle", "host lifecycle reconciliation");
+    return acquireLifecycleLock({ root: this.root, name: "host-lifecycle", description: "host lifecycle reconciliation", options: this.lockOptions });
   }
+
+  async acquireRegistryCacheLock(): Promise<() => Promise<void>> { return acquireLifecycleLock({ root: this.root, name: "registry-cache", description: "registry cache reconciliation", options: this.lockOptions }); }
+
+  async acquireGiteaServiceLock(): Promise<() => Promise<void>> { return acquireLifecycleLock({ root: this.root, name: "gitea-service", description: "Gitea service reconciliation", options: this.lockOptions }); }
 
   ciRunnerPath(project: string, name: string): string {
     return path.join(
@@ -133,7 +132,7 @@ export class LifecycleState {
       this.ciRunnerPath(project, name),
       `CI runner '${project}/${name}' not found`
     );
-    assertSchemaVersion(record, "CI runner", `${project}/${name}`, 4);
+    assertSchemaVersion(record, "CI runner", `${project}/${name}`, 8);
     return record;
   }
 
@@ -165,7 +164,7 @@ export class LifecycleState {
       records.push(...await listRecords<CiRunnerRecord>(
         path.join(directory, project.name),
         "CI runner",
-        4
+        8
       ));
     }
     return records.sort((left, right) =>
@@ -174,7 +173,12 @@ export class LifecycleState {
 
   async acquireCiRunnerLock(project: string): Promise<() => Promise<void>> {
     project = validateLifecycleName(project, "project");
-    return acquireLock(this.root, `ci-runner-${project}`, `CI runners for project '${project}' reconciliation`);
+    return acquireLifecycleLock({ root: this.root, name: `ci-runner-${project}`, description: `CI runners for project '${project}' reconciliation`, options: this.lockOptions });
+  }
+
+  async acquireQemuProjectHookPublicationLock(projectId: string): Promise<() => Promise<void>> {
+    if (!/^[A-Za-z0-9-]+$/.test(projectId)) throw new UserError(`project ID '${projectId}' is invalid`);
+    return acquireLifecycleLock({ root: this.root, name: `qemu-project-hook-${projectId}`, description: `QEMU Project hook '${projectId}' publication`, options: this.lockOptions });
   }
 
   async claimGiteaService(record: GiteaServiceRecord): Promise<void> {
@@ -224,8 +228,9 @@ export class LifecycleState {
       this.workspacePath(name),
       `workspace '${name}' not found`
     );
-    assertSchemaVersion(raw, "workspace", name);
+    assertSchemaVersion(raw, "workspace", name, 5);
     assertSysboxWorkspace(raw, name);
+    assertWorkspaceRepositorySnapshot(raw);
     return raw;
   }
 
@@ -234,16 +239,19 @@ export class LifecycleState {
   }
 
   async acquireWorkspaceLock(name: string): Promise<() => Promise<void>> {
-    return acquireLock(this.root, `workspace-${validateLifecycleName(name, "workspace")}`, `workspace '${name}' reconciliation`);
+    return acquireLifecycleLock({ root: this.root, name: `workspace-${validateLifecycleName(name, "workspace")}`, description: `workspace '${name}' reconciliation`, options: this.lockOptions });
   }
 
   async acquireWorkspaceSetupLock(name: string): Promise<() => Promise<void>> {
-    return acquireLock(this.root, `workspace-${validateLifecycleName(name, "workspace")}-setup`, `workspace '${name}' setup`);
+    return acquireLifecycleLock({ root: this.root, name: `workspace-${validateLifecycleName(name, "workspace")}-setup`, description: `workspace '${name}' setup`, options: this.lockOptions });
   }
 
   async listWorkspaces(): Promise<WorkspaceRecord[]> {
-    const records = await listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace", 3);
-    for (const record of records) assertSysboxWorkspace(record, record.name);
+    const records = await listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace", 5);
+    for (const record of records) {
+      assertSysboxWorkspace(record, record.name);
+      assertWorkspaceRepositorySnapshot(record);
+    }
     return records;
   }
 
@@ -267,13 +275,12 @@ export class LifecycleState {
   }
 
   async readProject(name: string): Promise<ProjectRecord> {
-    const record = await readJson<ProjectRecord>(this.projectPath(name), `project '${name}' not found`);
-    assertSchemaVersion(record, "project", name);
-    return record;
+    return parseProjectRecord(await readJson<unknown>(this.projectPath(name), `project '${name}' not found`));
   }
 
   async listProjects(): Promise<ProjectRecord[]> {
-    return listRecords<ProjectRecord>(path.join(this.root, "projects"), "project", 3);
+    return (await listRecords<ProjectRecord>(path.join(this.root, "projects"), "project", 4))
+      .map((record) => parseProjectRecord(record));
   }
 
   async removeProject(name: string): Promise<void> {
@@ -281,107 +288,6 @@ export class LifecycleState {
   }
 
   async acquireProjectLock(name: string): Promise<() => Promise<void>> {
-    return acquireLock(this.root, `project-${validateLifecycleName(name, "project")}`, `project '${name}' reconciliation`);
-  }
-}
-
-async function acquireLock(root: string, name: string, description: string): Promise<() => Promise<void>> {
-    const lockPath = path.join(root, "locks", `${name}.lock`);
-    await mkdir(path.dirname(lockPath), { recursive: true, mode: 0o700 });
-    for (let attempt = 0; attempt < 1200; attempt += 1) {
-      try {
-        const handle = await open(lockPath, "wx", 0o600);
-        await handle.writeFile(`${JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() })}\n`, "utf8");
-        await handle.close();
-        return async () => {
-          await rm(lockPath, { force: true });
-        };
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-        if (await lockIsStale(lockPath)) {
-          await rm(lockPath, { force: true });
-          continue;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-    }
-    throw new UserError(`timed out waiting for ${description} lock`);
-}
-
-async function atomicWrite(target: string, value: unknown): Promise<void> {
-  await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
-  const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-  await rename(temporary, target);
-}
-
-async function readJson<T>(target: string, missingMessage: string): Promise<T> {
-  try {
-    return JSON.parse(await readFile(target, "utf8")) as T;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new UserError(missingMessage);
-    }
-    throw error;
-  }
-}
-
-async function listRecords<T extends { schemaVersion: number; name: string }>(
-  directory: string,
-  kind: string,
-  expectedSchemaVersion: number
-): Promise<T[]> {
-  let entries: string[];
-  try {
-    entries = await readdir(directory);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-    throw error;
-  }
-  const records = await Promise.all(entries.filter((entry) => entry.endsWith(".json")).map(async (entry) => {
-    const record = await readJson<T>(path.join(directory, entry), `invalid ${kind} record: ${entry}`);
-    assertSchemaVersion(record, kind, record.name, expectedSchemaVersion);
-    return record;
-  }));
-  return records.sort((left, right) => left.name.localeCompare(right.name));
-}
-
-function assertSchemaVersion(
-  record: { schemaVersion?: number },
-  kind: string,
-  name: string,
-  expected = 3
-): void {
-  if (record.schemaVersion !== expected) {
-    throw new UserError(
-      `${kind} '${name}' uses unsupported state schema ${String(record.schemaVersion)}; `
-      + `expected ${expected} and DIM does not migrate existing state`
-    );
-  }
-}
-
-function assertSysboxWorkspace(record: { runtimeBackend?: unknown }, name: string): void {
-  if (record.runtimeBackend !== "sysbox") {
-    throw new UserError(
-      `workspace '${name}' uses unsupported backend '${String(record.runtimeBackend)}'; `
-      + "DIM supports only sysbox workspaces"
-    );
-  }
-}
-
-async function lockIsStale(lockPath: string): Promise<boolean> {
-  try {
-    const lock = JSON.parse(await readFile(lockPath, "utf8")) as { pid?: number; createdAt?: string };
-    if (!Number.isSafeInteger(lock.pid) || !lock.pid) return true;
-    const createdAt = Date.parse(lock.createdAt ?? "");
-    if (!Number.isFinite(createdAt) || Date.now() - createdAt > 5 * 60 * 1000) return true;
-    try {
-      process.kill(lock.pid, 0);
-      return false;
-    } catch (error) {
-      return (error as NodeJS.ErrnoException).code === "ESRCH";
-    }
-  } catch {
-    return true;
+    return acquireLifecycleLock({ root: this.root, name: `project-${validateLifecycleName(name, "project")}`, description: `project '${name}' reconciliation`, options: this.lockOptions });
   }
 }

@@ -72,10 +72,13 @@ dim doctor
 
 DIM automatically runs one managed controller process with separate local
 Unix sockets: a mode-`0600` host-admin API and a workspace-scoped API. Normal
-state commands are admin API clients. Only interactive `exec` and `run` remain
-direct CLI operations; controller bootstrap and local Git process adapters
-also stay local. Neither the admin socket nor host credentials are mounted
-into workspaces.
+state commands are admin API clients. Workspace, CI runner, and host lifecycle
+operations, CI logs, `exec`, and `run` use host-admin controller command
+sessions. Sessions preserve ordered stdout and stderr streams plus FIFO input
+and EOF. They allocate a PTY only when `exec` or `run` is attached to an
+interactive terminal. Controller bootstrap and local Git process adapters stay
+local. Neither the admin socket nor host credentials are mounted into
+workspaces.
 
 ## First Project
 
@@ -160,9 +163,10 @@ Run a task through the root repository's `.dim/entrypoint.sh`:
 dim workspace run feature-123 codex
 ```
 
-Task stdin is forwarded even when redirected or piped, so Project-defined
-streaming tasks can use contracts such as `dim workspace run feature-123
-restore <backup.tar.gz`. A TTY is allocated only for an interactive terminal.
+The controller command session forwards task stdin even when redirected or
+piped, so Project-defined streaming tasks can use contracts such as `dim
+workspace run feature-123 restore <backup.tar.gz`. Input bytes and EOF remain
+ordered, and a TTY is allocated only for an interactive terminal.
 
 `exec` is the raw escape hatch; `run` uses the Project-defined task contract.
 
@@ -318,8 +322,9 @@ Workflow code sees only nested KVM inside that VM. Use `list`, `start`,
 `restart`, `stop`, and `delete --yes` with the Project and runner name. The lifecycle boundary
 is provider-neutral; managed Gitea is the current coordinator.
 
-`logs` follows the container log until interrupted. `stop` preserves the
-runner registration and local data; `delete --yes` removes both.
+`logs` follows the container log through a controller command session until
+interrupted. `stop` preserves the runner registration and local data; `delete
+--yes` removes both.
 
 ## Managed Git credentials
 

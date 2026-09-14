@@ -14,6 +14,12 @@ export * from "./hostInputs.js";
 export * from "./hostLifecycle.js";
 export * from "./pluginLoader.js";
 export * from "./projectRegistry.js";
+export {
+  removeProtectedRootSnapshots,
+  resolveProtectedRootSnapshot,
+  type ProtectedRootSnapshot,
+  type ProtectedRootSnapshotRequest
+} from "./protectedRootSnapshot.js";
 export * from "./projectRuntimeCgroups.js";
 export * from "./repositorySet.js";
 export * from "./runner.js";
@@ -21,3 +27,4 @@ export * from "./runtimeBackends.js";
 export * from "./types.js";
 export * from "./userConfig.js";
 export * from "./workspaceLifecycle.js";
+export * from "./workspaceImage.js";

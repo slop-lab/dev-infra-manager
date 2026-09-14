@@ -28,6 +28,10 @@ npm install --save-exact "@slop-lab/dim-core@0.8.0"
 The package is ESM-only, supports Node.js 24 and 26, and includes TypeScript
 declarations. It supports Linux hosts only.
 
+Lifecycle operations require a mounted Linux procfs and the util-linux
+`flock` executable. DIM combines the kernel guard with a versioned owner
+record so process death releases exclusion while PID reuse remains detectable.
+
 ## Basic use
 
 ```ts
@@ -85,6 +89,18 @@ with host credentials.
 - `DIM_CI_RUNNER_IMAGE`, `DIM_CI_RUNNER_RUNTIME`, `DIM_CI_RUNNER_CPUS`,
   `DIM_CI_RUNNER_MEMORY`, and `DIM_CI_RUNNER_PIDS`
 
+`DIM_CI_RUNNER_IMAGE` accepts exactly one of these forms:
+
+- the built-in cache-tag sentinel `dev-infra-manager-ci-runner:act-runner-minimal-v1`,
+  which DIM builds locally;
+- a complete local Docker image ID such as `sha256:<64 lowercase hexadecimal characters>`;
+- a tagless registry reference pinned as `name@sha256:<64 lowercase hexadecimal characters>`.
+
+DIM pulls a configured registry reference and resolves it through Docker to the
+actual local image ID. Runner probes, state, and launches use only that resolved
+ID. Other tags and mutable image references are rejected before trusted image
+execution.
+
 The resource environment variables provide defaults. `createWorkspace`
 accepts persistent per-workspace overrides. A Project root ref may be omitted;
 workspace creation then resolves the root repository's symbolic `HEAD` and
@@ -93,12 +109,31 @@ fails if no `HEAD` exists.
 The default state root is `~/.local/state/dim`; the default managed Gitea port
 is `3300`. DIM does not migrate incompatible pre-stable state.
 
-For QEMU CI capacity, a Project may provide `.dim/ci/qemu-cache.bash` on its
-configured protected root ref. DIM executes the reviewed hook as root inside
-the Packer guest, passing `/var/lib/dim-kvm-cache` as its only argument, and
-uses its content digest in the Project-scoped runner-base cache key. The hook
-does not run on the host and receives no host runtime socket or coordinator
-credential. Reconcile the QEMU capacity after changing it.
+Every managed CI runner requires `.dim/ci/runner.yml` in the protected Project
+root. Its strict schema declares ordinary and integration labels,
+digest-pinned disposable job images, required executables, and the integration
+workload's `nested-docker` capability. DIM records the exact source ref, commit,
+and configuration digest, probes both workloads before registration, and never
+runs Project workflow commands in the runner host container.
+
+For QEMU CI capacity, a Project may provide `.dim/ci/qemu-cache.bash`. DIM
+requires applied root protection, resolves the configured root or symbolic
+`HEAD` once to a concrete protected branch and commit, and stages the exact
+hook blob from that immutable commit. An absent hook stages a deterministic
+no-op executable instead of an empty sentinel. The resolved source ref,
+commit, kind, and executable digest define the Project image identity and are
+stored in runner state. DIM executes the staged bytes as root inside the Packer
+guest, passing `/var/lib/dim-kvm-cache` as the only argument. The hook does not
+run on the host and receives no host runtime socket or coordinator credential.
+Reconcile the QEMU capacity after changing it.
+
+The shared QEMU common base pins one dated, signed Ubuntu 24.04 cloud image and
+one timestamped Ubuntu snapshot. Its identity includes exact artifact URLs and
+digests, signer-keyring provenance, APT source and requested package/version
+specifications, downloaded executable inputs, generated scripts, and Packer
+templates. Ubuntu guarantees snapshot history for at least two years rather
+than forever; preserve those source artifacts in a reviewed internal immutable
+cache when rebuilds must remain possible beyond that period.
 
 ## API scope
 

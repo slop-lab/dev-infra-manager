@@ -1,58 +1,31 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { statSync } from "node:fs";
-import { mkdir, stat, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { UserError } from "./errors.js";
+import { MissingRecordError, UserError } from "./errors.js";
+import { ciRunnerContainerPlan, removeCiRunnerContainer, startCiRunnerContainer, stopCiRunnerContainer } from "./ciRunnerContainer.js";
 import { giteaCiCoordinator } from "./giteaCiCoordinator.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
-import { readProjectRootFile, showProject } from "./projectRegistry.js";
-import { configuredCiRunnerDefaults } from "./userConfig.js";
+import { showProject } from "./projectRegistry.js";
 import type { CiRunnerExecutorKind, CiRunnerRecord, CiRunnerResources, LifecycleOptions, QemuCiRunnerExecutor, SysboxCiRunnerExecutor } from "./lifecycleTypes.js";
 import type { StreamingCommandRunner } from "./types.js";
-import { QEMU_CI_PACKER_PROVISION_SCRIPT, QEMU_CI_PACKER_TEMPLATE, QEMU_CI_SUPERVISOR_DOCKERFILE, QEMU_CI_SUPERVISOR_IMAGE, QEMU_CI_SUPERVISOR_SCRIPT, QEMU_CI_WEBHOOK_SCRIPT } from "./qemuCiRunnerAssets.js";
-import { configureSysboxRegistryMirror, CONTROL_NETWORK, ensureRegistryCache, REGISTRY_CACHE_ENDPOINT } from "./registryCache.js";
-import { SYSBOX_CI_RUNNER_DOCKERFILE, SYSBOX_CI_RUNNER_HEALTH_SCRIPT, SYSBOX_CI_RUNNER_IMAGE } from "./sysboxCiRunnerAssets.js";
+import { ensureCiRunnerVolume, removeCiRunnerVolume } from "./ciRunnerVolume.js";
+import { ciRunnerLabels, loadCiRunnerConfig, qemuCiRunnerLabelNames } from "./ciRunnerConfig.js";
+import { probeCiRunnerWorkloads } from "./ciRunnerProbe.js";
+import { ciRunnerQemuCommonCacheVolumeName, prepareQemuProjectHookFromSnapshot, removeQemuProjectImageState, restorePersistedQemuProjectHook } from "./qemuCiRunnerImage.js";
+import { ciRunnerQemuDispatchVolumeName, ciRunnerQemuProjectCacheVolumeName, ciRunnerQemuRunnerName, ciRunnerQemuSupervisorLaunchArgs,
+  ciRunnerQemuSupervisorName, ciRunnerQemuVolumeName, ciRunnerQemuVolumeDeletionPlans, qemuMemoryMiB } from "./qemuCiRunnerLifecycle.js";
+import { prepareQemuCiRunnerSupervisorImage, qemuCiRunnerProductionImageKeys } from "./qemuCiRunnerSupervisorImage.js";
+import { resolveProtectedRootSnapshotLocked } from "./protectedRootSnapshot.js";
+import { configureSysboxRegistryMirror, ensureRegistryCache } from "./registryCache.js";
+import { BUILTIN_CI_RUNNER_DEFAULTS, detectCiRunnerKvm, effectiveCiRunnerResources, effectiveQemuCiRunnerResources } from "./ciRunnerResources.js";
+import { ciRunnerContainerArgs, ciRunnerContainerName, ciRunnerVolumeName, removeSysboxRegistration,
+  resolveSysboxRunnerImage, sysboxRegistrationExists } from "./sysboxCiRunnerLifecycle.js";
 
-export const BUILTIN_CI_RUNNER_DEFAULTS: CiRunnerResources = { cpus: "4", memory: "8g", pidsLimit: "2048" };
-export const CI_RUNNER_LABELS = ["dim:docker://gitea/runner-images:ubuntu-24.04", "ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04", "dim-container-integration:host"].join(",");
-
-export async function detectCiRunnerKvm(probe: () => Promise<void> = async () => {
-  const device = await stat("/dev/kvm");
-  if (!device.isCharacterDevice()) throw new Error("/dev/kvm is not a character device");
-}, architecture = process.arch): Promise<boolean> {
-  if (architecture !== "x64") return false;
-  try { await probe(); return true; } catch { return false; }
-}
+export { BUILTIN_CI_RUNNER_DEFAULTS, detectCiRunnerKvm, effectiveCiRunnerResources, effectiveQemuCiRunnerResources };
+export { ciRunnerContainerArgs, ciRunnerContainerName, ciRunnerVolumeName };
+export { ciRunnerQemuDispatchVolumeName, ciRunnerQemuRunnerName, ciRunnerQemuSupervisorName, ciRunnerQemuVolumeName, qemuMemoryMiB } from "./qemuCiRunnerLifecycle.js";
 
 export interface CreateCiRunnerInput { project: string; name: string; executor: CiRunnerExecutorKind; resources?: Partial<CiRunnerResources> }
 interface CiRunnerIdentity { project: string; name: string }
-
-export function effectiveCiRunnerResources(options: LifecycleOptions, overrides?: Partial<CiRunnerResources>, configured = configuredCiRunnerDefaults()): { resources: CiRunnerResources; inheritsResources: boolean } {
-  const defaults = configured ?? { cpus: options.ciRunnerDefaultCpus || BUILTIN_CI_RUNNER_DEFAULTS.cpus, memory: options.ciRunnerDefaultMemory || BUILTIN_CI_RUNNER_DEFAULTS.memory, pidsLimit: options.ciRunnerDefaultPidsLimit || BUILTIN_CI_RUNNER_DEFAULTS.pidsLimit };
-  const resources = { cpus: overrides?.cpus ?? defaults.cpus, memory: overrides?.memory ?? defaults.memory, pidsLimit: overrides?.pidsLimit ?? defaults.pidsLimit };
-  if (!/^[0-9]+(?:\.[0-9]+)?$/.test(resources.cpus) || Number(resources.cpus) <= 0) throw new UserError("CI runner CPUs must be a positive number");
-  if (!/^[1-9][0-9]*(?:[kmgt]i?b?|[KMGT]i?B?)?$/.test(resources.memory)) throw new UserError("CI runner memory must be a positive container memory size");
-  if (!/^[1-9][0-9]*$/.test(resources.pidsLimit)) throw new UserError("CI runner PID limit must be a positive integer");
-  return { resources, inheritsResources: !overrides || Object.values(overrides).every((value) => value === undefined) };
-}
-
-export function effectiveQemuCiRunnerResources(options: LifecycleOptions, overrides?: Partial<CiRunnerResources>, configured = configuredCiRunnerDefaults()): { resources: Pick<CiRunnerResources, "cpus" | "memory">; inheritsResources: boolean } {
-  if (overrides?.pidsLimit !== undefined) throw new UserError("process limits apply only to the sysbox CI executor");
-  const effective = effectiveCiRunnerResources(options, {
-    ...(overrides?.cpus === undefined ? {} : { cpus: overrides.cpus }),
-    ...(overrides?.memory === undefined ? {} : { memory: overrides.memory })
-  }, configured);
-  if (!/^[1-9][0-9]*$/.test(effective.resources.cpus)) {
-    throw new UserError("QEMU CI runner CPUs must be a positive integer");
-  }
-  if (qemuMemoryMiB(effective.resources.memory) < 512) {
-    throw new UserError("QEMU CI runner memory must be at least 512 MiB");
-  }
-  return {
-    resources: { cpus: effective.resources.cpus, memory: effective.resources.memory },
-    inheritsResources: effective.inheritsResources
-  };
-}
 
 export async function createCiRunner(runner: StreamingCommandRunner, options: LifecycleOptions, input: CreateCiRunnerInput): Promise<CiRunnerRecord> {
   return reconcileCiRunner(runner, options, input, "create");
@@ -70,9 +43,11 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
   const projectName = validateLifecycleName(input.project, "project");
   const name = validateLifecycleName(input.name, "CI runner");
   const state = new LifecycleState(options.stateRoot);
-  const release = await state.acquireCiRunnerLock(projectName);
+  const releaseProject = await state.acquireProjectLock(projectName); let projectLockHeld = true;
   try {
-    const project = await showProject(options, projectName);
+    const release = await state.acquireCiRunnerLock(projectName);
+    try {
+    const project = await state.readProject(projectName);
     if (!project.rootRepositoryAlias) throw new UserError(`project '${projectName}' has no root repository`);
     const existing = await readOptional(state, projectName, name);
     if (mode === "create" && existing) {
@@ -90,76 +65,149 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       throw new UserError("process limits apply only to the sysbox CI executor");
     }
     if (mode === "start" && existing?.executor.kind === "sysbox") {
-      const started = await runner.run("docker", ["start", existing.executor.containerName]);
-      if (started.exitCode !== 0) {
-        throw new UserError(`failed to start CI runner '${projectName}/${name}': ${started.stderr.trim()}`);
-      }
+      await releaseProject();
+      projectLockHeld = false;
+      await startCiRunnerContainer(runner, ciRunnerContainerPlan(existing, existing.executor));
       return saveExecutor(state, existing, ready(existing.executor));
     }
-    if (mode === "create" && executorKind === "qemu") {
-      const stale = (await state.listCiRunners()).find((candidate) =>
-        candidate.projectName === projectName
-          && candidate.executor.kind === "qemu"
-          && candidate.executor.image !== QEMU_CI_SUPERVISOR_IMAGE);
-      if (stale) {
-        throw new UserError(
-          `restart QEMU CI runner '${projectName}/${stale.name}' with this DIM version before adding another capacity`
-        );
-      }
+    if (mode === "start" && existing?.executor.kind === "qemu") {
+      await releaseProject(); projectLockHeld = false;
+      if (!await detectCiRunnerKvm()) throw new UserError("the qemu CI executor requires x86-64 and host /dev/kvm access");
+      const projectHook = await restorePersistedQemuProjectHook({ stateRoot: options.stateRoot, projectId: existing.projectId, provenance: existing.executor.projectHook });
+      const executor: QemuCiRunnerExecutor = { ...existing.executor, phase: "creating", updatedAt: new Date().toISOString() };
+      await removeCiRunnerContainer(runner, ciRunnerContainerPlan(existing, existing.executor));
+      let record = await saveExecutor(state, existing, executor);
+      const webhookUrl = ciRunnerQemuWebhookUrl(executor);
+      try {
+        await ensureRegistryCache(runner, options.stateRoot);
+        await ensureCiRunnerVolume(runner, { name: executor.volumeName, resource: "ci-qemu-data", project: projectName, projectId: record.projectId });
+        await ensureCiRunnerVolume(runner, { name: ciRunnerQemuDispatchVolumeName(projectName), resource: "ci-qemu-dispatch", project: projectName, projectId: record.projectId });
+        await ensureCiRunnerVolume(runner, { name: ciRunnerQemuCommonCacheVolumeName(), resource: "ci-qemu-common-cache" });
+        await ensureCiRunnerVolume(runner, { name: ciRunnerQemuProjectCacheVolumeName(projectName), resource: "ci-qemu-project-cache", project: projectName, projectId: record.projectId });
+        await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, project, webhookUrl);
+        await giteaCiCoordinator.removeRunner(runner, options, project, ciRunnerQemuRunnerName(projectName, name));
+        const imageKeys = qemuCiRunnerProductionImageKeys({ projectId: record.projectId, hook: executor.projectHook });
+        const registration = await giteaCiCoordinator.prepareRunner(runner, options, project);
+        const authorization = `Bearer ${randomBytes(32).toString("hex")}`;
+        const started = await runner.run("docker", ciRunnerQemuSupervisorLaunchArgs({ record, executor, registration, authorization, kvmGroupId: () => statSync("/dev/kvm").gid, ...imageKeys, projectHook }));
+        if (started.exitCode !== 0) throw new UserError(`failed to start QEMU CI runner '${projectName}/${name}': ${started.stderr.trim()}`);
+        await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, { url: webhookUrl, authorizationHeader: authorization });
+        record = { ...record, provider: registration.provider };
+        return saveExecutor(state, record, ready(executor));
+      } catch (error) { await saveExecutor(state, record, failed(executor, error)); throw error; }
     }
+    const snapshot = await resolveProtectedRootSnapshotLocked({ runner, options, project });
+    const runnerConfig = await loadCiRunnerConfig(snapshot);
     const now = new Date().toISOString();
     let record: CiRunnerRecord;
     if (executorKind === "sysbox") {
-      await ensureRegistryCache(runner);
+      await releaseProject();
+      projectLockHeld = false;
+      const hostImage = await resolveSysboxRunnerImage(runner, options.stateRoot, options.ciRunnerImage);
+      await ensureRegistryCache(runner, options.stateRoot);
       const previous = existing?.executor.kind === "sysbox" ? existing.executor : undefined;
       const effective = previous && input.resources === undefined && !previous.inheritsResources ? { resources: previous.resources, inheritsResources: false } : effectiveCiRunnerResources(options, input.resources);
-      const executor: SysboxCiRunnerExecutor = { kind: "sysbox", phase: "creating", containerName: ciRunnerContainerName(projectName, name), volumeName: ciRunnerVolumeName(projectName, name), image: options.ciRunnerImage, runtime: options.ciRunnerRuntime, ...effective, labels: ["dim"], updatedAt: now };
-      record = await saveExecutor(state, existing ?? newRecord(project, name, executor, now), executor);
+      const labels = [...runnerConfig.config.workloads.ordinary.labels];
+      const executor: SysboxCiRunnerExecutor = { kind: "sysbox", phase: "creating", containerName: ciRunnerContainerName(projectName, name), volumeName: ciRunnerVolumeName(projectName, name), image: hostImage, runtime: options.ciRunnerRuntime, ...effective, labels, updatedAt: now };
+      record = await saveExecutor(state, {
+        ...(existing ?? newRecord({ project, name, executor, config: runnerConfig.provenance, now })),
+        config: runnerConfig.provenance
+      }, executor);
       try {
-        if (executor.image === SYSBOX_CI_RUNNER_IMAGE) {
-          await buildSysboxRunnerImage(runner, options.stateRoot);
-        }
-        await removeContainer(runner, executor.containerName);
-        await ensureVolume(runner, executor.volumeName);
+        await removeCiRunnerContainer(runner, ciRunnerContainerPlan(record, executor));
+        await ensureCiRunnerVolume(runner, { name: executor.volumeName, resource: "ci-runner-data", project: projectName, projectId: project.id });
         await configureSysboxRegistryMirror(runner, executor.volumeName);
-        if (await registrationExists(runner, executor.volumeName)) {
+        await probeCiRunnerWorkloads(runner, {
+          config: runnerConfig.config,
+          hostImage: executor.image,
+          runtime: executor.runtime,
+          projectName,
+          projectId: project.id,
+          capacityName: name,
+          executorKind
+        });
+        if (await sysboxRegistrationExists(runner, executor.volumeName)) {
           await giteaCiCoordinator.removeRunner(runner, options, project, executor.containerName);
-          await removeRegistration(runner, executor.volumeName);
+          await removeSysboxRegistration(runner, executor.volumeName);
         }
         const registration = await giteaCiCoordinator.prepareRunner(runner, options, project);
-        const started = await runner.run("docker", ciRunnerContainerArgs(record, executor, registration, true));
+        const started = await runner.run("docker", ciRunnerContainerArgs({
+          record,
+          executor,
+          labels: ciRunnerLabels(runnerConfig.config),
+          registration,
+          registryMirror: true
+        }));
         if (started.exitCode !== 0) throw new UserError(`failed to start sysbox CI runner '${projectName}/${name}': ${started.stderr.trim()}`);
         record = { ...record, provider: registration.provider };
         return saveExecutor(state, record, ready(executor));
       } catch (error) { await saveExecutor(state, record, failed(executor, error)); throw error; }
     }
     if (!await detectCiRunnerKvm()) throw new UserError("the qemu CI executor requires x86-64 and host /dev/kvm access");
-    await ensureRegistryCache(runner);
     const previous = existing?.executor.kind === "qemu" ? existing.executor : undefined;
     const effective = previous && input.resources === undefined && !previous.inheritsResources
       ? { resources: previous.resources, inheritsResources: false }
       : effectiveQemuCiRunnerResources(options, input.resources);
-    const executor: QemuCiRunnerExecutor = { kind: "qemu", phase: "creating", supervisorName: ciRunnerQemuSupervisorName(projectName, name), volumeName: ciRunnerQemuVolumeName(projectName, name), image: QEMU_CI_SUPERVISOR_IMAGE, ...effective, labels: ["dim-qemu"], updatedAt: now };
-    record = await saveExecutor(state, existing ?? newRecord(project, name, executor, now), executor);
+    const projectHook = await prepareQemuProjectHookFromSnapshot({ stateRoot: options.stateRoot, snapshot });
+    await releaseProject();
+    projectLockHeld = false;
+    const hostImage = await resolveSysboxRunnerImage(runner, options.stateRoot, options.ciRunnerImage);
+    const supervisorImage = await prepareQemuCiRunnerSupervisorImage(runner, options.stateRoot);
+    const executor: QemuCiRunnerExecutor = {
+      kind: "qemu", phase: "creating", supervisorName: ciRunnerQemuSupervisorName(projectName, name),
+      volumeName: ciRunnerQemuVolumeName(projectName, name), image: supervisorImage,
+      projectHook: { sourceRef: projectHook.sourceRef, sourceCommit: projectHook.sourceCommit, kind: projectHook.kind, digest: projectHook.digest },
+      ...effective,
+      labels: [...qemuCiRunnerLabelNames(runnerConfig.config)],
+      jobImage: runnerConfig.config.workloads.integration.image,
+      updatedAt: now
+    };
+    record = {
+      ...(existing ?? newRecord({ project, name, executor, config: runnerConfig.provenance, now })),
+      config: runnerConfig.provenance,
+      executor
+    };
+    await removeCiRunnerContainer(runner, ciRunnerContainerPlan(record, executor));
+    record = await saveExecutor(state, record, executor);
     const webhookUrl = ciRunnerQemuWebhookUrl(executor);
     try {
+      await ensureRegistryCache(runner, options.stateRoot);
       await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, project, webhookUrl);
-      await removeContainer(runner, executor.supervisorName);
       await giteaCiCoordinator.removeRunner(runner, options, project, ciRunnerQemuRunnerName(projectName, name));
-      await ensureVolume(runner, executor.volumeName);
-      await ensureVolume(runner, ciRunnerQemuDispatchVolumeName(projectName));
-      await ensureVolume(runner, ciRunnerQemuCacheVolumeName(projectName));
+      await ensureCiRunnerVolume(runner, { name: executor.volumeName, resource: "ci-qemu-data", project: projectName, projectId: project.id });
+      await ensureCiRunnerVolume(runner, { name: ciRunnerQemuDispatchVolumeName(projectName), resource: "ci-qemu-dispatch", project: projectName, projectId: project.id });
+      await ensureCiRunnerVolume(runner, { name: ciRunnerQemuCommonCacheVolumeName(), resource: "ci-qemu-common-cache" });
+      await ensureCiRunnerVolume(runner, { name: ciRunnerQemuProjectCacheVolumeName(projectName), resource: "ci-qemu-project-cache", project: projectName, projectId: project.id });
+      const imageKeys = qemuCiRunnerProductionImageKeys({ projectId: project.id, hook: executor.projectHook });
+      await probeCiRunnerWorkloads(runner, {
+        config: runnerConfig.config,
+        hostImage,
+        runtime: options.ciRunnerRuntime,
+        projectName,
+        projectId: project.id,
+        capacityName: name,
+        executorKind
+      });
       const registration = await giteaCiCoordinator.prepareRunner(runner, options, project);
       const authorization = `Bearer ${randomBytes(32).toString("hex")}`;
-      const projectCache = await prepareQemuProjectCacheHook(runner, options, project);
-      await buildQemuSupervisorImage(runner, options.stateRoot);
-      const started = await runner.run("docker", ciRunnerQemuSupervisorArgs(record, executor, registration, authorization, undefined, projectCache));
+      const started = await runner.run("docker", ciRunnerQemuSupervisorLaunchArgs({
+        record,
+        executor,
+        registration,
+        authorization,
+        kvmGroupId: () => statSync("/dev/kvm").gid,
+        ...imageKeys,
+        projectHook
+      }));
       if (started.exitCode !== 0) throw new UserError(`failed to start QEMU CI runner '${projectName}/${name}': ${started.stderr.trim()}`);
       await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, { url: webhookUrl, authorizationHeader: authorization });
       record = { ...record, provider: registration.provider };
       return saveExecutor(state, record, ready(executor));
     } catch (error) { await saveExecutor(state, record, failed(executor, error)); throw error; }
-  } finally { await release(); }
+    } finally { await release(); }
+  } finally {
+    if (projectLockHeld) await releaseProject();
+  }
 }
 
 export async function showCiRunner(options: LifecycleOptions, project: string, name: string): Promise<CiRunnerRecord> { return new LifecycleState(options.stateRoot).readCiRunner(validateLifecycleName(project, "project"), validateLifecycleName(name, "CI runner")); }
@@ -167,17 +215,18 @@ export async function listCiRunners(options: LifecycleOptions): Promise<CiRunner
 
 export async function stopCiRunner(runner: StreamingCommandRunner, options: LifecycleOptions, project: string, name: string): Promise<CiRunnerRecord> {
   const state = new LifecycleState(options.stateRoot); project = validateLifecycleName(project, "project"); name = validateLifecycleName(name, "CI runner");
-  const release = await state.acquireCiRunnerLock(project);
+  const releaseProject = await state.acquireProjectLock(project);
   try {
-    const record = await state.readCiRunner(project, name); const executor = record.executor;
-    if (executor.kind === "qemu") await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, await showProject(options, project), ciRunnerQemuWebhookUrl(executor));
-    const container = executor.kind === "sysbox" ? executor.containerName : executor.supervisorName;
-    const stopped = await runner.run("docker", ["stop", container]);
-    if (stopped.exitCode !== 0 && !stopped.stderr.includes("No such container")) throw new UserError(`failed to stop CI runner '${project}/${name}': ${stopped.stderr.trim()}`);
-    const updated = await saveExecutor(state, record, { ...executor, phase: "stopped", updatedAt: new Date().toISOString() } as typeof executor);
-    if (executor.kind === "qemu") await giteaCiCoordinator.reconcileWorkflowJobWebhookTargets(runner, options);
-    return updated;
-  } finally { await release(); }
+    const release = await state.acquireCiRunnerLock(project);
+    try {
+      const projectRecord = await state.readProject(project); const record = await state.readCiRunner(project, name); const executor = record.executor;
+      await stopCiRunnerContainer(runner, ciRunnerContainerPlan(record, executor));
+      if (executor.kind === "qemu") await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, projectRecord, ciRunnerQemuWebhookUrl(executor));
+      const updated = await saveExecutor(state, record, { ...executor, phase: "stopped", updatedAt: new Date().toISOString() } as typeof executor);
+      if (executor.kind === "qemu") await giteaCiCoordinator.reconcileWorkflowJobWebhookTargets(runner, options);
+      return updated;
+    } finally { await release(); }
+  } finally { await releaseProject(); }
 }
 
 export async function deleteCiRunner(runner: StreamingCommandRunner, options: LifecycleOptions, project: string, name: string): Promise<void> {
@@ -186,81 +235,25 @@ export async function deleteCiRunner(runner: StreamingCommandRunner, options: Li
   try {
     const record = await state.readCiRunner(project, name); const executor = record.executor; const projectRecord = await showProject(options, project);
     if (executor.kind === "sysbox") {
-      await removeContainer(runner, executor.containerName); await giteaCiCoordinator.removeRunner(runner, options, projectRecord, executor.containerName); await removeVolume(runner, executor.volumeName, `sysbox CI runner data for '${project}/${name}'`);
+      await removeCiRunnerContainer(runner, ciRunnerContainerPlan(record, executor));
+      await giteaCiCoordinator.removeRunner(runner, options, projectRecord, executor.containerName);
+      await removeCiRunnerVolume(runner, { name: executor.volumeName, resource: "ci-runner-data", project, projectId: record.projectId }, `sysbox CI runner data for '${project}/${name}'`);
     } else {
-      await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, projectRecord, ciRunnerQemuWebhookUrl(executor)); await removeContainer(runner, executor.supervisorName); await giteaCiCoordinator.removeRunner(runner, options, projectRecord, ciRunnerQemuRunnerName(project, name)); await removeVolume(runner, executor.volumeName, `QEMU runner data for '${project}/${name}'`);
+      await removeCiRunnerContainer(runner, ciRunnerContainerPlan(record, executor)); await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, projectRecord, ciRunnerQemuWebhookUrl(executor)); await giteaCiCoordinator.removeRunner(runner, options, projectRecord, ciRunnerQemuRunnerName(project, name));
+      const remainingCapacityNames = (await state.listCiRunners()).filter((candidate) => candidate.projectName === project && candidate.name !== name && candidate.executor.kind === "qemu").map((candidate) => candidate.name);
+      const volumes = ciRunnerQemuVolumeDeletionPlans({ project, projectId: record.projectId, capacityName: name, remainingCapacityNames });
+      for (const volume of volumes) await removeCiRunnerVolume(runner, volume, `QEMU CI runner resource for '${project}/${name}'`);
+      if (remainingCapacityNames.length === 0) await removeQemuProjectImageState(options.stateRoot, record.projectId);
+      await giteaCiCoordinator.reconcileWorkflowJobWebhookTargets(runner, options, { project, name });
     }
     await state.removeCiRunner(project, name);
-    if (executor.kind === "qemu" && !(await state.listCiRunners()).some((candidate) =>
-      candidate.projectName === project && candidate.executor.kind === "qemu")) {
-      await removeVolume(runner, ciRunnerQemuDispatchVolumeName(project), `QEMU dispatch data for '${project}'`);
-      await removeVolume(runner, ciRunnerQemuCacheVolumeName(project), `QEMU image cache for '${project}'`);
-    }
-    if (executor.kind === "qemu") await giteaCiCoordinator.reconcileWorkflowJobWebhookTargets(runner, options);
   } finally { await release(); }
 }
 
-async function readOptional(state: LifecycleState, project: string, name: string): Promise<CiRunnerRecord | undefined> { try { return await state.readCiRunner(project, name); } catch (error) { if (error instanceof UserError && error.message.includes("not found")) return undefined; throw error; } }
-function newRecord(project: { id: string; name: string }, name: string, executor: SysboxCiRunnerExecutor | QemuCiRunnerExecutor, now: string): CiRunnerRecord { return { schemaVersion: 4, name, projectId: project.id, projectName: project.name, provider: "pending", executor, createdAt: now, updatedAt: now }; }
+async function readOptional(state: LifecycleState, project: string, name: string): Promise<CiRunnerRecord | undefined> { try { return await state.readCiRunner(project, name); } catch (error) { if (error instanceof MissingRecordError) return undefined; throw error; } }
+function newRecord(input: { project: { id: string; name: string }; name: string; executor: SysboxCiRunnerExecutor | QemuCiRunnerExecutor; config: CiRunnerRecord["config"]; now: string }): CiRunnerRecord { return { schemaVersion: 8, name: input.name, projectId: input.project.id, projectName: input.project.name, provider: "pending", config: input.config, executor: input.executor, createdAt: input.now, updatedAt: input.now }; }
 async function saveExecutor(state: LifecycleState, record: CiRunnerRecord, executor: SysboxCiRunnerExecutor | QemuCiRunnerExecutor): Promise<CiRunnerRecord> { const updated = { ...record, executor, updatedAt: new Date().toISOString() }; await state.writeCiRunner(updated); return updated; }
 function ready<T extends SysboxCiRunnerExecutor | QemuCiRunnerExecutor>(executor: T): T { const value = { ...executor, phase: "ready", updatedAt: new Date().toISOString() }; delete value.error; return value; }
 function failed<T extends SysboxCiRunnerExecutor | QemuCiRunnerExecutor>(executor: T, error: unknown): T { return { ...executor, phase: "error", updatedAt: new Date().toISOString(), error: error instanceof Error ? error.message : String(error) }; }
 
-function runnerResourcePrefix(project: string, name: string): string { return `dim-ci-${validateLifecycleName(project, "project")}-${validateLifecycleName(name, "CI runner")}`; }
-export function ciRunnerContainerName(project: string, name: string): string { return runnerResourcePrefix(project, name); }
-export function ciRunnerVolumeName(project: string, name: string): string { return `${runnerResourcePrefix(project, name)}-data`; }
-export function ciRunnerQemuSupervisorName(project: string, name: string): string { return `${runnerResourcePrefix(project, name)}-qemu-supervisor`; }
-export function ciRunnerQemuRunnerName(project: string, name: string): string { return `${runnerResourcePrefix(project, name)}-qemu`; }
-export function ciRunnerQemuVolumeName(project: string, name: string): string { return `${runnerResourcePrefix(project, name)}-qemu-data`; }
-export function ciRunnerQemuDispatchVolumeName(project: string): string { return `dim-ci-${validateLifecycleName(project, "project")}-qemu-dispatch`; }
-export function ciRunnerQemuCacheVolumeName(project: string): string { return `dim-ci-${validateLifecycleName(project, "project")}-qemu-cache`; }
 function ciRunnerQemuWebhookUrl(executor: QemuCiRunnerExecutor): string { return `http://${executor.supervisorName}:8080/workflow-job`; }
-
-export function ciRunnerContainerArgs(record: Pick<CiRunnerRecord, "projectName" | "name">, executor: SysboxCiRunnerExecutor, registration?: { instanceUrl: string; token: string }, registryMirror = false): string[] {
-  return ["run", "--detach", "--name", executor.containerName, "--restart", "unless-stopped", "--network", CONTROL_NETWORK, "--runtime", executor.runtime, "--cpus", executor.resources.cpus, "--memory", executor.resources.memory, "--pids-limit", executor.resources.pidsLimit, "--mount", `type=volume,source=${executor.volumeName},target=/data`, ...(registryMirror ? ["--mount", `type=volume,source=${executor.volumeName},target=/etc/docker/daemon.json,volume-subpath=docker-daemon.json,readonly`, "--env", `DIM_CI_REGISTRY_CACHE_UPSTREAM=${REGISTRY_CACHE_ENDPOINT}`] : []), "--label", "dim.managed=true", "--label", "dim.resource=ci-runner", "--label", `dim.project=${record.projectName}`, "--label", `dim.ci-runner=${record.name}`, "--env", `GITEA_RUNNER_NAME=${executor.containerName}`, "--env", `GITEA_RUNNER_LABELS=${CI_RUNNER_LABELS}`, ...(registration ? ["--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`, "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`] : []), executor.image];
-}
-export function ciRunnerQemuSupervisorArgs(record: Pick<CiRunnerRecord, "projectName" | "name">, executor: QemuCiRunnerExecutor, registration: { instanceUrl: string; token: string }, authorization: string, kvmGroupId: (() => number) | undefined = undefined, projectCache: { path: string; key: string } = { path: "/dev/null", key: "none" }): string[] {
-  const guestMemoryMiB = qemuMemoryMiB(executor.resources.memory);
-  return ["run", "--detach", "--name", executor.supervisorName, "--restart", "unless-stopped", "--network", CONTROL_NETWORK, "--runtime", "runc", "--cpus", executor.resources.cpus, "--memory", `${guestMemoryMiB + 2048}m`, "--pids-limit", "1024", "--device", "/dev/kvm", "--group-add", String((kvmGroupId ?? (() => statSync("/dev/kvm").gid))()), "--mount", `type=volume,source=${executor.volumeName},target=/var/lib/dim-qemu-ci`, "--mount", `type=volume,source=${ciRunnerQemuDispatchVolumeName(record.projectName)},target=/var/lib/dim-qemu-ci-dispatch`, "--mount", `type=volume,source=${ciRunnerQemuCacheVolumeName(record.projectName)},target=/var/lib/dim-qemu-ci-cache`, "--mount", `type=bind,source=${projectCache.path},target=/var/lib/dim-qemu-ci-project/cache.bash,readonly`, "--label", "dim.managed=true", "--label", "dim.resource=ci-qemu-supervisor", "--label", `dim.project=${record.projectName}`, "--label", `dim.ci-runner=${record.name}`, "--env", `GITEA_INSTANCE_URL=${registration.instanceUrl}`, "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${registration.token}`, "--env", `GITEA_RUNNER_NAME=${ciRunnerQemuRunnerName(record.projectName, record.name)}`, "--env", `DIM_CI_REGISTRY_CACHE_UPSTREAM=${REGISTRY_CACHE_ENDPOINT}`, "--env", `DIM_QEMU_CI_PROJECT_CACHE_KEY=${projectCache.key}`, "--env", `DIM_QEMU_CI_CAPACITY=${record.name}`, "--env", `DIM_QEMU_CI_CPUS=${executor.resources.cpus}`, "--env", `DIM_QEMU_CI_MEMORY_MB=${guestMemoryMiB}`, "--env", `DIM_QEMU_WEBHOOK_AUTHORIZATION=${authorization}`, executor.image];
-}
-
-export function qemuMemoryMiB(memory: string): number {
-  const match = /^([1-9][0-9]*)([kmgt]?)(?:i?b?)?$/i.exec(memory);
-  if (!match) throw new UserError("QEMU CI runner memory must be a positive memory size");
-  const value = Number(match[1]);
-  const unit = (match[2] ?? "").toLowerCase();
-  const multiplier = unit === "t" ? 1024 * 1024 : unit === "g" ? 1024 : unit === "m" ? 1 : unit === "k" ? 1 / 1024 : 1 / (1024 * 1024);
-  return Math.ceil(value * multiplier);
-}
-
-async function buildQemuSupervisorImage(runner: StreamingCommandRunner, stateRoot: string): Promise<void> { const context = path.join(stateRoot, "assets", "qemu-ci-supervisor"); await mkdir(context, { recursive: true, mode: 0o700 }); await writeFile(path.join(context, "Dockerfile"), QEMU_CI_SUPERVISOR_DOCKERFILE, { mode: 0o600 }); await writeFile(path.join(context, "supervise.bash"), QEMU_CI_SUPERVISOR_SCRIPT, { mode: 0o600 }); await writeFile(path.join(context, "webhook.py"), QEMU_CI_WEBHOOK_SCRIPT, { mode: 0o600 }); await writeFile(path.join(context, "runner-base.pkr.hcl"), QEMU_CI_PACKER_TEMPLATE, { mode: 0o600 }); await writeFile(path.join(context, "provision-runner-base.bash"), QEMU_CI_PACKER_PROVISION_SCRIPT, { mode: 0o600 }); const result = await runner.run("docker", ["build", "--tag", QEMU_CI_SUPERVISOR_IMAGE, context]); if (result.exitCode !== 0) throw new UserError(`failed to build QEMU runner supervisor: ${result.stderr.trim()}`); }
-async function prepareQemuProjectCacheHook(runner: StreamingCommandRunner, options: LifecycleOptions, project: Awaited<ReturnType<typeof showProject>>): Promise<{ path: string; key: string }> {
-  const configured = await readProjectRootFile(runner, options, project.name, ".dim/ci/qemu-cache.bash");
-  if (configured !== undefined) {
-    const root = project.repositories.find((repository) => repository.alias === project.rootRepositoryAlias);
-    const rootRef = project.rootRef ?? "main";
-    const protectedRef = rootRef.replace(/^refs\/heads\//, "");
-    if (!root?.protectedPatterns.some((pattern) => protectedRefMatches(pattern, protectedRef))) {
-      throw new UserError(`Project QEMU cache hook requires protected root ref '${rootRef}'`);
-    }
-  }
-  const script = configured
-    ?? "#!/usr/bin/env bash\nset -euo pipefail\nmkdir -p \"${1:?cache directory is required}\"\n";
-  const directory = path.join(options.stateRoot, "assets", "qemu-ci-projects", project.name);
-  const scriptPath = path.join(directory, "cache.bash");
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  await writeFile(scriptPath, script, { mode: 0o600 });
-  return { path: scriptPath, key: createHash("sha256").update(script).digest("hex").slice(0, 16) };
-}
-function protectedRefMatches(pattern: string, ref: string): boolean {
-  const expression = pattern
-    .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*/g, ".*");
-  return new RegExp(`^${expression}$`).test(ref);
-}
-async function buildSysboxRunnerImage(runner: StreamingCommandRunner, stateRoot: string): Promise<void> { const context = path.join(stateRoot, "assets", "sysbox-ci-runner"); await mkdir(context, { recursive: true, mode: 0o700 }); await writeFile(path.join(context, "Dockerfile"), SYSBOX_CI_RUNNER_DOCKERFILE, { mode: 0o600 }); await writeFile(path.join(context, "health.bash"), SYSBOX_CI_RUNNER_HEALTH_SCRIPT, { mode: 0o700 }); const result = await runner.run("docker", ["build", "--tag", SYSBOX_CI_RUNNER_IMAGE, context]); if (result.exitCode !== 0) throw new UserError(`failed to build Sysbox CI runner image: ${result.stderr.trim()}`); }
-async function removeContainer(runner: StreamingCommandRunner, name: string): Promise<void> { const result = await runner.run("docker", ["container", "rm", "--force", name]); if (result.exitCode !== 0 && !result.stderr.includes("No such container")) throw new UserError(`failed to replace CI runner container '${name}': ${result.stderr.trim()}`); }
-async function ensureVolume(runner: StreamingCommandRunner, name: string): Promise<void> { if ((await runner.run("docker", ["volume", "inspect", name])).exitCode === 0) return; const result = await runner.run("docker", ["volume", "create", "--label", "dim.managed=true", "--label", "dim.resource=ci-runner-data", name]); if (result.exitCode !== 0) throw new UserError(`failed to create CI runner data volume: ${result.stderr.trim()}`); }
-async function removeVolume(runner: StreamingCommandRunner, name: string, description: string): Promise<void> { const result = await runner.run("docker", ["volume", "rm", name]); if (result.exitCode !== 0 && !result.stderr.includes("No such volume")) throw new UserError(`failed to remove ${description}: ${result.stderr.trim()}`); }
-async function registrationExists(runner: StreamingCommandRunner, volume: string): Promise<boolean> { return (await runner.run("docker", ["run", "--rm", "--mount", `type=volume,source=${volume},target=/data`, "--entrypoint", "sh", "alpine:3.22", "-c", "test -s /data/.runner"])).exitCode === 0; }
-async function removeRegistration(runner: StreamingCommandRunner, volume: string): Promise<void> { const result = await runner.run("docker", ["run", "--rm", "--mount", `type=volume,source=${volume},target=/data`, "--entrypoint", "sh", "alpine:3.22", "-c", "rm -f /data/.runner"]); if (result.exitCode !== 0) throw new UserError(`failed to reset CI runner registration: ${result.stderr.trim()}`); }

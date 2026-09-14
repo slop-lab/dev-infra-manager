@@ -4,6 +4,7 @@ import { publishPackageVersion } from "../../../scripts/publish-package-version.
 
 const sourcePath = new URL("../package.json", import.meta.url);
 const outputPath = new URL("../dist/package.json", import.meta.url);
+const versionModulePath = new URL("../dist/package-version.js", import.meta.url);
 const source = JSON.parse(await readFile(sourcePath, "utf8"));
 
 if (source.private !== true) {
@@ -29,5 +30,6 @@ if ("private" in output) {
 }
 
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);
+await writeFile(versionModulePath, `export const packageVersion = ${JSON.stringify(output.version)};\n`);
 await copyFile(new URL("../README.md", import.meta.url), new URL("../dist/README.md", import.meta.url));
 await copyFile(new URL("../../../LICENSE", import.meta.url), new URL("../dist/LICENSE", import.meta.url));
