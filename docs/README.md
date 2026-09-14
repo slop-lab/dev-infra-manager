@@ -61,7 +61,9 @@ The documentation is split by concern:
 - [Adopting DIM Safely](adoption.md): mandatory human review, version pinning, and branch policy for consuming projects.
 - [Architecture](architecture.md): core runtime boundaries and Git/review flow.
 - [Monorepo Structure](monorepo.md): workspace layout, dependency direction, and optional hosting provider boundaries.
-- [DIM Development Repositories](development-repositories.md): canonical GitHub source and the provider-neutral DIM-managed development host.
+- [DIM Development Repositories](development-repositories.md): split GitLab
+  development upstreams, the DIM-managed internal review host, and canonical
+  GitHub publication.
 - [DIM Self-development Boundaries](self-development-boundaries.md): planned `root`, `core`, `development`, and plugin review boundaries.
 - [Resource Isolation](resource-isolation.md): resource limits and runtime isolation.
 - [Usage](usage.md): local setup, commands, and operational workflow.

@@ -45,11 +45,12 @@ materializes every repository into siblings, verifies production repositories
 without the development repositories, and then runs each paired development
 suite. Consequently a reviewer can audit the exact production build inputs
 without first trusting test or development-environment code.
-Every managed repository uses `main`, with external import and publish
-mappings configured by the reviewed root catalog;
-only the self Project's `root/main` and `development/main` require protected-ref
-review. Repository-specific CI policy can move with each destination when the
-temporary branches become separate canonical repositories.
+Every managed repository uses `main`. The reviewed root catalog maps each one
+to an independent GitLab development upstream on `main`; only the self
+Project's `root/main` and `development/main` require protected-ref review.
+DIM-managed Gitea remains the internal review host. Publishing the 11 managed
+heads updates GitLab only, while integrated canonical publication and release
+on GitHub remain separate trusted maintainer actions.
 
 ## Dependency Direction
 
@@ -146,8 +147,9 @@ Create the split Project and a persistent workspace:
 
 ```bash
 dim project create dim-self \
-  --bootstrap-git-url https://github.com/slop-lab/dev-infra-manager.git \
-  --bootstrap-git-ref dev/root
+  --bootstrap-git-url https://gitlab.com/slop-lab/dim/root.git \
+  --bootstrap-git-ref main \
+  --apply-repos
 dim workspace create dim-self dim-self-dev
 dim workspace run dim-self-dev codex
 ```
