@@ -7,7 +7,7 @@ ARG DIM_WORKSPACE_GID=1000
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      bash ca-certificates curl git jq netcat-openbsd openssh-server tini \
+      acl bash ca-certificates curl git jq netcat-openbsd openssh-server tini \
  && rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub \
  && rm -rf /var/lib/apt/lists/* \
  && test "$DIM_WORKSPACE_UID" -ne 0 \
@@ -24,14 +24,14 @@ RUN apt-get update \
  && if test -n "$existing_user"; then \
        if test "$existing_user" = dim-agent; then \
          usermod --gid "$DIM_WORKSPACE_GID" --home /home/dim-agent \
-           --shell /bin/bash dim-agent; \
+           --shell /usr/local/bin/dim-agent-shell dim-agent; \
        else \
          usermod --login dim-agent --gid "$DIM_WORKSPACE_GID" \
-           --home /home/dim-agent --move-home --shell /bin/bash "$existing_user"; \
+           --home /home/dim-agent --move-home --shell /usr/local/bin/dim-agent-shell "$existing_user"; \
        fi; \
      else \
        useradd --uid "$DIM_WORKSPACE_UID" --gid "$DIM_WORKSPACE_GID" \
-         --home-dir /home/dim-agent --shell /bin/bash dim-agent; \
+         --home-dir /home/dim-agent --shell /usr/local/bin/dim-agent-shell dim-agent; \
      fi \
  && passwd --delete dim-agent \
  && mkdir -p /home/dim-agent \
@@ -44,8 +44,9 @@ RUN apt-get update \
       'PasswordAuthentication no' \
       'PermitEmptyPasswords no' \
       'KbdInteractiveAuthentication no' \
+      'PermitUserEnvironment no' \
       'AllowUsers dim-agent' \
-      > /etc/ssh/sshd_config.d/10-dim-key-only.conf
+      > /etc/ssh/sshd_config
 RUN set -eux; \
     case "$TARGETARCH" in \
       amd64) just_target=x86_64; just_sha=6a3003f68fa4d86ada8afe33830a88ffdb6c2fcaff4e5a840b1cb90eaf6f46fc ;; \
@@ -61,10 +62,11 @@ COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker-cli /usr/local/bin/docker-compose /usr/local/bin/docker-compose
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose \
   /usr/local/libexec/docker/cli-plugins/docker-compose
+COPY dim-agent-shell /usr/local/bin/dim-agent-shell
 COPY start-sshd.sh /usr/local/bin/start-sshd
 RUN npm install --global --allow-scripts=@anthropic-ai/claude-code \
       pnpm@10.13.1 @openai/codex@0.149.0 @anthropic-ai/claude-code@2.1.238
-RUN chmod 0755 /usr/local/bin/start-sshd
+RUN chmod 0755 /usr/local/bin/dim-agent-shell /usr/local/bin/start-sshd
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/usr/local/bin/start-sshd"]
