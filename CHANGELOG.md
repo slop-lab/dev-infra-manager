@@ -154,6 +154,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   installed entrypoint requires it.
 - Added managed workspace state, Compose service status, and bounded service
   logs when the multi-repository container smoke's Project setup fails.
+- The workspace-local protected QEMU verification service now uses strict
+  schema-1 `service-owner.json` ownership and rejects obsolete PID-only state.
+  Mode-`0600` records bind the exact `pid`, `startTicks`, `argv`, executable,
+  `cwd`, and socket identity, with atomic durable publication that never
+  replaces an existing owner. Replacement fails closed while preserving the
+  active service, and cleanup cannot remove a successor's files. Startup,
+  cancellation, and process-group shutdown through TERM and KILL are bounded.
+  Input snapshots stream from open directory handles, while event delivery
+  retains an 8 MiB replay window, allows at most 16 followers, and disconnects
+  a follower when a stream write returns false.
 
 ### Fixed
 
