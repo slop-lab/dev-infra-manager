@@ -61,7 +61,7 @@ describe("canonical non-root SSH practical authority", () => {
     const agent = await readFile(projectAgent, "utf8");
 
     expect(setup).toContain('install -d -m 0755 "$qemu_service_dir"');
-    expect(service).toContain("await mkdir(path.dirname(socketPath), { recursive: true, mode: 0o755 })");
+    expect(service).toContain("await mkdir(serviceDirectory, { recursive: true, mode: 0o755 })");
     expect(service).toContain("await chmod(socketPath, 0o666)");
     expect(service).not.toContain("chmod(socketPath, 0o600)");
     expect(service).not.toContain("mode: 0o777");
@@ -130,6 +130,10 @@ describe("full-development non-root SSH practical authority", () => {
     const runtimeMounts =
       compose.match(/^\s+- [^:\n]+:\/run\/dim-agent-dind$/gm)?.map((mount) => mount.trim()) ?? [];
 
+    expect(compose).toMatch(
+      /^  agent:[\s\S]*?^    depends_on:\n      agent-dind:\n        condition: service_healthy/m
+    );
+    expect(compose).not.toMatch(/^  agent:\n(?:(?!^  \S+:)[\s\S])*?^    ports:/m);
     expect(
       compose.match(/DOCKER_HOST: "unix:\/\/\/run\/dim-agent-dind\/docker\.sock"/g) ?? []
     ).toHaveLength(2);
@@ -193,5 +197,22 @@ describe("full-development non-root SSH practical authority", () => {
     expect(`${compose}\n${startup}`).not.toMatch(
       /DIM_CONTROLLER_TOKEN|DIM_EXTERNAL_URL_SOCKET|DIM_EXTERNAL_URL_CONTAINERS_JSON|DIM_QEMU_VERIFICATION_SOCKET/
     );
+  });
+
+  it("checks the actual SSH listener with bounded healthcheck settings", async () => {
+    const compose = await readFile(fullDevelopmentCompose, "utf8");
+
+    expect(compose).toMatch(
+      /^  agent:\n(?:(?!^  \S+:)[\s\S])*?^    healthcheck:\n      test: \["CMD-SHELL", "nc -z 127\.0\.0\.1 22"\]\n      interval: 1s\n      timeout: 5s\n      retries: 60/m
+    );
+  });
+
+  it("waits boundedly for the actual SSH listener before setup returns", async () => {
+    const setup = await readFile(
+      resolve(workspaceRoot, "examples/projects/full-development-flow/repos/root/.dim/setup.sh"),
+      "utf8"
+    );
+
+    expect(setup).toContain("up --detach --build --force-recreate --wait --wait-timeout 60");
   });
 });
