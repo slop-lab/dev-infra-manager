@@ -79,61 +79,16 @@ fi
 
 qemu_service_dir=/tmp/dim-qemu-verification
 install -d -m 0755 "$qemu_service_dir"
-qemu_process_start_time() {
-  process_stat="$(cat "/proc/$1/stat")" || return 1
-  process_stat="${process_stat##*) }"
-  set -- $process_stat
-  test "$#" -ge 20 || return 1
-  shift 19
-  printf '%s\n' "$1"
-}
 if [ "${DIM_WORKSPACE_KVM}" = 1 ]; then
   echo "[setup] start QEMU service" >&2
-  qemu_pid_file="$qemu_service_dir/service.pid"
+  qemu_owner_file="$qemu_service_dir/service-owner.json"
   qemu_socket="$qemu_service_dir/service.sock"
-  if [ -e "$qemu_pid_file" ] || [ -L "$qemu_pid_file" ]; then
-    test -f "$qemu_pid_file" && test ! -L "$qemu_pid_file" && test -r "$qemu_pid_file" || {
-      echo "existing QEMU service PID record is unreadable" >&2
-      exit 1
-    }
-    old_pid="$(cat "$qemu_service_dir/service.pid")"
-    case "$old_pid" in
-      ''|0*|*[!0-9]*) echo "existing QEMU service PID record is malformed" >&2; exit 1 ;;
-    esac
-    test "$(wc -l <"$qemu_pid_file")" -eq 1 && test "${#old_pid}" -le 7 &&
-      test "$old_pid" -le "$(cat /proc/sys/kernel/pid_max)" || {
-      echo "existing QEMU service PID record is malformed" >&2
-      exit 1
-    }
-    if kill -0 "$old_pid" 2>/dev/null; then
-      expected_qemu_cwd="$(pwd -P)"
-      old_start_time="$(qemu_process_start_time "$old_pid")" &&
-        test -r "/proc/$old_pid/cmdline" &&
-        tr '\000' '\n' <"/proc/$old_pid/cmdline" | grep -Fxq '.dim/qemu-service.mjs' &&
-        test "$(readlink "/proc/$old_pid/cwd")" = "$expected_qemu_cwd" &&
-        test "$(qemu_process_start_time "$old_pid")" = "$old_start_time" || {
-        echo "existing QEMU service PID identity is ambiguous" >&2
-        exit 1
-      }
-      kill "$old_pid" 2>/dev/null || true
-      for _ in $(seq 1 50); do
-        kill -0 "$old_pid" 2>/dev/null || break
-        sleep 0.1
-      done
-      if kill -0 "$old_pid" 2>/dev/null &&
-        test "$(qemu_process_start_time "$old_pid")" = "$old_start_time"; then
-        echo "existing QEMU service $old_pid did not stop" >&2
-        exit 1
-      fi
-    elif [ -d "/proc/$old_pid" ]; then
-      echo "existing QEMU service PID identity is ambiguous" >&2
-      exit 1
-    fi
-  elif [ -e "$qemu_socket" ] || [ -L "$qemu_socket" ]; then
-    echo "existing QEMU service socket has no PID record" >&2
+  if [ -e "$qemu_service_dir/service.pid" ] || [ -L "$qemu_service_dir/service.pid" ]; then
+    echo "obsolete QEMU service.pid is not accepted" >&2
     exit 1
   fi
-  rm -f "$qemu_service_dir/service.sock" "$qemu_service_dir/service.pid"
+  node .dim/qemu-service-owner.mjs retire \
+    "$qemu_owner_file" "$qemu_socket" "$(pwd -P)" 5000
   install -m 0500 .dim/qemu-verify.bash "$qemu_service_dir/launcher.bash"
   DIM_QEMU_SOURCE_ROOT=/workspace \
   DIM_QEMU_LAUNCHER="$qemu_service_dir/launcher.bash" \
@@ -142,28 +97,36 @@ if [ "${DIM_WORKSPACE_KVM}" = 1 ]; then
     nohup node .dim/qemu-service.mjs >"$qemu_service_dir/service.log" 2>&1 &
   new_pid="$!"
   for _ in $(seq 1 50); do
-    test -r "$qemu_service_dir/service.pid" &&
-      test "$(cat "$qemu_service_dir/service.pid")" = "$new_pid" &&
+    node .dim/qemu-service-owner.mjs inspect \
+      "$qemu_owner_file" "$qemu_socket" "$(pwd -P)" "$new_pid" >/dev/null 2>&1 &&
       test -S "$qemu_service_dir/service.sock" &&
       test "$(stat -c %a "$qemu_service_dir/service.sock")" = 666 &&
       curl --fail --silent --max-time 1 --unix-socket "$qemu_service_dir/service.sock" \
         http://dim-qemu/v1/status >/dev/null 2>&1 && break
     sleep 0.1
   done
-  test -r "$qemu_service_dir/service.pid" &&
-    test "$(cat "$qemu_service_dir/service.pid")" = "$new_pid" &&
+  node .dim/qemu-service-owner.mjs inspect \
+    "$qemu_owner_file" "$qemu_socket" "$(pwd -P)" "$new_pid" >/dev/null 2>&1 &&
     test -S "$qemu_service_dir/service.sock" &&
     test "$(stat -c %a "$qemu_service_dir/service.sock")" = 666 &&
     curl --fail --silent --max-time 1 --unix-socket "$qemu_service_dir/service.sock" \
       http://dim-qemu/v1/status >/dev/null 2>&1 || {
-    kill "$new_pid" 2>/dev/null || true
-    for _ in $(seq 1 50); do
-      kill -0 "$new_pid" 2>/dev/null || break
-      sleep 0.1
-    done
-    kill -0 "$new_pid" 2>/dev/null && kill -KILL "$new_pid" 2>/dev/null || true
-    wait "$new_pid" 2>/dev/null || true
-    rm -f "$qemu_service_dir/service.sock" "$qemu_service_dir/service.pid"
+    if node .dim/qemu-service-owner.mjs inspect \
+      "$qemu_owner_file" "$qemu_socket" "$(pwd -P)" "$new_pid" >/dev/null 2>&1; then
+      node .dim/qemu-service-owner.mjs retire \
+        "$qemu_owner_file" "$qemu_socket" "$(pwd -P)" 5000
+    elif [ ! -e "$qemu_owner_file" ] && [ ! -L "$qemu_owner_file" ]; then
+      for _ in $(seq 1 50); do
+        kill -0 "$new_pid" 2>/dev/null || {
+          wait "$new_pid" 2>/dev/null || true
+          break
+        }
+        sleep 0.1
+      done
+      if kill -0 "$new_pid" 2>/dev/null; then
+        echo "QEMU service process $new_pid remained live without publishing $qemu_owner_file; refusing to signal an unowned process" >&2
+      fi
+    fi
     cat "$qemu_service_dir/service.log" >&2
     exit 1
   }
