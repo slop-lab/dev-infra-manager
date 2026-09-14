@@ -1,11 +1,10 @@
 import { spawn } from "node:child_process";
-import { chmod, lstat, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { stopProcessGroup } from "./qemu-process-group.mjs";
-import { initializeService } from "./qemu-service-startup.mjs";
+import { initializeService, shutdownService, socketLeasePath } from "./qemu-service-startup.mjs";
 import { snapshotInputs } from "./qemu-snapshot.mjs";
-import { removeIfOwned, restoreReplacedSocket, safeguardReplacedSocket } from "./qemu-service-owner.mjs";
 
 const sourceRoot = await realpath(process.env.DIM_QEMU_SOURCE_ROOT ?? "/workspace");
 const socketPath = process.env.DIM_QEMU_SERVICE_SOCKET ?? "/tmp/dim-qemu-verification/service.sock";
@@ -13,24 +12,20 @@ const launcher = process.env.DIM_QEMU_LAUNCHER ?? "/workspace/project/.dim/qemu-
 const serviceDirectory = path.dirname(socketPath);
 const pidPath = path.join(serviceDirectory, "service.pid");
 const ownerPath = path.join(serviceDirectory, "service-owner.json");
+const leasePath = socketLeasePath(socketPath);
 const runsRoot = path.join(serviceDirectory, "runs");
 let activeRun;
 let latestRun;
 let serviceState = "accepting";
 let shutdownPromise;
 
-await mkdir(serviceDirectory, { recursive: true, mode: 0o755 });
-for (const stalePath of [pidPath, ownerPath]) {
-  try { await lstat(stalePath); throw new Error(`refusing existing service artifact: ${stalePath}`); }
-  catch (error) { if (!error || error.code !== "ENOENT") throw error; }
-}
-
 const server = http.createServer((request, response) => {
   void handle(request, response).catch((error) => {
     if (!response.destroyed) sendJson(response, 400, { error: error instanceof Error ? error.message : String(error) });
   });
 });
-const startup = await initializeService({ ownerPath, runsRoot, server, socketPath }).catch((error) => {
+const startup = await initializeService({ serviceDirectory, pidPath, ownerPath, socketPath, leasePath,
+  runsRoot, server }).catch((error) => {
   reportFailure(error);
   return undefined;
 });
@@ -236,7 +231,7 @@ function beginShutdown() {
     run.response?.destroy();
   }
   shutdownPromise = shutdown(run);
-  void shutdownPromise.catch(reportFailure);
+  void shutdownPromise.catch((error) => { reportFailure(error); process.exit(1); });
   return shutdownPromise;
 }
 
@@ -245,16 +240,8 @@ async function shutdown(run) {
     await stopProcessGroup(run);
     await requestFinalization(run, "cancelled");
   }
-  const protectedSocket = await safeguardReplacedSocket(socketPath, socketIdentity);
-  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-  await restoreReplacedSocket(protectedSocket, socketPath);
-  await rm(runsRoot, { recursive: true, force: true });
-  await cleanupOwnedArtifacts();
+  await shutdownService({ ownerIdentity, ownerPath, runsRoot, server, socketIdentity, socketPath });
   serviceState = "stopped";
-}
-
-async function cleanupOwnedArtifacts() {
-  await Promise.all([removeIfOwned(ownerPath, ownerIdentity), removeIfOwned(socketPath, socketIdentity)]);
 }
 
 function reportFailure(error) {
