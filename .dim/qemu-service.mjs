@@ -1,30 +1,36 @@
 import { spawn } from "node:child_process";
-import { constants } from "node:fs";
-import { chmod, lstat, mkdir, mkdtemp, open, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
+import { snapshotInputs } from "./qemu-snapshot.mjs";
 
 const sourceRoot = await realpath(process.env.DIM_QEMU_SOURCE_ROOT ?? "/workspace");
 const socketPath = process.env.DIM_QEMU_SERVICE_SOCKET ?? "/tmp/dim-qemu-verification/service.sock";
 const launcher = process.env.DIM_QEMU_LAUNCHER ?? "/workspace/project/.dim/qemu-verify.bash";
-const runsRoot = path.join(path.dirname(socketPath), "runs");
+const serviceDirectory = path.dirname(socketPath);
+const pidPath = path.join(serviceDirectory, "service.pid");
+const runsRoot = path.join(serviceDirectory, "runs");
 let activeRun;
 let latestRun;
+let serviceState = "accepting";
+let shutdownPromise;
 
-await mkdir(path.dirname(socketPath), { recursive: true, mode: 0o755 });
-await rm(socketPath, { force: true });
-await rm(runsRoot, { recursive: true, force: true });
-await mkdir(runsRoot, { mode: 0o700 });
+await mkdir(serviceDirectory, { recursive: true, mode: 0o755 });
 
 const server = http.createServer((request, response) => {
-  void handle(request, response).catch((error) => sendJson(response, 400, {
-    error: error instanceof Error ? error.message : String(error)
-  }));
+  void handle(request, response).catch((error) => {
+    if (!response.destroyed) sendJson(response, 400, { error: error instanceof Error ? error.message : String(error) });
+  });
 });
-server.listen(socketPath, async () => {
-  await chmod(socketPath, 0o666);
-  await writeFile(path.join(path.dirname(socketPath), "service.pid"), `${process.pid}\n`);
+await new Promise((resolve, reject) => {
+  server.once("error", reject);
+  server.listen(socketPath, resolve);
 });
+await rm(runsRoot, { recursive: true, force: true });
+await mkdir(runsRoot, { mode: 0o700 });
+await chmod(socketPath, 0o666);
+const socketIdentity = await lstat(socketPath, { bigint: true });
+await writeFile(pidPath, `${process.pid}\n`);
 
 async function handle(request, response) {
   const url = new URL(request.url ?? "/", "http://dim-qemu");
@@ -40,44 +46,69 @@ async function handle(request, response) {
     return;
   }
   if (request.method === "POST" && url.pathname === "/v1/run") {
+    if (serviceState !== "accepting") return sendJson(response, 503, { error: "QEMU verification is stopping" });
     if (activeRun) return sendJson(response, 409, { error: "QEMU verification is already running" });
-    const run = claimRun();
+    const run = claimRun(request, response);
     try {
-      const body = await readJson(request);
-      const requestInputs = parseInputs(body.inputs ?? []);
-      if (body.verbose !== undefined && typeof body.verbose !== "boolean") throw new Error("verbose must be a boolean");
-      const mode = body.mode ?? "run";
-      if (mode !== "run" && mode !== "probe") throw new Error("mode must be 'run' or 'probe'");
-      if (mode === "probe" && (requestInputs.length > 0 || body.verbose === true)) throw new Error("probe does not accept inputs or verbose output");
-      run.state = { status: "running", startedAt: run.state.startedAt, inputs: requestInputs.map(({ name }) => name), verbose: body.verbose === true, mode };
-      const inputs = await snapshotInputs(run, requestInputs);
+      run.work = prepareRun(run);
+      const inputs = await run.work;
+      run.abort.signal.throwIfAborted();
+      run.work = undefined;
       start(run, inputs);
-      return sendJson(response, 202, run.state);
+      sendJson(response, 202, run.state);
+      run.request = undefined;
+      run.response = undefined;
+      return;
     } catch (error) {
-      await rejectRun(run);
-      throw error;
+      await requestFinalization(run, run.abort.signal.aborted ? "cancelled" : "rejected");
+      if (!run.abort.signal.aborted) throw error;
+      return;
     }
   }
   if (request.method === "DELETE" && url.pathname === "/v1/run") {
     const run = activeRun;
     if (!run?.child || run.state.status !== "running") return sendJson(response, 409, { error: "QEMU verification is not running" });
+    run.cancelled = true;
     stopChild(run);
     return sendJson(response, 202, { ...run.state, cancelling: true });
   }
   return sendJson(response, 404, { error: "not found" });
 }
 
-function claimRun() {
+function claimRun(request, response) {
+  let resolveFinalization;
+  const finalizationRequested = new Promise((resolve) => { resolveFinalization = resolve; });
   const run = {
-    child: undefined,
-    listeners: new Set(),
-    output: "",
-    snapshotRoot: undefined,
-    state: { status: "running", startedAt: new Date().toISOString(), inputs: [], verbose: false, mode: "run" }
+    abort: new AbortController(), cancelled: false,
+    child: undefined, childClosed: undefined, closeResult: undefined,
+    completion: undefined, finalizationRequested: false,
+    listeners: new Set(), output: "", request, response, resolveFinalization,
+    snapshotRoot: undefined, work: undefined,
+    state: { status: "running", startedAt: new Date().toISOString(), inputs: [], verbose: false, mode: "run" },
   };
+  run.completion = (async () => finalizeRun(run, await finalizationRequested))();
   activeRun = run;
   latestRun = run;
   return run;
+}
+
+async function prepareRun(run) {
+  const body = await readJson(run.request, run.abort.signal);
+  const requestInputs = parseInputs(body.inputs ?? []);
+  if (body.verbose !== undefined && typeof body.verbose !== "boolean") throw new Error("verbose must be a boolean");
+  const mode = body.mode ?? "run";
+  if (mode !== "run" && mode !== "probe") throw new Error("mode must be 'run' or 'probe'");
+  if (mode === "probe" && (requestInputs.length > 0 || body.verbose === true)) throw new Error("probe does not accept inputs or verbose output");
+  run.state = {
+    status: "running", startedAt: run.state.startedAt, inputs: requestInputs.map(({ name }) => name),
+    verbose: body.verbose === true, mode
+  };
+  run.snapshotRoot = await mkdtemp(path.join(runsRoot, "run-"));
+  await chmod(run.snapshotRoot, 0o700);
+  const inputsRoot = path.join(run.snapshotRoot, "inputs");
+  await mkdir(inputsRoot, { mode: 0o700 });
+  await chmod(inputsRoot, 0o700);
+  return snapshotInputs({ inputs: requestInputs, inputsRoot, sourceRoot, signal: run.abort.signal });
 }
 
 function parseInputs(value) {
@@ -94,115 +125,79 @@ function parseInputs(value) {
   });
 }
 
-async function snapshotInputs(run, inputs) {
-  run.snapshotRoot = await mkdtemp(path.join(runsRoot, "run-"));
-  await chmod(run.snapshotRoot, 0o700);
-  const inputsRoot = path.join(run.snapshotRoot, "inputs");
-  await mkdir(inputsRoot, { mode: 0o700 });
-  const snapshots = [];
-  for (const input of inputs) {
-    const source = await open(input.path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
-    try {
-      const openedPath = await realpath(`/proc/self/fd/${source.fd}`);
-      if (openedPath !== sourceRoot && !openedPath.startsWith(`${sourceRoot}/`)) {
-        throw new Error(`input '${input.name}' resolves outside ${sourceRoot}`);
-      }
-      const destination = path.join(inputsRoot, input.name);
-      await mkdir(destination, { mode: 0o700 });
-      await copySnapshot(source.fd, destination, input.name);
-      await validateSnapshot(destination, input.name);
-      snapshots.push({ name: input.name, path: destination });
-    } finally {
-      await source.close();
-    }
-  }
-  return snapshots;
-}
-
-async function copySnapshot(sourceFd, destination, inputName) {
-  const copier = spawn("cp", ["--recursive", "--no-dereference", "--", "/proc/self/fd/3/.", destination], {
-    stdio: ["ignore", "ignore", "pipe", sourceFd]
-  });
-  let stderr = "";
-  copier.stderr.on("data", (chunk) => { stderr = `${stderr}${String(chunk)}`.slice(-65_536); });
-  const result = await new Promise((resolve, reject) => {
-    copier.once("error", reject);
-    copier.once("close", (exitCode, signal) => resolve({ exitCode, signal }));
-  });
-  if (result.exitCode !== 0) {
-    throw new Error(`failed to snapshot input '${inputName}'${result.signal ? ` (${result.signal})` : ""}: ${stderr.trim()}`);
-  }
-}
-
-async function validateSnapshot(directory, inputName) {
-  for (const entry of await readdir(directory)) {
-    const target = path.join(directory, entry);
-    const metadata = await lstat(target);
-    if (metadata.isDirectory()) await validateSnapshot(target, inputName);
-    else if (!metadata.isFile() && !metadata.isSymbolicLink()) throw new Error(`input '${inputName}' contains an unsupported entry type`);
-  }
-}
-
 function start(run, inputs) {
+  run.abort.signal.throwIfAborted();
+  if (serviceState !== "accepting" || activeRun !== run || run.finalizationRequested) throw new Error("QEMU verification is stopping");
   const environment = { ...process.env };
   delete environment.DIM_QEMU_EXTRA_INPUTS_JSON;
   environment.DIM_QEMU_SOURCE_ROOT = sourceRoot;
   environment.DIM_QEMU_INPUT_SNAPSHOTS_JSON = JSON.stringify(inputs);
-  run.child = spawn("bash", [launcher, ...(run.state.mode === "probe" ? ["--probe"] : run.state.verbose ? ["--verbose"] : [])], {
-    cwd: sourceRoot,
-    env: environment,
-    detached: true,
-    stdio: ["ignore", "pipe", "pipe"]
+  const child = spawn("bash", [launcher, ...(run.state.mode === "probe" ? ["--probe"] : run.state.verbose ? ["--verbose"] : [])], {
+    cwd: sourceRoot, env: environment, detached: true, stdio: ["ignore", "pipe", "pipe"]
   });
+  run.child = child;
   const append = (chunk) => {
     run.output += String(chunk);
     if (run.output.length > 8 * 1024 * 1024) run.output = run.output.slice(-8 * 1024 * 1024);
     for (const listener of run.listeners) listener.write(chunk);
   };
-  run.child.stdout.on("data", append);
-  run.child.stderr.on("data", append);
-  run.child.on("error", (error) => append(`failed to start QEMU verification: ${error.message}\n`));
-  run.child.on("close", (exitCode, signal) => void finishRun(run, exitCode, signal));
+  child.stdout.on("data", append);
+  child.stderr.on("data", append);
+  child.on("error", (error) => append(`failed to start QEMU verification: ${error.message}\n`));
+  run.childClosed = new Promise((resolve) => {
+    child.once("close", (exitCode, signal) => {
+      run.closeResult = { exitCode, signal };
+      run.child = undefined;
+      resolve();
+      void requestFinalization(run, "closed").catch(reportFailure);
+    });
+  });
 }
 
-async function finishRun(run, exitCode, signal) {
-  run.state = {
-    ...run.state,
-    status: exitCode === 0 ? "success" : signal ? "cancelled" : "failure",
-    exitCode: exitCode ?? undefined,
-    signal: signal ?? undefined,
-    completedAt: new Date().toISOString()
-  };
-  run.child = undefined;
-  await removeSnapshots(run);
-  if (activeRun === run) activeRun = undefined;
-  for (const listener of run.listeners) listener.end();
-  run.listeners.clear();
+function requestFinalization(run, reason) {
+  if (!run.finalizationRequested) {
+    run.finalizationRequested = true;
+    run.resolveFinalization(reason);
+  }
+  return run.completion;
 }
 
-async function rejectRun(run) {
-  await removeSnapshots(run);
-  if (activeRun === run) activeRun = undefined;
-  if (latestRun === run) latestRun = undefined;
-  for (const listener of run.listeners) listener.end();
-  run.listeners.clear();
+async function finalizeRun(run, reason) {
+  try {
+    if (run.work) {
+      try { await run.work; } catch (error) {
+        if (reason !== "rejected" && !run.abort.signal.aborted) throw error;
+      }
+    }
+    if (run.childClosed) await run.childClosed;
+    if (reason !== "rejected") {
+      run.state = {
+        ...run.state,
+        status: run.cancelled || reason === "cancelled" ? "cancelled" : run.closeResult?.exitCode === 0 ? "success" : "failure",
+        exitCode: run.closeResult?.exitCode ?? undefined, signal: run.closeResult?.signal ?? undefined,
+        completedAt: new Date().toISOString()
+      };
+    }
+    if (run.snapshotRoot) await rm(run.snapshotRoot, { recursive: true, force: true });
+  } finally {
+    run.snapshotRoot = undefined;
+    if (activeRun === run) activeRun = undefined;
+    if (reason === "rejected" && latestRun === run) latestRun = undefined;
+    for (const listener of run.listeners) listener.end();
+    run.listeners.clear();
+  }
 }
 
-async function removeSnapshots(run) {
-  if (!run.snapshotRoot) return;
-  const snapshotRoot = run.snapshotRoot;
-  run.snapshotRoot = undefined;
-  await rm(snapshotRoot, { recursive: true, force: true });
-}
-
-async function readJson(request) {
+async function readJson(request, signal) {
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
+    signal.throwIfAborted();
     size += chunk.length;
     if (size > 65_536) throw new Error("request body is too large");
     chunks.push(chunk);
   }
+  signal.throwIfAborted();
   if (size === 0) return {};
   const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("request body must be an object");
@@ -216,22 +211,54 @@ function sendJson(response, status, value) {
   response.end(body);
 }
 
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.once(signal, () => void shutdown());
-}
-
-async function shutdown() {
-  const run = activeRun;
-  if (run?.child) {
-    const stopped = new Promise((resolve) => run.child.once("close", resolve));
-    stopChild(run);
-    await stopped;
-  }
-  await new Promise((resolve) => server.close(resolve));
-  process.exit(0);
-}
-
 function stopChild(run) {
   if (!run.child?.pid) return;
-  try { process.kill(-run.child.pid, "SIGTERM"); } catch {}
+  try { process.kill(-run.child.pid, "SIGTERM"); } catch (error) {
+    if (!error || error.code !== "ESRCH") throw error;
+  }
 }
+
+function beginShutdown() {
+  if (shutdownPromise) return shutdownPromise;
+  serviceState = "stopping";
+  const run = activeRun;
+  if (run) {
+    run.cancelled = true;
+    run.abort.abort();
+    run.request?.destroy();
+    run.response?.destroy();
+    stopChild(run);
+  }
+  shutdownPromise = shutdown(run);
+  void shutdownPromise.catch(reportFailure);
+  return shutdownPromise;
+}
+
+async function shutdown(run) {
+  if (run) await requestFinalization(run, "cancelled");
+  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  await rm(runsRoot, { recursive: true, force: true });
+  await removeOwnedArtifacts();
+  serviceState = "stopped";
+}
+
+async function removeOwnedArtifacts() {
+  try {
+    const current = await lstat(socketPath, { bigint: true });
+    if (current.dev === socketIdentity.dev && current.ino === socketIdentity.ino && current.isSocket()) await rm(socketPath, { force: true });
+  } catch (error) {
+    if (!error || error.code !== "ENOENT") throw error;
+  }
+  try {
+    if (await readFile(pidPath, "utf8") === `${process.pid}\n`) await rm(pidPath, { force: true });
+  } catch (error) {
+    if (!error || error.code !== "ENOENT") throw error;
+  }
+}
+
+function reportFailure(error) {
+  process.stderr.write(`${error instanceof Error ? error.stack ?? error.message : String(error)}\n`);
+  process.exitCode = 1;
+}
+
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, beginShutdown);
