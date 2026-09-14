@@ -90,16 +90,18 @@ Implemented:
 
 Acceptance verification on 2026-09-14: `just verify agent` exited 0.
 Core-development Vitest reported 784 passed and 40 intentionally skipped; the
-CLI reported 63 passed; verification reported 103 passed; and the plugin
+CLI reported 63 passed; verification reported 118 passed; and the plugin
 development suites reported 6 and 14 passed. Repository materialization,
 TypeScript checks, builds, seven package dry-runs, plugin installation,
 `project-runtime-cgroups`, `pull-request-skill`, and the `agent-docker` smoke
 passed. `just check-run-cli`, the SSH policy check, and shell syntax checks
-passed. The verification suite includes four QEMU admission and immutable-input
-snapshot regressions plus full-development fixed-shell authority policy and
-journey coverage. A direct Unix-socket QEMU service API smoke and static
-full-development Compose validation also passed. All 11 repository diffs
-passed `git diff --check` before the evidence update was committed.
+passed. The verification suite includes QEMU admission, immutable snapshot,
+shutdown, service-replacement, and socket-readiness regressions, including
+nested executable files and unsupported FIFOs, plus full-development
+fixed-shell authority and bounded SSH-readiness policy coverage. Direct
+Unix-socket QEMU service tests and static full-development Compose validation
+also passed. All changed repository diffs passed `git diff --check` before the
+evidence update was committed.
 
 OpenSSH 9.6 and Docker buildx 0.30.1 were installed in the development agent to
 exercise the capable-host entrypoint. The full-development journey built all
