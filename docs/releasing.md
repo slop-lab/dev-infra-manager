@@ -20,16 +20,24 @@ belong in the development repository changelog.
 ## Prerequisites
 
 - Following the [development repository model](development-repositories.md),
-  the release commit is pushed to both the active DIM-managed development
-  repository (currently Gitea) and the canonical public GitHub repository.
-  Both providers' automatic CI is green at that exact commit.
+  all 11 reviewed managed `main` heads have been published to their independent
+  GitLab development upstreams. `dim repo publish dim` performs this GitLab
+  publication only.
+- A trusted maintainer has separately assembled and published the integrated
+  canonical commit to GitHub. DIM-managed Gitea and `dim repo publish dim` have
+  no authority over that publication or the GitHub release.
+- Release evidence records 11 GitLab split repository SHAs and one canonical
+  GitHub SHA as distinct fields. It does not treat them as one shared commit.
+  Automatic CI is green for each reviewed development head and for the
+  canonical GitHub commit under the policies defined for those repositories.
 - The manually dispatched Sysbox and KVM installer workflows pass on the
   release commit using fresh ephemeral self-hosted runners.
 - The promotion into the active DIM-managed development repository's `main`
   branch used a non-draft pull request and passed every automatic
   `host backend (BACKEND)` job. These run the same
   `just verify environments-kvm BACKEND` verification through managed runners; the manual
-  GitHub run remains an independent release check on a fresh runner.
+  GitHub run remains an independent release check on a fresh runner against
+  the separately published canonical commit.
 - `npm whoami` succeeds for an account allowed to publish the `@slop-lab` scope.
 - The version and changelog agree, and the release tag does not already exist.
 
@@ -73,36 +81,56 @@ of them.
 `bash verification/scripts/local-ci-matrix.bash --manual` is the combined
 local shorthand for the automatic matrix and both manual backend gates.
 
-Finally, run the two manual GitHub workflows on actual ephemeral self-hosted
-runners. The workflow definitions must already be present on the repository's
-default branch, and the release commit must be pushed before dispatch.
+After running `dim repo publish dim`, record the exact GitLab `main` SHA for
+each split upstream in the release evidence:
 
-Record the candidate SHA once and use it for every dispatch and comparison:
+| GitLab repository | Ref | Evidence field |
+| --- | --- | --- |
+| `root` | `main` | `gitlab_root_sha` |
+| `development` | `main` | `gitlab_development_sha` |
+| `core` | `main` | `gitlab_core_sha` |
+| `core-development` | `main` | `gitlab_core_development_sha` |
+| `plugin-dns-cloudflare` | `main` | `gitlab_plugin_dns_cloudflare_sha` |
+| `plugin-dns-cloudflare-development` | `main` | `gitlab_plugin_dns_cloudflare_development_sha` |
+| `plugin-external-urls` | `main` | `gitlab_plugin_external_urls_sha` |
+| `plugin-external-urls-development` | `main` | `gitlab_plugin_external_urls_development_sha` |
+| `verification` | `main` | `gitlab_verification_sha` |
+| `examples` | `main` | `gitlab_examples_sha` |
+| `specification` | `main` | `gitlab_specification_sha` |
+
+Record the integrated GitHub commit separately as `github_canonical_sha`,
+together with its canonical ref. The GitLab SHAs prove split development
+publication. The GitHub SHA proves the separately assembled canonical
+publication. They are not expected to be equal.
+
+Finally, run the two manual GitHub workflows on actual ephemeral self-hosted
+runners. The workflow definitions must already be present on the canonical
+repository's default branch, and the canonical commit must be published by a
+trusted maintainer before dispatch. From a clean canonical GitHub checkout,
+verify and retain its separate evidence:
 
 ```bash
-release_ref=development
-release_sha="$(git rev-parse HEAD)"
+github_canonical_ref=main
+github_canonical_sha="$(git rev-parse HEAD)"
 test -z "$(git status --porcelain)"
-test "$(git rev-parse "origin/$release_ref")" = "$release_sha"
-git fetch GITHUB_REMOTE "$release_ref"
-test "$(git rev-parse FETCH_HEAD)" = "$release_sha"
+git fetch GITHUB_REMOTE "$github_canonical_ref"
+test "$(git rev-parse FETCH_HEAD)" = "$github_canonical_sha"
 ```
 
-The managed `main` commit is published to GitHub `development` by the reviewed
-self-Project mapping; it never publishes directly to GitHub `main`. Replace
-`GITHUB_REMOTE` with the configured GitHub remote name. Confirm the
-automatic GitHub `CI` run reports `headSha == release_sha`; a green run for the
-same branch name at another SHA does not satisfy the release gate. This
-GitHub-hosted workflow intentionally performs only Node.js type checks and
-tests without APT or Docker setup. The current managed Gitea remains the
-complete automatic CI authority, while the local matrix and manual GitHub
+Replace `GITHUB_REMOTE` with the configured GitHub remote name. Confirm the
+automatic GitHub `CI` run reports
+`headSha == github_canonical_sha`; a green run for the same branch name at
+another SHA does not satisfy the release gate. This GitHub-hosted workflow
+intentionally performs only Node.js type checks and tests without APT or
+Docker setup. The current managed Gitea remains the complete automatic CI
+authority for internal review, while the local matrix and manual GitHub
 workflows cover package, container, Sysbox, and KVM release gates. This split
 implements the [development repository model](development-repositories.md);
 it is not a permanent Gitea contract.
 
 GitHub workflow dispatch accepts a branch or tag ref, not an arbitrary commit
-SHA. Dispatch with the verified `release_ref`, then require the resulting
-run's `headSha` to equal `release_sha` as shown below.
+SHA. Dispatch with the verified `github_canonical_ref`, then require the
+resulting run's `headSha` to equal `github_canonical_sha` as shown below.
 
 Build and verify the reviewed runner image once:
 
@@ -124,21 +152,21 @@ Then dispatch exactly one workflow at the pushed release ref from a second
 terminal and watch it to completion:
 
 ```bash
-gh workflow run sysbox-smoke.yml --ref "$release_ref"
-run_id="$(gh run list --workflow sysbox-smoke.yml --commit "$release_sha" \
+gh workflow run sysbox-smoke.yml --ref "$github_canonical_ref"
+run_id="$(gh run list --workflow sysbox-smoke.yml --commit "$github_canonical_sha" \
   --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')"
 gh run watch "$run_id" --exit-status
-test "$(gh run view "$run_id" --json headSha --jq .headSha)" = "$release_sha"
+test "$(gh run view "$run_id" --json headSha --jq .headSha)" = "$github_canonical_sha"
 ```
 
 Start a fresh ephemeral runner, then repeat for the KVM installer workflow:
 
 ```bash
-gh workflow run kvm-backend-install.yml --ref "$release_ref"
-run_id="$(gh run list --workflow kvm-backend-install.yml --commit "$release_sha" \
+gh workflow run kvm-backend-install.yml --ref "$github_canonical_ref"
+run_id="$(gh run list --workflow kvm-backend-install.yml --commit "$github_canonical_sha" \
   --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')"
 gh run watch "$run_id" --exit-status
-test "$(gh run view "$run_id" --json headSha --jq .headSha)" = "$release_sha"
+test "$(gh run view "$run_id" --json headSha --jq .headSha)" = "$github_canonical_sha"
 ```
 
 Each runner accepts one job and deletes its VM overlay and SSH key afterward.
@@ -185,7 +213,7 @@ temporary directory. Confirm the installer can install the CLI and plugin,
 ```bash
 release_version="$(node -p 'require("./package.json").version')"
 git tag --sign "v$release_version" --message "DIM $release_version"
-git push origin "v$release_version"
+git push GITHUB_REMOTE "v$release_version"
 ```
 
 Create the GitHub release from that tag and use the changelog entry as its

@@ -134,8 +134,9 @@ replacement is preferred.
 
 As described in the
 [development repository model](development-repositories.md), DIM develops
-itself primarily through its active managed Git host while GitHub remains the
-canonical public source. The current automatic workflows are provider-specific:
+itself through 11 GitLab development upstreams and its DIM-managed internal
+review host, while GitHub remains the integrated canonical public source. The
+current automatic workflows are provider-specific:
 `.gitea/workflows/ci.yml` uses the Project-owned integration label for the
 container gate in a fresh QEMU guest. Persistent Sysbox runners serve only
 ordinary labels. The QEMU gate covers the canonical self-Project's private
