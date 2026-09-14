@@ -1,4 +1,5 @@
-import { lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -18,7 +19,7 @@ function isMissing(error: unknown): boolean {
 }
 
 async function survivingArtifacts(fixture: ServiceFixture): Promise<readonly string[]> {
-  const paths = [fixture.runsRoot, fixture.socketPath, resolve(fixture.root, "service.pid")];
+  const paths = [fixture.runsRoot, fixture.socketPath, resolve(fixture.root, "service-owner.json")];
   const observations = await Promise.all(paths.map(async (path) => {
     try {
       await lstat(path);
@@ -32,6 +33,24 @@ async function survivingArtifacts(fixture: ServiceFixture): Promise<readonly str
 }
 
 describe("QEMU service shutdown", () => {
+  it("preserves replaced owner and socket inodes during service shutdown", async () => {
+    const fixture = await startService("hold");
+    const ownerPath = resolve(fixture.root, "service-owner.json");
+    await rm(fixture.socketPath);
+    const replacementSocket = createServer();
+    await new Promise<void>((resolveListen) => replacementSocket.listen(fixture.socketPath, resolveListen));
+    const replacementOwner = resolve(fixture.root, "replacement-owner.json");
+    await writeFile(replacementOwner, "replacement-owner\n");
+    await rename(replacementOwner, ownerPath);
+
+    fixture.process.kill("SIGTERM");
+    await waitForExit(fixture, 2_000);
+
+    expect.soft((await lstat(fixture.socketPath)).isSocket()).toBe(true);
+    expect(await readFile(ownerPath, "utf8")).toBe("replacement-owner\n");
+    await new Promise<void>((resolveClose) => replacementSocket.close(() => resolveClose()));
+  });
+
   it("drains an admitted incomplete body before bounded exit without launching or retaining artifacts", async () => {
     // Given
     const fixture = await startService("hold");
