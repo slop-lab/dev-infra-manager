@@ -403,8 +403,8 @@ only the immutable snapshot paths, never the live input paths. If validation
 or any snapshot operation fails, admission MUST fail, the run MUST own no
 reusable partial snapshot, and no launcher or other child process may start.
 
-The service MUST represent ownership only with a mode-`0600`, schema-1
-`service-owner.json` record. The record MUST have exactly `schema`, `pid`,
+The service MUST represent its process identity with a mode-`0600`, schema-1
+`service-owner.json` record. The record MUST remain unchanged and have exactly `schema`, `pid`,
 `startTicks`, `argv`, `executable`, `cwd`, and `socket`. `pid` and
 `startTicks`, each `device` and `inode`, and every other identity value whose
 precision can exceed JSON's exact integer range MUST remain canonical decimal
@@ -414,29 +414,64 @@ MUST be positive. `argv` MUST be a nonempty array of strings. `executable` and
 `cwd` MUST each contain exactly a canonical absolute `path`, `device`, and
 `inode`; `socket` MUST contain exactly `device` and `inode`.
 
+The service MUST pin the owned socket inode with a non-replacing hard link at:
+
+```javascript
+resolve(dirname(socketPath), `.${basename(socketPath)}.lease`)
+```
+
+It MUST create and directory-sync this hidden lease immediately after bind and
+socket identity capture, before socket chmod or owner publication. It MUST
+chmod through the lease. A pre-existing lease path is a collision: startup
+MUST preserve it and fail closed rather than remove, replace, or adopt it.
+
 Ownership inspection MUST match the record against the exact PID, process
 start ticks, complete argument vector, executable path and file identity,
 working-directory path and file identity, expected service working directory,
-and socket type and identity. The owner file and socket MUST both exist for
-state to be owned; absence of both is the only unowned state. Partial,
+and socket type and identity. The owner file, public socket, and lease MUST all
+exist, and the public socket and lease MUST have the recorded device and inode,
+for state to be owned. Absence of all three is the only unowned state. Partial,
 malformed, foreign, identity-mismatched, or replaced state MUST fail closed
 without signalling a process or removing an artifact. An obsolete
 `service.pid` MUST be rejected with no migration path, whether its named
 process is live or dead.
 
-Owner publication MUST create and sync a fresh temporary file, publish it
+In the supported lifecycle, workspace creation, setup, and discard serialize
+through the workspace setup lock before Project setup can create or replace the
+QEMU service namespace. Project setup MUST create the service directory before
+service start; the service MUST require that pre-existing path to be a
+non-symlink root:root directory with mode exactly `0755`, including no special
+mode bits, and both agent mount layers MUST expose it read-only. Startup MUST reject any existing or symlink `service.pid`, owner,
+public socket, or lease path, while stale run state is allowed until activation.
+It MUST prepare a fresh adjacent root:root directory with mode exactly `0700`,
+including no special mode bits, before
+binding, then remove stale run state and rename the prepared directory into
+place only after owner publication. Rollback before activation MUST discard
+only that prepared directory.
+
+Ownership inspection MUST open the owner pathname once without following
+symlinks and obtain its identity and bytes from that descriptor. Owner
+publication MUST derive identity from its temporary file descriptor and
+preserve a replacement at the temporary pathname during cleanup. It MUST
+create and sync a fresh temporary file, publish it
 without replacing an existing path, sync the containing directory, and remove
 the temporary file. A publication collision or later startup failure MUST
 leave an existing owner untouched and roll back only the new instance's exact
-artifacts. Cleanup MUST compare captured device and inode identities
-immediately before removal. When closing a server could unlink a socket path
-that another instance replaced, shutdown or rollback MUST atomically hard-link
-the replacement to a fresh protected path and remove the socket pathname only
-if it still has the captured device and inode. After closing the old server,
+artifacts. Cleanup MUST validate the lease against the captured socket identity
+before safe close and again immediately before removing the lease. It MUST
+operate sequentially, remove the lease last, and preserve a foreign public
+socket that was safeguarded and restored. Missing or mismatched lease state
+MUST fail closed before server close; the server is unreferenced rather than
+explicitly closed and ownership artifacts are not removed. When closing a
+server could unlink a socket path that another instance replaced, the supported
+serialized cleanup MUST hard-link the observed replacement to a fresh protected
+path before removing the public pathname. After closing the old server,
 restoration MUST hard-link the protected socket back to the socket pathname
 without replacing an existing destination, then remove the protected path only
-if it still has the captured identity. Any race that prevents safe cleanup or
-restoration MUST preserve the foreign or successor artifact and fail closed.
+if it still has the captured identity. Failure to safeguard or restore the
+observed replacement MUST preserve the protected artifact and fail closed.
+This mechanism does not claim defense against arbitrary same-UID or root
+pathname rebinding outside the supported serialized lifecycle.
 
 Project setup MAY retire a live service only after exact ownership inspection.
 It MAY remove dead residue only when the record and socket still match their
@@ -453,7 +488,7 @@ snapshot. Cancellation and shutdown MUST signal the launcher's detached
 process group with TERM, wait for a bounded grace period, escalate the same
 group to KILL if it remains live, and await child closure before run cleanup.
 Shutdown MUST await run completion and snapshot cleanup before removing the
-run tree and its own owner and socket artifacts. Event delivery MUST retain no
+run tree and its own owner, socket, and lease artifacts. Event delivery MUST retain no
 more than 8 MiB for replay, admit at most 16 concurrent followers for an
 active run, release a follower slot when it closes, and immediately disconnect
 a follower whenever a replay or live stream write reports false.

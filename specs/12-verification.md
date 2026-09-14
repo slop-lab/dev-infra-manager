@@ -206,6 +206,12 @@ failure. Because Docker volumes have no immutable ID, tests MUST also prove
 name-based volume removal is preceded by immediate ownership reinspection.
 Every foreign resource MUST remain untouched, while cleanup removes only exact
 owned residue.
+QEMU service verification MUST prove exact root-owned namespace modes,
+read-only exposure through both agent mount layers, four-path startup preflight,
+descriptor-bound owner inspection and publication identity, preservation of a
+replaced temporary owner path, listener inode pinning across unlink and rebind,
+staged run-root activation and rollback, exact owner/socket/lease modes, and
+launcher termination and run cleanup before lease-gated shutdown failure.
 QEMU tests MUST prove selection by either an integration label or `dim-qemu`,
 supervisor-side `register --ephemeral` after guest readiness, strict validation
 of the temporary `.runner`, and transfer of only that file into the guest.
@@ -532,18 +538,46 @@ either kernel `pid_max` or the maximum safe integer. Tests MUST prove that an
 argument-vector mismatch, owner-only state, malformed or foreign PID-only
 state, and replaced owner or socket inodes remain untouched and cause no
 signal. They MUST also prove that structurally valid dead residue is removed
-only through captured inode identities. Obsolete `service.pid` state MUST be
+only through captured inode identities. They MUST also prove the exact adjacent
+`.service.sock.lease` path, public-socket/lease inode equality, unchanged exact
+schema keys, triad ambiguity for every proper subset of owner, socket, and
+lease artifacts, mismatch rejection, collision preservation, and exact dead
+cleanup. All three artifacts absent MUST be verified as unowned. Inspection
+MUST be verified to open the owner with `O_NOFOLLOW` and derive both owner
+identity and bytes from that descriptor despite deterministic pathname
+replacement.
+Obsolete `service.pid` state MUST be
 rejected without migration for both live and dead recorded processes.
 
-Publication tests MUST prove that the published owner has mode `0600`, schema
-1, and the launched PID, and that no `service.pid` is created. Startup rollback
+Publication tests MUST prove that the published owner has actual mode `0600`,
+schema 1, and the launched PID; its recorded socket identity equals both the
+actual public socket and lease; both socket paths have actual mode `0666`; and
+no `service.pid` is created. Publication identity MUST come from the temporary
+FileHandle, and identity-checked temporary cleanup MUST preserve a deterministic
+replacement while closing the handle. Startup rollback
 MUST cover owner-publication failure after socket bind while a foreign socket
 replaces the bound pathname. Startup rollback and ordinary shutdown tests MUST
-prove that captured device and inode identities prevent removal of a successor.
+prove that the lease exists with the bound socket identity before blocked owner
+publication and is removed after rollback, and that captured device and inode
+identities prevent removal of a successor. The replacement test MUST retain the
+old inode through its production lease. A separate deterministic test MUST keep
+the original listener open across unlink and successor bind and prove that the
+successor inode differs, rather than depending on allocator reuse behavior.
 Restoration tests MUST prove that a later socket at the destination is not
 overwritten and that both foreign socket inodes remain preserved. A direct
 second service MUST fail without replacing the active socket, owner, or run
 tree.
+
+Filesystem tests MUST require a pre-existing, setup-created, real root:root
+service directory with exact mode `0755`, including rejection of symlinks,
+non-root uid or gid, and any special mode bit. They MUST cover existing or
+symlink collisions independently at all four preflight paths: obsolete PID,
+owner, public socket, and lease. They MUST prove that preparation preserves
+stale runs, creates an adjacent root:root directory with exact mode `0700`
+including no special bits, activates it only after publication, and discards
+only prepared state on pre-activation rollback. Static policy tests MUST prove
+both agent mount layers expose the namespace read-only and workspace creation,
+setup, and discard acquire the workspace setup lock.
 
 Setup tests MUST prove exact live-owner retirement occurs before replacement,
 exact dead residue can be removed, and the malformed, foreign, ambiguous,
@@ -557,9 +591,14 @@ failure without signalling the process.
 Shutdown tests MUST cover an incomplete request body, an observed partial
 snapshot, and a running detached launcher group. They MUST prove that shutdown
 first closes admission, prevents later launch, drains run cleanup, and removes
-only the service's own owner, socket, and run tree. Cancellation and shutdown
+only the service's own owner, socket, lease, and run tree. They MUST prove normal
+lease removal, successor preservation after replacement, and fail-closed
+pre-close behavior for missing or mismatched leases. A deterministic lease
+collision MUST remain untouched and prevent startup. Cancellation and shutdown
 tests MUST also use a TERM-ignoring launcher group and prove bounded escalation
-from TERM to KILL, child closure, and group termination before cleanup.
+from TERM to KILL, child closure, and group termination before cleanup. With an
+active launcher and invalid lease, tests MUST prove launcher termination and run
+cleanup complete before the service exits nonzero for the lease failure.
 
 Event tests MUST prove that no more than 16 followers are admitted for an
 active run, follower 17 is rejected before successful stream headers, and a
