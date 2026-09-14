@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  captureSocketIdentity, createOwnerRecord, inspectOwner, parseOwnerRecord, publishOwner,
-  removeOwnedArtifacts, restoreReplacedSocket, retireOwner, safeguardReplacedSocket,
+  captureSocketIdentity, createOwnerRecord, createSocketLease, inspectOwner, parseOwnerRecord,
+  publishOwner, removeOwnedArtifacts, restoreReplacedSocket, retireOwner,
+  safeguardReplacedSocket, socketLeasePath,
 } from "../../project/.dim/qemu-service-owner.mjs";
 
 const ownerScript = resolve(import.meta.dirname, "../../project/.dim/qemu-service-owner.mjs");
@@ -25,6 +26,7 @@ async function fixture() {
     server.once("error", rejectListen);
     server.listen(socketPath, resolveListen);
   });
+  await createSocketLease(socketPath, await captureSocketIdentity(socketPath));
   return { ownerPath, root, server, socketPath };
 }
 
@@ -91,12 +93,14 @@ describe("QEMU owner record contract", () => {
 
     await expect(readFile(ownerPath)).rejects.toThrow();
     await expect(lstat(socketPath)).rejects.toThrow();
+    await expect(lstat(socketLeasePath(socketPath))).rejects.toThrow();
   });
 
   it("preserves replaced owner and socket inodes during cleanup", async () => {
     const first = await fixture();
     const record = await createOwnerRecord(first.socketPath);
     const owner = await publishOwner(first.ownerPath, record);
+    const leaseIdentity = await lstat(socketLeasePath(first.socketPath), { bigint: true });
     await new Promise<void>((resolveClose) => first.server.close(() => resolveClose()));
     const replacementOwner = resolve(first.root, "replacement-owner.json");
     await writeFile(replacementOwner, "replacement-owner\n");
@@ -106,10 +110,31 @@ describe("QEMU owner record contract", () => {
     const foreignPath = resolve(first.root, "foreign.sock");
     await new Promise<void>((resolveListen) => replacement.listen(foreignPath, resolveListen));
     await link(foreignPath, first.socketPath);
+    const replacementIdentity = await lstat(first.socketPath, { bigint: true });
 
-    await expect(removeOwnedArtifacts(first.ownerPath, first.socketPath, owner, record.socket)).rejects.toThrow("replaced");
+    expect.soft({ device: replacementIdentity.dev, inode: replacementIdentity.ino })
+      .not.toEqual({ device: leaseIdentity.dev, inode: leaseIdentity.ino });
+    await expect(removeOwnedArtifacts({ owner, ownerPath: first.ownerPath, socket: record.socket,
+      socketPath: first.socketPath })).rejects.toThrow("replaced");
     expect.soft((await lstat(first.socketPath)).isSocket()).toBe(true);
     expect(await readFile(first.ownerPath, "utf8")).toBe("replacement-owner\n");
+  });
+
+  it("keeps an unlinked listener inode distinct from a successor bound at the same path", async () => {
+    const original = await fixture();
+    const originalIdentity = await lstat(original.socketPath, { bigint: true });
+    await rm(original.socketPath);
+    const successor = createServer();
+    servers.push(successor);
+    await new Promise<void>((resolveListen, rejectListen) => {
+      successor.once("error", rejectListen);
+      successor.listen(original.socketPath, resolveListen);
+    });
+    const successorIdentity = await lstat(original.socketPath, { bigint: true });
+
+    expect(original.server.listening).toBe(true);
+    expect({ dev: successorIdentity.dev, ino: successorIdentity.ino })
+      .not.toEqual({ dev: originalIdentity.dev, ino: originalIdentity.ino });
   });
 
   it("preserves both foreign sockets when restoration finds a second replacement", async () => {
