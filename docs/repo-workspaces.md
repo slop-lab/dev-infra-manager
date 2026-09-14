@@ -78,22 +78,21 @@ dim repo publish example # every repository with a publish policy
 ```
 
 An explicit import mapping can give a managed repository a conventional local
-branch while sourcing it from a differently named archive branch. Import and
-publish authority stay separate even when they intentionally use the same
-mapping:
+branch while sourcing it from a differently named branch. Import and publish
+authority stay separate even when they intentionally use the same mapping:
 
 ```yaml
 repositories:
   core:
-    url: https://github.com/example/archive.git
-    import: {main: dev/core}
+    url: https://github.com/example/source.git
+    import: {main: components/core}
     publish: {main: main}
 ```
 
-This creates only managed `core/main` from external `dev/core`; unrelated
-archive branches and tags are not copied into that managed repository. The
-publish destination `main` is connection-relative, so the import mapping
-projects it back to external `dev/core`.
+This creates only managed `core/main` from external `components/core`;
+unrelated source branches and tags are not copied into that managed repository.
+The publish destination `main` is connection-relative, so the import mapping
+projects it back to external `components/core`.
 
 The default `repo add URL` import copies branches and tags. Use `--mirror` only
 when server-private refs must also be copied. An import remains non-ready while
