@@ -46,7 +46,7 @@ describe("DIM development forge policy", () => {
     expect(helper).toContain('exec setsid node "$verdaccio_bin"');
   });
 
-  it("pins every split repository to its standalone upstream and main branch", async () => {
+  it("pins every split repository to its external upstream and main branch", async () => {
     const manifest = parse(await readFile(resolve(workspaceRoot, "project/.dim/repos.yml"), "utf8"));
     const expectedUpstreams = {
       root: "https://gitlab.com/slop-lab/dim/root.git",
@@ -79,6 +79,23 @@ describe("DIM development forge policy", () => {
       expect(repository.ref).toBe("main");
       expect(repository.root).toBe(alias === "root" ? true : undefined);
     }
+
+    const smoke = await readFile(
+      resolve(workspaceRoot, "verification/scripts/container-self-project-smoke.bash"),
+      "utf8"
+    );
+    expect(smoke).toContain("for repository in development root core core-development \\");
+    expect(smoke).toContain('git init --bare "$source_root/remotes/$repository.git"');
+    expect(smoke).toContain(
+      'git -C "$repository_path" push "$source_root/remotes/$repository.git" \\'
+    );
+    expect(smoke).toContain('"HEAD:refs/heads/main"');
+    expect(smoke).toContain('--bootstrap-git-url "$source_root/remotes/root.git"');
+    expect(smoke).toContain('--bootstrap-git-ref main');
+    expect(smoke).not.toContain("archive.git");
+    expect(smoke).not.toContain('refs/heads/dev/$repository');
+    expect(smoke).not.toContain("dev/${repository}");
+    expect(smoke).not.toContain('--initial-branch="dev/$repository"');
   });
 
   it("keeps persistent QEMU cache mutation in the protected root", async () => {

@@ -213,18 +213,16 @@ fi
 project_source="$source_root/repositories/root"
 dim_apply_test_registry_mirror "$project_source" agent-dind
 mkdir -p "$source_root/remotes"
-git init --bare "$source_root/remotes/archive.git" >/dev/null
 (
 cd -- "$integrated_source/verification"
-node --input-type=module - "$project_source/.dim/repos.yml" "$source_root/remotes/archive.git" <<'EOF'
+node --input-type=module - "$project_source/.dim/repos.yml" "$source_root/remotes" <<'EOF'
 import { readFileSync, writeFileSync } from "node:fs";
 import { parse, stringify } from "yaml";
-const [manifestPath, archive] = process.argv.slice(2);
+const [manifestPath, remotes] = process.argv.slice(2);
 const manifest = parse(readFileSync(manifestPath, "utf8"));
 for (const [repository, config] of Object.entries(manifest.repositories)) {
   const upstream = config.upstream;
-  manifest.upstreams[upstream].url = archive;
-  config.import = { main: `dev/${repository}` };
+  manifest.upstreams[upstream].url = `${remotes}/${repository}.git`;
 }
 writeFileSync(manifestPath, stringify(manifest));
 EOF
@@ -232,20 +230,20 @@ EOF
 
 for repository_path in "$source_root"/repositories/*; do
   repository="$(basename "$repository_path")"
-  git -C "$repository_path" init --initial-branch="dev/$repository" >/dev/null
+  git init --bare "$source_root/remotes/$repository.git" >/dev/null
+  git -C "$repository_path" init --initial-branch=main >/dev/null
   git -C "$repository_path" add -A
   git -C "$repository_path" \
     -c user.name="DIM Snapshot" \
     -c user.email="snapshot@dim.invalid" \
     commit -m "initialize $repository smoke source" >/dev/null
-  git -C "$repository_path" push "$source_root/remotes/archive.git" \
-    "HEAD:refs/heads/dev/$repository" >/dev/null
+  git -C "$repository_path" push "$source_root/remotes/$repository.git" \
+    "HEAD:refs/heads/main" >/dev/null
 done
 
-root_ref=dev/root
 dim project create "$project_name" \
-  --bootstrap-git-url "$source_root/remotes/archive.git" \
-  --bootstrap-git-ref "$root_ref" >/dev/null
+  --bootstrap-git-url "$source_root/remotes/root.git" \
+  --bootstrap-git-ref main >/dev/null
 verification_stage="workspace creation"
 if ! dim workspace create "$project_name" "$workspace_name" \
   >"$workspace_creation_log" 2>&1; then
@@ -604,21 +602,21 @@ if dim workspace run "$workspace_name" check >/dev/null 2>&1; then
   exit 1
 fi
 dim workspace run "$workspace_name" bash -- -lc \
-  "DIM_EXPECT_ARCHIVE_URL='$source_root/remotes/archive.git' just check-source" >/dev/null
+  "just check-source" >/dev/null
 if [[ "${DIM_SELF_VERIFY_AGENT:-0}" == 1 ]]; then
   verification_stage="full agent verification"
   dim workspace run "$workspace_name" bash -- -lc \
-    "DIM_EXPECT_ARCHIVE_URL='$source_root/remotes/archive.git' just verify agent" \
+    "just verify agent" \
     >"$agent_verification_log" 2>&1
 fi
 
-# Every reviewed managed development ref can be published back to its matching
-# canonical temporary branch without naming repositories one at a time.
+# Every reviewed managed main ref can be published back to its matching
+# canonical upstream without naming repositories one at a time.
 verification_stage="repository publication"
 dim repo publish "$project_name" >/dev/null
 for repository in root development core core-development plugin-dns-cloudflare plugin-dns-cloudflare-development plugin-external-urls plugin-external-urls-development verification examples specification; do
   managed_sha="$(git ls-remote "$(dim repo url "$project_name" "$repository")" refs/heads/main | cut -f1)"
-  external_sha="$(git --git-dir="$source_root/remotes/archive.git" rev-parse "refs/heads/dev/$repository")"
+  external_sha="$(git --git-dir="$source_root/remotes/$repository.git" rev-parse refs/heads/main)"
   test -n "$managed_sha"
   test "$managed_sha" = "$external_sha"
 done
