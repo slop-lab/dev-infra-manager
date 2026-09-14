@@ -70,6 +70,10 @@ function sameFile(left, right) {
   return left.path === right.path && left.device === right.device && left.inode === right.inode;
 }
 
+function sameIdentity(left, right) {
+  return left.device === right.device && left.inode === right.inode;
+}
+
 function sameProcess(record, actual) {
   return record.pid === actual.pid && record.startTicks === actual.startTicks
     && JSON.stringify(record.argv) === JSON.stringify(actual.argv)
@@ -87,30 +91,49 @@ async function cwdIdentity(path) {
 }
 
 export async function inspectOwner(ownerPath, socketPath, expectedCwd) {
-  const [ownerStats, socketStats] = await Promise.all([pathState(ownerPath), pathState(socketPath)]);
-  if (!ownerStats && !socketStats) return { state: "absent" };
-  if (!ownerStats || !socketStats || !ownerStats.isFile() || !socketStats.isSocket()) {
-    throw new Error("ambiguous service ownership artifacts");
-  }
-  const record = parseOwnerRecord(JSON.parse(await readFile(ownerPath, "utf8")));
-  const socket = identity(socketStats);
-  if (record.socket.device !== socket.device || record.socket.inode !== socket.inode
-    || !sameFile(record.cwd, await cwdIdentity(expectedCwd))) throw new Error("service ownership mismatch");
-  const result = { owner: identity(ownerStats), record, socket };
   try {
-    const actual = await processIdentity(Number(record.pid));
-    if (!sameProcess(record, actual)) throw new Error("service process identity mismatch");
-    return { ...result, state: "live" };
+    const ownerHandle = await open(ownerPath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const [ownerStats, socketStats, leaseStats] = await Promise.all([
+        ownerHandle.stat({ bigint: true }), pathState(socketPath), pathState(socketLeasePath(socketPath)),
+      ]);
+      if (!socketStats || !leaseStats || !ownerStats.isFile()
+        || !socketStats.isSocket() || !leaseStats.isSocket()) throw new Error("ambiguous service ownership artifacts");
+      const record = parseOwnerRecord(JSON.parse(await ownerHandle.readFile("utf8")));
+      const socket = identity(socketStats);
+      if (!sameIdentity(record.socket, socket) || !sameIdentity(socket, identity(leaseStats))
+        || !sameFile(record.cwd, await cwdIdentity(expectedCwd))) throw new Error("service ownership mismatch");
+      const result = { owner: identity(ownerStats), record, socket };
+      try {
+        const actual = await processIdentity(Number(record.pid));
+        if (!sameProcess(record, actual)) throw new Error("service process identity mismatch");
+        return { ...result, state: "live" };
+      } catch (error) {
+        if (error?.code === "ENOENT") return { ...result, state: "dead" };
+        throw error;
+      }
+    } finally {
+      await ownerHandle.close();
+    }
   } catch (error) {
-    if (error?.code === "ENOENT") return { ...result, state: "dead" };
+    if (error?.code === "ENOENT") {
+      const [socketStats, leaseStats] = await Promise.all([
+        pathState(socketPath), pathState(socketLeasePath(socketPath)),
+      ]);
+      if (!socketStats && !leaseStats) return { state: "absent" };
+      throw new Error("ambiguous service ownership artifacts");
+    }
     throw error;
   }
 }
 
 export async function createOwnerRecord(socketPath) {
   const current = await processIdentity(process.pid);
-  const socketStats = await lstat(socketPath, { bigint: true });
-  if (!socketStats.isSocket()) throw new Error("service socket is not a socket");
+  const [socketStats, leaseStats] = await Promise.all([
+    lstat(socketPath, { bigint: true }), lstat(socketLeasePath(socketPath), { bigint: true }),
+  ]);
+  if (!socketStats.isSocket() || !leaseStats.isSocket()
+    || !sameIdentity(identity(socketStats), identity(leaseStats))) throw new Error("service socket lease mismatch");
   return { ...current, schema: 1, socket: identity(socketStats) };
 }
 
@@ -120,21 +143,33 @@ export async function captureSocketIdentity(socketPath) {
   return identity(socketStats);
 }
 
+export function socketLeasePath(socketPath) {
+  return resolve(dirname(socketPath), `.${basename(socketPath)}.lease`);
+}
+
+export async function createSocketLease(socketPath, expected) {
+  await link(socketPath, socketLeasePath(socketPath));
+  const lease = identity(await lstat(socketLeasePath(socketPath), { bigint: true }));
+  if (!sameIdentity(lease, expected)) throw new Error("service socket changed before lease creation");
+  await syncContainingDirectory(socketPath);
+}
+
 export async function publishOwner(ownerPath, record) {
   parseOwnerRecord(record);
   const temporary = resolve(dirname(ownerPath), `.${basename(ownerPath)}.${process.pid}.${Date.now()}`);
   const handle = await open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
+  let temporaryIdentity;
   try {
+    temporaryIdentity = identity(await handle.stat({ bigint: true }));
     await handle.writeFile(`${JSON.stringify(record)}\n`);
     await handle.chmod(0o600);
     await handle.sync();
     await link(temporary, ownerPath);
     await syncContainingDirectory(ownerPath);
-    return identity(await lstat(ownerPath, { bigint: true }));
+    return temporaryIdentity;
   } finally {
-    await handle.close();
-    await rm(temporary, { force: true });
-    await syncContainingDirectory(ownerPath);
+    try { if (temporaryIdentity) await removeIfOwned(temporary, temporaryIdentity); }
+    finally { await handle.close(); }
   }
 }
 
@@ -148,13 +183,29 @@ export async function removeIfOwned(path, expected) {
   return true;
 }
 
-export async function removeOwnedArtifacts(ownerPath, socketPath, owner, socket) {
-  const socketRemoved = await removeIfOwned(socketPath, socket);
-  const ownerRemoved = await removeIfOwned(ownerPath, owner);
-  if (!socketRemoved || !ownerRemoved) throw new Error("refusing to remove replaced service artifacts");
+async function requireSocketLease(socketPath, expected) {
+  const lease = await pathState(socketLeasePath(socketPath));
+  if (!lease || !lease.isSocket() || !sameIdentity(identity(lease), expected)) {
+    throw new Error("service socket lease mismatch");
+  }
+}
+
+export async function removeOwnedArtifacts({ ownerPath, socketPath, owner, socket, preserveSocket = false }) {
+  await requireSocketLease(socketPath, socket);
+  if (!preserveSocket && !await removeIfOwned(socketPath, socket)) {
+    throw new Error("refusing to remove replaced service artifacts");
+  }
+  if (owner && !await removeIfOwned(ownerPath, owner)) {
+    throw new Error("refusing to remove replaced service artifacts");
+  }
+  await requireSocketLease(socketPath, socket);
+  if (!await removeIfOwned(socketLeasePath(socketPath), socket)) {
+    throw new Error("refusing to remove replaced service artifacts");
+  }
 }
 
 export async function safeguardReplacedSocket(socketPath, expected) {
+  await requireSocketLease(socketPath, expected);
   const current = await pathState(socketPath);
   if (!current) return undefined;
   const actual = identity(current);
@@ -204,7 +255,7 @@ export async function retireOwner(ownerPath, socketPath, expectedCwd, timeoutMs)
       throw new Error("timed out waiting for owned service to stop");
     }
   }
-  await removeOwnedArtifacts(ownerPath, socketPath, inspected.owner, inspected.socket);
+  await removeOwnedArtifacts({ owner: inspected.owner, ownerPath, socket: inspected.socket, socketPath });
 }
 
 async function main() {
