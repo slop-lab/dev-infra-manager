@@ -88,19 +88,28 @@ Implemented:
   test registry uses the exact lockfile-owned Verdaccio binary on randomized
   loopback, closes signup, and requires login for package mutation.
 
-Current repair-session verification: `just verify agent` exited 0.
-Core-development Vitest reported 768 passed and 40 intentionally skipped; the
-CLI reported 63 passed; verification reported 79 passed; and the plugin
-development suites reported 6 and 14 passed. Builds, seven package dry-runs,
-plugin installation, `project-runtime-cgroups`, `pull-request-skill`, and the
-`agent-docker` smoke passed. `just check-run-cli` passed. All 245 changed or new
-TypeScript files passed the `<=250` pure-LOC and forbidden-escape audit.
-All 11 repository diffs pass `git diff --check`.
+Acceptance verification on 2026-09-14: `just verify agent` exited 0.
+Core-development Vitest reported 784 passed and 40 intentionally skipped; the
+CLI reported 63 passed; verification reported 93 passed; and the plugin
+development suites reported 6 and 14 passed. Repository materialization,
+TypeScript checks, builds, seven package dry-runs, plugin installation,
+`project-runtime-cgroups`, `pull-request-skill`, and the `agent-docker` smoke
+passed. `just check-run-cli`, the SSH policy check, and shell syntax checks
+passed. All 11 repository diffs passed `git diff --check` before the evidence
+update was committed.
 
-Both `ssh` and `ssh-keygen` are absent on this host. Live
-`JUST_UNSTABLE=1 JUST_ACK_UNSTABLE=1 just verify full-development` was not
-executed or passed. The stateful flow contains the live ordinary-writer denial
-assertion, but that assertion remains pending execution on a capable host.
+OpenSSH 9.6 and Docker buildx 0.30.1 were installed in the development agent to
+exercise the capable-host entrypoint. The full-development journey built all
+packages and the canonical workspace image, then stopped at managed Gitea
+readiness because this agent controls a sibling rootless Docker daemon through
+a mounted Unix socket: Gitea returned HTTP 200 inside its container, while the
+daemon-local `127.0.0.1:3300` publication was not reachable from the agent's
+loopback namespace. This daemon also exposes no `sysbox-runc` runtime, and the
+agent has no accessible `/dev/kvm`. Therefore
+`JUST_UNSTABLE=1 JUST_ACK_UNSTABLE=1 just verify full-development` was executed
+but did not pass in this environment. Its live SSH and ordinary-writer denial
+assertions remain pending execution on a Sysbox-capable host whose Docker
+loopback namespace is local to the verifier.
 
 DIM does not currently provide automatic workspace cleanup after PR merge,
 one-shot workspace wrappers, or disk quota. Those orchestration policies can
