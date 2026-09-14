@@ -146,11 +146,13 @@ External sources are accessed only through the local Git CLI and its existing
 credential configuration. DIM does not provision external Git providers or
 proxy Git traffic. A repository retains its explicit external connection so
 `repo fetch` can project remote branches under managed `upstream/*` and
-`repo publish` can publish only reviewed, non-forced branch mappings. Omitting
-the repository alias publishes every repository with configured mappings.
-DIM's self Project maps its managed promotion branch to the canonical
-development branch, keeping the canonical release branch outside routine
-development publication.
+`repo publish` can publish only configured, non-forced branch mappings.
+Omitting the repository alias publishes every repository with configured
+mappings. DIM's self Project maps 11 managed `main` heads to 11 independent
+GitLab development upstreams on `main`. `dim repo publish dim` publishes only
+to those GitLab upstreams. Integrated canonical publication and release on
+GitHub remain separate trusted maintainer actions outside that command's
+authority.
 
 ## Root workspace contract
 
@@ -244,10 +246,9 @@ Manifest-free repositories use the explicit
 `--root ALIAS --bootstrap-git-url URL` form.
 The selected external bootstrap ref may differ from the managed root ref when
 the root entry has an explicit `import` mapping. For example,
-`--bootstrap-git-ref dev/root`
-with `ref: main` and `import: {main: dev/root}` imports only the external
-`dev/root` branch as managed `main`; subsequent root-manifest reads use managed
-`main`.
+`--bootstrap-git-ref components/root` with `ref: main` and
+`import: {main: components/root}` imports only that external branch as managed
+`main`; subsequent root-manifest reads use managed `main`.
 
 ```text
 DIM_PROJECT_ID
@@ -384,6 +385,18 @@ container, read-only for backup and read-write for restore. DIM does not
 interpret or persist the archive.
 Repository commands, including just recipes, run explicitly through the bash
 task rather than growing one entrypoint task per recipe.
+
+**WORKSPACE-QEMU-INPUT-001:** The canonical self-Project's constrained QEMU
+service MUST claim a run synchronously before awaiting its request body or any
+filesystem operation. It MUST reject a new run while another run owns the
+service, and it MUST reject duplicate input names before filesystem validation.
+Each admitted run MUST own a fresh set of service-owned input snapshots that
+the agent cannot mutate after admission.
+Snapshot copying MUST NOT dereference symlinks. The fixed launcher and its
+child process MUST receive only the immutable snapshot paths, never the live
+input paths. If validation or any snapshot operation fails, admission MUST
+fail, the run MUST own no reusable partial snapshot, and no launcher or other
+child process may start.
 
 Before `create`, `start`, `setup`, or `update` runs Project setup, DIM must
 ensure all three managed controller APIs are healthy. Host-admin, workspace,
