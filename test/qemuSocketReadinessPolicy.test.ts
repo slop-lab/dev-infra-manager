@@ -14,10 +14,10 @@ function qemuSection(setup: string, serviceDirectory: string): string {
   const start = setup.indexOf("qemu_service_dir=/tmp/dim-qemu-verification");
   const end = setup.indexOf("\n# Avoid inheriting", start);
   if (start < 0 || end < 0) throw new TypeError("QEMU setup section was not found");
-  return setup.slice(start, end).replace(
+  return `set -eu\n${setup.slice(start, end).replace(
     "qemu_service_dir=/tmp/dim-qemu-verification",
     `qemu_service_dir=${JSON.stringify(serviceDirectory)}`
-  );
+  )}`;
 }
 
 async function createFixture(): Promise<{
@@ -143,18 +143,16 @@ describe("canonical QEMU socket readiness", () => {
     expect(readiness.match(/= 666/g)).toHaveLength(2);
   });
 
-  it("guards replacement after the retirement loop while the exact old PID is still live", async () => {
+  it("runs strict owner retirement before installing or starting replacement", async () => {
     const setup = await readFile(resolve(projectRoot, ".dim/setup.sh"), "utf8");
-    const retirementStart = setup.indexOf("for _ in $(seq 1 50); do", setup.indexOf('kill "$old_pid"'));
-    const retirementEnd = setup.indexOf("done", retirementStart) + "done".length;
-    const replacementStart = setup.indexOf('rm -f "$qemu_service_dir/service.sock"', retirementEnd);
-    const retirementGate = setup.slice(retirementEnd, replacementStart);
+    const retirement = setup.indexOf("qemu-service-owner.mjs retire");
+    const replacementStart = setup.indexOf("install -m 0500 .dim/qemu-verify.bash");
 
-    expect(retirementGate).toContain('kill -0 "$old_pid"');
-    expect(retirementGate).toMatch(/exit\s+1/);
+    expect.soft(retirement).toBeGreaterThan(0);
+    expect(replacementStart).toBeGreaterThan(retirement);
   });
 
-  it("starts replacement only after the exact old PID has exited", async () => {
+  it("rejects obsolete PID-only ownership even after its process exits", async () => {
     const fixture = await createFixture();
     const oldPid = await startOldService(fixture.serviceDirectory, 75);
     const setup = await readFile(resolve(projectRoot, ".dim/setup.sh"), "utf8");
@@ -163,8 +161,9 @@ describe("canonical QEMU socket readiness", () => {
       fixture, oldPid, realSleep: true, section: qemuSection(setup, fixture.serviceDirectory)
     });
 
-    expect(result.status).not.toBeNull();
-    expect(await readFile(fixture.log, "utf8")).toBe(`replacement old_pid=${oldPid} state=exited\n`);
+    expect.soft(result.status).not.toBe(0);
+    expect.soft(await readFile(fixture.log, "utf8")).toBe("");
+    expect(await readFile(resolve(fixture.serviceDirectory, "service.pid"), "utf8")).toBe(`${oldPid}\n`);
   });
 
   it("fails closed without unlinking or starting replacement when the exact old PID survives timeout", async () => {
