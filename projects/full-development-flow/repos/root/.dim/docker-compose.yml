@@ -2,6 +2,9 @@ services:
   agent:
     build:
       context: agent
+      args:
+        DIM_WORKSPACE_UID: "${DIM_WORKSPACE_UID:-1000}"
+        DIM_WORKSPACE_GID: "${DIM_WORKSPACE_GID:-1000}"
     environment:
       DOCKER_HOST: "tcp://agent-dind:2375"
       DIM_CONTROLLER_SOCKET: "/run/dim/controller-proxy/agent.sock"
@@ -19,7 +22,7 @@ services:
       GIT_CONFIG_KEY_1: safe.directory
       GIT_CONFIG_VALUE_1: /workspace
     volumes:
-      - ..:/workspace
+      - ${DIM_PROJECT_ROOT:?}:/workspace
       - agent-home:/home/dim-agent
       - agent-dind-shared:/mnt/workspace-shared-dind
       - /tmp/dim-agent-controller:/run/dim/controller-proxy:ro

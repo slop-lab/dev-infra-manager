@@ -11,6 +11,11 @@ case "$task" in
   bash) set -- bash "$@" ;;
   codex) set -- codex --dangerously-bypass-approvals-and-sandbox "$@" ;;
   claude) set -- claude --dangerously-skip-permissions "$@" ;;
+  ssh-proxy)
+    test "$#" -eq 0 || { echo "ssh-proxy does not accept arguments" >&2; exit 2; }
+    exec docker compose \
+      --file .dim/docker-compose.yml exec --no-TTY agent nc 127.0.0.1 22
+    ;;
   *)
     echo "unknown DIM project task: $task" >&2
     exit 2
