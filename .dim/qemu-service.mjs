@@ -1,14 +1,18 @@
 import { spawn } from "node:child_process";
-import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
+import { stopProcessGroup } from "./qemu-process-group.mjs";
+import { initializeService } from "./qemu-service-startup.mjs";
 import { snapshotInputs } from "./qemu-snapshot.mjs";
+import { removeIfOwned, restoreReplacedSocket, safeguardReplacedSocket } from "./qemu-service-owner.mjs";
 
 const sourceRoot = await realpath(process.env.DIM_QEMU_SOURCE_ROOT ?? "/workspace");
 const socketPath = process.env.DIM_QEMU_SERVICE_SOCKET ?? "/tmp/dim-qemu-verification/service.sock";
 const launcher = process.env.DIM_QEMU_LAUNCHER ?? "/workspace/project/.dim/qemu-verify.bash";
 const serviceDirectory = path.dirname(socketPath);
 const pidPath = path.join(serviceDirectory, "service.pid");
+const ownerPath = path.join(serviceDirectory, "service-owner.json");
 const runsRoot = path.join(serviceDirectory, "runs");
 let activeRun;
 let latestRun;
@@ -16,30 +20,32 @@ let serviceState = "accepting";
 let shutdownPromise;
 
 await mkdir(serviceDirectory, { recursive: true, mode: 0o755 });
+for (const stalePath of [pidPath, ownerPath]) {
+  try { await lstat(stalePath); throw new Error(`refusing existing service artifact: ${stalePath}`); }
+  catch (error) { if (!error || error.code !== "ENOENT") throw error; }
+}
 
 const server = http.createServer((request, response) => {
   void handle(request, response).catch((error) => {
     if (!response.destroyed) sendJson(response, 400, { error: error instanceof Error ? error.message : String(error) });
   });
 });
-await new Promise((resolve, reject) => {
-  server.once("error", reject);
-  server.listen(socketPath, resolve);
+const startup = await initializeService({ ownerPath, runsRoot, server, socketPath }).catch((error) => {
+  reportFailure(error);
+  return undefined;
 });
-await rm(runsRoot, { recursive: true, force: true });
-await mkdir(runsRoot, { mode: 0o700 });
-await chmod(socketPath, 0o666);
-const socketIdentity = await lstat(socketPath, { bigint: true });
-await writeFile(pidPath, `${process.pid}\n`);
+const ownerIdentity = startup?.ownerIdentity;
+const socketIdentity = startup?.socketIdentity;
 
 async function handle(request, response) {
   const url = new URL(request.url ?? "/", "http://dim-qemu");
   if (request.method === "GET" && url.pathname === "/v1/status") return sendJson(response, 200, latestRun?.state ?? { status: "idle" });
   if (request.method === "GET" && url.pathname === "/v1/events") {
-    response.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
     const run = latestRun;
     if (!run) return response.end();
-    response.write(run.output);
+    if (activeRun === run && run.listeners.size >= 16) return sendJson(response, 503, { error: "too many event followers" });
+    response.writeHead(200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
+    if (run.output && !response.write(run.output)) return response.destroy();
     if (activeRun !== run) return response.end();
     run.listeners.add(response);
     response.on("close", () => run.listeners.delete(response));
@@ -69,7 +75,9 @@ async function handle(request, response) {
     const run = activeRun;
     if (!run?.child || run.state.status !== "running") return sendJson(response, 409, { error: "QEMU verification is not running" });
     run.cancelled = true;
-    stopChild(run);
+    const completion = requestFinalization(run, "cancelled");
+    await stopProcessGroup(run);
+    await completion;
     return sendJson(response, 202, { ...run.state, cancelling: true });
   }
   return sendJson(response, 404, { error: "not found" });
@@ -136,10 +144,16 @@ function start(run, inputs) {
     cwd: sourceRoot, env: environment, detached: true, stdio: ["ignore", "pipe", "pipe"]
   });
   run.child = child;
+  run.groupPid = child.pid;
   const append = (chunk) => {
     run.output += String(chunk);
     if (run.output.length > 8 * 1024 * 1024) run.output = run.output.slice(-8 * 1024 * 1024);
-    for (const listener of run.listeners) listener.write(chunk);
+    for (const listener of run.listeners) {
+      if (!listener.write(chunk)) {
+        run.listeners.delete(listener);
+        listener.destroy();
+      }
+    }
   };
   child.stdout.on("data", append);
   child.stderr.on("data", append);
@@ -211,13 +225,6 @@ function sendJson(response, status, value) {
   response.end(body);
 }
 
-function stopChild(run) {
-  if (!run.child?.pid) return;
-  try { process.kill(-run.child.pid, "SIGTERM"); } catch (error) {
-    if (!error || error.code !== "ESRCH") throw error;
-  }
-}
-
 function beginShutdown() {
   if (shutdownPromise) return shutdownPromise;
   serviceState = "stopping";
@@ -227,7 +234,6 @@ function beginShutdown() {
     run.abort.abort();
     run.request?.destroy();
     run.response?.destroy();
-    stopChild(run);
   }
   shutdownPromise = shutdown(run);
   void shutdownPromise.catch(reportFailure);
@@ -235,25 +241,20 @@ function beginShutdown() {
 }
 
 async function shutdown(run) {
-  if (run) await requestFinalization(run, "cancelled");
+  if (run) {
+    await stopProcessGroup(run);
+    await requestFinalization(run, "cancelled");
+  }
+  const protectedSocket = await safeguardReplacedSocket(socketPath, socketIdentity);
   await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  await restoreReplacedSocket(protectedSocket, socketPath);
   await rm(runsRoot, { recursive: true, force: true });
-  await removeOwnedArtifacts();
+  await cleanupOwnedArtifacts();
   serviceState = "stopped";
 }
 
-async function removeOwnedArtifacts() {
-  try {
-    const current = await lstat(socketPath, { bigint: true });
-    if (current.dev === socketIdentity.dev && current.ino === socketIdentity.ino && current.isSocket()) await rm(socketPath, { force: true });
-  } catch (error) {
-    if (!error || error.code !== "ENOENT") throw error;
-  }
-  try {
-    if (await readFile(pidPath, "utf8") === `${process.pid}\n`) await rm(pidPath, { force: true });
-  } catch (error) {
-    if (!error || error.code !== "ENOENT") throw error;
-  }
+async function cleanupOwnedArtifacts() {
+  await Promise.all([removeIfOwned(ownerPath, ownerIdentity), removeIfOwned(socketPath, socketIdentity)]);
 }
 
 function reportFailure(error) {
@@ -261,4 +262,4 @@ function reportFailure(error) {
   process.exitCode = 1;
 }
 
-for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, beginShutdown);
+if (startup) for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, beginShutdown);
