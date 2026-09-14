@@ -395,24 +395,68 @@ service, and it MUST reject duplicate input names before filesystem validation.
 Each admitted run MUST own a fresh set of service-owned input snapshots that
 the agent cannot mutate after admission.
 Snapshot copying MUST NOT dereference symlinks. It MUST anchor traversal to
-open descriptors, stream regular files with bounded memory, preserve regular
-file permission bits, and reject sockets, FIFOs, devices, and every other
+open descriptors, enumerate directories as a stream from open directory
+handles, stream regular files with bounded memory, preserve regular file
+permission bits, and reject sockets, FIFOs, devices, and every other
 unsupported entry type. The fixed launcher and its child process MUST receive
 only the immutable snapshot paths, never the live input paths. If validation
 or any snapshot operation fails, admission MUST fail, the run MUST own no
 reusable partial snapshot, and no launcher or other child process may start.
 
+The service MUST represent ownership only with a mode-`0600`, schema-1
+`service-owner.json` record. The record MUST have exactly `schema`, `pid`,
+`startTicks`, `argv`, `executable`, `cwd`, and `socket`. `pid` and
+`startTicks`, each `device` and `inode`, and every other identity value whose
+precision can exceed JSON's exact integer range MUST remain canonical decimal
+strings. The PID MUST be positive and no greater than either the kernel's
+`pid_max` or JavaScript's maximum safe integer. `startTicks` and each inode
+MUST be positive. `argv` MUST be a nonempty array of strings. `executable` and
+`cwd` MUST each contain exactly a canonical absolute `path`, `device`, and
+`inode`; `socket` MUST contain exactly `device` and `inode`.
+
+Ownership inspection MUST match the record against the exact PID, process
+start ticks, complete argument vector, executable path and file identity,
+working-directory path and file identity, expected service working directory,
+and socket type and identity. The owner file and socket MUST both exist for
+state to be owned; absence of both is the only unowned state. Partial,
+malformed, foreign, identity-mismatched, or replaced state MUST fail closed
+without signalling a process or removing an artifact. An obsolete
+`service.pid` MUST be rejected with no migration path, whether its named
+process is live or dead.
+
+Owner publication MUST create and sync a fresh temporary file, publish it
+without replacing an existing path, sync the containing directory, and remove
+the temporary file. A publication collision or later startup failure MUST
+leave an existing owner untouched and roll back only the new instance's exact
+artifacts. Cleanup MUST compare captured device and inode identities
+immediately before removal. When closing a server could unlink a socket path
+that another instance replaced, shutdown or rollback MUST atomically hard-link
+the replacement to a fresh protected path and remove the socket pathname only
+if it still has the captured device and inode. After closing the old server,
+restoration MUST hard-link the protected socket back to the socket pathname
+without replacing an existing destination, then remove the protected path only
+if it still has the captured identity. Any race that prevents safe cleanup or
+restoration MUST preserve the foreign or successor artifact and fail closed.
+
+Project setup MAY retire a live service only after exact ownership inspection.
+It MAY remove dead residue only when the record and socket still match their
+captured identities. Retirement and startup readiness MUST be bounded. Setup
+MUST publish readiness only after the new structured owner names the launched
+PID, the socket is mode `0666`, and a bounded status request succeeds. If a
+started process never publishes ownership, setup MUST fail after the readiness
+bound without signalling that unowned process. Readiness failure after valid
+publication MUST retire only that exact owner; replacement during readiness
+MUST remain untouched.
+
 Service shutdown MUST stop admission before aborting an in-progress request or
-snapshot and terminating the launcher's process group. It MUST await that
-run's completion and snapshot cleanup before removing the run tree, socket,
-or PID record. Socket and PID cleanup MUST remove only artifacts still owned by
-that service instance. Project setup MAY retire an existing live service only
-after validating its PID record, process start identity, command, and working
-directory as the exact expected service. Malformed, foreign, ambiguous, or
-PID-less live state MUST fail closed without signalling a process or removing
-its socket. Dead exact residue may be removed before the replacement binds its
-socket, and setup MUST publish readiness only after the new PID, socket mode,
-and status endpoint all match the launched instance.
+snapshot. Cancellation and shutdown MUST signal the launcher's detached
+process group with TERM, wait for a bounded grace period, escalate the same
+group to KILL if it remains live, and await child closure before run cleanup.
+Shutdown MUST await run completion and snapshot cleanup before removing the
+run tree and its own owner and socket artifacts. Event delivery MUST retain no
+more than 8 MiB for replay, admit at most 16 concurrent followers for an
+active run, release a follower slot when it closes, and immediately disconnect
+a follower whenever a replay or live stream write reports false.
 
 Before `create`, `start`, `setup`, or `update` runs Project setup, DIM must
 ensure all three managed controller APIs are healthy. Host-admin, workspace,

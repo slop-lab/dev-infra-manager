@@ -512,30 +512,68 @@ lifecycle, readiness, start, or restart operation. KVM-disabled lifecycle
 coverage instead asserts that DIM omits the explicit device and supplemental
 group from the workspace creation arguments.
 
-The canonical Project MUST also expose the same protected QEMU launcher through
-a workspace-local, single-run service. The service MUST claim a run
-synchronously before awaiting its request body or filesystem operations. The
-claim MUST remain exclusive while the service validates inputs and creates
-immutable, service-owned per-run snapshots before starting the fixed launcher.
-A concurrent run and duplicate input names MUST be rejected. Snapshot copying
-MUST NOT dereference symlinks, MUST stream regular files with bounded memory,
-and MUST preserve their permission bits. Nested files and symbolic links MUST
-remain within the service-owned snapshot tree. Sockets, FIFOs, devices, and
-other unsupported entry types MUST be rejected, and a validation or snapshot
-failure MUST start no child process. Tests MUST cover shutdown while reading an
-incomplete request body, while snapshotting, and while the launcher child is
-running. In every case shutdown MUST prevent a later launch, drain per-run
-cleanup, and leave no owned run tree. Replacement tests MUST distinguish an
-exact live service identity from malformed, foreign, ambiguous, dead, and
-PID-less state; only exact owned residue or dead owned state may be removed.
-The agent may
-start, follow, inspect, or cancel that fixed launcher, but cannot supply a
-command, launcher path, QEMU argument, or path outside the assembled
+For `WORKSPACE-QEMU-INPUT-001`, the canonical Project MUST expose the protected
+QEMU launcher through a workspace-local, single-run service. Admission tests
+MUST prove that the first request claims the run synchronously before body or
+filesystem work, a concurrent request is rejected, duplicate input names are
+rejected before path resolution, and a rejected admission releases its claim.
+Snapshot tests MUST prove that directory entries are streamed from open
+directory handles rather than loaded as a complete listing, permission bits
+are preserved, and symlinks are copied without dereferencing. They MUST cover
+nested trees, immutable service-owned results after source replacement, a
+socket, and a FIFO. A rejected unsupported entry and an interrupted snapshot
+MUST start no subprocess or launcher and leave no reusable partial run tree.
+
+Ownership tests MUST require a mode-`0600`, exact schema-1
+`service-owner.json`. They MUST prove publication records schema 1 and the
+launched PID as a decimal string, and MUST reject a missing required field, an
+extra field, a numeric PID, a noncanonical executable path, and PIDs above
+either kernel `pid_max` or the maximum safe integer. Tests MUST prove that an
+argument-vector mismatch, owner-only state, malformed or foreign PID-only
+state, and replaced owner or socket inodes remain untouched and cause no
+signal. They MUST also prove that structurally valid dead residue is removed
+only through captured inode identities. Obsolete `service.pid` state MUST be
+rejected without migration for both live and dead recorded processes.
+
+Publication tests MUST prove that the published owner has mode `0600`, schema
+1, and the launched PID, and that no `service.pid` is created. Startup rollback
+MUST cover owner-publication failure after socket bind while a foreign socket
+replaces the bound pathname. Startup rollback and ordinary shutdown tests MUST
+prove that captured device and inode identities prevent removal of a successor.
+Restoration tests MUST prove that a later socket at the destination is not
+overwritten and that both foreign socket inodes remain preserved. A direct
+second service MUST fail without replacing the active socket, owner, or run
+tree.
+
+Setup tests MUST prove exact live-owner retirement occurs before replacement,
+exact dead residue can be removed, and the malformed, foreign, ambiguous,
+PID-only, and argument-mismatched cases above fail closed. Readiness tests MUST
+require the launched PID in the structured owner, socket mode `0666`, and a
+successful bounded status request. They MUST cover readiness failure after
+publication, owner and socket replacement during readiness, and a started
+process that never publishes an owner. The no-owner case MUST reach a bounded
+failure without signalling the process.
+
+Shutdown tests MUST cover an incomplete request body, an observed partial
+snapshot, and a running detached launcher group. They MUST prove that shutdown
+first closes admission, prevents later launch, drains run cleanup, and removes
+only the service's own owner, socket, and run tree. Cancellation and shutdown
+tests MUST also use a TERM-ignoring launcher group and prove bounded escalation
+from TERM to KILL, child closure, and group termination before cleanup.
+
+Event tests MUST prove that no more than 16 followers are admitted for an
+active run, follower 17 is rejected before successful stream headers, and a
+closed follower releases capacity. A replay write that reports false MUST
+immediately disconnect that follower instead of allowing unbounded
+backpressure.
+
+The agent may start, follow, inspect, or cancel the fixed launcher, but cannot
+supply a command, launcher path, QEMU argument, or path outside the assembled
 `/workspace`. Accepted `NAME=/workspace/PATH` inputs appear only as guest
-snapshots under `/mnt/dim-inputs/NAME`.
-The service and QEMU process run in the trusted workspace; `/dev/kvm`, QEMU
-binaries, the launcher copy, and its base-image cache MUST NOT be mounted
-writable into the agent. Candidate verification code executes only in the VM.
+snapshots under `/mnt/dim-inputs/NAME`. The service and QEMU process run in the
+trusted workspace; `/dev/kvm`, QEMU binaries, the launcher copy, and its
+base-image cache MUST NOT be mounted writable into the agent. Candidate
+verification code executes only in the VM.
 
 ## Installer Facade Verification
 
