@@ -25,10 +25,10 @@ function qemuSection(setup: string, serviceDirectory: string): string {
   const start = setup.indexOf("qemu_service_dir=/tmp/dim-qemu-verification");
   const end = setup.indexOf("\n# Avoid inheriting", start);
   if (start < 0 || end < 0) throw new TypeError("QEMU setup section was not found");
-  return setup.slice(start, end).replace(
+  return `set -eu\n${setup.slice(start, end).replace(
     "qemu_service_dir=/tmp/dim-qemu-verification",
     `qemu_service_dir=${JSON.stringify(serviceDirectory)}`
-  );
+  )}`;
 }
 
 async function createSetupFixture(): Promise<SetupFixture> {
@@ -43,17 +43,18 @@ async function createSetupFixture(): Promise<SetupFixture> {
   await writeFile(log, "");
   await writeFile(resolve(tools, "sleep"), "#!/usr/bin/env bash\nexit 0\n");
   await writeFile(resolve(tools, "node"), `#!/usr/bin/env bash
+case "\${1:-}" in *qemu-service-owner.mjs) exec "$DIM_TEST_REAL_NODE" "$@" ;; esac
 printf 'replacement\n' >>"$DIM_TEST_REPLACEMENT_LOG"
 printf '%s\n' "$$" >"$DIM_TEST_REPLACEMENT_PID"
 exec "$DIM_TEST_REAL_NODE" --input-type=module -e '
-  import { chmodSync, writeFileSync } from "node:fs";
+  import { chmodSync } from "node:fs";
   import { createServer } from "node:http";
-  import { dirname, resolve } from "node:path";
+  import { createOwnerRecord, publishOwner } from "${resolve(projectRoot, ".dim/qemu-service-owner.mjs")}";
   const socketPath = process.env.DIM_QEMU_SERVICE_SOCKET;
   const server = createServer((_request, response) => response.end("{\\"status\\":\\"idle\\"}\\n"));
-  server.listen(socketPath, () => {
+  server.listen(socketPath, async () => {
     chmodSync(socketPath, 0o666);
-    writeFileSync(resolve(dirname(socketPath), "service.pid"), process.pid + "\\n");
+    await publishOwner(process.env.DIM_TEST_OWNER_PATH, await createOwnerRecord(socketPath));
   });
 '
 `);
@@ -71,6 +72,7 @@ async function runSetup(fixture: SetupFixture) {
       PATH: `${fixture.tools}:/usr/bin:/bin`,
       DIM_TEST_REAL_NODE: process.execPath,
       DIM_TEST_REPLACEMENT_LOG: fixture.log,
+      DIM_TEST_OWNER_PATH: resolve(fixture.serviceDirectory, "service-owner.json"),
       DIM_TEST_REPLACEMENT_PID: fixture.replacementPid,
       DIM_WORKSPACE_KVM: "1"
     },
@@ -153,7 +155,7 @@ describe("QEMU replacement ownership", () => {
     expect(await readFile(fixture.log, "utf8")).toBe("");
   });
 
-  it("cleans artifacts for a dead recorded PID and starts its replacement", async () => {
+  it("rejects obsolete service.pid residue instead of accepting its PID", async () => {
     const fixture = await createSetupFixture();
     const exited = spawn("/usr/bin/true");
     await new Promise<void>((resolveExit) => exited.once("exit", () => resolveExit()));
@@ -161,12 +163,9 @@ describe("QEMU replacement ownership", () => {
     await writeFile(resolve(fixture.serviceDirectory, "service.sock"), "stale\n");
 
     const result = await runSetup(fixture);
-    const replacement = await readFile(resolve(fixture.serviceDirectory, "service.pid"), "utf8");
-
-    expect.soft(result.status).toBe(0);
-    expect.soft(replacement).not.toBe(`${exited.pid}\n`);
-    expect.soft((await lstat(resolve(fixture.serviceDirectory, "service.sock"))).isSocket()).toBe(true);
-    expect(await readFile(fixture.log, "utf8")).toBe("replacement\n");
+    expect.soft(result.status).not.toBe(0);
+    expect.soft(await readFile(resolve(fixture.serviceDirectory, "service.pid"), "utf8")).toBe(`${exited.pid}\n`);
+    expect(await readFile(fixture.log, "utf8")).toBe("");
   });
 
   it("refuses a second direct service without replacing the active socket or run tree", async () => {
@@ -189,8 +188,8 @@ describe("QEMU replacement ownership", () => {
     const outcome = await Promise.race([
       new Promise<"exited">((resolveExit) => second.once("exit", () => resolveExit("exited"))),
       waitForObservation(async () => {
-        const recorded = Number.parseInt(await readFile(resolve(fixture.root, "service.pid"), "utf8"), 10);
-        return recorded !== fixture.process.pid ? "replaced" as const : undefined;
+        const recorded = JSON.parse(await readFile(resolve(fixture.root, "service-owner.json"), "utf8")) as { pid: string };
+        return Number(recorded.pid) !== fixture.process.pid ? "replaced" as const : undefined;
       }, 1_000)
     ]);
     const status = await http(fixture, { method: "GET", path: "/v1/status" });
