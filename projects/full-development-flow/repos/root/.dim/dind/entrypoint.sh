@@ -5,8 +5,12 @@ chown root:root /usr/bin/newuidmap /usr/bin/newgidmap
 chmod 4755 /usr/bin/newuidmap /usr/bin/newgidmap
 
 docker_data=/home/rootless/.local/share/docker
+docker_runtime=/run/dim-agent-dind
 ownership_marker="$docker_data/.dim-rootless-owner-v1"
-mkdir -p "$docker_data" /run/user/1000
+mkdir -p "$docker_data" /run/user/1000 "$docker_runtime"
+chown rootless:rootless "$docker_runtime"
+chmod 0755 "$docker_runtime"
+rm -f "$docker_runtime/docker.sock"
 if [ ! -f "$ownership_marker" ]; then
   chown -R rootless:rootless "$docker_data"
 fi

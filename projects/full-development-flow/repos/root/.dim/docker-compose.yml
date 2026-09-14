@@ -6,7 +6,7 @@ services:
         DIM_WORKSPACE_UID: "${DIM_WORKSPACE_UID:-1000}"
         DIM_WORKSPACE_GID: "${DIM_WORKSPACE_GID:-1000}"
     environment:
-      DOCKER_HOST: "tcp://agent-dind:2375"
+      DOCKER_HOST: "unix:///run/dim-agent-dind/docker.sock"
       DIM_CONTROLLER_SOCKET: "/run/dim/controller-proxy/agent.sock"
       DIM_GIT_USERNAME: "${DIM_GIT_USERNAME:?}"
       DIM_GIT_TOKEN: "${DIM_GIT_TOKEN:?}"
@@ -16,19 +16,22 @@ services:
       GIT_AUTHOR_EMAIL: "${GIT_AUTHOR_EMAIL:-}"
       GIT_COMMITTER_NAME: "${GIT_COMMITTER_NAME:-}"
       GIT_COMMITTER_EMAIL: "${GIT_COMMITTER_EMAIL:-}"
-      GIT_CONFIG_COUNT: "2"
+      GIT_CONFIG_COUNT: "3"
       GIT_CONFIG_KEY_0: credential.helper
       GIT_CONFIG_VALUE_0: "!f() { echo username=$$DIM_GIT_USERNAME; echo password=$$DIM_GIT_TOKEN; }; f"
       GIT_CONFIG_KEY_1: safe.directory
       GIT_CONFIG_VALUE_1: /workspace
+      GIT_CONFIG_KEY_2: safe.directory
+      GIT_CONFIG_VALUE_2: /workspace/*
+      GIT_TERMINAL_PROMPT: "0"
     volumes:
       - ${DIM_PROJECT_ROOT:?}:/workspace
       - agent-home:/home/dim-agent
       - agent-dind-shared:/mnt/workspace-shared-dind
+      - agent-dind-runtime:/run/dim-agent-dind
       - /tmp/dim-agent-controller:/run/dim/controller-proxy:ro
     networks:
       - default
-      - agent-dind
     working_dir: /workspace
     depends_on:
       agent-dind:
@@ -38,9 +41,9 @@ services:
     build:
       context: dind
     privileged: true
+    command: ["--host=unix:///run/dim-agent-dind/docker.sock"]
     environment:
-      DOCKER_HOST: "tcp://127.0.0.1:2375"
-      DOCKER_TLS_CERTDIR: ""
+      DOCKER_HOST: "unix:///run/dim-agent-dind/docker.sock"
     healthcheck:
       test: ["CMD", "docker", "info"]
       interval: 1s
@@ -49,6 +52,7 @@ services:
     volumes:
       - agent-dind-data:/home/rootless/.local/share/docker
       - agent-dind-shared:/mnt/workspace-shared-dind
+      - agent-dind-runtime:/run/dim-agent-dind
     networks:
       - agent-dind
 
@@ -72,6 +76,7 @@ volumes:
   # shared volume therefore has a sticky writable root, and bind-source
   # directories below it must grant access to both containers.
   agent-dind-shared:
+  agent-dind-runtime:
 
 networks:
   default:
