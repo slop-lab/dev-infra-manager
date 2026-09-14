@@ -61,7 +61,10 @@ describe("capable-host SSH journeys", () => {
     const smoke = await readFile(statefulSmoke, "utf8");
     const journey = section(smoke, "connect through key-only OpenSSH", "preserve work across dirty rejection");
     expectSshClientPolicy(smoke);
-    expectPracticalAuthority(journey, "tcp://agent-dind:2375");
+    expectPracticalAuthority(journey, "unix:///run/dim-agent-dind/docker.sock");
+    expect(journey).toContain("test -S /run/dim-agent-dind/docker.sock");
+    expect(journey).not.toContain("tcp://agent-dind:2375");
+    expect(journey).not.toContain("test ! -e /run/docker.sock");
     expect(journey).toContain("GIT_TERMINAL_PROMPT=0 git ls-remote origin HEAD");
     expect(smoke).toContain('project_task_uid="$(dim workspace run');
     expect(smoke).toContain('test "$project_task_uid" -ne 0');

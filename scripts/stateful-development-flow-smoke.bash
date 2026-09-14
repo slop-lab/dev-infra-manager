@@ -253,6 +253,18 @@ set -euo pipefail
 test "$(id -u)" -ne 0
 test "$(id -un)" = dim-agent
 test "$HOME" = /home/dim-agent
+test "$(getent passwd dim-agent | cut -d: -f7)" = /usr/local/bin/dim-agent-shell
+test "$(stat -c '%U:%G:%a' /run/dim-agent/environment)" = root:dim-agent:440
+test ! -w /run/dim-agent/environment
+expected_bridge_variables="$(printf '%s\n' \
+  PATH HOME DOCKER_HOST DIM_CONTROLLER_SOCKET DIM_GIT_USERNAME DIM_GIT_TOKEN \
+  GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL \
+  GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 GIT_CONFIG_KEY_1 \
+  GIT_CONFIG_VALUE_1 GIT_CONFIG_KEY_2 GIT_CONFIG_VALUE_2 GIT_TERMINAL_PROMPT)"
+test "$(sed -n 's/^export \([^=]*\)=.*/\1/p' /run/dim-agent/environment)" = \
+  "$expected_bridge_variables"
+getfacl -cp /workspace | grep -qx 'user:dim-agent:rwx'
+getfacl -cp /workspace | grep -qx 'default:user:dim-agent:rwx'
 test "$(cat /workspace/journey-ssh-existing)" = ordinary-task
 printf '%s\n' ssh-overwrite >/workspace/journey-ssh-existing
 test "$(cat /workspace/journey-ssh-existing)" = ssh-overwrite
@@ -266,8 +278,10 @@ touch "$HOME/journey-ssh-home"
 printf '%s\n' persistent-home >"$HOME/journey-ssh-home"
 test "$(cat "$HOME/journey-ssh-home")" = persistent-home
 rm "$HOME/journey-ssh-home"
-test "$DOCKER_HOST" = tcp://agent-dind:2375
-test ! -e /run/docker.sock
+test "$DOCKER_HOST" = unix:///run/dim-agent-dind/docker.sock
+test -S /run/dim-agent-dind/docker.sock
+getfacl -cp /run/dim-agent-dind/docker.sock | grep -qx 'user:dim-agent:rw-'
+getfacl -cp /run/dim-agent-dind/docker.sock | grep -qx 'other::---'
 test ! -e /var/run/docker.sock
 docker info --format '{{json .SecurityOptions}}' | grep -q rootless
 docker run --rm alpine:3.22 true
@@ -275,8 +289,16 @@ test "$GIT_AUTHOR_NAME" = "Full Flow Host"
 test "$GIT_AUTHOR_EMAIL" = full-flow@dim.invalid
 test "$GIT_COMMITTER_NAME" = "Full Flow Host"
 test "$GIT_COMMITTER_EMAIL" = full-flow@dim.invalid
+test "$GIT_CONFIG_COUNT" = 3
+test "$GIT_CONFIG_KEY_0" = credential.helper
+test "$GIT_CONFIG_VALUE_0" = '!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f'
+test "$GIT_CONFIG_KEY_1" = safe.directory
+test "$GIT_CONFIG_VALUE_1" = /workspace
+test "$GIT_CONFIG_KEY_2" = safe.directory
+test "$GIT_CONFIG_VALUE_2" = '/workspace/*'
+test "$GIT_TERMINAL_PROMPT" = 0
 test -n "$(git config --get credential.helper)"
-test "$(git config --get-all safe.directory)" = /workspace
+test "$(git config --get-all safe.directory)" = "$(printf '/workspace\n/workspace/*')"
 test -n "$DIM_GIT_TOKEN"
 GIT_TERMINAL_PROMPT=0 git ls-remote origin HEAD >/dev/null
 test -S "$DIM_CONTROLLER_SOCKET"
@@ -296,7 +318,7 @@ SSH_AUTHORITY
 env DIM_GIT_TOKEN=client-controlled-token ssh -F "$ssh_config" \
   -o SetEnv=DOCKER_HOST=unix:///tmp/client-controlled.sock \
   -o SendEnv=DIM_GIT_TOKEN "$ssh_alias" \
-  'test "$DOCKER_HOST" = tcp://agent-dind:2375; test -n "$DIM_GIT_TOKEN"; test "$DIM_GIT_TOKEN" != client-controlled-token'
+  'test "$DOCKER_HOST" = unix:///run/dim-agent-dind/docker.sock; test -n "$DIM_GIT_TOKEN"; test "$DIM_GIT_TOKEN" != client-controlled-token'
 if ssh -F "$ssh_config" -o User=root "$ssh_alias" true >/dev/null 2>&1; then
   echo "SSH unexpectedly accepted root login" >&2
   exit 1
@@ -332,6 +354,14 @@ test "$(dim workspace exec "$workspace_name" -- docker inspect "$agent_container
 nested_ssh_port="$(dim workspace exec "$workspace_name" -- \
   docker port "$agent_container" 22/tcp 2>/dev/null || true)"
 test -z "$nested_ssh_port"
+dind_processes="$(dim workspace exec "$workspace_name" -- \
+  docker compose --project-name "$compose_name" --file .dim/docker-compose.yml \
+  exec --no-TTY agent-dind ps -o args)"
+grep -q -- '--host=unix:///run/dim-agent-dind/docker.sock' <<<"$dind_processes"
+if grep -Eq 'tcp://|(^|[^0-9])(2375|2376)([^0-9]|$)' <<<"$dind_processes"; then
+  echo "DinD unexpectedly exposed a TCP listener" >&2
+  exit 1
+fi
 
 echo "[full-development-flow] preserve work across dirty rejection and reviewed restart"
 dim workspace run "$workspace_name" bash -- -lc \
