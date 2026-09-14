@@ -134,7 +134,7 @@ if [[ "$cache_routing" == false ]]; then
     mkdir -p "$inputs_root/$name"
     tar -C "$(dirname "$source")" --exclude=.git --exclude=.local --exclude=node_modules \
       -cf - -- "$(basename "$source")" | tar --strip-components=1 -x -C "$inputs_root/$name"
-  done < <(printf '%s' "${DIM_QEMU_EXTRA_INPUTS_JSON:-[]}" |
+  done < <(printf '%s' "${DIM_QEMU_INPUT_SNAPSHOTS_JSON:-[]}" |
     jq -r '.[] | [.name, .path] | @tsv')
   tar -C "$workdir" -czf "$workdir/inputs.tar.gz" dim-inputs
 fi
