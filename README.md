@@ -15,6 +15,12 @@ the trusted outer lifecycle. New checkouts use the runtime manifest's resolved
 commit SHA, so candidate refs and moving branches cannot change the materialized
 repository set after DIM creates the snapshot.
 
+The catalog connects these 11 independent repositories to GitLab development
+upstreams, each on `main`. DIM-managed Gitea is the internal review host.
+`dim repo publish dim` publishes managed heads only to those GitLab
+upstreams. Publishing the integrated canonical repository and creating a
+release on GitHub are separate actions performed by a trusted maintainer.
+
 The reviewed [QEMU cache hook](.dim/ci/qemu-cache.bash) seeds the pinned Ubuntu
 image used by DIM's nested installer verification into the Project-scoped
 runner base. It runs only while Packer builds that base; pull-request jobs see
@@ -25,8 +31,9 @@ Create the split self-development Project from the root branch:
 
 ```bash
 dim project create dim \
-  --bootstrap-git-url https://github.com/slop-lab/dev-infra-manager.git \
-  --bootstrap-git-ref dev/root
+  --bootstrap-git-url https://gitlab.com/slop-lab/dim/root.git \
+  --bootstrap-git-ref main \
+  --apply-repos
 dim workspace create dim dim-dev
 dim workspace run dim-dev codex
 ```
@@ -40,10 +47,14 @@ node project/.dim/qemu-client.mjs run --input fixtures=/workspace/local-fixtures
 node project/.dim/qemu-client.mjs probe
 ```
 
-Additional inputs must resolve beneath `/workspace`. They are copied into the
-guest under `/mnt/dim-inputs/NAME`; they are not host bind mounts and cannot
-escape the agent-visible source boundary. `status`, `follow`, and `cancel`
-subcommands control the single workspace-scoped run.
+Additional inputs must resolve beneath `/workspace`, and duplicate names are
+rejected. The service synchronously claims one run before reading its request
+body or awaiting filesystem work. While that claim remains exclusive, it
+copies inputs without following symlinks into immutable service-owned
+snapshots before launch. A snapshot failure starts no child process. Successful
+snapshots appear in the guest under `/mnt/dim-inputs/NAME`; they are not host
+bind mounts and cannot escape the agent-visible source boundary. `status`,
+`follow`, and `cancel` subcommands control the single workspace-scoped run.
 
 The canonical Project runs its development agent as UID 0 only inside a
 private rootless `agent-dind`. The daemon adopts the workspace checkout's
