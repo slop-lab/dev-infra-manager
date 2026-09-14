@@ -67,7 +67,7 @@ export async function spawnRecords(fixture: ServiceFixture): Promise<readonly Sp
 }
 
 export async function startService(mode: "exit" | "hold", options: ServiceOptions = {}): Promise<ServiceFixture> {
-  const root = await mkdtemp(resolve(tmpdir(), "dim-qemu-service-test-"));
+  const root = await mkdtemp(resolve(tmpdir(), "dim-qemu-service-test-")); await chmod(root, 0o755);
   fixtureRoots.push(root);
   const sourceRoot = resolve(root, "source");
   const recordFile = resolve(root, "launches.jsonl");

@@ -50,15 +50,18 @@ afterEach(async () => {
 
 describe("QEMU service startup rollback", () => {
   it("exits without residue while preserving a foreign socket that replaces the bound pathname", async () => {
-    const root = await mkdtemp(resolve(tmpdir(), "dim-qemu-startup-rollback-test-"));
+    const root = await mkdtemp(resolve(tmpdir(), "dim-qemu-startup-rollback-test-")); await chmod(root, 0o755);
     roots.push(root);
     const sourceRoot = resolve(root, "source");
+    const runsRoot = resolve(root, "runs");
+    const runSentinel = resolve(runsRoot, "existing-run");
     const socketPath = resolve(root, "service.sock");
     const blocked = resolve(root, "publication-blocked");
     const release = resolve(root, "publication-release");
     const loader = resolve(root, "owner-loader.mjs");
     const ownerWrapper = resolve(root, "owner-wrapper.mjs");
-    await mkdir(sourceRoot);
+    await Promise.all([mkdir(sourceRoot), mkdir(runsRoot)]);
+    await writeFile(runSentinel, "existing run\n");
     await writeFile(loader, `import { pathToFileURL } from "node:url";
 export async function resolve(specifier, context, nextResolve) {
   if (specifier.endsWith("qemu-service-owner.mjs") && !specifier.includes("?real")) {
@@ -70,10 +73,12 @@ export async function resolve(specifier, context, nextResolve) {
     await writeFile(ownerWrapper, `import fs from "node:fs";
 import * as owner from ${JSON.stringify(`${pathToFileURL(resolve(workspaceRoot, "project/.dim/qemu-service-owner.mjs")).href}?real`)};
 export const captureSocketIdentity = owner.captureSocketIdentity;
+export const createSocketLease = owner.createSocketLease;
 export const createOwnerRecord = owner.createOwnerRecord;
-export const removeIfOwned = owner.removeIfOwned;
+export const removeOwnedArtifacts = owner.removeOwnedArtifacts;
 export const restoreReplacedSocket = owner.restoreReplacedSocket;
 export const safeguardReplacedSocket = owner.safeguardReplacedSocket;
+export const socketLeasePath = owner.socketLeasePath;
 export async function publishOwner() {
   await fs.promises.writeFile(process.env.DIM_TEST_PUBLICATION_BLOCKED, "blocked\\n");
   while (!fs.existsSync(process.env.DIM_TEST_PUBLICATION_RELEASE)) await new Promise((resolveWait) => setTimeout(resolveWait, 5));
@@ -96,9 +101,15 @@ export async function publishOwner() {
         rejectExit(new TypeError(`service exited ${code}: ${Buffer.concat(stderr).toString("utf8")}`));
       })),
     ]);
-    expect({ entries: await readdir(root), exitCode: child.exitCode, stderr: Buffer.concat(stderr).toString("utf8") }).toMatchObject({
-      entries: expect.arrayContaining(["service.sock"]), exitCode: null,
+    const blockedEntries = await readdir(root);
+    const [blockedSocket, blockedLease] = await Promise.all([
+      lstat(socketPath, { bigint: true }), lstat(resolve(root, ".service.sock.lease"), { bigint: true }),
+    ]);
+    expect({ entries: blockedEntries, exitCode: child.exitCode, stderr: Buffer.concat(stderr).toString("utf8") }).toMatchObject({
+      entries: expect.arrayContaining([".service.sock.lease", "service.sock"]), exitCode: null,
     });
+    expect.soft({ device: blockedLease.dev, inode: blockedLease.ino })
+      .toEqual({ device: blockedSocket.dev, inode: blockedSocket.ino });
     await rm(socketPath);
     const foreign = createServer();
     servers.push(foreign);
@@ -112,7 +123,6 @@ export async function publishOwner() {
 
     await writeFile(release, "release\n");
     const exited = await waitForExit(child);
-    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
 
     const entries = await readdir(root);
     expect.soft({ entries, exitCode: child.exitCode, exited, stderr: Buffer.concat(stderr).toString("utf8") }).toMatchObject({
@@ -120,7 +130,9 @@ export async function publishOwner() {
     });
     expect.soft(child.exitCode).not.toBe(0);
     expect.soft(await exists(resolve(root, "service-owner.json"))).toBe(false);
-    expect.soft(await exists(resolve(root, "runs"))).toBe(false);
+    expect.soft(await readdir(runsRoot)).toEqual(["existing-run"]);
+    expect.soft(await readFile(runSentinel, "utf8")).toBe("existing run\n");
+    expect.soft(await exists(resolve(root, ".service.sock.lease"))).toBe(false);
     if (entries.includes("service.sock")) {
       const surviving = await lstat(socketPath, { bigint: true });
       expect({ device: surviving.dev, inode: surviving.ino }).toEqual({ device: foreignIdentity.dev, inode: foreignIdentity.ino });

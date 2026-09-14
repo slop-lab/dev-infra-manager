@@ -49,11 +49,12 @@ printf '%s\n' "$$" >"$DIM_TEST_REPLACEMENT_PID"
 exec "$DIM_TEST_REAL_NODE" --input-type=module -e '
   import { chmodSync } from "node:fs";
   import { createServer } from "node:http";
-  import { createOwnerRecord, publishOwner } from "${resolve(projectRoot, ".dim/qemu-service-owner.mjs")}";
+  import { captureSocketIdentity, createOwnerRecord, createSocketLease, publishOwner } from "${resolve(projectRoot, ".dim/qemu-service-owner.mjs")}";
   const socketPath = process.env.DIM_QEMU_SERVICE_SOCKET;
   const server = createServer((_request, response) => response.end("{\\"status\\":\\"idle\\"}\\n"));
   server.listen(socketPath, async () => {
-    chmodSync(socketPath, 0o666);
+    await createSocketLease(socketPath, await captureSocketIdentity(socketPath));
+    chmodSync(process.env.DIM_TEST_LEASE_PATH, 0o666);
     await publishOwner(process.env.DIM_TEST_OWNER_PATH, await createOwnerRecord(socketPath));
   });
 '
@@ -73,6 +74,7 @@ async function runSetup(fixture: SetupFixture) {
       DIM_TEST_REAL_NODE: process.execPath,
       DIM_TEST_REPLACEMENT_LOG: fixture.log,
       DIM_TEST_OWNER_PATH: resolve(fixture.serviceDirectory, "service-owner.json"),
+      DIM_TEST_LEASE_PATH: resolve(fixture.serviceDirectory, ".service.sock.lease"),
       DIM_TEST_REPLACEMENT_PID: fixture.replacementPid,
       DIM_WORKSPACE_KVM: "1"
     },
@@ -199,5 +201,24 @@ describe("QEMU replacement ownership", () => {
     expect.soft(status.body).toContain('"status":"running"');
     expect.soft((await lstat(fixture.socketPath, { bigint: true })).ino).toBe(socketIdentity.ino);
     expect(await readdir(fixture.runsRoot)).toEqual(runNames);
+  });
+
+  it("rejects a pre-existing deterministic lease without replacing it", async () => {
+    const fixture = await createSetupFixture();
+    const leasePath = resolve(fixture.serviceDirectory, ".service.sock.lease");
+    await writeFile(leasePath, "foreign lease\n");
+
+    const service = spawn(process.execPath, [serviceScript], {
+      env: { ...process.env, DIM_QEMU_LAUNCHER: "/bin/false",
+        DIM_QEMU_SERVICE_SOCKET: resolve(fixture.serviceDirectory, "service.sock"),
+        DIM_QEMU_SOURCE_ROOT: fixture.root },
+      stdio: "ignore",
+    });
+    processes.push(service);
+    await new Promise<void>((resolveExit) => service.once("exit", () => resolveExit()));
+
+    expect.soft(service.exitCode).not.toBe(0);
+    expect.soft(await readFile(leasePath, "utf8")).toBe("foreign lease\n");
+    await expect(lstat(resolve(fixture.serviceDirectory, "service.sock"))).rejects.toThrow();
   });
 });
