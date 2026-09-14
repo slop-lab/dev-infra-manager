@@ -57,10 +57,10 @@ protected ref or trusted Project runtime
 artifact, signing, publishing, or deployment
 ```
 
-DIM's canonical public source repository is GitHub, while DIM development
-normally uses the active Git host managed by a self-development Project. The
-current reference backend is Gitea with `act_runner`, but neither is part of
-the long-term Project contract. See
+DIM's canonical integrated public source repository is GitHub. DIM's 11 split
+development repositories use GitLab upstreams, while a self-development
+Project's managed Gitea and `act_runner` provide internal review and CI.
+Neither managed implementation is part of the long-term Project contract. See
 [DIM Development Repositories](specification/docs/development-repositories.md).
 
 Workspaces persist. Verification runs separately in disposable job containers.

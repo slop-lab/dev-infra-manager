@@ -219,9 +219,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   access policy or credentials to DIM core.
 - Added an interactive, recommended KVM-access confirmation to `dim workspace
   create`, plus explicit `--kvm` and `--no-kvm` policies for automation.
-- Added a full-development-flow reference Project and a stateful release
-  journey covering reviewed updates, restart safety, controller replacement,
-  setup recovery, backup/discard/recreate/restore, and cleanup without putting
+- Added a full-development-flow reference Project with key-only, non-root SSH
+  sessions that match ordinary agent authority while retaining bounded Git,
+  private Docker, and constrained controller access. Its QEMU verification
+  service serializes runs and snapshots agent-visible inputs before launch,
+  while the canonical self-development catalog maps each split repository to
+  its external upstream. The stateful release journey covers reviewed updates,
+  restart safety, controller replacement, setup recovery,
+  backup/discard/recreate/restore, and cleanup without putting
   verification-only hooks in the checked-in example.
 - Added a separate host-only managed Git maintainer capability for `dim x git`
   and `dim git setup`. Existing managed credentials and protected-branch rules
