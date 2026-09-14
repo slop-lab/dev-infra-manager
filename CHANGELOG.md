@@ -103,15 +103,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   not a raw `.dim/repos.yml` document, and an omitted ref still selects its
   symbolic `HEAD`.
 - Made the split DIM self-development repositories directly runnable: the
-  reviewed root catalog imports each archive `dev/<alias>` as an independent
-  managed repository's `main`, publishes each `main` back to its matching
-  canonical branch, and protects only `root/main` and `development/main`, then
-  materializes missing registered Project repositories into the integrated
-  agent workbench. The trusted outer lifecycle never invokes Git against an
-  existing agent-controlled checkout; agents update those checkouts inside
-  their private runtime. `project create --bootstrap-git-url` now applies a complete
-  same-origin repository set automatically while retaining explicit approval
-  for manifests that introduce another host Git origin.
+  reviewed root catalog registers 11 independent GitLab repositories on
+  `main`, maps each managed repository back to its matching upstream, and
+  protects only `root/main` and `development/main`, then materializes missing
+  registered Project repositories into the integrated agent workbench. The
+  trusted outer lifecycle never invokes Git against an existing
+  agent-controlled checkout; agents update those checkouts inside their
+  private runtime. `project create --bootstrap-git-url --apply-repos` applies
+  the complete reviewed repository set while retaining explicit approval for
+  manifests that introduce another host Git origin. DIM-managed Gitea remains
+  the internal review host; integrated GitHub publication remains a separate
+  trusted maintainer action.
   The development checkout also carries the agent guidance and repository-local
   PR/release skills used by the existing contributor workflow.
 - Staged the future `root`, `development`, `core`, paired core/plugin
