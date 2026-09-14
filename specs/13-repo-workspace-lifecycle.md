@@ -351,7 +351,9 @@ connecting. The top-level login MUST be a fixed non-root `dim-agent` account.
 The canonical self-Project uses UID 1000 for that account across SSH sessions
 and agent recreation. SSH root login MUST be disabled. Root authentication MUST
 remain rejected when the client offers a key that is valid and authorized for
-the `dim-agent` account.
+the `dim-agent` account. Project setup that publishes this task as ready MUST
+wait for the agent service's SSH listener through a bounded health check; a
+started container whose SSH listener is not accepting connections is not ready.
 
 The server MUST use a fixed shell bridge and a server-owned allowlist to create
 each session environment from current runtime values. That environment MUST be
@@ -392,11 +394,25 @@ filesystem operation. It MUST reject a new run while another run owns the
 service, and it MUST reject duplicate input names before filesystem validation.
 Each admitted run MUST own a fresh set of service-owned input snapshots that
 the agent cannot mutate after admission.
-Snapshot copying MUST NOT dereference symlinks. The fixed launcher and its
-child process MUST receive only the immutable snapshot paths, never the live
-input paths. If validation or any snapshot operation fails, admission MUST
-fail, the run MUST own no reusable partial snapshot, and no launcher or other
-child process may start.
+Snapshot copying MUST NOT dereference symlinks. It MUST anchor traversal to
+open descriptors, stream regular files with bounded memory, preserve regular
+file permission bits, and reject sockets, FIFOs, devices, and every other
+unsupported entry type. The fixed launcher and its child process MUST receive
+only the immutable snapshot paths, never the live input paths. If validation
+or any snapshot operation fails, admission MUST fail, the run MUST own no
+reusable partial snapshot, and no launcher or other child process may start.
+
+Service shutdown MUST stop admission before aborting an in-progress request or
+snapshot and terminating the launcher's process group. It MUST await that
+run's completion and snapshot cleanup before removing the run tree, socket,
+or PID record. Socket and PID cleanup MUST remove only artifacts still owned by
+that service instance. Project setup MAY retire an existing live service only
+after validating its PID record, process start identity, command, and working
+directory as the exact expected service. Malformed, foreign, ambiguous, or
+PID-less live state MUST fail closed without signalling a process or removing
+its socket. Dead exact residue may be removed before the replacement binds its
+socket, and setup MUST publish readiness only after the new PID, socket mode,
+and status endpoint all match the launched instance.
 
 Before `create`, `start`, `setup`, or `update` runs Project setup, DIM must
 ensure all three managed controller APIs are healthy. Host-admin, workspace,

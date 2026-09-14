@@ -518,8 +518,17 @@ synchronously before awaiting its request body or filesystem operations. The
 claim MUST remain exclusive while the service validates inputs and creates
 immutable, service-owned per-run snapshots before starting the fixed launcher.
 A concurrent run and duplicate input names MUST be rejected. Snapshot copying
-MUST NOT dereference symlinks, and a validation or snapshot failure MUST start
-no child process. The agent may
+MUST NOT dereference symlinks, MUST stream regular files with bounded memory,
+and MUST preserve their permission bits. Nested files and symbolic links MUST
+remain within the service-owned snapshot tree. Sockets, FIFOs, devices, and
+other unsupported entry types MUST be rejected, and a validation or snapshot
+failure MUST start no child process. Tests MUST cover shutdown while reading an
+incomplete request body, while snapshotting, and while the launcher child is
+running. In every case shutdown MUST prevent a later launch, drain per-run
+cleanup, and leave no owned run tree. Replacement tests MUST distinguish an
+exact live service identity from malformed, foreign, ambiguous, dead, and
+PID-less state; only exact owned residue or dead owned state may be removed.
+The agent may
 start, follow, inspect, or cancel that fixed launcher, but cannot supply a
 command, launcher path, QEMU argument, or path outside the assembled
 `/workspace`. Accepted `NAME=/workspace/PATH` inputs appear only as guest
@@ -632,6 +641,9 @@ stdio with no TTY, accept only key authentication after checking the generated
 host-key fingerprint, and reconnect after agent recreation with persisted
 authorized keys. It must prove that the target is fixed, no port is published,
 and no host, trusted-workspace, or Project-runtime control socket is exposed.
+Static checks MUST also prove that Project setup uses a bounded Compose wait
+and that agent health requires the SSH server to accept a connection, so setup
+cannot report completion before the proxy target is usable.
 Static checks MUST require a standalone key-only server configuration with no
 root login, password path, client environment import, or image-baked key. They
 MUST require runtime host-key generation, persistent authorized keys, the fixed
