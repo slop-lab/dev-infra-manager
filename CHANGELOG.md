@@ -3,23 +3,62 @@
 ## Unreleased
 
 - Give locally built installation packages a validated version containing the
-  production source commit and dirty-worktree state, so package managers do
-  not reuse different local contents under the release version. Tracked
-  manifests remain private and release builds retain the exact release
-  version.
+  aggregate SHA-256 of the three exact production commits named by
+  `DIM_SOURCE_CORE_COMMIT`, `DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT`, and
+  `DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT`, plus dirty-worktree state, so
+  package managers do not reuse different local contents under the release
+  version. Local builds link the exact core and contracts sources before
+  compiling plugins. Tracked manifests remain private and release builds retain
+  the exact release version.
 
 - Keep routine workspace lifecycle output concise by default instead of
   printing complete internal records, while preserving the full documented
   machine-readable result behind `--json`.
 
+- Show a TTY-only idle spinner after five quiet seconds during long-running
+  workspace, CI runner, and host lifecycle commands, reset the delay whenever
+  command output arrives, and cleanly remove the indicator on every exit path
+  without changing redirected, interactive, or machine-readable output.
+
 - Add a volume-preserving host shutdown/start lifecycle that leaves the
   controller available, records previously ready workspaces, CI runners, and
   plugin-managed host containers, restores infrastructure before execution
   runtimes, and reports maintenance readiness until every target recovers.
+  Ordinary admitted admin operations hold lifecycle admission through
+  completion, so maintenance waits for them before target capture and drain;
+  later queued operations reread host state and reject while it is non-ready.
+  Internal workspace recovery remains available to the admitted host-start
+  operation without reopening ordinary workspace administration.
+  Repeated start attempts retain pending recovery intent after partial failure,
+  skip targets already ready, replay
+  interrupted workspace setup from immutable state, and normalize interrupted
+  CI runners with ownership-safe stop/start. Lists clear only after full
+  recovery. Host state schema 2 records runner restart authority in the durable
+  `restartCiRunners` list and does not infer it from current runner state.
+  Schema 2 is structurally validated without mutating malformed records, and
+  the invocation's entry phase fixes runner recovery: ordinary retries leave
+  ready runners untouched, while an interrupted `stopping` transition
+  ownership-safely cycles a listed ready runner. Schema 1 is rejected without
+  migration. Host-global registry-cache reconciliation is serialized across
+  callers.
 
 - Give reviewed Project Compose runtimes a stable workspace-local identity
   independent of the outer DIM workspace name, and reconcile a stale `ready`
   phase to `stopped` when the managed outer container is no longer running.
+  Workspace state schema 5 records a complete alias-keyed repository snapshot
+  with each requested ref, resolved ref, and exact commit, including the root.
+  A symbolic root `HEAD` request remains distinct from its resolved protected
+  branch, so setup retries rebuild the runtime manifest without resolving moved
+  refs. Workspace containers and inner-engine volumes now require complete
+  identity-digest ownership labels. Lifecycle mutations use only inspected
+  container IDs. Docker volumes have no immutable ID, so deletion remains
+  name-based and discard reinspects ownership immediately before removal.
+  Workspace creation rejects malformed, root, unknown, duplicate, unavailable,
+  and existing-workspace-mismatch ref overrides without mutating state.
+  Optional lifecycle-file probes treat only exit 1 as absence; other probe
+  failures abort before hook, Compose, or fallback dispatch. Live agent SSH
+  rejects root login even when the client uses the same valid key accepted for
+  the non-root `dim-agent` account.
 
 - Remove the pre-stable gVisor, rootless-Podman, and privileged-runc workspace
   backends. Sysbox is now the sole workspace backend; ordinary runc remains an
@@ -30,48 +69,51 @@
   device and resize that device directly, avoiding Sysbox's non-effective
   ioctl forwarding through `/proc/<pid>/fd/*` while preserving ordered delivery.
 
-- Keep real PTY creation and I/O coverage in the explicitly identified Sysbox
-  host-mode CI lane while leaving the window-resize assertion to supported
-  hosts and disposable Ubuntu QEMU lanes. Treat the missing resize as an
-  observation of the current CI environment pending investigation, rather
-  than a documented Sysbox limitation or something inferred from an optional
-  `/proc/sysbox` marker.
-
 - Materialize reviewed workspace host aliases such as the resolved DIM Gitea
   control-network address in `/etc/hosts`, avoiding runtime-specific embedded
   DNS behavior while retaining the recorded endpoint boundary.
 
-- Materialize the DIM-owned registry cache's inspected control-network address
-  in workspace `/etc/hosts`, so gVisor workspaces use the host-governed mirror
-  without depending on runsc's nested embedded-DNS behavior.
-
-- Completed the rootless-Podman workspace toolchain with supported Node.js,
-  `just`, Docker-compatible Podman Compose, and the controller proxy used by
-  reviewed Project setup scripts.
-
-- Disabled nested Docker's iptables and ip6tables rule programming for gVisor
-  workspaces because runsc exposes neither nftables nor legacy NAT tables;
-  release integration still verifies the resulting Project networking path.
-
-- Updated the managed Sysbox CI runner to checksum-pinned Node.js 24 and a
-  pinned `just` so host-mode actions and DIM's integration recipes use the
-  supported toolchain directly.
-
-- Included `jq` and `socat` in the managed Sysbox CI runner for Project
-  repository materialization and the root-owned registry-cache relay during
-  full host-mode integration checks.
-
-- Included only util-linux-misc's `script` PTY helper in the managed Sysbox CI
-  runner so interactive command sessions use a real terminal while Sysbox
-  startup retains Alpine's BusyBox `mount` implementation.
+- Move every managed CI workload into a disposable, digest-pinned job image
+  selected by a strict protected-root `.dim/ci/runner.yml`. Runner admission
+  now records exact config provenance, probes declared tools and nested-Docker
+  capability before registration, shares one protected snapshot with QEMU
+  cache-hook admission, and removes Project tools and host-mode labels from the
+  runner host. State schema 8 records the final split: persistent Sysbox
+  advertises ordinary labels only with no job Docker host, while QEMU
+  advertises integration labels plus `dim-qemu` for fresh one-job guests. Probe
+  cleanup waits for container removal before its attached socket volume and
+  keeps attempting ownership-safe cleanup after partial failures. Probe
+  containers are mutated only through inspected immutable IDs; socket-volume
+  removal remains name-based and requires immediate ownership reinspection.
 
 - Added protected-root-owned QEMU cache hooks, digest-keyed shared runner
-  bases, and coverage for disposable-job isolation from persistent cache
-  state.
+  bases, collision-safe managed resource identities, fail-closed volume
+  ownership checks, retry-safe final-capacity cleanup, and a monotonic shared
+  webhook scheduler that prevents duplicate or reordered Gitea events from
+  resurrecting completed jobs while retaining the intentional host-common
+  cache. Common bases now use a dated, signed Ubuntu cloud-image release and a
+  timestamped Ubuntu package snapshot, pin requested package versions, verify
+  executable downloads, and key the cache from every repository, artifact,
+  package, architecture, generated script, and Packer-template input. The
+  scheduler fsyncs its durable file and containing directory before HTTP `202`
+  and rejects acknowledgement on load or write failure. After guest readiness,
+  the supervisor registers ephemerally, validates and transfers only `.runner`,
+  unsets the reusable token for guest transports and QEMU, runs `daemon --once`
+  under a timeout, and treats the claimed webhook job as a durable demand
+  trigger rather than the consumed job identity. Trigger completion, loss, or
+  replacement stops renewal without terminating running generic capacity,
+  while shutdown and state-I/O failures retain bounded process cleanup. QEMU
+  `start` preserves schema-8 admission state and refreshes only runtime state;
+  `restart` re-admits the current protected state. TERM and INT remain graceful,
+  startup residue is swept, and fresh per-job overlay, SSH, registration, and
+  run state are removed.
 
 - Command-session tests now cover base64-framed stdout/stderr, including bytes
-  that are invalid UTF-8, so streaming `run`/`exec` remains safe for binary
-  backup and restore tasks.
+  that are invalid UTF-8, plus FIFO input from files, pipes, and named FIFOs.
+  Streaming `run`/`exec` remains safe for binary backup and restore tasks, and
+  Unix responses settle on abort and error, while input responses, event
+  responses, transport errors, cancellation failures, and local interruption
+  failures all surface to the caller.
 
 - Added coverage for exact-name workspace capability providers, required
   fail-closed behavior, recommended availability reporting, and validated
@@ -83,4 +125,21 @@
 
 - New managed Gitea repositories enable the built-in issue tracker only for
   the Project root, keeping Project work tracking in one repository without
-  changing repositories that already exist.
+  changing repositories that already exist. Managed Gitea now disables
+  regular-user organization creation through exactly one true admin policy
+  key, reinspected after restart. Service state, resources, policy, readiness,
+  credential publication, and webhook configuration are serialized in one
+  reconciliation. Network and volume creation proceeds only when Docker's
+  trimmed, case-insensitive inspect diagnostic exactly identifies the expected
+  resource type and name as absent; every other inspect failure propagates
+  before any mutation. Container work uses the inspected immutable ID, and
+  only the reserved genuine missing-path result permits credential creation.
+  Project schema 4 records the required
+  nullable trusted organization ID before ready publication, verifies exact ID
+  and username on retry, and fails closed on a null-ID name collision pending
+  administrator reconciliation. Repository deletion also refuses
+  to remove its selected target while that repository is importing, without
+  blocking a ready target because a sibling import is active. Imports retain
+  only trusted transfer authority and remain non-ready until protection
+  succeeds; protection failure leaves ordinary repository users without write
+  access.

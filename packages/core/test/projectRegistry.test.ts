@@ -1,11 +1,13 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { LifecycleOptions, ProjectRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { ensureGitea, giteaRequest } from "../../../../core/packages/core/src/gitea.js";
 import {
   branchProtectionOptions,
+  createProjectRepository,
   deleteProjectRepository,
   giteaRepositoryCreationOptions,
   normalizeRepositoryRef,
@@ -13,13 +15,24 @@ import {
   projectNamespace
 } from "../../../../core/packages/core/src/projectRegistry.js";
 import { RecordingRunner } from "../../../../core/packages/core/src/runner.js";
+import { projectRepositoryFixture } from "./projectRegistryFixture.js";
+
+vi.mock("../../../../core/packages/core/src/gitea.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../../core/packages/core/src/gitea.js")>(),
+  ensureGitea: vi.fn(async () => ({
+    adminUsername: "admin", adminPassword: "secret",
+    writerUsername: "writer", writerPassword: "secret",
+    maintainerUsername: "maintainer", maintainerPassword: "secret",
+    apiBaseUrl: "http://gitea.invalid/api/v1"
+  })),
+  giteaRequest: vi.fn(async () => new Response(null, { status: 204 }))
+}));
 
 describe("project registry", () => {
   const cleanup: string[] = [];
   afterEach(async () => {
     await Promise.all(cleanup.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
   });
-
   it("derives reserved managed namespaces", () => {
     expect(projectNamespace("acme")).toBe("dim-acme");
     expect(() => projectNamespace("../acme")).toThrow(/project name/);
@@ -78,40 +91,58 @@ describe("project registry", () => {
 
   it("rejects deleting the project root repository", async () => {
     const stateRoot = await mkdtemp(join(tmpdir(), "dim-project-registry-"));
-    cleanup.push(stateRoot);
-    const state = new LifecycleState(stateRoot);
+    cleanup.push(stateRoot); const state = new LifecycleState(stateRoot);
     const now = new Date().toISOString();
-    const repository = (alias: string) => ({
-      alias,
-      providerRepoId: `dim-example/${alias}`,
-      owner: "dim-example",
-      hostUrl: `http://127.0.0.1:3300/dim-example/${alias}.git`,
-      workspaceUrl: `http://dim-gitea:3000/dim-example/${alias}.git`,
-      phase: "ready" as const,
-      connections: [],
-      protectedPatterns: [],
-      protectionPhase: "applied" as const,
-      createdAt: now,
-      updatedAt: now
-    });
     const project: ProjectRecord = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       id: "project-id",
       name: "example",
       gitNamespace: "dim-example",
+      giteaOrganizationId: 41,
       phase: "ready",
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
-      repositories: [repository("root"), repository("extra")],
+      repositories: [projectRepositoryFixture("root", "ready"), projectRepositoryFixture("extra", "ready")],
       createdAt: now,
       updatedAt: now
     };
     await state.claimProject(project);
-    const options = { stateRoot } as LifecycleOptions;
-
-    await expect(deleteProjectRepository(new RecordingRunner(), options, "example", "root")).rejects.toThrow(
+    await expect(deleteProjectRepository(new RecordingRunner(), { stateRoot } as LifecycleOptions, "example", "root")).rejects.toThrow(
       "is the project root"
     );
+  });
+
+  it("rejects deleting a repository while it is importing without side effects", async () => {
+    const stateRoot = await mkdtemp(join(tmpdir(), "dim-project-importing-delete-"));
+    cleanup.push(stateRoot); const state = new LifecycleState(stateRoot);
+    const now = new Date().toISOString();
+    const project: ProjectRecord = {
+      schemaVersion: 4, id: "project-id", name: "example", gitNamespace: "dim-example", giteaOrganizationId: 41, phase: "ready",
+      repositories: [{ ...projectRepositoryFixture("target", "importing"), createdAt: now, updatedAt: now }],
+      createdAt: now, updatedAt: now
+    };
+    await state.claimProject(project);
+    vi.clearAllMocks();
+
+    await expect(deleteProjectRepository(new RecordingRunner(), { stateRoot } as LifecycleOptions, "example", "target")).rejects.toThrow("is importing");
+
+    expect(ensureGitea).not.toHaveBeenCalled();
+    expect(giteaRequest).not.toHaveBeenCalled();
+    expect(await state.readProject("example")).toEqual(project);
+  });
+
+  it("deletes a ready target when another repository is importing", async () => {
+    const stateRoot = await mkdtemp(join(tmpdir(), "dim-project-sibling-import-"));
+    cleanup.push(stateRoot);
+    const state = new LifecycleState(stateRoot);
+    await state.claimProject({
+      schemaVersion: 4, id: "project-id", name: "example", gitNamespace: "dim-example", giteaOrganizationId: 41, phase: "ready",
+      repositories: [projectRepositoryFixture("target", "ready"), projectRepositoryFixture("other", "importing")],
+      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+    });
+    vi.clearAllMocks(); await deleteProjectRepository(new RecordingRunner(), { stateRoot } as LifecycleOptions, "example", "target");
+
+    expect((await state.readProject("example")).repositories.map((repo) => repo.alias)).toEqual(["other"]); expect(giteaRequest).toHaveBeenCalledOnce();
   });
 
   it("promotes an existing matching repository to the project root", async () => {
@@ -121,10 +152,11 @@ describe("project registry", () => {
     const now = new Date().toISOString();
     const source = "https://github.com/example/project.git";
     await state.claimProject({
-      schemaVersion: 3,
+      schemaVersion: 4,
       id: "project-id",
       name: "example",
       gitNamespace: "dim-example",
+      giteaOrganizationId: 41,
       phase: "ready",
       repositories: [{
         alias: "root",
@@ -168,10 +200,11 @@ describe("project registry", () => {
     const now = new Date().toISOString();
     const source = "https://github.com/example/project.git";
     await state.claimProject({
-      schemaVersion: 3,
+      schemaVersion: 4,
       id: "project-id",
       name: "example",
       gitNamespace: "dim-example",
+      giteaOrganizationId: 41,
       phase: "ready",
       repositories: [{
         alias: "root",
@@ -206,5 +239,34 @@ describe("project registry", () => {
     expect(prepared.transferId).toBeUndefined();
     expect((await state.readProject("example")).repositories[0]?.connections[0]?.publishBranches)
       .toEqual({ main: "development" });
+  });
+
+  it.each([
+    ["ordinary creation", createProjectRepository],
+    ["source-free transfer preparation", prepareProjectRepositoryTransfer]
+  ])("removes a stale transfer ID during %s", async (_name, transition) => {
+    // Given
+    const stateRoot = await mkdtemp(join(tmpdir(), "dim-project-transfer-id-"));
+    cleanup.push(stateRoot);
+    const state = new LifecycleState(stateRoot);
+    const now = new Date().toISOString();
+    await state.claimProject({
+      schemaVersion: 4, id: "project-id", name: "example", gitNamespace: "dim-example", giteaOrganizationId: 41, phase: "ready",
+      repositories: [{
+        alias: "repo", providerRepoId: "dim-example/repo", owner: "dim-example",
+        hostUrl: "http://host/dim-example/repo.git", workspaceUrl: "http://gitea/dim-example/repo.git",
+        phase: "error", transferId: "stale-transfer", error: "failed", connections: [],
+        protectedPatterns: [], protectionPhase: "pending", createdAt: now, updatedAt: now
+      }],
+      createdAt: now, updatedAt: now
+    });
+
+    // When
+    await transition(new RecordingRunner(), { stateRoot } as LifecycleOptions, {
+      project: "example", alias: "repo", root: false, protectedPatterns: []
+    });
+
+    // Then
+    expect((await state.readProject("example")).repositories[0]).not.toHaveProperty("transferId");
   });
 });

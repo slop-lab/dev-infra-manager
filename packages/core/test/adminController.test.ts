@@ -87,10 +87,10 @@ describe("DIM admin controller", () => {
     expect(rejected.status).toBe(400);
     expect(await rejected.json()).toEqual({ error: "operation 'plugin.unreviewed' is not streamable" });
     await new LifecycleState(stateRoot).writeHostLifecycle({
-      schemaVersion: 1,
+      schemaVersion: 2,
       phase: "stopped",
       resumeWorkspaces: ["work"],
-      resumeCiRunners: [],
+      restartCiRunners: [],
       resumeManagedContainers: [],
       updatedAt: new Date().toISOString()
     });

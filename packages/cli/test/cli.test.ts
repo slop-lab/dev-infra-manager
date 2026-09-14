@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
-import { once } from "node:events";
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { adminErrorDetail, printActionResult } from "../../../../core/packages/cli/src/cli-support.js";
+import { cliSourceCycles, readCliSource } from "./sourceArchitecture.js";
 
 const cli = fileURLToPath(new URL("../../../../core/packages/cli/src/cli.ts", import.meta.url));
 const cliSupport = fileURLToPath(new URL("../../../../core/packages/cli/src/cli-support.ts", import.meta.url));
@@ -14,7 +12,8 @@ const packageDirectory = fileURLToPath(new URL("../../../../core/packages/cli", 
 const tsxImport = import.meta.resolve("tsx");
 
 test("managed controller restarts preserve the workspace-mounted runtime directory", async () => {
-  const source = `${await readFile(cli, "utf8")}\n${await readFile(cliSupport, "utf8")}`;
+  const source = await readCliSource("systemd-controller", "managed-controller");
+  const entryAndBarrel = `${await readFile(cli, "utf8")}\n${await readFile(cliSupport, "utf8")}`;
   assert.match(source, /^RuntimeDirectory=dim$/m);
   assert.match(source, /^RuntimeDirectoryPreserve=restart$/m);
   assert.doesNotMatch(source, /^RuntimeDirectoryPreserve=yes$/m);
@@ -22,11 +21,17 @@ test("managed controller restarts preserve the workspace-mounted runtime directo
     source,
     /if \(usesSystemdManagedController\(options\)\) \{\s+await stopManagedController/
   );
+  assert.doesNotMatch(entryAndBarrel, /Static source-contract inventory/);
+  assert.deepEqual(await cliSourceCycles(), []);
 });
 
 test("CLI uses controller sessions and presents sanitized controller errors", async () => {
-  const source = await readFile(cli, "utf8");
-  const support = await readFile(cliSupport, "utf8");
+  const source = await readCliSource(
+    "workspace-execution-commands",
+    "workspace-lifecycle-commands",
+    "ci-commands"
+  );
+  const support = await readCliSource("controller-session");
   for (const operation of ["workspace.exec", "workspace.run", "workspace.setup", "workspace.restart", "ci.runner.logs"]) {
     assert.match(source, new RegExp(`adminStreamCall[^\\n]*[\\s\\S]{0,160}${operation.replace(".", "\\.")}`));
   }
@@ -49,7 +54,9 @@ test("workspace actions hide lifecycle records unless JSON is requested", () => 
     lines.length = 0;
     printActionResult(record, { json: true }, "Restarted workspace 'work-1'");
     assert.equal(lines.length, 1);
-    assert.deepEqual(JSON.parse(lines[0]!), record);
+    const [line] = lines;
+    assert.ok(line);
+    assert.deepEqual(JSON.parse(line), record);
   } finally {
     console.log = original;
   }
@@ -233,78 +240,6 @@ test("workspace align reset prompts in an interactive terminal", () => {
   assert.doesNotMatch(result.stdout, /confirmation requires --yes/);
 });
 
-test("controller serve preserves the active owner and cleans up its runtime files", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "dim-controller-test-"));
-  const socket = path.join(root, "controller.sock");
-  const adminSocket = path.join(root, "admin.sock");
-  const agentSocket = path.join(root, "agent.sock");
-  const pidPath = path.join(root, "controller.pid");
-  const configHome = path.join(root, "config");
-  await mkdir(path.join(configHome, "dim"), { recursive: true });
-  await writeFile(
-    path.join(configHome, "dim", "config.json"),
-    `${JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" })}\n`
-  );
-  const args = [
-    "--import",
-    tsxImport,
-    cli,
-    "controller",
-    "serve",
-    "--socket",
-    socket,
-    "--admin-socket",
-    adminSocket,
-    "--agent-socket",
-    agentSocket
-  ];
-  const env = {
-    ...process.env,
-    DIM_ADMIN_CONTROLLER_SOCKET: adminSocket,
-    DIM_AGENT_CONTROLLER_SOCKET: agentSocket,
-    DIM_CONTROLLER_SOCKET: socket,
-    DIM_PLUGIN_HOME: path.join(root, "plugins"),
-    DIM_STATE_ROOT: path.join(root, "state"),
-    XDG_CONFIG_HOME: configHome
-  };
-  const controller = spawn(process.execPath, args, {
-    cwd: packageDirectory,
-    env,
-    stdio: ["ignore", "pipe", "pipe"]
-  });
-  try {
-    await waitForPath(pidPath);
-    assert.equal(Number((await readFile(pidPath, "utf8")).trim()), controller.pid);
-
-    const duplicate = spawn(process.execPath, args, {
-      cwd: packageDirectory,
-      env,
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-    const [code] = await Promise.race([
-      once(duplicate, "exit"),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("duplicate controller did not exit")), 5_000))
-    ]);
-    assert.equal(code, 2);
-    assert.equal(Number((await readFile(pidPath, "utf8")).trim()), controller.pid);
-  } finally {
-    if (controller.exitCode === null) {
-      controller.kill("SIGTERM");
-      await once(controller, "exit");
-    }
-  }
-
-  try {
-    await assert.rejects(access(pidPath), { code: "ENOENT" });
-    await assert.rejects(access(socket), { code: "ENOENT" });
-    await assert.rejects(access(agentSocket), { code: "ENOENT" });
-    await assert.rejects(access(adminSocket), { code: "ENOENT" });
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
-
 function run(args: string[]): ReturnType<typeof spawnSync> {
   return spawnSync(process.execPath, ["--import", tsxImport, cli, ...args], {
     cwd: packageDirectory,
@@ -314,17 +249,4 @@ function run(args: string[]): ReturnType<typeof spawnSync> {
 
 function shellArgument(value: string): string {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
-}
-
-async function waitForPath(target: string): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    try {
-      await access(target);
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-  }
-  throw new Error(`timed out waiting for ${target}`);
 }

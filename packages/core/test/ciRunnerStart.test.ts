@@ -1,0 +1,90 @@
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  options,
+  persistedHook,
+  type QemuStartContext,
+  setUpQemuStartTest,
+  StartRunner,
+  tearDownQemuStartTest,
+  testState
+} from "./ciRunnerStartHarness.js";
+import { restartCiRunner, startCiRunner } from "../../../../core/packages/core/src/ciRunner.js";
+
+describe("QEMU CI runner stopped start", () => {
+  let context: QemuStartContext;
+
+  beforeEach(async () => { context = await setUpQemuStartTest(); });
+  afterEach(async () => { await tearDownQemuStartTest(context); });
+
+  it("restores runtime resources after releasing the Project lock without resolving current admission inputs", async () => {
+    // Given
+    const runner = new StartRunner();
+
+    // When
+    await startCiRunner(runner, options, { project: context.record.projectName, name: context.record.name });
+
+    // Then
+    expect(testState.events).not.toEqual(expect.arrayContaining([
+      "current:root", "current:config", "current:hook", "current:host-image",
+      "current:supervisor-image", "current:defaults", "current:probes"
+    ]));
+    expect(testState.events.indexOf("unlock:project")).toBeLessThan(testState.events.indexOf("runtime:kvm"));
+    expect(testState.events.indexOf("runtime:kvm")).toBeLessThan(testState.events.indexOf("persisted:hook"));
+    expect(testState.events).toEqual(expect.arrayContaining([
+      "runtime:cache", "runtime:volume:ci-qemu-data", "runtime:volume:ci-qemu-dispatch",
+      "runtime:volume:ci-qemu-common-cache", "runtime:volume:ci-qemu-project-cache",
+      "runtime:remove-webhook", "runtime:remove-registration", "runtime:register", "runtime:launch"
+    ]));
+  });
+
+  it("preserves schema-8 admission state while using fresh registration, authorization, and persisted image keys", async () => {
+    // Given
+    const runner = new StartRunner();
+
+    // When
+    const started = await startCiRunner(runner, options, { project: context.record.projectName, name: context.record.name });
+
+    // Then
+    expect(started.config).toEqual(context.record.config);
+    expect(started.executor).toMatchObject({
+      kind: "qemu", phase: "ready", supervisorName: context.record.executor.supervisorName,
+      volumeName: context.record.executor.volumeName,
+      image: context.record.executor.image, projectHook: persistedHook, resources: context.record.executor.resources,
+      inheritsResources: context.record.executor.inheritsResources, labels: context.record.executor.labels,
+      jobImage: context.record.executor.jobImage
+    });
+    expect(testState.imageKeyInputs).toEqual([{ projectId: context.record.projectId, hook: persistedHook }]);
+    const launch = testState.launches[0] ?? [];
+    expect(launch).toContain("GITEA_RUNNER_REGISTRATION_TOKEN=fresh-registration");
+    expect(launch).toContain(`DIM_QEMU_CI_JOB_IMAGE=${context.record.executor.jobImage}`);
+    const authorization = launch.find((argument) => argument.startsWith("DIM_QEMU_WEBHOOK_AUTHORIZATION="))?.split("=")[1];
+    expect(authorization).toMatch(/^Bearer [0-9a-f]{64}$/);
+    expect(testState.events).toContain(`runtime:webhook:${authorization}`);
+    expect(started.provider).toBe("fresh-provider");
+  });
+
+  it("keeps restart on full protected-state reconciliation", async () => {
+    // Given
+    const runner = new StartRunner();
+
+    // When
+    const restarted = await restartCiRunner(runner, options, { project: context.record.projectName, name: context.record.name });
+
+    // Then
+    expect(testState.events).toEqual(expect.arrayContaining([
+      "current:root", "current:config", "current:hook", "current:host-image",
+      "current:supervisor-image", "current:defaults", "current:probes"
+    ]));
+    expect(restarted.config).toEqual(testState.resolvedConfig.provenance);
+    expect(restarted.executor).toMatchObject({
+      kind: "qemu", phase: "ready", image: `sha256:${"f".repeat(64)}`,
+      projectHook: {
+        sourceRef: testState.currentHook.sourceRef, sourceCommit: testState.currentHook.sourceCommit,
+        kind: testState.currentHook.kind, digest: testState.currentHook.digest
+      },
+      resources: { cpus: "8", memory: "16GiB" }, inheritsResources: true,
+      labels: ["current-integration", "dim-qemu"],
+      jobImage: testState.resolvedConfig.config.workloads.integration.image
+    });
+  });
+});

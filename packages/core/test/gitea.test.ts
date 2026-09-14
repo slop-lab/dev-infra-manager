@@ -46,7 +46,7 @@ describe("Gitea control endpoint", () => {
   });
 
   it("applies exact webhook targets through Gitea's environment-to-INI contract", () => {
-    const args = giteaWebhookConfigArgs([
+    const args = giteaWebhookConfigArgs("gitea-container-id", [
       "dim-ci-example-qemu-supervisor",
       "dim-ci-example-qemu-supervisor",
       "dim-ci-other-qemu-supervisor"
@@ -59,7 +59,7 @@ describe("Gitea control endpoint", () => {
   });
 
   it("recovers managed users without requiring an interactive password change", () => {
-    expect(giteaChangePasswordArgs("dim-host", "secret")).toEqual(expect.arrayContaining([
+    expect(giteaChangePasswordArgs("gitea-container-id", "dim-host", "secret")).toEqual(expect.arrayContaining([
       "--username", "dim-host",
       "--password", "secret",
       "--must-change-password=false"
