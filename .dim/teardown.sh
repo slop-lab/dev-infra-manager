@@ -5,6 +5,15 @@ export DOCKER_CONFIG="/tmp/dim-workspace-docker-config-$(id -u)"
 mkdir -p "$DOCKER_CONFIG"
 chmod 0700 "$DOCKER_CONFIG"
 
+keep_volumes="${DIM_WORKSPACE_DISCARD_KEEP_VOLUME-0}"
+case "$keep_volumes" in
+  0|1) ;;
+  *)
+    echo "DIM_WORKSPACE_DISCARD_KEEP_VOLUME must be 0 or 1" >&2
+    exit 2
+    ;;
+esac
+
 qemu_service_dir=/tmp/dim-qemu-verification
 if [ -r "$qemu_service_dir/service.pid" ]; then
   qemu_pid="$(cat "$qemu_service_dir/service.pid")"
@@ -23,7 +32,11 @@ if [ -r "$qemu_service_dir/service.pid" ]; then
   esac
 fi
 
+set -- down
+test "$keep_volumes" = 1 || set -- "$@" --volumes
+set -- "$@" --remove-orphans
+
 docker compose \
   --file .dim/docker-compose.yml \
   --file /tmp/dim-project-compose-host-aliases.json \
-  down --volumes --remove-orphans
+  "$@"

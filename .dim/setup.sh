@@ -42,8 +42,10 @@ export GIT_COMMITTER_NAME="$git_name"
 export GIT_COMMITTER_EMAIL="$git_email"
 export DIM_WORKSPACE_UID DIM_WORKSPACE_GID
 
+echo "[setup] reconcile repositories" >&2
 sh .dim/reconcile-repositories.sh
 
+echo "[setup] start controller proxy" >&2
 external_url_proxy_dir=/tmp/dim-external-url
 external_url_proxy_socket="$external_url_proxy_dir/controller.sock"
 if ! curl --fail --silent --unix-socket "$external_url_proxy_socket" \
@@ -76,8 +78,9 @@ if ! curl --fail --silent --unix-socket "$external_url_proxy_socket" \
 fi
 
 qemu_service_dir=/tmp/dim-qemu-verification
+install -d -m 0755 "$qemu_service_dir"
 if [ "${DIM_WORKSPACE_KVM}" = 1 ]; then
-  mkdir -p "$qemu_service_dir"
+  echo "[setup] start QEMU service" >&2
   if [ -r "$qemu_service_dir/service.pid" ]; then
     old_pid="$(cat "$qemu_service_dir/service.pid")"
     case "$old_pid" in
@@ -102,16 +105,19 @@ if [ "${DIM_WORKSPACE_KVM}" = 1 ]; then
   DIM_QEMU_SERVICE_SOCKET="$qemu_service_dir/service.sock" \
     nohup node .dim/qemu-service.mjs >"$qemu_service_dir/service.log" 2>&1 &
   for _ in $(seq 1 50); do
-    test -S "$qemu_service_dir/service.sock" && break
+    test -S "$qemu_service_dir/service.sock" &&
+      test "$(stat -c %a "$qemu_service_dir/service.sock")" = 666 && break
     sleep 0.1
   done
-  test -S "$qemu_service_dir/service.sock" || {
+  test -S "$qemu_service_dir/service.sock" &&
+    test "$(stat -c %a "$qemu_service_dir/service.sock")" = 666 || {
     cat "$qemu_service_dir/service.log" >&2
     exit 1
   }
 else
+  echo "[setup] skip QEMU service" >&2
   rm -rf "$qemu_service_dir"
-  mkdir -p "$qemu_service_dir"
+  install -d -m 0755 "$qemu_service_dir"
 fi
 
 # Avoid inheriting buildx activity files created by a root lifecycle helper.
@@ -144,17 +150,23 @@ verify_idmap_helpers() {
   '
 }
 
+echo "[setup] build and start agent runtime" >&2
 compose build --quiet agent-dind
 # An outer workspace stop terminates nested containers without letting their
 # daemon preserve a restartable process state. Recreate Project containers on
 # every setup while retaining their named data and home volumes.
 compose up --detach --force-recreate --wait agent-dind
 verify_idmap_helpers agent-dind
+echo "[setup] configure agent and install dependencies" >&2
 compose exec --no-TTY --user root agent-dind dim-agent-dind setup
 case ",${COMPOSE_PROFILES:-}," in
   *,secure,*)
+    echo "[setup] build and start secure runtime" >&2
     compose build --quiet secure-dind
     compose up --detach --force-recreate --wait secure-dind
     verify_idmap_helpers secure-dind
+    ;;
+  *)
+    echo "[setup] skip secure runtime" >&2
     ;;
 esac

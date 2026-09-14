@@ -11,7 +11,7 @@ let child;
 let output = "";
 let state = { status: "idle" };
 
-await mkdir(path.dirname(socketPath), { recursive: true, mode: 0o700 });
+await mkdir(path.dirname(socketPath), { recursive: true, mode: 0o755 });
 await rm(socketPath, { force: true });
 
 const server = http.createServer((request, response) => {
@@ -20,7 +20,7 @@ const server = http.createServer((request, response) => {
   }));
 });
 server.listen(socketPath, async () => {
-  await chmod(socketPath, 0o600);
+  await chmod(socketPath, 0o666);
   await writeFile(path.join(path.dirname(socketPath), "service.pid"), `${process.pid}\n`);
 });
 

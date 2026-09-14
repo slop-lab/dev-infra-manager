@@ -16,7 +16,8 @@ case "${1:?private agent action is required}" in
     workspace_uid="$(stat -c %u /workspace)"
     workspace_gid="$(stat -c %g /workspace)"
     chown -R "$workspace_uid:$workspace_gid" /mnt/agent-home
-    docker build --quiet --tag "$agent_image" /workspace/agent >/dev/null
+    docker build --quiet --tag "$agent_image" \
+      --file /workspace/agent/Dockerfile /workspace >/dev/null
     docker rm --force "$agent_name" >/dev/null 2>&1 || true
     set -- run --detach --name "$agent_name" --restart unless-stopped \
       --label dev.dim.role=agent \
@@ -33,12 +34,16 @@ case "${1:?private agent action is required}" in
       --env "GIT_AUTHOR_EMAIL=$GIT_AUTHOR_EMAIL" \
       --env "GIT_COMMITTER_NAME=$GIT_COMMITTER_NAME" \
       --env "GIT_COMMITTER_EMAIL=$GIT_COMMITTER_EMAIL" \
+      --env GIT_TERMINAL_PROMPT=0 \
       --user 0:0 \
-      --env GIT_CONFIG_COUNT=2 \
+      --tmpfs /run/dim-agent:rw,noexec,nosuid,nodev,mode=0750,uid=0,gid=1000 \
+      --env GIT_CONFIG_COUNT=3 \
       --env GIT_CONFIG_KEY_0=credential.helper \
       --env 'GIT_CONFIG_VALUE_0=!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f' \
       --env GIT_CONFIG_KEY_1=safe.directory \
       --env GIT_CONFIG_VALUE_1=/workspace \
+      --env GIT_CONFIG_KEY_2=safe.directory \
+      --env 'GIT_CONFIG_VALUE_2=/workspace/*' \
       --mount type=bind,src=/workspace,dst=/workspace \
       --mount type=bind,src=/mnt/agent-home,dst=/home/dim-agent \
       --mount type=bind,src=/mnt/workspace-shared-dind,dst=/mnt/workspace-shared-dind \
@@ -51,7 +56,7 @@ case "${1:?private agent action is required}" in
     while IFS= read -r mapping; do
       test -z "$mapping" || set -- "$@" --add-host "$mapping"
     done <"$host_mappings"
-    set -- "$@" "$agent_image" sleep infinity
+    set -- "$@" "$agent_image"
     docker "$@" >/dev/null
     test "$(docker exec "$agent_name" id -u)" = 0
     test "$(docker exec "$agent_name" stat -c %u /workspace)" = 0

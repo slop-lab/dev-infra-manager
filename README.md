@@ -65,28 +65,131 @@ pnpm install --frozen-lockfile
 just check-source
 ```
 
+## Connect to the agent with OpenSSH
+
+The generic `ssh-proxy` Project task carries an unmodified SSH byte stream to
+port 22 inside the agent container. It accepts no arguments and never allocates
+a TTY. Add a public key to the persistent agent home before connecting:
+
+```bash
+dim workspace run dim-dev bash -lc \
+  'umask 077; mkdir -p ~/.ssh; cat >> ~/.ssh/authorized_keys' \
+  < ~/.ssh/id_ed25519.pub
+```
+
+The image supervises a root-owned foreground `sshd` master process as its
+default workload, so SSH returns with the agent when the existing container is
+stopped and started. Authenticated sessions use the `dim-agent` account with a
+fixed UID 1000. Ordinary canonical tasks still run as UID 0 inside the private
+rootless daemon, where that identity maps to the non-root workspace owner. SSH
+startup instead grants `dim-agent` recursive and default ACL access to the
+workspace and a scoped ACL on the private Docker socket. This gives SSH
+sessions practical workspace and Docker authority without changing checkout
+ownership or making it world-writable. The account's passwd home is
+`/home/dim-agent`, backed by the persistent agent-home volume, so its
+`authorized_keys` and other home state survive agent container recreation.
+
+Each SSH session receives a server-controlled environment from a root-owned,
+ephemeral file under `/run/dim-agent`. The explicit allowlist includes the
+private Docker endpoint, Git identity and credential settings, and constrained
+External URL and QEMU endpoints. Client environment requests cannot override
+it, and it is not persisted in the agent home. Git trusts only `/workspace`
+and `/workspace/*` as safe directories. `DOCKER_HOST` names the private nested
+socket at `/run/docker.sock`, never a host or Project-runtime Docker socket.
+The constrained External URL and QEMU sockets are the only other runtime
+control endpoints made available to these sessions.
+
+Before accepting a host key, obtain its fingerprint through the existing
+trusted Project task path:
+
+```bash
+dim workspace run dim-dev bash -lc \
+  'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub'
+```
+
+Accept the fingerprint shown by the OpenSSH client only when it matches this
+output.
+
+Configure any OpenSSH client with a `ProxyCommand` that invokes the task:
+
+```sshconfig
+Host dim-dev-agent
+    HostName dim-dev-agent
+    User dim-agent
+    RequestTTY no
+    ProxyCommand dim workspace run dim-dev ssh-proxy
+```
+
+Then connect with `ssh dim-dev-agent`. This transport can support shells,
+editors, file transfer, or a Codex development workflow without publishing an
+SSH port from either container.
+
+The proxy itself provides no authentication or authorization; `sshd` and the
+configured public keys provide those controls. Root authentication is disabled
+even with a valid configured key. A trusted key carries full agent authority:
+it can change workspace and home content, use the private nested Docker daemon,
+push with the agent's bounded Git credentials, and call the constrained agent
+endpoints. It grants no host or Project-runtime authority. Host keys persist
+across stop/start of the existing container but change when setup recreates it.
+Verify changed host keys rather than disabling strict host-key checking. To
+retain the agent-home volume across discard, use
+`dim workspace discard dim-dev --keep-volume`; the default discard removes it.
+
 ## Install an unreleased source build on the host
 
 From a host checkout of this root repository, clone the production source
-repositories from the same Git host, build them, rebuild the trusted workspace
-image, install the CLI, and restart the controller:
+repositories from the same Git host, build and package them, and rebuild the
+trusted workspace image with Docker Buildx:
+
+```bash
+DIM_SOURCE_CORE_COMMIT="$REVIEWED_CORE_COMMIT" \
+DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT="$REVIEWED_DNS_PLUGIN_COMMIT" \
+DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT="$REVIEWED_EXTERNAL_URLS_PLUGIN_COMMIT" \
+  just prepare-local
+```
+
+Review the resolved commits and prepared outputs, then install that exact
+package and image set before explicitly restarting the controller:
 
 ```bash
 just install-local
+just restart-controller
 ```
 
-The recipe requires Git, Docker, Node.js 24 or 26, pnpm 10, and the existing
-DIM installer facade. It clones only `core`, `plugin-dns-cloudflare`, and
-`plugin-external-urls`; no workspace or `*-development` checkout is used. Each
-resolved commit is printed before the build. A split `root.git` origin clones
-`main` from sibling repositories. A canonical monorepo origin instead clones
-the matching `dev/core` and `dev/plugin-*` branches from that same origin. Set
-`DIM_SOURCE_ROOT_URL`, `DIM_SOURCE_REPOSITORY_BASE_URL`, or `DIM_SOURCE_REF` to
-override source resolution.
-The recipe builds the exact `dev-infra-project-workspace:latest` image from the
-same `.local/production-source` snapshot before it installs the CLI or restarts
-the controller. It does not replace existing workspaces; recreate them
-explicitly when they need the refreshed image.
-Cloned sources and package tarballs remain under `.local/production-source`
-and `.local/dim-packages` for inspection after the command completes; the next
-run replaces their contents.
+Preparation requires Git, Docker with the Buildx plugin, Node.js 24 or 26, and
+pnpm 10. Installation also requires the existing DIM installer facade.
+Preparation clones only `core`, `plugin-dns-cloudflare`, and
+`plugin-external-urls`; no workspace or `*-development` checkout is used. The
+caller must set `DIM_SOURCE_CORE_COMMIT`,
+`DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT`, and
+`DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT` to reviewed full commits, each exactly
+40 lowercase hexadecimal characters. Branches, tags, abbreviated commits, and
+omitted inputs are rejected. Each exact object is fetched, checked out detached,
+verified against the resulting full `HEAD`, and printed before dependency
+installation. A split `root.git` origin resolves sibling repository URLs; a
+canonical monorepo origin uses that same URL for all three repositories. Set
+`DIM_SOURCE_ROOT_URL` or `DIM_SOURCE_REPOSITORY_BASE_URL` only to override this
+URL resolution. The local package version includes a deterministic SHA-256
+digest of the fixed, repository-name/full-commit record set, so changing any
+production repository changes the shared version identity. Preparation installs
+each cloned repository with its reviewed `pnpm-lock.yaml` and
+`--frozen-lockfile`, so package manifest and lockfile drift fails before any
+artifacts are prepared.
+
+The preparation recipe loads the exact
+`dev-infra-project-workspace:latest` image from the same
+`.local/production-source` snapshot and records full source SHAs, a digest of
+the package bundle, and the resulting image ID in ignored `.local` state. The
+install recipe does not rebuild or restart anything. Missing, stale, or
+mismatched state fails before installation, including when package bytes or
+the image tag changed after preparation. `just restart-controller` is the
+separate, explicit controller-restart stage. A failed preparation leaves no
+readiness marker. Preparation and installation hold the same exclusive lock
+under `.local`.
+Preparation builds under a temporary image tag and replaces the canonical tag
+only after every other output is ready, so a failed attempt leaves the previous
+canonical image untouched. Neither recipe replaces existing workspaces;
+recreate them explicitly when they need the refreshed image. Cloned sources
+and package tarballs remain under `.local/production-source` and
+`.local/dim-packages` for inspection; the next preparation replaces their
+contents.

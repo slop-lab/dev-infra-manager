@@ -18,6 +18,13 @@ case "$task" in
   codex)
     set -- codex --dangerously-bypass-approvals-and-sandbox "$@"
     ;;
+  ssh-proxy)
+    test "$#" -eq 0 || { echo "ssh-proxy does not accept arguments" >&2; exit 2; }
+    exec docker compose \
+      --file .dim/docker-compose.yml \
+      --file /tmp/dim-project-compose-host-aliases.json exec --no-TTY \
+      --user root agent-dind dim-agent-dind exec nc 127.0.0.1 22
+    ;;
   verify-qemu)
     set -- node /workspace/project/.dim/qemu-client.mjs run "$@"
     ;;
