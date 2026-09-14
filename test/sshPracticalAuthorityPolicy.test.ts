@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 const projectAgent = resolve(workspaceRoot, "project/.dim/agent-dind/agent.sh");
+const projectCompose = resolve(workspaceRoot, "project/.dim/docker-compose.yml");
 const fullDevelopmentDim = resolve(
   workspaceRoot,
   "examples/projects/full-development-flow/repos/root/.dim"
@@ -59,16 +60,27 @@ describe("canonical non-root SSH practical authority", () => {
     const setup = await readFile(resolve(workspaceRoot, "project/.dim/setup.sh"), "utf8");
     const service = await readFile(resolve(workspaceRoot, "project/.dim/qemu-service.mjs"), "utf8");
     const startup = await readFile(resolve(workspaceRoot, "project/.dim/qemu-service-startup.mjs"), "utf8");
+    const filesystem = await readFile(resolve(workspaceRoot, "project/.dim/qemu-service-filesystem.mjs"), "utf8");
+    const compose = await readFile(projectCompose, "utf8");
     const agent = await readFile(projectAgent, "utf8");
 
     expect(setup).toContain('install -d -m 0755 "$qemu_service_dir"');
-    expect(service).toContain("await mkdir(serviceDirectory, { recursive: true, mode: 0o755 })");
-    expect(startup).toContain("await chmod(config.socketPath, 0o666)");
+    expect(filesystem).toContain("constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW");
+    expect(filesystem).toContain("descriptorStat.uid !== 0n || descriptorStat.gid !== 0n");
+    expect(filesystem).toContain("(descriptorStat.mode & 0o7777n) !== 0o755n");
+    expect(startup).toContain("await chmod(socketLeasePath(config.socketPath), 0o666)");
     expect(`${service}\n${startup}`).not.toContain("chmod(socketPath, 0o600)");
     expect(service).not.toContain("mode: 0o777");
     expect(agent).toContain(
       "--mount type=bind,src=/run/dim/qemu-verification,dst=/run/dim/qemu-verification,readonly"
     );
+    expect(compose).toContain("/tmp/dim-qemu-verification:/run/dim/qemu-verification:ro");
+  });
+
+  it("serializes setup-producing and discard lifecycle entry points", async () => {
+    const sources = await Promise.all(["workspaceCreation.ts", "workspaceSetup.ts", "workspaceDiscard.ts"]
+      .map((name) => readFile(resolve(workspaceRoot, "core/packages/core/src", name), "utf8")));
+    for (const source of sources) expect(source).toContain("acquireWorkspaceSetupLock");
   });
 });
 
