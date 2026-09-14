@@ -243,7 +243,7 @@ done
 
 dim project create "$project_name" \
   --bootstrap-git-url "$source_root/remotes/root.git" \
-  --bootstrap-git-ref main >/dev/null
+  --bootstrap-git-ref main --apply-repos >/dev/null
 verification_stage="workspace creation"
 if ! dim workspace create "$project_name" "$workspace_name" \
   >"$workspace_creation_log" 2>&1; then

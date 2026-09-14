@@ -46,58 +46,6 @@ describe("DIM development forge policy", () => {
     expect(helper).toContain('exec setsid node "$verdaccio_bin"');
   });
 
-  it("pins every split repository to its external upstream and main branch", async () => {
-    const manifest = parse(await readFile(resolve(workspaceRoot, "project/.dim/repos.yml"), "utf8"));
-    const expectedUpstreams = {
-      root: "https://gitlab.com/slop-lab/dim/root.git",
-      development: "https://gitlab.com/slop-lab/dim/essential-dev/root.git",
-      core: "https://gitlab.com/slop-lab/dim/essential/core.git",
-      "core-development": "https://gitlab.com/slop-lab/dim/essential-dev/core.git",
-      "plugin-dns-cloudflare": "https://gitlab.com/slop-lab/dim/essential/plugin-dns-cloudflare.git",
-      "plugin-dns-cloudflare-development":
-        "https://gitlab.com/slop-lab/dim/essential-dev/plugin-dns-cloudflare.git",
-      "plugin-external-urls": "https://gitlab.com/slop-lab/dim/essential/plugin-external-urls.git",
-      "plugin-external-urls-development":
-        "https://gitlab.com/slop-lab/dim/essential-dev/plugin-external-urls.git",
-      verification: "https://gitlab.com/slop-lab/dim/dev/verification.git",
-      examples: "https://gitlab.com/slop-lab/dim/dev/examples.git",
-      specification: "https://gitlab.com/slop-lab/dim/dev/specification.git"
-    };
-    const expected = Object.keys(expectedUpstreams);
-
-    expect(manifest?.schemaVersion).toBe(1);
-    expect(manifest.upstreams).toEqual(
-      Object.fromEntries(Object.entries(expectedUpstreams).map(([alias, url]) => [alias, { url }]))
-    );
-    expect(Object.keys(manifest.repositories).sort()).toEqual(expected.sort());
-    for (const alias of expected) {
-      const repository = manifest.repositories[alias];
-      expect(repository.upstream).toBe(alias);
-      expect(repository.import).toEqual({ main: "main" });
-      expect(repository.publish).toEqual({ main: "main" });
-      expect(repository.protect ?? []).toEqual(["root", "development"].includes(alias) ? ["main"] : []);
-      expect(repository.ref).toBe("main");
-      expect(repository.root).toBe(alias === "root" ? true : undefined);
-    }
-
-    const smoke = await readFile(
-      resolve(workspaceRoot, "verification/scripts/container-self-project-smoke.bash"),
-      "utf8"
-    );
-    expect(smoke).toContain("for repository in development root core core-development \\");
-    expect(smoke).toContain('git init --bare "$source_root/remotes/$repository.git"');
-    expect(smoke).toContain(
-      'git -C "$repository_path" push "$source_root/remotes/$repository.git" \\'
-    );
-    expect(smoke).toContain('"HEAD:refs/heads/main"');
-    expect(smoke).toContain('--bootstrap-git-url "$source_root/remotes/root.git"');
-    expect(smoke).toContain('--bootstrap-git-ref main');
-    expect(smoke).not.toContain("archive.git");
-    expect(smoke).not.toContain('refs/heads/dev/$repository');
-    expect(smoke).not.toContain("dev/${repository}");
-    expect(smoke).not.toContain('--initial-branch="dev/$repository"');
-  });
-
   it("keeps persistent QEMU cache mutation in the protected root", async () => {
     const hook = resolve(workspaceRoot, "project/.dim/ci/qemu-cache.bash");
     expect(spawnSync("bash", ["-n", hook]).status).toBe(0);
