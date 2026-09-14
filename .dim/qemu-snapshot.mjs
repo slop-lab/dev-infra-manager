@@ -3,7 +3,7 @@ import {
   lstat,
   mkdir,
   open,
-  readdir,
+  opendir,
   readlink,
   realpath,
   symlink
@@ -44,8 +44,9 @@ export async function snapshotInputs({ inputs, inputsRoot, sourceRoot, signal })
 async function copyDirectory(source, destination, inputName, signal) {
   const sourceDirectory = fdPath(source.fd);
   const destinationDirectory = fdPath(destination.fd);
-  for (const name of await readdir(sourceDirectory)) {
+  for await (const entry of await opendir(sourceDirectory)) {
     signal.throwIfAborted();
+    const { name } = entry;
     const sourcePath = path.join(sourceDirectory, name);
     const destinationPath = path.join(destinationDirectory, name);
     const before = await lstat(sourcePath, { bigint: true });
