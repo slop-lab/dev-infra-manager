@@ -11,3 +11,7 @@ core/packages/*
 core/packages/controller-proxy/*
 !core/packages/controller-proxy/dist/
 !core/packages/controller-proxy/dist/**
+!agent/
+agent/*
+!agent/dim-agent-shell
+!agent/start-sshd.sh

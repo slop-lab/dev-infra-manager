@@ -16,6 +16,9 @@ just build-packages  # publishable package builds
 just check-source    # typecheck + test + package builds; only Node.js and pnpm required
 just verify agent    # strongest gate supported inside this repository's DIM agent
 bash verification/scripts/local-ci-matrix.bash # exact Node.js 24/26 CI matrix via mise
+just build-workspace-image # prepare the local workspace image with Docker Buildx
+just install-local   # install local packages without restarting the controller
+just restart-controller # restart the controller with the installed packages
 just doctor          # host readiness: dev tools, Docker, selected backend, cgroup v2
 just run-cli -- --help # build core, then run dim from source without installing it
 ```
@@ -29,6 +32,17 @@ that workspace's own nested runtime.
 The top-level justfile is an everyday contributor index, not a mirror of every
 CI job. Reusable verification commands remain under `just verify`; hosted lane
 composition lives in workflows and scripts.
+
+The `Expensive integration` workflow has dedicated clean hosted
+`cache-routing-kvm` and `qemu-ci-image-layers-kvm` lanes. The direct local
+`cache-routing-sysbox` recipe is capability-gated and is not a hosted QEMU
+lane. The hosted KVM lanes target QEMU through the integration label or
+`dim-qemu`; the local Sysbox recipe verifies Sysbox directly. Their matching
+local recipes are `just verify cache-routing-sysbox`, `just verify
+cache-routing-kvm`, and `just verify qemu-ci-image-layers-kvm`. A missing
+Sysbox or KVM host capability is not a pass: these recipes stop with exit
+status 2 and identify a missing local Sysbox, Docker, or KVM prerequisite
+before starting an expensive journey.
 
 Before installing or restarting a host with a reviewed repository set,
 dispatch `QEMU release gate` at the exact development ref. Its `root-ref` input
@@ -75,20 +89,38 @@ libraries, then `dim-cli`, then `dim-installer`).
 ## Bootstrapping a fresh dev host
 
 ```bash
-just bootstrap-ubuntu
+bash verification/scripts/bootstrap-ubuntu.bash
 ```
 
 Installs Node.js/pnpm/`just` (via mise when available), Sysbox, project
-dependencies, and runs `verify` plus `doctor`. See
+dependencies, then runs `just check-source`, `just verify plugin-install`,
+`just build-workspace-image`, and `just run-cli doctor`. See
 [docs/usage.md](specification/docs/usage.md#setup) for what each step does.
 
-## Linking a locally built `dim` for testing against another project
+## Preparing local DIM changes
 
 ```bash
+just build-workspace-image
 just install-local
+just restart-controller
+just doctor
 ```
 
-Builds local package tarballs and installs them through the mise-managed
-installer facade when available, with a direct global npm-prefix fallback —
-for iterating on DIM itself, not the normal release install path (see
-[README.md](README.md#install-the-dim-cli) for that).
+These are distinct operations with separate readiness domains:
+
+- `build-workspace-image` requires Docker Buildx and uses `--load` to prepare
+  the trusted workspace image in the local Docker image store. It does not
+  install packages or restart the controller.
+- `install-local` builds local package tarballs and installs them through the
+  mise-managed installer facade when available, with a direct global
+  npm-prefix fallback. It does not build the workspace image or restart the
+  controller.
+- `restart-controller` replaces the managed controller process with the
+  currently installed DIM package set. It does not rebuild either packages or
+  images.
+- `doctor` reports host readiness for development tools, Docker, the selected
+  backend, and cgroup v2. Run the stronger verification gates separately when
+  their image, container, or host behavior is the readiness domain in question.
+
+This path is for iterating on DIM itself, not the normal release install path;
+see [README.md](README.md#install-the-dim-cli) for that.

@@ -9,13 +9,41 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
-- Local source installations now package every DIM component under a shared
-  version containing the production commit and dirty-worktree state, and
-  automatically rebuild the trusted `dev-infra-project-workspace:latest` image
-  from the same cloned production source snapshot before installing the CLI or
-  restarting the controller. This avoids stale package-manager reuse when
-  different local builds share a release version and prevents stale workspace
-  images from being left behind.
+- `workspace discard --keep-volume` now tells reviewed Project teardown to
+  preserve nested named data and retains the DIM-managed nested-engine volume
+  for a later same-name workspace recreation. Ordinary discard keeps its
+  destructive cleanup behavior.
+
+- Managed CI workloads now run only in disposable digest-pinned job containers
+  declared by the protected Project root's `.dim/ci/runner.yml`. DIM records
+  the exact ref, commit, and config digest, probes declared tools and nested
+  Docker before registration, and keeps Project tooling out of runner hosts.
+  Schema 8 records the final runner contract: persistent Sysbox advertises
+  ordinary labels only with no job Docker host, while QEMU advertises
+  integration labels plus `dim-qemu` for fresh one-job guests. Runner start,
+  stop, removal, QEMU reconstruction, and host resume now require the complete
+  expected ownership labels and act on the inspected container ID. Same-name
+  foreign or partially labeled resources fail closed and remain untouched.
+  QEMU reconstruction performs that ownership inspection before coordinator
+  registration, authorization, or webhook mutation. Workload-probe containers
+  are also removed by inspected immutable ID, while their Docker socket volumes
+  are necessarily removed by name only after immediate ownership reinspection.
+
+- Local source workflows now distinguish the dirty-worktree convenience path
+  from exact-commit Project preparation. Top-level `install-local` packages
+  and installs the current development worktree. Both paths give every DIM
+  component a shared version containing the aggregate SHA-256 of their
+  repository-name/full-commit records, with dirty state marked for the
+  top-level path. Project `prepare-local` consumes the three required exact
+  commit inputs, prepares the package bundle and trusted workspace image, and
+  records the package-bundle digest and image ID as provenance. Project
+  `install-local` validates that prepared set before and after installing it
+  without rebuilding. Installation uses the exact lockfile-owned Verdaccio
+  binary on a random loopback port, with signup closed and mutation
+  authenticated.
+  `restart-controller` separately restarts the controller with the currently
+  installed packages; Project preparation, installation, and restart never
+  implicitly invoke one another.
 
 - The canonical Project now maps an inner UID-0 agent onto the non-root
   workspace owner through a private rootless `agent-dind`. The non-root agent
@@ -32,7 +60,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Restored a manually dispatched QEMU release gate in the development
   repository. It pins both development and root refs and runs the assembled
-  repository set in a clean Sysbox guest before host installation or
+  repository set in fresh QEMU integration guests before host installation or
   workspace restart.
 
 - Kept the top-level just recipes focused on discoverable everyday contributor
@@ -51,8 +79,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Moved long-running workspace and CI operations, including interactive
   `exec`/`run` and runner logs, behind host-controller command sessions with
-  ordered SSE output, stdin forwarding, cancellation, and reconnectable event
-  replay. This removes the CLI's direct runtime-control exception and provides
+  ordered SSE output, FIFO stdin forwarding for pipes, files, and named FIFOs,
+  cancellation, and reconnectable event replay. Input responses, stream
+  responses, transport errors, and cancellation failures now all fail the CLI
+  call. This removes the CLI's direct runtime-control exception and provides
   the transport foundation for a future authenticated web UI.
 - Renamed the user-facing process-limit option from `--processes` to the more
   precise `--pids` across workspace and CI runner commands.
@@ -60,7 +90,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Extended reviewed repository sets with a checkout `ref` for every alias.
   Workspace manifests now publish the requested ref, resolved ref, and exact
   commit SHA, while `workspace create --repo-ref ALIAS=REF` can substitute a
-  non-root candidate without changing Project state.
+  non-root candidate without changing Project state. Schema 5 accepts only a
+  complete, ready-only alias catalog and preserves a root request for symbolic
+  `HEAD` separately from its resolved protected branch. Repository deletion
+  refuses to remove the selected target while its import is active. An import
+  retains only trusted transfer authority and remains non-ready until protection
+  succeeds; a protection failure does not grant ordinary repository access.
+  Workspace creation rejects malformed, root, unknown, duplicate, unavailable,
+  and existing-workspace-mismatch ref overrides without state mutation.
 - Renamed `project create --url/--ref` to the unambiguous
   `--bootstrap-git-url/--bootstrap-git-ref`; the URL names a Git repository,
   not a raw `.dim/repos.yml` document, and an omitted ref still selects its
@@ -101,28 +138,20 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Renamed automatic CI around the boundary it verifies: supported-Node source
   compatibility, managed workspace integration, and disposable host-backend
   installation. Major workflow phases now appear as named UI steps, while the
-  host-mode runner capability remains provider plumbing rather than a job name.
-- Replaced the misleading `just install-local-cli` development recipe with
-  `just install-local`, which installs the local package set and immediately
-  reconciles the managed controller to the newly installed CLI.
-- Configured DIM-owned workspace Docker and Podman engines to share the
-  persistent anonymous Docker Hub pull-through cache used by managed CI,
-  without adding cache details to reviewed Project definitions.
+  integration runner capability remains provider plumbing rather than a job name.
+- Configured DIM-owned workspace and Sysbox Docker daemons to discover the
+  persistent anonymous Docker Hub pull-through cache directly through its
+  stable `dim-registry-cache:5000` alias, without adding cache details to
+  reviewed Project definitions. Nested agent DinD uses a workspace-local
+  relay, while QEMU guests use a launcher-local relay.
 - Switched the canonical and runnable-example agent images from Alpine-based
   Docker CLI images to pinned Ubuntu 24.04 images, while retaining pinned Node
   24, Docker CLI/Compose, and agent tooling through isolated build stages.
 - Normalized tracked Bash source files to non-executable mode; callers invoke
   them explicitly with Bash and runtime images set executable mode where an
   installed entrypoint requires it.
-- Split the managed development release gate into independent Sysbox, gVisor,
-  rootless-Podman, and runc QEMU jobs so named host capacities can verify the
-  backends concurrently while workflows retain the shared `dim-qemu` label.
 - Added managed workspace state, Compose service status, and bounded service
   logs when the multi-repository container smoke's Project setup fails.
-- Applied CI runner CPU and memory defaults or overrides to QEMU guest vCPUs
-  and RAM, persisted those values in CI runner state schema 4, and renamed the
-  user-facing `--pids-limit` option to `--processes`. Process limits remain a
-  Sysbox-only override.
 
 ### Fixed
 
@@ -135,19 +164,27 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Kept the full-development-flow example's private rootless DinD ownership
   repair aligned with the canonical self Project so its persistent volume
   remains writable after the outer workspace runtime is replaced.
-- Wired QEMU CI supervisors to the managed registry cache through an explicit
-  endpoint and fail-fast relay readiness check, preventing disposable guests
-  from silently falling back to direct Docker Hub pulls when the cache path is
-  unavailable.
 - Made the stateful full-development-flow gate build its local CLI and package
   artifacts before invoking the CLI from a clean KVM checkout.
 - Recreated fallback Compose services when starting a stopped workspace so
   persistent nested containers cannot retain stale runtime state after their
   outer container stopped.
-- Made running-workspace restart validate dirty and divergent root checkouts
-  before stopping the container. Rejection now preserves Git, workspace state,
-  setup history, and Project services while pointing to the explicit reset
-  recovery command.
+- Made workspace lifecycle recovery preserve its selected root. A
+  running-workspace restart validates dirty and divergent root checkouts before
+  stopping the container, while retrying `setting-up` or `setup-error` reapplies
+  workspace schema 5's complete alias-keyed repository snapshot, including
+  every requested ref, resolved ref, and exact commit, without following moved
+  refs. The separately published root snapshot remains pinned. Rejection
+  preserves Git, workspace state, setup history, and Project services, and the
+  workspace becomes ready only after setup succeeds. Repeated host recovery
+  uses schema 2's durable `restartCiRunners` intent, retains pending targets
+  after partial failure, skips targets already ready, and clears the lists only
+  after every target recovers. Schema 1 is rejected without migration.
+  Workspace container and inner-engine volume reuse now requires their complete
+  identity-digest label sets. Container lifecycle mutations act on the inspected
+  ID. Docker volume removal remains name-based because volumes have no immutable
+  ID, so discard rechecks ownership immediately before removal and leaves a
+  foreign same-name replacement untouched.
 - Initialized the canonical rootless-DinD sidecar's volume-mounted data path,
   home, and runtime directory for its unprivileged UID before starting Docker,
   including a marker-versioned one-time repair of existing containerd state,
@@ -160,41 +197,49 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   single-capacity demand scheduler. Queued jobs now survive supervisor
   failures and restarts, and remain scheduled until Gitea reports that they
   started or completed instead of being stranded when an ephemeral runner
-  consumes a different task.
+  consumes a different task. Each update fsyncs the durable scheduler file and
+  its containing directory before HTTP `202`; load or write failures reject
+  acknowledgement rather than losing demand.
 - Removed an empty per-Project CI runner state directory with the directory
   API, preventing a successful final runner deletion from ending in `EISDIR`
   and an admin-controller 500 response.
-- Kept the on-demand QEMU webhook worker alive after an individual disposable
-  VM supervisor failure, so later queued jobs no longer receive `202` without
-  starting a runner VM.
-- Forwarded stdin through `dim workspace run` and `dim workspace exec` even
-  when input is redirected instead of attached to a TTY, allowing streaming
-  Project tasks such as agent-home restore to consume piped archives.
 
 ### Added
 
+- Added Project-owned, key-only SSH access to development agents through a
+  private proxy, with host keys and authorized client keys supplied at runtime
+  and no published agent SSH port. The client logs in as `dim-agent` with a
+  fixed non-root UID and rejects root login, while an SSH server root is valid
+  only inside the subordinate-ID-mapped agent. Namespace-local ACLs and a
+  server-owned ephemeral environment give SSH sessions practical parity with
+  ordinary agent processes for the workspace, persistent home, private
+  rootless Docker, bounded Git, and constrained agent sockets. This does not
+  expose host or Project-runtime sockets or transfer checkout ownership.
+  The proxy supports reconnecting clients such as Codex without adding agent
+  access policy or credentials to DIM core.
 - Added an interactive, recommended KVM-access confirmation to `dim workspace
   create`, plus explicit `--kvm` and `--no-kvm` policies for automation.
 - Added a full-development-flow reference Project and a stateful release
   journey covering reviewed updates, restart safety, controller replacement,
   setup recovery, backup/discard/recreate/restore, and cleanup without putting
   verification-only hooks in the checked-in example.
-- Extended the managed CI registry-cache relay through nested KVM guests and
-  test-created DinD daemons while keeping ordinary Project examples independent
-  of that CI infrastructure.
 - Added a separate host-only managed Git maintainer capability for `dim x git`
   and `dim git setup`. Existing managed credentials and protected-branch rules
   are reconciled so trusted host Git may push protected refs without granting
   that authority to workspace writers or exposing a provider-specific payload
   through the CLI contract.
 - Added a host-scoped, credential-free CNCF Distribution pull-through cache
-  for Docker Hub layers used by managed CI. Sysbox daemons connect on the DIM
-  control network and disposable QEMU guests use a supervisor-local relay,
+  for Docker Hub layers used by managed CI. Managed workspace and Sysbox
+  daemons connect directly through the stable control-network alias, nested
+  agent DinD uses a workspace-local relay, and QEMU guests use a launcher-local
+  relay. Cold, warm, cache-replacement, and outage evidence proves each route
   without publishing the cache or attaching it to workspace networks.
-- Added a Project-scoped Packer cache for disposable QEMU CI runners. Named
-  capacities now share an atomically published, version-keyed Ubuntu base with
-  common packages and the pinned coordinator runner preinstalled, while job
-  registration and overlays remain ephemeral.
+- Added layered Packer caching for disposable QEMU CI runners. A host-scoped,
+  immutable common Packer base is reused across Projects, while protected
+  Project hooks produce isolated Project-specific thin layers keyed by the full
+  hook digest. Every job uses a fresh disposable overlay, and deleting a
+  Project's final capacity removes its Project cache while retaining the host
+  common cache.
 - Allowed multiple named QEMU CI capacities per Project behind the existing
   `dim-qemu` workflow capability. Supervisors now atomically dispatch shared
   demand with renewable claims, so provider webhook fan-out cannot duplicate a
@@ -209,7 +254,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   registrations.
 - Added a disposable QEMU managed runner for nested-KVM-capable hosts. A
   trusted supervisor owns host KVM access while each untrusted job runs in a
-  fresh ephemeral VM. Also added a forge-neutral pull-request skill with
+  fresh ephemeral VM. After guest readiness the supervisor registers
+  ephemerally, validates and transfers only temporary `.runner` state, unsets
+  the reusable token for guest transports and QEMU, runs `daemon --once` under
+  a timeout, and removes per-job overlay, SSH, registration, and run state.
+  Also added a forge-neutral pull-request skill with
   scripted GitHub/Gitea detection and Gitea PR/CI operations.
 - Added the KVM backend-installer release gate to non-draft pull requests on
   the active managed development host.
@@ -224,7 +273,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Renamed ambiguous root Just recipes to describe their actual scope:
   `install-dependencies`, `build-packages`, `check-source`, `run-cli`,
-  `install-local-cli`, and `build-workspace-image`.
+  `install-local`, and `build-workspace-image`.
 - Replaced named CI runner `enable`/`disable` with explicit
   `create`/`start`/`restart`/`stop`/`delete` lifecycle commands.
 
