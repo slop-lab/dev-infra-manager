@@ -513,11 +513,17 @@ coverage instead asserts that DIM omits the explicit device and supplemental
 group from the workspace creation arguments.
 
 The canonical Project MUST also expose the same protected QEMU launcher through
-a workspace-local, single-run service. The agent may start, follow, inspect, or
-cancel that fixed launcher, but cannot supply a command, launcher path, QEMU
-argument, or path outside the assembled `/workspace`. Additional
-`NAME=/workspace/PATH` inputs are realpath-checked, copied without dereferencing
-symlinks, and appear only as guest snapshots under `/mnt/dim-inputs/NAME`.
+a workspace-local, single-run service. The service MUST claim a run
+synchronously before awaiting its request body or filesystem operations. The
+claim MUST remain exclusive while the service validates inputs and creates
+immutable, service-owned per-run snapshots before starting the fixed launcher.
+A concurrent run and duplicate input names MUST be rejected. Snapshot copying
+MUST NOT dereference symlinks, and a validation or snapshot failure MUST start
+no child process. The agent may
+start, follow, inspect, or cancel that fixed launcher, but cannot supply a
+command, launcher path, QEMU argument, or path outside the assembled
+`/workspace`. Accepted `NAME=/workspace/PATH` inputs appear only as guest
+snapshots under `/mnt/dim-inputs/NAME`.
 The service and QEMU process run in the trusted workspace; `/dev/kvm`, QEMU
 binaries, the launcher copy, and its base-image cache MUST NOT be mounted
 writable into the agent. Candidate verification code executes only in the VM.

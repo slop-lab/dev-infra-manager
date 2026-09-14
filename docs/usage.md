@@ -94,8 +94,12 @@ node project/.dim/qemu-client.mjs run --input fixtures=/workspace/local-fixtures
 ```
 
 The client also provides `start`, `status`, `follow`, and `cancel`. QEMU and
-`/dev/kvm` remain in the trusted workspace. Inputs are snapshots restricted to
-paths already beneath `/workspace`, not live host bind mounts.
+`/dev/kvm` remain in the trusted workspace. The service synchronously claims
+one run before awaiting request or filesystem input, and rejects duplicate
+input names. While the claim remains exclusive, it copies inputs without
+following symlinks into immutable snapshots owned by that run before launch;
+any snapshot failure starts no child. Inputs must resolve beneath `/workspace`,
+and the guest receives snapshots rather than live host bind mounts.
 
 Prepare those dependencies with
 `bash verification/scripts/install-kvm-verify-deps-ubuntu.bash`. This
