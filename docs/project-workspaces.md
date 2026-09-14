@@ -64,7 +64,9 @@ workflow.
 
 When present, this script completely owns environment reconciliation. It may
 clone or update additional repositories, build images, and start project
-services. It runs from the project root with:
+services. DIM runs its reviewed bytes from the immutable snapshot of the exact
+protected root commit recorded by the workspace. Its working directory is that
+snapshot, while `DIM_PROJECT_ROOT` names the mutable Project checkout, with:
 
 ```text
 DIM_PROJECT_ID
@@ -101,13 +103,32 @@ require resource enforcement can opt into fail-closed setup with
 `dim-project-cgroup require`. See the
 [Project runtime cgroups example](../../examples/features/project-runtime-cgroups/README.md).
 
-The manifest's `repositories` object is the runtime catalog of repositories
-actually registered in the Project. Each alias maps to its credential-free
-`workspaceUrl`, current `phase`, and root role. Project lifecycle or an
-untrusted development environment may clone every readable source repository;
-DIM protects promotion and execution authority rather than source visibility.
-Consumers should clone only `phase: ready` entries and choose their own paths.
-DIM does not synthesize a monorepo layout or execute hooks from those clones.
+The manifest's `repositories` object is the workspace's complete immutable
+repository selection, keyed by every Project alias. Each entry includes its
+credential-free `workspaceUrl`, phase, root role, `requestedRef`, resolved
+`ref`, and exact `commit`. Every entry is complete and has `phase: ready`.
+The root appears in this object too. If its Project ref was omitted, the root
+entry keeps `requestedRef: HEAD` while `ref` names the concrete protected
+branch selected through symbolic `HEAD`. Its published full-tree lifecycle
+asset remains a separate workspace-state path.
+Project lifecycle or an untrusted development environment may clone every readable
+source repository; DIM protects promotion and execution authority rather than
+source visibility. Consumers should clone only `phase: ready` entries and
+choose their own paths. DIM does not synthesize a monorepo layout or execute
+hooks from those clones. Setup recovery republishes this recorded selection
+without fetching or resolving refs that may have moved.
+
+Workspace creation can select a non-root candidate without changing the
+Project's configured repository ref:
+
+```bash
+dim workspace create example example-dev \
+  --repo-ref product=refs/pull/42/head
+```
+
+Repeat `--repo-ref` for more aliases. The root alias cannot be overridden.
+Malformed values, unknown aliases, and duplicate aliases are rejected before
+the workspace is created.
 
 Selected profiles are passed as repeated arguments:
 
@@ -155,10 +176,13 @@ docker compose \
   up --detach --build
 ```
 
-Compose runs against the workspace's inner Docker daemon. Relative build
-contexts and bind sources are resolved inside the workspace, never against a
-host checkout. The fixed Compose project name lets reconciliation and cleanup
-distinguish resources belonging to different workspaces.
+Compose runs against the workspace's inner Docker daemon. The Compose file and
+relative build contexts are resolved from the immutable root snapshot, never
+from the mutable checkout or a host checkout. A service that needs mutable
+Project data must bind it explicitly through `DIM_PROJECT_ROOT`. The snapshot
+itself must not be mounted into an untrusted agent runtime. The fixed Compose
+project name lets reconciliation and cleanup distinguish resources belonging
+to different workspaces.
 
 When neither setup mechanism exists, setup is a successful no-op. The
 workspace remains useful for direct commands and projects that manage their
@@ -204,10 +228,36 @@ When the entrypoint is absent, `run` executes the supplied task and
 arguments directly from the project root. `exec` always bypasses
 the entrypoint.
 
+Projects may define a generic `ssh-proxy` entrypoint task for remote access to
+their fixed agent container. This optional pattern forwards raw stdio without
+a TTY and publishes no SSH port. The canonical self-Project uses key-only
+authentication and a fixed non-root `dim-agent` login, generates host keys at
+runtime, and keeps authorized keys in the persistent agent home. It grants that
+login practical agent authority through namespace-local ACLs for workspace
+content and the private nested Docker socket, without changing checkout
+ownership or making the workspace world-writable. A root-owned ephemeral
+allowlist supplies current Git, Docker, and constrained endpoint settings to
+each fixed-shell session, so clients cannot replace them or persist them in
+home state.
+
+A key trusted for this pattern can modify agent-visible source and home data,
+use the agent's private Docker daemon and Git credentials, and call any
+constrained agent endpoints the Project exposes. It must not receive a host,
+trusted-workspace, or Project-runtime control socket. Projects that copy this
+pattern must review those grants for their own layout rather than treating it
+as authority shared by every DIM Project. Verify the runtime host-key
+fingerprint before connecting, and disable root login even for a key accepted
+for `dim-agent`. Connecting a Codex client is one use case; DIM does not add an
+SSH command or own this Project task.
+
 ### `.dim/teardown.sh`
 
 When present, this script receives the same environment and repeated profile
-arguments as setup and runs before discard. When it is absent and
+arguments as setup and runs before discard. DIM additionally sets
+`DIM_WORKSPACE_DISCARD_KEEP_VOLUME=0` for ordinary discard and `1` for
+`--keep-volume`. At `1`, custom teardown must preserve nested named data meant
+to survive recreation of the same workspace name. At `0`, it retains its
+ordinary cleanup authority. When the script is absent and
 `.dim/docker-compose.yml` exists, `dim` performs:
 
 ```bash
@@ -217,10 +267,11 @@ docker compose \
   down --remove-orphans
 ```
 
-Teardown does not include `--volumes` by default. The final removal of the
-workspace's inner-Docker store still guarantees cleanup of non-external
-Compose resources. An external volume remains outside this ownership boundary
-and is the project's responsibility.
+Teardown does not include `--volumes` by default. The DIM-managed outer volume
+stores the workspace's inner Docker engine. Named volumes created by Compose
+inside that engine remain Project-owned, even though removing the outer engine
+volume makes them unreachable. External volumes sit outside both ownership
+boundaries and remain the Project's responsibility.
 
 ## End-to-end workflow
 
@@ -310,8 +361,9 @@ dim workspace update example-dev \
   --profile production
 ```
 
-`update` performs a fast-forward-only update of the project repository before
-selecting the new setup script. An update that would overwrite local work or
+`update` first pins and stages one commit from the applied protected root
+branch, then performs a fast-forward-only update of the mutable checkout and
+uses the same commit's immutable setup bytes. An update that would overwrite local work or
 requires a merge stops with an error. If one or more `--profile` flags are
 provided, they replace the stored profile set; otherwise the existing set is
 retained. Additional repository update policy belongs to `.dim/setup.sh` or
@@ -325,7 +377,8 @@ dim workspace start example-dev
 ```
 
 `stop` preserves the project checkout and inner-Docker state. `start`
-reconciles the runtime, fast-forwards the root ref, and invokes setup so
+pins an approved commit, reconciles the runtime, fast-forwards to that commit,
+and invokes its immutable setup so
 detached project services return to their desired state. Use `restart` to
 apply the same sequence to a running workspace:
 
@@ -339,6 +392,13 @@ Retry setup explicitly:
 dim workspace setup example-dev
 ```
 
+If setup stopped in `setting-up` or failed into `setup-error`, this command
+replays the checkout and runtime manifest from the immutable root already
+recorded for the workspace, then reruns Project setup. It doesn't fetch or
+follow the configured root ref, so a branch moving after the original
+selection can't change the recovery input. The workspace remains non-ready
+until every replay and setup step succeeds.
+
 Inspect or discard:
 
 ```bash
@@ -348,10 +408,13 @@ dim workspace discard example-dev --keep-volume --yes
 ```
 
 Discard stops project services when possible, then removes the top-level
-runtime, inner-Docker store, project checkout, and workspace journal. With
-`--keep-volume`, the managed inner-engine store remains available to a later
-workspace creation using the same name. Discard does not remove repositories
-from the managed Git service.
+runtime, project checkout, workspace journal, and the DIM-managed volume that
+stores the inner Docker engine. With `--keep-volume`, DIM retains that outer
+engine volume for a later workspace creation using the same name and tells
+custom teardown to preserve Project-owned nested named data intended to
+survive that recreation. Ordinary discard leaves custom teardown free to
+remove nested Project data. External volumes always remain Project-owned.
+Discard does not remove repositories from the managed Git service.
 
 ## Lifecycle behavior
 
@@ -360,24 +423,56 @@ from the managed Git service.
 | `create` | initial clone | yes | no |
 | `start` | fast-forward only | yes | no |
 | `restart` | fast-forward only | yes | no |
-| `setup` | no | yes | no |
+| `setup` | reuse; reapply recorded immutable root on recovery | yes | no |
 | `update` | fast-forward only | yes | no |
 | `run` | no | no | when present |
 | `exec` | no | no | never |
 | `stop` | no | no | no |
 | `discard` | no | teardown only | no |
 
-Setup is serialized per workspace. Ordinary tasks may run concurrently.
+Setup acquires the Project lock before the workspace setup lock and rechecks
+the Project and workspace identity while both are held. Ordinary tasks may run
+concurrently. `setup` and discard reuse the snapshot already recorded in
+workspace state; they never follow a moved branch. Missing recorded snapshot
+bytes fail closed.
 Setup failure is recorded separately from runtime reconciliation failure and
 does not destroy the checkout or inner-Docker cache. Task failure is returned
 to the caller but does not mark the workspace itself unhealthy.
+
+Lifecycle lock ownership follows the exact Linux process instance rather than
+lock age. Long setup, Packer, or QEMU work therefore remains exclusive while
+its owner is alive; dead owners and reused PIDs can be reclaimed. Corrupt or
+unverifiable owner state blocks until the bounded timeout and is reported for
+operator repair. Release is tied to the acquisition nonce, so a delayed old
+release cannot remove a successor's owner record. This applies without merging
+the distinct Project, runner, hook-publication, workspace-setup, and workspace
+reconciliation lock identities or changing their documented ordering.
+
+DIM identifies the outer workspace container with its managed owner,
+workspace, Project name and ID, root alias, backend, resource kind, and
+identity-digest labels. The inner-engine volume carries the matching managed
+owner, workspace, Project name and ID, resource kind, and identity digest.
+Lifecycle actions reject incomplete, malformed, foreign, or mismatched
+same-name resources. Container changes use only the ID returned by ownership
+inspection. Docker volume deletion remains name-based because Docker exposes no
+equivalent immutable volume ID, so discard reinspects complete ownership
+immediately before deleting the volume.
 
 For Docker or host maintenance, `dim host shutdown` stops all DIM runtimes
 without removing their named volumes and leaves the controller available in a
 not-ready maintenance state. After maintenance, `dim host start` restores
 Gitea and the registry cache before restarting only the workspaces and CI
 runners that were ready at shutdown. `dim host status --json` reports the
-phase and any pending recovery error.
+phase and any pending recovery error. If one target fails, DIM still attempts
+later targets where the recovery order permits it and retains all still-pending
+restart intent. Repeat `dim host start` after correcting the failure. Host
+lifecycle state is schema 2 and records CI intent in `restartCiRunners`; schema
+1 has no compatibility or migration path. A ready runner absent from that list
+is left alone. The retry also leaves ready workspaces alone, starts stopped
+targets, replays interrupted workspace setup from its immutable selection, and
+normalizes interrupted CI runner creation through an ownership-checked
+stop/start. A workspace still being created fails closed. The host clears its
+recovery lists only when every target has recovered.
 
 DIM configures its workspace Docker engine to use the same managed,
 host-scoped anonymous Docker Hub pull-through cache as managed CI runners.

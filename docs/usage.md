@@ -109,22 +109,29 @@ overlay defaults to 32 GiB and can be changed with `DIM_KVM_SMOKE_DISK_SIZE`.
 Run the Ubuntu bootstrap for Sysbox:
 
 ```bash
-just bootstrap-ubuntu
+bash verification/scripts/bootstrap-ubuntu.bash
 ```
 
 When mise is available, bootstrap runs `mise install` and uses the Node.js,
 pnpm, and `just` versions declared by this repository. Otherwise it installs
 Node.js, npm, and `just` through APT and installs the pinned pnpm version. It
-then installs Sysbox and project dependencies, runs
-verification, builds the included runtime images, and runs `doctor` for that
-backend. If `doctor` reports missing host capabilities, bootstrap exits
-non-zero after printing the gaps.
+then installs Sysbox and project dependencies, runs `just check-source` and
+`just verify plugin-install`, builds the included runtime image, and runs
+`just run-cli doctor` for that backend. If `doctor` reports missing host
+capabilities, bootstrap exits non-zero after printing the gaps.
 
 Build the included runtime images:
 
 ```bash
 just build-workspace-image
+dim workspace image status
 ```
+
+`dim workspace image status --json` reports the same inspection-derived image
+result for automation. A missing image is distinct from a controller, host, or
+workspace readiness problem. Controller restart does not build workspace
+images; use the Project or development build script that owns the configured
+image.
 
 Run the integration smoke test:
 
@@ -164,8 +171,9 @@ Run the full local verification suite:
 just check-source
 ```
 
-`just check` runs `just typecheck`, `just test`, and `just build`. It requires
-only Node.js and pnpm, not Docker, an installed DIM CLI, or a runtime backend.
+`just check-source` runs `just typecheck`, `just test`, and
+`just build-packages`. It requires only Node.js and pnpm, not Docker, an
+installed DIM CLI, or a runtime backend.
 Run the packaged plugin installation flow separately:
 
 ```bash
@@ -232,7 +240,7 @@ just verify example sysbox use
 just verify example sysbox use ci-runner
 ```
 
-For local development, `just install-dim-local` builds the publishable package
+For local development, `just install-local` builds the publishable package
 tarballs. When mise is available it automatically invokes the mise-selected
 installer facade and keeps `dim` proxied through that facade; without mise it
 retains the direct installation under `${DIM_INSTALL_PREFIX:-~/.local}`.
@@ -291,7 +299,7 @@ Run the same check from source against the installed backend configuration:
 just run-cli doctor
 ```
 
-`just cli` builds `@slop-lab/dim-core` first, then runs `dim`
+`just run-cli` builds `@slop-lab/dim-core` first, then runs `dim`
 directly from source via `tsx` — the reliable way to run the CLI without
 installing it. Running `tsx src/cli.ts` directly from `core/packages/cli`
 instead fails with `ERR_MODULE_NOT_FOUND` unless core has already been built.

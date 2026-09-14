@@ -18,7 +18,33 @@ dim ci runner status example primary
 
 The initial Gitea coordinator registers it at the Project's managed
 organization. Every root or non-root repository registered to that Project can
-therefore select the same runner.
+therefore select the same runner. Runner admission requires the protected root
+repository to provide `.dim/ci/runner.yml`:
+
+```yaml
+schemaVersion: 1
+workloads:
+  ordinary:
+    labels: [dim]
+    image: registry.example/ci@sha256:<64 lowercase hexadecimal digits>
+    tools: [bash, git, node]
+    capabilities: []
+  integration:
+    labels: [dim-container-integration]
+    image: registry.example/ci-integration@sha256:<64 lowercase hexadecimal digits>
+    tools: [bash, docker, git, node]
+    capabilities: [nested-docker]
+```
+
+The schema is strict: both workload classes and every field are required,
+unknown keys and duplicate labels or tools are rejected, images must use an
+immutable `sha256` digest without a tag, and the only current capability is
+`nested-docker`. Integration must request that capability. DIM resolves the
+configured root or symbolic `HEAD` once to one protected branch and exact
+commit, reads both this file and the optional QEMU cache hook from that one
+immutable snapshot, and persists `{sourceRef, sourceCommit, configDigest}` in
+runner state. A branch moving after admission cannot mix either input with a
+different commit.
 
 Workflows select it with the stable DIM label:
 
@@ -27,51 +53,78 @@ jobs:
   verify:
     runs-on: dim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm workspace:check
       - run: pnpm workspace:test
 ```
 
-For compatibility with workflows shared with GitHub, the initial adapter also
-maps `ubuntu-24.04` to the same job image.
+Every Project label maps to its workload's configured digest-pinned disposable
+job image. Persistent Sysbox runners advertise only ordinary labels, configure
+`docker_host: '-'`, and expose no job Docker host. QEMU runners advertise the
+integration labels plus DIM's `dim-qemu` label. Those labels map to the
+integration image, whose job receives only the private Docker socket inside
+its fresh guest. No Project workload uses Gitea runner host mode. DIM first
+force-pulls and probes both images in a separate throwaway Sysbox daemon,
+checks every declared executable, and proves the integration image can use
+nested Docker. Registration happens only after those probes succeed.
+The daemon's temporary deterministic container and socket volume carry the
+exact `dim.managed=true`, `dim.owner=dim`, `dim.project`, `dim.project-id`,
+`dim.capacity`, `dim.executor`, `dim.resource`, `dim.kind`, and `dim.digest`
+labels. Together they identify DIM, the Project name and ID, capacity,
+executor, probe resource kind, Docker resource kind, and full deterministic
+digest. DIM inspects the complete identity before reuse or deletion and after
+creation. An absent name is safe. A partial, malformed, mismatched, or foreign
+identity stops admission without touching that resource. Final cleanup
+re-inspects both names and removes only exact owned probe residue. Container
+cleanup uses the immutable ID returned by inspection. Docker volumes have no
+equivalent immutable ID, so socket-volume deletion remains name-based and is
+preceded by an immediate ownership reinspection. Container removal finishes
+before socket-volume removal so Docker has detached the volume. A partial
+cleanup failure does not skip ownership-safe attempts for the remaining
+resources.
 
-The `dim-container-integration` label runs directly in the isolated runner
-container (Gitea runner "host" mode). It is reserved for the repository's
-Gitea managed-workspace integration workflow, whose controller sockets and nested Docker
-bind mounts must share one filesystem namespace. Other workflow jobs remain
-in disposable job containers. After upgrading DIM across a label change,
-run `dim ci runner restart PROJECT RUNNER` once to replace the stored runner
-registration and publish the new labels.
-
-The managed Sysbox runner host image includes Node.js because JavaScript
-actions such as `actions/checkout` execute before a workflow can run
-`actions/setup-node`. DIM builds that image from a digest-pinned act-runner
-base during runner creation or restart. `just verify sysbox-ci-runner-image`
-builds and probes the same generated image without installing DIM on the host.
-The host-mode integration lane probes Sysbox mount mediation and the inner
-Docker daemon both before and after the integration command. A failed probe
-terminates PID 1 after reporting the job failure; the runner container's
-`unless-stopped` policy then starts it with a fresh Sysbox namespace instead
-of allowing mount failures to cascade into unrelated jobs.
+The managed Sysbox runner host image includes only act-runner, Bash, and the
+nested Docker daemon needed to launch disposable jobs. It contains no Node.js,
+Git, Docker CLI, `just`, `jq`, `socat`, or PTY helper for Project workflows.
+Its act_runner configuration remains non-privileged, rejects arbitrary volume
+mounts, binds only the job workspace, and force-pulls job images. `just verify
+sysbox-ci-runner-image` builds and probes the same generated image without
+installing DIM on the host. After changing `.dim/ci/runner.yml`, run `dim ci
+runner restart PROJECT RUNNER` to admit the new protected snapshot and replace
+the provider registration.
 
 DIM starts one host-scoped CNCF Distribution registry as an anonymous Docker
-Hub pull-through cache when the first managed CI runner is reconciled. Sysbox
-runner daemons use it directly on the private `dim-control` network. Each QEMU
-supervisor exposes only a local TCP relay to its disposable guest, whose Docker
-daemon uses the relay at `10.0.2.2:5000`. DIM's CI harness extends that relay
-across each additional test-only NAT boundary, so a nested KVM guest and DinD
-daemon use the same cache without adding cache configuration to Project
-examples. The supervisor verifies the relay before booting a guest; an
+Hub pull-through cache when the first managed CI runner is reconciled. Managed
+workspace and Sysbox runner daemons discover it directly as
+`dim-registry-cache:5000` on the private `dim-control` network. A
+workspace-local relay carries nested agent DinD traffic. Each persistent QEMU
+supervisor owns a launcher-local TCP relay to its disposable guest, whose
+Docker daemon uses the relay at `10.0.2.2` on a worker-specific port. Both
+relays target the stable cache alias so cache-container address replacement
+does not stale their route.
+The supervisor verifies its relay before booting a guest; an
 unavailable cache is reported as a runner error instead of silently sending
 the guest directly to Docker Hub. The registry has no published host
 port, accepts no pushes in proxy mode, stores no Docker Hub credentials, and
 is not attached to Project workspace networks. Its managed filesystem volume
 is shared across Projects and runner executors, so common public layers survive
 runner and VM disposal. A cache miss still reaches Docker Hub and remains
-subject to its upstream policy; pin frequently used images by digest where
-practical.
+subject to its upstream policy. Project workflow images must be digest-pinned.
+
+Verification records separate evidence for each route. A cold pull must reach
+the cache and request its upstream artifacts. A warm pull must reach the cache
+without another upstream artifact request. A replacement pull must follow the
+stable alias after the cache address changes, and an outage pull must fail
+without direct upstream bypass. A configured endpoint is not enough evidence.
+Packet capture and general network monitoring are not required.
+
+Run `just verify cache-routing-sysbox` directly on a real Sysbox-capable Docker
+host. Its preflight treats a missing Sysbox or Docker capability as an unmet
+prerequisite, not a pass. This recipe is not scheduled on the QEMU-backed
+`dim-container-integration` hosted lane. The hosted integration lane exercises
+its QEMU guest routes separately.
 
 After upgrading an existing installation to a DIM version that introduces or
 changes this cache configuration, run `dim ci runner restart PROJECT RUNNER`
@@ -83,22 +136,23 @@ As described in the
 [development repository model](development-repositories.md), DIM develops
 itself primarily through its active managed Git host while GitHub remains the
 canonical public source. The current automatic workflows are provider-specific:
-`.gitea/workflows/ci.yml`
-uses that host-mode label for the container gate supported within Sysbox. It
-excludes the canonical self-Project's private nested runtime; the runc
-QEMU gate covers that boundary on a compatible clean host. `.github/workflows/ci.yml`
+`.gitea/workflows/ci.yml` uses the Project-owned integration label for the
+container gate in a fresh QEMU guest. Persistent Sysbox runners serve only
+ordinary labels. The QEMU gate covers the canonical self-Project's private
+nested runtime on a compatible clean host. `.github/workflows/ci.yml`
 intentionally runs only lightweight Node.js type checks and tests without APT
 or Docker setup. GitHub-only manual Sysbox and KVM release workflows remain
 under `.github/workflows` and are not copied into the managed development Gitea
 instance.
 
-When explicitly created on a host with KVM, DIM starts a small trusted runc
-supervisor with `/dev/kvm`. A Gitea `workflow_job` webhook asks it to boot a
-QEMU VM only after a queued job selects the `dim-qemu` label. Workflow code
+When explicitly created on a host with KVM, DIM starts a small persistent,
+trusted runc supervisor with `/dev/kvm`. A Gitea `workflow_job` webhook asks it
+to boot a QEMU VM only after a queued job selects an integration label or
+`dim-qemu`. Workflow code
 runs inside that VM and sees its nested
 KVM device; it never runs in the supervisor or receives the DIM host's device
-directly. Each registration accepts one job and the VM overlay is deleted after
-shutdown. While idle, no guest exists; only the small webhook process remains.
+directly. Each registration accepts one job. While idle, no guest exists; only
+the persistent supervisor remains.
 The container limit still leaves room for its QEMU child while a job runs.
 Gitea registration is
 only the current coordinator adapter, so replacing the built-in coordinator
@@ -106,30 +160,101 @@ does not change this executor boundary.
 
 All QEMU supervisors in a Project form a shared scheduler, with one concurrent
 capacity per named runner. They persist demand and renewable capacity claims in
-a shared dispatch volume before acknowledging webhooks. Duplicate deliveries
-remain idempotent, and an atomically claimed job boots on only one capacity. A
-VM exit does not itself consume queued demand:
+a shared dispatch volume before acknowledging webhooks. Each update fsyncs its
+temporary state file, atomically replaces the durable file, and fsyncs the
+containing directory before HTTP `202`; a load, validation, or write error
+fails the acknowledgement. Duplicate deliveries remain idempotent, and each
+trigger has at most one active capacity claim.
+For each job ID, scheduler state only advances from `queued` to `in_progress`
+to `completed`, even when Gitea deliveries are duplicated or reordered. The
+scheduler retains the first completed timestamp for seven days, rejects stale
+queued or in-progress deliveries during that window, then prunes the terminal
+marker to bound persistent state. This retention cleanup is separate from the
+renewable lease expiry that lets another capacity recover an abandoned queued
+claim. The claimed job ID is only a durable demand trigger. It does not identify
+the job that Gitea assigns to the generic ephemeral runner, so two capacities
+may receive assignments in an order different from their triggers. A VM exit
+does not itself consume queued demand:
 the scheduler waits for Gitea to report that a job started or completed, and
 starts another disposable VM with bounded retry delay while demand remains.
-This matters because an organization runner cannot bind its next fetch to the
-job ID that caused the webhook and may receive another coordinator task.
-Persisted queued demand resumes after a supervisor restart, so webhook
-redelivery is not required.
+Each capacity runs at most one VM. Once started, that VM keeps running if its
+trigger completes or its claim disappears or moves to another capacity;
+renewal of that trigger claim stops. Shutdown and scheduler state-I/O failures
+still terminate and reap the supervisor process group, and normal supervisor
+cleanup still removes per-run process state. Persisted queued demand resumes
+after a supervisor restart, so webhook redelivery is not required.
 
-The first QEMU job for a Project builds a version-keyed runner base image with
-Packer. The image contains the common Ubuntu packages and the current
-coordinator adapter's runner binary, but no registration token, runner name, or
-job data. If the protected Project root contains `.dim/ci/qemu-cache.bash`,
-trusted Packer provisioning executes it inside the base-image guest with the
-cache directory as its only argument. The hook content digest selects the
-Project's base-image cache key. Workflow changes can modify only their
-disposable qcow2 overlay, not the Project's persistent base image. Named QEMU capacities share the completed qcow2 through a
-Project-scoped cache volume; a cross-container file lock serializes the first
-build and the completed image is published atomically. Every job still boots a
-fresh overlay and receives its ephemeral registration only after boot. Deleting
-the final QEMU capacity removes both shared dispatch state and this image cache.
-Changing a pinned image input selects a new cache key rather than modifying an
-image that another capacity may be using.
+The first matching QEMU job builds or reuses two immutable Packer layers. A
+host-scoped common base is keyed by the pinned Ubuntu cloud image, DIM
+provisioning, required tools, and coordinator runner inputs, so Projects may
+share it safely. It contains no Project hook output, token, runner identity, or
+job data. Above it, DIM builds a Project-specific cache layer, isolated per
+Project and keyed by hook provenance. DIM first requires applied provider
+protection, resolves the configured root or symbolic `HEAD` once to a concrete
+covered branch and commit, and reads `.dim/ci/qemu-cache.bash` only from that
+commit's immutable snapshot. The provenance records the resolved source ref,
+source commit, presence kind, and exact executable digest. If the hook is
+absent, DIM stages a deterministic non-empty no-op executable and hashes the
+same bytes that Packer consumes. Trusted Packer provisioning runs the staged executable inside the
+guest with the cache directory as its only argument. Locks serialize each
+build, and publication is atomic. Workflow changes can modify only a fresh
+disposable qcow2 overlay above the Project-specific cache layer. After the
+guest reports readiness, the trusted supervisor runs `register --ephemeral`,
+validates the temporary mode-`0600` `.runner`, and copies only that file into
+the guest. The reusable registration token is unset for guest transports and
+QEMU. The guest runs `daemon --once` under a bounded timeout. Teardown removes
+the job's overlay, SSH keys, `.runner`, and run directory, while the supervisor
+and cache layers persist. Deleting the final QEMU capacity
+removes shared dispatch state and that Project-specific cache layer, while reusable
+common bases remain host-scoped. Changed pinned inputs select new keys instead
+of mutating layers in use.
+
+The common base uses one dated Ubuntu 24.04 cloud-image release. Before Packer
+uses the checksum-pinned image, DIM verifies the exact `SHA256SUMS` and
+`SHA256SUMS.gpg` bytes with the digest-pinned Ubuntu cloud-image keyring and an
+accepted official signing fingerprint. Supervisor and guest APT use one
+timestamped `snapshot.ubuntu.com` Deb822 source for `noble`, `noble-updates`,
+and `noble-security`, with `main` and `universe` and normal Ubuntu signature
+verification. Every directly requested package is pinned as
+`package=version`; the initial digest-pinned supervisor image plus immutable
+snapshot also fixes dependency resolution. Packer, its QEMU plugin, the Gitea
+runner, generated scripts, and both Packer templates are exact identity inputs,
+so changing executable build input selects a new common key.
+
+Ubuntu states that archive snapshots are intended to remain available for at
+least two years, not forever. Operators needing later reconstruction must copy
+the dated cloud image, signed checksum files, trusted keyring, snapshot
+metadata, and package artifacts into a reviewed local or internal immutable
+cache while they remain available. Retaining DIM's common qcow2 alone preserves
+the built output, not all source provenance needed to rebuild it.
+
+DIM inspects the complete owner, scope, resource kind, and identity digest
+labels before reusing or deleting any CI volume. Each Sysbox runner and QEMU
+supervisor container also carries the complete DIM owner, Project name and ID,
+capacity, executor, resource kind, Docker kind, and identity digest labels. A
+same-name foreign, malformed, or partially labeled resource is a conflict,
+never an adoption target. Every generated CI resource name includes a digest
+of all length-framed identity inputs, even when the readable name is already
+short, and remains within the 63-character bound. Start, stop, removal, QEMU
+reconstruction, and host resume inspect all nine container labels and act only
+on the inspected container ID, never the name. Foreign, malformed, and
+partially labeled resources remain untouched. Stopping an already absent
+container succeeds; starting an absent Sysbox runner fails because ordinary
+`start` does not reconstruct it. QEMU reconstruction checks ownership before
+changing coordinator registration, authorization, or webhook state. Container
+cleanup removes the inspected container ID rather than trusting the name after
+inspection.
+Deletion removes provider and Docker resources before lifecycle state, so a
+failed or partially completed cleanup remains safe to retry. Only the final
+capacity removes its Project dispatch, cache volume, and local image state;
+the host-common cache remains intentional shared state.
+
+Admission acquires lifecycle locks in Project, CI-runner, then hook-publication
+order and stages the immutable executable and provenance before releasing the
+Project lock. Supervisor-image construction and Packer/QEMU image work happen
+after that release. A protected branch moving later therefore cannot mix a new
+hook or runner configuration with the admitted commit. Runner state schema 8
+retains config provenance for both executors and exact hook provenance for QEMU.
 
 The cache hook is optional and belongs in the protected root because it is the
 only Project code allowed to populate persistent runner state. Test orchestration
@@ -138,15 +263,19 @@ repositories. The hook runs inside the disposable Packer guest, receives no
 host socket or coordinator credential, and cannot access another Project's
 cache volume.
 
+An APT mirror was considered but is not required. The existing Docker registry
+pull-through cache remains separate from QEMU base-image caching.
+
 Creating a QEMU runner adds only its managed supervisor hostname to Gitea's
 webhook allowlist and restarts the managed Gitea service to apply that setting.
 DIM does not enable unrestricted private-network webhook delivery.
 
-The DIM repository selects this label for automatic host-backend verification on non-draft
-pull requests in its managed development host. Draft pull requests and branch
-pushes skip the expensive gate. One job installs and verifies Sysbox in a clean
-QEMU guest. Named host capacities claim these common
-`dim-qemu` jobs without appearing in the workflow. After installing a DIM
+The DIM repository selects integration labels or `dim-qemu` for automatic
+host-backend verification on non-draft pull requests in its managed
+development host. Draft pull requests and branch pushes skip the expensive
+gate. One job installs and verifies Sysbox in a clean QEMU guest. Named host
+capacities claim these common jobs without appearing in the workflow. After
+installing a DIM
 version that adds or changes runner labels, restart the runner once:
 
 ```bash
@@ -160,19 +289,22 @@ Restart every existing QEMU runner after this scheduler upgrade before adding
 another capacity. DIM rejects a mixed old/private and new/shared scheduler
 topology because both could otherwise react to the same capability event.
 
-Each status must include a ready QEMU `executor` record with `dim-qemu` and a
-distinct supervisor name. Workflows continue to select only
-`runs-on: dim-qemu`; capacity names are host lifecycle configuration and do not
-belong in tracked Project code. Creation detects host KVM, while successful VM readiness also
+Each status must include a ready QEMU `executor` record with the Project's
+integration labels, `dim-qemu`, and a distinct supervisor name. Workflows may
+select an integration label or `runs-on: dim-qemu`; capacity names are host
+lifecycle configuration and do not belong in tracked Project code. Creation
+detects host KVM, while successful VM readiness also
 requires nested virtualization from the host KVM module. `dim ci runner logs
 dim primary` follows the normal Sysbox runner;
 use `dim ci runner logs dim release` when diagnosing VM boot,
 registration, or replacement.
 
 An individual VM boot, provisioning, registration, or job failure is scoped
-to that queued job. The webhook service logs the job ID and supervisor exit
-status, removes it from the in-flight set, and continues processing later
-queued jobs. Repeated webhook responses without a corresponding
+to one capacity attempt. The webhook service logs the trigger job ID and
+supervisor exit status, releases or retains demand according to coordinator
+state, and continues processing later queued triggers. The logged trigger ID
+must not be read as the actual consumed job ID. Repeated webhook responses
+without a corresponding
 `qemu-ci: start disposable runner VM` line indicate that the event did not
 select `dim-qemu`; a previous supervisor failure must not disable demand
 processing.
@@ -228,10 +360,22 @@ dim ci runner delete example primary --yes
 ```
 
 `create` requires a new Project/runner identity. `start` requires a stopped
-runner and preserves its state; for QEMU it recreates the supervisor and
-webhook because `stop` removes the webhook credential. `restart` reconciles an
-existing runner while preserving its executor and resource override. `delete`
-permanently removes its provider registration, container, volume, and state.
+runner and preserves its state. For QEMU, it keeps the schema-8 config and hook
+artifact and provenance, supervisor image, job image, labels, effective
+resources, and inheritance choice. It restores runtime volumes and cache, then
+replaces only the provider registration, webhook authorization, webhook, and
+supervisor container because `stop` removed the live credential and webhook.
+`restart` instead re-admits the current protected root and refreshes derived
+config, hook, images, labels, and inherited resources while preserving the
+executor kind and explicit resource override. `delete` permanently removes its
+provider registration, container, volume, and state.
+
+`stop` holds the Project lock and then the Project-scoped runner lock while it
+inspects and changes the runner lifecycle.
+
+Host resume applies the same ownership inspection before it restarts a runner
+that was ready at shutdown. A same-name container with incomplete, malformed,
+or foreign labels blocks that runner's recovery and is left untouched.
 
 The coordinator integration is provider-specific, but runner state, lifecycle,
 and executor capabilities are provider-neutral. Managed Gitea Actions is the
@@ -249,7 +393,8 @@ Replacing the managed Git host therefore does not change workflow labels or
 expose capacity ownership in Project code.
 
 As a pre-stable state contract, earlier CI runner state is not migrated
-automatically. Schema 4 records effective QEMU resources so overrides survive
-restart. Before upgrading from schema 3, use the installed older CLI to delete
+automatically. Schema 8 records effective resources, protected-root runner
+configuration provenance, and QEMU hook provenance so image admission survives
+restart. Before upgrading from schema 7, use the installed older CLI to delete
 each runner, then recreate it with the new CLI; alternatively clean up its
 managed containers, volumes, provider registrations, and state manually.

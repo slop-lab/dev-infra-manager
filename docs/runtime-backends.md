@@ -17,9 +17,13 @@ do not change the recorded Sysbox backend.
 
 CPU, memory, and PID limits apply to the workspace boundary. Nested
 Project-owned services share that budget unless their Compose definition adds
-stricter child limits. Nested Docker state is persisted in the managed
-`/var/lib/docker` volume. `discard --keep-volume --yes` retains that volume for
-reuse when the workspace is recreated.
+stricter child limits. Nested Docker state is persisted in DIM's outer managed
+`/var/lib/docker` engine volume. `discard --keep-volume --yes` retains that
+volume for same-name recreation and signals custom Project teardown to retain
+nested named data intended to survive that recreation. Those nested named
+volumes are Project-owned resources inside the retained engine store. External
+volumes remain Project-owned outside the store. Ordinary discard preserves the
+Project's cleanup authority and removes DIM's engine volume.
 
 KVM is optional and independent of Sysbox readiness. When available and
 approved at workspace creation, DIM forwards `/dev/kvm` and its numeric group.

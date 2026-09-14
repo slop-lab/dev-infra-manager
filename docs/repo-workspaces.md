@@ -7,6 +7,19 @@ tracker: newly created root repositories enable Gitea issues and newly created
 non-root repositories disable them. Existing repository settings are not
 changed when this policy is introduced or reapplied.
 
+Managed Gitea disables organization creation by regular users. DIM maps
+Gitea's `[admin] DISABLE_REGULAR_ORG_CREATION` setting exactly as
+`GITEA__admin__DISABLE_REGULAR_ORG_CREATION=true`, leaving reserved namespace
+creation under DIM's administrator path.
+
+Project state schema `4` records the reserved organization's trusted numeric
+ID in required nullable `giteaOrganizationId`. The field may be null while
+creation is incomplete, but a ready Project always has a positive ID. DIM
+persists a newly returned ID before marking the Project ready. On retry it
+accepts an existing organization only when both the stored ID and reserved
+username match. If no ID was captured, a same-name collision fails closed and
+requires administrator reconciliation; DIM never adopts it by name.
+
 For a complete, tested, end-to-end walkthrough instead of a reference, see
 [Example: External URLs](../../examples/features/external-urls/README.md).
 
@@ -83,7 +96,12 @@ publish destination `main` is connection-relative, so the import mapping
 projects it back to external `dev/core`.
 
 The default `repo add URL` import copies branches and tags. Use `--mirror` only
-when server-private refs must also be copied.
+when server-private refs must also be copied. An import remains non-ready while
+protection is pending. Only DIM's trusted transfer identity can write during
+that interval. DIM removes that authority before applying protection, then
+grants ordinary repository users only after protection succeeds. A transfer or
+protection failure leaves the repository non-ready and denies ordinary writer
+access.
 
 The source may be any URL or path accepted by host Git. Repository aliases are
 explicit and Project-scoped. An empty managed repository omits the URL:
@@ -109,9 +127,11 @@ Permanently delete an unused non-root repository from DIM and managed Gitea:
 dim repo delete example environment --yes
 ```
 
-The command rejects a Project that still has workspaces. The root repository
-cannot be removed independently because every runnable Project must retain
-exactly one root; remove or purge the whole Project instead.
+The command rejects a Project that still has workspaces and rejects the target
+while that repository is importing. Another repository importing in the same
+Project does not block deletion of a ready target. The root repository cannot
+be removed independently because every runnable Project must retain exactly
+one root; remove or purge the whole Project instead.
 
 For a complete set, commit a `.dim/repos.yml` to the root repository whose
 mapping keys are aliases:
@@ -165,12 +185,36 @@ variables or require one container per repository.
 ## Workspaces
 
 ```bash
-dim workspace create example dev --profile development
+dim workspace create example dev --profile development \
+  --repo-ref product=refs/pull/42/head
 dim workspace exec dev -- bash
 dim workspace run dev codex
 ```
 
+Each repeated `--repo-ref ALIAS=REF` selects a non-root candidate only for that
+workspace. It does not change the Project repository set. The resulting
+workspace record and Project runtime manifest contain every Project alias as a
+complete `ready` entry with the requested ref, resolved ref, and exact commit.
+The root cannot be overridden. If the root has no configured ref, its request
+is recorded as `HEAD` separately from the concrete protected branch selected
+through symbolic `HEAD`. Creation rejects malformed, root, unknown, duplicate,
+or unavailable ref overrides before state mutation. Reusing an existing
+workspace with different overrides is also rejected without changing its
+record or Project repository state.
+
 Project or remote changes never alter a running workspace automatically.
+Trusted Project lifecycle code never executes from this mutable checkout.
+DIM records an exact approved root commit and uses a controller-owned,
+read-only full-tree snapshot for setup, entrypoint, teardown, Compose, and
+their relative helpers and build contexts.
+
+DIM treats only exit code `1` from an optional lifecycle-file probe as
+absence. Any other probe failure stops the operation before it runs a hook,
+Compose, or a direct-command fallback.
+
+Project-owned key-only agent SSH accepts the configured client key for the
+non-root `dim-agent` account. Root login stays disabled and is rejected even
+when the client offers that same valid key.
 
 ```bash
 dim workspace restart dev   # stop, start, root fast-forward, setup
@@ -185,6 +229,14 @@ explicit `dim workspace align WORKSPACE --reset --yes` recovery command when
 discarding the local state is intended. Stop/start and restart preserve the
 root checkout and inner-engine volume.
 
+DIM ownership-checks the complete workspace container and inner-engine volume
+label sets before reuse or mutation. Container lifecycle commands act on the
+inspected immutable container ID rather than its reusable name. Docker volumes
+have no equivalent immutable ID, so their deletion remains name-based. Discard
+validates both resources before teardown and reinspects complete volume
+ownership immediately before removal, so a foreign same-name replacement is
+left untouched.
+
 ```bash
 dim workspace list
 dim workspace show dev
@@ -197,3 +249,13 @@ DIM does not implicitly migrate incompatible pre-stable repository/workspace
 state. Push all work before upgrading, explicitly clean old resources with the
 old CLI, then create the Project and workspace again. Unknown state is rejected
 without mutation.
+
+Host maintenance state must be a structurally valid schema `2` record with its
+exact phase, workspace, CI-runner, managed-container, and timestamp fields,
+plus an optional error. Invalid or unknown structure is rejected unchanged
+before recovery runs. `restartCiRunners` alone records runner restart intent.
+If `dim host start` enters from `ready`, it dispatches no recovery. From
+`stopped`, `starting`, or `error`, listed ready runners are left alone, stopped
+runners start, and creating or errored runners are ownership-safely stopped
+before start. Entry from `stopping` uses the same matrix but also stops and
+starts listed ready runners because shutdown may have been interrupted.

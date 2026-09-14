@@ -90,7 +90,7 @@ Behavior:
 4. Without mise, install pinned pnpm if missing or wrong version.
 5. Install the selected Ubuntu host backend (Sysbox by default).
 6. Install project dependencies with frozen lockfile.
-7. Run `just check`.
+7. Run `just check-source`.
 8. Run `just verify plugin-install`.
 9. Build the Docker project workspace image.
 10. Run `doctor` for the backend persisted by the installer.
@@ -125,12 +125,13 @@ Sourced, not run directly. Provides `dim_start_local_npm_registry WORK_DIR`,
 `dim_publish_to_local_registry TARBALL...`, and
 `dim_stop_local_npm_registry` so a script can install unreleased local
 package builds through ordinary `npm install`/`mise use --raw --global npm:...` instead
-of the real npm registry. Runs `verdaccio` via `npx` (no global install, so
-no root/writable-prefix requirement), binds it to `0.0.0.0` explicitly
-(verdaccio defaults to IPv6 loopback only), registers one throwaway user via
-verdaccio's legacy user API, and points the registry at both
-`npm_config_registry` and an isolated `NPM_CONFIG_USERCONFIG` file rather
-than the caller's real npm config.
+of the real npm registry. It runs the exact Verdaccio binary owned by the
+repository's frozen lockfile and binds it to a randomly selected IPv4 loopback
+port. The helper creates one random throwaway publisher through Verdaccio's
+user API, restarts with signup closed, and permits package mutation only for
+the authenticated publisher. It points npm at both `npm_config_registry` and
+an isolated `NPM_CONFIG_USERCONFIG` file rather than the caller's real npm
+config.
 
 ## mise Install Smoke
 

@@ -10,6 +10,15 @@ Windows, and Docker Desktop are outside the supported runtime model.
 Implemented:
 
 - Project metadata with exactly one root repository per runnable Project.
+- Schema 4 Project state with a trusted Gitea organization ID persisted before
+  ready publication, and Project creation serialized through identity
+  selection and reconciliation.
+- Mandatory managed-Gitea organization policy for existing and newly created
+  service containers, disabling regular-user organization creation with one
+  canonical true admin key and post-restart reinspection. Service state,
+  resources, policy, readiness, and credential publication are serialized;
+  container operations use the inspected immutable ID, and only explicit
+  credential-path absence permits credential creation.
 - Managed local Gitea repositories, imports through the host `git` CLI, and
   protected branches.
 - Project-scoped repository sets loaded from `repos.yml`, including reviewed
@@ -19,6 +28,12 @@ Implemented:
   transport to one provider.
 - Persistent create, run, exec, setup, update, start, stop, show,
   and discard lifecycle.
+- Strict schema 2 host recovery that rejects invalid state before dispatch,
+  retains pending recovery intent after partial failure, and clears it only
+  after complete recovery. Ordinary admitted administration holds host
+  lifecycle admission through completion; maintenance waits before target
+  capture, and queued later operations reread and reject while the host is not
+  ready.
 - Sysbox backend identity persisted per workspace, with obsolete backend state
   rejected.
 - CPU, memory, and PID limits at the top-level workspace boundary.
@@ -42,6 +57,8 @@ Implemented:
   rejected before the workspace or its Project services are stopped.
 - TypeScript unit tests and nested-container lifecycle smoke tests.
 - Reproducible local Node.js 24/26, container, Sysbox, and KVM CI entrypoints.
+- Source CLI execution through `just run-cli`, which builds core and runs the
+  CLI directly through `tsx` without requiring an installed DIM CLI.
 - A common example verifier that creates a separate disposable QEMU guest for
   each selected example and runtime backend.
 - A full-development-flow Project example and continuous stateful journey from
@@ -50,8 +67,40 @@ Implemented:
   and failure hooks are injected into its disposable materialization rather
   than embedded in the copyable example.
 - Project-scoped managed CI runners shared by all repositories in the Project,
-  with Sysbox-isolated DinD, independent resource limits, and a
-  provider-neutral coordinator boundary.
+  with schema 8 state, independent resource limits, and a provider-neutral
+  coordinator boundary. Persistent Sysbox runners advertise ordinary labels
+  only and expose no job Docker host. Integration labels and `dim-qemu` select
+  fresh one-job QEMU guests through a persistent trusted supervisor that keeps
+  reusable registration tokens outside the guest.
+- Durable QEMU demand scheduling that fsyncs state and its containing directory
+  before HTTP `202`, rejects acknowledgement on state errors, and cleans fresh
+  per-job overlay, SSH, registration, and run state after bounded execution.
+- A host-scoped Docker Hub cache reached directly as
+  `dim-registry-cache:5000` by managed workspace and Sysbox daemons, through a
+  workspace-local relay by nested agent DinD, and through a launcher-local relay
+  by QEMU. Verification records separate cold, warm, replacement, and outage
+  evidence.
+- FIFO command-session input for terminals, redirected files, pipes, and named
+  FIFOs, with response, transport, and cancellation failures surfaced to the
+  CLI caller.
+- Local source preparation from three named exact production commits, with one
+  aggregate SHA-256 package identity and frozen-lockfile installs. Its local
+  test registry uses the exact lockfile-owned Verdaccio binary on randomized
+  loopback, closes signup, and requires login for package mutation.
+
+Current repair-session verification: `just verify agent` exited 0.
+Core-development Vitest reported 768 passed and 40 intentionally skipped; the
+CLI reported 63 passed; verification reported 79 passed; and the plugin
+development suites reported 6 and 14 passed. Builds, seven package dry-runs,
+plugin installation, `project-runtime-cgroups`, `pull-request-skill`, and the
+`agent-docker` smoke passed. `just check-run-cli` passed. All 245 changed or new
+TypeScript files passed the `<=250` pure-LOC and forbidden-escape audit.
+All 11 repository diffs pass `git diff --check`.
+
+Both `ssh` and `ssh-keygen` are absent on this host. Live
+`JUST_UNSTABLE=1 JUST_ACK_UNSTABLE=1 just verify full-development` was not
+executed or passed. The stateful flow contains the live ordinary-writer denial
+assertion, but that assertion remains pending execution on a capable host.
 
 DIM does not currently provide automatic workspace cleanup after PR merge,
 one-shot workspace wrappers, or disk quota. Those orchestration policies can

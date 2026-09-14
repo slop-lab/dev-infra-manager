@@ -36,8 +36,10 @@ belong in the development repository changelog.
 ## Verify
 
 CI runs the source compatibility checks on every supported Node.js LTS line
-and each release scheduled to become LTS (currently Node.js 24 and 26). Managed workspace and
-Sysbox integration checks use the newest validated line.
+and each release scheduled to become LTS (currently Node.js 24 and 26).
+Managed workspace and QEMU integration checks use the newest validated line.
+Persistent Sysbox runners advertise ordinary labels only; integration labels
+and `dim-qemu` select fresh one-job QEMU guests.
 
 ```bash
 bash verification/scripts/local-ci-matrix.bash
@@ -62,11 +64,12 @@ repository set. Require it to pass before host installation or
 `dim workspace restart`.
 
 The release gate also runs the complete stateful and canonical self-Project
-contract on the managed Sysbox integration runner. The KVM gate uses a separate
-clean Ubuntu guest for each backend, and every guest invokes the same common
-full-development recipe after its backend-specific installation and workload
-probes. Only a non-draft managed-host pull request targeting `main` schedules
-those backend gates independently, while the local command runs all of them.
+contract in a fresh QEMU integration guest. The host-installer gate uses a
+separate clean Ubuntu guest for each backend, and every guest invokes the same
+common full-development recipe after its backend-specific installation and
+workload probes. Only a non-draft managed-host pull request targeting `main`
+schedules those backend gates independently, while the local command runs all
+of them.
 `bash verification/scripts/local-ci-matrix.bash --manual` is the combined
 local shorthand for the automatic matrix and both manual backend gates.
 
@@ -153,11 +156,15 @@ future npm major may reject.
 
 Tracked publishable-package manifests remain `private: true`; builds generate
 minimal publish manifests without development scripts or dependencies. A
-normal release build preserves the exact tracked version. Local installation
-bundle builders set `DIM_LOCAL_BUILD_VERSION` to
-`VERSION-local-GIT_SHA[-dirty]` for every package in the bundle and rewrite
-exact internal dependencies to that same version, preventing a package manager
-from treating different local source states as an already-installed release.
+normal release build preserves the exact tracked version. Local source
+preparation requires `DIM_SOURCE_CORE_COMMIT`,
+`DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT`, and
+`DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT`, each set to an exact 40-character
+production commit. Bundle builders set `DIM_LOCAL_BUILD_VERSION` to
+`VERSION-local-AGGREGATE_SHA[-dirty]`, where `AGGREGATE_SHA` is the SHA-256 of
+the ordered repository-name and full-commit records. Exact internal
+dependencies use that same version, preventing a package manager from treating
+different local source sets as an already-installed release.
 
 ```bash
 pnpm --recursive run build
