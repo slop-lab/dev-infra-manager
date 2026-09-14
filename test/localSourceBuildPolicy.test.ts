@@ -1,0 +1,322 @@
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import { createHash } from "node:crypto";
+import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  createSourceBuildFixture,
+  runSourceBuild,
+  type SourceBuildFixture
+} from "./localSourceBuildPolicy.fixture.js";
+
+const workspaceRoot = resolve(import.meta.dirname, "../..");
+const fixtureRoots: string[] = [];
+
+const commits = {
+  DIM_SOURCE_CORE_COMMIT: "1".repeat(40),
+  DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT: "2".repeat(40),
+  DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT: "3".repeat(40)
+} as const;
+
+const publishPackageVersionHelpers = [
+  resolve(import.meta.dirname, "../../core/scripts/publish-package-version.mjs"),
+  resolve(import.meta.dirname, "../../plugin-dns-cloudflare/scripts/publish-package-version.mjs"),
+  resolve(import.meta.dirname, "../../plugin-external-urls/scripts/publish-package-version.mjs")
+] as const;
+
+async function sourceBuildFixture(): Promise<SourceBuildFixture> {
+  const fixture = await createSourceBuildFixture();
+  fixtureRoots.push(fixture.root);
+  return fixture;
+}
+
+type Fixture = {
+  readonly root: string;
+  readonly scripts: string;
+  readonly tools: string;
+  readonly log: string;
+  readonly readiness: string;
+};
+
+async function createFixture(): Promise<Fixture> {
+  const root = await mkdtemp(resolve(tmpdir(), "dim-local-source-policy-"));
+  fixtureRoots.push(root);
+  const scripts = resolve(root, "scripts");
+  const tools = resolve(root, "tools");
+  const log = resolve(root, "invocations.log");
+  const readiness = resolve(root, ".local/prepared-local.state");
+  await mkdir(scripts, { recursive: true });
+  await mkdir(tools, { recursive: true });
+  await Promise.all(
+    ["prepare-source-build.bash", "install-source-build.bash", "build-workspace-image.bash"].map(
+      (script) => copyFile(resolve(workspaceRoot, "project/scripts", script), resolve(scripts, script))
+    )
+  );
+  await writeFile(
+    resolve(scripts, "pack-source-build.bash"),
+    "#!/usr/bin/env bash\nprintf 'pack %s\\n' \"$1\" >>\"$DIM_INVOCATIONS\"\n"
+  );
+  await writeFile(
+    resolve(scripts, "local-preparation-state.bash"),
+    "#!/usr/bin/env bash\ncount_file=\"$DIM_STATE_COUNT\"\ncount=$(( $(cat \"$count_file\" 2>/dev/null || printf 0) + 1 ))\nprintf '%s' \"$count\" >\"$count_file\"\nprintf 'state %s %s\\n' \"$DIM_LOCAL_IMAGE_INSPECT_REF\" \"$DIM_LOCAL_IMAGE_RECORD_REF\" >>\"$DIM_INVOCATIONS\"\nif [[ \"$count\" -eq 1 ]]; then printf '%s\\n' \"${DIM_STATE_FIRST:-state=fresh}\"; else printf '%s\\n' \"${DIM_STATE_SECOND:-state=fresh}\"; fi\n"
+  );
+  const toolsSource: Readonly<Record<string, string>> = {
+    docker:
+      "#!/usr/bin/env bash\n{ printf 'docker'; printf ' %s' \"$@\"; printf '\\n'; } >>\"$DIM_INVOCATIONS\"\nif [[ \"$1 $2\" == 'buildx build' && \"${DIM_BUILD_FAILURE:-0}\" == 1 ]]; then exit 42; fi\nif [[ \"$1 $2\" == 'image inspect' ]]; then printf 'sha256:%064d\\n' 1; fi\n",
+    dim: "#!/usr/bin/env bash\n{ printf 'dim'; printf ' %s' \"$@\"; printf '\\n'; } >>\"$DIM_INVOCATIONS\"\n",
+    flock:
+      "#!/usr/bin/env bash\nfd=\"${!#}\"\nprintf 'lock %s\\n' \"$(readlink \"/proc/$PPID/fd/$fd\")\" >>\"$DIM_INVOCATIONS\"\n",
+    id: "#!/usr/bin/env bash\ncase \"$1\" in -u) printf '1234\\n' ;; -g) printf '5678\\n' ;; esac\n"
+  };
+  await Promise.all(
+    Object.entries(toolsSource).map(async ([tool, source]) => {
+      const path = resolve(tools, tool);
+      await writeFile(path, source);
+      await chmod(path, 0o755);
+    })
+  );
+  return { root, scripts, tools, log, readiness };
+}
+
+function runScript(fixture: Fixture, script: string, environment: Readonly<Record<string, string>> = {}): SpawnSyncReturns<string> {
+  return spawnSync("/usr/bin/bash", [resolve(fixture.scripts, script)], {
+    encoding: "utf8",
+    env: {
+      PATH: `${fixture.tools}:/usr/bin:/bin`,
+      DIM_INVOCATIONS: fixture.log,
+      DIM_STATE_COUNT: resolve(fixture.root, "state-count"),
+      ...environment
+    }
+  });
+}
+
+afterEach(async () => {
+  await Promise.all(fixtureRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
+describe("local source build policy", () => {
+  it.each([
+    { name: "missing", environment: {} },
+    { name: "a branch", environment: { ...commits, DIM_SOURCE_CORE_COMMIT: "main" } },
+    { name: "a tag", environment: { ...commits, DIM_SOURCE_CORE_COMMIT: "v0.8.0" } },
+    { name: "an abbreviated commit", environment: { ...commits, DIM_SOURCE_CORE_COMMIT: "1".repeat(12) } },
+    { name: "an uppercase commit", environment: { ...commits, DIM_SOURCE_CORE_COMMIT: "A".repeat(40) } },
+    { name: "the obsolete shared ref", environment: { ...commits, DIM_SOURCE_REF: "main" } }
+  ])("rejects $name commit input before package or image build execution", async ({ environment }) => {
+    // Given
+    const fixture = await sourceBuildFixture();
+
+    // When
+    const result = runSourceBuild(fixture, "prepare-source-build.bash", environment);
+    const invocations = await readFile(fixture.log, "utf8");
+
+    // Then
+    expect(result.status).not.toBe(0);
+    expect(invocations).not.toMatch(/^(?:pnpm|docker buildx build)/m);
+  });
+
+  it("fetches exact commits, verifies detached HEADs, and derives version identity from every repository", async () => {
+    // Given
+    const fixture = await sourceBuildFixture();
+    const changedPluginCommits = { ...commits, DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT: "4".repeat(40) };
+    const expectedDigest = createHash("sha256")
+      .update(
+        `core=${commits.DIM_SOURCE_CORE_COMMIT}\nplugin-dns-cloudflare=${commits.DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT}\nplugin-external-urls=${commits.DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT}\n`
+      )
+      .digest("hex");
+
+    // When
+    const first = runSourceBuild(fixture, "pack-source-build.bash", commits);
+    const firstInvocations = await readFile(fixture.log, "utf8");
+    await writeFile(fixture.log, "");
+    const second = runSourceBuild(fixture, "pack-source-build.bash", changedPluginCommits);
+    const secondInvocations = await readFile(fixture.log, "utf8");
+
+    // Then
+    expect(first.status).toBe(0);
+    expect(second.status).toBe(0);
+    expect(first.stdout).toContain(`[source] core ${commits.DIM_SOURCE_CORE_COMMIT}`);
+    expect(firstInvocations).toContain(`fetch --quiet origin ${commits.DIM_SOURCE_CORE_COMMIT}`);
+    expect(firstInvocations).toContain(`checkout --quiet --detach ${commits.DIM_SOURCE_CORE_COMMIT}`);
+    expect(firstInvocations).toContain(`version=0.8.0-local-${expectedDigest}`);
+    expect(secondInvocations).not.toContain(`version=0.8.0-local-${expectedDigest}`);
+  });
+
+  it.each(["", "-dirty"])("accepts the computed aggregate identity in every production package helper%s", (suffix) => {
+    // Given
+    const aggregate = createHash("sha256")
+      .update(
+        `core=${commits.DIM_SOURCE_CORE_COMMIT}\nplugin-dns-cloudflare=${commits.DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT}\nplugin-external-urls=${commits.DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT}\n`
+      )
+      .digest("hex");
+    const localVersion = `0.8.0-local-${aggregate}${suffix}`;
+
+    // When
+    const results = publishPackageVersionHelpers.map((helper) => spawnSync(process.execPath, ["--input-type=module", "--eval", `import { publishPackageVersion } from ${JSON.stringify(pathToFileURL(helper).href)}; process.stdout.write(publishPackageVersion("0.8.0", ${JSON.stringify(localVersion)}));`], { encoding: "utf8" }));
+
+    // Then
+    for (const result of results) {
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe(localVersion);
+    }
+  });
+
+  it.each(["1", "1".repeat(40)])("rejects short identities in every production package helper: %s", (identity) => {
+    // Given
+    const localVersion = `0.8.0-local-${identity}`;
+
+    // When
+    const results = publishPackageVersionHelpers.map((helper) => spawnSync(process.execPath, [
+      "--input-type=module",
+      "--eval",
+      `import { publishPackageVersion } from ${JSON.stringify(pathToFileURL(helper).href)}; process.stdout.write(publishPackageVersion("0.8.0", ${JSON.stringify(localVersion)}));`
+    ], { encoding: "utf8" }));
+
+    // Then
+    for (const result of results) {
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("DIM_LOCAL_BUILD_VERSION");
+    }
+  });
+
+  it("rejects a checkout whose full HEAD differs before dependency installation", async () => {
+    // Given
+    const fixture = await sourceBuildFixture();
+
+    // When
+    const result = runSourceBuild(fixture, "pack-source-build.bash", {
+      ...commits,
+      DIM_GIT_MISMATCH_REPOSITORY: "plugin-dns-cloudflare"
+    });
+    const invocations = await readFile(fixture.log, "utf8");
+
+    // Then
+    expect(result.status).not.toBe(0);
+    expect(invocations).not.toMatch(/^pnpm /m);
+  });
+
+  it("uses only reviewed frozen lockfiles and keeps installation restart-free", async () => {
+    // Given
+    const packaging = await readFile(resolve(workspaceRoot, "project/scripts/pack-source-build.bash"), "utf8");
+    const installation = await readFile(resolve(workspaceRoot, "project/scripts/install-source-build.bash"), "utf8");
+    const recipes = await readFile(resolve(workspaceRoot, "project/justfile"), "utf8");
+
+    // Then
+    expect(packaging).not.toContain("--lockfile=false");
+    expect(packaging).toContain("pnpm --dir \"$source_root/$repository\" install --frozen-lockfile");
+    expect(installation).not.toMatch(/(?:systemctl|dim)\s+(?:restart|controller restart)/);
+    expect(recipes).toContain("prepare-local:\n    bash scripts/prepare-source-build.bash");
+    expect(recipes).toContain("install-local:\n    bash scripts/install-source-build.bash");
+    expect(recipes).toContain("restart-controller:");
+    expect(recipes.indexOf("install-local:")).toBeLessThan(recipes.indexOf("restart-controller:"));
+  });
+
+  it("packs and loads a temporary-tag image before promoting readiness", async () => {
+    // Given
+    const fixture = await createFixture();
+
+    // When
+    const result = runScript(fixture, "prepare-source-build.bash");
+    const invocations = await readFile(fixture.log, "utf8");
+
+    // Then
+    expect(result.status).toBe(0);
+    expect(await readFile(fixture.readiness, "utf8")).toBe("state=fresh\n");
+    expect(invocations).toContain(`pack ${resolve(fixture.root, ".local/dim-packages")}`);
+    expect(invocations).toMatch(/docker buildx build .* --load .* --tag dev-infra-project-workspace:prepare-1234-/);
+    expect(invocations.indexOf("pack ")).toBeLessThan(invocations.indexOf("docker buildx build"));
+    expect(invocations.indexOf("docker buildx build")).toBeLessThan(
+      invocations.indexOf("state dev-infra-project-workspace:prepare-1234-")
+    );
+    expect(invocations.indexOf("state dev-infra-project-workspace:prepare-1234-")).toBeLessThan(
+      invocations.indexOf("docker image tag dev-infra-project-workspace:prepare-1234-")
+    );
+  });
+
+  it("leaves no readiness marker or promoted tag when preparation fails", async () => {
+    // Given
+    const fixture = await createFixture();
+    await mkdir(resolve(fixture.root, ".local"), { recursive: true });
+    await writeFile(fixture.readiness, "state=old\n");
+
+    // When
+    const result = runScript(fixture, "prepare-source-build.bash", { DIM_BUILD_FAILURE: "1" });
+    const invocations = await readFile(fixture.log, "utf8");
+
+    // Then
+    expect(result.status).toBe(42);
+    await expect(readFile(fixture.readiness, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    expect(invocations).not.toContain("docker image tag");
+    expect(invocations).not.toContain("state dev-infra-project-workspace");
+  });
+
+  it.each([
+    { name: "missing", readiness: undefined, firstState: "state=fresh" },
+    { name: "stale", readiness: "state=stale\n", firstState: "state=fresh" }
+  ])("rejects $name preparation before install or restart", async (scenario) => {
+    // Given
+    const fixture = await createFixture();
+    if (scenario.readiness !== undefined) {
+      await mkdir(resolve(fixture.root, ".local"), { recursive: true });
+      await writeFile(fixture.readiness, scenario.readiness);
+    }
+
+    // When
+    const result = runScript(fixture, "install-source-build.bash", { DIM_STATE_FIRST: scenario.firstState });
+    const invocations = await readFile(fixture.log, "utf8");
+
+    // Then
+    expect(result.status).toBe(1);
+    expect(invocations).not.toContain("dim install-cli");
+    expect(invocations).not.toContain("dim controller restart");
+    expect(invocations).not.toContain("pack ");
+    expect(invocations).not.toContain("docker build");
+  });
+
+  it("installs a prepared bundle without restarting the controller", async () => {
+    // Given
+    const fixture = await createFixture();
+    expect(runScript(fixture, "prepare-source-build.bash").status).toBe(0);
+    await writeFile(fixture.log, "");
+    await writeFile(resolve(fixture.root, "state-count"), "0");
+
+    // When
+    const result = runScript(fixture, "install-source-build.bash");
+    const invocations = await readFile(fixture.log, "utf8");
+
+    // Then
+    expect(result.status).toBe(0);
+    expect(invocations).toContain("dim install-cli");
+    expect(invocations).toContain("dim --version");
+    expect(invocations).not.toContain("dim controller restart");
+  });
+
+  it("validates again after install and shares the preparation lock", async () => {
+    // Given
+    const fixture = await createFixture();
+    expect(runScript(fixture, "prepare-source-build.bash").status).toBe(0);
+    const preparationInvocations = await readFile(fixture.log, "utf8");
+    await writeFile(fixture.log, "");
+    await writeFile(resolve(fixture.root, "state-count"), "0");
+
+    // When
+    const result = runScript(fixture, "install-source-build.bash", {
+      DIM_STATE_FIRST: "state=fresh",
+      DIM_STATE_SECOND: "state=changed"
+    });
+    const invocations = await readFile(fixture.log, "utf8");
+    const lockPath = resolve(fixture.root, ".local/prepare-install.lock");
+
+    // Then
+    expect(result.status).toBe(1);
+    expect(preparationInvocations).toContain(`lock ${lockPath}`);
+    expect(invocations.match(new RegExp(`lock ${lockPath}`, "g"))).toHaveLength(1);
+    expect(invocations.match(/^state /gm)).toHaveLength(2);
+    expect(invocations).toContain("dim install-cli");
+    expect(invocations).not.toContain("dim controller restart");
+    expect(invocations).not.toMatch(/^pack /m);
+    expect(invocations).not.toContain("docker build");
+  });
+});

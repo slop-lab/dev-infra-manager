@@ -79,7 +79,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-dim_prepare_clone_source "$checkout_root" "$work_dir/source" "$dirty_policy"
+dim_prepare_workbench_clone_source "$checkout_root" "$work_dir/source" "$dirty_policy"
 verification_checkout="$DIM_GIT_CLONE_SOURCE"
 verification_source="$verification_checkout/workbench"
 

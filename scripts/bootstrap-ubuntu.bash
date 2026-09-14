@@ -57,12 +57,12 @@ bash "${script_dir}/install-host-ubuntu.bash" "$backend"
 cd "$repo_root"
 pnpm install --frozen-lockfile
 export JUST_UNSTABLE=1
-"$JUST_BIN" check
+"$JUST_BIN" check-source
 "$JUST_BIN" verify plugin-install
-"$JUST_BIN" build-project-workspace
+"$JUST_BIN" build-workspace-image
 
 set +e
-"$JUST_BIN" cli doctor
+"$JUST_BIN" run-cli doctor
 doctor_rc=$?
 set -e
 

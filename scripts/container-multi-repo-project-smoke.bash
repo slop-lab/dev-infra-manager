@@ -10,7 +10,10 @@ source_namespace="source-$suffix"
 api_repo="api"
 worker_repo="worker"
 docs_repo="docs"
+candidate_ref="refs/heads/candidate"
+worker_candidate_ref="refs/heads/worker-candidate"
 workspace_name="multi-$suffix"
+rejected_workspace_name="multi-rejected-$suffix"
 state_root="$(mktemp -d /tmp/dim-multi-state.XXXXXX)"
 source_root="$(mktemp -d /tmp/dim-multi-source.XXXXXX)"
 dim_bin="${DIM_BIN:-dim}"
@@ -42,9 +45,12 @@ export DIM_CONFIG_PATH="$state_root/dim.json"
 bash "$script_dir/configure-user-backend.bash" sysbox
 
 cleanup() {
-  if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    "$dim_bin" workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
-  fi
+  local workspace
+  for workspace in "$workspace_name" "$rejected_workspace_name"; do
+    if [[ -f "$state_root/workspaces/$workspace.json" ]]; then
+      "$dim_bin" workspace discard "$workspace" --yes >/dev/null 2>&1 || true
+    fi
+  done
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     local credentials admin_username admin_password
     credentials="$(docker exec dim-gitea cat /data/dim/credentials.json 2>/dev/null || true)"
@@ -64,6 +70,37 @@ cleanup() {
 }
 trap cleanup EXIT
 
+managed_repository_refs() {
+  local alias
+  while IFS= read -r alias; do
+    printf '%s\n' "$alias"
+    git ls-remote --refs "$("$dim_bin" repo url "$project_name" "$alias")" | LC_ALL=C sort
+  done < <("$dim_bin" repo list "$project_name" --json | jq -r 'sort_by(.alias)[].alias')
+}
+
+assert_workspace_create_rejected() {
+  local expected_error="$1"
+  local rejected_name="$2"
+  shift 2
+  local project_before workspaces_before workspace_before repositories_before refs_before rejection_error
+  project_before="$("$dim_bin" project show "$project_name" --json | jq -Sc .)"
+  workspaces_before="$("$dim_bin" workspace list --json | jq -Sc 'sort_by(.name)')"
+  workspace_before="$("$dim_bin" workspace show "$workspace_name" --json | jq -Sc .)"
+  repositories_before="$("$dim_bin" repo list "$project_name" --json | jq -Sc 'sort_by(.alias)')"
+  refs_before="$(managed_repository_refs)"
+  if rejection_error="$("$dim_bin" workspace create "$project_name" "$rejected_name" \
+    --profile development --profile documentation "$@" 2>&1)"; then
+    echo "rejected workspace creation unexpectedly succeeded" >&2
+    return 1
+  fi
+  grep -Fq "$expected_error" <<<"$rejection_error"
+  test "$("$dim_bin" project show "$project_name" --json | jq -Sc .)" = "$project_before"
+  test "$("$dim_bin" workspace list --json | jq -Sc 'sort_by(.name)')" = "$workspaces_before"
+  test "$("$dim_bin" workspace show "$workspace_name" --json | jq -Sc .)" = "$workspace_before"
+  test "$("$dim_bin" repo list "$project_name" --json | jq -Sc 'sort_by(.alias)')" = "$repositories_before"
+  test "$(managed_repository_refs)" = "$refs_before"
+}
+
 create_repo() {
   local name="$1"
   local message="$2"
@@ -81,6 +118,19 @@ create_repo() {
 create_repo "$api_repo" "api-source-ok"
 create_repo "$worker_repo" "worker-source-ok"
 create_repo "$docs_repo" "docs-source-ok"
+git -C "$source_root/$api_repo" switch -c candidate >/dev/null
+printf '%s\n' candidate-source-ok > "$source_root/$api_repo/candidate.txt"
+git -C "$source_root/$api_repo" add candidate.txt
+git -C "$source_root/$api_repo" commit -m candidate >/dev/null
+candidate_commit="$(git -C "$source_root/$api_repo" rev-parse HEAD)"
+git -C "$source_root/$api_repo" push "$source_root/$api_repo.git" "$candidate_ref:$candidate_ref" >/dev/null
+git -C "$source_root/$worker_repo" switch -c worker-candidate >/dev/null
+printf '%s\n' worker-candidate-source-ok > "$source_root/$worker_repo/worker-candidate.txt"
+git -C "$source_root/$worker_repo" add worker-candidate.txt
+git -C "$source_root/$worker_repo" commit -m worker-candidate >/dev/null
+worker_candidate_commit="$(git -C "$source_root/$worker_repo" rev-parse HEAD)"
+git -C "$source_root/$worker_repo" push "$source_root/$worker_repo.git" \
+  "$worker_candidate_ref:$worker_candidate_ref" >/dev/null
 
 "$dim_bin" admin service ensure >/dev/null
 source_credentials="$("$dim_bin" admin service credentials --show-secrets --json)"
@@ -107,6 +157,12 @@ printf '%s\n' \
   '    image: alpine:3.22' \
   '    command: ["sleep", "infinity"]' \
   > "$project_worktree/compose.yaml"
+
+printf '%s\n' \
+  '#!/usr/bin/env sh' \
+  'set -eu' \
+  'test ! -e /tmp/dim-multi-setup-error' \
+  > "$project_worktree/.dim/setup.sh"
 
 printf '%s\n' \
   '#!/usr/bin/env sh' \
@@ -251,6 +307,8 @@ root_url="$("$dim_bin" repo url "$project_name" atlas)"
 if ! "$dim_bin" workspace create "$project_name" "$workspace_name" \
   --profile development \
   --profile documentation \
+  --repo-ref "$api_repo=$candidate_ref" \
+  --repo-ref "$worker_repo=$worker_candidate_ref" \
   >/dev/null; then
   echo "multi-repository workspace setup failed; managed state and Project service diagnostics:" >&2
   workspace_json="$("$dim_bin" workspace show "$workspace_name" --json 2>/dev/null || true)"
@@ -270,9 +328,36 @@ fi
 # COMPOSE_PROJECT_NAME, which `dim` documents and exports for exactly this
 # purpose -- read it back from `show --json` rather than assuming a
 # `dim-<name>`-shaped prefix here too.
-compose_project_name="$("$dim_bin" workspace show "$workspace_name" --json | jq -r .composeProjectName)"
+workspace_json="$("$dim_bin" workspace show "$workspace_name" --json)"
+compose_project_name="$(jq -r .composeProjectName <<<"$workspace_json")"
 
-test "$("$dim_bin" workspace show "$workspace_name" --json | jq -c .profiles)" = '["development","documentation"]'
+test "$(jq -c .profiles <<<"$workspace_json")" = '["development","documentation"]'
+jq -e \
+  --arg ref "$candidate_ref" \
+  --arg commit "$candidate_commit" \
+  --arg worker_ref "$worker_candidate_ref" \
+  --arg worker_commit "$worker_candidate_commit" '
+  .repositoryRefOverrides.api == $ref
+  and .repositoryRefOverrides.worker == $worker_ref
+  and .repositorySnapshot.api.requestedRef == $ref
+  and .repositorySnapshot.api.ref == $ref
+  and .repositorySnapshot.api.commit == $commit
+  and .repositorySnapshot.worker.requestedRef == $worker_ref
+  and .repositorySnapshot.worker.ref == $worker_ref
+  and .repositorySnapshot.worker.commit == $worker_commit
+' <<<"$workspace_json" >/dev/null
+"$dim_bin" workspace exec "$workspace_name" -- jq -e \
+  --arg ref "$candidate_ref" \
+  --arg commit "$candidate_commit" \
+  --arg worker_ref "$worker_candidate_ref" \
+  --arg worker_commit "$worker_candidate_commit" '
+    .repositories.api.requestedRef == $ref
+    and .repositories.api.ref == $ref
+    and .repositories.api.commit == $commit
+    and .repositories.worker.requestedRef == $worker_ref
+    and .repositories.worker.ref == $worker_ref
+    and .repositories.worker.commit == $worker_commit
+  ' /run/dim/project.json >/dev/null
 test "$("$dim_bin" exec "$workspace_name" -- ls -1 /workspace)" = "project"
 git ls-remote "$("$dim_bin" repo url "$project_name" api)" \
   "refs/heads/agent/$workspace_name" | grep -q .
@@ -280,6 +365,56 @@ git ls-remote "$("$dim_bin" repo url "$project_name" api)" \
 output="$("$dim_bin" run "$workspace_name" verify)"
 test "$output" = "multi-repo-project-ok"
 test "$("$dim_bin" run "$workspace_name" version)" = "v1"
+
+echo "[multi-repository] moved candidate ref does not change setup recovery snapshot"
+printf '%s\n' moved-candidate-source-ok >> "$source_root/$api_repo/candidate.txt"
+git -C "$source_root/$api_repo" add candidate.txt
+git -C "$source_root/$api_repo" commit -m 'move candidate' >/dev/null
+moved_candidate_commit="$(git -C "$source_root/$api_repo" rev-parse HEAD)"
+test "$moved_candidate_commit" != "$candidate_commit"
+"$dim_bin" x git -C "$source_root/$api_repo" push \
+  "$("$dim_bin" repo url "$project_name" "$api_repo")" "$candidate_ref" >/dev/null
+"$dim_bin" workspace exec "$workspace_name" -- touch /tmp/dim-multi-setup-error
+if "$dim_bin" workspace setup "$workspace_name" >/dev/null 2>&1; then
+  echo "injected multi-repository setup failure unexpectedly succeeded" >&2
+  exit 1
+fi
+workspace_json="$("$dim_bin" workspace show "$workspace_name" --json)"
+test "$(jq -r .phase <<<"$workspace_json")" = setup-error
+test "$(jq -r .repositorySnapshot.api.commit <<<"$workspace_json")" = "$candidate_commit"
+"$dim_bin" workspace exec "$workspace_name" -- rm /tmp/dim-multi-setup-error
+"$dim_bin" workspace setup "$workspace_name" >/dev/null
+test "$("$dim_bin" workspace show "$workspace_name" --json | jq -r .repositorySnapshot.api.commit)" = \
+  "$candidate_commit"
+test "$("$dim_bin" workspace exec "$workspace_name" -- \
+  jq -r .repositories.api.commit /run/dim/project.json)" = "$candidate_commit"
+
+echo "[multi-repository] invalid overrides reject without project, workspace, repository, or ref mutation"
+assert_workspace_create_rejected \
+  "the root repository ref cannot be overridden by a workspace candidate" \
+  "$rejected_workspace_name" \
+  --repo-ref "atlas=$candidate_ref"
+assert_workspace_create_rejected \
+  "project '$project_name' has no repository 'unknown'" \
+  "$rejected_workspace_name" \
+  --repo-ref "unknown=$candidate_ref"
+assert_workspace_create_rejected \
+  "repository ref override 'malformed' must use alias=ref" \
+  "$rejected_workspace_name" \
+  --repo-ref malformed
+assert_workspace_create_rejected \
+  "repository ref override '$api_repo' is duplicated" \
+  "$rejected_workspace_name" \
+  --repo-ref "$api_repo=$candidate_ref" --repo-ref "$api_repo=refs/heads/main"
+unavailable_ref="refs/heads/unavailable-$suffix"
+assert_workspace_create_rejected \
+  "failed to resolve repository ref '$project_name/$api_repo:$unavailable_ref'" \
+  "$rejected_workspace_name" \
+  --repo-ref "$api_repo=$unavailable_ref"
+assert_workspace_create_rejected \
+  "workspace '$workspace_name' already exists with different repository ref overrides" \
+  "$workspace_name" \
+  --repo-ref "$api_repo=refs/heads/main"
 
 echo "[multi-repository] dirty restart rejects before lifecycle mutation"
 workspace_before="$("$dim_bin" workspace show "$workspace_name" --json)"
@@ -352,6 +487,17 @@ find "$source_root" -depth -delete
 "$dim_bin" workspace start "$workspace_name" >/dev/null
 output="$("$dim_bin" run "$workspace_name" verify)"
 test "$output" = "multi-repo-project-ok"
+
+echo "[multi-repository] non-ready repository rejects without project, workspace, repository, or ref mutation"
+if "$dim_bin" repo add "$project_name" broken "$source_root/missing.git" >/dev/null 2>&1; then
+  echo "missing non-root source unexpectedly imported" >&2
+  exit 1
+fi
+test "$("$dim_bin" repo show "$project_name" broken --json | jq -r .phase)" = error
+assert_workspace_create_rejected \
+  "project '$project_name' repository 'broken' is not ready (phase: error)" \
+  "$rejected_workspace_name" \
+  --repo-ref "$api_repo=$candidate_ref"
 
 "$dim_bin" workspace discard "$workspace_name" --yes >/dev/null
 

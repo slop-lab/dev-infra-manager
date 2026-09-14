@@ -8,6 +8,13 @@ environments-kvm verbose="":
 agent-control-kvm verbose="":
     cd .. && bash verification/scripts/qemu-agent-control-smoke.bash "{{verbose}}"
 
+# Clean hosted/local gate. Missing x86-64, Docker, or writable KVM is unavailable (exit 2).
+qemu-ci-image-layers-kvm:
+    @[[ "$(uname -m)" == x86_64 ]] || { echo "qemu-ci-image-layers-kvm requires x86-64" >&2; exit 2; }
+    @docker info >/dev/null 2>&1 || { echo "qemu-ci-image-layers-kvm requires a reachable Docker daemon" >&2; exit 2; }
+    @[[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]] || { echo "qemu-ci-image-layers-kvm requires an accessible character /dev/kvm" >&2; exit 2; }
+    cd .. && DIM_QEMU_CI_KVM_SMOKE=1 pnpm --dir core-development exec vitest run packages/core/test/qemuCiRunnerKvm.test.ts
+
 # Run the backend-independent end-to-end contract after a backend is installed.
 full-development:
     cd .. && DIM_EXAMPLE_WORKSPACE_BACKEND=sysbox JUST_UNSTABLE=1 bash verification/scripts/stateful-development-flow-smoke.bash
@@ -41,7 +48,20 @@ agent:
 agent-docker:
     cd .. && bash verification/scripts/agent-docker-smoke.bash
 
-# Build the managed Sysbox runner image and prove host-mode JavaScript actions have Node.js.
+# Prove cold, warm, and unavailable pull-through-cache routing with a disposable nested Docker daemon.
+cache-routing-docker:
+    cd .. && bash verification/scripts/registry-cache-routing-smoke.bash --docker-only
+    cd .. && bash verification/scripts/registry-cache-routing-nested-smoke.bash --docker-only
+
+# Clean hosted/local gate. Missing host-installed sysbox-runc is an unavailable capability (exit 2).
+cache-routing-sysbox:
+    cd .. && bash verification/scripts/registry-cache-routing-managed-smoke.bash --sysbox
+
+# Clean hosted/local gate. Missing x86-64 KVM, QEMU, cloud-init, SSH, or socat is unavailable (exit 2).
+cache-routing-kvm:
+    cd .. && bash verification/scripts/registry-cache-routing-managed-smoke.bash --kvm
+
+# Build the managed Sysbox runner image and prove Project tools, including Node.js, are absent.
 sysbox-ci-runner-image:
     cd .. && bash verification/scripts/sysbox-ci-runner-image-smoke.bash
 
@@ -85,10 +105,10 @@ self-development:
     just build-workspace-image
     cd .. && bash verification/scripts/container-self-project-smoke.bash
 
-# Run lifecycle isolation tests without Docker or workspace creation.
+# Run generated workspace isolation checks without Docker or workspace creation.
 isolation:
-    cd .. && pnpm --dir core-development exec vitest run packages/core/test/lifecycle.test.ts
+    cd .. && pnpm --dir core-development exec vitest run packages/core/test/lifecycleContainer.test.ts
 
-# Run lifecycle isolation tests with Vitest's JSON reporter.
+# Run generated workspace isolation checks with Vitest's JSON reporter.
 isolation-json:
-    cd .. && pnpm --dir core-development exec vitest run packages/core/test/lifecycle.test.ts --reporter=json
+    cd .. && pnpm --dir core-development exec vitest run packages/core/test/lifecycleContainer.test.ts --reporter=json

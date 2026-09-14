@@ -63,3 +63,39 @@ dim_prepare_clone_source() {
     commit -m "snapshot current worktree" >/dev/null
   DIM_GIT_CLONE_SOURCE="$snapshot_dir"
 }
+
+dim_prepare_workbench_clone_source() {
+  local checkout_root="$1"
+  local snapshot_dir="$2"
+  local dirty_policy="${3:-use}"
+  local repository
+  local repository_source
+  local repository_destination
+  local -a repositories=(
+    development root core core-development
+    plugin-dns-cloudflare plugin-dns-cloudflare-development
+    plugin-external-urls plugin-external-urls-development
+    verification examples specification
+  )
+
+  mkdir -p "$snapshot_dir/workbench" "$snapshot_dir/.snapshots"
+  for repository in "${repositories[@]}"; do
+    case "$repository" in
+      development) repository_source="$checkout_root"; repository_destination="$snapshot_dir/workbench" ;;
+      root) repository_source="$checkout_root/project"; repository_destination="$snapshot_dir/workbench/project" ;;
+      *) repository_source="$checkout_root/$repository"; repository_destination="$snapshot_dir/workbench/$repository" ;;
+    esac
+    dim_prepare_clone_source \
+      "$repository_source" "$snapshot_dir/.snapshots/$repository" "$dirty_policy"
+    mkdir -p "$repository_destination"
+    git -C "$DIM_GIT_CLONE_SOURCE" archive HEAD | tar -x -C "$repository_destination"
+  done
+  find "$snapshot_dir/.snapshots" -depth -delete
+  git -C "$snapshot_dir" init --initial-branch=main >/dev/null
+  git -C "$snapshot_dir" add workbench
+  git -C "$snapshot_dir" \
+    -c user.name="DIM Snapshot" \
+    -c user.email="snapshot@dim.invalid" \
+    commit -m "snapshot assembled workbench" >/dev/null
+  DIM_GIT_CLONE_SOURCE="$snapshot_dir"
+}

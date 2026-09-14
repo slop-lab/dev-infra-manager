@@ -37,16 +37,8 @@ jobs:
   verify:
     runs-on: ${{ inputs.runner-label || 'dim' }}
     # The QEMU lane installs a clean host and verifies the Sysbox contract.
-    timeout-minutes: ${{ (inputs.gate == 'kvm' || inputs.gate == 'kvm-control') && 60 || 30 }}
+    timeout-minutes: ${{ (inputs.gate == 'kvm' || inputs.gate == 'kvm-control' || inputs.gate == 'cache-routing-kvm' || inputs.gate == 'qemu-ci-image-layers-kvm') && 60 || 30 }}
     steps:
-      - name: Bootstrap Node.js for host-mode JavaScript actions
-        if: ${{ inputs.gate == 'kvm' || inputs.gate == 'kvm-control' }}
-        run: |
-          curl -fsSL https://deb.nodesource.com/setup_24.x -o /tmp/dim-nodesource-setup.bash
-          sudo bash /tmp/dim-nodesource-setup.bash >/dev/null
-          rm -f /tmp/dim-nodesource-setup.bash
-          sudo apt-get install -y nodejs >/dev/null
-          node --version
       - name: Check out development root
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -100,10 +92,6 @@ jobs:
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
           version: 10.13.1
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        if: ${{ inputs.gate != 'integration' && inputs.gate != 'container' }}
-        with:
-          node-version: 24
       - name: Install repository-set dependencies
         working-directory: snapshot
         run: pnpm install --frozen-lockfile
@@ -130,41 +118,45 @@ jobs:
       - name: Verify container integration
         if: ${{ inputs.gate == 'container' }}
         working-directory: snapshot
-        env:
-          # Resize is not observed in the current Sysbox-hosted runner. This
-          # records that CI-environment behavior without assigning its cause.
-          DIM_TEST_PTY_RESIZE: unsupported
         run: |
-          dim-ci-runner-health --recover
           just check-source
           just verify workspace-runtime
           bash verification/scripts/container-cgroup-smoke.bash
       - name: Verify full development integration
         if: ${{ inputs.gate == 'integration' }}
         working-directory: snapshot
-        env:
-          # Resize is not observed in the current Sysbox-hosted runner. This
-          # records that CI-environment behavior without assigning its cause.
-          DIM_TEST_PTY_RESIZE: unsupported
         run: |
-          dim-ci-runner-health --recover
           just check-source
-          bash verification/scripts/with-ci-registry-cache.bash \
+          DIM_DOCKER_REGISTRY_MIRROR=http://host.docker.internal:5000 \
             just verify full-development
-      - name: Verify runner health after container integration
-        if: ${{ always() && (inputs.gate == 'container' || inputs.gate == 'integration') }}
-        run: dim-ci-runner-health --recover
       - name: Verify QEMU backend integration
         if: ${{ inputs.gate == 'kvm' }}
         working-directory: snapshot
         run: |
           test -r /dev/kvm -a -w /dev/kvm
-          bash verification/scripts/with-ci-registry-cache.bash \
+          bash verification/scripts/with-ci-registry-cache.bash --qemu-relay \
             env JUST_UNSTABLE=1 just verify environments-kvm
       - name: Verify agent-controlled QEMU host integration
         if: ${{ inputs.gate == 'kvm-control' }}
         working-directory: snapshot
         run: |
           test -r /dev/kvm -a -w /dev/kvm
-          bash verification/scripts/with-ci-registry-cache.bash \
+          bash verification/scripts/with-ci-registry-cache.bash --qemu-relay \
             env JUST_UNSTABLE=1 just verify agent-control-kvm
+      - name: Verify route-specific Sysbox registry cache
+        if: ${{ inputs.gate == 'cache-routing-sysbox' }}
+        working-directory: snapshot
+        run: |
+          just verify cache-routing-sysbox
+      - name: Verify route-specific KVM registry cache
+        if: ${{ inputs.gate == 'cache-routing-kvm' }}
+        working-directory: snapshot
+        run: |
+          test -r /dev/kvm -a -w /dev/kvm
+          just verify cache-routing-kvm
+      - name: Verify QEMU CI image layers
+        if: ${{ inputs.gate == 'qemu-ci-image-layers-kvm' }}
+        working-directory: snapshot
+        run: |
+          test -r /dev/kvm -a -w /dev/kvm
+          just verify qemu-ci-image-layers-kvm

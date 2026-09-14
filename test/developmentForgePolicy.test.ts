@@ -1,7 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
@@ -9,81 +8,42 @@ const workspaceRoot = resolve(import.meta.dirname, "../..");
 
 describe("DIM development forge policy", () => {
   it("gives local install bundles a source-specific package version", async () => {
-    for (const path of [
-      "project/scripts/pack-source-build.bash",
-      "verification/scripts/pack-local-packages.bash"
+    const localPack = await readFile(
+      resolve(workspaceRoot, "verification/scripts/pack-local-packages.bash"),
+      "utf8"
+    );
+    expect(localPack).toContain("repositories=(core plugin-dns-cloudflare plugin-external-urls)");
+    expect(localPack).toContain("GIT_MASTER=1 git -C");
+    expect(localPack).toContain("rev-parse HEAD");
+    expect(localPack).not.toContain("rev-parse --short");
+    expect(localPack).toContain("sha256sum");
+    expect(localPack).toContain("DIM_LOCAL_BUILD_VERSION");
+
+    const sourcePack = await readFile(resolve(workspaceRoot, "project/scripts/pack-source-build.bash"), "utf8");
+    expect(sourcePack).toContain("git -C");
+    expect(sourcePack).toContain("rev-parse HEAD");
+    for (const variable of [
+      "DIM_SOURCE_CORE_COMMIT",
+      "DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT",
+      "DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT"
     ]) {
-      const source = await readFile(resolve(workspaceRoot, path), "utf8");
-      expect(source).toContain("git -C");
-      expect(source).toContain("rev-parse --short=12 HEAD");
-      expect(source).toContain("status --porcelain");
-      expect(source).toContain("DIM_LOCAL_BUILD_VERSION");
-      expect(source).toContain("-local-");
-      expect(source).toContain("-dirty");
+      expect(sourcePack).toContain(variable);
     }
+    expect(sourcePack).toContain("sha256sum");
+    expect(sourcePack).toContain("DIM_LOCAL_BUILD_VERSION");
+    expect(sourcePack).toContain("-local-");
+    expect(sourcePack).toContain("-dirty");
   });
 
-  it.each([
-    { name: "succeeds", dockerFailure: "0", expectedStatus: 0, expectedDimInvocationCount: 3 },
-    { name: "fails", dockerFailure: "1", expectedStatus: 42, expectedDimInvocationCount: 0 }
-  ])("rebuilds the trusted workspace image before installation when the Docker build $name", async (scenario) => {
-    // Given
-    const fixtureRoot = await mkdtemp(resolve(tmpdir(), "dim-root-install-"));
-    const scriptsDirectory = resolve(fixtureRoot, "scripts");
-    const toolsDirectory = resolve(fixtureRoot, "tools");
-    const invocationLog = resolve(fixtureRoot, "invocations.log");
-    const packageDirectory = resolve(fixtureRoot, ".local/dim-packages");
-    const productionSource = resolve(fixtureRoot, ".local/production-source");
-    const dockerfile = resolve(productionSource, "core/images/project-workspace/Dockerfile");
-    try {
-      await mkdir(scriptsDirectory, { recursive: true });
-      await mkdir(toolsDirectory, { recursive: true });
-      await mkdir(resolve(productionSource, "core/images/project-workspace"), { recursive: true });
-      await copyFile(
-        resolve(workspaceRoot, "project/scripts/install-source-build.bash"),
-        resolve(scriptsDirectory, "install-source-build.bash")
-      );
-      await writeFile(resolve(scriptsDirectory, "pack-source-build.bash"), "#!/usr/bin/env bash\nprintf 'pack-source-build %s\\n' \"$1\" >> \"$DIM_INVOCATIONS\"\n");
-      await writeFile(dockerfile, "FROM scratch\n");
-      await writeFile(
-        resolve(toolsDirectory, "docker"),
-        "#!/usr/bin/env bash\n{\n  printf 'docker'\n  printf ' %s' \"$@\"\n  printf '\\n'\n} >> \"$DIM_INVOCATIONS\"\nif [[ \"$DIM_DOCKER_FAILURE\" == 1 ]]; then\n  exit 42\nfi\n"
-      );
-      await writeFile(resolve(toolsDirectory, "dim"), "#!/usr/bin/env bash\n{\n  printf 'dim'\n  printf ' %s' \"$@\"\n  printf '\\n'\n} >> \"$DIM_INVOCATIONS\"\n");
-      await writeFile(resolve(toolsDirectory, "id"), "#!/usr/bin/env bash\nprintf 'id %s\\n' \"$1\" >> \"$DIM_INVOCATIONS\"\ncase \"$1\" in\n  -u) printf '1234\\n' ;;\n  -g) printf '5678\\n' ;;\nesac\n");
-      await Promise.all(["docker", "dim", "id"].map((tool) => chmod(resolve(toolsDirectory, tool), 0o755)));
-      const expectedBuild = [
-        `pack-source-build ${packageDirectory}`,
-        "id -u",
-        "id -g",
-        `docker build --quiet --force-rm --build-arg DIM_UID=1234 --build-arg DIM_GID=5678 -t dev-infra-project-workspace:latest -f ${dockerfile} ${productionSource}`
-      ];
-      const dimInvocations = [
-        `dim install-cli --local-packages ${packageDirectory} --no-local-bin`,
-        "dim controller restart",
-        "dim --version"
-      ];
+  it("uses the exact reviewed Verdaccio dependency from the verification workspace", async () => {
+    const packageManifest = parse(await readFile(resolve(workspaceRoot, "verification/package.json"), "utf8"));
+    expect(packageManifest.devDependencies.verdaccio).toBe("6.8.0");
 
-      // When
-      const result = spawnSync("/usr/bin/bash", [resolve(scriptsDirectory, "install-source-build.bash")], {
-        encoding: "utf8",
-        env: {
-          PATH: `${toolsDirectory}:/usr/bin:/bin`,
-          DIM_INVOCATIONS: invocationLog,
-          DIM_DOCKER_FAILURE: scenario.dockerFailure
-        }
-      });
-      const invocations = (await readFile(invocationLog, "utf8")).trim().split("\n");
-
-      // Then
-      expect(result.status).toBe(scenario.expectedStatus);
-      expect(invocations).toEqual([
-        ...expectedBuild,
-        ...dimInvocations.slice(0, scenario.expectedDimInvocationCount)
-      ]);
-    } finally {
-      await rm(fixtureRoot, { recursive: true, force: true });
-    }
+    const helper = await readFile(resolve(workspaceRoot, "verification/scripts/lib/local-npm-registry.bash"), "utf8");
+    expect(helper).not.toContain("npx");
+    expect(helper).not.toContain("--yes");
+    expect(helper).toContain('verdaccio_bin="$script_dir/../../node_modules/verdaccio/bin/verdaccio"');
+    expect(helper).toContain('exec setsid node "$verdaccio_bin"');
   });
 
   it("pins every split repository to its standalone upstream and main branch", async () => {
@@ -145,11 +105,64 @@ describe("DIM development forge policy", () => {
     );
     expect(recipes).toContain("DIM_EXAMPLE_WORKSPACE_BACKEND=sysbox");
     expect(recipes).toContain("DIM_SELF_WORKSPACE_BACKEND=sysbox");
-    expect(workflow.match(/with-ci-registry-cache\.bash/g)).toHaveLength(3);
-    expect(workflow.match(/DIM_TEST_PTY_RESIZE: unsupported/g)).toHaveLength(3);
-    expect(workflow).toContain("inputs.gate == 'kvm' || inputs.gate == 'kvm-control'");
+    expect(workflow.match(/with-ci-registry-cache\.bash --qemu-relay/g)).toHaveLength(2);
+    const verificationSteps: readonly {
+      readonly name?: string;
+      readonly env?: Readonly<Record<string, unknown>>;
+    }[] = parse(workflow).jobs.verify.steps;
+    const sourceVerification = verificationSteps.filter(
+      (step) => step.name === "Verify source repository set"
+    );
+    const containerVerification = verificationSteps.filter(
+      (step) => step.name === "Verify container integration"
+    );
+    const fullDevelopmentVerification = verificationSteps.filter(
+      (step) => step.name === "Verify full development integration"
+    );
+    expect(sourceVerification).toHaveLength(1);
+    expect(containerVerification).toHaveLength(1);
+    expect(fullDevelopmentVerification).toHaveLength(1);
+    expect(
+      verificationSteps.filter((step) => Object.hasOwn(step.env ?? {}, "DIM_TEST_PTY_RESIZE"))
+    ).toHaveLength(1);
+    expect(sourceVerification[0]?.env?.["DIM_TEST_PTY_RESIZE"]).toBe("unsupported");
+    expect(Object.hasOwn(containerVerification[0]?.env ?? {}, "DIM_TEST_PTY_RESIZE")).toBe(false);
+    expect(Object.hasOwn(fullDevelopmentVerification[0]?.env ?? {}, "DIM_TEST_PTY_RESIZE")).toBe(false);
     expect(workflow).toContain("just verify agent-control-kvm");
-    expect(workflow).toContain("inputs.gate != 'integration' && inputs.gate != 'container'");
+    expect(workflow).not.toContain("dim-ci-runner-health");
+    expect(workflow).not.toContain("actions/setup-node");
+    expect(workflow).not.toContain("Bootstrap Node.js");
+  });
+
+  it("owns CI job images and required tools in the protected Project contract", async () => {
+    const contract = parse(await readFile(resolve(workspaceRoot, "project/.dim/ci/runner.yml"), "utf8"));
+    const expectedImage =
+      "nixery.dev/shell/bash/coreutils/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:e191da897cdbfad45bb0f6a84e1d93d8628dabb9a1c2aa1c1897759d6b3078e3";
+    expect(contract.schemaVersion).toBe(1);
+    expect(Object.keys(contract.workloads).sort()).toEqual(["integration", "ordinary"]);
+    expect(contract.workloads.ordinary.labels).toEqual(["dim"]);
+    expect(contract.workloads.integration.labels).toEqual(["dim-container-integration"]);
+    expect(contract.workloads.integration.capabilities).toEqual(["nested-docker"]);
+    for (const workload of Object.values(contract.workloads) as Array<Record<string, unknown>>) {
+      expect(workload.image).toBe(expectedImage);
+      expect(workload.image).toMatch(/@sha256:[0-9a-f]{64}$/);
+      expect(String(workload.image).split("@")[0]).not.toMatch(/:[^/]+$/);
+      expect(workload.tools).toEqual(expect.arrayContaining(["bash", "git", "node", "python3"]));
+    }
+  });
+
+  it("runs all managed workflow labels in disposable job containers", async () => {
+    const workflowPaths = [
+      "project/.gitea/workflows/verify.yml",
+      ".gitea/workflows/release-gate.yml",
+      "verification/.gitea/workflows/integration.yml",
+      "verification/.gitea/workflows/repository-set.yml"
+    ];
+    for (const path of workflowPaths) {
+      const workflow = await readFile(resolve(workspaceRoot, path), "utf8");
+      expect(workflow).not.toContain(":host");
+      expect(workflow).not.toContain("dim-ci-runner-health");
+    }
   });
 
   it("builds rootless agent DinD without inherited file-capability layers", async () => {
@@ -160,6 +173,18 @@ describe("DIM development forge policy", () => {
     ]) {
       const dockerfile = await readFile(resolve(workspaceRoot, path), "utf8");
       expect(dockerfile).toContain("FROM docker:29.1.3-dind-rootless");
+    }
+  });
+
+  it("mounts each example agent workspace from the lifecycle-provided mutable project root", async () => {
+    for (const path of [
+      "examples/projects/full-development-flow/repos/root/.dim/docker-compose.yml",
+      "examples/projects/single-repository/repos/app/.dim/docker-compose.yml",
+      "examples/projects/multi-repository/repos/root/.dim/docker-compose.yml"
+    ]) {
+      const compose = await readFile(resolve(workspaceRoot, path), "utf8");
+      expect(compose).toContain("${DIM_PROJECT_ROOT:?}:/workspace");
+      expect(compose).not.toContain("..:/workspace");
     }
   });
 
@@ -199,13 +224,14 @@ describe("DIM development forge policy", () => {
   });
 
   it("keeps the inner Compose identity independent of the workspace name", async () => {
-    const lifecycle = await readFile(
-      resolve(workspaceRoot, "core/packages/core/src/workspaceLifecycle.ts"),
+    const lifecycleTypes = await readFile(resolve(workspaceRoot, "core/packages/core/src/workspaceLifecycleTypes.ts"), "utf8");
+    const projectCommands = await readFile(
+      resolve(workspaceRoot, "core/packages/core/src/workspaceProjectCommands.ts"),
       "utf8"
     );
-    expect(lifecycle).toContain('const PROJECT_COMPOSE_NAME = "dim-project"');
-    expect(lifecycle).toContain('`COMPOSE_PROJECT_NAME=${PROJECT_COMPOSE_NAME}`');
-    expect(lifecycle).not.toContain('`COMPOSE_PROJECT_NAME=${record.composeProjectName}`');
+    expect(lifecycleTypes).toContain('const PROJECT_COMPOSE_NAME = "dim-project"');
+    expect(projectCommands).toContain('`COMPOSE_PROJECT_NAME=${PROJECT_COMPOSE_NAME}`');
+    expect(projectCommands).not.toContain('`COMPOSE_PROJECT_NAME=${record.composeProjectName}`');
   });
 
   it("verifies volume-preserving host shutdown and restore", async () => {
@@ -218,11 +244,24 @@ describe("DIM development forge policy", () => {
       "utf8"
     );
     expect(lifecycle).toContain("resumeWorkspaces");
-    expect(lifecycle).toContain("resumeCiRunners");
+    expect(lifecycle).toContain("restartCiRunners");
     expect(lifecycle).toContain("resumeManagedContainers");
     expect(lifecycle).not.toMatch(/docker[^\n]*(?:volume rm|container rm|\brm\b)/);
     expect(smoke).toContain("dim host shutdown");
     expect(smoke).toContain("volumes_before=");
     expect(smoke).toContain("dim host start");
   });
+
+  it("uses serialized workspace resource names in verification smokes", async () => {
+    for (const path of [
+      "verification/scripts/container-self-project-smoke.bash",
+      "verification/scripts/stateful-development-flow-smoke.bash"
+    ]) {
+      const smoke = await readFile(resolve(workspaceRoot, path), "utf8");
+      expect(smoke).toContain("jq -er .containerName");
+      expect(smoke).toContain("jq -er .dockerVolumeName");
+      expect(smoke).not.toContain("dim-ws-$workspace_name");
+    }
+  });
+
 });

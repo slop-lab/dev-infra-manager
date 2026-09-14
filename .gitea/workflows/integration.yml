@@ -6,7 +6,7 @@ on:
       lane:
         description: Integration lane to run
         type: choice
-        options: [all, container, kvm]
+        options: [all, container, kvm, cache-routing-kvm, qemu-ci-image-layers-kvm]
         default: all
   schedule:
     - cron: '17 3 * * 1'
@@ -30,4 +30,20 @@ jobs:
       candidate-repository: verification
       candidate-ref: ${{ gitea.sha }}
       gate: kvm
+      runner-label: dim-qemu
+  cache-routing-kvm:
+    if: ${{ gitea.event_name == 'schedule' || inputs.lane == 'all' || inputs.lane == 'cache-routing-kvm' }}
+    uses: ./.gitea/workflows/repository-set.yml
+    with:
+      candidate-repository: verification
+      candidate-ref: ${{ gitea.sha }}
+      gate: cache-routing-kvm
+      runner-label: dim-qemu
+  qemu-ci-image-layers-kvm:
+    if: ${{ gitea.event_name == 'schedule' || inputs.lane == 'all' || inputs.lane == 'qemu-ci-image-layers-kvm' }}
+    uses: ./.gitea/workflows/repository-set.yml
+    with:
+      candidate-repository: verification
+      candidate-ref: ${{ gitea.sha }}
+      gate: qemu-ci-image-layers-kvm
       runner-label: dim-qemu

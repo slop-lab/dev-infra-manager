@@ -61,6 +61,7 @@ mkdir -p /work
 cp /mnt/*.tgz /mnt/local-npm-registry.bash /work/
 cd /work
 source /work/local-npm-registry.bash
+trap dim_stop_local_npm_registry EXIT
 
 echo "[container] start local npm registry"
 dim_start_local_npm_registry /work

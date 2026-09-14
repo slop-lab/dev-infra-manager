@@ -10,6 +10,8 @@ repo_root="$(cd -- "$script_dir/../.." && pwd)"
 source "$script_dir/lib/local-npm-registry.bash"
 # shellcheck source=lib/example-dim-install.bash
 source "$script_dir/lib/example-dim-install.bash"
+source "$script_dir/lib/registry-cache-routing.bash"
+source "$script_dir/lib/registry-cache-routing-journey.bash"
 
 suffix="$PPID-$$"
 project_name="ci-runner-example-$suffix"
@@ -109,6 +111,7 @@ if jq -e '.[0].Mounts[]? | select(.Destination == "/var/run/docker.sock")' \
   echo "CI runner unexpectedly mounts the host Docker socket" >&2
   exit 1
 fi
+dim_cache_routing_runner_ready "$container_name"
 
 echo "[ci-runner-example] 4. open a pull request in a non-root repository"
 git -C "$source_app" switch -c example-change >/dev/null
@@ -157,6 +160,7 @@ if [[ "$workflow_result" != *"|success" ]]; then
   jq '.workflow_runs[:3]' <<<"$runs" >&2
   exit 1
 fi
+dim_cache_routing_runner_outage "$container_name"
 
 echo "[ci-runner-example] 6. disable the runner"
 dim ci runner delete "$project_name" "$runner_name" --yes

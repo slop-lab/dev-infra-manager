@@ -6,10 +6,28 @@ source "$script_dir/lib/git-clone-source.bash"
 # shellcheck source=lib/test-registry-mirror.bash
 source "$script_dir/lib/test-registry-mirror.bash"
 
+for required_command in ssh ssh-keygen sha256sum; do
+  command -v "$required_command" >/dev/null || {
+    printf 'unavailable: container self-project smoke requires %s\n' "$required_command" >&2
+    exit 2
+  }
+done
+
 project_name="dim-self-smoke"
 workspace_name="dim-self-smoke"
+container_name=""
+workspace_volume_name=""
 state_root="/tmp/dim-self-smoke-state"
 source_root="/tmp/dim-self-smoke-source"
+ssh_key="$state_root/ssh-id"
+wrong_ssh_key="$state_root/wrong-ssh-id"
+ssh_config="$state_root/ssh-config"
+wrong_ssh_config="$state_root/wrong-ssh-config"
+ssh_known_hosts="$state_root/ssh-known-hosts"
+ssh_host_public_key="$state_root/ssh-host-ed25519.pub"
+ssh_proxy="$state_root/dim-ssh-proxy"
+ssh_alias="$workspace_name-agent"
+ssh_host_fingerprint=""
 agent_verification_log="$state_root/agent-verification.log"
 workspace_creation_log="$state_root/workspace-creation.log"
 verification_stage="initialization"
@@ -39,8 +57,18 @@ export GIT_CONFIG_GLOBAL="$state_root/host.gitconfig"
 cleanup_managed_resources() {
   local failed=0
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
+    workspace_json="$(dim workspace show "$workspace_name" --json)" || return 1
+    container_name="$(jq -er .containerName <<<"$workspace_json")" || return 1
+    workspace_volume_name="$(jq -er .dockerVolumeName <<<"$workspace_json")" || return 1
     if ! dim workspace discard "$workspace_name" --yes; then
       echo "failed to discard self-project smoke workspace '$workspace_name'" >&2
+      failed=1
+    fi
+  fi
+  if [[ -n "$workspace_volume_name" ]] && \
+    docker volume inspect "$workspace_volume_name" >/dev/null 2>&1; then
+    if ! docker volume rm "$workspace_volume_name" >/dev/null; then
+      echo "failed to remove self-project smoke volume '$workspace_volume_name'" >&2
       failed=1
     fi
   fi
@@ -53,22 +81,39 @@ cleanup_managed_resources() {
   return "$failed"
 }
 
-if [[ -d "$state_root" ]]; then
-  echo "recover previous container self-project smoke state"
-  if ! cleanup_managed_resources; then
-    echo "retained DIM_STATE_ROOT=$state_root for manual recovery" >&2
-    exit 1
-  fi
-  find "$state_root" -depth -delete
-  find "$source_root" -depth -delete 2>/dev/null || true
-fi
+record_self_ssh_host_key() {
+  local expected_change="$1"
+  local trusted_fingerprint local_fingerprint key_type key_data
+  dim workspace run "$workspace_name" bash -- -lc \
+    'cat /etc/ssh/ssh_host_ed25519_key.pub' >"$ssh_host_public_key"
+  trusted_fingerprint="$(dim workspace run "$workspace_name" bash -- -lc \
+    'ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub')"
+  local_fingerprint="$(ssh-keygen -lf "$ssh_host_public_key")"
+  trusted_fingerprint="${trusted_fingerprint#* }"
+  trusted_fingerprint="${trusted_fingerprint%% *}"
+  local_fingerprint="${local_fingerprint#* }"
+  local_fingerprint="${local_fingerprint%% *}"
+  test "$local_fingerprint" = "$trusted_fingerprint"
+  case "$expected_change" in
+    initial) ;;
+    rotated) test "$local_fingerprint" != "$ssh_host_fingerprint" ;;
+    *) echo "unknown self-Project SSH host-key expectation: $expected_change" >&2; return 2 ;;
+  esac
+  ssh_host_fingerprint="$local_fingerprint"
+  read -r key_type key_data _ <"$ssh_host_public_key"
+  printf '%s %s %s\n' "$ssh_alias" "$key_type" "$key_data" >"$ssh_known_hosts"
+  chmod 0600 "$ssh_known_hosts"
+}
 
-mkdir -p "$state_root" "$source_root"
-git config --file "$GIT_CONFIG_GLOBAL" user.name "DIM Self Host"
-git config --file "$GIT_CONFIG_GLOBAL" user.email "dim-self-host@dim.invalid"
-mkdir -p "$DIM_PLUGIN_HOME"
-printf '%s\n' '{"schemaVersion":1,"plugins":[]}' > "$DIM_PLUGIN_HOME/plugins.json"
-bash "$script_dir/configure-user-backend.bash" "${DIM_SELF_WORKSPACE_BACKEND:-sysbox}"
+assert_self_ssh_session() {
+  local agent_uid expected actual
+  agent_uid="$(dim workspace run "$workspace_name" bash -- -lc 'id -u dim-agent')"
+  test "$agent_uid" -ne 0
+  expected="$(printf '%s\n' "$agent_uid" dim-agent /home/dim-agent /workspace)"
+  actual="$(ssh -F "$ssh_config" "$ssh_alias" \
+    'id -u; id -un; printf "%s\n" "$HOME"; cd /workspace; pwd; test -r AGENTS.md')"
+  test "$actual" = "$expected"
+}
 
 cleanup() {
   local status=$?
@@ -93,7 +138,59 @@ cleanup() {
   fi
   exit "$status"
 }
+
+if [[ -d "$state_root" ]]; then
+  echo "recover previous container self-project smoke state"
+  if ! cleanup_managed_resources; then
+    echo "retained DIM_STATE_ROOT=$state_root for manual recovery" >&2
+    exit 1
+  fi
+  find "$state_root" -depth -delete
+  find "$source_root" -depth -delete 2>/dev/null || true
+fi
+
+mkdir -p "$state_root" "$source_root"
 trap cleanup EXIT
+git config --file "$GIT_CONFIG_GLOBAL" user.name "DIM Self Host"
+git config --file "$GIT_CONFIG_GLOBAL" user.email "dim-self-host@dim.invalid"
+if [[ -n "${DIM_BIN:-}" ]]; then
+  printf '#!/usr/bin/env bash\nexec %q "$@"\n' "$dim_bin" >"$ssh_proxy"
+else
+  printf '#!/usr/bin/env bash\nexec node %q "$@"\n' "$dim_bin" >"$ssh_proxy"
+fi
+chmod 0700 "$ssh_proxy"
+ssh-keygen -q -t ed25519 -N '' -f "$ssh_key"
+ssh-keygen -q -t ed25519 -N '' -f "$wrong_ssh_key"
+cat >"$ssh_config" <<EOF
+Host $ssh_alias
+    HostName $ssh_alias
+    User dim-agent
+    IdentityFile $ssh_key
+    IdentitiesOnly yes
+    BatchMode yes
+    RequestTTY no
+    StrictHostKeyChecking yes
+    UserKnownHostsFile $ssh_known_hosts
+    GlobalKnownHostsFile /dev/null
+    ProxyCommand "$ssh_proxy" workspace run "$workspace_name" ssh-proxy
+EOF
+cat >"$wrong_ssh_config" <<EOF
+Host $ssh_alias
+    HostName $ssh_alias
+    User dim-agent
+    IdentityFile $wrong_ssh_key
+    IdentitiesOnly yes
+    BatchMode yes
+    RequestTTY no
+    StrictHostKeyChecking yes
+    UserKnownHostsFile $ssh_known_hosts
+    GlobalKnownHostsFile /dev/null
+    ProxyCommand "$ssh_proxy" workspace run "$workspace_name" ssh-proxy
+EOF
+chmod 0600 "$ssh_config" "$wrong_ssh_config"
+mkdir -p "$DIM_PLUGIN_HOME"
+printf '%s\n' '{"schemaVersion":1,"plugins":[]}' > "$DIM_PLUGIN_HOME/plugins.json"
+bash "$script_dir/configure-user-backend.bash" "${DIM_SELF_WORKSPACE_BACKEND:-sysbox}"
 
 if [[ -d "$project_source/project/.git" ]]; then
   mkdir -p "$source_root/repositories"
@@ -163,6 +260,8 @@ fi
 
 verification_stage="workspace ready phase"
 workspace_json="$(dim workspace show "$workspace_name" --json)"
+container_name="$(jq -er .containerName <<<"$workspace_json")"
+workspace_volume_name="$(jq -er .dockerVolumeName <<<"$workspace_json")"
 test "$(jq -r .phase <<<"$workspace_json")" = ready
 verification_stage="workspace repository manifest"
 expected_repositories='["core","core-development","development","examples","plugin-dns-cloudflare","plugin-dns-cloudflare-development","plugin-external-urls","plugin-external-urls-development","root","specification","verification"]'
@@ -278,6 +377,8 @@ if ! restart_error="$(dim workspace restart "$workspace_name" 2>&1)"; then
   exit 1
 fi
 workspace_json="$(dim workspace show "$workspace_name" --json)"
+container_name="$(jq -er .containerName <<<"$workspace_json")"
+workspace_volume_name="$(jq -er .dockerVolumeName <<<"$workspace_json")"
 test "$(jq -r .phase <<<"$workspace_json")" = ready
 verification_stage="restarted agent-dind contract"
 verify_agent_dind
@@ -297,7 +398,6 @@ updated_resources="$(dim workspace resources "$workspace_name" \
 test "$(jq -r .cpuCount <<<"$updated_resources")" = "1.25"
 test "$(jq -r .memory <<<"$updated_resources")" = "2g"
 test "$(jq -r .pidsLimit <<<"$updated_resources")" = "1024"
-container_name="$(jq -r .containerName <<<"$workspace_json")"
 test "$(docker inspect "$container_name" --format \
   '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}')" = \
   "1250000000|2147483648|2147483648|1024"
@@ -311,6 +411,82 @@ agent_git_identity="$(dim workspace run "$workspace_name" bash -- -lc \
   'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
 test "$agent_git_identity" = \
   "DIM Self Host <dim-self-host@dim.invalid>|DIM Self Host <dim-self-host@dim.invalid>"
+verification_stage="authenticated non-root SSH authority"
+dim workspace run "$workspace_name" bash -- -lc \
+  "printf '%s\\n' ordinary-task >journey-self-ssh-existing"
+dim workspace run "$workspace_name" bash -- -lc \
+  'umask 077; mkdir -p "$HOME/.ssh"; touch "$HOME/.ssh/authorized_keys"; chmod 0700 "$HOME/.ssh"; chmod 0600 "$HOME/.ssh/authorized_keys"; cat >>"$HOME/.ssh/authorized_keys"' \
+  <"$ssh_key.pub"
+record_self_ssh_host_key initial
+assert_self_ssh_session
+ssh -F "$ssh_config" "$ssh_alias" 'bash -se' <<'SSH_AUTHORITY'
+set -euo pipefail
+test "$(id -u)" -ne 0
+test "$(id -un)" = dim-agent
+test "$HOME" = /home/dim-agent
+test "$(cat /workspace/journey-self-ssh-existing)" = ordinary-task
+printf '%s\n' ssh-overwrite >/workspace/journey-self-ssh-existing
+test "$(cat /workspace/journey-self-ssh-existing)" = ssh-overwrite
+rm /workspace/journey-self-ssh-existing
+mkdir -p /workspace/journey-self-ssh-created/nested
+touch /workspace/journey-self-ssh-created/nested/value
+printf '%s\n' nested-workspace >/workspace/journey-self-ssh-created/nested/value
+test "$(cat /workspace/journey-self-ssh-created/nested/value)" = nested-workspace
+rm -rf /workspace/journey-self-ssh-created
+touch "$HOME/journey-self-ssh-home"
+printf '%s\n' persistent-home >"$HOME/journey-self-ssh-home"
+test "$(cat "$HOME/journey-self-ssh-home")" = persistent-home
+rm "$HOME/journey-self-ssh-home"
+test "$DOCKER_HOST" = unix:///run/docker.sock
+test -S /run/docker.sock
+test ! -e /var/run/docker.sock
+docker info --format '{{json .SecurityOptions}}' | grep -q rootless
+docker run --rm alpine:3.22 true
+test "$GIT_AUTHOR_NAME" = "DIM Self Host"
+test "$GIT_AUTHOR_EMAIL" = dim-self-host@dim.invalid
+test "$GIT_COMMITTER_NAME" = "DIM Self Host"
+test "$GIT_COMMITTER_EMAIL" = dim-self-host@dim.invalid
+test -n "$(git config --get credential.helper)"
+test "$(git config --get-all safe.directory)" = "$(printf '/workspace\n/workspace/*')"
+test "$GIT_TERMINAL_PROMPT" = 0
+test -n "$DIM_GIT_TOKEN"
+git ls-remote origin HEAD >/dev/null
+test -S "$DIM_EXTERNAL_URL_SOCKET"
+test ! -e /run/dim/controller/controller.sock
+test -z "${DIM_CONTROLLER_TOKEN:-}"
+curl --fail --silent --unix-socket "$DIM_EXTERNAL_URL_SOCKET" http://dim-controller/api |
+  jq -e '.routes | type == "array"' >/dev/null
+if test -S "$DIM_QEMU_VERIFICATION_SOCKET"; then
+  node /workspace/project/.dim/qemu-client.mjs probe
+  node /workspace/project/.dim/qemu-client.mjs status | jq -e '.status == "success"' >/dev/null
+fi
+SSH_AUTHORITY
+env DIM_GIT_TOKEN=client-controlled-token ssh -F "$ssh_config" \
+  -o SetEnv=DOCKER_HOST=unix:///tmp/client-controlled.sock \
+  -o SendEnv=DIM_GIT_TOKEN "$ssh_alias" \
+  'test "$DOCKER_HOST" = unix:///run/docker.sock; test -n "$DIM_GIT_TOKEN"; test "$DIM_GIT_TOKEN" != client-controlled-token'
+if ssh -F "$ssh_config" -o User=root "$ssh_alias" true >/dev/null 2>&1; then
+  echo "SSH unexpectedly accepted root login" >&2
+  exit 1
+fi
+if ssh -F "$wrong_ssh_config" "$ssh_alias" true >/dev/null 2>&1; then
+  echo "SSH unexpectedly accepted an unprovisioned key" >&2
+  exit 1
+fi
+if ssh -F "$ssh_config" \
+  -o PubkeyAuthentication=no -o PasswordAuthentication=yes \
+  -o PreferredAuthentications=password -o NumberOfPasswordPrompts=0 \
+  "$ssh_alias" true >/dev/null 2>&1; then
+  echo "SSH unexpectedly accepted password-only authentication" >&2
+  exit 1
+fi
+outer_ssh_port="$(docker port "$container_name" 22/tcp 2>/dev/null || true)"
+test -z "$outer_ssh_port"
+agent_dind_container="$(dim workspace exec "$workspace_name" -- \
+  docker compose --project-name "dim-project" --file .dim/docker-compose.yml ps --quiet agent-dind)"
+nested_ssh_port="$(dim workspace exec "$workspace_name" -- docker exec "$agent_dind_container" \
+  dim-agent-dind docker port dim-agent 22/tcp 2>/dev/null || true)"
+test -z "$nested_ssh_port"
 verification_stage="agent identity"
 workspace_owner_uid="$(dim workspace exec "$workspace_name" -- stat -c %u /workspace)"
 agent_uid="$(dim workspace run "$workspace_name" bash -- -lc 'id -u')"
@@ -447,7 +623,32 @@ for repository in root development core core-development plugin-dns-cloudflare p
   test "$managed_sha" = "$external_sha"
 done
 
+verification_stage="retained agent home across discard and recreation"
+retained_sentinel="retained-$PPID-$$-$(date +%s%N)"
+dim workspace run "$workspace_name" bash -- -lc \
+  "printf '%s\\n' '$retained_sentinel' >\"\$HOME/dim-retained-discard-sentinel\""
+dim workspace discard "$workspace_name" --keep-volume --yes >/dev/null
+test ! -e "$state_root/workspaces/$workspace_name.json"
+test -z "$(docker ps -aq --filter "name=^/$container_name$")"
+docker volume inspect "$workspace_volume_name" >/dev/null
+
+dim workspace create "$project_name" "$workspace_name" >/dev/null
+workspace_json="$(dim workspace show "$workspace_name" --json)"
+container_name="$(jq -er .containerName <<<"$workspace_json")"
+workspace_volume_name="$(jq -er .dockerVolumeName <<<"$workspace_json")"
+test "$(jq -r .phase <<<"$workspace_json")" = ready
+test "$(dim workspace run "$workspace_name" bash -- -lc \
+  'cat /home/dim-agent/dim-retained-discard-sentinel')" = "$retained_sentinel"
+dim workspace run "$workspace_name" bash -- -lc 'pgrep -x sshd >/dev/null'
+record_self_ssh_host_key rotated
+assert_self_ssh_session
+
+verification_stage="ordinary workspace discard"
 dim workspace discard "$workspace_name" --yes >/dev/null
+if docker volume inspect "$workspace_volume_name" >/dev/null 2>&1; then
+  echo "ordinary discard retained outer volume '$workspace_volume_name'" >&2
+  exit 1
+fi
 dim project purge "$project_name" --yes >/dev/null
 
 echo "container-self-project-smoke-ok"
