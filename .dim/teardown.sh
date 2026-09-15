@@ -16,6 +16,7 @@ esac
 
 qemu_service_dir=/tmp/dim-qemu-verification
 qemu_project_root="$(pwd -P)"
+qemu_service_cwd="$qemu_service_dir"
 qemu_node=/usr/bin/node
 if [ -e "$qemu_service_dir/service.pid" ] || [ -L "$qemu_service_dir/service.pid" ]; then
   echo "obsolete QEMU service.pid is not accepted" >&2
@@ -23,7 +24,7 @@ if [ -e "$qemu_service_dir/service.pid" ] || [ -L "$qemu_service_dir/service.pid
 fi
 sudo -n /usr/bin/env -i PATH=/usr/bin:/bin HOME=/root \
   "$qemu_node" "$qemu_project_root/.dim/qemu-service-owner.mjs" retire \
-  "$qemu_service_dir/service-owner.json" "$qemu_service_dir/service.sock" "$qemu_project_root" 10000
+  "$qemu_service_dir/service-owner.json" "$qemu_service_dir/service.sock" "$qemu_service_cwd" 10000
 
 set -- down
 test "$keep_volumes" = 1 || set -- "$@" --volumes
