@@ -394,6 +394,14 @@ filesystem operation. It MUST reject a new run while another run owns the
 service, and it MUST reject duplicate input names before filesystem validation.
 Each admitted run MUST own a fresh set of service-owned input snapshots that
 the agent cannot mutate after admission.
+
+Core MUST dispatch Project setup and teardown as `dim` from the immutable
+`/run/dim/project-roots/<commit>` snapshot. Only QEMU namespace, owner,
+launcher, service, and reset operations elevate through the existing sudo
+boundary. Every elevated Node invocation MUST use the fixed
+`/usr/bin/node`. The elevated command MUST begin with `/usr/bin/env -i` and an
+explicit `PATH` and `HOME` before invoking either root Node or `/bin/sh`, so
+unrelated inherited environment variables never reach root QEMU commands.
 Snapshot copying MUST NOT dereference symlinks. It MUST anchor traversal to
 open descriptors, enumerate directories as a stream from open directory
 handles, stream regular files with bounded memory, preserve regular file
@@ -413,6 +421,12 @@ strings. The PID MUST be positive and no greater than either the kernel's
 MUST be positive. `argv` MUST be a nonempty array of strings. `executable` and
 `cwd` MUST each contain exactly a canonical absolute `path`, `device`, and
 `inode`; `socket` MUST contain exactly `device` and `inode`.
+Service inspection output MUST have only the exact `state`, `pid`,
+`startTicks`, `owner`, and `socket` identity fields. Exact retirement MUST
+compare the immutable PID, process-start ticks, owner identity, and socket
+identity captured by inspection. A process becoming dead after inspection is
+an allowed live-to-dead transition and does not invalidate those immutable
+identity comparisons.
 
 The service MUST pin the owned socket inode with a non-replacing hard link at:
 
@@ -444,26 +458,44 @@ non-symlink root:root directory with mode exactly `0755`, including no special
 mode bits, and both agent mount layers MUST expose it read-only. Startup MUST reject any existing or symlink `service.pid`, owner,
 public socket, or lease path, while stale run state is allowed until activation.
 It MUST prepare a fresh adjacent root:root directory with mode exactly `0700`,
-including no special mode bits, before
-binding, then remove stale run state and rename the prepared directory into
-place only after owner publication. Rollback before activation MUST discard
-only that prepared directory.
+including no special mode bits, before binding. The service starts in
+`starting`, and every route, including status and run, MUST return `503` until
+both owner publication and prepared-runs activation commit complete. It may
+then enter `accepting`.
+
+Activation MUST first rename stale canonical runs aside to a unique
+`runs.replaced-*` quarantine path, then rename prepared runs to the canonical
+path. Failure before the prepared-to-canonical rename commits MUST restore the
+exact stale canonical state and discard only the prepared directory. The
+prepared-to-canonical rename is the activation commit. Failure of recursive
+cleanup after that commit is fatal: the fresh canonical runs MUST remain,
+every old remainder MUST stay quarantined under `runs.replaced-*`, and cleanup
+MUST NOT falsely restore partial stale evidence as canonical.
 
 Ownership inspection MUST open the owner pathname once without following
 symlinks and obtain its identity and bytes from that descriptor. Owner
 publication MUST derive identity from its temporary file descriptor and
 preserve a replacement at the temporary pathname during cleanup. It MUST
 create and sync a fresh temporary file, publish it
-without replacing an existing path, sync the containing directory, and remove
-the temporary file. A publication collision or later startup failure MUST
-leave an existing owner untouched and roll back only the new instance's exact
-artifacts. Cleanup MUST validate the lease against the captured socket identity
+without replacing an existing path, sync the containing directory, remove the
+temporary file, and close its handle. Publication is transactional across the
+post-link directory sync, temporary cleanup, and close stages. Failure at any
+stage MUST aggregate errors in stable operation order and roll back only the
+exact linked owner identity. Replacements and collisions MUST remain untouched,
+and any quarantine evidence MUST be preserved. A publication collision or
+later startup failure MUST leave an existing owner untouched and roll back only
+the new instance's exact artifacts.
+
+Cleanup MUST validate the lease against the captured socket identity
 before safe close and again immediately before removing the lease. It MUST
 operate sequentially, remove the lease last, and preserve a foreign public
-socket that was safeguarded and restored. Missing or mismatched lease state
-MUST fail closed before server close; the server is unreferenced rather than
-explicitly closed and ownership artifacts are not removed. When closing a
-server could unlink a socket path that another instance replaced, the supported
+socket that was safeguarded and restored. Shutdown MUST validate the lease
+before close, stop admission, initiate server close, call
+`closeAllConnections`, await close, and only then clean run and ownership state.
+Incomplete raw HTTP headers MUST not block shutdown. Missing or mismatched
+lease state MUST fail closed before server close; the server is unreferenced
+rather than explicitly closed and ownership artifacts are not removed. When
+closing a server could unlink a socket path that another instance replaced, the supported
 serialized cleanup MUST hard-link the observed replacement to a fresh protected
 path before removing the public pathname. After closing the old server,
 restoration MUST hard-link the protected socket back to the socket pathname
@@ -476,19 +508,28 @@ pathname rebinding outside the supported serialized lifecycle.
 Project setup MAY retire a live service only after exact ownership inspection.
 It MAY remove dead residue only when the record and socket still match their
 captured identities. Retirement and startup readiness MUST be bounded. Setup
-MUST publish readiness only after the new structured owner names the launched
-PID, the socket is mode `0666`, and a bounded status request succeeds. If a
-started process never publishes ownership, setup MUST fail after the readiness
-bound without signalling that unowned process. Readiness failure after valid
-publication MUST retire only that exact owner; replacement during readiness
-MUST remain untouched.
+MUST derive the launched PID from the structured owner record and publish
+readiness only after that process has root UID, the owner has exact mode
+`0600`, the public socket and lease each have exact mode `0666`, and a bounded
+status request succeeds. If a started wrapper never publishes ownership, setup
+MUST fail after the readiness bound without signalling that unowned wrapper.
+Readiness failure after valid publication MUST retire only that exact owner;
+replacement during readiness MUST remain untouched. A KVM-disabled setup MUST
+still perform the root-owned reset through the same constrained elevated
+boundary.
 
 Service shutdown MUST stop admission before aborting an in-progress request or
 snapshot. Cancellation and shutdown MUST signal the launcher's detached
 process group with TERM, wait for a bounded grace period, escalate the same
 group to KILL if it remains live, and await child closure before run cleanup.
-Shutdown MUST await run completion and snapshot cleanup before removing the
-run tree and its own owner, socket, and lease artifacts. Event delivery MUST retain no
+An asynchronous launcher spawn failure MUST finalize the run, release
+admission, and remove its snapshot. The complete process group MUST disappear
+before snapshot deletion. If any member remains after KILL, the service MUST
+stop admission, close its listener while restoring an owned public socket from
+the validated lease, exit nonzero, and preserve owner, socket, lease, run, and
+snapshot evidence. Shutdown MUST await run completion and snapshot cleanup
+before removing the run tree and its own owner, socket, and lease artifacts.
+Event delivery MUST retain no
 more than 8 MiB for replay, admit at most 16 concurrent followers for an
 active run, release a follower slot when it closes, and immediately disconnect
 a follower whenever a replay or live stream write reports false.

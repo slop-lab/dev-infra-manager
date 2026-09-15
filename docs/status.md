@@ -125,6 +125,17 @@ unavailable because no server is installed; the executable typecheck was used
 instead. The broader `just verify agent`, live Sysbox, KVM, and
 full-development gates were not rerun for this follow-up.
 
+A lifecycle correction was independently verified on 2026-09-15. Evidence
+included verification across 40 files and 206 tests, passing cross-workspace
+gates, 786 passed core-development tests with 40 environment skips, and 63
+passed CLI tests. All 11 typechecks, package builds, Node and Bash syntax, LOC,
+hygiene, and changed-file diff checks passed. Manual Unix-socket checks observed
+status, HTTP `400` handling, and graceful cleanup.
+Oracle gave a final PASS for the implementation blockers as review evidence.
+This was not a five-way sealed review. TypeScript LSP remained unavailable
+because its earlier installation was declined. Live KVM, live Sysbox, and the
+full-development journey were not rerun.
+
 OpenSSH 9.6 and Docker buildx 0.30.1 were installed in the development agent to
 exercise the capable-host entrypoint. The full-development journey built all
 packages and the canonical workspace image, then stopped at managed Gitea

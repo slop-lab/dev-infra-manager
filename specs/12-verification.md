@@ -212,6 +212,11 @@ descriptor-bound owner inspection and publication identity, preservation of a
 replaced temporary owner path, listener inode pinning across unlink and rebind,
 staged run-root activation and rollback, exact owner/socket/lease modes, and
 launcher termination and run cleanup before lease-gated shutdown failure.
+Executable tests MUST also prove that core dispatches setup and teardown with
+`docker exec --user dim` from the immutable Project-root snapshot, while only
+the defined QEMU operations elevate. They MUST prove the fixed
+`/usr/bin/node` interpreter and `/usr/bin/env -i` environment isolation with
+explicit `PATH` and `HOME` for root Node and shell commands.
 QEMU tests MUST prove selection by either an integration label or `dim-qemu`,
 supervisor-side `register --ephemeral` after guest readiness, strict validation
 of the temporary `.runner`, and transfer of only that file into the guest.
@@ -546,6 +551,12 @@ cleanup. All three artifacts absent MUST be verified as unowned. Inspection
 MUST be verified to open the owner with `O_NOFOLLOW` and derive both owner
 identity and bytes from that descriptor despite deterministic pathname
 replacement.
+Helper-level tests MUST enumerate all eight owner, socket, and lease presence
+combinations. Integrated setup coverage across the existing split tests MUST
+exercise every proper partial state. Inspection tests MUST require the strict
+exact fingerprint shape with only `state`, `pid`, `startTicks`, `owner`, and
+`socket` identities, and MUST prove exact retirement across an allowed
+live-to-dead transition.
 Obsolete `service.pid` state MUST be
 rejected without migration for both live and dead recorded processes.
 
@@ -567,6 +578,10 @@ Restoration tests MUST prove that a later socket at the destination is not
 overwritten and that both foreign socket inodes remain preserved. A direct
 second service MUST fail without replacing the active socket, owner, or run
 tree.
+Publication fault tests MUST cover post-link directory sync, temporary unlink,
+handle close, rollback, replacement, and collision. They MUST assert exact
+quarantine bytes and identities, preserved replacement and collision evidence,
+rollback of only the exact linked owner, and stable aggregate error order.
 
 Filesystem tests MUST require a pre-existing, setup-created, real root:root
 service directory with exact mode `0755`, including rejection of symlinks,
@@ -578,27 +593,46 @@ including no special bits, activates it only after publication, and discards
 only prepared state on pre-activation rollback. Static policy tests MUST prove
 both agent mount layers expose the namespace read-only and workspace creation,
 setup, and discard acquire the workspace setup lock.
+Activation tests MUST prove that status and run both return `503` while the
+service is `starting`, before owner publication and prepared-runs activation
+commit. They MUST prove exact stale canonical restoration after every
+pre-commit fault. Post-commit recursive cleanup faults MUST be fatal while the
+fresh canonical runs remain and exact old bytes and identities remain
+quarantined under `runs.replaced-*`, with no partial evidence restored as
+canonical.
 
 Setup tests MUST prove exact live-owner retirement occurs before replacement,
 exact dead residue can be removed, and the malformed, foreign, ambiguous,
 PID-only, and argument-mismatched cases above fail closed. Readiness tests MUST
-require the launched PID in the structured owner, socket mode `0666`, and a
-successful bounded status request. They MUST cover readiness failure after
-publication, owner and socket replacement during readiness, and a started
-process that never publishes an owner. The no-owner case MUST reach a bounded
-failure without signalling the process.
+derive the actual owner PID independently of the wrapper and require its root
+UID, owner mode exactly `0600`, public socket and lease modes exactly `0666`,
+and a successful bounded status request. They MUST cover dead owners, malformed
+owners, argument-vector mismatch, readiness failure after publication, owner
+and socket replacement during readiness, and a started wrapper that never
+publishes an owner. The no-owner case MUST reach a bounded failure without
+signalling the wrapper, and every readiness replacement MUST remain untouched.
+KVM-disabled setup coverage MUST prove the root-owned reset still runs through
+the constrained elevated boundary.
 
-Shutdown tests MUST cover an incomplete request body, an observed partial
-snapshot, and a running detached launcher group. They MUST prove that shutdown
-first closes admission, prevents later launch, drains run cleanup, and removes
-only the service's own owner, socket, lease, and run tree. They MUST prove normal
-lease removal, successor preservation after replacement, and fail-closed
-pre-close behavior for missing or mismatched leases. A deterministic lease
-collision MUST remain untouched and prevent startup. Cancellation and shutdown
-tests MUST also use a TERM-ignoring launcher group and prove bounded escalation
-from TERM to KILL, child closure, and group termination before cleanup. With an
-active launcher and invalid lease, tests MUST prove launcher termination and run
-cleanup complete before the service exits nonzero for the lease failure.
+Shutdown tests MUST cover an incomplete request body, incomplete raw HTTP
+headers, an observed partial snapshot, and a running detached launcher group.
+They MUST prove lease validation before close, admission closure, server close
+initiation, `closeAllConnections`, awaited close, later-launch prevention, run
+cleanup, and removal of only the service's own owner, socket, lease, and run
+tree. They MUST prove normal lease removal, successor preservation after
+replacement, and fail-closed pre-close behavior for missing or mismatched
+leases. A deterministic lease collision MUST remain untouched and prevent
+startup. Cancellation and shutdown tests MUST exercise repeated signals and
+concurrent cancellation. They MUST use a TERM-ignoring launcher group and prove
+bounded escalation from TERM to KILL, child closure, leader-exit descendant
+cleanup, and complete group disappearance before snapshot deletion. A real
+spawn `ENOENT` MUST finalize the run, release admission, clean its snapshot,
+and permit re-admission. With an active launcher and invalid lease, tests MUST
+prove launcher termination and run cleanup complete before the service exits
+nonzero for the lease failure. A process-group residual after KILL MUST be
+fatal, stop admission, close the listener while restoring the owned public
+socket from its lease, and preserve exact owner, socket, lease, run, and
+snapshot evidence.
 
 Event tests MUST prove that no more than 16 followers are admitted for an
 active run, follower 17 is rejected before successful stream headers, and a
