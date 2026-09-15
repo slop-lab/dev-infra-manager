@@ -64,7 +64,7 @@ describe("canonical non-root SSH practical authority", () => {
     const compose = await readFile(projectCompose, "utf8");
     const agent = await readFile(projectAgent, "utf8");
 
-    expect(setup).toContain('install -d -m 0755 "$qemu_service_dir"');
+    expect(setup).toContain('sudo -n /usr/bin/install -d -o root -g root -m 0755 "$qemu_service_dir"');
     expect(filesystem).toContain("constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW");
     expect(filesystem).toContain("descriptorStat.uid !== 0n || descriptorStat.gid !== 0n");
     expect(filesystem).toContain("(descriptorStat.mode & 0o7777n) !== 0o755n");
