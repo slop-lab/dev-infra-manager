@@ -36,10 +36,13 @@ describe("QEMU root command authority", () => {
     expect(rootCommands.match(/\/usr\/bin\/env -i PATH=\/usr\/bin:\/bin HOME=\/root/g)?.length).toBeGreaterThanOrEqual(3);
     expect.soft(rootCommands).not.toContain("NODE_OPTIONS");
     expect.soft(rootCommands).toContain('qemu_project_root="$(pwd -P)"');
+    expect.soft(rootCommands).toContain('qemu_service_cwd="$qemu_service_dir"');
     expect.soft(rootCommands).toContain('qemu_owner_script="$qemu_project_root/.dim/qemu-service-owner.mjs"');
     expect.soft(rootCommands).toContain('qemu_service_script="$qemu_project_root/.dim/qemu-service.mjs"');
     const serviceLaunch = rootCommands.slice(rootCommands.indexOf("sudo -n /usr/bin/env -i", rootCommands.indexOf("qemu_root_owner retire")));
     expect.soft(serviceLaunch.indexOf("/usr/bin/env -i")).toBeLessThan(serviceLaunch.indexOf("/bin/sh -c"));
+    expect.soft(serviceLaunch).toContain('cd "$1"');
+    expect.soft(serviceLaunch).toContain('qemu-service "$qemu_service_cwd"');
     expect(serviceLaunch).toContain("/bin/sh -c");
   });
 

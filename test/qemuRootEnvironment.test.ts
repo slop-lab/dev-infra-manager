@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
+import { http, spawnRecords, startService, waitForObservation } from "./qemuServiceTestSupport.js";
 
 const projectRoot = resolve(import.meta.dirname, "../../project");
 const roots: string[] = [];
@@ -46,5 +47,16 @@ describe("QEMU root environment", () => {
     expect.soft(results.map(({ status }) => status), results.map(({ stderr }) => stderr).join("\n")).toEqual([0, 0]);
     await expect(readFile(pathSentinel)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(readFile(preloadSentinel)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("keeps launcher children rooted at the assembled source tree", async () => {
+    const service = await startService("exit");
+
+    const response = await http(service, { body: { mode: "run" }, method: "POST", path: "/v1/run" });
+    const launcher = await waitForObservation(async () =>
+      (await spawnRecords(service)).find((record) => record.command === "bash"));
+
+    expect.soft(response.status).toBe(202);
+    expect(launcher).toMatchObject({ cwd: service.sourceRoot, sourceRoot: service.sourceRoot });
   });
 });
