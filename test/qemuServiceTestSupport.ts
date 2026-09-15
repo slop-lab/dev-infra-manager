@@ -6,13 +6,14 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import type { Readable } from "node:stream";
 import { afterEach } from "vitest";
+import { launcherScript, spawnPreloadScript } from "./qemuServiceFixtureScripts.js";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 const serviceScript = resolve(workspaceRoot, "project/.dim/qemu-service.mjs");
 const fixtures: ServiceFixture[] = [];
 const fixtureRoots: string[] = [];
 
-export type ServiceFixture = { readonly launcherPidFile: string; readonly launcherStopFile: string;
+export type ServiceFixture = { readonly descendantPidFile: string; readonly launcherPidFile: string; readonly launcherStopFile: string;
   readonly process: ChildProcessByStdio<null, Readable, Readable>; readonly recordFile: string;
   readonly root: string; readonly runsRoot: string; readonly socketPath: string;
   readonly sourceRoot: string; readonly spawnRecordFile: string };
@@ -24,7 +25,9 @@ export type SpawnRecord = { readonly arguments: readonly string[]; readonly comm
 export type IncompleteRun = { readonly abort: () => void; readonly continued: Promise<void>;
   readonly finish: () => void; readonly response: Promise<HttpResult> };
 export type ServiceOptions = { readonly forceResponseBackpressure?: boolean;
-  readonly ignoreLauncherTerm?: boolean; readonly rejectReaddir?: boolean };
+  readonly ignoreLauncherTerm?: boolean; readonly leaderExits?: boolean;
+  readonly missingLauncherShell?: boolean; readonly rejectReaddir?: boolean;
+  readonly residualProcessGroup?: boolean; readonly serviceCwd?: string };
 
 function isMissing(error: unknown): boolean { return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT"; }
 
@@ -75,66 +78,40 @@ export async function startService(mode: "exit" | "hold", options: ServiceOption
   const socketPath = resolve(root, "service.sock");
   const launcherPidFile = resolve(root, "launcher.pid");
   const launcherStopFile = resolve(root, "launcher.stopped");
+  const descendantPidFile = resolve(root, "descendant.pid");
   const launcher = resolve(root, "launcher.bash");
   const preload = resolve(root, "record-spawns.mjs");
   await mkdir(sourceRoot);
-  await writeFile(preload, `import childProcess from "node:child_process";
-import fs, { appendFileSync } from "node:fs";
-import http from "node:http";
-import { syncBuiltinESMExports } from "node:module";
-const originalSpawn = childProcess.spawn;
-childProcess.spawn = function instrumentedSpawn(command, args, options) {
-  appendFileSync(process.env.DIM_TEST_SPAWN_RECORD, JSON.stringify({ command, arguments: args ?? [] }) + "\\n");
-  return originalSpawn.call(childProcess, command, args, options);
-};
-if (process.env.DIM_TEST_REJECT_READDIR === "1") {
-  fs.promises.readdir = async function rejectedReaddir() { throw new Error("DIM_TEST_READDIR_FORBIDDEN"); };
-}
-if (process.env.DIM_TEST_FORCE_BACKPRESSURE === "1") {
-  const originalWrite = http.ServerResponse.prototype.write;
-  http.ServerResponse.prototype.write = function forcedBackpressure(...args) { originalWrite.apply(this, args); return false; };
-}
-syncBuiltinESMExports();
-`);
-  await writeFile(launcher, `#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\n' "$$" >"$DIM_TEST_LAUNCHER_PID"
-printf '%s\n' "$DIM_QEMU_INPUT_SNAPSHOTS_JSON" >>"$DIM_TEST_LAUNCH_RECORD"
-printf 'ready\n'
-[[ "$DIM_TEST_LAUNCHER_MODE" != exit ]] || exit 0
-if [[ "$DIM_TEST_IGNORE_TERM" == 1 ]]; then
-  trap '' TERM INT
-  bash -c 'trap "" TERM INT; exec sleep 86400' &
-else
-  sleep 86400 &
-  trap 'kill "$sleeper" >/dev/null 2>&1 || true; wait "$sleeper" 2>/dev/null || true; printf stopped >"$DIM_TEST_LAUNCHER_STOPPED"; exit 0' TERM INT
-fi
-sleeper=$!
-wait "$sleeper"
-`);
+  await writeFile(preload, spawnPreloadScript());
+  await writeFile(launcher, launcherScript());
   await chmod(launcher, 0o700);
   const stderr: Buffer[] = [];
   const watcher = watch(root);
   const child = spawn(process.execPath, ["--import", preload, serviceScript], {
+    cwd: options.serviceCwd,
     env: {
       ...process.env,
+      PATH: options.missingLauncherShell === true ? root : process.env.PATH,
       DIM_QEMU_LAUNCHER: launcher,
       DIM_QEMU_SERVICE_SOCKET: socketPath,
       DIM_QEMU_SOURCE_ROOT: sourceRoot,
       DIM_TEST_LAUNCHER_MODE: mode,
       DIM_TEST_LAUNCHER_PID: launcherPidFile,
       DIM_TEST_LAUNCHER_STOPPED: launcherStopFile,
+      DIM_TEST_DESCENDANT_PID: descendantPidFile,
       DIM_TEST_LAUNCH_RECORD: recordFile,
       DIM_TEST_FORCE_BACKPRESSURE: options.forceResponseBackpressure === true ? "1" : "0",
       DIM_TEST_IGNORE_TERM: options.ignoreLauncherTerm === true ? "1" : "0",
+      DIM_TEST_LEADER_EXITS: options.leaderExits === true ? "1" : "0",
       DIM_TEST_REJECT_READDIR: options.rejectReaddir === true ? "1" : "0",
+      DIM_TEST_RESIDUAL_GROUP: options.residualProcessGroup === true ? "1" : "0",
       DIM_TEST_SPAWN_RECORD: spawnRecordFile
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
   child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
   const fixture = {
-    launcherPidFile, launcherStopFile, process: child, recordFile, root,
+    descendantPidFile, launcherPidFile, launcherStopFile, process: child, recordFile, root,
     runsRoot: resolve(root, "runs"), socketPath, sourceRoot, spawnRecordFile
   };
   fixtures.push(fixture);
