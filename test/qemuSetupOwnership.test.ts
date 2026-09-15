@@ -1,37 +1,26 @@
 import { spawn, spawnSync, type ChildProcess, type SpawnSyncReturns } from "node:child_process";
-import { chmod, link, lstat, mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, link, lstat, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { parseOwnerRecord } from "../../project/.dim/qemu-service-owner.mjs";
+import {
+  copyLifecycleSnapshots, lifecycleEnvironment, qemuSetupSection, qemuTeardownSection, type QemuLifecycleFixture,
+} from "./qemuLifecycleSnapshotTestSupport.js";
 import { waitForObservation } from "./qemuServiceTestSupport.js";
 import { ownerPid, processIsLive } from "./qemuSetupTestSupport.js";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 const projectRoot = resolve(workspaceRoot, "project");
-const serviceScript = resolve(projectRoot, ".dim/qemu-service.mjs");
 const roots: string[] = [];
 const children: ChildProcess[] = [];
 const servers: Server[] = [];
 
-type Fixture = {
-  readonly cliLog: string;
-  readonly newPidFile: string;
-  readonly root: string;
-  readonly serviceDirectory: string;
-  readonly tools: string;
+type Fixture = QemuLifecycleFixture & {
+  readonly newLifecycleRoot: string;
+  readonly oldLifecycleRoot: string;
 };
-
-function qemuSection(setup: string, serviceDirectory: string): string {
-  const start = setup.indexOf("qemu_service_dir=/tmp/dim-qemu-verification");
-  const end = setup.indexOf("\n# Avoid inheriting", start);
-  if (start < 0 || end < 0) throw new TypeError("QEMU setup section was not found");
-  return `set -eu\n${setup.slice(start, end).replace(
-    "qemu_service_dir=/tmp/dim-qemu-verification", `qemu_service_dir=${JSON.stringify(serviceDirectory)}`,
-  ).replace("qemu_node=/usr/bin/node", 'qemu_node="$DIM_TEST_NODE"')
-    .replaceAll("sudo -n ", '"$DIM_TEST_SUDO" ')
-    .replaceAll("/usr/bin/env -i", "/usr/bin/env")}`;
-}
 
 async function createFixture(): Promise<Fixture> {
   const root = await mkdtemp(resolve(tmpdir(), "dim-qemu-setup-owner-test-"));
@@ -42,6 +31,7 @@ async function createFixture(): Promise<Fixture> {
   const newPidFile = resolve(root, "new-service.pid");
   const signalPreload = resolve(root, "signal-preload.mjs");
   await Promise.all([mkdir(tools), mkdir(serviceDirectory), writeFile(cliLog, "")]);
+  const { newLifecycleRoot, oldLifecycleRoot } = await copyLifecycleSnapshots(projectRoot, root);
   await writeFile(signalPreload, `import { appendFileSync } from "node:fs";
 if (process.env.DIM_TEST_READINESS === "mismatch") {
   process.on("SIGTERM", () => appendFileSync(process.env.DIM_TEST_SIGNAL_LOG, "SIGTERM\\n"));
@@ -101,35 +91,16 @@ if [[ "$DIM_TEST_READINESS" == mismatch && -e "$target" ]]; then target="$DIM_TE
 ' "$target"
 `);
   await Promise.all(["node", "curl", "sleep", "sudo"].map((name) => chmod(resolve(tools, name), 0o700)));
-  return { cliLog, newPidFile, root, serviceDirectory, tools };
-}
-
-function setupEnvironment(fixture: Fixture, readiness: "failure" | "mismatch" | "success" | "unowned") {
-  return {
-    ...process.env,
-    PATH: `${fixture.tools}:/usr/bin:/bin`,
-    DIM_TEST_NEW_PID_FILE: fixture.newPidFile,
-    DIM_TEST_NODE: resolve(fixture.tools, "node"),
-    DIM_TEST_SUDO: resolve(fixture.tools, "sudo"),
-    DIM_TEST_CHILD_PID_FILE: resolve(fixture.root, "child-service.pid"),
-    DIM_TEST_OWNER_CLI_LOG: fixture.cliLog,
-    DIM_TEST_OWNER_PATH: resolve(fixture.serviceDirectory, "service-owner.json"),
-    DIM_TEST_READINESS: readiness,
-    DIM_TEST_READINESS_RELEASE: resolve(fixture.root, "readiness-release"),
-    DIM_TEST_REAL_NODE: process.execPath,
-    DIM_TEST_SIGNAL_LOG: resolve(fixture.root, "signals.log"),
-    DIM_TEST_SIGNAL_PRELOAD: resolve(fixture.root, "signal-preload.mjs"),
-    DIM_WORKSPACE_KVM: "1",
-  };
+  return { cliLog, newLifecycleRoot, newPidFile, oldLifecycleRoot, root, serviceDirectory, tools };
 }
 
 async function setupCommand(fixture: Fixture): Promise<string> {
-  return qemuSection(await readFile(resolve(projectRoot, ".dim/setup.sh"), "utf8"), fixture.serviceDirectory);
+  return qemuSetupSection(await readFile(resolve(fixture.newLifecycleRoot, ".dim/setup.sh"), "utf8"), fixture.serviceDirectory);
 }
 
 function runSetup(fixture: Fixture, command: string, readiness: "failure" | "success"): SpawnSyncReturns<string> {
   return spawnSync("/usr/bin/bash", ["-c", command], {
-    cwd: projectRoot, encoding: "utf8", env: setupEnvironment(fixture, readiness), timeout: 20_000,
+    cwd: fixture.newLifecycleRoot, encoding: "utf8", env: lifecycleEnvironment(fixture, readiness), timeout: 20_000,
   });
 }
 
@@ -137,8 +108,8 @@ async function startOwnedService(fixture: Fixture): Promise<ChildProcess> {
   const socketPath = resolve(fixture.serviceDirectory, "service.sock");
   const sourceRoot = resolve(fixture.root, "source");
   await mkdir(sourceRoot);
-  const child = spawn(process.execPath, [serviceScript], {
-    cwd: projectRoot,
+  const child = spawn(process.execPath, [resolve(fixture.oldLifecycleRoot, ".dim/qemu-service.mjs")], {
+    cwd: fixture.serviceDirectory,
     env: { ...process.env, DIM_QEMU_LAUNCHER: "/bin/false", DIM_QEMU_SERVICE_SOCKET: socketPath, DIM_QEMU_SOURCE_ROOT: sourceRoot },
     stdio: "ignore",
   });
@@ -187,8 +158,31 @@ describe("QEMU setup structured ownership", () => {
     const result = runSetup(fixture, await setupCommand(fixture), "success");
     expect(result, result.stderr).toMatchObject({ status: 0 });
     const replacementPid = await ownerPid(fixture.serviceDirectory);
+    const owner = parseOwnerRecord(JSON.parse(await readFile(resolve(fixture.serviceDirectory, "service-owner.json"), "utf8")));
+    const serviceDirectoryIdentity = await stat(fixture.serviceDirectory, { bigint: true });
     expect.soft(oldService.exitCode ?? oldService.signalCode).not.toBeNull();
     expect(replacementPid).not.toBe(oldService.pid);
+    expect(owner.cwd).toEqual({
+      device: serviceDirectoryIdentity.dev.toString(),
+      inode: serviceDirectoryIdentity.ino.toString(),
+      path: fixture.serviceDirectory,
+    });
+  });
+
+  it("retires an exact old-snapshot owner from new-snapshot teardown", async () => {
+    const fixture = await createFixture();
+    const oldService = await startOwnedService(fixture);
+
+    const result = spawnSync("/bin/sh", ["-c", await qemuTeardownSection(fixture.newLifecycleRoot, fixture.serviceDirectory)], {
+      cwd: fixture.newLifecycleRoot, encoding: "utf8", env: lifecycleEnvironment(fixture, "success"), timeout: 20_000,
+    });
+    if (oldService.exitCode === null && oldService.signalCode === null) {
+      await new Promise<void>((resolveExit) => oldService.once("exit", () => resolveExit()));
+    }
+
+    expect.soft(result.status, result.stderr).toBe(0);
+    expect.soft(oldService.exitCode ?? oldService.signalCode).not.toBeNull();
+    await expect(lstat(resolve(fixture.serviceDirectory, "service-owner.json"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("uses exact structured retirement when readiness fails after owner publication", async () => {
@@ -210,7 +204,7 @@ describe("QEMU setup structured ownership", () => {
     const command = await setupCommand(fixture);
 
     const result = spawnSync("/usr/bin/bash", ["-c", command], {
-      cwd: projectRoot, encoding: "utf8", env: setupEnvironment(fixture, "unowned"), timeout: 20_000,
+      cwd: fixture.newLifecycleRoot, encoding: "utf8", env: lifecycleEnvironment(fixture, "unowned"), timeout: 20_000,
     });
     expect(result.status, result.stderr).not.toBe(0);
     const unownedPid = Number.parseInt(await readFile(fixture.newPidFile, "utf8"), 10);
@@ -226,7 +220,7 @@ describe("QEMU setup structured ownership", () => {
     const fixture = await createFixture();
     const command = await setupCommand(fixture);
     const setup = spawn("/usr/bin/bash", ["-c", command], {
-      cwd: projectRoot, env: setupEnvironment(fixture, "mismatch"), stdio: "ignore",
+      cwd: fixture.newLifecycleRoot, env: lifecycleEnvironment(fixture, "mismatch"), stdio: "ignore",
     });
     children.push(setup);
     await waitForObservation(async () => {
