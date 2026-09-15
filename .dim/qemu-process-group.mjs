@@ -28,9 +28,10 @@ export function stopProcessGroup(run) {
         if (error?.code !== "ESRCH") throw error;
       }
     }
-    await run.childClosed;
     const killDeadline = Date.now() + 1_000;
     while (groupIsLive(run.groupPid) && Date.now() < killDeadline) await delay(10);
+    if (groupIsLive(run.groupPid)) throw new Error(`QEMU process group ${run.groupPid} remained live after SIGKILL`);
+    await run.childClosed;
   })();
   return run.stopPromise;
 }

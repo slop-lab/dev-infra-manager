@@ -3,7 +3,8 @@ import { chmod, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { stopProcessGroup } from "./qemu-process-group.mjs";
-import { initializeService, shutdownService, socketLeasePath } from "./qemu-service-startup.mjs";
+import { parseInputs, readJson, sendJson } from "./qemu-service-http.mjs";
+import { closeServiceListenerPreservingSocket, initializeService, shutdownService, socketLeasePath } from "./qemu-service-startup.mjs";
 import { snapshotInputs } from "./qemu-snapshot.mjs";
 
 const sourceRoot = await realpath(process.env.DIM_QEMU_SOURCE_ROOT ?? "/workspace");
@@ -16,8 +17,9 @@ const leasePath = socketLeasePath(socketPath);
 const runsRoot = path.join(serviceDirectory, "runs");
 let activeRun;
 let latestRun;
-let serviceState = "accepting";
+let serviceState = "starting";
 let shutdownPromise;
+let fatalShutdownPromise;
 
 const server = http.createServer((request, response) => {
   void handle(request, response).catch((error) => {
@@ -31,8 +33,12 @@ const startup = await initializeService({ serviceDirectory, pidPath, ownerPath, 
 });
 const ownerIdentity = startup?.ownerIdentity;
 const socketIdentity = startup?.socketIdentity;
+if (startup) serviceState = "accepting";
 
 async function handle(request, response) {
+  if (serviceState === "starting") {
+    return sendJson(response, 503, { error: "QEMU verification is starting" });
+  }
   const url = new URL(request.url ?? "/", "http://dim-qemu");
   if (request.method === "GET" && url.pathname === "/v1/status") return sendJson(response, 200, latestRun?.state ?? { status: "idle" });
   if (request.method === "GET" && url.pathname === "/v1/events") {
@@ -70,9 +76,7 @@ async function handle(request, response) {
     const run = activeRun;
     if (!run?.child || run.state.status !== "running") return sendJson(response, 409, { error: "QEMU verification is not running" });
     run.cancelled = true;
-    const completion = requestFinalization(run, "cancelled");
-    await stopProcessGroup(run);
-    await completion;
+    await requestFinalization(run, "cancelled");
     return sendJson(response, 202, { ...run.state, cancelling: true });
   }
   return sendJson(response, 404, { error: "not found" });
@@ -97,7 +101,7 @@ function claimRun(request, response) {
 
 async function prepareRun(run) {
   const body = await readJson(run.request, run.abort.signal);
-  const requestInputs = parseInputs(body.inputs ?? []);
+  const requestInputs = parseInputs(body.inputs ?? [], path);
   if (body.verbose !== undefined && typeof body.verbose !== "boolean") throw new Error("verbose must be a boolean");
   const mode = body.mode ?? "run";
   if (mode !== "run" && mode !== "probe") throw new Error("mode must be 'run' or 'probe'");
@@ -112,20 +116,6 @@ async function prepareRun(run) {
   await mkdir(inputsRoot, { mode: 0o700 });
   await chmod(inputsRoot, 0o700);
   return snapshotInputs({ inputs: requestInputs, inputsRoot, sourceRoot, signal: run.abort.signal });
-}
-
-function parseInputs(value) {
-  if (!Array.isArray(value) || value.length > 16) throw new Error("inputs must be an array of at most 16 entries");
-  const names = new Set();
-  return value.map((entry) => {
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new Error("each input must be an object");
-    const { name, path: requested } = entry;
-    if (typeof name !== "string" || !/^[a-z0-9][a-z0-9._-]{0,63}$/.test(name)) throw new Error(`invalid input name '${String(name)}'`);
-    if (names.has(name)) throw new Error(`duplicate input name '${name}'`);
-    if (typeof requested !== "string" || !path.isAbsolute(requested)) throw new Error(`input '${name}' path must be absolute`);
-    names.add(name);
-    return { name, path: requested };
-  });
 }
 
 function start(run, inputs) {
@@ -152,13 +142,18 @@ function start(run, inputs) {
   };
   child.stdout.on("data", append);
   child.stderr.on("data", append);
-  child.on("error", (error) => append(`failed to start QEMU verification: ${error.message}\n`));
+  child.on("error", (error) => {
+    append(`failed to start QEMU verification: ${error.message}\n`);
+    void requestFinalization(run, "closed").catch(beginFatalShutdown);
+  });
   run.childClosed = new Promise((resolve) => {
-    child.once("close", (exitCode, signal) => {
+    child.once("exit", (exitCode, signal) => {
       run.closeResult = { exitCode, signal };
+      void requestFinalization(run, "closed").catch(beginFatalShutdown);
+    });
+    child.once("close", () => {
       run.child = undefined;
       resolve();
-      void requestFinalization(run, "closed").catch(reportFailure);
     });
   });
 }
@@ -178,7 +173,10 @@ async function finalizeRun(run, reason) {
         if (reason !== "rejected" && !run.abort.signal.aborted) throw error;
       }
     }
-    if (run.childClosed) await run.childClosed;
+    if (run.childClosed) {
+      await stopProcessGroup(run);
+      await run.childClosed;
+    }
     if (reason !== "rejected") {
       run.state = {
         ...run.state,
@@ -197,30 +195,8 @@ async function finalizeRun(run, reason) {
   }
 }
 
-async function readJson(request, signal) {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of request) {
-    signal.throwIfAborted();
-    size += chunk.length;
-    if (size > 65_536) throw new Error("request body is too large");
-    chunks.push(chunk);
-  }
-  signal.throwIfAborted();
-  if (size === 0) return {};
-  const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("request body must be an object");
-  return value;
-}
-
-function sendJson(response, status, value) {
-  if (response.headersSent) return response.end();
-  const body = `${JSON.stringify(value)}\n`;
-  response.writeHead(status, { "content-type": "application/json", "content-length": Buffer.byteLength(body) });
-  response.end(body);
-}
-
 function beginShutdown() {
+  if (fatalShutdownPromise) return fatalShutdownPromise;
   if (shutdownPromise) return shutdownPromise;
   serviceState = "stopping";
   const run = activeRun;
@@ -231,13 +207,28 @@ function beginShutdown() {
     run.response?.destroy();
   }
   shutdownPromise = shutdown(run);
-  void shutdownPromise.catch((error) => { reportFailure(error); process.exit(1); });
+  void shutdownPromise.catch((error) => {
+    if (fatalShutdownPromise) return;
+    reportFailure(error);
+    process.exit(1);
+  });
   return shutdownPromise;
+}
+
+function beginFatalShutdown(error) {
+  reportFailure(error);
+  if (fatalShutdownPromise) return fatalShutdownPromise;
+  serviceState = "stopping";
+  activeRun?.abort.abort();
+  activeRun?.request?.destroy();
+  activeRun?.response?.destroy();
+  fatalShutdownPromise = closeServiceListenerPreservingSocket({ server, socketIdentity, socketPath })
+    .catch(reportFailure).finally(() => process.exit(1));
+  return fatalShutdownPromise;
 }
 
 async function shutdown(run) {
   if (run) {
-    await stopProcessGroup(run);
     await requestFinalization(run, "cancelled");
   }
   await shutdownService({ ownerIdentity, ownerPath, runsRoot, server, socketIdentity, socketPath });
