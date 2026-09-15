@@ -5,10 +5,12 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  captureSocketIdentity, createOwnerRecord, createSocketLease, inspectOwner, parseOwnerRecord,
-  publishOwner, removeOwnedArtifacts, restoreReplacedSocket, retireOwner,
-  safeguardReplacedSocket, socketLeasePath,
+  createOwnerRecord, inspectOwner, parseOwnerRecord, retireOwner,
 } from "../../project/.dim/qemu-service-owner.mjs";
+import {
+  captureSocketIdentity, createSocketLease, publishOwner, removeOwnedArtifacts,
+  restoreReplacedSocket, safeguardReplacedSocket, socketLeasePath,
+} from "../../project/.dim/qemu-service-artifacts.mjs";
 
 const ownerScript = resolve(import.meta.dirname, "../../project/.dim/qemu-service-owner.mjs");
 
