@@ -1,5 +1,5 @@
 import { link, lstat, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
+import { createConnection, createServer } from "node:net";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -13,7 +13,7 @@ import {
   waitForObservation,
   type ServiceFixture
 } from "./qemuServiceTestSupport.js";
-import { socketLeasePath } from "../../project/.dim/qemu-service-owner.mjs";
+import { socketLeasePath } from "../../project/.dim/qemu-service-artifacts.mjs";
 
 function isMissing(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
@@ -134,6 +134,30 @@ describe("QEMU service shutdown", () => {
     expect.soft(exitedWhileIncomplete, "SIGTERM must close an incomplete admitted request").toBe(true);
     expect.soft(await spawnRecords(fixture)).toEqual([]);
     expect.soft(await launchRecords(fixture)).toEqual([]);
+    expect(await survivingArtifacts(fixture)).toEqual([]);
+  });
+
+  it("closes a raw incomplete-header connection before service exit", async () => {
+    const fixture = await startService("hold");
+    const client = createConnection(fixture.socketPath);
+    await new Promise<void>((resolveConnect, rejectConnect) => {
+      client.once("connect", resolveConnect);
+      client.once("error", rejectConnect);
+    });
+    client.write("POST /v1/run HTTP/1.1\r\nContent-Length: 10\r\n");
+    const closed = new Promise<void>((resolveClose, rejectClose) => {
+      client.once("close", () => resolveClose());
+      client.once("error", (error: NodeJS.ErrnoException) => {
+        if (error.code === "ECONNRESET") resolveClose();
+        else rejectClose(error);
+      });
+    });
+
+    fixture.process.kill("SIGTERM");
+    const exited = await waitForExit(fixture, 2_000);
+    await closed;
+
+    expect.soft(exited).toBe(true);
     expect(await survivingArtifacts(fixture)).toEqual([]);
   });
 
