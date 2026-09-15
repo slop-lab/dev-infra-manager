@@ -78,53 +78,66 @@ if ! curl --fail --silent --unix-socket "$external_url_proxy_socket" \
 fi
 
 qemu_service_dir=/tmp/dim-qemu-verification
-install -d -m 0755 "$qemu_service_dir"
+qemu_project_root="$(pwd -P)"
+qemu_node=/usr/bin/node
+qemu_owner_script="$qemu_project_root/.dim/qemu-service-owner.mjs"
+qemu_service_script="$qemu_project_root/.dim/qemu-service.mjs"
+qemu_root_owner() {
+  sudo -n /usr/bin/env -i PATH=/usr/bin:/bin HOME=/root \
+    "$qemu_node" "$qemu_owner_script" "$@"
+}
 if [ "${DIM_WORKSPACE_KVM}" = 1 ]; then
   echo "[setup] start QEMU service" >&2
+  sudo -n /usr/bin/install -d -o root -g root -m 0755 "$qemu_service_dir"
   qemu_owner_file="$qemu_service_dir/service-owner.json"
   qemu_socket="$qemu_service_dir/service.sock"
+  qemu_lease="$qemu_service_dir/.service.sock.lease"
   if [ -e "$qemu_service_dir/service.pid" ] || [ -L "$qemu_service_dir/service.pid" ]; then
     echo "obsolete QEMU service.pid is not accepted" >&2
     exit 1
   fi
-  node .dim/qemu-service-owner.mjs retire \
+  qemu_root_owner retire \
     "$qemu_owner_file" "$qemu_socket" "$(pwd -P)" 5000
-  install -m 0500 .dim/qemu-verify.bash "$qemu_service_dir/launcher.bash"
-  DIM_QEMU_SOURCE_ROOT=/workspace \
-  DIM_QEMU_LAUNCHER="$qemu_service_dir/launcher.bash" \
-  DIM_KVM_IMAGE_CACHE="$qemu_service_dir/cache" \
-  DIM_QEMU_SERVICE_SOCKET="$qemu_service_dir/service.sock" \
-    nohup node .dim/qemu-service.mjs >"$qemu_service_dir/service.log" 2>&1 &
-  new_pid="$!"
+  sudo -n /usr/bin/install -o root -g root -m 0500 \
+    "$qemu_project_root/.dim/qemu-verify.bash" "$qemu_service_dir/launcher.bash"
+  sudo -n /usr/bin/env -i PATH=/usr/bin:/bin HOME=/root \
+    DIM_QEMU_SOURCE_ROOT=/workspace DIM_QEMU_LAUNCHER="$qemu_service_dir/launcher.bash" \
+    DIM_KVM_IMAGE_CACHE="$qemu_service_dir/cache" DIM_QEMU_SERVICE_SOCKET="$qemu_socket" \
+    /bin/sh -c '
+    exec /usr/bin/nohup "$4" "$5" >"$6" 2>&1
+  ' qemu-service "$qemu_service_dir/launcher.bash" "$qemu_service_dir/cache" \
+    "$qemu_socket" "$qemu_node" "$qemu_service_script" "$qemu_service_dir/service.log" &
+  service_wrapper_pid="$!"
+  fingerprint=
+  owned_fingerprint=
   for _ in $(seq 1 50); do
-    node .dim/qemu-service-owner.mjs inspect \
-      "$qemu_owner_file" "$qemu_socket" "$(pwd -P)" "$new_pid" >/dev/null 2>&1 &&
-      test -S "$qemu_service_dir/service.sock" &&
-      test "$(stat -c %a "$qemu_service_dir/service.sock")" = 666 &&
-      curl --fail --silent --max-time 1 --unix-socket "$qemu_service_dir/service.sock" \
-        http://dim-qemu/v1/status >/dev/null 2>&1 && break
+    candidate="$(qemu_root_owner inspect "$qemu_owner_file" "$qemu_socket" "$(pwd -P)" 2>/dev/null)" || candidate=
+    owner_pid="$(printf '%s' "$candidate" | "$qemu_node" -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{const v=JSON.parse(s);if(v.state!=="live"||typeof v.pid!=="string")process.exit(1);process.stdout.write(v.pid)})' 2>/dev/null)" || owner_pid=
+    if test -n "$owner_pid" && test "$(ps -o uid= -p "$owner_pid" | tr -d ' ')" = 0 &&
+      test "$(stat -c %u:%g:%a "$qemu_owner_file")" = 0:0:600 &&
+      test "$(stat -c %u:%g:%a "$qemu_socket")" = 0:0:666 &&
+      test "$(stat -c %u:%g:%a "$qemu_lease")" = 0:0:666; then
+      owned_fingerprint="$candidate"
+      if curl --fail --silent --max-time 1 --unix-socket "$qemu_service_dir/service.sock" \
+        http://dim-qemu/v1/status >/dev/null 2>&1; then fingerprint="$candidate"; break; fi
+    fi
     sleep 0.1
   done
-  node .dim/qemu-service-owner.mjs inspect \
-    "$qemu_owner_file" "$qemu_socket" "$(pwd -P)" "$new_pid" >/dev/null 2>&1 &&
-    test -S "$qemu_service_dir/service.sock" &&
-    test "$(stat -c %a "$qemu_service_dir/service.sock")" = 666 &&
-    curl --fail --silent --max-time 1 --unix-socket "$qemu_service_dir/service.sock" \
-      http://dim-qemu/v1/status >/dev/null 2>&1 || {
-    if node .dim/qemu-service-owner.mjs inspect \
-      "$qemu_owner_file" "$qemu_socket" "$(pwd -P)" "$new_pid" >/dev/null 2>&1; then
-      node .dim/qemu-service-owner.mjs retire \
-        "$qemu_owner_file" "$qemu_socket" "$(pwd -P)" 5000
+  current="$(qemu_root_owner inspect "$qemu_owner_file" "$qemu_socket" "$(pwd -P)" 2>/dev/null)" || current=
+  test -n "$fingerprint" && test "$current" = "$fingerprint" || {
+    if [ -n "$owned_fingerprint" ]; then
+      qemu_root_owner retire-exact \
+        "$qemu_owner_file" "$qemu_socket" "$(pwd -P)" 5000 "$owned_fingerprint"
     elif [ ! -e "$qemu_owner_file" ] && [ ! -L "$qemu_owner_file" ]; then
       for _ in $(seq 1 50); do
-        kill -0 "$new_pid" 2>/dev/null || {
-          wait "$new_pid" 2>/dev/null || true
+        kill -0 "$service_wrapper_pid" 2>/dev/null || {
+          wait "$service_wrapper_pid" 2>/dev/null || true
           break
         }
         sleep 0.1
       done
-      if kill -0 "$new_pid" 2>/dev/null; then
-        echo "QEMU service process $new_pid remained live without publishing $qemu_owner_file; refusing to signal an unowned process" >&2
+      if kill -0 "$service_wrapper_pid" 2>/dev/null; then
+        echo "QEMU service wrapper $service_wrapper_pid remained live without publishing $qemu_owner_file; refusing to signal an unowned process" >&2
       fi
     fi
     cat "$qemu_service_dir/service.log" >&2
@@ -132,8 +145,11 @@ if [ "${DIM_WORKSPACE_KVM}" = 1 ]; then
   }
 else
   echo "[setup] skip QEMU service" >&2
-  rm -rf "$qemu_service_dir"
-  install -d -m 0755 "$qemu_service_dir"
+  sudo -n /usr/bin/install -d -o root -g root -m 0755 "$qemu_service_dir"
+  qemu_root_owner retire "$qemu_service_dir/service-owner.json" \
+    "$qemu_service_dir/service.sock" "$(pwd -P)" 5000
+  sudo -n /usr/bin/rm -rf "$qemu_service_dir"
+  sudo -n /usr/bin/install -d -o root -g root -m 0755 "$qemu_service_dir"
 fi
 
 # Avoid inheriting buildx activity files created by a root lifecycle helper.
