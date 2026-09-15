@@ -1,21 +1,31 @@
 import { chmod, rm } from "node:fs/promises";
 import {
   captureSocketIdentity,
-  createOwnerRecord,
   createSocketLease,
   publishOwner,
   removeOwnedArtifacts,
+  restoreSocketFromLease,
   restoreReplacedSocket,
   safeguardReplacedSocket,
   socketLeasePath,
-} from "./qemu-service-owner.mjs";
+} from "./qemu-service-artifacts.mjs";
+import { createOwnerRecord } from "./qemu-service-owner.mjs";
 import { activatePreparedRuns, discardPreparedRuns, prepareServiceFilesystem } from "./qemu-service-filesystem.mjs";
 
 export { socketLeasePath };
 
-async function closeServer(server) {
+export async function closeServiceListener(server) {
   if (!server.listening) return;
-  await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  const closed = new Promise((resolve, reject) => {
+    server.close((error) => error ? reject(error) : resolve());
+  });
+  server.closeAllConnections();
+  await closed;
+}
+
+export async function closeServiceListenerPreservingSocket(state) {
+  await closeServiceListener(state.server);
+  await restoreSocketFromLease(state.socketPath, state.socketIdentity);
 }
 
 async function cleanupServiceFilesystem(state) {
@@ -26,7 +36,7 @@ async function cleanupServiceFilesystem(state) {
   let protectedSocket;
   try { protectedSocket = await safeguardReplacedSocket(state.socketPath, state.socketIdentity); }
   catch (error) { state.server.unref(); throw error; }
-  await closeServer(state.server);
+  await closeServiceListener(state.server);
   await restoreReplacedSocket(protectedSocket, state.socketPath);
   if (state.removeRunsRoot) await rm(state.runsRoot, { recursive: true, force: true });
   await removeOwnedArtifacts({ owner: state.ownerIdentity, ownerPath: state.ownerPath,

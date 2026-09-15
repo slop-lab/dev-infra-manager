@@ -45,9 +45,28 @@ export async function prepareServiceFilesystem(paths) {
   return preparedRunsRoot;
 }
 
-export async function activatePreparedRuns(runsRoot, preparedRunsRoot) {
-  await rm(runsRoot, { recursive: true, force: true });
-  await rename(preparedRunsRoot, runsRoot);
+export async function activatePreparedRuns(runsRoot, preparedRunsRoot, operations = { rename, rm }) {
+  const replacedRunsRoot = `${runsRoot}.replaced-${process.pid}-${randomUUID()}`;
+  let replaced = false;
+  try {
+    try {
+      await operations.rename(runsRoot, replacedRunsRoot);
+      replaced = true;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    await operations.rename(preparedRunsRoot, runsRoot);
+  } catch (error) {
+    if (replaced) {
+      try {
+        await operations.rename(replacedRunsRoot, runsRoot);
+      } catch (rollbackError) {
+        throw new AggregateError([error, rollbackError], "QEMU runs activation and rollback failed");
+      }
+    }
+    throw error;
+  }
+  if (replaced) await operations.rm(replacedRunsRoot, { recursive: true });
 }
 
 export async function discardPreparedRuns(preparedRunsRoot) {
