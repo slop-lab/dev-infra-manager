@@ -67,7 +67,13 @@ async function handle(request, response) {
       run.response = undefined;
       return;
     } catch (error) {
-      await requestFinalization(run, run.abort.signal.aborted ? "cancelled" : "rejected");
+      try {
+        await requestFinalization(run, run.abort.signal.aborted ? "cancelled" : "rejected");
+      } catch (finalizationError) {
+        reportFailure(error);
+        await beginFatalShutdown(finalizationError);
+        return;
+      }
       if (!run.abort.signal.aborted) throw error;
       return;
     }
@@ -186,10 +192,10 @@ async function finalizeRun(run, reason) {
       };
     }
     if (run.snapshotRoot) await rm(run.snapshotRoot, { recursive: true, force: true });
-  } finally {
     run.snapshotRoot = undefined;
     if (activeRun === run) activeRun = undefined;
     if (reason === "rejected" && latestRun === run) latestRun = undefined;
+  } finally {
     for (const listener of run.listeners) listener.end();
     run.listeners.clear();
   }
