@@ -21,13 +21,14 @@ export type ServiceFixture = { readonly descendantPidFile: string; readonly laun
 export type HttpResult = { readonly body: string; readonly status: number };
 export type RequestSpec = { readonly body?: unknown; readonly method: string; readonly path: string };
 export type LauncherInput = { readonly name: string; readonly path: string };
-export type SpawnRecord = { readonly arguments: readonly string[]; readonly command: string };
+export type SpawnRecord = { readonly arguments: readonly string[]; readonly command: string;
+  readonly cwd: string; readonly sourceRoot: string };
 export type IncompleteRun = { readonly abort: () => void; readonly continued: Promise<void>;
   readonly finish: () => void; readonly response: Promise<HttpResult> };
 export type ServiceOptions = { readonly forceResponseBackpressure?: boolean;
   readonly ignoreLauncherTerm?: boolean; readonly leaderExits?: boolean;
   readonly missingLauncherShell?: boolean; readonly rejectReaddir?: boolean;
-  readonly residualProcessGroup?: boolean; readonly serviceCwd?: string };
+  readonly residualProcessGroup?: boolean; readonly serviceCwd?: string; readonly serviceDirectoryCwd?: boolean };
 
 function isMissing(error: unknown): boolean { return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT"; }
 
@@ -41,11 +42,12 @@ function parseInput(value: unknown): LauncherInput {
 
 function parseSpawn(value: unknown): SpawnRecord {
   if (typeof value !== "object" || value === null || !("command" in value) || !("arguments" in value)
+    || !("cwd" in value) || !("sourceRoot" in value) || typeof value.cwd !== "string" || typeof value.sourceRoot !== "string"
     || typeof value.command !== "string" || !Array.isArray(value.arguments)
     || !value.arguments.every((argument) => typeof argument === "string")) {
     throw new TypeError("spawn record is invalid");
   }
-  return { arguments: value.arguments, command: value.command };
+  return { arguments: value.arguments, command: value.command, cwd: value.cwd, sourceRoot: value.sourceRoot };
 }
 
 async function jsonLines(path: string): Promise<readonly unknown[]> {
@@ -88,7 +90,7 @@ export async function startService(mode: "exit" | "hold", options: ServiceOption
   const stderr: Buffer[] = [];
   const watcher = watch(root);
   const child = spawn(process.execPath, ["--import", preload, serviceScript], {
-    cwd: options.serviceCwd,
+    cwd: options.serviceDirectoryCwd === true ? root : options.serviceCwd,
     env: {
       ...process.env,
       PATH: options.missingLauncherShell === true ? root : process.env.PATH,

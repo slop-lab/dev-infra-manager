@@ -6,7 +6,9 @@ import { syncBuiltinESMExports } from "node:module";
 const originalSpawn = childProcess.spawn;
 const originalKill = process.kill;
 childProcess.spawn = function instrumentedSpawn(command, args, options) {
-  appendFileSync(process.env.DIM_TEST_SPAWN_RECORD, JSON.stringify({ command, arguments: args ?? [] }) + "\\n");
+  appendFileSync(process.env.DIM_TEST_SPAWN_RECORD, JSON.stringify({
+    command, arguments: args ?? [], cwd: options.cwd, sourceRoot: options.env.DIM_QEMU_SOURCE_ROOT,
+  }) + "\\n");
   return originalSpawn.call(childProcess, command, args, options);
 };
 if (process.env.DIM_TEST_RESIDUAL_GROUP === "1") {
