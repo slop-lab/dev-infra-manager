@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:net";
+import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -35,6 +36,17 @@ async function waitForExit(child: ChildProcess): Promise<boolean> {
   ]);
 }
 
+function status(socketPath: string, method: string): Promise<number> {
+  return new Promise((resolveStatus, rejectStatus) => {
+    const outgoing = request({ socketPath, method, path: method === "GET" ? "/v1/status" : "/v1/run" }, (incoming) => {
+      incoming.resume();
+      incoming.once("end", () => resolveStatus(incoming.statusCode ?? 0));
+    });
+    outgoing.once("error", rejectStatus);
+    outgoing.end(method === "POST" ? JSON.stringify({ inputs: [], mode: "run" }) : undefined);
+  });
+}
+
 afterEach(async () => {
   await Promise.all(servers.splice(0).map((server) => new Promise<void>((resolveClose) => {
     if (!server.listening) return resolveClose();
@@ -64,24 +76,29 @@ describe("QEMU service startup rollback", () => {
     await writeFile(runSentinel, "existing run\n");
     await writeFile(loader, `import { pathToFileURL } from "node:url";
 export async function resolve(specifier, context, nextResolve) {
-  if (specifier.endsWith("qemu-service-owner.mjs") && !specifier.includes("?real")) {
+  if (specifier.endsWith("qemu-service-artifacts.mjs") && !specifier.includes("?real")) {
     return { shortCircuit: true, url: pathToFileURL(process.env.DIM_TEST_OWNER_WRAPPER).href };
   }
   return nextResolve(specifier, context);
 }
 `);
     await writeFile(ownerWrapper, `import fs from "node:fs";
-import * as owner from ${JSON.stringify(`${pathToFileURL(resolve(workspaceRoot, "project/.dim/qemu-service-owner.mjs")).href}?real`)};
-export const captureSocketIdentity = owner.captureSocketIdentity;
-export const createSocketLease = owner.createSocketLease;
-export const createOwnerRecord = owner.createOwnerRecord;
-export const removeOwnedArtifacts = owner.removeOwnedArtifacts;
-export const restoreReplacedSocket = owner.restoreReplacedSocket;
-export const safeguardReplacedSocket = owner.safeguardReplacedSocket;
-export const socketLeasePath = owner.socketLeasePath;
+import * as artifacts from ${JSON.stringify(`${pathToFileURL(resolve(workspaceRoot, "project/.dim/qemu-service-artifacts.mjs")).href}?real`)};
+export const captureSocketIdentity = artifacts.captureSocketIdentity;
+export const createSocketLease = artifacts.createSocketLease;
+export const identity = artifacts.identity;
+export const pathState = artifacts.pathState;
+export const removeOwnedArtifacts = artifacts.removeOwnedArtifacts;
+export const restoreReplacedSocket = artifacts.restoreReplacedSocket;
+export const restoreSocketFromLease = artifacts.restoreSocketFromLease;
+export const sameIdentity = artifacts.sameIdentity;
+export const safeguardReplacedSocket = artifacts.safeguardReplacedSocket;
+export const socketLeasePath = artifacts.socketLeasePath;
 export async function publishOwner() {
   await fs.promises.writeFile(process.env.DIM_TEST_PUBLICATION_BLOCKED, "blocked\\n");
-  while (!fs.existsSync(process.env.DIM_TEST_PUBLICATION_RELEASE)) await new Promise((resolveWait) => setTimeout(resolveWait, 5));
+  if (!fs.existsSync(process.env.DIM_TEST_PUBLICATION_RELEASE)) await new Promise((resolveRelease) => {
+    const watcher=fs.watch(process.env.DIM_TEST_ROOT,(_event,name)=>{if(name==="publication-release"){watcher.close();resolveRelease()}});
+  });
   throw Object.assign(new Error("DIM_TEST_OWNER_PUBLICATION_FAILED"), { code: "EIO" });
 }
 `);
@@ -89,7 +106,7 @@ export async function publishOwner() {
     const child = spawn(process.execPath, ["--experimental-loader", loader, serviceScript], {
       env: { ...process.env, DIM_QEMU_LAUNCHER: "/bin/false", DIM_QEMU_SERVICE_SOCKET: socketPath,
         DIM_QEMU_SOURCE_ROOT: sourceRoot, DIM_TEST_OWNER_WRAPPER: ownerWrapper,
-        DIM_TEST_PUBLICATION_BLOCKED: blocked, DIM_TEST_PUBLICATION_RELEASE: release },
+        DIM_TEST_PUBLICATION_BLOCKED: blocked, DIM_TEST_PUBLICATION_RELEASE: release, DIM_TEST_ROOT: root },
       stdio: ["ignore", "ignore", "pipe"],
     });
     const stderr: Buffer[] = [];
@@ -110,6 +127,9 @@ export async function publishOwner() {
     });
     expect.soft({ device: blockedLease.dev, inode: blockedLease.ino })
       .toEqual({ device: blockedSocket.dev, inode: blockedSocket.ino });
+    expect.soft(await status(socketPath, "GET")).toBe(503);
+    expect.soft(await status(socketPath, "POST")).toBe(503);
+    expect.soft(await readFile(runSentinel, "utf8")).toBe("existing run\n");
     await rm(socketPath);
     const foreign = createServer();
     servers.push(foreign);

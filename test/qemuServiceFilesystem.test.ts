@@ -1,4 +1,4 @@
-import { chmod, chown, lstat, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, chown, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -100,5 +100,83 @@ describe("QEMU staged runs activation", () => {
     await discardPreparedRuns(preparedRunsRoot);
     await expect(lstat(preparedRunsRoot)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(lstat(join(paths.runsRoot, "sentinel"))).resolves.toBeDefined();
+  });
+
+  it("restores stale runs when prepared activation fails", async () => {
+    const paths = await fixture();
+    await mkdir(paths.runsRoot, { mode: 0o700 });
+    await writeFile(join(paths.runsRoot, "sentinel"), "stale");
+    const { activatePreparedRuns, discardPreparedRuns, prepareServiceFilesystem } = await import(filesystemModule);
+    const preparedRunsRoot = await prepareServiceFilesystem(paths);
+    let renameCount = 0;
+    const operations = {
+      rename: async (source: string, destination: string) => {
+        renameCount += 1;
+        if (renameCount === 2) throw Object.assign(new Error("activation failed"), { code: "EIO" });
+        await rename(source, destination);
+      },
+      rm,
+    };
+
+    await expect(activatePreparedRuns(paths.runsRoot, preparedRunsRoot, operations)).rejects.toThrow("activation failed");
+    await expect(readFile(join(paths.runsRoot, "sentinel"), "utf8")).resolves.toBe("stale");
+    await discardPreparedRuns(preparedRunsRoot);
+  });
+
+  it("keeps fresh canonical runs and partial old evidence when post-commit cleanup fails", async () => {
+    const paths = await fixture();
+    await mkdir(paths.runsRoot, { mode: 0o700 });
+    await writeFile(join(paths.runsRoot, "sentinel"), "stale");
+    await writeFile(join(paths.runsRoot, "survivor"), "old evidence");
+    const { activatePreparedRuns, prepareServiceFilesystem } = await import(filesystemModule);
+    const preparedRunsRoot = await prepareServiceFilesystem(paths);
+    await writeFile(join(preparedRunsRoot, "new"), "prepared");
+    const operations = {
+      rename,
+      rm: async (target: string, options: { readonly recursive: boolean }) => {
+        if (target.includes(".replaced-")) {
+          await rm(join(target, "sentinel"));
+          throw new Error("replaced cleanup failed");
+        }
+        await rm(target, options);
+      },
+    };
+
+    await expect(activatePreparedRuns(paths.runsRoot, preparedRunsRoot, operations)).rejects.toThrow(
+      "replaced cleanup failed",
+    );
+    expect(await readFile(join(paths.runsRoot, "new"), "utf8")).toBe("prepared");
+    await expect(lstat(join(paths.runsRoot, "sentinel"))).rejects.toMatchObject({ code: "ENOENT" });
+    const quarantines = (await readdir(paths.serviceDirectory)).filter((name) => name.startsWith("runs.replaced-"));
+    expect.soft(quarantines).toHaveLength(1);
+    expect(await readFile(join(paths.serviceDirectory, quarantines[0] ?? "missing", "survivor"), "utf8")).toBe("old evidence");
+  });
+
+  it("reports activation before a pre-commit stale-tree restoration failure", async () => {
+    const paths = await fixture();
+    await mkdir(paths.runsRoot, { mode: 0o700 });
+    await writeFile(join(paths.runsRoot, "sentinel"), "stale");
+    const { activatePreparedRuns, prepareServiceFilesystem } = await import(filesystemModule);
+    const preparedRunsRoot = await prepareServiceFilesystem(paths);
+    await writeFile(join(preparedRunsRoot, "prepared"), "fresh");
+    let renameCount = 0;
+    const operations = {
+      rename: async (source: string, destination: string) => {
+        renameCount += 1;
+        if (renameCount === 2) throw new Error("activation failed");
+        if (renameCount === 3) throw new Error("restore failed");
+        await rename(source, destination);
+      },
+      rm,
+    };
+
+    const result = await Promise.allSettled([activatePreparedRuns(paths.runsRoot, preparedRunsRoot, operations)]);
+    expect(result).toMatchObject([{ status: "rejected", reason: {
+      errors: [{ message: "activation failed" }, { message: "restore failed" }],
+    } }]);
+    expect.soft(await readFile(join(preparedRunsRoot, "prepared"), "utf8")).toBe("fresh");
+    const quarantines = (await readdir(paths.serviceDirectory)).filter((name) => name.startsWith("runs.replaced-"));
+    expect.soft(quarantines).toHaveLength(1);
+    expect(await readFile(join(paths.serviceDirectory, quarantines[0] ?? "missing", "sentinel"), "utf8")).toBe("stale");
   });
 });
