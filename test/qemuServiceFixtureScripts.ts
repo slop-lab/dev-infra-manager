@@ -5,6 +5,7 @@ import http from "node:http";
 import { syncBuiltinESMExports } from "node:module";
 const originalSpawn = childProcess.spawn;
 const originalKill = process.kill;
+const originalRm = fs.promises.rm;
 childProcess.spawn = function instrumentedSpawn(command, args, options) {
   appendFileSync(process.env.DIM_TEST_SPAWN_RECORD, JSON.stringify({
     command, arguments: args ?? [], cwd: options.cwd, sourceRoot: options.env.DIM_QEMU_SOURCE_ROOT,
@@ -20,6 +21,23 @@ if (process.env.DIM_TEST_RESIDUAL_GROUP === "1") {
 if (process.env.DIM_TEST_REJECT_READDIR === "1") {
   fs.promises.readdir = async function rejectedReaddir() { throw new Error("DIM_TEST_READDIR_FORBIDDEN"); };
 }
+fs.promises.rm = async function instrumentedRm(target, options) {
+  const trigger = process.env.DIM_TEST_REJECT_SNAPSHOT_RM_TRIGGER;
+  const record = process.env.DIM_TEST_REJECT_SNAPSHOT_RM_RECORD;
+  const runsRoot = process.env.DIM_TEST_RUNS_ROOT;
+  if (trigger !== undefined && record !== undefined && runsRoot !== undefined && typeof target === "string"
+    && target.startsWith(runsRoot + "/run-") && !target.slice(runsRoot.length + 1).includes("/")
+    && options?.recursive === true && options.force === true) {
+    try {
+      fs.renameSync(trigger, record);
+      appendFileSync(record, target + "\\n");
+      throw new Error("DIM_TEST_SNAPSHOT_RM_FAILURE " + target);
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+  }
+  return originalRm.call(fs.promises, target, options);
+};
 if (process.env.DIM_TEST_FORCE_BACKPRESSURE === "1") {
   const originalWrite = http.ServerResponse.prototype.write;
   http.ServerResponse.prototype.write = function forcedBackpressure(...args) {

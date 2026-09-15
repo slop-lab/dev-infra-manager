@@ -28,7 +28,8 @@ export type IncompleteRun = { readonly abort: () => void; readonly continued: Pr
 export type ServiceOptions = { readonly forceResponseBackpressure?: boolean;
   readonly ignoreLauncherTerm?: boolean; readonly leaderExits?: boolean;
   readonly missingLauncherShell?: boolean; readonly rejectReaddir?: boolean;
-  readonly residualProcessGroup?: boolean; readonly serviceCwd?: string; readonly serviceDirectoryCwd?: boolean };
+  readonly rejectSnapshotRemoval?: boolean; readonly residualProcessGroup?: boolean;
+  readonly serviceCwd?: string; readonly serviceDirectoryCwd?: boolean };
 
 function isMissing(error: unknown): boolean { return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT"; }
 
@@ -77,6 +78,8 @@ export async function startService(mode: "exit" | "hold", options: ServiceOption
   const sourceRoot = resolve(root, "source");
   const recordFile = resolve(root, "launches.jsonl");
   const spawnRecordFile = resolve(root, "spawns.jsonl");
+  const snapshotRemovalTriggerFile = resolve(root, "reject-snapshot-removal.trigger");
+  const snapshotRemovalRecordFile = resolve(root, "rejected-snapshot-removal.record");
   const socketPath = resolve(root, "service.sock");
   const launcherPidFile = resolve(root, "launcher.pid");
   const launcherStopFile = resolve(root, "launcher.stopped");
@@ -86,6 +89,7 @@ export async function startService(mode: "exit" | "hold", options: ServiceOption
   await mkdir(sourceRoot);
   await writeFile(preload, spawnPreloadScript());
   await writeFile(launcher, launcherScript());
+  if (options.rejectSnapshotRemoval === true) await writeFile(snapshotRemovalTriggerFile, "armed\n");
   await chmod(launcher, 0o700);
   const stderr: Buffer[] = [];
   const watcher = watch(root);
@@ -106,7 +110,10 @@ export async function startService(mode: "exit" | "hold", options: ServiceOption
       DIM_TEST_IGNORE_TERM: options.ignoreLauncherTerm === true ? "1" : "0",
       DIM_TEST_LEADER_EXITS: options.leaderExits === true ? "1" : "0",
       DIM_TEST_REJECT_READDIR: options.rejectReaddir === true ? "1" : "0",
+      DIM_TEST_REJECT_SNAPSHOT_RM_RECORD: snapshotRemovalRecordFile,
+      DIM_TEST_REJECT_SNAPSHOT_RM_TRIGGER: snapshotRemovalTriggerFile,
       DIM_TEST_RESIDUAL_GROUP: options.residualProcessGroup === true ? "1" : "0",
+      DIM_TEST_RUNS_ROOT: resolve(root, "runs"),
       DIM_TEST_SPAWN_RECORD: spawnRecordFile
     },
     stdio: ["ignore", "pipe", "pipe"]
