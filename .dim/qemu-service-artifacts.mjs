@@ -116,7 +116,7 @@ export async function publishOwner(ownerPath, record) {
   return temporaryIdentity;
 }
 
-async function requireSocketLease(socketPath, expected) {
+export async function requireSocketLease(socketPath, expected) {
   const lease = await pathState(socketLeasePath(socketPath));
   if (!lease || !lease.isSocket() || !sameIdentity(identity(lease), expected)) {
     throw new Error("service socket lease mismatch");

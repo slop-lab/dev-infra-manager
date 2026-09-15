@@ -3,6 +3,7 @@ import {
   captureSocketIdentity,
   createSocketLease,
   publishOwner,
+  requireSocketLease,
   removeOwnedArtifacts,
   restoreSocketFromLease,
   restoreReplacedSocket,
@@ -24,6 +25,8 @@ export async function closeServiceListener(server) {
 }
 
 export async function closeServiceListenerPreservingSocket(state) {
+  try { await requireSocketLease(state.socketPath, state.socketIdentity); }
+  catch (error) { state.server.unref(); throw error; }
   await closeServiceListener(state.server);
   await restoreSocketFromLease(state.socketPath, state.socketIdentity);
 }
