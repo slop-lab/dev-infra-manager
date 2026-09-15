@@ -111,7 +111,7 @@ describe("integrated QEMU setup residue contract", () => {
   });
 
   it("removes complete dead structured residue before starting replacement", async () => {
-    const service = await startService("hold", { serviceCwd: projectRoot });
+    const service = await startService("hold", { serviceDirectoryCwd: true });
     const ownerPath = resolve(service.root, "service-owner.json");
     const oldOwner = await lstat(ownerPath, { bigint: true });
     service.process.kill("SIGKILL");
@@ -123,12 +123,12 @@ describe("integrated QEMU setup residue contract", () => {
     expect.soft(result.status, result.stderr).toBe(0);
     expect.soft((await lstat(ownerPath, { bigint: true })).ino).not.toBe(oldOwner.ino);
     expect.soft(replacementPid).not.toBe(String(service.process.pid));
-    const retired = spawnSync(process.execPath, [ownerScript, "retire", ownerPath, service.socketPath, projectRoot, "5000"], { encoding: "utf8" });
+    const retired = spawnSync(process.execPath, [ownerScript, "retire", ownerPath, service.socketPath, service.root, "5000"], { encoding: "utf8" });
     expect(retired.status, retired.stderr).toBe(0);
   }, 25_000);
 
   it.each(["malformed", "argv-mismatch"] as const)("preserves complete %s ownership without replacement", async (kind) => {
-    const service = await startService("hold", { serviceCwd: projectRoot });
+    const service = await startService("hold", { serviceDirectoryCwd: true });
     const ownerPath = resolve(service.root, "service-owner.json");
     const original = await readFile(ownerPath, "utf8");
     const changed = kind === "malformed" ? "not-json\n" : `${JSON.stringify({ ...JSON.parse(original), argv: ["spoofed"] })}\n`;
@@ -149,7 +149,7 @@ describe("integrated QEMU setup residue contract", () => {
     [false, true, true], [true, true, false],
   ] as const)(
     "preserves partial owner=%s socket=%s lease=%s without replacement", async (owner, socket, lease) => {
-      const service = await startService("hold", { serviceCwd: projectRoot });
+      const service = await startService("hold", { serviceDirectoryCwd: true });
       const paths = [resolve(service.root, "service-owner.json"), service.socketPath, socketLeasePath(service.socketPath)];
       for (const [present, path] of [[owner, paths[0]], [socket, paths[1]], [lease, paths[2]]] as const) if (!present && path) await rm(path);
       const present = paths.filter((_path, index) => [owner, socket, lease][index]);
