@@ -86,16 +86,16 @@ qemu_root_owner() {
   sudo -n /usr/bin/env -i PATH=/usr/bin:/bin HOME=/root \
     "$qemu_node" "$qemu_owner_script" "$@"
 }
+if [ -e "$qemu_service_dir/service.pid" ] || [ -L "$qemu_service_dir/service.pid" ]; then
+  echo "obsolete QEMU service.pid is not accepted" >&2
+  exit 1
+fi
 if [ "${DIM_WORKSPACE_KVM}" = 1 ]; then
   echo "[setup] start QEMU service" >&2
   sudo -n /usr/bin/install -d -o root -g root -m 0755 "$qemu_service_dir"
   qemu_owner_file="$qemu_service_dir/service-owner.json"
   qemu_socket="$qemu_service_dir/service.sock"
   qemu_lease="$qemu_service_dir/.service.sock.lease"
-  if [ -e "$qemu_service_dir/service.pid" ] || [ -L "$qemu_service_dir/service.pid" ]; then
-    echo "obsolete QEMU service.pid is not accepted" >&2
-    exit 1
-  fi
   qemu_root_owner retire \
     "$qemu_owner_file" "$qemu_socket" "$(pwd -P)" 5000
   sudo -n /usr/bin/install -o root -g root -m 0500 \
