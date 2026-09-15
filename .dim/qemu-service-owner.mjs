@@ -1,53 +1,10 @@
-import { constants, readFileSync } from "node:fs";
-import { link, lstat, open, readFile, realpath, rm, stat } from "node:fs/promises";
-import { basename, dirname, resolve } from "node:path";
+import { constants } from "node:fs";
+import { open, readFile, realpath, stat } from "node:fs/promises";
+import { resolve } from "node:path";
+import { identity, pathState, sameIdentity, socketLeasePath } from "./qemu-service-artifacts.mjs";
+import { parseOwnerFingerprint, parseOwnerRecord } from "./qemu-owner-record.mjs";
 
-const OWNER_KEYS = ["argv", "cwd", "executable", "pid", "schema", "socket", "startTicks"];
-const FILE_KEYS = ["device", "inode", "path"];
-const SOCKET_KEYS = ["device", "inode"];
-const MAX_SAFE_PID = BigInt(Number.MAX_SAFE_INTEGER);
-const PID_MAX = BigInt(readFileSync("/proc/sys/kernel/pid_max", "utf8").trim());
-
-function exactKeys(value, keys) {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    && JSON.stringify(Object.keys(value).sort()) === JSON.stringify(keys);
-}
-
-function decimal(value, positive = false) {
-  return typeof value === "string" && /^(0|[1-9][0-9]*)$/.test(value)
-    && (!positive || value !== "0");
-}
-
-function processId(value) {
-  return decimal(value, true) && BigInt(value) <= MAX_SAFE_PID && BigInt(value) <= PID_MAX;
-}
-
-function parseFileIdentity(value) {
-  if (!exactKeys(value, FILE_KEYS) || typeof value.path !== "string" || value.path.length === 0
-    || value.path !== resolve(value.path)
-    || !decimal(value.device) || !decimal(value.inode, true)) throw new Error("invalid owner file identity");
-  return value;
-}
-
-export function parseOwnerRecord(value) {
-  if (!exactKeys(value, OWNER_KEYS) || value.schema !== 1 || !processId(value.pid)
-    || !decimal(value.startTicks, true) || !Array.isArray(value.argv) || value.argv.length === 0
-    || value.argv.some((entry) => typeof entry !== "string")
-    || !exactKeys(value.socket, SOCKET_KEYS) || !decimal(value.socket.device)
-    || !decimal(value.socket.inode, true)) throw new Error("invalid service owner record");
-  parseFileIdentity(value.executable);
-  parseFileIdentity(value.cwd);
-  return value;
-}
-
-function identity(stats) {
-  return { device: stats.dev.toString(), inode: stats.ino.toString() };
-}
-
-async function syncContainingDirectory(path) {
-  const directory = await open(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY);
-  try { await directory.sync(); } finally { await directory.close(); }
-}
+export { parseOwnerRecord } from "./qemu-owner-record.mjs";
 
 async function fileIdentity(path) {
   const canonicalPath = await realpath(path);
@@ -57,8 +14,10 @@ async function fileIdentity(path) {
 async function processIdentity(pid) {
   const proc = `/proc/${pid}`;
   const [statText, command, executable, cwd] = await Promise.all([
-    readFile(`${proc}/stat`, "utf8"), readFile(`${proc}/cmdline`),
-    fileIdentity(`${proc}/exe`), fileIdentity(`${proc}/cwd`),
+    readFile(`${proc}/stat`, "utf8"),
+    readFile(`${proc}/cmdline`),
+    fileIdentity(`${proc}/exe`),
+    fileIdentity(`${proc}/cwd`),
   ]);
   const end = command.at(-1) === 0 ? -1 : undefined;
   const argv = command.subarray(0, end).toString().split("\0");
@@ -67,11 +26,7 @@ async function processIdentity(pid) {
 }
 
 function sameFile(left, right) {
-  return left.path === right.path && left.device === right.device && left.inode === right.inode;
-}
-
-function sameIdentity(left, right) {
-  return left.device === right.device && left.inode === right.inode;
+  return left.path === right.path && sameIdentity(left, right);
 }
 
 function sameProcess(record, actual) {
@@ -80,167 +35,69 @@ function sameProcess(record, actual) {
     && sameFile(record.executable, actual.executable) && sameFile(record.cwd, actual.cwd);
 }
 
-async function pathState(path) {
-  try { return await lstat(path, { bigint: true }); }
-  catch (error) { if (error?.code === "ENOENT") return undefined; throw error; }
-}
-
-async function cwdIdentity(path) {
-  const canonicalPath = await realpath(path);
-  return { ...identity(await stat(canonicalPath, { bigint: true })), path: canonicalPath };
-}
-
 export async function inspectOwner(ownerPath, socketPath, expectedCwd) {
+  let ownerHandle;
   try {
-    const ownerHandle = await open(ownerPath, constants.O_RDONLY | constants.O_NOFOLLOW);
-    try {
-      const [ownerStats, socketStats, leaseStats] = await Promise.all([
-        ownerHandle.stat({ bigint: true }), pathState(socketPath), pathState(socketLeasePath(socketPath)),
-      ]);
-      if (!socketStats || !leaseStats || !ownerStats.isFile()
-        || !socketStats.isSocket() || !leaseStats.isSocket()) throw new Error("ambiguous service ownership artifacts");
-      const record = parseOwnerRecord(JSON.parse(await ownerHandle.readFile("utf8")));
-      const socket = identity(socketStats);
-      if (!sameIdentity(record.socket, socket) || !sameIdentity(socket, identity(leaseStats))
-        || !sameFile(record.cwd, await cwdIdentity(expectedCwd))) throw new Error("service ownership mismatch");
-      const result = { owner: identity(ownerStats), record, socket };
-      try {
-        const actual = await processIdentity(Number(record.pid));
-        if (!sameProcess(record, actual)) throw new Error("service process identity mismatch");
-        return { ...result, state: "live" };
-      } catch (error) {
-        if (error?.code === "ENOENT") return { ...result, state: "dead" };
-        throw error;
-      }
-    } finally {
-      await ownerHandle.close();
-    }
+    ownerHandle = await open(ownerPath, constants.O_RDONLY | constants.O_NOFOLLOW);
   } catch (error) {
-    if (error?.code === "ENOENT") {
-      const [socketStats, leaseStats] = await Promise.all([
-        pathState(socketPath), pathState(socketLeasePath(socketPath)),
-      ]);
-      if (!socketStats && !leaseStats) return { state: "absent" };
+    if (error?.code !== "ENOENT") throw error;
+    const [socketStats, leaseStats] = await Promise.all([
+      pathState(socketPath), pathState(socketLeasePath(socketPath)),
+    ]);
+    if (!socketStats && !leaseStats) return { state: "absent" };
+    throw new Error("ambiguous service ownership artifacts");
+  }
+  try {
+    const [ownerStats, socketStats, leaseStats] = await Promise.all([
+      ownerHandle.stat({ bigint: true }), pathState(socketPath), pathState(socketLeasePath(socketPath)),
+    ]);
+    if (!socketStats || !leaseStats || !ownerStats.isFile() || (ownerStats.mode & 0o7777n) !== 0o600n
+      || !socketStats.isSocket() || !leaseStats.isSocket()) {
       throw new Error("ambiguous service ownership artifacts");
     }
-    throw error;
+    const record = parseOwnerRecord(JSON.parse(await ownerHandle.readFile("utf8")));
+    const socket = identity(socketStats);
+    if (!sameIdentity(record.socket, socket) || !sameIdentity(socket, identity(leaseStats))
+      || !sameFile(record.cwd, await fileIdentity(expectedCwd))) throw new Error("service ownership mismatch");
+    const result = { owner: identity(ownerStats), record, socket };
+    try {
+      const actual = await processIdentity(Number(record.pid));
+      if (!sameProcess(record, actual)) throw new Error("service process identity mismatch");
+      return { ...result, state: "live" };
+    } catch (error) {
+      if (error?.code === "ENOENT") return { ...result, state: "dead" };
+      throw error;
+    }
+  } finally {
+    await ownerHandle.close();
   }
 }
 
 export async function createOwnerRecord(socketPath) {
   const current = await processIdentity(process.pid);
   const [socketStats, leaseStats] = await Promise.all([
-    lstat(socketPath, { bigint: true }), lstat(socketLeasePath(socketPath), { bigint: true }),
+    pathState(socketPath), pathState(socketLeasePath(socketPath)),
   ]);
-  if (!socketStats.isSocket() || !leaseStats.isSocket()
-    || !sameIdentity(identity(socketStats), identity(leaseStats))) throw new Error("service socket lease mismatch");
+  if (!socketStats?.isSocket() || !leaseStats?.isSocket()
+    || !sameIdentity(identity(socketStats), identity(leaseStats))) {
+    throw new Error("service socket lease mismatch");
+  }
   return { ...current, schema: 1, socket: identity(socketStats) };
 }
 
-export async function captureSocketIdentity(socketPath) {
-  const socketStats = await lstat(socketPath, { bigint: true });
-  if (!socketStats.isSocket()) throw new Error("service socket is not a socket");
-  return identity(socketStats);
-}
-
-export function socketLeasePath(socketPath) {
-  return resolve(dirname(socketPath), `.${basename(socketPath)}.lease`);
-}
-
-export async function createSocketLease(socketPath, expected) {
-  await link(socketPath, socketLeasePath(socketPath));
-  const lease = identity(await lstat(socketLeasePath(socketPath), { bigint: true }));
-  if (!sameIdentity(lease, expected)) throw new Error("service socket changed before lease creation");
-  await syncContainingDirectory(socketPath);
-}
-
-export async function publishOwner(ownerPath, record) {
-  parseOwnerRecord(record);
-  const temporary = resolve(dirname(ownerPath), `.${basename(ownerPath)}.${process.pid}.${Date.now()}`);
-  const handle = await open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600);
-  let temporaryIdentity;
-  try {
-    temporaryIdentity = identity(await handle.stat({ bigint: true }));
-    await handle.writeFile(`${JSON.stringify(record)}\n`);
-    await handle.chmod(0o600);
-    await handle.sync();
-    await link(temporary, ownerPath);
-    await syncContainingDirectory(ownerPath);
-    return temporaryIdentity;
-  } finally {
-    try { if (temporaryIdentity) await removeIfOwned(temporary, temporaryIdentity); }
-    finally { await handle.close(); }
-  }
-}
-
-export async function removeIfOwned(path, expected) {
-  const stats = await pathState(path);
-  if (!stats) return true;
-  const actual = identity(stats);
-  if (actual.device !== expected.device || actual.inode !== expected.inode) return false;
-  await rm(path);
-  await syncContainingDirectory(path);
-  return true;
-}
-
-async function requireSocketLease(socketPath, expected) {
-  const lease = await pathState(socketLeasePath(socketPath));
-  if (!lease || !lease.isSocket() || !sameIdentity(identity(lease), expected)) {
-    throw new Error("service socket lease mismatch");
-  }
-}
-
-export async function removeOwnedArtifacts({ ownerPath, socketPath, owner, socket, preserveSocket = false }) {
-  await requireSocketLease(socketPath, socket);
-  if (!preserveSocket && !await removeIfOwned(socketPath, socket)) {
-    throw new Error("refusing to remove replaced service artifacts");
-  }
-  if (owner && !await removeIfOwned(ownerPath, owner)) {
-    throw new Error("refusing to remove replaced service artifacts");
-  }
-  await requireSocketLease(socketPath, socket);
-  if (!await removeIfOwned(socketLeasePath(socketPath), socket)) {
-    throw new Error("refusing to remove replaced service artifacts");
-  }
-}
-
-export async function safeguardReplacedSocket(socketPath, expected) {
-  await requireSocketLease(socketPath, expected);
-  const current = await pathState(socketPath);
-  if (!current) return undefined;
-  const actual = identity(current);
-  if (actual.device === expected.device && actual.inode === expected.inode) return undefined;
-  const protectedPath = `${socketPath}.replacement.${process.pid}`;
-  try { await link(socketPath, protectedPath); }
-  catch (error) {
-    if (error?.code === "EEXIST") throw new Error(`refusing to safeguard replaced socket because protected path exists: ${protectedPath}`, { cause: error });
-    throw error;
-  }
-  await syncContainingDirectory(protectedPath);
-  if (!await removeIfOwned(socketPath, actual)) {
-    throw new Error(`service socket changed while safeguarding replacement; preserved protected socket: ${protectedPath}`);
-  }
-  return protectedPath;
-}
-
-export async function restoreReplacedSocket(protectedPath, socketPath) {
-  if (!protectedPath) return;
-  const expected = identity(await lstat(protectedPath, { bigint: true }));
-  try { await link(protectedPath, socketPath); }
-  catch (error) {
-    if (error?.code === "EEXIST") throw new Error(`refusing to restore replaced socket because destination exists: ${socketPath}; preserved: ${protectedPath}`, { cause: error });
-    throw error;
-  }
-  await syncContainingDirectory(socketPath);
-  if (!await removeIfOwned(protectedPath, expected)) {
-    throw new Error(`protected socket changed after restoration: ${protectedPath}`);
-  }
+export function ownerFingerprint(inspected) {
+  return {
+    state: inspected.state,
+    pid: inspected.record?.pid ?? null,
+    startTicks: inspected.record?.startTicks ?? null,
+    owner: inspected.owner ?? null,
+    socket: inspected.socket ?? null,
+  };
 }
 
 const sleep = (milliseconds) => new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds));
 
-export async function retireOwner(ownerPath, socketPath, expectedCwd, timeoutMs) {
-  const inspected = await inspectOwner(ownerPath, socketPath, expectedCwd);
+async function retireInspected(inspected, ownerPath, socketPath, expectedCwd, timeoutMs) {
   if (inspected.state === "absent") return;
   if (inspected.state === "live") {
     process.kill(Number(inspected.record.pid), "SIGTERM");
@@ -255,25 +112,48 @@ export async function retireOwner(ownerPath, socketPath, expectedCwd, timeoutMs)
       throw new Error("timed out waiting for owned service to stop");
     }
   }
+  const { removeOwnedArtifacts } = await import("./qemu-service-artifacts.mjs");
   await removeOwnedArtifacts({ owner: inspected.owner, ownerPath, socket: inspected.socket, socketPath });
 }
 
+export async function retireOwner(ownerPath, socketPath, expectedCwd, timeoutMs) {
+  await retireInspected(await inspectOwner(ownerPath, socketPath, expectedCwd), ownerPath, socketPath, expectedCwd, timeoutMs);
+}
+
+export async function retireExact(ownerPath, socketPath, expectedCwd, timeoutMs, expected) {
+  const parsedExpected = parseOwnerFingerprint(expected);
+  const inspected = await inspectOwner(ownerPath, socketPath, expectedCwd);
+  const actual = ownerFingerprint(inspected);
+  if (actual.pid !== parsedExpected.pid || actual.startTicks !== parsedExpected.startTicks
+    || !sameIdentity(actual.owner, parsedExpected.owner) || !sameIdentity(actual.socket, parsedExpected.socket)) {
+    throw new Error("service owner fingerprint mismatch");
+  }
+  await retireInspected(inspected, ownerPath, socketPath, expectedCwd, timeoutMs);
+}
+
 async function main() {
-  const args = process.argv.slice(2);
-  const [command, ownerPath, socketPath, cwd, argument] = args;
-  if (command === "inspect") {
-    if (args.length !== 4 && args.length !== 5) throw new Error("invalid inspect arguments");
-    const result = await inspectOwner(ownerPath, socketPath, cwd);
-    if (argument && (result.state !== "live" || result.record.pid !== argument)) process.exitCode = 1;
-    else process.stdout.write(`${JSON.stringify({ pid: result.record?.pid, state: result.state })}\n`);
-  } else if (command === "retire") {
-    if (args.length !== 5 || !/^(0|[1-9][0-9]*)$/.test(argument)) throw new Error("invalid retirement timeout");
-    const timeoutMs = Number(argument);
-    if (!Number.isSafeInteger(timeoutMs)) throw new Error("invalid retirement timeout");
-    await retireOwner(ownerPath, socketPath, cwd, timeoutMs);
-  } else throw new Error("usage: qemu-service-owner.mjs inspect OWNER SOCKET CWD [PID] | retire OWNER SOCKET CWD TIMEOUT_MS");
+  const [command, ownerPath, socketPath, cwd, argument, fingerprint] = process.argv.slice(2);
+  if (command === "inspect" && process.argv.length === 6) {
+    process.stdout.write(`${JSON.stringify(ownerFingerprint(await inspectOwner(ownerPath, socketPath, cwd)))}\n`);
+    return;
+  }
+  if ((command === "retire" || command === "retire-exact")
+    && /^(0|[1-9][0-9]*)$/.test(argument) && Number.isSafeInteger(Number(argument))) {
+    if (command === "retire" && process.argv.length === 7) {
+      await retireOwner(ownerPath, socketPath, cwd, Number(argument));
+      return;
+    }
+    if (command === "retire-exact" && process.argv.length === 8) {
+      await retireExact(ownerPath, socketPath, cwd, Number(argument), JSON.parse(fingerprint));
+      return;
+    }
+  }
+  throw new Error("invalid owner command arguments");
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(import.meta.filename)) {
-  main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
 }
