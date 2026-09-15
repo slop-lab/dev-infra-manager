@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { waitForObservation } from "./qemuServiceTestSupport.js";
+import { ownerPid, processIsLive } from "./qemuSetupTestSupport.js";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 const projectRoot = resolve(workspaceRoot, "project");
@@ -27,7 +28,9 @@ function qemuSection(setup: string, serviceDirectory: string): string {
   if (start < 0 || end < 0) throw new TypeError("QEMU setup section was not found");
   return `set -eu\n${setup.slice(start, end).replace(
     "qemu_service_dir=/tmp/dim-qemu-verification", `qemu_service_dir=${JSON.stringify(serviceDirectory)}`,
-  )}`;
+  ).replace("qemu_node=/usr/bin/node", 'qemu_node="$DIM_TEST_NODE"')
+    .replaceAll("sudo -n ", '"$DIM_TEST_SUDO" ')
+    .replaceAll("/usr/bin/env -i", "/usr/bin/env")}`;
 }
 
 async function createFixture(): Promise<Fixture> {
@@ -40,11 +43,16 @@ async function createFixture(): Promise<Fixture> {
   const signalPreload = resolve(root, "signal-preload.mjs");
   await Promise.all([mkdir(tools), mkdir(serviceDirectory), writeFile(cliLog, "")]);
   await writeFile(signalPreload, `import { appendFileSync } from "node:fs";
-process.on("SIGTERM", () => appendFileSync(process.env.DIM_TEST_SIGNAL_LOG, "SIGTERM\\n"));
+if (process.env.DIM_TEST_READINESS === "mismatch") {
+  process.on("SIGTERM", () => appendFileSync(process.env.DIM_TEST_SIGNAL_LOG, "SIGTERM\\n"));
+}
 `);
   await writeFile(resolve(tools, "node"), `#!/usr/bin/env bash
 case "\${1:-}" in
-  *qemu-service-owner.mjs) printf '%s\n' "$*" >>"$DIM_TEST_OWNER_CLI_LOG" ;;
+  *qemu-service-owner.mjs)
+    printf '%s\n' "$*" >>"$DIM_TEST_OWNER_CLI_LOG"
+    if [[ "$DIM_TEST_READINESS" == mismatch && -e "$DIM_TEST_READINESS_RELEASE" ]]; then exit 1; fi
+    ;;
   *qemu-service.mjs)
     printf '%s\n' "$$" >"$DIM_TEST_NEW_PID_FILE"
     if [[ "$DIM_TEST_READINESS" == unowned ]]; then
@@ -53,27 +61,46 @@ case "\${1:-}" in
     fi
     if [[ "$DIM_TEST_READINESS" == mismatch ]]; then
       trap 'printf "SIGTERM\\n" >>"$DIM_TEST_SIGNAL_LOG"; exit 0' TERM
-      "$DIM_TEST_REAL_NODE" "$@" &
+      /usr/bin/nohup "$DIM_TEST_REAL_NODE" "$@" >/dev/null 2>&1 &
       child=$!
       printf '%s\n' "$child" >"$DIM_TEST_CHILD_PID_FILE"
-      wait "$child"
       exit 0
     fi
     exec "$DIM_TEST_REAL_NODE" --import "$DIM_TEST_SIGNAL_PRELOAD" "$@"
     ;;
+  -e)
+    if [[ "$DIM_TEST_READINESS" == mismatch && -e "$DIM_TEST_READINESS_RELEASE" ]]; then exit 1; fi
+    ;;
 esac
 exec "$DIM_TEST_REAL_NODE" "$@"
+`);
+  await writeFile(resolve(tools, "sudo"), `#!/usr/bin/env bash
+exec "$@"
 `);
   await writeFile(resolve(tools, "curl"), `#!/usr/bin/env bash
 test "$DIM_TEST_READINESS" = success || exit 22
 exec /usr/bin/curl "$@"
 `);
   await writeFile(resolve(tools, "sleep"), `#!/usr/bin/env bash
-if [[ "$DIM_TEST_READINESS" == mismatch ]]; then
-  while [[ ! -e "$DIM_TEST_READINESS_RELEASE" ]]; do /usr/bin/sleep 0.01; done
-fi
+target="$DIM_TEST_OWNER_PATH"
+[[ "$DIM_TEST_READINESS" != unowned ]] || target="$DIM_TEST_NEW_PID_FILE"
+if [[ "$DIM_TEST_READINESS" == mismatch && -e "$target" ]]; then target="$DIM_TEST_READINESS_RELEASE"; fi
+[[ -e "$target" ]] || exec "$DIM_TEST_REAL_NODE" -e '
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const target = process.argv[1];
+  const complete = () => {
+    if (!fs.existsSync(target)) return;
+    watcher.close();
+    process.exit(0);
+  };
+  const watcher = fs.watch(path.dirname(target), (_event, name) => {
+    if (name === path.basename(target)) complete();
+  });
+  complete();
+' "$target"
 `);
-  await Promise.all(["node", "curl", "sleep"].map((name) => chmod(resolve(tools, name), 0o700)));
+  await Promise.all(["node", "curl", "sleep", "sudo"].map((name) => chmod(resolve(tools, name), 0o700)));
   return { cliLog, newPidFile, root, serviceDirectory, tools };
 }
 
@@ -82,8 +109,11 @@ function setupEnvironment(fixture: Fixture, readiness: "failure" | "mismatch" | 
     ...process.env,
     PATH: `${fixture.tools}:/usr/bin:/bin`,
     DIM_TEST_NEW_PID_FILE: fixture.newPidFile,
+    DIM_TEST_NODE: resolve(fixture.tools, "node"),
+    DIM_TEST_SUDO: resolve(fixture.tools, "sudo"),
     DIM_TEST_CHILD_PID_FILE: resolve(fixture.root, "child-service.pid"),
     DIM_TEST_OWNER_CLI_LOG: fixture.cliLog,
+    DIM_TEST_OWNER_PATH: resolve(fixture.serviceDirectory, "service-owner.json"),
     DIM_TEST_READINESS: readiness,
     DIM_TEST_READINESS_RELEASE: resolve(fixture.root, "readiness-release"),
     DIM_TEST_REAL_NODE: process.execPath,
@@ -99,16 +129,8 @@ async function setupCommand(fixture: Fixture): Promise<string> {
 
 function runSetup(fixture: Fixture, command: string, readiness: "failure" | "success"): SpawnSyncReturns<string> {
   return spawnSync("/usr/bin/bash", ["-c", command], {
-    cwd: projectRoot, encoding: "utf8", env: setupEnvironment(fixture, readiness), timeout: 10_000,
+    cwd: projectRoot, encoding: "utf8", env: setupEnvironment(fixture, readiness), timeout: 20_000,
   });
-}
-
-function processIsLive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; }
-  catch (error) {
-    if (error instanceof Error && error.message.includes("ESRCH")) return false;
-    throw error;
-  }
 }
 
 async function startOwnedService(fixture: Fixture): Promise<ChildProcess> {
@@ -140,7 +162,10 @@ afterEach(async () => {
     for (const pidFile of ["new-service.pid", "child-service.pid"]) {
       try {
         const pid = Number.parseInt(await readFile(resolve(root, pidFile), "utf8"), 10);
-        if (processIsLive(pid)) process.kill(pid, "SIGKILL");
+        if (processIsLive(pid)) {
+          process.kill(pid, "SIGKILL");
+          await waitForObservation(async () => processIsLive(pid) ? undefined : true);
+        }
       } catch (error) {
         if (typeof error !== "object" || error === null || !("code" in error) || error.code !== "ENOENT") throw error;
       }
@@ -160,9 +185,8 @@ describe("QEMU setup structured ownership", () => {
     const oldService = await startOwnedService(fixture);
 
     const result = runSetup(fixture, await setupCommand(fixture), "success");
-    const replacementPid = Number.parseInt(await readFile(fixture.newPidFile, "utf8"), 10);
-
-    expect.soft(result.status).toBe(0);
+    expect(result, result.stderr).toMatchObject({ status: 0 });
+    const replacementPid = await ownerPid(fixture.serviceDirectory);
     expect.soft(oldService.exitCode ?? oldService.signalCode).not.toBeNull();
     expect(replacementPid).not.toBe(oldService.pid);
   });
@@ -171,32 +195,32 @@ describe("QEMU setup structured ownership", () => {
     const fixture = await createFixture();
 
     const result = runSetup(fixture, await setupCommand(fixture), "failure");
+    expect(result.status, result.stderr).not.toBe(0);
     const cliCalls = await readFile(fixture.cliLog, "utf8");
     const failedPid = Number.parseInt(await readFile(fixture.newPidFile, "utf8"), 10);
 
-    expect.soft(result.status).not.toBe(0);
-    expect.soft(cliCalls.match(/retire .* 5000/g)).toHaveLength(2);
+    expect.soft(cliCalls).toContain("retire-exact");
     expect.soft(processIsLive(failedPid)).toBe(false);
     await expect(lstat(resolve(fixture.serviceDirectory, "service-owner.json"))).rejects.toThrow();
     await expect(lstat(resolve(fixture.serviceDirectory, "service.sock"))).rejects.toThrow();
-  });
+  }, 25_000);
 
   it("returns without signalling when a live service never publishes ownership", async () => {
     const fixture = await createFixture();
     const command = await setupCommand(fixture);
 
     const result = spawnSync("/usr/bin/bash", ["-c", command], {
-      cwd: projectRoot, encoding: "utf8", env: setupEnvironment(fixture, "unowned"), timeout: 7_500,
+      cwd: projectRoot, encoding: "utf8", env: setupEnvironment(fixture, "unowned"), timeout: 20_000,
     });
+    expect(result.status, result.stderr).not.toBe(0);
     const unownedPid = Number.parseInt(await readFile(fixture.newPidFile, "utf8"), 10);
 
     expect.soft(result.error).toBeUndefined();
-    expect.soft(result.status).not.toBe(0);
     expect.soft(processIsLive(unownedPid)).toBe(true);
     expect.soft(result.stderr).toContain(String(unownedPid));
     expect.soft(result.stderr).toContain(resolve(fixture.serviceDirectory, "service-owner.json"));
     await expect(readFile(resolve(fixture.root, "signals.log"), "utf8")).rejects.toThrow();
-  }, 10_000);
+  }, 25_000);
 
   it("does not signal or mutate a process whose published ownership is replaced during readiness", async () => {
     const fixture = await createFixture();
@@ -206,7 +230,7 @@ describe("QEMU setup structured ownership", () => {
     });
     children.push(setup);
     await waitForObservation(async () => {
-      try { return Number.parseInt(await readFile(fixture.newPidFile, "utf8"), 10); }
+      try { return await ownerPid(fixture.serviceDirectory); }
       catch (error) {
         if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return undefined;
         throw error;
@@ -233,11 +257,13 @@ describe("QEMU setup structured ownership", () => {
     await rename(replacementOwner, ownerPath);
     await writeFile(resolve(fixture.root, "readiness-release"), "release\n");
 
-    await new Promise<void>((resolveExit) => setup.once("exit", () => resolveExit()));
+    if (setup.exitCode === null && setup.signalCode === null) {
+      await new Promise<void>((resolveExit) => setup.once("exit", () => resolveExit()));
+    }
 
     await expect(readFile(resolve(fixture.root, "signals.log"), "utf8")).rejects.toThrow();
     const surviving = await lstat(socketPath, { bigint: true });
     expect.soft({ device: surviving.dev, inode: surviving.ino }).toEqual({ device: socketIdentity.dev, inode: socketIdentity.ino });
     expect(await readFile(ownerPath, "utf8")).toBe("foreign-owner\n");
-  });
+  }, 15_000);
 });

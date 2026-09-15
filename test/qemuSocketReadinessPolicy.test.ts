@@ -17,7 +17,7 @@ function qemuSection(setup: string, serviceDirectory: string): string {
   return `set -eu\n${setup.slice(start, end).replace(
     "qemu_service_dir=/tmp/dim-qemu-verification",
     `qemu_service_dir=${JSON.stringify(serviceDirectory)}`
-  )}`;
+  ).replace("qemu_node=/usr/bin/node", 'qemu_node="$DIM_TEST_NODE"')}`;
 }
 
 async function createFixture(): Promise<{
@@ -100,6 +100,7 @@ function runQemuSetup(run: SetupRun) {
       DIM_TEST_OLD_PID: String(run.oldPid),
       DIM_TEST_REAL_SLEEP: run.realSleep ? "1" : "0",
       DIM_TEST_REAL_NODE: process.execPath,
+      DIM_TEST_NODE: resolve(run.fixture.tools, "node"),
       DIM_TEST_REPLACEMENT_LOG: run.fixture.log,
       DIM_TEST_REPLACEMENT_PID: run.fixture.replacementPidFile,
       DIM_WORKSPACE_KVM: "1"
@@ -138,15 +139,15 @@ describe("canonical QEMU socket readiness", () => {
       setup.indexOf("else", setup.indexOf("DIM_QEMU_SERVICE_SOCKET"))
     );
 
-    expect(readiness).toContain('test -S "$qemu_service_dir/service.sock"');
-    expect(readiness).toContain('stat -c %a "$qemu_service_dir/service.sock"');
-    expect(readiness.match(/= 666/g)).toHaveLength(2);
+    expect(readiness).toContain('stat -c %u:%g:%a "$qemu_socket"');
+    expect(readiness).toContain('stat -c %u:%g:%a "$qemu_lease"');
+    expect(readiness.match(/= 0:0:666/g)).toHaveLength(2);
   });
 
   it("runs strict owner retirement before installing or starting replacement", async () => {
     const setup = await readFile(resolve(projectRoot, ".dim/setup.sh"), "utf8");
-    const retirement = setup.indexOf("qemu-service-owner.mjs retire");
-    const replacementStart = setup.indexOf("install -m 0500 .dim/qemu-verify.bash");
+    const retirement = setup.indexOf("qemu_root_owner retire");
+    const replacementStart = setup.indexOf('"$qemu_project_root/.dim/qemu-verify.bash"');
 
     expect.soft(retirement).toBeGreaterThan(0);
     expect(replacementStart).toBeGreaterThan(retirement);

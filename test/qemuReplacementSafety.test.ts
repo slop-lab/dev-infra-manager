@@ -28,7 +28,7 @@ function qemuSection(setup: string, serviceDirectory: string): string {
   return `set -eu\n${setup.slice(start, end).replace(
     "qemu_service_dir=/tmp/dim-qemu-verification",
     `qemu_service_dir=${JSON.stringify(serviceDirectory)}`
-  )}`;
+  ).replace("qemu_node=/usr/bin/node", 'qemu_node="$DIM_TEST_NODE"')}`;
 }
 
 async function createSetupFixture(): Promise<SetupFixture> {
@@ -49,7 +49,8 @@ printf '%s\n' "$$" >"$DIM_TEST_REPLACEMENT_PID"
 exec "$DIM_TEST_REAL_NODE" --input-type=module -e '
   import { chmodSync } from "node:fs";
   import { createServer } from "node:http";
-  import { captureSocketIdentity, createOwnerRecord, createSocketLease, publishOwner } from "${resolve(projectRoot, ".dim/qemu-service-owner.mjs")}";
+import { createOwnerRecord } from "${resolve(projectRoot, ".dim/qemu-service-owner.mjs")}";
+import { captureSocketIdentity, createSocketLease, publishOwner } from "${resolve(projectRoot, ".dim/qemu-service-artifacts.mjs")}";
   const socketPath = process.env.DIM_QEMU_SERVICE_SOCKET;
   const server = createServer((_request, response) => response.end("{\\"status\\":\\"idle\\"}\\n"));
   server.listen(socketPath, async () => {
@@ -72,6 +73,7 @@ async function runSetup(fixture: SetupFixture) {
       ...process.env,
       PATH: `${fixture.tools}:/usr/bin:/bin`,
       DIM_TEST_REAL_NODE: process.execPath,
+      DIM_TEST_NODE: resolve(fixture.tools, "node"),
       DIM_TEST_REPLACEMENT_LOG: fixture.log,
       DIM_TEST_OWNER_PATH: resolve(fixture.serviceDirectory, "service-owner.json"),
       DIM_TEST_LEASE_PATH: resolve(fixture.serviceDirectory, ".service.sock.lease"),
