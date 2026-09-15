@@ -1,10 +1,23 @@
-import { lstat, readFile } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { startService } from "./qemuServiceTestSupport.js";
-import { socketLeasePath } from "../../project/.dim/qemu-service-owner.mjs";
+import { publishOwner, socketLeasePath } from "../../project/.dim/qemu-service-artifacts.mjs";
 
 describe("QEMU structured service ownership", () => {
+  it("rejects an invalid record before creating publication artifacts", async () => {
+    const root = await mkdtemp(resolve(tmpdir(), "dim-qemu-owner-validation-test-"));
+    try {
+      await expect(publishOwner(resolve(root, "service-owner.json"), { schema: 1 })).rejects.toThrow(
+        "invalid service owner record",
+      );
+      expect(await readdir(root)).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("atomically publishes a mode-0600 schema-1 owner record instead of service.pid", async () => {
     const fixture = await startService("exit");
     const ownerPath = resolve(fixture.root, "service-owner.json");

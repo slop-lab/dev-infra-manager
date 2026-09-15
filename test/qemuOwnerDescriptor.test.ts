@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  captureSocketIdentity, createOwnerRecord, createSocketLease, publishOwner
-} from "../../project/.dim/qemu-service-owner.mjs";
+import { createOwnerRecord } from "../../project/.dim/qemu-service-owner.mjs";
+import { captureSocketIdentity, createSocketLease, publishOwner } from "../../project/.dim/qemu-service-artifacts.mjs";
 import { createServer, type Server } from "node:net";
 
 const ownerModule = pathToFileURL(resolve(import.meta.dirname, "../../project/.dim/qemu-service-owner.mjs")).href;
+const artifactModule = pathToFileURL(resolve(import.meta.dirname, "../../project/.dim/qemu-service-artifacts.mjs")).href;
 const roots: string[] = [];
 const servers: Server[] = [];
 
@@ -34,12 +34,12 @@ async function harness(root: string, body: string) {
   const runner = resolve(root, "runner.mjs");
   await writeFile(loader, `import { pathToFileURL } from "node:url";
 export async function resolve(specifier, context, nextResolve) {
-  if (specifier === "node:fs/promises" && context.parentURL?.startsWith(${JSON.stringify(ownerModule)}))
+  if (specifier === "node:fs/promises" && (context.parentURL?.startsWith(${JSON.stringify(ownerModule)}) || context.parentURL?.startsWith(${JSON.stringify(artifactModule)})))
     return { shortCircuit: true, url: pathToFileURL(process.env.DIM_TEST_FS_WRAPPER).href };
   return nextResolve(specifier, context);
 }`);
   await writeFile(wrapper, `import * as fs from "node:fs/promises";
-export const readFile=fs.readFile,realpath=fs.realpath,rm=fs.rm,stat=fs.stat;
+export const readFile=fs.readFile,realpath=fs.realpath,rename=fs.rename,rm=fs.rm,stat=fs.stat;
 let rebound=false;
 export async function open(path,...args){const handle=await fs.open(path,...args);if(path===process.env.DIM_TEST_OWNER&&!rebound){rebound=true;await fs.rename(process.env.DIM_TEST_REPLACEMENT,path)}return handle}
 export async function lstat(path,...args){const value=await fs.lstat(path,...args);if(path===process.env.DIM_TEST_OWNER&&!rebound){rebound=true;await fs.rename(process.env.DIM_TEST_REPLACEMENT,path)}return value}
@@ -81,7 +81,7 @@ process.stdout.write(result.state);`);
     const replacement = resolve(paths.root, "replacement-owner");
     await writeFile(replacement, "replacement\n");
     const files = await harness(paths.root, `import { lstat,readFile } from "node:fs/promises";
-import { publishOwner } from ${JSON.stringify(ownerModule)};
+import { publishOwner } from ${JSON.stringify(artifactModule)};
 const identity=await publishOwner(process.env.DIM_TEST_OWNER,JSON.parse(process.env.DIM_TEST_RECORD));
 const names=(await import("node:fs/promises")).readdir(process.env.DIM_TEST_ROOT);
 const temporary=(await names).find(name=>name.startsWith(".service-owner.json."));
