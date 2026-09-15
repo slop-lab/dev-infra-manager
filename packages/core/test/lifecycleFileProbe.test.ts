@@ -125,6 +125,18 @@ describe("lifecycle file probes", () => {
     expect(runner.streamingCalls).toHaveLength(0);
   });
 
+  it.each([
+    ["setup", ".dim/setup.sh", (runner: LifecycleRunner, current: WorkspaceRecord) => runProjectSetup(runner, current, false, false)],
+    ["teardown", ".dim/teardown.sh", (runner: LifecycleRunner, current: WorkspaceRecord) => runProjectTeardown(runner, current, false)]
+  ] as const)("dispatches project %s as the unprivileged workspace user", async (_name, path, invoke) => {
+    const runner = new LifecycleProbeRunner(path, 0);
+
+    await invoke(runner, record);
+
+    expect(runner.streamingCalls).toHaveLength(1);
+    expect(runner.streamingCalls[0]?.slice(0, 4)).toEqual(["docker", "exec", "--user", "dim"]);
+  });
+
   it.each(EXCEPTIONAL_EXIT_CODES)("rejects Compose probe exit %i before Compose dispatch", async (exitCode) => {
     // Given
     const runner = new LifecycleProbeRunner(".dim/docker-compose.yml", exitCode);
