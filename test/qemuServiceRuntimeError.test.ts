@@ -58,6 +58,56 @@ function groupIsGone(pid: number): boolean {
 }
 
 describe("QEMU service runtime server errors", () => {
+  it("preserves the snapshot when fatal shutdown owns finalization before cleanup", async () => {
+    // Given
+    const fixture = await startService("hold", { blockSnapshotRemoval: true });
+    await http(fixture, { body: { inputs: [], mode: "run" }, method: "POST", path: "/v1/run" });
+    await readEvents(fixture, "ready\n");
+    const [snapshotName] = await readdir(fixture.runsRoot);
+    if (snapshotName === undefined) throw new TypeError("active snapshot was not published");
+    const snapshotRoot = resolve(fixture.runsRoot, snapshotName);
+
+    // When
+    await triggerRuntimeServerErrors(fixture, 1);
+    const exited = await waitForExit(fixture, 5_000);
+
+    // Then
+    expect.soft(exited).toBe(true);
+    expect.soft(fixture.process.exitCode).toBe(1);
+    expect.soft((await lstat(snapshotRoot)).isDirectory()).toBe(true);
+    await expect(readFile(fixture.snapshotRemovalStartedFile, "utf8")).rejects.toThrow();
+  }, 6_000);
+
+  it("finishes cleanup that won before fatal shutdown while retaining remaining evidence", async () => {
+    // Given
+    const fixture = await startService("hold", { blockSnapshotRemoval: true });
+    await http(fixture, { body: { inputs: [], mode: "run" }, method: "POST", path: "/v1/run" });
+    await readEvents(fixture, "ready\n");
+    const ownerPath = resolve(fixture.root, "service-owner.json");
+
+    // When
+    const cancellation = http(fixture, { method: "DELETE", path: "/v1/run" }).catch(() => undefined);
+    await waitForObservation(async () => {
+      try { return (await readFile(fixture.snapshotRemovalStartedFile, "utf8")).trim() || undefined; }
+      catch (error) {
+        if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return undefined;
+        throw error;
+      }
+    });
+    await triggerRuntimeServerErrors(fixture, 1);
+    await writeFile(fixture.snapshotRemovalReleaseFile, "release\n");
+    const exited = await waitForExit(fixture, 5_000);
+    await cancellation;
+
+    // Then
+    expect.soft(exited).toBe(true);
+    expect.soft(fixture.process.exitCode).toBe(1);
+    expect.soft(await readdir(fixture.runsRoot)).toEqual([]);
+    expect.soft((await lstat(ownerPath)).isFile()).toBe(true);
+    expect.soft((await lstat(fixture.socketPath)).isSocket()).toBe(true);
+    expect((await lstat(socketLeasePath(fixture.socketPath))).isSocket()).toBe(true);
+  }, 7_000);
+
   it("enters bounded fatal shutdown on the first error after accepting", async () => {
     // Given
     const fixture = await startService("hold");
