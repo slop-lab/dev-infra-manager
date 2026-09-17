@@ -53,19 +53,33 @@ export async function shutdownService(state) {
 export async function initializeService(config) {
   const state = { ...config, ownerIdentity: undefined, preparedRunsRoot: undefined,
     removeRunsRoot: false, socketIdentity: undefined };
+  let initializationError;
+  const onInitializationError = (error) => { initializationError = error; };
   try {
     state.preparedRunsRoot = await prepareServiceFilesystem(config);
     await new Promise((resolve, reject) => {
-      config.server.once("error", reject);
-      config.server.listen(config.socketPath, resolve);
+      const onStartupError = (error) => reject(error);
+      config.server.once("error", onStartupError);
+      config.server.listen(config.socketPath, () => {
+        config.server.on("error", onInitializationError);
+        config.server.off("error", onStartupError);
+        resolve();
+      });
     });
     state.socketIdentity = await captureSocketIdentity(config.socketPath);
     await createSocketLease(config.socketPath, state.socketIdentity);
+    if (initializationError) throw initializationError;
     await chmod(socketLeasePath(config.socketPath), 0o666);
+    if (initializationError) throw initializationError;
     const ownerRecord = await createOwnerRecord(config.socketPath);
+    if (initializationError) throw initializationError;
     state.ownerIdentity = await publishOwner(config.ownerPath, ownerRecord);
+    if (initializationError) throw initializationError;
     await activatePreparedRuns(config.runsRoot, state.preparedRunsRoot);
+    if (initializationError) throw initializationError;
     state.preparedRunsRoot = undefined;
+    config.server.on("error", config.onRuntimeError);
+    config.server.off("error", onInitializationError);
     return { ownerIdentity: state.ownerIdentity, socketIdentity: state.socketIdentity };
   } catch (error) {
     const rollbackErrors = [];
@@ -76,6 +90,7 @@ export async function initializeService(config) {
     }
     try { if (state.preparedRunsRoot) await discardPreparedRuns(state.preparedRunsRoot); }
     catch (rollbackError) { rollbackErrors.push(rollbackError); }
+    config.server.off("error", onInitializationError);
     if (rollbackErrors.length > 0) {
       throw new AggregateError([error, ...rollbackErrors], "QEMU service startup and rollback failed");
     }

@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
-import { chmod, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
-import { stopProcessGroup } from "./qemu-process-group.mjs";
+import { finalizeRun, markRunFatal, quiesceRunPreservingEvidence, requestRunFinalization } from "./qemu-run-finalization.mjs";
 import { parseInputs, readJson, sendJson } from "./qemu-service-http.mjs";
 import { closeServiceListenerPreservingSocket, initializeService, shutdownService, socketLeasePath } from "./qemu-service-startup.mjs";
 import { snapshotInputs } from "./qemu-snapshot.mjs";
@@ -20,6 +20,8 @@ let latestRun;
 let serviceState = "starting";
 let shutdownPromise;
 let fatalShutdownPromise;
+let ownerIdentity;
+let socketIdentity;
 
 const server = http.createServer((request, response) => {
   void handle(request, response).catch((error) => {
@@ -27,12 +29,12 @@ const server = http.createServer((request, response) => {
   });
 });
 const startup = await initializeService({ serviceDirectory, pidPath, ownerPath, socketPath, leasePath,
-  runsRoot, server }).catch((error) => {
+  runsRoot, server, onRuntimeError: handleRuntimeServerError }).catch((error) => {
   reportFailure(error);
   return undefined;
 });
-const ownerIdentity = startup?.ownerIdentity;
-const socketIdentity = startup?.socketIdentity;
+ownerIdentity = startup?.ownerIdentity;
+socketIdentity = startup?.socketIdentity;
 if (startup) serviceState = "accepting";
 
 async function handle(request, response) {
@@ -68,7 +70,8 @@ async function handle(request, response) {
       return;
     } catch (error) {
       try {
-        await requestFinalization(run, run.abort.signal.aborted ? "cancelled" : "rejected");
+        if (run.preserveEvidence) return;
+        await requestRunFinalization(run, run.abort.signal.aborted ? "cancelled" : "rejected");
       } catch (finalizationError) {
         reportFailure(error);
         await beginFatalShutdown(finalizationError);
@@ -82,7 +85,7 @@ async function handle(request, response) {
     const run = activeRun;
     if (!run?.child || run.state.status !== "running") return sendJson(response, 409, { error: "QEMU verification is not running" });
     run.cancelled = true;
-    await requestFinalization(run, "cancelled");
+    await requestRunFinalization(run, "cancelled");
     return sendJson(response, 202, { ...run.state, cancelling: true });
   }
   return sendJson(response, 404, { error: "not found" });
@@ -96,10 +99,10 @@ function claimRun(request, response) {
     child: undefined, childClosed: undefined, closeResult: undefined,
     completion: undefined, finalizationRequested: false,
     listeners: new Set(), output: "", request, response, resolveFinalization,
-    snapshotRoot: undefined, work: undefined,
+    preserveEvidence: false, snapshotRoot: undefined, work: undefined,
     state: { status: "running", startedAt: new Date().toISOString(), inputs: [], verbose: false, mode: "run" },
   };
-  run.completion = (async () => finalizeRun(run, await finalizationRequested))();
+  run.completion = (async () => finalizeRun(run, await finalizationRequested, releaseRun))();
   activeRun = run;
   latestRun = run;
   return run;
@@ -150,12 +153,12 @@ function start(run, inputs) {
   child.stderr.on("data", append);
   child.on("error", (error) => {
     append(`failed to start QEMU verification: ${error.message}\n`);
-    void requestFinalization(run, "closed").catch(beginFatalShutdown);
+    if (!run.preserveEvidence) void requestRunFinalization(run, "closed").catch(beginFatalShutdown);
   });
   run.childClosed = new Promise((resolve) => {
     child.once("exit", (exitCode, signal) => {
       run.closeResult = { exitCode, signal };
-      void requestFinalization(run, "closed").catch(beginFatalShutdown);
+      if (!run.preserveEvidence) void requestRunFinalization(run, "closed").catch(beginFatalShutdown);
     });
     child.once("close", () => {
       run.child = undefined;
@@ -164,41 +167,9 @@ function start(run, inputs) {
   });
 }
 
-function requestFinalization(run, reason) {
-  if (!run.finalizationRequested) {
-    run.finalizationRequested = true;
-    run.resolveFinalization(reason);
-  }
-  return run.completion;
-}
-
-async function finalizeRun(run, reason) {
-  try {
-    if (run.work) {
-      try { await run.work; } catch (error) {
-        if (reason !== "rejected" && !run.abort.signal.aborted) throw error;
-      }
-    }
-    if (run.childClosed) {
-      await stopProcessGroup(run);
-      await run.childClosed;
-    }
-    if (reason !== "rejected") {
-      run.state = {
-        ...run.state,
-        status: run.cancelled || reason === "cancelled" ? "cancelled" : run.closeResult?.exitCode === 0 ? "success" : "failure",
-        exitCode: run.closeResult?.exitCode ?? undefined, signal: run.closeResult?.signal ?? undefined,
-        completedAt: new Date().toISOString()
-      };
-    }
-    if (run.snapshotRoot) await rm(run.snapshotRoot, { recursive: true, force: true });
-    run.snapshotRoot = undefined;
-    if (activeRun === run) activeRun = undefined;
-    if (reason === "rejected" && latestRun === run) latestRun = undefined;
-  } finally {
-    for (const listener of run.listeners) listener.end();
-    run.listeners.clear();
-  }
+function releaseRun(run, reason) {
+  if (activeRun === run) activeRun = undefined;
+  if (reason === "rejected" && latestRun === run) latestRun = undefined;
 }
 
 function beginShutdown() {
@@ -225,17 +196,32 @@ function beginFatalShutdown(error) {
   reportFailure(error);
   if (fatalShutdownPromise) return fatalShutdownPromise;
   serviceState = "stopping";
-  activeRun?.abort.abort();
-  activeRun?.request?.destroy();
-  activeRun?.response?.destroy();
-  fatalShutdownPromise = closeServiceListenerPreservingSocket({ server, socketIdentity, socketPath })
-    .catch(reportFailure).finally(() => process.exit(1));
+  const run = activeRun;
+  markRunFatal(run);
+  if (shutdownPromise) {
+    fatalShutdownPromise = shutdownPromise.catch(async (shutdownError) => {
+      reportFailure(shutdownError);
+      try { await closeServiceListenerPreservingSocket({ server, socketIdentity, socketPath }); }
+      catch (closeError) { reportFailure(closeError); }
+    }).finally(() => process.exit(1));
+    return fatalShutdownPromise;
+  }
+  fatalShutdownPromise = (async () => {
+    try { await quiesceRunPreservingEvidence(run); }
+    catch (runError) { reportFailure(runError); }
+    try { await closeServiceListenerPreservingSocket({ server, socketIdentity, socketPath }); }
+    catch (closeError) { reportFailure(closeError); }
+  })().finally(() => process.exit(1));
   return fatalShutdownPromise;
+}
+
+function handleRuntimeServerError(error) {
+  void beginFatalShutdown(error);
 }
 
 async function shutdown(run) {
   if (run) {
-    await requestFinalization(run, "cancelled");
+    await requestRunFinalization(run, "cancelled");
   }
   await shutdownService({ ownerIdentity, ownerPath, runsRoot, server, socketIdentity, socketPath });
   serviceState = "stopped";
