@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run test/developmentForgePolicy.test.ts"
+    "test": "vitest run test/developmentForgePolicy.test.ts test/workspaceUserSetupPolicy.test.ts"
   },
   "engines": {
     "node": "^24.0.0 || ^26.0.0",
