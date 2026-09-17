@@ -12,23 +12,24 @@ const ownerScript = resolve(projectRoot, ".dim/qemu-service-owner.mjs");
 const roots: string[] = [];
 const processes: ChildProcess[] = [];
 
-async function setupSection(serviceDirectory: string, tools: string): Promise<string> {
-  const setup = await readFile(resolve(projectRoot, ".dim/setup.sh"), "utf8");
-  const start = setup.indexOf("qemu_service_dir=/tmp/dim-qemu-verification");
-  const end = setup.indexOf("\n# Avoid inheriting", start);
+async function lifecycleSection(lifecycle: "setup" | "teardown", serviceDirectory: string, tools: string): Promise<string> {
+  const script = await readFile(resolve(projectRoot, `.dim/${lifecycle}.sh`), "utf8");
+  const start = script.indexOf("qemu_service_dir=/tmp/dim-qemu-verification");
+  const endMarker = lifecycle === "setup" ? "\n# Avoid inheriting" : "\nset -- down";
+  const end = script.indexOf(endMarker, start);
   await writeFile(resolve(tools, "sudo"), "#!/bin/sh\n[ \"$1\" != -n ] || shift\nexec \"$@\"\n");
   await chmod(resolve(tools, "sudo"), 0o700);
-  return `set -eu\n${setup.slice(start, end)
+  return `set -eu\n${script.slice(start, end)
     .replace("qemu_service_dir=/tmp/dim-qemu-verification", `qemu_service_dir=${JSON.stringify(serviceDirectory)}`)
     .replace("qemu_node=/usr/bin/node", `qemu_node=${JSON.stringify(process.execPath)}`)}`;
 }
 
-async function runSetup(serviceDirectory: string, kvm = "1") {
+async function runLifecycle(lifecycle: "setup" | "teardown", serviceDirectory: string, kvm = "1") {
   const root = await mkdtemp(resolve(tmpdir(), "dim-qemu-setup-residue-test-"));
   roots.push(root);
   const tools = resolve(root, "tools");
   await mkdir(tools);
-  return spawnSync("/bin/sh", ["-c", await setupSection(serviceDirectory, tools)], {
+  return spawnSync("/bin/sh", ["-c", await lifecycleSection(lifecycle, serviceDirectory, tools)], {
     cwd: projectRoot, encoding: "utf8", env: { ...process.env, DIM_WORKSPACE_KVM: kvm, PATH: `${tools}:/usr/bin:/bin` }, timeout: 20_000,
   });
 }
@@ -75,11 +76,21 @@ afterEach(async () => {
 
 describe("integrated QEMU setup residue contract", () => {
   it.each([
-    ["regular", "live"],
-    ["regular", "dead"],
-    ["symlink", "live"],
-    ["symlink", "dead"],
-  ] as const)("rejects disabled-KVM %s obsolete PID residue with %s contents before mutation", async (kind, state) => {
+    ["enabled setup", "setup", "1", "regular", "live"],
+    ["enabled setup", "setup", "1", "regular", "dead"],
+    ["enabled setup", "setup", "1", "symlink", "live"],
+    ["enabled setup", "setup", "1", "symlink", "dead"],
+    ["disabled setup", "setup", "0", "regular", "live"],
+    ["disabled setup", "setup", "0", "regular", "dead"],
+    ["disabled setup", "setup", "0", "symlink", "live"],
+    ["disabled setup", "setup", "0", "symlink", "dead"],
+    ["teardown", "teardown", "1", "regular", "live"],
+    ["teardown", "teardown", "1", "regular", "dead"],
+    ["teardown", "teardown", "1", "symlink", "live"],
+    ["teardown", "teardown", "1", "symlink", "dead"],
+  ] as const)("rejects %s path=%s kvm=%s %s obsolete PID residue with %s contents before mutation", async (
+    _path, lifecycle, kvm, kind, state,
+  ) => {
     // Given
     const root = await mkdtemp(resolve(tmpdir(), "dim-qemu-disabled-residue-test-"));
     roots.push(root);
@@ -96,7 +107,7 @@ describe("integrated QEMU setup residue contract", () => {
       .map((path) => lstat(path, { bigint: true })));
 
     // When
-    const result = await runSetup(serviceDirectory, "0");
+    const result = await runLifecycle(lifecycle, serviceDirectory, kvm);
 
     // Then
     expect.soft(result.status).not.toBe(0);
@@ -117,7 +128,7 @@ describe("integrated QEMU setup residue contract", () => {
     service.process.kill("SIGKILL");
     expect(await waitForExit(service)).toBe(true);
 
-    const result = await runSetup(service.root);
+    const result = await runLifecycle("setup", service.root);
     const replacementPid = recordPid(JSON.parse(await readFile(ownerPath, "utf8")));
 
     expect.soft(result.status, result.stderr).toBe(0);
@@ -135,7 +146,7 @@ describe("integrated QEMU setup residue contract", () => {
     await writeFile(ownerPath, changed, { mode: 0o600 });
     const before = await Promise.all([ownerPath, service.socketPath, socketLeasePath(service.socketPath)].map((path) => lstat(path, { bigint: true })));
 
-    const result = await runSetup(service.root);
+    const result = await runLifecycle("setup", service.root);
     const after = await Promise.all([ownerPath, service.socketPath, socketLeasePath(service.socketPath)].map((path) => lstat(path, { bigint: true })));
 
     expect.soft(result.status).not.toBe(0);
@@ -156,7 +167,7 @@ describe("integrated QEMU setup residue contract", () => {
       const before = await Promise.all(present.map((path) => lstat(path, { bigint: true })));
       const ownerContent = owner ? await readFile(paths[0] ?? "missing", "utf8") : undefined;
 
-      const result = await runSetup(service.root);
+      const result = await runLifecycle("setup", service.root);
       const after = await Promise.all(present.map((path) => lstat(path, { bigint: true })));
 
       expect.soft(result.status).not.toBe(0);
