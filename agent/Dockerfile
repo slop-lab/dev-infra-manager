@@ -5,7 +5,7 @@ ARG TARGETARCH=amd64
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      bash ca-certificates curl git jq tini \
+      bash ca-certificates curl git jq tini util-linux \
  && rm -rf /var/lib/apt/lists/*
 RUN set -eux; \
     case "$TARGETARCH" in \
@@ -22,8 +22,9 @@ COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker-cli /usr/local/bin/docker-compose /usr/local/bin/docker-compose
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose \
   /usr/local/libexec/docker/cli-plugins/docker-compose
-RUN npm install --global pnpm@10.13.1 @openai/codex@0.149.0
+RUN npm install --global pnpm@10.13.1
 RUN mkdir -p /home/dim-agent
+ENV PATH="/home/dim-agent/.local/bin:${PATH}"
 WORKDIR /workspace
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
