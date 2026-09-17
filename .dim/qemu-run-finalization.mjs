@@ -9,7 +9,7 @@ export function requestRunFinalization(run, reason) {
   return run.completion;
 }
 
-export async function finalizeRun(run, reason, releaseRun) {
+export async function finalizeRun(run, reason, { releaseRun, removeSnapshot = rm }) {
   try {
     if (run.work) {
       try { await run.work; } catch (error) {
@@ -20,7 +20,8 @@ export async function finalizeRun(run, reason, releaseRun) {
       await stopProcessGroup(run);
       await run.childClosed;
     }
-    if (run.preserveEvidence) return;
+    run.cleanupOwner = run.preserveEvidence ? "fatal" : "ordinary";
+    if (run.cleanupOwner === "fatal") return;
     if (reason !== "rejected") {
       run.state = {
         ...run.state,
@@ -29,8 +30,9 @@ export async function finalizeRun(run, reason, releaseRun) {
         completedAt: new Date().toISOString()
       };
     }
-    if (run.snapshotRoot) await rm(run.snapshotRoot, { recursive: true, force: true });
+    if (run.snapshotRoot) await removeSnapshot(run.snapshotRoot, { recursive: true, force: true });
     run.snapshotRoot = undefined;
+    if (run.preserveEvidence) return;
     releaseRun(run, reason);
   } finally {
     for (const listener of run.listeners) listener.end();

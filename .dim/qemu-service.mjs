@@ -85,7 +85,12 @@ async function handle(request, response) {
     const run = activeRun;
     if (!run?.child || run.state.status !== "running") return sendJson(response, 409, { error: "QEMU verification is not running" });
     run.cancelled = true;
-    await requestRunFinalization(run, "cancelled");
+    try {
+      await requestRunFinalization(run, "cancelled");
+    } catch (error) {
+      await beginFatalShutdown(error);
+      return;
+    }
     return sendJson(response, 202, { ...run.state, cancelling: true });
   }
   return sendJson(response, 404, { error: "not found" });
@@ -99,10 +104,10 @@ function claimRun(request, response) {
     child: undefined, childClosed: undefined, closeResult: undefined,
     completion: undefined, finalizationRequested: false,
     listeners: new Set(), output: "", request, response, resolveFinalization,
-    preserveEvidence: false, snapshotRoot: undefined, work: undefined,
+    cleanupOwner: undefined, preserveEvidence: false, snapshotRoot: undefined, work: undefined,
     state: { status: "running", startedAt: new Date().toISOString(), inputs: [], verbose: false, mode: "run" },
   };
-  run.completion = (async () => finalizeRun(run, await finalizationRequested, releaseRun))();
+  run.completion = (async () => finalizeRun(run, await finalizationRequested, { releaseRun }))();
   activeRun = run;
   latestRun = run;
   return run;
@@ -184,11 +189,7 @@ function beginShutdown() {
     run.response?.destroy();
   }
   shutdownPromise = shutdown(run);
-  void shutdownPromise.catch((error) => {
-    if (fatalShutdownPromise) return;
-    reportFailure(error);
-    process.exit(1);
-  });
+  void shutdownPromise.catch((error) => { void beginFatalShutdown(error); });
   return shutdownPromise;
 }
 
