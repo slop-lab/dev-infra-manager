@@ -59,18 +59,27 @@ bind mounts and cannot escape the agent-visible source boundary. `status`,
 The service records its identity in a mode-`0600`, schema-1
 `service-owner.json` that binds its PID, process start ticks, `argv`,
 executable, working directory, and socket inode. The obsolete `service.pid`
-format is rejected, not migrated. Setup and teardown replace or retire a
-service and its artifacts only when that complete identity still matches.
-Malformed, ambiguous, or replaced ownership fails closed: lifecycle cleanup
-neither signals nor deletes artifacts it cannot prove belong to that service.
-With no owner record, startup waits for a bounded period without signalling a
-process.
+format is rejected before mutation, not migrated, by enabled and disabled
+setup and by teardown. The service has the stable working directory
+`/tmp/dim-qemu-verification`, while its scripts retain immutable Project-root
+provenance and each launcher receives `/workspace` as both its source root and
+working directory. Setup and teardown replace or retire a service and its
+artifacts only when that complete identity still matches. Malformed,
+ambiguous, or replaced ownership fails closed: lifecycle cleanup neither
+signals nor deletes artifacts it cannot prove belong to that service. With no
+owner record, startup waits for a bounded period without signalling a process.
 
 Snapshot directory traversal is streamed to keep large input trees bounded in
 memory. Cancellation is bounded: it stops the verified process group with
 `TERM`, followed by `KILL` after four seconds if needed. Up to 16 clients may
 follow run events at once; a follower that cannot accept events without
-backpressure is disconnected rather than allowed to stall the service.
+backpressure is disconnected rather than allowed to stall the service. A
+snapshot-cleanup failure or permanent listener error closes admission, exits
+nonzero after bounded termination of any active process group, and retains
+ownership, run, and snapshot evidence. Shutdown is serialized: the first
+graceful shutdown continues its cleanup even if a later runtime error upgrades
+the exit to `1`; when fatal shutdown wins first, evidence is preserved and
+later signals reuse that same shutdown.
 
 The canonical Project runs its development agent as UID 0 only inside a
 private rootless `agent-dind`. The daemon adopts the workspace checkout's
