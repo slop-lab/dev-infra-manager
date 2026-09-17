@@ -15,9 +15,6 @@ case "$task" in
   bash)
     set -- bash "$@"
     ;;
-  codex)
-    set -- codex --dangerously-bypass-approvals-and-sandbox "$@"
-    ;;
   verify-qemu)
     set -- node /workspace/project/.dim/qemu-client.mjs run "$@"
     ;;
