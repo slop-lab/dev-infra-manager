@@ -43,6 +43,24 @@ fs.promises.rm = async function instrumentedRm(target, options) {
       if (error?.code !== "ENOENT") throw error;
     }
   }
+  if (process.env.DIM_TEST_BLOCK_SNAPSHOT_RM === "1" && runsRoot !== undefined && typeof target === "string"
+    && target.startsWith(runsRoot + "/run-") && !target.slice(runsRoot.length + 1).includes("/")
+    && options?.recursive === true && options.force === true) {
+    appendFileSync(process.env.DIM_TEST_SNAPSHOT_RM_STARTED, target + "\\n");
+    const release = process.env.DIM_TEST_SNAPSHOT_RM_RELEASE;
+    await new Promise((resolveRelease, rejectRelease) => {
+      const complete = () => {
+        if (!fs.existsSync(release)) return;
+        watcher.close();
+        resolveRelease();
+      };
+      const watcher = fs.watch(path.dirname(release), (_event, filename) => {
+        if (filename?.toString() === path.basename(release)) complete();
+      });
+      watcher.once("error", rejectRelease);
+      complete();
+    });
+  }
   return originalRm.call(fs.promises, target, options);
 };
 fs.promises.lstat = async function instrumentedLstat(target, options) {

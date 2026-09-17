@@ -16,17 +16,15 @@ const fixtureRoots: string[] = [];
 export type ServiceFixture = { readonly descendantPidFile: string; readonly launcherPidFile: string; readonly launcherStopFile: string;
   readonly groupSignalRecordFile: string; readonly process: ChildProcessByStdio<null, Readable, Readable>; readonly recordFile: string;
   readonly root: string; readonly runtimeServerErrorRecordFile: string; readonly runtimeServerErrorTriggerFile: string;
-  readonly runsRoot: string; readonly serverCloseRecordFile: string; readonly socketPath: string;
+  readonly runsRoot: string; readonly serverCloseRecordFile: string; readonly snapshotRemovalReleaseFile: string; readonly snapshotRemovalStartedFile: string; readonly socketPath: string;
   readonly sourceRoot: string; readonly spawnRecordFile: string; readonly stderr: () => string };
 
 export type HttpResult = { readonly body: string; readonly status: number };
 export type RequestSpec = { readonly body?: unknown; readonly method: string; readonly path: string };
 export type LauncherInput = { readonly name: string; readonly path: string };
-export type SpawnRecord = { readonly arguments: readonly string[]; readonly command: string;
-  readonly cwd: string; readonly sourceRoot: string };
-export type IncompleteRun = { readonly abort: () => void; readonly continued: Promise<void>;
-  readonly finish: () => void; readonly response: Promise<HttpResult> };
-export type ServiceOptions = { readonly forceResponseBackpressure?: boolean;
+export type SpawnRecord = { readonly arguments: readonly string[]; readonly command: string; readonly cwd: string; readonly sourceRoot: string };
+export type IncompleteRun = { readonly abort: () => void; readonly continued: Promise<void>; readonly finish: () => void; readonly response: Promise<HttpResult> };
+export type ServiceOptions = { readonly blockSnapshotRemoval?: boolean; readonly forceResponseBackpressure?: boolean;
   readonly ignoreLauncherTerm?: boolean; readonly leaderExits?: boolean;
   readonly missingLauncherShell?: boolean; readonly rejectReaddir?: boolean;
   readonly rejectSnapshotRemoval?: boolean; readonly residualProcessGroup?: boolean;
@@ -81,6 +79,8 @@ export async function startService(mode: "exit" | "hold", options: ServiceOption
   const spawnRecordFile = resolve(root, "spawns.jsonl");
   const snapshotRemovalTriggerFile = resolve(root, "reject-snapshot-removal.trigger");
   const snapshotRemovalRecordFile = resolve(root, "rejected-snapshot-removal.record");
+  const snapshotRemovalReleaseFile = resolve(root, "snapshot-removal.release");
+  const snapshotRemovalStartedFile = resolve(root, "snapshot-removal.started");
   const runtimeServerErrorTriggerFile = resolve(root, "runtime-server-error.trigger");
   const runtimeServerErrorRecordFile = resolve(root, "runtime-server-error.record");
   const serverCloseRecordFile = resolve(root, "server-close.record");
@@ -118,6 +118,9 @@ export async function startService(mode: "exit" | "hold", options: ServiceOption
       DIM_TEST_REJECT_READDIR: options.rejectReaddir === true ? "1" : "0",
       DIM_TEST_REJECT_SNAPSHOT_RM_RECORD: snapshotRemovalRecordFile,
       DIM_TEST_REJECT_SNAPSHOT_RM_TRIGGER: snapshotRemovalTriggerFile,
+      DIM_TEST_BLOCK_SNAPSHOT_RM: options.blockSnapshotRemoval === true ? "1" : "0",
+      DIM_TEST_SNAPSHOT_RM_RELEASE: snapshotRemovalReleaseFile,
+      DIM_TEST_SNAPSHOT_RM_STARTED: snapshotRemovalStartedFile,
       DIM_TEST_RESIDUAL_GROUP: options.residualProcessGroup === true ? "1" : "0",
       DIM_TEST_RUNTIME_SERVER_ERROR_RECORD: runtimeServerErrorRecordFile,
       DIM_TEST_RUNTIME_SERVER_ERROR_TRIGGER: runtimeServerErrorTriggerFile,
@@ -131,7 +134,7 @@ export async function startService(mode: "exit" | "hold", options: ServiceOption
   const fixture = {
     descendantPidFile, groupSignalRecordFile, launcherPidFile, launcherStopFile, process: child, recordFile, root,
     runtimeServerErrorRecordFile, runtimeServerErrorTriggerFile, runsRoot: resolve(root, "runs"),
-    serverCloseRecordFile, socketPath, sourceRoot, spawnRecordFile,
+    serverCloseRecordFile, snapshotRemovalReleaseFile, snapshotRemovalStartedFile, socketPath, sourceRoot, spawnRecordFile,
     stderr: () => Buffer.concat(stderr).toString("utf8")
   };
   fixtures.push(fixture);
