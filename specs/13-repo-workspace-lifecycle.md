@@ -547,17 +547,28 @@ group to KILL if it remains live, and await child closure before run cleanup.
 An asynchronous launcher spawn failure MUST finalize the run, release
 admission, and remove its snapshot. The complete process group MUST disappear
 before snapshot deletion. If any member remains after KILL, the service MUST
-stop admission, close its listener while restoring an owned public socket from
-the validated lease, exit nonzero, and preserve owner, socket, lease, run, and
-snapshot evidence. Shutdown MUST await run completion and snapshot cleanup
+stop admission, close its listener after validating the owned lease, restore
+the owned public socket only when that pathname was not replaced, and preserve
+and restore a safeguarded foreign public replacement when one was present. It
+MUST exit nonzero and preserve owner, lease, run, and snapshot evidence.
+Shutdown MUST await run completion and snapshot cleanup
 before removing the run tree and its own owner, socket, and lease artifacts. A
 snapshot cleanup failure is fatal: the service MUST stop admission without
 releasing the active-run claim, preserve the owner, socket, lease, run tree,
 and exact snapshot evidence, start no later launcher, and exit nonzero. The
 permanent runtime error handler MUST stop admission, terminate any active
 detached process group with the same bounded TERM-to-KILL protocol, validate
-the lease before closing the listener, preserve ownership and run evidence,
-and exit nonzero.
+the lease and safeguard a foreign public replacement before closing the
+listener, preserve ownership and run evidence, and exit nonzero. Every caller
+that observes finalization rejection MUST enter this fatal shutdown path rather
+than translating the failure into an ordinary request error.
+
+Run cleanup ownership MUST linearize before snapshot removal begins. If fatal
+shutdown owns cleanup first, snapshot removal MUST NOT start and the exact
+snapshot MUST remain as evidence. If ordinary cleanup owns first, it MUST
+finish the already-committed removal; a later fatal upgrade MUST await it,
+retain the active-run claim and every remaining service and run artifact, and
+MUST NOT claim that the snapshot whose deletion already began remains intact.
 
 Shutdown ownership MUST be serialized. The first graceful signal owns and
 continues ordinary cleanup; a runtime error received while that cleanup is in

@@ -563,7 +563,8 @@ while the source root and launcher working directory remain `/workspace`.
 Obsolete `service.pid` state MUST be
 rejected without migration for both live and dead recorded processes. The
 integrated enabled setup, disabled setup, and teardown paths MUST each reject
-regular-file and symlink residue before lifecycle mutation.
+regular-file and symlink residue, for both live and dead recorded PIDs, before
+lifecycle mutation while retaining the process and every artifact identity.
 
 Publication tests MUST prove that the published owner has actual mode `0600`,
 schema 1, and the launched PID; its recorded socket identity equals both the
@@ -642,13 +643,19 @@ and permit re-admission. With an active launcher and invalid lease, tests MUST
 prove launcher termination and run cleanup complete before the service exits
 nonzero for the lease failure. A process-group residual after KILL MUST be
 fatal, stop admission, close the listener while restoring the owned public
-socket from its lease, and preserve exact owner, socket, lease, run, and
-snapshot evidence. Fatal listener close MUST validate the lease before closing
-the server. A rejected-run snapshot cleanup failure MUST be fatal, keep
+socket from its lease when the public pathname was not replaced, and preserve
+exact owner, socket, lease, run, and snapshot evidence. Fatal listener close
+MUST validate the lease before closing the server. With a valid owned lease and
+a foreign public replacement, fatal close MUST preserve and restore the foreign
+inode and reachability while retaining owner, lease, run, and snapshot
+evidence. A rejected-run snapshot cleanup failure MUST be fatal, keep
 admission closed, and retain the exact owner, socket, lease, run-tree, and
 snapshot evidence without launching a child. Runtime listener errors MUST
 be handled by the permanent handler after startup and MUST perform bounded
 active-group termination before listener close while preserving evidence.
+Cancellation-only process-group residuals and snapshot-removal failures MUST
+also escalate finalization rejection into fatal shutdown rather than an HTTP
+`400` response.
 
 Shutdown serialization tests MUST prove that the first shutdown owner controls
 cleanup. When graceful shutdown starts first, its cleanup MUST continue and a
@@ -656,6 +663,11 @@ later runtime error MUST reuse that work while upgrading the eventual exit to
 `1`, without a competing listener close. When fatal shutdown starts first, it
 MUST preserve evidence, and repeated runtime errors and later signals MUST
 reuse the same bounded fatal shutdown and one listener close.
+Run-finalization ordering tests MUST block snapshot removal deterministically
+and prove both owners: fatal-first skips deletion and preserves the exact
+snapshot, while ordinary-cleanup-first finishes its already-committed deletion,
+then retains the active-run claim and all remaining evidence after a fatal
+upgrade without claiming the deleting snapshot stayed intact.
 
 Event tests MUST prove that no more than 16 followers are admitted for an
 active run, follower 17 is rejected before successful stream headers, and a
