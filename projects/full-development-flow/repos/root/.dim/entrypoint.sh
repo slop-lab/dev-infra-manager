@@ -9,8 +9,6 @@ case "$task" in
     exec sh .dim/home-archive.sh "$task"
     ;;
   bash) set -- bash "$@" ;;
-  codex) set -- codex --dangerously-bypass-approvals-and-sandbox "$@" ;;
-  claude) set -- claude --dangerously-skip-permissions "$@" ;;
   *)
     echo "unknown DIM project task: $task" >&2
     exit 2
