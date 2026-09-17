@@ -14,9 +14,10 @@ const fixtures: ServiceFixture[] = [];
 const fixtureRoots: string[] = [];
 
 export type ServiceFixture = { readonly descendantPidFile: string; readonly launcherPidFile: string; readonly launcherStopFile: string;
-  readonly process: ChildProcessByStdio<null, Readable, Readable>; readonly recordFile: string;
-  readonly root: string; readonly runsRoot: string; readonly socketPath: string;
-  readonly sourceRoot: string; readonly spawnRecordFile: string };
+  readonly groupSignalRecordFile: string; readonly process: ChildProcessByStdio<null, Readable, Readable>; readonly recordFile: string;
+  readonly root: string; readonly runtimeServerErrorRecordFile: string; readonly runtimeServerErrorTriggerFile: string;
+  readonly runsRoot: string; readonly serverCloseRecordFile: string; readonly socketPath: string;
+  readonly sourceRoot: string; readonly spawnRecordFile: string; readonly stderr: () => string };
 
 export type HttpResult = { readonly body: string; readonly status: number };
 export type RequestSpec = { readonly body?: unknown; readonly method: string; readonly path: string };
@@ -80,6 +81,10 @@ export async function startService(mode: "exit" | "hold", options: ServiceOption
   const spawnRecordFile = resolve(root, "spawns.jsonl");
   const snapshotRemovalTriggerFile = resolve(root, "reject-snapshot-removal.trigger");
   const snapshotRemovalRecordFile = resolve(root, "rejected-snapshot-removal.record");
+  const runtimeServerErrorTriggerFile = resolve(root, "runtime-server-error.trigger");
+  const runtimeServerErrorRecordFile = resolve(root, "runtime-server-error.record");
+  const serverCloseRecordFile = resolve(root, "server-close.record");
+  const groupSignalRecordFile = resolve(root, "group-signals.record");
   const socketPath = resolve(root, "service.sock");
   const launcherPidFile = resolve(root, "launcher.pid");
   const launcherStopFile = resolve(root, "launcher.stopped");
@@ -107,21 +112,27 @@ export async function startService(mode: "exit" | "hold", options: ServiceOption
       DIM_TEST_DESCENDANT_PID: descendantPidFile,
       DIM_TEST_LAUNCH_RECORD: recordFile,
       DIM_TEST_FORCE_BACKPRESSURE: options.forceResponseBackpressure === true ? "1" : "0",
+      DIM_TEST_GROUP_SIGNAL_RECORD: groupSignalRecordFile,
       DIM_TEST_IGNORE_TERM: options.ignoreLauncherTerm === true ? "1" : "0",
       DIM_TEST_LEADER_EXITS: options.leaderExits === true ? "1" : "0",
       DIM_TEST_REJECT_READDIR: options.rejectReaddir === true ? "1" : "0",
       DIM_TEST_REJECT_SNAPSHOT_RM_RECORD: snapshotRemovalRecordFile,
       DIM_TEST_REJECT_SNAPSHOT_RM_TRIGGER: snapshotRemovalTriggerFile,
       DIM_TEST_RESIDUAL_GROUP: options.residualProcessGroup === true ? "1" : "0",
+      DIM_TEST_RUNTIME_SERVER_ERROR_RECORD: runtimeServerErrorRecordFile,
+      DIM_TEST_RUNTIME_SERVER_ERROR_TRIGGER: runtimeServerErrorTriggerFile,
       DIM_TEST_RUNS_ROOT: resolve(root, "runs"),
+      DIM_TEST_SERVER_CLOSE_RECORD: serverCloseRecordFile,
       DIM_TEST_SPAWN_RECORD: spawnRecordFile
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
   child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
   const fixture = {
-    descendantPidFile, launcherPidFile, launcherStopFile, process: child, recordFile, root,
-    runsRoot: resolve(root, "runs"), socketPath, sourceRoot, spawnRecordFile
+    descendantPidFile, groupSignalRecordFile, launcherPidFile, launcherStopFile, process: child, recordFile, root,
+    runtimeServerErrorRecordFile, runtimeServerErrorTriggerFile, runsRoot: resolve(root, "runs"),
+    serverCloseRecordFile, socketPath, sourceRoot, spawnRecordFile,
+    stderr: () => Buffer.concat(stderr).toString("utf8")
   };
   fixtures.push(fixture);
   await new Promise<void>((resolveReady, rejectReady) => {
