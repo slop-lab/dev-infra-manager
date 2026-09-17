@@ -5,6 +5,8 @@ services:
     environment:
       DOCKER_HOST: "tcp://agent-dind:2375"
       DIM_CONTROLLER_SOCKET: "/run/dim/controller-proxy/agent.sock"
+      DIM_WEB_URL_SOCKET: "/run/dim/web-url/controller.sock"
+      DIM_WEB_URL_CONTAINERS_JSON: '["agent"]'
       DIM_GIT_USERNAME: "${DIM_GIT_USERNAME:?}"
       DIM_GIT_TOKEN: "${DIM_GIT_TOKEN:?}"
       GIT_AUTHOR_NAME: "${GIT_AUTHOR_NAME:-}"
@@ -20,6 +22,7 @@ services:
       - ..:/workspace
       - agent-home:/home/dim-agent
       - /tmp/dim-agent-controller:/run/dim/controller-proxy:ro
+      - /tmp/dim-web-url:/run/dim/web-url:ro
       - agent-dind-shared:/mnt/workspace-shared-dind
     networks:
       - default
