@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { spawnPreloadScript } from "./qemuServiceFixtureScripts.js";
 import { waitForObservation } from "./qemuServiceTestSupport.js";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
@@ -61,6 +62,93 @@ afterEach(async () => {
 });
 
 describe("QEMU service startup rollback", () => {
+  it("rolls back a server error after listen while initialization remains asynchronous", async () => {
+    // Given
+    const root = await mkdtemp(resolve(tmpdir(), "dim-qemu-initialization-error-test-"));
+    roots.push(root);
+    await chmod(root, 0o755);
+    const sourceRoot = resolve(root, "source");
+    const socketPath = resolve(root, "service.sock");
+    const preload = resolve(root, "initialization-error-preload.mjs");
+    const errorRecord = resolve(root, "initialization-errors.record");
+    const closeRecord = resolve(root, "server-close.record");
+    await mkdir(sourceRoot);
+    await writeFile(preload, spawnPreloadScript());
+    const child = spawn(process.execPath, ["--import", preload, serviceScript], {
+      env: {
+        ...process.env,
+        DIM_QEMU_LAUNCHER: "/bin/false",
+        DIM_QEMU_SERVICE_SOCKET: socketPath,
+        DIM_QEMU_SOURCE_ROOT: sourceRoot,
+        DIM_TEST_ERROR_AFTER_SOCKET_IDENTITY: "1",
+        DIM_TEST_ERROR_DURING_ROLLBACK: "1",
+        DIM_TEST_INITIALIZATION_ERROR_RECORD: errorRecord,
+        DIM_TEST_SERVER_CLOSE_RECORD: closeRecord,
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const stderr: Buffer[] = [];
+    child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
+    processes.push(child);
+
+    // When
+    const exited = await waitForExit(child);
+
+    // Then
+    const entries = await readdir(root);
+    expect.soft(exited, "initialization server error must produce bounded exit").toBe(true);
+    expect.soft(child.exitCode).toBe(1);
+    expect.soft(Buffer.concat(stderr).toString("utf8")).toContain("DIM_TEST_ERROR_AFTER_SOCKET_IDENTITY");
+    expect.soft(await readFile(errorRecord, "utf8")).toBe("after-identity\nduring-rollback\n");
+    expect.soft(await readFile(closeRecord, "utf8")).toBe("close\n");
+    expect.soft(entries).toEqual([
+      "initialization-error-preload.mjs", "initialization-errors.record", "server-close.record", "source",
+    ]);
+    expect.soft(await exists(socketPath)).toBe(false);
+    expect.soft(await exists(resolve(root, ".service.sock.lease"))).toBe(false);
+    expect.soft(await exists(resolve(root, "service-owner.json"))).toBe(false);
+    expect(await exists(resolve(root, "runs"))).toBe(false);
+  });
+
+  it("rejects a listen error and removes only the prepared startup filesystem", async () => {
+    // Given
+    const root = await mkdtemp(resolve(tmpdir(), "dim-qemu-listen-rollback-test-"));
+    roots.push(root);
+    await chmod(root, 0o755);
+    const sourceRoot = resolve(root, "source");
+    const socketPath = resolve(root, "service.sock");
+    const preload = resolve(root, "listen-failure-preload.mjs");
+    await mkdir(sourceRoot);
+    await writeFile(preload, spawnPreloadScript());
+    const child = spawn(process.execPath, ["--import", preload, serviceScript], {
+      env: {
+        ...process.env,
+        DIM_QEMU_LAUNCHER: "/bin/false",
+        DIM_QEMU_SERVICE_SOCKET: socketPath,
+        DIM_QEMU_SOURCE_ROOT: sourceRoot,
+        DIM_TEST_STARTUP_LISTEN_FAILURE: "1",
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const stderr: Buffer[] = [];
+    child.stderr?.on("data", (chunk: Buffer) => stderr.push(chunk));
+    processes.push(child);
+
+    // When
+    const exited = await waitForExit(child);
+
+    // Then
+    const entries = await readdir(root);
+    expect.soft(exited, "startup listen failure must produce bounded exit").toBe(true);
+    expect.soft(child.exitCode).toBe(1);
+    expect.soft(Buffer.concat(stderr).toString("utf8")).toContain("DIM_TEST_STARTUP_LISTEN_FAILURE");
+    expect.soft(entries).toEqual(["listen-failure-preload.mjs", "source"]);
+    expect.soft(await exists(socketPath)).toBe(false);
+    expect.soft(await exists(resolve(root, ".service.sock.lease"))).toBe(false);
+    expect.soft(await exists(resolve(root, "service-owner.json"))).toBe(false);
+    expect(await exists(resolve(root, "runs"))).toBe(false);
+  });
+
   it("exits without residue while preserving a foreign socket that replaces the bound pathname", async () => {
     const root = await mkdtemp(resolve(tmpdir(), "dim-qemu-startup-rollback-test-")); await chmod(root, 0o755);
     roots.push(root);
@@ -88,6 +176,7 @@ export const captureSocketIdentity = artifacts.captureSocketIdentity;
 export const createSocketLease = artifacts.createSocketLease;
 export const identity = artifacts.identity;
 export const pathState = artifacts.pathState;
+export const requireSocketLease = artifacts.requireSocketLease;
 export const removeOwnedArtifacts = artifacts.removeOwnedArtifacts;
 export const restoreReplacedSocket = artifacts.restoreReplacedSocket;
 export const restoreSocketFromLease = artifacts.restoreSocketFromLease;
