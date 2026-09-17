@@ -130,11 +130,12 @@ included verification across 40 files and 206 tests, passing cross-workspace
 gates, 786 passed core-development tests with 40 environment skips, and 63
 passed CLI tests. All 11 typechecks, package builds, Node and Bash syntax, LOC,
 hygiene, and changed-file diff checks passed. Manual Unix-socket checks observed
-status, HTTP `400` handling, and graceful cleanup.
-Oracle gave a final PASS for the implementation blockers as review evidence.
-This was not a five-way sealed review. TypeScript LSP remained unavailable
-because its earlier installation was declined. Live KVM, live Sysbox, and the
-full-development journey were not rerun.
+status, HTTP `400` handling, and graceful cleanup. Oracle reported a PASS for
+the implementation blockers as a point-in-time review observation, not final
+approval. That observation was not a five-way sealed review and is superseded
+as approval evidence by the current pending status below. TypeScript LSP
+remained unavailable because its earlier installation was declined. Live KVM,
+live Sysbox, and the full-development journey were not rerun.
 
 OpenSSH 9.6 and Docker buildx 0.30.1 were installed in the development agent to
 exercise the capable-host entrypoint. The full-development journey built all
@@ -148,6 +149,19 @@ agent has no accessible `/dev/kvm`. Therefore
 but did not pass in this environment. Its live SSH and ordinary-writer denial
 assertions remain pending execution on a Sysbox-capable host whose Docker
 loopback namespace is local to the verifier.
+
+Current review status on 2026-09-17: **PENDING**. Seal
+`6279a7a8f70dd1e5761e5788dea5b596901f0df2e28d6c25dfa026cb0d4be103`
+failed and carries no approval. The parent review observed 221 verification
+tests passing across 43 files; `workspace:check` passing all 11 projects;
+core-development reporting 786 passed and 40 skipped; the CLI reporting 63
+passed; and the workspace build passing. A manual real-Node Unix-socket check
+observed status HTTP `200`, malformed JSON HTTP `400`, run HTTP `202`, and
+SIGTERM exit `0`, after which the owner, socket, lease, and runs artifacts were
+all absent. TypeScript LSP diagnostics remained unavailable because
+installation had previously been declined. Live KVM, live Sysbox, and the
+full-development journey were not run. No final five-lane approval has been
+issued.
 
 DIM does not currently provide automatic workspace cleanup after PR merge,
 one-shot workspace wrappers, or disk quota. Those orchestration policies can
