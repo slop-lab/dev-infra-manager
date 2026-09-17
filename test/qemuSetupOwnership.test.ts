@@ -9,7 +9,7 @@ import {
   copyLifecycleSnapshots, lifecycleEnvironment, qemuSetupSection, qemuTeardownSection, type QemuLifecycleFixture,
 } from "./qemuLifecycleSnapshotTestSupport.js";
 import { waitForObservation } from "./qemuServiceTestSupport.js";
-import { ownerPid, processIsLive } from "./qemuSetupTestSupport.js";
+import { ownerPid, ownershipSignalPreloadScript, processIsLive, startOwnedServiceProcess } from "./qemuSetupTestSupport.js";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 const projectRoot = resolve(workspaceRoot, "project");
@@ -32,11 +32,7 @@ async function createFixture(): Promise<Fixture> {
   const signalPreload = resolve(root, "signal-preload.mjs");
   await Promise.all([mkdir(tools), mkdir(serviceDirectory), writeFile(cliLog, "")]);
   const { newLifecycleRoot, oldLifecycleRoot } = await copyLifecycleSnapshots(projectRoot, root);
-  await writeFile(signalPreload, `import { appendFileSync } from "node:fs";
-if (process.env.DIM_TEST_READINESS === "mismatch") {
-  process.on("SIGTERM", () => appendFileSync(process.env.DIM_TEST_SIGNAL_LOG, "SIGTERM\\n"));
-}
-`);
+  await writeFile(signalPreload, ownershipSignalPreloadScript());
   await writeFile(resolve(tools, "node"), `#!/usr/bin/env bash
 case "\${1:-}" in
   *qemu-service-owner.mjs)
@@ -104,23 +100,12 @@ function runSetup(fixture: Fixture, command: string, readiness: "failure" | "suc
   });
 }
 
-async function startOwnedService(fixture: Fixture): Promise<ChildProcess> {
-  const socketPath = resolve(fixture.serviceDirectory, "service.sock");
-  const sourceRoot = resolve(fixture.root, "source");
-  await mkdir(sourceRoot);
-  const child = spawn(process.execPath, [resolve(fixture.oldLifecycleRoot, ".dim/qemu-service.mjs")], {
-    cwd: fixture.serviceDirectory,
-    env: { ...process.env, DIM_QEMU_LAUNCHER: "/bin/false", DIM_QEMU_SERVICE_SOCKET: socketPath, DIM_QEMU_SOURCE_ROOT: sourceRoot },
-    stdio: "ignore",
-  });
+async function startOwnedService(fixture: Fixture, blockActivation = false): Promise<ChildProcess> {
+  const activationRelease = resolve(fixture.root, "activation-release");
+  if (!blockActivation) await writeFile(activationRelease, "release\n");
+  const { child, ready } = startOwnedServiceProcess(fixture);
   children.push(child);
-  await waitForObservation(async () => {
-    try { return JSON.parse(await readFile(resolve(fixture.serviceDirectory, "service-owner.json"), "utf8")); }
-    catch (error) {
-      if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return undefined;
-      throw error;
-    }
-  });
+  await ready;
   return child;
 }
 
@@ -151,6 +136,27 @@ afterEach(async () => {
 });
 
 describe("QEMU setup structured ownership", () => {
+  it("waits for full service activation after owner publication", async () => {
+    const fixture = await createFixture();
+    let returned = false;
+    const starting = startOwnedService(fixture, true).then((service) => {
+      returned = true;
+      return service;
+    });
+    await waitForObservation(async () => {
+      try { return await readFile(resolve(fixture.root, "activation-started"), "utf8"); }
+      catch (error) {
+        if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return undefined;
+        throw error;
+      }
+    });
+    await new Promise<void>((resolveTurn) => setImmediate(resolveTurn));
+
+    expect.soft(returned, "owner publication must not be treated as service readiness").toBe(false);
+    await writeFile(resolve(fixture.root, "activation-release"), "release\n");
+    await starting;
+  });
+
   it("retires an exact-live structured owner before starting replacement", async () => {
     const fixture = await createFixture();
     const oldService = await startOwnedService(fixture);
