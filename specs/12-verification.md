@@ -556,9 +556,14 @@ combinations. Integrated setup coverage across the existing split tests MUST
 exercise every proper partial state. Inspection tests MUST require the strict
 exact fingerprint shape with only `state`, `pid`, `startTicks`, `owner`, and
 `socket` identities, and MUST prove exact retirement across an allowed
-live-to-dead transition.
+live-to-dead transition. Lifecycle tests MUST distinguish immutable
+Project-root script provenance from process working directories: the service
+owner MUST have `/tmp/dim-qemu-verification` as its stable working directory,
+while the source root and launcher working directory remain `/workspace`.
 Obsolete `service.pid` state MUST be
-rejected without migration for both live and dead recorded processes.
+rejected without migration for both live and dead recorded processes. The
+integrated enabled setup, disabled setup, and teardown paths MUST each reject
+regular-file and symlink residue before lifecycle mutation.
 
 Publication tests MUST prove that the published owner has actual mode `0600`,
 schema 1, and the launched PID; its recorded socket identity equals both the
@@ -577,7 +582,13 @@ successor inode differs, rather than depending on allocator reuse behavior.
 Restoration tests MUST prove that a later socket at the destination is not
 overwritten and that both foreign socket inodes remain preserved. A direct
 second service MUST fail without replacing the active socket, owner, or run
-tree.
+tree. Listen errors MUST roll back only prepared startup state. Errors emitted
+after listen succeeds but before initialization completes MUST remain latched,
+MUST be honored only after the bound socket has an identity-pinned lease, and
+MUST drive complete ownership-safe rollback. Tests MUST prove that the
+temporary initialization handler is replaced by one permanent runtime error
+handler only after activation commits.
+
 Publication fault tests MUST cover post-link directory sync, temporary unlink,
 handle close, rollback, replacement, and collision. They MUST assert exact
 quarantine bytes and identities, preserved replacement and collision evidence,
@@ -632,7 +643,19 @@ prove launcher termination and run cleanup complete before the service exits
 nonzero for the lease failure. A process-group residual after KILL MUST be
 fatal, stop admission, close the listener while restoring the owned public
 socket from its lease, and preserve exact owner, socket, lease, run, and
-snapshot evidence.
+snapshot evidence. Fatal listener close MUST validate the lease before closing
+the server. A rejected-run snapshot cleanup failure MUST be fatal, keep
+admission closed, and retain the exact owner, socket, lease, run-tree, and
+snapshot evidence without launching a child. Runtime listener errors MUST
+be handled by the permanent handler after startup and MUST perform bounded
+active-group termination before listener close while preserving evidence.
+
+Shutdown serialization tests MUST prove that the first shutdown owner controls
+cleanup. When graceful shutdown starts first, its cleanup MUST continue and a
+later runtime error MUST reuse that work while upgrading the eventual exit to
+`1`, without a competing listener close. When fatal shutdown starts first, it
+MUST preserve evidence, and repeated runtime errors and later signals MUST
+reuse the same bounded fatal shutdown and one listener close.
 
 Event tests MUST prove that no more than 16 followers are admitted for an
 active run, follower 17 is rejected before successful stream headers, and a

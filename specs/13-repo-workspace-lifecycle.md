@@ -450,6 +450,15 @@ without signalling a process or removing an artifact. An obsolete
 `service.pid` MUST be rejected with no migration path, whether its named
 process is live or dead.
 
+The lifecycle MUST execute the owner and service scripts by absolute path from
+the immutable Project-root snapshot. The service process MUST change to the
+stable `/tmp/dim-qemu-verification` directory before execution, and that path
+and identity MUST be recorded as its owner working directory. This service
+working directory is distinct from `DIM_QEMU_SOURCE_ROOT`: admitted launchers
+MUST receive `/workspace` as their source root and process working directory.
+The fixed launcher copied from the immutable Project-root snapshot into the
+root-owned service namespace does not change that source-root boundary.
+
 In the supported lifecycle, workspace creation, setup, and discard serialize
 through the workspace setup lock before Project setup can create or replace the
 QEMU service namespace. Project setup MUST create the service directory before
@@ -457,6 +466,9 @@ service start; the service MUST require that pre-existing path to be a
 non-symlink root:root directory with mode exactly `0755`, including no special
 mode bits, and both agent mount layers MUST expose it read-only. Startup MUST reject any existing or symlink `service.pid`, owner,
 public socket, or lease path, while stale run state is allowed until activation.
+Enabled setup, disabled setup, and teardown MUST each reject any regular-file
+or symlink `service.pid` before signalling a process, retiring ownership, or
+removing an artifact; obsolete PID state has no compatibility path.
 It MUST prepare a fresh adjacent root:root directory with mode exactly `0700`,
 including no special mode bits, before binding. The service starts in
 `starting`, and every route, including status and run, MUST return `503` until
@@ -485,6 +497,16 @@ exact linked owner identity. Replacements and collisions MUST remain untouched,
 and any quarantine evidence MUST be preserved. A publication collision or
 later startup failure MUST leave an existing owner untouched and roll back only
 the new instance's exact artifacts.
+
+The server MUST treat a listen error as initialization failure and roll back
+only state prepared by that startup. After listen succeeds, initialization
+MUST install a temporary error handler that latches a server error.
+Initialization MUST capture the bound socket identity and establish its
+identity-pinned lease before honoring a latched error, so rollback can close
+the listener safely. It MUST check for a latched error after each remaining
+asynchronous initialization stage. Only after owner publication and run-root
+activation commit succeed may it replace the temporary handler with the
+permanent runtime error handler and enter `accepting`.
 
 Cleanup MUST validate the lease against the captured socket identity
 before safe close and again immediately before removing the lease. It MUST
@@ -528,7 +550,23 @@ before snapshot deletion. If any member remains after KILL, the service MUST
 stop admission, close its listener while restoring an owned public socket from
 the validated lease, exit nonzero, and preserve owner, socket, lease, run, and
 snapshot evidence. Shutdown MUST await run completion and snapshot cleanup
-before removing the run tree and its own owner, socket, and lease artifacts.
+before removing the run tree and its own owner, socket, and lease artifacts. A
+snapshot cleanup failure is fatal: the service MUST stop admission without
+releasing the active-run claim, preserve the owner, socket, lease, run tree,
+and exact snapshot evidence, start no later launcher, and exit nonzero. The
+permanent runtime error handler MUST stop admission, terminate any active
+detached process group with the same bounded TERM-to-KILL protocol, validate
+the lease before closing the listener, preserve ownership and run evidence,
+and exit nonzero.
+
+Shutdown ownership MUST be serialized. The first graceful signal owns and
+continues ordinary cleanup; a runtime error received while that cleanup is in
+progress MUST reuse the graceful shutdown promise and upgrade the final exit to
+`1` without starting competing run or listener cleanup. If fatal shutdown owns
+the transition first, it MUST preserve evidence, and later signals or runtime
+errors MUST reuse that same fatal shutdown. Every path MUST perform at most one
+listener close.
+
 Event delivery MUST retain no
 more than 8 MiB for replay, admit at most 16 concurrent followers for an
 active run, release a follower slot when it closes, and immediately disconnect
