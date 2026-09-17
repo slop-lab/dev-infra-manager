@@ -76,10 +76,16 @@ follow run events at once; a follower that cannot accept events without
 backpressure is disconnected rather than allowed to stall the service. A
 snapshot-cleanup failure or permanent listener error closes admission, exits
 nonzero after bounded termination of any active process group, and retains
-ownership, run, and snapshot evidence. Shutdown is serialized: the first
-graceful shutdown continues its cleanup even if a later runtime error upgrades
-the exit to `1`; when fatal shutdown wins first, evidence is preserved and
-later signals reuse that same shutdown.
+ownership, run, and snapshot evidence. Run cleanup chooses one owner before
+snapshot removal starts. When fatal shutdown wins first, it skips removal and
+preserves the exact snapshot. When ordinary cleanup wins first, a later fatal
+error awaits that already-committed removal, retains the remaining run and
+service evidence, and does not claim that the snapshot being removed remains
+intact. Shutdown is serialized: the first graceful shutdown continues its
+cleanup even if a later runtime error upgrades the exit to `1`; later signals
+reuse that same shutdown. Fatal listener close safeguards and restores a
+foreign public socket that replaced the owned pathname while retaining the
+owned lease and other evidence.
 
 The canonical Project runs its development agent as UID 0 only inside a
 private rootless `agent-dind`. The daemon adopts the workspace checkout's
