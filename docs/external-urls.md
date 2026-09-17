@@ -48,6 +48,24 @@ named ingress and denies all other controller routes. Advanced reviewed policies
 `@slop-lab/dim-controller-proxy`; the runnable form is in the
 [External URL example](../../examples/features/external-urls/README.md).
 
+An application-specific capability should also pin its target at the trusted
+Project lifecycle boundary:
+
+```bash
+dim-controller-proxy external-url \
+  --listen /run/dim/web-url/controller.sock \
+  --ingress https-ts \
+  --target-containers-json '["agent"]' \
+  --target-protocol http \
+  --target-port 4096
+```
+
+The target options are an optional group. Omitting the group preserves the
+generic ingress-only capability. Supplying it makes target matching exact for
+creation, filtered listing, and revocation authorization. Projects must use a
+distinct socket for a narrower application capability instead of narrowing an
+existing generic socket used by other clients.
+
 ## Named ingresses
 
 An ingress is a host-approved external entry point backed by the plugin's
@@ -87,6 +105,13 @@ the controller reconciles provider DNS and the Caddy container automatically.
 Discovery exposes only each ingress's `name`, `description`, and `scheme`.
 Workspaces cannot select domains, listener addresses, upstream hosts, or
 arbitrary provider configuration.
+
+Allowing an ingress through an application socket is a reviewed policy choice.
+Selecting a different ingress at runtime is insufficient unless trusted
+Project lifecycle code also changes that socket's ingress allowlist. The
+Project examples provide an executable Caddy HTTPS configuration at
+[`examples/projects/configure-web-ingress.bash`](../../examples/projects/configure-web-ingress.bash);
+they do not rely on a cleartext local HTTP ingress for coding-agent Web access.
 
 ## Discovery and requests
 

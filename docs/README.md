@@ -68,7 +68,7 @@ The documentation is split by concern:
 - [Configuration](configuration.md): configuration file reference.
 - [Runtime Backend](runtime-backends.md): Sysbox agent isolation and trusted runc infrastructure.
 - [Runtime Images](runtime-images.md): workspace-root runtime images and their nested workloads.
-- [External workspace URLs](external-urls.md): controller discovery, named ingresses, nested targets, and Caddy/Cloudflare HTTPS.
+- [External workspace URLs](external-urls.md): controller discovery, named ingresses, exact-target application proxies, nested targets, and Caddy/Cloudflare HTTPS.
 - [Repository-backed Workspaces](repo-workspaces.md): managed Git registration, persistent workspaces, reconciliation, and Git environment.
 - [Managed CI Runners](ci-runners.md): independent pull-request verification, resource defaults, and runner lifecycle.
 - [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.
