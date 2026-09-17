@@ -3,7 +3,6 @@ import {
   captureSocketIdentity,
   createSocketLease,
   publishOwner,
-  requireSocketLease,
   removeOwnedArtifacts,
   restoreSocketFromLease,
   restoreReplacedSocket,
@@ -25,10 +24,12 @@ export async function closeServiceListener(server) {
 }
 
 export async function closeServiceListenerPreservingSocket(state) {
-  try { await requireSocketLease(state.socketPath, state.socketIdentity); }
+  let protectedSocket;
+  try { protectedSocket = await safeguardReplacedSocket(state.socketPath, state.socketIdentity); }
   catch (error) { state.server.unref(); throw error; }
   await closeServiceListener(state.server);
-  await restoreSocketFromLease(state.socketPath, state.socketIdentity);
+  if (protectedSocket) await restoreReplacedSocket(protectedSocket, state.socketPath);
+  else await restoreSocketFromLease(state.socketPath, state.socketIdentity);
 }
 
 async function cleanupServiceFilesystem(state) {
