@@ -193,6 +193,102 @@ Project-owned private runtime started by `.dim/setup.sh`, then dispatch fixed
 tasks from `.dim/entrypoint.sh`. Core owns none of its image, service, volume,
 privilege, or task configuration. `dim workspace run WORKSPACE TASK` always
 follows the checked-in `.dim/entrypoint.sh` contract when present.
+Top-level `dim run` is the same Project task boundary. Top-level `dim exec`
+and `dim workspace exec` bypass the entrypoint and provide raw access to the
+trusted workspace container; they are recovery and lifecycle-administration
+paths, not agent entrypoints.
+
+**WORKSPACE-AGENT-SETUP-001:** Coding-agent tool installation MUST be an
+explicit workspace-user action inside a Project-owned agent. DIM and trusted
+`.dim/setup.sh` lifecycle code MUST NOT perform it automatically. A Project may
+publish a user-run bootstrap script, but invoking that script MUST happen
+through a Project task such as `dim run WORKSPACE bash -- -s` or from an
+interactive `bash` task. The script MAY mutate only the invoking user's home,
+including user-local executables and agent configuration. It MUST NOT perform
+authentication, change global Git configuration, expose a web interface,
+request DIM controller or plugin authority, or modify the trusted workspace.
+This is a Project convention and introduces no DIM plugin, API, lifecycle
+hook, or CLI command.
+
+**WORKSPACE-AGENT-WEB-001:** A Project MAY publish a Web launcher separately
+from the setup script. Launch MUST be an explicit workspace-user action and
+MUST fail when the pinned OpenCode prerequisite or restricted external-URL
+socket is absent. A non-empty Basic Auth credential MUST be configured before
+the listener binds outside loopback. Persistent credentials, logs, lock state,
+and process identity MUST remain in mode-restricted state below canonical
+`HOME`; credentials MUST NOT appear in command arguments, URLs, logs, or
+repository files, and the launcher MUST NOT print the password in routine
+output. It MUST report the restricted credential-file path so the user can
+explicitly read its two-line username/password content. The selected external
+URL ingress MUST advertise HTTPS before the listener starts. The launcher MUST
+use only its dedicated `DIM_WEB_URL_SOCKET` and non-empty
+`DIM_WEB_URL_CONTAINERS_JSON` inputs, with no fallback to the generic external
+URL capability. Changing the selected ingress also requires a reviewed trusted
+proxy-allowlist change. The launcher MUST establish readiness through a bounded
+authenticated health request and prove through the Linux listening socket that
+the exact newly started or recorded process owns the configured port. Lock,
+proxy, readiness, and cleanup waits MUST be bounded. It MUST NOT adopt or kill
+an unrecorded process, even when that process accepts the same credentials. URL
+reuse requires an exact ingress,
+HTTP protocol, port, and reviewed nested-container-path match. The agent may
+receive only a restricted external-URL proxy socket and fixed target metadata,
+not a controller grant, raw host secret, or new lifecycle authority.
+The canonical same-origin Web UI/API path MUST NOT enable wildcard CORS. If a
+Project adds a different-origin client, every allowed origin MUST be explicit
+and reviewed.
+
+The script MUST resolve `HOME` to its canonical path and reject every mutation
+target whose canonical path is not contained beneath it. For a target that
+does not yet exist, containment validation MUST account for its nearest
+existing parent and any symbolic links. The canonical install prefix is
+`$HOME/.local`. The npm install prefix, cache, and user configuration file MUST
+all resolve to canonical descendants of `HOME`; inherited npm environment or
+configuration MUST NOT redirect those mutation roots. The effective cache home
+`${XDG_CACHE_HOME:-$HOME/.cache}` MUST be exported as a canonical descendant of
+`HOME`; a value or symbolic-link target that resolves outside `HOME` MUST be
+rejected before npm runs. The effective data and state homes MUST default to
+`${XDG_DATA_HOME:-$HOME/.local/share}` and
+`${XDG_STATE_HOME:-$HOME/.local/state}`. Their values MUST be absolute and
+newline-free, resolve to canonical descendants of `HOME`, and be exported in
+canonical form before npm runs. Relative or newline-containing values, and
+values or symbolic-link targets that resolve outside canonical `HOME`, MUST be
+rejected before npm runs. These XDG homes remain separate from the dedicated npm
+cache and user configuration. OpenCode configuration remains in the
+home-confined XDG directory `${XDG_CONFIG_HOME:-$HOME/.config}/opencode`; an
+`XDG_CONFIG_HOME` that resolves outside `HOME` MUST be rejected. An existing
+symbolic link at
+`$XDG_CACHE_HOME/opencode/packages/oh-my-openagent@4.19.4` MUST be rejected
+regardless of its target, and preflight validation MUST NOT create that
+coordinate. OMO 4.19.4 configuration uses exactly `$HOME/.omo/omo.jsonc`, with
+the bounded Team Mode settings at `["[opencode]"].team_mode`.
+
+Configuration updates MUST use targeted, comment-preserving JSONC edits. They
+MUST preserve unrelated properties, comments, and existing plugin options;
+whole-document parse and reserialization is not acceptable. Setup invocations
+for the same home MUST use flock-equivalent exclusive lock semantics covering
+package mutation, configuration mutation, and final installed-version
+verification, so concurrent runs cannot overwrite each other's edits. Lock
+ownership MUST be released on every exit, and a failed or interrupted holder
+MUST NOT permanently block a retry. Each configuration-file replacement MUST
+avoid exposing a partial file, and an interrupted or partial multi-file run
+MUST converge to the required state when retried. The bootstrap is not required
+to make package installation and all configuration files one transaction.
+
+When a Project documents a remote bootstrap, both the script and its
+`.sha256` file MUST be fetched from the same full, immutable development
+commit. The commit input MUST match exactly 40 lowercase hexadecimal
+characters. The copyable download procedure MUST run in a fail-closed
+`set -euo pipefail` subshell, derive both URLs from that same validated commit,
+verify the checksum before streaming the local bytes to the `bash` task, and
+remove temporary files through an exit trap. A branch, tag, `latest` URL, or
+direct download-to-shell pipeline is not an acceptable bootstrap source. The
+canonical self-development Project instead runs the reviewed local script at
+`/workspace/scripts/workspace-user-setup.bash` through its `bash` task.
+Complete Project examples MUST accept an operator-supplied, provider-neutral
+raw-source root ending before the commit segment, normalize one optional
+trailing slash, and combine that root with the validated commit. They MUST NOT
+hard-code a provider raw-content hostname. The root README MAY use DIM's
+canonical GitHub raw source.
 The canonical self-Project's outer Compose graph contains only a private
 rootless `agent-dind` daemon. Its daemon user adopts the numeric UID/GID that
 owns the workspace checkout. That daemon owns the agent and ordinary development
@@ -209,8 +305,8 @@ trusted outer workspace.
 Secret-bearing workloads must use a separate `secure-dind` daemon with
 separate runtime storage. The agent daemon socket, agent home, workspace source,
 and workspace Git credentials must not be mounted into that daemon.
-The canonical self-Project exposes `codex`, an agent-container `bash` task,
-and Project-owned `backup`/`restore` tasks that stream a gzip tar archive of
+The canonical self-Project exposes an agent-container `bash` task and
+Project-owned `backup`/`restore` tasks that stream a gzip tar archive of
 the agent home over stdout/stdin. Those canonical tasks temporarily stop the
 agent and mount only its named home volume into a networkless archive
 container, read-only for backup and read-write for restore. DIM does not
@@ -283,8 +379,8 @@ the workspace's aggregate host-enforced limits remain the parent boundary.
 Threaded children may control CPU scheduling and PID counts, but must not be
 presented as independent memory or I/O boundaries. The canonical self-Project
 keeps ordinary `bash` task execution in the agent container's default group
-and starts Codex in a dynamically created tool group so management commands retain a
-responsive execution path.
+and starts resource-intensive user tools in dynamically created tool groups so
+management commands retain a responsive execution path.
 
 The canonical self-Project stores the agent's home in a Project-owned outer
 named volume. The private daemon receives that volume at a fixed path and
@@ -292,6 +388,13 @@ bind-mounts it into the inner agent as `/home/dim-agent`; task dispatch sets
 `HOME` to that path. Agent configuration persists across task processes and
 inner-container recreation, while workspace discard removes the volume through
 reviewed teardown.
+The optional canonical workspace-user bootstrap installs pinned OpenCode and
+companion package versions below that home. OpenCode configuration remains in
+its home-confined XDG directory. OMO 4.19.4 configuration is
+`$HOME/.omo/omo.jsonc`; `["[opencode]"].team_mode` is bounded to
+`enabled=true`, `max_parallel_members=4`, `max_members=8`, and
+`tmux_visualization=false`. These are Project-owned user settings, not DIM
+configuration or authority.
 
 ## Applying changes
 
@@ -354,4 +457,10 @@ Required tests cover:
 - no live update of a running workspace;
 - start/restart fast-forward and dirty-root rejection;
 - task/raw command dispatch, stop persistence, and discard cleanup;
+- explicit, checksum-verified workspace-user setup through the Project task
+  boundary, with user-home-only mutation and no automatic lifecycle install;
+- explicit authenticated Web launch with bad-input and missing-prerequisite
+  rejection, bounded authenticated readiness, listening-socket ownership,
+  exact process and URL reuse, authenticated-orphan and unrelated-process
+  survival, startup-failure cleanup, and no lifecycle launch;
 - packed CLI help, JSON output, URL stdout, and Git credential wrapper.

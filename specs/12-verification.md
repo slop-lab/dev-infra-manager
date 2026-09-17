@@ -48,6 +48,14 @@ just build-packages
 This gate must require only Node.js and pnpm, not Docker, a runtime backend,
 QEMU, KVM, or an installed DIM CLI.
 
+`just verify workspace-user-setup` MUST supplement launcher mocks with the real
+pinned OpenCode `1.18.31` runtime in a disposable home without provider
+credentials. It MUST prove local and external unauthenticated `401` and
+authenticated `200` responses, stable PID reuse, restricted state, absence of
+credential disclosure, and process cleanup. Mock coverage MUST separately
+exercise bounded lock, proxy, and readiness failures plus a same-credential
+unrecorded listener that remains alive and is never adopted.
+
 CI runner unit coverage must verify resource-default precedence, stable managed
 names, and that default container arguments use the configured isolation
 runtime without mounting the host Docker socket. It must also verify that the
@@ -199,6 +207,74 @@ home volume MUST be writable by inner UID 0 through the daemon's mapped
 workspace-owner UID/GID. The daemon's rootless socket and data directory remain
 inside `agent-dind` and MUST NOT be replaced
 with a host or trusted-workspace runtime socket.
+The gate MUST also verify that workspace creation, setup, start, restart, and
+update do not install coding-agent tools. The canonical workspace-user setup
+script and its `.sha256` file MUST be published by the development repository.
+Verification MUST invoke the script explicitly through the Project-owned
+`bash` task, confirm its checksum before execution, and prove that all changes
+stay canonically below the persistent agent home, including with adversarial
+`XDG_CONFIG_HOME` and `XDG_CACHE_HOME` values and symbolic links. It MUST reject
+cache paths that resolve outside the canonical home before npm runs, accept and
+export the canonical target of a contained cache symlink, and verify the
+canonical `$HOME/.cache` default. It MUST exercise relative, newline-containing,
+outside-home, escaping-symlink, and contained-symlink values for both
+`XDG_DATA_HOME` and `XDG_STATE_HOME`, including their `$HOME/.local/share` and
+`$HOME/.local/state` defaults. Accepted values MUST be observed by npm as
+absolute, newline-free canonical paths below `HOME`, and every rejected value
+MUST prevent npm invocation. Verification MUST reject an existing symbolic link
+at `$XDG_CACHE_HOME/opencode/packages/oh-my-openagent@4.19.4` for both contained
+and outside-home targets, and MUST prove that preflight validation does not
+create that coordinate. After destroying and recreating the inner agent
+container, rather than merely starting another task process, verification MUST
+observe the installed tools and configuration from the persistent home.
+
+Static verification of that script MUST reject mutable package or source
+coordinates, branch or `latest` download URLs, authentication commands,
+global Git configuration, web-interface startup, and DIM controller, plugin,
+token, or grant access. It MUST confirm pinned OpenCode and companion package
+versions; home-confined XDG OpenCode configuration; and OMO 4.19.4 configuration
+at `$HOME/.omo/omo.jsonc`, with `["[opencode]"].team_mode` settings of
+`enabled=true`, `max_parallel_members=4`, `max_members=8`, and
+`tmux_visualization=false`. Tests MUST exercise comment and unrelated-property
+preservation, targeted plugin-option updates, serialized concurrent setup,
+per-file failure cleanup, and retry convergence after a partial multi-file
+run. They MUST NOT require multi-file transactional atomicity. This verifies a
+Project bootstrap convention and MUST NOT add a DIM plugin, API, or lifecycle
+interface.
+
+Launcher verification MUST remain separate from setup verification. It MUST
+cover invalid ports and target JSON, missing prerequisites and proxy sockets,
+startup failure and bounded authenticated readiness, unauthenticated HTTP
+rejection, successful Basic Auth, mode-restricted persistent credentials and
+logs, password-free routine output with explicit restricted-file retrieval,
+HTTPS-ingress rejection before launch, exact process-instance reuse, exact external-URL reuse, and survival of
+unrelated processes. At least one runtime lane MUST execute the pinned OpenCode
+binary with no provider credential and observe both HTTP 401 without Basic Auth
+and a healthy authenticated response. Setup-only lanes MUST continue proving
+that no OpenCode listener starts. Verification MUST also prove that the
+same-origin path does not enable wildcard CORS; any different-origin allowance
+must name only exact reviewed origins.
+
+Static policy verification MUST inspect the root README and all three complete
+Project example READMEs. Every copyable remote flow MUST create a host temporary
+directory, install its cleanup trap immediately, derive each setup or launcher
+script and checksum URL from one validated full development commit, verify all
+checksums, and only then stream the verified local bytes through the existing
+Project `bash` task. Setup and opt-in Web launch MUST remain separate commands.
+The example READMEs MUST accept an operator-supplied, provider-neutral
+raw-source root, normalize its trailing slash, and MUST NOT hard-code a Git
+provider raw-content hostname. The root README MAY use DIM's canonical GitHub
+raw source.
+
+Verification MUST exercise remote-bootstrap failure and retry: a failed
+checksum MUST NOT invoke the Project task, temporary downloads MUST be removed,
+and retry MUST perform a fresh download and checksum verification before any
+bytes execute. Script verification MUST also prove that the npm install prefix,
+cache, and user configuration file resolve to canonical descendants of `HOME`,
+that the npm cache and user configuration remain separate from
+`XDG_CACHE_HOME`, and that the home-scoped serialization mechanism provides
+flock-equivalent exclusive lock semantics through final installed-version
+verification and releases ownership on success, failure, and interruption.
 
 Project-runtime cgroup verification MUST cover both supported delegation
 shapes (`systemd` and `cgroupfs`) and the unsupported `none` driver. The
