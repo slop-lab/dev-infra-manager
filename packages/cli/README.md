@@ -157,7 +157,7 @@ dim workspace exec feature-123 -- bash
 Run a task through the root repository's `.dim/entrypoint.sh`:
 
 ```bash
-dim workspace run feature-123 codex
+dim workspace run feature-123 bash
 ```
 
 Task stdin is forwarded even when redirected or piped, so Project-defined
