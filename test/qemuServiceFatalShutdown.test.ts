@@ -1,9 +1,9 @@
-import { link, lstat, readFile, readdir, rm } from "node:fs/promises";
+import { link, lstat, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { createConnection, createServer, type Server } from "node:net";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { socketLeasePath } from "../../project/.dim/qemu-service-artifacts.mjs";
-import { http, startService, waitForExit, waitForObservation } from "./qemuServiceTestSupport.js";
+import { http, readEvents, startService, waitForExit, waitForObservation } from "./qemuServiceTestSupport.js";
 
 const foreignServers: Server[] = [];
 
@@ -29,6 +29,52 @@ afterEach(async () => {
 });
 
 describe("QEMU service fatal shutdown", () => {
+  it("preserves a foreign public socket and owned evidence with a valid lease", async () => {
+    // Given
+    const fixture = await startService("hold");
+    await http(fixture, { body: { inputs: [], mode: "run" }, method: "POST", path: "/v1/run" });
+    await readEvents(fixture, "ready\n");
+    const ownerPath = resolve(fixture.root, "service-owner.json");
+    const leasePath = socketLeasePath(fixture.socketPath);
+    const runEntries = await readdir(fixture.runsRoot);
+    const [ownerBefore, leaseBefore, runsBefore, ownerContent] = await Promise.all([
+      lstat(ownerPath, { bigint: true }), lstat(leasePath, { bigint: true }),
+      lstat(fixture.runsRoot, { bigint: true }), readFile(ownerPath, "utf8"),
+    ]);
+    await rm(fixture.socketPath);
+    const foreignPath = resolve(fixture.root, "foreign-public.sock");
+    const foreign = createServer((connection) => connection.end("foreign public socket alive\n"));
+    foreignServers.push(foreign);
+    await new Promise<void>((resolveListen, rejectListen) => {
+      foreign.once("error", rejectListen);
+      foreign.listen(foreignPath, resolveListen);
+    });
+    await link(foreignPath, fixture.socketPath);
+    const foreignBefore = await lstat(fixture.socketPath, { bigint: true });
+
+    // When
+    const temporary = `${fixture.runtimeServerErrorTriggerFile}.prepared`;
+    await writeFile(temporary, JSON.stringify({ count: 1, signal: false }));
+    await rename(temporary, fixture.runtimeServerErrorTriggerFile);
+    const exited = await waitForExit(fixture, 5_000);
+
+    // Then
+    const [ownerAfter, publicAfter, leaseAfter, runsAfter] = await Promise.all([
+      lstat(ownerPath, { bigint: true }), lstat(fixture.socketPath, { bigint: true }),
+      lstat(leasePath, { bigint: true }), lstat(fixture.runsRoot, { bigint: true }),
+    ]);
+    expect.soft(exited).toBe(true);
+    expect.soft(fixture.process.exitCode).toBe(1);
+    expect.soft(identity(publicAfter)).toEqual(identity(foreignBefore));
+    expect.soft(identity(ownerAfter)).toEqual(identity(ownerBefore));
+    expect.soft(identity(leaseAfter)).toEqual(identity(leaseBefore));
+    expect.soft(identity(runsAfter)).toEqual(identity(runsBefore));
+    expect.soft(await readFile(ownerPath, "utf8")).toBe(ownerContent);
+    expect.soft(await readdir(fixture.runsRoot)).toEqual(runEntries);
+    expect.soft(await receive(fixture.socketPath)).toBe("foreign public socket alive\n");
+    expect(await receive(foreignPath)).toBe("foreign public socket alive\n");
+  }, 7_000);
+
   it.each(["missing", "mismatched"] as const)(
     "preserves the live service and run evidence when the socket lease is %s",
     async (leaseState) => {
