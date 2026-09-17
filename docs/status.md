@@ -163,6 +163,21 @@ installation had previously been declined. Live KVM, live Sysbox, and the
 full-development journey were not run. No final five-lane approval has been
 issued.
 
+The lifecycle-finalization follow-up on 2026-09-17 retains **PENDING** status
+and does not supersede that failed seal. Regression-first verification observed
+40 focused QEMU lifecycle tests pass, followed by the first full verification
+run passing 237 tests across 44 files. `workspace:check` passed all 11 checked
+projects and the workspace package build passed. Changed Node modules passed
+syntax checks. A manual real-Node Unix-socket run observed status HTTP `200`,
+malformed JSON HTTP `400`, run HTTP `202`, and SIGTERM exit `0`; owner, public
+socket, lease, and run-root artifacts were all absent afterward. Deterministic
+tests separately exercised both blocked snapshot-removal orderings, cancel-only
+finalization failures, a foreign public socket with a valid owned lease, the
+12-case obsolete-PID lifecycle matrix, and activation readiness after owner
+publication. TypeScript LSP diagnostics remain unavailable because installation
+was previously declined. No fresh sealed review or final approval has been
+issued.
+
 DIM does not currently provide automatic workspace cleanup after PR merge,
 one-shot workspace wrappers, or disk quota. Those orchestration policies can
 be added on top of the workspace lifecycle without introducing a second
