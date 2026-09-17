@@ -19,14 +19,18 @@ case "${1:?private agent action is required}" in
     docker build --quiet --tag "$agent_image" /workspace/agent >/dev/null
     docker rm --force "$agent_name" >/dev/null 2>&1 || true
     set -- run --detach --name "$agent_name" --restart unless-stopped \
+      --publish 4096:4096 \
       --label dev.dim.role=agent \
       --env DOCKER_HOST=unix:///run/docker.sock \
       --env HOME=/home/dim-agent \
+      --env PATH=/home/dim-agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
       --env DIM_QEMU_VERIFICATION_SOCKET=/run/dim/qemu-verification/service.sock \
       --env DIM_EXTERNAL_URL_SOCKET=/run/dim/external-url/controller.sock \
       --env 'DIM_EXTERNAL_URL_CONTAINERS_JSON=["agent-dind","dim-agent"]' \
       --mount type=bind,src=/run/dim/external-url,dst=/run/dim/external-url,readonly \
-      --publish 4096:4096 \
+      --env DIM_WEB_URL_SOCKET=/run/dim/web-url/controller.sock \
+      --env 'DIM_WEB_URL_CONTAINERS_JSON=["agent-dind","dim-agent"]' \
+      --mount type=bind,src=/run/dim/web-url,dst=/run/dim/web-url,readonly \
       --env "DIM_GIT_USERNAME=$DIM_GIT_USERNAME" \
       --env "DIM_GIT_TOKEN=$DIM_GIT_TOKEN" \
       --env "GIT_AUTHOR_NAME=$GIT_AUTHOR_NAME" \
