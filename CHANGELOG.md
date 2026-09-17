@@ -9,6 +9,18 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Development workspaces now bootstrap pinned OpenCode and Oh My OpenAgent
+  releases into the persistent workspace-user home, with exact plugin
+  registration, Team Mode defaults, automatic updates disabled, and existing
+  unrelated user configuration preserved across repeat setup runs. Setup now
+  also rejects `XDG_CACHE_HOME` escapes before npm, exports contained cache
+  symlinks canonically, defaults to canonical `$HOME/.cache`, and keeps the npm
+  cache and user configuration separate. A separate explicit launcher now
+  starts password-protected OpenCode Web, persists its generated credential in
+  restricted user-home state, safely reuses only its owned healthy process,
+  and requests or reuses a workspace-scoped external URL without giving the
+  agent broader controller authority.
+
 - Local source installations now package every DIM component under a shared
   version containing the production commit and dirty-worktree state, and
   automatically rebuild the trusted `dev-infra-project-workspace:latest` image
