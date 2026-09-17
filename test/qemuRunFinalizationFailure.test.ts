@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:net";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { socketLeasePath } from "../../project/.dim/qemu-service-artifacts.mjs";
-import { http, spawnRecords, startService, waitForExit, waitForObservation } from "./qemuServiceTestSupport.js";
+import { http, readEvents, spawnRecords, startService, waitForExit, waitForObservation } from "./qemuServiceTestSupport.js";
 
 const unsupportedServers: Server[] = [];
 
@@ -84,4 +84,25 @@ describe("QEMU rejected run finalization", () => {
     expect.soft(stderrText).toContain("input 'unsupported' contains an unsupported entry type");
     expect(stderrText).toContain(`DIM_TEST_SNAPSHOT_RM_FAILURE ${snapshotRoot}`);
   }, 5_000);
+
+  it.each([
+    ["residual process group", { residualProcessGroup: true }, "remained live after SIGKILL"],
+    ["snapshot removal failure", { rejectSnapshotRemoval: true }, "DIM_TEST_SNAPSHOT_RM_FAILURE"],
+  ] as const)("escalates a cancel-only %s finalization rejection to fatal shutdown", async (_kind, options, diagnostic) => {
+    // Given
+    const fixture = await startService("hold", options);
+    const started = await http(fixture, { body: { inputs: [], mode: "run" }, method: "POST", path: "/v1/run" });
+    await readEvents(fixture, "ready\n");
+    expect.soft(started.status).toBe(202);
+
+    // When
+    const cancellation = http(fixture, { method: "DELETE", path: "/v1/run" }).catch(() => undefined);
+    const exited = await waitForExit(fixture, 6_000);
+    await cancellation;
+
+    // Then
+    expect.soft(exited, "cancel finalization rejection must stop the service").toBe(true);
+    expect.soft(fixture.process.exitCode).toBe(1);
+    expect(fixture.stderr()).toContain(diagnostic);
+  }, 7_000);
 });
