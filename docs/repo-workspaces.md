@@ -166,9 +166,15 @@ variables or require one container per repository.
 
 ```bash
 dim workspace create example dev --profile development
-dim workspace exec dev -- bash
-dim workspace run dev codex
+dim run dev bash
+dim run dev bash -- -lc 'just test'
+dim exec dev -- bash
 ```
+
+`dim run` dispatches through the Project's reviewed entrypoint and is the
+normal way to enter a Project-owned agent task. `dim exec` bypasses that
+entrypoint and provides raw trusted-workspace access for recovery or lifecycle
+administration. Neither command installs coding-agent tools automatically.
 
 Project or remote changes never alter a running workspace automatically.
 

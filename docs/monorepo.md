@@ -124,10 +124,11 @@ The role-neutral `core/images/project-workspace` image is the trusted lifecycle
 container. The reviewed `.dim/setup.sh` obtains the host Git author through
 the narrow host-input API and starts only the repository-owned Compose
 `agent-dind` service. That private rootless daemon creates the development agent
-inside its own runtime. Its pinned `workbench/agent` image supplies Codex,
-Node.js 24, pnpm, just, Git, and a Docker client connected only to the private
-daemon; it receives neither the host Docker socket nor the trusted workspace's
-Docker socket. The daemon adopts the reviewed workspace checkout's UID/GID.
+inside its own runtime. Its pinned agent image supplies the common development
+toolchain and a Docker client connected only to the private daemon. Coding-agent
+tools are installed separately by explicit workspace-user action. The agent
+receives neither the host Docker socket nor the trusted workspace's Docker
+socket. The daemon adopts the reviewed workspace checkout's UID/GID.
 The agent runs as UID 0 only inside the daemon's rootless user namespace, where
 that identity maps to the non-root workspace owner rather than
 trusted-workspace or host root.
@@ -139,24 +140,23 @@ the narrowly scoped secrets and build inputs those workloads need.
 
 The outer lifecycle mounts a Project-owned named volume into the private
 runtime, which bind-mounts it as the agent's `/home/dim-agent`. Separate
-`dim workspace run` invocations therefore share Codex configuration and other user-home
-state until the workspace is discarded; source remains in `/workspace`.
+`dim run` invocations therefore share user-installed tools and configuration
+until the workspace is discarded; source remains in `/workspace`.
 
 Create the split Project and a persistent workspace:
 
 ```bash
 dim project create dim-self \
-  --bootstrap-git-url https://github.com/slop-lab/dev-infra-manager.git \
-  --bootstrap-git-ref dev/root
+  --bootstrap-git-url <canonical-root-url> \
+  --bootstrap-git-ref main
 dim workspace create dim-self dim-self-dev
-dim workspace run dim-self-dev codex
+dim run dim-self-dev bash
 ```
 
 `run` dispatches the repository's checked-in `.dim/entrypoint.sh` task
 contract into the Project-owned agent. The canonical contract deliberately
 exposes only these tasks:
 
-- `codex` starts Codex inside the unprivileged Project-owned agent container.
 - `bash` starts Bash inside the unprivileged Project-owned agent container,
   not in the trusted workspace container.
 - `backup` writes a gzip tar stream of the agent home to stdout, and `restore`
@@ -167,7 +167,28 @@ exposes only these tasks:
 
 Use `bash -- -lc 'just RECIPE'` for repository recipes instead of adding a
 task alias for each recipe.
-`exec dim-self-dev -- bash` remains the raw trusted-workspace recovery or
+Install the optional reviewed OpenCode bootstrap explicitly from inside the
+agent task boundary:
+
+```bash
+dim run dim-self-dev bash -- \
+  /workspace/scripts/workspace-user-setup.bash
+```
+
+The script is development-owned, installs pinned packages only into the
+persistent user home, and preserves comments while making targeted
+configuration edits. OpenCode uses the home-confined XDG configuration
+directory. OMO 4.19.4 uses `$HOME/.omo/omo.jsonc`, with bounded settings at
+`["[opencode]"].team_mode`: `enabled=true`, `max_parallel_members=4`,
+`max_members=8`, and `tmux_visualization=false`. Concurrent setup is serialized,
+and a retry converges after an interrupted partial update; the files are not
+promised to change as one transaction. The script does not perform
+authentication, alter global Git configuration, expose OpenCode Web, or
+receive DIM controller or plugin authority. Run OpenCode afterward as an
+ordinary command through `bash`; it is an optional tool, not a DIM task or
+lifecycle feature.
+
+`dim exec dim-self-dev -- bash` remains the raw trusted-workspace recovery or
 interactive shell path. The agent bind-mounts the workspace checkout and its
 private-Docker state uses a separate Project volume; no host checkout or
 Docker socket is mounted.

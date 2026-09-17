@@ -120,6 +120,13 @@ The script must be safe to retry after partial failure. It is invoked by
 successful `update`. It is not invoked by `run` or
 `exec`.
 
+Trusted setup prepares Project infrastructure. It must not install a coding
+agent's personal tools or configuration. Projects that offer such a bootstrap
+should publish it as an explicit workspace-user action and run it through an
+agent task after setup has completed. Keeping that mutation below the agent's
+persistent home lets it survive task processes and agent-container recreation
+without giving the script trusted lifecycle authority.
+
 The trusted project root can request narrowly defined, non-secret host
 settings from installed providers:
 
@@ -183,8 +190,8 @@ task="${1:?task is required}"
 shift
 
 case "$task" in
-  codex)
-    exec codex "$@"
+  bash)
+    exec bash "$@"
     ;;
   test)
     exec docker compose \
@@ -271,11 +278,105 @@ Creation:
 Run project-defined tasks without repeating setup:
 
 ```bash
-dim workspace run example-dev codex
-dim workspace run example-dev bash -- -lc 'just test'
-dim workspace run example-dev backup >example-dev-home.tar.gz
-dim workspace run example-dev restore <example-dev-home.tar.gz
+dim run example-dev bash
+dim run example-dev bash -- -lc 'just test'
+dim run example-dev backup >example-dev-home.tar.gz
+dim run example-dev restore <example-dev-home.tar.gz
 ```
+
+`dim run` is the short form of `dim workspace run`. It enters the checked-in
+Project task boundary, which may dispatch `bash` into a Project-owned agent.
+It does not run setup or install an agent tool by itself.
+
+To offer an optional OpenCode bootstrap, publish
+`scripts/workspace-user-setup.bash` and its `.sha256` file from the development
+repository. Download both from one full development commit, verify the local
+file, then stream those verified bytes to the existing `bash` task. For
+example, replace the URL and commit with the canonical development
+repository's immutable raw-file URL and full commit ID:
+
+```bash
+(
+  set -euo pipefail
+
+  development_commit="${DIM_DEVELOPMENT_COMMIT:?set a full development commit}"
+  [[ "$development_commit" =~ ^[0-9a-f]{40}$ ]] || {
+    printf 'development commit must be exactly 40 lowercase hex characters\n' >&2
+    exit 2
+  }
+
+  : "${DIM_DEVELOPMENT_RAW_ROOT:?set the development repository raw-file root}"
+  development_raw_root="${DIM_DEVELOPMENT_RAW_ROOT%/}"
+  artifact_base="${development_raw_root}/${development_commit}"
+  download_dir="$(mktemp -d)"
+  trap 'rm -rf -- "$download_dir"' EXIT
+
+  curl --fail --silent --show-error --location \
+    --output "$download_dir/workspace-user-setup.bash" \
+    "${artifact_base}/scripts/workspace-user-setup.bash"
+  curl --fail --silent --show-error --location \
+    --output "$download_dir/workspace-user-setup.bash.sha256" \
+    "${artifact_base}/scripts/workspace-user-setup.bash.sha256"
+  (
+    cd -- "$download_dir"
+    sha256sum --check workspace-user-setup.bash.sha256
+  )
+  dim run example-dev bash -- -s <"$download_dir/workspace-user-setup.bash"
+)
+```
+
+Set `DIM_DEVELOPMENT_COMMIT` to exactly 40 lowercase hexadecimal characters
+and `DIM_DEVELOPMENT_RAW_ROOT` to the Git provider's raw-file repository root,
+ending immediately before the commit segment. A trailing slash is accepted and
+normalized. Don't pipe a mutable URL into a shell. The script and checksum come
+from the same validated commit, checksum failure prevents execution, and the
+exit trap removes both downloads.
+
+The script may install pinned user-local executables and agent configuration
+only below the canonical agent home. It rejects an XDG configuration directory
+or cache directory, including a symbolic-link target, that resolves outside
+that home. `XDG_CACHE_HOME` defaults to canonical `$HOME/.cache`; a contained
+symlink is exported as its canonical target. OpenCode configuration stays below
+`${XDG_CONFIG_HOME:-$HOME/.config}/opencode`. OMO 4.19.4 uses
+`$HOME/.omo/omo.jsonc`, with the bounded settings at
+`["[opencode]"].team_mode`: `enabled=true`, `max_parallel_members=4`,
+`max_members=8`, and `tmux_visualization=false`.
+
+The npm install prefix, cache, and user configuration file are canonical
+descendants of `HOME`; inherited npm settings cannot redirect those mutation
+roots. The npm cache and user configuration remain separate from
+`XDG_CACHE_HOME`. Setup serializes overlapping invocations with flock-equivalent
+exclusive lock semantics across package installation, configuration, and final
+version verification. A failed holder cannot leave a permanent lock. Setup
+applies targeted JSONC edits so unrelated properties, comments, and plugin
+options survive. Each file is replaced without exposing partial content. Package and
+multi-file configuration updates are not one transaction; after interruption,
+rerunning the script must converge on the documented state. The script must not
+authenticate the tool, change global Git configuration, start a web interface,
+or request DIM controller or plugin access.
+
+An optional Web launcher is a separate explicit workspace-user action. It must
+require the pinned OpenCode installation instead of downloading or silently
+upgrading it. Before binding `0.0.0.0`, it configures OpenCode Basic Auth, keeps
+the credential out of command arguments and logs, and persists it only in a
+mode-restricted canonical user-home state directory. Routine output reports
+that file rather than the password; reading its username/password lines is a
+separate explicit action. The selected ingress must advertise HTTPS before the
+listener starts. Readiness uses the
+authenticated `/global/health` endpoint. A retry may reuse only the exact
+recorded live process after proving that process owns the listening socket,
+and an external URL whose ingress, protocol, port, and
+container path all match. It must not discover and kill processes by command
+substring. External exposure uses only the Project's restricted external-URL
+proxy socket and non-empty reviewed target exposed as `DIM_WEB_URL_SOCKET` and
+`DIM_WEB_URL_CONTAINERS_JSON`; it does not fall back to `DIM_EXTERNAL_URL_*`
+and receives no raw controller grant or host secret. Lock acquisition, proxy
+requests, readiness, and cleanup are bounded. Selecting another ingress also
+requires a reviewed change to the trusted proxy's ingress allowlist.
+Installation/configuration remains non-launching.
+The Web UI and API use the same external origin, so the canonical launcher does
+not enable CORS. A different-origin client requires an exact reviewed origin;
+wildcard CORS is not an acceptable default.
 
 Backup and restore are Project-defined tasks rather than DIM lifecycle
 operations. A Project can use stdin/stdout streaming for its chosen format and
@@ -290,15 +391,18 @@ PTY, applies the CLI's initial dimensions, and forwards later terminal resize
 events. Internal reconciliation and readiness probes are not part of the task
 output stream.
 
-Run a raw command in the top-level workspace:
+Run a raw command in the trusted top-level workspace:
 
 ```bash
-dim workspace exec example-dev -- bash
-dim workspace exec example-dev -- docker compose \
+dim exec example-dev -- bash
+dim exec example-dev -- docker compose \
   --file .dim/docker-compose.yml ps
 ```
 
-There is no separate `workspace shell` command; `exec NAME -- bash`
+`dim exec` is the short form of `dim workspace exec`. It always bypasses the
+Project entrypoint and enters the trusted workspace container. Use it for
+recovery and Project lifecycle administration, not as the coding-agent task
+boundary. There is no separate `workspace shell` command; `exec NAME -- bash`
 is the explicit equivalent.
 
 Update the project and reconcile its environment:
