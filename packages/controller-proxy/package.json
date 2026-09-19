@@ -22,10 +22,16 @@
       "types": "./src/external-url.ts",
       "import": "./dist/external-url.js",
       "default": "./dist/external-url.js"
+    },
+    "./development-service": {
+      "types": "./src/development-service.ts",
+      "import": "./dist/development-service.js",
+      "default": "./dist/development-service.js"
     }
   },
   "bin": {
-    "dim-controller-proxy": "./dist/cli.js"
+    "dim-controller-proxy": "./dist/cli.js",
+    "dim-development-service": "./dist/development-service-cli.js"
   },
   "scripts": {
     "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",

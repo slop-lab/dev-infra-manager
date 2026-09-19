@@ -30,7 +30,9 @@ COPY core/packages/controller-proxy/dist /usr/local/lib/dim/controller-proxy
 RUN chmod +x /usr/local/bin/dim-project-entrypoint /usr/local/bin/dim-git-askpass \
   /usr/local/bin/dim-project-cgroup \
   /usr/local/lib/dim/controller-proxy/cli.js \
-  && ln -s /usr/local/lib/dim/controller-proxy/cli.js /usr/local/bin/dim-controller-proxy
+  /usr/local/lib/dim/controller-proxy/development-service-cli.js \
+  && ln -s /usr/local/lib/dim/controller-proxy/cli.js /usr/local/bin/dim-controller-proxy \
+  && ln -s /usr/local/lib/dim/controller-proxy/development-service-cli.js /usr/local/bin/dim-development-service
 
 WORKDIR /workspace
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/dim-project-entrypoint"]
