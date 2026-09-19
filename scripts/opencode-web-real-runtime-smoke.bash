@@ -8,6 +8,7 @@ fixture_pid=""
 proxy_pid=""
 server_pid=""
 service_pid=""
+wildcard_pid=""
 
 process_start_time() {
   node - "$1" <<'NODE'
@@ -42,10 +43,12 @@ cleanup() {
   local status=$?
   [[ -z "$server_pid" ]] || kill "$server_pid" 2>/dev/null || true
   [[ -z "$service_pid" ]] || kill "$service_pid" 2>/dev/null || true
+  [[ -z "$wildcard_pid" ]] || kill -KILL "$wildcard_pid" 2>/dev/null || true
   [[ -z "$proxy_pid" ]] || kill "$proxy_pid" 2>/dev/null || true
   [[ -z "$fixture_pid" ]] || kill "$fixture_pid" 2>/dev/null || true
   [[ -z "$server_pid" ]] || wait "$server_pid" 2>/dev/null || true
   [[ -z "$service_pid" ]] || wait "$service_pid" 2>/dev/null || true
+  [[ -z "$wildcard_pid" ]] || wait "$wildcard_pid" 2>/dev/null || true
   [[ -z "$proxy_pid" ]] || wait "$proxy_pid" 2>/dev/null || true
   [[ -z "$fixture_pid" ]] || wait "$fixture_pid" 2>/dev/null || true
   if ! stop_owned_gateway; then
@@ -126,11 +129,62 @@ done
 run_launcher() {
   local selected_port="${1:-$opencode_port}"
   local selected_ingress="${2:-https-ts}"
-  env -i HOME="$work_dir/home" PATH="$work_dir/tools:/usr/local/bin:/usr/bin:/bin" \
-    DIM_DEVELOPMENT_URL_SOCKET="$development_socket" OPENCODE_WEB_PORT="$selected_port" \
-    OPENCODE_WEB_INGRESS="$selected_ingress" \
-    bash "$repo_root/scripts/opencode-web.bash"
+  if (($# >= 3)); then
+    env -i HOME="$work_dir/home" PATH="$work_dir/tools:/usr/local/bin:/usr/bin:/bin" \
+      DIM_DEVELOPMENT_URL_SOCKET="$development_socket" OPENCODE_WEB_PORT="$selected_port" \
+      OPENCODE_WEB_INGRESS="$selected_ingress" OPENCODE_WEB_CORS_ORIGINS="$3" \
+      bash "$repo_root/scripts/opencode-web.bash"
+  else
+    env -i HOME="$work_dir/home" PATH="$work_dir/tools:/usr/local/bin:/usr/bin:/bin" \
+      DIM_DEVELOPMENT_URL_SOCKET="$development_socket" OPENCODE_WEB_PORT="$selected_port" \
+      OPENCODE_WEB_INGRESS="$selected_ingress" \
+      bash "$repo_root/scripts/opencode-web.bash"
+  fi
 }
+
+assert_header() {
+  local headers_file="$1" expected="$2"
+  tr -d '\r' <"$headers_file" | grep -Fiqx "$expected"
+}
+
+assert_no_header() {
+  local headers_file="$1" header_name="$2"
+  ! tr -d '\r' <"$headers_file" | grep -Eiq "^${header_name}:"
+}
+
+wildcard_port="$(available_port)"
+wildcard_password=0123456789abcdef0123456789abcdef
+wildcard_auth_config="$work_dir/wildcard-auth"
+printf 'user = "opencode:%s"\n' "$wildcard_password" >"$wildcard_auth_config"
+chmod 0600 "$wildcard_auth_config"
+mkdir -p "$work_dir/wildcard-home"
+HOME="$work_dir/wildcard-home" OPENCODE_SERVER_USERNAME=opencode OPENCODE_SERVER_PASSWORD="$wildcard_password" \
+  "$opencode_binary" web --hostname 127.0.0.1 --port "$wildcard_port" --cors '*' \
+  >"$work_dir/wildcard-runtime.log" 2>&1 &
+wildcard_pid=$!
+for attempt in $(seq 1 100); do
+  wildcard_health="$(curl --silent --connect-timeout 0.2 --max-time 0.2 --output /dev/null \
+    --write-out '%{http_code}' "http://127.0.0.1:$wildcard_port/global/health" || true)"
+  [[ "$wildcard_health" = 401 ]] && break
+  [[ "$attempt" -lt 100 ]] || { printf 'wildcard runtime probe did not become ready\n' >&2; exit 1; }
+  sleep 0.1
+done
+wildcard_runtime_headers="$work_dir/wildcard-runtime.headers"
+wildcard_runtime_status="$(curl --config "$wildcard_auth_config" --silent --dump-header "$wildcard_runtime_headers" \
+  --output /dev/null --write-out '%{http_code}' --header 'Origin: https://remote-web.example' \
+  "http://127.0.0.1:$wildcard_port/global/health")"
+[[ "$wildcard_runtime_status" = 200 ]]
+assert_no_header "$wildcard_runtime_headers" 'access-control-allow-origin'
+kill "$wildcard_pid"
+for _ in $(seq 1 20); do
+  kill -0 "$wildcard_pid" 2>/dev/null || break
+  sleep 0.1
+done
+if kill -0 "$wildcard_pid" 2>/dev/null; then
+  kill -KILL "$wildcard_pid" 2>/dev/null || true
+fi
+wait "$wildcard_pid" 2>/dev/null || true
+wildcard_pid=""
 
 first_output="$(run_launcher 2>"$work_dir/first.stderr")"
 credential_file="$work_dir/home/.local/state/opencode-web/credentials"
@@ -147,6 +201,102 @@ chmod 0600 "$auth_config"
 [[ "$(curl --config "$auth_config" --noproxy '*' --insecure --silent \
   --resolve "service-1.example.test:$external_port:127.0.0.1" --output /dev/null \
   --write-out '%{http_code}' "$opencode_url/global/health")" = 200 ]]
+
+default_preflight_headers="$work_dir/default-preflight.headers"
+default_preflight_status="$(curl --noproxy '*' --insecure --silent \
+  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$default_preflight_headers" \
+  --output /dev/null --write-out '%{http_code}' --request OPTIONS \
+  --header 'Origin: https://localhost:4096' --header 'Access-Control-Request-Method: GET' \
+  --header 'Access-Control-Request-Headers: authorization,content-type' "$opencode_url/global/health")"
+[[ "$default_preflight_status" = 204 ]]
+assert_header "$default_preflight_headers" 'access-control-allow-origin: https://localhost:4096'
+assert_header "$default_preflight_headers" 'access-control-allow-headers: authorization,content-type'
+
+default_get_headers="$work_dir/default-get.headers"
+default_get_status="$(curl --config "$auth_config" --noproxy '*' --insecure --silent \
+  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$default_get_headers" \
+  --output /dev/null --write-out '%{http_code}' --header 'Origin: https://localhost:4096' \
+  "$opencode_url/global/health")"
+[[ "$default_get_status" = 200 ]]
+assert_header "$default_get_headers" 'access-control-allow-origin: https://localhost:4096'
+
+missing_auth_headers="$work_dir/missing-auth.headers"
+missing_auth_status="$(curl --noproxy '*' --insecure --silent \
+  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$missing_auth_headers" \
+  --output /dev/null --write-out '%{http_code}' --header 'Origin: https://localhost:4096' \
+  "$opencode_url/global/health")"
+[[ "$missing_auth_status" = 401 ]]
+assert_header "$missing_auth_headers" 'access-control-allow-origin: https://localhost:4096'
+
+wrong_auth_headers="$work_dir/wrong-auth.headers"
+wrong_auth_status="$(curl --user 'opencode:wrong' --noproxy '*' --insecure --silent \
+  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$wrong_auth_headers" \
+  --output /dev/null --write-out '%{http_code}' --header 'Origin: https://localhost:4096' \
+  "$opencode_url/global/health")"
+[[ "$wrong_auth_status" = 401 ]]
+assert_header "$wrong_auth_headers" 'access-control-allow-origin: https://localhost:4096'
+
+untrusted_headers="$work_dir/untrusted.headers"
+untrusted_status="$(curl --config "$auth_config" --noproxy '*' --insecure --silent \
+  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$untrusted_headers" \
+  --output /dev/null --write-out '%{http_code}' --header 'Origin: https://untrusted.example' \
+  "$opencode_url/global/health")"
+[[ "$untrusted_status" = 200 ]]
+assert_no_header "$untrusted_headers" 'access-control-allow-origin'
+
+additional_origins='["https://remote-web.example","https://localhost:4096","https://remote-web.example/"]'
+if run_launcher "$opencode_port" https-ts '["*"]' >"$work_dir/wildcard.stdout" 2>"$work_dir/wildcard.stderr"; then
+  printf 'launcher accepted wildcard CORS with the pinned runtime\n' >&2
+  exit 1
+fi
+grep -Fq 'OPENCODE_WEB_CORS_ORIGINS' "$work_dir/wildcard.stderr"
+[[ "$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/server.pid")" = "$server_pid" ]]
+kill -0 "$server_pid"
+
+additional_output="$(run_launcher "$opencode_port" https-ts "$additional_origins" 2>"$work_dir/additional.stderr")"
+additional_pid="$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/server.pid")"
+[[ "$additional_output" = "$first_output" ]]
+[[ "$additional_pid" != "$server_pid" ]]
+! kill -0 "$server_pid" 2>/dev/null
+server_pid="$additional_pid"
+[[ "$(sed -n '2p' "$credential_file")" = "$password" ]]
+
+remote_preflight_headers="$work_dir/remote-preflight.headers"
+remote_preflight_status="$(curl --noproxy '*' --insecure --silent \
+  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$remote_preflight_headers" \
+  --output /dev/null --write-out '%{http_code}' --request OPTIONS \
+  --header 'Origin: https://remote-web.example' --header 'Access-Control-Request-Method: GET' \
+  --header 'Access-Control-Request-Headers: authorization,content-type' "$opencode_url/global/health")"
+[[ "$remote_preflight_status" = 204 ]]
+assert_header "$remote_preflight_headers" 'access-control-allow-origin: https://remote-web.example'
+assert_header "$remote_preflight_headers" 'access-control-allow-headers: authorization,content-type'
+
+remote_get_headers="$work_dir/remote-get.headers"
+remote_get_status="$(curl --config "$auth_config" --noproxy '*' --insecure --silent \
+  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$remote_get_headers" \
+  --output /dev/null --write-out '%{http_code}' --header 'Origin: https://remote-web.example' \
+  "$opencode_url/global/health")"
+[[ "$remote_get_status" = 200 ]]
+assert_header "$remote_get_headers" 'access-control-allow-origin: https://remote-web.example'
+
+equivalent_origins='["https://remote-web.example/","https://remote-web.example"]'
+run_launcher "$opencode_port" https-ts "$equivalent_origins" >/dev/null 2>"$work_dir/equivalent.stderr"
+[[ "$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/server.pid")" = "$server_pid" ]]
+
+removed_output="$(run_launcher 2>"$work_dir/removed.stderr")"
+removed_pid="$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/server.pid")"
+[[ "$removed_output" = "$first_output" ]]
+[[ "$removed_pid" != "$server_pid" ]]
+! kill -0 "$server_pid" 2>/dev/null
+server_pid="$removed_pid"
+[[ "$(sed -n '2p' "$credential_file")" = "$password" ]]
+removed_remote_headers="$work_dir/removed-remote.headers"
+removed_remote_status="$(curl --config "$auth_config" --noproxy '*' --insecure --silent \
+  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$removed_remote_headers" \
+  --output /dev/null --write-out '%{http_code}' --header 'Origin: https://remote-web.example' \
+  "$opencode_url/global/health")"
+[[ "$removed_remote_status" = 200 ]]
+assert_no_header "$removed_remote_headers" 'access-control-allow-origin'
 
 cat >"$work_dir/service.mjs" <<'EOF'
 import http from "node:http";
@@ -243,4 +393,9 @@ kill -0 "$gateway_pid"
 
 stop_owned_gateway
 [[ ! -e "$work_dir/home/.local/state/dim/development-service/gateway.identity.json" ]]
+printf 'cors-evidence default-options=%s default-get=%s remote-options=%s remote-get=%s untrusted-get=%s untrusted-allow-origin=absent missing-auth=%s wrong-auth=%s\n' \
+  "$default_preflight_status" "$default_get_status" "$remote_preflight_status" "$remote_get_status" \
+  "$untrusted_status" "$missing_auth_status" "$wrong_auth_status"
+printf '%s\n' 'cors-pid-evidence equivalent=reused changed=restarted removed=restarted wildcard=rejected-owned-process-preserved'
+printf 'cors-wildcard-runtime-evidence pinned=1.18.31 get=%s arbitrary-origin-allow-header=absent\n' "$wildcard_runtime_status"
 printf '%s\n' opencode-web-real-runtime-smoke-ok
