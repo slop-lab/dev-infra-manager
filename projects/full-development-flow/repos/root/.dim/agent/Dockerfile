@@ -4,10 +4,11 @@ FROM ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987
 ARG TARGETARCH=amd64
 ARG DIM_WORKSPACE_UID=1000
 ARG DIM_WORKSPACE_GID=1000
+ENV PATH="/home/dim-agent/.local/bin:${PATH}"
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      acl bash ca-certificates curl git jq netcat-openbsd openssh-server tini \
+      acl bash ca-certificates curl git jq netcat-openbsd openssh-server tini util-linux \
  && rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub \
  && rm -rf /var/lib/apt/lists/* \
  && test "$DIM_WORKSPACE_UID" -ne 0 \
@@ -64,8 +65,7 @@ COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose \
   /usr/local/libexec/docker/cli-plugins/docker-compose
 COPY dim-agent-shell /usr/local/bin/dim-agent-shell
 COPY start-sshd.sh /usr/local/bin/start-sshd
-RUN npm install --global --allow-scripts=@anthropic-ai/claude-code \
-      pnpm@10.13.1 @openai/codex@0.149.0 @anthropic-ai/claude-code@2.1.238
+RUN npm install --global pnpm@10.13.1
 RUN chmod 0755 /usr/local/bin/dim-agent-shell /usr/local/bin/start-sshd
 
 ENTRYPOINT ["/usr/bin/tini", "--"]

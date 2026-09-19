@@ -9,8 +9,6 @@ case "$task" in
     exec sh .dim/home-archive.sh "$task"
     ;;
   bash) set -- bash "$@" ;;
-  codex) set -- codex --dangerously-bypass-approvals-and-sandbox "$@" ;;
-  claude) set -- claude --dangerously-skip-permissions "$@" ;;
   ssh-proxy)
     test "$#" -eq 0 || { echo "ssh-proxy does not accept arguments" >&2; exit 2; }
     exec docker compose \
