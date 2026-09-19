@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Add a generic `dim-development-service` helper backed by a shared
+  HTTP/WebSocket gateway reachable on the agent-container gateway port and
+  forwarding only to loopback applications. A trusted bound External URL proxy
+  fixes the gateway target while callers submit only an ingress; stable service
+  names retain their URL and URL ID when the local application port changes.
+
 ## 0.9.0 - 2026-09-13
 
 - Give locally built installation packages a validated version containing the
