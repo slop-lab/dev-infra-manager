@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.9.0 - 2026-09-13
+
 - Give locally built installation packages a validated version containing the
   aggregate SHA-256 of the three exact production commits named by
   `DIM_SOURCE_CORE_COMMIT`, `DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT`, and

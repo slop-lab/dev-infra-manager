@@ -86,6 +86,56 @@ describe("controller proxy", () => {
     expect(requests.every((entry) => entry.authorization === "Bearer workspace.secret")).toBe(true);
   });
 
+  it("restricts External URL create, list, and revoke operations to exact targets", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "dim-target-controller-proxy-"));
+    cleanup.push(() => rm(root, { recursive: true, force: true }));
+    const sourceSocket = path.join(root, "source.sock");
+    const listen = path.join(root, "proxy.sock");
+    const allowedTarget = { containers: ["agent"], protocol: "http" as const, port: 4096 };
+    const targets = [
+      allowedTarget,
+      { ...allowedTarget, containers: ["other"] },
+      { ...allowedTarget, protocol: "https" },
+      { ...allowedTarget, port: 4097 }
+    ];
+    const upstream = http.createServer((request, response) => {
+      if (request.method === "GET" && request.url === "/api/urls") {
+        response.setHeader("content-type", "application/json");
+        response.end(JSON.stringify({
+          urls: targets.map((target, index) => ({ id: `url-${index}`, ingress: "https-ts", target }))
+        }));
+        return;
+      }
+      response.writeHead(201).end('{"ok":true}\n');
+    });
+    await listenServer(upstream, sourceSocket);
+    cleanup.push(() => closeServer(upstream));
+
+    const proxy = createControllerProxy({
+      sourceSocket,
+      token: "workspace.secret",
+      listen,
+      capabilities: [externalUrlProxy({
+        allowedIngresses: ["https-ts"],
+        allowedTargets: [allowedTarget]
+      })]
+    });
+    await proxy.listen();
+    cleanup.push(() => proxy.close());
+
+    for (const target of targets.slice(1)) {
+      expect((await request(listen, "POST", "/api/urls", { ingress: "https-ts", target })).status).toBe(403);
+    }
+    expect((await request(listen, "POST", "/api/urls", { ingress: "https-ts", target: allowedTarget })).status).toBe(201);
+    expect(JSON.parse((await request(listen, "GET", "/api/urls")).body)).toEqual({
+      urls: [{ id: "url-0", ingress: "https-ts", target: allowedTarget }]
+    });
+    for (const id of ["url-1", "url-2", "url-3"]) {
+      expect((await request(listen, "DELETE", `/api/urls/${id}`)).status).toBe(403);
+    }
+    expect((await request(listen, "DELETE", "/api/urls/url-0")).status).toBe(201);
+  });
+
   it("creates a deny-by-default agent proxy from exact route policies", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "dim-agent-controller-proxy-"));
     cleanup.push(() => rm(root, { recursive: true, force: true }));
