@@ -32,6 +32,32 @@ if (value < 1n || value > 65535n) process.exit(1)
 process.stdout.write(value.toString())
 NODE
 )" || fail 'port must be an integer from 1 through 65535'
+cors_origins_json="$(node - "${OPENCODE_WEB_CORS_ORIGINS:-[]}" <<'NODE' 2>/dev/null
+const mandatoryOrigin = "https://localhost:4096"
+const input = JSON.parse(process.argv[2])
+if (!Array.isArray(input)) throw new Error("origins must be an array")
+const origins = new Set([mandatoryOrigin])
+for (const value of input) {
+  if (typeof value !== "string" || value.includes("*") ||
+      !/^https?:\/\/[^/?#]+\/?$/.test(value) || /[\r\n]/.test(value)) {
+    throw new Error("each origin must be an exact URL origin")
+  }
+  const url = new URL(value)
+  if ((url.protocol !== "http:" && url.protocol !== "https:") ||
+      url.username !== "" || url.password !== "" || url.pathname !== "/" ||
+      url.search !== "" || url.hash !== "" || url.origin === "null" || url.origin.includes("*")) {
+    throw new Error("each origin must be an exact HTTP or HTTPS URL origin")
+  }
+  origins.add(url.origin)
+}
+process.stdout.write(JSON.stringify([...origins].sort()))
+NODE
+)" || fail 'OPENCODE_WEB_CORS_ORIGINS must be a JSON array of exact HTTP or HTTPS origins without wildcard, userinfo, path, query, or fragment'
+mapfile -t cors_origins < <(jq -r '.[]' <<<"$cors_origins_json")
+cors_arguments=()
+for cors_origin in "${cors_origins[@]}"; do
+  cors_arguments+=(--cors "$cors_origin")
+done
 ingress="${OPENCODE_WEB_INGRESS:-$DEFAULT_INGRESS}"
 [[ -n "$ingress" && "$ingress" != *$'\n'* && "$ingress" != *$'\r'* ]] || \
   fail 'OPENCODE_WEB_INGRESS must be non-empty and single-line'
@@ -135,6 +161,15 @@ process.exit(environment.includes(expected) ? 0 : 1)
 NODE
 }
 
+process_cors_matches() {
+  node - "$1" "$2" <<'NODE'
+const fs = require("node:fs")
+const expected = `DIM_OPENCODE_WEB_CORS_ORIGINS_CANONICAL=${process.argv[3]}`
+const environment = fs.readFileSync(`/proc/${process.argv[2]}/environ`, "utf8").split("\0")
+process.exit(environment.includes(expected) ? 0 : 1)
+NODE
+}
+
 process_owns_listener() {
   node - "$1" "$2" <<'NODE'
 const fs = require("node:fs")
@@ -192,7 +227,8 @@ if [[ -f "$pid_file" && ! -L "$pid_file" ]]; then
     "${recorded_port:-}" =~ ^[0-9]+$ ]] && \
     process_instance_matches "$recorded_pid" "$recorded_instance"; then
     owned_pid="$recorded_pid"
-    if [[ "${recorded_port:-}" = "$port" ]] && authenticated_health && \
+    if [[ "${recorded_port:-}" = "$port" ]] && process_cors_matches "$owned_pid" "$cors_origins_json" && \
+      authenticated_health && \
       process_owns_listener "$owned_pid" "$port"; then
       server_pid="$owned_pid"
     else
@@ -225,7 +261,9 @@ if [[ -z "${server_pid:-}" ]]; then
   OPENCODE_SERVER_USERNAME="$SERVER_USERNAME" \
   OPENCODE_SERVER_PASSWORD="$password" \
   DIM_OPENCODE_WEB_INSTANCE_ID="$instance_id" \
+  DIM_OPENCODE_WEB_CORS_ORIGINS_CANONICAL="$cors_origins_json" \
     nohup opencode web --hostname 127.0.0.1 --port "$port" \
+      "${cors_arguments[@]}" \
       {lock_fd}>&- </dev/null >>"$log_file" 2>&1 &
   server_pid=$!
   started_pid="$server_pid"
