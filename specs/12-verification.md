@@ -259,9 +259,26 @@ not stop the actual helper-managed shared gateway or another service routed
 through it. At least one runtime lane MUST execute the pinned OpenCode
 binary with no provider credential and observe both HTTP 401 without Basic Auth
 and a healthy authenticated response. Setup-only lanes MUST continue proving
-that no OpenCode listener starts. Verification MUST also prove that the
-same-origin path does not enable wildcard CORS; any different-origin allowance
-must name only exact reviewed origins.
+that no OpenCode listener starts. Verification MUST prove that the launcher
+always supplies `https://localhost:4096`; accepts a JSON array of additional
+exact HTTP or HTTPS source origins that defaults to `[]`; and normalizes,
+deduplicates, and sorts the result before passing repeated `--cors` arguments.
+Invalid JSON, non-origins,
+user information, paths, queries, fragments, and wildcard values MUST fail
+before credentials, logs, locks, or process state are created. The pinned real
+OpenCode binary MUST demonstrate that `*` does not act as a wildcard.
+
+At least one runtime lane MUST send a different-origin preflight and
+authenticated request through the TLS generic gateway to the external URL. It
+MUST observe a successful preflight that allows `Authorization` and
+`Content-Type`, a CORS response for the configured client UI origin, HTTP 401
+without Basic Auth, and HTTP 200 with the credential. The configured origin is
+the requesting browser UI's source origin, not the destination external URL.
+Verification MUST NOT assume that launcher origins exclude OpenCode origins
+from built-in behavior or existing server configuration. It MUST also prove
+that matching CORS configuration reuses the same process, while changed CORS
+configuration restarts only the owned process and retains the credential,
+stable URL, and shared gateway.
 
 Static policy verification MUST inspect the root README and all three complete
 Project example READMEs. Every copyable remote flow MUST create a host temporary
@@ -269,6 +286,9 @@ directory, install its cleanup trap immediately, derive each setup or launcher
 script and checksum URL from one validated full development commit, verify all
 checksums, and only then stream the verified local bytes through the existing
 Project `bash` task. Setup and opt-in Web launch MUST remain separate commands.
+Each example MUST show how to set `OPENCODE_WEB_CORS_ORIGINS` while streaming
+the already verified launcher bytes, without relying on a script path that is
+deleted after bootstrap.
 The example READMEs MUST accept an operator-supplied, provider-neutral
 raw-source root, normalize its trailing slash, and MUST NOT hard-code a Git
 provider raw-content hostname. The root README MAY use DIM's canonical GitHub

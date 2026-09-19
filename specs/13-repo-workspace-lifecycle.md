@@ -243,9 +243,27 @@ raw host secret, target metadata, or new lifecycle authority. Other separately
 reviewed agent capabilities remain independent. Access to this socket permits any
 same-agent process to expose a service reachable through the agent's existing
 network authority and MUST NOT be described as intra-agent isolation.
-The canonical same-origin Web UI/API path MUST NOT enable wildcard CORS. If a
-Project adds a different-origin client, every allowed origin MUST be explicit
-and reviewed.
+The launcher MUST always supply `https://localhost:4096` as an exact CORS
+origin. It MUST accept `OPENCODE_WEB_CORS_ORIGINS` only as a JSON array of
+additional exact HTTP or HTTPS origins, defaulting to `[]`, where each origin
+identifies the requesting browser UI rather than the destination external URL. Before it
+creates credentials, logs, lock state, or process state, it MUST reject invalid
+JSON and values containing a wildcard, user information, path, query, or
+fragment. It MUST normalize URL origins, deduplicate and sort the complete
+list, and pass each origin to OpenCode separately. The pinned OpenCode release
+does not support `*` as a wildcard, so the launcher MUST reject it. OpenCode MAY
+also merge origins from its existing server configuration or built-in
+behavior; the launcher MUST NOT describe its inputs as a universal deny list.
+
+OpenCode CORS headers MUST remain effective through the external URL route.
+Preflight responses MUST allow the `Authorization` and `Content-Type` headers
+needed by browser clients, while application requests MUST remain protected by
+Basic Auth. The browser client MUST send the reported credential in the
+`Authorization` header. A launcher retry MAY reuse its healthy owned process
+only when both the port and canonical CORS list match. A change to either MUST
+restart only the recorded owned process while retaining its credential, stable
+external URL, and shared gateway. Projects SHOULD allow only trusted browser
+UI origins.
 
 The script MUST resolve `HOME` to its canonical path and reject every mutation
 target whose canonical path is not contained beneath it. For a target that
