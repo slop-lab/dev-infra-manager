@@ -87,17 +87,19 @@ agent resource, plugin, API, or lifecycle step.
 
 Projects may separately publish an opt-in OpenCode Web launcher. The canonical
 launcher requires the pinned setup to have completed, sets a non-empty server
-password before binding outside loopback, stores the generated credential and
+password before binding OpenCode to loopback, stores the generated credential and
 process identity in mode-restricted state below the user home, reports the
-credential-file path without printing the password, requires an HTTPS ingress,
-and polls the
-authenticated health endpoint. It requests or reuses an external URL only
-through the Project-provided `DIM_WEB_URL_SOCKET` and non-empty
-`DIM_WEB_URL_CONTAINERS_JSON` target, never the generic `DIM_EXTERNAL_URL_*`
-capability. It proves that its exact recorded process owns the listening socket
-and bounds lock, proxy, readiness, and cleanup waits. Another ingress requires
-both launcher selection and a reviewed trusted-proxy allowlist change. It is
-not invoked by installation, configuration, or lifecycle setup.
+credential-file path without printing the password, and polls the authenticated
+health endpoint. It invokes `dim-development-service expose` with a stable name,
+the selected local port, and an HTTPS requirement. Its only DIM capability is
+`DIM_DEVELOPMENT_URL_SOCKET`; the trusted proxy injects the fixed gateway target,
+so the launcher receives no target/container metadata. It proves that its exact
+recorded process owns the listening socket and bounds lock, helper, readiness,
+and cleanup waits. Another ingress must already be allowed by the reviewed
+trusted proxy. Installation, configuration, and lifecycle setup do not invoke
+the launcher, and launcher retries or failures do not stop the shared gateway
+or another routed service. The gateway listens on its fixed agent-container
+port for the trusted ingress and forwards each route to a loopback application.
 The returned Web UI and API are same-origin, so this path does not require
 CORS. Do not enable a wildcard origin; a separate browser client must use only
 its exact reviewed origin.

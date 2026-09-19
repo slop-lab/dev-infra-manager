@@ -357,23 +357,25 @@ or request DIM controller or plugin access.
 
 An optional Web launcher is a separate explicit workspace-user action. It must
 require the pinned OpenCode installation instead of downloading or silently
-upgrading it. Before binding `0.0.0.0`, it configures OpenCode Basic Auth, keeps
+upgrading it. Before binding loopback, it configures OpenCode Basic Auth, keeps
 the credential out of command arguments and logs, and persists it only in a
 mode-restricted canonical user-home state directory. Routine output reports
 that file rather than the password; reading its username/password lines is a
-separate explicit action. The selected ingress must advertise HTTPS before the
-listener starts. Readiness uses the
+separate explicit action. Readiness uses the
 authenticated `/global/health` endpoint. A retry may reuse only the exact
 recorded live process after proving that process owns the listening socket,
-and an external URL whose ingress, protocol, port, and
-container path all match. It must not discover and kill processes by command
-substring. External exposure uses only the Project's restricted external-URL
-proxy socket and non-empty reviewed target exposed as `DIM_WEB_URL_SOCKET` and
-`DIM_WEB_URL_CONTAINERS_JSON`; it does not fall back to `DIM_EXTERNAL_URL_*`
-and receives no raw controller grant or host secret. Lock acquisition, proxy
-requests, readiness, and cleanup are bounded. Selecting another ingress also
-requires a reviewed change to the trusted proxy's ingress allowlist.
-Installation/configuration remains non-launching.
+and it must not discover and kill processes by command substring. External
+exposure uses `dim-development-service expose` with a stable service name, the
+selected local port, and an HTTPS scheme requirement. The launcher receives
+only `DIM_DEVELOPMENT_URL_SOCKET`, not target/container metadata, a raw
+controller grant, or a host secret. The helper owns stable URL reuse and a
+shared gateway that listens on the agent-container gateway port and forwards
+only to loopback applications; changing the application port updates only its
+named gateway route. Lock acquisition, the complete helper process tree,
+readiness, and cleanup are bounded. Selecting another ingress cannot widen the
+trusted proxy's allowlist.
+Installation/configuration remains non-launching. One launcher failure or
+retry must not stop the gateway shared by other development services.
 The Web UI and API use the same external origin, so the canonical launcher does
 not enable CORS. A different-origin client requires an exact reviewed origin;
 wildcard CORS is not an acceptable default.
