@@ -232,6 +232,9 @@ test "$(jq -c .profiles <<<"$workspace_json")" = '["documentation"]'
 test "$(jq -r .cpuCount <<<"$workspace_json")" = 2
 test "$(jq -r .memory <<<"$workspace_json")" = 3g
 test "$(jq -r .pidsLimit <<<"$workspace_json")" = 768
+dim workspace run "$workspace_name" bash -- -lc '! command -v opencode >/dev/null 2>&1'
+test "$(dim workspace run "$workspace_name" bash -- -lc 'printf provider-neutral-bash-ok')" = \
+  "provider-neutral-bash-ok"
 dim workspace exec "$workspace_name" -- docker inspect \
   "${compose_name}-documentation-preview-1" >/dev/null
 dim workspace exec "$workspace_name" -- sh -c \

@@ -20,6 +20,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
+workspace_setup_assertions="$script_dir/lib/workspace-user-setup-assertions.cjs"
 # shellcheck source=lib/local-npm-registry.bash
 source "$script_dir/lib/local-npm-registry.bash"
 # shellcheck source=lib/example-dim-install.bash
@@ -172,31 +173,41 @@ dim workspace run "$workspace_name" bash -- -lc 'rm "$HOME/archive-smoke"'
 dim workspace run "$workspace_name" restore <"$home_backup"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/archive-smoke"')" = multi-home
 
-echo "[example-project] 7. run a coding agent in the dev container"
-# The dev container installs codex/claude via its own startup command, which
-# can still be running just after `docker compose up` reports it started.
-wait_for_task() {
+echo "[example-project] 7. explicitly install reviewed workspace-user tooling"
+if dim workspace run "$workspace_name" bash -- -lc 'command -v opencode' >/dev/null 2>&1; then
+  echo "workspace lifecycle unexpectedly installed OpenCode" >&2
+  exit 1
+fi
+assert_unknown_task() {
   local task="$1"
-  local attempt
-  for attempt in $(seq 1 60); do
-    if dim workspace run "$workspace_name" "$task" -- --version >/dev/null 2>&1; then
-      return 0
-    fi
-    sleep 1
-  done
-  echo "timed out waiting for '$task' to become available in the dev container" >&2
-  return 1
+  local error_file="$work_dir/$task-task.stderr"
+  if dim workspace run "$workspace_name" "$task" >"$work_dir/$task-task.stdout" 2>"$error_file"; then
+    echo "removed '$task' task unexpectedly succeeded" >&2
+    exit 1
+  fi
+  test "$(tr -d '\r' <"$error_file")" = "unknown DIM project task: $task"
 }
-wait_for_task codex
-wait_for_task claude
-codex_version="$(dim workspace run "$workspace_name" codex -- --version)"
-claude_version="$(dim workspace run "$workspace_name" claude -- --version)"
-echo "$codex_version" | grep -q "^codex-cli "
-echo "$claude_version" | grep -q "(Claude Code)$"
-# Without `--`, `--version` is parsed as a flag on `dim workspace run`/`dim-cli`
-# itself, not forwarded to the task -- confirm the documented gotcha in the
-# README is real: it prints dim-cli's own version, not codex's.
-test "$(dim workspace run "$workspace_name" codex --version)" != "$codex_version"
+assert_unknown_task codex
+assert_unknown_task claude
+(
+  cd "$repo_root/scripts"
+  sha256sum --check workspace-user-setup.bash.sha256
+)
+dim workspace run "$workspace_name" bash -- -s <"$repo_root/scripts/workspace-user-setup.bash"
+
+workspace_user_setup_state() {
+  dim workspace run "$workspace_name" bash -- -lc 'test "$(opencode --version)" = "1.18.31"'
+  dim workspace run "$workspace_name" bash -- -lc \
+    'node - "$HOME/.local" "$HOME/.config/opencode/opencode.json" "$HOME/.omo/omo.jsonc" fresh' \
+    <"$workspace_setup_assertions"
+  dim workspace run "$workspace_name" bash -- -lc \
+    'sha256sum "$HOME/.config/opencode/opencode.json" "$HOME/.omo/omo.jsonc"'
+}
+
+setup_state_before="$(workspace_user_setup_state)"
+dim workspace run "$workspace_name" bash -- -s <"$repo_root/scripts/workspace-user-setup.bash"
+setup_state_after="$(workspace_user_setup_state)"
+test "$setup_state_after" = "$setup_state_before"
 
 dev_git_identity="$(dim workspace run "$workspace_name" bash -- \
   -lc 'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"

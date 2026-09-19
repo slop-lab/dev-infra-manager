@@ -6,7 +6,7 @@ import { parse } from "yaml";
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 
 describe("DIM self-project topology policy", () => {
-  it("pins every split repository to its external upstream and main branch", async () => {
+  it("pins every split repository to its reviewed archive branch", async () => {
     const manifest = parse(await readFile(resolve(workspaceRoot, "project/.dim/repos.yml"), "utf8"));
     const expectedUpstreams = {
       root: "https://gitlab.com/slop-lab/dim/root.git",
@@ -41,19 +41,17 @@ describe("DIM self-project topology policy", () => {
     const smoke = await readFile(resolve(workspaceRoot, "verification/scripts/container-self-project-smoke.bash"), "utf8");
     const repositoryLoop = smoke.match(/for repository in ([\s\S]*?); do/);
     expect(repositoryLoop?.[1]?.replaceAll("\\", "").trim().split(/\s+/).sort()).toEqual(expected.sort());
-    expect(smoke).toContain('git init --bare "$source_root/remotes/$repository.git"');
-    expect(smoke).toContain('git -C "$repository_path" push "$source_root/remotes/$repository.git" \\');
-    expect(smoke).toContain('"HEAD:refs/heads/main"');
+    expect(smoke).toContain('git init --bare "$source_root/remotes/archive.git"');
+    expect(smoke).toContain('git -C "$repository_path" push "$source_root/remotes/archive.git" \\');
+    expect(smoke).toContain('"HEAD:refs/heads/dev/$repository"');
 
     const createStart = smoke.indexOf('dim project create "$project_name" \\');
     const createEnd = smoke.indexOf("\nverification_stage=", createStart);
     const createCommand = smoke.slice(createStart, createEnd);
-    expect(createCommand).toContain('--bootstrap-git-url "$source_root/remotes/root.git"');
-    expect(createCommand).toContain("--bootstrap-git-ref main");
-    expect(createCommand.match(/--apply-repos/g) ?? []).toHaveLength(1);
-    expect(smoke).not.toContain("archive.git");
-    expect(smoke).not.toContain('refs/heads/dev/$repository');
-    expect(smoke).not.toContain("dev/${repository}");
-    expect(smoke).not.toContain('--initial-branch="dev/$repository"');
+    expect(createCommand).toContain('--bootstrap-git-url "$source_root/remotes/archive.git"');
+    expect(createCommand).toContain('--bootstrap-git-ref "$root_ref"');
+    expect(createCommand).not.toContain("--apply-repos");
+    expect(smoke).toContain("config.import = { main: `dev/${repository}` }");
+    expect(smoke).toContain('--initial-branch="dev/$repository"');
   });
 });

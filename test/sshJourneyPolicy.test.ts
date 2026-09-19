@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 const verificationRoot = resolve(import.meta.dirname, "..");
 const statefulSmoke = resolve(verificationRoot, "scripts/stateful-development-flow-smoke.bash");
 const selfSmoke = resolve(verificationRoot, "scripts/container-self-project-smoke.bash");
+const selfSshFixture = resolve(verificationRoot, "scripts/lib/container-self-project-ssh-fixture.bash");
+const selfSshChecks = resolve(verificationRoot, "scripts/lib/container-self-project-ssh-checks.bash");
 
 function section(source: string, start: string, end: string): string {
   return source.slice(source.indexOf(start), source.indexOf(end));
@@ -71,7 +73,9 @@ describe("capable-host SSH journeys", () => {
   });
 
   it("proves canonical self-Project SSH authority and denials through the nested rootless agent", async () => {
-    const smoke = await readFile(selfSmoke, "utf8");
+    const smoke = (await Promise.all(
+      [selfSmoke, selfSshFixture, selfSshChecks].map(async (path) => readFile(path, "utf8"))
+    )).join("\n");
     const journey = section(smoke, 'verification_stage="authenticated non-root SSH authority"', 'verification_stage="agent identity"');
     expectSshClientPolicy(smoke);
     expectPracticalAuthority(journey, "unix:///run/docker.sock");
@@ -82,7 +86,11 @@ describe("capable-host SSH journeys", () => {
 
   it("keeps tokens out of SSH verification output while proving override denial", async () => {
     for (const path of [statefulSmoke, selfSmoke]) {
-      const smoke = await readFile(path, "utf8");
+      const smoke = path === selfSmoke
+        ? (await Promise.all(
+          [selfSmoke, selfSshFixture, selfSshChecks].map(async (source) => readFile(source, "utf8"))
+        )).join("\n")
+        : await readFile(path, "utf8");
       expect(smoke).not.toContain("printenv");
       expect(smoke).not.toContain("env | sort");
       expect(smoke).toContain('test -n "$DIM_GIT_TOKEN"');

@@ -17,6 +17,7 @@ qemu-ci-image-layers-kvm:
 
 # Run the backend-independent end-to-end contract after a backend is installed.
 full-development:
+    just verify workspace-user-setup
     cd .. && DIM_EXAMPLE_WORKSPACE_BACKEND=sysbox JUST_UNSTABLE=1 bash verification/scripts/stateful-development-flow-smoke.bash
     cd .. && DIM_SELF_WORKSPACE_BACKEND=sysbox DIM_SELF_EXPECT_AGENT_UID=1001 DIM_SELF_VERIFY_AGENT=1 JUST_UNSTABLE=1 just verify self-development
 
@@ -24,6 +25,13 @@ full-development:
 plugin-install:
     just build-packages
     cd .. && bash verification/scripts/plugin-install-smoke.bash
+
+# Verify the pinned workspace-user tooling setup in a disposable home.
+workspace-user-setup:
+    cd .. && bash verification/scripts/workspace-user-setup-smoke.bash
+    cd .. && bash verification/scripts/workspace-user-setup-remote-bootstrap-smoke.bash
+    cd .. && bash verification/scripts/opencode-web-launcher-smoke.bash
+    cd .. && bash verification/scripts/opencode-web-real-runtime-smoke.bash
 
 # Verify every publishable package through the same dry-run used before release.
 package-packs:

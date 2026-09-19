@@ -105,6 +105,9 @@ test "$(jq -r .cpuCount <<<"$workspace_json")" = "2"
 test "$(jq -r .memory <<<"$workspace_json")" = "2g"
 test "$(jq -r .pidsLimit <<<"$workspace_json")" = "512"
 container_name="$(jq -r .containerName <<<"$workspace_json")"
+dim workspace run "$workspace_name" bash -- -lc '! command -v opencode >/dev/null 2>&1'
+test "$(dim workspace run "$workspace_name" bash -- -lc 'printf provider-neutral-bash-ok')" = \
+  "provider-neutral-bash-ok"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'curl --fail --silent http://127.0.0.1:3000')" = \
   "hello from a single-repository DIM workspace"
 dim workspace run "$workspace_name" bash -- -lc 'printf "single-home\n" >"$HOME/archive-smoke"'
