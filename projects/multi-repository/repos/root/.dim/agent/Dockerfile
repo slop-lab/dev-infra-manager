@@ -24,6 +24,8 @@ COPY --from=docker-cli /usr/local/bin/docker-compose /usr/local/bin/docker-compo
 COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose \
   /usr/local/libexec/docker/cli-plugins/docker-compose
 RUN npm install --global pnpm@10.13.1
+RUN ln -s /usr/local/lib/dim/controller-proxy/development-service-cli.js \
+      /usr/local/bin/dim-development-service
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["sleep", "infinity"]
