@@ -264,19 +264,28 @@ The command prints the URL, username, and restricted credential-file path; it
 does not print the password. The credential, PID identity, and mode-0600 log persist under
 `${XDG_STATE_HOME:-$HOME/.local/state}/opencode-web`; rerunning reuses the owned
 healthy process and matching URL. It never kills an unrecorded OpenCode
-process. The launcher consumes only the dedicated `DIM_WEB_URL_SOCKET` and
-`DIM_WEB_URL_CONTAINERS_JSON` capability, not the generic
-`DIM_EXTERNAL_URL_*` capability. The default `https-ts` ingress must already
-be configured. Selecting another ingress with `DIM_WEB_URL_INGRESS` is not
-sufficient by itself: trusted Project lifecycle code must also review and
-change the Web proxy's ingress allowlist.
+process. OpenCode binds only to `127.0.0.1` on `OPENCODE_WEB_PORT` (default
+`4096`). The launcher asks the generic `dim-development-service` helper to
+expose the stable `opencode-web` service name and consumes only
+`DIM_DEVELOPMENT_URL_SOCKET`; it uses no container path, gateway target port, raw
+controller grant, or host secret. The default `https-ts` ingress must already
+be allowed by the trusted bound proxy. `OPENCODE_WEB_INGRESS` selects another
+allowed HTTPS ingress, but cannot widen that proxy policy. The launcher requires
+the installed helper and GNU `timeout`; it bounds the complete helper process
+tree and cleans up only a newly started OpenCode process when exposure fails.
 Retrieve the generated username and password explicitly from the first and
 second lines of the reported mode-`0600` file, for example with
 `dim workspace run dim-dev bash -- -lc 'cat "$HOME/.local/state/opencode-web/credentials"'`.
 The Web UI and API share the external URL origin, so the launcher does not
-enable CORS; do not add a wildcard origin. The self-Project publishes TCP 4096
-from `dim-agent` into `agent-dind`; a different `OPENCODE_WEB_PORT` also requires
-a reviewed matching `--publish PORT:PORT` in the Project lifecycle.
+enable CORS; do not add a wildcard origin. The development-service gateway
+listens on its agent-container interfaces at the fixed port reported by
+`gateway-port`, then forwards each exact external authority only to the
+selected `127.0.0.1:OPENCODE_WEB_PORT` application. The trusted nested route,
+when needed, maps that queried gateway port to the same port (`G:G`); changing
+the OpenCode application port requires no `.dim` or container-port change.
+The independent generic `DIM_EXTERNAL_URL_*` capability remains available to
+callers that need to choose arbitrary targets; the OpenCode launcher does not
+consume it.
 
 For a workspace that does not have the development checkout, download both
 files on the host from one reviewed, full 40-character development commit.

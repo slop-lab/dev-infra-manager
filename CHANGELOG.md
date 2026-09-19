@@ -18,8 +18,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   cache and user configuration separate. A separate explicit launcher now
   starts password-protected OpenCode Web, persists its generated credential in
   restricted user-home state, safely reuses only its owned healthy process,
-  and requests or reuses a workspace-scoped external URL without giving the
-  agent broader controller authority.
+  binds any selected application port only on loopback, and uses the generic
+  development-service helper to retain one workspace URL without giving the
+  tool container metadata or broader controller authority. The same trusted
+  gateway can expose other agent-selected loopback services without Project
+  changes while its bound proxy keeps the external target fixed. Launcher
+  lock, readiness, helper execution, and cleanup are bounded; failed exposure
+  stops only a newly started OpenCode process and leaves the shared gateway and
+  other services running.
 
 - Local source installations now package every DIM component under a shared
   version containing the production commit and dirty-worktree state, and
