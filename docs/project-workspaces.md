@@ -427,9 +427,25 @@ readiness, and cleanup are bounded. Selecting another ingress cannot widen the
 trusted proxy's allowlist.
 Installation/configuration remains non-launching. One launcher failure or
 retry must not stop the gateway shared by other development services.
-The Web UI and API use the same external origin, so the canonical launcher does
-not enable CORS. A different-origin client requires an exact reviewed origin;
-wildcard CORS is not an acceptable default.
+The launcher must always supply `https://localhost:4096` as an exact CORS
+origin. `OPENCODE_WEB_CORS_ORIGINS` is a JSON array of additional exact HTTP or
+HTTPS browser client origins and defaults to `[]`. The origin identifies the
+source Web UI, not the destination DIM external URL. Before creating state, the launcher rejects
+invalid JSON and values containing a wildcard, user information, path, query,
+or fragment. It normalizes URL origins, removes duplicates, sorts the result,
+and passes each value through a separate OpenCode `--cors` argument. The pinned
+OpenCode release does not implement `*` as a wildcard origin. OpenCode may also
+merge origins from server configuration or built-in behavior, so the launcher
+list is not a universal deny list.
+
+CORS headers from OpenCode pass through the external URL route. Preflight must
+permit the `Authorization` and `Content-Type` headers used by the browser
+client. Later requests remain subject to Basic Auth and must send the reported
+credential in `Authorization`. The launcher may reuse a healthy owned process
+only when its port and canonical CORS list match. A change to either setting
+must restart only the recorded owned process, preserving the credential,
+stable external URL, and helper-managed shared gateway. Projects should allow
+only trusted browser UI origins.
 
 Backup and restore are Project-defined tasks rather than DIM lifecycle
 operations. A Project can use stdin/stdout streaming for its chosen format and
