@@ -38,6 +38,7 @@ while (($#)); do
   case "$1" in
     --hostname) hostname="$2"; shift 2 ;;
     --port) port="$2"; shift 2 ;;
+    --cors) shift 2 ;;
     *) exit 64 ;;
   esac
 done
