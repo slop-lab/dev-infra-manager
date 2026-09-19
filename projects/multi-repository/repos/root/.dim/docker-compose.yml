@@ -4,8 +4,7 @@ services:
       context: agent
     environment:
       DOCKER_HOST: "tcp://agent-dind:2375"
-      DIM_WEB_URL_SOCKET: "/run/dim/web-url/controller.sock"
-      DIM_WEB_URL_CONTAINERS_JSON: '["agent"]'
+      DIM_DEVELOPMENT_URL_SOCKET: "/run/dim/development-url/controller.sock"
       DIM_GIT_USERNAME: "${DIM_GIT_USERNAME:?}"
       DIM_GIT_TOKEN: "${DIM_GIT_TOKEN:?}"
       # Setup supplies these when creating the agent. Defaults keep unrelated
@@ -23,7 +22,10 @@ services:
       - ${DIM_PROJECT_ROOT:?}:/workspace
       - agent-home:/home/dim-agent
       - agent-dind-shared:/mnt/workspace-shared-dind
-      - /tmp/dim-web-url:/run/dim/web-url:ro
+      - /tmp/dim-development-url:/run/dim/development-url:ro
+      - /usr/local/lib/dim/controller-proxy:/usr/local/lib/dim/controller-proxy:ro
+    expose:
+      - "${DIM_DEVELOPMENT_GATEWAY_PORT:?}"
     networks:
       - default
       - agent-dind
