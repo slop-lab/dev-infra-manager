@@ -56,6 +56,52 @@ fixed tasks into it from `.dim/entrypoint.sh`. The service is ordinary
 Project-owned Compose configuration; DIM core does not define or manage an
 agent resource.
 
+Enter that Project-owned task boundary with `dim run WORKSPACE bash`. Use
+`dim exec WORKSPACE -- bash` only when raw access to the trusted workspace is
+needed for recovery or lifecycle administration. `run`, `exec`, and trusted
+`.dim/setup.sh` do not install coding-agent tools automatically.
+
+A Project may document an optional workspace-user bootstrap. Fetch its script
+and `.sha256` file from the same full development commit, verify the checksum,
+then explicitly stream the verified script through
+`dim run WORKSPACE bash -- -s`. Never pipe a branch, tag, or `latest` URL
+directly into a shell. The bootstrap may change only the persistent agent user
+home and must exclude authentication, global Git configuration, web exposure,
+and DIM controller or plugin access. The canonical self-development workspace
+can run its reviewed local copy directly:
+
+```bash
+dim run dim-dev bash -- /workspace/scripts/workspace-user-setup.bash
+```
+
+That optional script installs pinned OpenCode tooling below the canonical
+agent home. OpenCode configuration remains in the home-confined XDG directory;
+OMO 4.19.4 configuration is `$HOME/.omo/omo.jsonc`, with
+`["[opencode]"].team_mode` settings of `enabled=true`, `max_parallel_members=4`,
+`max_members=8`,
+and `tmux_visualization=false`. Targeted JSONC updates preserve comments and
+unrelated settings, and concurrent setup is serialized. An interrupted
+multi-file update converges when retried rather than promising transactional
+atomicity across files. OpenCode remains a user-selected command, not a DIM
+agent resource, plugin, API, or lifecycle step.
+
+Projects may separately publish an opt-in OpenCode Web launcher. The canonical
+launcher requires the pinned setup to have completed, sets a non-empty server
+password before binding outside loopback, stores the generated credential and
+process identity in mode-restricted state below the user home, reports the
+credential-file path without printing the password, requires an HTTPS ingress,
+and polls the
+authenticated health endpoint. It requests or reuses an external URL only
+through the Project-provided `DIM_WEB_URL_SOCKET` and non-empty
+`DIM_WEB_URL_CONTAINERS_JSON` target, never the generic `DIM_EXTERNAL_URL_*`
+capability. It proves that its exact recorded process owns the listening socket
+and bounds lock, proxy, readiness, and cleanup waits. Another ingress requires
+both launcher selection and a reviewed trusted-proxy allowlist change. It is
+not invoked by installation, configuration, or lifecycle setup.
+The returned Web UI and API are same-origin, so this path does not require
+CORS. Do not enable a wildcard origin; a separate browser client must use only
+its exact reviewed origin.
+
 Run `just` as your normal user, including when it comes from mise. After the
 first install, log out and back in or run `newgrp docker` once to refresh the
 Docker group membership added by the installer.
@@ -205,7 +251,7 @@ prefix and uses only that installed `dim` binary to exercise:
 - An external URL project whose root, nested dev, and further nested service
   are routed without publishing arbitrary host upstreams.
 - This repository registered as a real project, including locked dependency
-  setup and its checked-in `check`, `verify`, and `codex` tasks.
+  setup and its checked-in `bash`, `backup`, and `restore` tasks.
 - Capability-profile replacement, project fast-forward update, stop/start
   persistence, and discard cleanup.
 
@@ -277,6 +323,8 @@ For a combined, stateful adoption and recovery walkthrough, see
 `start`, `restart`, `setup`, and after a fast-forward-only `update`. Only the
 optional files under `.dim` have special meaning; root Compose files are
 never auto-discovered.
+Agent-tool installation, when a Project offers it, is a separate explicit
+workspace-user action through the Project task boundary.
 
 Copy the minimal `.dim` examples from
 [Project Workspaces](project-workspaces.md) for the hook contract, lifecycle,
