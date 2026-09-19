@@ -44,11 +44,16 @@ Agent containers:
   and administration are absent. A self-restart capability still requires a
   reviewed, deny-by-default Project proxy which derives its target from the
   trusted workspace grant and does not expose that grant or socket.
-- May receive a distinct External URL application socket whose reviewed proxy
-  fixes the allowed ingress and exact container path, protocol, and port. Its
-  create, list, and revoke operations must enforce the same target policy.
-  Existing generic External URL sockets must remain separate when other
-  clients still require ingress-only target selection.
+- May receive a distinct development-service External URL socket whose reviewed
+  proxy fixes the allowed ingress and exact container path, protocol, and
+  shared gateway port. The caller supplies only an ingress; it cannot select or
+  override that target. Existing generic External URL sockets must remain
+  separate when other clients still require ingress-only target selection.
+  The gateway may listen on the agent container's interfaces at that fixed
+  port, but its application upstreams are restricted to loopback ports.
+  This is not an intra-agent isolation boundary: a process with the socket can
+  expose a loopback service available through the agent's existing network
+  authority.
 - Must belong to a named workspace and be declared by reviewed Project code;
   DIM core does not define an agent resource.
 - Must remain inside the resource-limited outer workspace boundary. A Project

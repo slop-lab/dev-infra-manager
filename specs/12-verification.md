@@ -52,9 +52,15 @@ QEMU, KVM, or an installed DIM CLI.
 pinned OpenCode `1.18.31` runtime in a disposable home without provider
 credentials. It MUST prove local and external unauthenticated `401` and
 authenticated `200` responses, stable PID reuse, restricted state, absence of
-credential disclosure, and process cleanup. Mock coverage MUST separately
-exercise bounded lock, proxy, and readiness failures plus a same-credential
-unrecorded listener that remains alive and is never adopted.
+credential disclosure, and process cleanup on a non-4096 loopback port. The
+runtime lane MUST use the built `dim-development-service` and bound proxy,
+observe a caller POST containing only `ingress` and the trusted proxy's target
+injection, exercise HTTP and WebSocket forwarding, and prove that a second
+non-OpenCode service retains its URL while changing local ports. Mock coverage
+MUST separately exercise bounded lock, helper, and readiness failures plus a
+same-credential unrecorded listener that remains alive and is never adopted.
+The helper failure case MUST stall the helper process itself, complete within
+the launcher's own deadline, and prove cleanup of the newly started tool.
 
 CI runner unit coverage must verify resource-default precedence, stable managed
 names, and that default container arguments use the configured isolation
@@ -243,12 +249,14 @@ Project bootstrap convention and MUST NOT add a DIM plugin, API, or lifecycle
 interface.
 
 Launcher verification MUST remain separate from setup verification. It MUST
-cover invalid ports and target JSON, missing prerequisites and proxy sockets,
+cover invalid ports, missing prerequisites and development-service sockets,
 startup failure and bounded authenticated readiness, unauthenticated HTTP
 rejection, successful Basic Auth, mode-restricted persistent credentials and
 logs, password-free routine output with explicit restricted-file retrieval,
-HTTPS-ingress rejection before launch, exact process-instance reuse, exact external-URL reuse, and survival of
-unrelated processes. At least one runtime lane MUST execute the pinned OpenCode
+HTTPS helper enforcement, exact process-instance reuse, stable named URL reuse,
+and survival of unrelated processes. It MUST prove that launcher failure does
+not stop the actual helper-managed shared gateway or another service routed
+through it. At least one runtime lane MUST execute the pinned OpenCode
 binary with no provider credential and observe both HTTP 401 without Basic Auth
 and a healthy authenticated response. Setup-only lanes MUST continue proving
 that no OpenCode listener starts. Verification MUST also prove that the
