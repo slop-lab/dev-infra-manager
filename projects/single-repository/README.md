@@ -124,9 +124,12 @@ URL, username, and restricted credential-file path without printing the
 password, stores restricted state below the persistent user home, and reuses
 its owned healthy process and matching URL on retry. Read the reported file
 explicitly for browser login; its first line is the username and its second is
-the password. The Project gives it only an HTTPS external-URL proxy and the
-fixed direct `agent` target at HTTP port 4096. That target reaches the listener
-over the Compose network without a host port publication. Configure `https-ts`
+the password. The Project gives the agent the common
+`dim-development-service` helper and only an HTTPS development-URL socket. The
+helper lets the launcher select its loopback port and routes the resulting URL
+through the lifecycle's fixed gateway in the direct `agent` container. The
+gateway is reachable over the Compose network without a host port publication;
+neither the tool nor its local port appears in `.dim`. Configure `https-ts`
 before launching with the reviewed executable configuration shared by the
 Project examples:
 
@@ -139,12 +142,13 @@ DIM_EXTERNAL_URL_DNS_VALUE=203.0.113.10 \
 ```
 
 The script creates a Caddy HTTPS ingress and verifies it. An alternative
-ingress is usable only after reviewed lifecycle code changes both the proxy's
-`--ingress` allowlist and the launcher selection. The launcher receives
-`DIM_WEB_URL_SOCKET` and `DIM_WEB_URL_CONTAINERS_JSON`; the generic
-`DIM_EXTERNAL_URL_*` capability is not used for Web. The UI and API are
-same-origin through the returned URL, so the launcher does not enable CORS;
-never substitute a wildcard origin.
+ingress is usable only after reviewed lifecycle code changes the proxy's
+`--ingress` allowlist and the launcher selects it. The launcher consumes only
+`DIM_DEVELOPMENT_URL_SOCKET`; the generic `DIM_EXTERNAL_URL_*` capability is
+not used for this service. The UI and API are same-origin through the returned
+URL, so the launcher does not enable CORS; never substitute a wildcard origin.
+Another development service can use the same helper and choose any local port
+without changing `.dim`.
 
 The Project also owns a simple streaming backup contract for the agent home.
 Backup data uses stdout and restore data uses stdin; diagnostics remain on
