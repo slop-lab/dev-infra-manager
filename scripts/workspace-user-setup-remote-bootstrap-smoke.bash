@@ -83,6 +83,7 @@ download_log="$work_dir/downloads.log"
 dim_log="$work_dir/dim.log"
 captured_setup="$work_dir/captured-setup.bash"
 captured_launcher="$work_dir/captured-launcher.bash"
+captured_cors="$work_dir/captured-cors.json"
 commit='0123456789abcdef0123456789abcdef01234567'
 expected_base="https://raw.githubusercontent.com/slop-lab/dev-infra-manager/${commit}/scripts"
 mkdir -p "$fixture_dir" "$tools_dir" "$downloads_dir"
@@ -94,6 +95,7 @@ EOF
 cat >"$fixture_dir/opencode-web.bash" <<'EOF'
 #!/usr/bin/env bash
 printf 'opencode-web remote bootstrap fixture\n'
+printf '%s\n' "$OPENCODE_WEB_CORS_ORIGINS" >"$REMOTE_BOOTSTRAP_CAPTURED_CORS"
 EOF
 (
   cd -- "$fixture_dir"
@@ -158,16 +160,18 @@ matches_invocation() {
 }
 
 setup=(workspace run dim-dev bash -- -s)
+launch=(workspace run dim-dev bash -- -c
+  'export OPENCODE_WEB_CORS_ORIGINS="$1"; exec bash -s' bash "$REMOTE_BOOTSTRAP_EXPECTED_CORS")
 if matches_invocation setup "$@"; then
   printf '%s\n' 'workspace run dim-dev bash -- -s' >>"$REMOTE_BOOTSTRAP_DIM_LOG"
-  if [[ ! -e "$REMOTE_BOOTSTRAP_CAPTURED_SETUP" ]]; then
-    cat >"$REMOTE_BOOTSTRAP_CAPTURED_SETUP"
-  elif [[ ! -e "$REMOTE_BOOTSTRAP_CAPTURED_LAUNCHER" ]]; then
-    cat >"$REMOTE_BOOTSTRAP_CAPTURED_LAUNCHER"
-  else
-    printf 'dim received bootstrap bytes more than twice\n' >&2
-    exit 94
-  fi
+  [[ ! -e "$REMOTE_BOOTSTRAP_CAPTURED_SETUP" ]]
+  cat >"$REMOTE_BOOTSTRAP_CAPTURED_SETUP"
+elif matches_invocation launch "$@"; then
+  [[ -e "$REMOTE_BOOTSTRAP_CAPTURED_SETUP" && ! -e "$REMOTE_BOOTSTRAP_CAPTURED_LAUNCHER" ]]
+  printf '%s\n' 'workspace run dim-dev bash -- -c CORS launcher' >>"$REMOTE_BOOTSTRAP_DIM_LOG"
+  cat >"$REMOTE_BOOTSTRAP_CAPTURED_LAUNCHER"
+  shift 5
+  bash "$@" <"$REMOTE_BOOTSTRAP_CAPTURED_LAUNCHER"
 else
   printf 'unexpected dim invocation:' >&2
   printf ' %q' "$@" >&2
@@ -187,6 +191,8 @@ run_bootstrap() {
     PATH="$tools_dir:$system_path" \
     TMPDIR="$downloads_dir" \
     DIM_DEVELOPMENT_COMMIT="$commit" \
+    OPENCODE_WEB_CORS_ORIGINS="${4:-}" \
+    REMOTE_BOOTSTRAP_EXPECTED_CORS="${4:-[]}" \
     REMOTE_BOOTSTRAP_CHECKSUM_MODE="$checksum_mode" \
     REMOTE_BOOTSTRAP_FIXTURES="$fixture_dir" \
     REMOTE_BOOTSTRAP_EXPECTED_BASE="$expected_base" \
@@ -194,6 +200,7 @@ run_bootstrap() {
     REMOTE_BOOTSTRAP_DIM_LOG="$dim_log" \
     REMOTE_BOOTSTRAP_CAPTURED_SETUP="$captured_setup" \
     REMOTE_BOOTSTRAP_CAPTURED_LAUNCHER="$captured_launcher" \
+    REMOTE_BOOTSTRAP_CAPTURED_CORS="$captured_cors" \
     bash --noprofile --norc "$bootstrap" >"$stdout" 2>"$stderr"
 }
 
@@ -215,8 +222,9 @@ bad_setup_dir="$(dirname -- "$bad_script")"
 [[ ! -e "$dim_log" ]]
 [[ ! -e "$captured_setup" ]]
 [[ ! -e "$captured_launcher" ]]
+[[ ! -e "$captured_cors" ]]
 
-run_bootstrap good "$work_dir/good.stdout" "$work_dir/good.stderr"
+run_bootstrap good "$work_dir/good.stdout" "$work_dir/good.stderr" '["https://remote-web.example"]'
 
 mapfile -t all_downloads <"$download_log"
 if [[ "${#all_downloads[@]}" -ne 8 ]]; then
@@ -233,11 +241,17 @@ retry_setup_dir="$(dirname -- "$retry_script")"
 mapfile -t dim_invocations <"$dim_log"
 if [[ "${#dim_invocations[@]}" -ne 2 || \
   "${dim_invocations[0]}" != 'workspace run dim-dev bash -- -s' || \
-  "${dim_invocations[1]}" != 'workspace run dim-dev bash -- -s' ]]; then
+  "${dim_invocations[1]}" != 'workspace run dim-dev bash -- -c CORS launcher' ]]; then
   printf 'retry did not invoke DIM setup then OpenCode launch exactly once each\n' >&2
   exit 1
 fi
 cmp -s "$fixture_dir/workspace-user-setup.bash" "$captured_setup"
+cmp -s "$fixture_dir/opencode-web.bash" "$captured_launcher"
+[[ "$(<"$captured_cors")" = '["https://remote-web.example"]' ]]
+
+rm -- "$captured_setup" "$captured_launcher" "$captured_cors"
+run_bootstrap good "$work_dir/default.stdout" "$work_dir/default.stderr"
+[[ "$(<"$captured_cors")" = '[]' ]]
 cmp -s "$fixture_dir/opencode-web.bash" "$captured_launcher"
 
 printf '%s\n' 'workspace-user-setup-remote-bootstrap-smoke-ok'

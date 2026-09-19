@@ -65,7 +65,11 @@ describe("workspace-user setup policy", () => {
     const end = readme.indexOf(remoteBootstrapEnd);
     const bootstrap = begin >= 0 && end > begin ? readme.slice(begin + remoteBootstrapBegin.length, end).trim() : "";
     const setup = 'dim workspace run dim-dev bash -- -s <"$setup_dir/workspace-user-setup.bash"';
-    const launch = 'dim workspace run dim-dev bash -- -s <"$setup_dir/opencode-web.bash"';
+    const launch = [
+      "dim workspace run dim-dev bash -- -c \\",
+      "    'export OPENCODE_WEB_CORS_ORIGINS=\"$1\"; exec bash -s' \\",
+      '    bash "${OPENCODE_WEB_CORS_ORIGINS:-[]}" <"$setup_dir/opencode-web.bash"'
+    ].join("\n");
     const checksum = bootstrap.indexOf("sha256sum --check");
     const setupExecution = bootstrap.indexOf(setup, checksum);
     const launchExecution = bootstrap.indexOf(launch, setupExecution);
