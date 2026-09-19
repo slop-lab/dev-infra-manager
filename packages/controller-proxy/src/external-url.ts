@@ -13,7 +13,7 @@ export interface ExternalUrlIngress {
 
 export interface ExternalUrlProxyOptions {
   readonly allowedIngresses: readonly string[];
-  readonly allowedTargets?: readonly ExternalUrlTarget[];
+  readonly boundTarget?: ExternalUrlTarget;
 }
 
 export interface ExternalUrlTarget {
@@ -25,30 +25,41 @@ export interface ExternalUrlTarget {
 export function externalUrlProxy(options: ExternalUrlProxyOptions): ControllerProxyCapability {
   const allowed = new Set(options.allowedIngresses);
   if (allowed.size === 0) throw new Error("external URL proxy requires at least one allowed ingress");
-  const allowedTargets = options.allowedTargets === undefined
-    ? undefined
-    : new Set(options.allowedTargets.map((target) => {
-      const key = targetKey(target);
-      if (key === undefined) throw new Error("external URL proxy received an invalid allowed target");
-      return key;
-    }));
-  if (allowedTargets?.size === 0) throw new Error("external URL proxy target policy requires at least one target");
+  const boundTargetKey = options.boundTarget === undefined ? undefined : targetKey(options.boundTarget);
+  if (options.boundTarget !== undefined && boundTargetKey === undefined) {
+    throw new Error("external URL proxy received an invalid bound target");
+  }
   const isAllowed = (entry: Record<string, unknown>): boolean =>
     typeof entry.ingress === "string"
     && allowed.has(entry.ingress)
-    && (allowedTargets === undefined || allowedTargets.has(targetKey(entry.target) ?? ""));
+    && (boundTargetKey === undefined || boundTargetKey === targetKey(entry.target));
   return {
     async authorize(request, upstream) {
       if (request.method === "GET" && request.path === "/api") return true;
       if (request.method === "GET" && request.path === "/api/urls") return true;
       if (request.method === "POST" && request.path === "/api/urls") {
         const body = jsonObject(request.body);
-        return isAllowed(body);
+        return typeof body.ingress === "string"
+          && allowed.has(body.ingress)
+          && (boundTargetKey === undefined
+            || (Object.hasOwn(body, "ingress") && Object.keys(body).length === 1));
       }
       const match = request.method === "DELETE" && request.path.match(/^\/api\/urls\/([^/]+)$/);
       if (!match) return false;
       const id = decodeURIComponent(match[1] as string);
       return (await currentUrls(upstream)).some((entry) => entry.id === id && isAllowed(entry));
+    },
+    transformRequest(request) {
+      if (options.boundTarget === undefined
+        || request.method !== "POST"
+        || request.path !== "/api/urls") return request;
+      return {
+        ...request,
+        body: Buffer.from(JSON.stringify({
+          ingress: jsonObject(request.body).ingress,
+          target: options.boundTarget
+        }))
+      };
     },
     filterResponse(request, response) {
       if (request.method !== "GET" || response.status !== 200) return response;

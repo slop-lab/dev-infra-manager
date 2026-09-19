@@ -20,6 +20,8 @@ export interface ControllerProxyUpstream {
 
 export interface ControllerProxyCapability {
   authorize(request: ControllerProxyRequest, upstream: ControllerProxyUpstream): boolean | Promise<boolean>;
+  transformRequest?(request: ControllerProxyRequest, upstream: ControllerProxyUpstream):
+    ControllerProxyRequest | Promise<ControllerProxyRequest>;
   filterResponse?(
     request: ControllerProxyRequest,
     response: ControllerProxyResponse
@@ -165,8 +167,9 @@ async function handle(
     });
     return;
   }
-  let result = await upstream.request(method, url.pathname, body);
-  if (capability.filterResponse) result = await capability.filterResponse(input, result);
+  const forwarded = capability.transformRequest ? await capability.transformRequest(input, upstream) : input;
+  let result = await upstream.request(forwarded.method, forwarded.path, forwarded.body);
+  if (capability.filterResponse) result = await capability.filterResponse(forwarded, result);
   send(response, result.status, result.body, result.headers);
 }
 

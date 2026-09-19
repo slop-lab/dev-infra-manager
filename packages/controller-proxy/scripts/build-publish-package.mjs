@@ -19,9 +19,17 @@ output.exports = {
     types: "./external-url.d.ts",
     import: "./external-url.js",
     default: "./external-url.js"
+  },
+  "./development-service": {
+    types: "./development-service.d.ts",
+    import: "./development-service.js",
+    default: "./development-service.js"
   }
 };
-output.bin = { "dim-controller-proxy": "cli.js" };
+output.bin = {
+  "dim-controller-proxy": "cli.js",
+  "dim-development-service": "development-service-cli.js"
+};
 delete output.private;
 
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);
