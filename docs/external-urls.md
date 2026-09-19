@@ -48,23 +48,49 @@ named ingress and denies all other controller routes. Advanced reviewed policies
 `@slop-lab/dim-controller-proxy`; the runnable form is in the
 [External URL example](../../examples/features/external-urls/README.md).
 
-An application-specific capability should also pin its target at the trusted
-Project lifecycle boundary:
+A caller-specific capability may pin its target at the trusted Project
+lifecycle boundary:
 
 ```bash
 dim-controller-proxy external-url \
   --listen /run/dim/web-url/controller.sock \
   --ingress https-ts \
-  --target-containers-json '["agent"]' \
-  --target-protocol http \
-  --target-port 4096
+  --bind-containers-json '["agent"]' \
+  --bind-protocol http \
+  --bind-port 4096
 ```
 
-The target options are an optional group. Omitting the group preserves the
+The binding options are an optional group. Omitting the group preserves the
 generic ingress-only capability. Supplying it makes target matching exact for
 creation, filtered listing, and revocation authorization. Projects must use a
 distinct socket for a narrower application capability instead of narrowing an
 existing generic socket used by other clients.
+
+For self-service tools whose local ports should not appear in reviewed Project
+configuration, bind a dedicated proxy socket to the agent container and the
+fixed port printed by `dim-development-service gateway-port`. Pass only that
+socket as `DIM_DEVELOPMENT_URL_SOCKET`. The agent runs:
+
+```bash
+dim-development-service expose \
+  --name preview --port 5173 --ingress https-ts --require-scheme https
+```
+
+The caller's POST body contains only `ingress`; the trusted proxy injects the
+gateway target. The lazily managed gateway listens on `0.0.0.0:G` inside the
+agent container so the trusted ingress can reach it, and routes each returned
+exact authority only to an application at `127.0.0.1:PORT`, including WebSocket
+upgrades. Where nested container publication is required, trusted Project code
+maps the queried gateway port to the same port (`G:G`), because URL creation
+stores that bound target port. Re-exposing a stable name with another local
+port retains the URL and URL ID. The generic
+ingress-only External URL capability remains a separate socket and contract.
+
+Binding fixes the external target, not authority among processes inside one
+agent. Code that can access the development socket can publish any service its
+existing agent network authority can reach through local loopback. This helper
+therefore avoids granting container-target selection but does not create a
+security boundary between mutually untrusted processes in the same agent.
 
 ## Named ingresses
 

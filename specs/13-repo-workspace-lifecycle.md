@@ -343,27 +343,37 @@ hook, or CLI command.
 
 **WORKSPACE-AGENT-WEB-001:** A Project MAY publish a Web launcher separately
 from the setup script. Launch MUST be an explicit workspace-user action and
-MUST fail when the pinned OpenCode prerequisite or restricted external-URL
+MUST fail when the pinned OpenCode prerequisite or development-service
 socket is absent. A non-empty Basic Auth credential MUST be configured before
-the listener binds outside loopback. Persistent credentials, logs, lock state,
+the listener binds to loopback. Persistent credentials, logs, lock state,
 and process identity MUST remain in mode-restricted state below canonical
 `HOME`; credentials MUST NOT appear in command arguments, URLs, logs, or
 repository files, and the launcher MUST NOT print the password in routine
 output. It MUST report the restricted credential-file path so the user can
-explicitly read its two-line username/password content. The selected external
-URL ingress MUST advertise HTTPS before the listener starts. The launcher MUST
-use only its dedicated `DIM_WEB_URL_SOCKET` and non-empty
-`DIM_WEB_URL_CONTAINERS_JSON` inputs, with no fallback to the generic external
-URL capability. Changing the selected ingress also requires a reviewed trusted
-proxy-allowlist change. The launcher MUST establish readiness through a bounded
-authenticated health request and prove through the Linux listening socket that
-the exact newly started or recorded process owns the configured port. Lock,
-proxy, readiness, and cleanup waits MUST be bounded. It MUST NOT adopt or kill
+explicitly read its two-line username/password content. The launcher MUST use
+`dim-development-service expose` with a stable service name, the selected local
+port, ingress, and HTTPS requirement. Its DIM integration MUST depend only on
+`DIM_DEVELOPMENT_URL_SOCKET`, with no target/container metadata and no fallback
+to the generic external URL capability. The trusted proxy MUST inject an exact
+container path, HTTP protocol, and shared gateway port after authorizing the
+ingress-only request. Trusted nested routing MUST map the queried gateway port
+to the same container port (`G:G`) where publication is required. The gateway
+MAY listen on the agent container's interfaces at that port, but MUST forward
+application traffic only to `127.0.0.1:PORT`. The launcher MUST establish
+readiness through a bounded authenticated health request and prove through the
+Linux listening socket that the exact newly started or recorded process owns
+the configured port. Lock,
+the complete helper process tree, readiness, and cleanup waits MUST be bounded.
+It MUST NOT adopt or kill
 an unrecorded process, even when that process accepts the same credentials. URL
-reuse requires an exact ingress,
-HTTP protocol, port, and reviewed nested-container-path match. The agent may
-receive only a restricted external-URL proxy socket and fixed target metadata,
-not a controller grant, raw host secret, or new lifecycle authority.
+reuse is keyed by stable service name and ingress; changing the local port MUST
+update only that service's shared-gateway route while retaining the URL and URL
+ID. The launcher MUST NOT stop the shared gateway on retry or failure. This
+capability MUST provide only the restricted socket, not a controller grant,
+raw host secret, target metadata, or new lifecycle authority. Other separately
+reviewed agent capabilities remain independent. Access to this socket permits any
+same-agent process to expose a service reachable through the agent's existing
+network authority and MUST NOT be described as intra-agent isolation.
 The canonical same-origin Web UI/API path MUST NOT enable wildcard CORS. If a
 Project adds a different-origin client, every allowed origin MUST be explicit
 and reviewed.
