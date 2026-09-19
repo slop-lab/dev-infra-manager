@@ -5,6 +5,7 @@ readonly EXPECTED_OPENCODE_VERSION="1.18.31"
 readonly DEFAULT_PORT="4096"
 readonly DEFAULT_INGRESS="https-ts"
 readonly SERVER_USERNAME="opencode"
+readonly EXPOSE_TIMEOUT_SECONDS="25"
 
 fail() {
   printf 'opencode-web: %s\n' "$*" >&2
@@ -15,7 +16,7 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "required command not found on PATH: $1"
 }
 
-for command_name in curl flock jq node nohup opencode; do
+for command_name in curl dim-development-service flock jq node nohup opencode timeout; do
   require_command "$command_name"
 done
 
@@ -31,30 +32,17 @@ if (value < 1n || value > 65535n) process.exit(1)
 process.stdout.write(value.toString())
 NODE
 )" || fail 'port must be an integer from 1 through 65535'
-ingress="${DIM_WEB_URL_INGRESS:-$DEFAULT_INGRESS}"
+ingress="${OPENCODE_WEB_INGRESS:-$DEFAULT_INGRESS}"
 [[ -n "$ingress" && "$ingress" != *$'\n'* && "$ingress" != *$'\r'* ]] || \
-  fail 'DIM_WEB_URL_INGRESS must be non-empty and single-line'
-controller_socket="${DIM_WEB_URL_SOCKET:-}"
-[[ -n "$controller_socket" ]] || fail 'DIM_WEB_URL_SOCKET is required'
-[[ -S "$controller_socket" ]] || fail "external URL controller socket not found: $controller_socket"
-
-containers_json="${DIM_WEB_URL_CONTAINERS_JSON:-}"
-containers_json="$(jq -ce '
-  if type == "array" and length > 0 and all(.[]; type == "string" and length > 0)
-  then . else error("invalid") end
-' <<<"$containers_json" 2>/dev/null)" || \
-  fail 'DIM_WEB_URL_CONTAINERS_JSON must be a non-empty JSON array of non-empty strings'
+  fail 'OPENCODE_WEB_INGRESS must be non-empty and single-line'
+development_url_socket="${DIM_DEVELOPMENT_URL_SOCKET:-}"
+[[ -n "$development_url_socket" ]] || fail 'DIM_DEVELOPMENT_URL_SOCKET is required'
+[[ -S "$development_url_socket" ]] || \
+  fail "development URL socket not found: $development_url_socket"
 
 installed_version="$(opencode --version)"
 [[ "$installed_version" = "$EXPECTED_OPENCODE_VERSION" ]] || \
   fail "expected opencode $EXPECTED_OPENCODE_VERSION; run workspace-user-setup.bash first (found $installed_version)"
-
-discovery="$(curl --fail --silent --show-error --connect-timeout 2 --max-time 5 --unix-socket "$controller_socket" \
-  http://dim-controller/api)" || fail 'could not discover external URL ingresses'
-ingress_scheme="$(jq -er --arg ingress "$ingress" '
-  first(.routes[]?.discovery.ingresses[]? | select(.name == $ingress) | .scheme)
-' <<<"$discovery" 2>/dev/null)" || fail "external URL ingress is unavailable: $ingress"
-[[ "$ingress_scheme" = https ]] || fail "external URL ingress must use HTTPS: $ingress"
 
 state_home="${XDG_STATE_HOME:-$HOME/.local/state}"
 state_dir="$(node - "$HOME" "$state_home" <<'NODE'
@@ -237,7 +225,7 @@ if [[ -z "${server_pid:-}" ]]; then
   OPENCODE_SERVER_USERNAME="$SERVER_USERNAME" \
   OPENCODE_SERVER_PASSWORD="$password" \
   DIM_OPENCODE_WEB_INSTANCE_ID="$instance_id" \
-    nohup opencode web --hostname 0.0.0.0 --port "$port" \
+    nohup opencode web --hostname 127.0.0.1 --port "$port" \
       {lock_fd}>&- </dev/null >>"$log_file" 2>&1 &
   server_pid=$!
   started_pid="$server_pid"
@@ -266,25 +254,9 @@ if [[ -z "${server_pid:-}" ]]; then
   chmod 0600 "$pid_file"
 fi
 
-urls="$(curl --fail --silent --show-error --connect-timeout 2 --max-time 5 --unix-socket "$controller_socket" \
-  http://dim-controller/api/urls)" || fail 'could not list external URLs'
-external_url="$(jq -r --arg ingress "$ingress" --argjson port "$port" \
-  --argjson containers "$containers_json" '
-    .urls[]? |
-    select(.ingress == $ingress and .target.protocol == "http" and
-      .target.port == $port and .target.containers == $containers) |
-    .url
-  ' <<<"$urls" | sed -n '1p')"
-
-if [[ -z "$external_url" ]]; then
-  request_body="$(jq -cn --arg ingress "$ingress" --argjson port "$port" \
-    --argjson containers "$containers_json" \
-    '{ingress:$ingress,target:{containers:$containers,port:$port,protocol:"http"}}')"
-  response="$(curl --fail --silent --show-error --connect-timeout 2 --max-time 5 --unix-socket "$controller_socket" \
-    --header 'Content-Type: application/json' --data "$request_body" \
-    http://dim-controller/api/urls)" || fail 'could not request an external URL'
-  external_url="$(jq -er '.urls[0].url // .url' <<<"$response")" || fail 'external URL response did not contain a URL'
-fi
+external_url="$(timeout --kill-after=2s "${EXPOSE_TIMEOUT_SECONDS}s" \
+  dim-development-service expose --name opencode-web --port "$port" \
+    --ingress "$ingress" --require-scheme https)" || fail 'could not expose OpenCode Web'
 [[ "$external_url" =~ ^https://[^[:space:]]+$ ]] || fail 'external URL response did not contain a valid HTTPS URL'
 
 launch_complete=true
