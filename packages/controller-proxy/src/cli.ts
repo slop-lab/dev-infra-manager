@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 import { createAgentControllerProxy, createControllerProxy } from "./index.js";
 import { externalUrlProxy, type ExternalUrlTarget } from "./external-url.js";
+import { ensureManagedProxy, managedProxyFingerprint } from "./managed-proxy.js";
 
 async function main(arguments_: string[]): Promise<void> {
   if (arguments_[0] === "--config") {
@@ -11,40 +12,71 @@ async function main(arguments_: string[]): Promise<void> {
     await import(pathToFileURL(path.resolve(config)).href);
     return;
   }
-  const preset = arguments_[0];
+  const ensure = arguments_[0] === "ensure";
+  const presetIndex = ensure ? 1 : 0;
+  const preset = arguments_[presetIndex];
   if (preset !== "external-url" && preset !== "agent") usage();
   let listen: string | undefined;
   let socketMode = 0o660;
   let directoryMode = 0o700;
   const ingresses: string[] = [];
-  let targetContainersJson: string | undefined;
-  let targetProtocol: "http" | "https" | undefined;
-  let targetPort: number | undefined;
+  let bindContainersJson: string | undefined;
+  let bindProtocol: "http" | "https" | undefined;
+  let bindPort: number | undefined;
   let allowWorkspaceRestart = false;
-  for (let index = 1; index < arguments_.length; index += 1) {
+  for (let index = presetIndex + 1; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
     if (argument === "--listen") listen = requiredValue(arguments_, ++index, argument);
     else if (argument === "--ingress") ingresses.push(requiredValue(arguments_, ++index, argument));
-    else if (argument === "--target-containers-json") targetContainersJson = requiredValue(arguments_, ++index, argument);
-    else if (argument === "--target-protocol") targetProtocol = protocol(requiredValue(arguments_, ++index, argument));
-    else if (argument === "--target-port") targetPort = port(requiredValue(arguments_, ++index, argument));
+    else if (argument === "--bind-containers-json") bindContainersJson = requiredValue(arguments_, ++index, argument);
+    else if (argument === "--bind-protocol") bindProtocol = protocol(requiredValue(arguments_, ++index, argument));
+    else if (argument === "--bind-port") bindPort = port(requiredValue(arguments_, ++index, argument));
     else if (argument === "--allow-workspace-restart") allowWorkspaceRestart = true;
     else if (argument === "--socket-mode") socketMode = mode(requiredValue(arguments_, ++index, argument));
     else if (argument === "--directory-mode") directoryMode = mode(requiredValue(arguments_, ++index, argument));
     else usage();
   }
   if (!listen) usage();
-  const targetOptions = [targetContainersJson, targetProtocol, targetPort];
-  const hasTarget = targetOptions.every((value) => value !== undefined);
+  const bindOptions = [bindContainersJson, bindProtocol, bindPort];
+  const hasBoundTarget = bindOptions.every((value) => value !== undefined);
   if ((preset === "external-url" && ingresses.length === 0)
     || (preset === "agent" && !allowWorkspaceRestart)
     || (preset === "external-url" && allowWorkspaceRestart)
     || (preset === "agent" && ingresses.length > 0)
-    || (targetOptions.some((value) => value !== undefined) && !hasTarget)
-    || (preset === "agent" && hasTarget)) usage();
-  let allowedTargets: ExternalUrlTarget[] | undefined;
-  if (targetContainersJson !== undefined && targetProtocol !== undefined && targetPort !== undefined) {
-    allowedTargets = [{ containers: containers(targetContainersJson), protocol: targetProtocol, port: targetPort }];
+    || (bindOptions.some((value) => value !== undefined) && !hasBoundTarget)
+    || (preset === "agent" && hasBoundTarget)
+    || (ensure && preset !== "external-url")) usage();
+  let boundTarget: ExternalUrlTarget | undefined;
+  if (bindContainersJson !== undefined && bindProtocol !== undefined && bindPort !== undefined) {
+    boundTarget = { containers: containers(bindContainersJson), protocol: bindProtocol, port: bindPort };
+  }
+  if (ensure) {
+    const sourceSocket = process.env.DIM_CONTROLLER_SOCKET;
+    const token = process.env.DIM_CONTROLLER_TOKEN;
+    if (!sourceSocket || !token) throw new Error("DIM_CONTROLLER_SOCKET and DIM_CONTROLLER_TOKEN are required");
+    const cliPath = fileURLToPath(import.meta.url);
+    const childArguments = arguments_.slice(1);
+    const result = await ensureManagedProxy({
+      listen,
+      fingerprint: managedProxyFingerprint(JSON.stringify({
+        preset,
+        listen: path.resolve(listen),
+        socketMode,
+        directoryMode,
+        ingresses,
+        boundTarget,
+        sourceSocket,
+        token
+      })),
+      command: {
+        executable: process.execPath,
+        arguments: [cliPath, ...childArguments],
+        identityMarker: cliPath,
+        environment: process.env
+      }
+    });
+    console.log(`DIM controller proxy ${result.action} on ${path.resolve(listen)} (PID ${result.pid})`);
+    return;
   }
   const proxy = preset === "external-url"
     ? createControllerProxy({
@@ -53,7 +85,7 @@ async function main(arguments_: string[]): Promise<void> {
       directoryMode,
       capabilities: [externalUrlProxy({
         allowedIngresses: ingresses,
-        ...(allowedTargets === undefined ? {} : { allowedTargets })
+        ...(boundTarget === undefined ? {} : { boundTarget })
       })]
     })
     : createAgentControllerProxy({
@@ -75,20 +107,20 @@ function containers(value: string): string[] {
   const parsed = JSON.parse(value) as unknown;
   if (!Array.isArray(parsed) || parsed.length > 2
     || !parsed.every((container) => typeof container === "string" && container.length > 0)) {
-    throw new Error("--target-containers-json requires an array of zero, one, or two non-empty strings");
+    throw new Error("--bind-containers-json requires an array of zero, one, or two non-empty strings");
   }
   return parsed;
 }
 
 function protocol(value: string): "http" | "https" {
-  if (value !== "http" && value !== "https") throw new Error("--target-protocol requires http or https");
+  if (value !== "http" && value !== "https") throw new Error("--bind-protocol requires http or https");
   return value;
 }
 
 function port(value: string): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535) {
-    throw new Error("--target-port requires an integer between 1 and 65535");
+    throw new Error("--bind-port requires an integer between 1 and 65535");
   }
   return parsed;
 }
@@ -107,7 +139,10 @@ function requiredValue(arguments_: string[], index: number, option: string): str
 function usage(): never {
   throw new Error(
     "usage: dim-controller-proxy external-url --listen SOCKET --ingress NAME [--ingress NAME ...]\n"
-    + "       [--target-containers-json JSON --target-protocol http|https --target-port PORT]\n"
+    + "       [--bind-containers-json JSON --bind-protocol http|https --bind-port PORT]\n"
+    + "       [--directory-mode MODE] [--socket-mode MODE]\n"
+    + "   or: dim-controller-proxy ensure external-url --listen SOCKET --ingress NAME [--ingress NAME ...]\n"
+    + "       [--bind-containers-json JSON --bind-protocol http|https --bind-port PORT]\n"
     + "       [--directory-mode MODE] [--socket-mode MODE]\n"
     + "   or: dim-controller-proxy agent --listen SOCKET --allow-workspace-restart\n"
     + "       [--directory-mode MODE] [--socket-mode MODE]\n"
