@@ -81,7 +81,8 @@ the commit placeholder and set `DIM_DEVELOPMENT_RAW_ROOT` to the raw-file root
 for the reviewed development repository, ending before the commit and file
 path. An optional trailing slash is normalized. Download the script and its
 checksum from the same revision, then verify it on the host before streaming
-it into the agent:
+it into the agent. Optionally set `OPENCODE_WEB_CORS_ORIGINS` on the host to a
+JSON array of additional trusted client UI origins; unset uses the default:
 
 ```bash
 (
@@ -111,7 +112,9 @@ it into the agent:
   (cd -- "$setup_dir" && sha256sum --check \
     workspace-user-setup.bash.sha256 opencode-web.bash.sha256)
   dim workspace run single-dev bash -- -s <"$setup_dir/workspace-user-setup.bash"
-  dim workspace run single-dev bash -- -s <"$setup_dir/opencode-web.bash"
+  dim workspace run single-dev bash -- -c \
+    'export OPENCODE_WEB_CORS_ORIGINS="$1"; exec bash -s' \
+    bash "${OPENCODE_WEB_CORS_ORIGINS:-[]}" <"$setup_dir/opencode-web.bash"
 )
 ```
 
@@ -145,8 +148,18 @@ The script creates a Caddy HTTPS ingress and verifies it. An alternative
 ingress is usable only after reviewed lifecycle code changes the proxy's
 `--ingress` allowlist and the launcher selects it. The launcher consumes only
 `DIM_DEVELOPMENT_URL_SOCKET`; the generic `DIM_EXTERNAL_URL_*` capability is
-not used for this service. The UI and API are same-origin through the returned
-URL, so the launcher does not enable CORS; never substitute a wildcard origin.
+not used for this service. `OPENCODE_WEB_CORS_ORIGINS` is a JSON array of
+additional exact HTTP or HTTPS origins for browser UIs that connect to the
+returned URL, and defaults to `[]`. Name the source UI origin, not that
+destination URL. The launcher
+always includes `https://localhost:4096`, normalizes, deduplicates, and sorts
+the list, and rejects invalid values or `*` before creating state. The pinned
+OpenCode release does not support wildcard CORS, though OpenCode may merge its
+own configured or built-in origins. Its CORS headers pass through the external
+route. The browser must still send the reported Basic Auth credential in the
+`Authorization` header. Repeating the same configuration reuses the owned
+process; changing the port or CORS list restarts only that process and retains
+the credential, URL, and shared gateway. Allow only trusted client UI origins.
 Another development service can use the same helper and choose any local port
 without changing `.dim`.
 
