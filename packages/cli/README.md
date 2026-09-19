@@ -47,13 +47,13 @@ workspace isolation boundary.
 Install an exact, reviewed version globally:
 
 ```bash
-npm install --global "@slop-lab/dim-cli@0.8.0"
+npm install --global "@slop-lab/dim-cli@0.9.0"
 ```
 
 Or use the user-local installer:
 
 ```bash
-npx '@slop-lab/dim-installer@0.8.0' install-cli
+npx '@slop-lab/dim-installer@0.9.0' install-cli
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
@@ -160,7 +160,7 @@ dim workspace exec feature-123 -- bash
 Run a task through the root repository's `.dim/entrypoint.sh`:
 
 ```bash
-dim workspace run feature-123 codex
+dim workspace run feature-123 bash
 ```
 
 The controller command session forwards task stdin even when redirected or

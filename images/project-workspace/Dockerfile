@@ -16,12 +16,11 @@ RUN apk add --no-cache bash ca-certificates cdrkit coreutils curl git jq just no
   && chmod 0440 /etc/sudoers /etc/sudoers.d/dim
 
 ENV HOME=/home/dim \
-    CODEX_HOME=/home/dim/.codex \
     DOCKER_TLS_CERTDIR="" \
     DOCKER_HOST=unix:///var/run/docker.sock \
     PATH=/home/dim/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-RUN npm install --global pnpm@10 @openai/codex
+RUN npm install --global pnpm@10.13.1
 
 COPY core/images/project-workspace/entrypoint.bash /usr/local/bin/dim-project-entrypoint
 COPY core/images/project-workspace/git-askpass.sh /usr/local/bin/dim-git-askpass

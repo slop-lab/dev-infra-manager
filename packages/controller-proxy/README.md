@@ -8,7 +8,7 @@ new restricted socket is mounted into the child container.
 ## Installation
 
 ```bash
-npm install --save-exact '@slop-lab/dim-controller-proxy@0.8.0'
+npm install --save-exact '@slop-lab/dim-controller-proxy@0.9.0'
 ```
 
 The package is ESM-only, requires Node.js 24 or 26, includes TypeScript
@@ -57,6 +57,24 @@ dim-controller-proxy external-url \
   --ingress public
 ```
 
+By default this preserves the generic External URL capability: a caller may
+select any target accepted by the workspace-scoped controller. A reviewed
+Project can instead constrain the socket to one exact container path,
+protocol, and port:
+
+```bash
+dim-controller-proxy external-url \
+  --listen /run/dim/web-url/controller.sock \
+  --ingress https-ts \
+  --target-containers-json '["agent"]' \
+  --target-protocol http \
+  --target-port 4096
+```
+
+When target options are present, all three are required. The proxy rejects
+creation for any other target, omits mismatched entries from list responses,
+and denies revocation of mismatched entries. Ingress filtering still applies.
+
 It reads the trusted upstream socket and bearer grant from
 `DIM_CONTROLLER_SOCKET` and `DIM_CONTROLLER_TOKEN`. Options
 `--directory-mode` and `--socket-mode` accept octal Unix modes; their defaults
@@ -84,13 +102,19 @@ const proxy = createControllerProxy({
     externalUrlProxy({
       allowedIngresses: ingresses
         .filter(({ name }) => name.startsWith("dev-"))
-        .map(({ name }) => name)
+        .map(({ name }) => name),
+      allowedTargets: [
+        { containers: ["agent"], protocol: "http", port: 4096 }
+      ]
     })
   ]
 });
 
 await proxy.listen();
 ```
+
+`allowedTargets` is optional. Omitting it retains ingress-only target policy;
+supplying it enables exact matching for create, list, and revoke operations.
 
 `createControllerProxy` also accepts explicit `sourceSocket`, `token`,
 `maxBodyBytes`, and socket/directory modes. The default request-body limit is

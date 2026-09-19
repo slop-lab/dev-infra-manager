@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-mkdir -p /home/dim/.codex /var/lib/docker /var/run /workspace
+mkdir -p /var/lib/docker /var/run /workspace
 chown -R dim:dim /home/dim /var/lib/docker /workspace
-chmod 0700 /home/dim/.codex
 # A stopped container keeps its writable /var/run layer. Managed containerd
 # state is process-namespace-local, so it must not survive a container restart.
 rm -rf -- /var/run/docker/containerd
@@ -38,6 +37,5 @@ docker info >/dev/null 2>&1 || { cat /var/log/dockerd.log >&2; exit 1; }
 
 exec sudo -H -E -u dim env \
   HOME=/home/dim \
-  CODEX_HOME=/home/dim/.codex \
   PATH=/home/dim/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
   "$@"

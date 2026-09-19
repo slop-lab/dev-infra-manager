@@ -13,24 +13,42 @@ export interface ExternalUrlIngress {
 
 export interface ExternalUrlProxyOptions {
   readonly allowedIngresses: readonly string[];
+  readonly allowedTargets?: readonly ExternalUrlTarget[];
+}
+
+export interface ExternalUrlTarget {
+  readonly containers: readonly string[];
+  readonly protocol: "http" | "https";
+  readonly port: number;
 }
 
 export function externalUrlProxy(options: ExternalUrlProxyOptions): ControllerProxyCapability {
   const allowed = new Set(options.allowedIngresses);
   if (allowed.size === 0) throw new Error("external URL proxy requires at least one allowed ingress");
+  const allowedTargets = options.allowedTargets === undefined
+    ? undefined
+    : new Set(options.allowedTargets.map((target) => {
+      const key = targetKey(target);
+      if (key === undefined) throw new Error("external URL proxy received an invalid allowed target");
+      return key;
+    }));
+  if (allowedTargets?.size === 0) throw new Error("external URL proxy target policy requires at least one target");
+  const isAllowed = (entry: Record<string, unknown>): boolean =>
+    typeof entry.ingress === "string"
+    && allowed.has(entry.ingress)
+    && (allowedTargets === undefined || allowedTargets.has(targetKey(entry.target) ?? ""));
   return {
     async authorize(request, upstream) {
       if (request.method === "GET" && request.path === "/api") return true;
       if (request.method === "GET" && request.path === "/api/urls") return true;
       if (request.method === "POST" && request.path === "/api/urls") {
         const body = jsonObject(request.body);
-        return typeof body.ingress === "string" && allowed.has(body.ingress);
+        return isAllowed(body);
       }
       const match = request.method === "DELETE" && request.path.match(/^\/api\/urls\/([^/]+)$/);
       if (!match) return false;
       const id = decodeURIComponent(match[1] as string);
-      return (await currentUrls(upstream)).some((entry) =>
-        entry.id === id && typeof entry.ingress === "string" && allowed.has(entry.ingress));
+      return (await currentUrls(upstream)).some((entry) => entry.id === id && isAllowed(entry));
     },
     filterResponse(request, response) {
       if (request.method !== "GET" || response.status !== 200) return response;
@@ -57,12 +75,26 @@ export function externalUrlProxy(options: ExternalUrlProxyOptions): ControllerPr
       if (request.path !== "/api/urls") return response;
       const body = jsonObject(response.body);
       const urls = Array.isArray(body.urls)
-        ? body.urls.filter((entry) =>
-          isObject(entry) && typeof entry.ingress === "string" && allowed.has(entry.ingress))
+        ? body.urls.filter((entry) => isObject(entry) && isAllowed(entry))
         : [];
       return jsonResponse(response, { ...body, urls });
     }
   };
+}
+
+function targetKey(value: unknown): string | undefined {
+  if (!isObject(value)
+    || !Array.isArray(value.containers)
+    || value.containers.length > 2
+    || !value.containers.every((container) => typeof container === "string" && container.length > 0)
+    || (value.protocol !== "http" && value.protocol !== "https")
+    || typeof value.port !== "number"
+    || !Number.isInteger(value.port)
+    || value.port < 1
+    || value.port > 65_535) {
+    return undefined;
+  }
+  return JSON.stringify([value.containers, value.protocol, value.port]);
 }
 
 export async function getExternalUrlIngresses(options: {
