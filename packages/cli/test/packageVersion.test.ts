@@ -17,13 +17,13 @@ test("normal published CLI reports its package metadata version", () => {
   const fixture = buildPublishedCli(environment);
 
   // Then
-  assert.equal(fixture.metadataVersion, "0.8.0");
-  assert.equal(fixture.publishedVersion, "0.8.0");
+  assert.equal(fixture.metadataVersion, "0.9.0");
+  assert.equal(fixture.publishedVersion, "0.9.0");
 });
 
 test("local published CLI reports its package metadata version", () => {
   // Given
-  const version = "0.8.0-local-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef-dirty";
+  const version = "0.9.0-local-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef-dirty";
 
   // When
   const fixture = buildPublishedCli({ ...process.env, DIM_LOCAL_BUILD_VERSION: version });
@@ -35,7 +35,7 @@ test("local published CLI reports its package metadata version", () => {
 
 test("source CLI reports the normal package version deterministically", () => {
   // Given
-  const expected = "0.8.0";
+  const expected = "0.9.0";
 
   // When
   const result = spawnSync(process.execPath, ["--import", tsxImport, sourceCli, "--version"], {
