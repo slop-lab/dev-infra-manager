@@ -22,7 +22,7 @@ Each Project can combine:
   secrets.
 - Per-workspace CPU, memory, and process limits.
 
-DIM sits below interactive coding agents and autonomous orchestrators. Codex,
+DIM sits below interactive coding agents and autonomous orchestrators. OpenCode,
 Claude Code, or another agent can run in a DIM workspace. An orchestrator such
 as OpenAI Symphony can map a task to a persistent DIM workspace while DIM owns
 the workspace, repository, verification, and trust boundaries.
@@ -220,7 +220,6 @@ integrations. It does not expose a generic Git-provider extension point. See
 dim project create project \
   --bootstrap-git-url /path/to/project --bootstrap-git-ref main --apply-repos
 dim workspace create project work-1
-dim workspace run work-1 codex
 dim workspace exec work-1 -- bash
 ```
 
@@ -235,9 +234,95 @@ The keys below `repositories` are Project-scoped aliases; URLs are passed to
 the host Git CLI and are never parsed to invent a name.
 
 This repository implements the same project contract on itself through
-`.dim/setup.sh` and `.dim/entrypoint.sh`; after pushing it as the Project
-root, `dim workspace run work-1 codex` launches Codex in the persistent DIM workspace,
-no separate launcher needed.
+`.dim/setup.sh` and `.dim/entrypoint.sh`.
+
+### Set up OpenCode in the development workspace
+
+The development agent image provides Node.js and npm but does not bake in a
+coding agent. From a local checkout of this repository, install the reviewed
+OpenCode and Oh My OpenAgent versions into the persistent workspace user's
+home:
+
+```bash
+dim workspace run dim-dev bash -- /workspace/scripts/workspace-user-setup.bash \
+  && dim workspace run dim-dev bash -- -lc 'exec opencode'
+```
+
+The setup is safe to rerun. It installs under `$HOME/.local`, pins the OMO
+plugin coordinate, disables supported automatic updates, enables Team Mode,
+and preserves unrelated OpenCode and OMO user configuration. It does not start
+OpenCode or perform provider authentication.
+
+To start an authenticated OpenCode Web server explicitly and request or reuse
+its workspace-scoped external URL, run the separate launcher after setup:
+
+```bash
+dim workspace run dim-dev bash -- /workspace/scripts/opencode-web.bash
+```
+
+The command prints the URL, username, and restricted credential-file path; it
+does not print the password. The credential, PID identity, and mode-0600 log persist under
+`${XDG_STATE_HOME:-$HOME/.local/state}/opencode-web`; rerunning reuses the owned
+healthy process and matching URL. It never kills an unrecorded OpenCode
+process. OpenCode binds only to `127.0.0.1` on `OPENCODE_WEB_PORT` (default
+`4096`). The launcher asks the generic `dim-development-service` helper to
+expose the stable `opencode-web` service name and consumes only
+`DIM_DEVELOPMENT_URL_SOCKET`; it uses no container path, gateway target port, raw
+controller grant, or host secret. The default `https-ts` ingress must already
+be allowed by the trusted bound proxy. `OPENCODE_WEB_INGRESS` selects another
+allowed HTTPS ingress, but cannot widen that proxy policy. The launcher requires
+the installed helper and GNU `timeout`; it bounds the complete helper process
+tree and cleans up only a newly started OpenCode process when exposure fails.
+Retrieve the generated username and password explicitly from the first and
+second lines of the reported mode-`0600` file, for example with
+`dim workspace run dim-dev bash -- -lc 'cat "$HOME/.local/state/opencode-web/credentials"'`.
+The Web UI and API share the external URL origin, so the launcher does not
+enable CORS; do not add a wildcard origin. The development-service gateway
+listens on its agent-container interfaces at the fixed port reported by
+`gateway-port`, then forwards each exact external authority only to the
+selected `127.0.0.1:OPENCODE_WEB_PORT` application. The trusted nested route,
+when needed, maps that queried gateway port to the same port (`G:G`); changing
+the OpenCode application port requires no `.dim` or container-port change.
+The independent generic `DIM_EXTERNAL_URL_*` capability remains available to
+callers that need to choose arbitrary targets; the OpenCode launcher does not
+consume it.
+
+For a workspace that does not have the development checkout, download both
+files on the host from one reviewed, full 40-character development commit.
+Set `DIM_DEVELOPMENT_COMMIT` to that commit in the environment; never
+substitute a moving branch or tag:
+
+```bash
+# DIM_REMOTE_BOOTSTRAP_BEGIN
+(
+  set -euo pipefail
+  FULL_DEVELOPMENT_COMMIT="${DIM_DEVELOPMENT_COMMIT:?set DIM_DEVELOPMENT_COMMIT to a reviewed full 40-character commit}"
+  [[ "$FULL_DEVELOPMENT_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+    printf 'FULL_DEVELOPMENT_COMMIT must be exactly 40 lowercase hex characters\n' >&2
+    exit 2
+  }
+  setup_dir="$(mktemp -d)"
+  trap 'rm -rf -- "$setup_dir"' EXIT
+  base="https://raw.githubusercontent.com/slop-lab/dev-infra-manager/${FULL_DEVELOPMENT_COMMIT}/scripts"
+  curl --fail --silent --show-error --location \
+    --output "$setup_dir/workspace-user-setup.bash" \
+    "$base/workspace-user-setup.bash"
+  curl --fail --silent --show-error --location \
+    --output "$setup_dir/workspace-user-setup.bash.sha256" \
+    "$base/workspace-user-setup.bash.sha256"
+  curl --fail --silent --show-error --location \
+    --output "$setup_dir/opencode-web.bash" \
+    "$base/opencode-web.bash"
+  curl --fail --silent --show-error --location \
+    --output "$setup_dir/opencode-web.bash.sha256" \
+    "$base/opencode-web.bash.sha256"
+  (cd -- "$setup_dir" && sha256sum --check \
+    workspace-user-setup.bash.sha256 opencode-web.bash.sha256)
+  dim workspace run dim-dev bash -- -s <"$setup_dir/workspace-user-setup.bash"
+  dim workspace run dim-dev bash -- -s <"$setup_dir/opencode-web.bash"
+)
+# DIM_REMOTE_BOOTSTRAP_END
+```
 
 For a complete, tested walkthrough that exposes a nested development
 container and a container inside it through host-configured external URL

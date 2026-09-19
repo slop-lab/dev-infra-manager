@@ -6,7 +6,7 @@ ARG DIM_AGENT_UID=1000
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-       acl bash ca-certificates curl git jq netcat-openbsd openssh-server tini \
+       acl bash ca-certificates curl git jq netcat-openbsd openssh-server tini util-linux \
  && rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub \
  && rm -rf /var/lib/apt/lists/* \
  && test "$DIM_AGENT_UID" -ne 0 \
@@ -58,9 +58,12 @@ COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose \
   /usr/local/libexec/docker/cli-plugins/docker-compose
 COPY agent/dim-agent-shell /usr/local/bin/dim-agent-shell
 COPY agent/start-sshd.sh /usr/local/bin/start-sshd
-RUN npm install --global pnpm@10.13.1 @openai/codex@0.149.0
+RUN npm install --global pnpm@10.13.1
 RUN chmod 0755 /usr/local/bin/dim-agent-shell /usr/local/bin/start-sshd \
- && chown dim-agent:dim-agent /home/dim-agent
+ && chown dim-agent:dim-agent /home/dim-agent \
+ && ln -s /usr/local/lib/dim/controller-proxy/development-service-cli.js \
+      /usr/local/bin/dim-development-service
+ENV PATH="/home/dim-agent/.local/bin:${PATH}"
 WORKDIR /workspace
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
