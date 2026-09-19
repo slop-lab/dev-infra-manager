@@ -57,10 +57,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   development-service helper to retain one workspace URL without giving the
   tool container metadata or broader controller authority. The same trusted
   gateway can expose other agent-selected loopback services without Project
-  changes while its bound proxy keeps the external target fixed. Launcher
-  lock, readiness, helper execution, and cleanup are bounded; failed exposure
-  stops only a newly started OpenCode process and leaves the shared gateway and
-  other services running.
+  changes while its bound proxy keeps the external target fixed. The launcher
+  now always supplies the exact `https://localhost:4096` CORS origin and accepts
+  a normalized JSON list of additional exact HTTP or HTTPS client UI origins.
+  It rejects invalid values and unsupported wildcards before creating state.
+  Matching configuration reuses the owned process, while a changed port or
+  CORS list restarts only that process and retains its credential, external
+  URL, and shared gateway. Launcher lock, readiness, helper execution, and
+  cleanup are bounded; failed exposure stops only a newly started OpenCode
+  process and leaves the shared gateway and other services running.
 
 - Local source installations now package every DIM component under a shared
   version containing the production commit and dirty-worktree state, and

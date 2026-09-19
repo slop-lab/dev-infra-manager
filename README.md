@@ -260,6 +260,15 @@ its workspace-scoped external URL, run the separate launcher after setup:
 dim workspace run dim-dev bash -- /workspace/scripts/opencode-web.bash
 ```
 
+If a Web UI hosted at another origin will connect to the returned DIM URL,
+pass that UI's origin as an additional exact CORS origin:
+
+```bash
+dim workspace run dim-dev bash -- -c \
+  'export OPENCODE_WEB_CORS_ORIGINS="$1"; exec bash /workspace/scripts/opencode-web.bash' \
+  bash '["https://remote-web.example"]'
+```
+
 The command prints the URL, username, and restricted credential-file path; it
 does not print the password. The credential, PID identity, and mode-0600 log persist under
 `${XDG_STATE_HOME:-$HOME/.local/state}/opencode-web`; rerunning reuses the owned
@@ -276,8 +285,28 @@ tree and cleans up only a newly started OpenCode process when exposure fails.
 Retrieve the generated username and password explicitly from the first and
 second lines of the reported mode-`0600` file, for example with
 `dim workspace run dim-dev bash -- -lc 'cat "$HOME/.local/state/opencode-web/credentials"'`.
-The Web UI and API share the external URL origin, so the launcher does not
-enable CORS; do not add a wildcard origin. The development-service gateway
+The launcher always passes `https://localhost:4096` to OpenCode and treats
+`OPENCODE_WEB_CORS_ORIGINS` as a JSON array of additional origins, defaulting
+to `[]`. Each value
+must be an exact HTTP or HTTPS origin, with no wildcard, credentials, path,
+query, or fragment. It normalizes, deduplicates, and sorts the list, and rejects
+invalid input before creating launcher state. OpenCode 1.18.31 does not treat
+`*` as a wildcard origin, so the launcher rejects it rather than suggesting
+false broad access. OpenCode may also merge origins from its own configuration
+or built-in behavior, so this setting describes the origins supplied by the
+launcher rather than a universal deny list.
+
+The allowed origin is the source origin of the browser UI making the request,
+such as `https://remote-web.example`, not the destination DIM external URL.
+CORS headers produced by OpenCode travel through the external URL route.
+Cross-origin requests still require the reported Basic Auth credential, and
+the browser client must send it in the `Authorization` header. Repeating the
+launcher with the same port and canonical CORS list reuses its healthy owned
+process. Changing either restarts only that owned process while retaining the
+credential, external URL, and shared gateway. Allow only trusted client UI
+origins.
+
+The development-service gateway
 listens on its agent-container interfaces at the fixed port reported by
 `gateway-port`, then forwards each exact external authority only to the
 selected `127.0.0.1:OPENCODE_WEB_PORT` application. The trusted nested route,
@@ -291,6 +320,10 @@ For a workspace that does not have the development checkout, download both
 files on the host from one reviewed, full 40-character development commit.
 Set `DIM_DEVELOPMENT_COMMIT` to that commit in the environment; never
 substitute a moving branch or tag:
+
+Optionally set `OPENCODE_WEB_CORS_ORIGINS='["https://remote-web.example"]'` on
+the host before this block to pass additional client UI origins. Unset keeps
+only the launcher's default origin.
 
 ```bash
 # DIM_REMOTE_BOOTSTRAP_BEGIN
@@ -319,7 +352,9 @@ substitute a moving branch or tag:
   (cd -- "$setup_dir" && sha256sum --check \
     workspace-user-setup.bash.sha256 opencode-web.bash.sha256)
   dim workspace run dim-dev bash -- -s <"$setup_dir/workspace-user-setup.bash"
-  dim workspace run dim-dev bash -- -s <"$setup_dir/opencode-web.bash"
+  dim workspace run dim-dev bash -- -c \
+    'export OPENCODE_WEB_CORS_ORIGINS="$1"; exec bash -s' \
+    bash "${OPENCODE_WEB_CORS_ORIGINS:-[]}" <"$setup_dir/opencode-web.bash"
 )
 # DIM_REMOTE_BOOTSTRAP_END
 ```
