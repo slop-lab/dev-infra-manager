@@ -77,6 +77,17 @@ if ! curl --fail --silent --unix-socket "$external_url_proxy_socket" \
   }
 fi
 
+DIM_DEVELOPMENT_GATEWAY_PORT="$(dim-development-service gateway-port)"
+export DIM_DEVELOPMENT_GATEWAY_PORT
+dim-controller-proxy ensure external-url \
+  --listen /tmp/dim-development-url/controller.sock \
+  --ingress https-ts \
+  --bind-containers-json '["agent-dind","dim-agent"]' \
+  --bind-protocol http \
+  --bind-port "$DIM_DEVELOPMENT_GATEWAY_PORT" \
+  --directory-mode 0755 \
+  --socket-mode 0666
+
 qemu_service_dir=/tmp/dim-qemu-verification
 qemu_project_root="$(pwd -P)"
 qemu_service_cwd="$qemu_service_dir"

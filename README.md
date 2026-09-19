@@ -35,8 +35,54 @@ dim project create dim \
   --bootstrap-git-ref main \
   --apply-repos
 dim workspace create dim dim-dev
-dim workspace run dim-dev codex
 ```
+
+After the repositories materialize, explicitly bootstrap the local user tools
+through the `bash` task, then launch OpenCode through that same task:
+
+```bash
+dim workspace run dim-dev bash -- /workspace/scripts/workspace-user-setup.bash \
+  && dim workspace run dim-dev bash -- -lc 'exec opencode'
+```
+
+The bootstrap creates explicit user-level state that persists in the agent
+home. The reviewed Project lifecycle does not install user tools automatically;
+this setup is not `.dim/setup.sh` lifecycle work.
+
+Launch the opt-in authenticated Web interface separately:
+
+```bash
+dim workspace run dim-dev bash -- /workspace/scripts/opencode-web.bash
+```
+
+The launcher prints the external URL, username, and restricted credential-file
+path without printing the password. It stores the credential and owned-process
+identity in the persistent user home, and reuses a
+healthy matching process and URL on retry. The setup command above remains
+non-launching. The agent receives `DIM_DEVELOPMENT_URL_SOCKET` and the common
+`dim-development-service` helper from the reviewed workspace image. The helper
+lets the launcher choose its own loopback port, creates or reuses the external
+URL, and routes that URL through a fixed gateway selected by the lifecycle.
+The lifecycle constrains the gateway to ingress `https-ts`, protocol `http`,
+and container path `["agent-dind","dim-agent"]`; it does not know which tool or
+local port uses the gateway. The existing `DIM_EXTERNAL_URL_SOCKET` remains an
+ingress-only generic capability for its existing clients and continues to
+permit both `https-ts` and `http-ts`. Neither socket exposes a controller grant
+or raw host secret. Read the reported mode-`0600` file explicitly when the
+browser asks for Basic Auth; its first line is the username and its second is
+the password. The UI and API are same-origin through that URL, so no CORS
+allowlist is required and the launcher does not enable one. The reviewed
+inner-container launch publishes only the common gateway port at the same
+stable port in `agent-dind`. The mapping survives inner-agent recreation, so
+the existing external URL relay remains valid. Replacing OpenCode with another
+development service does not require a `.dim` change.
+
+The host must have the HTTPS `https-ts` ingress configured before Web launch.
+The executable Caddy/Cloudflare pattern is
+[`examples/projects/configure-web-ingress.bash`](../examples/projects/configure-web-ingress.bash).
+Selecting another ingress also requires a reviewed change to the development
+URL proxy's `--ingress` allowlist; changing only the launcher cannot widen the
+socket.
 
 When the workspace was created with KVM, the agent can run the reviewed local
 QEMU gate without receiving `/dev/kvm` or a QEMU binary itself:
