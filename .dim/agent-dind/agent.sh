@@ -19,7 +19,7 @@ case "${1:?private agent action is required}" in
     docker build --quiet --tag "$agent_image" /workspace/agent >/dev/null
     docker rm --force "$agent_name" >/dev/null 2>&1 || true
     set -- run --detach --name "$agent_name" --restart unless-stopped \
-      --publish 4096:4096 \
+      --publish "$DIM_DEVELOPMENT_GATEWAY_PORT:$DIM_DEVELOPMENT_GATEWAY_PORT" \
       --label dev.dim.role=agent \
       --env DOCKER_HOST=unix:///run/docker.sock \
       --env HOME=/home/dim-agent \
@@ -28,9 +28,9 @@ case "${1:?private agent action is required}" in
       --env DIM_EXTERNAL_URL_SOCKET=/run/dim/external-url/controller.sock \
       --env 'DIM_EXTERNAL_URL_CONTAINERS_JSON=["agent-dind","dim-agent"]' \
       --mount type=bind,src=/run/dim/external-url,dst=/run/dim/external-url,readonly \
-      --env DIM_WEB_URL_SOCKET=/run/dim/web-url/controller.sock \
-      --env 'DIM_WEB_URL_CONTAINERS_JSON=["agent-dind","dim-agent"]' \
-      --mount type=bind,src=/run/dim/web-url,dst=/run/dim/web-url,readonly \
+      --env DIM_DEVELOPMENT_URL_SOCKET=/run/dim/development-url/controller.sock \
+      --mount type=bind,src=/run/dim/development-url,dst=/run/dim/development-url,readonly \
+      --mount type=bind,src=/usr/local/lib/dim/controller-proxy,dst=/usr/local/lib/dim/controller-proxy,readonly \
       --env "DIM_GIT_USERNAME=$DIM_GIT_USERNAME" \
       --env "DIM_GIT_TOKEN=$DIM_GIT_TOKEN" \
       --env "GIT_AUTHOR_NAME=$GIT_AUTHOR_NAME" \

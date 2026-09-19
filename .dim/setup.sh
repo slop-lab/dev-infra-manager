@@ -75,38 +75,16 @@ if ! curl --fail --silent --unix-socket "$external_url_proxy_socket" \
   }
 fi
 
-web_url_proxy_dir=/tmp/dim-web-url
-web_url_proxy_socket="$web_url_proxy_dir/controller.sock"
-if ! curl --fail --silent --unix-socket "$web_url_proxy_socket" \
-  http://dim-controller/api >/dev/null 2>&1; then
-  if [ -r "$web_url_proxy_dir/proxy.pid" ]; then
-    old_web_proxy_pid="$(cat "$web_url_proxy_dir/proxy.pid")"
-    case "$old_web_proxy_pid" in
-      ''|*[!0-9]*) ;;
-      *) kill "$old_web_proxy_pid" 2>/dev/null || true ;;
-    esac
-  fi
-  rm -rf "$web_url_proxy_dir"
-  mkdir -p "$web_url_proxy_dir"
-  dim-controller-proxy external-url \
-    --listen "$web_url_proxy_socket" \
-    --ingress https-ts \
-    --target-containers-json '["agent-dind","dim-agent"]' \
-    --target-protocol http \
-    --target-port 4096 \
-    --directory-mode 0755 \
-    --socket-mode 0666 \
-    >"$web_url_proxy_dir/proxy.log" 2>&1 &
-  echo "$!" >"$web_url_proxy_dir/proxy.pid"
-  for _ in $(seq 1 50); do
-    test -S "$web_url_proxy_socket" && break
-    sleep 0.1
-  done
-  test -S "$web_url_proxy_socket" || {
-    cat "$web_url_proxy_dir/proxy.log" >&2
-    exit 1
-  }
-fi
+DIM_DEVELOPMENT_GATEWAY_PORT="$(dim-development-service gateway-port)"
+export DIM_DEVELOPMENT_GATEWAY_PORT
+dim-controller-proxy ensure external-url \
+  --listen /tmp/dim-development-url/controller.sock \
+  --ingress https-ts \
+  --bind-containers-json '["agent-dind","dim-agent"]' \
+  --bind-protocol http \
+  --bind-port "$DIM_DEVELOPMENT_GATEWAY_PORT" \
+  --directory-mode 0755 \
+  --socket-mode 0666
 
 qemu_service_dir=/tmp/dim-qemu-verification
 if [ "${DIM_WORKSPACE_KVM}" = 1 ]; then

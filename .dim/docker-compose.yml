@@ -15,6 +15,7 @@ services:
       GIT_AUTHOR_EMAIL: "${GIT_AUTHOR_EMAIL:?}"
       GIT_COMMITTER_NAME: "${GIT_COMMITTER_NAME:?}"
       GIT_COMMITTER_EMAIL: "${GIT_COMMITTER_EMAIL:?}"
+      DIM_DEVELOPMENT_GATEWAY_PORT: "${DIM_DEVELOPMENT_GATEWAY_PORT:?}"
     healthcheck:
       test: ["CMD", "docker", "info"]
       interval: 1s
@@ -28,7 +29,8 @@ services:
       - agent-dind-shared:/mnt/workspace-shared-dind
       - /tmp/dim-qemu-verification:/run/dim/qemu-verification:ro
       - /tmp/dim-external-url:/run/dim/external-url:ro
-      - /tmp/dim-web-url:/run/dim/web-url:ro
+      - /tmp/dim-development-url:/run/dim/development-url:ro
+      - /usr/local/lib/dim/controller-proxy:/usr/local/lib/dim/controller-proxy:ro
     working_dir: /workspace
 
   secure-dind:
