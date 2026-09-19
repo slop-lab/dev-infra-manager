@@ -100,9 +100,30 @@ trusted proxy. Installation, configuration, and lifecycle setup do not invoke
 the launcher, and launcher retries or failures do not stop the shared gateway
 or another routed service. The gateway listens on its fixed agent-container
 port for the trusted ingress and forwards each route to a loopback application.
-The returned Web UI and API are same-origin, so this path does not require
-CORS. Do not enable a wildcard origin; a separate browser client must use only
-its exact reviewed origin.
+The launcher always supplies `https://localhost:4096` to OpenCode and accepts
+`OPENCODE_WEB_CORS_ORIGINS` as a JSON array of additional exact HTTP or HTTPS
+origins, defaulting to `[]`. Values with a wildcard, user information, path,
+query, or fragment are rejected before launcher state is created. The list is normalized,
+deduplicated, and sorted. The pinned OpenCode release does not support `*` as a
+wildcard CORS origin. OpenCode can merge these launcher origins with origins
+from its own configuration or built-in behavior.
+
+For a remote Web UI, configure the source origin shown in the browser address
+bar, not the destination DIM external URL:
+
+```bash
+dim workspace run dim-dev bash -- -c \
+  'export OPENCODE_WEB_CORS_ORIGINS="$1"; exec bash /workspace/scripts/opencode-web.bash' \
+  bash '["https://remote-web.example"]'
+```
+
+OpenCode's CORS headers pass through the external URL route. A successful
+preflight permits `Authorization` and `Content-Type`, but CORS does not replace
+authentication. The browser client must send the reported Basic Auth
+credential in the `Authorization` header on its requests. Matching port and
+canonical CORS settings reuse the healthy owned process. A changed port or
+origin list restarts only that process and retains the credential, external
+URL, and shared gateway. Allow only trusted client UI origins.
 
 Run `just` as your normal user, including when it comes from mise. After the
 first install, log out and back in or run `newgrp docker` once to refresh the
