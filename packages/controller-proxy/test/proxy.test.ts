@@ -19,12 +19,16 @@ describe("controller proxy", () => {
       method: string | undefined;
       path: string | undefined;
       authorization: string | undefined;
+      body: string;
     }> = [];
-    const upstream = http.createServer((request, response) => {
+    const upstream = http.createServer(async (request, response) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
       requests.push({
         method: request.method,
         path: request.url,
-        authorization: request.headers.authorization
+        authorization: request.headers.authorization,
+        body: Buffer.concat(chunks).toString("utf8")
       });
       if (request.method === "GET" && request.url === "/api") {
         response.setHeader("content-type", "application/json");
@@ -78,7 +82,15 @@ describe("controller proxy", () => {
     });
     expect((await request(listen, "POST", "/api/host-inputs/builtin.git-author", { key: "name" })).status).toBe(403);
     expect((await request(listen, "POST", "/api/urls", { ingress: "public" })).status).toBe(403);
-    expect((await request(listen, "POST", "/api/urls", { ingress: "tailscale-main" })).status).toBe(201);
+    const genericRequest = {
+      ingress: "tailscale-main",
+      target: { containers: ["caller"], protocol: "https", port: 8443 },
+      subdomain: "review",
+      path: "/service",
+      pluginOption: true
+    };
+    expect((await request(listen, "POST", "/api/urls", genericRequest)).status).toBe(201);
+    expect(JSON.parse(requests.at(-1)?.body ?? "null")).toEqual(genericRequest);
     const listed = await request(listen, "GET", "/api/urls");
     expect(JSON.parse(listed.body)).toEqual({ urls: [{ id: "allowed-id", ingress: "tailscale-main" }] });
     expect((await request(listen, "DELETE", "/api/urls/denied-id")).status).toBe(403);
@@ -86,19 +98,23 @@ describe("controller proxy", () => {
     expect(requests.every((entry) => entry.authorization === "Bearer workspace.secret")).toBe(true);
   });
 
-  it("restricts External URL create, list, and revoke operations to exact targets", async () => {
+  it("binds External URL create, list, and revoke operations to one trusted target", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "dim-target-controller-proxy-"));
     cleanup.push(() => rm(root, { recursive: true, force: true }));
     const sourceSocket = path.join(root, "source.sock");
     const listen = path.join(root, "proxy.sock");
     const allowedTarget = { containers: ["agent"], protocol: "http" as const, port: 4096 };
+    const forwardedBodies: string[] = [];
     const targets = [
       allowedTarget,
       { ...allowedTarget, containers: ["other"] },
       { ...allowedTarget, protocol: "https" },
       { ...allowedTarget, port: 4097 }
     ];
-    const upstream = http.createServer((request, response) => {
+    const upstream = http.createServer(async (request, response) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      forwardedBodies.push(Buffer.concat(chunks).toString("utf8"));
       if (request.method === "GET" && request.url === "/api/urls") {
         response.setHeader("content-type", "application/json");
         response.end(JSON.stringify({
@@ -117,16 +133,28 @@ describe("controller proxy", () => {
       listen,
       capabilities: [externalUrlProxy({
         allowedIngresses: ["https-ts"],
-        allowedTargets: [allowedTarget]
+        boundTarget: allowedTarget
       })]
     });
     await proxy.listen();
     cleanup.push(() => proxy.close());
 
-    for (const target of targets.slice(1)) {
-      expect((await request(listen, "POST", "/api/urls", { ingress: "https-ts", target })).status).toBe(403);
+    for (const extra of [
+      { target: allowedTarget },
+      { subdomain: "review" },
+      { path: "/service" },
+      { pluginOption: true }
+    ]) {
+      expect((await request(listen, "POST", "/api/urls", {
+        ingress: "https-ts",
+        ...extra
+      })).status).toBe(403);
     }
-    expect((await request(listen, "POST", "/api/urls", { ingress: "https-ts", target: allowedTarget })).status).toBe(201);
+    expect((await request(listen, "POST", "/api/urls", { ingress: "https-ts" })).status).toBe(201);
+    expect(JSON.parse(forwardedBodies.at(-1) ?? "null")).toEqual({
+      ingress: "https-ts",
+      target: allowedTarget
+    });
     expect(JSON.parse((await request(listen, "GET", "/api/urls")).body)).toEqual({
       urls: [{ id: "url-0", ingress: "https-ts", target: allowedTarget }]
     });
