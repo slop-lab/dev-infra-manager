@@ -6,7 +6,9 @@ import { describe, expect, it } from "vitest";
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 const workspaceUserSetup = "scripts/workspace-user-setup.bash";
 const openCodeWebLauncher = "scripts/opencode-web.bash";
+const openCodeWebLauncherFailureSmoke = "verification/scripts/opencode-web-launcher-failure-smoke.bash";
 const openCodeWebRealRuntimeSmoke = "verification/scripts/opencode-web-real-runtime-smoke.bash";
+const openCodeWebRealRuntimeFixture = "verification/scripts/opencode-web-real-runtime-fixture.mjs";
 const remoteBootstrapBegin = "# DIM_REMOTE_BOOTSTRAP_BEGIN";
 const remoteBootstrapEnd = "# DIM_REMOTE_BOOTSTRAP_END";
 
@@ -45,9 +47,11 @@ describe("workspace-user setup policy", () => {
       `${workspaceUserSetup}.sha256`,
       openCodeWebLauncher,
       `${openCodeWebLauncher}.sha256`,
-      openCodeWebRealRuntimeSmoke
+      openCodeWebLauncherFailureSmoke,
+      openCodeWebRealRuntimeSmoke,
+      openCodeWebRealRuntimeFixture
     ];
-    expect(artifacts.map((path) => existsSync(resolve(workspaceRoot, path)))).toEqual([true, true, true, true, true]);
+    expect(artifacts.map((path) => existsSync(resolve(workspaceRoot, path)))).toEqual([true, true, true, true, true, true, true]);
   });
 
   it("marks the root remote bootstrap and requires its commit from the environment", async () => {
@@ -188,8 +192,13 @@ describe("workspace-user setup policy", () => {
     expect(source).toContain('EXPECTED_OPENCODE_VERSION="1.18.31"');
     expect(source).toContain("OPENCODE_SERVER_PASSWORD");
     expect(source).toContain("/global/health");
-    expect(source).toContain("DIM_WEB_URL_SOCKET");
-    expect(source).toContain("DIM_WEB_URL_CONTAINERS_JSON");
+    expect(source).toContain("DIM_DEVELOPMENT_URL_SOCKET");
+    expect(source).toContain("dim-development-service expose");
+    expect(source).toContain("--name opencode-web");
+    expect(source).toContain("--require-scheme https");
+    expect(source).toContain("--hostname 127.0.0.1");
+    expect(source).not.toContain("DIM_WEB_URL");
+    expect(source).not.toContain("CONTAINERS_JSON");
     expect(source).not.toContain("DIM_EXTERNAL_URL_SOCKET");
     expect(source).not.toContain("DIM_EXTERNAL_URL_CONTAINERS_JSON");
     expect(source).toContain("process_owns_listener");
@@ -204,8 +213,13 @@ describe("workspace-user setup policy", () => {
 
     expect(source).toContain("1.18.31");
     expect(source).toContain("env -i");
+    expect(source).toContain("dim-development-service");
+    expect(source).toContain("generic-http");
+    expect(source).toContain("31887");
+    expect(source).not.toContain("DIM_WEB_URL");
     expect(source).toContain("opencode-web-real-runtime-smoke-ok");
     expect(recipes).toContain("bash verification/scripts/opencode-web-real-runtime-smoke.bash");
+    expect(recipes).toContain("bash verification/scripts/opencode-web-launcher-failure-smoke.bash");
   });
 
   it.each(remoteBootstrapReadmes)("documents host-verified streaming setup in %s", async (path, workspace) => {

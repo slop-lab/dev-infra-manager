@@ -19,11 +19,12 @@ plugin-install:
     just build-packages
     cd .. && bash verification/scripts/plugin-install-smoke.bash
 
-# Verify the pinned workspace-user tooling setup in a disposable home.
+# Verify pinned workspace-user setup plus generic development-service exposure.
 workspace-user-setup:
     cd .. && bash verification/scripts/workspace-user-setup-smoke.bash
     cd .. && bash verification/scripts/workspace-user-setup-remote-bootstrap-smoke.bash
     cd .. && bash verification/scripts/opencode-web-launcher-smoke.bash
+    cd .. && bash verification/scripts/opencode-web-launcher-failure-smoke.bash
     cd .. && bash verification/scripts/opencode-web-real-runtime-smoke.bash
 
 # Verify every publishable package through the same dry-run used before release.
