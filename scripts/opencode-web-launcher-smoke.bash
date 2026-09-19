@@ -26,6 +26,7 @@ cat >"$work_dir/tools/opencode" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 if [[ "${1:-}" == --version ]]; then
+  [[ -z "${MOCK_OPENCODE_VERSION_PROBE:-}" ]] || printf '%s\n' probed >>"$MOCK_OPENCODE_VERSION_PROBE"
   printf '%s\n' "${MOCK_OPENCODE_VERSION:-1.18.31}"
   exit 0
 fi
@@ -33,14 +34,18 @@ fi
 shift
 hostname=""
 port=""
+cors=()
 while (($#)); do
   case "$1" in
     --hostname) hostname="$2"; shift 2 ;;
     --port) port="$2"; shift 2 ;;
+    --cors) cors+=("$2"); shift 2 ;;
     *) exit 64 ;;
   esac
 done
-printf '%s %s\n' "$hostname" "$port" >"$MOCK_OPENCODE_ARGUMENTS"
+printf '%s %s' "$hostname" "$port" >"$MOCK_OPENCODE_ARGUMENTS"
+printf ' --cors=%s' "${cors[@]}" >>"$MOCK_OPENCODE_ARGUMENTS"
+printf '\n' >>"$MOCK_OPENCODE_ARGUMENTS"
 [[ "${MOCK_OPENCODE_FAIL:-0}" != 1 ]] || exit 73
 [[ "${MOCK_OPENCODE_HOLD:-0}" != 1 ]] || exec sleep 120
 exec node "$MOCK_OPENCODE_SERVER" "$hostname" "$port"
@@ -111,6 +116,7 @@ base_env=(
   PATH="$work_dir/tools:$PATH"
   MOCK_OPENCODE_SERVER="$work_dir/opencode-server.mjs"
   MOCK_OPENCODE_ARGUMENTS="$opencode_arguments"
+  MOCK_OPENCODE_VERSION_PROBE="$work_dir/version-probes"
   MOCK_DEVELOPMENT_SOCKET="$socket"
   MOCK_EXPOSE_ARGUMENTS="$arguments_file"
   MOCK_EXPOSE_ENVIRONMENT="$environment_file"
@@ -118,6 +124,21 @@ base_env=(
   DIM_DEVELOPMENT_URL_SOCKET="$socket"
   OPENCODE_WEB_PORT="$port"
 )
+
+for invalid_cors in 'not-json' 'null' '["*"]' '["https://*.example"]' '["https://%2a.example.com"]' '["ftp://remote-web.example"]' \
+  '["https://user@remote-web.example"]' '["https://remote-web.example/path"]' \
+  '["https://remote-web.example/%2e%2e"]' \
+  '["https://remote-web.example?query=yes"]' '["https://remote-web.example#fragment"]'; do
+  rm -f "$work_dir/version-probes"
+  if env "${base_env[@]}" OPENCODE_WEB_CORS_ORIGINS="$invalid_cors" bash "$launcher" \
+    >/dev/null 2>"$work_dir/invalid-cors"; then
+    printf 'launcher accepted invalid CORS origins: %s\n' "$invalid_cors" >&2
+    exit 1
+  fi
+  grep -Fq 'OPENCODE_WEB_CORS_ORIGINS' "$work_dir/invalid-cors"
+  [[ ! -e "$work_dir/version-probes" ]]
+  [[ ! -e "$work_dir/home/.local/state/opencode-web" ]]
+done
 
 mkdir -p "$work_dir/missing-tools"
 for prerequisite in curl flock jq node nohup; do
@@ -212,7 +233,7 @@ password="$(sed -n '2p' "$credential_file")"
 [[ "$(stat -c %a "$state_dir/server.pid")" = 600 ]]
 [[ "$(stat -c %a "$state_dir/server.log")" = 600 ]]
 ! grep -Fq "$password" "$state_dir/server.log"
-grep -Fqx "127.0.0.1 $port" "$opencode_arguments"
+grep -Fqx "127.0.0.1 $port --cors=https://localhost:4096" "$opencode_arguments"
 grep -Fqx "expose --name opencode-web --port $port --ingress https-ts --require-scheme https" "$arguments_file"
 grep -Fqx "DIM_DEVELOPMENT_URL_SOCKET=$socket" "$environment_file"
 ! grep -Eq 'DIM_(WEB_URL|EXTERNAL_URL)|CONTAINERS_JSON|TARGET' "$environment_file"
@@ -229,6 +250,42 @@ second_output="$(env "${base_env[@]}" bash "$launcher")"
 [[ "$second_output" = "$first_output" ]]
 [[ "$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/server.pid")" = "$server_pid" ]]
 [[ "$(wc -l <"$arguments_file")" = 2 ]]
+kill -0 "$unrelated_pid"
+
+for invalid_cors in 'not-json' '["*"]' '["https://%2a.example.com"]'; do
+  if env "${base_env[@]}" OPENCODE_WEB_CORS_ORIGINS="$invalid_cors" bash "$launcher" \
+    >/dev/null 2>"$work_dir/invalid-cors-running"; then
+    printf 'launcher accepted invalid CORS origins while an owned process was running: %s\n' "$invalid_cors" >&2
+    exit 1
+  fi
+  grep -Fq 'OPENCODE_WEB_CORS_ORIGINS' "$work_dir/invalid-cors-running"
+  [[ "$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/server.pid")" = "$server_pid" ]]
+  kill -0 "$server_pid"
+done
+
+credential_before_change="$(cat "$credential_file")"
+additional_cors='["https://remote-web.example/","https://localhost:4096","https://remote-web.example"]'
+changed_output="$(env "${base_env[@]}" OPENCODE_WEB_CORS_ORIGINS="$additional_cors" bash "$launcher")"
+changed_pid="$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/server.pid")"
+[[ "$changed_output" = "$first_output" ]]
+[[ "$changed_pid" != "$server_pid" ]]
+! kill -0 "$server_pid" 2>/dev/null
+server_pid="$changed_pid"
+[[ "$(cat "$credential_file")" = "$credential_before_change" ]]
+grep -Fqx "127.0.0.1 $port --cors=https://localhost:4096 --cors=https://remote-web.example" "$opencode_arguments"
+
+equivalent_cors='["https://remote-web.example","https://remote-web.example/"]'
+env "${base_env[@]}" OPENCODE_WEB_CORS_ORIGINS="$equivalent_cors" bash "$launcher" >/dev/null
+[[ "$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/server.pid")" = "$server_pid" ]]
+
+default_again_output="$(env "${base_env[@]}" bash "$launcher")"
+default_again_pid="$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/server.pid")"
+[[ "$default_again_output" = "$first_output" ]]
+[[ "$default_again_pid" != "$server_pid" ]]
+! kill -0 "$server_pid" 2>/dev/null
+server_pid="$default_again_pid"
+[[ "$(cat "$credential_file")" = "$credential_before_change" ]]
+grep -Fqx "127.0.0.1 $port --cors=https://localhost:4096" "$opencode_arguments"
 kill -0 "$unrelated_pid"
 
 printf '%s\n' fail >"$mode_file"
