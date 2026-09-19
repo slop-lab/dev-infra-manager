@@ -48,6 +48,15 @@ Launch the opt-in authenticated Web interface separately:
 dim workspace run dim-dev bash -- /workspace/scripts/opencode-web.bash
 ```
 
+For a separate browser UI, pass its source origin, not the destination DIM
+external URL:
+
+```bash
+dim workspace run dim-dev bash -- -c \
+  'export OPENCODE_WEB_CORS_ORIGINS="$1"; exec bash /workspace/scripts/opencode-web.bash' \
+  bash '["https://remote-web.example"]'
+```
+
 The launcher prints the external URL, username, and restricted credential-file
 path without printing the password. It stores the credential and owned-process
 identity in the persistent user home, and reuses a
@@ -63,8 +72,21 @@ ingress-only generic capability for its existing clients and continues to
 permit both `https-ts` and `http-ts`. Neither socket exposes a controller grant
 or raw host secret. Read the reported mode-`0600` file explicitly when the
 browser asks for Basic Auth; its first line is the username and its second is
-the password. The UI and API are same-origin through that URL, so no CORS
-allowlist is required and the launcher does not enable one. The reviewed
+the password. The launcher always allows `https://localhost:4096` and reads
+`OPENCODE_WEB_CORS_ORIGINS` as a JSON array of additional exact HTTP or HTTPS
+origins, defaulting to `[]`. It normalizes, deduplicates, and sorts them, and
+rejects invalid values, credentials, paths, queries, fragments, and `*` before
+creating state.
+The pinned OpenCode release does not support `*` as a wildcard CORS origin.
+OpenCode may merge launcher origins with its own configured or built-in
+origins.
+
+OpenCode's CORS response headers pass through the external URL route. A
+cross-origin browser client must still send the reported Basic Auth credential
+in the `Authorization` header. The same port and canonical origin list reuse
+the healthy owned process; a changed port or list restarts only that process
+while retaining its credential, external URL, and shared gateway. Allow only
+trusted client UI origins. The reviewed
 inner-container launch publishes only the common gateway port at the same
 stable port in `agent-dind`. The mapping survives inner-agent recreation, so
 the existing external URL relay remains valid. Replacing OpenCode with another
