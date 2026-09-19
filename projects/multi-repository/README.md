@@ -113,9 +113,12 @@ URL, username, and restricted credential-file path without printing the
 password, stores restricted state below the persistent user home, and reuses
 its owned healthy process and matching URL on retry. Read the reported file
 explicitly for browser login; its first line is the username and its second is
-the password. The Project gives it only an HTTPS external-URL proxy and the
-fixed direct `agent` target at HTTP port 4096. That target reaches the listener
-over the Compose network without a host port publication. Configure `https-ts`
+the password. The Project gives the agent the common
+`dim-development-service` helper and only an HTTPS development-URL socket. The
+helper lets the launcher choose its loopback port and routes the resulting URL
+through the lifecycle's fixed gateway in the direct `agent` container. The
+gateway is reachable over the Compose network without a host port publication;
+neither the tool nor its local port appears in `.dim`. Configure `https-ts`
 before launching with the executable HTTPS configuration:
 
 ```bash
@@ -130,12 +133,13 @@ DIM_EXTERNAL_URL_DNS_VALUE=203.0.113.10 \
 ```
 
 The script creates and verifies the Caddy-backed `https-ts` ingress. An
-alternative ingress requires a reviewed change to the scoped
-proxy's allowlist as well as the launcher selection. Web uses
-`DIM_WEB_URL_SOCKET` and `DIM_WEB_URL_CONTAINERS_JSON`, not the generic
-`DIM_EXTERNAL_URL_*` capability. The UI and API are same-origin through the
-returned URL, so the launcher does not enable CORS; never substitute a
-wildcard origin.
+alternative ingress requires a reviewed change to the scoped proxy's allowlist
+as well as the launcher selection. The launcher consumes only
+`DIM_DEVELOPMENT_URL_SOCKET`, not the generic `DIM_EXTERNAL_URL_*` capability.
+The UI and API are same-origin through the returned URL, so the launcher does
+not enable CORS; never substitute a wildcard origin. Another development
+service can use the same helper and choose any local port without changing
+`.dim`.
 
 Export or restore only the Project-owned agent home as a gzip tar stream:
 
