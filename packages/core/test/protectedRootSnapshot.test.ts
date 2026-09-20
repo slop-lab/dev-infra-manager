@@ -1,6 +1,8 @@
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { chown, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
@@ -14,6 +16,8 @@ import {
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 
 const COMMIT = "a".repeat(40);
+const NON_ROOT_UID = 1000;
+const nonRootDriver = fileURLToPath(new URL("./protectedRootSnapshotNonRootDriver.ts", import.meta.url));
 
 class SnapshotRunner implements StreamingCommandRunner {
   readonly calls: string[][] = [];
@@ -229,6 +233,29 @@ describe("protected Project root snapshots", () => {
     await expect(stat(snapshot.rootSnapshotPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
+  it.runIf(process.getuid?.() === 0 || process.getuid?.() === NON_ROOT_UID)(
+    "creates, reuses, and cleans failed unpublished snapshots as uid 1000",
+    async () => {
+      // Given
+      const driverRoot = await mkdtemp(join(tmpdir(), "dim-protected-root-nonroot-"));
+      if (process.getuid?.() === 0) await chown(driverRoot, NON_ROOT_UID, NON_ROOT_UID);
+
+      try {
+        // When
+        const result = await runNonRootDriver(driverRoot);
+
+        // Then
+        expect(result).toEqual({
+          code: 0,
+          stdout: "created\nreused\noriginal-error-preserved\nfailed-staging-cleaned\n",
+          stderr: ""
+        });
+      } finally {
+        await rm(driverRoot, { recursive: true, force: true });
+      }
+    }
+  );
+
   function resolve(runner: StreamingCommandRunner): Promise<ProtectedRootSnapshot> {
     return resolveProtectedRootSnapshot({
       runner,
@@ -245,3 +272,21 @@ describe("protected Project root snapshots", () => {
     });
   }
 });
+
+function runNonRootDriver(root: string): Promise<{ readonly code: number | null; readonly stdout: string; readonly stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const dropPrivileges = process.getuid?.() === 0;
+    const child = spawn(process.execPath, ["--import", "tsx", nonRootDriver, root], {
+      ...(dropPrivileges ? { uid: NON_ROOT_UID, gid: NON_ROOT_UID } : {}),
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => { stdout += chunk; });
+    child.stderr.on("data", (chunk: string) => { stderr += chunk; });
+    child.once("error", reject);
+    child.once("close", (code) => resolve({ code, stdout, stderr }));
+  });
+}
