@@ -547,7 +547,7 @@ dim workspace run WORKSPACE TASK [ARGS...]
 dim workspace setup WORKSPACE
 dim workspace update WORKSPACE [--profile PROFILE ... | --clear-profiles]
 dim workspace start WORKSPACE
-dim workspace restart WORKSPACE
+dim workspace restart WORKSPACE...
 dim workspace stop WORKSPACE
 dim workspace discard WORKSPACE --yes [--keep-volume]
 ```
@@ -609,6 +609,12 @@ resolve a mutable lifecycle ref. Only successful setup may publish `ready`.
 `restart` stops a running workspace only after dirty/divergence preflight.
 Dirty root checkouts and non-fast-forward
 updates are rejected without reset.
+When multiple workspaces are supplied, `restart` MUST process them sequentially
+in command-line order. It MUST report each completed workspace before starting
+the next one and MUST stop at the first failure with that workspace identified;
+earlier completed restarts remain complete and later workspaces are not called.
+With `--json`, a fully successful invocation MUST emit one array containing the
+ordered per-workspace results.
 
 `workspace align` is the checkout-only recovery path. It fetches the
 configured root ref, switches a clean checkout back to the corresponding

@@ -222,7 +222,7 @@ non-root `dim-agent` account. Root login stays disabled and is rejected even
 when the client offers that same valid key.
 
 ```bash
-dim workspace restart dev   # stop, start, root fast-forward, setup
+dim workspace restart dev review   # each: stop, start, root fast-forward, setup
 dim workspace stop dev
 dim workspace start dev     # root fast-forward and setup
 ```
@@ -233,6 +233,11 @@ restart leaves the workspace and its Project services running and prints the
 explicit `dim workspace align WORKSPACE --reset --yes` recovery command when
 discarding the local state is intended. Stop/start and restart preserve the
 root checkout and inner-engine volume.
+
+`restart` accepts one or more workspace names and processes them sequentially
+in command-line order. It reports each success immediately and stops on the
+first failure, identifying that workspace. Earlier restarts remain complete;
+later names are not attempted.
 
 DIM ownership-checks the complete workspace container and inner-engine volume
 label sets before reuse or mutation. Container lifecycle commands act on the
