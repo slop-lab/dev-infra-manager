@@ -304,6 +304,93 @@ describe("external URLs plugin", () => {
     });
   });
 
+  it("reconciles a persisted route to a recreated workspace upstream before listing it", async () => {
+    const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-recreated-"));
+    close.push(() => rm(stateRoot, { recursive: true, force: true }));
+    const firstUpstream = http.createServer((_request, response) => response.end("first generation"));
+    firstUpstream.listen(0, "127.0.0.1");
+    await once(firstUpstream, "listening");
+    close.push(() => new Promise((resolve) => firstUpstream.close(() => resolve())));
+    const secondUpstream = http.createServer((_request, response) => response.end("second generation"));
+    secondUpstream.listen(0, "127.0.0.1");
+    await once(secondUpstream, "listening");
+    close.push(() => new Promise((resolve) => secondUpstream.close(() => resolve())));
+    const firstAddress = firstUpstream.address();
+    const secondAddress = secondUpstream.address();
+    if (!firstAddress || typeof firstAddress === "string" || !secondAddress || typeof secondAddress === "string") {
+      throw new Error("missing upstream address");
+    }
+    const proxyPort = await availablePort();
+    const registered = await registerPlugins([createExternalUrlsPlugin({
+      ingresses: {
+        public: {
+          description: "Public HTTP",
+          scheme: "http",
+          domain: "example.test",
+          listenHost: "127.0.0.1",
+          listenPort: proxyPort
+        }
+      }
+    })]);
+    close.push(() => registered.dispose());
+    let currentPort = firstAddress.port;
+    const workspace = {
+      id: "project-id:work-1",
+      name: "work-1",
+      projectId: "project-id",
+      projectName: "project"
+    };
+    const controller = createDimController({
+      stateRoot,
+      routes: registered.controllerRoutes,
+      authenticate: async () => workspace,
+      resolveTarget: async (_workspace, target) => ({
+        protocol: "http",
+        host: "127.0.0.1",
+        port: target.port === 9999 ? firstAddress.port : currentPort
+      })
+    });
+    controller.listen(0, "127.0.0.1");
+    await once(controller, "listening");
+    close.push(() => new Promise((resolve) => controller.close(() => resolve())));
+    const controllerAddress = controller.address();
+    if (!controllerAddress || typeof controllerAddress === "string") throw new Error("missing controller address");
+    const base = `http://127.0.0.1:${controllerAddress.port}`;
+    const headers = { authorization: "Bearer grant", "content-type": "application/json" };
+
+    const created = await fetch(`${base}/api/urls`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        ingress: "public",
+        subdomain: "work-1--service",
+        target: { containers: ["agent"], port: 31887 }
+      })
+    });
+    expect(created.status).toBe(201);
+    const createdBody = externalUrlResponse(await created.json());
+    expect(await proxyRequest(proxyPort, "work-1--service.example.test")).toBe("first generation");
+
+    currentPort = secondAddress.port;
+    const listed = await fetch(`${base}/api/urls`, { headers });
+
+    expect(listed.status).toBe(200);
+    expect(externalUrlResponse(await listed.json()).urls).toEqual(createdBody.urls);
+    expect(await proxyRequest(proxyPort, "work-1--service.example.test")).toBe("second generation");
+
+    const conflicting = await fetch(`${base}/api/urls`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        ingress: "public",
+        subdomain: "work-1--service",
+        target: { containers: ["other"], port: 9999 }
+      })
+    });
+    expect(conflicting.status).toBe(400);
+    expect(await proxyRequest(proxyPort, "work-1--service.example.test")).toBe("second generation");
+  });
+
   it("starts normally without a configured ingress", async () => {
     const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-external-urls-empty-"));
     close.push(() => rm(stateRoot, { recursive: true, force: true }));
@@ -514,6 +601,21 @@ async function availablePort(): Promise<number> {
   if (!address || typeof address === "string") throw new Error("missing address");
   await new Promise<void>((resolve) => server.close(() => resolve()));
   return address.port;
+}
+
+function externalUrlResponse(value: unknown): { readonly urls: readonly { readonly id: string; readonly url: string }[] } {
+  if (!value || typeof value !== "object" || Array.isArray(value) || !("urls" in value) || !Array.isArray(value.urls)) {
+    throw new Error("expected external URL response");
+  }
+  const urls = value.urls.map((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)
+      || !("id" in entry) || typeof entry.id !== "string"
+      || !("url" in entry) || typeof entry.url !== "string") {
+      throw new Error("expected external URL entry");
+    }
+    return { id: entry.id, url: entry.url };
+  });
+  return { urls };
 }
 
 async function proxyRequest(
