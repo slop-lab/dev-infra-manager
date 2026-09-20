@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Allow independent workspace run/exec and CI-log streams to progress
+  concurrently by releasing their host-readiness admission before runtime
+  dispatch, while lifecycle mutations and plugin operations remain exclusively
+  admitted. Workspace readiness, ownership, and per-workspace locking checks
+  still apply, and a later stop, discard, or host-maintenance operation may
+  interrupt an existing stream.
+
 - Publish protected-root snapshots successfully when DIM runs as a normal
   non-root host user, while retaining read-only published trees and cleaning
   unpublished staging trees without replacing the original publication error.
