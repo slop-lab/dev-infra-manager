@@ -24,3 +24,17 @@ export async function withHostAdminAdmission<T>(
     await release();
   }
 }
+
+export async function withHostRuntimeAdmission<T>(
+  lifecycle: LifecycleOptions,
+  execute: () => Promise<T>
+): Promise<T> {
+  const release = await new LifecycleState(lifecycle.stateRoot).acquireHostLifecycleLock();
+  try {
+    const host = await hostLifecycleStatus(lifecycle);
+    if (host.phase !== "ready") throw new HostNotReadyError(host.phase);
+  } finally {
+    await release();
+  }
+  return await execute();
+}

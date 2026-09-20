@@ -2,7 +2,7 @@ import * as ciRunner from "./ciRunner.js";
 import { runDoctor } from "./doctor.js";
 import { UserError } from "./errors.js";
 import { ensureGitea } from "./gitea.js";
-import { HostNotReadyError, withHostAdminAdmission } from "./hostAdminAdmission.js";
+import { HostNotReadyError, withHostAdminAdmission, withHostRuntimeAdmission } from "./hostAdminAdmission.js";
 import { hostLifecycleStatus, shutdownHost, startHost } from "./hostLifecycle.js";
 import type { LifecycleOptions } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
@@ -29,7 +29,8 @@ export async function adminBuiltinCall(operation: string, context: BuiltinContex
       return startHost(context.runner, context.lifecycle);
     default:
       try {
-        return await withHostAdminAdmission(context.lifecycle, () => dispatchBuiltin(operation, context));
+        const admit = RUNTIME_OPERATIONS.has(operation) ? withHostRuntimeAdmission : withHostAdminAdmission;
+        return await admit(context.lifecycle, () => dispatchBuiltin(operation, context));
       } catch (error) {
         if (error instanceof HostNotReadyError) {
           throw new UserError(`DIM host is ${error.phase}; run dim host start before '${operation}'`);
@@ -38,6 +39,8 @@ export async function adminBuiltinCall(operation: string, context: BuiltinContex
       }
   }
 }
+
+const RUNTIME_OPERATIONS = new Set(["ci.runner.logs", "workspace.exec", "workspace.run"]);
 
 async function dispatchBuiltin(operation: string, context: BuiltinContext): Promise<unknown> {
   const { input, lifecycle, runner, plugins } = context;
