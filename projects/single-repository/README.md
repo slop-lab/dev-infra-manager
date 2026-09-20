@@ -52,6 +52,9 @@ resource-bounded DIM workspace
 The agent receives neither the host Docker socket nor the Project runtime
 socket. Its `DOCKER_HOST` reaches only `agent-dind`, so coding tools can create
 nested containers without controlling sibling Project services.
+Agent tasks run as the workspace owner's nonroot identity and may use
+passwordless `sudo` only for root inside the agent container; this grants no
+root or runtime-control authority in the trusted workspace or on the host.
 
 Reviewed setup code also creates a deny-by-default agent controller proxy. The
 agent receives only its derived socket, not the workspace grant or original

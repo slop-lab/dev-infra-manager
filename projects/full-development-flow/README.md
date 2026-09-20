@@ -43,6 +43,9 @@ dim workspace start full-dev
 
 The agent can use its private Docker daemon but cannot access a host Docker
 socket or the trusted secret service's raw environment.
+Ordinary agent tasks run as the workspace owner's nonroot identity and may use
+passwordless `sudo` only for root inside the agent container, without gaining
+trusted-workspace or host runtime authority.
 
 ## Connect with OpenSSH
 

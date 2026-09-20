@@ -186,6 +186,9 @@ root checkout. It does not receive the host Docker socket or the trusted
 workspace Docker socket. The privileged sidecar runs a rootless Docker daemon
 inside the workspace's existing resource and isolation boundary; the agent
 reaches it over the private Compose network.
+Agent tasks run as the workspace owner's nonroot identity and may use
+passwordless `sudo` only for root inside the agent container. That container
+root has neither the trusted workspace's runtime socket nor host authority.
 
 The agent and DinD sidecar share only the named volume mounted at
 `/mnt/workspace-shared-dind`. Bind-mounted nested workloads must use a source
