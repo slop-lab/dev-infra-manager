@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -131,7 +132,42 @@ describe("stateful development flow shared-path policy", () => {
     }
   });
 
-  it("places every sibling-daemon bind source and source fixture beneath the configured shared root", async () => {
+  it("keeps controller sockets usable from a deeply nested checkout", async () => {
+    // Given
+    const fixtureRoot = await temporaryRoot("dim-stateful-deep-checkout-");
+    const checkoutRoot = resolve(fixtureRoot, "nested-checkout-segment".repeat(4));
+    await mkdir(checkoutRoot);
+
+    // When
+    const result = spawnSync("bash", [
+      "-c",
+      'set -euo pipefail; source "$1"; dim_stateful_initialize_work_tree "$2"; printf "%s\n%s\n%s\n" "$state_root" "$controller_runtime_dir" "$controller_socket"',
+      "bash",
+      statefulLibrary,
+      checkoutRoot
+    ], { encoding: "utf8" });
+
+    // Then
+    expect(result.status, result.stderr).toBe(0);
+    const [stateRoot, controllerRuntimeDir, controllerSocket] = result.stdout.trim().split("\n");
+    expect(stateRoot?.startsWith(`${checkoutRoot}/.local/dim-example-work/`)).toBe(true);
+    expect(controllerRuntimeDir).toBeDefined();
+    expect(controllerSocket).toBeDefined();
+    if (controllerRuntimeDir === undefined || controllerSocket === undefined) return;
+    temporaryRoots.push(controllerRuntimeDir);
+    expect(Buffer.byteLength(controllerSocket)).toBeLessThan(108);
+    await mkdir(resolve(controllerSocket, ".."), { recursive: true });
+    const server = createServer();
+    await new Promise<void>((resolveListen, rejectListen) => {
+      server.once("error", rejectListen);
+      server.listen(controllerSocket, resolveListen);
+    });
+    await new Promise<void>((resolveClose, rejectClose) => {
+      server.close((error) => error === undefined ? resolveClose() : rejectClose(error));
+    });
+  });
+
+  it("places every sibling-daemon bind source beneath its cleanup-owned root", async () => {
     // Given
     const fixtureRoot = await temporaryRoot("dim-stateful-paths-");
     const checkoutRoot = resolve(fixtureRoot, "checkout");
@@ -151,7 +187,7 @@ while [[ "$#" -gt 0 ]]; do
       source="\${mount#*source=}"
       source="\${source%%,*}"
       case "$source" in
-        "$DIM_TEST_SHARED_ROOT"/*) ;;
+        "$DIM_TEST_SHARED_ROOT"/*|"$DIM_TEST_RUNTIME_ROOT"/*) ;;
         *) exit 42 ;;
       esac
       test -e "$source"
@@ -172,11 +208,14 @@ dim_stateful_initialize_work_tree "$2"
 mkdir -p "$repositories" "$state_root/assets/project-roots/example" "$controller_dir"
 dim_stateful_assert_shared_paths
 docker_args=(run)
+export DIM_TEST_RUNTIME_ROOT="$controller_runtime_dir"
 for source in "\${stateful_sibling_bind_sources[@]}"; do
   docker_args+=(--mount "type=bind,source=$source,target=/fixture")
 done
 docker "\${docker_args[@]}"
-printf '%s\n' "$work_dir" "$repositories" "$state_root" "$controller_dir" "$controller_socket" "$agent_controller_socket" "$admin_socket"`,
+printf '%s\n' "$work_dir" "$repositories" "$state_root" "$controller_runtime_dir" "$controller_dir" "$controller_socket" "$agent_controller_socket" "$admin_socket"
+workspace_name=unused project_name=unused controller_pid=""
+(cleanup)`,
       "bash",
       statefulLibrary,
       checkoutRoot
@@ -194,11 +233,21 @@ printf '%s\n' "$work_dir" "$repositories" "$state_root" "$controller_dir" "$cont
     // Then
     expect(result.status, result.stderr).toBe(0);
     const paths = result.stdout.trim().split("\n");
-    expect(paths).toHaveLength(7);
-    for (const path of paths) expect(path.startsWith(`${sharedRoot}/`)).toBe(true);
+    expect(paths).toHaveLength(8);
+    for (const path of paths.slice(0, 3)) expect(path.startsWith(`${sharedRoot}/`)).toBe(true);
+    const workDirectory = paths[0];
+    const controllerRuntimeDir = paths[3];
+    expect(controllerRuntimeDir?.startsWith("/tmp/dim-full-development-runtime.")).toBe(true);
+    if (workDirectory === undefined || controllerRuntimeDir === undefined) return;
+    for (const path of paths.slice(4)) expect(path.startsWith(`${controllerRuntimeDir}/`)).toBe(true);
     const bindSources = (await readFile(bindLog, "utf8")).trim().split("\n");
     expect(bindSources).toHaveLength(3);
-    for (const source of bindSources) expect(source.startsWith(`${sharedRoot}/`)).toBe(true);
+    expect(bindSources[0]?.startsWith(`${sharedRoot}/`)).toBe(true);
+    for (const source of bindSources.slice(1)) {
+      expect(source.startsWith(`${controllerRuntimeDir}/`)).toBe(true);
+    }
+    await expect(access(workDirectory)).rejects.toThrow();
+    await expect(access(controllerRuntimeDir)).rejects.toThrow();
   });
 
   it("rejects an arbitrary tmp bind source before it reaches the sibling daemon", async () => {
@@ -216,6 +265,6 @@ printf '%s\n' "$work_dir" "$repositories" "$state_root" "$controller_dir" "$cont
 
     // Then
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("bind source escapes shared work root: /tmp/dim-escaped-controller");
+    expect(result.stderr).toContain("bind source escapes controller runtime root: /tmp/dim-escaped-controller");
   });
 });

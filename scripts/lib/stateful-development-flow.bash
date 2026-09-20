@@ -8,7 +8,7 @@ dim_stateful_initialize_work_tree() {
   work_dir="$(mktemp -d "$stateful_shared_work_root/dim-full-development-flow.XXXXXX")"
   repositories="$work_dir/repositories"
   state_root="$work_dir/state"
-  controller_runtime_dir="$work_dir/runtime"
+  controller_runtime_dir="$(mktemp -d /tmp/dim-full-development-runtime.XXXXXX)"
   controller_dir="$controller_runtime_dir/controller"
   controller_socket="$controller_dir/controller.sock"
   agent_controller_socket="$controller_dir/agent.sock"
@@ -22,13 +22,22 @@ dim_stateful_initialize_work_tree() {
 
 dim_stateful_assert_shared_paths() {
   local source resolved_source
-  for source in "$repositories" "$state_root" "$controller_runtime_dir" \
-    "${stateful_sibling_bind_sources[@]}"; do
+  for source in "$repositories" "$state_root" "${stateful_sibling_bind_sources[0]}"; do
     resolved_source="$(realpath --canonicalize-missing -- "$source")"
     case "$resolved_source" in
       "$stateful_shared_work_root"|"$stateful_shared_work_root"/*) ;;
       *)
         echo "bind source escapes shared work root: $resolved_source" >&2
+        return 1
+        ;;
+    esac
+  done
+  for source in "$controller_runtime_dir" "${stateful_sibling_bind_sources[@]:1}"; do
+    resolved_source="$(realpath --canonicalize-missing -- "$source")"
+    case "$resolved_source" in
+      "$controller_runtime_dir"|"$controller_runtime_dir"/*) ;;
+      *)
+        echo "bind source escapes controller runtime root: $resolved_source" >&2
         return 1
         ;;
     esac
@@ -169,6 +178,7 @@ cleanup() {
     dim project purge "$project_name" --yes >/dev/null 2>&1 || status=1
   fi
   stop_controller
+  find "$controller_runtime_dir" -depth -delete 2>/dev/null || true
   find "$work_dir" -depth -delete 2>/dev/null || true
   exit "$status"
 }
