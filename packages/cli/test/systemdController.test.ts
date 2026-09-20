@@ -102,6 +102,24 @@ test("controller restart preserves the original systemd failure when journal acc
   }
 });
 
+test("controller restart preserves the original systemd failure when journalctl is absent", async () => {
+  const fixture = await createSystemdFixture("denied");
+  await rm(path.join(fixture.root, "bin", "journalctl"));
+  try {
+    const result = runControllerRestart({
+      ...fixture,
+      env: { ...fixture.env, PATH: path.join(fixture.root, "bin") }
+    });
+
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /could not start DIM controller with systemd: systemd restart failed/);
+    assert.match(result.stderr, /controller service state: failed/);
+    assert.doesNotMatch(result.stderr, /spawn journalctl|ENOENT|systemctl-secret/);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("controller restart distinguishes a stopped service from a failed service", async () => {
   const fixture = await createSystemdFixture("stopped");
   try {
