@@ -13,21 +13,21 @@ trap cleanup EXIT
 cd "$repo_root"
 bash verification/scripts/pack-local-packages.bash "$package_root"
 
+plugins=(
+  @slop-lab/dim-plugin-dns-cloudflare
+  @slop-lab/dim-plugin-external-urls
+)
+
 if command -v mise >/dev/null 2>&1; then
-  echo "[packages] install through the mise-managed DIM installer facade"
-  mise exec -- dim install-cli --local-packages "$package_root" --no-local-bin
-  echo "Installed the local DIM build behind the mise-managed dim facade"
-  exit 0
+  echo "[packages] use the mise-managed DIM installer facade"
+  dim_command=(mise exec -- dim)
+else
+  installer_tarballs=("$package_root"/slop-lab-dim-installer-*.tgz)
+  test "${#installer_tarballs[@]}" -eq 1 && test -f "${installer_tarballs[0]}"
+  npm install --global --prefix "$install_prefix" "${installer_tarballs[0]}"
+  dim_command=("$install_prefix/bin/dim")
 fi
 
-local_tarballs=()
-while IFS= read -r tarball; do
-  case "$(basename "$tarball")" in
-    *dim-installer*) ;;
-    *) local_tarballs+=("$tarball") ;;
-  esac
-done < <(find "$package_root" -maxdepth 1 -type f -name '*.tgz' -print | sort)
-test "${#local_tarballs[@]}" -gt 0
-
-npm install --global --prefix "$install_prefix" "${local_tarballs[@]}"
-echo "Installed $install_prefix/bin/dim (ensure $install_prefix/bin is in PATH)"
+"${dim_command[@]}" install-cli --local-packages "$package_root" --no-local-bin
+"${dim_command[@]}" enable-plugin "${plugins[@]}"
+echo "Installed the local DIM build and enabled its DNS and External URLs plugins"
