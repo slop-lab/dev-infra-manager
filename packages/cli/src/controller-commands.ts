@@ -57,8 +57,15 @@ controller.command("serve")
         await claimControllerPid(pidPath);
         ownsPid = true;
       }
-      loaded = await loadInstalledPlugins(await resolvePluginHome());
-      await initializeControllerRoutes(options, loaded.registered);
+      const loadedPlugins = await controllerStartupStage(
+        "loading plugins",
+        async () => await loadInstalledPlugins(await resolvePluginHome())
+      );
+      loaded = loadedPlugins;
+      await controllerStartupStage(
+        "initializing plugin routes",
+        async () => await initializeControllerRoutes(options, loadedPlugins.registered)
+      );
       server = configuredDimController(options, loaded.registered);
       adminServer = configuredDimAdminController(options, loaded.registered);
       agentServer = configuredDimAgentController(options, loaded.registered);
@@ -113,4 +120,13 @@ controller.command("serve")
       }
     }
   });
+}
+
+async function controllerStartupStage<T>(stage: string, operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new UserError(`controller startup failed while ${stage}: ${detail}`);
+  }
 }

@@ -6,6 +6,9 @@ import { runner } from "./cli-runtime.js";
 import { managedControllerReady } from "./controller-health.js";
 
 const managedControllerStartAttempts = 2400;
+const controllerUnit = "dim-controller.service";
+const controllerJournalLines = 20;
+const controllerDiagnosticLimit = 4096;
 
 export function usesSystemdManagedController(options: LifecycleOptions): boolean {
   if (process.platform !== "linux") return false;
@@ -30,7 +33,7 @@ export async function startSystemdManagedController(options: LifecycleOptions): 
     "systemd",
     "user"
   );
-  const unitPath = path.join(unitDirectory, "dim-controller.service");
+  const unitPath = path.join(unitDirectory, controllerUnit);
   const environment = [
     "DIM_CONFIG_PATH",
     "DIM_DATA_HOME",
@@ -88,24 +91,82 @@ WantedBy=default.target
   await rename(temporary, unitPath);
   for (const args of [
     ["--user", "daemon-reload"],
-    ["--user", "enable", "dim-controller.service"],
-    ["--user", "restart", "dim-controller.service"]
+    ["--user", "enable", controllerUnit],
+    ["--user", "restart", controllerUnit]
   ]) {
     const result = await runner.run("systemctl", args);
     if (result.exitCode !== 0) {
-      throw new UserError(
-        `could not start DIM controller with systemd: ${result.stderr.trim() || result.stdout.trim()}`
-      );
+      const detail = boundedDiagnostic(result.stderr.trim() || result.stdout.trim());
+      const summary = `could not start DIM controller with systemd: ${detail}`;
+      if (args[1] === "restart") await throwControllerStartupFailure(summary);
+      throw new UserError(summary);
     }
   }
   for (let attempt = 0; attempt < managedControllerStartAttempts; attempt += 1) {
     if (await managedControllerReady(options)) return;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  throw new UserError(
-    "managed controller failed to start; run "
-      + "'journalctl --user --unit dim-controller.service --lines 100' for details"
-  );
+  await throwControllerStartupFailure("managed controller failed to start");
+}
+
+async function throwControllerStartupFailure(summary: string): Promise<never> {
+  const details: string[] = [];
+  const state = await runner.run("systemctl", [
+    "--user",
+    "show",
+    controllerUnit,
+    "--property=ActiveState",
+    "--property=SubState",
+    "--property=Result",
+    "--property=ExecMainStatus",
+    "--no-pager"
+  ]);
+  if (state.exitCode === 0) {
+    const serviceState = controllerServiceState(state.stdout);
+    if (serviceState) details.push(`controller service state: ${serviceState}`);
+  }
+  const journal = await runner.run("journalctl", [
+    "--user",
+    "--unit",
+    controllerUnit,
+    "--lines",
+    String(controllerJournalLines),
+    "--no-pager",
+    "--output",
+    "cat"
+  ]);
+  if (journal.exitCode === 0 && journal.stdout.trim()) {
+    details.push(
+      `recent controller startup output (last ${controllerJournalLines} lines):\n${boundedDiagnostic(journal.stdout)}`
+    );
+  }
+  throw new UserError([summary, ...details].join("\n"));
+}
+
+function controllerServiceState(output: string): string | undefined {
+  const properties = new Map(output.split("\n").flatMap((line) => {
+    const separator = line.indexOf("=");
+    return separator < 1 ? [] : [[line.slice(0, separator), line.slice(separator + 1)]];
+  }));
+  const active = properties.get("ActiveState");
+  if (active === "failed") return "failed";
+  if (active === "inactive") return "stopped";
+  if (active === "active" || active === "activating" || active === "deactivating") return active;
+  return undefined;
+}
+
+function boundedDiagnostic(value: string): string {
+  const redacted = value
+    .replace(
+      /(\b[A-Z0-9_]*(?:TOKEN|PASSWORD|SECRET|CREDENTIAL|API_KEY)[A-Z0-9_]*\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s]+)/gi,
+      "$1[redacted]"
+    )
+    .replace(/\bBearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/(https?:\/\/)[^/\s:@]+:[^/\s@]+@/gi, "$1[redacted]@");
+  const trimmed = redacted.trim();
+  return trimmed.length <= controllerDiagnosticLimit
+    ? trimmed
+    : `${trimmed.slice(0, controllerDiagnosticLimit)}\n[diagnostic truncated]`;
 }
 
 export function systemdQuote(value: string): string {
