@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Publish protected-root snapshots successfully when DIM runs as a normal
+  non-root host user, while retaining read-only published trees and cleaning
+  unpublished staging trees without replacing the original publication error.
+
 - Add a generic `dim-development-service` helper backed by a shared
   HTTP/WebSocket gateway reachable on the agent-container gateway port and
   forwarding only to loopback applications. A trusted bound External URL proxy
