@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Allow `dim workspace restart` to accept multiple workspace names, process
+  them sequentially with per-workspace progress, stop at the first contextual
+  failure without hiding earlier success, and return ordered results as one
+  JSON array. Preserve the installer's existing multi-package
+  `enable-plugin` behavior with executable regression coverage.
+
 - Show the canonical public DIM source repository in both direct CLI and
   installer-only root help, while preserving full source-specific local build
   versions and installed-facade dispatch behavior.
