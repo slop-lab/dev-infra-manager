@@ -38,9 +38,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   commit inputs, prepares the package bundle and trusted workspace image, and
   records the package-bundle digest and image ID as provenance. Project
   `install-local` validates that prepared set before and after installing it
-  without rebuilding. Installation uses the exact lockfile-owned Verdaccio
-  binary on a random loopback port, with signup closed and mutation
-  authenticated.
+  without rebuilding. Both local installation paths explicitly enable the
+  built DNS Cloudflare and External URLs plugins while preserving other
+  enabled plugins. Installation uses the exact lockfile-owned Verdaccio binary
+  on a random loopback port, with signup closed and mutation authenticated.
   `restart-controller` separately restarts the controller with the currently
   installed packages; Project preparation, installation, and restart never
   implicitly invoke one another.
