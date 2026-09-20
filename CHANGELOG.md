@@ -6,7 +6,13 @@
   HTTP/WebSocket gateway reachable on the agent-container gateway port and
   forwarding only to loopback applications. A trusted bound External URL proxy
   fixes the gateway target while callers submit only an ingress; stable service
-  names retain their URL and URL ID when the local application port changes.
+  names retain their URL and URL ID when the local application port changes or
+  the workspace is recreated, with persisted URLs reconciled to the current
+  resolved upstream before reuse.
+
+- Allow workspace discard to continue when its optional External URL cleanup
+  cannot authenticate because the workspace controller grant is already gone,
+  while preserving failures for denied or unreachable controllers.
 
 ## 0.9.0 - 2026-09-13
 
