@@ -10,6 +10,13 @@ const cli = fileURLToPath(new URL("../../../../core/packages/cli/src/cli.ts", im
 const cliSupport = fileURLToPath(new URL("../../../../core/packages/cli/src/cli-support.ts", import.meta.url));
 const packageDirectory = fileURLToPath(new URL("../../../../core/packages/cli", import.meta.url));
 const tsxImport = import.meta.resolve("tsx");
+const sourceRepositoryUrl = "https://github.com/slop-lab/dev-infra-manager";
+
+test("root help identifies the canonical source repository", () => {
+  const help = run(["--help"]);
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, new RegExp(sourceRepositoryUrl.replaceAll("/", "\\/")));
+});
 
 test("managed controller restarts preserve the workspace-mounted runtime directory", async () => {
   const source = await readCliSource("systemd-controller", "managed-controller");
