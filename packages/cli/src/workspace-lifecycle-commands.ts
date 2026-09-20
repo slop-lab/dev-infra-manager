@@ -2,8 +2,19 @@ import { type Command } from "commander";
 import { lifecycleOptions, UserError } from "@slop-lab/dim-core";
 import {
   adminCall, adminStreamCall, collect, confirmAction, ensureManagedController,
-  externalUrlControllerRequest, printActionResult, stopManagedController, type JsonFlags
+  ControllerRequestError, externalUrlControllerRequest, printActionResult,
+  stopManagedController, WorkspaceControllerGrantNotFoundError, type JsonFlags
 } from "./cli-support.js";
+
+export async function revokeWorkspaceExternalUrls(name: string): Promise<void> {
+  try {
+    await externalUrlControllerRequest("/api/urls", { method: "DELETE" }, name);
+  } catch (error) {
+    if (error instanceof WorkspaceControllerGrantNotFoundError) return;
+    if (error instanceof ControllerRequestError && error.status === 404) return;
+    throw error;
+  }
+}
 
 export function registerWorkspaceLifecycleCommands(workspace: Command): void {
   workspace.command("align")
@@ -86,9 +97,7 @@ workspace.command("discard")
     await confirmAction(flags.yes ?? false, `Permanently discard workspace '${name}'?`);
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    await externalUrlControllerRequest("/api/urls", { method: "DELETE" }, name).catch((error) => {
-      if (!(error instanceof Error) || !error.message.includes("(404)")) throw error;
-    });
+    await revokeWorkspaceExternalUrls(name);
     await adminStreamCall("workspace.discard", { name, keepVolume: flags.keepVolume ?? false });
     if ((await adminCall<unknown[]>("workspace.list")).length === 0) await stopManagedController(options);
   });

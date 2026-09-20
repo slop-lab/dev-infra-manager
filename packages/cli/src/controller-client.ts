@@ -12,6 +12,18 @@ export async function externalUrlControllerRequest(
   return controllerRequest(pathname, init, workspace);
 }
 
+export class WorkspaceControllerGrantNotFoundError extends UserError {
+  readonly name = "WorkspaceControllerGrantNotFoundError";
+}
+
+export class ControllerRequestError extends UserError {
+  readonly name = "ControllerRequestError";
+
+  constructor(readonly status: number, detail: string) {
+    super(`controller request failed (${status})${detail ? `: ${detail}` : ""}`);
+  }
+}
+
 export async function adminCall<T = unknown>(
   operation: string,
   body: Record<string, unknown> = {}
@@ -82,8 +94,8 @@ export async function controllerRequest(
     try {
       token = (await readFile(path.join(options.stateRoot, "workspace-grants", workspace), "utf8")).trim();
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        throw new UserError(`workspace '${workspace}' has no controller grant`);
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+        throw new WorkspaceControllerGrantNotFoundError(`workspace '${workspace}' has no controller grant`);
       }
       throw error;
     }
@@ -96,9 +108,7 @@ export async function controllerRequest(
   if (socketPath) {
     const response = await unixHttpRequest(socketPath, pathname, init, token);
     if (response.status < 200 || response.status >= 300) {
-      throw new UserError(
-        `controller request failed (${response.status})${response.body ? `: ${response.body.trim()}` : ""}`
-      );
+      throw new ControllerRequestError(response.status, response.body.trim());
     }
     if (response.status === 204) return {};
     return JSON.parse(response.body);
