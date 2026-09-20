@@ -38,7 +38,7 @@ function expectPracticalAuthority(journey: string, dockerHost: string): void {
   expect(journey).toContain("docker run --rm");
   expect(journey).toContain("git config --get credential.helper");
   expect(journey).toContain("git config --get-all safe.directory");
-  expect(journey).toContain("git ls-remote origin HEAD");
+  expect(journey).toContain("ls-remote origin HEAD");
   expect(journey).not.toContain("git config --list");
   expect(journey).toContain('test -S "$DIM_EXTERNAL_URL_SOCKET"');
   expect(journey).toMatch(/curl[^\n]*--unix-socket "\$DIM_EXTERNAL_URL_SOCKET"/);
@@ -67,7 +67,7 @@ describe("capable-host SSH journeys", () => {
     expect(journey).toContain("test -S /run/dim-agent-dind/docker.sock");
     expect(journey).not.toContain("tcp://agent-dind:2375");
     expect(journey).not.toContain("test ! -e /run/docker.sock");
-    expect(journey).toContain("GIT_TERMINAL_PROMPT=0 git ls-remote origin HEAD");
+    expect(journey).toContain("GIT_TERMINAL_PROMPT=0 git -C /workspace ls-remote origin HEAD");
     expect(smoke).toContain('project_task_uid="$(dim workspace run');
     expect(smoke).toContain('test "$project_task_uid" -ne 0');
   });
