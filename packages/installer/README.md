@@ -203,6 +203,14 @@ in config; package-manifest versions are not used to construct paths. Plugins
 share the runtime's `@slop-lab/dim-core`, whose exact peer dependency is
 checked by npm before installation succeeds.
 
+If preparation fails before this command with an error that describes the old
+`-local-<git-sha>` format, the selected production source predates the current
+aggregate SHA-256 package identity. Update the reviewed core and plugin source
+commits together, rebuild the bundle, and retry the same install command. Do
+not shorten the aggregate identity or relax its validation. A facade that
+already supports `--local-packages` passes the tarballs to npm and does not
+apply the package build's commit-length validation itself.
+
 **Default**: under `mise`, `--no-local-bin` is the default; everywhere else,
 `--local-bin` is the default. The explicit flag always wins over this
 detection. The interactive installer prints the direct-mode risks before it
