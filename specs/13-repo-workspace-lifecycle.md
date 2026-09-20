@@ -727,16 +727,27 @@ container cannot make the host ready. Repeating host start after partial
 failure uses the durable recovery intent, skips targets already ready, and
 clears those lists only after every target succeeds.
 
-Every ordinary built-in or plugin host-admin operation MUST acquire the host
-lifecycle lock before dispatch, confirm the host is `ready`, and retain that
-admission until it completes. Host shutdown MUST acquire the same lock before
-capturing its workspace, CI-runner, and managed-container recovery targets, so
-target capture and service drain wait for admitted operations. A later
-ordinary operation that waited behind maintenance MUST reread host state after
-acquiring the lock and reject without dispatch when the host is not `ready`.
-Host start owns its lifecycle admission and performs recorded workspace start
-or immutable setup replay within that operation; those recovery calls MUST NOT
-be blocked by attempting ordinary workspace admission again.
+Every ordinary built-in other than the runtime-session exceptions below, and
+every plugin host-admin operation, MUST acquire the host lifecycle lock before
+dispatch, confirm the host is `ready`, and retain that admission until it
+completes. This includes every lifecycle mutation. Host shutdown MUST acquire
+the same lock before capturing its workspace, CI-runner, and managed-container
+recovery targets, so target capture and service drain wait for those admitted
+operations. A later operation that waited behind maintenance MUST reread host
+state after acquiring the lock and reject without dispatch when the host is not
+`ready`. Host start owns its lifecycle admission and performs recorded
+workspace start or immutable setup replay within that operation; those recovery
+calls MUST NOT be blocked by attempting ordinary workspace admission again.
+
+`workspace.run`, `workspace.exec`, and `ci.runner.logs` MUST instead use short
+runtime admission: acquire the host lifecycle lock, confirm `ready`, release the
+lock, and only then dispatch the stream. This exception permits independent
+runtime sessions to overlap but does not permit destructive lifecycle
+mutations to overlap one another. Existing operation-specific checks remain
+mandatory; workspace run/exec retain workspace readiness, ownership, and
+per-workspace locking checks. A stop, discard, or host-maintenance operation
+admitted after the readiness check MAY interrupt the stream, and the stream has
+no atomic guarantee that host phase remains `ready` until it exits.
 
 CI-runner recovery is determined by the host phase captured at the start of
 that `host start` invocation. From `ready`, host start returns without recovery

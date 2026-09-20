@@ -18,13 +18,24 @@
   fetch, publish, and `x git`), the Git credential helper, controller bootstrap,
   and pre-controller backend diagnosis. They obtain DIM-owned state and
   credentials through the admin API.
-- Every ordinary built-in or plugin host-admin operation MUST acquire host
-  lifecycle admission before it inspects, snapshots, or mutates DIM state. An
-  admitted operation MUST hold that admission through completion. Host
-  maintenance waits for all admitted operations before it captures recovery
-  targets or drains services. An operation queued behind maintenance MUST
-  reread host lifecycle state after admission and reject without dispatch
-  unless the host is `ready`.
+- Every ordinary built-in other than the runtime-session exceptions below, and
+  every plugin host-admin operation, MUST acquire host lifecycle admission
+  before dispatch and MUST retain that admission through completion. This
+  includes every lifecycle mutation. Host maintenance waits for those admitted
+  operations before it captures recovery targets or drains services. An
+  operation queued behind maintenance MUST reread host lifecycle state after
+  admission and reject without dispatch unless the host is `ready`.
+- `workspace.run`, `workspace.exec`, and `ci.runner.logs` are runtime-session
+  exceptions. Each MUST acquire host lifecycle admission, confirm the host is
+  `ready`, and release admission before dispatching its potentially long-lived
+  stream. Independent runtime sessions may therefore progress concurrently and
+  do not authorize concurrent lifecycle mutations. Existing operation-specific
+  checks still apply; in particular, workspace run/exec retain their workspace
+  readiness, ownership, and per-workspace locking checks. Host shutdown,
+  workspace stop/discard, or another admitted lifecycle mutation that begins
+  after this short readiness check MAY interrupt an existing stream; runtime
+  admission does not promise that the host remains `ready` for the session
+  lifetime.
 - The managed controller uses separate Unix sockets in separate host runtime
   directories. The host-admin socket is mode `0600` and is never mounted into
   a workspace. The workspace socket accepts workspace-scoped grants and is
