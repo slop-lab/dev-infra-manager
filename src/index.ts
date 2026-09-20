@@ -103,6 +103,11 @@ interface ConfiguredIngress {
   listener: IngressListener;
 }
 
+interface RouteReconciliationContext {
+  workspace: ControllerWorkspace;
+  resolveTarget(target: WorkspaceTarget, mode: "container-dns" | "container-ip"): Promise<ResolvedWorkspaceTarget>;
+}
+
 interface ListenerOptions {
   name: string;
   listenHost: string;
@@ -165,13 +170,10 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
         for (const workspace of await runtime.listWorkspaces()) {
           for (const entry of deduplicateRoutes(await store.list(workspace.id))) {
             try {
-              const ingress = required(ingresses, entry.ingress);
-              const upstream = await runtime.resolveTarget(workspace, entry.target, ingress.listener.upstreamMode);
-              const reconciled = await ingress.listener.provision(workspace, storedRequest(entry), upstream);
-              if (reconciled.authority !== entry.route.authority) {
-                await ingress.listener.revoke(reconciled).catch(() => {});
-                throw new Error(`external route '${entry.route.id}' changed authority during reconciliation`);
-              }
+              await reconcileStoredRoute(entry, required(ingresses, entry.ingress), {
+                workspace,
+                resolveTarget: (target, mode) => runtime.resolveTarget(workspace, target, mode)
+              });
             } catch (error) {
               host.logger.error("DIM external URL route reconciliation failed", {
                 workspace: workspace.name,
@@ -202,7 +204,7 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
         audiences: ["workspace", "agent"],
         discovery,
         initialize,
-        handle: (context) => listUrls(context)
+        handle: (context) => mutations.run(() => listUrls(context, ingresses))
       });
       host.registerControllerRoute({
         method: "POST",
@@ -693,12 +695,31 @@ function httpIngressArgumentError(detail: string): UserError {
   return new UserError(`http ingress arguments ${detail}. See ${INGRESS_DOCUMENTATION_URL}`);
 }
 
-async function listUrls(context: ControllerRouteContext) {
+async function listUrls(
+  context: ControllerRouteContext,
+  ingresses: ReadonlyMap<string, ConfiguredIngress>
+) {
+  const entries = await new ExternalUrlStore(context.stateRoot).list(context.workspace.id);
+  for (const entry of deduplicateRoutes(entries)) {
+    await reconcileStoredRoute(entry, required(ingresses, entry.ingress), context);
+  }
   return {
     body: {
-      urls: publicEntries(await new ExternalUrlStore(context.stateRoot).list(context.workspace.id))
+      urls: publicEntries(entries)
     }
   };
+}
+
+async function reconcileStoredRoute(
+  entry: StoredUrl,
+  ingress: ConfiguredIngress,
+  context: RouteReconciliationContext
+): Promise<void> {
+  const upstream = await context.resolveTarget(entry.target, ingress.listener.upstreamMode);
+  const reconciled = await ingress.listener.provision(context.workspace, storedRequest(entry), upstream);
+  if (reconciled.authority === entry.route.authority) return;
+  await ingress.listener.revoke(reconciled).catch(() => {});
+  throw new Error(`external route '${entry.route.id}' changed authority during reconciliation`);
 }
 
 async function createUrl(
@@ -820,7 +841,11 @@ class WorkspaceRouteRegistry {
   provision(authority: string, claim: string, upstream: ResolvedWorkspaceTarget): void {
     const existing = this.#routes.get(authority);
     if (existing && JSON.stringify(existing.upstream) !== JSON.stringify(upstream)) {
-      throw new UserError(`external route '${authority}' already targets another service`);
+      if (existing.claims.size !== 1 || !existing.claims.has(claim)) {
+        throw new UserError(`external route '${authority}' already targets another service`);
+      }
+      existing.upstream = upstream;
+      return;
     }
     if (existing) existing.claims.add(claim);
     else this.#routes.set(authority, { upstream, claims: new Set([claim]) });
