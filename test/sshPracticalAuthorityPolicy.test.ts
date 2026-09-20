@@ -159,6 +159,15 @@ describe("full-development non-root SSH practical authority", () => {
     expect(compose).not.toMatch(/-\s+[^:\n]+:\/run\/dim-agent(?:\s|$)/);
   });
 
+  it("starts DinD explicitly with only the private Unix listener", async () => {
+    const compose = await readFile(fullDevelopmentCompose, "utf8");
+
+    expect(compose).toContain(
+      'command: ["dockerd", "--host=unix:///run/dim-agent-dind/docker.sock"]'
+    );
+    expect(compose).not.toMatch(/--host=tcp:|DOCKER_TLS_CERTDIR/);
+  });
+
   it("limits session state to Docker, bounded Git, and the constrained controller socket", async () => {
     const compose = await readFile(fullDevelopmentCompose, "utf8");
     const startup = await readFile(fullDevelopmentStartup, "utf8");
