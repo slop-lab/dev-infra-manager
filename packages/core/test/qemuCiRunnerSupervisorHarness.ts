@@ -186,8 +186,10 @@ for ((index=1; index <= $#; index+=1)); do
 done
 printf '%s\n' "\${@: -2:1}" >"$FAKE_ROOT/copied-source-$port"
 `;
+const nodeExecutable = `'${process.execPath.replaceAll("'", "'\\''")}'`;
+
 const fakePython = `#!/usr/bin/env bash
-/usr/local/bin/node -e 'const fs=require("fs"); const runner=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const strings=[runner.uuid,runner.name,runner.token,runner.address]; if(!Number.isInteger(runner.id)||runner.id<1||strings.some(value=>typeof value!=="string"||value.length===0)||!Array.isArray(runner.labels)||runner.labels.some(value=>typeof value!=="string"||value.length===0)||runner.ephemeral!==true)process.exit(1)' "\${!#}"
+${nodeExecutable} -e 'const fs=require("fs"); const runner=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const strings=[runner.uuid,runner.name,runner.token,runner.address]; if(!Number.isInteger(runner.id)||runner.id<1||strings.some(value=>typeof value!=="string"||value.length===0)||!Array.isArray(runner.labels)||runner.labels.some(value=>typeof value!=="string"||value.length===0)||runner.ephemeral!==true)process.exit(1)' "\${!#}"
 `;
 const fakeSsh = `#!/usr/bin/env bash
 printf 'ssh %s\n' "$*" >>"$FAKE_ROOT/tools.log"

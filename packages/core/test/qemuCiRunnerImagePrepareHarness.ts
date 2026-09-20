@@ -183,19 +183,21 @@ else
 fi
 `;
 
+const nodeExecutable = `'${process.execPath.replaceAll("'", "'\\''")}'`;
+
 const fakePython = `#!/usr/bin/env bash
 set -euo pipefail
 source="$(cat)"
 if [[ "$source" == *os.rename* ]]; then
   mv -- "$2" "$3"
 elif [[ "$source" == *json.dump* ]]; then
-  /usr/local/bin/node -e 'const fs=require("fs"); const [,manifest,schema,key,digest,common,kind,hook,sourceRef,sourceCommit]=process.argv; const value={schema,key,artifactSha256:digest}; if(common)value.commonKey=common; if(kind){value.hookKind=kind;value.hookDigest=hook;value.hookSourceRef=sourceRef;value.hookSourceCommit=sourceCommit} fs.writeFileSync(manifest,JSON.stringify(value)+"\\n",{flag:"wx"})' -- "$2" "$3" "$4" "$5" "$6" "\${7:-}" "\${8:-}" "\${9:-}" "\${10:-}"
+  ${nodeExecutable} -e 'const fs=require("fs"); const [,manifest,schema,key,digest,common,kind,hook,sourceRef,sourceCommit]=process.argv; const value={schema,key,artifactSha256:digest}; if(common)value.commonKey=common; if(kind){value.hookKind=kind;value.hookDigest=hook;value.hookSourceRef=sourceRef;value.hookSourceCommit=sourceCommit} fs.writeFileSync(manifest,JSON.stringify(value)+"\\n",{flag:"wx"})' -- "$2" "$3" "$4" "$5" "$6" "\${7:-}" "\${8:-}" "\${9:-}" "\${10:-}"
 elif [[ "$source" == *'with open(manifest'* ]]; then
-  /usr/local/bin/node -e 'const fs=require("fs"); const [,manifest,schema,key,digest,common,kind,hook,sourceRef,sourceCommit]=process.argv; const value={schema,key,artifactSha256:digest}; if(common)value.commonKey=common; if(kind){value.hookKind=kind;value.hookDigest=hook;value.hookSourceRef=sourceRef;value.hookSourceCommit=sourceCommit} if(JSON.stringify(JSON.parse(fs.readFileSync(manifest,"utf8")))!==JSON.stringify(value))process.exit(1)' -- "$2" "$3" "$4" "$5" "$6" "\${7:-}" "\${8:-}" "\${9:-}" "\${10:-}"
+  ${nodeExecutable} -e 'const fs=require("fs"); const [,manifest,schema,key,digest,common,kind,hook,sourceRef,sourceCommit]=process.argv; const value={schema,key,artifactSha256:digest}; if(common)value.commonKey=common; if(kind){value.hookKind=kind;value.hookDigest=hook;value.hookSourceRef=sourceRef;value.hookSourceCommit=sourceCommit} if(JSON.stringify(JSON.parse(fs.readFileSync(manifest,"utf8")))!==JSON.stringify(value))process.exit(1)' -- "$2" "$3" "$4" "$5" "$6" "\${7:-}" "\${8:-}" "\${9:-}" "\${10:-}"
 elif [[ "$source" == *'Project image must'* ]]; then
-  /usr/local/bin/node -e 'const [,image,payload]=process.argv; const chain=JSON.parse(payload); if(!Array.isArray(chain)||chain.length!==2||chain[0].filename!==image||chain[0].format!=="qcow2"||chain[1].format!=="qcow2"||chain[1]["backing-filename"]!==undefined)process.exit(1); const backing=chain[0]["full-backing-filename"]??chain[0]["backing-filename"]; if(typeof backing!=="string"||chain[1].filename!==backing)process.exit(1); console.log(backing)' -- "$2" "$3"
+  ${nodeExecutable} -e 'const [,image,payload]=process.argv; const chain=JSON.parse(payload); if(!Array.isArray(chain)||chain.length!==2||chain[0].filename!==image||chain[0].format!=="qcow2"||chain[1].format!=="qcow2"||chain[1]["backing-filename"]!==undefined)process.exit(1); const backing=chain[0]["full-backing-filename"]??chain[0]["backing-filename"]; if(typeof backing!=="string"||chain[1].filename!==backing)process.exit(1); console.log(backing)' -- "$2" "$3"
 else
-  /usr/local/bin/node -e 'const [,image,payload]=process.argv; const chain=JSON.parse(payload); if(!Array.isArray(chain)||chain.length!==1||chain[0].filename!==image||chain[0].format!=="qcow2"||chain[0]["backing-filename"]!==undefined||chain[0]["full-backing-filename"]!==undefined)process.exit(1)' -- "$2" "$3"
+  ${nodeExecutable} -e 'const [,image,payload]=process.argv; const chain=JSON.parse(payload); if(!Array.isArray(chain)||chain.length!==1||chain[0].filename!==image||chain[0].format!=="qcow2"||chain[0]["backing-filename"]!==undefined||chain[0]["full-backing-filename"]!==undefined)process.exit(1)' -- "$2" "$3"
 fi
 `;
 
