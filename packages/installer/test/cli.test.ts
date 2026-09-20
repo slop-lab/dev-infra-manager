@@ -68,6 +68,7 @@ function runCli(args: string[], tsxPath: string, env: NodeJS.ProcessEnv, cwd: st
 }
 
 const tsxPath = await locateTsx();
+const sourceRepositoryUrl = "https://github.com/slop-lab/dev-infra-manager";
 
 describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", () => {
   const temporaryDirectories: string[] = [];
@@ -106,6 +107,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("DIM installer/facade");
     expect(result.stdout).toContain("DIM CLI is not installed.");
+    expect(result.stdout).toContain(sourceRepositoryUrl);
   });
 
   it("dim --version reports installer-only state when no CLI is configured", async () => {

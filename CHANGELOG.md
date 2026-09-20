@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Show the canonical public DIM source repository in both direct CLI and
+  installer-only root help, while preserving full source-specific local build
+  versions and installed-facade dispatch behavior.
+
 - Allow independent workspace run/exec and CI-log streams to progress
   concurrently by releasing their host-readiness admission before runtime
   dispatch, while lifecycle mutations and plugin operations remain exclusively
