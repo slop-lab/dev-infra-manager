@@ -82,7 +82,8 @@ Typical flow:
   dim workspace create PROJECT WORKSPACE
   dim workspace exec WORKSPACE -- bash
 
-Run 'dim help --all' to list administrative commands.`;
+Run 'dim help --all' to list administrative commands.
+Source: https://github.com/slop-lab/dev-infra-manager`;
 
   if (process.env.DIM_INVOKED_VIA_INSTALLER !== "1") {
     return context.command === program ? rootText : "";

@@ -323,7 +323,8 @@ Usage:
   dim disable-plugin PACKAGE...
   dim remove-plugin PACKAGE...
 
-Run 'dim install-cli --help' for installation modes.`);
+Run 'dim install-cli --help' for installation modes.
+Source: https://github.com/slop-lab/dev-infra-manager`);
 }
 
 function printInstallerHelp(): void {
