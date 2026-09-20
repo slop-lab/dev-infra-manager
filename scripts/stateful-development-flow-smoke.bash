@@ -235,6 +235,10 @@ test "$(jq -r .pidsLimit <<<"$workspace_json")" = 768
 dim workspace run "$workspace_name" bash -- -lc '! command -v opencode >/dev/null 2>&1'
 test "$(dim workspace run "$workspace_name" bash -- -lc 'printf provider-neutral-bash-ok')" = \
   "provider-neutral-bash-ok"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" -ne "0"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"
+dim workspace run "$workspace_name" bash -- -lc 'getent hosts dim-gitea >/dev/null'
+dim workspace run "$workspace_name" bash -- -lc 'git ls-remote origin HEAD >/dev/null'
 dim workspace exec "$workspace_name" -- docker inspect \
   "${compose_name}-documentation-preview-1" >/dev/null
 dim workspace exec "$workspace_name" -- sh -c \
@@ -397,6 +401,10 @@ if ! dim workspace restart "$workspace_name" >/dev/null; then
 fi
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat reviewed-version.txt')" = reviewed-v2
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/journey-home"')" = persistent-home
+test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" -ne "0"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"
+dim workspace run "$workspace_name" bash -- -lc 'getent hosts dim-gitea >/dev/null'
+dim workspace run "$workspace_name" bash -- -lc 'git ls-remote origin HEAD >/dev/null'
 record_ssh_host_key rotated
 assert_ssh_session
 

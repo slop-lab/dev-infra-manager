@@ -108,6 +108,10 @@ container_name="$(jq -r .containerName <<<"$workspace_json")"
 dim workspace run "$workspace_name" bash -- -lc '! command -v opencode >/dev/null 2>&1'
 test "$(dim workspace run "$workspace_name" bash -- -lc 'printf provider-neutral-bash-ok')" = \
   "provider-neutral-bash-ok"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" -ne "0"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"
+dim workspace run "$workspace_name" bash -- -lc 'getent hosts dim-gitea >/dev/null'
+dim workspace run "$workspace_name" bash -- -lc 'git ls-remote origin HEAD >/dev/null'
 test "$(dim workspace run "$workspace_name" bash -- -lc 'curl --fail --silent http://127.0.0.1:3000')" = \
   "hello from a single-repository DIM workspace"
 dim workspace run "$workspace_name" bash -- -lc 'printf "single-home\n" >"$HOME/archive-smoke"'
@@ -167,6 +171,10 @@ for attempt in $(seq 1 120); do
   fi
   sleep 1
 done
+test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" -ne "0"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"
+dim workspace run "$workspace_name" bash -- -lc 'getent hosts dim-gitea >/dev/null'
+dim workspace run "$workspace_name" bash -- -lc 'git ls-remote origin HEAD >/dev/null'
 dind_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-project" \
   --file .dim/docker-compose.yml ps --quiet agent-dind)"

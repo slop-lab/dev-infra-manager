@@ -165,6 +165,10 @@ if [[ "$bash_status" -ne 0 || "$bash_output" != "project-bash-ok" ]]; then
   echo "bash task failed ($bash_status), output: '$bash_output'" >&2
   exit 1
 fi
+test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" -ne "0"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"
+dim workspace run "$workspace_name" bash -- -lc 'getent hosts dim-gitea >/dev/null'
+dim workspace run "$workspace_name" bash -- -lc 'git ls-remote origin HEAD >/dev/null'
 dim workspace run "$workspace_name" bash -- -lc 'printf "multi-home\n" >"$HOME/archive-smoke"'
 home_backup="$work_dir/agent-home.tar.gz"
 dim workspace run "$workspace_name" backup >"$home_backup"
@@ -264,6 +268,13 @@ echo "[example-project] 8. create a nested container from inside the dev contain
 nested_output="$(dim workspace run "$workspace_name" bash -- \
   -lc 'docker run --rm hello-world')"
 echo "$nested_output" | grep -q "Hello from Docker!"
+
+echo "[example-project] survive workspace restart with managed Git access"
+dim workspace restart "$workspace_name" >/dev/null
+test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" -ne "0"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"
+dim workspace run "$workspace_name" bash -- -lc 'getent hosts dim-gitea >/dev/null'
+dim workspace run "$workspace_name" bash -- -lc 'git ls-remote origin HEAD >/dev/null'
 
 echo "[example-project] 9. reach another managed repository"
 web_content="$(dim workspace exec "$workspace_name" -- sh -c \
