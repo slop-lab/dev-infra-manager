@@ -111,9 +111,11 @@ jobs:
           # records that CI-environment behavior without assigning its cause.
           DIM_TEST_PTY_RESIZE: unsupported
         run: |
+          apt-get update
+          apt-get install --yes tini=0.19.0-1
           bash verification/scripts/repository-materialization-smoke.bash
           pnpm run workspace:check
-          pnpm run workspace:test
+          tini -s -- pnpm run workspace:test
           pnpm run workspace:build
       - name: Verify container integration
         if: ${{ inputs.gate == 'container' }}
