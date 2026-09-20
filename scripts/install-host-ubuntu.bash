@@ -33,7 +33,7 @@ This script is a development convenience, not production hardening guidance.
 Review and adapt every change before using it on a production host.
 
 It will:
-  - install common APT packages: apparmor, curl, docker.io, docker-compose-v2, jq
+  - install common APT packages: apparmor, curl, docker.io, docker-buildx, docker-compose-v2, jq
   - when required by Ubuntu, allow /usr/local/bin/rootlesskit to create its user namespace
   - install and configure the Sysbox backend
 EOF
@@ -54,7 +54,7 @@ EOF
 
 install_common_packages() {
   sudo apt-get update
-  sudo apt-get install -y apparmor curl docker.io docker-compose-v2 jq
+  sudo apt-get install -y apparmor curl docker.io docker-buildx docker-compose-v2 jq
 }
 
 install_sysbox() {
