@@ -307,7 +307,7 @@ test "$GIT_TERMINAL_PROMPT" = 0
 test -n "$(git config --get credential.helper)"
 test "$(git config --get-all safe.directory)" = "$(printf '/workspace\n/workspace/*')"
 test -n "$DIM_GIT_TOKEN"
-GIT_TERMINAL_PROMPT=0 git ls-remote origin HEAD >/dev/null
+GIT_TERMINAL_PROMPT=0 git -C /workspace ls-remote origin HEAD >/dev/null
 test -S "$DIM_CONTROLLER_SOCKET"
 test ! -e /run/dim/controller/controller.sock
 test -z "${DIM_CONTROLLER_TOKEN:-}"
