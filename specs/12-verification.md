@@ -330,12 +330,21 @@ host phase `ready` MUST dispatch no recovery. Ready targets MUST not be
 disrupted on an ordinary retry. Runner normalization and QEMU reconstruction MUST inspect
 complete ownership and act only on the inspected container ID before any
 coordinator registration, authorization, or webhook mutation.
-Host administration tests MUST prove that ordinary built-in and plugin
+Host administration tests MUST prove that ordinary built-ins other than the
+runtime-session exceptions, including lifecycle mutations, and plugin
 operations acquire lifecycle admission before dispatch and retain it until
-completion. Shutdown MUST wait before target capture while an admitted
+completion. Shutdown MUST wait before target capture while such an admitted
 operation remains active. A later operation queued behind shutdown MUST reread
-the resulting host state and reject without dispatch. Streamed ordinary
-operations MUST follow the same admission rule, while health, readiness, route
+the resulting host state and reject without dispatch. Tests for
+`workspace.run`, `workspace.exec`, and `ci.runner.logs` MUST instead prove that
+the runtime-session path acquires admission, rejects without dispatch when the
+observed host phase is not `ready`, and releases admission before streaming. A
+deterministic blocked-stream test MUST prove that two independent runtime
+sessions can both progress while lifecycle mutations remain exclusively
+admitted; it MUST NOT assert that host readiness remains stable for the stream
+lifetime or that a later stop/discard cannot interrupt it. Existing
+operation-specific checks remain in scope, including workspace readiness,
+ownership, and per-workspace locking. Health, readiness, route
 discovery, host status, and command-session transport remain available during
 maintenance. Recovery tests MUST also prove that `host start` can perform its
 internal workspace recovery while ordinary workspace administration remains
