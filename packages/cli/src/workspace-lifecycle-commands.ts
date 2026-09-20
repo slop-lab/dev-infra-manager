@@ -73,14 +73,26 @@ workspace.command("start")
   });
 
 workspace.command("restart")
-  .description("Restart a workspace, fast-forward its root ref, and run setup")
-  .argument("<workspace>")
+  .description("Restart one or more workspaces, fast-forward their root refs, and run setup")
+  .argument("<workspaces...>")
   .option("--json", "print machine-readable JSON")
-  .action(async (name: string, flags: JsonFlags) => {
+  .action(async (names: string[], flags: JsonFlags) => {
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    const result = await adminStreamCall("workspace.restart", { name });
-    printActionResult(result, flags, `Restarted workspace '${name}'`);
+    const results: unknown[] = [];
+    for (const name of names) {
+      try {
+        const result = await adminStreamCall("workspace.restart", { name });
+        results.push(result);
+        if (!flags.json) printActionResult(result, flags, `Restarted workspace '${name}'`);
+      } catch (error) {
+        if (error instanceof UserError) {
+          throw new UserError(`Failed to restart workspace '${name}': ${error.message}`);
+        }
+        throw error;
+      }
+    }
+    if (flags.json) printActionResult(results, flags, "");
   });
 
 workspace.command("stop")

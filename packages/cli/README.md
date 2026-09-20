@@ -178,7 +178,7 @@ dim workspace show feature-123
 dim workspace resources feature-123 --cpus 4 --memory 8g --pids 4096
 dim workspace stop feature-123
 dim workspace start feature-123
-dim workspace restart feature-123
+dim workspace restart feature-123 review-456
 dim workspace update feature-123
 dim workspace setup feature-123
 dim workspace discard feature-123 --keep-volume --yes
@@ -188,8 +188,9 @@ dim workspace discard feature-123 --keep-volume --yes
 - `resources` changes any supplied live or stopped workspace limits and keeps
   omitted limits unchanged.
 - `start` refreshes the root ref and runs setup.
-- `restart` is the explicit way to apply merged root-repository changes to a
-  running workspace.
+- `restart` is the explicit way to apply merged root-repository changes to one
+  or more workspaces. Multiple names are processed in command-line order; a
+  failure stops before later names while keeping earlier restarts complete.
 - `update` fast-forwards the root ref without a stop/start cycle.
 - `setup` retries setup without changing the root ref.
 - `discard` permanently removes the workspace and unpushed changes; use
