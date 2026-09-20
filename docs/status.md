@@ -30,10 +30,13 @@ Implemented:
   and discard lifecycle.
 - Strict schema 2 host recovery that rejects invalid state before dispatch,
   retains pending recovery intent after partial failure, and clears it only
-  after complete recovery. Ordinary admitted administration holds host
-  lifecycle admission through completion; maintenance waits before target
-  capture, and queued later operations reread and reject while the host is not
-  ready.
+  after complete recovery. Ordinary built-ins other than runtime sessions, and
+  all plugin administration, hold host lifecycle admission through completion;
+  maintenance waits before target capture, and queued later operations reread
+  and reject while the host is not ready. Workspace run/exec and CI-log runtime
+  sessions release their short readiness admission before streaming, so
+  independent sessions can overlap while later stop, discard, or maintenance
+  may interrupt them.
 - Sysbox backend identity persisted per workspace, with obsolete backend state
   rejected.
 - CPU, memory, and PID limits at the top-level workspace boundary.
