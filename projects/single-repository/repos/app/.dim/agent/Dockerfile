@@ -2,12 +2,37 @@ FROM node@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc0
 FROM docker@sha256:4fa0ee1f3a7e4354c4ea34558b6d4ee32859baf4973d4c8ccc8e7fe3dd730c04 AS docker-cli
 FROM ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 ARG TARGETARCH=amd64
+ARG DIM_WORKSPACE_UID=1000
+ARG DIM_WORKSPACE_GID=1000
 ENV PATH="/home/dim-agent/.local/bin:${PATH}"
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      bash ca-certificates curl git jq tini util-linux \
- && rm -rf /var/lib/apt/lists/*
+      bash ca-certificates curl git jq sudo tini util-linux \
+ && rm -rf /var/lib/apt/lists/* \
+ && test "$DIM_WORKSPACE_UID" -ne 0 \
+ && test "$DIM_WORKSPACE_GID" -ne 0 \
+ && existing_group="$(getent group "$DIM_WORKSPACE_GID" | cut -d: -f1)" \
+ && if test -n "$existing_group"; then \
+      if test "$existing_group" != dim-agent; then groupmod --new-name dim-agent "$existing_group"; fi; \
+    else \
+      groupadd --gid "$DIM_WORKSPACE_GID" dim-agent; \
+    fi \
+ && existing_user="$(getent passwd "$DIM_WORKSPACE_UID" | cut -d: -f1)" \
+ && if test -n "$existing_user"; then \
+      if test "$existing_user" = dim-agent; then \
+        usermod --gid "$DIM_WORKSPACE_GID" --home /home/dim-agent --shell /bin/bash dim-agent; \
+      else \
+        usermod --login dim-agent --gid "$DIM_WORKSPACE_GID" --home /home/dim-agent --move-home --shell /bin/bash "$existing_user"; \
+      fi; \
+    else \
+      useradd --uid "$DIM_WORKSPACE_UID" --gid "$DIM_WORKSPACE_GID" --home-dir /home/dim-agent --shell /bin/bash dim-agent; \
+    fi \
+ && mkdir -p /home/dim-agent \
+ && chown "$DIM_WORKSPACE_UID:$DIM_WORKSPACE_GID" /home/dim-agent \
+ && printf '%s\n' 'dim-agent ALL=(root) NOPASSWD: ALL' > /etc/sudoers.d/dim-agent \
+ && chmod 0440 /etc/sudoers.d/dim-agent \
+ && visudo --check --file=/etc/sudoers.d/dim-agent
 RUN set -eux; \
     case "$TARGETARCH" in \
       amd64) just_target=x86_64; just_sha=6a3003f68fa4d86ada8afe33830a88ffdb6c2fcaff4e5a840b1cb90eaf6f46fc ;; \
