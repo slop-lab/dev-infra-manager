@@ -8,7 +8,7 @@ ENV PATH="/home/dim-agent/.local/bin:${PATH}"
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      acl bash ca-certificates curl git jq netcat-openbsd openssh-server tini util-linux \
+      acl bash ca-certificates curl git jq netcat-openbsd openssh-server sudo tini util-linux \
  && rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub \
  && rm -rf /var/lib/apt/lists/* \
  && test "$DIM_WORKSPACE_UID" -ne 0 \
@@ -37,6 +37,9 @@ RUN apt-get update \
  && passwd --delete dim-agent \
  && mkdir -p /home/dim-agent \
  && chown "$DIM_WORKSPACE_UID:$DIM_WORKSPACE_GID" /home/dim-agent \
+ && printf '%s\n' 'dim-agent ALL=(root) NOPASSWD: ALL' > /etc/sudoers.d/dim-agent \
+ && chmod 0440 /etc/sudoers.d/dim-agent \
+ && visudo --check --file=/etc/sudoers.d/dim-agent \
  && printf '%s\n' \
       'PermitRootLogin no' \
       'PubkeyAuthentication yes' \
