@@ -16,8 +16,11 @@
   `DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT`, plus dirty-worktree state, so
   package managers do not reuse different local contents under the release
   version. Local builds link the exact core and contracts sources before
-  compiling plugins. Tracked manifests remain private and release builds retain
-  the exact release version.
+  compiling plugins. Existing facades pass these local tarballs through without
+  revalidating the aggregate identity; an obsolete `<git-sha>` rejection during
+  preparation means the selected production sources must be updated together,
+  not that the 64-character identity should be weakened. Tracked manifests
+  remain private and release builds retain the exact release version.
 
 - Keep routine workspace lifecycle output concise by default instead of
   printing complete internal records, while preserving the full documented
