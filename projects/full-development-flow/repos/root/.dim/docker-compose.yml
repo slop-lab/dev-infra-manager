@@ -51,7 +51,7 @@ services:
     build:
       context: dind
     privileged: true
-    command: ["--host=unix:///run/dim-agent-dind/docker.sock"]
+    command: ["dockerd", "--host=unix:///run/dim-agent-dind/docker.sock"]
     environment:
       DOCKER_HOST: "unix:///run/dim-agent-dind/docker.sock"
     healthcheck:
