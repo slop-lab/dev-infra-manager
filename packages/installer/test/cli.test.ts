@@ -169,6 +169,33 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(result.stderr).toContain("CLI must be installed before plugins");
   });
 
+  it("enables multiple installed plugins in one command", async () => {
+    const root = await tempDir("dim-enable-plugins-");
+    const { env, configPath, dataHome } = await baseEnv(root);
+    const pluginHome = join(dataHome, "runtime", "current");
+    const executable = join(pluginHome, "node_modules", ".bin", "dim");
+    await mkdir(dirname(configPath), { recursive: true });
+    await mkdir(pluginHome, { recursive: true });
+    await writeFile(configPath, JSON.stringify({
+      schemaVersion: 1,
+      cli: { mode: "proxied", version: "0.9.0", executable }
+    }));
+    await writeFile(join(pluginHome, "package.json"), JSON.stringify({
+      private: true,
+      dependencies: { "plugin-one": "1.0.0", "plugin-two": "2.0.0" }
+    }));
+    await writeFile(join(pluginHome, "plugins.json"), '{"schemaVersion":1,"plugins":[]}\n');
+
+    const result = await runCli(["enable-plugin", "plugin-two", "plugin-one"], tsxPath!, env, root);
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe("Enabled plugin-two\nEnabled plugin-one\n");
+    expect(JSON.parse(await readFile(join(pluginHome, "plugins.json"), "utf8"))).toEqual({
+      schemaVersion: 1,
+      plugins: ["plugin-one", "plugin-two"]
+    });
+  });
+
   it("dim install-cli help warns about direct mode under mise", async () => {
     const root = await tempDir("dim-cli-mise-help-");
     const { env } = await baseEnv(root);
