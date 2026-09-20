@@ -131,8 +131,14 @@ async function publishRootSnapshot(
     if (checkedOut.exitCode !== 0) throw commandError(`check out protected root commit '${input.commit}'`, checkedOut);
     await rm(path.join(checkout, ".git"), { recursive: true, force: true });
     await validateSnapshotLinks(checkout);
-    await makeSnapshotReadOnly(checkout);
     await rename(checkout, target);
+    try {
+      await makeSnapshotReadOnly(target);
+    } catch (error) {
+      await makeDirectoriesWritable(target);
+      await rm(target, { recursive: true, force: true });
+      throw error;
+    }
     return target;
   } finally {
     await rm(staging, { recursive: true, force: true });
