@@ -49,6 +49,10 @@ fi
 echo "[host] install package bundle"
 "${dim_command[@]}" install-cli --local-packages "$package_root" --no-local-bin
 
+"${dim_command[@]}" enable-plugin \
+  @slop-lab/dim-plugin-dns-cloudflare \
+  @slop-lab/dim-plugin-external-urls
+
 validate_preparation
 echo "[host] local package bundle installed; restart separately with just restart-controller"
 "${dim_command[@]}" --version
