@@ -119,7 +119,7 @@ describe("full-development non-root SSH practical authority", () => {
     expect(startup).not.toMatch(/environment_file=.*\/home\/dim-agent/);
   });
 
-  it("grants workspace and private Docker access with ACLs rather than privilege", async () => {
+  it("keeps SSH authority bounded while allowing container-local sudo", async () => {
     const dockerfile = await readFile(fullDevelopmentDockerfile, "utf8");
     const startup = await readFile(fullDevelopmentStartup, "utf8");
     const packages = dockerfile.slice(
@@ -128,13 +128,14 @@ describe("full-development non-root SSH practical authority", () => {
     );
 
     expect(packages).toMatch(/\bacl\b/);
+    expect(packages).toMatch(/\bsudo\b/);
+    expect(dockerfile.match(/dim-agent ALL=\(root\) NOPASSWD: ALL/g)).toHaveLength(1);
+    expect(dockerfile).toContain("visudo --check --file=/etc/sudoers.d/dim-agent");
     expect(startup).toContain("setfacl -R -m u:dim-agent:rwX /workspace");
     expect(startup).toContain("find /workspace -type d -exec setfacl -m d:u:dim-agent:rwX {} +");
     expect(startup).toContain("setfacl -m u:dim-agent:rw /run/dim-agent-dind/docker.sock");
     expect(startup).not.toMatch(/chown[^\n]*\/workspace/);
-    expect(`${dockerfile}\n${startup}`).not.toMatch(
-      /\bsudo\b|\bchmod\s+(?:u\+s|4\d{3}|[0-7]*[2367])\b/
-    );
+    expect(`${dockerfile}\n${startup}`).not.toMatch(/\bchmod\s+(?:u\+s|4\d{3}|[0-7]*[2367])\b/);
   });
 
   it("shares only the private Unix Docker socket and keeps runtime state ephemeral", async () => {
