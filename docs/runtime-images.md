@@ -14,8 +14,12 @@ dim workspace image status
 dim workspace image status --json
 ```
 
-The command inspects `DIM_WORKSPACE_IMAGE` or the default image and reports
+The command inspects `DIM_WORKSPACE_IMAGE` or
+`dev-infra-project-workspace:<installed DIM package version>` and reports
 `ready` with its image ID, or `missing`. Other inspection failures are errors.
+Release packages select their release tag. Local package bundles whose shared
+version contains the complete aggregate source identity select that exact tag;
+there is no implicit `latest` fallback.
 Image status is independent of host readiness and workspace lifecycle state.
 Restarting the controller does not build the image or mark it ready; Project
 and development scripts own image builds.
