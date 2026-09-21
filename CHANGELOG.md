@@ -37,7 +37,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   top-level path. Project `prepare-local` resolves omitted source inputs to each
   production repository's latest default-branch commit while still accepting
   exact reviewed commits, prepares the package bundle and trusted workspace
-  image, and records the package-bundle digest and image ID as provenance.
+  image under that bundle's complete aggregate local version, and records the
+  image tag, package-bundle digest, and immutable image ID as provenance.
   Project `install-local` validates that prepared set before and after
   installing it without rebuilding. Both local installation paths explicitly
   enable the built DNS Cloudflare and External URLs plugins while preserving
@@ -71,7 +72,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 - Local source installations now package every DIM component under a shared
   version containing the production commit and dirty-worktree state, and
-  automatically rebuild the trusted `dev-infra-project-workspace:latest` image
+  automatically rebuild the trusted workspace image under that exact version
   from the same cloned production source snapshot before installing the CLI or
   restarting the controller. This avoids stale package-manager reuse when
   different local builds share a release version and prevents stale workspace
