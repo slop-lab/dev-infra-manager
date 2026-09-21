@@ -20,6 +20,10 @@ command -v flock >/dev/null 2>&1 || {
 mkdir -p "$local_root"
 exec 9>"$lock_file"
 flock --exclusive 9
+test -r "$readiness_file" || {
+  echo "local source build is not prepared; run just prepare-local" >&2
+  exit 1
+}
 package_version="$(bash "$repo_root/scripts/local-package-version.bash" "$package_root")"
 image_ref="dev-infra-project-workspace:$package_version"
 
