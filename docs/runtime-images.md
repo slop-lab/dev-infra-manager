@@ -1,11 +1,29 @@
 # Workspace Runtime Image
 
 The project workspace image is built from
-[`core/images/project-workspace`](../../core/images/project-workspace):
+[`core/images/project-workspace`](../../core/images/project-workspace). The
+release build is a distinct path that tags the image with the exact release
+version:
 
 ```bash
 just build-workspace-image
 ```
+
+For an assembled development checkout, prepare the matching local image before
+installing or using local packages:
+
+```bash
+just build-local-workspace-image
+just install-local
+```
+
+The local package tarballs and image use exactly one aggregate local version.
+Its identity covers the exact production source commits and the SHA-256 digest
+of the reviewed aggregate dependency lock owned by the root repository. The
+synthetic production workspace copies that lock and installs dependencies with
+the frozen lock. A missing or stale lock stops preparation before package or
+image publication. The root repository's `just prepare-local` workflow
+prepares the same matched package and image set before `just install-local`.
 
 Check whether the configured image exists locally without building it:
 
@@ -17,9 +35,9 @@ dim workspace image status --json
 The command inspects `DIM_WORKSPACE_IMAGE` or
 `dev-infra-project-workspace:<installed DIM package version>` and reports
 `ready` with its image ID, or `missing`. Other inspection failures are errors.
-Release packages select their release tag. Local package bundles whose shared
-version contains the complete aggregate source identity select that exact tag;
-there is no implicit `latest` fallback.
+Release packages select their release tag. Local package bundles select the
+tag for their shared aggregate local version; there is no implicit `latest`
+fallback.
 Image status is independent of host readiness and workspace lifecycle state.
 Restarting the controller does not build the image or mark it ready; Project
 and development scripts own image builds.

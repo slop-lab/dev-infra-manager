@@ -101,13 +101,29 @@ Behavior:
 
 ## Local Source Preparation
 
-The reviewed root `prepare-local` path builds production packages under one
-shared release or aggregate local version, builds the trusted workspace image
-under a temporary tag, inspects its immutable image ID, and only then promotes
-it to `dev-infra-project-workspace:<shared package version>`. Its readiness
+The reviewed root repository MUST own the aggregate dependency lock used for
+local source preparation. The aggregate local identity MUST be the SHA-256
+digest of the ordered production repository-name and exact-commit records plus
+the SHA-256 digest of that reviewed lock. Preparation MUST copy the lock into
+the isolated synthetic production workspace and install its dependencies with
+the frozen lock. A missing lock or one that is stale for the synthetic
+workspace MUST fail preparation before package build, package publication, or
+image publication.
+
+The reviewed root `prepare-local` path MUST build every production package
+tarball and the trusted workspace image under exactly one aggregate local
+version. It builds the image under a temporary tag, inspects its immutable
+image ID, and only then promotes it to
+`dev-infra-project-workspace:<shared aggregate local version>`. Its readiness
 state binds that versioned tag to the image ID and package/source digests.
 `install-local` recomputes the tag from the unchanged bundle and rejects stale
-or mismatched state before and after installation. Neither path uses `latest`.
+or mismatched state before and after installation.
+
+For an assembled development checkout, `build-local-workspace-image` is the
+explicit local-image preparation step and MUST run before the matching local
+packages are used. `install-local` does not build that image. The release
+`build-workspace-image` path MUST remain distinct and tag the image with the
+exact release version. None of these paths uses `latest`.
 
 ## Smoke Script
 

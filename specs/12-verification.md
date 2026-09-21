@@ -57,8 +57,13 @@ Local source-preparation tests MUST require the three named inputs
 `DIM_SOURCE_CORE_COMMIT`, `DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT`, and
 `DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT` as exact 40-character commits. They
 MUST prove detached checkout of each full commit and derive the shared local
-package version from the SHA-256 digest of the ordered repository-name and
-full-commit records.
+package and image version from the SHA-256 digest of the ordered
+repository-name and full-commit records plus the SHA-256 digest of the reviewed
+root-owned aggregate dependency lock. Executable tests MUST prove that the
+synthetic production workspace copies that lock and installs with the frozen
+lock. With source commits held constant, changing only the lock MUST change the
+aggregate local version. Missing and stale locks MUST each fail before package
+build, package publication, or image publication.
 
 `just verify workspace-user-setup` MUST supplement launcher mocks with the real
 pinned OpenCode `1.18.31` runtime in a disposable home without provider
@@ -890,9 +895,13 @@ controller readiness, and workspace lifecycle state.
 
 For `CLI-WORKSPACE-IMAGE-IDENTITY-001`, core tests MUST prove the release
 package version supplies the default tag and that `DIM_WORKSPACE_IMAGE` wins.
-Local-source policy tests MUST prove the package bundle's full aggregate
-version supplies both the prepared and installed tag, no `latest` reference is
-used, and prepared state binds that tag to the inspected immutable image ID.
+Executable local-source tests MUST prove that every package tarball and the
+local workspace image use exactly the same aggregate local version, including
+the reviewed aggregate-lock digest. They MUST prove that local image
+preparation is explicit and precedes use of the matching local packages, that
+the release-tag build remains distinct, that no `latest` reference is used,
+and that prepared state binds the shared local tag to the inspected immutable
+image ID.
 
 For `CLI-STREAM-PROGRESS-001`, CLI tests must prove that lifecycle and CI
 streams show an idle spinner only on TTY stderr, retain deterministic Project
