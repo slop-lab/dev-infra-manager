@@ -96,6 +96,16 @@ Behavior:
 10. Run `doctor` for the backend persisted by the installer.
 11. Exit non-zero if that backend doctor reports host runtime gaps.
 
+## Local Source Preparation
+
+The reviewed root `prepare-local` path builds production packages under one
+shared release or aggregate local version, builds the trusted workspace image
+under a temporary tag, inspects its immutable image ID, and only then promotes
+it to `dev-infra-project-workspace:<shared package version>`. Its readiness
+state binds that versioned tag to the image ID and package/source digests.
+`install-local` recomputes the tag from the unchanged bundle and rejects stale
+or mismatched state before and after installation. Neither path uses `latest`.
+
 ## Smoke Script
 
 Script:
