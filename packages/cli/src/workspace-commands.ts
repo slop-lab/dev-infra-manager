@@ -3,7 +3,7 @@ import { detectWorkspaceKvm, inspectWorkspaceImage, lifecycleOptions, UserError 
 import {
   adminCall, adminStreamCall, collect, confirmRecommended, ensureManagedController,
   hasResourceFlags, interactive, print, printActionResult, printList, resourceInput, runner,
-  type JsonFlags, type ResourceFlags, type WorkspaceCreateFlags
+  workspaceLifecycleStreamCall, type JsonFlags, type ResourceFlags, type WorkspaceCreateFlags
 } from "./cli-support.js";
 
 export function registerWorkspaceCommands(program: Command): Command {
@@ -60,7 +60,7 @@ workspace.command("create")
       );
     }
     await ensureManagedController(options);
-    const result = await adminStreamCall("workspace.create", {
+    const result = await workspaceLifecycleStreamCall("workspace.create", {
       project: projectName,
       name,
       profiles: flags.profile,

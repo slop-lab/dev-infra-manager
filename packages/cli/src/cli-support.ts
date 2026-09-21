@@ -9,3 +9,4 @@ export * from "./repository-set-types.js";
 export * from "./repository-sync.js";
 export * from "./repository-transfer.js";
 export * from "./systemd-controller.js";
+export * from "./workspace-lifecycle-session.js";

@@ -3,7 +3,7 @@ import { lifecycleOptions, UserError } from "@slop-lab/dim-core";
 import {
   adminCall, adminStreamCall, collect, confirmAction, ensureManagedController,
   ControllerRequestError, externalUrlControllerRequest, printActionResult,
-  stopManagedController, WorkspaceControllerGrantNotFoundError, type JsonFlags
+  stopManagedController, workspaceLifecycleStreamCall, WorkspaceControllerGrantNotFoundError, type JsonFlags
 } from "./cli-support.js";
 
 export async function revokeWorkspaceExternalUrls(name: string): Promise<void> {
@@ -38,7 +38,7 @@ workspace.command("setup")
   .action(async (name: string, flags: JsonFlags) => {
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    const result = await adminStreamCall("workspace.setup", { name });
+    const result = await workspaceLifecycleStreamCall("workspace.setup", { name });
     printActionResult(result, flags, `Workspace '${name}' is ready`);
   });
 
@@ -54,7 +54,7 @@ workspace.command("update")
     }
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    const result = await adminStreamCall("workspace.update", {
+    const result = await workspaceLifecycleStreamCall("workspace.update", {
       name,
       ...(flags.clearProfiles ? { profiles: [] } : flags.profile.length > 0 ? { profiles: flags.profile } : {})
     });
@@ -68,7 +68,7 @@ workspace.command("start")
   .action(async (name: string, flags: JsonFlags) => {
     const options = lifecycleOptions();
     await ensureManagedController(options);
-    const result = await adminStreamCall("workspace.start", { name });
+    const result = await workspaceLifecycleStreamCall("workspace.start", { name });
     printActionResult(result, flags, `Started workspace '${name}'`);
   });
 
@@ -82,12 +82,12 @@ workspace.command("restart")
     const results: unknown[] = [];
     for (const name of names) {
       try {
-        const result = await adminStreamCall("workspace.restart", { name });
+        const result = await workspaceLifecycleStreamCall("workspace.restart", { name });
         results.push(result);
         if (!flags.json) printActionResult(result, flags, `Restarted workspace '${name}'`);
       } catch (error) {
         if (error instanceof UserError) {
-          throw new UserError(`Failed to restart workspace '${name}': ${error.message}`);
+          throw new UserError(`Failed to restart workspace '${name}': ${error.message}`, { cause: error });
         }
         throw error;
       }
