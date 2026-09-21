@@ -888,6 +888,12 @@ image ID in missing output. They MUST prove that non-absence inspection
 failures remain errors and that status is independent of host readiness,
 controller readiness, and workspace lifecycle state.
 
+For `CLI-WORKSPACE-IMAGE-IDENTITY-001`, core tests MUST prove the release
+package version supplies the default tag and that `DIM_WORKSPACE_IMAGE` wins.
+Local-source policy tests MUST prove the package bundle's full aggregate
+version supplies both the prepared and installed tag, no `latest` reference is
+used, and prepared state binds that tag to the inspected immutable image ID.
+
 For `CLI-STREAM-PROGRESS-001`, CLI tests must prove that lifecycle and CI
 streams show an idle spinner only on TTY stderr, retain deterministic Project
 stage lines in non-TTY output, and emit no spinner or terminal-control bytes to
