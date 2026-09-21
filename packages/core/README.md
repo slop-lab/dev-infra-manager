@@ -101,6 +101,12 @@ actual local image ID. Runner probes, state, and launches use only that resolved
 ID. Other tags and mutable image references are rejected before trusted image
 execution.
 
+Without `DIM_WORKSPACE_IMAGE`, the workspace image is
+`dev-infra-project-workspace:<installed DIM package version>`. Release installs
+therefore select the release tag, while aggregate-identity local packages
+select their full local version tag. `DIM_WORKSPACE_IMAGE` remains an explicit
+override.
+
 The resource environment variables provide defaults. `createWorkspace`
 accepts persistent per-workspace overrides. A Project root ref may be omitted;
 workspace creation then resolves the root repository's symbolic `HEAD` and
