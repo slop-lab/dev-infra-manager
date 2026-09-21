@@ -12,7 +12,6 @@ package_root="$local_root/dim-packages"
 readiness_file="$local_root/prepared-local.state"
 readiness_tmp="$readiness_file.tmp.$$"
 lock_file="$local_root/prepare-install.lock"
-final_image_ref=dev-infra-project-workspace:latest
 temporary_image_ref="dev-infra-project-workspace:prepare-$(id -u)-$$"
 promoted=0
 
@@ -41,6 +40,8 @@ rm -f -- "$readiness_file" "$readiness_tmp"
 
 find "$package_root" -mindepth 1 -depth -delete
 bash "$repo_root/scripts/pack-source-build.bash" "$package_root"
+package_version="$(bash "$repo_root/scripts/local-package-version.bash" "$package_root")"
+final_image_ref="dev-infra-project-workspace:$package_version"
 DIM_LOCAL_IMAGE_BUILD_REF="$temporary_image_ref" \
   bash "$repo_root/scripts/build-workspace-image.bash"
 DIM_LOCAL_IMAGE_INSPECT_REF="$temporary_image_ref" \
