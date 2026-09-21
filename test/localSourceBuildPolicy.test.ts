@@ -330,6 +330,26 @@ describe("local source build policy", () => {
     expect(invocations).not.toContain("state dev-infra-project-workspace");
   });
 
+  it("reports missing preparation before package-version parsing or installation", async () => {
+    // Given
+    const fixture = await createFixture();
+    await expect(readFile(resolve(fixture.root, ".local/dim-packages/packages.json"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+
+    // When
+    const result = runScript(fixture, "install-source-build.bash");
+    const invocations = await readFile(fixture.log, "utf8");
+
+    // Then
+    expect(result.status).toBe(1);
+    expect(result.stderr).toBe("local source build is not prepared; run just prepare-local\n");
+    expect(invocations).not.toContain("dim install-cli");
+    expect(invocations).not.toContain("dim controller restart");
+    expect(invocations).not.toContain("pack ");
+    expect(invocations).not.toContain("docker build");
+  });
+
   it.each([
     { name: "missing", readiness: undefined, firstState: "state=fresh" },
     { name: "stale", readiness: "state=stale\n", firstState: "state=fresh" }
