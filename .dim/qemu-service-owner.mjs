@@ -97,18 +97,53 @@ export function ownerFingerprint(inspected) {
 
 const sleep = (milliseconds) => new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds));
 
-async function retireInspected(inspected, ownerPath, socketPath, expectedCwd, timeoutMs) {
+async function inspectRetirementProgress(inspected, ownerPath, socketPath) {
+  const leaseStats = await pathState(socketLeasePath(socketPath));
+  if (!leaseStats) {
+    const [ownerStats, socketStats] = await Promise.all([pathState(ownerPath), pathState(socketPath)]);
+    if (!ownerStats && !socketStats) return { state: "absent" };
+    throw new Error("ambiguous service ownership artifacts");
+  }
+  if (!leaseStats.isSocket() || !sameIdentity(identity(leaseStats), inspected.socket)) {
+    throw new Error("service owner fingerprint mismatch");
+  }
+  const ownerStats = await pathState(ownerPath);
+  if (ownerStats && (!ownerStats.isFile() || (ownerStats.mode & 0o7777n) !== 0o600n
+    || !sameIdentity(identity(ownerStats), inspected.owner))) {
+    throw new Error("service owner fingerprint mismatch");
+  }
+  const socketStats = await pathState(socketPath);
+  if (socketStats && (!socketStats.isSocket() || !sameIdentity(identity(socketStats), inspected.socket))) {
+    throw new Error("service owner fingerprint mismatch");
+  }
+  if (!ownerStats && socketStats) throw new Error("ambiguous service ownership artifacts");
+  try {
+    const actual = await processIdentity(Number(inspected.record.pid));
+    if (!sameProcess(inspected.record, actual)) throw new Error("service process identity mismatch");
+    return { state: "live" };
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      if (ownerStats && socketStats) return { state: "dead" };
+      throw new Error("ambiguous service ownership artifacts");
+    }
+    throw error;
+  }
+}
+
+async function retireInspected(inspected, ownerPath, socketPath, timeoutMs) {
   if (inspected.state === "absent") return;
   if (inspected.state === "live") {
     process.kill(Number(inspected.record.pid), "SIGTERM");
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       await sleep(50);
-      const next = await inspectOwner(ownerPath, socketPath, expectedCwd);
+      const next = await inspectRetirementProgress(inspected, ownerPath, socketPath);
       if (next.state === "absent") return;
       if (next.state === "dead") break;
     }
-    if ((await inspectOwner(ownerPath, socketPath, expectedCwd)).state === "live") {
+    const final = await inspectRetirementProgress(inspected, ownerPath, socketPath);
+    if (final.state === "absent") return;
+    if (final.state === "live") {
       throw new Error("timed out waiting for owned service to stop");
     }
   }
@@ -117,7 +152,7 @@ async function retireInspected(inspected, ownerPath, socketPath, expectedCwd, ti
 }
 
 export async function retireOwner(ownerPath, socketPath, expectedCwd, timeoutMs) {
-  await retireInspected(await inspectOwner(ownerPath, socketPath, expectedCwd), ownerPath, socketPath, expectedCwd, timeoutMs);
+  await retireInspected(await inspectOwner(ownerPath, socketPath, expectedCwd), ownerPath, socketPath, timeoutMs);
 }
 
 export async function retireExact(ownerPath, socketPath, expectedCwd, timeoutMs, expected) {
@@ -128,7 +163,7 @@ export async function retireExact(ownerPath, socketPath, expectedCwd, timeoutMs,
     || !sameIdentity(actual.owner, parsedExpected.owner) || !sameIdentity(actual.socket, parsedExpected.socket)) {
     throw new Error("service owner fingerprint mismatch");
   }
-  await retireInspected(inspected, ownerPath, socketPath, expectedCwd, timeoutMs);
+  await retireInspected(inspected, ownerPath, socketPath, timeoutMs);
 }
 
 async function main() {
