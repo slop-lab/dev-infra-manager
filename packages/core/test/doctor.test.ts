@@ -99,6 +99,18 @@ describe("doctor checks", () => {
     expect(runner.calls).toHaveLength(1);
   });
 
+  it("fails AppArmor readiness when the restriction query has an unrelated error", async () => {
+    const runner = new QueueRunner([result(1, "sysctl: permission denied on key kernel.apparmor_restrict_unprivileged_userns\nignored")]);
+
+    const check = await appArmorUserNamespaceCheck(runner);
+
+    expect(check).toEqual({
+      name: "AppArmor unprivileged user namespaces",
+      ok: false,
+      detail: "sysctl: permission denied on key kernel.apparmor_restrict_unprivileged_userns"
+    });
+  });
+
   it("reports disabled AppArmor user namespace restrictions without requiring a profile", async () => {
     const runner = new QueueRunner([result(0, "", "0\n")]);
 
