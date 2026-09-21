@@ -81,9 +81,16 @@
   Schema 2 is structurally validated without mutating malformed records, and
   the invocation's entry phase fixes runner recovery: ordinary retries leave
   ready runners untouched, while an interrupted `stopping` transition
-  ownership-safely cycles a listed ready runner. Schema 1 is rejected without
-  migration. Host-global registry-cache reconciliation is serialized across
-  callers.
+  ownership-safely cycles a listed ready runner. Managed-controller startup now
+  performs the sole supported historical state migration before loading plugins
+  or opening listeners: an exact schema 1 host record is converted to schema 2
+  by renaming only `resumeCiRunners` to `restartCiRunners`. Migration preserves
+  the original bytes permanently in mode-`0600` `host.json.schema-1.bak`, uses
+  fsync-backed same-directory publication and replacement under one host lock,
+  recovers deterministically after interruption, and rejects malformed,
+  conflicting, extra-key, symlink, or non-regular artifacts without mutation.
+  Normal reads and every non-host state remain migration-free. Host-global
+  registry-cache reconciliation is serialized across callers.
 
 - Give reviewed Project Compose runtimes a stable workspace-local identity
   independent of the outer DIM workspace name, and reconcile a stale `ready`
