@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Select the default trusted workspace image by the exact installed DIM package
+  version instead of the mutable `latest` tag, while retaining
+  `DIM_WORKSPACE_IMAGE` as an explicit override. Package builds now generate the
+  runtime version used by both release and aggregate-identity local installs.
+
 - Allow `dim workspace restart` to accept multiple workspace names, process
   them sequentially with per-workspace progress, stop at the first contextual
   failure without hiding earlier success, and return ordered results as one
