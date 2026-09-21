@@ -296,10 +296,11 @@ workspace containing only the cloned production packages, so unpublished
 internal versions link to the exact resolved source set and a surrounding
 development checkout cannot affect dependency installation.
 
-The preparation recipe loads the exact
-`dev-infra-project-workspace:latest` image from the same
-`.local/production-source` snapshot and records full source SHAs, a digest of
-the package bundle, and the resulting image ID in ignored `.local` state. The
+The preparation recipe tags the trusted workspace image with the package
+bundle's complete aggregate local version, built from the same
+`.local/production-source` snapshot, and records that tag, full source SHAs, a
+digest of the package bundle, and the resulting immutable image ID in ignored
+`.local` state. The
 install recipe installs the CLI and enables the prepared DNS Cloudflare and
 External URLs plugins through the existing DIM installer facade. It preserves
 other enabled plugins and is safe to repeat. It does not rebuild or restart
@@ -308,9 +309,9 @@ including when package bytes or the image tag changed after preparation.
 `just restart-controller` is the separate, explicit controller-restart stage.
 A failed preparation leaves no readiness marker. Preparation and installation
 hold the same exclusive lock under `.local`.
-Preparation builds under a temporary image tag and replaces the canonical tag
+Preparation builds under a temporary image tag and replaces the versioned tag
 only after every other output is ready, so a failed attempt leaves the previous
-canonical image untouched. Neither recipe replaces existing workspaces;
+versioned image untouched. Neither recipe replaces existing workspaces;
 recreate them explicitly when they need the refreshed image. Cloned sources
 and package tarballs remain under `.local/production-source` and
 `.local/dim-packages` for inspection; the next preparation replaces their
