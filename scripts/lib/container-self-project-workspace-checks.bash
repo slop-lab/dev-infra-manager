@@ -79,6 +79,13 @@ if [[ -c /dev/kvm ]]; then
 fi
 
 verification_stage="workspace restart"
+dim workspace run "$workspace_name" bash -- -lc '
+  printf "preserve metadata\n" > /home/dim-agent/.dim-home-metadata-sentinel
+  chown dim-agent:dim-agent /home/dim-agent/.dim-home-metadata-sentinel
+  chmod 0640 /home/dim-agent/.dim-home-metadata-sentinel
+'
+home_metadata_before="$(dim workspace run "$workspace_name" bash -- -lc \
+  'stat -c %u:%g:%a /home/dim-agent/.dim-home-metadata-sentinel')"
 if ! restart_error="$(dim workspace restart "$workspace_name" 2>&1)"; then
   printf '%s\n' "$restart_error" >&2
   dim workspace show "$workspace_name" >&2 || true
@@ -91,6 +98,8 @@ workspace_json="$(dim workspace show "$workspace_name" --json)"
 test "$(jq -r .phase <<<"$workspace_json")" = ready
 verification_stage="restarted agent-dind contract"
 verify_agent_dind
+test "$(dim workspace run "$workspace_name" bash -- -lc \
+  'stat -c %u:%g:%a /home/dim-agent/.dim-home-metadata-sentinel')" = "$home_metadata_before"
 assert_opencode_absent
 
 verification_stage="explicit workspace setup without user tooling"
