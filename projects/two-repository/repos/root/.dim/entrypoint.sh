@@ -10,8 +10,9 @@ case "$task" in
       echo "app requires a command" >&2
       exit 2
     }
-    cd "$DIM_PROJECT_ROOT/app"
-    exec "$@"
+    exec docker compose --file .dim/docker-compose.yml exec --no-TTY \
+      --user "$(id -u):$(id -g)" --workdir /workspace \
+      --env HOME=/home/dim-agent app "$@"
     ;;
   *)
     echo "unknown DIM project task: $task" >&2

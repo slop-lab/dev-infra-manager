@@ -1,19 +1,28 @@
 #!/usr/bin/env sh
 set -eu
 
-app_dir="$DIM_PROJECT_ROOT/app"
-if test -d "$app_dir/.git"; then
-  exit 0
-fi
-if test -e "$app_dir"; then
-  echo "app checkout path exists but is not a Git repository: $app_dir" >&2
-  exit 1
-fi
+sh .dim/materialize-app.sh
 
-app_ref="$(jq -er '.repositories.app.ref' "$DIM_PROJECT_MANIFEST")"
-temporary_app="$DIM_PROJECT_ROOT/.app-clone.$$"
-trap 'rm -rf -- "$temporary_app"' EXIT HUP INT TERM
-git clone --branch "$app_ref" --single-branch \
-  "$DIM_GIT_BASE_URL/app.git" "$temporary_app"
-mv "$temporary_app" "$app_dir"
-trap - EXIT HUP INT TERM
+git_name="$(dim-host-input builtin.git-author name)"
+git_email="$(dim-host-input builtin.git-author email)"
+DIM_WORKSPACE_UID="$(stat -c %u "$DIM_PROJECT_ROOT")"
+DIM_WORKSPACE_GID="$(stat -c %g "$DIM_PROJECT_ROOT")"
+test "$DIM_WORKSPACE_UID" -ne 0 && test "$DIM_WORKSPACE_GID" -ne 0 || {
+  echo "two-repository requires a non-root workspace owner" >&2
+  exit 1
+}
+
+compose_host_aliases=/tmp/dim-two-repository-compose-host-aliases.json
+jq -e '.hostAliases | type == "object"' "$DIM_PROJECT_MANIFEST" >/dev/null
+jq '{services:{app:{extra_hosts:[.hostAliases | to_entries[] | .key as $host | .value[] | "\($host)=\(.)"]}}}' \
+  "$DIM_PROJECT_MANIFEST" >"$compose_host_aliases"
+
+export GIT_AUTHOR_NAME="$git_name"
+export GIT_AUTHOR_EMAIL="$git_email"
+export GIT_COMMITTER_NAME="$git_name"
+export GIT_COMMITTER_EMAIL="$git_email"
+export DIM_WORKSPACE_UID DIM_WORKSPACE_GID
+
+docker compose \
+  --file .dim/docker-compose.yml --file "$compose_host_aliases" \
+  up --detach --build app
