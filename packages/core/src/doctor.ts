@@ -182,17 +182,19 @@ export async function userLingerCheck(
 export async function appArmorUserNamespaceCheck(runner: CommandRunner): Promise<DoctorCheck> {
   const restriction = await runner.run("sysctl", ["-n", "kernel.apparmor_restrict_unprivileged_userns"]);
   if (restriction.exitCode !== 0) {
-    return restriction.exitCode === 127
-      ? {
-          name: "AppArmor unprivileged user namespaces",
-          ok: false,
-          detail: firstLine(`${restriction.stderr}${restriction.stdout}`) || "unable to inspect restriction"
-        }
-      : {
-          name: "AppArmor unprivileged user namespaces",
-          ok: true,
-          detail: "restriction not applicable"
-        };
+    const detail = firstLine(`${restriction.stderr}${restriction.stdout}`);
+    if (detail.includes("cannot stat /proc/sys/kernel/apparmor_restrict_unprivileged_userns")) {
+      return {
+        name: "AppArmor unprivileged user namespaces",
+        ok: true,
+        detail: "restriction not applicable"
+      };
+    }
+    return {
+      name: "AppArmor unprivileged user namespaces",
+      ok: false,
+      detail: detail || "unable to inspect restriction"
+    };
   }
   if (restriction.stdout.trim() === "0") {
     return {
