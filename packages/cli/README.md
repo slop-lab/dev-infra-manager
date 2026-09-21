@@ -197,6 +197,11 @@ dim workspace discard feature-123 --keep-volume --yes
   `--keep-volume` to retain DIM-managed nested-engine data for recreation with
   the same workspace name.
 
+If a controller command session for `create`, `setup`, `update`, `start`, or
+`restart` fails, the CLI preserves the failure context and recommends running
+`dim doctor` to check host readiness. `dim doctor` is diagnostic only; it does
+not repair workspace lifecycle state or retry the failed command.
+
 DIM only performs fast-forward root updates. It will not overwrite divergent
 workspace history.
 
