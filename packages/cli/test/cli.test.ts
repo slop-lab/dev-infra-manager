@@ -35,12 +35,21 @@ test("managed controller restarts preserve the workspace-mounted runtime directo
 test("CLI uses controller sessions and presents sanitized controller errors", async () => {
   const source = await readCliSource(
     "workspace-execution-commands",
+    "workspace-commands",
     "workspace-lifecycle-commands",
     "ci-commands"
   );
   const support = await readCliSource("controller-session");
-  for (const operation of ["workspace.exec", "workspace.run", "workspace.setup", "workspace.restart", "ci.runner.logs"]) {
+  for (const operation of ["workspace.exec", "workspace.run", "ci.runner.logs"]) {
     assert.match(source, new RegExp(`adminStreamCall[^\\n]*[\\s\\S]{0,160}${operation.replace(".", "\\.")}`));
+  }
+  for (const operation of [
+    "workspace.create", "workspace.setup", "workspace.update", "workspace.start", "workspace.restart"
+  ]) {
+    assert.match(
+      source,
+      new RegExp(`workspaceLifecycleStreamCall[^\\n]*[\\s\\S]{0,160}${operation.replace(".", "\\.")}`)
+    );
   }
   assert.doesNotMatch(source, /await (?:execWorkspace|runWorkspace)\(/);
   assert.match(source, /terminal: interactive\(\)/);
