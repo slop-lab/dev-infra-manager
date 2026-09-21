@@ -34,17 +34,18 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   and installs the current development worktree. Both paths give every DIM
   component a shared version containing the aggregate SHA-256 of their
   repository-name/full-commit records, with dirty state marked for the
-  top-level path. Project `prepare-local` consumes the three required exact
-  commit inputs, prepares the package bundle and trusted workspace image, and
-  records the package-bundle digest and image ID as provenance. Project
-  `install-local` validates that prepared set before and after installing it
-  without rebuilding. Both local installation paths explicitly enable the
-  built DNS Cloudflare and External URLs plugins while preserving other
-  enabled plugins. Installation uses the exact lockfile-owned Verdaccio binary
-  on a random loopback port, with signup closed and mutation authenticated.
-  `restart-controller` separately restarts the controller with the currently
-  installed packages; Project preparation, installation, and restart never
-  implicitly invoke one another.
+  top-level path. Project `prepare-local` resolves omitted source inputs to each
+  production repository's latest default-branch commit while still accepting
+  exact reviewed commits, prepares the package bundle and trusted workspace
+  image, and records the package-bundle digest and image ID as provenance.
+  Project `install-local` validates that prepared set before and after
+  installing it without rebuilding. Both local installation paths explicitly
+  enable the built DNS Cloudflare and External URLs plugins while preserving
+  other enabled plugins. Installation uses the exact lockfile-owned Verdaccio
+  binary on a random loopback port, with signup closed and mutation
+  authenticated. `restart-controller` separately restarts the controller with
+  the currently installed packages; Project preparation, installation, and
+  restart never implicitly invoke one another.
 - Development workspaces now bootstrap pinned OpenCode and Oh My OpenAgent
   releases into the persistent workspace-user home, with exact plugin
   registration, Team Mode defaults, automatic updates disabled, and existing
