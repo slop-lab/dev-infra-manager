@@ -29,8 +29,7 @@ DIM_EXAMPLES_ROOT="$repo_root/examples" \
 DIM_EXAMPLES_ROOT="$repo_root/examples" \
   bash "$script_dir/two-repository-materialization-smoke.bash"
 workspace_backend="${DIM_EXAMPLE_WORKSPACE_BACKEND:-sysbox}"
-workspace_version="$(node -p "require('./core/package.json').version")"
-workspace_image="dev-infra-project-workspace:$workspace_version"
+workspace_image="dev-infra-project-workspace:$(node -p "require('./core/package.json').version")"
 export DIM_WORKSPACE_IMAGE="$workspace_image"
 bash "$script_dir/configure-user-backend.bash" "$workspace_backend"
 
