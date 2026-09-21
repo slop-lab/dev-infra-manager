@@ -5,22 +5,17 @@ chown root:root /usr/bin/newuidmap /usr/bin/newgidmap
 chmod 4755 /usr/bin/newuidmap /usr/bin/newgidmap
 
 docker_data=/home/rootless/.local/share/docker
-ownership_marker="$docker_data/.dim-rootless-owner-v1"
 mkdir -p "$docker_data" /run/user/1000 /mnt/workspace-shared-dind
-if [ ! -f "$ownership_marker" ]; then
-  chown -R rootless:rootless "$docker_data"
+rootless_owner="$(id -u rootless):$(id -g rootless)"
+actual_owner="$(stat -c %u:%g "$docker_data")"
+if [ "$actual_owner" != "$rootless_owner" ]; then
+  if [ -n "$(find "$docker_data" -mindepth 1 -maxdepth 1 -print -quit)" ]; then
+    echo "secure Docker data has incompatible ownership: expected $rootless_owner, found $actual_owner" >&2
+    exit 1
+  fi
+  chown "$rootless_owner" "$docker_data"
 fi
-if ! su-exec rootless sh -eu -c '
-  mkdir -p "$1"
-  : >"$1/.dim-write-probe"
-  rm "$1/.dim-write-probe"
-' sh "$docker_data/containerd/daemon" 2>/dev/null; then
-  chown -R rootless:rootless "$docker_data"
-  su-exec rootless mkdir -p "$docker_data/containerd/daemon"
-fi
-su-exec rootless touch "$ownership_marker"
-chown rootless:rootless /home/rootless /home/rootless/.local \
-  /home/rootless/.local/share "$docker_data" /run/user/1000 /mnt/workspace-shared-dind
+chown rootless:rootless /run/user/1000 /mnt/workspace-shared-dind
 chmod 0700 /run/user/1000
 chmod 1777 /mnt/workspace-shared-dind
 

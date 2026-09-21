@@ -13,9 +13,6 @@ case "${1:?private agent action is required}" in
   setup)
     test -r /run/dim/project.json
     test -d /workspace/agent
-    workspace_uid="$(stat -c %u /workspace)"
-    workspace_gid="$(stat -c %g /workspace)"
-    chown -R "$workspace_uid:$workspace_gid" /mnt/agent-home
     docker build --quiet --tag "$agent_image" \
       --file /workspace/agent/Dockerfile /workspace >/dev/null
     docker rm --force "$agent_name" >/dev/null 2>&1 || true
