@@ -13,6 +13,8 @@ Runtime hosts also need the tools used by DIM:
 
 - A Linux host running a systemd user manager. macOS, Windows, and Docker
   Desktop hosts are not supported.
+- Linger enabled for the DIM host user so its user manager and managed
+  controller continue running after logout.
 - Docker-compatible CLI.
 - Sysbox installed and registered as `sysbox-runc`.
 - Optional KVM access for workspaces that request it.
@@ -21,6 +23,14 @@ Runtime hosts also need the tools used by DIM:
 
 The default managed controller is a `systemd --user` service. DIM installs and
 starts the unit automatically when a command first needs the controller.
+Enable linger once for the DIM host user:
+
+```bash
+sudo loginctl enable-linger "$USER"
+```
+
+This changes persistent host configuration; review and run it explicitly.
+`dim doctor` only reads the current `Linger` property and does not enable it.
 Inspect its timestamped, rotated journal with:
 
 ```bash
@@ -366,7 +376,21 @@ dim doctor
 ```
 
 The installed command checks Docker daemon access, the selected workspace
-runtime backend, and cgroup v2 support.
+runtime backend, cgroup v2 support, systemd user linger, and AppArmor
+user-namespace readiness. On a host where
+`kernel.apparmor_restrict_unprivileged_userns` is absent or `0`, the AppArmor
+rootlesskit profile is not applicable. When it is `1`, the loaded profiles
+must include `/usr/local/bin/rootlesskit`.
+
+From a reviewed source checkout, restore the profile installed by DIM with:
+
+```bash
+sudo bash verification/scripts/install-rootlesskit-apparmor-profile-ubuntu.bash
+```
+
+The script makes a host policy change; `dim doctor` only inspects the sysctl
+and loaded profiles. Do not disable the kernel restriction merely to silence
+the diagnostic.
 
 Run the same check from source against the installed backend configuration:
 
