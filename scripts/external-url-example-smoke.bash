@@ -72,6 +72,7 @@ trap report_error ERR
 trap cleanup EXIT
 
 echo "[external-url-example] build local packages and workspace image"
+workspace_image="dev-infra-project-workspace:$(node -p "require('./core/package.json').version")"
 bash verification/scripts/pack-local-packages.bash "$pack_root" >/dev/null
 bash examples/features/external-urls/create-repository.bash \
   "$repository_root/materialized" >/dev/null
@@ -79,7 +80,7 @@ docker build \
   --quiet \
   --build-arg "DIM_UID=$(id -u)" \
   --build-arg "DIM_GID=$(id -g)" \
-  --tag dev-infra-project-workspace:latest \
+  --tag "$workspace_image" \
   --file core/images/project-workspace/Dockerfile \
   . >/dev/null
 
@@ -165,7 +166,7 @@ docker run --detach --privileged \
   --env DIM_CONTROLLER_SOCKET=/run/dim/controller/controller.sock \
   --env "DIM_CONTROLLER_TOKEN=$grant" \
   --env COMPOSE_PROJECT_NAME=dim-external-example \
-  dev-infra-project-workspace:latest sleep infinity >/dev/null
+  "$workspace_image" sleep infinity >/dev/null
 
 for attempt in $(seq 1 60); do
   docker exec "$root_container" docker info >/dev/null 2>&1 && break
