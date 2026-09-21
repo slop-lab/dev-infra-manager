@@ -57,7 +57,8 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$repo_root"
-workspace_image="dev-infra-project-workspace:$(node -p "require('./core/package.json').version")"
+local_version="$(bash "$script_dir/local-build-version.bash")"
+workspace_image="dev-infra-project-workspace:$local_version"
 echo "[single-repository] install DIM and materialize one repository"
 dim_install_example_cli "$repo_root" "$work_dir" "$install_prefix"
 docker build \

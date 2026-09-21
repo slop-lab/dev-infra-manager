@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
+const projectRoot = process.env.DIM_TEST_ROOT_REPOSITORY ?? resolve(workspaceRoot, "project");
 
 describe("DIM development forge policy", () => {
   it("gives local install bundles a source-specific package version", async () => {
@@ -12,14 +13,20 @@ describe("DIM development forge policy", () => {
       resolve(workspaceRoot, "verification/scripts/pack-local-packages.bash"),
       "utf8"
     );
-    expect(localPack).toContain("repositories=(core plugin-dns-cloudflare plugin-external-urls)");
-    expect(localPack).toContain("GIT_MASTER=1 git -C");
-    expect(localPack).toContain("rev-parse HEAD");
-    expect(localPack).not.toContain("rev-parse --short");
-    expect(localPack).toContain("sha256sum");
+    const localVersion = await readFile(
+      resolve(workspaceRoot, "verification/scripts/local-build-version.bash"),
+      "utf8"
+    );
+    expect(localPack).toContain('bash "$script_dir/local-build-version.bash"');
     expect(localPack).toContain("DIM_LOCAL_BUILD_VERSION");
+    expect(localVersion).toContain("repositories=(core plugin-dns-cloudflare plugin-external-urls)");
+    expect(localVersion).toContain("GIT_MASTER=1 git -C");
+    expect(localVersion).toContain("rev-parse HEAD");
+    expect(localVersion).not.toContain("rev-parse --short");
+    expect(localVersion).toContain("aggregate-lock-sha256");
+    expect(localVersion).toContain("sha256sum");
 
-    const sourcePack = await readFile(resolve(workspaceRoot, "project/scripts/pack-source-build.bash"), "utf8");
+    const sourcePack = await readFile(resolve(projectRoot, "scripts/pack-source-build.bash"), "utf8");
     expect(sourcePack).toContain("git -C");
     expect(sourcePack).toContain("rev-parse HEAD");
     for (const variable of [

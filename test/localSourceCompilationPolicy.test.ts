@@ -33,7 +33,7 @@ describe("exact source plugin compilation", () => {
     expect(result.status).toBe(0);
     const pnpmInvocations = invocations.filter((invocation) => invocation.startsWith("pnpm "));
     expect(pnpmInvocations.map((invocation) => invocation.replace(/ version=.*/, ""))).toEqual([
-      `pnpm --dir ${sourceRoot} install --lockfile=false`,
+      `pnpm --dir ${sourceRoot} install --frozen-lockfile`,
       `pnpm --dir ${sourceRoot}/core run build`,
       `pnpm --dir ${sourceRoot}/plugin-dns-cloudflare run build`,
       `pnpm --dir ${sourceRoot}/plugin-external-urls run build`
@@ -58,7 +58,7 @@ describe("exact source plugin compilation", () => {
 
     expect(result.status).toBe(42);
     expect(invocations.match(/^pnpm /gm)).toHaveLength(1);
-    expect(invocations).toContain(`pnpm --dir ${sourceRoot} install --lockfile=false`);
+    expect(invocations).toContain(`pnpm --dir ${sourceRoot} install --frozen-lockfile`);
     expect(invocations).not.toMatch(/^pnpm .* run build /m);
     expect(invocations).not.toMatch(/^node .*pack-local-packages\.mjs /m);
   });

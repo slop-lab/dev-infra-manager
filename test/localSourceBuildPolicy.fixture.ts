@@ -21,9 +21,11 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
   const log = resolve(root, "invocations.log");
   await mkdir(scripts, { recursive: true });
   await mkdir(tools, { recursive: true });
+  await writeFile(resolve(root, "pnpm-lock.yaml"), fixtureLockfile);
+  const projectRoot = process.env.DIM_TEST_ROOT_REPOSITORY ?? resolve(workspaceRoot, "project");
   await Promise.all(
     ["pack-source-build.bash", "prepare-source-build.bash", "build-workspace-image.bash", "local-package-version.bash"].map((script) =>
-      copyFile(resolve(workspaceRoot, "project/scripts", script), resolve(scripts, script))
+      copyFile(resolve(projectRoot, "scripts", script), resolve(scripts, script))
     )
   );
   await writeFile(resolve(scripts, "pack-local-packages.mjs"), "");
@@ -90,7 +92,9 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
       "directory=\"$2\"",
       "command=\"$3\"",
       "if [[ \"$command\" == 'install' ]]; then",
-      "  [[ \"$4\" == '--lockfile=false' ]] || exit 82",
+      "  [[ \"$4\" == '--frozen-lockfile' ]] || exit 82",
+      "  cmp \"$directory/pnpm-lock.yaml\" \"$DIM_EXPECTED_AGGREGATE_LOCK\" || exit 83",
+      "  [[ \"${DIM_AGGREGATE_LOCK_STALE:-0}\" == 0 ]] || exit 43",
       "  [[ \"${DIM_WORKSPACE_INSTALL_FAILURE:-0}\" == 0 ]] || exit 42",
       "  for plugin in plugin-dns-cloudflare plugin-external-urls; do",
       "    mkdir -p \"$directory/$plugin/node_modules/@slop-lab\"",
@@ -134,6 +138,7 @@ export function runSourceBuild(
     env: {
       PATH: `${fixture.tools}:/usr/bin:/bin`,
       DIM_INVOCATIONS: fixture.log,
+      DIM_EXPECTED_AGGREGATE_LOCK: resolve(fixture.root, "pnpm-lock.yaml"),
       ...environment
     }
   });

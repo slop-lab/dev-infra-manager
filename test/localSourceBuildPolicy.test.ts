@@ -7,11 +7,13 @@ import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createSourceBuildFixture,
+  fixtureLockfile,
   runSourceBuild,
   type SourceBuildFixture
 } from "./localSourceBuildPolicy.fixture.js";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
+const projectRoot = process.env.DIM_TEST_ROOT_REPOSITORY ?? resolve(workspaceRoot, "project");
 const fixtureRoots: string[] = [];
 
 const commits = {
@@ -51,7 +53,7 @@ async function createFixture(): Promise<Fixture> {
   await mkdir(tools, { recursive: true });
   await Promise.all(
     ["prepare-source-build.bash", "install-source-build.bash", "build-workspace-image.bash", "local-package-version.bash"].map(
-      (script) => copyFile(resolve(workspaceRoot, "project/scripts", script), resolve(scripts, script))
+      (script) => copyFile(resolve(projectRoot, "scripts", script), resolve(scripts, script))
     )
   );
   await writeFile(
@@ -146,7 +148,7 @@ describe("local source build policy", () => {
     const changedPluginCommits = { ...commits, DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT: "4".repeat(40) };
     const expectedDigest = createHash("sha256")
       .update(
-        `core=${commits.DIM_SOURCE_CORE_COMMIT}\nplugin-dns-cloudflare=${commits.DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT}\nplugin-external-urls=${commits.DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT}\n`
+        `core=${commits.DIM_SOURCE_CORE_COMMIT}\nplugin-dns-cloudflare=${commits.DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT}\nplugin-external-urls=${commits.DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT}\naggregate-lock-sha256=${createHash("sha256").update(fixtureLockfile).digest("hex")}\n`
       )
       .digest("hex");
 
@@ -167,11 +169,71 @@ describe("local source build policy", () => {
     expect(secondInvocations).not.toContain(`version=0.8.0-local-${expectedDigest}`);
   });
 
+  it("copies the checked-in aggregate lock and installs the synthetic workspace frozen", async () => {
+    // Given
+    const fixture = await sourceBuildFixture();
+
+    // When
+    const result = runSourceBuild(fixture, "pack-source-build.bash", commits);
+    const invocations = await readFile(fixture.log, "utf8");
+    const copiedLock = await readFile(resolve(fixture.root, ".local/production-source/pnpm-lock.yaml"), "utf8");
+
+    // Then
+    expect(result.status).toBe(0);
+    expect(copiedLock).toBe(fixtureLockfile);
+    expect(invocations).toContain(`pnpm --dir ${resolve(fixture.root, ".local/production-source")} install --frozen-lockfile`);
+  });
+
+  it("changes aggregate identity when only the checked-in lock changes", async () => {
+    // Given
+    const fixture = await sourceBuildFixture();
+    const originalLockDigest = createHash("sha256").update(fixtureLockfile).digest("hex");
+    const originalIdentity = createHash("sha256")
+      .update(
+        `core=${commits.DIM_SOURCE_CORE_COMMIT}\nplugin-dns-cloudflare=${commits.DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT}\nplugin-external-urls=${commits.DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT}\naggregate-lock-sha256=${originalLockDigest}\n`
+      )
+      .digest("hex");
+
+    // When
+    const first = runSourceBuild(fixture, "pack-source-build.bash", commits);
+    await writeFile(fixture.log, "");
+    await writeFile(resolve(fixture.root, "pnpm-lock.yaml"), `${fixtureLockfile}settings:\n  autoInstallPeers: false\n`);
+    const second = runSourceBuild(fixture, "pack-source-build.bash", commits);
+    const secondInvocations = await readFile(fixture.log, "utf8");
+
+    // Then
+    expect(first.status).toBe(0);
+    expect(second.status).toBe(0);
+    expect(secondInvocations).not.toContain(`version=0.8.0-local-${originalIdentity}`);
+  });
+
+  it.each([
+    { name: "missing", removeLock: true, environment: {} },
+    { name: "stale", removeLock: false, environment: { DIM_AGGREGATE_LOCK_STALE: "1" } }
+  ])("rejects a $name aggregate lock before build, pack, or image publication", async (scenario) => {
+    // Given
+    const fixture = await sourceBuildFixture();
+    if (scenario.removeLock) {
+      await rm(resolve(fixture.root, "pnpm-lock.yaml"));
+    }
+
+    // When
+    const result = runSourceBuild(fixture, "prepare-source-build.bash", { ...commits, ...scenario.environment });
+    const invocations = await readFile(fixture.log, "utf8");
+
+    // Then
+    expect(result.status).not.toBe(0);
+    expect(invocations).not.toMatch(/^pnpm .* run build/m);
+    expect(invocations).not.toMatch(/^node .*pack-local-packages\.mjs/m);
+    expect(invocations).not.toMatch(/^docker buildx build/m);
+    expect(invocations).not.toMatch(/^docker image tag/m);
+  });
+
   it.each(["", "-dirty"])("accepts the computed aggregate identity in every production package helper%s", (suffix) => {
     // Given
     const aggregate = createHash("sha256")
       .update(
-        `core=${commits.DIM_SOURCE_CORE_COMMIT}\nplugin-dns-cloudflare=${commits.DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT}\nplugin-external-urls=${commits.DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT}\n`
+        `core=${commits.DIM_SOURCE_CORE_COMMIT}\nplugin-dns-cloudflare=${commits.DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT}\nplugin-external-urls=${commits.DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT}\naggregate-lock-sha256=${createHash("sha256").update(fixtureLockfile).digest("hex")}\n`
       )
       .digest("hex");
     const localVersion = `0.8.0-local-${aggregate}${suffix}`;
@@ -222,9 +284,9 @@ describe("local source build policy", () => {
 
   it("isolates production package linking and keeps installation restart-free", async () => {
     // Given
-    const packaging = await readFile(resolve(workspaceRoot, "project/scripts/pack-source-build.bash"), "utf8");
-    const installation = await readFile(resolve(workspaceRoot, "project/scripts/install-source-build.bash"), "utf8");
-    const recipes = await readFile(resolve(workspaceRoot, "project/justfile"), "utf8");
+    const packaging = await readFile(resolve(projectRoot, "scripts/pack-source-build.bash"), "utf8");
+    const installation = await readFile(resolve(projectRoot, "scripts/install-source-build.bash"), "utf8");
+    const recipes = await readFile(resolve(projectRoot, "justfile"), "utf8");
     const developmentRecipes = await readFile(resolve(workspaceRoot, "justfile"), "utf8");
     const imageConsumers = await Promise.all([
       "container-sysbox-isolation-smoke.bash",
@@ -237,7 +299,9 @@ describe("local source build policy", () => {
 
     // Then
     expect(packaging).toContain('cat >"$source_root/pnpm-workspace.yaml"');
-    expect(packaging).toContain('pnpm --dir "$source_root" install --lockfile=false');
+    expect(packaging).toContain('cp -- "$aggregate_lock" "$source_root/pnpm-lock.yaml"');
+    expect(packaging).toContain('pnpm --dir "$source_root" install --frozen-lockfile');
+    expect(packaging).toContain("aggregate-lock-sha256=%s");
     expect(installation).not.toMatch(/(?:systemctl|dim)\s+(?:restart|controller restart)/);
     expect(recipes).toContain("prepare-local:\n    bash scripts/prepare-source-build.bash");
     expect(recipes).toContain("install-local:\n    bash scripts/install-source-build.bash");
@@ -245,7 +309,9 @@ describe("local source build policy", () => {
     expect(recipes.indexOf("install-local:")).toBeLessThan(recipes.indexOf("restart-controller:"));
     expect(developmentRecipes).toContain("dev-infra-project-workspace:${image_version}");
     expect(developmentRecipes).not.toContain("dev-infra-project-workspace:latest");
-    expect(imageConsumers.every((script) => script.includes("dev-infra-project-workspace:$(node -p"))).toBe(true);
+    expect(imageConsumers.every((script) => script.includes('local_version="$(bash "$script_dir/local-build-version.bash")"'))).toBe(true);
+    expect(imageConsumers.every((script) => script.includes("dev-infra-project-workspace:$local_version"))).toBe(true);
+    expect(imageConsumers.every((script) => !script.includes("require('./core/package.json').version"))).toBe(true);
     expect(imageConsumers.every((script) => !script.includes("dev-infra-project-workspace:latest"))).toBe(true);
   });
 
@@ -285,7 +351,7 @@ describe("local source build policy", () => {
     const sources = resolve(root, ".local/production-source");
     await Promise.all([mkdir(scripts), mkdir(tools), mkdir(packages, { recursive: true })]);
     await copyFile(
-      resolve(workspaceRoot, "project/scripts/local-preparation-state.bash"),
+      resolve(projectRoot, "scripts/local-preparation-state.bash"),
       resolve(scripts, "local-preparation-state.bash")
     );
     await writeFile(resolve(packages, "packages.json"), "{}\n");

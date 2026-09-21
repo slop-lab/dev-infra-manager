@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 suffix="$PPID-$$"
 network="dim-ext-$suffix"
 client_network="dim-ext-client-$suffix"
@@ -72,7 +73,8 @@ trap report_error ERR
 trap cleanup EXIT
 
 echo "[external-url-example] build local packages and workspace image"
-workspace_image="dev-infra-project-workspace:$(node -p "require('./core/package.json').version")"
+local_version="$(bash "$script_dir/local-build-version.bash")"
+workspace_image="dev-infra-project-workspace:$local_version"
 bash verification/scripts/pack-local-packages.bash "$pack_root" >/dev/null
 bash examples/features/external-urls/create-repository.bash \
   "$repository_root/materialized" >/dev/null

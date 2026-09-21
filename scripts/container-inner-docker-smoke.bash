@@ -2,9 +2,11 @@
 set -euo pipefail
 
 inner_image="${DIM_CONTAINER_TEST_IMAGE:-alpine:3.22}"
-repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd -- "$script_dir/../.." && pwd)"
 cd "$repo_root"
-workspace_image="dev-infra-project-workspace:$(node -p "require('./core/package.json').version")"
+local_version="$(bash "$script_dir/local-build-version.bash")"
+workspace_image="dev-infra-project-workspace:$local_version"
 
 run_inner_smoke() {
   local outer_image="$1"

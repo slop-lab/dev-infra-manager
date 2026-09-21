@@ -15,24 +15,7 @@ output_directory="$(cd -- "$output_directory" && pwd)"
 
 cd "$repo_root"
 echo "[packages] build workspace"
-source_version="$(node -p 'require("./core/package.json").version')"
-repositories=(core plugin-dns-cloudflare plugin-external-urls)
-commits=()
-local_dirty=""
-for repository in "${repositories[@]}"; do
-  commits+=("$(GIT_MASTER=1 git -C "$repository" rev-parse HEAD)")
-  repository_status="$(GIT_MASTER=1 git -C "$repository" status --porcelain)"
-  if [[ -n "$repository_status" ]]; then
-    local_dirty=-dirty
-  fi
-done
-aggregate_sha="$({
-  for index in "${!repositories[@]}"; do
-    printf '%s=%s\n' "${repositories[$index]}" "${commits[$index]}"
-  done
-} | sha256sum | cut -d ' ' -f 1)"
-[[ "$aggregate_sha" =~ ^[0-9a-f]{64}$ ]]
-export DIM_LOCAL_BUILD_VERSION="$source_version-local-$aggregate_sha$local_dirty"
+export DIM_LOCAL_BUILD_VERSION="$(bash "$script_dir/local-build-version.bash")"
 pnpm run workspace:build >/dev/null
 
 echo "[packages] create pnpm tarballs"
