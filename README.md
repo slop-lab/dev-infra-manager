@@ -7,6 +7,8 @@ Project examples are complete, copyable adoption shapes:
 - [`projects/single-repository/`](projects/single-repository/README.md) is the
   default: one repository, no secrets or protected ref, resource limits, and
   a Project-owned agent/private DinD pair, and an optional external URL.
+- [`projects/two-repository/`](projects/two-repository/README.md) is a minimal
+  reusable root template paired with an ordinary application repository.
 - [`projects/multi-repository/`](projects/multi-repository/README.md) adds
   independent repository and secret-bearing review boundaries.
 - [`projects/full-development-flow/`](projects/full-development-flow/README.md)
@@ -61,9 +63,9 @@ The second argument controls a dirty source checkout:
 - `discard` verifies committed `HEAD` without modifying the checkout.
 
 The optional third argument selects one example (`single-repository`,
-`multi-repository`, `full-development-flow`, `ci-runner`, `external-urls`,
-`shared-upstream`, or `project-runtime-cgroups`) instead of the compatible
-suite.
+`two-repository`, `multi-repository`, `full-development-flow`, `ci-runner`,
+`external-urls`, `shared-upstream`, or `project-runtime-cgroups`) instead of
+the compatible suite.
 
 Complete adoption shapes belong under `projects/`; capability-focused and
 one-off examples belong under `features/`.
