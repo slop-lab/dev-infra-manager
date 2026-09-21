@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "repositories": {
+    "root": {
+      "url": "__DIM_EXAMPLE_ROOT_URL__",
+      "root": true,
+      "ref": "main"
+    },
+    "app": {
+      "url": "__DIM_EXAMPLE_APP_URL__",
+      "ref": "main"
+    }
+  }
+}
