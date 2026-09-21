@@ -164,6 +164,15 @@ the `secure` workspace profile starts a separate `secure-dind` daemon with its
 own storage and without agent home, source, or Git credential mounts for
 Project-defined secret-bearing workloads.
 
+Agent and secure rootless DinD startup repairs the root ownership and setuid
+mode of `newuidmap` and `newgidmap`, but never recursively changes persistent
+agent-home or Docker-data ownership, content, or modes. An empty persistent
+root is initialized for its configured rootless UID. A populated root with an
+incompatible top-level owner, or an agent home with an incompatible mode,
+fails startup with the observed and expected identity instead of attempting an
+implicit migration. Recreate or restore incompatible state explicitly; the
+lifecycle does not remove stale runtime state from persistent Docker storage.
+
 The root lifecycle clones missing registered managed repositories into
 `/workspace` using the runtime catalog. It never runs Git against an
 existing agent-controlled checkout; agents fetch, switch, and update those
