@@ -4,7 +4,8 @@
     "root": {
       "url": "__DIM_EXAMPLE_ROOT_URL__",
       "root": true,
-      "ref": "main"
+      "ref": "main",
+      "protect": ["main"]
     },
     "app": {
       "url": "__DIM_EXAMPLE_APP_URL__",
