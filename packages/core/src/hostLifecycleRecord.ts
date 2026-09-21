@@ -49,13 +49,15 @@ export function convertHostLifecycleSchema1(value: unknown): HostLifecycleRecord
 
 export function parseHostLifecycleRecord(value: unknown): HostLifecycleRecord {
   const record = object(value, "host lifecycle state");
-  exactFields(record, REQUIRED_FIELDS, OPTIONAL_FIELDS);
+  if (record.schemaVersion === 1) {
+    throw new UserError("host lifecycle 'host' uses state schema 1; controller startup migration is required");
+  }
   if (record.schemaVersion !== 2) {
     throw new UserError(
-      `host lifecycle 'host' uses unsupported state schema ${String(record.schemaVersion)}; `
-      + "expected 2 after controller startup migration"
+      `host lifecycle 'host' uses unsupported state schema ${String(record.schemaVersion)}; expected 2`
     );
   }
+  exactFields(record, REQUIRED_FIELDS, OPTIONAL_FIELDS);
 
   const parsed = {
     schemaVersion: 2,
