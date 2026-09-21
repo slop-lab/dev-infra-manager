@@ -29,6 +29,8 @@ export async function runDoctor(
   checks.push(await commandCheck(runner, "script", ["--version"], "PTY helper"));
   checks.push(await commandCheck(runner, "stty", ["--version"], "terminal resize helper"));
   checks.push(await userSystemdCheck(runner));
+  checks.push(await userLingerCheck(runner));
+  checks.push(await appArmorUserNamespaceCheck(runner));
   checks.push(await commandCheck(runner, "docker", ["--version"], "Docker CLI"));
   checks.push(await dockerDaemonCheck(runner));
   checks.push(...(await runtimeBackendChecks(runner, backend, options)));
@@ -62,6 +64,8 @@ export async function runCommonDoctorChecks(runner: CommandRunner): Promise<Doct
     await commandCheck(runner, "script", ["--version"], "PTY helper"),
     await commandCheck(runner, "stty", ["--version"], "terminal resize helper"),
     await userSystemdCheck(runner),
+    await userLingerCheck(runner),
+    await appArmorUserNamespaceCheck(runner),
     await commandCheck(runner, "docker", ["--version"], "Docker CLI"),
     await dockerDaemonCheck(runner),
     await cgroupCheck()
@@ -155,6 +159,67 @@ async function userSystemdCheck(runner: CommandRunner): Promise<DoctorCheck> {
     detail: result.exitCode === 0
       ? "available"
       : firstLine(`${result.stderr}${result.stdout}`) || "not available"
+  };
+}
+
+export async function userLingerCheck(
+  runner: CommandRunner,
+  user: string = String(process.getuid?.() ?? "self")
+): Promise<DoctorCheck> {
+  const result = await runner.run("loginctl", ["show-user", user, "--property=Linger", "--value"]);
+  const enabled = result.exitCode === 0 && result.stdout.trim() === "yes";
+  return {
+    name: "systemd user linger",
+    ok: enabled,
+    detail: enabled
+      ? "enabled"
+      : result.exitCode === 0
+        ? "disabled; run: sudo loginctl enable-linger $USER"
+        : `${firstLine(`${result.stderr}${result.stdout}`) || "unable to query"}; run: sudo loginctl enable-linger $USER`
+  };
+}
+
+export async function appArmorUserNamespaceCheck(runner: CommandRunner): Promise<DoctorCheck> {
+  const restriction = await runner.run("sysctl", ["-n", "kernel.apparmor_restrict_unprivileged_userns"]);
+  if (restriction.exitCode !== 0) {
+    const detail = firstLine(`${restriction.stderr}${restriction.stdout}`);
+    if (detail.includes("cannot stat /proc/sys/kernel/apparmor_restrict_unprivileged_userns")) {
+      return {
+        name: "AppArmor unprivileged user namespaces",
+        ok: true,
+        detail: "restriction not applicable"
+      };
+    }
+    return {
+      name: "AppArmor unprivileged user namespaces",
+      ok: false,
+      detail: detail || "unable to inspect restriction"
+    };
+  }
+  if (restriction.stdout.trim() === "0") {
+    return {
+      name: "AppArmor unprivileged user namespaces",
+      ok: true,
+      detail: "restriction disabled"
+    };
+  }
+  if (restriction.stdout.trim() !== "1") {
+    return {
+      name: "AppArmor unprivileged user namespaces",
+      ok: false,
+      detail: `unexpected restriction value: ${restriction.stdout.trim() || "empty"}`
+    };
+  }
+
+  const profiles = await runner.run("cat", ["/sys/kernel/security/apparmor/profiles"], { sudo: true });
+  const profileLoaded = profiles.exitCode === 0
+    && profiles.stdout.split("\n").some((line) => line.startsWith("/usr/local/bin/rootlesskit "));
+  return {
+    name: "AppArmor unprivileged user namespaces",
+    ok: profileLoaded,
+    detail: profileLoaded
+      ? "restriction enabled; rootlesskit profile loaded"
+      : "restriction enabled; /usr/local/bin/rootlesskit profile is not loaded; run: sudo bash verification/scripts/install-rootlesskit-apparmor-profile-ubuntu.bash"
   };
 }
 
