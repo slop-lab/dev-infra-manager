@@ -616,6 +616,15 @@ earlier completed restarts remain complete and later workspaces are not called.
 With `--json`, a fully successful invocation MUST emit one array containing the
 ordered per-workspace results.
 
+**CLI-WORKSPACE-LIFECYCLE-DOCTOR-001:** When a controller command session for
+`workspace create`, `setup`, `update`, `start`, or `restart` fails with a user
+error, the CLI MUST preserve the original error and operation context and MUST
+append exactly one `Run 'dim doctor' to check host readiness.` recommendation.
+The recommendation MUST NOT be added to local option validation or to `run`,
+`exec`, `stop`, `discard`, `align`, or `resources` failures. `dim doctor` is a
+diagnostic command and MUST NOT be represented as repairing DIM records,
+workspace lifecycle state, containers, or Project services.
+
 `workspace align` is the checkout-only recovery path. It fetches the
 configured root ref, switches a clean checkout back to the corresponding
 local branch, and fast-forwards it without running Project setup or changing
