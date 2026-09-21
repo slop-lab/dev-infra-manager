@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Diagnose whether the current user's systemd manager persists after logout
+  and whether AppArmor's unprivileged-user-namespace restriction has the
+  required loaded rootlesskit profile. These doctor checks are read-only and
+  report the explicit host commands needed for remediation.
+
 - Allow `dim workspace restart` to accept multiple workspace names, process
   them sequentially with per-workspace progress, stop at the first contextual
   failure without hiding earlier success, and return ordered results as one
