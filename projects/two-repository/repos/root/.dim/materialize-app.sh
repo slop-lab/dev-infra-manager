@@ -12,6 +12,17 @@ test "$(printf '%s' "$entry" | jq -r '.phase')" = ready || {
 workspace_url="$(printf '%s' "$entry" | jq -er '.workspaceUrl | select(type == "string" and length > 0)')"
 ref="$(printf '%s' "$entry" | jq -er '.ref | select(type == "string" and length > 0)')"
 commit="$(printf '%s' "$entry" | jq -er '.commit | select(type == "string" and test("^[0-9a-f]{40,64}$"))')"
+case "$ref" in
+  refs/heads/|refs/)
+    echo "Project repository ref is not a full nonempty ref: app" >&2
+    exit 1
+    ;;
+  refs/*) ;;
+  *)
+    echo "Project repository ref is not a full ref: app" >&2
+    exit 1
+    ;;
+esac
 
 app_dir="$DIM_PROJECT_ROOT/app"
 if test -d "$app_dir/.git"; then
@@ -22,8 +33,7 @@ if test -e "$app_dir" || test -L "$app_dir"; then
   exit 1
 fi
 
-staging="$DIM_PROJECT_ROOT/.app-materialize"
-rm -rf -- "$staging"
+staging="$(mktemp -d "$DIM_PROJECT_ROOT/.app-materialize.XXXXXX")"
 trap 'rm -rf -- "$staging"' EXIT HUP INT TERM
 
 trusted_git() {
