@@ -290,11 +290,13 @@ repository URLs; a canonical monorepo origin uses that same URL for all three
 repositories. Set `DIM_SOURCE_ROOT_URL` or
 `DIM_SOURCE_REPOSITORY_BASE_URL` only to override this URL resolution. The local
 package version includes a deterministic SHA-256 digest of the fixed,
-repository-name/full-commit record set, so changing any production repository
-changes the shared version identity. Preparation creates an isolated pnpm
-workspace containing only the cloned production packages, so unpublished
-internal versions link to the exact resolved source set and a surrounding
-development checkout cannot affect dependency installation.
+repository-name/full-commit record set and the checked-in aggregate pnpm lock
+digest, so changing any production repository or the reviewed dependency graph
+changes the shared version identity. Preparation copies that lock into an
+isolated pnpm workspace containing only the cloned production packages and
+installs with `--frozen-lockfile`, so unpublished internal versions link to the
+exact resolved source set and a surrounding development checkout cannot affect
+dependency installation.
 
 The preparation recipe tags the trusted workspace image with the package
 bundle's complete aggregate local version, built from the same
