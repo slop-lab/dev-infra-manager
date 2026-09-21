@@ -13,22 +13,12 @@ commit_variables=(
   DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT
 )
 commits=()
+source_urls=()
 
 if [[ -n "${DIM_SOURCE_REF+x}" ]]; then
-  echo "DIM_SOURCE_REF is not supported; provide one exact commit for each production repository" >&2
+  echo "DIM_SOURCE_REF is not supported; provide exact commits or omit them to use the latest sources" >&2
   exit 2
 fi
-
-for index in "${!repositories[@]}"; do
-  repository="${repositories[$index]}"
-  commit_variable="${commit_variables[$index]}"
-  commit="${!commit_variable:-}"
-  if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
-    echo "$commit_variable must be exactly 40 lowercase hexadecimal characters for $repository" >&2
-    exit 2
-  fi
-  commits+=("$commit")
-done
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 output_directory="$1"
@@ -45,7 +35,6 @@ repository_base="${origin_url%/*}"
 
 for index in "${!repositories[@]}"; do
   repository="${repositories[$index]}"
-  commit="${commits[$index]}"
   if [[ -n "${DIM_SOURCE_REPOSITORY_BASE_URL:-}" ]]; then
     source_url="${DIM_SOURCE_REPOSITORY_BASE_URL%/}/$repository.git"
   elif [[ "$origin_repository" == root ]]; then
@@ -53,6 +42,28 @@ for index in "${!repositories[@]}"; do
   else
     source_url="$origin_url"
   fi
+  source_urls+=("$source_url")
+
+  commit_variable="${commit_variables[$index]}"
+  commit="${!commit_variable:-}"
+  if [[ -z "$commit" ]]; then
+    echo "[source] resolve latest $repository"
+    commit="$(git ls-remote "$source_url" HEAD | awk 'NR == 1 { print $1 }')"
+    if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+      echo "could not resolve the latest commit for $repository from $source_url" >&2
+      exit 1
+    fi
+  elif [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "$commit_variable must be exactly 40 lowercase hexadecimal characters for $repository" >&2
+    exit 2
+  fi
+  commits+=("$commit")
+done
+
+for index in "${!repositories[@]}"; do
+  repository="${repositories[$index]}"
+  source_url="${source_urls[$index]}"
+  commit="${commits[$index]}"
   echo "[source] clone $repository"
   git clone --quiet --no-checkout "$source_url" "$source_root/$repository"
   git -C "$source_root/$repository" fetch --quiet origin "$commit"
@@ -74,10 +85,23 @@ aggregate_sha="$({
 [[ "$aggregate_sha" =~ ^[0-9a-f]{64}$ ]]
 export DIM_LOCAL_BUILD_VERSION="$source_version-local-$aggregate_sha"
 
+cat >"$source_root/package.json" <<'EOF'
+{"name":"dim-production-source-build","private":true}
+EOF
+cat >"$source_root/pnpm-workspace.yaml" <<'EOF'
+packages:
+  - core/packages/core
+  - core/packages/cli
+  - core/packages/installer
+  - core/packages/controller-proxy
+  - core/packages/contracts/*
+  - plugin-dns-cloudflare
+  - plugin-external-urls
+linkWorkspacePackages: true
+EOF
+
 echo "[source] install production build dependencies"
-for repository in "${repositories[@]}"; do
-  pnpm --dir "$source_root/$repository" install --frozen-lockfile
-done
+pnpm --dir "$source_root" install --lockfile=false
 
 echo "[source] build production packages"
 local_dirty=""
@@ -89,10 +113,6 @@ for repository in "${repositories[@]}"; do
 done
 export DIM_LOCAL_BUILD_VERSION="$source_version-local-$aggregate_sha$local_dirty"
 pnpm --dir "$source_root/core" run build
-for repository in "${repositories[@]:1}"; do
-  pnpm --dir "$source_root/$repository" link "$source_root/core/packages/core"
-  pnpm --dir "$source_root/$repository" link "$source_root/core/packages/contracts/external-url"
-done
 pnpm --dir "$source_root/plugin-dns-cloudflare" run build
 pnpm --dir "$source_root/plugin-external-urls" run build
 

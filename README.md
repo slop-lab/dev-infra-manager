@@ -252,6 +252,14 @@ repositories from the same Git host, build and package them, and rebuild the
 trusted workspace image with Docker Buildx:
 
 ```bash
+just prepare-local
+```
+
+By default, preparation resolves and pins the latest commit from each production
+repository's default branch. To prepare an explicitly reviewed source set
+instead, provide any or all of the corresponding full commits:
+
+```bash
 DIM_SOURCE_CORE_COMMIT="$REVIEWED_CORE_COMMIT" \
 DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT="$REVIEWED_DNS_PLUGIN_COMMIT" \
 DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT="$REVIEWED_EXTERNAL_URLS_PLUGIN_COMMIT" \
@@ -270,21 +278,23 @@ Preparation requires Git, Docker with the Buildx plugin, Node.js 24 or 26, and
 pnpm 10. Installation also requires the existing DIM installer facade.
 Preparation clones only `core`, `plugin-dns-cloudflare`, and
 `plugin-external-urls`; no workspace or `*-development` checkout is used. The
-caller must set `DIM_SOURCE_CORE_COMMIT`,
+caller may set `DIM_SOURCE_CORE_COMMIT`,
 `DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT`, and
 `DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT` to reviewed full commits, each exactly
-40 lowercase hexadecimal characters. Branches, tags, abbreviated commits, and
-omitted inputs are rejected. Each exact object is fetched, checked out detached,
-verified against the resulting full `HEAD`, and printed before dependency
-installation. A split `root.git` origin resolves sibling repository URLs; a
-canonical monorepo origin uses that same URL for all three repositories. Set
-`DIM_SOURCE_ROOT_URL` or `DIM_SOURCE_REPOSITORY_BASE_URL` only to override this
-URL resolution. The local package version includes a deterministic SHA-256
-digest of the fixed, repository-name/full-commit record set, so changing any
-production repository changes the shared version identity. Preparation installs
-each cloned repository with its reviewed `pnpm-lock.yaml` and
-`--frozen-lockfile`, so package manifest and lockfile drift fails before any
-artifacts are prepared.
+40 lowercase hexadecimal characters. An omitted input resolves to the remote
+repository's current default-branch `HEAD`; branches, tags, and abbreviated
+commits are rejected as explicit inputs. Each resolved object is fetched,
+checked out detached, verified against the resulting full `HEAD`, and printed
+before dependency installation. A split `root.git` origin resolves sibling
+repository URLs; a canonical monorepo origin uses that same URL for all three
+repositories. Set `DIM_SOURCE_ROOT_URL` or
+`DIM_SOURCE_REPOSITORY_BASE_URL` only to override this URL resolution. The local
+package version includes a deterministic SHA-256 digest of the fixed,
+repository-name/full-commit record set, so changing any production repository
+changes the shared version identity. Preparation creates an isolated pnpm
+workspace containing only the cloned production packages, so unpublished
+internal versions link to the exact resolved source set and a surrounding
+development checkout cannot affect dependency installation.
 
 The preparation recipe loads the exact
 `dev-infra-project-workspace:latest` image from the same
