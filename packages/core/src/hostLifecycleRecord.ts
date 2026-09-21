@@ -12,8 +12,40 @@ const REQUIRED_FIELDS = [
 ] as const;
 
 const OPTIONAL_FIELDS = ["error"] as const;
+const SCHEMA_1_REQUIRED_FIELDS = [
+  "schemaVersion",
+  "phase",
+  "resumeWorkspaces",
+  "resumeCiRunners",
+  "resumeManagedContainers",
+  "updatedAt"
+] as const;
 const RUNNER_TARGET_FIELDS = ["project", "name"] as const;
 const NO_OPTIONAL_FIELDS: readonly string[] = [];
+
+export function convertHostLifecycleSchema1(value: unknown): HostLifecycleRecord {
+  const record = object(value, "host lifecycle state");
+  exactFields(record, SCHEMA_1_REQUIRED_FIELDS, OPTIONAL_FIELDS);
+  if (record.schemaVersion !== 1) {
+    throw new UserError(
+      `host lifecycle 'host' uses unsupported state schema ${String(record.schemaVersion)}; expected 1 for migration`
+    );
+  }
+  const converted = {
+    schemaVersion: 2,
+    phase: hostPhase(record.phase),
+    resumeWorkspaces: lifecycleNames(record.resumeWorkspaces, "workspace", "resumeWorkspaces"),
+    restartCiRunners: runnerTargets(record.resumeCiRunners, "resumeCiRunners"),
+    resumeManagedContainers: lifecycleNames(
+      record.resumeManagedContainers,
+      "managed container",
+      "resumeManagedContainers"
+    ),
+    updatedAt: text(record.updatedAt, "updatedAt")
+  } satisfies HostLifecycleRecord;
+  if (record.error === undefined) return converted;
+  return { ...converted, error: text(record.error, "error") };
+}
 
 export function parseHostLifecycleRecord(value: unknown): HostLifecycleRecord {
   const record = object(value, "host lifecycle state");
@@ -21,7 +53,7 @@ export function parseHostLifecycleRecord(value: unknown): HostLifecycleRecord {
   if (record.schemaVersion !== 2) {
     throw new UserError(
       `host lifecycle 'host' uses unsupported state schema ${String(record.schemaVersion)}; `
-      + "expected 2 and DIM does not migrate existing state"
+      + "expected 2 after controller startup migration"
     );
   }
 
@@ -29,7 +61,7 @@ export function parseHostLifecycleRecord(value: unknown): HostLifecycleRecord {
     schemaVersion: 2,
     phase: hostPhase(record.phase),
     resumeWorkspaces: lifecycleNames(record.resumeWorkspaces, "workspace", "resumeWorkspaces"),
-    restartCiRunners: runnerTargets(record.restartCiRunners),
+    restartCiRunners: runnerTargets(record.restartCiRunners, "restartCiRunners"),
     resumeManagedContainers: lifecycleNames(
       record.resumeManagedContainers,
       "managed container",
@@ -63,10 +95,10 @@ function lifecycleNames(value: unknown, kind: string, field: string): string[] {
   });
 }
 
-function runnerTargets(value: unknown): HostLifecycleRecord["restartCiRunners"] {
-  if (!Array.isArray(value)) throw invalid("restartCiRunners");
+function runnerTargets(value: unknown, field: string): HostLifecycleRecord["restartCiRunners"] {
+  if (!Array.isArray(value)) throw invalid(field);
   return value.map((entry, index) => {
-    const label = `restartCiRunners[${index}]`;
+    const label = `${field}[${index}]`;
     const target = object(entry, label);
     exactFields(target, RUNNER_TARGET_FIELDS, NO_OPTIONAL_FIELDS);
     if (typeof target.project !== "string") throw invalid(`${label}.project`);
