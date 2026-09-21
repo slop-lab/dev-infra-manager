@@ -34,7 +34,25 @@ test("workspace restart preserves completed output and stops at the failing targ
 
   assert.equal(result.status, 2);
   assert.equal(result.stdout, "Restarted workspace 'first'\n");
-  assert.equal(result.stderr, "Failed to restart workspace 'second': controller rejected restart\n");
+  assert.equal(
+    result.stderr,
+    "Failed to restart workspace 'second': controller rejected restart\nRun 'dim doctor' to check host readiness.\n"
+  );
+  assert.deepEqual(requests, [
+    { operation: "workspace.restart", input: { name: "first" } },
+    { operation: "workspace.restart", input: { name: "second" } }
+  ]);
+});
+
+test("workspace restart failure does not emit a partial JSON array", async () => {
+  const { requests, result } = await runRestart(["first", "second", "third"], "second", true);
+
+  assert.equal(result.status, 2);
+  assert.equal(result.stdout, "");
+  assert.equal(
+    result.stderr,
+    "Failed to restart workspace 'second': controller rejected restart\nRun 'dim doctor' to check host readiness.\n"
+  );
   assert.deepEqual(requests, [
     { operation: "workspace.restart", input: { name: "first" } },
     { operation: "workspace.restart", input: { name: "second" } }
