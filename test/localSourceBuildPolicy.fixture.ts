@@ -22,7 +22,7 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
   await mkdir(scripts, { recursive: true });
   await mkdir(tools, { recursive: true });
   await Promise.all(
-    ["pack-source-build.bash", "prepare-source-build.bash", "build-workspace-image.bash"].map((script) =>
+    ["pack-source-build.bash", "prepare-source-build.bash", "build-workspace-image.bash", "local-package-version.bash"].map((script) =>
       copyFile(resolve(workspaceRoot, "project/scripts", script), resolve(scripts, script))
     )
   );
@@ -51,6 +51,13 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
       "      ;;",
       "    'status --porcelain ') ;;",
       "    *) exit 91 ;;",
+      "  esac",
+      "elif [[ \"$1\" == 'ls-remote' ]]; then",
+      "  case \"$2\" in",
+      "    */core.git) printf '%040d\\tHEAD\\n' 1 ;;",
+      "    */plugin-dns-cloudflare.git) printf '%040d\\tHEAD\\n' 2 ;;",
+      "    */plugin-external-urls.git) printf '%040d\\tHEAD\\n' 3 ;;",
+      "    *) exit 93 ;;",
       "  esac",
       "elif [[ \"$1\" == 'clone' ]]; then",
       "  directory=\"${!#}\"",
@@ -83,11 +90,12 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
       "directory=\"$2\"",
       "command=\"$3\"",
       "if [[ \"$command\" == 'install' ]]; then",
-      "  [[ \"$4\" == '--frozen-lockfile' ]] || exit 82",
-      "  if [[ \"$(basename \"$directory\")\" == \"${DIM_INSTALL_FAILURE_REPOSITORY:-}\" ]]; then exit 42; fi",
-      "  mkdir -p \"$directory/node_modules/@slop-lab/dim-core/dist\" \"$directory/node_modules/@slop-lab/dim-contracts-external-url/dist\"",
-      "  printf 'published-api\\n' >\"$directory/node_modules/@slop-lab/dim-core/dist/api\"",
-      "  printf 'published-api\\n' >\"$directory/node_modules/@slop-lab/dim-contracts-external-url/dist/api\"",
+      "  [[ \"$4\" == '--lockfile=false' ]] || exit 82",
+      "  for plugin in plugin-dns-cloudflare plugin-external-urls; do",
+      "    mkdir -p \"$directory/$plugin/node_modules/@slop-lab\"",
+      "    ln -s \"$directory/core/packages/core\" \"$directory/$plugin/node_modules/@slop-lab/dim-core\"",
+      "    ln -s \"$directory/core/packages/contracts/external-url\" \"$directory/$plugin/node_modules/@slop-lab/dim-contracts-external-url\"",
+      "  done",
       "elif [[ \"$command\" == 'link' ]]; then",
       "  source=\"$4\"",
       "  case \"$source\" in",
