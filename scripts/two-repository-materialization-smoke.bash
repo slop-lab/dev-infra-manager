@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s nullglob
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 workspace_root="$(cd -- "$script_dir/../.." && pwd)"
@@ -45,7 +46,8 @@ run_materialize() {
 
 assert_no_staging() {
   local project_root="$1"
-  ! compgen -G "$project_root/.app-*" >/dev/null
+  local staging=("$project_root"/.app-materialize.*)
+  test "${#staging[@]}" -eq 0
 }
 
 echo '[two-repository-materialization] use the exact commit for a full branch ref after movement'
@@ -69,6 +71,29 @@ write_manifest "$source_bare" ready refs/tags/example "$moved_commit"
 run_materialize "$project_root"
 test "$(git -C "$project_root/app" rev-parse HEAD)" = "$moved_commit"
 test -z "$(git -C "$project_root/app" branch --show-current)"
+
+echo '[two-repository-materialization] reject non-full refs before invoking Git'
+mkdir "$work_dir/reject-git"
+cat >"$work_dir/reject-git/git" <<EOF
+#!/bin/sh
+touch '$work_dir/non-full-ref-invoked-git'
+exit 99
+EOF
+chmod +x "$work_dir/reject-git/git"
+rejected_ref_index=0
+for rejected_ref in main refs/ refs/heads/; do
+  project_root="$work_dir/rejected-ref-$rejected_ref_index"
+  mkdir "$project_root"
+  write_manifest "$source_bare" ready "$rejected_ref" "$moved_commit"
+  if PATH="$work_dir/reject-git:$PATH" run_materialize "$project_root" >/dev/null 2>&1; then
+    echo "materialization unexpectedly accepted ref: $rejected_ref" >&2
+    exit 1
+  fi
+  test ! -e "$work_dir/non-full-ref-invoked-git"
+  test ! -e "$project_root/app"
+  assert_no_staging "$project_root"
+  rejected_ref_index=$((rejected_ref_index + 1))
+done
 
 echo '[two-repository-materialization] ignore hostile system/global config and hooks'
 project_root="$work_dir/hostile-project"
@@ -108,18 +133,30 @@ done
 
 echo '[two-repository-materialization] clean failed fetches and permit a retry'
 project_root="$work_dir/retry-project"
-mkdir "$project_root" "$project_root/.app-materialize"
-printf 'stale\n' >"$project_root/.app-materialize/content"
+mkdir "$project_root" \
+  "$project_root/.app-materialize" \
+  "$project_root/.app-materialize.foreign" \
+  "$project_root/.app-materialize.ABC123"
+printf 'fixed\n' >"$project_root/.app-materialize/content"
+printf 'foreign\n' >"$project_root/.app-materialize.foreign/content"
+printf 'collision\n' >"$project_root/.app-materialize.ABC123/content"
 write_manifest "$work_dir/missing.git" ready refs/heads/main "$moved_commit"
 if run_materialize "$project_root" >/dev/null 2>&1; then
   echo 'materialization unexpectedly accepted an unavailable repository' >&2
   exit 1
 fi
 test ! -e "$project_root/app"
-assert_no_staging "$project_root"
+test "$(cat "$project_root/.app-materialize/content")" = fixed
+test "$(cat "$project_root/.app-materialize.foreign/content")" = foreign
+test "$(cat "$project_root/.app-materialize.ABC123/content")" = collision
+test "$(printf '%s\n' "$project_root"/.app-materialize.* | wc -l)" -eq 2
 write_manifest "$source_bare" ready refs/heads/main "$moved_commit"
 run_materialize "$project_root"
 test "$(git -C "$project_root/app" rev-parse HEAD)" = "$moved_commit"
+test "$(cat "$project_root/.app-materialize/content")" = fixed
+test "$(cat "$project_root/.app-materialize.foreign/content")" = foreign
+test "$(cat "$project_root/.app-materialize.ABC123/content")" = collision
+test "$(printf '%s\n' "$project_root"/.app-materialize.* | wc -l)" -eq 2
 
 echo '[two-repository-materialization] reject an existing non-Git destination without mutation'
 project_root="$work_dir/non-git-project"
