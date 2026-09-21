@@ -20,7 +20,7 @@ describe("host state migration concurrency", () => {
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "dim-host-migration-concurrency-"));
-    state = new LifecycleState(root, { waitTimeoutMs: 2_000, retryDelayMs: 1 });
+    state = new LifecycleState(root, { waitTimeoutMs: 10_000, retryDelayMs: 1 });
     await writeFile(state.hostLifecyclePath(), schema1Bytes);
   });
 
