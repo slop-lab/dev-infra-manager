@@ -258,12 +258,21 @@ dim workspace discard dev --yes
 DIM does not implicitly migrate incompatible pre-stable repository/workspace
 state. Push all work before upgrading, explicitly clean old resources with the
 old CLI, then create the Project and workspace again. Unknown state is rejected
-without mutation.
+without mutation. The sole exception is the lossless host lifecycle schema 1
+to 2 transition: managed-controller startup renames `resumeCiRunners` to
+`restartCiRunners` before loading plugins or opening listeners and preserves the
+original bytes permanently in mode-`0600` `host.json.schema-1.bak`.
 
 Host maintenance state must be a structurally valid schema `2` record with its
 exact phase, workspace, CI-runner, managed-container, and timestamp fields,
 plus an optional error. Invalid or unknown structure is rejected unchanged
 before recovery runs. `restartCiRunners` alone records runner restart intent.
+The host migration accepts only the exact historical schema 1 shape. A
+malformed or extra-key record, conflicting or unsafe backup, symlink, or
+non-regular canonical, backup, or recognized temporary artifact stops
+controller startup without mutation. Interrupted migration is safe to retry;
+an absent canonical record is recovered from a valid permanent backup.
+
 If `dim host start` enters from `ready`, it dispatches no recovery. From
 `stopped`, `starting`, or `error`, listed ready runners are left alone, stopped
 runners start, and creating or errored runners are ownership-safely stopped
