@@ -42,6 +42,9 @@ Behavior:
 15. Add the invoking non-root user to the `docker` group.
 16. Explain that the user must log in again or run `newgrp docker` once
     before the current session can use Docker without `sudo`.
+17. Do not enable systemd user linger. The operator explicitly runs
+    `sudo loginctl enable-linger "$USER"`; `doctor` reports disabled linger
+    without changing it.
 
 Unsupported Sysbox architectures must fail. Installation records `sysbox` in
 DIM user configuration. From a source checkout, the operator runs
