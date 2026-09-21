@@ -22,7 +22,7 @@ afterEach(async () => {
 });
 
 describe("exact source plugin compilation", () => {
-  it("links selected core and contracts after frozen installs so plugins can use unreleased APIs", async () => {
+  it("installs the source workspace before ordered builds and packaging", async () => {
     const fixture = await createSourceBuildFixture();
     fixtures.push(fixture);
     const sourceRoot = resolve(fixture.root, ".local/production-source");
@@ -33,14 +33,8 @@ describe("exact source plugin compilation", () => {
     expect(result.status).toBe(0);
     const pnpmInvocations = invocations.filter((invocation) => invocation.startsWith("pnpm "));
     expect(pnpmInvocations.map((invocation) => invocation.replace(/ version=.*/, ""))).toEqual([
-      `pnpm --dir ${sourceRoot}/core install --frozen-lockfile`,
-      `pnpm --dir ${sourceRoot}/plugin-dns-cloudflare install --frozen-lockfile`,
-      `pnpm --dir ${sourceRoot}/plugin-external-urls install --frozen-lockfile`,
+      `pnpm --dir ${sourceRoot} install --lockfile=false`,
       `pnpm --dir ${sourceRoot}/core run build`,
-      `pnpm --dir ${sourceRoot}/plugin-dns-cloudflare link ${sourceRoot}/core/packages/core`,
-      `pnpm --dir ${sourceRoot}/plugin-dns-cloudflare link ${sourceRoot}/core/packages/contracts/external-url`,
-      `pnpm --dir ${sourceRoot}/plugin-external-urls link ${sourceRoot}/core/packages/core`,
-      `pnpm --dir ${sourceRoot}/plugin-external-urls link ${sourceRoot}/core/packages/contracts/external-url`,
       `pnpm --dir ${sourceRoot}/plugin-dns-cloudflare run build`,
       `pnpm --dir ${sourceRoot}/plugin-external-urls run build`
     ]);
@@ -51,18 +45,20 @@ describe("exact source plugin compilation", () => {
     }
   });
 
-  it("stops before links, builds, and packaging when a frozen install fails", async () => {
+  it("stops before builds and packaging when the workspace install fails", async () => {
     const fixture = await createSourceBuildFixture();
     fixtures.push(fixture);
+    const sourceRoot = resolve(fixture.root, ".local/production-source");
 
     const result = runSourceBuild(fixture, "pack-source-build.bash", {
       ...commits,
-      DIM_INSTALL_FAILURE_REPOSITORY: "plugin-dns-cloudflare"
+      DIM_WORKSPACE_INSTALL_FAILURE: "1"
     });
     const invocations = await readFile(fixture.log, "utf8");
 
     expect(result.status).toBe(42);
-    expect(invocations).not.toMatch(/^pnpm .* link /m);
+    expect(invocations.match(/^pnpm /gm)).toHaveLength(1);
+    expect(invocations).toContain(`pnpm --dir ${sourceRoot} install --lockfile=false`);
     expect(invocations).not.toMatch(/^pnpm .* run build /m);
     expect(invocations).not.toMatch(/^node .*pack-local-packages\.mjs /m);
   });
