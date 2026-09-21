@@ -139,6 +139,11 @@ just build-workspace-image
 bash verification/scripts/install-host-ubuntu.bash sysbox
 ```
 
+The build tags the trusted image as
+`dev-infra-project-workspace:<release version>`, matching the default selected
+by the same DIM package release. Set `DIM_WORKSPACE_IMAGE` only when an explicit
+different image reference is required.
+
 Run `just` as your normal user, including when it is managed by mise. The
 installer invokes `sudo` only for host changes, and adds the invoking user to
 the `docker` group; log out and back in or run `newgrp docker` once after the
