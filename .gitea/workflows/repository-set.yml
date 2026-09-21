@@ -17,6 +17,10 @@ on:
         type: string
         required: false
         default: ''
+      verification-ref:
+        type: string
+        required: false
+        default: ''
       gate:
         type: string
         required: false
@@ -79,7 +83,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: dim-dim/verification
-          ref: ${{ gitea.event_name == 'workflow_call' && inputs.candidate-repository == 'verification' && inputs.candidate-ref || gitea.event_name != 'workflow_call' && gitea.sha || 'main' }}
+          ref: ${{ inputs.verification-ref || (gitea.event_name == 'workflow_call' && inputs.candidate-repository == 'verification' && inputs.candidate-ref) || (gitea.event_name != 'workflow_call' && gitea.sha) || 'main' }}
           path: snapshot/verification
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
