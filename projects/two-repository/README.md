@@ -15,10 +15,9 @@ two URLs in [`.dim/repos.yml`](repos/root/.dim/repos.yml), and keep using your
 application repository normally. The `app` repository does not need a `.dim`
 directory or DIM-specific source files.
 
-Neither repository is branch-protected in this example. Add reviewed
-protection when the application or lifecycle needs it; the larger
-[`multi-repository`](../multi-repository/README.md) example demonstrates that
-shape.
+The root `main` branch is protected because it owns trusted lifecycle and
+container policy. The ordinary app remains unprotected so its child runtime
+can use the managed Project writer normally.
 
 ## Try it
 
@@ -45,20 +44,30 @@ dim workspace create two-repository two-repository-dev
 dim workspace run two-repository-dev app -- sh hello.bash
 ```
 
-The root setup clones `app` once into the persistent workspace checkout.
-Restarting reconciles lifecycle setup without replacing local app work:
+The root setup reads the app's ready runtime-manifest entry, fetches its exact
+immutable commit with system/global Git configuration and hooks disabled, and
+atomically publishes the checkout under the persistent Project root. A full
+`refs/heads/` ref becomes a local branch; other refs are checked out detached.
+Existing Git checkouts are agent-owned and are never passed to trusted Git.
+Restarting reconciles the child service without replacing local app work:
 
 ```bash
 dim workspace restart two-repository-dev
 dim workspace run two-repository-dev app -- sh hello.bash
 ```
 
-This minimal template runs app commands directly in the isolated workspace
-container. It intentionally has no nested agent container, private Docker
-daemon, secrets, external URL, or coding-agent-provider setup. Use the other
-Project examples when those boundaries or capabilities are required.
+App commands run only in a minimal Ubuntu child container as the workspace's
+nonroot UID and GID, with all Linux capabilities dropped and privilege
+escalation disabled. The child mounts only the app checkout at `/workspace`
+and its persistent home. It receives managed Git credentials and author
+identity, but no root checkout, Docker socket, DIM controller socket or grant,
+host device, sudo, nested Docker daemon, secret, external URL, or
+coding-agent-provider setup. Argument, stream, exit-status, and working-directory
+behavior pass through the fixed `app -- ...` task mapping.
 
-Discard the persistent workspace explicitly when the work is finished:
+Discard the persistent workspace explicitly when the work is finished. The
+root teardown removes only this template's Compose service, network, and home
+volume:
 
 ```bash
 dim workspace discard two-repository-dev --yes
