@@ -15,6 +15,15 @@ const VALID_HOST_RECORD = {
   error: "interrupted"
 } as const;
 
+const HISTORICAL_SCHEMA_1_RECORD = {
+  schemaVersion: 1,
+  phase: "stopped",
+  resumeWorkspaces: ["workspace"],
+  resumeCiRunners: [{ project: "example", name: "capacity" }],
+  resumeManagedContainers: ["managed-service"],
+  updatedAt: "now"
+} as const;
+
 const MALFORMED_HOST_RECORDS = [
   ["missing phase", "phase", undefined],
   ["unsupported phase", "phase", "paused"],
@@ -98,6 +107,19 @@ describe("host lifecycle state validation", () => {
 
     // Then
     await expect(read).rejects.toThrow();
+    await expect(readFile(state.hostLifecyclePath(), "utf8")).resolves.toBe(rawState);
+  });
+
+  it("directs exact historical schema 1 state through controller startup migration without mutating it", async () => {
+    // Given
+    const rawState = `${JSON.stringify(HISTORICAL_SCHEMA_1_RECORD, null, 4)}\n`;
+    await writeFile(state.hostLifecyclePath(), rawState);
+
+    // When
+    const read = state.readHostLifecycle();
+
+    // Then
+    await expect(read).rejects.toThrow(/schema 1.*controller startup migration/);
     await expect(readFile(state.hostLifecyclePath(), "utf8")).resolves.toBe(rawState);
   });
 
