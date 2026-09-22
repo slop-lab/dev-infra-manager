@@ -118,7 +118,7 @@ export const options = {
   defaultWorkspaceBackend: "sysbox", cpuCount: "4", memory: "8GiB", pidsLimit: "2048",
   controllerRuntimeDirectory: "/run/dim", controllerSocketPath: "/run/dim/controller.sock",
   agentControllerSocketPath: "/run/dim/agent.sock", adminControllerSocketPath: "/run/dim/admin.sock",
-  ciRunnerImage: "dev-infra-manager-ci-runner:act-runner-minimal-v1", ciRunnerRuntime: "sysbox-runc",
+  ciRunnerImage: "dev-infra-manager-ci-runner:act-runner-minimal-v2", ciRunnerRuntime: "sysbox-runc",
   ciRunnerDefaultCpus: "4", ciRunnerDefaultMemory: "8GiB", ciRunnerDefaultPidsLimit: "2048"
 } satisfies LifecycleOptions;
 
