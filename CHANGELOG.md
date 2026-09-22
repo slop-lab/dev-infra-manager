@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Keep the Docker CLI required by the pinned upstream Sysbox runner image's
+  daemon readiness gate so persistent runners start instead of waiting
+  indefinitely, while Project jobs remain disposable containers without the
+  host Docker socket or runner host mode.
+
 - Diagnose whether the current user's systemd manager persists after logout
   and whether AppArmor's unprivileged-user-namespace restriction has the
   required loaded rootlesskit profile. These doctor checks are read-only and
