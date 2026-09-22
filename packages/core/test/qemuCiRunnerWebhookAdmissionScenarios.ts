@@ -12,6 +12,26 @@ import {
 } from "./qemuCiRunnerWebhookHarness.js";
 
 export function registerWebhookAdmissionScenarios(): void {
+  it("requires supervisor authorization for health readiness", async () => {
+    // Given
+    const directory = await schedulerDirectory("health-authorization");
+    const scheduler = await startScheduler(directory, { capacity: "capacity-1", startWorker: false });
+
+    try {
+      // When
+      const unauthorized = await fetch(`http://127.0.0.1:${scheduler.port}/healthz`);
+      const authorized = await fetch(`http://127.0.0.1:${scheduler.port}/healthz`, {
+        headers: { Authorization: "Bearer test" }
+      });
+
+      // Then
+      expect(unauthorized.status).toBe(404);
+      expect(authorized.status).toBe(200);
+    } finally {
+      await stopScheduler(scheduler);
+    }
+  });
+
   it("dispatches admitted integration labels and dim-qemu but ignores ordinary labels", async () => {
     // Given
     const directory = await schedulerDirectory("admitted-labels");
