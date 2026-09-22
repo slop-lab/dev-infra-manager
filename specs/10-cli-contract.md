@@ -359,6 +359,19 @@ the running VM. Scheduler shutdown, scheduler state-I/O failure, supervisor
 exit, and bounded process termination and cleanup retain their existing
 behavior.
 
+**CI-QEMU-BACKLOG-001:** QEMU runner create, start, and restart MUST make the
+supervisor healthy, install its authenticated workflow-job webhook, and perform
+one queued-job reconciliation before publishing the runner `ready`. The
+coordinator adapter MUST retain the first ascending-ID page, derive a fixed
+last page and effective page size from validated same-Gitea `Link` metadata or
+coherent first-page count metadata, then enumerate those pages from last to
+first. It MUST collect and deduplicate all jobs before replaying any job through
+the supervisor's existing authenticated workflow-job handler. It MUST NOT
+request a URL supplied by `Link`, expose the Gitea credential to the supervisor,
+or exceed 100 pages. Malformed, inconsistent, unbounded, or incomplete
+pagination and any replay failure MUST fail reconciliation and retain the
+runner in `error`; only complete reconciliation may publish `ready`.
+
 **CI-QEMU-IMAGE-LAYERS-001:** QEMU runner reconciliation MUST use a host-scoped,
 immutable common base keyed by the pinned cloud image, DIM provisioning,
 required toolchain, and runner inputs. DIM MAY reuse that common base across
