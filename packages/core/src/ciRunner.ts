@@ -17,11 +17,11 @@ import { prepareQemuCiRunnerSupervisorImage, qemuCiRunnerProductionImageKeys } f
 import { resolveProtectedRootSnapshotLocked } from "./protectedRootSnapshot.js";
 import { configureSysboxRegistryMirror, ensureRegistryCache } from "./registryCache.js";
 import { BUILTIN_CI_RUNNER_DEFAULTS, detectCiRunnerKvm, effectiveCiRunnerResources, effectiveQemuCiRunnerResources } from "./ciRunnerResources.js";
+import { prepareQemuBacklogReplay } from "./qemuCiRunnerBacklog.js";
 import { ciRunnerContainerArgs, ciRunnerContainerName, ciRunnerVolumeName, removeSysboxRegistration,
   resolveSysboxRunnerImage, sysboxRegistrationExists } from "./sysboxCiRunnerLifecycle.js";
 
-export { BUILTIN_CI_RUNNER_DEFAULTS, detectCiRunnerKvm, effectiveCiRunnerResources, effectiveQemuCiRunnerResources };
-export { ciRunnerContainerArgs, ciRunnerContainerName, ciRunnerVolumeName };
+export { BUILTIN_CI_RUNNER_DEFAULTS, ciRunnerContainerArgs, ciRunnerContainerName, ciRunnerVolumeName, detectCiRunnerKvm, effectiveCiRunnerResources, effectiveQemuCiRunnerResources };
 export { ciRunnerQemuDispatchVolumeName, ciRunnerQemuRunnerName, ciRunnerQemuSupervisorName, ciRunnerQemuVolumeName, qemuMemoryMiB } from "./qemuCiRunnerLifecycle.js";
 
 export interface CreateCiRunnerInput { project: string; name: string; executor: CiRunnerExecutorKind; resources?: Partial<CiRunnerResources> }
@@ -91,7 +91,8 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
         const authorization = `Bearer ${randomBytes(32).toString("hex")}`;
         const started = await runner.run("docker", ciRunnerQemuSupervisorLaunchArgs({ record, executor, registration, authorization, kvmGroupId: () => statSync("/dev/kvm").gid, ...imageKeys, projectHook }));
         if (started.exitCode !== 0) throw new UserError(`failed to start QEMU CI runner '${projectName}/${name}': ${started.stderr.trim()}`);
-        await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, { url: webhookUrl, authorizationHeader: authorization });
+        const replayQueuedJob = await prepareQemuBacklogReplay({ runner, record, executor, authorization });
+        await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, { url: webhookUrl, authorizationHeader: authorization, replayQueuedJob });
         record = { ...record, provider: registration.provider };
         return saveExecutor(state, record, ready(executor));
       } catch (error) { await saveExecutor(state, record, failed(executor, error)); throw error; }
@@ -200,7 +201,8 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
         projectHook
       }));
       if (started.exitCode !== 0) throw new UserError(`failed to start QEMU CI runner '${projectName}/${name}': ${started.stderr.trim()}`);
-      await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, { url: webhookUrl, authorizationHeader: authorization });
+      const replayQueuedJob = await prepareQemuBacklogReplay({ runner, record, executor, authorization });
+      await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, { url: webhookUrl, authorizationHeader: authorization, replayQueuedJob });
       record = { ...record, provider: registration.provider };
       return saveExecutor(state, record, ready(executor));
     } catch (error) { await saveExecutor(state, record, failed(executor, error)); throw error; }
