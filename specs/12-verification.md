@@ -202,10 +202,11 @@ use for runner configuration and QEMU hook admission, and state schema `8`
 round-tripping. It MUST prove that every Project label selects a digest-pinned
 disposable job image and that no `:host` label is advertised.
 
-Verification MUST build the generated runner host image, execute act_runner,
-and prove that Node.js, Git, Docker CLI, `just`, `jq`, `socat`, and `script` are
-absent. It MUST inspect the effective act_runner policy for non-privileged jobs,
-no arbitrary valid volumes, bound job workspaces, and forced pulls. Admission
+Verification MUST build the generated runner host image, execute act_runner and
+its required Docker CLI, and prove that Node.js, Git, `just`, `jq`, `socat`, and
+`script` are absent. It MUST inspect the effective act_runner policy for
+non-privileged jobs, no arbitrary valid volumes, bound job workspaces, forced
+pulls, and no host Docker socket or runner host mode. Admission
 tests MUST run every configured tool and capability probe through a separate
 nested daemon and MUST prove that probe failure prevents registration.
 Probe ownership tests MUST verify the complete DIM, Project name and ID,
