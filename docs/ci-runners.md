@@ -85,15 +85,17 @@ before socket-volume removal so Docker has detached the volume. A partial
 cleanup failure does not skip ownership-safe attempts for the remaining
 resources.
 
-The managed Sysbox runner host image includes only act-runner, Bash, and the
-nested Docker daemon needed to launch disposable jobs. It contains no Node.js,
-Git, Docker CLI, `just`, `jq`, `socat`, or PTY helper for Project workflows.
-Its act_runner configuration remains non-privileged, rejects arbitrary volume
-mounts, binds only the job workspace, and force-pulls job images. `just verify
-sysbox-ci-runner-image` builds and probes the same generated image without
-installing DIM on the host. After changing `.dim/ci/runner.yml`, run `dim ci
-runner restart PROJECT RUNNER` to admit the new protected snapshot and replace
-the provider registration.
+The managed Sysbox runner host image includes only act-runner, Bash, the Docker
+CLI required by the upstream image's daemon readiness gate, and the nested
+Docker daemon needed to launch disposable jobs. It contains no Node.js, Git,
+`just`, `jq`, `socat`, or PTY helper for Project workflows. Project workflows
+still run only in disposable job containers and receive neither the host Docker
+socket nor runner host mode. Its act_runner configuration remains
+non-privileged, rejects arbitrary volume mounts, binds only the job workspace,
+and force-pulls job images. `just verify sysbox-ci-runner-image` builds and
+probes the same generated image without installing DIM on the host. After
+changing `.dim/ci/runner.yml`, run `dim ci runner restart PROJECT RUNNER` to
+admit the new protected snapshot and replace the provider registration.
 
 DIM starts one host-scoped CNCF Distribution registry as an anonymous Docker
 Hub pull-through cache when the first managed CI runner is reconciled. Managed
