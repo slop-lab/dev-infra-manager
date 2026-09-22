@@ -49,18 +49,22 @@ it("ships a pinned, syntactically valid supervisor without putting the registrat
     expect(QEMU_CI_WEBHOOK_SCRIPT).toContain("queued demand remains; retrying");
   });
 
-it("ships a pinned minimal Sysbox runner host image without Project tools", () => {
+it("ships a pinned minimal Sysbox runner host image with its required Docker CLI", () => {
     expect(SYSBOX_CI_RUNNER_BASE_IMAGE).toMatch(/^gitea\/act_runner@sha256:[0-9a-f]{64}$/);
-    expect(SYSBOX_CI_RUNNER_IMAGE).toMatch(/^dev-infra-manager-ci-runner:/);
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain(`FROM ${SYSBOX_CI_RUNNER_BASE_IMAGE}`);
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("command -v act_runner");
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("command -v dockerd");
-    expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("rm -f /usr/bin/git /usr/local/bin/docker");
+    expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("rm -f /usr/bin/git");
+    expect(SYSBOX_CI_RUNNER_DOCKERFILE).not.toMatch(/rm -f[^\n]*\/usr\/local\/bin\/docker/);
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("! command -v node");
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("! command -v git");
-    expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("! command -v docker");
+    expect(SYSBOX_CI_RUNNER_DOCKERFILE).toContain("&& command -v docker");
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).not.toMatch(/\b(?:just|jq|socat|script)\b/);
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).not.toContain("util-linux-misc");
     expect(SYSBOX_CI_RUNNER_DOCKERFILE).not.toContain("dim-ci-runner-health");
+  });
+
+it("uses a fresh cache alias for the corrected Sysbox runner image", () => {
+    expect(SYSBOX_CI_RUNNER_IMAGE).toBe("dev-infra-manager-ci-runner:act-runner-minimal-v2");
   });
 });
