@@ -20,8 +20,10 @@ docker build --quiet --tag "$image" "$work_dir" >/dev/null
 trap 'docker image rm --force "$image" >/dev/null 2>&1 || true; cleanup' EXIT
 docker run --rm --entrypoint sh "$image" -ec '
   act_runner --version
+  docker --version
   test -s /etc/dim-act-runner.yml
-  for tool in node git docker just jq socat script; do
+  test ! -S /var/run/docker.sock
+  for tool in node git just jq socat script; do
     ! command -v "$tool"
   done
 ' >/dev/null
