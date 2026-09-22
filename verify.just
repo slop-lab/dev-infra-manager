@@ -93,6 +93,7 @@ workspace-runtime:
     docker compose version >/dev/null
     cd .. && bash verification/scripts/container-integration-preflight.bash
     just build-workspace-image
+    just build-local-workspace-image
     cd .. && bash verification/scripts/container-inner-docker-smoke.bash
     cd .. && bash verification/scripts/container-lifecycle-smoke.bash
     cd .. && bash verification/scripts/container-packed-project-smoke.bash

@@ -22,12 +22,13 @@ fi
 cd "$repo_root"
 for repository in "${repositories[@]}"; do
   commits+=("$(GIT_MASTER=1 git -C "$repository" rev-parse HEAD)")
-  if [[ -n "$(GIT_MASTER=1 git -C "$repository" status --porcelain)" ]]; then
+  repository_status="$(GIT_MASTER=1 git -C "$repository" status --porcelain)"
+  if [[ -n "$repository_status" ]]; then
     local_dirty=-dirty
   fi
 done
 
-source_version="$(node -p "require('$repo_root/core/package.json').version")"
+source_version="$(node -p 'require(process.argv[1]).version' "$repo_root/core/package.json")"
 aggregate_lock_sha="$(sha256sum "$aggregate_lock" | cut -d ' ' -f 1)"
 [[ "$aggregate_lock_sha" =~ ^[0-9a-f]{64}$ ]]
 aggregate_sha="$({

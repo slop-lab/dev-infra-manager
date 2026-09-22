@@ -15,7 +15,8 @@ output_directory="$(cd -- "$output_directory" && pwd)"
 
 cd "$repo_root"
 echo "[packages] build workspace"
-export DIM_LOCAL_BUILD_VERSION="$(bash "$script_dir/local-build-version.bash")"
+DIM_LOCAL_BUILD_VERSION="$(bash "$script_dir/local-build-version.bash")"
+export DIM_LOCAL_BUILD_VERSION
 pnpm run workspace:build >/dev/null
 
 echo "[packages] create pnpm tarballs"
