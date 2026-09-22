@@ -91,7 +91,7 @@ with host credentials.
 
 `DIM_CI_RUNNER_IMAGE` accepts exactly one of these forms:
 
-- the built-in cache-tag sentinel `dev-infra-manager-ci-runner:act-runner-minimal-v1`,
+- the built-in cache-tag sentinel `dev-infra-manager-ci-runner:act-runner-minimal-v2`,
   which DIM builds locally;
 - a complete local Docker image ID such as `sha256:<64 lowercase hexadecimal characters>`;
 - a tagless registry reference pinned as `name@sha256:<64 lowercase hexadecimal characters>`.
