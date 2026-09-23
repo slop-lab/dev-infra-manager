@@ -25,6 +25,15 @@ const IDENTITY = {
 const CONTAINER_LABELS = workspaceContainerLabels(IDENTITY).map(labelValue);
 const VOLUME_LABELS = workspaceVolumeLabels(IDENTITY).map(labelValue);
 
+function containerInspection(fields: readonly string[], rootSnapshotPath = "/unused-project-root"): string {
+  return [...fields, JSON.stringify([{
+    Type: "bind",
+    Source: rootSnapshotPath,
+    Destination: "/run/dim/project-root",
+    RW: false
+  }])].join("|");
+}
+
 type RunnerConfig = {
   readonly containerInspect?: string;
   readonly volumeInspect?: string;
@@ -40,13 +49,17 @@ class OwnershipRunner implements StreamingCommandRunner {
   readonly streamingCalls: string[][] = [];
   private volumeInspection = 0;
 
-  constructor(private readonly config: RunnerConfig = {}) {}
+  constructor(
+    private readonly rootSnapshotPath: string,
+    private readonly config: RunnerConfig = {}
+  ) {}
 
   async run(command: string, args: string[]): Promise<CommandResult> {
     this.runCalls.push([command, ...args]);
     if (args[0] === "container" && args[1] === "inspect") {
       const stderr = this.config.containerInspectError ?? "";
-      const stdout = this.config.containerInspect ?? [CONTAINER_ID, "true", ...CONTAINER_LABELS, "7"].join("|");
+      const stdout = this.config.containerInspect
+        ?? containerInspection([CONTAINER_ID, "true", ...CONTAINER_LABELS, "7"], this.rootSnapshotPath);
       return { command, args, stdout, stderr, exitCode: stderr ? 1 : 0 };
     }
     if (args[0] === "volume" && args[1] === "inspect") {
@@ -93,15 +106,15 @@ describe("workspace discard ownership", () => {
   });
 
   it.each([
-    ["foreign", [CONTAINER_ID, "true", "false", ...CONTAINER_LABELS.slice(1), "7"].join("|")],
-    ["partial", [CONTAINER_ID, "true", ...CONTAINER_LABELS.slice(0, -1), "7"].join("|")],
-    ["mismatched", [CONTAINER_ID, "true", ...CONTAINER_LABELS.slice(0, 2), "other-workspace", ...CONTAINER_LABELS.slice(3), "7"].join("|")],
-    ["wrong-project", [CONTAINER_ID, "true", ...CONTAINER_LABELS.slice(0, 3), "other-project", ...CONTAINER_LABELS.slice(4), "7"].join("|")],
-    ["wrong-repository", [CONTAINER_ID, "true", ...CONTAINER_LABELS.slice(0, 5), "other-repo", ...CONTAINER_LABELS.slice(6), "7"].join("|")],
-    ["wrong-backend", [CONTAINER_ID, "true", ...CONTAINER_LABELS.slice(0, 6), "runc", ...CONTAINER_LABELS.slice(7), "7"].join("|")]
+    ["foreign", containerInspection([CONTAINER_ID, "true", "false", ...CONTAINER_LABELS.slice(1), "7"])],
+    ["partial", containerInspection([CONTAINER_ID, "true", ...CONTAINER_LABELS.slice(0, -1), "7"])],
+    ["mismatched", containerInspection([CONTAINER_ID, "true", ...CONTAINER_LABELS.slice(0, 2), "other-workspace", ...CONTAINER_LABELS.slice(3), "7"])],
+    ["wrong-project", containerInspection([CONTAINER_ID, "true", ...CONTAINER_LABELS.slice(0, 3), "other-project", ...CONTAINER_LABELS.slice(4), "7"])],
+    ["wrong-repository", containerInspection([CONTAINER_ID, "true", ...CONTAINER_LABELS.slice(0, 5), "other-repo", ...CONTAINER_LABELS.slice(6), "7"])],
+    ["wrong-backend", containerInspection([CONTAINER_ID, "true", ...CONTAINER_LABELS.slice(0, 6), "runc", ...CONTAINER_LABELS.slice(7), "7"])]
   ])("leaves a %s same-name container untouched", async (_kind, containerInspect) => {
     // Given
-    const runner = new OwnershipRunner({ containerInspect });
+    const runner = new OwnershipRunner(workspace.rootSnapshotPath, { containerInspect });
     const state = new LifecycleState(root);
 
     // When / Then
@@ -119,7 +132,7 @@ describe("workspace discard ownership", () => {
     ["mismatched", ["dim-ws-work-1-docker", ...VOLUME_LABELS.slice(0, 2), "other", ...VOLUME_LABELS.slice(3)].join("|")]
   ])("preflights a %s same-name volume before teardown and leaves every resource untouched", async (_kind, volumeInspect) => {
     // Given
-    const runner = new OwnershipRunner({ volumeInspect });
+    const runner = new OwnershipRunner(workspace.rootSnapshotPath, { volumeInspect });
     const state = new LifecycleState(root);
 
     // When / Then
@@ -133,7 +146,7 @@ describe("workspace discard ownership", () => {
 
   it("validates a retained volume before Project teardown", async () => {
     // Given
-    const runner = new OwnershipRunner({
+    const runner = new OwnershipRunner(workspace.rootSnapshotPath, {
       volumeInspect: [workspace.dockerVolumeName, ...VOLUME_LABELS.slice(0, 2), "other", ...VOLUME_LABELS.slice(3)].join("|")
     });
 
@@ -150,7 +163,7 @@ describe("workspace discard ownership", () => {
 
   it("runs teardown and removal against the inspected container ID", async () => {
     // Given
-    const runner = new OwnershipRunner();
+    const runner = new OwnershipRunner(workspace.rootSnapshotPath);
 
     // When
     await discardWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), workspace.name);
@@ -163,7 +176,7 @@ describe("workspace discard ownership", () => {
 
   it("completes cleanup when owned resources disappear after inspection", async () => {
     // Given
-    const runner = new OwnershipRunner({
+    const runner = new OwnershipRunner(workspace.rootSnapshotPath, {
       containerRemoveError: `Error response from daemon: No such container: ${CONTAINER_ID}`,
       volumeRemoveError: `Error response from daemon: No such volume: ${workspace.dockerVolumeName}`
     });
@@ -180,7 +193,7 @@ describe("workspace discard ownership", () => {
     // Given
     const owned = [workspace.dockerVolumeName, ...VOLUME_LABELS].join("|");
     const foreign = [workspace.dockerVolumeName, ...VOLUME_LABELS.slice(0, 1), "foreign", ...VOLUME_LABELS.slice(2)].join("|");
-    const runner = new OwnershipRunner({ volumeInspects: [owned, foreign] });
+    const runner = new OwnershipRunner(workspace.rootSnapshotPath, { volumeInspects: [owned, foreign] });
     const state = new LifecycleState(root);
 
     // When / Then
@@ -194,7 +207,7 @@ describe("workspace discard ownership", () => {
 
   it("treats exactly absent resources as a safe discard retry", async () => {
     // Given
-    const runner = new OwnershipRunner({
+    const runner = new OwnershipRunner(workspace.rootSnapshotPath, {
       containerInspectError: `Error response from daemon: No such container: ${workspace.containerName}`,
       volumeInspectError: `Error: No such volume: ${workspace.dockerVolumeName}`
     });

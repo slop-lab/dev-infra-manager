@@ -47,7 +47,13 @@ class RuntimeRunner implements StreamingCommandRunner {
     const container = args[2] ?? "";
     const record = workspaceRecord(container.replace("dim-ws-", ""), "ready");
     const labels = workspaceContainerLabels(record).map((label) => label.slice(label.indexOf("=") + 1));
-    return result(command, args, [container, "true", ...labels, String(WORKSPACE_RUNTIME_CONFIG_VERSION)].join("|"));
+    const mounts = JSON.stringify([{
+      Type: "bind",
+      Source: record.rootSnapshotPath,
+      Destination: "/run/dim/project-root",
+      RW: false
+    }]);
+    return result(command, args, [container, "true", ...labels, String(WORKSPACE_RUNTIME_CONFIG_VERSION), mounts].join("|"));
   }
 
   async runStreaming(command: string, args: string[]): Promise<number> {

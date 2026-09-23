@@ -6,7 +6,7 @@ import {
 
 type WorkspaceIdentity = Pick<WorkspaceRecord,
   "name" | "projectName" | "projectId" | "rootRepositoryAlias" | "runtimeBackend" |
-  "containerName" | "dockerVolumeName">;
+  "containerName" | "dockerVolumeName"> & { readonly rootSnapshotPath?: string };
 
 export function workspaceContainerInspect(
   record: WorkspaceIdentity,
@@ -14,13 +14,20 @@ export function workspaceContainerInspect(
     readonly id?: string;
     readonly running?: boolean;
     readonly runtimeConfig?: string;
+    readonly rootSnapshotPath?: string;
   } = {}
 ): string {
   return [
     input.id ?? "workspace-container-id",
     String(input.running ?? true),
     ...workspaceContainerLabels(record).map(labelValue),
-    input.runtimeConfig ?? "8"
+    input.runtimeConfig ?? "8",
+    JSON.stringify([{
+      Type: "bind",
+      Source: input.rootSnapshotPath ?? record.rootSnapshotPath ?? "/var/lib/dim/project-roots/default",
+      Destination: "/run/dim/project-root",
+      RW: false
+    }])
   ].join("|");
 }
 

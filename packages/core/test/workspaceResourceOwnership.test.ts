@@ -16,10 +16,11 @@ const RECORD = {
   rootRepositoryAlias: "root",
   runtimeBackend: "sysbox",
   containerName: "dim-ws-work-1",
-  dockerVolumeName: "dim-ws-work-1-docker"
+  dockerVolumeName: "dim-ws-work-1-docker",
+  rootSnapshotPath: "/var/lib/dim/project-roots/project-id/approved"
 } satisfies Pick<WorkspaceRecord,
   "name" | "projectName" | "projectId" | "rootRepositoryAlias" | "runtimeBackend" |
-  "containerName" | "dockerVolumeName">;
+  "containerName" | "dockerVolumeName" | "rootSnapshotPath">;
 
 const CONTAINER_LABELS = [
   "dim.managed=true",
@@ -78,6 +79,48 @@ describe("workspace resource ownership", () => {
     }
   );
 
+  it("returns the inspected immutable read-only Project-root mount", async () => {
+    // Given
+    const mounts = [{
+      Type: "bind",
+      Source: RECORD.rootSnapshotPath,
+      Destination: "/run/dim/project-root",
+      RW: false
+    }];
+    const runner = new InspectRunner([
+      "container-id", "true", ...CONTAINER_LABELS.map(labelValue), "8", JSON.stringify(mounts)
+    ].join("|"));
+
+    // When
+    const inspected = await inspectWorkspaceContainer(runner, RECORD);
+
+    // Then
+    expect(inspected).toEqual({
+      id: "container-id",
+      running: true,
+      runtimeConfig: "8",
+      rootSnapshotPath: RECORD.rootSnapshotPath
+    });
+  });
+
+  it.each([
+    ["missing", []],
+    ["writable", [{
+      Type: "bind", Source: RECORD.rootSnapshotPath, Destination: "/run/dim/project-root", RW: true
+    }]],
+    ["volume-backed", [{
+      Type: "volume", Source: RECORD.rootSnapshotPath, Destination: "/run/dim/project-root", RW: false
+    }]]
+  ])("rejects a %s immutable Project-root mount", async (_case, mounts) => {
+    // Given
+    const runner = new InspectRunner([
+      "container-id", "true", ...CONTAINER_LABELS.map(labelValue), "8", JSON.stringify(mounts)
+    ].join("|"));
+
+    // When / Then
+    await expect(inspectWorkspaceContainer(runner, RECORD)).rejects.toThrow(/Project-root mount/);
+  });
+
   it.each(VOLUME_LABELS.map((_, index) => index))(
     "rejects volume ownership when label %s alone differs",
     async (index) => {
@@ -93,8 +136,7 @@ describe("workspace resource ownership", () => {
 
   it.each([
     ["missing ID", ["", "true", ...CONTAINER_LABELS.map(labelValue), "7"].join("|")],
-    ["partial labels", ["container-id", "true", ...CONTAINER_LABELS.slice(0, -1).map(labelValue), "7"].join("|")],
-    ["extra field", ["container-id", "true", ...CONTAINER_LABELS.map(labelValue), "7", "extra"].join("|")]
+    ["partial labels", ["container-id", "true", ...CONTAINER_LABELS.slice(0, -1).map(labelValue), "7"].join("|")]
   ])("rejects malformed container inspection with %s", async (_case, output) => {
     const runner = new InspectRunner(output);
     await expect(inspectWorkspaceContainer(runner, RECORD)).rejects.toThrow(/conflicts with DIM ownership/);
