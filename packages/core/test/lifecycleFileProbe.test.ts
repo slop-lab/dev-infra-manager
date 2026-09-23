@@ -13,15 +13,18 @@ import {
   runProjectTeardown
 } from "../../../../core/packages/core/src/workspaceProjectCommands.js";
 import { COMMIT, LifecycleRunner, repositorySnapshot } from "./workspaceLifecycleSnapshotFixture.js";
+import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
 
 const EXCEPTIONAL_EXIT_CODES = [2, 125, 127] as const;
 
 class LifecycleProbeRunner extends LifecycleRunner {
   constructor(
+    record: WorkspaceRecord,
     private readonly probePath: string,
     private readonly probeExitCode: number
   ) {
     super(new Set());
+    this.containerInspect = workspaceContainerInspect(record);
   }
 
   override async run(command: string, args: string[]): Promise<CommandResult> {
@@ -90,7 +93,7 @@ describe("lifecycle file probes", () => {
     "treats probe exit %i as file presence %s",
     async (exitCode, expected) => {
       // Given
-      const runner = new LifecycleProbeRunner(".dim/setup.sh", exitCode);
+      const runner = new LifecycleProbeRunner(record, ".dim/setup.sh", exitCode);
 
       // When
       const present = await lifecycleFileExists(runner, record, ".dim/setup.sh");
@@ -102,7 +105,7 @@ describe("lifecycle file probes", () => {
 
   it.each(EXCEPTIONAL_EXIT_CODES)("rejects setup probe exit %i before setup dispatch", async (exitCode) => {
     // Given
-    const runner = new LifecycleProbeRunner(".dim/setup.sh", exitCode);
+    const runner = new LifecycleProbeRunner(record, ".dim/setup.sh", exitCode);
 
     // When
     const setup = runProjectSetup(runner, record, false, false);
@@ -114,7 +117,7 @@ describe("lifecycle file probes", () => {
 
   it.each(EXCEPTIONAL_EXIT_CODES)("rejects teardown probe exit %i before teardown dispatch", async (exitCode) => {
     // Given
-    const runner = new LifecycleProbeRunner(".dim/teardown.sh", exitCode);
+    const runner = new LifecycleProbeRunner(record, ".dim/teardown.sh", exitCode);
 
     // When
     const teardown = runProjectTeardown(runner, record, false);
@@ -128,7 +131,7 @@ describe("lifecycle file probes", () => {
     ["setup", ".dim/setup.sh", (runner: LifecycleRunner, current: WorkspaceRecord) => runProjectSetup(runner, current, false, false)],
     ["teardown", ".dim/teardown.sh", (runner: LifecycleRunner, current: WorkspaceRecord) => runProjectTeardown(runner, current, false)]
   ] as const)("dispatches project %s as the unprivileged workspace user", async (_name, path, invoke) => {
-    const runner = new LifecycleProbeRunner(path, 0);
+    const runner = new LifecycleProbeRunner(record, path, 0);
 
     await invoke(runner, record);
 
@@ -138,7 +141,7 @@ describe("lifecycle file probes", () => {
 
   it.each(EXCEPTIONAL_EXIT_CODES)("rejects Compose probe exit %i before Compose dispatch", async (exitCode) => {
     // Given
-    const runner = new LifecycleProbeRunner(".dim/docker-compose.yml", exitCode);
+    const runner = new LifecycleProbeRunner(record, ".dim/docker-compose.yml", exitCode);
 
     // When
     const setup = runProjectSetup(runner, record, false, false);
@@ -152,7 +155,7 @@ describe("lifecycle file probes", () => {
     "rejects entrypoint probe exit %i before direct-command fallback dispatch",
     async (exitCode) => {
       // Given
-      const runner = new LifecycleProbeRunner(".dim/entrypoint.sh", exitCode);
+      const runner = new LifecycleProbeRunner(record, ".dim/entrypoint.sh", exitCode);
 
       // When
       const run = runWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), {

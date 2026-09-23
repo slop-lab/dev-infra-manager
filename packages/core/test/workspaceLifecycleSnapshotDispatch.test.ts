@@ -9,6 +9,7 @@ import type { CommandResult, StreamingCommandRunner } from "../../../../core/pac
 import { runWorkspace, setupWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
 
 import { COMMIT, LifecycleRunner, MOVED_SOURCE_COMMIT, projectFixture, repositorySnapshot } from "./workspaceLifecycleSnapshotFixture.js";
+import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
 
 describe("immutable workspace lifecycle dispatch", () => {
   let root = "";
@@ -64,6 +65,7 @@ describe("immutable workspace lifecycle dispatch", () => {
 it("dispatches entrypoint bytes from the recorded snapshot and exposes mutable Project data separately", async () => {
     // Given
     const runner = new LifecycleRunner();
+    runner.containerInspect = workspaceContainerInspect(record);
 
     // When
     await runWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), {
@@ -83,6 +85,7 @@ it("dispatches entrypoint bytes from the recorded snapshot and exposes mutable P
 it("retries setup from the recorded commit without resolving a mutable branch", async () => {
     // Given
     const runner = new LifecycleRunner();
+    runner.containerInspect = workspaceContainerInspect(record);
 
     // When
     await setupWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
@@ -95,6 +98,7 @@ it("retries setup from the recorded commit without resolving a mutable branch", 
 it("runs Compose fallback and its relative build context from immutable snapshot bytes", async () => {
     // Given
     const runner = new LifecycleRunner(new Set([".dim/docker-compose.yml"]));
+    runner.containerInspect = workspaceContainerInspect(record);
 
     // When
     await setupWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
@@ -109,6 +113,7 @@ it("runs Compose fallback and its relative build context from immutable snapshot
 it("fails closed before trusted dispatch when the recorded snapshot is missing", async () => {
     // Given
     const runner = new LifecycleRunner();
+    runner.containerInspect = workspaceContainerInspect(record);
     await rm(record.rootSnapshotPath, { recursive: true, force: true });
 
     // When / Then

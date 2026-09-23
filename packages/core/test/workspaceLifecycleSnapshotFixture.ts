@@ -41,10 +41,22 @@ export class LifecycleRunner implements StreamingCommandRunner {
       return { command, args, stdout, stderr: "", exitCode: 0 };
     }
     if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-gitea") {
-      const stdout = args.some((argument) => argument.includes("IPAddress")) ? "172.20.0.2\n" : "true|true\n";
+      const stdout = args.some((argument) => argument.includes("IPAddress"))
+        ? "172.20.0.2\n"
+        : "gitea-container-id|true|true\n";
       return { command, args, stdout, stderr: "", exitCode: 0 };
     }
-    if (args[0] === "exec" && args[1] === "dim-gitea" && args[2] === "cat") {
+    if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-registry-cache") {
+      return {
+        command,
+        args,
+        stdout: "true|true|registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33\n",
+        stderr: "",
+        exitCode: 0
+      };
+    }
+    if (args[0] === "exec" && (args[1] === "dim-gitea" || args[1] === "gitea-container-id")
+      && args.some((argument) => argument.includes("/data/dim/credentials.json"))) {
       return { command, args, stdout: JSON.stringify({
         adminUsername: "admin", adminPassword: "admin-secret",
         writerUsername: "writer", writerPassword: "writer-secret",
@@ -54,8 +66,27 @@ export class LifecycleRunner implements StreamingCommandRunner {
     if (args.includes("gitea") && args.includes("admin")) {
       return { command, args, stdout: "", stderr: "", exitCode: 0 };
     }
+    if (args[0] === "exec" && args[1] === "--user" && args[3] === "gitea-container-id"
+      && args[4] === "sh" && args[5] === "-c") {
+      return { command, args, stdout: "true\n", stderr: "", exitCode: 0 };
+    }
+    if (args[0] === "exec" && args.at(-2) === "docker" && args.at(-1) === "info") {
+      return { command, args, stdout: "", stderr: "", exitCode: 0 };
+    }
     if (args.some((argument) => argument.includes(".Config.Labels"))) {
       return { command, args, stdout: `${this.containerInspect}\n`, stderr: "", exitCode: 0 };
+    }
+    if (args.some((argument) => argument.startsWith("DIM_HOST_INPUT_HELPER_B64="))) {
+      return { command, args, stdout: "", stderr: "", exitCode: 0 };
+    }
+    if (args[0] === "container" && args[1] === "rm") {
+      return { command, args, stdout: "", stderr: "", exitCode: 0 };
+    }
+    if (args[0] === "run") {
+      const rootMount = args.find((argument) => argument.includes("target=/run/dim/project-root"));
+      const rootSnapshotPath = rootMount?.match(/source=([^,]+)/)?.[1] ?? "missing";
+      this.containerInspect = workspaceContainerInspect(WORKSPACE_IDENTITY, { rootSnapshotPath });
+      return { command, args, stdout: "workspace-container-id\n", stderr: "", exitCode: 0 };
     }
     if (args.includes("-f")) {
       return {

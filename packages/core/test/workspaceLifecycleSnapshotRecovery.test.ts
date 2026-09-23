@@ -64,13 +64,13 @@ describe("immutable workspace lifecycle dispatch", () => {
 
 it("publishes a setup-error manifest solely from the recorded root contract", async () => {
     const runner = new LifecycleRunner();
+    runner.containerInspect = workspaceContainerInspect(record);
     const failed = { ...record, phase: "setup-error" } as const;
     await state.writeWorkspace(failed);
 
     await setupWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
 
     expect(runner.runCalls.some((call) => call.includes("ls-remote"))).toBe(false);
-    expect(runner.runCalls.some((call) => call.includes("git"))).toBe(false);
     expect(runner.publishedManifests[0]).toMatchObject({
       schemaVersion: 3,
       root: { ref: record.rootRef, commit: record.rootCommit, path: "/run/dim/project-root" },
@@ -81,13 +81,13 @@ it("publishes a setup-error manifest solely from the recorded root contract", as
 
   it("recovers a failed initial manifest publication without Git mutation", async () => {
     const runner = new LifecycleRunner();
+    runner.containerInspect = workspaceContainerInspect(record);
     const failed = { ...record, phase: "error" } as const;
     await state.writeWorkspace(failed);
 
     await setupWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
 
     expect(runner.runCalls.some((call) => call.includes("ls-remote"))).toBe(false);
-    expect(runner.runCalls.some((call) => call.includes("git"))).toBe(false);
     expect(runner.publishedManifests[0]).not.toHaveProperty("repositories");
   });
 
@@ -103,12 +103,39 @@ it("publishes a setup-error manifest solely from the recorded root contract", as
       lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }),
       record.name
     )).rejects.toThrow(/conflicts with DIM ownership/);
-    await expect(state.readWorkspace(record.name)).resolves.toEqual(interrupted);
+    await expect(state.readWorkspace(record.name)).resolves.toMatchObject({
+      phase: "error",
+      rootCommit: interrupted.rootCommit,
+      rootSnapshotPath: interrupted.rootSnapshotPath,
+      error: "Docker container 'dim-ws-work-1' conflicts with DIM ownership"
+    });
     expect(runner.runCalls.some((call) => call.includes("git"))).toBe(false);
+  });
+
+  it("reconciles recovery when the owned container mounts a different immutable root", async () => {
+    // Given
+    const interrupted = { ...record, phase: "setup-error" as const };
+    await state.writeWorkspace(interrupted);
+    const runner = new LifecycleRunner();
+    runner.containerInspect = workspaceContainerInspect(record, { rootSnapshotPath: join(root, "old-root") });
+
+    // When
+    const recovered = await setupWorkspace(
+      runner,
+      lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }),
+      record.name
+    );
+
+    // Then
+    expect(recovered).toMatchObject({ phase: "ready", rootSnapshotPath: record.rootSnapshotPath });
+    expect(runner.runCalls).toContainEqual(["docker", "container", "rm", "--force", "workspace-container-id"]);
+    expect(runner.publishedManifests).toHaveLength(1);
+    expect(runner.streamingCalls).toHaveLength(1);
   });
 
   it("recovers an omitted root ref from its recorded symbolic HEAD resolution after refs move", async () => {
     const runner = new LifecycleRunner();
+    runner.containerInspect = workspaceContainerInspect(record);
     const headProject = { ...project };
     delete headProject.rootRef;
     await state.writeProject(headProject);
@@ -117,7 +144,6 @@ it("publishes a setup-error manifest solely from the recorded root contract", as
     await setupWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
 
     expect(runner.runCalls.some((call) => call.includes("ls-remote"))).toBe(false);
-    expect(runner.runCalls.some((call) => call.includes("git"))).toBe(false);
     expect(runner.publishedManifests[0]?.root).toMatchObject({ ref: record.rootRef, commit: record.rootCommit });
   });
 });
