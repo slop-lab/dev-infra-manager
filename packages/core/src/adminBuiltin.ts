@@ -147,13 +147,15 @@ async function dispatchBuiltin(operation: string, context: BuiltinContext): Prom
     case "ci.runner.stop": return ciRunner.stopCiRunner(runner, lifecycle, text("project"), text("name"));
     case "ci.runner.delete": await ciRunner.deleteCiRunner(runner, lifecycle, text("project"), text("name")); return {};
     case "workspace.create":
+      if (input.repositoryRefs !== undefined) {
+        throw new UserError("workspace repository ref overrides are obsolete; define non-root ref policy in reviewed Project code");
+      }
       return workspaceLifecycle.createWorkspace(runner, lifecycle, {
         project: text("project"),
         name: text("name"),
         profiles: stringArray(input.profiles),
         requiredCapabilities: stringArray(input.requiredCapabilities),
         recommendedCapabilities: stringArray(input.recommendedCapabilities),
-        repositoryRefs: stringArray(input.repositoryRefs),
         runtimeBackend: workspaceRuntimeBackend(input.runtimeBackend),
         cpuCount: text("cpuCount"),
         memory: text("memory"),
@@ -164,7 +166,6 @@ async function dispatchBuiltin(operation: string, context: BuiltinContext): Prom
       }, plugins);
     case "workspace.list": return workspaceLifecycle.listWorkspaces(runner, lifecycle);
     case "workspace.show": return workspaceLifecycle.showWorkspace(runner, lifecycle, text("name"));
-    case "workspace.align": return workspaceLifecycle.alignWorkspaceRoot(runner, lifecycle, text("name"), input.reset === true);
     case "workspace.setup": return workspaceLifecycle.setupWorkspace(runner, lifecycle, text("name"));
     case "workspace.update":
       return workspaceLifecycle.updateWorkspace(
@@ -230,7 +231,7 @@ async function dispatchBuiltin(operation: string, context: BuiltinContext): Prom
 export const STREAMABLE_OPERATIONS = new Set([
   "project.create", "project.purge", "repo.protect", "ci.runner.create", "ci.runner.logs",
   "ci.runner.start", "ci.runner.restart", "ci.runner.stop", "ci.runner.delete",
-  "workspace.create", "workspace.align", "workspace.setup", "workspace.update",
+  "workspace.create", "workspace.setup", "workspace.update",
   "workspace.resources", "workspace.start", "workspace.restart", "workspace.stop",
   "workspace.discard", "workspace.exec", "workspace.run", "service.ensure",
   "host.shutdown", "host.start", "doctor"
