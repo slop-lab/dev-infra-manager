@@ -19,7 +19,7 @@ import {
   updateWorkspaceResources
 } from "../../../../core/packages/core/src/workspaceLifecycle.js";
 
-import { options, projectFixture, repositorySnapshot, workspaceFixture } from "./workspaceUpdateLockFixture.js";
+import { options, projectFixture, workspaceFixture } from "./workspaceUpdateLockFixture.js";
 import { COMMIT, LockInterleaving, MOVED_HEAD_COMMIT, MOVED_SOURCE_COMMIT, UpdateRunner } from "./workspaceUpdateLockRunner.js";
 
 describe("workspace update setup lock", () => {
@@ -56,8 +56,7 @@ it("replays the recorded root and manifest before direct setup recovery from set
       phase: "setting-up",
       rootRef: "refs/heads/main",
       rootCommit: COMMIT,
-      rootSnapshotPath: targetSnapshotPath,
-      repositorySnapshot: repositorySnapshot()
+      rootSnapshotPath: targetSnapshotPath
     } as const;
     await state.writeWorkspace(interrupted);
     runner = new UpdateRunner(0, 0);
@@ -69,12 +68,10 @@ it("replays the recorded root and manifest before direct setup recovery from set
     expect(recovered).toMatchObject({ phase: "ready", rootCommit: COMMIT, rootSnapshotPath: targetSnapshotPath });
     expect(runner.runCalls.some((call) => call.includes("ls-remote"))).toBe(false);
     expect(runner.runCalls.some((call) => call.includes("fetch"))).toBe(false);
-    expect(runner.publishedManifests[0]?.repositories).toMatchObject(repositorySnapshot());
-    expect(runner.streamingCalls[0]).toContain(`/run/dim/project-roots/${COMMIT}/.dim/setup.sh`);
-    expect(runner.runCalls.some((call) =>
-      call.includes("merge") && call.includes("--ff-only") && call.includes(COMMIT)
-    )).toBe(true);
-    expect(runner.lifecycleEvents).toEqual(["root-merge", "manifest-publication", "project-setup"]);
+    expect(runner.publishedManifests[0]).not.toHaveProperty("repositories");
+    expect(runner.streamingCalls[0]).toContain("/run/dim/project-root/.dim/setup.sh");
+    expect(runner.runCalls.some((call) => call.includes("git"))).toBe(false);
+    expect(runner.lifecycleEvents).toEqual(["manifest-publication", "project-setup"]);
   });
 
 it("recovers an interruption after snapshot persistence without resolving moved repositories", async () => {
@@ -96,7 +93,7 @@ it("recovers an interruption after snapshot persistence without resolving moved 
     );
     await expect(state.readWorkspace(workspace.name)).resolves.toMatchObject({
       phase: "setting-up",
-      repositorySnapshot: repositorySnapshot()
+      rootCommit: COMMIT
     });
     runner.sourceCommit = MOVED_SOURCE_COMMIT;
     runner.headCommit = MOVED_HEAD_COMMIT;
@@ -110,7 +107,7 @@ it("recovers an interruption after snapshot persistence without resolving moved 
     // Then
     expect(runner.runCalls.some((call) => call.includes("ls-remote"))).toBe(false);
     expect(runner.runCalls.some((call) => call.includes("fetch"))).toBe(false);
-    expect(runner.publishedManifests[0]?.repositories).toMatchObject(repositorySnapshot());
+    expect(runner.publishedManifests[0]).not.toHaveProperty("repositories");
   });
 
 it("recovers a manifest failure through direct setup from the recorded root", async () => {
@@ -119,7 +116,7 @@ it("recovers a manifest failure through direct setup from the recorded root", as
     await expect(updateWorkspace(runner, options(root), workspace.name)).rejects.toThrow(
       /failed to write project runtime manifest/
     );
-    const originallyPublished = runner.publishedManifests[0]?.repositories;
+    const originallyPublished = runner.publishedManifests[0]?.root;
     runner.sourceCommit = MOVED_SOURCE_COMMIT;
     runner.headCommit = MOVED_HEAD_COMMIT;
     runner.runCalls.length = 0;
@@ -133,9 +130,9 @@ it("recovers a manifest failure through direct setup from the recorded root", as
     expect(recovered).toMatchObject({ phase: "ready", rootCommit: COMMIT });
     expect(runner.runCalls.some((call) => call.includes("ls-remote"))).toBe(false);
     expect(runner.runCalls.some((call) => call.includes("fetch"))).toBe(false);
-    expect(runner.publishedManifests[1]?.repositories).toEqual(originallyPublished);
-    expect(runner.streamingCalls[0]).toContain(`/run/dim/project-roots/${COMMIT}/.dim/setup.sh`);
+    expect(runner.publishedManifests[1]?.root).toEqual(originallyPublished);
+    expect(runner.streamingCalls[0]).toContain("/run/dim/project-root/.dim/setup.sh");
     expect(runner.manifestPublicationAttempts).toBe(2);
-    expect(runner.lifecycleEvents).toEqual(["root-merge", "manifest-publication", "project-setup"]);
+    expect(runner.lifecycleEvents).toEqual(["manifest-publication", "project-setup"]);
   });
 });

@@ -144,7 +144,7 @@ it("does not publish ready between selected-root publication and failed Project 
 
     // Then
     await expect(updating).rejects.toThrow(/project setup exited with 17/);
-    expect(runner.lifecycleEvents).toEqual(["root-merge", "manifest-publication", "project-setup"]);
+    expect(runner.lifecycleEvents).toEqual(["manifest-publication", "project-setup"]);
     await expect(state.readWorkspace(workspace.name)).resolves.toMatchObject({
       phase: "setup-error",
       rootCommit: COMMIT,
