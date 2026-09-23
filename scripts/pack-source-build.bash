@@ -21,6 +21,11 @@ if [[ -n "${DIM_SOURCE_REF+x}" ]]; then
 fi
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+aggregate_lock="$repo_root/pnpm-lock.yaml"
+if [[ ! -f "$aggregate_lock" ]]; then
+  echo "aggregate source-build lock is missing: $aggregate_lock" >&2
+  exit 1
+fi
 output_directory="$1"
 mkdir -p "$output_directory"
 output_directory="$(cd -- "$output_directory" && pwd)"
@@ -76,15 +81,6 @@ for index in "${!repositories[@]}"; do
   printf '[source] %s %s\n' "$repository" "$resolved_commit"
 done
 
-source_version="$(node -p "require('$source_root/core/package.json').version")"
-aggregate_sha="$({
-  for index in "${!repositories[@]}"; do
-    printf '%s=%s\n' "${repositories[$index]}" "${commits[$index]}"
-  done
-} | sha256sum | cut -d ' ' -f 1)"
-[[ "$aggregate_sha" =~ ^[0-9a-f]{64}$ ]]
-export DIM_LOCAL_BUILD_VERSION="$source_version-local-$aggregate_sha"
-
 cat >"$source_root/package.json" <<'EOF'
 {"name":"dim-production-source-build","private":true}
 EOF
@@ -99,9 +95,22 @@ packages:
   - plugin-external-urls
 linkWorkspacePackages: true
 EOF
+cp -- "$aggregate_lock" "$source_root/pnpm-lock.yaml"
+
+source_version="$(node -p "require('$source_root/core/package.json').version")"
+aggregate_lock_sha="$(sha256sum "$aggregate_lock" | cut -d ' ' -f 1)"
+[[ "$aggregate_lock_sha" =~ ^[0-9a-f]{64}$ ]]
+aggregate_sha="$({
+  for index in "${!repositories[@]}"; do
+    printf '%s=%s\n' "${repositories[$index]}" "${commits[$index]}"
+  done
+  printf 'aggregate-lock-sha256=%s\n' "$aggregate_lock_sha"
+} | sha256sum | cut -d ' ' -f 1)"
+[[ "$aggregate_sha" =~ ^[0-9a-f]{64}$ ]]
+export DIM_LOCAL_BUILD_VERSION="$source_version-local-$aggregate_sha"
 
 echo "[source] install production build dependencies"
-pnpm --dir "$source_root" install --lockfile=false
+pnpm --dir "$source_root" install --frozen-lockfile
 
 echo "[source] build production packages"
 local_dirty=""

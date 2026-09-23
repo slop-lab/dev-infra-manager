@@ -11,7 +11,6 @@ local_root="$repo_root/.local"
 package_root="$repo_root/.local/dim-packages"
 readiness_file="$repo_root/.local/prepared-local.state"
 lock_file="$local_root/prepare-install.lock"
-image_ref=dev-infra-project-workspace:latest
 
 command -v flock >/dev/null 2>&1 || {
   echo "install-local requires flock" >&2
@@ -21,6 +20,12 @@ command -v flock >/dev/null 2>&1 || {
 mkdir -p "$local_root"
 exec 9>"$lock_file"
 flock --exclusive 9
+test -r "$readiness_file" || {
+  echo "local source build is not prepared; run just prepare-local" >&2
+  exit 1
+}
+package_version="$(bash "$repo_root/scripts/local-package-version.bash" "$package_root")"
+image_ref="dev-infra-project-workspace:$package_version"
 
 validate_preparation() {
   test -r "$readiness_file" || {
