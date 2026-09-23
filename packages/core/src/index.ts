@@ -29,3 +29,4 @@ export * from "./types.js";
 export * from "./userConfig.js";
 export * from "./workspaceLifecycle.js";
 export * from "./workspaceImage.js";
+export * from "./workspaceImageReference.js";
