@@ -1,5 +1,6 @@
 packages:
   - packages/core
+  - packages/runtime
   - packages/cli
   - packages/installer
   - packages/controller-proxy
