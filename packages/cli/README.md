@@ -80,6 +80,15 @@ interactive terminal. Controller bootstrap and local Git process adapters stay
 local. Neither the admin socket nor host credentials are mounted into
 workspaces.
 
+After claiming the managed controller PID and before loading plugins or opening
+listeners, startup performs the one supported pre-stable state migration: a
+strict host-only `host.json` schema 1 record becomes schema 2 by renaming
+`resumeCiRunners` to `restartCiRunners`. The original bytes remain permanently
+in mode-`0600` `host.json.schema-1.bak`. Startup reports only a completed
+migration or backup recovery; an unsafe, malformed, or conflicting artifact is
+reported as a host-lifecycle-migration startup-stage failure. All other state
+schemas remain rejection-only.
+
 ## First Project
 
 Create a Project from a repository whose `.dim/repos.yml` declares its stable
@@ -398,9 +407,9 @@ dim workspace create acme feature-123 --cpus 4 --memory 8g --pids 4096
 dim workspace resources feature-123 --memory 12g
 ```
 
-DIM is pre-stable and does not migrate incompatible state between `0.x`
-releases. Push all important work before upgrading and review the release
-notes.
+DIM is pre-stable and rejects incompatible state between `0.x` releases except
+for the explicitly documented host lifecycle schema 1-to-2 migration. Push all
+important work before upgrading and review the release notes.
 
 For the complete lifecycle and `.dim` hook contracts, see
 [Repository-backed Workspaces](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/repo-workspaces.md)

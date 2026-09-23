@@ -4,7 +4,8 @@ import path from "node:path";
 import { type Command } from "commander";
 import {
   configuredDimAdminController, configuredDimAgentController, configuredDimController,
-  initializeControllerRoutes, lifecycleOptions, loadInstalledPlugins, resolvePluginHome, UserError
+  initializeControllerRoutes, LifecycleState, lifecycleOptions, loadInstalledPlugins,
+  migrateHostLifecycleState, resolvePluginHome, UserError
 } from "@slop-lab/dim-core";
 import {
   claimControllerPid, closeControllerServer, pidFileOwnedByCurrentProcess,
@@ -56,6 +57,15 @@ controller.command("serve")
         await mkdir(path.dirname(pidPath), { recursive: true });
         await claimControllerPid(pidPath);
         ownsPid = true;
+      }
+      const migration = await controllerStartupStage(
+        "migrating host lifecycle state",
+        async () => await migrateHostLifecycleState(new LifecycleState(options.stateRoot))
+      );
+      if (migration.kind === "migrated") {
+        console.log("Migrated host lifecycle state schema 1 to 2");
+      } else if (migration.kind === "recovered") {
+        console.log("Recovered host lifecycle state schema 2 from the schema 1 backup");
       }
       const loadedPlugins = await controllerStartupStage(
         "loading plugins",

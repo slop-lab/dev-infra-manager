@@ -113,7 +113,16 @@ workspace creation then resolves the root repository's symbolic `HEAD` and
 fails if no `HEAD` exists.
 
 The default state root is `~/.local/state/dim`; the default managed Gitea port
-is `3300`. DIM does not migrate incompatible pre-stable state.
+is `3300`. DIM rejects incompatible pre-stable state except for the single
+lossless host lifecycle transition from schema 1 to schema 2. At controller
+startup, `migrateHostLifecycleState` runs under the host lifecycle lock before
+plugins or listeners, renames only `resumeCiRunners` to `restartCiRunners`, and
+retains the original bytes permanently in mode-`0600`
+`host.json.schema-1.bak`. Normal lifecycle reads remain schema-2-only. A
+malformed record, extra field, conflicting backup, symlink, or non-regular
+canonical, backup, or recognized temporary artifact fails closed without
+changing canonical state. No Project, workspace, runner, plugin, installer, or
+other state is migrated.
 
 Every managed CI runner requires `.dim/ci/runner.yml` in the protected Project
 root. Its strict schema declares ordinary and integration labels,
