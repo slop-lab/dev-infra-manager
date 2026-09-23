@@ -133,6 +133,8 @@ jobs:
         working-directory: snapshot
         run: |
           just check-source
+          just verify workspace-user-setup
+          just verify headscale-tailnet-tcp
           DIM_DOCKER_REGISTRY_MIRROR=http://host.docker.internal:5000 \
             just verify full-development
       - name: Verify QEMU backend integration
