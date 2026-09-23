@@ -57,7 +57,6 @@ test("unrelated workspace controller-session failures do not recommend doctor", 
     { operation: "workspace.exec", args: ["workspace", "exec", "candidate", "true"] },
     { operation: "workspace.stop", args: ["workspace", "stop", "candidate"] },
     { operation: "workspace.discard", args: ["workspace", "discard", "candidate", "--yes"] },
-    { operation: "workspace.align", args: ["workspace", "align", "candidate"] },
     { operation: "workspace.resources", args: ["workspace", "resources", "candidate", "--cpus", "2"] }
   ] as const;
 
@@ -76,8 +75,7 @@ test("local workspace option validation does not recommend doctor or start a ses
   const scenarios = [
     ["workspace", "update", "candidate", "--profile", "dev", "--clear-profiles"],
     ["workspace", "resources", "candidate"],
-    ["workspace", "discard", "candidate"],
-    ["workspace", "align", "candidate", "--reset"]
+    ["workspace", "discard", "candidate"]
   ] as const;
 
   for (const args of scenarios) await context.test(args.join(" "), async () => {
@@ -87,6 +85,18 @@ test("local workspace option validation does not recommend doctor or start a ses
     assert.equal(guidanceOccurrences(result.stderr), 0);
     assert.deepEqual(requests, []);
   });
+});
+
+test("obsolete workspace align is rejected locally without doctor guidance or a session", async () => {
+  const { requests, result } = await runCommand(
+    ["workspace", "align", "candidate", "--reset"],
+    "unused controller error"
+  );
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /unknown command 'align'/);
+  assert.equal(guidanceOccurrences(result.stderr), 0);
+  assert.deepEqual(requests, []);
 });
 
 function guidanceOccurrences(value: string): number {

@@ -184,9 +184,10 @@ test("host lifecycle commands expose volume-preserving maintenance", () => {
 test("workspace resources command requires at least one live limit", () => {
   const workspaceHelp = run(["workspace", "--help"]);
   assert.equal(workspaceHelp.status, 0);
-  for (const command of ["align", "create", "discard", "resources", "update"]) {
+  for (const command of ["create", "discard", "resources", "update"]) {
     assert.match(workspaceHelp.stdout, new RegExp(command));
   }
+  assert.doesNotMatch(workspaceHelp.stdout, /\balign\b/);
 
   const removedRoot = run(["resources", "work-1"]);
   assert.notEqual(removedRoot.status, 0);
@@ -227,26 +228,28 @@ test("destructive commands require --yes only in non-interactive use", () => {
     ["project", "purge", "example"],
     ["repo", "delete", "example", "root"],
     ["ci", "runner", "delete", "example", "primary"],
-    ["workspace", "discard", "work-1"],
-    ["workspace", "align", "work-1", "--reset"]
+    ["workspace", "discard", "work-1"]
   ]) {
     const result = run(args);
     assert.notEqual(result.status, 0);
     assert.match(result.stderr, /confirmation requires --yes in a non-interactive shell/);
     assert.doesNotMatch(result.stderr, /required option '--yes'/);
   }
+
+  const obsoleteAlign = run(["workspace", "align", "work-1", "--reset"]);
+  assert.notEqual(obsoleteAlign.status, 0);
+  assert.match(obsoleteAlign.stderr, /unknown command 'align'/);
 });
 
-test("workspace align reset prompts in an interactive terminal", () => {
+test("workspace discard prompts in an interactive terminal", () => {
   const command = [
     process.execPath,
     "--import",
     tsxImport,
     cli,
     "workspace",
-    "align",
-    "work-1",
-    "--reset"
+    "discard",
+    "work-1"
   ].map(shellArgument).join(" ");
   const result = spawnSync("script", ["--quiet", "--return", "--command", command, "/dev/null"], {
     cwd: packageDirectory,
@@ -254,7 +257,7 @@ test("workspace align reset prompts in an interactive terminal", () => {
     encoding: "utf8"
   });
   assert.notEqual(result.status, 0);
-  assert.match(result.stdout, /Discard local commits in workspace 'work-1'\? \[y\/N\]/);
+  assert.match(result.stdout, /Permanently discard workspace 'work-1'\? \[y\/N\]/);
   assert.match(result.stdout, /operation was not confirmed/);
   assert.doesNotMatch(result.stdout, /confirmation requires --yes/);
 });

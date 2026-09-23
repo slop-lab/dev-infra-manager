@@ -156,12 +156,13 @@ test("non-TTY and interactive stream options never schedule or emit progress", (
 
 test("every lifecycle and CI progress operation has one stable label", () => {
   assert.deepEqual(streamProgressOperations, [
-    "workspace.create", "workspace.resources", "workspace.align", "workspace.setup", "workspace.update",
+    "workspace.create", "workspace.resources", "workspace.setup", "workspace.update",
     "workspace.start", "workspace.restart", "workspace.stop", "workspace.discard",
     "ci.runner.create", "ci.runner.start", "ci.runner.restart", "ci.runner.stop", "ci.runner.delete",
     "ci.runner.logs", "host.start", "host.shutdown"
   ]);
   for (const operation of streamProgressOperations) assert.equal(typeof streamProgressLabel(operation), "string");
+  assert.equal(streamProgressLabel("workspace.align"), undefined);
   assert.equal(streamProgressLabel("workspace.exec"), undefined);
   assert.equal(streamProgressLabel("workspace.run"), undefined);
 });
