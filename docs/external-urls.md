@@ -139,10 +139,13 @@ at a time. Its request uses `protocol: "tcp"`, does not accept a path or DNS
 subdomain, and returns `tcp://HOST:PORT`. DIM resolves the target through the
 same workspace/container boundary as HTTP targets; callers cannot supply an
 arbitrary host or loopback upstream. A repeated request for the same workspace
-and exact target is idempotent. A different target or workspace is rejected
-until revocation, workspace discard, or ingress removal releases the claim.
+and exact target returns the existing route identity without provisioning or
+persisting another claim. A different target or workspace is rejected until
+revocation, authoritative workspace discard, or ingress removal releases the
+claim.
 Persisted claims are resolved and rebound after controller restart. When the
-same logical claim resolves to a recreated target address, DIM disconnects its
+same logical claim resolves to a recreated target runtime generation, including
+a replaced nested leaf behind an unchanged relay address, DIM disconnects its
 old flows before atomically replacing the upstream. Revocation and listener
 shutdown also close both sides of every active flow. Each listener accepts at
 most 256 concurrent flows, bounds upstream connection establishment at 10
@@ -368,6 +371,16 @@ provider-managed wildcard record before deleting the local configuration:
 ```bash
 dim external-url ingress remove public-https --cleanup-dns
 ```
+
+Ingress removal first closes the live listener, disconnects active flows, and
+deletes every persisted route and claim for that ingress. Re-adding an ingress
+with the same name therefore does not resurrect endpoints removed with the old
+configuration.
+
+The authoritative `dim workspace discard` operation invokes plugin cleanup
+before removing workspace state, even when the workspace controller grant is
+already absent. Calling the lower-level core workspace-discard library without
+registered plugin hooks does not provide this plugin cleanup contract.
 
 ## Plugin installation
 

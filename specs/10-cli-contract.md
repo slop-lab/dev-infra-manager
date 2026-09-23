@@ -732,23 +732,34 @@ domains. The request contains a complete relative subdomain. By default it
 must begin `WORKSPACE--`; an omitted value receives the first unused
 `WORKSPACE--INDEX` name. An ingress may replace this default with a fail-closed
 HTTP(S) or Unix-socket policy webhook. DIM revalidates any webhook replacement
-and prevents hostname conflicts. Workspace discard revokes all routes
-authenticated by that workspace grant before removing the grant.
+and prevents hostname conflicts. The authoritative workspace-discard operation
+MUST invoke registered plugin cleanup before removing workspace runtime and
+state, and MUST NOT depend on the workspace controller grant still existing.
+Library-level discard callers that omit plugin hooks do not receive this
+plugin-cleanup guarantee.
 
 **CLI-EXTERNAL-URL-TCP-001:** A raw TCP ingress MUST accept only a target with
 protocol `tcp`, MUST reject a URL path or subdomain, and MUST resolve its
 upstream through the authenticated workspace target resolver rather than a
 caller-supplied host. One listener MUST have at most one workspace and exact
 target claim; an identical claim is idempotent, while a different claim is
-rejected until revocation. Claims MUST persist and reconcile after controller
-restart and MUST be revoked on workspace discard. Reconciliation MAY replace a
-resolved upstream address only for the same workspace and exact logical target;
+rejected until revocation. An identical replay MUST return the existing route
+identity without acquiring, persisting, or revoking another claim. Claims MUST
+persist and reconcile after controller restart and MUST be revoked on
+authoritative workspace discard. Reconciliation MAY replace a resolved
+upstream only for the same workspace and exact logical target when its runtime
+generation changes, including a replaced nested leaf behind an unchanged relay;
 it MUST destroy every active old flow before the replacement becomes current.
 A different claim MUST remain rejected. Revocation, listener shutdown, client
 end, upstream end, and either-side failure MUST release both socket directions.
 Each listener MUST allow at most 256 concurrent flows, bound upstream connect
 waits to 10 seconds, and terminate flows after five idle minutes. Returned
 endpoints use `tcp://HOST:PORT`.
+
+Removing any ingress MUST close its live listener, terminate active flows, and
+remove every persisted route and claim for that ingress before deleting its
+configuration. Re-adding the same ingress name MUST NOT restore those removed
+routes or claims.
 
 **CLI-EXTERNAL-URL-TAILSCALE-001:** The optional `tailscale` ingress driver MUST
 require scheme `tcp` and exactly one configured listener port in
