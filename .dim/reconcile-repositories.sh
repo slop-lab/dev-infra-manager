@@ -27,6 +27,10 @@ materialize() {
     *) ref="refs/heads/$configured_ref" ;;
   esac
   destination="$DIM_WORKSPACE_DATA/$relative_path"
+  if test -L "$destination" || test -L "$destination/.git"; then
+    echo "workspace repository path contains a symbolic link: $destination" >&2
+    exit 1
+  fi
   test -d "$destination/.git" && return
   if test -e "$destination" || test -L "$destination"; then
     echo "workspace repository path exists but is not a Git repository: $destination" >&2
@@ -58,7 +62,21 @@ for alias in $(jq -er '.repositories | to_entries | sort_by(.value.path | split(
 done
 
 integrated_root="$DIM_WORKSPACE_DATA/workspace"
-exclude="$integrated_root/.git/info/exclude"
+git_directory="$integrated_root/.git"
+git_info="$git_directory/info"
+exclude="$git_info/exclude"
+if test -L "$integrated_root" || test ! -d "$integrated_root" \
+  || test -L "$git_directory" || test ! -d "$git_directory" \
+  || test -L "$git_info" || test ! -d "$git_info" \
+  || test -L "$exclude" || { test -e "$exclude" && test ! -f "$exclude"; }; then
+  echo "workspace repository metadata is not a confined directory tree: $integrated_root" >&2
+  exit 1
+fi
+exclude_next="$(mktemp "$git_info/.exclude.XXXXXX")"
+trap 'rm -f -- "$exclude_next"' EXIT HUP INT TERM
+if test -f "$exclude"; then
+  cat -- "$exclude" >"$exclude_next"
+fi
 for path in \
   node_modules/ .pnpm-store/ \
   core/ core-development/ \
@@ -66,5 +84,7 @@ for path in \
   plugin-external-urls/ plugin-external-urls-development/ \
   verification/ examples/ specification/
 do
-  grep -Fxq "$path" "$exclude" || printf '%s\n' "$path" >>"$exclude"
+  grep -Fxq "$path" "$exclude_next" || printf '%s\n' "$path" >>"$exclude_next"
 done
+mv -- "$exclude_next" "$exclude"
+trap - EXIT HUP INT TERM
