@@ -127,16 +127,24 @@ installers — is [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Set up a host runtime backend
 
-The container image and host-installer scripts DIM ships aren't published
-anywhere except this repository yet, so a one-time clone is needed even if
-you'll install the `dim` CLI itself from npm below:
+The host-installer scripts are development-source assets, so installing a
+backend from this repository still requires a reviewed checkout. The published
+`dim` CLI now ships the trusted workspace-image build inputs and does not need
+this checkout when building the image:
 
 ```bash
 git clone --no-checkout <this-repository>
 cd dev-infra-manager
 git checkout --detach <reviewed-tag-or-full-commit>
-just build-workspace-image
 bash verification/scripts/install-host-ubuntu.bash sysbox
+```
+
+After installing the exact reviewed CLI version below, build its matching image
+from any directory:
+
+```bash
+dim workspace image build
+dim workspace image status
 ```
 
 The build tags the trusted image as
@@ -144,8 +152,12 @@ The build tags the trusted image as
 by the same DIM package release. Set `DIM_WORKSPACE_IMAGE` only when an explicit
 different image reference is required.
 
-This is the release-image recipe. Contributors preparing an aggregate local
-source set use `just build-local-workspace-image`, documented in
+`dim workspace image build` is the installed release-image path. It uses the
+current UID and GID and the trusted assets shipped with the CLI's exact core and
+controller-proxy versions. An explicitly tagged `DIM_WORKSPACE_IMAGE` may
+replace the default destination; IDs, digests, untagged destinations, and
+`latest` are rejected. Contributors preparing an aggregate local source set
+use `just build-local-workspace-image`, documented in
 [CONTRIBUTING.md](CONTRIBUTING.md), to create the corresponding exact local tag.
 
 Run `just` as your normal user, including when it is managed by mise. The

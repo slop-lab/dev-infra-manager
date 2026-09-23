@@ -16,7 +16,7 @@ just build-packages  # publishable package builds
 just check-source    # typecheck + test + package builds; only Node.js and pnpm required
 just verify agent    # strongest gate supported inside this repository's DIM agent
 bash verification/scripts/local-ci-matrix.bash # exact Node.js 24/26 CI matrix via mise
-just build-workspace-image # prepare the release-version workspace image with Docker Buildx
+just build-workspace-image # run the source CLI's shipped-asset release image build
 just build-local-workspace-image # prepare the aggregate-local workspace image with Docker Buildx
 just install-local   # install local packages without restarting the controller
 just restart-controller # restart the controller with the installed packages
@@ -110,12 +110,13 @@ just doctor
 These are distinct operations with separate readiness domains:
 
 - `build-workspace-image` is the release recipe. It requires Docker Buildx,
-  uses `--load` to prepare
+  delegates to `dim workspace image build`, and uses `--load` to prepare
   `dev-infra-project-workspace:<release version>` in the local Docker image
   store, and does not install packages or restart the controller.
 - `build-local-workspace-image` is the aggregate-local recipe. It requires
   Docker Buildx, invokes `verification/scripts/local-build-version.bash` once,
-  and uses that exact output to tag the local image. Its tag matches the
+  builds the source CLI packages with that aggregate identity, and delegates to
+  the same shipped-asset command. Its exact output tags the local image and matches the
   aggregate local version selected by local packages. It does not install
   packages or restart the controller.
 - `install-local` builds local package tarballs and installs them through the
