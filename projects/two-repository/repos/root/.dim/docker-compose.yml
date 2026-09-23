@@ -22,7 +22,7 @@ services:
       GIT_CONFIG_KEY_1: safe.directory
       GIT_CONFIG_VALUE_1: /workspace
     volumes:
-      - ${DIM_PROJECT_ROOT:?}/app:/workspace
+      - ${DIM_WORKSPACE_DATA:?}/app:/workspace
       - agent-home:/home/dim-agent
     cap_drop:
       - ALL

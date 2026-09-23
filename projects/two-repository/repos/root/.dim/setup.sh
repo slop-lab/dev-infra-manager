@@ -5,8 +5,8 @@ sh .dim/materialize-app.sh
 
 git_name="$(dim-host-input builtin.git-author name)"
 git_email="$(dim-host-input builtin.git-author email)"
-DIM_WORKSPACE_UID="$(stat -c %u "$DIM_PROJECT_ROOT")"
-DIM_WORKSPACE_GID="$(stat -c %g "$DIM_PROJECT_ROOT")"
+DIM_WORKSPACE_UID="$(stat -c %u "$DIM_WORKSPACE_DATA")"
+DIM_WORKSPACE_GID="$(stat -c %g "$DIM_WORKSPACE_DATA")"
 test "$DIM_WORKSPACE_UID" -ne 0 && test "$DIM_WORKSPACE_GID" -ne 0 || {
   echo "two-repository requires a non-root workspace owner" >&2
   exit 1
