@@ -75,7 +75,7 @@ describe("workspace-user setup policy", () => {
     const begin = readme.indexOf(remoteBootstrapBegin);
     const end = readme.indexOf(remoteBootstrapEnd);
     const bootstrap = begin >= 0 && end > begin ? readme.slice(begin + remoteBootstrapBegin.length, end).trim() : "";
-    const setup = 'dim workspace run dim-dev tool-setup <"$setup_dir/workspace-user-setup.bash"';
+    const setup = 'dim workspace run dim-dev bash -- -s <"$setup_dir/workspace-user-setup.bash"';
     const launch = [
       "dim workspace run dim-dev bash -- -c \\",
       "    'export OPENCODE_WEB_CORS_ORIGINS=\"$1\"; exec bash -s' \\",
@@ -295,8 +295,9 @@ describe("workspace-user setup policy", () => {
     const temporaryDirectory = readme.indexOf('setup_dir="$(mktemp -d)"');
     const cleanupTrap = readme.indexOf("trap 'rm -rf -- \"$setup_dir\"' EXIT", temporaryDirectory);
     const checksumVerification = readme.indexOf("sha256sum --check", cleanupTrap);
+    const setupTask = path === "README.md" ? "bash -- -s" : "tool-setup";
     const verifiedExecution = readme.indexOf(
-      `dim workspace run ${workspace} tool-setup <"$setup_dir/workspace-user-setup.bash"`,
+      `dim workspace run ${workspace} ${setupTask} <"$setup_dir/workspace-user-setup.bash"`,
       checksumVerification
     );
 

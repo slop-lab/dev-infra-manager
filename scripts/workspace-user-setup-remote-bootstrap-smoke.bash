@@ -86,6 +86,7 @@ captured_launcher="$work_dir/captured-launcher.bash"
 captured_cors="$work_dir/captured-cors.json"
 commit='0123456789abcdef0123456789abcdef01234567'
 expected_base="https://raw.githubusercontent.com/slop-lab/dev-infra-manager/${commit}/scripts"
+entrypoint="$repo_root/project/.dim/entrypoint.sh"
 mkdir -p "$fixture_dir" "$tools_dir" "$downloads_dir"
 
 cat >"$fixture_dir/workspace-user-setup.bash" <<'EOF'
@@ -146,41 +147,58 @@ EOF
 cat >"$tools_dir/dim" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-
-matches_invocation() {
-  local expected_name="$1"
-  shift
-  local -n expected="$expected_name"
-  local actual=("$@")
-
-  [[ "${#actual[@]}" -eq "${#expected[@]}" ]] || return 1
-  for index in "${!expected[@]}"; do
-    [[ "${actual[$index]}" == "${expected[$index]}" ]] || return 1
-  done
-}
-
-setup=(workspace run dim-dev tool-setup)
-launch=(workspace run dim-dev bash -- -c
-  'export OPENCODE_WEB_CORS_ORIGINS="$1"; exec bash -s' bash "$REMOTE_BOOTSTRAP_EXPECTED_CORS")
-if matches_invocation setup "$@"; then
-  printf '%s\n' 'workspace run dim-dev tool-setup' >>"$REMOTE_BOOTSTRAP_DIM_LOG"
-  [[ ! -e "$REMOTE_BOOTSTRAP_CAPTURED_SETUP" ]]
-  cat >"$REMOTE_BOOTSTRAP_CAPTURED_SETUP"
-elif matches_invocation launch "$@"; then
-  [[ -e "$REMOTE_BOOTSTRAP_CAPTURED_SETUP" && ! -e "$REMOTE_BOOTSTRAP_CAPTURED_LAUNCHER" ]]
-  printf '%s\n' 'workspace run dim-dev bash -- -c CORS launcher' >>"$REMOTE_BOOTSTRAP_DIM_LOG"
-  cat >"$REMOTE_BOOTSTRAP_CAPTURED_LAUNCHER"
-  shift 5
-  bash "$@" <"$REMOTE_BOOTSTRAP_CAPTURED_LAUNCHER"
-else
+if [[ "${1:-}" != workspace || "${2:-}" != run || "${3:-}" != dim-dev ]]; then
   printf 'unexpected dim invocation:' >&2
   printf ' %q' "$@" >&2
   printf '\n' >&2
   exit 92
 fi
+shift 3
+task="${1:?task is required}"
+shift
+if [[ "${1:-}" == -- ]]; then
+  shift
+fi
+if [[ "$task" == bash && "${1:-}" == -s && "$#" -eq 1 ]]; then
+  printf '%s\n' 'workspace run dim-dev bash -- -s' >>"$REMOTE_BOOTSTRAP_DIM_LOG"
+elif [[ "$task" == bash && "${1:-}" == -c ]]; then
+  printf '%s\n' 'workspace run dim-dev bash -- -c CORS launcher' >>"$REMOTE_BOOTSTRAP_DIM_LOG"
+else
+  printf 'unexpected Project task invocation:' >&2
+  printf ' %q' "$task" "$@" >&2
+  printf '\n' >&2
+  exit 93
+fi
+exec sh "$REMOTE_BOOTSTRAP_ENTRYPOINT" "$task" "$@"
 EOF
 
-chmod 0700 "$tools_dir/curl" "$tools_dir/dim"
+cat >"$tools_dir/docker" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+while (($#)); do
+  if [[ "$1" == dim-agent-dind && "${2:-}" == exec ]]; then
+    shift 2
+    break
+  fi
+  shift
+done
+if [[ "${1:-}" == bash && "${2:-}" == -s && "$#" -eq 2 ]]; then
+  [[ ! -e "$REMOTE_BOOTSTRAP_CAPTURED_SETUP" ]]
+  cat >"$REMOTE_BOOTSTRAP_CAPTURED_SETUP"
+  exec bash -s <"$REMOTE_BOOTSTRAP_CAPTURED_SETUP"
+fi
+if [[ "${1:-}" == bash && "${2:-}" == -c ]]; then
+  [[ -e "$REMOTE_BOOTSTRAP_CAPTURED_SETUP" && ! -e "$REMOTE_BOOTSTRAP_CAPTURED_LAUNCHER" ]]
+  cat >"$REMOTE_BOOTSTRAP_CAPTURED_LAUNCHER"
+  exec "$@" <"$REMOTE_BOOTSTRAP_CAPTURED_LAUNCHER"
+fi
+printf 'unexpected final process invocation:' >&2
+printf ' %q' "$@" >&2
+printf '\n' >&2
+exit 93
+EOF
+
+chmod 0700 "$tools_dir/curl" "$tools_dir/dim" "$tools_dir/docker"
 
 run_bootstrap() {
   local checksum_mode="$1"
@@ -192,7 +210,7 @@ run_bootstrap() {
     TMPDIR="$downloads_dir" \
     DIM_DEVELOPMENT_COMMIT="$commit" \
     OPENCODE_WEB_CORS_ORIGINS="${4:-}" \
-    REMOTE_BOOTSTRAP_EXPECTED_CORS="${4:-[]}" \
+    REMOTE_BOOTSTRAP_ENTRYPOINT="$entrypoint" \
     REMOTE_BOOTSTRAP_CHECKSUM_MODE="$checksum_mode" \
     REMOTE_BOOTSTRAP_FIXTURES="$fixture_dir" \
     REMOTE_BOOTSTRAP_EXPECTED_BASE="$expected_base" \
@@ -240,7 +258,7 @@ retry_setup_dir="$(dirname -- "$retry_script")"
 
 mapfile -t dim_invocations <"$dim_log"
 if [[ "${#dim_invocations[@]}" -ne 2 || \
-  "${dim_invocations[0]}" != 'workspace run dim-dev tool-setup' || \
+  "${dim_invocations[0]}" != 'workspace run dim-dev bash -- -s' || \
   "${dim_invocations[1]}" != 'workspace run dim-dev bash -- -c CORS launcher' ]]; then
   printf 'retry did not invoke DIM setup then OpenCode launch exactly once each\n' >&2
   exit 1
