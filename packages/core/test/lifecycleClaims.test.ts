@@ -7,15 +7,12 @@ import { LifecycleState, validateLifecycleName } from "../../../../core/packages
 import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import {
-  alignWorkspaceRoot,
   detectWorkspaceKvm,
   projectRuntimeManifest,
   resolveWorkspaceCapabilities,
-  resolveRepositorySnapshot,
   resolveWorkspaceKvm,
   restartWorkspace,
   updateWorkspaceResources,
-  validateRepositoryRefOverrides,
   validateWorkspaceProfiles,
   validateWorkspaceResources,
   waitForInnerDocker,
@@ -79,7 +76,7 @@ it("claims project and workspace names atomically", async () => {
     expect(await state.listProjects()).toEqual([project]);
 
     const workspace: WorkspaceRecord = {
-      schemaVersion: 5,
+      schemaVersion: 6,
       name: "work-1",
       projectId: project.id,
       projectName: project.name,
@@ -87,9 +84,7 @@ it("claims project and workspace names atomically", async () => {
       rootRef: "refs/heads/main",
       rootCommit: "a".repeat(40),
       rootSnapshotPath: join(root, "assets", "project-roots", project.id, "a".repeat(40)),
-      repositoryRefOverrides: {},
-      repositorySnapshot: rootRepositorySnapshot("a".repeat(40), "http://dim-gitea:3000/dim-project/root.git"),
-      projectPath: "/workspace/project",
+      workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "creating",
       profiles: ["development"],
       composeProjectName: "dim-work-1",

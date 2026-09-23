@@ -7,15 +7,12 @@ import { LifecycleState, validateLifecycleName } from "../../../../core/packages
 import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import {
-  alignWorkspaceRoot,
   detectWorkspaceKvm,
   projectRuntimeManifest,
   resolveWorkspaceCapabilities,
-  resolveRepositorySnapshot,
   resolveWorkspaceKvm,
   restartWorkspace,
   updateWorkspaceResources,
-  validateRepositoryRefOverrides,
   validateWorkspaceProfiles,
   validateWorkspaceResources,
   waitForInnerDocker,
@@ -33,40 +30,6 @@ describe("project and workspace lifecycle", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await rm(root, { recursive: true, force: true });
-  });
-
-it("validates non-root candidate repository ref overrides", () => {
-    const project = {
-      schemaVersion: 4 as const,
-      id: "project-id",
-      name: "project",
-      gitNamespace: "dim-project",
-      giteaOrganizationId: 41,
-      phase: "ready" as const,
-      rootRepositoryAlias: "root",
-      rootRef: "refs/heads/main",
-      repositories: ["root", "core"].map((alias) => ({
-        alias,
-        providerRepoId: `dim-project/${alias}`,
-        owner: "dim-project",
-        hostUrl: `http://host/${alias}.git`,
-        workspaceUrl: `http://workspace/${alias}.git`,
-        phase: "ready" as const,
-        connections: [],
-        protectedPatterns: [],
-        protectionPhase: "applied" as const,
-        createdAt: "now",
-        updatedAt: "now"
-      })),
-      createdAt: "now",
-      updatedAt: "now"
-    };
-    expect(validateRepositoryRefOverrides(["core=refs/pull/7/head"], project)).toEqual({
-      core: "refs/pull/7/head"
-    });
-    expect(() => validateRepositoryRefOverrides(["root=next"], project)).toThrow(/root repository/);
-    expect(() => validateRepositoryRefOverrides(["missing=next"], project)).toThrow(/no repository/);
-    expect(() => validateRepositoryRefOverrides(["core=one", "core=two"], project)).toThrow(/duplicated/);
   });
 
 it("validates names and container-only option overrides", () => {
