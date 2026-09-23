@@ -14,9 +14,13 @@ cleanup() { find "$work_dir" -depth -delete 2>/dev/null || true; }
 trap cleanup EXIT
 
 repositories=(development core core-development plugin-dns-cloudflare plugin-dns-cloudflare-development plugin-external-urls plugin-external-urls-development verification examples specification)
-mkdir -p "$work_dir/sources" "$work_dir/integrated"
+project_root="$work_dir/project-root"
+workspace_data="$work_dir/data"
+integrated="$workspace_data/workspace"
+mkdir -p "$work_dir/sources" "$project_root/.dim" "$workspace_data"
 manifest="$work_dir/project.json"
-printf '{"repositories":{' >"$manifest"
+policy="$project_root/.dim/workspace-repositories.json"
+printf '{"schemaVersion":1,"repositories":{' >"$policy"
 separator=""
 for repository in "${repositories[@]}"; do
   source="$work_dir/sources/$repository.git"
@@ -31,20 +35,41 @@ for repository in "${repositories[@]}"; do
   git -C "$worktree" commit -m initial >/dev/null
   git -C "$worktree" remote add origin "$source"
   git -C "$worktree" push origin "$ref" >/dev/null
-  commit="$(git -C "$worktree" rev-parse HEAD)"
-  printf '%s"%s":{"workspaceUrl":"%s","phase":"ready","root":false,"requestedRef":"refs/heads/%s","ref":"refs/heads/%s","commit":"%s"}' \
-    "$separator" "$repository" "$source" "$ref" "$ref" "$commit" >>"$manifest"
+  case "$repository" in
+    development) relative_path=workspace ;;
+    *) relative_path="workspace/$repository" ;;
+  esac
+  printf '%s"%s":{"ref":"%s","path":"%s"}' \
+    "$separator" "$repository" "$ref" "$relative_path" >>"$policy"
   separator=,
 done
-printf '}}\n' >>"$manifest"
+printf '}}\n' >>"$policy"
+jq -n \
+  --arg root "$project_root" \
+  --arg data "$workspace_data" \
+  --arg git_base "$work_dir/sources" \
+  '{
+    schemaVersion: 3,
+    root: {
+      repository: "root",
+      ref: "refs/heads/main",
+      commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      path: $root
+    },
+    data: {path: $data},
+    gitBaseUrl: $git_base,
+    hostAliases: {},
+    runtime: {capabilities: []}
+  }' >"$manifest"
 
-DIM_PROJECT_MANIFEST="$manifest" DIM_INTEGRATED_ROOT="$work_dir/integrated" \
+DIM_PROJECT_ROOT="$project_root" DIM_PROJECT_MANIFEST="$manifest" \
+  DIM_WORKSPACE_DATA="$workspace_data" \
   sh "$reconcile"
 
 for repository in "${repositories[@]}"; do
   case "$repository" in
-    development) path="$work_dir/integrated" ;;
-    *) path="$work_dir/integrated/$repository" ;;
+    development) path="$integrated" ;;
+    *) path="$integrated/$repository" ;;
   esac
   test "$(git -C "$path" branch --show-current)" = main
   test "$(cat "$path/content.txt")" = "$repository-initial"
@@ -56,17 +81,18 @@ done
 printf 'core-updated\n' >"$work_dir/core/content.txt"
 git -C "$work_dir/core" commit -am update >/dev/null
 git -C "$work_dir/core" push origin main >/dev/null
-printf 'agent-work\n' >>"$work_dir/integrated/core-development/content.txt"
+printf 'agent-work\n' >>"$integrated/core-development/content.txt"
 mkdir "$work_dir/no-git"
 printf '#!/bin/sh\necho "trusted setup invoked Git for an existing checkout" >&2\nexit 99\n' \
   >"$work_dir/no-git/git"
 chmod +x "$work_dir/no-git/git"
 PATH="$work_dir/no-git:$PATH" \
-  DIM_PROJECT_MANIFEST="$manifest" DIM_INTEGRATED_ROOT="$work_dir/integrated" \
+  DIM_PROJECT_ROOT="$project_root" DIM_PROJECT_MANIFEST="$manifest" \
+  DIM_WORKSPACE_DATA="$workspace_data" \
   sh "$reconcile"
-test "$(cat "$work_dir/integrated/core/content.txt")" = core-initial
-grep -q agent-work "$work_dir/integrated/core-development/content.txt"
-git -C "$work_dir/integrated/core" pull --ff-only >/dev/null
-test "$(cat "$work_dir/integrated/core/content.txt")" = core-updated
+test "$(cat "$integrated/core/content.txt")" = core-initial
+grep -q agent-work "$integrated/core-development/content.txt"
+git -C "$integrated/core" pull --ff-only >/dev/null
+test "$(cat "$integrated/core/content.txt")" = core-updated
 
 echo repository-materialization-smoke-ok
