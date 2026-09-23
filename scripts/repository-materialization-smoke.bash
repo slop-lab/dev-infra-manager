@@ -95,4 +95,21 @@ grep -q agent-work "$integrated/core-development/content.txt"
 git -C "$integrated/core" pull --ff-only >/dev/null
 test "$(cat "$integrated/core/content.txt")" = core-updated
 
+# An existing self-Project checkout cannot redirect trusted exclusion writes
+# through repository metadata links outside persistent workspace data.
+hostile_root="$work_dir/hostile-project-root"
+hostile_data="$work_dir/hostile-data"
+outside_git="$work_dir/outside-git"
+mkdir -p "$hostile_root/.dim" "$hostile_data/workspace" "$outside_git/info"
+printf '%s\n' outside-before >"$outside_git/info/exclude"
+ln -s "$outside_git" "$hostile_data/workspace/.git"
+printf '%s\n' '{"schemaVersion":1,"repositories":{"development":{"ref":"main","path":"workspace"}}}' \
+  >"$hostile_root/.dim/workspace-repositories.json"
+if DIM_PROJECT_ROOT="$hostile_root" DIM_PROJECT_MANIFEST="$manifest" \
+  DIM_WORKSPACE_DATA="$hostile_data" sh "$reconcile"; then
+  echo "repository materialization accepted a symbolic-link .git directory" >&2
+  exit 1
+fi
+test "$(cat "$outside_git/info/exclude")" = outside-before
+
 echo repository-materialization-smoke-ok
