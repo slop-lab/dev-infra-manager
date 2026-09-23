@@ -84,6 +84,13 @@ describe("workspace image asset parity", () => {
 
     expect(normalizeDockerfileCopySources(shipped)).toBe(normalizeDockerfileCopySources(canonical));
   });
+
+  it("initializes persistent roots without recursively changing descendant ownership", async () => {
+    const entrypoint = await readFile(path.join(canonicalWorkspaceImageAssets, "entrypoint.bash"), "utf8");
+
+    expect(entrypoint).not.toContain("chown -R");
+    expect(entrypoint).toContain('initialize_root /var/lib/dim/workspace-data "workspace data"');
+  });
 });
 
 describe("workspace image inspection", () => {
