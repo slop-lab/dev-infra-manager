@@ -106,6 +106,9 @@ verification_stage="inner agent recreation with persistent user tooling"
 dim workspace setup "$workspace_name" >/dev/null
 inner_agent_after="$(inner_agent_id)"
 test "$inner_agent_after" != "$inner_agent_before"
+verify_agent_dind
+test "$(dim workspace run "$workspace_name" bash -- -lc \
+  'stat -c %u:%g:%a /home/dim-agent/.dim-home-metadata-sentinel')" = "$home_metadata_before"
 setup_state_after="$(workspace_user_setup_state)"
 test "$setup_state_after" = "$setup_state_before"
 
