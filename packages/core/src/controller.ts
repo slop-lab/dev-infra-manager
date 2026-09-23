@@ -25,11 +25,11 @@ export interface ControllerWorkspace {
 export interface WorkspaceTarget {
   containers: string[];
   port: number;
-  protocol: "http" | "https";
+  protocol: "http" | "https" | "tcp";
 }
 
 export interface ResolvedWorkspaceTarget {
-  protocol: "http" | "https";
+  protocol: "http" | "https" | "tcp";
   host: string;
   port: number;
 }
@@ -400,8 +400,8 @@ function validateTarget(target: WorkspaceTarget): void {
   if (!Number.isInteger(target.port) || target.port < 1 || target.port > 65_535) {
     throw new UserError("target.port must be an integer between 1 and 65535");
   }
-  if (target.protocol !== "http" && target.protocol !== "https") {
-    throw new UserError("target.protocol must be http or https");
+  if (target.protocol !== "http" && target.protocol !== "https" && target.protocol !== "tcp") {
+    throw new UserError("target.protocol must be http, https, or tcp");
   }
 }
 

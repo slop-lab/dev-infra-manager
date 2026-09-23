@@ -45,7 +45,7 @@ export interface DnsProviderAddFlags {
 export interface IngressAddFlags {
   name: string;
   description: string;
-  scheme: "http" | "https";
+  scheme: "http" | "https" | "tcp";
 }
 
 export interface ExternalUrlCreateFlags extends JsonFlags {
@@ -53,7 +53,7 @@ export interface ExternalUrlCreateFlags extends JsonFlags {
   subdomain?: string;
   container: string[];
   port: string;
-  protocol: "http" | "https";
+  protocol: "http" | "https" | "tcp";
   path?: string;
   workspace?: string;
 }

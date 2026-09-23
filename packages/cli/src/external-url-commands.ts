@@ -113,8 +113,8 @@ externalUrl.command("request")
   .option("--workspace <name>", "use a host-side workspace grant")
   .option("--json", "print machine-readable JSON")
   .action(async (flags: ExternalUrlCreateFlags) => {
-    if (flags.protocol !== "http" && flags.protocol !== "https") {
-      throw new UserError("--protocol must be http or https");
+    if (flags.protocol !== "http" && flags.protocol !== "https" && flags.protocol !== "tcp") {
+      throw new UserError("--protocol must be http, https, or tcp");
     }
     const result = await externalUrlControllerRequest("/api/urls", {
       method: "POST",

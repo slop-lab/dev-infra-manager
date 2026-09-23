@@ -18,7 +18,7 @@ export interface ExternalUrlProxyOptions {
 
 export interface ExternalUrlTarget {
   readonly containers: readonly string[];
-  readonly protocol: "http" | "https";
+  readonly protocol: "http" | "https" | "tcp";
   readonly port: number;
 }
 
@@ -98,7 +98,7 @@ function targetKey(value: unknown): string | undefined {
     || !Array.isArray(value.containers)
     || value.containers.length > 2
     || !value.containers.every((container) => typeof container === "string" && container.length > 0)
-    || (value.protocol !== "http" && value.protocol !== "https")
+    || (value.protocol !== "http" && value.protocol !== "https" && value.protocol !== "tcp")
     || typeof value.port !== "number"
     || !Number.isInteger(value.port)
     || value.port < 1

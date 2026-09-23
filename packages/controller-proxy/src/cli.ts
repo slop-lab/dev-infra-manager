@@ -21,7 +21,7 @@ async function main(arguments_: string[]): Promise<void> {
   let directoryMode = 0o700;
   const ingresses: string[] = [];
   let bindContainersJson: string | undefined;
-  let bindProtocol: "http" | "https" | undefined;
+  let bindProtocol: "http" | "https" | "tcp" | undefined;
   let bindPort: number | undefined;
   let allowWorkspaceRestart = false;
   for (let index = presetIndex + 1; index < arguments_.length; index += 1) {
@@ -112,8 +112,10 @@ function containers(value: string): string[] {
   return parsed;
 }
 
-function protocol(value: string): "http" | "https" {
-  if (value !== "http" && value !== "https") throw new Error("--bind-protocol requires http or https");
+function protocol(value: string): "http" | "https" | "tcp" {
+  if (value !== "http" && value !== "https" && value !== "tcp") {
+    throw new Error("--bind-protocol requires http, https, or tcp");
+  }
   return value;
 }
 
@@ -139,10 +141,10 @@ function requiredValue(arguments_: string[], index: number, option: string): str
 function usage(): never {
   throw new Error(
     "usage: dim-controller-proxy external-url --listen SOCKET --ingress NAME [--ingress NAME ...]\n"
-    + "       [--bind-containers-json JSON --bind-protocol http|https --bind-port PORT]\n"
+    + "       [--bind-containers-json JSON --bind-protocol http|https|tcp --bind-port PORT]\n"
     + "       [--directory-mode MODE] [--socket-mode MODE]\n"
     + "   or: dim-controller-proxy ensure external-url --listen SOCKET --ingress NAME [--ingress NAME ...]\n"
-    + "       [--bind-containers-json JSON --bind-protocol http|https --bind-port PORT]\n"
+    + "       [--bind-containers-json JSON --bind-protocol http|https|tcp --bind-port PORT]\n"
     + "       [--directory-mode MODE] [--socket-mode MODE]\n"
     + "   or: dim-controller-proxy agent --listen SOCKET --allow-workspace-restart\n"
     + "       [--directory-mode MODE] [--socket-mode MODE]\n"

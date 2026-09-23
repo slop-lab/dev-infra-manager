@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-export type ExternalUrlScheme = "http" | "https";
+export type ExternalUrlScheme = "http" | "https" | "tcp";
 export type ExternalUrlUpstreamMode = "container-dns" | "container-ip";
 export const EXTERNAL_URL_DNS_PROVIDER_EXTENSION = "external-url.dns-provider";
 
@@ -114,8 +114,8 @@ export function validateExternalUrlConfig(value: unknown, source = "external URL
     if (typeof ingress.description !== "string" || ingress.description.trim().length === 0) {
       throw new Error(`external URL ingress '${name}' requires a description`);
     }
-    if (ingress.scheme !== "http" && ingress.scheme !== "https") {
-      throw new Error(`external URL ingress '${name}' requires scheme http or https`);
+    if (ingress.scheme !== "http" && ingress.scheme !== "https" && ingress.scheme !== "tcp") {
+      throw new Error(`external URL ingress '${name}' requires scheme http, https, or tcp`);
     }
     if (typeof ingress.argument !== "string") {
       throw new Error(`external URL ingress '${name}' requires a string argument`);
