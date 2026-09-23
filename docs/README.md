@@ -16,13 +16,14 @@ Docker/Git terms aren't repeated here.
   is scoped to one Project, never the reverse.
 - **Root repository** — the one required repository per Project. Its
   optional `.dim` directory defines the workspace's environment and
-  lifecycle hooks; DIM clones only this repository into a workspace
-  automatically.
+  lifecycle hooks; DIM publishes its reviewed bytes as the immutable workspace
+  lifecycle contract.
 - **Workspace** — a named, persistent DIM resource bound to exactly one
   Project. Its record and top-level container survive stop/start until the
   workspace is explicitly discarded.
 - **Workspace container** — the workspace's isolated top-level container. It
-  owns the root-repository checkout and the **Project runtime**. Older text
+  mounts the immutable root contract, persistent Project-owned data, and the
+  **Project runtime**. Older text
   may call this the “workspace root” or “project-root container”; use
   “workspace container” when the distinction from the root repository
   matters.

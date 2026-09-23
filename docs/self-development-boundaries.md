@@ -51,10 +51,11 @@ push, merge, deployment, secret access, or host execution.
 
 ## Integrated development tree
 
-DIM supplies the read-only runtime repository catalog and scoped Git
-credentials. The `root` bootstrap or the inner `development` environment may
-clone catalog entries into any useful layout and synthesize pnpm, TypeScript,
-or `just` orchestration across them. DIM core does not define that layout.
+DIM supplies the Project-specific managed Git base URL and scoped Git
+credentials. Reviewed `root` bootstrap policy selects repository aliases and
+refs, clones them into persistent Project data, and may synthesize pnpm,
+TypeScript, or `just` orchestration across them. DIM core does not define that
+layout.
 
 The self-development checkout is:
 
