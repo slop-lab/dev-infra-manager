@@ -195,19 +195,8 @@ export interface WorkspaceCapabilityRecord {
   environment?: Record<string, string>;
 }
 
-export type WorkspaceRepositorySnapshotEntry = {
-  readonly workspaceUrl: string;
-  readonly phase: "ready";
-  readonly root: boolean;
-  readonly requestedRef: string;
-  readonly ref: string;
-  readonly commit: string;
-};
-
-export type WorkspaceRepositorySnapshot = Readonly<Record<string, WorkspaceRepositorySnapshotEntry>>;
-
 export interface WorkspaceRecord {
-  schemaVersion: 5;
+  schemaVersion: 6;
   name: string;
   projectId: string;
   projectName: string;
@@ -215,9 +204,7 @@ export interface WorkspaceRecord {
   rootRef: string;
   rootCommit: string;
   rootSnapshotPath: string;
-  repositoryRefOverrides?: Record<string, string>;
-  repositorySnapshot: WorkspaceRepositorySnapshot;
-  projectPath: string;
+  workspaceDataPath: string;
   phase: WorkspacePhase;
   profiles: string[];
   capabilities?: WorkspaceCapabilityRecord[];

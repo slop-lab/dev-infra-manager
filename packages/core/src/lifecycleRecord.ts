@@ -56,7 +56,7 @@ export function assertSchemaVersion(
   if (record.schemaVersion !== expected) {
     throw new UserError(
       `${kind} '${name}' uses unsupported state schema ${String(record.schemaVersion)}; `
-      + `expected ${expected} and DIM does not migrate existing state`
+      + `expected ${expected}. Export needed data and recreate this ${kind}; DIM will not migrate or delete it`
     );
   }
 }

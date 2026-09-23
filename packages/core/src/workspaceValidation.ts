@@ -1,13 +1,11 @@
 import { stat } from "node:fs/promises";
 import { UserError } from "./errors.js";
-import { validateLifecycleName } from "./lifecycleState.js";
 import type {
   ProjectRecord,
   WorkspaceCapabilityRecord,
   WorkspaceRecord
 } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
-import { normalizeRepositoryRef } from "./repositoryRef.js";
 
 export function validateWorkspaceResources(resources: {
   cpuCount: string;
@@ -99,29 +97,6 @@ export async function resolveWorkspaceCapabilities(
     }
   }
   return resolved;
-}
-
-export function validateRepositoryRefOverrides(
-  values: string[],
-  project: ProjectRecord
-): Record<string, string> {
-  const overrides: Record<string, string> = {};
-  for (const value of values) {
-    const separator = value.indexOf("=");
-    if (separator <= 0 || separator === value.length - 1) {
-      throw new UserError(`repository ref override '${value}' must use alias=ref`);
-    }
-    const alias = validateLifecycleName(value.slice(0, separator), "repo alias");
-    if (!project.repositories.some((repository) => repository.alias === alias)) {
-      throw new UserError(`project '${project.name}' has no repository '${alias}'`);
-    }
-    if (alias === project.rootRepositoryAlias) {
-      throw new UserError("the root repository ref cannot be overridden by a workspace candidate");
-    }
-    if (overrides[alias] !== undefined) throw new UserError(`repository ref override '${alias}' is duplicated`);
-    overrides[alias] = normalizeRepositoryRef(value.slice(separator + 1));
-  }
-  return overrides;
 }
 
 export async function detectWorkspaceKvm(

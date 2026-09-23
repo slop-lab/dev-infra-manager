@@ -7,7 +7,7 @@ import { acquireLifecycleLock, type LifecycleLockOptions } from "./lifecycleLock
 import { assertSchemaVersion, assertSysboxWorkspace, atomicWrite, listRecords, readJson, validateLifecycleName } from "./lifecycleRecord.js";
 import type { CiRunnerRecord, GiteaServiceRecord, HostLifecycleRecord, ProjectRecord, WorkspaceRecord } from "./lifecycleTypes.js";
 import { parseProjectRecord } from "./projectRecord.js";
-import { assertWorkspaceRepositorySnapshot } from "./workspaceRepositorySnapshot.js";
+import { WORKSPACE_DATA } from "./workspaceLifecycleTypes.js";
 
 export { validateLifecycleName } from "./lifecycleRecord.js";
 
@@ -228,9 +228,9 @@ export class LifecycleState {
       this.workspacePath(name),
       `workspace '${name}' not found`
     );
-    assertSchemaVersion(raw, "workspace", name, 5);
+    assertSchemaVersion(raw, "workspace", name, 6);
     assertSysboxWorkspace(raw, name);
-    assertWorkspaceRepositorySnapshot(raw);
+    assertWorkspaceContract(raw, name);
     return raw;
   }
 
@@ -247,10 +247,10 @@ export class LifecycleState {
   }
 
   async listWorkspaces(): Promise<WorkspaceRecord[]> {
-    const records = await listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace", 5);
+    const records = await listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace", 6);
     for (const record of records) {
       assertSysboxWorkspace(record, record.name);
-      assertWorkspaceRepositorySnapshot(record);
+      assertWorkspaceContract(record, record.name);
     }
     return records;
   }
@@ -289,5 +289,14 @@ export class LifecycleState {
 
   async acquireProjectLock(name: string): Promise<() => Promise<void>> {
     return acquireLifecycleLock({ root: this.root, name: `project-${validateLifecycleName(name, "project")}`, description: `project '${name}' reconciliation`, options: this.lockOptions });
+  }
+}
+
+function assertWorkspaceContract(record: WorkspaceRecord, name: string): void {
+  if (Object.hasOwn(record, "repositorySnapshot") || Object.hasOwn(record, "repositoryRefOverrides")) {
+    throw new UserError(`workspace '${name}' contains an obsolete repository catalog; export needed data and recreate the workspace`);
+  }
+  if (Object.hasOwn(record, "projectPath") || record.workspaceDataPath !== WORKSPACE_DATA) {
+    throw new UserError(`workspace '${name}' has an invalid workspace data path; export needed data and recreate the workspace`);
   }
 }
