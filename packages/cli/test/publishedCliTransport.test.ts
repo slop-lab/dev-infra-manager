@@ -14,8 +14,7 @@ interface SessionRequest {
 }
 
 interface WorkspaceCreateScenario {
-  readonly repositoryRefs: readonly string[];
-  readonly controllerError?: string;
+  readonly obsoleteRepositoryRef?: string;
 }
 
 interface WorkspaceCreateRun {
@@ -23,10 +22,8 @@ interface WorkspaceCreateRun {
   readonly result: PublishedCliResult;
 }
 
-test("published workspace create sends repeated repository refs unchanged and in order", async () => {
-  const repositoryRefs = ["api=refs/pull/42/head", "web=feature/candidate"];
-
-  const { requests, result } = await runWorkspaceCreate({ repositoryRefs });
+test("published workspace create sends no repository catalog or ref policy", async () => {
+  const { requests, result } = await runWorkspaceCreate({});
 
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stdout, "Workspace 'candidate' is ready\n");
@@ -38,7 +35,6 @@ test("published workspace create sends repeated repository refs unchanged and in
       profiles: [],
       requiredCapabilities: [],
       recommendedCapabilities: [],
-      repositoryRefs,
       runtimeBackend: "sysbox",
       cpuCount: "7",
       memory: "9g",
@@ -47,37 +43,12 @@ test("published workspace create sends repeated repository refs unchanged and in
   }]);
 });
 
-test("published workspace create leaves repository-ref validation failures to the controller", async (context) => {
-  const scenarios = [
-    {
-      name: "malformed override",
-      repositoryRef: "malformed",
-      error: "repository ref override 'malformed' must use alias=ref"
-    },
-    {
-      name: "root alias",
-      repositoryRef: "root=next",
-      error: "the root repository ref cannot be overridden by a workspace candidate"
-    },
-    {
-      name: "unknown alias",
-      repositoryRef: "missing=next",
-      error: "project 'project' has no repository 'missing'"
-    }
-  ] as const;
+test("published workspace create rejects the obsolete repository-ref option before controller contact", async () => {
+  const { requests, result } = await runWorkspaceCreate({ obsoleteRepositoryRef: "app=main" });
 
-  for (const scenario of scenarios) await context.test(scenario.name, async () => {
-    const { requests, result } = await runWorkspaceCreate({
-      repositoryRefs: [scenario.repositoryRef],
-      controllerError: scenario.error
-    });
-
-    assert.equal(result.status, 2);
-    assert.equal(result.stderr, `${scenario.error}\nRun 'dim doctor' to check host readiness.\n`);
-    assert.equal(requests.length, 1);
-    assert.equal(requests[0]?.operation, "workspace.create");
-    assert.deepEqual(requests[0]?.input.repositoryRefs, [scenario.repositoryRef]);
-  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /unknown option '--repo-ref'/);
+  assert.deepEqual(requests, []);
 });
 
 async function runWorkspaceCreate(scenario: WorkspaceCreateScenario): Promise<WorkspaceCreateRun> {
@@ -108,10 +79,7 @@ async function runWorkspaceCreate(scenario: WorkspaceCreateScenario): Promise<Wo
     }
     if (request.method === "GET" && request.url === "/v1/sessions/session/events") {
       response.writeHead(200, { "content-type": "text/event-stream" });
-      const event = scenario.controllerError === undefined
-        ? { type: "result", result: { name: "candidate" } }
-        : { type: "error", error: scenario.controllerError };
-      response.end(`data: ${JSON.stringify(event)}\n\n`);
+      response.end(`data: ${JSON.stringify({ type: "result", result: { name: "candidate" } })}\n\n`);
       return;
     }
     response.writeHead(404).end();
@@ -120,7 +88,7 @@ async function runWorkspaceCreate(scenario: WorkspaceCreateScenario): Promise<Wo
   await once(server, "listening");
   try {
     const args = ["workspace", "create", "project", "candidate"];
-    for (const repositoryRef of scenario.repositoryRefs) args.push("--repo-ref", repositoryRef);
+    if (scenario.obsoleteRepositoryRef !== undefined) args.push("--repo-ref", scenario.obsoleteRepositoryRef);
     const result = await runPublishedCli(args, {
       ...process.env,
       DIM_STATE_ROOT: stateRoot,

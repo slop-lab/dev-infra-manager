@@ -211,9 +211,12 @@ test("workspace creation exposes explicit KVM policy", () => {
   assert.equal(help.status, 0);
   assert.match(help.stdout, /--kvm/);
   assert.match(help.stdout, /--no-kvm/);
-  assert.match(help.stdout, /--repo-ref <alias=ref>/);
+  assert.doesNotMatch(help.stdout, /--repo-ref/);
   assert.match(help.stdout, /--require-capability <name>/);
   assert.match(help.stdout, /--recommend-capability <name>/);
+  const obsoleteRepoRef = run(["workspace", "create", "project", "work-1", "--repo-ref", "app=main"]);
+  assert.notEqual(obsoleteRepoRef.status, 0);
+  assert.match(obsoleteRepoRef.stderr, /unknown option '--repo-ref'/);
   const discardHelp = run(["workspace", "discard", "--help"]);
   assert.equal(discardHelp.status, 0);
   assert.match(discardHelp.stdout, /--keep-volume/);
