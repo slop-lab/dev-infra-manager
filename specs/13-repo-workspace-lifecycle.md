@@ -905,13 +905,27 @@ automatically.
 - `restart` selects and stages one approved root commit, then stops a running
   runtime and performs the same start/apply/setup sequence.
 - `update` selects and stages one approved root commit, performs the
-  fast-forward and setup without a stop, and may also
-  replace Compose profiles.
+  fast-forward and setup, and may also replace Compose profiles. When the
+  selected root is unchanged, DIM reuses the running workspace container and
+  does not interrupt its nested runtime merely to repeat setup. When the
+  selected root changes, DIM replaces the owned outer container before
+  publishing the runtime manifest or running setup; this may interrupt outer
+  processes and every nested runtime while preserving the workspace's named
+  persistent data volume.
 - `setup` retries from the immutable repository selection already recorded by
   the workspace. For `setting-up`, `setup-error`, or recovery from `error`, it
   repeats root publication and Project runtime manifest publication before
   Project setup and final ready publication, without fetching or resolving any
   repository ref.
+
+**WORKSPACE-IMMUTABLE-ROOT-MOUNT-001:** Before trusted setup or task dispatch,
+DIM MUST inspect the owned container by immutable container ID and verify that
+exactly one read-only bind mount maps the recorded root snapshot source to
+`/run/dim/project-root`. A selected-root change MUST enter a non-ready phase
+before replacement. Replacement MUST remove only the inspected owned container
+and MUST preserve its named persistent data volume. Any replacement,
+publication, or setup failure MUST remain non-ready. Recovery MUST reconcile a
+mismatched owned mount or reject it before executing trusted Project bytes.
 
 **WORKSPACE-SELECTED-ROOT-PUBLICATION-001:** After preflight accepts a selected
 root, DIM MUST atomically record its ref, commit, snapshot path, and a non-ready

@@ -488,7 +488,11 @@ publishes the same commit's immutable setup bytes, and invokes reviewed setup.
 DIM does not rewrite mutable checkouts. If one or more `--profile` flags are
 provided, they replace the stored profile set; otherwise the existing set is
 retained. Additional repository update policy belongs to `.dim/setup.sh` or
-the services that own those repositories.
+the services that own those repositories. An update that selects the currently
+mounted root reuses the outer container and nested runtime. Selecting a
+different root safely replaces the outer container first, which may interrupt
+outer processes and nested runtimes; the named persistent data volume remains
+attached to the replacement.
 
 Stop and resume the environment:
 
@@ -517,7 +521,9 @@ replays the checkout and runtime manifest from the immutable root already
 recorded for the workspace, then reruns Project setup. It doesn't fetch or
 follow the configured root ref, so a branch moving after the original
 selection can't change the recovery input. The workspace remains non-ready
-until every replay and setup step succeeds.
+until every replay and setup step succeeds. Recovery also verifies that the
+outer container's read-only root mount matches the recorded snapshot and
+reconciles a mismatch before manifest publication or setup.
 
 Inspect or discard:
 
