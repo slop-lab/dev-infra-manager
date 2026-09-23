@@ -22,7 +22,7 @@ services:
       GIT_CONFIG_KEY_1: safe.directory
       GIT_CONFIG_VALUE_1: /workspace
     volumes:
-      - ${DIM_PROJECT_ROOT:?}:/workspace
+      - ${DIM_WORKSPACE_DATA:?}/project:/workspace
       - agent-home:/home/dim-agent
       - agent-dind-shared:/mnt/workspace-shared-dind
       - /tmp/dim-development-url:/run/dim/development-url:ro
