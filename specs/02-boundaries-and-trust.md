@@ -2,12 +2,13 @@
 
 ## Boundary Summary
 
-The system has four major execution boundaries:
+The system has five major execution boundaries:
 
 - Agent container boundary.
 - Secret-bearing runtime boundary.
 - Trusted Project lifecycle boundary.
 - DIM host boundary.
+- Remote control-plane boundary.
 
 The agent container boundary is untrusted.
 The secret-bearing runtime boundary is trusted only after human review of its effective source and runtime definition.
@@ -102,7 +103,8 @@ Trusted Project lifecycle code:
 Host-side DIM:
 
 - Creates, reconciles, and discards workspace containers.
-- Manages Project-scoped repositories and protection through managed Gitea.
+- Holds approval state and capability ceilings locally.
+- Executes only operator-registered workload IDs after exact-tree admission.
 - Installs and checks runtime support through scripts and doctor checks.
 - Runs the DIM host controller and grants each workspace only its scoped,
   authenticated interfaces.
@@ -111,14 +113,21 @@ DIM host code is trusted infrastructure code only after direct human review of
 the complete pinned DIM revision. The complete root repository and all
 secret-bearing environment code also require human review before deployment.
 
-The CLI is an unprivileged presentation and transport adapter for DIM-owned
-state. Runtime lifecycle, workspace command execution, CI runner logs, and
-secret-sensitive decisions execute in the host controller. The CLI may execute
-external Git transport and controller bootstrap locally because those depend
-on the invoking user's terminal or credential helpers. Controller command
-sessions expose output, input, and cancellation only on the host-admin socket;
-making them reachable from a browser requires a separately reviewed
-authentication and authorization boundary.
+The CLI is an unprivileged local policy and transport adapter. It never sends a
+host-admin socket or local runtime credential to the remote control plane.
+
+## Remote Control-Plane Boundary
+
+The local host initiates one bounded SSH request/response using an operator
+key and pinned host key. SSH agent use, forwarding, PTYs, local commands, and
+interactive authentication are disabled. The remote side may propose only a
+Project ID, request ID, local workload ID, complete reviewed tree, and named
+capabilities. Local admission remains authoritative.
+
+A compromised control plane can schedule only workloads whose exact tree and
+capability ceiling the local operator already approved. It cannot administer
+the host, widen capabilities, or select commands, mounts, devices, environment,
+URLs, images, or sockets.
 
 ## Git Boundary
 
