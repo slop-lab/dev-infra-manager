@@ -1,8 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-mkdir -p /var/lib/dim/workspace-data/docker /var/run /workspace
-chown -R dim:dim /home/dim /var/lib/dim/workspace-data /workspace
+dim_uid="$(id -u dim)"
+dim_gid="$(id -g dim)"
+
+initialize_root() {
+  local root="$1"
+  local description="$2"
+  mkdir -p -- "$root"
+  [[ ! -L "$root" && -d "$root" ]] || {
+    echo "$description root is not a directory: $root" >&2
+    exit 1
+  }
+  if [[ "$(stat -c '%u:%g' -- "$root")" == "$dim_uid:$dim_gid" ]]; then
+    return
+  fi
+  if [[ -n "$(find "$root" -mindepth 1 -maxdepth 1 -print -quit)" ]]; then
+    echo "$description root is populated with incompatible ownership: $root" >&2
+    exit 1
+  fi
+  chown dim:dim -- "$root"
+}
+
+initialize_root /home/dim "DIM home"
+initialize_root /var/lib/dim/workspace-data "workspace data"
+initialize_root /workspace "workspace"
+mkdir -p /var/lib/dim/workspace-data/docker /var/run
 # A stopped container keeps its writable /var/run layer. Managed containerd
 # state is process-namespace-local, so it must not survive a container restart.
 rm -rf -- /var/run/docker/containerd
