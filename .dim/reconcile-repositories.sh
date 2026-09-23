@@ -37,17 +37,23 @@ materialize() {
   trap 'rm -rf -- "$staging"' EXIT HUP INT TERM
   trusted_git init "$staging" >/dev/null
   trusted_git -C "$staging" remote add origin "$git_base_url/$alias.git"
-  trusted_git -C "$staging" fetch --no-tags origin "$ref"
-  commit="$(trusted_git -C "$staging" rev-parse 'FETCH_HEAD^{commit}')"
   case "$ref" in
-    refs/heads/*) trusted_git -C "$staging" checkout -b "${ref#refs/heads/}" "$commit" >/dev/null ;;
-    *) trusted_git -C "$staging" checkout --detach "$commit" >/dev/null ;;
+    refs/heads/*)
+      branch="${ref#refs/heads/}"
+      trusted_git -C "$staging" fetch --no-tags origin "$ref:refs/remotes/origin/$branch"
+      trusted_git -C "$staging" checkout -b "$branch" --track "origin/$branch" >/dev/null
+      ;;
+    *)
+      trusted_git -C "$staging" fetch --no-tags origin "$ref"
+      commit="$(trusted_git -C "$staging" rev-parse 'FETCH_HEAD^{commit}')"
+      trusted_git -C "$staging" checkout --detach "$commit" >/dev/null
+      ;;
   esac
   mv -- "$staging" "$destination"
   trap - EXIT HUP INT TERM
 }
 
-for alias in $(jq -er '.repositories | keys[]' "$policy"); do
+for alias in $(jq -er '.repositories | to_entries | sort_by(.value.path | split("/") | length) | .[].key' "$policy"); do
   materialize "$alias"
 done
 
