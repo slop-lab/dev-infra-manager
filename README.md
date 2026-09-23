@@ -37,17 +37,22 @@ dim project create dim \
 dim workspace create dim dim-dev
 ```
 
-After the repositories materialize, explicitly bootstrap the local user tools
-through the `bash` task, then launch OpenCode through that same task:
+After the repositories materialize, explicitly bootstrap the configured user
+tool, then launch the configured agent through the Project-owned task contract:
 
 ```bash
-dim workspace run dim-dev bash -- /workspace/scripts/workspace-user-setup.bash \
-  && dim workspace run dim-dev bash -- -lc 'exec opencode'
+dim workspace run dim-dev tool-setup \
+  && dim workspace run dim-dev agent
 ```
 
-The bootstrap creates explicit user-level state that persists in the agent
-home. The reviewed Project lifecycle does not install user tools automatically;
-this setup is not `.dim/setup.sh` lifecycle work.
+The `tool-setup` mapping runs the reviewed local setup utility. It creates
+explicit user-level state that persists in the agent home, including a
+contract-versioned launcher manifest. The `agent` mapping accepts that state
+only when its contract version, launcher name, pinned tool identity and
+version, and executable path match the Project's reviewed configuration. The
+reviewed Project lifecycle does not install or authenticate user tools
+automatically; this setup is not `.dim/setup.sh` lifecycle work. DIM core knows
+neither task's tool-specific mapping.
 
 Launch the opt-in authenticated Web interface separately:
 
