@@ -362,7 +362,7 @@ repository's immutable raw-file URL and full commit ID:
     cd -- "$download_dir"
     sha256sum --check workspace-user-setup.bash.sha256
   )
-  dim run example-dev tool-setup <"$download_dir/workspace-user-setup.bash"
+  dim run example-dev bash -- -s <"$download_dir/workspace-user-setup.bash"
 )
 ```
 
@@ -382,6 +382,14 @@ symlink is exported as its canonical target. OpenCode configuration stays below
 `$HOME/.omo/omo.jsonc`, with the bounded settings at
 `["[opencode]"].team_mode`: `enabled=true`, `max_parallel_members=4`,
 `max_members=8`, and `tmux_visualization=false`.
+
+The canonical self-development Project's `tool-setup` task executes its
+reviewed local utility and does not consume downloaded stdin. Its no-checkout
+procedure therefore uses the existing `bash -- -s` task path shown above.
+Projects whose reviewed `tool-setup` mapping is itself `bash -s`, including the
+complete examples, may stream verified bytes to that task instead. Existing
+homes do not upgrade automatically; users must rerun the applicable explicit
+setup action after adopting reviewed setup or version changes.
 
 The npm install prefix, cache, and user configuration file are canonical
 descendants of `HOME`; inherited npm settings cannot redirect those mutation

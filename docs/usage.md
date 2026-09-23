@@ -72,19 +72,25 @@ needed for recovery or lifecycle administration. `run`, `exec`, and trusted
 `.dim/setup.sh` do not install coding-agent tools automatically.
 
 A Project may document an optional workspace-user bootstrap and map the
-generic `tool-setup` and `agent` tasks to it. Fetch its script
-and `.sha256` file from the same full development commit, verify the checksum,
-then explicitly stream the verified script through
-`dim run WORKSPACE tool-setup`. Never pipe a branch, tag, or `latest` URL
-directly into a shell. The bootstrap may change only the persistent agent user
-home and must exclude authentication, global Git configuration, web exposure,
-and DIM controller or plugin access. The canonical self-development workspace
-can run its reviewed local copy directly:
+generic `tool-setup` and `agent` tasks to it. Fetch its script and `.sha256`
+file from the same full development commit, verify the checksum, then execute
+the verified local bytes through the Project's reviewed task contract. The
+canonical no-checkout flow uses `dim run WORKSPACE bash -- -s`; complete
+examples may stream to `tool-setup` because their checked-in mapping is
+`bash -s`. Never pipe a branch, tag, or `latest` URL directly into a shell. The
+bootstrap may change only the persistent agent user home and must exclude
+authentication, global Git configuration, web exposure, and DIM controller or
+plugin access. The canonical self-development workspace's local-only
+`tool-setup` mapping runs its reviewed checkout copy directly:
 
 ```bash
 dim run dim-dev tool-setup
 dim run dim-dev agent
 ```
+
+Existing homes are not upgraded automatically. Rerun the applicable explicit
+setup action after adopting a reviewed Project change that selects new setup
+bytes or tool versions.
 
 The task names are only a Project convention; DIM core has no tool registry,
 installation path, or launcher mapping. The reviewed Project configuration
