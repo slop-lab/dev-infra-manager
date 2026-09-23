@@ -1,13 +1,20 @@
 # Workspace Runtime Image
 
-The project workspace image is built from
-[`core/images/project-workspace`](../../core/images/project-workspace). The
-release build is a distinct path that tags the image with the exact release
-version:
+The published CLI ships the complete trusted workspace-image context and an
+exact-version dependency on the published controller proxy. A released
+installation builds its matching image from any directory without a source
+checkout, `just`, or pnpm:
 
 ```bash
-just build-workspace-image
+dim workspace image build
+dim workspace image status
 ```
+
+The command uses Docker Buildx with `--load`, passes the invoking user's UID and
+GID, and tags `dev-infra-project-workspace:<installed DIM package version>`.
+`DIM_WORKSPACE_IMAGE` may select another explicitly tagged destination. Image
+IDs, digest references, untagged references, and `latest` are rejected before
+Docker runs.
 
 For an assembled development checkout, prepare the matching local image before
 installing or using local packages:
@@ -38,11 +45,12 @@ The command inspects `DIM_WORKSPACE_IMAGE` or
 Release packages select their release tag. Local package bundles select the
 tag for their shared aggregate local version; there is no implicit `latest`
 fallback.
-Image status is independent of host readiness and workspace lifecycle state.
-Restarting the controller does not build the image or mark it ready; Project
-and development scripts own image builds.
+Image build and status are independent of host and controller readiness and
+workspace lifecycle state. Restarting the controller does not build the image
+or mark it ready, and no workspace lifecycle operation builds it implicitly.
 
-The build packages `@slop-lab/dim-controller-proxy` and includes its restricted
+The build stages the complete exact-version published
+`@slop-lab/dim-controller-proxy` dependency and includes its restricted
 controller-socket helper. The image contains the trusted Project lifecycle
 toolchain and a nested Docker daemon. It does not install a coding-agent CLI.
 It receives neither the host Docker socket nor a host checkout; Project source

@@ -206,15 +206,19 @@ capabilities, bootstrap exits non-zero after printing the gaps.
 Build the included runtime images:
 
 ```bash
-just build-workspace-image
+dim workspace image build
 dim workspace image status
 ```
 
 `dim workspace image status --json` reports the same inspection-derived image
-result for automation. A missing image is distinct from a controller, host, or
-workspace readiness problem. Controller restart does not build workspace
-images; use the Project or development build script that owns the configured
-image.
+result for automation. The installed build command works from any directory
+using assets shipped with the exact CLI/core/controller-proxy release; it does
+not require a source checkout, `just`, pnpm, or a running controller. A missing
+image is distinct from a controller, host, or workspace readiness problem.
+Controller restart and workspace lifecycle commands do not build workspace
+images. Contributors can invoke the same path through `just
+build-workspace-image`, while aggregate-local source preparation remains the
+separate `just build-local-workspace-image` workflow.
 
 Run the integration smoke test:
 
