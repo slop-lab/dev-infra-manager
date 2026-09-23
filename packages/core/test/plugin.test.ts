@@ -19,6 +19,7 @@ describe("plugin contract", () => {
     expect(register).toHaveBeenCalledWith(expect.objectContaining({
       apiVersion: DIM_PLUGIN_API_VERSION,
       registerControllerRoute: expect.any(Function),
+      registerWorkspaceDiscardHook: expect.any(Function),
       registerHostInputProvider: expect.any(Function),
       registerWorkspaceCapability: expect.any(Function),
       registerExtension: expect.any(Function),
@@ -89,6 +90,30 @@ describe("plugin contract", () => {
     await registered.dispose();
     await registered.dispose();
     expect(disposed).toEqual(["second", "first"]);
+  });
+
+  it("collects generic workspace discard hooks in plugin order", async () => {
+    // Given: two plugins that own workspace-scoped host resources.
+    const first = { beforeDiscard: vi.fn() };
+    const second = { beforeDiscard: vi.fn() };
+
+    // When: both plugins register their lifecycle hooks.
+    const registered = await registerPlugins([
+      {
+        name: "first-hook",
+        apiVersion: DIM_PLUGIN_API_VERSION,
+        register(host) { host.registerWorkspaceDiscardHook(first); }
+      },
+      {
+        name: "second-hook",
+        apiVersion: DIM_PLUGIN_API_VERSION,
+        register(host) { host.registerWorkspaceDiscardHook(second); }
+      }
+    ]);
+
+    // Then: authoritative lifecycle callers can invoke every registered hook.
+    expect(registered.workspaceDiscardHooks).toEqual([first, second]);
+    await registered.dispose();
   });
 
   it("rejects duplicate capability names", async () => {
