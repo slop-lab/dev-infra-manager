@@ -357,13 +357,28 @@ paths, not agent entrypoints.
 explicit workspace-user action inside a Project-owned agent. DIM and trusted
 `.dim/setup.sh` lifecycle code MUST NOT perform it automatically. A Project may
 publish a user-run bootstrap script, but invoking that script MUST happen
-through a Project task such as `dim run WORKSPACE bash -- -s` or from an
-interactive `bash` task. The script MAY mutate only the invoking user's home,
+through a Project task such as the conventional
+`dim run WORKSPACE tool-setup` or from an interactive `bash` task. The script
+MAY mutate only the invoking user's home,
 including user-local executables and agent configuration. It MUST NOT perform
 authentication, change global Git configuration, expose a web interface,
 request DIM controller or plugin authority, or modify the trusted workspace.
 This is a Project convention and introduces no DIM plugin, API, lifecycle
 hook, or CLI command.
+
+**WORKSPACE-AGENT-TASK-001:** A Project MAY expose the generic task names
+`tool-setup` and `agent`. DIM core MUST NOT assign tool semantics, installation
+paths, a registry, options, or automatic lifecycle behavior to those names.
+The reviewed Project entrypoint MUST explicitly map setup to reviewed utility
+bytes and agent launch to a supported contract version, launcher name, pinned
+tool identity and version, and exact executable path. A compatible setup
+utility MAY publish a mode-restricted manifest and launcher below canonical
+user `HOME`. Before execution, the Project-owned launcher MUST reject a
+missing or non-regular manifest, unsupported contract version, unknown
+launcher, mismatched tool identity or version, mismatched executable path,
+canonical target outside `HOME`, and non-file or non-executable targets. Setup
+and launch MUST remain separate explicit actions. Neither may
+perform provider login, and `.dim/setup.sh` MUST invoke neither.
 
 **WORKSPACE-AGENT-WEB-001:** A Project MAY publish a Web launcher separately
 from the setup script. Launch MUST be an explicit workspace-user action and
@@ -462,11 +477,11 @@ When a Project documents a remote bootstrap, both the script and its
 commit. The commit input MUST match exactly 40 lowercase hexadecimal
 characters. The copyable download procedure MUST run in a fail-closed
 `set -euo pipefail` subshell, derive both URLs from that same validated commit,
-verify the checksum before streaming the local bytes to the `bash` task, and
+verify the checksum before streaming the local bytes to the `tool-setup` task, and
 remove temporary files through an exit trap. A branch, tag, `latest` URL, or
 direct download-to-shell pipeline is not an acceptable bootstrap source. The
-canonical self-development Project instead runs the reviewed local script at
-`/workspace/scripts/workspace-user-setup.bash` through its `bash` task.
+canonical self-development Project instead maps `tool-setup` to the reviewed
+local script at `/workspace/scripts/workspace-user-setup.bash`.
 Complete Project examples MUST accept an operator-supplied, provider-neutral
 raw-source root ending before the commit segment, normalize one optional
 trailing slash, and combine that root with the validated commit. They MUST NOT

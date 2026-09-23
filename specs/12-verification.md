@@ -78,6 +78,14 @@ MUST separately exercise bounded lock, helper, and readiness failures plus a
 same-credential unrecorded listener that remains alive and is never adopted.
 The helper failure case MUST stall the helper process itself, complete within
 the launcher's own deadline, and prove cleanup of the newly started tool.
+The same gate MUST drive the actual canonical Project entrypoint with a
+compatible setup/launcher fixture. It MUST prove `tool-setup` and `agent`
+argument forwarding, unknown Project-task rejection, setup argument rejection,
+successful version-1 manifest launch, and rejection of an unsupported contract
+version and unknown launcher. Static policy MUST prove that representative
+Project examples own the explicit mapping, core defines no tool registry or
+automatic setup behavior, and the optional Web launcher retains its configured
+stable service name.
 
 CI runner unit coverage must verify resource-default precedence, stable managed
 names, and that default container arguments use the configured isolation
