@@ -71,29 +71,38 @@ Enter that Project-owned task boundary with `dim run WORKSPACE bash`. Use
 needed for recovery or lifecycle administration. `run`, `exec`, and trusted
 `.dim/setup.sh` do not install coding-agent tools automatically.
 
-A Project may document an optional workspace-user bootstrap. Fetch its script
+A Project may document an optional workspace-user bootstrap and map the
+generic `tool-setup` and `agent` tasks to it. Fetch its script
 and `.sha256` file from the same full development commit, verify the checksum,
 then explicitly stream the verified script through
-`dim run WORKSPACE bash -- -s`. Never pipe a branch, tag, or `latest` URL
+`dim run WORKSPACE tool-setup`. Never pipe a branch, tag, or `latest` URL
 directly into a shell. The bootstrap may change only the persistent agent user
 home and must exclude authentication, global Git configuration, web exposure,
 and DIM controller or plugin access. The canonical self-development workspace
 can run its reviewed local copy directly:
 
 ```bash
-dim run dim-dev bash -- /workspace/scripts/workspace-user-setup.bash
+dim run dim-dev tool-setup
+dim run dim-dev agent
 ```
 
-That optional script installs pinned OpenCode tooling below the canonical
-agent home. OpenCode configuration remains in the home-confined XDG directory;
+The task names are only a Project convention; DIM core has no tool registry,
+installation path, or launcher mapping. The reviewed Project configuration
+selects the setup utility and expected contract version, launcher, pinned tool
+identity and version, and executable path. The setup script installs pinned
+OpenCode tooling below the canonical agent home. OpenCode configuration remains
+in the home-confined XDG directory;
 OMO 4.19.4 configuration is `$HOME/.omo/omo.jsonc`, with
 `["[opencode]"].team_mode` settings of `enabled=true`, `max_parallel_members=4`,
 `max_members=8`,
 and `tmux_visualization=false`. Targeted JSONC updates preserve comments and
 unrelated settings, and concurrent setup is serialized. An interrupted
 multi-file update converges when retried rather than promising transactional
-atomicity across files. OpenCode remains a user-selected command, not a DIM
-agent resource, plugin, API, or lifecycle step.
+atomicity across files. It also writes a mode-restricted version-1 manifest
+and launcher below canonical `$HOME/.local`; `agent` rejects missing, unknown,
+escaping, or incompatible launcher state before execution.
+OpenCode remains a Project-selected command, not a DIM agent resource, plugin,
+API, or lifecycle step.
 
 Projects may separately publish an opt-in OpenCode Web launcher. The canonical
 launcher requires the pinned setup to have completed, sets a non-empty server

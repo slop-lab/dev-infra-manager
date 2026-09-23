@@ -314,13 +314,20 @@ Run project-defined tasks without repeating setup:
 ```bash
 dim run example-dev bash
 dim run example-dev bash -- -lc 'just test'
+dim run example-dev tool-setup <reviewed-tool-setup.bash
+dim run example-dev agent
 dim run example-dev backup >example-dev-home.tar.gz
 dim run example-dev restore <example-dev-home.tar.gz
 ```
 
 `dim run` is the short form of `dim workspace run`. It enters the checked-in
 Project task boundary, which may dispatch `bash` into a Project-owned agent.
-It does not run setup or install an agent tool by itself.
+Projects may conventionally expose `tool-setup` for an explicit reviewed
+user-home setup program and `agent` for the compatible installed launcher.
+Those generic names do not select a tool in DIM. The Project entrypoint maps
+them to a reviewed utility, expected contract version, launcher name, pinned
+tool identity and version, and executable path. `run` does not invoke either
+task by itself.
 
 To offer an optional OpenCode bootstrap, publish
 `scripts/workspace-user-setup.bash` and its `.sha256` file from the development
@@ -355,7 +362,7 @@ repository's immutable raw-file URL and full commit ID:
     cd -- "$download_dir"
     sha256sum --check workspace-user-setup.bash.sha256
   )
-  dim run example-dev bash -- -s <"$download_dir/workspace-user-setup.bash"
+  dim run example-dev tool-setup <"$download_dir/workspace-user-setup.bash"
 )
 ```
 
@@ -388,6 +395,16 @@ multi-file configuration updates are not one transaction; after interruption,
 rerunning the script must converge on the documented state. The script must not
 authenticate the tool, change global Git configuration, start a web interface,
 or request DIM controller or plugin access.
+
+After successful setup, the canonical utility writes a mode-restricted
+manifest and launcher below canonical `$HOME/.local`. The manifest contract
+version is `1` and names launcher entries without defining them in DIM core.
+Before executing `agent`, Project-owned dispatch validates the supported
+contract version, requested launcher, pinned tool identity and version, the
+exact executable path, and its canonical target below `HOME`. Missing, unknown,
+escaping, or incompatible state fails before execution. A Project can replace
+the mapping only by reviewing its own setup and entrypoint together; lifecycle
+setup does not infer, install, authenticate, or launch the tool.
 
 An optional Web launcher is a separate explicit workspace-user action. It must
 require the pinned OpenCode installation instead of downloading or silently
