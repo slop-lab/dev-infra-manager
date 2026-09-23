@@ -7,6 +7,11 @@
   `DIM_WORKSPACE_IMAGE` as an explicit override. Package builds now generate the
   runtime version used by both release and aggregate-identity local installs.
 
+- Migrate the sole supported historical host state schema 1 record to schema 2
+  during controller startup, with a durable permanent backup, deterministic
+  interruption recovery, and fail-closed handling of conflicting or unsafe
+  artifacts.
+
 - Diagnose whether the current user's systemd manager persists after logout
   and whether AppArmor's unprivileged-user-namespace restriction has the
   required loaded rootlesskit profile. These doctor checks are read-only and
