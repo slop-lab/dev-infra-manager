@@ -6,6 +6,10 @@
   version instead of the mutable `latest` tag, while retaining
   `DIM_WORKSPACE_IMAGE` as an explicit override. Package builds now generate the
   runtime version used by both release and aggregate-identity local installs.
+  The installed CLI now builds that image explicitly from shipped trusted
+  assets and its exact-version controller-proxy dependency, with no source
+  checkout or running controller required. Builds use the current user's UID
+  and GID and reject IDs, digests, untagged destinations, and `latest`.
 
 - Migrate the sole supported historical host state schema 1 record to schema 2
   during controller startup, with a durable permanent backup, deterministic
