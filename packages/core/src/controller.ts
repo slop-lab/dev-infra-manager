@@ -29,9 +29,10 @@ export interface WorkspaceTarget {
 }
 
 export interface ResolvedWorkspaceTarget {
-  protocol: "http" | "https" | "tcp";
-  host: string;
-  port: number;
+  readonly protocol: "http" | "https" | "tcp";
+  readonly host: string;
+  readonly port: number;
+  readonly fingerprint: string;
 }
 
 export interface ControllerRouteResponse {
@@ -358,35 +359,37 @@ export async function resolveWorkspaceTarget(
   mode: "container-dns" | "container-ip"
 ): Promise<ResolvedWorkspaceTarget> {
   validateTarget(target);
+  const outer = await outerContainer(runner, record);
   if (target.containers.length === 0) {
     return {
       protocol: target.protocol,
-      host: mode === "container-ip"
-        ? await outerContainerIp(runner, record)
-        : record.containerName,
-      port: target.port
+      host: mode === "container-ip" ? outer.ip : record.containerName,
+      port: target.port,
+      fingerprint: outer.id
     };
   }
 
   const first = await innerContainer(runner, record, target.containers[0] as string);
   let relayTargetPort = target.port;
+  let fingerprint = first.id;
   if (target.containers.length === 2) {
-    relayTargetPort = await nestedPublishedPort(
+    const nested = await nestedPublishedTarget(
       runner,
       record,
       first.name,
       target.containers[1] as string,
       target.port
     );
+    relayTargetPort = nested.port;
+    fingerprint = nested.id;
   }
   const relayPort = 20_000 + stableHash(JSON.stringify(target)) % 30_000;
   await ensureWorkspaceRelay(runner, record, relayPort, first.ip, relayTargetPort);
   return {
     protocol: target.protocol,
-    host: mode === "container-ip"
-      ? await outerContainerIp(runner, record)
-      : record.containerName,
-    port: relayPort
+    host: mode === "container-ip" ? outer.ip : record.containerName,
+    port: relayPort,
+    fingerprint
   };
 }
 
@@ -405,23 +408,30 @@ function validateTarget(target: WorkspaceTarget): void {
   }
 }
 
-async function outerContainerIp(runner: StreamingCommandRunner, record: WorkspaceRecord): Promise<string> {
+async function outerContainer(
+  runner: StreamingCommandRunner,
+  record: WorkspaceRecord
+): Promise<{ readonly id: string; readonly ip: string }> {
   const inspected = await runner.run("docker", [
     "container", "inspect", record.containerName,
-    "--format", "{{json .NetworkSettings.Networks}}"
+    "--format", "{{json .}}"
   ]);
   if (inspected.exitCode !== 0) throw new UserError(`cannot inspect workspace '${record.name}'`);
-  const networks = JSON.parse(inspected.stdout) as Record<string, { IPAddress?: string }>;
-  const address = networks[record.networkName]?.IPAddress;
+  const container = JSON.parse(inspected.stdout) as {
+    Id?: string;
+    NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> };
+  };
+  const address = container.NetworkSettings?.Networks?.[record.networkName]?.IPAddress;
+  if (!container.Id) throw new UserError(`workspace '${record.name}' has no container identity`);
   if (!address) throw new UserError(`workspace '${record.name}' has no address on '${record.networkName}'`);
-  return address;
+  return { id: container.Id, ip: address };
 }
 
 async function innerContainer(
   runner: StreamingCommandRunner,
   record: WorkspaceRecord,
   nameOrService: string
-): Promise<{ name: string; ip: string }> {
+): Promise<{ readonly id: string; readonly name: string; readonly ip: string }> {
   let inspected = await workspaceDocker(runner, record, [
     "container", "inspect", nameOrService,
     "--format", "{{json .}}"
@@ -443,37 +453,43 @@ async function innerContainer(
   }
   if (inspected.exitCode !== 0) throw new UserError(`cannot inspect workspace target '${nameOrService}'`);
   const container = JSON.parse(inspected.stdout) as {
+    Id?: string;
     Name?: string;
     NetworkSettings?: { Networks?: Record<string, { IPAddress?: string }> };
   };
   const ip = Object.values(container.NetworkSettings?.Networks ?? {}).map((network) => network.IPAddress).find(Boolean);
+  if (!container.Id) throw new UserError(`workspace target '${nameOrService}' has no container identity`);
   if (!ip) throw new UserError(`workspace target '${nameOrService}' has no reachable address`);
-  return { name: (container.Name ?? nameOrService).replace(/^\//, ""), ip };
+  return { id: container.Id, name: (container.Name ?? nameOrService).replace(/^\//, ""), ip };
 }
 
-async function nestedPublishedPort(
+async function nestedPublishedTarget(
   runner: StreamingCommandRunner,
   record: WorkspaceRecord,
   parent: string,
   child: string,
   port: number
-): Promise<number> {
+): Promise<{ readonly id: string; readonly port: number }> {
   const inspected = await runner.run("docker", [
     "exec", "--user", "root", record.containerName,
     nestedEngine(record), "exec", parent,
     "docker", "container", "inspect", child,
-    "--format", "{{json .NetworkSettings.Ports}}"
+    "--format", "{{json .}}"
   ]);
   if (inspected.exitCode !== 0) {
     throw new UserError(`nested target '${parent}/${child}' was not found`);
   }
-  const ports = JSON.parse(inspected.stdout) as Record<string, Array<{ HostPort?: string }> | null>;
-  const published = ports[`${port}/tcp`]?.[0]?.HostPort;
+  const container = JSON.parse(inspected.stdout) as {
+    Id?: string;
+    NetworkSettings?: { Ports?: Record<string, Array<{ HostPort?: string }> | null> };
+  };
+  const published = container.NetworkSettings?.Ports?.[`${port}/tcp`]?.[0]?.HostPort;
   const parsed = Number(published);
+  if (!container.Id) throw new UserError(`nested target '${parent}/${child}' has no container identity`);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535) {
     throw new UserError(`nested target '${parent}/${child}' must publish TCP port ${port} on '${parent}'`);
   }
-  return parsed;
+  return { id: container.Id, port: parsed };
 }
 
 async function ensureWorkspaceRelay(
