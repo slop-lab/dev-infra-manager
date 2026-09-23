@@ -216,7 +216,10 @@ dim workspace discard feature-123 --keep-volume --yes
 - `restart` is the explicit way to apply merged root-repository changes to one
   or more workspaces. Multiple names are processed in command-line order; a
   failure stops before later names while keeping earlier restarts complete.
-- `update` fast-forwards the root ref without a stop/start cycle.
+- `update` reuses the running outer container when the selected root is
+  unchanged. A changed root replaces that container before setup and may
+  interrupt outer processes and nested runtimes while preserving named
+  persistent data.
 - `setup` retries setup without changing the root ref.
 - `discard` permanently removes the workspace and unpushed changes; use
   `--keep-volume` to retain DIM-managed nested-engine data for recreation with
