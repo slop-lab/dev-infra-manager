@@ -13,18 +13,18 @@ A DIM **Project** is lightweight metadata:
 - one required **root repository** and an optional branch ref;
 - any additional repositories that belong to the Project.
 
-Each **workspace** clones only the root repository. The root repository's
+Each **workspace** mounts an immutable snapshot of the reviewed root repository. The root repository's
 optional `.dim/setup.sh`, `.dim/entrypoint.sh`, and Docker Compose
-configuration own any additional checkouts and nested containers. A repository
+configuration own all mutable checkouts and nested containers. A repository
 does not need to correspond one-to-one with a container. DIM therefore tracks
 one root ref instead of prescribing a multi-repository runtime layout. When no
 root ref is configured, DIM resolves the repository's symbolic `HEAD`;
 workspace creation fails if the repository has no `HEAD`.
 
 A running workspace is never changed automatically when the Project changes.
-`dim workspace start`, `dim workspace restart`, and `dim workspace update` fast-forward the configured root
-ref and run setup. This keeps an active agent session stable while making
-refreshes explicit.
+`dim workspace start`, `dim workspace restart`, and `dim workspace update`
+select reviewed root bytes and run setup. Project code decides how to reconcile
+its persistent mutable data.
 
 ## Requirements
 
@@ -242,19 +242,12 @@ dim repo list acme
 
 The root lifecycle receives a Project-specific base URL such as
 `http://dim-gitea:3000/dim-acme` in `DIM_GIT_BASE_URL`, plus a small runtime
-manifest at `DIM_PROJECT_MANIFEST`. Each ready repository record includes its
-requested ref, resolved ref, and exact commit SHA. Project code decides checkout
-paths and services but materializes that recorded commit. DIM neither exports a variable per repository
-nor assumes a repository-to-container mapping. Projects can independently map
+manifest at `DIM_PROJECT_MANIFEST`. The manifest identifies the immutable root,
+persistent workspace-data path, and generic runtime capabilities. Project code
+owns repository aliases, refs, checkout paths, and services. DIM neither
+exports a variable per repository nor assumes a repository-to-container mapping. Projects can independently map
 different upstream repository names without making their normal configuration
 depend on DIM.
-
-Use a non-root candidate ref without changing Project state when creating a
-verification workspace:
-
-```bash
-dim workspace create acme candidate --repo-ref product=refs/pull/42/head
-```
 
 ### Synchronizing an external repository
 
