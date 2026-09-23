@@ -189,13 +189,15 @@ jq -n \
   --arg network "$network" \
   --arg now "$now" \
   '{
-    schemaVersion: 3,
+    schemaVersion: 6,
     name: $name,
     projectId: "external-example-project-id",
     projectName: "external-example",
     rootRepositoryAlias: "root",
     rootRef: "refs/heads/main",
-    projectPath: "/workspace/project",
+    rootCommit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    rootSnapshotPath: "/run/dim/project-root",
+    workspaceDataPath: "/var/lib/dim/workspace-data",
     phase: "ready",
     profiles: ["development"],
     composeProjectName: "dim-external-example",
@@ -211,6 +213,7 @@ jq -n \
     gitUserName: "DIM Example",
     gitUserEmail: "example@dim.invalid",
     gitBaseUrl: "http://unused.invalid",
+    hostAliases: {},
     projectManifestPath: "/run/dim/project.json",
     createdAt: $now,
     updatedAt: $now

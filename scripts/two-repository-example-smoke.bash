@@ -103,10 +103,7 @@ dim workspace create "$project_name" "$workspace_name" >/dev/null
 workspace_json="$(dim workspace show "$workspace_name" --json)"
 test "$(jq -r .phase <<<"$workspace_json")" = "ready"
 container_name="$(jq -r .containerName <<<"$workspace_json")"
-project_path="$(jq -r .projectPath <<<"$workspace_json")"
-test "$(jq -r .repositorySnapshot.app.requestedRef <<<"$workspace_json")" = main
-test "$(jq -r .repositorySnapshot.app.ref <<<"$workspace_json")" = refs/heads/main
-test "$(jq -r .repositorySnapshot.app.commit <<<"$workspace_json")" = "$app_commit"
+workspace_data_path="$(jq -r .workspaceDataPath <<<"$workspace_json")"
 test "$(docker inspect "$container_name" --format '{{.Config.Image}}')" = "$workspace_image"
 
 app_container="$(dim workspace exec "$workspace_name" -- \
@@ -122,12 +119,13 @@ dim workspace exec "$workspace_name" -- docker inspect "$app_container" \
   --format '{{.HostConfig.Privileged}}' | grep -qx false
 mounts_json="$(dim workspace exec "$workspace_name" -- docker inspect "$app_container" \
   --format '{{json .Mounts}}')"
-jq -e --arg app "$project_path/app" '
+jq -e --arg app "$workspace_data_path/app" '
   length == 2 and
   any(.[]; .Destination == "/workspace" and .Type == "bind" and .RW == true and .Source == $app) and
   any(.[]; .Destination == "/home/dim-agent" and .Type == "volume" and .RW == true) and
   all(.[]; (.Destination == "/workspace" or .Destination == "/home/dim-agent"))
 ' <<<"$mounts_json" >/dev/null
+test "$(dim workspace run "$workspace_name" app -- git rev-parse HEAD)" = "$app_commit"
 
 test "$(dim workspace run "$workspace_name" app -- id -u)" -ne 0
 dim workspace run "$workspace_name" app -- sh -eu -c '
