@@ -10,8 +10,11 @@ for arg in "$@"; do
   esac
 done
 
-repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd -- "$script_dir/../.." && pwd)"
 cd "$repo_root"
+local_version="$(bash "$script_dir/local-build-version.bash")"
+workspace_image="dev-infra-project-workspace:$local_version"
 
 tmpdir="$(mktemp -d /tmp/dim-sysbox-isolation-XXXXXX)"
 probe_suffix="$$-$(date +%s)"
@@ -50,7 +53,7 @@ trap cleanup EXIT
 # Use unique tags so the isolation assertions never depend on which images the
 # host or inner daemon happened to cache before this smoke run.
 step "verify nested Docker isolation and resource limits"
-docker tag dev-infra-project-workspace:latest "$host_probe_image"
+docker tag "$workspace_image" "$host_probe_image"
 docker run --rm \
   --name "$nested_smoke_container" \
   --runtime sysbox-runc \
@@ -59,7 +62,7 @@ docker run --rm \
   --pids 128 \
   --env HOST_PROBE_IMAGE="$host_probe_image" \
   --env INNER_PROBE_IMAGE="$inner_probe_image" \
-  dev-infra-project-workspace:latest \
+  "$workspace_image" \
   bash -lc '
     ! docker image inspect "$HOST_PROBE_IMAGE" >/dev/null 2>&1
     read -r cpu_quota cpu_period < /sys/fs/cgroup/cpu.max

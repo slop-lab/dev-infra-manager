@@ -57,13 +57,15 @@ cleanup() {
 trap cleanup EXIT
 
 cd "$repo_root"
+local_version="$(bash "$script_dir/local-build-version.bash")"
+workspace_image="dev-infra-project-workspace:$local_version"
 echo "[single-repository] install DIM and materialize one repository"
 dim_install_example_cli "$repo_root" "$work_dir" "$install_prefix"
 docker build \
   --quiet \
   --build-arg "DIM_UID=$(id -u)" \
   --build-arg "DIM_GID=$(id -g)" \
-  --tag dev-infra-project-workspace:latest \
+  --tag "$workspace_image" \
   --file "$repo_root/core/images/project-workspace/Dockerfile" \
   "$repo_root" >/dev/null
 bash "$repo_root/examples/projects/single-repository/create-repository.bash" \

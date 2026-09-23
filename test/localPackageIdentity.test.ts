@@ -13,6 +13,7 @@ const commits = {
   "plugin-dns-cloudflare": "2".repeat(40),
   "plugin-external-urls": "3".repeat(40)
 } as const;
+const aggregateLock = "lockfileVersion: '9.0'\n";
 
 type Fixture = {
   readonly root: string;
@@ -21,19 +22,24 @@ type Fixture = {
   readonly versions: string;
 };
 
-async function createFixture(): Promise<Fixture> {
-  const root = await mkdtemp(resolve(tmpdir(), "dim-local-package-identity-"));
+async function createFixture(prefix = "dim-local-package-identity-"): Promise<Fixture> {
+  const root = await mkdtemp(resolve(tmpdir(), prefix));
   fixtureRoots.push(root);
   const scripts = resolve(root, "verification/scripts");
+  const project = resolve(root, "project");
   const tools = resolve(root, "tools");
   const versions = resolve(root, "versions.log");
   await Promise.all([
     mkdir(scripts, { recursive: true }),
+    mkdir(project, { recursive: true }),
     mkdir(tools, { recursive: true }),
     ...repositories.map((repository) => mkdir(resolve(root, repository), { recursive: true }))
   ]);
+  await writeFile(resolve(root, "core/package.json"), '{"version":"0.8.0"}\n');
   const script = resolve(scripts, "pack-local-packages.bash");
   await copyFile(resolve(workspaceRoot, "verification/scripts/pack-local-packages.bash"), script);
+  await copyFile(resolve(workspaceRoot, "verification/scripts/local-build-version.bash"), resolve(scripts, "local-build-version.bash"));
+  await writeFile(resolve(project, "pnpm-lock.yaml"), aggregateLock);
 
   const toolSources: Readonly<Record<string, string>> = {
     git: `#!/usr/bin/env bash
@@ -47,13 +53,18 @@ if [[ "$operation" == "rev-parse HEAD" ]]; then
     plugin-dns-cloudflare) printf '%s\n' "$DIM_TEST_DNS_HEAD" ;;
     plugin-external-urls) printf '%s\n' "$DIM_TEST_EXTERNAL_HEAD" ;;
   esac
-elif [[ "$operation" == "status --porcelain" && "$repository" == "\${DIM_TEST_DIRTY_REPOSITORY:-}" ]]; then
-  printf ' M package.json\n'
+elif [[ "$operation" == "status --porcelain" ]]; then
+  if [[ "$repository" == "\${DIM_TEST_STATUS_FAILURE_REPOSITORY:-}" ]]; then
+    exit 41
+  fi
+  if [[ "$repository" == "\${DIM_TEST_DIRTY_REPOSITORY:-}" ]]; then
+    printf ' M package.json\n'
+  fi
 fi
 `,
     node: `#!/usr/bin/env bash
 if [[ "$1" == -p ]]; then
-  printf '0.8.0\n'
+  exec ${JSON.stringify(process.execPath)} "$@"
 else
   printf '%s\n' "$DIM_LOCAL_BUILD_VERSION" >>"$DIM_TEST_VERSIONS"
 fi
@@ -86,14 +97,33 @@ function runPack(
       DIM_TEST_DNS_HEAD: heads["plugin-dns-cloudflare"],
       DIM_TEST_EXTERNAL_HEAD: heads["plugin-external-urls"],
       DIM_TEST_DIRTY_REPOSITORY: dirtyRepository,
+      DIM_ROOT_REPOSITORY_PATH: resolve(fixture.root, "project"),
       DIM_TEST_VERSIONS: fixture.versions
+    }
+  });
+}
+
+function runVersion(fixture: Fixture, environment: Readonly<Record<string, string>> = {}): SpawnSyncReturns<string> {
+  return spawnSync("/usr/bin/bash", [resolve(fixture.root, "verification/scripts/local-build-version.bash")], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${fixture.tools}:/usr/bin:/bin`,
+      DIM_TEST_CORE_HEAD: commits.core,
+      DIM_TEST_DNS_HEAD: commits["plugin-dns-cloudflare"],
+      DIM_TEST_EXTERNAL_HEAD: commits["plugin-external-urls"],
+      DIM_ROOT_REPOSITORY_PATH: resolve(fixture.root, "project"),
+      DIM_TEST_VERSIONS: fixture.versions,
+      ...environment
     }
   });
 }
 
 function aggregateIdentity(heads: Readonly<Record<(typeof repositories)[number], string>>): string {
   return createHash("sha256")
-    .update(repositories.map((repository) => `${repository}=${heads[repository]}\n`).join(""))
+    .update(
+      `${repositories.map((repository) => `${repository}=${heads[repository]}\n`).join("")}aggregate-lock-sha256=${createHash("sha256").update(aggregateLock).digest("hex")}\n`
+    )
     .digest("hex");
 }
 
@@ -120,6 +150,29 @@ describe("local package identity", () => {
     ]);
   });
 
+  it("uses the exact same aggregate local version for packages and images", async () => {
+    const fixture = await createFixture();
+
+    const packages = runPack(fixture, commits);
+    const image = spawnSync("/usr/bin/bash", [resolve(fixture.root, "verification/scripts/local-build-version.bash")], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${fixture.tools}:/usr/bin:/bin`,
+        DIM_TEST_CORE_HEAD: commits.core,
+        DIM_TEST_DNS_HEAD: commits["plugin-dns-cloudflare"],
+        DIM_TEST_EXTERNAL_HEAD: commits["plugin-external-urls"],
+        DIM_ROOT_REPOSITORY_PATH: resolve(fixture.root, "project"),
+        DIM_TEST_VERSIONS: fixture.versions
+      }
+    });
+    const versions = (await readFile(fixture.versions, "utf8")).trim().split("\n");
+
+    expect(packages.status).toBe(0);
+    expect(image.status).toBe(0);
+    expect(versions).toEqual([image.stdout.trim(), image.stdout.trim()]);
+  });
+
   it.each(repositories)("appends one dirty suffix when %s is dirty", async (dirtyRepository) => {
     const fixture = await createFixture();
 
@@ -131,5 +184,64 @@ describe("local package identity", () => {
       `0.8.0-local-${aggregateIdentity(commits)}-dirty`,
       `0.8.0-local-${aggregateIdentity(commits)}-dirty`
     ]);
+  });
+
+  it("stops before package build and pack when the aggregate lock is missing", async () => {
+    // Given
+    const fixture = await createFixture();
+    await rm(resolve(fixture.root, "project/pnpm-lock.yaml"));
+
+    // When
+    const result = runPack(fixture, commits);
+
+    // Then
+    expect(result.status).not.toBe(0);
+    await expect(readFile(fixture.versions, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("returns no version when repository status inspection fails", async () => {
+    // Given
+    const fixture = await createFixture();
+
+    // When
+    const result = runVersion(fixture, { DIM_TEST_STATUS_FAILURE_REPOSITORY: "core" });
+
+    // Then
+    expect(result.status).toBe(41);
+    expect(result.stdout).toBe("");
+  });
+
+  it("reads the package version when the repository path contains a quote", async () => {
+    // Given
+    const fixture = await createFixture("dim-local-package-'identity-");
+
+    // When
+    const result = runVersion(fixture);
+
+    // Then
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe(`0.8.0-local-${aggregateIdentity(commits)}`);
+  });
+
+  it("builds release and aggregate-local workspace images before local-tag consumers", async () => {
+    // Given
+    const recipes = await readFile(resolve(workspaceRoot, "verification/verify.just"), "utf8");
+    const workspaceRuntime = recipes.slice(
+      recipes.indexOf("workspace-runtime:"),
+      recipes.indexOf("# Requires Docker and network access")
+    );
+
+    // When
+    const releaseBuild = workspaceRuntime.indexOf("just build-workspace-image");
+    const localBuild = workspaceRuntime.indexOf("just build-local-workspace-image");
+    const localTagConsumer = workspaceRuntime.indexOf("container-inner-docker-smoke.bash");
+
+    // Then
+    expect(releaseBuild).toBeGreaterThan(-1);
+    expect(localBuild).toBeGreaterThan(releaseBuild);
+    expect(localBuild).toBeLessThan(localTagConsumer);
+    expect(workspaceRuntime).toContain(
+      "    just build-workspace-image\n    just build-local-workspace-image\n    cd .. && bash verification/scripts/container-inner-docker-smoke.bash"
+    );
   });
 });

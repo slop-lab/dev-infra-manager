@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 const fixtureRoots: string[] = [];
+const packageVersion = `0.9.0-local-${"a".repeat(64)}`;
+const imageRef = `dev-infra-project-workspace:${packageVersion}`;
 
 type Fixture = {
   readonly root: string;
@@ -21,13 +23,31 @@ async function createFixture(): Promise<Fixture> {
   const packageRoot = resolve(root, ".local/dim-packages");
   const log = resolve(root, "invocations.log");
   await Promise.all([scripts, tools, packageRoot].map((directory) => mkdir(directory, { recursive: true })));
-  await copyFile(resolve(workspaceRoot, "project/scripts/install-source-build.bash"), resolve(scripts, "install-source-build.bash"));
+  await Promise.all(
+    ["install-source-build.bash", "local-package-version.bash"].map((script) =>
+      copyFile(resolve(workspaceRoot, "project/scripts", script), resolve(scripts, script))
+    )
+  );
   await writeFile(resolve(root, ".local/prepared-local.state"), "state=fresh\n");
+  await writeFile(
+    resolve(packageRoot, "packages.json"),
+    `${JSON.stringify({ schemaVersion: 1, packages: [{ name: "@slop-lab/dim-cli", version: packageVersion, file: "slop-lab-dim-cli-local.tgz" }] })}\n`
+  );
+  await writeFile(resolve(packageRoot, "slop-lab-dim-cli-local.tgz"), "");
   await writeFile(resolve(packageRoot, "slop-lab-dim-plugin-dns-cloudflare-local.tgz"), "");
   await writeFile(resolve(packageRoot, "slop-lab-dim-plugin-external-urls-local.tgz"), "");
   await writeFile(resolve(packageRoot, "unrelated-plugin-local.tgz"), "");
-  await writeFile(resolve(scripts, "local-preparation-state.bash"), "#!/usr/bin/bash\nprintf 'state=fresh\\n'\n");
+  await writeFile(resolve(scripts, "local-preparation-state.bash"), `#!/usr/bin/bash
+expected_ref=${JSON.stringify(imageRef)}
+[[ "$DIM_LOCAL_IMAGE_INSPECT_REF" == "$expected_ref" ]]
+[[ "$DIM_LOCAL_IMAGE_RECORD_REF" == "$expected_ref" ]]
+printf 'state %s %s\n' "$DIM_LOCAL_IMAGE_INSPECT_REF" "$DIM_LOCAL_IMAGE_RECORD_REF" >>"$DIM_INVOCATIONS"
+printf 'state=fresh\n'
+`);
   await writeFile(resolve(tools, "flock"), "#!/usr/bin/bash\nexit 0\n");
+  await writeFile(resolve(tools, "node"), `#!/usr/bin/bash
+exec ${JSON.stringify(process.execPath)} "$@"
+`);
   await writeFile(resolve(tools, "dim"), `#!/usr/bin/bash
 { printf 'dim'; printf ' %s' "$@"; printf '\n'; } >>"$DIM_INVOCATIONS"
 if [[ "\${DIM_PLUGIN_FAILURE:-0}" == 1 && "$1" == "enable-plugin" ]]; then exit 42; fi
@@ -35,6 +55,7 @@ if [[ "\${DIM_PLUGIN_FAILURE:-0}" == 1 && "$1" == "enable-plugin" ]]; then exit 
   await Promise.all([
     resolve(scripts, "local-preparation-state.bash"),
     resolve(tools, "flock"),
+    resolve(tools, "node"),
     resolve(tools, "dim")
   ].map((path) => chmod(path, 0o755)));
   return { root, tools, log };
@@ -70,6 +91,8 @@ describe("Project local install facade", () => {
     expect(invocations).toContain("dim enable-plugin @slop-lab/dim-plugin-dns-cloudflare @slop-lab/dim-plugin-external-urls");
     expect(invocations).not.toContain("unrelated-plugin-local.tgz");
     expect(invocations.indexOf(" install-cli ")).toBeLessThan(invocations.indexOf(" enable-plugin "));
+    expect(invocations.match(/^state /gm)).toHaveLength(2);
+    expect(invocations).toContain(`state ${imageRef} ${imageRef}`);
   });
 
   it("propagates prepared plugin activation failure", async () => {

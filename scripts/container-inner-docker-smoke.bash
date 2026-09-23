@@ -2,6 +2,11 @@
 set -euo pipefail
 
 inner_image="${DIM_CONTAINER_TEST_IMAGE:-alpine:3.22}"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd -- "$script_dir/../.." && pwd)"
+cd "$repo_root"
+local_version="$(bash "$script_dir/local-build-version.bash")"
+workspace_image="dev-infra-project-workspace:$local_version"
 
 run_inner_smoke() {
   local outer_image="$1"
@@ -15,6 +20,6 @@ run_inner_smoke() {
   "
 }
 
-run_inner_smoke dev-infra-project-workspace:latest overlayfs
+run_inner_smoke "$workspace_image" overlayfs
 
 echo "container-inner-docker-smoke-ok"
