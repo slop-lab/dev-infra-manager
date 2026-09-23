@@ -6,9 +6,9 @@ import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/l
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
-import { runWorkspace, setupWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
+import { setupWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
 
-import { COMMIT, LifecycleRunner, MOVED_SOURCE_COMMIT, projectFixture, repositorySnapshot } from "./workspaceLifecycleSnapshotFixture.js";
+import { COMMIT, LifecycleRunner, projectFixture } from "./workspaceLifecycleSnapshotFixture.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
 
 describe("immutable workspace lifecycle dispatch", () => {
@@ -22,7 +22,7 @@ describe("immutable workspace lifecycle dispatch", () => {
     state = new LifecycleState(root);
     project = projectFixture();
     record = {
-      schemaVersion: 5,
+      schemaVersion: 6,
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
@@ -30,8 +30,7 @@ describe("immutable workspace lifecycle dispatch", () => {
       rootRef: "refs/heads/main",
       rootCommit: COMMIT,
       rootSnapshotPath: join(root, "assets", "project-roots", "project-id", COMMIT),
-      repositorySnapshot: repositorySnapshot(),
-      projectPath: "/workspace/project",
+      workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready",
       profiles: ["development"],
       composeProjectName: "dim-work-1",
@@ -63,23 +62,24 @@ describe("immutable workspace lifecycle dispatch", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-it("publishes a setup-error manifest solely from the recorded repository snapshot", async () => {
+it("publishes a setup-error manifest solely from the recorded root contract", async () => {
     const runner = new LifecycleRunner();
-    const snapshot = repositorySnapshot();
-    const failed = { ...record, phase: "setup-error", repositorySnapshot: snapshot } as const;
+    const failed = { ...record, phase: "setup-error" } as const;
     await state.writeWorkspace(failed);
 
     await setupWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
 
     expect(runner.runCalls.some((call) => call.includes("ls-remote"))).toBe(false);
-    expect(runner.runCalls.some((call) => call.includes("fetch"))).toBe(false);
-    expect(runner.publishedManifests[0]?.repositories).toMatchObject(snapshot);
-    const merge = runner.runCalls.find((call) => call.includes("git") && call.includes("merge"));
-    expect(merge).toContain("workspace-container-id");
-    expect(merge).not.toContain(record.containerName);
+    expect(runner.runCalls.some((call) => call.includes("git"))).toBe(false);
+    expect(runner.publishedManifests[0]).toMatchObject({
+      schemaVersion: 3,
+      root: { ref: record.rootRef, commit: record.rootCommit, path: "/run/dim/project-root" },
+      data: { path: record.workspaceDataPath }
+    });
+    expect(runner.publishedManifests[0]).not.toHaveProperty("repositories");
   });
 
-  it("recovers a failed initial manifest publication from the recorded repository snapshot", async () => {
+  it("recovers a failed initial manifest publication without Git mutation", async () => {
     const runner = new LifecycleRunner();
     const failed = { ...record, phase: "error" } as const;
     await state.writeWorkspace(failed);
@@ -87,8 +87,8 @@ it("publishes a setup-error manifest solely from the recorded repository snapsho
     await setupWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
 
     expect(runner.runCalls.some((call) => call.includes("ls-remote"))).toBe(false);
-    expect(runner.runCalls.some((call) => call.includes("fetch"))).toBe(false);
-    expect(runner.publishedManifests[0]?.repositories).toMatchObject(repositorySnapshot());
+    expect(runner.runCalls.some((call) => call.includes("git"))).toBe(false);
+    expect(runner.publishedManifests[0]).not.toHaveProperty("repositories");
   });
 
   it("rejects a same-name foreign replacement before recovery changes selected-root or Git state", async () => {
@@ -104,24 +104,20 @@ it("publishes a setup-error manifest solely from the recorded repository snapsho
       record.name
     )).rejects.toThrow(/conflicts with DIM ownership/);
     await expect(state.readWorkspace(record.name)).resolves.toEqual(interrupted);
-    expect(runner.runCalls.some((call) => call.includes("git") && call.includes("merge"))).toBe(false);
+    expect(runner.runCalls.some((call) => call.includes("git"))).toBe(false);
   });
 
   it("recovers an omitted root ref from its recorded symbolic HEAD resolution after refs move", async () => {
     const runner = new LifecycleRunner();
-    const snapshot = {
-      ...repositorySnapshot(),
-      root: { ...repositorySnapshot().root, requestedRef: "HEAD" }
-    } as const;
     const headProject = { ...project };
     delete headProject.rootRef;
     await state.writeProject(headProject);
-    await state.writeWorkspace({ ...record, phase: "setup-error", repositorySnapshot: snapshot });
+    await state.writeWorkspace({ ...record, phase: "setup-error" });
 
     await setupWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
 
     expect(runner.runCalls.some((call) => call.includes("ls-remote"))).toBe(false);
-    expect(runner.runCalls.some((call) => call.includes("fetch"))).toBe(false);
-    expect(runner.publishedManifests[0]?.repositories).toMatchObject(snapshot);
+    expect(runner.runCalls.some((call) => call.includes("git"))).toBe(false);
+    expect(runner.publishedManifests[0]?.root).toMatchObject({ ref: record.rootRef, commit: record.rootCommit });
   });
 });

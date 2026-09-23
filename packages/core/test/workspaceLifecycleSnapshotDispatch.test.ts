@@ -21,7 +21,7 @@ describe("immutable workspace lifecycle dispatch", () => {
     state = new LifecycleState(root);
     project = projectFixture();
     record = {
-      schemaVersion: 5,
+      schemaVersion: 6,
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
@@ -29,8 +29,7 @@ describe("immutable workspace lifecycle dispatch", () => {
       rootRef: "refs/heads/main",
       rootCommit: COMMIT,
       rootSnapshotPath: join(root, "assets", "project-roots", "project-id", COMMIT),
-      repositorySnapshot: repositorySnapshot(),
-      projectPath: "/workspace/project",
+      workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready",
       profiles: ["development"],
       composeProjectName: "dim-work-1",
@@ -75,9 +74,9 @@ it("dispatches entrypoint bytes from the recorded snapshot and exposes mutable P
 
     // Then
     const call = runner.streamingCalls[0] ?? [];
-    expect(call).toContain(`/run/dim/project-roots/${COMMIT}/.dim/entrypoint.sh`);
-    expect(call).toContain(`DIM_PROJECT_ROOT=${record.projectPath}`);
-    expect(call).toContain("/run/dim/project-roots/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    expect(call).toContain("/run/dim/project-root/.dim/entrypoint.sh");
+    expect(call).toContain("DIM_PROJECT_ROOT=/run/dim/project-root");
+    expect(call).toContain("DIM_WORKSPACE_DATA=/var/lib/dim/workspace-data");
     expect(call.join(" ")).not.toContain("/workspace/project/.dim/entrypoint.sh");
   });
 
@@ -89,7 +88,7 @@ it("retries setup from the recorded commit without resolving a mutable branch", 
     await setupWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
 
     // Then
-    expect(runner.streamingCalls[0]).toContain(`/run/dim/project-roots/${COMMIT}/.dim/setup.sh`);
+    expect(runner.streamingCalls[0]).toContain("/run/dim/project-root/.dim/setup.sh");
     expect(runner.runCalls.some((call) => call.includes("ls-remote"))).toBe(false);
   });
 
@@ -102,8 +101,8 @@ it("runs Compose fallback and its relative build context from immutable snapshot
 
     // Then
     const call = runner.streamingCalls[0] ?? [];
-    expect(call).toContain(`/run/dim/project-roots/${COMMIT}/.dim/docker-compose.yml`);
-    expect(call).toContain(`/run/dim/project-roots/${COMMIT}`);
+    expect(call).toContain("/run/dim/project-root/.dim/docker-compose.yml");
+    expect(call).toContain("/run/dim/project-root");
     expect(call.join(" ")).not.toContain("/workspace/project/.dim/docker-compose.yml");
   });
 
