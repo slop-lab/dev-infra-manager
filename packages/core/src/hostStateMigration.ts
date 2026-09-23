@@ -54,9 +54,6 @@ async function migrateLocked(canonicalPath: string): Promise<HostStateMigrationR
 
   const parsedCanonical = parseState(canonical.bytes, canonicalPath);
   if (parsedCanonical.schema === 2) {
-    if (parsedBackup !== undefined && !recordsEqual(parsedCanonical.record, parsedBackup.converted)) {
-      throw new UserError("host lifecycle schema 1 backup conflicts with canonical schema 2 state");
-    }
     await removeTemporaries(directory, temporaries);
     return { kind: "unchanged" };
   }
@@ -187,10 +184,6 @@ function parseJson(bytes: Buffer, source: string): unknown {
     if (error instanceof SyntaxError) throw new UserError(`host lifecycle state in '${source}' is not valid JSON`);
     throw error;
   }
-}
-
-function recordsEqual(left: HostLifecycleRecord, right: HostLifecycleRecord): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
