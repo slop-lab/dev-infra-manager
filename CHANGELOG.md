@@ -2,13 +2,6 @@
 
 ## Unreleased
 
-- Separate provider-specific Gitea and CI management into the optional
-  `@slop-lab/dim-control-plane` package. The local core and CLI now expose a
-  strict provider-neutral scheduling protocol, pinned outbound SSH transport,
-  exact-tree/path/capability admission, explicit local approval, and
-  locally registered workload execution without provider dependencies or
-  compatibility reexports.
-
 - Replace DIM-owned mutable repository reconciliation with a schema-6
   workspace contract that mounts reviewed root bytes read-only and gives
   reviewed Project code a persistent data root. The schema-3 runtime manifest
