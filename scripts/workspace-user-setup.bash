@@ -115,6 +115,8 @@ const installPrefix = ensureDirectory(path.join(home, ".local"), "installation p
 ensureDirectory(path.join(installPrefix, "bin"), "npm executable directory")
 const installLibrary = ensureDirectory(path.join(installPrefix, "lib"), "npm library directory")
 ensureDirectory(path.join(installLibrary, "node_modules"), "npm package directory")
+const toolLauncherDirectory = ensureDirectory(path.join(installPrefix, "libexec"), "tool launcher directory")
+const toolStateDirectory = ensureDirectory(path.join(installPrefix, "state", "dim-project-tool"), "tool state directory")
 const omoDirectory = ensureDirectory(path.join(home, ".omo"), "OMO configuration directory")
 const configHome = ensureDirectory(rebaseFromRequestedHome(requestedConfigHome), "XDG configuration directory")
 const openCodeDirectory = ensureDirectory(path.join(configHome, "opencode"), "OpenCode configuration directory")
@@ -153,12 +155,14 @@ process.stdout.write([
   stateHome,
   npmCache,
   npmUserconfig,
+  path.join(toolLauncherDirectory, "dim-project-tool-launch"),
+  path.join(toolStateDirectory, "manifest.json"),
 ].join("\n"))
 NODE
 )"
 
 mapfile -t setup_paths <<<"$preflight_output"
-(( ${#setup_paths[@]} == 9 )) || fail 'internal path preflight returned an invalid result'
+(( ${#setup_paths[@]} == 11 )) || fail 'internal path preflight returned an invalid result'
 canonical_home="${setup_paths[0]}"
 install_prefix="${setup_paths[1]}"
 omo_dir="${setup_paths[2]}"
@@ -168,6 +172,8 @@ data_home="${setup_paths[5]}"
 state_home="${setup_paths[6]}"
 npm_cache="${setup_paths[7]}"
 npm_userconfig="${setup_paths[8]}"
+tool_launcher="${setup_paths[9]}"
+tool_manifest="${setup_paths[10]}"
 
 HOME="$canonical_home"
 export HOME
@@ -339,6 +345,100 @@ for (const [name, version] of Object.entries(expected)) {
   const installed = JSON.parse(fs.readFileSync(path.join(prefix, "lib", "node_modules", name, "package.json"), "utf8")).version
   if (installed !== version) throw new Error(`expected ${name}@${version}, found ${installed}`)
 }
+NODE
+
+node - "$tool_launcher" "$tool_manifest" "$install_prefix/bin/opencode" <<'NODE'
+const crypto = require("node:crypto")
+const fs = require("node:fs")
+const path = require("node:path")
+
+const launcherPath = process.argv[2]
+const manifestPath = process.argv[3]
+const executablePath = process.argv[4]
+const launcher = `#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+  printf 'dim-project-tool-launch: %s\\n' "$*" >&2
+  exit 1
+}
+
+(( $# >= 5 )) || fail 'expected CONTRACT_VERSION LAUNCHER TOOL VERSION EXECUTABLE [ARGS...]'
+expected_contract_version="$1"
+expected_launcher="$2"
+expected_tool="$3"
+expected_version="$4"
+expected_executable="$5"
+shift 5
+
+[[ -n "\${HOME:-}" && "$HOME" = /* ]] || fail 'HOME must be an absolute path'
+executable="$(node - "$HOME" "$expected_contract_version" "$expected_launcher" "$expected_tool" "$expected_version" "$expected_executable" <<'VERIFY'
+const fs = require("node:fs")
+const path = require("node:path")
+
+const home = fs.realpathSync(process.argv[2])
+const expectedContractVersion = Number(process.argv[3])
+const expectedLauncher = process.argv[4]
+const expectedTool = process.argv[5]
+const expectedVersion = process.argv[6]
+const expectedExecutable = process.argv[7]
+const manifestPath = path.join(home, ".local", "state", "dim-project-tool", "manifest.json")
+const manifestStat = fs.lstatSync(manifestPath)
+if (!manifestStat.isFile() || manifestStat.isSymbolicLink()) throw new Error("manifest must be a regular file")
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+if (manifest === null || typeof manifest !== "object" || Array.isArray(manifest)) throw new Error("manifest must be an object")
+if (manifest.contractVersion !== expectedContractVersion) throw new Error("unsupported contract version")
+if (manifest.tool !== expectedTool || manifest.version !== expectedVersion) throw new Error("incompatible tool identity")
+const entry = manifest.launchers?.[expectedLauncher]
+if (entry === null || typeof entry !== "object" || Array.isArray(entry)) throw new Error("unknown launcher")
+if (entry.executable !== expectedExecutable) throw new Error("incompatible executable path")
+const relative = path.relative(home, expectedExecutable)
+if (relative === "" || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative)) {
+  throw new Error("executable must be below HOME")
+}
+const executableStat = fs.lstatSync(expectedExecutable)
+if (!executableStat.isFile() && !executableStat.isSymbolicLink()) throw new Error("executable path must be a file or symbolic link")
+fs.accessSync(expectedExecutable, fs.constants.X_OK)
+const executableTarget = fs.realpathSync(expectedExecutable)
+const targetRelative = path.relative(home, executableTarget)
+if (targetRelative === "" || targetRelative === ".." || targetRelative.startsWith(".." + path.sep) || path.isAbsolute(targetRelative)) {
+  throw new Error("executable target must be below HOME")
+}
+if (!fs.statSync(executableTarget).isFile()) throw new Error("executable target must be a regular file")
+process.stdout.write(expectedExecutable)
+VERIFY
+)" || fail 'installed tool manifest is missing or incompatible'
+exec "$executable" "$@"
+`
+const manifest = {
+  contractVersion: 1,
+  tool: "opencode",
+  version: "1.18.31",
+  launchers: {
+    agent: { executable: executablePath },
+  },
+}
+
+function replaceRegularFile(filePath, contents, mode) {
+  try {
+    const stat = fs.lstatSync(filePath)
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`target must be a regular file: ${filePath}`)
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error
+  }
+  const temporaryPath = path.join(path.dirname(filePath), `.${path.basename(filePath)}.${process.pid}.${crypto.randomBytes(6).toString("hex")}.tmp`)
+  const descriptor = fs.openSync(temporaryPath, "wx", mode)
+  try {
+    fs.writeFileSync(descriptor, contents, "utf8")
+    fs.fsyncSync(descriptor)
+  } finally {
+    fs.closeSync(descriptor)
+  }
+  fs.renameSync(temporaryPath, filePath)
+}
+
+replaceRegularFile(launcherPath, launcher, 0o700)
+replaceRegularFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 0o600)
 NODE
 
 printf '%s\n' \
