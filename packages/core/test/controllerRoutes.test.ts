@@ -21,7 +21,7 @@ describe("DIM controller", () => {
   });
 
 it("authenticates, discovers plugin routes, dispatches parameters, and resolves workspace targets", async () => {
-    const resolveTarget = vi.fn(async () => ({ protocol: "http" as const, host: "workspace", port: 8080 }));
+    const resolveTarget = vi.fn(async () => ({ protocol: "tcp" as const, host: "workspace", port: 8080 }));
     const server = createDimController({
       stateRoot: "/state",
       authenticate: async (token) => token === "grant"
@@ -40,7 +40,7 @@ it("authenticates, discovers plugin routes, dispatches parameters, and resolves 
           const target = await context.resolveTarget({
             containers: ["dev"],
             port: body.port,
-            protocol: "http"
+            protocol: "tcp"
           }, "container-dns");
           return { status: 201, body: { id: context.params.id, target } };
         }
@@ -72,11 +72,11 @@ it("authenticates, discovers plugin routes, dispatches parameters, and resolves 
     expect(created.status).toBe(201);
     expect(await created.json()).toEqual({
       id: "item-1",
-      target: { protocol: "http", host: "workspace", port: 8080 }
+      target: { protocol: "tcp", host: "workspace", port: 8080 }
     });
     expect(resolveTarget).toHaveBeenCalledWith(
       expect.objectContaining({ name: "work" }),
-      { containers: ["dev"], port: 8080, protocol: "http" },
+      { containers: ["dev"], port: 8080, protocol: "tcp" },
       "container-dns"
     );
   });

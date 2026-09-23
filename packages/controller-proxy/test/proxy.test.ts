@@ -103,7 +103,7 @@ describe("controller proxy", () => {
     cleanup.push(() => rm(root, { recursive: true, force: true }));
     const sourceSocket = path.join(root, "source.sock");
     const listen = path.join(root, "proxy.sock");
-    const allowedTarget = { containers: ["agent"], protocol: "http" as const, port: 4096 };
+    const allowedTarget = { containers: ["agent"], protocol: "tcp" as const, port: 4096 };
     const forwardedBodies: string[] = [];
     const targets = [
       allowedTarget,
