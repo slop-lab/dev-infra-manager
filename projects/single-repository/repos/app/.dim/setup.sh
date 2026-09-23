@@ -1,10 +1,12 @@
 #!/usr/bin/env sh
 set -eu
 
+sh .dim/materialize-root.sh
+
 git_name="$(dim-host-input builtin.git-author name)"
 git_email="$(dim-host-input builtin.git-author email)"
-DIM_WORKSPACE_UID="$(stat -c %u "$DIM_PROJECT_ROOT")"
-DIM_WORKSPACE_GID="$(stat -c %g "$DIM_PROJECT_ROOT")"
+DIM_WORKSPACE_UID="$(stat -c %u "$DIM_WORKSPACE_DATA/project")"
+DIM_WORKSPACE_GID="$(stat -c %g "$DIM_WORKSPACE_DATA/project")"
 test "$DIM_WORKSPACE_UID" -ne 0 && test "$DIM_WORKSPACE_GID" -ne 0 || {
   echo "single-repository requires a non-root workspace owner" >&2
   exit 1
