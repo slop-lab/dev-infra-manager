@@ -7,6 +7,17 @@ export interface CiRunnerRegistration {
   token: string;
 }
 
+export type QueuedWorkflowJob = {
+  readonly id: number;
+  readonly labels: readonly string[];
+};
+
+export type WorkflowJobWebhookInput = {
+  readonly url: string;
+  readonly authorizationHeader: string;
+  readonly replayQueuedJob: (job: QueuedWorkflowJob) => Promise<void>;
+};
+
 export interface CiCoordinator {
   prepareRunner(
     runner: CommandRunner,
@@ -23,7 +34,7 @@ export interface CiCoordinator {
     runner: CommandRunner,
     options: LifecycleOptions,
     project: ProjectRecord,
-    input: { url: string; authorizationHeader: string }
+    input: WorkflowJobWebhookInput
   ): Promise<void>;
   removeWorkflowJobWebhook(
     runner: CommandRunner,
