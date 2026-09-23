@@ -443,7 +443,7 @@ for target_scope in inside outside; do
   assert_rejected_omo_coordinate_symlink "$target_scope"
 done
 
-for descendant in .local/bin .local/lib .local/lib/node_modules; do
+for descendant in .local/bin .local/lib .local/lib/node_modules .local/libexec .local/state/dim-project-tool; do
   assert_rejected_npm_descendant "$descendant"
   assert_accepted_npm_descendant "$descendant"
 done
@@ -508,28 +508,99 @@ wait "$first_pid"
 test "$($HOME/.local/bin/opencode --version)" = "1.18.31"
 tool_launcher="$HOME/.local/libexec/dim-project-tool-launch"
 tool_manifest="$HOME/.local/state/dim-project-tool/manifest.json"
+tool_executable="$HOME/.local/bin/opencode"
 test "$(stat -c %a "$tool_launcher")" = 700
 test "$(stat -c %a "$tool_manifest")" = 600
-node - "$tool_manifest" "$HOME/.local/bin/opencode" <<'NODE'
+node - "$tool_manifest" "$tool_executable" <<'NODE'
 const fs = require("node:fs")
 const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
 if (manifest.contractVersion !== 1) throw new Error("unexpected contract version")
 if (manifest.tool !== "opencode" || manifest.version !== "1.18.31") throw new Error("unexpected tool identity")
 if (manifest.launchers?.agent?.executable !== process.argv[3]) throw new Error("unexpected agent executable")
 NODE
-test "$("$tool_launcher" 1 agent opencode 1.18.31 "$HOME/.local/bin/opencode" --version)" = 1.18.31
-if "$tool_launcher" 2 agent opencode 1.18.31 "$HOME/.local/bin/opencode" \
+test "$("$tool_launcher" 1 agent opencode 1.18.31 "$tool_executable" --version)" = 1.18.31
+if "$tool_launcher" 2 agent opencode 1.18.31 "$tool_executable" \
   >"$work_dir/incompatible-contract.stdout" 2>"$work_dir/incompatible-contract.stderr"; then
   echo "tool launcher unexpectedly accepted an incompatible contract" >&2
   exit 1
 fi
 grep -Fq 'installed tool manifest is missing or incompatible' "$work_dir/incompatible-contract.stderr"
-if "$tool_launcher" 1 missing opencode 1.18.31 "$HOME/.local/bin/opencode" \
+if "$tool_launcher" 1 missing opencode 1.18.31 "$tool_executable" \
   >"$work_dir/unknown-launcher.stdout" 2>"$work_dir/unknown-launcher.stderr"; then
   echo "tool launcher unexpectedly accepted an unknown launcher" >&2
   exit 1
 fi
 grep -Fq 'installed tool manifest is missing or incompatible' "$work_dir/unknown-launcher.stderr"
+
+assert_launcher_rejected() {
+  local name="$1"
+  shift
+  if "$tool_launcher" "$@" >"$work_dir/$name.stdout" 2>"$work_dir/$name.stderr"; then
+    printf 'tool launcher unexpectedly accepted %s\n' "$name" >&2
+    exit 1
+  fi
+  grep -Fq 'installed tool manifest is missing or incompatible' "$work_dir/$name.stderr"
+}
+
+manifest_backup="$work_dir/tool-manifest.json"
+cp --preserve=mode "$tool_manifest" "$manifest_backup"
+rm "$tool_manifest"
+ln -s "$manifest_backup" "$tool_manifest"
+assert_launcher_rejected manifest-symlink 1 agent opencode 1.18.31 "$tool_executable" --version
+rm "$tool_manifest"
+cp --preserve=mode "$manifest_backup" "$tool_manifest"
+
+node - "$tool_manifest" <<'NODE'
+const fs = require("node:fs")
+const manifestPath = process.argv[2]
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+manifest.tool = "other-tool"
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+NODE
+assert_launcher_rejected tool-mismatch 1 agent opencode 1.18.31 "$tool_executable" --version
+cp --preserve=mode "$manifest_backup" "$tool_manifest"
+
+node - "$tool_manifest" <<'NODE'
+const fs = require("node:fs")
+const manifestPath = process.argv[2]
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+manifest.version = "1.18.30"
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+NODE
+assert_launcher_rejected version-mismatch 1 agent opencode 1.18.31 "$tool_executable" --version
+cp --preserve=mode "$manifest_backup" "$tool_manifest"
+
+node - "$tool_manifest" "$HOME/.local/bin/other" <<'NODE'
+const fs = require("node:fs")
+const manifestPath = process.argv[2]
+const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+manifest.launchers.agent.executable = process.argv[3]
+fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+NODE
+assert_launcher_rejected executable-path-mismatch 1 agent opencode 1.18.31 "$tool_executable" --version
+cp --preserve=mode "$manifest_backup" "$tool_manifest"
+
+executable_backup="$work_dir/opencode-executable"
+mv "$tool_executable" "$executable_backup"
+cat >"$work_dir/outside-home-opencode" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' outside-home-executed
+EOF
+chmod 0700 "$work_dir/outside-home-opencode"
+ln -s "$work_dir/outside-home-opencode" "$tool_executable"
+assert_launcher_rejected outside-home-executable-symlink 1 agent opencode 1.18.31 "$tool_executable" --version
+rm "$tool_executable"
+mv "$executable_backup" "$tool_executable"
+
+mv "$tool_executable" "$executable_backup"
+cat >"$tool_executable" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' non-executable-ran
+EOF
+chmod 0600 "$tool_executable"
+assert_launcher_rejected non-executable-target 1 agent opencode 1.18.31 "$tool_executable" --version
+rm "$tool_executable"
+mv "$executable_backup" "$tool_executable"
 node "$assertions" "$HOME/.local" "$XDG_CONFIG_HOME/opencode/opencode.jsonc" \
   "$HOME/.omo/omo.jsonc" preserved >/dev/null
 grep -Fqx '  // OpenCode fixture comment must survive targeted edits.' \
