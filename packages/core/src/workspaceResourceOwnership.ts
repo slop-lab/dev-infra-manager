@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { UserError } from "./errors.js";
 import type { WorkspaceRecord } from "./lifecycleTypes.js";
 import type { StreamingCommandRunner } from "./types.js";
+import { PROJECT_ROOT } from "./workspaceLifecycleTypes.js";
 
 type WorkspaceIdentity = Pick<WorkspaceRecord,
   "name" | "projectName" | "projectId" | "rootRepositoryAlias" | "runtimeBackend" |
@@ -23,7 +24,8 @@ const CONTAINER_INSPECT_FORMAT = [
   "{{.Id}}",
   "{{.State.Running}}",
   ...CONTAINER_LABEL_KEYS.map((key) => `{{index .Config.Labels "${key}"}}`),
-  "{{index .Config.Labels \"dim.runtime-config\"}}"
+  "{{index .Config.Labels \"dim.runtime-config\"}}",
+  "{{json .Mounts}}"
 ].join("|");
 
 const VOLUME_LABEL_KEYS = [
@@ -45,6 +47,7 @@ export type InspectedWorkspaceContainer = {
   readonly id: string;
   readonly running: boolean;
   readonly runtimeConfig: string;
+  readonly rootSnapshotPath: string;
 };
 
 export function workspaceContainerLabels(record: WorkspaceIdentity): readonly string[] {
@@ -103,12 +106,17 @@ export async function inspectWorkspaceContainer(
     throw new UserError(`failed to inspect workspace container '${record.containerName}': ${inspected.stderr.trim()}`);
   }
   const [id, running, ...values] = inspected.stdout.trim().split("|");
-  const runtimeConfig = values.pop();
+  const labels = values.slice(0, CONTAINER_LABEL_KEYS.length);
+  const runtimeConfig = values[CONTAINER_LABEL_KEYS.length];
   const expected = workspaceContainerLabels(record).map(labelValue).join("|");
-  if (!id || (running !== "true" && running !== "false") || values.join("|") !== expected || runtimeConfig === undefined) {
+  if (!id || (running !== "true" && running !== "false") || labels.join("|") !== expected || runtimeConfig === undefined) {
     throw new UserError(`Docker container '${record.containerName}' conflicts with DIM ownership`);
   }
-  return { id, running: running === "true", runtimeConfig };
+  const rootSnapshotPath = parseProjectRootMount(
+    values.slice(CONTAINER_LABEL_KEYS.length + 1).join("|"),
+    record.containerName
+  );
+  return { id, running: running === "true", runtimeConfig, rootSnapshotPath };
 }
 
 export async function inspectWorkspaceVolume(
@@ -147,6 +155,40 @@ export function isMissingVolume(stderr: string, target: string): boolean {
 
 function labelValue(label: string): string {
   return label.slice(label.indexOf("=") + 1);
+}
+
+type DockerMount = {
+  readonly Type: string;
+  readonly Source: string;
+  readonly Destination: string;
+  readonly RW: boolean;
+};
+
+function parseProjectRootMount(raw: string, containerName: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new UserError(`Docker container '${containerName}' has an invalid immutable Project-root mount`);
+  }
+  const mounts = Array.isArray(parsed) ? parsed.filter(isDockerMount) : [];
+  const projectRoots = mounts.filter((mount) => mount.Destination === PROJECT_ROOT);
+  if (projectRoots.length !== 1) {
+    throw new UserError(`Docker container '${containerName}' has an invalid immutable Project-root mount`);
+  }
+  const mount = projectRoots[0];
+  if (mount === undefined || mount.Type !== "bind" || mount.RW || mount.Source.length === 0) {
+    throw new UserError(`Docker container '${containerName}' has an invalid immutable Project-root mount`);
+  }
+  return mount.Source;
+}
+
+function isDockerMount(value: unknown): value is DockerMount {
+  return typeof value === "object" && value !== null
+    && "Type" in value && typeof value.Type === "string"
+    && "Source" in value && typeof value.Source === "string"
+    && "Destination" in value && typeof value.Destination === "string"
+    && "RW" in value && typeof value.RW === "boolean";
 }
 
 function identityDigest(fields: readonly string[]): string {

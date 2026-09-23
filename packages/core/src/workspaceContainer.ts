@@ -34,6 +34,9 @@ export async function assertContainerRunning(
   if (container === undefined || !container.running) {
     throw new UserError(`workspace '${record.name}' is stopped; run dim workspace start`);
   }
+  if (container.rootSnapshotPath !== record.rootSnapshotPath) {
+    throw new UserError(`workspace '${record.name}' container root does not match its recorded immutable root`);
+  }
   return container.id;
 }
 
@@ -68,7 +71,8 @@ export async function reconcileContainer(
         : `failed to create workspace container: ${created.stderr.trim()}`);
     }
   }
-  if (container.runtimeConfig !== WORKSPACE_RUNTIME_CONFIG_VERSION) {
+  if (container.runtimeConfig !== WORKSPACE_RUNTIME_CONFIG_VERSION
+    || container.rootSnapshotPath !== record.rootSnapshotPath) {
     const removed = await runner.run("docker", ["container", "rm", "--force", container.id]);
     if (removed.exitCode !== 0 && !isMissingContainer(removed.stderr, container.id)) {
       throw new UserError(`failed to replace workspace container: ${removed.stderr.trim()}`);
@@ -84,6 +88,9 @@ export async function reconcileContainer(
     }
     if (container.runtimeConfig !== WORKSPACE_RUNTIME_CONFIG_VERSION) {
       throw new UserError(`workspace container '${record.containerName}' has stale runtime configuration`);
+    }
+    if (container.rootSnapshotPath !== record.rootSnapshotPath) {
+      throw new UserError(`workspace container '${record.containerName}' has the wrong immutable Project root`);
     }
   }
   if (!container.running) {

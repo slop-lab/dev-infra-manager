@@ -44,6 +44,12 @@ export async function reconcileWorkspaceRuntimeState(
   const running = container?.running ?? false;
   // A running outer container is not sufficient evidence that reviewed Project
   // setup completed. Only DIM setup may promote a workspace back to ready.
+  if (running && container?.rootSnapshotPath !== record.rootSnapshotPath) {
+    const error = "workspace container root does not match its recorded immutable root";
+    const reconciled = { ...record, phase: "error" as const, error, updatedAt: new Date().toISOString() };
+    await state.writeWorkspace(reconciled);
+    return reconciled;
+  }
   if (running || record.phase === "stopped") return record;
   const reconciled = { ...record, phase: "stopped" as const, updatedAt: new Date().toISOString() };
   delete reconciled.error;
