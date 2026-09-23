@@ -772,7 +772,9 @@ the recorded recovery targets in order. A partial failure MUST retain all
 still-pending restart intent so another
 `host start` invocation can repeat recovery. Host lifecycle state uses only
 schema version `2`; `restartCiRunners` is the durable authority to recover CI
-runners, and there is no schema-`1` compatibility or migration path. A runner
+runners. Managed-controller startup MUST migrate only an exact schema-`1` host
+record by changing `schemaVersion` to `2` and renaming `resumeCiRunners` to
+`restartCiRunners`; every other field and value is preserved. A runner
 that is ready but absent from `restartCiRunners` MUST remain untouched. A
 workspace already in `ready` MUST not be cycled on retry. A `stopped` workspace
 MUST use ordinary start, while
@@ -787,6 +789,21 @@ A schema-`2` host record MUST have exactly `schemaVersion`, `phase`,
 and each runner target contains exactly valid `project` and `name` strings.
 Malformed, missing, mistyped, or unknown structure MUST be rejected without
 mutating the record or dispatching recovery.
+
+The startup-only migration MUST run immediately after controller PID ownership
+is claimed and before plugin loading, route initialization, or listener setup.
+It owns one host lifecycle lock acquisition and rereads under that lock. It
+keeps byte-exact schema-`1` bytes permanently in mode-`0600`
+`host.json.schema-1.bak`, publishes that backup without replacement, and uses
+synced exclusive same-directory temporaries plus atomic canonical rename and
+directory sync. It deterministically completes or recovers the valid
+schema-1/no-backup, schema-1/matching-backup, schema-2/no-backup,
+schema-2/matching-backup, and missing-canonical/valid-backup states. Symlinks,
+non-regular artifacts, malformed or extra-key state, conflicting backups, and
+all other schemas fail closed without canonical mutation. Operator output is
+emitted only for completed migration or recovery; failure names the migration
+startup stage. Normal reads accept only schema `2`, and no other state family
+is migrated.
 
 CI recovery behavior is fixed by the host phase at invocation entry. For an
 entry phase of `ready`, host start MUST return without recovery dispatch. For

@@ -335,6 +335,28 @@ host phase `ready` MUST dispatch no recovery. Ready targets MUST not be
 disrupted on an ordinary retry. Runner normalization and QEMU reconstruction MUST inspect
 complete ownership and act only on the inspected container ID before any
 coordinator registration, authorization, or webhook mutation.
+Host-state migration tests MUST use the historical shapes established by the
+schema-`1` and schema-`2` revisions and prove that only `schemaVersion` and the
+`resumeCiRunners`/`restartCiRunners` key change. They MUST cover valid schema 1
+with absent and matching backup, valid schema 2 with absent and matching backup,
+missing canonical recovery from a valid backup, idempotent repetition, and
+concurrent callers. The permanent backup MUST be byte-exact and mode `0600`.
+Concurrent reader evidence MUST contain only complete old or new canonical
+bytes. Fault injection at backup publication and canonical replacement MUST
+prove lock release and successful retry. Validation MUST reject without
+mutation malformed JSON, unsupported schemas, every missing, mistyped, or extra
+field, conflicting backup content, wrong backup mode, and symlink or non-regular
+canonical, backup, and recognized temporary artifacts. Tests MUST prove that
+recognized regular orphan temporaries are removed only after canonical
+validation and that unrelated files remain untouched.
+
+Managed-controller tests MUST prove migration occurs after PID claim and before
+plugin load, route initialization, and listeners; success output occurs only
+for migration or backup recovery; and failure names the migration startup stage
+without executing plugin module side effects or creating listeners. Existing
+normal-read rejection tests and every non-host schema rejection test remain in
+force.
+
 Host administration tests MUST prove that ordinary built-ins other than the
 runtime-session exceptions, including lifecycle mutations, and plugin
 operations acquire lifecycle admission before dispatch and retain it until

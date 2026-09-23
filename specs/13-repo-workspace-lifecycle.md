@@ -57,8 +57,40 @@ be non-empty strings. Malformed, missing, mistyped, unknown, or unsupported
 state MUST be rejected without mutation or recovery dispatch.
 `restartCiRunners` is durable restart intent captured before shutdown,
 alongside workspace and other managed-container recovery lists. Host start does
-not infer runner restart authority from current runner state. Schema `1` is
-rejected without a compatibility or migration path.
+not infer runner restart authority from current runner state.
+
+The only supported historical state migration is host lifecycle schema `1` to
+schema `2`. Schema `1` MUST have the same exact fields and validation as schema
+`2`, except that it has `resumeCiRunners` instead of `restartCiRunners` and its
+`schemaVersion` is `1`. Migration changes only those two values. Every other
+schema, malformed value, missing or extra key, and invalid nested target MUST
+be rejected without mutation. Normal runtime parsing remains schema-`2`-only;
+the migration is a controller-startup operation and MUST NOT apply to Project,
+workspace, runner, plugin, installer, or other state.
+
+Migration MUST acquire the non-reentrant host lifecycle lock once, then reread
+all artifacts under that lock. `host.json`, the fixed permanent
+`host.json.schema-1.bak`, and recognized same-directory migration temporaries
+MUST be inspected with `lstat`; symlinks and non-regular files are ambiguous and
+MUST fail closed. The backup MUST contain the byte-exact original schema `1`
+record at mode `0600`, MUST be published without replacing an existing path,
+and MUST never be deleted. Backup and replacement temporaries use unique
+`host.json.schema-{1,2}...tmp-<pid>-<randomUUID>` names, exclusive creation at
+mode `0600`, file sync before publication, and parent-directory sync after each
+namespace change. Canonical publication uses atomic rename and the resulting
+record MUST parse as strict schema `2` before migration succeeds.
+
+Valid schema `1` with no backup migrates after creating the backup; valid schema
+`1` with a byte-identical backup completes migration; valid schema `2` with no
+backup is unchanged; valid schema `2` with a corresponding schema `1` backup is
+unchanged; and an absent canonical record with a valid schema `1` backup is
+recovered as schema `2`. Recognized regular orphan temporaries are removed only
+after canonical and backup validation. Conflicting backups and every malformed
+or unsafe combination fail without canonical mutation. Repeated and concurrent
+calls MUST converge, readers MUST observe complete old or new canonical bytes,
+and every failure MUST release the lifecycle lock so a later retry can finish.
+An absent canonical record with no backup is the valid fresh-host state and is
+left unchanged.
 
 ## Project namespace
 
@@ -726,6 +758,12 @@ restored through the phase-aware start/setup path, so a merely running outer
 container cannot make the host ready. Repeating host start after partial
 failure uses the durable recovery intent, skips targets already ready, and
 clears those lists only after every target succeeds.
+
+Managed-controller startup MUST run host-state migration immediately after it
+claims controller PID ownership and before plugin loading, route initialization,
+or listener creation. It emits stable operator output only after a migration or
+backup recovery completes. Migration failure is identified as its controller
+startup stage and prevents plugins and listeners from starting.
 
 Every ordinary built-in other than the runtime-session exceptions below, and
 every plugin host-admin operation, MUST acquire the host lifecycle lock before

@@ -589,9 +589,15 @@ phase and any pending recovery error. If one target fails, DIM still attempts
 later targets where the recovery order permits it and retains all still-pending
 restart intent. Repeat `dim host start` after correcting the failure. Host
 lifecycle state is schema 2 and records CI intent in `restartCiRunners`; schema
-1 has no compatibility or migration path. A ready runner absent from that list
-is left alone. The retry also leaves ready workspaces alone, starts stopped
-targets, replays interrupted workspace setup from its immutable selection, and
+1 is migrated at managed-controller startup only when it has the exact
+historical shape. DIM renames `resumeCiRunners`, preserves all other fields,
+and keeps the original bytes permanently in mode-`0600`
+`host.json.schema-1.bak`. Migration runs before plugins and listeners and fails
+closed on malformed, conflicting, extra-key, symlink, or non-regular artifacts.
+An interrupted migration can be retried or recovered from that backup. A ready
+runner absent from the schema-2 list is left alone. The retry also leaves ready
+workspaces alone, starts stopped targets, replays interrupted workspace setup
+from its immutable selection, and
 normalizes interrupted CI runner creation through an ownership-checked
 stop/start. A workspace still being created fails closed. The host clears its
 recovery lists only when every target has recovered.
