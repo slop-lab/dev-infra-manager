@@ -813,12 +813,14 @@ keeps byte-exact schema-`1` bytes permanently in mode-`0600`
 synced exclusive same-directory temporaries plus atomic canonical rename and
 directory sync. It deterministically completes or recovers the valid
 schema-1/no-backup, schema-1/matching-backup, schema-2/no-backup,
-schema-2/matching-backup, and missing-canonical/valid-backup states. Symlinks,
-non-regular artifacts, malformed or extra-key state, conflicting backups, and
-all other schemas fail closed without canonical mutation. Operator output is
-emitted only for completed migration or recovery; failure names the migration
-startup stage. Normal reads accept only schema `2`, and no other state family
-is migrated.
+schema-2/valid-historical-backup, and missing-canonical/valid-backup states. A
+valid schema-`2` canonical record is authoritative and is not compared with the
+historical backup after normal lifecycle changes. Symlinks, non-regular
+artifacts, malformed or extra-key state, an existing backup that differs from a
+canonical schema-`1` record, and all other schemas fail closed without canonical
+mutation. Operator output is emitted only for completed migration or recovery;
+failure names the migration startup stage. Normal reads accept only schema `2`,
+and no other state family is migrated.
 
 CI recovery behavior is fixed by the host phase at invocation entry. For an
 entry phase of `ready`, host start MUST return without recovery dispatch. For

@@ -74,21 +74,26 @@ all artifacts under that lock. `host.json`, the fixed permanent
 MUST be inspected with `lstat`; symlinks and non-regular files are ambiguous and
 MUST fail closed. The backup MUST contain the byte-exact original schema `1`
 record at mode `0600`, MUST be published without replacing an existing path,
-and MUST never be deleted. Backup and replacement temporaries use unique
-`host.json.schema-{1,2}...tmp-<pid>-<randomUUID>` names, exclusive creation at
-mode `0600`, file sync before publication, and parent-directory sync after each
-namespace change. Canonical publication uses atomic rename and the resulting
-record MUST parse as strict schema `2` before migration succeeds.
+and MUST never be deleted. It is immutable historical recovery material, not
+a live mirror of later schema-`2` lifecycle state. Backup and replacement
+temporaries use unique `host.json.schema-{1,2}...tmp-<pid>-<randomUUID>` names,
+exclusive creation at mode `0600`, file sync before publication, and
+parent-directory sync after each namespace change. Canonical publication uses
+atomic rename and the resulting record MUST parse as strict schema `2` before
+migration succeeds.
 
 Valid schema `1` with no backup migrates after creating the backup; valid schema
 `1` with a byte-identical backup completes migration; valid schema `2` with no
-backup is unchanged; valid schema `2` with a corresponding schema `1` backup is
-unchanged; and an absent canonical record with a valid schema `1` backup is
-recovered as schema `2`. Recognized regular orphan temporaries are removed only
-after canonical and backup validation. Conflicting backups and every malformed
-or unsafe combination fail without canonical mutation. Repeated and concurrent
-calls MUST converge, readers MUST observe complete old or new canonical bytes,
-and every failure MUST release the lifecycle lock so a later retry can finish.
+backup or with any valid historical schema `1` backup is authoritative and
+unchanged, without comparing its lifecycle contents to the backup; and an absent
+canonical record with a valid schema `1` backup is recovered as schema `2`.
+Normal schema-`2` lifecycle writes MUST leave the backup byte-identical.
+Recognized regular orphan temporaries are removed only after canonical and
+backup validation. An existing backup that differs from a canonical schema `1`
+record, and every malformed or unsafe combination, fail without canonical
+mutation. Repeated and concurrent calls MUST converge, readers MUST observe
+complete old or new canonical bytes, and every failure MUST release the
+lifecycle lock so a later retry can finish.
 An absent canonical record with no backup is the valid fresh-host state and is
 left unchanged.
 
