@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Replace DIM-owned mutable repository reconciliation with a schema-6
+  workspace contract that mounts reviewed root bytes read-only and gives
+  reviewed Project code a persistent data root. The schema-3 runtime manifest
+  no longer publishes a repository catalog or accepts per-workspace ref
+  overrides; incompatible old workspace state is rejected before mutation.
+
 - Select the default trusted workspace image by the exact installed DIM package
   version instead of the mutable `latest` tag, while retaining
   `DIM_WORKSPACE_IMAGE` as an explicit override. Package builds now generate the
