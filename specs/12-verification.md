@@ -165,10 +165,15 @@ independent route claim revocation. The Cloudflare plugin suite must verify name
 registration, provider/record argument normalization, and DNS reconciliation.
 For `CLI-EXTERNAL-URL-TCP-001`, the suite MUST exercise authenticated raw TCP
 forwarding, rejection before a valid claim, exact-target idempotence, collision
-rejection, active-flow disconnection on revocation and shutdown, maximum
-connection enforcement, connect and idle deadlines, same-claim upstream
-replacement with old-flow disconnection, other-claim rejection, and
-persisted-claim reconciliation. For
+rejection, replay of the existing route identity without duplicate persistence
+or rollback of an already-owned claim, active-flow disconnection on revocation
+and shutdown, maximum connection enforcement, connect and idle deadlines,
+same-claim nested-runtime replacement behind an unchanged relay with old-flow
+disconnection, other-claim rejection, and persisted-claim reconciliation. The
+suite MUST also prove that authoritative workspace discard revokes routes when
+the workspace grant is absent, and that ingress removal closes its listener,
+purges its persisted routes and claims, and prevents resurrection after re-add.
+For
 `CLI-EXTERNAL-URL-TAILSCALE-001`, it MUST prove status-only CLI invocation,
 running-state and CGNAT address validation, exact-address binding data, and
 high-port validation without host Tailscale mutation.
