@@ -34,10 +34,12 @@ externalUrlIngress.command("add")
   .argument("[driver-argument...]", "arguments interpreted by the selected plugin driver")
   .requiredOption("--name <name>")
   .requiredOption("--description <text>")
-  .requiredOption("--scheme <scheme>", "http or https")
+  .requiredOption("--scheme <scheme>", "http, https, or tcp")
   .allowUnknownOption()
   .action(async (driver: string, driverArguments: string[], flags: IngressAddFlags) => {
-    if (flags.scheme !== "http" && flags.scheme !== "https") throw new UserError("--scheme must be http or https");
+    if (flags.scheme !== "http" && flags.scheme !== "https" && flags.scheme !== "tcp") {
+      throw new UserError("--scheme must be http, https, or tcp");
+    }
     await externalUrlAdmin("ingress-add", {
       driver,
       name: flags.name,
