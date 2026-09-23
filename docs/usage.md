@@ -382,6 +382,14 @@ user-namespace readiness. On a host where
 rootlesskit profile is not applicable. When it is `1`, the loaded profiles
 must include `/usr/local/bin/rootlesskit`.
 
+Controller-session failures from workspace create, setup, update, start, and
+restart recommend this check while retaining the original failure details.
+`dim doctor` diagnoses supported host and backend prerequisites; it does not
+repair DIM records, workspace lifecycle state, containers, or Project services,
+and it does not retry the failed lifecycle command. Correct the reported
+readiness problem, then retry the original command. If the failure remains,
+inspect the managed controller journal shown above.
+
 From a reviewed source checkout, restore the profile installed by DIM with:
 
 ```bash
