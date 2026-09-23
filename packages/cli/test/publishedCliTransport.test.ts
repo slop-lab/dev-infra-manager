@@ -73,7 +73,7 @@ test("published workspace create leaves repository-ref validation failures to th
     });
 
     assert.equal(result.status, 2);
-    assert.equal(result.stderr, `${scenario.error}\n`);
+    assert.equal(result.stderr, `${scenario.error}\nRun 'dim doctor' to check host readiness.\n`);
     assert.equal(requests.length, 1);
     assert.equal(requests[0]?.operation, "workspace.create");
     assert.deepEqual(requests[0]?.input.repositoryRefs, [scenario.repositoryRef]);
