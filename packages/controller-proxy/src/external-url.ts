@@ -8,7 +8,7 @@ import type {
 export interface ExternalUrlIngress {
   readonly name: string;
   readonly description: string;
-  readonly scheme: "http" | "https";
+  readonly scheme: "http" | "https" | "tcp";
 }
 
 export interface ExternalUrlProxyOptions {
@@ -39,10 +39,11 @@ export function externalUrlProxy(options: ExternalUrlProxyOptions): ControllerPr
       if (request.method === "GET" && request.path === "/api/urls") return true;
       if (request.method === "POST" && request.path === "/api/urls") {
         const body = jsonObject(request.body);
-        return typeof body.ingress === "string"
-          && allowed.has(body.ingress)
-          && (boundTargetKey === undefined
-            || (Object.hasOwn(body, "ingress") && Object.keys(body).length === 1));
+        if (typeof body.ingress !== "string" || !allowed.has(body.ingress)) return false;
+        if (boundTargetKey === undefined) return true;
+        if (!Object.hasOwn(body, "ingress") || Object.keys(body).length !== 1) return false;
+        return (await currentIngresses(upstream)).some((ingress) =>
+          ingress.name === body.ingress && compatibleScheme(options.boundTarget, ingress.scheme));
       }
       const match = request.method === "DELETE" && request.path.match(/^\/api\/urls\/([^/]+)$/);
       if (!match) return false;
@@ -74,7 +75,8 @@ export function externalUrlProxy(options: ExternalUrlProxyOptions): ControllerPr
                   ...route.discovery,
                   ingresses: Array.isArray(route.discovery.ingresses)
                     ? route.discovery.ingresses.filter((ingress) =>
-                      isIngress(ingress) && allowed.has(ingress.name))
+                       isIngress(ingress) && allowed.has(ingress.name)
+                       && compatibleScheme(options.boundTarget, ingress.scheme))
                     : []
                 }
               }
@@ -155,7 +157,23 @@ function isIngress(value: unknown): value is ExternalUrlIngress {
   return isObject(value)
     && typeof value.name === "string"
     && typeof value.description === "string"
-    && (value.scheme === "http" || value.scheme === "https");
+    && (value.scheme === "http" || value.scheme === "https" || value.scheme === "tcp");
+}
+
+async function currentIngresses(upstream: ControllerProxyUpstream): Promise<ExternalUrlIngress[]> {
+  const response = await upstream.request("GET", "/api");
+  if (response.status !== 200) return [];
+  const body = jsonObject(response.body);
+  if (!Array.isArray(body.routes)) return [];
+  const route = body.routes.find((candidate) =>
+    isObject(candidate) && candidate.path === "/api/urls" && isObject(candidate.discovery));
+  if (!isObject(route) || !isObject(route.discovery) || !Array.isArray(route.discovery.ingresses)) return [];
+  return route.discovery.ingresses.filter(isIngress);
+}
+
+function compatibleScheme(target: ExternalUrlTarget | undefined, scheme: ExternalUrlIngress["scheme"]): boolean {
+  if (target === undefined) return true;
+  return target.protocol === "tcp" ? scheme === "tcp" : scheme !== "tcp";
 }
 
 function isExternalUrlRoute(value: unknown): value is Record<string, unknown> {
