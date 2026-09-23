@@ -262,6 +262,9 @@ without mutation. The sole exception is the lossless host lifecycle schema 1
 to 2 transition: managed-controller startup renames `resumeCiRunners` to
 `restartCiRunners` before loading plugins or opening listeners and preserves the
 original bytes permanently in mode-`0600` `host.json.schema-1.bak`.
+That backup is immutable historical recovery material, not a live mirror;
+after migration, valid schema `2` `host.json` is authoritative and may evolve
+without matching the backup.
 
 Host maintenance state must be a structurally valid schema `2` record with its
 exact phase, workspace, CI-runner, managed-container, and timestamp fields,
