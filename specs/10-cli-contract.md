@@ -596,6 +596,15 @@ image readiness. Starting or restarting the controller neither builds the
 image nor marks it ready; Project and development scripts retain build
 authority.
 
+**CLI-WORKSPACE-IMAGE-IDENTITY-001:** When `DIM_WORKSPACE_IMAGE` is absent, DIM
+MUST select `dev-infra-project-workspace:<installed DIM package version>`.
+Release packages and their release image MUST use the exact release version.
+A local package bundle and its local workspace image MUST use exactly one shared
+aggregate local version. That version MUST include the identity of the exact
+production source commits and the SHA-256 digest of the reviewed aggregate
+dependency lock owned by the root repository. DIM MUST NOT fall back to
+`latest`. An explicit `DIM_WORKSPACE_IMAGE` remains authoritative.
+
 Running workspaces do not change when Project metadata or the root remote
 changes. `start`, `restart`, and `update` each select and stage one approved
 root commit before applying that exact commit and its lifecycle snapshot.

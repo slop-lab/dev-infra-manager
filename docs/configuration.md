@@ -56,6 +56,11 @@ embedded in repository URLs.
 `127.0.0.1` for a local Docker daemon. Override it when the Docker daemon's
 published ports are reachable through a different hostname or address.
 
+`DIM_WORKSPACE_IMAGE` explicitly overrides the trusted workspace image. When
+unset, DIM selects `dev-infra-project-workspace:<installed package version>` so
+the image follows the exact release or aggregate-identity local package set,
+never a mutable `latest` tag.
+
 Runtime backend selection is documented in
 [Runtime Backends](runtime-backends.md). Project and workspace settings are
 persisted by their lifecycle commands rather than copied into user config.
