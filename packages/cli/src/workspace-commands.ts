@@ -47,7 +47,6 @@ workspace.command("create")
   .option("--profile <profile>", "Compose capability profile", collect, [])
   .option("--require-capability <name>", "require an installed plugin provider", collect, [])
   .option("--recommend-capability <name>", "use an installed plugin provider when available", collect, [])
-  .option("--repo-ref <alias=ref>", "candidate checkout ref for a non-root repository", collect, [])
   .option("--git-user-name <name>")
   .option("--git-user-email <email>")
   .option("--cpus <count>", "workspace CPU limit")
@@ -73,7 +72,6 @@ workspace.command("create")
       profiles: flags.profile,
       requiredCapabilities: flags.requireCapability,
       recommendedCapabilities: flags.recommendCapability,
-      repositoryRefs: flags.repoRef,
       runtimeBackend: options.defaultWorkspaceBackend,
       cpuCount: flags.cpus ?? options.cpuCount,
       memory: flags.memory ?? options.memory,

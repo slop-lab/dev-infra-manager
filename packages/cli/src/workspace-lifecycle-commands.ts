@@ -17,20 +17,6 @@ export async function revokeWorkspaceExternalUrls(name: string): Promise<void> {
 }
 
 export function registerWorkspaceLifecycleCommands(workspace: Command): void {
-  workspace.command("align")
-  .description("Align the root checkout to its configured ref without running setup")
-  .argument("<workspace>")
-  .option("--reset", "reset the configured local branch to the fetched ref")
-  .option("--yes", "confirm resetting local commits on the configured branch")
-  .option("--json", "print machine-readable JSON")
-  .action(async (name: string, flags: JsonFlags & { reset?: boolean; yes?: boolean }) => {
-    if (flags.reset) {
-      await confirmAction(flags.yes ?? false, `Discard local commits in workspace '${name}'?`);
-    }
-    const result = await adminStreamCall("workspace.align", { name, reset: flags.reset ?? false });
-    printActionResult(result, flags, `Aligned workspace '${name}'`);
-  });
-
 workspace.command("setup")
   .description("Retry root project environment setup")
   .argument("<workspace>")
@@ -43,7 +29,7 @@ workspace.command("setup")
   });
 
 workspace.command("update")
-  .description("Fast-forward the root ref and run setup")
+  .description("Select the current protected root contract and run setup")
   .argument("<workspace>")
   .option("--profile <profile>", "replace Compose capability profiles", collect, [])
   .option("--clear-profiles", "remove all capability profiles")
@@ -62,7 +48,7 @@ workspace.command("update")
   });
 
 workspace.command("start")
-  .description("Start a stopped workspace, fast-forward its root ref, and run setup")
+  .description("Start a stopped workspace with the current protected root contract and run setup")
   .argument("<workspace>")
   .option("--json", "print machine-readable JSON")
   .action(async (name: string, flags: JsonFlags) => {
@@ -73,7 +59,7 @@ workspace.command("start")
   });
 
 workspace.command("restart")
-  .description("Restart one or more workspaces, fast-forward their root refs, and run setup")
+  .description("Restart one or more workspaces with the current protected root contract and run setup")
   .argument("<workspaces...>")
   .option("--json", "print machine-readable JSON")
   .action(async (names: string[], flags: JsonFlags) => {

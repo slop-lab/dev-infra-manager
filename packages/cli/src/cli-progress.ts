@@ -1,7 +1,6 @@
 export const streamProgressOperations = [
   "workspace.create",
   "workspace.resources",
-  "workspace.align",
   "workspace.setup",
   "workspace.update",
   "workspace.start",
@@ -23,7 +22,6 @@ type StreamProgressOperation = (typeof streamProgressOperations)[number];
 const streamProgressLabels = {
   "workspace.create": "Creating workspace",
   "workspace.resources": "Updating workspace resources",
-  "workspace.align": "Aligning workspace",
   "workspace.setup": "Setting up workspace",
   "workspace.update": "Updating workspace",
   "workspace.start": "Starting workspace",

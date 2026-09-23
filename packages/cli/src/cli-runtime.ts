@@ -30,7 +30,6 @@ export interface WorkspaceCreateFlags extends JsonFlags {
   profile: string[];
   requireCapability: string[];
   recommendCapability: string[];
-  repoRef: string[];
   kvm?: boolean;
   gitUserName?: string;
   gitUserEmail?: string;
