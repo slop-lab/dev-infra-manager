@@ -18,6 +18,7 @@ import {
   type ExternalUrlDnsProviderDriver
 } from "@slop-lab/dim-contracts-external-url";
 import { createExternalUrlsPlugin, externalUrlsPluginFromConfig } from "../../plugin-external-urls/src/index.js";
+import { EXTERNAL_URL_INGRESS_DRIVER_EXTENSION } from "../../plugin-external-urls/src/tailscale.js";
 
 describe("external URLs plugin", () => {
   const close: Array<() => Promise<void>> = [];
@@ -35,6 +36,7 @@ describe("external URLs plugin", () => {
     expect(registered.controllerRoutes.every((route) =>
       route.audiences.includes("workspace") && route.audiences.includes("agent")))
       .toBe(true);
+    expect(registered.host.extension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "tailscale")).toBeDefined();
   });
 
   it("reports ingress argument mistakes as actionable client errors", async () => {
@@ -588,7 +590,7 @@ describe("external URLs plugin", () => {
           listenPort: 8080
         }
       }
-    })).toThrow(/scheme must be http or https/);
+    })).toThrow(/scheme must be http, https, or tcp/);
   });
 
 });
