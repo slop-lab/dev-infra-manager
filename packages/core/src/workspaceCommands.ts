@@ -21,16 +21,14 @@ export async function runWorkspace(
   if (input.command.length === 0) throw new UserError("dim workspace run requires a task");
   await assertRootSnapshot(record);
   const hasEntrypoint = await lifecycleFileExists(runner, record, ".dim/entrypoint.sh");
-  if (hasEntrypoint) {
-    return streamLifecycleCommand(
-      runner,
-      record,
-      ["sh", `${lifecycleRoot(record)}/.dim/entrypoint.sh`, ...input.command],
-      input.interactive,
-      true
-    );
-  }
-  return streamProjectCommand(runner, record, input.command, input.interactive, true);
+  if (!hasEntrypoint) throw new UserError("reviewed Project root does not define .dim/entrypoint.sh");
+  return streamLifecycleCommand(
+    runner,
+    record,
+    ["sh", `${lifecycleRoot(record)}/.dim/entrypoint.sh`, ...input.command],
+    input.interactive,
+    true
+  );
 }
 
 export async function execWorkspace(
