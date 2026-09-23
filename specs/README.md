@@ -53,6 +53,7 @@ instead be split.
 | [Verification](12-verification.md) | Verification | Repository-wide gates and evidence |
 | [Project, Repository, and Workspace Lifecycle](13-repo-workspace-lifecycle.md) | Contract | Mixed with state paths and runtime wiring |
 | [Installer Facade](14-installer-facade.md) | Contract | Mixed with installation implementation choices |
+| [Remote Control Plane](15-remote-control-plane.md) | Contract | Package, protocol, SSH, approval, and admission boundary |
 | [Image Entrypoints](local-details/image-entrypoints.md) | Implementation profile | Image-local compatibility details |
 | [Installation Scripts](local-details/installation-scripts.md) | Implementation profile | Script and packaging details |
 
