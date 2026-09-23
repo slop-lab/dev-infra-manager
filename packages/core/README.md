@@ -107,6 +107,14 @@ therefore select the release tag, while aggregate-identity local packages
 select their full local version tag. `DIM_WORKSPACE_IMAGE` remains an explicit
 override.
 
+`buildWorkspaceImage` stages the image Dockerfile, entrypoint, relay, and
+cgroup helpers shipped in this package together with the exact-version
+`@slop-lab/dim-controller-proxy` dependency, then runs Docker Buildx with the
+current user's UID and GID. It accepts only an explicit mutable tag as a build
+destination: image IDs, digest references, untagged references, and `latest`
+are rejected. The operation is local to Docker and does not require or start a
+DIM controller.
+
 The resource environment variables provide defaults. `createWorkspace`
 accepts persistent per-workspace overrides. A Project root ref may be omitted;
 workspace creation then resolves the root repository's symbolic `HEAD` and
