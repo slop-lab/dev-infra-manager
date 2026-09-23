@@ -12,7 +12,6 @@ export {
   type WorkspaceGitEnvironment,
   type WorkspaceResourceInput
 } from "./workspaceLifecycleTypes.js";
-export { alignWorkspaceRoot } from "./workspaceRootAlignment.js";
 export { setupWorkspace } from "./workspaceSetup.js";
 export {
   listWorkspaces,
@@ -29,11 +28,7 @@ export {
   detectWorkspaceKvm,
   resolveWorkspaceCapabilities,
   resolveWorkspaceKvm,
-  validateRepositoryRefOverrides,
   validateWorkspaceProfiles,
   validateWorkspaceResources
 } from "./workspaceValidation.js";
-export {
-  projectRuntimeManifest,
-  resolveRepositorySnapshot
-} from "./workspaceRepositorySnapshot.js";
+export { projectRuntimeManifest } from "./workspaceRepositorySnapshot.js";

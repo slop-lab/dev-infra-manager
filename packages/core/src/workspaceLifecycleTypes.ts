@@ -1,8 +1,9 @@
 import type { WorkspaceRecord } from "./lifecycleTypes.js";
 
 export const WORKSPACE_USER = "dim";
-export const WORKSPACE_RUNTIME_CONFIG_VERSION = "7";
-export const PROJECT_ROOT_SNAPSHOTS = "/run/dim/project-roots";
+export const WORKSPACE_RUNTIME_CONFIG_VERSION = "8";
+export const PROJECT_ROOT = "/run/dim/project-root";
+export const WORKSPACE_DATA = "/var/lib/dim/workspace-data";
 export const PROJECT_COMPOSE_NAME = "dim-project";
 
 export interface WorkspaceGitEnvironment {
@@ -26,5 +27,5 @@ export interface WorkspaceResourceInput {
 
 export type WorkspacePublicationTarget = Pick<
   WorkspaceRecord,
-  "rootRef" | "rootCommit" | "rootSnapshotPath" | "repositorySnapshot"
+  "rootRef" | "rootCommit" | "rootSnapshotPath"
 >;

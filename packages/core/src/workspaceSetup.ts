@@ -5,11 +5,10 @@ import type {
   GiteaCredentials,
   LifecycleOptions,
   ProjectRecord,
-  ProjectRepositoryRecord,
   WorkspaceRecord
 } from "./lifecycleTypes.js";
 import type { StreamingCommandRunner } from "./types.js";
-import { assertRepositorySnapshotComplete, writeProjectManifest } from "./workspaceRepositorySnapshot.js";
+import { writeProjectManifest } from "./workspaceRepositorySnapshot.js";
 import { assertContainerRunning, reconcileContainer } from "./workspaceContainer.js";
 import type { WorkspaceGitEnvironment } from "./workspaceLifecycleTypes.js";
 import {
@@ -17,7 +16,7 @@ import {
   installHostInputHelper,
   runProjectSetup
 } from "./workspaceProjectCommands.js";
-import { applySelectedRoot, ensureClone } from "./workspacePublication.js";
+import { applySelectedRoot } from "./workspacePublication.js";
 
 export async function setupWorkspace(
   runner: StreamingCommandRunner,
@@ -40,7 +39,6 @@ export async function setupWorkspace(
       if (record.phase === "setting-up" || record.phase === "setup-error" || record.phase === "error") {
         const project = await state.readProject(record.projectName);
         if (project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
-        assertRepositorySnapshotComplete(record.repositorySnapshot, project, record.rootRepositoryAlias);
         const containerId = await assertContainerRunning(runner, record);
         record = await applySelectedRoot({
           runner,
@@ -50,8 +48,7 @@ export async function setupWorkspace(
           target: {
             rootRef: record.rootRef,
             rootCommit: record.rootCommit,
-            rootSnapshotPath: record.rootSnapshotPath,
-            repositorySnapshot: record.repositorySnapshot
+            rootSnapshotPath: record.rootSnapshotPath
           }
         });
       }
@@ -131,7 +128,7 @@ export async function reconcileProject(
   state: LifecycleState,
   initialRecord: WorkspaceRecord,
   project: ProjectRecord,
-  repo: ProjectRepositoryRecord
+  repo: ProjectRecord["repositories"][number]
 ): Promise<WorkspaceRecord> {
   const release = await state.acquireWorkspaceLock(initialRecord.name);
   let record = await state.readWorkspace(initialRecord.name);
@@ -151,8 +148,7 @@ export async function reconcileProject(
       const containerId = await reconcileContainer(runner, options, record, gitEnvironment(record, credentials));
       const runtimeRecord = { ...record, containerName: containerId };
       await installHostInputHelper(runner, runtimeRecord);
-      await ensureClone(runner, runtimeRecord, repo.workspaceUrl);
-      await writeProjectManifest(runner, runtimeRecord);
+       await writeProjectManifest(runner, runtimeRecord);
       record = { ...record, updatedAt: new Date().toISOString() };
       await state.writeWorkspace(record);
       return record;

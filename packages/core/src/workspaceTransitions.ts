@@ -6,10 +6,8 @@ import type { StreamingCommandRunner } from "./types.js";
 import { assertContainerRunning } from "./workspaceContainer.js";
 import {
   applySelectedRoot,
-  planFastForwardRoot,
-  resolveWorkspacePublication,
-  type ResolvedWorkspacePublicationTarget
 } from "./workspacePublication.js";
+import type { ProtectedRootSnapshot } from "./protectedRootSnapshot.js";
 import { reconcileProject, setupWorkspaceLocked } from "./workspaceSetup.js";
 import {
   assertSelectedProjectUnchanged,
@@ -38,9 +36,7 @@ export async function updateWorkspace(
       const oldProfiles = record.profiles;
       const nextProfiles = profiles === undefined ? oldProfiles : validateWorkspaceProfiles(profiles);
       const containerId = await assertContainerRunning(runner, record);
-      await planFastForwardRoot(runner, { ...record, containerName: containerId }, selectedRoot);
-      const target = await resolveWorkspacePublication({ runner, options, record, target: selectedRoot });
-      record = await applySelectedRoot({ runner, state, record, target, containerId });
+      record = await applySelectedRoot({ runner, state, record, target: selectedRoot, containerId });
       record = { ...record, profiles: nextProfiles, updatedAt: new Date().toISOString() };
       await state.writeWorkspace(record);
       return await setupWorkspaceLocked(
@@ -70,10 +66,9 @@ export async function startWorkspace(
   const releaseProject = await state.acquireProjectLock(record.projectName);
   try {
     await assertSelectedProjectUnchanged(state, selectedRoot);
-    const target = await resolveWorkspacePublication({ runner, options, record, target: selectedRoot });
     const release = await state.acquireWorkspaceSetupLock(workspaceName);
     try {
-      return await startWorkspaceLocked(runner, options, state, workspaceName, target);
+      return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot);
     } finally {
       await release();
     }
@@ -87,7 +82,7 @@ async function startWorkspaceLocked(
   options: LifecycleOptions,
   state: LifecycleState,
   workspaceName: string,
-  selectedRoot: ResolvedWorkspacePublicationTarget
+  selectedRoot: ProtectedRootSnapshot
 ): Promise<WorkspaceRecord> {
   let record = await reconcileWorkspaceRuntimeState(runner, state, await state.readWorkspace(workspaceName));
   if (record.phase !== "stopped") {
@@ -103,7 +98,6 @@ async function startWorkspaceLocked(
     selectedRoot.repository
   );
   const containerId = await assertContainerRunning(runner, reconciled);
-  await planFastForwardRoot(runner, { ...reconciled, containerName: containerId }, selectedRoot);
   const updated = await applySelectedRoot({ runner, state, record: reconciled, target: selectedRoot, containerId });
   return setupWorkspaceLocked(runner, options, state, updated, false, true);
 }
@@ -124,15 +118,12 @@ export async function restartWorkspace(
     try {
       const record = await reconcileWorkspaceRuntimeState(runner, state, await state.readWorkspace(workspaceName));
       if (record.phase === "stopped") {
-        const target = await resolveWorkspacePublication({ runner, options, record, target: selectedRoot });
-        return await startWorkspaceLocked(runner, options, state, workspaceName, target);
+        return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot);
       }
       if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
       const containerId = await assertContainerRunning(runner, record);
-      await planFastForwardRoot(runner, { ...record, containerName: containerId }, selectedRoot);
-      const target = await resolveWorkspacePublication({ runner, options, record, target: selectedRoot });
       await stopWorkspaceLocked(runner, state, record);
-      return await startWorkspaceLocked(runner, options, state, workspaceName, target);
+      return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot);
     } finally {
       await release();
     }
