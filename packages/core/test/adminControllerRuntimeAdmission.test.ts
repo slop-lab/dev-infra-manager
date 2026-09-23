@@ -86,8 +86,8 @@ describe("admin runtime admission", () => {
     const root = await mkdtemp(join(tmpdir(), "dim-runtime-admission-"));
     roots.push(root);
     const state = new LifecycleState(root);
-    await state.claimWorkspace(admittedWorkspaceRecord("first"));
-    await state.claimWorkspace(admittedWorkspaceRecord("second"));
+    await state.claimWorkspace(workspaceRecord("first", "ready"));
+    await state.claimWorkspace(workspaceRecord("second", "ready"));
     const lock = new AdmissionLock();
     vi.spyOn(LifecycleState.prototype, "acquireHostLifecycleLock").mockImplementation(() => lock.acquire());
     const runner = new RuntimeRunner();
@@ -155,23 +155,6 @@ async function startWorkspaceExec(base: string, name: string): Promise<string> {
 
 async function sessionEvents(base: string, id: string): Promise<string> {
   return await (await fetch(`${base}/v1/sessions/${id}/events`)).text();
-}
-
-function admittedWorkspaceRecord(name: string) {
-  return {
-    ...workspaceRecord(name, "ready"),
-    repositoryRefOverrides: {},
-    repositorySnapshot: {
-      root: {
-        workspaceUrl: "http://dim-gitea:3000/dim-example/root.git",
-        phase: "ready" as const,
-        root: true,
-        requestedRef: "refs/heads/main",
-        ref: "refs/heads/main",
-        commit: "a".repeat(40)
-      }
-    }
-  };
 }
 
 function result(command: string, args: string[], stdout: string): CommandResult {
