@@ -8,6 +8,7 @@ import {
   recordedLines,
   recordedPids,
   schedulerDirectory,
+  schedulerHealthStatus,
   schedulerState,
   sendWorkflowJob,
   startScheduler,
@@ -97,7 +98,7 @@ locked_update = injected_locked_update`
       expect.soft(await schedulerState(scheduler.statePath)).toMatchObject({
         queued: [416], claims: { "416": { owner: "capacity-tree-kill" } }
       });
-      expect.soft((await fetch(`http://127.0.0.1:${scheduler.port}/missing`)).status).toBe(501);
+      expect.soft(await schedulerHealthStatus(scheduler.port)).toBe(200);
     } finally {
       await stopScheduler(scheduler);
       await killRecordedProcesses([wrapperPidsPath, descendantPidsPath]);
@@ -159,7 +160,7 @@ locked_update = injected_locked_update`
       expect.soft(await schedulerState(scheduler.statePath)).toMatchObject({
         queued: [417], claims: { "417": { owner: "capacity-release-failure" } }
       });
-      expect.soft((await fetch(`http://127.0.0.1:${scheduler.port}/missing`)).status).toBe(501);
+      expect.soft(await schedulerHealthStatus(scheduler.port)).toBe(200);
     } finally {
       await writeFile(releasePath, "release");
       await stopScheduler(scheduler);

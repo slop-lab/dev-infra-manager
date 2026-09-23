@@ -7,6 +7,7 @@ import {
   recordedLines,
   recordedPids,
   schedulerDirectory,
+  schedulerHealthStatus,
   schedulerState,
   sendWorkflowJob,
   startScheduler,
@@ -58,7 +59,7 @@ locked_update = injected_locked_update`
       expect.soft(await schedulerState(scheduler.statePath)).toMatchObject({
         queued: [414], claims: { "414": { owner: "capacity-claim-failure" } }
       });
-      expect.soft((await fetch(`http://127.0.0.1:${scheduler.port}/missing`)).status).toBe(501);
+      expect.soft(await schedulerHealthStatus(scheduler.port)).toBe(200);
     } finally {
       await writeFile(releasePath, "release");
       await stopScheduler(scheduler);
@@ -116,7 +117,7 @@ locked_update = observed_locked_update`
       expect.soft(await schedulerState(scheduler.statePath)).toMatchObject({
         queued: [415], claims: { "415": { owner: "capacity-launch-failure" } }
       });
-      expect.soft((await fetch(`http://127.0.0.1:${scheduler.port}/missing`)).status).toBe(501);
+      expect.soft(await schedulerHealthStatus(scheduler.port)).toBe(200);
     } finally {
       await writeFile(releasePath, "release");
       await stopScheduler(scheduler);

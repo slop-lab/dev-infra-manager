@@ -78,14 +78,29 @@ export async function startScheduler(directory: string, options: SchedulerOption
     },
     stdio: "ignore"
   });
-  await waitFor(async () => {
-    try {
-      return (await fetch(`http://127.0.0.1:${port}/missing`)).status === 501;
-    } catch {
-      return false;
-    }
+  const scheduler = { port, process, statePath };
+  const processFailed = new Promise<never>((_resolve, reject) => {
+    process.once("error", reject);
+    process.once("exit", (code, signal) => {
+      reject(new Error(`QEMU webhook test scheduler exited before readiness: ${code ?? signal}`));
+    });
   });
-  return { port, process, statePath };
+  try {
+    await Promise.race([
+      waitFor(async () => {
+        try {
+          return await schedulerHealthStatus(port) === 200;
+        } catch {
+          return false;
+        }
+      }),
+      processFailed
+    ]);
+    return scheduler;
+  } catch (error) {
+    await stopScheduler(scheduler);
+    throw error;
+  }
 }
 
 export async function stopScheduler(scheduler: Scheduler): Promise<void> {
@@ -158,6 +173,12 @@ export async function workflowJobStatus(
     body: JSON.stringify({ action, workflow_job: { id, labels } })
   });
   return response.status;
+}
+
+export async function schedulerHealthStatus(port: number): Promise<number> {
+  return (await fetch(`http://127.0.0.1:${port}/healthz`, {
+    headers: { Authorization: "Bearer test" }
+  })).status;
 }
 
 export async function pathExists(path: string): Promise<boolean> {
