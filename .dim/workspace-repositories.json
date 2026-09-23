@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "repositories": {
+    "development": { "ref": "main", "path": "workspace" },
+    "core": { "ref": "main", "path": "workspace/core" },
+    "core-development": { "ref": "main", "path": "workspace/core-development" },
+    "plugin-dns-cloudflare": { "ref": "main", "path": "workspace/plugin-dns-cloudflare" },
+    "plugin-dns-cloudflare-development": { "ref": "main", "path": "workspace/plugin-dns-cloudflare-development" },
+    "plugin-external-urls": { "ref": "main", "path": "workspace/plugin-external-urls" },
+    "plugin-external-urls-development": { "ref": "main", "path": "workspace/plugin-external-urls-development" },
+    "verification": { "ref": "main", "path": "workspace/verification" },
+    "examples": { "ref": "main", "path": "workspace/examples" },
+    "specification": { "ref": "main", "path": "workspace/specification" }
+  }
+}
