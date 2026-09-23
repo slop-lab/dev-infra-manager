@@ -100,7 +100,7 @@ JSON array of additional trusted client UI origins; unset uses the default:
     "$base/opencode-web.bash.sha256"
   (cd -- "$setup_dir" && sha256sum --check \
     workspace-user-setup.bash.sha256 opencode-web.bash.sha256)
-  dim workspace run example-dev bash -- -s <"$setup_dir/workspace-user-setup.bash"
+  dim workspace run example-dev tool-setup <"$setup_dir/workspace-user-setup.bash"
   dim workspace run example-dev bash -- -c \
     'export OPENCODE_WEB_CORS_ORIGINS="$1"; exec bash -s' \
     bash "${OPENCODE_WEB_CORS_ORIGINS:-[]}" <"$setup_dir/opencode-web.bash"
@@ -110,6 +110,17 @@ JSON array of additional trusted client UI origins; unset uses the default:
 This is user-level, one-time setup for each new persistent agent home, and it
 is idempotent if repeated. It is not workspace lifecycle automation: do not
 add it to the image or `.dim/setup.sh`.
+
+Launch the Project-configured agent only after setup succeeds:
+
+```bash
+dim workspace run example-dev agent
+```
+
+The generic task names do not identify a tool to DIM. This Project maps them
+to its reviewed setup input and an OpenCode executable pinned in a
+contract-versioned manifest below the canonical agent home. The `agent` task
+rejects missing, unknown, or incompatible launcher state.
 
 The launcher is an explicit action, not part of setup. It prints the external
 URL, username, and restricted credential-file path without printing the
