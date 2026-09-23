@@ -44,7 +44,7 @@ it("isolates agent grants and discovery from the workspace controller", async ()
     const state = new LifecycleState(stateRoot);
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
-      schemaVersion: 5,
+      schemaVersion: 6,
       name: "work",
       projectId: "pid",
       projectName: "project",
@@ -52,17 +52,7 @@ it("isolates agent grants and discovery from the workspace controller", async ()
       rootRef: "refs/heads/main",
       rootCommit: "a".repeat(40),
       rootSnapshotPath: "/state/assets/project-roots/pid/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      repositorySnapshot: {
-        root: {
-          workspaceUrl: "http://dim-gitea:3000/dim-project/root.git",
-          phase: "ready",
-          root: true,
-          requestedRef: "refs/heads/main",
-          ref: "refs/heads/main",
-          commit: "a".repeat(40)
-        }
-      },
-      projectPath: "/workspace/project",
+      workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready",
       profiles: [],
       composeProjectName: "dim-work",

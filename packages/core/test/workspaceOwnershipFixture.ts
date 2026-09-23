@@ -20,7 +20,7 @@ export function workspaceContainerInspect(
     input.id ?? "workspace-container-id",
     String(input.running ?? true),
     ...workspaceContainerLabels(record).map(labelValue),
-    input.runtimeConfig ?? "7"
+    input.runtimeConfig ?? "8"
   ].join("|");
 }
 

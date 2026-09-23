@@ -7,15 +7,12 @@ import { LifecycleState, validateLifecycleName } from "../../../../core/packages
 import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import {
-  alignWorkspaceRoot,
   detectWorkspaceKvm,
   projectRuntimeManifest,
   resolveWorkspaceCapabilities,
-  resolveRepositorySnapshot,
   resolveWorkspaceKvm,
   restartWorkspace,
   updateWorkspaceResources,
-  validateRepositoryRefOverrides,
   validateWorkspaceProfiles,
   validateWorkspaceResources,
   waitForInnerDocker,
@@ -55,7 +52,7 @@ it("creates and authenticates a workspace-scoped external URL grant", async () =
     const state = new LifecycleState(root);
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
-      schemaVersion: 5,
+      schemaVersion: 6,
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
@@ -63,9 +60,7 @@ it("creates and authenticates a workspace-scoped external URL grant", async () =
       rootRef: "refs/heads/main",
       rootCommit: "a".repeat(40),
       rootSnapshotPath: join(root, "assets", "project-roots", "project-id", "a".repeat(40)),
-      repositoryRefOverrides: {},
-      repositorySnapshot: rootRepositorySnapshot("a".repeat(40)),
-      projectPath: "/workspace/project",
+      workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready",
       profiles: [],
       composeProjectName: "dim-work-1",

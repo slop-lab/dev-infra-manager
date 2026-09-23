@@ -40,7 +40,7 @@ class LifecycleProbeRunner extends LifecycleRunner {
 
 function workspaceFixture(root: string): WorkspaceRecord {
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     name: "work-1",
     projectId: "project-id",
     projectName: "project",
@@ -48,8 +48,7 @@ function workspaceFixture(root: string): WorkspaceRecord {
     rootRef: "refs/heads/main",
     rootCommit: COMMIT,
     rootSnapshotPath: join(root, "assets", "project-roots", "project-id", COMMIT),
-    repositorySnapshot: repositorySnapshot(),
-    projectPath: "/workspace/project",
+    workspaceDataPath: "/var/lib/dim/workspace-data",
     phase: "ready",
     profiles: ["development"],
     composeProjectName: "dim-work-1",
