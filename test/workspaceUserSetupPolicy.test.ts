@@ -9,6 +9,7 @@ const openCodeWebLauncher = "scripts/opencode-web.bash";
 const openCodeWebLauncherFailureSmoke = "verification/scripts/opencode-web-launcher-failure-smoke.bash";
 const openCodeWebRealRuntimeSmoke = "verification/scripts/opencode-web-real-runtime-smoke.bash";
 const openCodeWebRealRuntimeFixture = "verification/scripts/opencode-web-real-runtime-fixture.mjs";
+const projectToolTasksSmoke = "verification/scripts/project-tool-tasks-smoke.bash";
 const remoteBootstrapBegin = "# DIM_REMOTE_BOOTSTRAP_BEGIN";
 const remoteBootstrapEnd = "# DIM_REMOTE_BOOTSTRAP_END";
 
@@ -49,9 +50,19 @@ describe("workspace-user setup policy", () => {
       `${openCodeWebLauncher}.sha256`,
       openCodeWebLauncherFailureSmoke,
       openCodeWebRealRuntimeSmoke,
-      openCodeWebRealRuntimeFixture
+      openCodeWebRealRuntimeFixture,
+      projectToolTasksSmoke
     ];
-    expect(artifacts.map((path) => existsSync(resolve(workspaceRoot, path)))).toEqual([true, true, true, true, true, true, true]);
+    expect(artifacts.map((path) => existsSync(resolve(workspaceRoot, path)))).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]);
   });
 
   it("marks the root remote bootstrap and requires its commit from the environment", async () => {
@@ -64,7 +75,7 @@ describe("workspace-user setup policy", () => {
     const begin = readme.indexOf(remoteBootstrapBegin);
     const end = readme.indexOf(remoteBootstrapEnd);
     const bootstrap = begin >= 0 && end > begin ? readme.slice(begin + remoteBootstrapBegin.length, end).trim() : "";
-    const setup = 'dim workspace run dim-dev bash -- -s <"$setup_dir/workspace-user-setup.bash"';
+    const setup = 'dim workspace run dim-dev tool-setup <"$setup_dir/workspace-user-setup.bash"';
     const launch = [
       "dim workspace run dim-dev bash -- -c \\",
       "    'export OPENCODE_WEB_CORS_ORIGINS=\"$1\"; exec bash -s' \\",
@@ -86,7 +97,7 @@ describe("workspace-user setup policy", () => {
     expect(launchExecution).toBeGreaterThan(setupExecution);
     expect(readme.slice(end + remoteBootstrapEnd.length)).not.toContain(launch);
     expect(readme).toContain(
-      "/workspace/scripts/workspace-user-setup.bash \\\n  && dim workspace run dim-dev bash -- -lc 'exec opencode'"
+      "dim workspace run dim-dev tool-setup \\\n  && dim workspace run dim-dev agent"
     );
   });
 
@@ -95,8 +106,8 @@ describe("workspace-user setup policy", () => {
     const readme = await readFile(resolve(workspaceRoot, "project/README.md"), "utf8");
 
     // When
-    const setup = "dim workspace run dim-dev bash -- /workspace/scripts/workspace-user-setup.bash";
-    const launch = "dim workspace run dim-dev bash -- -lc 'exec opencode'";
+    const setup = "dim workspace run dim-dev tool-setup";
+    const launch = "dim workspace run dim-dev agent";
 
     // Then
     expect(readme).toContain(`${setup} \\\n  && ${launch}`);
@@ -165,7 +176,7 @@ describe("workspace-user setup policy", () => {
     expect(source).toContain("XDG_CACHE_HOME");
     expect(source).toContain("XDG_DATA_HOME");
     expect(source).toContain("XDG_STATE_HOME");
-    expect(source).toMatch(/\(\(\s*\$\{#setup_paths\[@\]\}\s*==\s*9\s*\)\)/);
+    expect(source).toMatch(/\(\(\s*\$\{#setup_paths\[@\]\}\s*==\s*11\s*\)\)/);
   });
 
   it("uses targeted JSONC edits instead of whole-document serialization", async () => {
@@ -188,6 +199,56 @@ describe("workspace-user setup policy", () => {
     expect(source).not.toMatch(/\bdim\s+(?:install-plugin|controller)\b/);
     expect(source).not.toMatch(/\bDIM_(?:CONTROLLER|PLUGIN)(?:_[A-Z0-9_]+)?\b/);
     expect(source).not.toMatch(/\bDIM_[A-Z0-9_]*(?:TOKEN|GRANT)\b/);
+  });
+
+  it.each(projectEntrypoints)("exposes the generic Project-owned tool task contract in %s", async (path) => {
+    // Given
+    const entrypoint = await readFile(resolve(workspaceRoot, path), "utf8");
+
+    // When
+    const setupTask = entrypoint.match(/^\s*tool-setup\)/m);
+    const agentTask = entrypoint.match(/^\s*agent\)/m);
+
+    // Then
+    expect(setupTask).not.toBeNull();
+    expect(agentTask).not.toBeNull();
+    expect(entrypoint).toContain("DIM_PROJECT_TOOL_CONTRACT_VERSION=1");
+    expect(entrypoint).toContain("DIM_PROJECT_TOOL_LAUNCHER=agent");
+  });
+
+  it("publishes and verifies the compatible installed launcher manifest", async () => {
+    // Given
+    const setup = await readFile(resolve(workspaceRoot, workspaceUserSetup), "utf8");
+    const recipes = await readFile(resolve(workspaceRoot, "verification/verify.just"), "utf8");
+
+    // When
+    const manifestContract = setup.includes("contractVersion: 1");
+
+    // Then
+    expect(manifestContract).toBe(true);
+    expect(setup).toContain("agent:");
+    expect(setup).toContain("dim-project-tool-launch");
+    expect(recipes).toContain("bash verification/scripts/project-tool-tasks-smoke.bash");
+  });
+
+  it("keeps generic tool task names outside core workspace behavior", async () => {
+    // Given
+    const corePaths = [
+      "core/packages/cli/src/workspace-execution-commands.ts",
+      "core/packages/cli/src/workspace-commands.ts",
+      "core/packages/core/src/workspaceProjectCommands.ts",
+      "core/packages/core/src/workspaceSetup.ts"
+    ];
+
+    // When
+    const coreSources = await Promise.all(corePaths.map(async (path) => readFile(resolve(workspaceRoot, path), "utf8")));
+
+    // Then
+    for (const source of coreSources) {
+      expect(source).not.toContain("tool-setup");
+      expect(source).not.toContain("DIM_PROJECT_TOOL_");
+      expect(source).not.toContain("dim-project-tool-launch");
+    }
   });
 
   it("keeps authenticated Web launch separate and scoped", async () => {
@@ -235,7 +296,7 @@ describe("workspace-user setup policy", () => {
     const cleanupTrap = readme.indexOf("trap 'rm -rf -- \"$setup_dir\"' EXIT", temporaryDirectory);
     const checksumVerification = readme.indexOf("sha256sum --check", cleanupTrap);
     const verifiedExecution = readme.indexOf(
-      `dim workspace run ${workspace} bash -- -s <"$setup_dir/workspace-user-setup.bash"`,
+      `dim workspace run ${workspace} tool-setup <"$setup_dir/workspace-user-setup.bash"`,
       checksumVerification
     );
 

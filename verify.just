@@ -32,6 +32,7 @@ headscale-tailnet-tcp:
 
 # Verify pinned workspace-user setup plus generic development-service exposure.
 workspace-user-setup:
+    cd .. && bash verification/scripts/project-tool-tasks-smoke.bash
     cd .. && bash verification/scripts/workspace-user-setup-smoke.bash
     cd .. && bash verification/scripts/workspace-user-setup-remote-bootstrap-smoke.bash
     cd .. && bash verification/scripts/opencode-web-launcher-smoke.bash
