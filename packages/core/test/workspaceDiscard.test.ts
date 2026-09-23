@@ -10,7 +10,7 @@ import { discardWorkspace } from "../../../../core/packages/core/src/workspaceLi
 import { workspaceContainerInspect, workspaceVolumeInspect } from "./workspaceOwnershipFixture.js";
 
 const WORKSPACE = {
-  schemaVersion: 5,
+    schemaVersion: 6,
   name: "work-1",
   projectId: "project-id",
   projectName: "project",
@@ -18,18 +18,7 @@ const WORKSPACE = {
   rootRef: "refs/heads/main",
   rootCommit: "a".repeat(40),
   rootSnapshotPath: "/tmp/dim-test-project-root",
-  repositoryRefOverrides: {},
-  repositorySnapshot: {
-    root: {
-      workspaceUrl: "http://dim-gitea:3000/dim-project/root.git",
-      phase: "ready",
-      root: true,
-      requestedRef: "refs/heads/main",
-      ref: "refs/heads/main",
-      commit: "a".repeat(40)
-    }
-  },
-  projectPath: "/workspace/project",
+    workspaceDataPath: "/var/lib/dim/workspace-data",
   phase: "ready",
   profiles: ["development"],
   composeProjectName: "dim-work-1",
@@ -130,7 +119,7 @@ describe("workspace discard teardown intent", () => {
       "env",
       "DIM_WORKSPACE_DISCARD_KEEP_VOLUME=1",
       "sh",
-      `/run/dim/project-roots/${WORKSPACE.rootCommit}/.dim/teardown.sh`,
+      "/run/dim/project-root/.dim/teardown.sh",
       "--profile",
       "development"
     ]);
@@ -150,7 +139,7 @@ describe("workspace discard teardown intent", () => {
       "env",
       "DIM_WORKSPACE_DISCARD_KEEP_VOLUME=0",
       "sh",
-      `/run/dim/project-roots/${WORKSPACE.rootCommit}/.dim/teardown.sh`,
+      "/run/dim/project-root/.dim/teardown.sh",
       "--profile",
       "development"
     ]);
@@ -170,7 +159,7 @@ describe("workspace discard teardown intent", () => {
       "env",
       "DIM_WORKSPACE_DISCARD_KEEP_VOLUME=0",
       "sh",
-      `/run/dim/project-roots/${WORKSPACE.rootCommit}/.dim/teardown.sh`,
+      "/run/dim/project-root/.dim/teardown.sh",
       "--profile",
       "development"
     ]);

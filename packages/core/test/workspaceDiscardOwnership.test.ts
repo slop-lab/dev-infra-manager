@@ -213,7 +213,7 @@ describe("workspace discard ownership", () => {
 function workspaceRecord(rootSnapshotPath: string): WorkspaceRecord {
   const timestamp = "2026-09-12T00:00:00.000Z";
   return {
-    schemaVersion: 5,
+    schemaVersion: 6,
     name: "work-1",
     projectId: "project-id",
     projectName: "project",
@@ -221,18 +221,7 @@ function workspaceRecord(rootSnapshotPath: string): WorkspaceRecord {
     rootRef: "refs/heads/main",
     rootCommit: "b".repeat(40),
     rootSnapshotPath,
-    repositoryRefOverrides: {},
-    repositorySnapshot: {
-      root: {
-        workspaceUrl: "http://dim-gitea:3000/dim-project/root.git",
-        phase: "ready",
-        root: true,
-        requestedRef: "refs/heads/main",
-        ref: "refs/heads/main",
-        commit: "b".repeat(40)
-      }
-    },
-    projectPath: "/workspace/project",
+    workspaceDataPath: "/var/lib/dim/workspace-data",
     phase: "ready",
     profiles: ["development"],
     composeProjectName: "dim-work-1",

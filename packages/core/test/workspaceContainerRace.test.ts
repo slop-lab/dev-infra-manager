@@ -216,7 +216,7 @@ function container(
     name: record.containerName,
     labels: input.foreign ? foreignLabels(labels) : labels,
     running: input.running,
-    runtimeConfig: input.runtimeConfig ?? "7"
+    runtimeConfig: input.runtimeConfig ?? "8"
   };
 }
 
