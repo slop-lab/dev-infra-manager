@@ -22,6 +22,7 @@ type Container = {
   readonly name: string;
   readonly labels: readonly string[];
   readonly runtimeConfig: string;
+  readonly rootSnapshotPath: string;
   running: boolean;
 };
 
@@ -71,7 +72,13 @@ class WorkspaceDockerRunner implements StreamingCommandRunner {
     }
     if (args[0] === "container" && args[1] === "inspect") return this.inspectContainer(command, args);
     if (args[0] === "run") {
-      if (this.containerCreateWinner !== undefined) this.addContainer(this.containerCreateWinner);
+      if (this.containerCreateWinner !== undefined) {
+        this.addContainer(this.containerCreateWinner);
+      } else {
+        const rootMount = args.find((argument) => argument.includes("target=/run/dim/project-root"));
+        const rootSnapshotPath = rootMount?.match(/source=([^,]+)/)?.[1] ?? "missing";
+        this.addContainer(container(this.record, { id: "created-id", running: true, rootSnapshotPath }));
+      }
       return result(command, args, this.containerCreateWinner === undefined ? 0 : 1, "", "name already in use");
     }
     if (args[0] === "container" && args[1] === "rm") return this.removeContainer(command, args);
@@ -99,7 +106,13 @@ class WorkspaceDockerRunner implements StreamingCommandRunner {
       container.id,
       String(container.running),
       ...container.labels.map(labelValue),
-      container.runtimeConfig
+      container.runtimeConfig,
+      JSON.stringify([{
+        Type: "bind",
+        Source: container.rootSnapshotPath,
+        Destination: "/run/dim/project-root",
+        RW: false
+      }])
     ].join("|");
     if (this.replacement !== undefined) {
       this.addContainer(this.replacement);
@@ -199,6 +212,42 @@ describe("workspace container reconciliation ownership races", () => {
     expect(runner.calls).not.toContainEqual(["docker", "container", "rm", "--force", record.containerName]);
     expect(runner.current(record.containerName)).toMatchObject({ id: "foreign-id" });
   });
+
+  it("replaces an owned container whose immutable root mount differs from the record", async () => {
+    // Given
+    const runner = new WorkspaceDockerRunner(record);
+    runner.addOwnedVolume();
+    runner.addContainer(container(record, {
+      id: "old-root-id",
+      running: true,
+      rootSnapshotPath: join(root, "old-root")
+    }));
+
+    // When
+    const containerId = await reconcile(runner, record, root);
+
+    // Then
+    expect(containerId).toBe("created-id");
+    expect(runner.calls).toContainEqual(["docker", "container", "rm", "--force", "old-root-id"]);
+    expect(runner.current(record.containerName)).toMatchObject({
+      id: "created-id",
+      rootSnapshotPath: record.rootSnapshotPath
+    });
+  });
+
+  it("keeps an owned container when its immutable root mount already matches", async () => {
+    // Given
+    const runner = new WorkspaceDockerRunner(record);
+    runner.addOwnedVolume();
+    runner.addContainer(container(record, { id: "matching-root-id", running: true }));
+
+    // When
+    const containerId = await reconcile(runner, record, root);
+
+    // Then
+    expect(containerId).toBe("matching-root-id");
+    expect(runner.calls.some((call) => call[1] === "container" && call[2] === "rm")).toBe(false);
+  });
 });
 
 function container(
@@ -207,6 +256,7 @@ function container(
     readonly id: string;
     readonly running: boolean;
     readonly runtimeConfig?: string;
+    readonly rootSnapshotPath?: string;
     readonly foreign?: boolean;
   }
 ): Container {
@@ -216,7 +266,8 @@ function container(
     name: record.containerName,
     labels: input.foreign ? foreignLabels(labels) : labels,
     running: input.running,
-    runtimeConfig: input.runtimeConfig ?? "8"
+    runtimeConfig: input.runtimeConfig ?? "8",
+    rootSnapshotPath: input.rootSnapshotPath ?? record.rootSnapshotPath
   };
 }
 
