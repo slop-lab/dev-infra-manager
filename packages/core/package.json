@@ -1,7 +1,7 @@
 {
-  "name": "@slop-lab/dim-control-plane",
+  "name": "@slop-lab/dim-core",
   "version": "0.9.0",
-  "description": "Optional remote Gitea and CI control plane for DIM",
+  "description": "Project, managed Git, and persistent workspace lifecycle APIs for DIM",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -15,9 +15,6 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./src/index.ts",
-  "bin": {
-    "dim-control-plane": "./dist/brokerCli.js"
-  },
   "exports": {
     ".": {
       "types": "./src/index.ts",
@@ -36,7 +33,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@slop-lab/dim-core": "workspace:0.9.0",
     "@slop-lab/dim-controller-proxy": "workspace:0.9.0",
     "yaml": "2.8.3"
   },

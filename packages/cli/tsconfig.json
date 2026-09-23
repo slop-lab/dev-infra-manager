@@ -4,5 +4,5 @@
     "outDir": "dist",
     "rootDir": "src"
   },
-  "include": ["src/cli.ts", "src/local-config.ts", "src/package-version.ts"]
+  "include": ["src/**/*.ts"]
 }
