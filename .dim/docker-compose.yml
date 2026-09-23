@@ -22,7 +22,8 @@ services:
       timeout: 5s
       retries: 60
     volumes:
-      - "${DIM_PROJECT_ROOT:?}/..:/workspace"
+      - "${DIM_WORKSPACE_DATA:?}/workspace:/workspace"
+      - "${DIM_PROJECT_ROOT:?}:/run/dim/project-root:ro"
       - "${DIM_PROJECT_MANIFEST:?}:/run/dim/project.json:ro"
       - agent-home:/mnt/agent-home
       - agent-dind-rootless-data:/home/rootless/.local/share/docker

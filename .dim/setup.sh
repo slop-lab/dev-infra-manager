@@ -6,6 +6,7 @@ if [ -n "${DIM_PROJECT_MANIFEST:-}" ]; then
   test -n "${DIM_GIT_BASE_URL:-}"
   test "$(jq -r '.gitBaseUrl' "$DIM_PROJECT_MANIFEST")" = "$DIM_GIT_BASE_URL"
   test "$(jq -r '.root.path' "$DIM_PROJECT_MANIFEST")" = "${DIM_PROJECT_ROOT:-$PWD}"
+  test "$(jq -r '.data.path' "$DIM_PROJECT_MANIFEST")" = "${DIM_WORKSPACE_DATA:?}"
 fi
 
 compose_host_aliases=/tmp/dim-project-compose-host-aliases.json
@@ -29,8 +30,11 @@ esac
 
 git_name="$(dim-host-input builtin.git-author name)"
 git_email="$(dim-host-input builtin.git-author email)"
-DIM_WORKSPACE_UID="$(stat -c %u /workspace)"
-DIM_WORKSPACE_GID="$(stat -c %g /workspace)"
+echo "[setup] reconcile repositories" >&2
+sh .dim/reconcile-repositories.sh
+integrated_root="$DIM_WORKSPACE_DATA/workspace"
+DIM_WORKSPACE_UID="$(stat -c %u "$integrated_root")"
+DIM_WORKSPACE_GID="$(stat -c %g "$integrated_root")"
 test "$DIM_WORKSPACE_UID" -ne 0 || {
   echo "canonical agent-dind requires a non-root workspace owner" >&2
   exit 1
@@ -41,9 +45,6 @@ export GIT_AUTHOR_EMAIL="$git_email"
 export GIT_COMMITTER_NAME="$git_name"
 export GIT_COMMITTER_EMAIL="$git_email"
 export DIM_WORKSPACE_UID DIM_WORKSPACE_GID
-
-echo "[setup] reconcile repositories" >&2
-sh .dim/reconcile-repositories.sh
 
 echo "[setup] start controller proxy" >&2
 external_url_proxy_dir=/tmp/dim-external-url
@@ -113,7 +114,7 @@ if [ "${DIM_WORKSPACE_KVM}" = 1 ]; then
   sudo -n /usr/bin/install -o root -g root -m 0500 \
     "$qemu_project_root/.dim/qemu-verify.bash" "$qemu_service_dir/launcher.bash"
   sudo -n /usr/bin/env -i PATH=/usr/bin:/bin HOME=/root \
-    DIM_QEMU_SOURCE_ROOT=/workspace DIM_QEMU_LAUNCHER="$qemu_service_dir/launcher.bash" \
+    DIM_QEMU_SOURCE_ROOT="$DIM_WORKSPACE_DATA/workspace" DIM_QEMU_LAUNCHER="$qemu_service_dir/launcher.bash" \
     DIM_KVM_IMAGE_CACHE="$qemu_service_dir/cache" DIM_QEMU_SERVICE_SOCKET="$qemu_socket" \
     /bin/sh -c '
     cd "$1"

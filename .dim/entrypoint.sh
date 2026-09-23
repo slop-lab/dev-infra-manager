@@ -23,7 +23,7 @@ case "$task" in
       --user root agent-dind dim-agent-dind exec nc 127.0.0.1 22
     ;;
   verify-qemu)
-    set -- node /workspace/project/.dim/qemu-client.mjs run "$@"
+    set -- node /run/dim/project-root/.dim/qemu-client.mjs run "$@"
     ;;
   *)
     echo "unknown DIM project task: $task" >&2
