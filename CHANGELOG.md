@@ -12,6 +12,13 @@
   interruption recovery, and fail-closed handling of conflicting or unsafe
   artifacts.
 
+- Discover matching Gitea Actions jobs that were already queued when QEMU CI
+  capacity is created, started, or restarted. DIM installs the webhook first,
+  performs one bounded host-side backlog reconciliation through the existing
+  authenticated shared scheduler, and publishes capacity ready only after the
+  replay succeeds, without exposing coordinator credentials to the supervisor
+  or guest.
+
 - Diagnose whether the current user's systemd manager persists after logout
   and whether AppArmor's unprivileged-user-namespace restriction has the
   required loaded rootlesskit profile. These doctor checks are read-only and

@@ -39,8 +39,9 @@ const hoistedTestState = vi.hoisted(() => {
     digest: "9".repeat(64), path: "/current/hook/cache.bash"
   } satisfies PreparedQemuProjectHook;
   return {
-    events: new Array<string>(), launches: new Array<readonly string[]>(),
+    events: new Array<string>(), launches: new Array<readonly string[]>(), dockerCalls: new Array<readonly string[]>(),
     imageKeyInputs: new Array<{ readonly projectId: string; readonly hook: QemuCiProjectHookProvenance }>(),
+    webhookFailures: new Array<Error>(),
     project, snapshot, resolvedConfig, currentHook
   };
 });
@@ -102,8 +103,15 @@ vi.mock("../../../../core/packages/core/src/giteaCiCoordinator.js", () => ({
     prepareRunner: vi.fn(async () => {
       hoistedTestState.events.push("runtime:register"); return { provider: "fresh-provider", instanceUrl: "http://fresh-coordinator", token: "fresh-registration" };
     }),
-    ensureWorkflowJobWebhook: vi.fn(async (_runner: StreamingCommandRunner, _options: LifecycleOptions, _project: ProjectRecord, input: { readonly authorizationHeader: string }) => {
+    ensureWorkflowJobWebhook: vi.fn(async (_runner: StreamingCommandRunner, _options: LifecycleOptions, _project: ProjectRecord, input: {
+      readonly authorizationHeader: string;
+      readonly replayQueuedJob: (job: { readonly id: number; readonly labels: readonly string[] }) => Promise<void>;
+    }) => {
       hoistedTestState.events.push(`runtime:webhook:${input.authorizationHeader}`);
+      hoistedTestState.events.push("runtime:query-backlog");
+      const failure = hoistedTestState.webhookFailures.shift();
+      if (failure !== undefined) throw failure;
+      await input.replayQueuedJob({ id: 991, labels: ["persisted-integration", "dim-qemu"] });
     }),
     reconcileWorkflowJobWebhookTargets: vi.fn(async () => {})
   }
@@ -143,24 +151,45 @@ export type QemuStartContext = { readonly stateRoot: string; readonly state: Lif
 export type ReconciliationMode = "start" | "restart" | "create";
 
 export class StartRunner implements StreamingCommandRunner {
+  private launchedContainer: { readonly id: string; readonly name: string; readonly labels: readonly string[] } | undefined;
   constructor(private readonly container?: ContainerFixture) {}
   async run(command: string, args: string[]): Promise<CommandResult> {
+    testState.dockerCalls.push([command, ...args]);
     if (command === "docker" && args[0] === "container" && args[1] === "inspect") {
       if (this.container !== undefined) {
         const values = this.container.labels.map((label) => label.slice(label.indexOf("=") + 1));
         return { command, args, stdout: `${[this.container.id, ...values].join("|")}\n`, stderr: "", exitCode: 0 };
       }
+      const launchedContainer = this.launchedContainer;
+      if (launchedContainer !== undefined && launchedContainer.name === args[2]) {
+        const values = launchedContainer.labels.map((label) => label.slice(label.indexOf("=") + 1));
+        return { command, args, stdout: `${[launchedContainer.id, ...values].join("|")}\n`, stderr: "", exitCode: 0 };
+      }
       return { command, args, stdout: "", stderr: `Error: No such object: ${args[2] ?? ""}`, exitCode: 1 };
     }
     if (command === "docker" && args[0] === "container" && args[1] === "rm") testState.events.push("runtime:remove-container");
-    if (command === "docker" && args[0] === "run") { testState.events.push("runtime:launch"); testState.launches.push(args); }
+    if (command === "docker" && args[0] === "run") {
+      testState.events.push("runtime:launch"); testState.launches.push(args);
+      const nameIndex = args.indexOf("--name");
+      this.launchedContainer = {
+        id: "immutable-supervisor-id",
+        name: args[nameIndex + 1] ?? "",
+        labels: args.flatMap((argument, index) => args[index - 1] === "--label" ? [argument] : [])
+      };
+    }
+    if (command === "docker" && args[0] === "exec") {
+      const url = args.at(-1);
+      if (url === "http://127.0.0.1:8080/healthz") testState.events.push("runtime:health");
+      if (url === "http://127.0.0.1:8080/workflow-job") testState.events.push("runtime:replay");
+    }
     return { command, args, stdout: "", stderr: "", exitCode: 0 };
   }
   async runStreaming(): Promise<number> { return 0; }
 }
 
 export async function setUpQemuStartTest(): Promise<QemuStartContext> {
-  testState.events.length = 0; testState.launches.length = 0; testState.imageKeyInputs.length = 0;
+  testState.events.length = 0; testState.launches.length = 0; testState.dockerCalls.length = 0;
+  testState.imageKeyInputs.length = 0; testState.webhookFailures.length = 0;
   const stateRoot = await mkdtemp(join(tmpdir(), "dim-ci-runner-start-"));
   options.stateRoot = stateRoot;
   const state = new LifecycleState(stateRoot);

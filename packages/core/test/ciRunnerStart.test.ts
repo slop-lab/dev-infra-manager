@@ -3,6 +3,7 @@ import {
   options,
   persistedHook,
   type QemuStartContext,
+  reconcileWithFixture,
   setUpQemuStartTest,
   StartRunner,
   tearDownQemuStartTest,
@@ -61,6 +62,39 @@ describe("QEMU CI runner stopped start", () => {
     expect(authorization).toMatch(/^Bearer [0-9a-f]{64}$/);
     expect(testState.events).toContain(`runtime:webhook:${authorization}`);
     expect(started.provider).toBe("fresh-provider");
+  });
+
+  it.each(["create", "start", "restart"] as const)("installs the webhook before replaying queued jobs on %s and publishes ready afterward", async (mode) => {
+    // Given
+    const runner = new StartRunner();
+
+    // When
+    const started = await reconcileWithFixture(mode, runner, context);
+
+    // Then
+    expect(testState.events.indexOf("runtime:launch")).toBeLessThan(testState.events.indexOf("runtime:health"));
+    expect(testState.events.indexOf("runtime:health")).toBeLessThan(testState.events.findIndex((event) => event.startsWith("runtime:webhook:")));
+    expect(testState.events.findIndex((event) => event.startsWith("runtime:webhook:"))).toBeLessThan(testState.events.indexOf("runtime:query-backlog"));
+    expect(testState.events.indexOf("runtime:query-backlog")).toBeLessThan(testState.events.indexOf("runtime:replay"));
+    const health = testState.dockerCalls.find((call) => call.at(-1) === "http://127.0.0.1:8080/healthz");
+    const replay = testState.dockerCalls.find((call) => call.at(-1) === "http://127.0.0.1:8080/workflow-job");
+    expect(health).toEqual(expect.arrayContaining(["docker", "exec", "immutable-supervisor-id", "--header", expect.stringMatching(/^Authorization: Bearer /)]));
+    expect(replay).toEqual(expect.arrayContaining(["docker", "exec", "immutable-supervisor-id", "--header", "X-Gitea-Event: workflow_job"]));
+    expect(replay).toContain(JSON.stringify({ action: "queued", workflow_job: { id: 991, labels: ["persisted-integration", "dim-qemu"] } }));
+    expect(health).not.toContain("sh");
+    expect(replay).not.toContain("sh");
+    expect(started.executor.phase).toBe("ready");
+  });
+
+  it.each(["create", "start", "restart"] as const)("retains an error phase when queued-job reconciliation fails on %s", async (mode) => {
+    // Given
+    const runner = new StartRunner();
+    testState.webhookFailures.push(new Error("queued backlog failed"));
+
+    // When / Then
+    await expect(reconcileWithFixture(mode, runner, context)).rejects.toThrow("queued backlog failed");
+    const persisted = await context.state.readCiRunner(context.record.projectName, context.record.name);
+    expect(persisted.executor).toMatchObject({ phase: "error", error: "queued backlog failed" });
   });
 
   it("keeps restart on full protected-state reconciliation", async () => {
