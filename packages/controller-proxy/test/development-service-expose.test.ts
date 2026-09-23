@@ -51,15 +51,20 @@ describe("development service exposure", () => {
     expect((await fixture.gateway.getRoute("demo"))?.urlId).toBe("url-2");
   });
 
-  it("rejects an ingress whose discovered scheme does not meet the requirement", async () => {
-    const fixture = await setup("http");
+  it.each(["http", "tcp"] as const)(
+    "rejects a %s ingress whose discovered scheme does not meet the requirement",
+    async (scheme) => {
+      const fixture = await setup(scheme);
 
-    await expect(exposeDevelopmentService(fixture.options(4101))).rejects.toThrow("requires scheme https");
+      await expect(exposeDevelopmentService(fixture.options(4101))).rejects.toThrow(
+        scheme === "tcp" ? "is unavailable" : "requires scheme https"
+      );
 
-    expect(fixture.posts).toEqual([]);
-  });
+      expect(fixture.posts).toEqual([]);
+    }
+  );
 
-  async function setup(scheme: "http" | "https" = "https") {
+  async function setup(scheme: "http" | "https" | "tcp" = "https") {
     const root = await mkdtemp(path.join(tmpdir(), "dim-development-expose-"));
     cleanup.push(() => rm(root, { recursive: true, force: true }));
     const developmentUrlSocket = path.join(root, "development.sock");

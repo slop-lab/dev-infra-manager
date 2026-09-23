@@ -41,6 +41,7 @@ describe("controller proxy", () => {
               discovery: {
                 ingresses: [
                   { name: "tailscale-main", description: "Tailnet", scheme: "https" },
+                  { name: "raw-tcp", description: "Raw TCP", scheme: "tcp" },
                   { name: "public", description: "Public", scheme: "https" }
                 ]
               }
@@ -70,14 +71,17 @@ describe("controller proxy", () => {
       sourceSocket,
       token: "workspace.secret",
       listen,
-      capabilities: [externalUrlProxy({ allowedIngresses: ["tailscale-main"] })]
+      capabilities: [externalUrlProxy({ allowedIngresses: ["tailscale-main", "raw-tcp"] })]
     });
     await proxy.listen();
     cleanup.push(() => proxy.close());
 
     const discovery = await request(listen, "GET", "/api");
     expect(JSON.parse(discovery.body)).toMatchObject({
-      routes: [{ path: "/api/urls", discovery: { ingresses: [{ name: "tailscale-main" }] } }],
+      routes: [{ path: "/api/urls", discovery: { ingresses: [
+        { name: "tailscale-main" },
+        { name: "raw-tcp" }
+      ] } }],
       hostInputProviders: []
     });
     expect((await request(listen, "POST", "/api/host-inputs/builtin.git-author", { key: "name" })).status).toBe(403);
@@ -115,6 +119,14 @@ describe("controller proxy", () => {
       const chunks: Buffer[] = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
       forwardedBodies.push(Buffer.concat(chunks).toString("utf8"));
+      if (request.method === "GET" && request.url === "/api") {
+        response.setHeader("content-type", "application/json");
+        response.end(JSON.stringify({ routes: [{ path: "/api/urls", discovery: { ingresses: [
+          { name: "https-ts", description: "HTTP gateway", scheme: "https" },
+          { name: "https-ts", description: "TCP gateway", scheme: "tcp" }
+        ] } }] }));
+        return;
+      }
       if (request.method === "GET" && request.url === "/api/urls") {
         response.setHeader("content-type", "application/json");
         response.end(JSON.stringify({
@@ -138,6 +150,11 @@ describe("controller proxy", () => {
     });
     await proxy.listen();
     cleanup.push(() => proxy.close());
+
+    const discovery = await request(listen, "GET", "/api");
+    expect(JSON.parse(discovery.body)).toMatchObject({
+      routes: [{ discovery: { ingresses: [{ scheme: "tcp" }] } }]
+    });
 
     for (const extra of [
       { target: allowedTarget },
