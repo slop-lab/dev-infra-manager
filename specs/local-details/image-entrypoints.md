@@ -2,7 +2,8 @@
 
 ## Docker-compatible image
 
-`core/images/project-workspace` starts a private Docker daemon, waits for readiness,
+The workspace image entrypoint shipped in `@slop-lab/dim-core` starts a private
+Docker daemon, waits for readiness,
 sets ownership on the workspace and nested-engine storage, and executes the
 requested command as the unprivileged `dim` user (`DIM_UID`/`DIM_GID` build
 args select its UID/GID, both defaulting to 1000). This is the workspace

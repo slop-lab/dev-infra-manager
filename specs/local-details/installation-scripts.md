@@ -122,8 +122,10 @@ or mismatched state before and after installation.
 For an assembled development checkout, `build-local-workspace-image` is the
 explicit local-image preparation step and MUST run before the matching local
 packages are used. `install-local` does not build that image. The release
-`build-workspace-image` path MUST remain distinct and tag the image with the
-exact release version. None of these paths uses `latest`.
+`build-workspace-image` path MUST remain distinct and delegate to the explicit
+CLI build with the exact release version. A published CLI MUST perform that
+same build from its shipped package assets without source-development tools.
+None of these paths uses `latest`.
 
 ## Smoke Script
 
