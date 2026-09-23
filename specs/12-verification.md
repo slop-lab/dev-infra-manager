@@ -242,6 +242,17 @@ of the temporary `.runner`, and transfer of only that file into the guest.
 They MUST also prove that guest transports and QEMU lack the reusable token,
 the guest runs `daemon --once` under a timeout, and each job receives fresh
 overlay, SSH, registration, and run state with bounded teardown.
+For `CI-QEMU-BACKLOG-001`, deterministic tests MUST cover more than 100 queued
+jobs while the ascending-ID queue shrinks between requests. They MUST prove
+validated effective page sizing, fixed last-to-first enumeration, first-page
+retention, cross-page deduplication, and no replay before enumeration completes.
+They MUST reject malformed jobs, duplicate-only incomplete coverage,
+inconsistent counts, foreign or malformed `Link` targets, and more than 100
+pages without following a supplied URL. Create, start, and restart tests MUST
+prove health and webhook installation precede enumeration, replay uses the
+immutable inspected supervisor container and authenticated workflow-job
+handler, successful replay precedes `ready`, and any enumeration or replay
+failure persists runner phase `error`.
 
 The automatic managed-workspace gate must also run the shared-upstream example smoke.
 That smoke proves that two logical DIM repositories can share one external Git

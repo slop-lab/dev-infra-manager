@@ -166,6 +166,25 @@ temporary state file, atomically replaces the durable file, and fsyncs the
 containing directory before HTTP `202`; a load, validation, or write error
 fails the acknowledgement. Duplicate deliveries remain idempotent, and each
 trigger has at most one active capacity claim.
+Creating, starting, or restarting capacity does not rely on future webhook
+redelivery to discover existing demand. After launching the supervisor, DIM
+inspects its complete ownership identity, addresses the resulting immutable
+container ID, and waits for its authorization-protected loopback health
+endpoint. DIM installs the `workflow_job` hook before listing queued
+organization jobs, traverses that API with bounded pagination, strictly parses
+positive job IDs, string labels, and queued status, deduplicates IDs, and
+replays normalized queued events through the same authenticated webhook
+handler. Only then may the capacity become `ready`. Hook installation, listing,
+or replay failure leaves admission failed rather than publishing partial
+capacity. This is one host-driven reconciliation pass, not a polling scheduler;
+the existing shared claims, label matching, event precedence, and completed
+tombstones govern replay exactly as they govern live delivery.
+
+Coordinator credentials remain in the DIM host process that installs the hook
+and lists jobs. Neither the supervisor nor its guest receives them. Supervisor
+health and replay use only the per-launch webhook authorization, passed to
+`curl` as direct Docker-exec arguments without a shell.
+
 For each job ID, scheduler state only advances from `queued` to `in_progress`
 to `completed`, even when Gitea deliveries are duplicated or reordered. The
 scheduler retains the first completed timestamp for seven days, rejects stale
