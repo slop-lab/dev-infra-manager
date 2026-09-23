@@ -287,7 +287,6 @@ describe("local source build policy", () => {
     const packaging = await readFile(resolve(projectRoot, "scripts/pack-source-build.bash"), "utf8");
     const installation = await readFile(resolve(projectRoot, "scripts/install-source-build.bash"), "utf8");
     const recipes = await readFile(resolve(projectRoot, "justfile"), "utf8");
-    const developmentRecipes = await readFile(resolve(workspaceRoot, "justfile"), "utf8");
     const imageConsumers = await Promise.all([
       "container-sysbox-isolation-smoke.bash",
       "container-inner-docker-smoke.bash",
@@ -307,12 +306,45 @@ describe("local source build policy", () => {
     expect(recipes).toContain("install-local:\n    bash scripts/install-source-build.bash");
     expect(recipes).toContain("restart-controller:");
     expect(recipes.indexOf("install-local:")).toBeLessThan(recipes.indexOf("restart-controller:"));
-    expect(developmentRecipes).toContain("dev-infra-project-workspace:${image_version}");
-    expect(developmentRecipes).not.toContain("dev-infra-project-workspace:latest");
     expect(imageConsumers.every((script) => script.includes('local_version="$(bash "$script_dir/local-build-version.bash")"'))).toBe(true);
     expect(imageConsumers.every((script) => script.includes("dev-infra-project-workspace:$local_version"))).toBe(true);
     expect(imageConsumers.every((script) => !script.includes("require('./core/package.json').version"))).toBe(true);
     expect(imageConsumers.every((script) => !script.includes("dev-infra-project-workspace:latest"))).toBe(true);
+  });
+
+  it("routes the aggregate local version through the source CLI workspace-image build", async () => {
+    // Given
+    const fixtureRoot = await mkdtemp(resolve(tmpdir(), "dim-local-workspace-recipe-"));
+    fixtureRoots.push(fixtureRoot);
+    const log = resolve(fixtureRoot, "invocations.log");
+    const bashEnvironment = resolve(fixtureRoot, "bash-environment");
+    await writeFile(
+      bashEnvironment,
+      "just() {\n  printf 'version=%s\\n' \"$DIM_LOCAL_BUILD_VERSION\" >>\"$DIM_INVOCATIONS\"\n  printf 'just' >>\"$DIM_INVOCATIONS\"\n  printf ' %s' \"$@\" >>\"$DIM_INVOCATIONS\"\n  printf '\\n' >>\"$DIM_INVOCATIONS\"\n}\n"
+    );
+    const expectedVersion = spawnSync("/usr/bin/bash", [resolve(workspaceRoot, "verification/scripts/local-build-version.bash")], {
+      cwd: workspaceRoot,
+      encoding: "utf8",
+      env: process.env
+    });
+
+    // When
+    const result = spawnSync("just", ["build-local-workspace-image"], {
+      cwd: workspaceRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        BASH_ENV: bashEnvironment,
+        DIM_INVOCATIONS: log
+      }
+    });
+    const invocations = await readFile(log, "utf8");
+
+    // Then
+    expect(expectedVersion.status).toBe(0);
+    expect(result.status).toBe(0);
+    expect(invocations).toBe(`version=${expectedVersion.stdout.trim()}\njust run-cli workspace image build\n`);
+    expect(invocations).not.toMatch(/(?:install|restart|latest)/);
   });
 
   it("packs and loads a temporary-tag image before promoting readiness", async () => {
