@@ -35,6 +35,7 @@ describe("workspace update setup lock", () => {
     project = projectFixture();
     workspace = workspaceFixture(root, project);
     runner = new UpdateRunner();
+    runner.containerRootSnapshotPath = workspace.rootSnapshotPath;
     await state.claimProject(project);
     await mkdir(workspace.rootSnapshotPath, { recursive: true });
     await mkdir(join(root, "assets", "project-roots", project.id, COMMIT), { recursive: true });
@@ -51,6 +52,7 @@ describe("workspace update setup lock", () => {
 it("keeps a post-fast-forward manifest failure non-ready and blocks run", async () => {
     // Given
     runner = new UpdateRunner(1);
+    runner.containerRootSnapshotPath = workspace.rootSnapshotPath;
 
     // When
     const updating = updateWorkspace(runner, options(root), workspace.name);
@@ -110,6 +112,7 @@ it("persists setup-error when the final ready write fails after manifest publica
 it("recovers a failed manifest publication through a later update", async () => {
     // Given
     runner = new UpdateRunner(1);
+    runner.containerRootSnapshotPath = workspace.rootSnapshotPath;
     await expect(updateWorkspace(runner, options(root), workspace.name)).rejects.toThrow(
       /failed to write project runtime manifest/
     );
@@ -126,9 +129,10 @@ it("recovers a failed manifest publication through a later update", async () => 
     expect(runner.manifestPublicationAttempts).toBe(2);
   });
 
-it("does not publish ready between selected-root publication and failed Project setup", async () => {
+  it("does not publish ready between selected-root publication and failed Project setup", async () => {
     // Given
     runner = new UpdateRunner(0, 17);
+    runner.containerRootSnapshotPath = workspace.rootSnapshotPath;
     const persistedPhases: WorkspaceRecord["phase"][] = [];
     const writeWorkspace = LifecycleState.prototype.writeWorkspace;
     vi.spyOn(LifecycleState.prototype, "writeWorkspace").mockImplementation(async function (
@@ -144,7 +148,9 @@ it("does not publish ready between selected-root publication and failed Project 
 
     // Then
     await expect(updating).rejects.toThrow(/project setup exited with 17/);
-    expect(runner.lifecycleEvents).toEqual(["manifest-publication", "project-setup"]);
+    expect(runner.lifecycleEvents).toEqual([
+      "container-remove", "container-create", "manifest-publication", "project-setup"
+    ]);
     await expect(state.readWorkspace(workspace.name)).resolves.toMatchObject({
       phase: "setup-error",
       rootCommit: COMMIT,
@@ -157,5 +163,35 @@ it("does not publish ready between selected-root publication and failed Project 
     })).rejects.toThrow(/not ready \(phase: setup-error\)/);
     expect(runner.streamingCalls).toHaveLength(1);
     expect(persistedPhases).not.toContain("ready");
+  });
+
+  it("replaces the owned outer container before setup when the approved root changes", async () => {
+    // Given
+    const selectedRootPath = join(root, "assets", "project-roots", project.id, COMMIT);
+
+    // When
+    const updated = await updateWorkspace(runner, options(root), workspace.name);
+
+    // Then
+    expect(updated).toMatchObject({ phase: "ready", rootCommit: COMMIT, rootSnapshotPath: selectedRootPath });
+    expect(runner.lifecycleEvents).toEqual(["container-remove", "container-create", "manifest-publication"]);
+    expect(runner.containerRootSnapshotPath).toBe(selectedRootPath);
+    expect(runner.runCalls.some((call) => call[1] === "volume" && call[2] === "rm")).toBe(false);
+  });
+
+  it("keeps the owned outer container when the approved root is unchanged", async () => {
+    // Given
+    const selectedRootPath = join(root, "assets", "project-roots", project.id, COMMIT);
+    workspace = { ...workspace, rootCommit: COMMIT, rootSnapshotPath: selectedRootPath };
+    await state.writeWorkspace(workspace);
+    runner.containerRootSnapshotPath = selectedRootPath;
+
+    // When
+    await updateWorkspace(runner, options(root), workspace.name);
+
+    // Then
+    expect(runner.lifecycleEvents).toEqual(["manifest-publication"]);
+    expect(runner.runCalls.some((call) => call[1] === "container" && call[2] === "rm")).toBe(false);
+    expect(runner.runCalls.some((call) => call[1] === "run")).toBe(false);
   });
 });

@@ -55,6 +55,8 @@ export class UpdateRunner implements StreamingCommandRunner {
   manifestPublicationAttempts = 0;
   sourceCommit = SOURCE_COMMIT;
   headCommit = HEAD_COMMIT;
+  containerRootSnapshotPath = "";
+  containerExists = true;
 
   constructor(
     private remainingManifestFailures = 0,
@@ -79,8 +81,15 @@ export class UpdateRunner implements StreamingCommandRunner {
         : "true\n";
       return result(command, args, stdout);
     }
+    if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-gitea"
+      && args.some((argument) => argument.includes("NetworkSettings.Networks"))) {
+      return result(command, args, "172.20.0.2\n");
+    }
     if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-gitea") {
       return result(command, args, "gitea-container-id|true|true\n");
+    }
+    if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-registry-cache") {
+      return result(command, args, "true|true|registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33\n");
     }
     if (args[0] === "exec" && args[1] === "gitea-container-id"
       && args.some((argument) => argument.includes("/data/dim/credentials.json"))) {
@@ -90,7 +99,24 @@ export class UpdateRunner implements StreamingCommandRunner {
       return result(command, args, "true\n");
     }
     if (args.some((argument) => argument.includes(".Config.Labels"))) {
-      return result(command, args, `${workspaceContainerInspect(WORKSPACE_IDENTITY)}\n`);
+      if (!this.containerExists) {
+        return { command, args, stdout: "", stderr: `Error: No such object: ${WORKSPACE_IDENTITY.containerName}`, exitCode: 1 };
+      }
+      return result(command, args, `${workspaceContainerInspect(WORKSPACE_IDENTITY, {
+        rootSnapshotPath: this.containerRootSnapshotPath
+      })}\n`);
+    }
+    if (args[0] === "container" && args[1] === "rm") {
+      this.containerExists = false;
+      this.lifecycleEvents.push("container-remove");
+      return result(command, args);
+    }
+    if (args[0] === "run") {
+      const rootMount = args.find((argument) => argument.includes("target=/run/dim/project-root"));
+      this.containerRootSnapshotPath = rootMount?.match(/source=([^,]+)/)?.[1] ?? "missing";
+      this.containerExists = true;
+      this.lifecycleEvents.push("container-create");
+      return result(command, args, "workspace-container-id\n");
     }
     if (args.includes("{{.State.Running}}")) return result(command, args, "true\n");
     if (args.includes("git") && args.includes("merge") && args.includes("--ff-only")) {

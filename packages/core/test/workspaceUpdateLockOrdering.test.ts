@@ -35,6 +35,7 @@ describe("workspace update setup lock", () => {
     project = projectFixture();
     workspace = workspaceFixture(root, project);
     runner = new UpdateRunner();
+    runner.containerRootSnapshotPath = workspace.rootSnapshotPath;
     await state.claimProject(project);
     await mkdir(workspace.rootSnapshotPath, { recursive: true });
     await mkdir(join(root, "assets", "project-roots", project.id, COMMIT), { recursive: true });

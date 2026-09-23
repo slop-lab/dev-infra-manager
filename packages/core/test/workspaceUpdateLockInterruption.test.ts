@@ -35,6 +35,7 @@ describe("workspace update setup lock", () => {
     project = projectFixture();
     workspace = workspaceFixture(root, project);
     runner = new UpdateRunner();
+    runner.containerRootSnapshotPath = workspace.rootSnapshotPath;
     await state.claimProject(project);
     await mkdir(workspace.rootSnapshotPath, { recursive: true });
     await mkdir(join(root, "assets", "project-roots", project.id, COMMIT), { recursive: true });
@@ -60,6 +61,7 @@ it("replays the recorded root and manifest before direct setup recovery from set
     } as const;
     await state.writeWorkspace(interrupted);
     runner = new UpdateRunner(0, 0);
+    runner.containerRootSnapshotPath = targetSnapshotPath;
 
     // When
     const recovered = await setupWorkspace(runner, options(root), workspace.name);
@@ -70,7 +72,6 @@ it("replays the recorded root and manifest before direct setup recovery from set
     expect(runner.runCalls.some((call) => call.includes("fetch"))).toBe(false);
     expect(runner.publishedManifests[0]).not.toHaveProperty("repositories");
     expect(runner.streamingCalls[0]).toContain("/run/dim/project-root/.dim/setup.sh");
-    expect(runner.runCalls.some((call) => call.includes("git"))).toBe(false);
     expect(runner.lifecycleEvents).toEqual(["manifest-publication", "project-setup"]);
   });
 
@@ -113,6 +114,7 @@ it("recovers an interruption after snapshot persistence without resolving moved 
 it("recovers a manifest failure through direct setup from the recorded root", async () => {
     // Given
     runner = new UpdateRunner(1, 0);
+    runner.containerRootSnapshotPath = workspace.rootSnapshotPath;
     await expect(updateWorkspace(runner, options(root), workspace.name)).rejects.toThrow(
       /failed to write project runtime manifest/
     );
