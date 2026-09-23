@@ -1,5 +1,5 @@
 import type { LifecycleOptions, WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
-import { packageVersion } from "./package-version.js";
+import { workspaceImageReference } from "./workspaceImageReference.js";
 
 export interface WorkspaceRuntimePlan {
   dockerRuntime: string;
@@ -36,7 +36,7 @@ export function workspaceRuntimePlan(
     // runs in a host-side Sysbox container, so the trusted outer container
     // continues to use Docker's ordinary runc runtime.
     dockerRuntime: options.workspaceRuntime ?? "runc",
-    image: options.workspaceImage ?? `dev-infra-project-workspace:${packageVersion}`,
+    image: workspaceImageReference(options.workspaceImage),
     privileged: options.workspacePrivileged ?? true,
     runtimeDataPath: "/var/lib/docker",
     engine: "docker",
