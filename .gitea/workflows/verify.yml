@@ -11,27 +11,26 @@ permissions:
 
 jobs:
   repository-set:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@17abe8c1b3ff2c5b0212d23678cb02868c3040b1
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@310ca9071f9d2a3e9ed94287bb3b297f9ce8cfb3
     with:
       candidate-repository: root
       candidate-ref: ${{ gitea.sha }}
-      verification-ref: 17abe8c1b3ff2c5b0212d23678cb02868c3040b1
+      verification-ref: 310ca9071f9d2a3e9ed94287bb3b297f9ce8cfb3
 
   persistent-state-integration:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@17abe8c1b3ff2c5b0212d23678cb02868c3040b1
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@310ca9071f9d2a3e9ed94287bb3b297f9ce8cfb3
     with:
       candidate-repository: root
       candidate-ref: ${{ gitea.sha }}
-      verification-ref: 17abe8c1b3ff2c5b0212d23678cb02868c3040b1
+      verification-ref: 310ca9071f9d2a3e9ed94287bb3b297f9ce8cfb3
       gate: integration
       runner-label: dim-container-integration
 
   local-qemu-host-gate:
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@17abe8c1b3ff2c5b0212d23678cb02868c3040b1
+    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@310ca9071f9d2a3e9ed94287bb3b297f9ce8cfb3
     with:
       candidate-repository: root
       candidate-ref: ${{ gitea.sha }}
-      verification-ref: 17abe8c1b3ff2c5b0212d23678cb02868c3040b1
+      verification-ref: 310ca9071f9d2a3e9ed94287bb3b297f9ce8cfb3
       gate: kvm-control
       runner-label: dim-qemu
-      backend: sysbox
