@@ -3,12 +3,15 @@
 ## Docker-compatible image
 
 The workspace image entrypoint shipped in `@slop-lab/dim-core` starts a private
-Docker daemon, waits for readiness,
-sets ownership on the workspace and nested-engine storage, and executes the
+Docker daemon, waits for readiness, initializes ownership only on empty
+top-level workspace, home, and nested-engine storage directories, and executes the
 requested command as the unprivileged `dim` user (`DIM_UID`/`DIM_GID` build
 args select its UID/GID, both defaulting to 1000). This is the workspace
 container's trusted account, not the identity of an agent process; see [Trust
 Boundaries](../02-boundaries-and-trust.md#trusted-project-lifecycle-boundary).
+Existing descendants retain their ownership and modes. A populated top-level
+directory with incompatible ownership fails startup instead of recursively
+rewriting persistent Project or nested-Docker data.
 
 `DIM_DOCKERD_FLAGS` may add managed daemon flags. The image must not
 mount or contact the host Docker socket.
