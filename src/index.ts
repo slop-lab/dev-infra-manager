@@ -38,10 +38,16 @@ import {
   workspaceSubdomainPrefix,
   type ExternalUrlRoutePolicyConfig
 } from "./routePolicy.js";
+import { TcpIngressListener } from "./tcpIngress.js";
+import {
+  EXTERNAL_URL_INGRESS_DRIVER_EXTENSION,
+  tailscaleIngressDriver,
+  type ExternalUrlIngressDriver
+} from "./tailscale.js";
 
 export interface ExternalUrlIngressOptions {
   description: string;
-  scheme: "http" | "https";
+  scheme: "http" | "https" | "tcp";
   domain: string;
   port?: number;
   listenHost: string;
@@ -95,6 +101,7 @@ interface IngressListener {
   upstreamMode: "container-dns" | "container-ip";
   provision(workspace: ControllerWorkspace, request: NormalizedRequest, upstream: ResolvedWorkspaceTarget): Promise<ExternalRoute>;
   revoke(route: ExternalRoute): Promise<void>;
+  ready(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -125,7 +132,8 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
   return {
     name: "@slop-lab/dim-plugin-external-urls",
     apiVersion: DIM_PLUGIN_API_VERSION,
-    register(host) {
+    async register(host) {
+      host.registerExtension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "tailscale", tailscaleIngressDriver);
       host.registerAdminRoute({
         method: "POST",
         path: "/external-url/:action",
@@ -147,18 +155,27 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
       for (const [name, ingress] of Object.entries(options.ingresses)) {
         ingresses.set(name, {
           options: ingress,
-          listener: new WorkspaceIngressListener(registry, {
-            name,
-            listenHost: ingress.listenHost,
-            listenPort: ingress.listenPort,
-            upstreamMode: ingress.upstreamMode ?? "container-ip",
-            scheme: ingress.scheme,
-            domain: ingress.domain,
-            ...(ingress.routePolicy === undefined ? {} : { routePolicy: ingress.routePolicy }),
-            ...(ingress.port === undefined ? {} : { port: ingress.port })
-          }, host.logger)
+          listener: ingress.scheme === "tcp"
+            ? new TcpIngressListener({
+                name,
+                listenHost: ingress.listenHost,
+                listenPort: ingress.listenPort,
+                publicHost: ingress.domain,
+                upstreamMode: ingress.upstreamMode ?? "container-ip"
+              })
+            : new WorkspaceIngressListener(registry, {
+                name,
+                listenHost: ingress.listenHost,
+                listenPort: ingress.listenPort,
+                upstreamMode: ingress.upstreamMode ?? "container-ip",
+                scheme: ingress.scheme,
+                domain: ingress.domain,
+                ...(ingress.routePolicy === undefined ? {} : { routePolicy: ingress.routePolicy }),
+                ...(ingress.port === undefined ? {} : { port: ingress.port })
+              }, host.logger)
         });
       }
+      await Promise.all([...ingresses.values()].map((ingress) => ingress.listener.ready()));
 
       const initialize = async (runtime: ControllerRuntimeContext): Promise<void> => {
         for (const driver of options.requiredDnsDrivers ?? []) dnsDriver(host, driver);
@@ -266,7 +283,7 @@ export async function externalUrlsPluginFromConfig(
         provider,
         routerPort
       };
-    } else {
+    } else if (ingress.driver === "http") {
       const argument = parseHttpIngressArgument(ingress.driver, ingress.argument);
       if (argument.listenPort === "auto") {
         throw new Error(`ingress '${name}' has unresolved listenPort 'auto'; re-add it with the DIM CLI`);
@@ -280,6 +297,16 @@ export async function externalUrlsPluginFromConfig(
         listenPort: argument.listenPort,
         ...(argument.upstreamMode === undefined ? {} : { upstreamMode: argument.upstreamMode }),
         ...(argument.routePolicy === undefined ? {} : { routePolicy: argument.routePolicy })
+      };
+    } else {
+      const runtime = await tailscaleIngressDriver.runtime(ingress.argument);
+      ingresses[name] = {
+        description: ingress.description,
+        scheme: runtime.scheme,
+        domain: runtime.publicHost,
+        listenHost: runtime.listenHost,
+        listenPort: runtime.listenPort,
+        upstreamMode: runtime.upstreamMode
       };
     }
   }
@@ -348,8 +375,10 @@ async function externalUrlAdmin(
     case "ingress-add": {
       const driver = text("driver");
       const scheme = text("scheme");
-      if (scheme !== "http" && scheme !== "https") throw new UserError("scheme must be http or https");
-      let argument = await configureIngressArguments(driver, scheme, strings("arguments"));
+      if (scheme !== "http" && scheme !== "https" && scheme !== "tcp") {
+        throw new UserError("scheme must be http, https, or tcp");
+      }
+      let argument = await configureIngressArguments(host, driver, scheme, strings("arguments"));
       if (driver === "caddy") {
         const parsed = parseCaddyIngressArgument(argument);
         const dnsProvider = parsed.dnsProvider;
@@ -404,6 +433,8 @@ async function externalUrlAdmin(
         if (!storedProvider) throw new UserError(`DNS provider '${argument.dnsProvider}' is not configured`);
         await dnsDriver(host, storedProvider.driver).verify(dnsOperation(storedProvider, argument));
         await verifyCaddyIngress(argument);
+      } else if (ingress.driver !== "http") {
+        await ingressDriver(host, ingress.driver).verify(ingress.argument);
       }
       return {};
     }
@@ -560,10 +591,14 @@ function dnsOperation(provider: ExternalUrlDnsProviderConfig, ingress: ReturnTyp
 }
 
 async function configureIngressArguments(
+  host: DimPluginHost,
   driver: string,
-  scheme: "http" | "https",
+  scheme: "http" | "https" | "tcp",
   arguments_: readonly string[]
 ): Promise<string> {
+  if (driver !== "http" && driver !== "caddy") {
+    return ingressDriver(host, driver).configure(scheme, arguments_);
+  }
   const argument = JSON.stringify(parseIngressCliArguments(driver, arguments_));
   if (driver === "caddy") {
     if (scheme !== "https") {
@@ -591,6 +626,17 @@ async function configureIngressArguments(
     ...parsed,
     listenPort: parsed.listenPort === "auto" ? await availableTcpPort(parsed.listenHost) : parsed.listenPort
   });
+}
+
+function ingressDriver(host: DimPluginHost, name: string): ExternalUrlIngressDriver {
+  const driver = host.extension<ExternalUrlIngressDriver>(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, name);
+  if (!driver || typeof driver.configure !== "function"
+    || typeof driver.runtime !== "function" || typeof driver.verify !== "function") {
+    throw new UserError(
+      `external URL ingress driver '${name}' is not installed; install and enable its DIM plugin first`
+    );
+  }
+  return driver;
 }
 
 function parseIngressCliArguments(driver: string, arguments_: readonly string[]): Record<string, unknown> {
@@ -932,6 +978,10 @@ class WorkspaceIngressListener implements IngressListener {
     return { id: randomUUID(), ingress: this.name, authority, ingressId: claim, url };
   }
 
+  ready(): Promise<void> {
+    return this.#ready;
+  }
+
   async revoke(route: ExternalRoute): Promise<void> {
     this.#registry.revoke(route.authority, route.ingressId ?? route.authority);
   }
@@ -1022,8 +1072,9 @@ function validateRequest(value: unknown): NormalizedRequest {
   if (!Number.isInteger(target.port) || (target.port as number) < 1 || (target.port as number) > 65_535) {
     throw new UserError("target.port must be an integer between 1 and 65535");
   }
-  if (target.protocol !== undefined && target.protocol !== "http" && target.protocol !== "https") {
-    throw new UserError("target.protocol must be http or https");
+  if (target.protocol !== undefined && target.protocol !== "http" && target.protocol !== "https"
+    && target.protocol !== "tcp") {
+    throw new UserError("target.protocol must be http, https, or tcp");
   }
   if (input.path !== undefined && (typeof input.path !== "string" || !input.path.startsWith("/") || input.path.includes(".."))) {
     throw new UserError("path must be an absolute URL path without '..'");
@@ -1034,7 +1085,7 @@ function validateRequest(value: unknown): NormalizedRequest {
     target: {
       containers: containers as string[],
       port: target.port as number,
-      protocol: (target.protocol ?? "http") as "http" | "https"
+      protocol: (target.protocol ?? "http") as "http" | "https" | "tcp"
     },
     ...(input.path === undefined ? {} : { path: input.path as string })
   };
@@ -1057,8 +1108,8 @@ function validateOptions(options: ExternalUrlsPluginOptions): void {
     if (typeof ingress.description !== "string" || ingress.description.trim().length === 0) {
       throw new Error(`external URL ingress '${name}' requires a description`);
     }
-    if (ingress.scheme !== "http" && ingress.scheme !== "https") {
-      throw new Error(`external URL ingress '${name}' scheme must be http or https`);
+    if (ingress.scheme !== "http" && ingress.scheme !== "https" && ingress.scheme !== "tcp") {
+      throw new Error(`external URL ingress '${name}' scheme must be http, https, or tcp`);
     }
     if (typeof ingress.domain !== "string" || normalizeDomain(ingress.domain).length === 0) {
       throw new Error(`external URL ingress '${name}' requires a domain`);
@@ -1072,6 +1123,10 @@ function validateOptions(options: ExternalUrlsPluginOptions): void {
     }
     if (ingress.upstreamMode !== undefined) upstreamMode(ingress.upstreamMode);
     if (ingress.routePolicy !== undefined) parseRoutePolicy(ingress.routePolicy);
+    if (ingress.scheme === "tcp" && (ingress.routePolicy !== undefined || ingress.port !== undefined)) {
+      throw new Error(`external URL TCP ingress '${name}' cannot configure HTTP route policy or a separate public port`);
+    }
+    if (ingress.scheme === "tcp") continue;
     const domain = normalizeDomain(ingress.domain);
     const routing = {
       name,
