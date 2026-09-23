@@ -53,8 +53,10 @@ while [[ ! -f '${releasePath}' ]]; do sleep 0.05; done
     try {
       await waitFor(async () => {
         try {
-          const response = await fetch(`http://127.0.0.1:${port}/missing`);
-          return response.status === 501;
+          const response = await fetch(`http://127.0.0.1:${port}/healthz`, {
+            headers: { Authorization: "Bearer test" }
+          });
+          return response.status === 200;
         } catch {
           return false;
         }
@@ -146,7 +148,11 @@ while [[ ! -f '${releasePath}' ]]; do sleep 0.05; done
     }
     try {
       await Promise.all(ports.map((port) => waitFor(async () => {
-        try { return (await fetch(`http://127.0.0.1:${port}/missing`)).status === 501; }
+        try {
+          return (await fetch(`http://127.0.0.1:${port}/healthz`, {
+            headers: { Authorization: "Bearer test" }
+          })).status === 200;
+        }
         catch { return false; }
       })));
       await Promise.all(ports.map((port) => sendWorkflowJob(port, 301, "queued")));
