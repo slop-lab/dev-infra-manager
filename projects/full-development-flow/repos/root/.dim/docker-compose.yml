@@ -26,7 +26,7 @@ services:
       GIT_CONFIG_VALUE_2: /workspace/*
       GIT_TERMINAL_PROMPT: "0"
     volumes:
-      - ${DIM_PROJECT_ROOT:?}:/workspace
+      - ${DIM_WORKSPACE_DATA:?}/project:/workspace
       - agent-home:/home/dim-agent
       - agent-dind-shared:/mnt/workspace-shared-dind
       - agent-dind-runtime:/run/dim-agent-dind
