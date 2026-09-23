@@ -1,5 +1,5 @@
 import { type Command } from "commander";
-import { detectWorkspaceKvm, inspectWorkspaceImage, lifecycleOptions, UserError } from "@slop-lab/dim-core";
+import { buildWorkspaceImage, detectWorkspaceKvm, inspectWorkspaceImage, lifecycleOptions, UserError } from "@slop-lab/dim-core";
 import {
   adminCall, adminStreamCall, collect, confirmRecommended, ensureManagedController,
   hasResourceFlags, interactive, print, printActionResult, printList, resourceInput, runner,
@@ -9,7 +9,14 @@ import {
 export function registerWorkspaceCommands(program: Command): Command {
   const workspace = program.command("workspace").description("Manage persistent development workspaces");
 
-const workspaceImage = workspace.command("image").description("Inspect the configured workspace image");
+const workspaceImage = workspace.command("image").description("Build or inspect the configured workspace image");
+
+workspaceImage.command("build")
+  .description("Build the configured workspace image from installed trusted assets")
+  .action(async () => {
+    const result = await buildWorkspaceImage(runner);
+    console.log(`Built workspace image ${result.image}`);
+  });
 
 workspaceImage.command("status")
   .description("Show whether the configured workspace image is available")
