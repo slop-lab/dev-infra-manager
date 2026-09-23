@@ -28,9 +28,14 @@ async function runLifecycle(lifecycle: "setup" | "teardown", serviceDirectory: s
   const root = await mkdtemp(resolve(tmpdir(), "dim-qemu-setup-residue-test-"));
   roots.push(root);
   const tools = resolve(root, "tools");
-  await mkdir(tools);
+  await Promise.all([mkdir(tools), mkdir(resolve(root, "workspace"))]);
   return spawnSync("/bin/sh", ["-c", await lifecycleSection(lifecycle, serviceDirectory, tools)], {
-    cwd: projectRoot, encoding: "utf8", env: { ...process.env, DIM_WORKSPACE_KVM: kvm, PATH: `${tools}:/usr/bin:/bin` }, timeout: 20_000,
+    cwd: projectRoot, encoding: "utf8", env: {
+      ...process.env,
+      DIM_WORKSPACE_DATA: root,
+      DIM_WORKSPACE_KVM: kvm,
+      PATH: `${tools}:/usr/bin:/bin`,
+    }, timeout: 20_000,
   });
 }
 

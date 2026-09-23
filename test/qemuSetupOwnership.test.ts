@@ -30,7 +30,7 @@ async function createFixture(): Promise<Fixture> {
   const cliLog = resolve(root, "owner-cli.log");
   const newPidFile = resolve(root, "new-service.pid");
   const signalPreload = resolve(root, "signal-preload.mjs");
-  await Promise.all([mkdir(tools), mkdir(serviceDirectory), writeFile(cliLog, "")]);
+  await Promise.all([mkdir(tools), mkdir(serviceDirectory), mkdir(resolve(root, "workspace")), writeFile(cliLog, "")]);
   const { newLifecycleRoot, oldLifecycleRoot } = await copyLifecycleSnapshots(projectRoot, root);
   await writeFile(signalPreload, ownershipSignalPreloadScript());
   await writeFile(resolve(tools, "node"), `#!/usr/bin/env bash

@@ -37,6 +37,7 @@ export function lifecycleEnvironment(fixture: QemuLifecycleFixture, readiness: L
     DIM_TEST_REAL_NODE: process.execPath,
     DIM_TEST_SIGNAL_LOG: resolve(fixture.root, "signals.log"),
     DIM_TEST_SIGNAL_PRELOAD: resolve(fixture.root, "signal-preload.mjs"),
+    DIM_WORKSPACE_DATA: fixture.root,
     DIM_WORKSPACE_KVM: "1",
   };
 }
