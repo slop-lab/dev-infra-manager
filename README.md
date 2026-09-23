@@ -274,7 +274,9 @@ self-Project maps `tool-setup` to its local OpenCode utility and maps `agent`
 to the pinned executable through a contract-versioned launcher manifest below
 canonical `$HOME`. Launch rejects a missing manifest, unsupported contract,
 unknown launcher, or mismatched tool, version, or executable path. Setup is
-safe to rerun. It installs under `$HOME/.local`, pins the OMO plugin
+safe to rerun. Existing homes are not upgraded automatically: rerun
+`tool-setup` explicitly after adopting a reviewed Project change that selects
+new tool bytes or versions. It installs under `$HOME/.local`, pins the OMO plugin
 coordinate, disables supported automatic updates, enables Team Mode, and
 preserves unrelated OpenCode and OMO user configuration. It does not start
 OpenCode or perform provider authentication, and lifecycle setup never invokes
@@ -378,7 +380,7 @@ only the launcher's default origin.
     "$base/opencode-web.bash.sha256"
   (cd -- "$setup_dir" && sha256sum --check \
     workspace-user-setup.bash.sha256 opencode-web.bash.sha256)
-  dim workspace run dim-dev tool-setup <"$setup_dir/workspace-user-setup.bash"
+  dim workspace run dim-dev bash -- -s <"$setup_dir/workspace-user-setup.bash"
   dim workspace run dim-dev bash -- -c \
     'export OPENCODE_WEB_CORS_ORIGINS="$1"; exec bash -s' \
     bash "${OPENCODE_WEB_CORS_ORIGINS:-[]}" <"$setup_dir/opencode-web.bash"

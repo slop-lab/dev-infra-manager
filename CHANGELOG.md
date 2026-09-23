@@ -87,7 +87,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   now expose generic explicit `tool-setup` and `agent` task mappings. Setup
   publishes a versioned user-home launcher manifest, and launch validates the
   Project-selected tool, version, and executable without adding tool knowledge
-  or automatic installation to DIM core.
+  or automatic installation to DIM core. The canonical Project's `tool-setup`
+  runs only its reviewed local utility; no-checkout bootstraps execute verified
+  downloaded bytes through `bash`, and existing homes upgrade only when the
+  user explicitly reruns setup.
 
 - The canonical Project now maps an inner UID-0 agent onto the non-root
   workspace owner through a private rootless `agent-dind`. The non-root agent
