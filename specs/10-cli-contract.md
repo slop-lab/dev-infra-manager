@@ -714,7 +714,7 @@ Workspace-scoped URL operations are:
 ```text
 dim external-url discover [--workspace WORKSPACE] [--json]
 dim external-url request [--workspace WORKSPACE] --ingress NAME
-  [--subdomain NAME] [--container NAME ...] --port PORT [--protocol http|https]
+  [--subdomain NAME] [--container NAME ...] --port PORT [--protocol http|https|tcp]
 dim external-url list [--workspace WORKSPACE] [--json]
 dim external-url revoke URL_ID [--workspace WORKSPACE]
 dim host-input get PROVIDER KEY [--parameters STRING]
@@ -734,6 +734,24 @@ must begin `WORKSPACE--`; an omitted value receives the first unused
 HTTP(S) or Unix-socket policy webhook. DIM revalidates any webhook replacement
 and prevents hostname conflicts. Workspace discard revokes all routes
 authenticated by that workspace grant before removing the grant.
+
+**CLI-EXTERNAL-URL-TCP-001:** A raw TCP ingress MUST accept only a target with
+protocol `tcp`, MUST reject a URL path or subdomain, and MUST resolve its
+upstream through the authenticated workspace target resolver rather than a
+caller-supplied host. One listener MUST have at most one workspace and exact
+target claim; an identical claim is idempotent, while a different claim is
+rejected until revocation. Claims MUST persist and reconcile after controller
+restart and MUST be revoked on workspace discard. Returned endpoints use
+`tcp://HOST:PORT`.
+
+**CLI-EXTERNAL-URL-TAILSCALE-001:** The optional `tailscale` ingress driver MUST
+require scheme `tcp` and exactly one configured listener port in
+`49152..65535`. It MUST derive both advertised and listen hosts from a running
+host Tailscale self IPv4 address in `100.64.0.0/10`, using only `tailscale
+status --json`, and MUST bind that exact address. It MUST NOT authenticate or
+mutate Tailscale, bind a wildcard or arbitrary host address, depend on Serve or
+Funnel, make Tailscale a core dependency, or expose the host LocalAPI socket,
+state, binary, or credentials to a workspace or target container.
 
 Inside a workspace the controller endpoint and grant come from
 `DIM_CONTROLLER_SOCKET` and `DIM_CONTROLLER_TOKEN`. On the host, `--workspace`

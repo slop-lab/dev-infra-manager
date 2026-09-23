@@ -132,6 +132,33 @@ Discovery exposes only each ingress's `name`, `description`, and `scheme`.
 Workspaces cannot select domains, listener addresses, upstream hosts, or
 arbitrary provider configuration.
 
+### Raw TCP and Tailscale
+
+A `tcp` ingress owns one host listener and one authenticated workspace target
+at a time. Its request uses `protocol: "tcp"`, does not accept a path or DNS
+subdomain, and returns `tcp://HOST:PORT`. DIM resolves the target through the
+same workspace/container boundary as HTTP targets; callers cannot supply an
+arbitrary host or loopback upstream. A repeated request for the same workspace
+and exact target is idempotent. A different target or workspace is rejected
+until revocation, workspace discard, or ingress removal releases the claim.
+Persisted claims are resolved and rebound after controller restart.
+
+The built-in `tailscale` ingress driver is opt-in:
+
+```bash
+dim external-url ingress add tailscale --name tailnet-ssh \
+  --description "Tailnet SSH" --scheme tcp --listen-port 49152
+```
+
+The host must already have an authenticated, running Tailscale daemon and CLI.
+The driver invokes only `tailscale status --json`, chooses the current self IPv4
+address in `100.64.0.0/10`, and binds exactly that address on the configured
+port in `49152..65535`. It never binds `0.0.0.0`, runs `tailscale up`, or uses
+Tailscale Serve or Funnel. Tailscale is not a core dependency, and no binary,
+state, LocalAPI socket, or authentication material is passed into a workspace
+or target container. See the runnable
+[Tailnet SSH example](../../examples/features/tailnet-ssh/README.md).
+
 Allowing an ingress through an application socket is a reviewed policy choice.
 Selecting a different ingress at runtime is insufficient unless trusted
 Project lifecycle code also changes that socket's ingress allowlist. The
@@ -385,9 +412,12 @@ dnsmasq wildcard DNS
 ```
 
 The unit suite verifies ingress discovery, mandatory ingress selection,
-multiple target-resolution modes, HTTP proxying, persistence, and revocation.
+multiple target-resolution modes, HTTP proxying, raw TCP forwarding, exclusive
+TCP claims, persistence, and revocation.
 The example smoke test also runs a local Cloudflare-compatible API backed by
 authoritative CoreDNS, then checks provider reconciliation, wildcard
 resolution, and cleanup without external credentials.
-A separately configured Tailnet ingress can run
-`verification/scripts/tailscale-external-url-smoke.sh`.
+`just verify headscale-tailnet-tcp` proves isolated tailnet TCP transport with
+digest-pinned Headscale and Tailscale containers without reading or changing
+host Tailscale state. A separately configured operator-owned Tailnet ingress
+can additionally run `verification/scripts/tailscale-external-url-smoke.sh`.

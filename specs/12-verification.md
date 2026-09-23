@@ -155,6 +155,12 @@ concurrent automatic-name allocation, default workspace-prefix rejection,
 webhook approval and response bounds, forwarded-header normalization, and
 independent route claim revocation. The Cloudflare plugin suite must verify named driver
 registration, provider/record argument normalization, and DNS reconciliation.
+For `CLI-EXTERNAL-URL-TCP-001`, the suite MUST exercise authenticated raw TCP
+forwarding, rejection before a valid claim, exact-target idempotence, collision
+rejection, revocation, and persisted-claim reconciliation. For
+`CLI-EXTERNAL-URL-TAILSCALE-001`, it MUST prove status-only CLI invocation,
+running-state and CGNAT address validation, exact-address binding data, and
+high-port validation without host Tailscale mutation.
 The generated QEMU webhook asset suite MUST execute the emitted Python program
 and verify monotonic workflow-job transitions across duplicate, reordered,
 concurrent, and post-restart deliveries, including bounded terminal retention,
@@ -168,8 +174,11 @@ claims MUST leave every already-running generic capacity alive, while one-VM
 per-capacity, shutdown, state-I/O failure, and process cleanup remain enforced.
 The route-policy test launches the checked-in advanced example server rather
 than maintaining a test-only webhook implementation.
-A configured Tailnet
-ingress can additionally run:
+A Docker-capable lane MUST run `just verify headscale-tailnet-tcp`. It uses
+digest-pinned Headscale and Tailscale images, registers two disposable nodes
+without host Tailscale state, binds raw TCP on the allocated tailnet address,
+and proves a second node receives a unique sentinel. A configured
+operator-owned Tailnet ingress can additionally run:
 
 ```bash
 verification/scripts/tailscale-external-url-smoke.sh
