@@ -16,7 +16,8 @@ just build-packages  # publishable package builds
 just check-source    # typecheck + test + package builds; only Node.js and pnpm required
 just verify agent    # strongest gate supported inside this repository's DIM agent
 bash verification/scripts/local-ci-matrix.bash # exact Node.js 24/26 CI matrix via mise
-just build-workspace-image # prepare the local workspace image with Docker Buildx
+just build-workspace-image # prepare the release-version workspace image with Docker Buildx
+just build-local-workspace-image # prepare the aggregate-local workspace image with Docker Buildx
 just install-local   # install local packages without restarting the controller
 just restart-controller # restart the controller with the installed packages
 just doctor          # host readiness: dev tools, Docker, selected backend, cgroup v2
@@ -100,20 +101,26 @@ dependencies, then runs `just check-source`, `just verify plugin-install`,
 ## Preparing local DIM changes
 
 ```bash
-just build-workspace-image
+just build-local-workspace-image
 just install-local
-just restart-controller
+# just restart-controller # optional: start the installed package set
 just doctor
 ```
 
 These are distinct operations with separate readiness domains:
 
-- `build-workspace-image` requires Docker Buildx and uses `--load` to prepare
-  the trusted workspace image in the local Docker image store. It does not
-  install packages or restart the controller.
+- `build-workspace-image` is the release recipe. It requires Docker Buildx,
+  uses `--load` to prepare
+  `dev-infra-project-workspace:<release version>` in the local Docker image
+  store, and does not install packages or restart the controller.
+- `build-local-workspace-image` is the aggregate-local recipe. It requires
+  Docker Buildx, invokes `verification/scripts/local-build-version.bash` once,
+  and uses that exact output to tag the local image. Its tag matches the
+  aggregate local version selected by local packages. It does not install
+  packages or restart the controller.
 - `install-local` builds local package tarballs and installs them through the
   mise-managed installer facade when available, with a direct global
-  npm-prefix fallback. It does not build the workspace image or restart the
+  npm-prefix fallback. It does not build a workspace image or restart the
   controller.
 - `restart-controller` replaces the managed controller process with the
   currently installed DIM package set. It does not rebuild either packages or

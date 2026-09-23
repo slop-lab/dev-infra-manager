@@ -54,4 +54,10 @@ doctor:
 build-workspace-image:
     docker buildx version >/dev/null
     pnpm --filter @slop-lab/dim-controller-proxy run build
-    docker buildx build --load --quiet --build-arg "DIM_UID=$(id -u)" --build-arg "DIM_GID=$(id -g)" -t dev-infra-project-workspace:latest -f core/images/project-workspace/Dockerfile . >/dev/null
+    image_version="$(node -p "require('./core/package.json').version")"; docker buildx build --load --quiet --build-arg "DIM_UID=$(id -u)" --build-arg "DIM_GID=$(id -g)" -t "dev-infra-project-workspace:${image_version}" -f core/images/project-workspace/Dockerfile . >/dev/null
+
+# Build the Docker-compatible Project workspace runtime image for local sources.
+build-local-workspace-image:
+    docker buildx version >/dev/null
+    pnpm --filter @slop-lab/dim-controller-proxy run build
+    image_version="$(bash verification/scripts/local-build-version.bash)"; docker buildx build --load --quiet --build-arg "DIM_UID=$(id -u)" --build-arg "DIM_GID=$(id -g)" -t "dev-infra-project-workspace:${image_version}" -f core/images/project-workspace/Dockerfile . >/dev/null

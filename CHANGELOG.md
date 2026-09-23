@@ -30,22 +30,25 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   are necessarily removed by name only after immediate ownership reinspection.
 
 - Local source workflows now distinguish the dirty-worktree convenience path
-  from exact-commit Project preparation. Top-level `install-local` packages
-  and installs the current development worktree. Both paths give every DIM
-  component a shared version containing the aggregate SHA-256 of their
-  repository-name/full-commit records, with dirty state marked for the
-  top-level path. Project `prepare-local` resolves omitted source inputs to each
-  production repository's latest default-branch commit while still accepting
-  exact reviewed commits, prepares the package bundle and trusted workspace
-  image, and records the package-bundle digest and image ID as provenance.
-  Project `install-local` validates that prepared set before and after
-  installing it without rebuilding. Both local installation paths explicitly
-  enable the built DNS Cloudflare and External URLs plugins while preserving
-  other enabled plugins. Installation uses the exact lockfile-owned Verdaccio
-  binary on a random loopback port, with signup closed and mutation
-  authenticated. `restart-controller` separately restarts the controller with
-  the currently installed packages; Project preparation, installation, and
-  restart never implicitly invoke one another.
+  from exact-commit Project preparation. Top-level
+  `build-local-workspace-image` explicitly prepares the trusted workspace image
+  under the exact version emitted by `verification/scripts/local-build-version.bash`,
+  while `install-local` only packages and installs the current development
+  worktree. Both paths give every DIM component a shared version containing the
+  aggregate SHA-256 of their repository-name/full-commit records and the root
+  aggregate lock, with dirty state marked for the top-level path. Project
+  `prepare-local` resolves omitted source inputs to each production repository's
+  latest default-branch commit while still accepting exact reviewed commits,
+  prepares the package bundle and trusted workspace image under that bundle's
+  complete aggregate local version, and records the image tag, package-bundle
+  digest, and immutable image ID as provenance. Project `install-local`
+  validates that prepared set before and after installing it without rebuilding.
+  Both local installation paths explicitly enable the built DNS Cloudflare and
+  External URLs plugins while preserving other enabled plugins. Installation
+  uses the exact lockfile-owned Verdaccio binary on a random loopback port, with
+  signup closed and mutation authenticated. `restart-controller` separately
+  restarts the controller with the currently installed packages; image
+  preparation, installation, and restart never implicitly invoke one another.
 - Development workspaces now bootstrap pinned OpenCode and Oh My OpenAgent
   releases into the persistent workspace-user home, with exact plugin
   registration, Team Mode defaults, automatic updates disabled, and existing
@@ -68,14 +71,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   URL, and shared gateway. Launcher lock, readiness, helper execution, and
   cleanup are bounded; failed exposure stops only a newly started OpenCode
   process and leaves the shared gateway and other services running.
-
-- Local source installations now package every DIM component under a shared
-  version containing the production commit and dirty-worktree state, and
-  automatically rebuild the trusted `dev-infra-project-workspace:latest` image
-  from the same cloned production source snapshot before installing the CLI or
-  restarting the controller. This avoids stale package-manager reuse when
-  different local builds share a release version and prevents stale workspace
-  images from being left behind.
 
 - The canonical Project now maps an inner UID-0 agent onto the non-root
   workspace owner through a private rootless `agent-dind`. The non-root agent
