@@ -52,7 +52,9 @@ only when its contract version, launcher name, pinned tool identity and
 version, and executable path match the Project's reviewed configuration. The
 reviewed Project lifecycle does not install or authenticate user tools
 automatically; this setup is not `.dim/setup.sh` lifecycle work. DIM core knows
-neither task's tool-specific mapping.
+neither task's tool-specific mapping. Existing agent homes are not upgraded
+automatically. After adopting a reviewed Project change that selects new setup
+bytes or tool versions, rerun `tool-setup` explicitly before launching `agent`.
 
 Launch the opt-in authenticated Web interface separately:
 
