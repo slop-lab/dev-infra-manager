@@ -173,34 +173,27 @@ must end in `/` and may not overlap; each shared upstream may have at most one
 fallback. Unmatched refs are ignored when no fallback is declared. See the
 [shared-upstream feature example](../../examples/features/shared-upstream/README.md).
 
-DIM directly clones only the configured root. The root `.dim` lifecycle reads
-the `repositories` catalog in `DIM_PROJECT_MANIFEST` for the actual registered
-aliases, phases, and credential-free workspace URLs. The Project-specific
-`DIM_GIT_BASE_URL` remains available for compatibility with simple alias-based
-URL construction. The Project owns checkout selection, paths, integrated build
+DIM publishes only the configured root as an immutable lifecycle snapshot.
+The root `.dim` lifecycle owns repository policy and uses the Project-specific
+`DIM_GIT_BASE_URL` when it chooses to materialize managed repositories under
+`DIM_WORKSPACE_DATA`. The Project owns refs, checkout paths, integrated build
 layout, and nested services; DIM does not create per-repository environment
-variables or require one container per repository.
+variables, publish a repository catalog, or require one container per repository.
 
 ## Workspaces
 
 ```bash
-dim workspace create example dev --profile development \
-  --repo-ref product=refs/pull/42/head
+dim workspace create example dev --profile development
 dim run dev bash
 dim run dev bash -- -lc 'just test'
 dim exec dev -- bash
 ```
 
-Each repeated `--repo-ref ALIAS=REF` selects a non-root candidate only for that
-workspace. It does not change the Project repository set. The resulting
-workspace record and Project runtime manifest contain every Project alias as a
-complete `ready` entry with the requested ref, resolved ref, and exact commit.
-The root cannot be overridden. If the root has no configured ref, its request
-is recorded as `HEAD` separately from the concrete protected branch selected
-through symbolic `HEAD`. Creation rejects malformed, root, unknown, duplicate,
-or unavailable ref overrides before state mutation. Reusing an existing
-workspace with different overrides is also rejected without changing its
-record or Project repository state.
+Workspace creation records only the reviewed root identity. Reviewed Project
+code selects non-root refs and materializes them into persistent workspace data.
+It should stage a new checkout, disable inherited Git hooks and configuration,
+and publish atomically. Existing checkout paths are agent data and must not be
+silently rewritten.
 
 `dim run` dispatches through the Project's reviewed entrypoint and is the
 normal way to enter a Project-owned agent task. `dim exec` bypasses that
@@ -208,7 +201,7 @@ entrypoint and provides raw trusted-workspace access for recovery or lifecycle
 administration. Neither command installs coding-agent tools automatically.
 
 Project or remote changes never alter a running workspace automatically.
-Trusted Project lifecycle code never executes from this mutable checkout.
+Trusted Project lifecycle code never executes from Project-owned mutable data.
 DIM records an exact approved root commit and uses a controller-owned,
 read-only full-tree snapshot for setup, entrypoint, teardown, Compose, and
 their relative helpers and build contexts.
@@ -227,12 +220,11 @@ dim workspace stop dev
 dim workspace start dev     # root fast-forward and setup
 ```
 
-Dirty root checkouts and non-fast-forward updates are rejected. For a running
-workspace, restart performs these checks before it stops anything. A rejected
-restart leaves the workspace and its Project services running and prints the
-explicit `dim workspace align WORKSPACE --reset --yes` recovery command when
-discarding the local state is intended. Stop/start and restart preserve the
-root checkout and inner-engine volume.
+Restart selects reviewed immutable root bytes before it stops a running
+workspace. Project setup decides how to reconcile mutable data and must preserve
+existing agent checkouts unless its reviewed contract explicitly directs the
+user otherwise. Stop/start and restart preserve workspace data and the
+inner-engine volume.
 
 `restart` accepts one or more workspace names and processes them sequentially
 in command-line order. It reports each success immediately and stops on the

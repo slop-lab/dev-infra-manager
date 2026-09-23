@@ -66,13 +66,15 @@ When present, this script completely owns environment reconciliation. It may
 clone or update additional repositories, build images, and start project
 services. DIM runs its reviewed bytes from the immutable snapshot of the exact
 protected root commit recorded by the workspace. Its working directory is that
-snapshot, while `DIM_PROJECT_ROOT` names the mutable Project checkout, with:
+snapshot, `DIM_PROJECT_ROOT` names the same immutable root contract, and
+`DIM_WORKSPACE_DATA` names persistent Project-owned mutable data, with:
 
 ```text
 DIM_PROJECT_ID
 DIM_PROJECT_NAME
 DIM_PROJECT_ROOT
 DIM_PROJECT_MANIFEST
+DIM_WORKSPACE_DATA
 DIM_WORKSPACE_NAME
 DIM_WORKSPACE_BACKEND
 DIM_NESTED_ENGINE
@@ -103,32 +105,13 @@ require resource enforcement can opt into fail-closed setup with
 `dim-project-cgroup require`. See the
 [Project runtime cgroups example](../../examples/features/project-runtime-cgroups/README.md).
 
-The manifest's `repositories` object is the workspace's complete immutable
-repository selection, keyed by every Project alias. Each entry includes its
-credential-free `workspaceUrl`, phase, root role, `requestedRef`, resolved
-`ref`, and exact `commit`. Every entry is complete and has `phase: ready`.
-The root appears in this object too. If its Project ref was omitted, the root
-entry keeps `requestedRef: HEAD` while `ref` names the concrete protected
-branch selected through symbolic `HEAD`. Its published full-tree lifecycle
-asset remains a separate workspace-state path.
-Project lifecycle or an untrusted development environment may clone every readable
-source repository; DIM protects promotion and execution authority rather than
-source visibility. Consumers should clone only `phase: ready` entries and
-choose their own paths. DIM does not synthesize a monorepo layout or execute
-hooks from those clones. Setup recovery republishes this recorded selection
-without fetching or resolving refs that may have moved.
-
-Workspace creation can select a non-root candidate without changing the
-Project's configured repository ref:
-
-```bash
-dim workspace create example example-dev \
-  --repo-ref product=refs/pull/42/head
-```
-
-Repeat `--repo-ref` for more aliases. The root alias cannot be overridden.
-Malformed values, unknown aliases, and duplicate aliases are rejected before
-the workspace is created.
+The schema-3 manifest identifies the immutable reviewed root at
+`/run/dim/project-root`, persistent Project-owned data at
+`/var/lib/dim/workspace-data`, the managed Git base URL, host aliases, and
+generic runtime capabilities. It contains no repository catalog. Reviewed
+Project code owns repository aliases, refs, checkout paths, staging, and retry
+policy. It must preserve an existing agent checkout rather than silently
+fetching, switching, merging, or resetting it.
 
 Selected profiles are passed as repeated arguments:
 
@@ -186,7 +169,7 @@ docker compose \
 Compose runs against the workspace's inner Docker daemon. The Compose file and
 relative build contexts are resolved from the immutable root snapshot, never
 from the mutable checkout or a host checkout. A service that needs mutable
-Project data must bind it explicitly through `DIM_PROJECT_ROOT`. The snapshot
+Project data must bind it explicitly through `DIM_WORKSPACE_DATA`. The snapshot
 itself must not be mounted into an untrusted agent runtime. The fixed Compose
 project name lets reconciliation and cleanup distinguish resources belonging
 to different workspaces.
@@ -483,10 +466,9 @@ dim workspace update example-dev \
   --profile production
 ```
 
-`update` first pins and stages one commit from the applied protected root
-branch, then performs a fast-forward-only update of the mutable checkout and
-uses the same commit's immutable setup bytes. An update that would overwrite local work or
-requires a merge stops with an error. If one or more `--profile` flags are
+`update` pins and stages one commit from the applied protected root branch,
+publishes the same commit's immutable setup bytes, and invokes reviewed setup.
+DIM does not rewrite mutable checkouts. If one or more `--profile` flags are
 provided, they replace the stored profile set; otherwise the existing set is
 retained. Additional repository update policy belongs to `.dim/setup.sh` or
 the services that own those repositories.
@@ -498,9 +480,8 @@ dim workspace stop example-dev
 dim workspace start example-dev
 ```
 
-`stop` preserves the project checkout and inner-Docker state. `start`
-pins an approved commit, reconciles the runtime, fast-forwards to that commit,
-and invokes its immutable setup so
+`stop` preserves Project-owned data and inner-Docker state. `start`
+pins an approved commit, reconciles the runtime, and invokes its immutable setup so
 detached project services return to their desired state. Use `restart` to
 apply the same sequence to a running workspace:
 
