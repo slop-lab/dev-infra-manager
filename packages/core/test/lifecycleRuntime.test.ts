@@ -53,12 +53,24 @@ it("honors explicit workspace KVM policy", async () => {
 
 it("selects persistent workspace runtime backends", () => {
     const options = lifecycleOptions({ DIM_STATE_ROOT: root, DIM_CONFIG_PATH: join(root, "dim.json") });
-    expect(workspaceRuntimePlan("sysbox", options)).toMatchObject({
+  expect(workspaceRuntimePlan("sysbox", options)).toMatchObject({
       dockerRuntime: "runc",
-      image: "dev-infra-project-workspace:latest",
+      image: "dev-infra-project-workspace:0.9.0",
       privileged: true,
       engine: "docker",
       env: { DIM_DOCKERD_FLAGS: "--feature containerd-snapshotter=false" }
     });
+  });
+
+  it("preserves an explicit workspace image override", () => {
+    const options = lifecycleOptions({
+      DIM_STATE_ROOT: root,
+      DIM_CONFIG_PATH: join(root, "dim.json"),
+      DIM_WORKSPACE_IMAGE: "registry.example/workspace@sha256:explicit"
+    });
+
+    expect(workspaceRuntimePlan("sysbox", options).image).toBe(
+      "registry.example/workspace@sha256:explicit"
+    );
   });
 });

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Select the default trusted workspace image by the exact installed DIM package
+  version instead of the mutable `latest` tag, while retaining
+  `DIM_WORKSPACE_IMAGE` as an explicit override. Package builds now generate the
+  runtime version used by both release and aggregate-identity local installs.
+
 - Diagnose whether the current user's systemd manager persists after logout
   and whether AppArmor's unprivileged-user-namespace restriction has the
   required loaded rootlesskit profile. These doctor checks are read-only and
