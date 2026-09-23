@@ -159,11 +159,11 @@ matches_invocation() {
   done
 }
 
-setup=(workspace run dim-dev bash -- -s)
+setup=(workspace run dim-dev tool-setup)
 launch=(workspace run dim-dev bash -- -c
   'export OPENCODE_WEB_CORS_ORIGINS="$1"; exec bash -s' bash "$REMOTE_BOOTSTRAP_EXPECTED_CORS")
 if matches_invocation setup "$@"; then
-  printf '%s\n' 'workspace run dim-dev bash -- -s' >>"$REMOTE_BOOTSTRAP_DIM_LOG"
+  printf '%s\n' 'workspace run dim-dev tool-setup' >>"$REMOTE_BOOTSTRAP_DIM_LOG"
   [[ ! -e "$REMOTE_BOOTSTRAP_CAPTURED_SETUP" ]]
   cat >"$REMOTE_BOOTSTRAP_CAPTURED_SETUP"
 elif matches_invocation launch "$@"; then
@@ -240,7 +240,7 @@ retry_setup_dir="$(dirname -- "$retry_script")"
 
 mapfile -t dim_invocations <"$dim_log"
 if [[ "${#dim_invocations[@]}" -ne 2 || \
-  "${dim_invocations[0]}" != 'workspace run dim-dev bash -- -s' || \
+  "${dim_invocations[0]}" != 'workspace run dim-dev tool-setup' || \
   "${dim_invocations[1]}" != 'workspace run dim-dev bash -- -c CORS launcher' ]]; then
   printf 'retry did not invoke DIM setup then OpenCode launch exactly once each\n' >&2
   exit 1
