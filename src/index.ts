@@ -16,6 +16,7 @@ import {
   type DimPluginHost,
   type DimPluginLogger,
   type ResolvedWorkspaceTarget,
+  type WorkspaceDiscardContext,
   type WorkspaceTarget
 } from "@slop-lab/dim-core";
 import {
@@ -73,7 +74,7 @@ interface ManagedCaddyIngress {
 
 interface NormalizedRequest {
   ingress: string;
-  subdomain: string;
+  subdomain?: string;
   target: WorkspaceTarget;
   path?: string;
 }
@@ -91,7 +92,7 @@ interface StoredUrl {
   workspace: string;
   workspaceId: string;
   ingress: string;
-  subdomain: string;
+  subdomain?: string;
   target: WorkspaceTarget;
   path?: string;
   route: ExternalRoute;
@@ -102,7 +103,11 @@ interface StoredUrl {
 interface IngressListener {
   name: string;
   upstreamMode: "container-dns" | "container-ip";
-  provision(workspace: ControllerWorkspace, request: NormalizedRequest, upstream: ResolvedWorkspaceTarget): Promise<ExternalRoute>;
+  provision(
+    workspace: ControllerWorkspace,
+    request: NormalizedRequest,
+    upstream: ResolvedWorkspaceTarget
+  ): Promise<{ readonly route: ExternalRoute; readonly acquired: boolean }>;
   revoke(route: ExternalRoute): Promise<void>;
   ready(): Promise<void>;
   close(): Promise<void>;
@@ -137,24 +142,24 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
     apiVersion: DIM_PLUGIN_API_VERSION,
     async register(host) {
       host.registerExtension(EXTERNAL_URL_INGRESS_DRIVER_EXTENSION, "tailscale", tailscaleIngressDriver);
+      const registry = new WorkspaceRouteRegistry();
+      const mutations = new RouteMutationQueue();
+      const ingresses = new Map<string, ConfiguredIngress>();
       host.registerAdminRoute({
         method: "POST",
         path: "/external-url/:action",
         summary: "Manage External URL DNS providers and ingresses",
         async handle(context) {
           return {
-            body: await externalUrlAdmin(
-              host,
-              context,
-              context.params.action ?? "",
-              await context.readJson()
-            )
+            body: await mutations.run(() => externalUrlAdmin(
+              host, context, ingresses, context.params.action ?? "", context.readJson()
+            ))
           };
         }
       });
-      const registry = new WorkspaceRouteRegistry();
-      const mutations = new RouteMutationQueue();
-      const ingresses = new Map<string, ConfiguredIngress>();
+      host.registerWorkspaceDiscardHook({
+        beforeDiscard: (context) => mutations.run(() => removeWorkspaceRoutes(context, ingresses))
+      });
       for (const [name, ingress] of Object.entries(options.ingresses)) {
         ingresses.set(name, {
           options: ingress,
@@ -323,9 +328,11 @@ export async function externalUrlsPluginFromConfig(
 async function externalUrlAdmin(
   host: DimPluginHost,
   context: AdminRouteContext,
+  ingresses: Map<string, ConfiguredIngress>,
   action: string,
-  value: unknown
+  pendingValue: Promise<unknown>
 ): Promise<unknown> {
+  const value = await pendingValue;
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new UserError("request body must be an object");
   const input = value as Record<string, unknown>;
   const text = (name: string) => {
@@ -422,6 +429,12 @@ async function externalUrlAdmin(
       if (ingress.driver === "caddy") {
         await stopManagedCaddy(context, name);
       }
+      const configured = ingresses.get(name);
+      if (configured !== undefined) {
+        await configured.listener.close();
+        ingresses.delete(name);
+      }
+      await new ExternalUrlStore(context.lifecycle.stateRoot).removeIngress(name);
       delete config.ingresses[name];
       await writeExternalUrlConfig(config);
       return {};
@@ -766,8 +779,8 @@ async function reconcileStoredRoute(
 ): Promise<void> {
   const upstream = await context.resolveTarget(entry.target, ingress.listener.upstreamMode);
   const reconciled = await ingress.listener.provision(context.workspace, storedRequest(entry), upstream);
-  if (reconciled.authority === entry.route.authority) return;
-  await ingress.listener.revoke(reconciled).catch(() => {});
+  if (reconciled.route.authority === entry.route.authority) return;
+  if (reconciled.acquired) await ingress.listener.revoke(reconciled.route).catch(() => {});
   throw new Error(`external route '${entry.route.id}' changed authority during reconciliation`);
 }
 
@@ -776,19 +789,27 @@ async function createUrl(
   ingresses: ReadonlyMap<string, ConfiguredIngress>
 ) {
   const input = await context.readJson() as Record<string, unknown>;
-  if (input && typeof input === "object" && input.subdomain === undefined) {
-    const existing = await new ExternalUrlStore(context.stateRoot).list(context.workspace.id);
-    const used = new Set(existing.map((entry) => entry.subdomain));
+  const ingressName = requestIngress(input);
+  const ingress = required(ingresses, ingressName);
+  const store = new ExternalUrlStore(context.stateRoot);
+  const entries = await store.list(context.workspace.id);
+  if (ingress.options.scheme !== "tcp" && input.subdomain === undefined) {
+    const used = new Set(entries.flatMap((entry) => entry.subdomain === undefined ? [] : [entry.subdomain]));
     let index = 0;
     const prefix = workspaceSubdomainPrefix(context.workspace.name);
     while (used.has(`${prefix}${index}`)) index += 1;
     input.subdomain = `${prefix}${index}`;
   }
-  const request = validateRequest(input);
-  const ingress = required(ingresses, request.ingress);
+  const request = validateRequest(input, ingress.options.scheme);
+  const existing = entries.find((entry) => requestsEqual(storedRequest(entry), request));
+  if (existing !== undefined) {
+    await reconcileStoredRoute(existing, ingress, context);
+    return { status: 200, body: { urls: [publicEntry(existing)] } };
+  }
   const upstream = await context.resolveTarget(request.target, ingress.listener.upstreamMode);
-  const route = await ingress.listener.provision(context.workspace, request, upstream);
+  const provisioned = await ingress.listener.provision(context.workspace, request, upstream);
   try {
+    const { route } = provisioned;
     const url = route.url;
     if (!url) throw new Error(`ingress '${request.ingress}' did not return a public URL`);
     const entry: StoredUrl = {
@@ -796,17 +817,17 @@ async function createUrl(
       workspace: context.workspace.name,
       workspaceId: context.workspace.id,
       ingress: request.ingress,
-      subdomain: request.subdomain,
+      ...(request.subdomain === undefined ? {} : { subdomain: request.subdomain }),
       target: request.target,
       ...(request.path === undefined ? {} : { path: request.path }),
       route,
       url,
       createdAt: new Date().toISOString()
     };
-    await new ExternalUrlStore(context.stateRoot).put(entry);
+    await store.put(entry);
     return { status: 201, body: { urls: [publicEntry(entry)] } };
   } catch (error) {
-    await ingress.listener.revoke(route).catch(() => {});
+    if (provisioned.acquired) await ingress.listener.revoke(provisioned.route).catch(() => {});
     throw error;
   }
 }
@@ -833,13 +854,26 @@ async function deleteWorkspaceUrls(
   context: ControllerRouteContext,
   ingresses: ReadonlyMap<string, ConfiguredIngress>
 ) {
+  await removeWorkspaceRoutes({
+    workspaceId: context.workspace.id,
+    workspaceName: context.workspace.name,
+    projectId: context.workspace.projectId,
+    projectName: context.workspace.projectName,
+    stateRoot: context.stateRoot
+  }, ingresses);
+  return { status: 204 };
+}
+
+async function removeWorkspaceRoutes(
+  context: WorkspaceDiscardContext,
+  ingresses: ReadonlyMap<string, ConfiguredIngress>
+): Promise<void> {
   const store = new ExternalUrlStore(context.stateRoot);
-  for (const entry of await store.list(context.workspace.id)) {
+  for (const entry of await store.list(context.workspaceId)) {
     const ingress = ingresses.get(entry.ingress);
-    if (ingress) await ingress.listener.revoke(entry.route);
+    if (ingress !== undefined) await ingress.listener.revoke(entry.route);
     await store.remove(entry);
   }
-  return { status: 204 };
 }
 
 class ExternalUrlStore {
@@ -871,6 +905,32 @@ class ExternalUrlStore {
     await rm(this.entryPath(entry.workspaceId, entry.id), { force: true });
   }
 
+  async removeIngress(ingress: string): Promise<void> {
+    const root = path.join(this.stateRoot, "plugins", "external-urls");
+    let workspaces: string[];
+    try {
+      workspaces = await readdir(root);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
+    }
+    for (const workspace of workspaces) {
+      const directory = path.join(root, workspace);
+      let names: string[];
+      try {
+        names = await readdir(directory);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOTDIR") continue;
+        throw error;
+      }
+      for (const name of names.filter((candidate) => candidate.endsWith(".json"))) {
+        const target = path.join(directory, name);
+        const entry = storedUrl(JSON.parse(await readFile(target, "utf8")) as unknown);
+        if (entry.ingress === ingress) await rm(target, { force: true });
+      }
+    }
+  }
+
   private directory(workspaceId: string): string {
     return path.join(this.stateRoot, "plugins", "external-urls", Buffer.from(workspaceId).toString("base64url"));
   }
@@ -887,17 +947,22 @@ class WorkspaceRouteRegistry {
     claims: Set<string>;
   }>();
 
-  provision(authority: string, claim: string, upstream: ResolvedWorkspaceTarget): void {
+  provision(authority: string, claim: string, upstream: ResolvedWorkspaceTarget): boolean {
     const existing = this.#routes.get(authority);
     if (existing && JSON.stringify(existing.upstream) !== JSON.stringify(upstream)) {
       if (existing.claims.size !== 1 || !existing.claims.has(claim)) {
         throw new UserError(`external route '${authority}' already targets another service`);
       }
       existing.upstream = upstream;
-      return;
+      return false;
     }
-    if (existing) existing.claims.add(claim);
-    else this.#routes.set(authority, { upstream, claims: new Set([claim]) });
+    if (existing) {
+      const acquired = !existing.claims.has(claim);
+      existing.claims.add(claim);
+      return acquired;
+    }
+    this.#routes.set(authority, { upstream, claims: new Set([claim]) });
+    return true;
   }
 
   revoke(authority: string, claim: string): void {
@@ -932,6 +997,7 @@ class WorkspaceIngressListener implements IngressListener {
   readonly #domain: string;
   readonly #port: number | undefined;
   readonly #routePolicy: ExternalUrlRoutePolicyConfig | undefined;
+  readonly #upgrades = new Set<{ readonly client: import("node:stream").Duplex; readonly upstream: net.Socket }>();
 
   constructor(
     registry: WorkspaceRouteRegistry,
@@ -964,6 +1030,7 @@ class WorkspaceIngressListener implements IngressListener {
 
   async provision(workspace: ControllerWorkspace, request: NormalizedRequest, upstream: ResolvedWorkspaceTarget) {
     await this.#ready;
+    if (request.subdomain === undefined) throw new UserError("HTTP ingress requests require a subdomain");
     const subdomain = await applyRoutePolicy(this.#routePolicy, {
       workspace: { id: workspace.id, name: workspace.name },
       ingress: this.name,
@@ -973,12 +1040,12 @@ class WorkspaceIngressListener implements IngressListener {
     validateSubdomain(subdomain);
     const authority = `${subdomain}.${normalizeDomain(this.#domain)}`;
     const claim = routeClaim(workspace, request);
-    this.#registry.provision(authority, claim, upstream);
+    const acquired = this.#registry.provision(authority, claim, upstream);
     const publicAuthority = `${authority}${
       this.#port === undefined ? "" : `:${this.#port}`
     }`;
     const url = validateExternalUrl(`${this.#scheme}://${publicAuthority}${request.path ?? "/"}`);
-    return { id: randomUUID(), ingress: this.name, authority, ingressId: claim, url };
+    return { acquired, route: { id: randomUUID(), ingress: this.name, authority, ingressId: claim, url } };
   }
 
   ready(): Promise<void> {
@@ -992,9 +1059,16 @@ class WorkspaceIngressListener implements IngressListener {
   async close(): Promise<void> {
     await this.#ready.catch(() => {});
     if (!this.#server.listening) return;
-    await new Promise<void>((resolve, reject) => {
+    const closed = new Promise<void>((resolve, reject) => {
       this.#server.close((error) => error ? reject(error) : resolve());
     });
+    this.#server.closeAllConnections();
+    for (const upgrade of this.#upgrades) {
+      upgrade.client.destroy();
+      upgrade.upstream.destroy();
+    }
+    this.#upgrades.clear();
+    await closed;
   }
 
   #target(request: IncomingMessage): ResolvedWorkspaceTarget | undefined {
@@ -1043,6 +1117,13 @@ class WorkspaceIngressListener implements IngressListener {
       ? () => tls.connect(target.port, target.host)
       : () => net.connect(target.port, target.host);
     const upstream = connect();
+    const upgrade = { client, upstream };
+    this.#upgrades.add(upgrade);
+    const destroy = () => {
+      this.#upgrades.delete(upgrade);
+      client.destroy();
+      upstream.destroy();
+    };
     upstream.once("connect", () => {
       const headers = Object.entries(request.headers)
         .flatMap(([name, value]) => Array.isArray(value) ? value.map((item) => `${name}: ${item}`) : [`${name}: ${value ?? ""}`]);
@@ -1050,20 +1131,24 @@ class WorkspaceIngressListener implements IngressListener {
       if (head.length > 0) upstream.write(head);
       client.pipe(upstream).pipe(client);
     });
-    upstream.on("error", () => client.destroy());
+    upstream.once("close", destroy);
+    upstream.once("error", destroy);
+    client.once("close", destroy);
+    client.once("error", destroy);
   }
 }
 
-function validateRequest(value: unknown): NormalizedRequest {
+function validateRequest(value: unknown, scheme: ExternalUrlIngressOptions["scheme"]): NormalizedRequest {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new UserError("request body must be an object");
   const input = value as Record<string, unknown>;
-  if (typeof input.ingress !== "string" || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(input.ingress)) {
-    throw new UserError("ingress must be a configured ingress name");
+  const ingress = requestIngress(input);
+  if (scheme === "tcp" && input.subdomain !== undefined) {
+    throw new UserError("TCP ingress requests do not accept a subdomain");
   }
-  if (typeof input.subdomain !== "string") {
+  if (scheme !== "tcp" && typeof input.subdomain !== "string") {
     throw new UserError("subdomain must be a relative DNS name");
   }
-  validateSubdomain(input.subdomain);
+  if (typeof input.subdomain === "string") validateSubdomain(input.subdomain);
   if (!input.target || typeof input.target !== "object" || Array.isArray(input.target)) {
     throw new UserError("target must be an object");
   }
@@ -1082,16 +1167,26 @@ function validateRequest(value: unknown): NormalizedRequest {
   if (input.path !== undefined && (typeof input.path !== "string" || !input.path.startsWith("/") || input.path.includes(".."))) {
     throw new UserError("path must be an absolute URL path without '..'");
   }
+  if (scheme === "tcp" && input.path !== undefined) {
+    throw new UserError("TCP ingress requests do not accept a URL path");
+  }
   return {
-    ingress: input.ingress,
-    subdomain: input.subdomain,
+    ingress,
+    ...(typeof input.subdomain === "string" ? { subdomain: input.subdomain } : {}),
     target: {
       containers: containers as string[],
       port: target.port as number,
-      protocol: (target.protocol ?? "http") as "http" | "https" | "tcp"
+      protocol: (target.protocol ?? (scheme === "tcp" ? "tcp" : "http")) as "http" | "https" | "tcp"
     },
     ...(input.path === undefined ? {} : { path: input.path as string })
   };
+}
+
+function requestIngress(input: Readonly<Record<string, unknown>>): string {
+  if (typeof input.ingress !== "string" || !/^[a-z0-9][a-z0-9-]{0,62}$/.test(input.ingress)) {
+    throw new UserError("ingress must be a configured ingress name");
+  }
+  return input.ingress;
 }
 
 function validateOptions(options: ExternalUrlsPluginOptions): void {
@@ -1169,7 +1264,7 @@ function deduplicateRoutes(entries: StoredUrl[]): StoredUrl[] {
 function storedRequest(entry: StoredUrl): NormalizedRequest {
   return {
     ingress: entry.ingress,
-    subdomain: entry.subdomain,
+    ...(entry.subdomain === undefined ? {} : { subdomain: entry.subdomain }),
     target: entry.target,
     ...(entry.path === undefined ? {} : { path: entry.path })
   };
@@ -1180,11 +1275,16 @@ function storedUrl(value: unknown): StoredUrl {
     throw new Error("invalid stored external URL");
   }
   const candidate = value as StoredUrl;
-  if (typeof candidate.ingress !== "string" || typeof candidate.subdomain !== "string"
+  if (typeof candidate.ingress !== "string"
+    || (candidate.subdomain !== undefined && typeof candidate.subdomain !== "string")
     || typeof candidate.route?.ingress !== "string") {
     throw new Error(`invalid stored external URL '${candidate.id}'`);
   }
   return candidate;
+}
+
+function requestsEqual(left: NormalizedRequest, right: NormalizedRequest): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function validateExternalUrl(value: string): string {

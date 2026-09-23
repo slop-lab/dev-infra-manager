@@ -14,6 +14,11 @@ export interface TcpExternalRoute {
   readonly url: string;
 }
 
+export interface TcpIngressProvision {
+  readonly route: TcpExternalRoute;
+  readonly acquired: boolean;
+}
+
 export interface TcpIngressOptions {
   readonly name: string;
   readonly listenHost: string;
@@ -71,7 +76,7 @@ export class TcpIngressListener {
     workspace: ControllerWorkspace,
     request: TcpIngressRequest,
     upstream: ResolvedWorkspaceTarget
-  ): Promise<TcpExternalRoute> {
+  ): Promise<TcpIngressProvision> {
     await this.#ready;
     if (request.path !== undefined) throw new UserError("TCP ingress requests do not accept a URL path");
     if (request.target.protocol !== "tcp" || upstream.protocol !== "tcp") {
@@ -81,16 +86,20 @@ export class TcpIngressListener {
     if (this.#route !== undefined && this.#route.claim !== claim) {
       throw new UserError(`TCP ingress '${this.name}' already targets another service`);
     }
-    if (this.#route !== undefined && JSON.stringify(this.#route.upstream) !== JSON.stringify(upstream)) {
+    const acquired = this.#route === undefined;
+    if (!acquired && JSON.stringify(this.#route?.upstream) !== JSON.stringify(upstream)) {
       this.#destroyConnections();
     }
     this.#route = { claim, upstream };
     return {
-      id: claim,
-      ingress: this.name,
-      authority: this.#authority,
-      ingressId: claim,
-      url: `tcp://${this.#authority}`
+      acquired,
+      route: {
+        id: claim,
+        ingress: this.name,
+        authority: this.#authority,
+        ingressId: claim,
+        url: `tcp://${this.#authority}`
+      }
     };
   }
 
