@@ -45,7 +45,8 @@ describe("TCP external ingress", () => {
       resolveTarget: async (_workspace, requested) => ({
         protocol: requested.protocol,
         host: "127.0.0.1",
-        port: targetAddress.port
+        port: targetAddress.port,
+        fingerprint: "target-generation"
       })
     });
     await listen(controller);
@@ -100,7 +101,12 @@ describe("TCP external ingress", () => {
       stateRoot,
       routes: registered.controllerRoutes,
       authenticate: async () => workspace,
-      resolveTarget: async (_workspace, target) => ({ protocol: target.protocol, host: "127.0.0.1", port: target.port })
+      resolveTarget: async (_workspace, target) => ({
+        protocol: target.protocol,
+        host: "127.0.0.1",
+        port: target.port,
+        fingerprint: `target:${target.port}`
+      })
     });
     await listen(controller);
     cleanup.push(() => close(controller));
@@ -135,7 +141,12 @@ describe("TCP external ingress", () => {
       stateRoot,
       routes: first.controllerRoutes,
       authenticate: async () => workspace,
-      resolveTarget: async (_workspace, target) => ({ protocol: target.protocol, host: "127.0.0.1", port: target.port })
+      resolveTarget: async (_workspace, target) => ({
+        protocol: target.protocol,
+        host: "127.0.0.1",
+        port: target.port,
+        fingerprint: `target:${target.port}`
+      })
     });
     await listen(controller);
     const base = `http://127.0.0.1:${address(controller).port}`;
@@ -152,7 +163,12 @@ describe("TCP external ingress", () => {
     cleanup.push(() => restarted.dispose());
     const initialize = restarted.controllerRoutes.find((candidate) => candidate.initialize !== undefined)?.initialize;
     if (initialize === undefined) throw new Error("missing route initializer");
-    const resolveTarget = vi.fn(async (_target) => ({ protocol: "tcp" as const, host: "127.0.0.1", port: 2222 }));
+    const resolveTarget = vi.fn(async (_target) => ({
+      protocol: "tcp" as const,
+      host: "127.0.0.1",
+      port: 2222,
+      fingerprint: "target-generation"
+    }));
     const runner = new RecordingRunner();
     await initialize({
       stateRoot,

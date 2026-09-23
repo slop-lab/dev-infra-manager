@@ -126,7 +126,7 @@ describe("TCP ingress connection lifecycle", () => {
     const oldClosed = once(oldClient, "close");
 
     // When: reconciliation resolves the same logical claim to a recreated target.
-    const route = await listener.provision(workspace, request, resolved(secondTarget));
+    const route = (await listener.provision(workspace, request, resolved(secondTarget))).route;
 
     // Then: old flows are revoked, new flows use the replacement, and another claim is rejected.
     await within(oldClosed, 500);
@@ -153,7 +153,7 @@ async function provision(server: net.Server, limits: ListenerLimits = {}): Promi
 }> {
   const port = await availablePort();
   const listener = new TcpIngressListener({ ...options(port), ...limits });
-  const route = await listener.provision(workspace, { target }, resolved(server));
+  const route = (await listener.provision(workspace, { target }, resolved(server))).route;
   return { listener, route, port };
 }
 
@@ -168,7 +168,8 @@ function options(port: number) {
 }
 
 function resolved(server: net.Server): ResolvedWorkspaceTarget {
-  return { protocol: "tcp", host: "127.0.0.1", port: address(server).port };
+  const port = address(server).port;
+  return { protocol: "tcp", host: "127.0.0.1", port, fingerprint: `tcp:${port}` };
 }
 
 async function availablePort(): Promise<number> {

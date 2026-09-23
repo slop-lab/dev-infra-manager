@@ -284,7 +284,12 @@ describe("external URLs plugin", () => {
     close.push(() => registered.dispose());
     const initialize = registered.controllerRoutes.find((route) => route.initialize)?.initialize;
     expect(initialize).toBeDefined();
-    const resolveTarget = vi.fn(async () => ({ protocol: "http" as const, host: "127.0.0.1", port: 8080 }));
+    const resolveTarget = vi.fn(async () => ({
+      protocol: "http" as const,
+      host: "127.0.0.1",
+      port: 8080,
+      fingerprint: "target-generation"
+    }));
     const runner = new RecordingRunner();
 
     await expect(initialize!({
@@ -349,7 +354,8 @@ describe("external URLs plugin", () => {
       resolveTarget: async (_workspace, target) => ({
         protocol: "http",
         host: "127.0.0.1",
-        port: target.port === 9999 ? firstAddress.port : currentPort
+        port: target.port === 9999 ? firstAddress.port : currentPort,
+        fingerprint: `target:${target.port === 9999 ? firstAddress.port : currentPort}`
       })
     });
     controller.listen(0, "127.0.0.1");
@@ -463,7 +469,8 @@ describe("external URLs plugin", () => {
     const resolveTarget = vi.fn(async () => ({
       protocol: "http" as const,
       host: "127.0.0.1",
-      port: upstreamAddress.port
+      port: upstreamAddress.port,
+      fingerprint: "target-generation"
     }));
     const controller = createDimController({
       stateRoot,
