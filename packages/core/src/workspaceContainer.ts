@@ -1,5 +1,5 @@
-import path from "node:path";
 import { statSync } from "node:fs";
+import path from "node:path";
 import { UserError } from "./errors.js";
 import { LifecycleState } from "./lifecycleState.js";
 import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
@@ -11,7 +11,7 @@ import {
 import { workspaceRuntimePlan } from "./runtimeBackends.js";
 import type { StreamingCommandRunner } from "./types.js";
 import {
-  PROJECT_ROOT_SNAPSHOTS,
+  PROJECT_ROOT,
   WORKSPACE_RUNTIME_CONFIG_VERSION,
   WORKSPACE_USER,
   type WorkspaceGitEnvironment
@@ -135,7 +135,7 @@ export function workspaceContainerArgs(
     "--memory-swap", record.memory,
     "--pids-limit", record.pidsLimit,
     "--mount", `type=volume,source=${record.dockerVolumeName},target=${plan.runtimeDataPath}`,
-    "--mount", `type=bind,source=${path.dirname(record.rootSnapshotPath)},target=${PROJECT_ROOT_SNAPSHOTS},readonly`,
+    "--mount", `type=bind,source=${record.rootSnapshotPath},target=${PROJECT_ROOT},readonly`,
     "--mount", `type=bind,source=${path.dirname(options.controllerSocketPath)},target=/run/dim/controller`,
     "--mount", `type=bind,source=${path.dirname(options.agentControllerSocketPath)},target=/run/dim/agent-controller`,
     ...workspaceContainerLabels(record).flatMap((label) => ["--label", label]),

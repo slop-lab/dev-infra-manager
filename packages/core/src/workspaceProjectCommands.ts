@@ -4,7 +4,7 @@ import type { WorkspaceRecord } from "./lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "./types.js";
 import {
   PROJECT_COMPOSE_NAME,
-  PROJECT_ROOT_SNAPSHOTS,
+  PROJECT_ROOT,
   WORKSPACE_USER
 } from "./workspaceLifecycleTypes.js";
 
@@ -110,7 +110,8 @@ function projectEnvironment(record: WorkspaceRecord): string[] {
   return [
     "--env", `DIM_PROJECT_ID=${record.projectId}`,
     "--env", `DIM_PROJECT_NAME=${record.projectName}`,
-    "--env", `DIM_PROJECT_ROOT=${record.projectPath}`,
+    "--env", `DIM_PROJECT_ROOT=${PROJECT_ROOT}`,
+    "--env", `DIM_WORKSPACE_DATA=${record.workspaceDataPath}`,
     "--env", `DIM_PROJECT_MANIFEST=${record.projectManifestPath}`,
     "--env", `DIM_WORKSPACE_NAME=${record.name}`,
     "--env", `COMPOSE_PROJECT_NAME=${PROJECT_COMPOSE_NAME}`,
@@ -120,12 +121,6 @@ function projectEnvironment(record: WorkspaceRecord): string[] {
     "--env", `COMPOSE_PROFILES=${record.profiles.join(",")}`,
     "--env", `DIM_GIT_BASE_URL=${record.gitBaseUrl}`
   ];
-}
-
-export function rootBranch(ref: string): string {
-  const prefix = "refs/heads/";
-  if (!ref.startsWith(prefix)) throw new UserError(`workspace root ref '${ref}' is not a branch`);
-  return ref.slice(prefix.length);
 }
 
 function nestedEngine(_record: WorkspaceRecord): "docker" {
@@ -147,7 +142,7 @@ export async function lifecycleFileExists(
 }
 
 export function lifecycleRoot(record: WorkspaceRecord): string {
-  return `${PROJECT_ROOT_SNAPSHOTS}/${record.rootCommit}`;
+  return PROJECT_ROOT;
 }
 
 export async function assertRootSnapshot(record: WorkspaceRecord): Promise<void> {
@@ -168,7 +163,7 @@ export async function projectCommand(
   command: string[]
 ): Promise<CommandResult> {
   const args = [
-    "exec", "--user", WORKSPACE_USER, "--workdir", record.projectPath,
+    "exec", "--user", WORKSPACE_USER, "--workdir", record.workspaceDataPath,
     ...projectEnvironment(record), record.containerName, ...command
   ];
   return runner.run("docker", args);
@@ -182,7 +177,7 @@ export async function streamProjectCommand(
   attachStdin = false
 ): Promise<number> {
   const args = [
-    "exec", "--user", WORKSPACE_USER, "--workdir", record.projectPath,
+    "exec", "--user", WORKSPACE_USER, "--workdir", record.workspaceDataPath,
     ...projectEnvironment(record)
   ];
   if (attachStdin) args.push("--interactive");

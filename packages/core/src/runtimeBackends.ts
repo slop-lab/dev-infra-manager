@@ -14,7 +14,7 @@ export interface WorkspaceRuntimePlan {
 }
 
 // Docker 29 enables the containerd image store for fresh daemons. DIM persists
-// /var/lib/docker as the workspace engine boundary, while containerd keeps
+  // the workspace data volume as the workspace engine boundary, while containerd keeps
 // snapshots under /var/lib/containerd; nested overlayfs also does not reliably
 // preserve security.capability xattrs on supported system-container backends.
 const nestedDockerFlags = "--feature containerd-snapshotter=false";
@@ -38,7 +38,7 @@ export function workspaceRuntimePlan(
     dockerRuntime: options.workspaceRuntime ?? "runc",
     image: workspaceImageReference(options.workspaceImage),
     privileged: options.workspacePrivileged ?? true,
-    runtimeDataPath: "/var/lib/docker",
+    runtimeDataPath: "/var/lib/dim/workspace-data",
     engine: "docker",
     env: { DIM_DOCKERD_FLAGS: nestedDockerFlags }
   };
