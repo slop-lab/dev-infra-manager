@@ -7,15 +7,12 @@ import { LifecycleState, validateLifecycleName } from "../../../../core/packages
 import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import {
-  alignWorkspaceRoot,
   detectWorkspaceKvm,
   projectRuntimeManifest,
   resolveWorkspaceCapabilities,
-  resolveRepositorySnapshot,
   resolveWorkspaceKvm,
   restartWorkspace,
   updateWorkspaceResources,
-  validateRepositoryRefOverrides,
   validateWorkspaceProfiles,
   validateWorkspaceResources,
   waitForInnerDocker,
@@ -23,7 +20,26 @@ import {
 } from "../../../../core/packages/core/src/workspaceLifecycle.js";
 import { workspaceRuntimePlan } from "../../../../core/packages/core/src/runtimeBackends.js";
 import { rootRepositorySnapshot } from "./lifecycleFixture.js";
-import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
+import { workspaceContainerInspect, workspaceVolumeInspect } from "./workspaceOwnershipFixture.js";
+
+vi.mock("../../../../core/packages/core/src/registryCache.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../../core/packages/core/src/registryCache.js")>(),
+  ensureRegistryCache: vi.fn(async () => {})
+}));
+
+vi.mock("../../../../core/packages/core/src/gitea.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../../core/packages/core/src/gitea.js")>(),
+  ensureGitea: vi.fn(async () => ({
+    apiBaseUrl: "http://127.0.0.1:3300/api/v1",
+    adminUsername: "admin",
+    adminPassword: "admin-secret",
+    writerUsername: "writer",
+    writerPassword: "writer-secret",
+    maintainerUsername: "maintainer",
+    maintainerPassword: "maintainer-secret"
+  })),
+  giteaNestedBaseUrl: vi.fn(async () => "http://172.20.0.2:3000")
+}));
 
 describe("project and workspace lifecycle", () => {
   let root: string;
@@ -36,7 +52,7 @@ describe("project and workspace lifecycle", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-it("checks dirty and divergent restarts under Project and setup locks before changing state", async () => {
+it("restarts under Project and setup locks without inspecting or changing workspace Git", async () => {
     const state = new LifecycleState(root);
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
     let projectLocked = false;
@@ -81,7 +97,7 @@ it("checks dirty and divergent restarts under Project and setup locks before cha
       updatedAt: now
     };
     const workspace: WorkspaceRecord = {
-      schemaVersion: 5,
+      schemaVersion: 6,
       name: "work-1",
       projectId: project.id,
       projectName: project.name,
@@ -89,9 +105,7 @@ it("checks dirty and divergent restarts under Project and setup locks before cha
       rootRef: "refs/heads/main",
       rootCommit: "a".repeat(40),
       rootSnapshotPath: join(root, "assets", "project-roots", project.id, "a".repeat(40)),
-      repositoryRefOverrides: {},
-      repositorySnapshot: rootRepositorySnapshot("a".repeat(40)),
-      projectPath: "/workspace/project",
+      workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready",
       profiles: ["development"],
       composeProjectName: "dim-work-1",
@@ -117,16 +131,19 @@ it("checks dirty and divergent restarts under Project and setup locks before cha
     await mkdir(workspace.rootSnapshotPath, { recursive: true });
     await state.claimWorkspace(workspace);
     const calls: string[][] = [];
-    let checkout: "dirty" | "divergent" = "dirty";
     let stopCalls = 0;
     const runner: StreamingCommandRunner = {
       async run(command, args) {
         calls.push([command, ...args]);
+        if (args[0] === "container" && args[1] === "inspect"
+          && args.some((argument) => argument.includes("NetworkSettings.Networks"))) {
+          return { command, args, stdout: "172.20.0.2\n", stderr: "", exitCode: 0 };
+        }
         if (args[0] === "network" && args[1] === "inspect") {
           return { command, args, stdout: "true\n", stderr: "", exitCode: 0 };
         }
         if (args[0] === "volume" && args[1] === "inspect") {
-          return { command, args, stdout: "true\n", stderr: "", exitCode: 0 };
+          return { command, args, stdout: `${workspaceVolumeInspect(workspace)}\n`, stderr: "", exitCode: 0 };
         }
         if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-gitea") {
           return { command, args, stdout: "gitea-container-id|true|true\n", stderr: "", exitCode: 0 };
@@ -159,17 +176,6 @@ it("checks dirty and divergent restarts under Project and setup locks before cha
           expect(setupLocked).toBe(true);
           return { command, args, stdout: `${workspaceContainerInspect(workspace)}\n`, stderr: "", exitCode: 0 };
         }
-        if (args.includes("--porcelain")) {
-          expect(projectLocked).toBe(true);
-          expect(setupLocked).toBe(true);
-          return {
-            command,
-            args,
-            stdout: checkout === "dirty" ? " M tracked.txt\n?? untracked.txt\n" : "",
-            stderr: "",
-            exitCode: 0
-          };
-        }
         if (args.includes("ls-remote")) {
           return {
             command,
@@ -179,9 +185,7 @@ it("checks dirty and divergent restarts under Project and setup locks before cha
             exitCode: 0
           };
         }
-        if (args.includes("fetch")) return { command, args, stdout: "", stderr: "", exitCode: 0 };
-        if (args.includes("merge-base")) return { command, args, stdout: "", stderr: "", exitCode: 1 };
-        return { command, args, stdout: "", stderr: "unexpected command", exitCode: 1 };
+        return { command, args, stdout: "", stderr: "", exitCode: 0 };
       },
       async runStreaming() {
         stopCalls += 1;
@@ -190,23 +194,8 @@ it("checks dirty and divergent restarts under Project and setup locks before cha
     };
     const options = lifecycleOptions({ DIM_STATE_ROOT: root, DIM_CONFIG_PATH: join(root, "dim.json") });
 
-    await expect(restartWorkspace(runner, options, workspace.name)).rejects.toThrow(
-      /uncommitted project changes.*workspace align work-1 --reset --yes/
-    );
-    expect(stopCalls).toBe(0);
-    expect(calls.some((call) => call.includes("fetch"))).toBe(false);
-    expect(await state.readWorkspace(workspace.name)).toEqual(workspace);
-
-    calls.length = 0;
-    checkout = "divergent";
-    await expect(restartWorkspace(runner, options, workspace.name)).rejects.toThrow(
-      /cannot fast-forward.*workspace align work-1 --reset --yes/
-    );
-    expect(stopCalls).toBe(0);
-    expect(calls.some((call) => call.includes("merge"))).toBe(false);
-    expect(calls.flat()).not.toContain("FETCH_HEAD");
-    expect(calls.some((call) => call.includes("--no-write-fetch-head"))).toBe(true);
-    expect(calls.filter((call) => call.includes("merge-base"))).toHaveLength(2);
-    expect(await state.readWorkspace(workspace.name)).toEqual(workspace);
+    await expect(restartWorkspace(runner, options, workspace.name)).resolves.toMatchObject({ phase: "ready" });
+    expect(stopCalls).toBeGreaterThan(0);
+    expect(calls.some((call) => call[0] === "docker" && call.includes("git"))).toBe(false);
   });
 });
