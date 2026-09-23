@@ -45,6 +45,9 @@ import {
   type ExternalUrlIngressDriver
 } from "./tailscale.js";
 
+export { TcpIngressListener } from "./tcpIngress.js";
+export { tailscaleIngressDriver } from "./tailscale.js";
+
 export interface ExternalUrlIngressOptions {
   description: string;
   scheme: "http" | "https" | "tcp";

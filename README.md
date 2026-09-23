@@ -72,7 +72,12 @@ selects the current IPv4 address in `100.64.0.0/10`, and binds exactly that
 address on a port from `49152` through `65535`. It does not run `tailscale up`,
 depend on Serve or Funnel, or pass the Tailscale socket, state, credentials, or
 binary into a workspace. One authenticated workspace target owns the listener
-until its route is revoked; TCP requests do not accept URL paths.
+until its route is revoked; TCP requests do not accept URL paths. The listener
+allows at most 256 concurrent flows, limits upstream connection setup to 10
+seconds, and closes a flow after five idle minutes. Revocation, listener
+shutdown, and a same-owner target refresh destroy both socket directions. A
+refresh can therefore follow a recreated workspace address without allowing a
+different workspace or logical target to take over the listener.
 
 ## Caddy HTTPS
 
