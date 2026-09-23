@@ -22,6 +22,7 @@ support process:
 
 - [Managed CI runner](features/ci-runner/README.md)
 - [External URLs](features/external-urls/README.md)
+- [Tailnet SSH over a raw TCP ingress](features/tailnet-ssh/README.md)
 - [External URL route policy](features/external-url-route-policy/README.md)
 - [Several managed repositories in one upstream](features/shared-upstream/README.md)
 - [Project runtime cgroups](features/project-runtime-cgroups/README.md)
