@@ -3,4 +3,4 @@ FROM ${NODE_IMAGE}
 RUN useradd --create-home --uid 10001 dim-broker
 COPY package/ /opt/dim-control-plane/
 USER dim-broker
-ENTRYPOINT ["node", "/opt/dim-control-plane/brokerCli.js"]
+ENTRYPOINT ["node", "/opt/dim-control-plane/dist/brokerCli.js"]

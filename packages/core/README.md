@@ -15,3 +15,6 @@ The command accepts one provider-neutral poll request on stdin and writes one
 strict schedule proposal on stdout. SSH authentication and command restriction
 are operator-owned deployment prerequisites. The package does not edit host
 SSH keys or receive the local DIM admin socket.
+
+The shipped `container/Dockerfile` consumes a built `pnpm deploy` tree named
+`package/`; it does not install dependencies while building the image.
