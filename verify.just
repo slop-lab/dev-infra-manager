@@ -26,6 +26,10 @@ plugin-install:
     just build-packages
     cd .. && bash verification/scripts/plugin-install-smoke.bash
 
+# Prove raw TCP reachability across a disposable Headscale tailnet without host Tailscale state.
+headscale-tailnet-tcp:
+    cd .. && bash verification/scripts/headscale-tailnet-tcp-smoke.bash
+
 # Verify pinned workspace-user setup plus generic development-service exposure.
 workspace-user-setup:
     cd .. && bash verification/scripts/workspace-user-setup-smoke.bash
