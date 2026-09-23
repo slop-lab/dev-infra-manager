@@ -175,7 +175,8 @@ if env "${base_env[@]}" DIM_DEVELOPMENT_URL_SOCKET="$work_dir/missing.sock" bash
 fi
 grep -Fq 'development URL socket not found' "$work_dir/missing-socket"
 
-if env HOME="$work_dir/home" PATH="$work_dir/tools:$PATH" \
+if env -u DIM_DEVELOPMENT_URL_SOCKET -u DIM_EXTERNAL_URL_SOCKET \
+  -u DIM_EXTERNAL_URL_CONTAINERS_JSON HOME="$work_dir/home" PATH="$work_dir/tools:$PATH" \
   DIM_WEB_URL_SOCKET="$socket" DIM_WEB_URL_CONTAINERS_JSON='["agent"]' \
   OPENCODE_WEB_PORT="$port" bash "$launcher" >/dev/null 2>"$work_dir/obsolete-only"; then
   printf 'launcher accepted obsolete Web URL capabilities\n' >&2
