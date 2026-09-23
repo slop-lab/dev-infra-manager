@@ -3,78 +3,63 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const smoke = resolve(
-  import.meta.dirname,
-  "../scripts/container-multi-repo-project-smoke.bash"
+const repositoryRoot = resolve(import.meta.dirname, "../..");
+const containerSmoke = resolve(
+  repositoryRoot,
+  "verification/scripts/container-multi-repo-project-smoke.bash"
+);
+const materializationSmoke = resolve(
+  repositoryRoot,
+  "verification/scripts/two-repository-materialization-smoke.bash"
+);
+const projectMaterializer = resolve(
+  repositoryRoot,
+  "project/.dim/reconcile-repositories.sh"
+);
+const exampleMaterializer = resolve(
+  repositoryRoot,
+  "examples/projects/two-repository/repos/root/.dim/materialize-app.sh"
 );
 
-describe("multi-repository candidate ref journey policy", () => {
-  it("keeps the container smoke valid Bash", () => {
-    const command = ["-n", smoke];
-
-    const syntax = spawnSync("bash", command, { encoding: "utf8" });
+describe("Project-owned repository materialization policy", () => {
+  it.each([
+    containerSmoke,
+    materializationSmoke,
+    projectMaterializer,
+    exampleMaterializer,
+  ])("keeps %s valid shell", (script) => {
+    const syntax = spawnSync("bash", ["-n", script], { encoding: "utf8" });
 
     expect(syntax.status, syntax.stderr).toBe(0);
   });
 
-  it("creates through the CLI with repeated distinct overrides and checks both snapshots", async () => {
-    const source = await readFile(smoke, "utf8");
+  it("executes the real two-repository materialization journey", () => {
+    const journey = spawnSync("bash", [materializationSmoke], {
+      encoding: "utf8",
+    });
 
-    const creation = source.slice(
-      source.indexOf('if ! "$dim_bin" workspace create'),
-      source.indexOf('echo "[multi-repository] moved candidate ref')
-    );
-
-    expect(creation).toContain('--repo-ref "$api_repo=$candidate_ref"');
-    expect(creation).toContain('--repo-ref "$worker_repo=$worker_candidate_ref"');
-    expect(creation).toContain('workspace_json="$("$dim_bin" workspace show');
-    expect(creation).toContain(".repositorySnapshot.api.requestedRef == $ref");
-    expect(creation).toContain(".repositorySnapshot.api.ref == $ref");
-    expect(creation).toContain(".repositorySnapshot.api.commit == $commit");
-    expect(creation).toContain(".repositorySnapshot.worker.requestedRef == $worker_ref");
-    expect(creation).toContain(".repositorySnapshot.worker.commit == $worker_commit");
-    expect(creation).toContain(".repositories.api.requestedRef == $ref");
-    expect(creation).toContain(".repositories.worker.requestedRef == $worker_ref");
-    expect(creation).toContain("/run/dim/project.json");
+    expect(journey.status, journey.stderr).toBe(0);
+    expect(journey.stdout).toContain("two-repository-materialization-smoke-ok");
   });
 
-  it("moves the candidate before setup recovery and retains the recorded commit", async () => {
-    const source = await readFile(smoke, "utf8");
+  it("keeps repository policy and mutable destinations in Project code", async () => {
+    const source = await readFile(projectMaterializer, "utf8");
 
-    const movement = source.indexOf("moved_candidate_commit=");
-    const failedSetup = source.indexOf('workspace setup "$workspace_name"', movement);
-    const retainedCommit = source.indexOf(".repositorySnapshot.api.commit", failedSetup);
-    const recoveredSetup = source.indexOf('workspace setup "$workspace_name"', failedSetup + 1);
-    const runtimeCommit = source.indexOf(".repositories.api.commit /run/dim/project.json", recoveredSetup);
-
-    expect(movement).toBeGreaterThan(0);
-    expect(failedSetup).toBeGreaterThan(movement);
-    expect(retainedCommit).toBeGreaterThan(failedSetup);
-    expect(recoveredSetup).toBeGreaterThan(retainedCommit);
-    expect(runtimeCommit).toBeGreaterThan(recoveredSetup);
+    expect(source).toContain('policy="$DIM_PROJECT_ROOT/.dim/workspace-repositories.json"');
+    expect(source).toContain('destination="$DIM_WORKSPACE_DATA/$relative_path"');
+    expect(source).toContain('test -d "$destination/.git" && return');
+    expect(source).toContain('git_base_url="$');
+    expect(source).toContain("GIT_CONFIG_NOSYSTEM=1");
+    expect(source).not.toContain("repositorySnapshot");
+    expect(source).not.toContain("repositoryRefOverrides");
+    expect(source).not.toContain("--repo-ref");
   });
 
-  it("guards every rejected override with unchanged project, workspace, repository, and ref state", async () => {
-    const source = await readFile(smoke, "utf8");
+  it("keeps the container journey delegated to the real materialization smoke", async () => {
+    const source = await readFile(containerSmoke, "utf8");
 
-    const rejectionHelper = source.slice(
-      source.indexOf("assert_workspace_create_rejected()"),
-      source.indexOf("create_repo()")
-    );
-
-    expect(rejectionHelper).toContain('project show "$project_name" --json');
-    expect(rejectionHelper).toContain('workspace list --json');
-    expect(rejectionHelper).toContain('workspace show "$workspace_name" --json');
-    expect(rejectionHelper).toContain('repo list "$project_name" --json');
-    expect(rejectionHelper).toContain("managed_repository_refs");
-    expect(rejectionHelper).toContain('test "$(managed_repository_refs)" = "$refs_before"');
-
-    expect(source).toContain('--repo-ref "atlas=$candidate_ref"');
-    expect(source).toContain('--repo-ref "unknown=$candidate_ref"');
-    expect(source).toContain("--repo-ref malformed");
-    expect(source).toContain('--repo-ref "$api_repo=$candidate_ref" --repo-ref "$api_repo=refs/heads/main"');
-    expect(source).toContain('--repo-ref "$api_repo=$unavailable_ref"');
-    expect(source).toContain('repo show "$project_name" broken --json');
-    expect(source).toContain('--repo-ref "$api_repo=$candidate_ref"');
+    expect(source).toContain('bash "$script_dir/two-repository-materialization-smoke.bash"');
+    expect(source).not.toContain("workspace create");
+    expect(source).not.toContain("workspace align");
   });
 });
