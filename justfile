@@ -37,8 +37,9 @@ install-local:
 restart-controller:
     if command -v mise >/dev/null 2>&1; then mise exec -- dim controller restart; else "${DIM_INSTALL_PREFIX:-$HOME/.local}/bin/dim" controller restart; fi
 
-# Builds core first, then runs the local dim CLI from source (no install needed).
+# Builds image dependencies and core first, then runs the local dim CLI from source (no install needed).
 run-cli *args:
+    pnpm --filter @slop-lab/dim-controller-proxy run build
     pnpm --filter @slop-lab/dim-core run build
     pnpm --dir core-development exec tsx ../core/packages/cli/src/cli.ts {{ args }}
 
@@ -52,12 +53,8 @@ doctor:
 
 # Build the Docker-compatible Project workspace runtime image.
 build-workspace-image:
-    docker buildx version >/dev/null
-    pnpm --filter @slop-lab/dim-controller-proxy run build
-    image_version="$(node -p "require('./core/package.json').version")"; docker buildx build --load --quiet --build-arg "DIM_UID=$(id -u)" --build-arg "DIM_GID=$(id -g)" -t "dev-infra-project-workspace:${image_version}" -f core/images/project-workspace/Dockerfile . >/dev/null
+    just run-cli workspace image build
 
 # Build the Docker-compatible Project workspace runtime image for local sources.
 build-local-workspace-image:
-    docker buildx version >/dev/null
-    pnpm --filter @slop-lab/dim-controller-proxy run build
-    image_version="$(bash verification/scripts/local-build-version.bash)"; docker buildx build --load --quiet --build-arg "DIM_UID=$(id -u)" --build-arg "DIM_GID=$(id -g)" -t "dev-infra-project-workspace:${image_version}" -f core/images/project-workspace/Dockerfile . >/dev/null
+    image_version="$(bash verification/scripts/local-build-version.bash)"; DIM_LOCAL_BUILD_VERSION="$image_version" just run-cli workspace image build
