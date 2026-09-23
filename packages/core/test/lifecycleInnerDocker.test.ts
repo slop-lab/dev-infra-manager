@@ -7,15 +7,12 @@ import { LifecycleState, validateLifecycleName } from "../../../../core/packages
 import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import {
-  alignWorkspaceRoot,
   detectWorkspaceKvm,
   projectRuntimeManifest,
   resolveWorkspaceCapabilities,
-  resolveRepositorySnapshot,
   resolveWorkspaceKvm,
   restartWorkspace,
   updateWorkspaceResources,
-  validateRepositoryRefOverrides,
   validateWorkspaceProfiles,
   validateWorkspaceResources,
   waitForInnerDocker,

@@ -7,15 +7,12 @@ import { LifecycleState, validateLifecycleName } from "../../../../core/packages
 import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import {
-  alignWorkspaceRoot,
   detectWorkspaceKvm,
   projectRuntimeManifest,
   resolveWorkspaceCapabilities,
-  resolveRepositorySnapshot,
   resolveWorkspaceKvm,
   restartWorkspace,
   updateWorkspaceResources,
-  validateRepositoryRefOverrides,
   validateWorkspaceProfiles,
   validateWorkspaceResources,
   waitForInnerDocker,
@@ -44,7 +41,7 @@ it("builds a persistent container with credentials but no host mounts or socket"
     });
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
-      schemaVersion: 5,
+      schemaVersion: 6,
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
@@ -52,9 +49,7 @@ it("builds a persistent container with credentials but no host mounts or socket"
       rootRef: "refs/heads/main",
       rootCommit: "a".repeat(40),
       rootSnapshotPath: join(root, "assets", "project-roots", "project-id", "a".repeat(40)),
-      repositoryRefOverrides: {},
-      repositorySnapshot: rootRepositorySnapshot("a".repeat(40)),
-      projectPath: "/workspace/project",
+      workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "creating",
       profiles: [],
       capabilities: [{
@@ -96,9 +91,9 @@ it("builds a persistent container with credentials but no host mounts or socket"
       "--label", "dim.managed=true",
       "--label", "dim.project=project",
       "--label", "dim.repo=root",
-      "--label", "dim.runtime-config=7",
-      "--mount", `type=bind,source=${join(root, "assets", "project-roots", "project-id")},target=/run/dim/project-roots,readonly`,
-      "--mount", "type=volume,source=dim-ws-work-1-docker,target=/var/lib/docker",
+      "--label", "dim.runtime-config=8",
+      "--mount", `type=bind,source=${join(root, "assets", "project-roots", "project-id", "a".repeat(40))},target=/run/dim/project-root,readonly`,
+      "--mount", "type=volume,source=dim-ws-work-1-docker,target=/var/lib/dim/workspace-data",
       "--cpus", "1.5",
       "--memory", "3g",
       "--pids-limit", "1024",

@@ -7,15 +7,12 @@ import { LifecycleState, validateLifecycleName } from "../../../../core/packages
 import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import {
-  alignWorkspaceRoot,
   detectWorkspaceKvm,
   projectRuntimeManifest,
   resolveWorkspaceCapabilities,
-  resolveRepositorySnapshot,
   resolveWorkspaceKvm,
   restartWorkspace,
   updateWorkspaceResources,
-  validateRepositoryRefOverrides,
   validateWorkspaceProfiles,
   validateWorkspaceResources,
   waitForInnerDocker,
@@ -35,7 +32,7 @@ describe("project and workspace lifecycle", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-it("publishes the actual Project repository catalog without credentials", async () => {
+it("publishes only the immutable root contract and generic runtime data", async () => {
     const now = new Date().toISOString();
     const repository = (alias: string, phase: "ready" | "error") => ({
       alias,
@@ -64,7 +61,7 @@ it("publishes the actual Project repository catalog without credentials", async 
       updatedAt: now
     };
     const workspace = {
-      schemaVersion: 5 as const,
+      schemaVersion: 6 as const,
       name: "work",
       projectId: project.id,
       projectName: project.name,
@@ -72,14 +69,7 @@ it("publishes the actual Project repository catalog without credentials", async 
       rootRef: "refs/heads/main",
       rootCommit: "a".repeat(40),
       rootSnapshotPath: "/state/assets/project-roots/project-id/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      repositoryRefOverrides: { source: "refs/pull/7/head" },
-      repositorySnapshot: {
-        root: { workspaceUrl: "http://dim-gitea:3000/dim-project/root.git", phase: "ready", root: true,
-          requestedRef: "refs/heads/main", ref: "refs/heads/main", commit: "a".repeat(40) },
-        source: { workspaceUrl: "http://dim-gitea:3000/dim-project/source.git", phase: "ready", root: false,
-          requestedRef: "refs/pull/7/head", ref: "refs/pull/7/head", commit: "b".repeat(40) }
-      } as const,
-      projectPath: "/workspace/project",
+      workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready" as const,
       profiles: [],
       composeProjectName: "dim-work",
@@ -109,45 +99,17 @@ it("publishes the actual Project repository catalog without credentials", async 
       reason: "test"
     });
 
-    expect(manifest.schemaVersion).toBe(2);
+    expect(manifest.schemaVersion).toBe(3);
     expect(manifest.root).toEqual({
       repository: "root",
       ref: "refs/heads/main",
       commit: "a".repeat(40),
-      path: "/workspace/project"
+      path: "/run/dim/project-root"
     });
-    expect(manifest.repositories).toEqual({
-      root: { workspaceUrl: "http://dim-gitea:3000/dim-project/root.git", phase: "ready", root: true, requestedRef: "refs/heads/main", ref: "refs/heads/main", commit: "a".repeat(40) },
-      source: { workspaceUrl: "http://dim-gitea:3000/dim-project/source.git", phase: "ready", root: false, requestedRef: "refs/pull/7/head", ref: "refs/pull/7/head", commit: "b".repeat(40) }
-    });
+    expect(manifest.data).toEqual({ path: "/var/lib/dim/workspace-data" });
+    expect(manifest).not.toHaveProperty("repositories");
     expect(JSON.stringify(manifest)).not.toContain("token");
     expect(JSON.stringify(manifest)).not.toContain("password");
 
-    const runner: StreamingCommandRunner = {
-      async run(command: string, args: string[]): Promise<CommandResult> {
-        const source = args.includes("refs/pull/7/head");
-        return {
-          command,
-          args,
-          stdout: source
-            ? `${"b".repeat(40)}\trefs/pull/7/head\n`
-            : `${"a".repeat(40)}\trefs/heads/main\n`,
-          stderr: "",
-          exitCode: 0
-        };
-      },
-      async runStreaming(): Promise<number> { return 0; }
-    };
-    await expect(resolveRepositorySnapshot(runner, { ...workspace, rootRequestedRef: "refs/heads/main" }, project, {
-      adminUsername: "admin",
-      adminPassword: "secret",
-      writerUsername: "writer",
-      writerPassword: "secret",
-      maintainerUsername: "maintainer",
-      maintainerPassword: "secret"
-    })).resolves.toMatchObject({
-      root: { requestedRef: "refs/heads/main", ref: "refs/heads/main", commit: "a".repeat(40) },
-      source: { requestedRef: "refs/pull/7/head", ref: "refs/pull/7/head", commit: "b".repeat(40) }
-    });
   });
 });

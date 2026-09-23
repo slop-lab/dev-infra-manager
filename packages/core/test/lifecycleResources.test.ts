@@ -7,15 +7,12 @@ import { LifecycleState, validateLifecycleName } from "../../../../core/packages
 import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import {
-  alignWorkspaceRoot,
   detectWorkspaceKvm,
   projectRuntimeManifest,
   resolveWorkspaceCapabilities,
-  resolveRepositorySnapshot,
   resolveWorkspaceKvm,
   restartWorkspace,
   updateWorkspaceResources,
-  validateRepositoryRefOverrides,
   validateWorkspaceProfiles,
   validateWorkspaceResources,
   waitForInnerDocker,
@@ -40,7 +37,7 @@ it("updates a claimed workspace container and persists its effective resources",
     const state = new LifecycleState(root);
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
-      schemaVersion: 5,
+      schemaVersion: 6,
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
@@ -48,9 +45,7 @@ it("updates a claimed workspace container and persists its effective resources",
       rootRef: "refs/heads/main",
       rootCommit: "a".repeat(40),
       rootSnapshotPath: join(root, "assets", "project-roots", "project-id", "a".repeat(40)),
-      repositoryRefOverrides: {},
-      repositorySnapshot: rootRepositorySnapshot("a".repeat(40)),
-      projectPath: "/workspace/project",
+      workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready",
       profiles: [],
       composeProjectName: "dim-work-1",
@@ -73,15 +68,11 @@ it("updates a claimed workspace container and persists its effective resources",
     };
     await state.claimWorkspace(record);
     const calls: string[][] = [];
-    let projectStatus = "";
     const runner: StreamingCommandRunner = {
       async run(command: string, args: string[]): Promise<CommandResult> {
         calls.push([command, ...args]);
         if ((args[0] === "container" && args[1] === "inspect") || args[0] === "inspect") {
           return { command, args, stdout: `${workspaceContainerInspect(record)}\n`, stderr: "", exitCode: 0 };
-        }
-        if (args.includes("--porcelain")) {
-          return { command, args, stdout: projectStatus, stderr: "", exitCode: 0 };
         }
         return { command, args, stdout: "dim-ws-work-1\n", stderr: "", exitCode: 0 };
       },
@@ -109,22 +100,5 @@ it("updates a claimed workspace container and persists its effective resources",
       "--pids-limit", "1024",
       "workspace-container-id"
     ]);
-
-    await alignWorkspaceRoot(runner, options, "work-1");
-    expect(calls.some((call) => call.slice(-3).join(" ") === "git switch main")).toBe(true);
-    expect(calls.some((call) => call.slice(-4).join(" ") === "git merge --ff-only FETCH_HEAD")).toBe(true);
-
-    calls.length = 0;
-    projectStatus = " M .dim/setup.bash\n?? setup-output\n";
-    await expect(alignWorkspaceRoot(runner, options, "work-1")).rejects.toThrow(/uncommitted project changes/);
-    expect(calls.some((call) => call.includes("fetch"))).toBe(false);
-
-    calls.length = 0;
-    await alignWorkspaceRoot(runner, options, "work-1", true);
-    expect(calls.some((call) =>
-      call.slice(-6).join(" ") === "git switch --discard-changes --force-create main FETCH_HEAD"
-    )).toBe(true);
-    expect(calls.some((call) => call.slice(-3).join(" ") === "git clean -fd")).toBe(true);
-    expect(calls.some((call) => call.includes("merge"))).toBe(false);
   });
 });
