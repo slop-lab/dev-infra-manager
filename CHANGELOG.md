@@ -9,8 +9,9 @@
 
 - Migrate the sole supported historical host state schema 1 record to schema 2
   during controller startup, with a durable permanent backup, deterministic
-  interruption recovery, and fail-closed handling of conflicting or unsafe
-  artifacts.
+  interruption recovery, authoritative schema 2 lifecycle evolution without
+  rewriting the historical backup, and fail-closed handling of conflicting or
+  unsafe artifacts.
 
 - Discover matching Gitea Actions jobs that were already queued when QEMU CI
   capacity is created, started, or restarted. DIM installs the webhook first,
