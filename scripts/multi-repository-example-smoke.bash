@@ -233,7 +233,7 @@ agent_container="$(dim workspace exec "$workspace_name" -- \
 test -n "$agent_container"
 test "$(dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
   --format '{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Type}}|{{.RW}}|{{.Source}}{{end}}{{end}}')" = \
-  "bind|true|$(jq -r .projectPath <<<"$workspace_json")"
+  "bind|true|$(jq -r .workspaceDataPath <<<"$workspace_json")/project"
 test "$(dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
   --format '{{range .Mounts}}{{if eq .Destination "/home/dim-agent"}}{{.Type}}|{{.RW}}{{end}}{{end}}')" = \
   "volume|true"

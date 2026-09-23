@@ -148,14 +148,14 @@ describe("DIM development forge policy", () => {
     }
   });
 
-  it("mounts each example agent workspace from the lifecycle-provided mutable project root", async () => {
+  it("mounts each example agent workspace from Project-owned persistent data", async () => {
     for (const path of [
       "examples/projects/full-development-flow/repos/root/.dim/docker-compose.yml",
       "examples/projects/single-repository/repos/app/.dim/docker-compose.yml",
       "examples/projects/multi-repository/repos/root/.dim/docker-compose.yml"
     ]) {
       const compose = await readFile(resolve(workspaceRoot, path), "utf8");
-      expect(compose).toContain("${DIM_PROJECT_ROOT:?}:/workspace");
+      expect(compose).toContain("${DIM_WORKSPACE_DATA:?}/project:/workspace");
       expect(compose).not.toContain("..:/workspace");
     }
   });
@@ -168,7 +168,8 @@ describe("DIM development forge policy", () => {
     expect(dind).toContain("FROM docker:29.1.3-dind-rootless");
     expect(dind).toContain("chown root:root /usr/bin/newuidmap /usr/bin/newgidmap");
     expect(compose).toContain('DIM_UID: "${DIM_WORKSPACE_UID:-1000}"');
-    expect(setup).toContain('DIM_WORKSPACE_UID="$(stat -c %u /workspace)"');
+    expect(setup).toContain('integrated_root="$DIM_WORKSPACE_DATA/workspace"');
+    expect(setup).toContain('DIM_WORKSPACE_UID="$(stat -c %u "$integrated_root")"');
     expect(setup).toContain("export COMPOSE_BAKE=false");
     expect(setup).toContain("verify_idmap_helpers agent-dind");
     expect(setup).toContain("verify_idmap_helpers secure-dind");
