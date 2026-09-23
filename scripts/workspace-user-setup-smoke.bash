@@ -506,6 +506,30 @@ grep -Fq 'workspace user setup is already running' "$work_dir/setup-two.stderr"
 wait "$first_pid"
 
 test "$($HOME/.local/bin/opencode --version)" = "1.18.31"
+tool_launcher="$HOME/.local/libexec/dim-project-tool-launch"
+tool_manifest="$HOME/.local/state/dim-project-tool/manifest.json"
+test "$(stat -c %a "$tool_launcher")" = 700
+test "$(stat -c %a "$tool_manifest")" = 600
+node - "$tool_manifest" "$HOME/.local/bin/opencode" <<'NODE'
+const fs = require("node:fs")
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], "utf8"))
+if (manifest.contractVersion !== 1) throw new Error("unexpected contract version")
+if (manifest.tool !== "opencode" || manifest.version !== "1.18.31") throw new Error("unexpected tool identity")
+if (manifest.launchers?.agent?.executable !== process.argv[3]) throw new Error("unexpected agent executable")
+NODE
+test "$("$tool_launcher" 1 agent opencode 1.18.31 "$HOME/.local/bin/opencode" --version)" = 1.18.31
+if "$tool_launcher" 2 agent opencode 1.18.31 "$HOME/.local/bin/opencode" \
+  >"$work_dir/incompatible-contract.stdout" 2>"$work_dir/incompatible-contract.stderr"; then
+  echo "tool launcher unexpectedly accepted an incompatible contract" >&2
+  exit 1
+fi
+grep -Fq 'installed tool manifest is missing or incompatible' "$work_dir/incompatible-contract.stderr"
+if "$tool_launcher" 1 missing opencode 1.18.31 "$HOME/.local/bin/opencode" \
+  >"$work_dir/unknown-launcher.stdout" 2>"$work_dir/unknown-launcher.stderr"; then
+  echo "tool launcher unexpectedly accepted an unknown launcher" >&2
+  exit 1
+fi
+grep -Fq 'installed tool manifest is missing or incompatible' "$work_dir/unknown-launcher.stderr"
 node "$assertions" "$HOME/.local" "$XDG_CONFIG_HOME/opencode/opencode.jsonc" \
   "$HOME/.omo/omo.jsonc" preserved >/dev/null
 grep -Fqx '  // OpenCode fixture comment must survive targeted edits.' \
