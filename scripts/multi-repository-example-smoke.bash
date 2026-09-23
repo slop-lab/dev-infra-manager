@@ -199,10 +199,10 @@ assert_unknown_task claude
   cd "$repo_root/scripts"
   sha256sum --check workspace-user-setup.bash.sha256
 )
-dim workspace run "$workspace_name" bash -- -s <"$repo_root/scripts/workspace-user-setup.bash"
+dim workspace run "$workspace_name" tool-setup <"$repo_root/scripts/workspace-user-setup.bash"
 
 workspace_user_setup_state() {
-  dim workspace run "$workspace_name" bash -- -lc 'test "$(opencode --version)" = "1.18.31"'
+  dim workspace run "$workspace_name" agent -- --version | grep -qx 1.18.31
   dim workspace run "$workspace_name" bash -- -lc \
     'node - "$HOME/.local" "$HOME/.config/opencode/opencode.json" "$HOME/.omo/omo.jsonc" fresh' \
     <"$workspace_setup_assertions"
@@ -211,7 +211,7 @@ workspace_user_setup_state() {
 }
 
 setup_state_before="$(workspace_user_setup_state)"
-dim workspace run "$workspace_name" bash -- -s <"$repo_root/scripts/workspace-user-setup.bash"
+dim workspace run "$workspace_name" tool-setup <"$repo_root/scripts/workspace-user-setup.bash"
 setup_state_after="$(workspace_user_setup_state)"
 test "$setup_state_after" = "$setup_state_before"
 

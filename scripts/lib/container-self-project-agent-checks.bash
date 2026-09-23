@@ -81,10 +81,10 @@ verification_stage="explicit workspace-user setup"
 )
 dim workspace run "$workspace_name" bash -- -lc \
   'command -v flock >/dev/null || { echo "flock is required for workspace user setup" >&2; exit 1; }'
-dim workspace run "$workspace_name" bash -- /workspace/scripts/workspace-user-setup.bash >/dev/null
+dim workspace run "$workspace_name" tool-setup >/dev/null
 
 workspace_user_setup_state() {
-  dim workspace run "$workspace_name" bash -- -lc 'test "$(opencode --version)" = "1.18.31"'
+  dim workspace run "$workspace_name" agent -- --version | grep -qx 1.18.31
   dim workspace run "$workspace_name" bash -- -lc \
     'node /workspace/verification/scripts/lib/workspace-user-setup-assertions.cjs "$HOME/.local" "$HOME/.config/opencode/opencode.json" "$HOME/.omo/omo.jsonc" fresh'
   dim workspace run "$workspace_name" bash -- -lc \
