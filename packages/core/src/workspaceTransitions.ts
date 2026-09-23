@@ -6,9 +6,10 @@ import type { StreamingCommandRunner } from "./types.js";
 import { assertContainerRunning } from "./workspaceContainer.js";
 import {
   applySelectedRoot,
+  recordSelectedRoot,
 } from "./workspacePublication.js";
 import type { ProtectedRootSnapshot } from "./protectedRootSnapshot.js";
-import { reconcileProject, setupWorkspaceLocked } from "./workspaceSetup.js";
+import { reconcileProjectContainer, setupWorkspaceLocked } from "./workspaceSetup.js";
 import {
   assertSelectedProjectUnchanged,
   reconcileWorkspaceRuntimeState,
@@ -35,7 +36,20 @@ export async function updateWorkspace(
       if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
       const oldProfiles = record.profiles;
       const nextProfiles = profiles === undefined ? oldProfiles : validateWorkspaceProfiles(profiles);
-      const containerId = await assertContainerRunning(runner, record);
+      let containerId = await assertContainerRunning(runner, record);
+      if (record.rootSnapshotPath !== selectedRoot.rootSnapshotPath) {
+        record = await recordSelectedRoot(state, record, selectedRoot);
+        const reconciled = await reconcileProjectContainer({
+          runner,
+          options,
+          state,
+          record,
+          project: selectedRoot.project,
+          repo: selectedRoot.repository
+        });
+        record = reconciled.record;
+        containerId = reconciled.containerId;
+      }
       record = await applySelectedRoot({ runner, state, record, target: selectedRoot, containerId });
       record = { ...record, profiles: nextProfiles, updatedAt: new Date().toISOString() };
       await state.writeWorkspace(record);
@@ -89,16 +103,18 @@ async function startWorkspaceLocked(
     throw new UserError(`workspace '${workspaceName}' is not stopped; use restart to apply project changes`);
   }
   if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
-  const reconciled = await reconcileProject(
+  record = await recordSelectedRoot(state, record, selectedRoot);
+  const reconciled = await reconcileProjectContainer({
     runner,
     options,
     state,
     record,
-    selectedRoot.project,
-    selectedRoot.repository
-  );
-  const containerId = await assertContainerRunning(runner, reconciled);
-  const updated = await applySelectedRoot({ runner, state, record: reconciled, target: selectedRoot, containerId });
+    project: selectedRoot.project,
+    repo: selectedRoot.repository
+  });
+  const updated = await applySelectedRoot({
+    runner, state, record: reconciled.record, target: selectedRoot, containerId: reconciled.containerId
+  });
   return setupWorkspaceLocked(runner, options, state, updated, false, true);
 }
 

@@ -4,7 +4,7 @@ import type { StreamingCommandRunner } from "./types.js";
 import { writeProjectManifest } from "./workspaceRepositorySnapshot.js";
 import type { WorkspacePublicationTarget } from "./workspaceLifecycleTypes.js";
 
-async function recordSelectedRoot(
+export async function recordSelectedRoot(
   state: LifecycleState,
   record: WorkspaceRecord,
   target: WorkspacePublicationTarget

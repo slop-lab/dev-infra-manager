@@ -17,6 +17,16 @@ import {
   runProjectSetup
 } from "./workspaceProjectCommands.js";
 import { applySelectedRoot } from "./workspacePublication.js";
+import { inspectWorkspaceContainer } from "./workspaceResourceOwnership.js";
+
+type ReconcileProjectContainerInput = {
+  readonly runner: StreamingCommandRunner;
+  readonly options: LifecycleOptions;
+  readonly state: LifecycleState;
+  readonly record: WorkspaceRecord;
+  readonly project: ProjectRecord;
+  readonly repo: ProjectRecord["repositories"][number];
+};
 
 export async function setupWorkspace(
   runner: StreamingCommandRunner,
@@ -39,7 +49,11 @@ export async function setupWorkspace(
       if (record.phase === "setting-up" || record.phase === "setup-error" || record.phase === "error") {
         const project = await state.readProject(record.projectName);
         if (project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
-        const containerId = await assertContainerRunning(runner, record);
+        const repo = project.repositories.find((candidate) => candidate.alias === record.rootRepositoryAlias);
+        if (repo === undefined) throw new UserError(`project '${project.name}' root repository is missing`);
+        const reconciled = await reconcileProjectContainer({ runner, options, state, record, project, repo });
+        record = reconciled.record;
+        const containerId = reconciled.containerId;
         record = await applySelectedRoot({
           runner,
           state,
@@ -130,38 +144,62 @@ export async function reconcileProject(
   project: ProjectRecord,
   repo: ProjectRecord["repositories"][number]
 ): Promise<WorkspaceRecord> {
-  const release = await state.acquireWorkspaceLock(initialRecord.name);
-  let record = await state.readWorkspace(initialRecord.name);
+  const reconciled = await reconcileProjectContainer({
+    runner, options, state, record: initialRecord, project, repo
+  });
+  let record = reconciled.record;
   try {
-    try {
-      const credentials = await ensureGitea(runner, options);
-      const gitBaseUrl = `${await giteaNestedBaseUrl(runner)}/${project.gitNamespace}`;
-      const giteaAddress = new URL(gitBaseUrl).hostname;
-      record = {
-        ...record,
-        projectName: project.name,
-        rootRepositoryAlias: repo.alias,
-        gitBaseUrl,
-        hostAliases: { "dim-gitea": [giteaAddress] }
-      };
-      await state.writeWorkspace(record);
-      const containerId = await reconcileContainer(runner, options, record, gitEnvironment(record, credentials));
-      const runtimeRecord = { ...record, containerName: containerId };
-      await installHostInputHelper(runner, runtimeRecord);
-       await writeProjectManifest(runner, runtimeRecord);
-      record = { ...record, updatedAt: new Date().toISOString() };
-      await state.writeWorkspace(record);
-      return record;
-    } catch (error) {
-      record = {
-        ...record,
-        phase: "error",
-        error: error instanceof Error ? error.message : String(error),
-        updatedAt: new Date().toISOString()
-      };
-      await state.writeWorkspace(record);
-      throw error;
-    }
+    await writeProjectManifest(runner, { ...record, containerName: reconciled.containerId });
+    record = { ...record, updatedAt: new Date().toISOString() };
+    await state.writeWorkspace(record);
+    return record;
+  } catch (error) {
+    record = {
+      ...record,
+      phase: "error",
+      error: error instanceof Error ? error.message : String(error),
+      updatedAt: new Date().toISOString()
+    };
+    await state.writeWorkspace(record);
+    throw error;
+  }
+}
+
+export async function reconcileProjectContainer(
+  input: ReconcileProjectContainerInput
+): Promise<{ readonly record: WorkspaceRecord; readonly containerId: string }> {
+  const release = await input.state.acquireWorkspaceLock(input.record.name);
+  let record = await input.state.readWorkspace(input.record.name);
+  try {
+    await inspectWorkspaceContainer(input.runner, record);
+    const credentials = await ensureGitea(input.runner, input.options);
+    const gitBaseUrl = `${await giteaNestedBaseUrl(input.runner)}/${input.project.gitNamespace}`;
+    const giteaAddress = new URL(gitBaseUrl).hostname;
+    record = {
+      ...record,
+      projectName: input.project.name,
+      rootRepositoryAlias: input.repo.alias,
+      gitBaseUrl,
+      hostAliases: { "dim-gitea": [giteaAddress] }
+    };
+    await input.state.writeWorkspace(record);
+    const containerId = await reconcileContainer(
+      input.runner,
+      input.options,
+      record,
+      gitEnvironment(record, credentials)
+    );
+    await installHostInputHelper(input.runner, { ...record, containerName: containerId });
+    return { record, containerId };
+  } catch (error) {
+    record = {
+      ...record,
+      phase: "error",
+      error: error instanceof Error ? error.message : String(error),
+      updatedAt: new Date().toISOString()
+    };
+    await input.state.writeWorkspace(record);
+    throw error;
   } finally {
     await release();
   }
