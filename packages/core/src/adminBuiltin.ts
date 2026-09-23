@@ -197,7 +197,15 @@ async function dispatchBuiltin(operation: string, context: BuiltinContext): Prom
       })
     };
     case "workspace.stop": await workspaceLifecycle.stopWorkspace(runner, lifecycle, text("name")); return {};
-    case "workspace.discard": await workspaceLifecycle.discardWorkspace(runner, lifecycle, text("name"), input.keepVolume === true); return {};
+    case "workspace.discard":
+      await workspaceLifecycle.discardWorkspace(
+        runner,
+        lifecycle,
+        text("name"),
+        input.keepVolume === true,
+        plugins.workspaceDiscardHooks
+      );
+      return {};
     case "doctor": return runDoctor(runner, lifecycle.defaultWorkspaceBackend, lifecycle);
     case "service.ensure": return ensureGitea(runner, lifecycle);
     case "git.credentials": return projectRegistry.prepareHostGitCredential(runner, lifecycle);

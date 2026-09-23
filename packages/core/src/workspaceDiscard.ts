@@ -1,6 +1,7 @@
 import { UserError } from "./errors.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type { LifecycleOptions } from "./lifecycleTypes.js";
+import type { WorkspaceDiscardHook } from "./plugin.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { waitForInnerDocker } from "./workspaceContainer.js";
 import { runProjectTeardown } from "./workspaceProjectCommands.js";
@@ -15,13 +16,23 @@ export async function discardWorkspace(
   runner: StreamingCommandRunner,
   options: LifecycleOptions,
   name: string,
-  keepVolume = false
+  keepVolume = false,
+  hooks: readonly WorkspaceDiscardHook[] = []
 ): Promise<void> {
   const workspaceName = validateLifecycleName(name, "workspace");
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
     const record = await state.readWorkspace(workspaceName);
+    for (const hook of hooks) {
+      await hook.beforeDiscard({
+        workspaceId: `${record.projectId}:${record.name}`,
+        workspaceName: record.name,
+        projectId: record.projectId,
+        projectName: record.projectName,
+        stateRoot: options.stateRoot
+      });
+    }
     const container = await inspectWorkspaceContainer(runner, record);
     const volume = await inspectWorkspaceVolume(runner, record);
     if (container !== undefined) {

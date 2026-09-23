@@ -38,6 +38,18 @@ export interface WorkspaceCapabilityProvider {
   provision(context: WorkspaceCapabilityContext): Promise<WorkspaceCapabilityProvision> | WorkspaceCapabilityProvision;
 }
 
+export interface WorkspaceDiscardContext {
+  readonly workspaceId: string;
+  readonly workspaceName: string;
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly stateRoot: string;
+}
+
+export interface WorkspaceDiscardHook {
+  beforeDiscard(context: WorkspaceDiscardContext): Promise<void>;
+}
+
 export interface RegisteredWorkspaceCapabilityProvider {
   readonly plugin: string;
   readonly provider: WorkspaceCapabilityProvider;
@@ -57,6 +69,7 @@ export interface DimPluginHost {
   registerAdminRoute(route: DimAdminRoute): void;
   registerHostInputProvider(name: string, provider: HostInputProvider): void;
   registerWorkspaceCapability(name: string, provider: WorkspaceCapabilityProvider): void;
+  registerWorkspaceDiscardHook(hook: WorkspaceDiscardHook): void;
   registerExtension(kind: string, name: string, extension: object): void;
   extension<T extends object>(kind: string, name: string): T | undefined;
 }
@@ -74,6 +87,7 @@ export interface RegisteredDimPlugins {
   readonly adminRoutes: readonly DimAdminRoute[];
   readonly hostInputProviders: ReadonlyMap<string, HostInputProvider>;
   readonly workspaceCapabilityProviders: ReadonlyMap<string, RegisteredWorkspaceCapabilityProvider>;
+  readonly workspaceDiscardHooks: readonly WorkspaceDiscardHook[];
   dispose(): Promise<void>;
 }
 
@@ -83,6 +97,7 @@ class PluginHost implements DimPluginHost {
   readonly adminRoutes: DimAdminRoute[] = [];
   readonly providers = new Map<string, HostInputProvider>();
   readonly workspaceCapabilities = new Map<string, RegisteredWorkspaceCapabilityProvider>();
+  readonly workspaceDiscardHooks: WorkspaceDiscardHook[] = [];
   readonly extensions = new Map<string, Map<string, object>>();
   registeringPlugin: string | undefined;
   acceptingRegistrations = true;
@@ -166,6 +181,17 @@ class PluginHost implements DimPluginHost {
     this.workspaceCapabilities.set(name, { plugin, provider });
   }
 
+  registerWorkspaceDiscardHook(hook: WorkspaceDiscardHook): void {
+    const plugin = this.registeringPlugin ?? "unknown plugin";
+    if (!this.acceptingRegistrations) {
+      throw new UserError(`plugin '${plugin}' attempted workspace discard hook registration after startup`);
+    }
+    if (!hook || typeof hook.beforeDiscard !== "function") {
+      throw new UserError(`plugin '${plugin}' registered an invalid workspace discard hook`);
+    }
+    this.workspaceDiscardHooks.push(Object.freeze(hook));
+  }
+
   registerExtension(kind: string, name: string, extension: object): void {
     const plugin = this.registeringPlugin ?? "unknown plugin";
     if (!this.acceptingRegistrations) {
@@ -232,6 +258,7 @@ export async function registerPlugins(
     adminRoutes: [...host.adminRoutes],
     hostInputProviders: new Map(host.providers),
     workspaceCapabilityProviders: new Map(host.workspaceCapabilities),
+    workspaceDiscardHooks: [...host.workspaceDiscardHooks],
     async dispose(): Promise<void> {
       if (disposed) return;
       disposed = true;
