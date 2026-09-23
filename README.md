@@ -1,9 +1,5 @@
 # Examples
 
-- [Remote control plane](features/remote-control-plane/README.md) demonstrates
-  pinned outbound SSH, strict proposals, exact-tree approval, and local
-  workload-ID execution without production keys.
-
 ## Project examples
 
 Project examples are complete, copyable adoption shapes:

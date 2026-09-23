@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "projectId": "project-1",
-  "treeDigest": "d50618972af95730e2f2ae5d8af0864678f6747f2d953254d8007fd6a6646c51",
-  "pathPatterns": ["src/**", "test/**"],
-  "capabilityCeiling": ["nested-containers"],
-  "approvedAt": "2026-09-23T00:00:00.000Z",
-  "approvedBy": "local-operator"
-}
