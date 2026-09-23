@@ -6,13 +6,11 @@ import type { RegisteredDimPlugins } from "./plugin.js";
 import { assertProjectRepositoriesReady } from "./protectedRootResolution.js";
 import { resolveProtectedRootSnapshot } from "./protectedRootSnapshot.js";
 import type { StreamingCommandRunner } from "./types.js";
-import { resolveRepositorySnapshot } from "./workspaceRepositorySnapshot.js";
 import { reconcileProject, setupWorkspaceLocked } from "./workspaceSetup.js";
 import { assertSelectedProjectUnchanged } from "./workspaceState.js";
 import {
   resolveWorkspaceCapabilities,
   resolveWorkspaceKvm,
-  validateRepositoryRefOverrides,
   validateWorkspaceProfiles,
   validateWorkspaceResources
 } from "./workspaceValidation.js";
@@ -26,7 +24,6 @@ export async function createWorkspace(
     profiles: string[];
     requiredCapabilities?: string[];
     recommendedCapabilities?: string[];
-    repositoryRefs?: string[];
     runtimeBackend: WorkspaceRecord["runtimeBackend"];
     cpuCount?: string;
     memory?: string;
@@ -56,7 +53,6 @@ export async function createWorkspace(
       input.requiredCapabilities ?? [], input.recommendedCapabilities ?? [], projectRecord, name,
       input.runtimeBackend, plugins.workspaceCapabilityProviders
     );
-    const repositoryRefOverrides = validateRepositoryRefOverrides(input.repositoryRefs ?? [], projectRecord);
     const repo = selectedRoot.repository;
     const now = new Date().toISOString();
     const gitUserName = input.gitUserName ?? process.env.DIM_GIT_USER_NAME ?? `dim/${name}`;
@@ -72,9 +68,6 @@ export async function createWorkspace(
       }
       if (JSON.stringify(record.capabilities ?? []) !== JSON.stringify(capabilities)) {
         throw new UserError(`workspace '${name}' already exists with different capability requests`);
-      }
-      if (JSON.stringify(record.repositoryRefOverrides ?? {}) !== JSON.stringify(repositoryRefOverrides)) {
-        throw new UserError(`workspace '${name}' already exists with different repository ref overrides`);
       }
       if (record.runtimeBackend !== input.runtimeBackend) {
         throw new UserError(`workspace '${name}' already exists with backend '${record.runtimeBackend}'`);
@@ -93,15 +86,8 @@ export async function createWorkspace(
       if (!(error instanceof MissingRecordError)) throw error;
       const kvm = await resolveWorkspaceKvm(input.runtimeBackend, input.kvm);
       const credentials = await ensureGitea(runner, options);
-      const repositorySnapshot = await resolveRepositorySnapshot(runner, {
-        rootRepositoryAlias: repo.alias,
-        rootRequestedRef: selectedRoot.rootRequestedRef,
-        rootRef: selectedRoot.rootRef,
-        rootCommit: selectedRoot.rootCommit,
-        repositoryRefOverrides
-      }, projectRecord, credentials);
       record = {
-        schemaVersion: 5,
+        schemaVersion: 6,
         name,
         projectId: projectRecord.id,
         projectName: projectRecord.name,
@@ -109,9 +95,7 @@ export async function createWorkspace(
         rootRef: selectedRoot.rootRef,
         rootCommit: selectedRoot.rootCommit,
         rootSnapshotPath: selectedRoot.rootSnapshotPath,
-        repositoryRefOverrides,
-        repositorySnapshot,
-        projectPath: "/workspace/project",
+        workspaceDataPath: "/var/lib/dim/workspace-data",
         phase: "creating",
         profiles,
         capabilities,
