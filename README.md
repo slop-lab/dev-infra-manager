@@ -1,9 +1,9 @@
 # `@slop-lab/dim-plugin-external-urls`
 
-Workspace-scoped development URLs for DIM. The plugin provides shared direct
-HTTP ingresses and controller-managed Caddy HTTPS ingresses, then routes each
-URL to a container or nested container selected by the authenticated
-workspace.
+Workspace-scoped development endpoints for DIM. The plugin provides shared
+direct HTTP ingresses, controller-managed Caddy HTTPS ingresses, and opt-in raw
+TCP listeners, then routes each endpoint to a container or nested container
+selected by the authenticated workspace.
 
 ## Installation
 
@@ -48,6 +48,32 @@ Targets may be the workspace root, one named child container, or a container
 inside that child. DIM resolves the target through the workspace runtime
 rather than accepting an arbitrary host address.
 
+## Tailscale TCP ingress
+
+The built-in `tailscale` driver exposes one raw TCP target through the DIM
+host's existing Tailscale node. Tailscale must already be installed,
+authenticated, and running on the host. Configuration is explicit and accepts
+only a high listener port:
+
+```bash
+dim external-url ingress add tailscale \
+  --name tailnet-ssh \
+  --description "Tailnet SSH" \
+  --scheme tcp --listen-port 49152
+
+dim external-url request \
+  --workspace feature-123 \
+  --ingress tailnet-ssh \
+  --container ssh --port 22 --protocol tcp
+```
+
+The driver runs only `tailscale status --json`, requires a running backend,
+selects the current IPv4 address in `100.64.0.0/10`, and binds exactly that
+address on a port from `49152` through `65535`. It does not run `tailscale up`,
+depend on Serve or Funnel, or pass the Tailscale socket, state, credentials, or
+binary into a workspace. One authenticated workspace target owns the listener
+until its route is revoked; TCP requests do not accept URL paths.
+
 ## Caddy HTTPS
 
 The `caddy` ingress driver reconciles wildcard DNS, builds the required Caddy
@@ -80,7 +106,7 @@ HTTPS reachability. Removing an ingress does not delete DNS unless
 
 ## Policy and trust boundary
 
-The default route policy requires workspace-qualified subdomains. An ingress
+The default HTTP route policy requires workspace-qualified subdomains. An ingress
 may instead use a fail-closed HTTP(S) or Unix-socket webhook to approve,
 reject, or rewrite requested subdomains.
 

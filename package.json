@@ -1,7 +1,7 @@
 {
   "name": "@slop-lab/dim-plugin-external-urls",
   "version": "0.9.0",
-  "description": "Workspace-scoped HTTP and Caddy HTTPS ingresses for DIM",
+  "description": "Workspace-scoped HTTP, HTTPS, and raw TCP ingresses for DIM",
   "license": "MIT",
   "repository": {
     "type": "git",
