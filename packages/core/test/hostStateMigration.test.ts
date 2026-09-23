@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { convertHostLifecycleSchema1 } from "../../../../core/packages/core/src/hostLifecycleRecord.js";
 import { migrateHostLifecycleState } from "../../../../core/packages/core/src/hostStateMigration.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+import type { HostLifecycleRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 
 const SCHEMA_1 = {
   schemaVersion: 1,
@@ -248,6 +249,30 @@ describe("host lifecycle schema 1 migration", () => {
     // Then
     expect(second).toEqual({ kind: "unchanged" });
     expect(await readFile(canonical, "utf8")).toBe(canonicalAfterFirst);
+    expect(await readFile(backup, "utf8")).toBe(schema1Bytes);
+  });
+
+  it("accepts lifecycle evolution after migration without changing canonical bytes or the backup", async () => {
+    // Given
+    await writeFile(canonical, schema1Bytes);
+    await migrateHostLifecycleState(state);
+    const evolved: HostLifecycleRecord = {
+      schemaVersion: 2,
+      phase: "ready",
+      resumeWorkspaces: [],
+      restartCiRunners: [],
+      resumeManagedContainers: [],
+      updatedAt: "2026-09-23T00:00:00.000Z"
+    };
+    await state.writeHostLifecycle(evolved);
+    const canonicalAfterEvolution = await readFile(canonical, "utf8");
+
+    // When
+    const result = await migrateHostLifecycleState(state);
+
+    // Then
+    expect(result).toEqual({ kind: "unchanged" });
+    expect(await readFile(canonical, "utf8")).toBe(canonicalAfterEvolution);
     expect(await readFile(backup, "utf8")).toBe(schema1Bytes);
   });
 });
