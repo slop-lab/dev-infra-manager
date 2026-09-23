@@ -6,6 +6,21 @@ import { buildWorkspaceImage, inspectWorkspaceImage } from "../../../../core/pac
 import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import type { CommandResult, CommandRunner, RunOptions } from "../../../../core/packages/core/src/types.js";
 
+const canonicalWorkspaceImageAssets = path.resolve(import.meta.dirname, "../../../../core/images/project-workspace");
+const shippedWorkspaceImageAssets = path.resolve(import.meta.dirname, "../../../../core/packages/core/src/workspace-image-assets");
+const workspaceImageHelperAssets = [
+  "entrypoint.bash",
+  "git-askpass.sh",
+  "project-cgroup.bash",
+  "route-relay.mjs"
+] as const;
+
+function normalizeDockerfileCopySources(dockerfile: string): string {
+  return dockerfile
+    .replace(/^COPY core\/images\/project-workspace\//gm, "COPY ")
+    .replace(/^COPY core\/packages\/controller-proxy\/dist /gm, "COPY controller-proxy ");
+}
+
 class InspectRunner implements CommandRunner {
   readonly calls: Array<{ readonly command: string; readonly args: readonly string[] }> = [];
 
@@ -50,6 +65,26 @@ class BuildRunner implements CommandRunner {
 function commandResult(exitCode: number, stdout = "", stderr = ""): CommandResult {
   return { command: "docker", args: [], stdout, stderr, exitCode };
 }
+
+describe("workspace image asset parity", () => {
+  it.each(workspaceImageHelperAssets)("keeps shipped %s bytes identical to the canonical image asset", async (asset) => {
+    const [canonical, shipped] = await Promise.all([
+      readFile(path.join(canonicalWorkspaceImageAssets, asset)),
+      readFile(path.join(shippedWorkspaceImageAssets, asset))
+    ]);
+
+    expect(shipped).toEqual(canonical);
+  });
+
+  it("keeps the shipped Dockerfile identical after normalizing only build-context COPY sources", async () => {
+    const [canonical, shipped] = await Promise.all([
+      readFile(path.join(canonicalWorkspaceImageAssets, "Dockerfile"), "utf8"),
+      readFile(path.join(shippedWorkspaceImageAssets, "Dockerfile"), "utf8")
+    ]);
+
+    expect(normalizeDockerfileCopySources(shipped)).toBe(normalizeDockerfileCopySources(canonical));
+  });
+});
 
 describe("workspace image inspection", () => {
   const imageId = `sha256:${"a".repeat(64)}`;
