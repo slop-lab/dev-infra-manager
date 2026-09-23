@@ -257,7 +257,7 @@ the host Git CLI and are never parsed to invent a name.
 This repository implements the same project contract on itself through
 `.dim/setup.sh` and `.dim/entrypoint.sh`.
 
-### Set up OpenCode in the development workspace
+### Set up the Project-configured agent tool
 
 The development agent image provides Node.js and npm but does not bake in a
 coding agent. From a local checkout of this repository, install the reviewed
@@ -265,14 +265,20 @@ OpenCode and Oh My OpenAgent versions into the persistent workspace user's
 home:
 
 ```bash
-dim workspace run dim-dev bash -- /workspace/scripts/workspace-user-setup.bash \
-  && dim workspace run dim-dev bash -- -lc 'exec opencode'
+dim workspace run dim-dev tool-setup \
+  && dim workspace run dim-dev agent
 ```
 
-The setup is safe to rerun. It installs under `$HOME/.local`, pins the OMO
-plugin coordinate, disables supported automatic updates, enables Team Mode,
-and preserves unrelated OpenCode and OMO user configuration. It does not start
-OpenCode or perform provider authentication.
+The generic task names belong to this reviewed Project, not DIM core. The
+self-Project maps `tool-setup` to its local OpenCode utility and maps `agent`
+to the pinned executable through a contract-versioned launcher manifest below
+canonical `$HOME`. Launch rejects a missing manifest, unsupported contract,
+unknown launcher, or mismatched tool, version, or executable path. Setup is
+safe to rerun. It installs under `$HOME/.local`, pins the OMO plugin
+coordinate, disables supported automatic updates, enables Team Mode, and
+preserves unrelated OpenCode and OMO user configuration. It does not start
+OpenCode or perform provider authentication, and lifecycle setup never invokes
+it.
 
 To start an authenticated OpenCode Web server explicitly and request or reuse
 its workspace-scoped external URL, run the separate launcher after setup:
@@ -372,7 +378,7 @@ only the launcher's default origin.
     "$base/opencode-web.bash.sha256"
   (cd -- "$setup_dir" && sha256sum --check \
     workspace-user-setup.bash.sha256 opencode-web.bash.sha256)
-  dim workspace run dim-dev bash -- -s <"$setup_dir/workspace-user-setup.bash"
+  dim workspace run dim-dev tool-setup <"$setup_dir/workspace-user-setup.bash"
   dim workspace run dim-dev bash -- -c \
     'export OPENCODE_WEB_CORS_ORIGINS="$1"; exec bash -s' \
     bash "${OPENCODE_WEB_CORS_ORIGINS:-[]}" <"$setup_dir/opencode-web.bash"

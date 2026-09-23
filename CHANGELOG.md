@@ -83,7 +83,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   CORS list restarts only that process and retains its credential, external
   URL, and shared gateway. Launcher lock, readiness, helper execution, and
   cleanup are bounded; failed exposure stops only a newly started OpenCode
-  process and leaves the shared gateway and other services running.
+  process and leaves the shared gateway and other services running. Projects
+  now expose generic explicit `tool-setup` and `agent` task mappings. Setup
+  publishes a versioned user-home launcher manifest, and launch validates the
+  Project-selected tool, version, and executable without adding tool knowledge
+  or automatic installation to DIM core.
 
 - The canonical Project now maps an inner UID-0 agent onto the non-root
   workspace owner through a private rootless `agent-dind`. The non-root agent
