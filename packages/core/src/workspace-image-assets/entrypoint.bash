@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-mkdir -p /var/lib/docker /var/run /workspace
-chown -R dim:dim /home/dim /var/lib/docker /workspace
+mkdir -p /var/lib/dim/workspace-data/docker /var/run /workspace
+chown -R dim:dim /home/dim /var/lib/dim/workspace-data /workspace
 # A stopped container keeps its writable /var/run layer. Managed containerd
 # state is process-namespace-local, so it must not survive a container restart.
 rm -rf -- /var/run/docker/containerd
@@ -10,7 +10,7 @@ rm -f -- /var/run/docker.pid /var/run/docker.sock
 
 dockerd_args=(
   --host=unix:///var/run/docker.sock
-  --data-root=/var/lib/docker
+  --data-root=/var/lib/dim/workspace-data/docker
   --group=dim
 )
 if [[ -n "${DIM_REGISTRY_CACHE_ENDPOINT:-}" ]]; then
