@@ -165,7 +165,10 @@ independent route claim revocation. The Cloudflare plugin suite must verify name
 registration, provider/record argument normalization, and DNS reconciliation.
 For `CLI-EXTERNAL-URL-TCP-001`, the suite MUST exercise authenticated raw TCP
 forwarding, rejection before a valid claim, exact-target idempotence, collision
-rejection, revocation, and persisted-claim reconciliation. For
+rejection, active-flow disconnection on revocation and shutdown, maximum
+connection enforcement, connect and idle deadlines, same-claim upstream
+replacement with old-flow disconnection, other-claim rejection, and
+persisted-claim reconciliation. For
 `CLI-EXTERNAL-URL-TAILSCALE-001`, it MUST prove status-only CLI invocation,
 running-state and CGNAT address validation, exact-address binding data, and
 high-port validation without host Tailscale mutation.
@@ -182,10 +185,14 @@ claims MUST leave every already-running generic capacity alive, while one-VM
 per-capacity, shutdown, state-I/O failure, and process cleanup remain enforced.
 The route-policy test launches the checked-in advanced example server rather
 than maintaining a test-only webhook implementation.
-A Docker-capable lane MUST run `just verify headscale-tailnet-tcp`. It uses
-digest-pinned Headscale and Tailscale images, registers two disposable nodes
-without host Tailscale state, binds raw TCP on the allocated tailnet address,
-and proves a second node receives a unique sentinel. A configured
+A Docker-capable lane MUST run `just verify headscale-tailnet-tcp`. It MUST
+install the packaged plugin in a digest-pinned Node/Tailscale host, invoke the
+compiled Tailscale status driver and `TcpIngressListener`, and register that
+host plus a client against disposable digest-pinned Headscale. The listener
+MUST forward a unique sentinel to a separate target attached only to a private
+non-tailnet network, then fail reachability after route revocation. The fixture
+MUST inspect that target for absence of Tailscale credentials, state, socket,
+binary, and mounts, and MUST neither read nor change host Tailscale state. A configured
 operator-owned Tailnet ingress can additionally run:
 
 ```bash

@@ -741,8 +741,14 @@ upstream through the authenticated workspace target resolver rather than a
 caller-supplied host. One listener MUST have at most one workspace and exact
 target claim; an identical claim is idempotent, while a different claim is
 rejected until revocation. Claims MUST persist and reconcile after controller
-restart and MUST be revoked on workspace discard. Returned endpoints use
-`tcp://HOST:PORT`.
+restart and MUST be revoked on workspace discard. Reconciliation MAY replace a
+resolved upstream address only for the same workspace and exact logical target;
+it MUST destroy every active old flow before the replacement becomes current.
+A different claim MUST remain rejected. Revocation, listener shutdown, client
+end, upstream end, and either-side failure MUST release both socket directions.
+Each listener MUST allow at most 256 concurrent flows, bound upstream connect
+waits to 10 seconds, and terminate flows after five idle minutes. Returned
+endpoints use `tcp://HOST:PORT`.
 
 **CLI-EXTERNAL-URL-TAILSCALE-001:** The optional `tailscale` ingress driver MUST
 require scheme `tcp` and exactly one configured listener port in

@@ -141,7 +141,12 @@ same workspace/container boundary as HTTP targets; callers cannot supply an
 arbitrary host or loopback upstream. A repeated request for the same workspace
 and exact target is idempotent. A different target or workspace is rejected
 until revocation, workspace discard, or ingress removal releases the claim.
-Persisted claims are resolved and rebound after controller restart.
+Persisted claims are resolved and rebound after controller restart. When the
+same logical claim resolves to a recreated target address, DIM disconnects its
+old flows before atomically replacing the upstream. Revocation and listener
+shutdown also close both sides of every active flow. Each listener accepts at
+most 256 concurrent flows, bounds upstream connection establishment at 10
+seconds, and closes a flow after five idle minutes.
 
 The built-in `tailscale` ingress driver is opt-in:
 
@@ -417,7 +422,10 @@ TCP claims, persistence, and revocation.
 The example smoke test also runs a local Cloudflare-compatible API backed by
 authoritative CoreDNS, then checks provider reconciliation, wildcard
 resolution, and cleanup without external credentials.
-`just verify headscale-tailnet-tcp` proves isolated tailnet TCP transport with
-digest-pinned Headscale and Tailscale containers without reading or changing
-host Tailscale state. A separately configured operator-owned Tailnet ingress
-can additionally run `verification/scripts/tailscale-external-url-smoke.sh`.
+`just verify headscale-tailnet-tcp` installs the packaged plugin into a pinned
+Node/Tailscale host, runs its compiled status driver and `TcpIngressListener`,
+and forwards from a second Headscale node to a separate non-tailnet target. It
+proves reachability and post-revocation failure while confirming the target has
+no Tailscale binary, key, state, socket, or mount. The fixture does not read or
+change host Tailscale state. A separately configured operator-owned Tailnet
+ingress can additionally run `verification/scripts/tailscale-external-url-smoke.sh`.
