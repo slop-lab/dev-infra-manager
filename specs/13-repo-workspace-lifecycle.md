@@ -193,39 +193,30 @@ authority.
 
 ## Root workspace contract
 
-A workspace binds permanently to a Project ID and directly clones only the
-configured root repository/ref at:
+A workspace binds permanently to a Project ID. DIM mounts the selected root
+contract read-only at:
 
 ```text
-/workspace/project
+/run/dim/project-root
 ```
 
-`/workspace/project` is mutable Project data and is never a source of trusted
-lifecycle execution. For create, start, update, and restart, DIM resolves a
+Persistent Project-owned data is mounted at `/var/lib/dim/workspace-data`.
+DIM never clones, fetches, switches, merges, or resets a repository there.
+For create, start, update, and restart, DIM resolves a
 single concrete branch covered by the root repository's applied protection,
 pins its exact commit, and atomically publishes the complete commit tree below
-the controller-owned content-addressed assets path. At the same selection
-point, DIM resolves the requested ref for every other Project repository to an
-exact commit. The workspace record uses schema version `5`. Its immutable
-`repositorySnapshot` is a complete object keyed by every Project repository
-alias, and it MUST NOT be empty or omit an alias. Each entry has exactly a
-credential-free `workspaceUrl`, `phase: ready`, its root role, `requestedRef`,
-the resolved `ref`, and the exact `commit`, including the root entry. No
-non-ready repository may appear in the snapshot. For a root with a configured
-ref, `requestedRef` and the resolved `ref` record that selected concrete ref.
-When the root ref is omitted, `requestedRef` MUST remain the literal `HEAD`
-while `ref` records the concrete protected branch to which symbolic `HEAD`
-resolved. The root entry's resolved ref and commit MUST equal the workspace's
-separate `rootRef` and `rootCommit`. The root's published full-tree asset
-remains recorded separately in `rootSnapshotPath`; the repository snapshot
-does not replace that path. Older workspace schemas are rejected without
-migration.
+the controller-owned content-addressed assets path. The workspace record uses
+schema version `6` and records only that root ref, commit, snapshot path, and
+the canonical workspace-data path. It contains no repository catalog or
+per-repository ref overrides. Older workspace schemas and records containing
+obsolete checkout-layout fields are rejected before mutation, with guidance
+to export important data and recreate the workspace.
 
 The selected Project-root snapshot is mounted read-only only into the trusted
-outer workspace. It is not mounted into an agent runtime. Setup, entrypoint,
+outer workspace. It is not writable agent data. Setup, entrypoint,
 teardown, Compose fallback, and relative helpers or build contexts execute from
-that snapshot. `DIM_PROJECT_ROOT` explicitly names the mutable checkout for
-lifecycle code that needs Project data. Reserved lifecycle files must not be
+that snapshot. `DIM_PROJECT_ROOT` names the immutable root and
+`DIM_WORKSPACE_DATA` names persistent Project-owned data. Reserved lifecycle files must not be
 symbolic links, and links in the snapshot must not escape its tree.
 
 Creation records an immutable effective KVM capability. An interactive create
@@ -292,6 +283,7 @@ DIM_PROJECT_ID
 DIM_PROJECT_NAME
 DIM_PROJECT_ROOT
 DIM_PROJECT_MANIFEST
+DIM_WORKSPACE_DATA
 DIM_WORKSPACE_NAME
 DIM_WORKSPACE_BACKEND
 DIM_WORKSPACE_KVM
@@ -315,19 +307,14 @@ which copies the reviewed aliases onto the agent container it creates.
 This is a static bootstrap registry: address changes take effect when setup
 reconciles the workspace and recreates the affected Project service.
 
-The runtime manifest MUST also contain a `repositories` object copied from the
-workspace's complete immutable `repositorySnapshot`, not reconstructed from
-current Project state or only the desired root `.dim/repos.yml`. Entries are
-keyed by validated repository alias and expose the credential-free workspace
-URL, lifecycle phase, root role, requested ref, resolved ref, and exact commit.
-This catalog is readable by Project lifecycle and agent environments; source
-visibility is not a protected boundary. It MUST NOT expose external
-credentials or grant protected-ref, merge, trusted-runtime, or host authority.
-DIM clones only the root and leaves checkout paths and integrated development
-layout to Project code.
+The runtime manifest uses schema version `3`. It records only the immutable
+root identity and path, the persistent data path, the Project-specific managed
+Git base URL, host aliases, and generic runtime capabilities. Project code owns
+repository aliases, refs, checkout paths, retries, and integrated development
+layout. It may use the managed Git base URL to materialize repositories, but
+must not infer a DIM-owned repository catalog from the runtime manifest.
 
-The Project manifest uses schema version `2`, records the selected root commit,
-and publishes the workspace
+The manifest publishes the workspace
 runtime's optional cgroup capability at `runtime.cgroups`. DIM enables the
 capability automatically when the boundary is safe: the record reports
 `status: delegated` only for a writable cgroup v2 hierarchy whose
@@ -907,37 +894,30 @@ automatically.
   replace Compose profiles.
 - `setup` retries from the immutable repository selection already recorded by
   the workspace. For `setting-up`, `setup-error`, or recovery from `error`, it
-  repeats root checkout and Project runtime manifest publication before
+  repeats root publication and Project runtime manifest publication before
   Project setup and final ready publication, without fetching or resolving any
   repository ref.
 
 **WORKSPACE-SELECTED-ROOT-PUBLICATION-001:** After preflight accepts a selected
 root, DIM MUST atomically record its ref, commit, snapshot path, and a non-ready
-workspace phase before mutating the checkout or Project runtime manifest. The
-workspace MUST remain non-ready until both mutations complete and the final
-ready record is durably published. Any checkout, manifest, or final ready-state
+workspace phase before mutating the Project runtime manifest. The
+workspace MUST remain non-ready until publication and setup complete and the final
+ready record is durably published. Any manifest, setup, or final ready-state
 publication failure MUST leave a non-ready record bound to that selected root.
 `run` MUST reject every non-ready phase. `setup` MUST recover using the recorded
-root asset and complete `repositorySnapshot` by acquiring the Project lock and
+root asset by acquiring the Project lock and
 then the workspace setup lock, revalidating the Project and workspace identity
-under both locks, and repeating checkout and Project runtime manifest
-publication before Project setup. It MUST NOT fetch or resolve any repository
-ref during this recovery, even if a recorded ref has moved. `update` MUST
+under both locks, and repeating Project runtime manifest publication before
+Project setup. DIM MUST NOT fetch or resolve a non-root repository ref during
+this recovery. `update` MUST
 be able to select and publish a root again; only successful setup may return
 the workspace to `ready`.
 
-Dirty roots and non-fast-forward updates fail without modifying user work.
-An otherwise clean local branch that is ahead of the reviewed root remains
-compatible, matching `git merge --ff-only REVIEWED_COMMIT`; divergence means
-neither commit is an ancestor of the other.
-For a running workspace, `restart` MUST perform both checks while holding the
-workspace setup lock and before stopping its container, changing its phase or
-setup record, or interrupting Project services. A rejection MUST preserve the
-checkout, workspace record, and running container identities and MUST name the
-explicit `workspace align --reset --yes` recovery command. A successful
-restart MAY apply the exact fetched commit accepted by this preflight so the
-stop/start boundary does not repeat a mutable remote-ref decision.
-Stop/start and restart preserve the checkout and named inner-engine volume.
+Project-owned setup decides how mutable checkouts are reconciled and must not
+silently rewrite an existing agent checkout. DIM restart selects reviewed root
+bytes before stopping the container, then dispatches setup from those immutable
+bytes. Stop/start and restart preserve workspace data and the named
+inner-engine volume.
 Create may request plugin-provided workspace capabilities as `required` or
 `recommended`. Provider registration names match request names exactly.
 Missing or failed required capabilities abort creation; recommended ones are
@@ -983,23 +963,20 @@ Required tests cover:
 - two Projects using the same repository alias without collision;
 - empty creation, standard initial push, delayed protection, and import;
 - host/workspace URL separation and credential-free output;
-- root clone/ref validation and runtime manifest injection;
+- root selection validation and runtime manifest injection;
 - no live update of a running workspace;
-- start/restart fast-forward and dirty-root rejection;
+- start/restart immutable-root selection and persistent-data preservation;
 - task/raw command dispatch, stop persistence, discard cleanup, and both
   teardown keep-volume values;
 - Project deletion refusal while referenced, Project-to-CI-runner lock order,
   Gitea repository-to-organization cleanup order, protected-snapshot cleanup
   before Project state deletion, retained state after cleanup failure, and
   successful retry when managed Gitea resources are already absent;
-- schema-`5` complete alias-keyed repository selection, including requested
-  refs, resolved refs, and exact commits for the root and every other alias,
-  ready-only entries, and literal root `HEAD` request preservation separately
-  from its concrete protected branch;
-- non-root workspace ref overrides from packed CLI transport through exact
-  resolution, persisted state, and runtime-manifest publication, including
-  rejection of malformed, root, unknown, and duplicate overrides without
-  Project-state mutation;
+- schema-`6` root identity and canonical workspace-data path, schema-`3`
+  catalog-free runtime publication, and rejection of obsolete state before
+  mutation;
+- Project-owned non-root ref selection, staged hook-safe materialization,
+  retry, existing-checkout preservation, and non-Git destination rejection;
 - complete workspace container and volume ownership labels and identity
   digests, inspected-ID-only container mutations, post-create inspection,
   volume reinspection before removal, and same-name replacement races;

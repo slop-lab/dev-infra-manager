@@ -547,7 +547,6 @@ per-job state.
 ```bash
 dim workspace create PROJECT WORKSPACE \
   [--profile PROFILE ...] \
-  [--repo-ref ALIAS=REF ...] \
   [--require-capability NAME ...] [--recommend-capability NAME ...] \
   [--kvm | --no-kvm] \
   [--cpus COUNT] [--memory SIZE] [--pids COUNT]
@@ -557,7 +556,6 @@ dim workspace show WORKSPACE
 dim workspace image build
 dim workspace image status [--json]
 dim workspace resources WORKSPACE [--cpus COUNT] [--memory SIZE] [--pids COUNT]
-dim workspace align WORKSPACE [--reset --yes]
 dim workspace exec WORKSPACE -- COMMAND [ARGS...]
 dim workspace run WORKSPACE TASK [ARGS...]
 dim workspace setup WORKSPACE
@@ -570,17 +568,10 @@ dim workspace discard WORKSPACE --yes [--keep-volume]
 
 `create` resolves one concrete branch covered by applied root protection,
 publishes its exact commit as a controller-owned immutable full-tree snapshot,
-clones that commit at `/workspace/project`, and runs the snapshot's `.dim`
-setup contract. DIM directly manages no other checkout; the
-root repository lifecycle owns additional clones and nested services.
-Each `--repo-ref` selects a non-root repository candidate for this workspace
-without changing Project state. The root alias, malformed values, unknown
-aliases, and duplicate aliases are rejected. Before claiming the workspace,
-DIM requires every Project repository to be `ready` and resolves the root plus
-every non-root selection into a complete schema-`5` repository snapshot. Each
-entry is itself `ready` and contains its requested ref, resolved ref, and exact
-commit. When the Project root has no configured ref, its requested ref remains
-the literal `HEAD` while its resolved ref records the concrete protected branch.
+mounts it read-only at `/run/dim/project-root`, mounts persistent Project-owned
+data at `/var/lib/dim/workspace-data`, and runs the snapshot's `.dim` setup
+contract. DIM does not materialize mutable repository checkouts. Project code
+owns repository aliases, refs, checkout paths, and reconciliation policy.
 Resource flags are stored in the workspace record. Environment configuration
 provides their defaults but does not force one limit set on every workspace.
 `resources` requires at least one flag, applies the complete effective limit
@@ -643,13 +634,12 @@ root commit before applying that exact commit and its lifecycle snapshot.
 `setup` and `discard` reuse the commit already recorded by the workspace.
 For a workspace in `setting-up` or `setup-error`, direct `setup` MUST acquire
 the Project lock and then the workspace setup lock, revalidate the Project and
-workspace identity while both locks are held, and replay checkout and Project
-runtime manifest publication from the recorded immutable root before Project
+workspace identity while both locks are held, and replay Project runtime
+manifest publication from the recorded immutable root before Project
 setup. It MUST keep the workspace non-ready through setup and MUST NOT fetch or
 resolve a mutable lifecycle ref. Only successful setup may publish `ready`.
-`restart` stops a running workspace only after dirty/divergence preflight.
-Dirty root checkouts and non-fast-forward
-updates are rejected without reset.
+`restart` selects immutable reviewed root bytes before stopping a running
+workspace. Project setup owns any mutable-checkout reconciliation.
 When multiple workspaces are supplied, `restart` MUST process them sequentially
 in command-line order. It MUST report each completed workspace before starting
 the next one and MUST stop at the first failure with that workspace identified;
@@ -666,13 +656,7 @@ The recommendation MUST NOT be added to local option validation or to `run`,
 diagnostic command and MUST NOT be represented as repairing DIM records,
 workspace lifecycle state, containers, or Project services.
 
-`workspace align` is the checkout-only recovery path. It fetches the
-configured root ref, switches a clean checkout back to the corresponding
-local branch, and fast-forwards it without running Project setup or changing
-containers. `--reset --yes` instead resets that configured branch to the
-fetched ref, discarding tracked changes and non-ignored untracked files so it
-can recover after a failed setup; ignored files and other local branches remain
-available. Top-level `dim run` and
+Top-level `dim run` and
 `dim exec` are convenience aliases for `dim workspace run` and `dim workspace
 exec`. Other workspace lifecycle commands exist only below `dim workspace`.
 

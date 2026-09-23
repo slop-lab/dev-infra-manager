@@ -290,29 +290,26 @@ empty and ordinary workspace operations to succeed.
 Deterministic workspace recovery tests MUST prove that direct `setup` from both
 `setting-up` and `setup-error` acquires the Project lock before the workspace
 setup lock, revalidates Project and workspace identity while both are held,
-and replays the recorded immutable-root checkout and complete alias-keyed
-repository snapshot before Project setup and final `ready` publication. They
-MUST prove schema `5` requires each alias, including the root, to retain its
-requested ref, resolved ref, and exact commit. The workspace must remain
-non-ready throughout setup, moved refs cannot change any recorded selection,
-and recovery MUST neither fetch nor resolve a repository ref.
+and republishes the recorded immutable root and schema-3 runtime manifest
+before Project setup and final `ready` publication. They MUST prove schema `6`
+retains the root ref, exact commit, snapshot path, and canonical workspace-data
+path without a repository catalog. The workspace must remain non-ready
+throughout setup, moved root refs cannot change the recorded selection, and DIM
+recovery MUST neither fetch nor resolve a non-root repository ref.
 
 Lifecycle-file probe tests MUST cover `.dim/setup.sh`, `.dim/entrypoint.sh`,
 `.dim/teardown.sh`, and `.dim/docker-compose.yml`. They MUST prove that exit
 code `0` means present, only exit code `1` means absent, and every other exit
 code aborts before hook, Compose, or direct-command fallback dispatch.
 
-Workspace selection tests MUST prove that schema `5` rejects an empty snapshot,
-an omitted Project alias, any entry whose phase is not `ready`, and any entry
-missing `requestedRef`, resolved `ref`, or exact `commit`. They MUST prove that
-an omitted root ref records requested `HEAD` separately from the concrete
-protected branch in `ref`. Published-CLI transport and an end-to-end workspace
-journey MUST pass repeated `--repo-ref ALIAS=REF` values through the controller,
-resolve each selected non-root ref to its exact commit, and observe the same
-requested ref, resolved ref, and commit in workspace state and the Project
-runtime manifest. The journey MUST also reject malformed, root-alias, unknown,
-duplicate, unavailable-ref, and existing-workspace mismatch overrides without
-mutating Project, workspace, repository, or ref state.
+Workspace selection tests MUST prove that schema `6` records one immutable root
+selection and the canonical persistent data path without a repository catalog
+or ref overrides. They MUST prove that older schemas and obsolete checkout
+layout fields are rejected before mutation. An end-to-end two-repository
+journey MUST prove that reviewed Project code selects the non-root ref,
+materializes it under `DIM_WORKSPACE_DATA`, ignores hostile Git configuration
+and hooks, leaves an existing checkout untouched, rejects a non-Git destination
+without mutation, and can retry after failed staging.
 
 Workspace resource ownership tests MUST verify the complete container and
 inner-engine volume label sets from `WORKSPACE-RESOURCE-OWNERSHIP-001`,
