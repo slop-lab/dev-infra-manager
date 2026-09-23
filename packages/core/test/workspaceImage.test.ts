@@ -1,6 +1,8 @@
+import { access, readFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { UserError } from "../../../../core/packages/core/src/errors.js";
-import { inspectWorkspaceImage } from "../../../../core/packages/core/src/index.js";
+import { buildWorkspaceImage, inspectWorkspaceImage } from "../../../../core/packages/core/src/index.js";
 import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import type { CommandResult, CommandRunner, RunOptions } from "../../../../core/packages/core/src/types.js";
 
@@ -11,6 +13,36 @@ class InspectRunner implements CommandRunner {
 
   async run(command: string, args: string[], _options: RunOptions = {}): Promise<CommandResult> {
     this.calls.push({ command, args });
+    return this.result;
+  }
+}
+
+class BuildRunner implements CommandRunner {
+  readonly calls: Array<{ readonly command: string; readonly args: readonly string[]; readonly cwd: string | undefined }> = [];
+  readonly contextFiles: string[] = [];
+
+  constructor(private readonly result: CommandResult = commandResult(0)) {}
+
+  async run(command: string, args: string[], options: RunOptions = {}): Promise<CommandResult> {
+    this.calls.push({ command, args, cwd: options.cwd });
+    if (options.cwd !== undefined) {
+      const expectedFiles = [
+        "Dockerfile",
+        "entrypoint.bash",
+        "git-askpass.sh",
+        "project-cgroup.bash",
+        "route-relay.mjs",
+        "controller-proxy/package.json",
+        "controller-proxy/cli.js",
+        "controller-proxy/development-service-cli.js"
+      ];
+      for (const relativePath of expectedFiles) {
+        await access(path.join(options.cwd, relativePath));
+        this.contextFiles.push(relativePath);
+      }
+      const dockerfile = await readFile(path.join(options.cwd, "Dockerfile"), "utf8");
+      expect(dockerfile).toContain("COPY controller-proxy /usr/local/lib/dim/controller-proxy");
+    }
     return this.result;
   }
 }
@@ -71,5 +103,61 @@ describe("workspace image inspection", () => {
 
     await expect(inspection).rejects.toBeInstanceOf(UserError);
     await expect(inspection).rejects.toThrow("failed to inspect workspace image 'example/workspace:tested': permission denied");
+  });
+});
+
+describe("workspace image build", () => {
+  it("builds the exact installed-version tag from shipped assets and the current user identity", async () => {
+    const runner = new BuildRunner();
+
+    const result = await buildWorkspaceImage(runner, {});
+
+    expect(result).toEqual({ image: "dev-infra-project-workspace:0.9.0" });
+    expect(runner.calls).toEqual([{
+      command: "docker",
+      args: [
+        "buildx", "build", "--load",
+        "--build-arg", `DIM_UID=${process.getuid?.()}`,
+        "--build-arg", `DIM_GID=${process.getgid?.()}`,
+        "--tag", "dev-infra-project-workspace:0.9.0",
+        "--file", "Dockerfile", "."
+      ],
+      cwd: expect.stringContaining("dim-workspace-image-")
+    }]);
+    expect(runner.contextFiles).toHaveLength(8);
+  });
+
+  it("uses an explicitly tagged workspace image override", async () => {
+    const runner = new BuildRunner();
+
+    const result = await buildWorkspaceImage(runner, { DIM_WORKSPACE_IMAGE: "registry.example/dim/workspace:reviewed" });
+
+    expect(result).toEqual({ image: "registry.example/dim/workspace:reviewed" });
+    expect(runner.calls[0]?.args).toContain("registry.example/dim/workspace:reviewed");
+  });
+
+  it.each([
+    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "registry.example/workspace@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "registry.example/workspace",
+    "registry.example/workspace:latest"
+  ])("rejects unsafe build destination %j before invoking Docker", async (image) => {
+    const runner = new BuildRunner();
+
+    const build = buildWorkspaceImage(runner, { DIM_WORKSPACE_IMAGE: image });
+
+    await expect(build).rejects.toBeInstanceOf(UserError);
+    expect(runner.calls).toEqual([]);
+  });
+
+  it("reports Docker build failures and removes the temporary context", async () => {
+    const runner = new BuildRunner(commandResult(1, "", "build denied\n"));
+
+    const build = buildWorkspaceImage(runner, {});
+
+    await expect(build).rejects.toThrow("failed to build workspace image 'dev-infra-project-workspace:0.9.0': build denied");
+    const context = runner.calls[0]?.cwd;
+    expect(context).toBeDefined();
+    await expect(access(context ?? "")).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

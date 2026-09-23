@@ -26,10 +26,47 @@ test("workspace image status is discoverable with JSON output", () => {
   const imageHelp = run(["workspace", "image", "--help"]);
   assert.equal(imageHelp.status, 0);
   assert.match(imageHelp.stdout, /status/);
+  assert.match(imageHelp.stdout, /build/);
 
   const statusHelp = run(["workspace", "image", "status", "--help"]);
   assert.equal(statusHelp.status, 0);
   assert.match(statusHelp.stdout, /--json/);
+});
+
+test("workspace image build uses shipped context without controller or backend configuration", async () => {
+  const fixture = await createFixture("build");
+  try {
+    const result = run(["workspace", "image", "build"], {
+      ...fixture.env,
+      DIM_CONFIG_PATH: path.join(fixture.root, "missing.json"),
+      DIM_WORKSPACE_IMAGE: undefined
+    });
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, "Built workspace image dev-infra-project-workspace:0.9.0\n");
+    assert.equal(result.stderr, "");
+    const log = await readFile(fixture.commandLog, "utf8");
+    assert.match(log, /^docker buildx build --load --build-arg DIM_UID=\d+ --build-arg DIM_GID=\d+ --tag dev-infra-project-workspace:0\.9\.0 --file Dockerfile \.\n$/);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
+test("workspace image build rejects immutable destinations before Docker", async () => {
+  const fixture = await createFixture("build");
+  try {
+    const result = run(["workspace", "image", "build"], {
+      ...fixture.env,
+      DIM_WORKSPACE_IMAGE: `workspace@sha256:${"a".repeat(64)}`
+    });
+
+    assert.equal(result.status, 2);
+    assert.match(result.stderr, /cannot build an immutable workspace image destination/);
+    assert.equal(result.stdout, "");
+    assert.equal(await readFile(fixture.commandLog, "utf8"), "");
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
 });
 
 test("workspace image status emits the exact ready JSON without controller side effects", async () => {
@@ -120,7 +157,7 @@ test("workspace image status requires a configured backend", async () => {
   }
 });
 
-async function createFixture(status: "ready" | "missing" | "malformed"): Promise<ImageFixture> {
+async function createFixture(status: "ready" | "missing" | "malformed" | "build"): Promise<ImageFixture> {
   const root = await mkdtemp(path.join(tmpdir(), "dim-workspace-image-"));
   const bin = path.join(root, "bin");
   const configPath = path.join(root, "config.json");
@@ -130,6 +167,18 @@ async function createFixture(status: "ready" | "missing" | "malformed"): Promise
   await writeFile(commandLog, "");
   await writeFile(path.join(bin, "docker"), `#!/bin/sh
 printf 'docker %s\\n' "$*" >> "$DIM_TEST_COMMAND_LOG"
+if [ "$DIM_TEST_IMAGE_STATUS" = build ]; then
+  test -f Dockerfile
+  test -f entrypoint.bash
+  test -f git-askpass.sh
+  test -f project-cgroup.bash
+  test -f route-relay.mjs
+  test -f controller-proxy/package.json
+  test -f controller-proxy/cli.js
+  test -f controller-proxy/development-service-cli.js
+  grep -q 'COPY controller-proxy /usr/local/lib/dim/controller-proxy' Dockerfile
+  exit 0
+fi
 if [ "$DIM_TEST_IMAGE_STATUS" = malformed ]; then
   printf '${imageId}\\n${imageId}\\n'
   exit 0
