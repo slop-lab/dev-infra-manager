@@ -554,6 +554,7 @@ dim workspace create PROJECT WORKSPACE \
 
 dim workspace list
 dim workspace show WORKSPACE
+dim workspace image build
 dim workspace image status [--json]
 dim workspace resources WORKSPACE [--cpus COUNT] [--memory SIZE] [--pids COUNT]
 dim workspace align WORKSPACE [--reset --yes]
@@ -619,6 +620,22 @@ aggregate local version. That version MUST include the identity of the exact
 production source commits and the SHA-256 digest of the reviewed aggregate
 dependency lock owned by the root repository. DIM MUST NOT fall back to
 `latest`. An explicit `DIM_WORKSPACE_IMAGE` remains authoritative.
+
+**CLI-WORKSPACE-IMAGE-BUILD-001:** `workspace image build` MUST explicitly
+build the configured workspace image from trusted assets shipped with the
+installed DIM packages. The build context MUST contain the Dockerfile,
+entrypoint, Git askpass helper, route relay, cgroup helper, and the complete
+exact-version published `@slop-lab/dim-controller-proxy` package. It MUST NOT
+depend on a source checkout, `just`, pnpm, a sibling source path, or source
+package build order at runtime. The default destination MUST be
+`dev-infra-project-workspace:<installed DIM package version>`, including the
+complete aggregate identity for local packages. `DIM_WORKSPACE_IMAGE` MAY
+override it only with an explicitly tagged destination. An image ID, digest
+reference, untagged destination, or `latest` MUST be rejected before Docker is
+invoked. The build MUST pass the invoking user's UID and GID, use Buildx with
+`--load`, and remain independent of host, controller, and workspace lifecycle
+readiness. No lifecycle operation builds the image implicitly, restarts a host
+service, or selects a fallback tag.
 
 Running workspaces do not change when Project metadata or the root remote
 changes. `start`, `restart`, and `update` each select and stage one approved
