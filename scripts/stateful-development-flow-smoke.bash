@@ -357,7 +357,7 @@ agent_container="$(dim workspace exec "$workspace_name" -- \
 test -n "$agent_container"
 test "$(dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
   --format '{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Type}}|{{.RW}}|{{.Source}}{{end}}{{end}}')" = \
-  "bind|true|$(jq -r .projectPath <<<"$workspace_json")"
+  "bind|true|$(jq -r .workspaceDataPath <<<"$workspace_json")/project"
 nested_ssh_port="$(dim workspace exec "$workspace_name" -- \
   docker port "$agent_container" 22/tcp 2>/dev/null || true)"
 test -z "$nested_ssh_port"
@@ -370,22 +370,14 @@ if grep -Eq 'tcp://|(^|[^0-9])(2375|2376)([^0-9]|$)' <<<"$dind_processes"; then
   exit 1
 fi
 
-echo "[full-development-flow] preserve work across dirty rejection and reviewed restart"
+echo "[full-development-flow] preserve Project-owned work across reviewed restart"
 dim workspace run "$workspace_name" bash -- -lc \
   'printf "persistent-home\n" >"$HOME/journey-home"'
-before="$(dim workspace show "$workspace_name" --json)"
-started_before="$(docker inspect --format '{{.State.StartedAt}}' "$container_name")"
 dim workspace exec "$workspace_name" -- sh -c \
   'printf "# dirty journey probe\n" >>ops/secret-service.sh; printf "untracked\n" >journey-untracked'
-if restart_error="$(dim workspace restart "$workspace_name" 2>&1)"; then
-  echo "dirty workspace restart unexpectedly succeeded" >&2
-  exit 1
-fi
-grep -q "dim workspace align $workspace_name --reset --yes" <<<"$restart_error"
-test "$(dim workspace show "$workspace_name" --json)" = "$before"
-test "$(docker inspect --format '{{.State.StartedAt}}' "$container_name")" = "$started_before"
+dim workspace restart "$workspace_name" >/dev/null
 dim workspace exec "$workspace_name" -- sh -c \
-  'git restore ops/secret-service.sh; rm journey-untracked'
+  'grep -q "dirty journey probe" ops/secret-service.sh; test -f journey-untracked'
 
 review="$work_dir/review"
 dim x git clone --quiet "$(dim repo url "$project_name" root)" "$review"
@@ -399,7 +391,7 @@ if ! dim workspace restart "$workspace_name" >/dev/null; then
   diagnose_workspace_setup
   exit 1
 fi
-test "$(dim workspace run "$workspace_name" bash -- -lc 'cat reviewed-version.txt')" = reviewed-v2
+test "$(dim workspace run "$workspace_name" bash -- -lc 'cat reviewed-version.txt')" = reviewed-v1
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/journey-home"')" = persistent-home
 test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" -ne "0"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"

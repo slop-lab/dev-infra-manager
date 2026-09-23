@@ -149,7 +149,7 @@ diagnose_workspace_setup() {
   local -a failed_compose
   failed_workspace="$(dim workspace show "$workspace_name" --json)"
   failed_container="$(jq -r .containerName <<<"$failed_workspace")"
-  failed_project_path="$(jq -r .projectPath <<<"$failed_workspace")"
+  failed_project_path=/run/dim/project-root
   failed_compose=(--file .dim/docker-compose.yml)
   docker start "$failed_container" >/dev/null 2>&1 || true
   if docker exec --user dim --workdir "$failed_project_path" "$failed_container" \
