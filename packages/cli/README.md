@@ -34,9 +34,25 @@ refreshes explicit.
 - Git and a working Docker CLI/daemon. DIM always uses Docker to manage the
   outer workspace container, regardless of the selected backend.
 - The Sysbox workspace backend and its registered `sysbox-runc` Docker runtime.
-- The DIM workspace image.
+- Docker Buildx, used by the explicit workspace-image build command.
 
-The repository contains host-backend installers and image build recipes. Read
+The installed CLI contains the trusted image build assets. After installing a
+host backend, build the exact image selected by this CLI release without a
+source checkout:
+
+```bash
+dim workspace image build
+dim workspace image status
+```
+
+The build uses the invoking user's UID and GID and defaults to
+`dev-infra-project-workspace:<installed DIM package version>`. An explicit
+tagged `DIM_WORKSPACE_IMAGE` is the only override. Image IDs, digest-pinned
+references, untagged references, and `latest` are not valid build destinations.
+The command requires Docker Buildx but does not start or contact the DIM
+controller. Workspace creation never builds an image implicitly.
+
+The repository also contains host-backend installers. Read
 the [setup guide](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/usage.md)
 before using the CLI on a new host. Docker's ordinary runc runtime remains an
 internal dependency for trusted infrastructure; it is not a selectable
@@ -382,6 +398,7 @@ organization as well. Both reject Projects still referenced by workspaces.
 dim --help
 dim project --help
 dim repo --help
+dim workspace image build --help
 dim help --all
 dim project show --json acme
 ```
