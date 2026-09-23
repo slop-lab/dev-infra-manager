@@ -49,6 +49,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   signup closed and mutation authenticated. `restart-controller` separately
   restarts the controller with the currently installed packages; image
   preparation, installation, and restart never implicitly invoke one another.
+  Published CLI installations can now explicitly run `dim workspace image
+  build` from any directory. The core package ships the complete trusted build
+  context and references the exact-version controller-proxy package, so the
+  build needs no source checkout, `just`, or pnpm. It uses the invoking user's
+  UID and GID, builds the installed-version tag by default, safely honors only
+  an explicitly tagged `DIM_WORKSPACE_IMAGE`, and remains independent of
+  controller readiness and workspace lifecycle.
 - Development workspaces now bootstrap pinned OpenCode and Oh My OpenAgent
   releases into the persistent workspace-user home, with exact plugin
   registration, Team Mode defaults, automatic updates disabled, and existing
