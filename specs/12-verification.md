@@ -81,8 +81,13 @@ the launcher's own deadline, and prove cleanup of the newly started tool.
 The same gate MUST drive the actual canonical Project entrypoint with a
 compatible setup/launcher fixture. It MUST prove `tool-setup` and `agent`
 argument forwarding, unknown Project-task rejection, setup argument rejection,
+canonical local-only setup ignoring stdin while `bash -s` consumes it,
 successful version-1 manifest launch, and rejection of an unsupported contract
-version and unknown launcher. Static policy MUST prove that representative
+version, unknown launcher, symbolic-link manifest, mismatched tool identity,
+mismatched version, mismatched executable path, executable symbolic-link target
+outside canonical `HOME`, and non-executable target. Setup preflight MUST reject
+escaping symbolic links at both `.local/libexec` and
+`.local/state/dim-project-tool`. Static policy MUST prove that representative
 Project examples own the explicit mapping, core defines no tool registry or
 automatic setup behavior, and the optional Web launcher retains its configured
 stable service name.

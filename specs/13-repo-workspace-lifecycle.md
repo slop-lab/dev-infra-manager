@@ -477,11 +477,16 @@ When a Project documents a remote bootstrap, both the script and its
 commit. The commit input MUST match exactly 40 lowercase hexadecimal
 characters. The copyable download procedure MUST run in a fail-closed
 `set -euo pipefail` subshell, derive both URLs from that same validated commit,
-verify the checksum before streaming the local bytes to the `tool-setup` task, and
-remove temporary files through an exit trap. A branch, tag, `latest` URL, or
-direct download-to-shell pipeline is not an acceptable bootstrap source. The
-canonical self-development Project instead maps `tool-setup` to the reviewed
-local script at `/workspace/scripts/workspace-user-setup.bash`.
+verify the checksum before streaming the local bytes to a reviewed
+stdin-consuming Project task, and remove temporary files through an exit trap.
+A branch, tag, `latest` URL, or direct download-to-shell pipeline is not an
+acceptable bootstrap source. The canonical self-development Project instead
+maps `tool-setup` to the reviewed local script at
+`/workspace/scripts/workspace-user-setup.bash`; its remote bootstrap MUST
+stream verified bytes through its existing `bash -- -s` task rather than
+`tool-setup`. Existing homes MUST NOT be upgraded automatically; the user must
+explicitly rerun the applicable setup action after adopting a reviewed setup
+or version change.
 Complete Project examples MUST accept an operator-supplied, provider-neutral
 raw-source root ending before the commit segment, normalize one optional
 trailing slash, and combine that root with the validated commit. They MUST NOT
