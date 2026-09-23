@@ -9,6 +9,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Changed
 
+- Workspaces now expose reviewed root lifecycle bytes read-only while Project
+  code owns repository aliases, refs, materialization, and persistent checkout
+  paths. The canonical Project stages hook-safe checkouts under workspace data,
+  preserves existing agent work, and maps that Project-owned tree into the
+  nested agent runtime.
+
 - `workspace discard --keep-volume` now tells reviewed Project teardown to
   preserve nested named data and retains the DIM-managed nested-engine volume
   for a later same-name workspace recreation. Ordinary discard keeps its
