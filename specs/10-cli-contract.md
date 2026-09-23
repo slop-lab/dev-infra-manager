@@ -479,10 +479,12 @@ may use runner host mode.
 Before provider registration, DIM MUST force-pull and probe both workload
 images in a separate throwaway Sysbox daemon, verify every declared executable,
 and prove each requested capability. The Sysbox runner host image MUST contain
-only act_runner, Bash, and the nested daemon needed to launch jobs. It MUST NOT
-contain Node.js, Git, Docker CLI, `just`, `jq`, `socat`, or the `script` PTY
-helper. Its act_runner config MUST remain non-privileged, reject arbitrary
-volume mounts, bind only the job workspace, and force-pull job images.
+only act_runner, Bash, the Docker CLI required by the upstream image's daemon
+readiness gate, and the nested daemon needed to launch jobs. It MUST NOT contain
+Node.js, Git, `just`, `jq`, `socat`, or the `script` PTY helper. Its act_runner
+config MUST remain non-privileged, reject arbitrary volume mounts, bind only the
+job workspace, and force-pull job images. Project workflows MUST remain confined
+to disposable job containers without the host Docker socket or runner host mode.
 Each temporary deterministic probe container and socket volume MUST carry the
 exact `dim.managed=true`, `dim.owner=dim`, `dim.project`, `dim.project-id`,
 `dim.capacity`, `dim.executor`, `dim.resource`, `dim.kind`, and `dim.digest`
