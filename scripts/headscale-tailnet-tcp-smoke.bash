@@ -87,7 +87,7 @@ import { TcpIngressListener, tailscaleIngressDriver } from "@slop-lab/dim-plugin
 
 const runtime = await tailscaleIngressDriver.runtime('{"listenPort":49152}');
 const listener = new TcpIngressListener({ name: "tailnet", ...runtime });
-const route = await listener.provision(
+const { route } = await listener.provision(
   { id: "fixture:workspace", name: "workspace", projectId: "fixture", projectName: "fixture" },
   { target: { containers: ["target"], port: 39000, protocol: "tcp" } },
   { host: "target", port: 39000, protocol: "tcp" }
