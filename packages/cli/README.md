@@ -410,6 +410,9 @@ dim project purge acme --yes
 `remove` deletes only DIM's Project metadata and preserves managed Git data.
 `purge` deletes the unused Project's managed repositories and Gitea
 organization as well. Both reject Projects still referenced by workspaces.
+With external Gitea, `remove` remains the local detach operation, while
+`purge` and `repo delete` fail before remote mutation because the operator owns
+external repositories and organizations.
 
 ## CLI discovery and automation
 
