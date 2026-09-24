@@ -48,7 +48,7 @@ case "${1:?private agent action is required}" in
     done </tmp/dim-agent-hosts
     docker "$@" "$agent_image" >/dev/null
     docker exec --user root "$agent_name" sh -eu -c '
-      chown -R dim-agent:dim-agent /home/dim-agent
+      chown dim-agent:dim-agent /home/dim-agent
       setfacl -R -m u:dim-agent:rwX /workspace
       find /workspace -type d -exec setfacl -m d:u:dim-agent:rwX {} +
       setfacl -m u:dim-agent:rw /run/dim-agent-dind/docker.sock

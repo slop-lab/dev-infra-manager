@@ -8,7 +8,7 @@ ENV PATH="/home/dim-agent/.local/bin:${PATH}"
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-      bash ca-certificates curl git jq sudo tini util-linux \
+      acl bash ca-certificates curl git jq sudo tini util-linux \
  && rm -rf /var/lib/apt/lists/* \
  && test "$DIM_WORKSPACE_UID" -ne 0 \
  && test "$DIM_WORKSPACE_GID" -ne 0 \
