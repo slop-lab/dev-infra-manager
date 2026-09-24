@@ -118,14 +118,18 @@ image ID, and only then promotes it to
 state binds that versioned tag to the image ID and package/source digests.
 `install-local` recomputes the tag from the unchanged bundle and rejects stale
 or mismatched preparation state before and after installation. Both the
-reviewed-root prepared path and the assembled-development path rely on the
-installer facade's staged target-package state compatibility preflight before
-runtime promotion. When mise is unavailable, the assembled-development script
-stages the candidate installer privately, uses it to run the compatibility
-guard and runtime installation, and only then updates the global facade. A
-compatibility refusal must therefore precede facade, config, runtime, plugin,
-or image mutation. The existing preparation-image readiness checks and their
-ordering remain unchanged.
+reviewed-root prepared path and the assembled-development path MUST stage the
+installer tarball from the validated candidate bundle in a temporary directory
+outside that bundle, then use that target facade for `install-cli` and its
+target-package state compatibility preflight before runtime promotion. An
+existing standalone or mise-managed facade cannot retroactively provide a
+candidate check and MUST NOT perform this install operation. Mise may supply
+Node.js and npm while executing the staged facade's absolute path. When mise is
+unavailable, the assembled-development path may update its global facade only
+after target validation and runtime promotion succeed. A compatibility refusal
+must therefore precede facade, config, runtime, plugin, or image mutation and
+must preserve prepared bundle bytes and readiness. The existing preparation-
+image readiness checks and their ordering remain unchanged.
 
 For an assembled development checkout, `build-local-workspace-image` is the
 explicit local-image preparation step and MUST run before the matching local
