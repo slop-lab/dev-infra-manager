@@ -49,7 +49,10 @@ export async function prepareQemuBacklogReplay(
 export async function prepareSharedQemuBacklogReplay(
   connection: QemuSchedulerProjectConnection
 ): Promise<(job: QueuedWorkflowJob) => Promise<void>> {
-  const health = await fetch(`${connection.controllerEndpoint}/healthz`, { signal: AbortSignal.timeout(10_000) });
+  const health = await fetch(`${connection.controllerEndpoint}/healthz`, {
+    redirect: "error",
+    signal: AbortSignal.timeout(2_000)
+  });
   if (!health.ok) throw new UserError(`shared QEMU scheduler did not become ready: ${health.status}`);
   return async (job) => {
     const response = await fetch(`${connection.controllerEndpoint}/v1/events`, {
@@ -65,7 +68,8 @@ export async function prepareSharedQemuBacklogReplay(
         jobId: job.id,
         labels: job.labels
       }),
-      signal: AbortSignal.timeout(10_000)
+      redirect: "error",
+      signal: AbortSignal.timeout(2_000)
     });
     if (response.status !== 202) throw new UserError(`failed to replay queued workflow job ${job.id} to shared scheduler: ${response.status}`);
   };
