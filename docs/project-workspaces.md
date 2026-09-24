@@ -43,6 +43,10 @@ daemon for secret-bearing workloads so the agent can control ordinary
 development containers without controlling the secret runtime. The complete
 examples use this two-daemon shape because they demonstrate both authorities;
 it is practical guidance, not a requirement to add unused layers.
+Private daemon entrypoints should invoke `dockerd` with only their dedicated
+Unix socket explicitly. The upstream DinD image's empty-argument behavior also
+adds a TCP listener, so clearing `DOCKER_TLS_CERTDIR` alone is not a Unix-only
+configuration. Do not forward Docker ports through RootlessKit.
 
 A Project may keep code that can affect secret-bearing environments in a
 separate repository with stricter review rules. DIM records that repository
@@ -692,5 +696,7 @@ The multi-repository container smoke covers:
 - Direct managed-Git access from nested services.
 - Service-owned persistent checkout volumes.
 - Compose profile selection stored by `create`.
+- Authoritative profile reconciliation that stops deselected outer daemons and
+  removes deselected restart-enabled children from persistent inner daemons.
 - Project task dispatch through `.dim/entrypoint.sh`.
 - Stop/start persistence, update/setup retry, and complete discard cleanup.

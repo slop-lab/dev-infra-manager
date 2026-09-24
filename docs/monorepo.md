@@ -137,7 +137,10 @@ trusted-workspace or host root.
 Projects that run secret-bearing workloads use the separate `secure-dind`
 Compose profile. Its daemon has distinct storage and no agent-home, source, or
 Git-credential mounts; Project-reviewed tasks are responsible for injecting
-the narrowly scoped secrets and build inputs those workloads need.
+the narrowly scoped secrets and build inputs those workloads need. Both private
+daemons use explicit Unix-only `dockerd` listeners. Reviewed secret operations
+resolve their scripts and Compose configuration from the immutable root rather
+than from the agent-writable Project checkout.
 
 The outer lifecycle mounts a Project-owned named volume into the private
 runtime, which bind-mounts it as the agent's `/home/dim-agent`. Separate

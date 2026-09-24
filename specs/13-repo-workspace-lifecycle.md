@@ -565,6 +565,16 @@ the agent. Any communication exposed to the agent MUST be a fixed,
 Project-reviewed application protocol endpoint rather than a Docker control
 endpoint. Neither daemon may receive a host or trusted-workspace runtime
 socket.
+Each private daemon MUST listen only on its dedicated Unix socket. Project
+entrypoints using an upstream DinD image MUST pass an explicit `dockerd`
+command and Unix `--host`; they MUST NOT rely on the image's empty-argument
+defaults, enable a Docker TCP listener, or configure RootlessKit to forward
+ports 2375 or 2376. A reviewed application relay MUST NOT make either daemon's
+control API reachable from the other authority.
+Trusted operations that build or deploy a secret-bearing workload MUST execute
+their script and Compose definition from the immutable selected root. They MUST
+NOT resolve those authority-bearing bytes relative to the mutable Project data
+checkout, although mutable checkout files may remain ordinary agent work.
 The canonical self-Project exposes an agent-container `bash` task and
 Project-owned `backup`/`restore` tasks that stream a gzip tar archive of
 the agent home over stdout/stdin. Those canonical tasks temporarily stop the
@@ -940,6 +950,12 @@ automatically.
   repeats root publication and Project runtime manifest publication before
   Project setup and final ready publication, without fetching or resolving any
   repository ref.
+
+Project setup MUST treat the stored profile list as authoritative. Repeated
+setup after profile replacement MUST stop a deselected optional outer daemon
+and stop or remove deselected workloads inside persistent nested daemons;
+restart policies from an earlier setup MUST NOT retain capabilities that are no
+longer selected.
 
 **WORKSPACE-IMMUTABLE-ROOT-MOUNT-001:** Before trusted setup or task dispatch,
 DIM MUST inspect the owned container by immutable container ID and verify that

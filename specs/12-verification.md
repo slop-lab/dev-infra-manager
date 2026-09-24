@@ -492,6 +492,16 @@ distinct Docker daemon, cannot list the trusted workspace's secret-bearing
 child, does not mount either Docker socket, and does not receive the child's
 raw secret environment. Its shared bind-mount probe must work when the agent
 UID differs from the rootless-DinD UID.
+The rich-example gates MUST inspect each running daemon's actual `dockerd` and
+RootlessKit argument vectors and kernel listener tables. They MUST prove that
+only the reviewed Unix socket is configured, that RootlessKit forwards neither
+2375 nor 2376, and that neither TCP port is listening. They MUST exercise
+selected and cleared secure/documentation profiles, including removal of a
+restart-enabled documentation child from persistent daemon state. Secret
+operations MUST execute from the immutable selected root, while mutable-file
+preservation probes MUST name the Project data checkout explicitly. Agent-home
+archive verification MUST stop and restart the inner agent, then preserve both
+file bytes and modes across restore.
 The single- and multi-repository example gates must also verify that their
 fresh rootless-DinD images retain executable UID/GID mapping helpers with a
 setuid fallback before exercising the private daemon.
