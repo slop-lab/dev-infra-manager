@@ -20,7 +20,7 @@ afterEach(async () => {
 });
 
 describe("shared QEMU scheduler worker", () => {
-  it("terminates and reaps its local process group after an uncertain renewal without passing scheduler credentials", async () => {
+  it.each(["disconnect", "malformed", "timeout"])("terminates, reaps, and releases after an uncertain %s renewal without passing scheduler credentials", async (renewalFailure) => {
     // Given
     const root = await mkdtemp(join(tmpdir(), "dim-shared-worker-"));
     roots.push(root);
@@ -43,11 +43,12 @@ while true; do sleep 0.05; done
           return;
         }
         claimed = true;
-        response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ jobId: 501, claimId: "claim-one", leaseExpiresAt: 9999999999 }));
+        response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ jobId: 501, claimId: "claim-one", leaseExpiresAt: 9999999999, leaseSeconds: 60 }));
         return;
       }
       if (request.url === "/v1/claims/claim-one/renew") {
-        request.socket.destroy();
+        if (renewalFailure === "disconnect") request.socket.destroy();
+        else if (renewalFailure === "malformed") response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ state: "unexpected" }));
         return;
       }
       if (request.url === "/v1/claims/claim-one/release") {
@@ -95,7 +96,7 @@ while true; do sleep 0.05; done
     await once(worker, "exit");
   }, 15_000);
 
-  it("uses an injected clock to expire a lease and fence the prior claim deterministically", () => {
+  it("holds an expired lease through cleanup grace and fences its prior owner after release", () => {
     // Given / When
     const assets = join(import.meta.dirname, "../../../../core/packages/core/src/shared-qemu-scheduler-assets");
     const result = spawnSync("python3", ["-c", `
@@ -104,16 +105,72 @@ from protocol import HostId, ProjectId
 from store import SchedulerStore
 now = [1000.0]
 with tempfile.TemporaryDirectory() as root:
-    store = SchedulerStore(pathlib.Path(root) / "state.sqlite3", 30, lambda: now[0])
+    store = SchedulerStore(pathlib.Path(root) / "state.sqlite3", 60, lambda: now[0], takeover_grace_seconds=20, restart_hold_seconds=20)
     store.record_event(ProjectId("project"), "queued", 77, ("dim-qemu",))
     first = store.claim(ProjectId("project"), HostId("host-a"), "one", ("dim-qemu",), "request-a")
-    now[0] = 1031.0
+    now[0] = 1061.0
     second = store.claim(ProjectId("project"), HostId("host-b"), "two", ("dim-qemu",), "request-b")
-    assert first is not None and second is not None and first.claim_id != second.claim_id
+    assert first is not None and second is None
+    assert store.release(ProjectId("project"), HostId("host-a"), first.claim_id) is True
+    successor = store.claim(ProjectId("project"), HostId("host-b"), "two", ("dim-qemu",), "request-c")
+    assert successor is not None and first.claim_id != successor.claim_id
     assert store.release(ProjectId("project"), HostId("host-a"), first.claim_id) is False
 `], { env: { ...process.env, PYTHONPATH: assets }, encoding: "utf8" });
 
     // Then
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+  });
+
+  it("applies a one-time restart hold without reviving terminal demand", () => {
+    const assets = join(import.meta.dirname, "../../../../core/packages/core/src/shared-qemu-scheduler-assets");
+    const result = spawnSync("python3", ["-c", `
+import pathlib, tempfile
+from protocol import HostId, ProjectId
+from store import SchedulerStore
+now = [1000.0]
+with tempfile.TemporaryDirectory() as root:
+    path = pathlib.Path(root) / "state.sqlite3"
+    store = SchedulerStore(path, 60, lambda: now[0], takeover_grace_seconds=20, restart_hold_seconds=20)
+    store.record_event(ProjectId("project"), "queued", 77, ("dim-qemu",))
+    first = store.claim(ProjectId("project"), HostId("host-a"), "one", ("dim-qemu",), "request-a")
+    assert first is not None
+    now[0] = 1061.0
+    restarted = SchedulerStore(path, 60, lambda: now[0], takeover_grace_seconds=20, restart_hold_seconds=20)
+    assert restarted.claim(ProjectId("project"), HostId("host-b"), "two", ("dim-qemu",), "request-b") is None
+    now[0] = 900.0
+    assert restarted.renew(ProjectId("project"), HostId("host-a"), first.claim_id) == "renewed"
+    now[0] = 1102.0
+    assert restarted.claim(ProjectId("project"), HostId("host-b"), "two", ("dim-qemu",), "request-c") is None
+    now[0] = 1142.0
+    assert restarted.claim(ProjectId("project"), HostId("host-b"), "two", ("dim-qemu",), "request-e") is not None
+    restarted.record_event(ProjectId("project"), "completed", 77, ("dim-qemu",))
+    now[0] = 1163.0
+    terminal_restart = SchedulerStore(path, 60, lambda: now[0], takeover_grace_seconds=20, restart_hold_seconds=20)
+    assert terminal_restart.claim(ProjectId("project"), HostId("host-a"), "three", ("dim-qemu",), "request-d") is None
+`], { env: { ...process.env, PYTHONPATH: assets }, encoding: "utf8" });
+
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+  });
+
+  it("rejects a service lease shorter than the worker safety contract", () => {
+    const assets = join(import.meta.dirname, "../../../../core/packages/core/src/shared-qemu-scheduler-assets");
+    const result = spawnSync("python3", ["-c", `
+import json, pathlib, tempfile
+from protocol import ProtocolError, load_config
+with tempfile.TemporaryDirectory() as root:
+    path = pathlib.Path(root) / "config.json"
+    path.write_text(json.dumps({"schemaVersion": 1, "listen": {"host": "127.0.0.1", "port": 1}, "database": str(pathlib.Path(root) / "db"), "leaseSeconds": 59, "projects": {"project": {"webhookToken": "webhook", "allowedLabels": ["dim-qemu"], "hosts": {"host": "token"}}}}))
+    path.chmod(0o600)
+    try:
+        load_config(path)
+    except ProtocolError:
+        pass
+    else:
+        raise AssertionError("unsafe lease was accepted")
+`], { env: { ...process.env, PYTHONPATH: assets }, encoding: "utf8" });
+
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
   });
