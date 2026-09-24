@@ -177,15 +177,34 @@ export async function giteaRequest(
   apiPath: string,
   body?: unknown
 ): Promise<Response> {
+  const url = giteaApiRequestUrl(connection.apiBaseUrl, apiPath);
   const authorization = Buffer.from(`${connection.adminUsername}:${connection.adminPassword}`).toString("base64");
-  return fetch(`${connection.apiBaseUrl}${apiPath}`, {
+  const response = await fetch(url, {
     method,
+    redirect: "manual",
+    signal: AbortSignal.timeout(10_000),
     headers: {
       Authorization: `Basic ${authorization}`,
       ...(body === undefined ? {} : { "Content-Type": "application/json" })
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) })
   });
+  if (response.status >= 300 && response.status < 400) {
+    throw new UserError("Gitea API redirects are not allowed");
+  }
+  return response;
+}
+
+function giteaApiRequestUrl(apiBaseUrl: string, apiPath: string): string {
+  if (!apiPath.startsWith("/") || apiPath.startsWith("//") || apiPath.includes("\\") || apiPath.includes("#")) {
+    throw new UserError("Gitea API request path must remain within the configured API base URL");
+  }
+  const base = new URL(apiBaseUrl);
+  const target = new URL(`${apiBaseUrl}${apiPath}`);
+  if (target.origin !== base.origin || !target.pathname.startsWith(`${base.pathname}/`)) {
+    throw new UserError("Gitea API request path must remain within the configured API base URL");
+  }
+  return target.href;
 }
 
 async function readyGiteaConnection(
@@ -214,7 +233,10 @@ async function waitForGitea(baseUrl: string): Promise<void> {
   let lastError = "not ready";
   for (let attempt = 0; attempt < 90; attempt += 1) {
     try {
-      const response = await fetch(`${baseUrl}/api/healthz`);
+      const response = await fetch(`${baseUrl}/api/healthz`, {
+        redirect: "error",
+        signal: AbortSignal.timeout(10_000)
+      });
       if (response.ok) return;
       lastError = `${response.status} ${await response.text()}`;
     } catch (error) {
