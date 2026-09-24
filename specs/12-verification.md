@@ -214,7 +214,14 @@ and one host shutting down without stopping the service or the other host.
 Protocol tests MUST reject redirects, oversized or non-exact responses,
 sub-60-second leases, API-authenticated non-queued transitions, and MUST
 acknowledge unrelated queued labels without creating demand. Fake-clock tests MUST cover the
-takeover grace and one-time restart hold without real-time waits.
+takeover grace and one-time restart hold without real-time waits. They MUST
+also prove direct running events count toward the 10,000-job nonterminal cap,
+released claim churn reaches the 100,000-receipt cap, saturation preserves live
+fences, and retention restores admission. Lifecycle tests MUST prove local to
+shared, shared to local, Project-ID, host-ID, and external-Gitea-host-ID changes
+fail before runtime mutation. Shared-worker tests MUST prove an unsuccessful
+supervisor releases only after termination and reaping and cannot start another
+supervisor before bounded shutdown-interruptible backoff.
 The route-policy test launches the checked-in advanced example server rather
 than maintaining a test-only webhook implementation.
 A Docker-capable lane MUST run `just verify headscale-tailnet-tcp`. It MUST

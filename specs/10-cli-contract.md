@@ -377,7 +377,14 @@ transitions. Each host remains authoritative
 for its local supervisor and VM. Loss or uncertainty of renewal MUST stop and
 reap that process group before the capacity claims again. Scheduler credentials
 MUST never enter a guest or job environment. The service MUST hold no Gitea
-administrator credential.
+administrator credential. Persistent state MUST cap each Project at 10,000
+combined queued and running jobs, 10,000 completed tombstones, and 100,000
+claim request receipts. Saturation MUST reject new entries without evicting
+existing nonterminal demand, claims, or live request fences. Completed events
+MUST free nonterminal capacity. Completed tombstones and receipts without a
+live claim MUST be pruned after seven days. An unsuccessful supervisor MUST be
+terminated and reaped before release, then fresh claims MUST use
+shutdown-interruptible exponential backoff capped at 30 seconds.
 
 **CI-QEMU-BACKLOG-001:** QEMU runner create, start, and restart MUST make the
 supervisor healthy, install its authenticated workflow-job webhook, and perform
