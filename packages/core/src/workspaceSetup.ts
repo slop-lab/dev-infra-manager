@@ -173,14 +173,15 @@ export async function reconcileProjectContainer(
   try {
     await inspectWorkspaceContainer(input.runner, record);
     const credentials = await ensureGitea(input.runner, input.options);
-    const gitBaseUrl = `${await giteaNestedBaseUrl(input.runner)}/${input.project.gitNamespace}`;
-    const giteaAddress = new URL(gitBaseUrl).hostname;
+    const gitBaseUrl = `${await giteaNestedBaseUrl(input.runner, credentials)}/${input.project.gitNamespace}`;
     record = {
       ...record,
       projectName: input.project.name,
       rootRepositoryAlias: input.repo.alias,
       gitBaseUrl,
-      hostAliases: { "dim-gitea": [giteaAddress] }
+      hostAliases: credentials.kind === "managed"
+        ? { "dim-gitea": [new URL(gitBaseUrl).hostname] }
+        : {}
     };
     await input.state.writeWorkspace(record);
     const containerId = await reconcileContainer(

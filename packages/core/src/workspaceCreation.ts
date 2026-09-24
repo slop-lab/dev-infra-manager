@@ -1,5 +1,5 @@
 import { MissingRecordError, UserError } from "./errors.js";
-import { ensureGitea, GITEA_NETWORK } from "./gitea.js";
+import { ensureGitea, giteaNestedBaseUrl, GITEA_NETWORK } from "./gitea.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
@@ -44,6 +44,9 @@ export async function createWorkspace(
   });
   const state = new LifecycleState(options.stateRoot);
   assertProjectRepositoriesReady(await state.readProject(project));
+  const externalCredentials = options.giteaConnection.kind === "external"
+    ? await ensureGitea(runner, options)
+    : undefined;
   const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: project });
   const releaseProject = await state.acquireProjectLock(project);
   try {
@@ -85,7 +88,8 @@ export async function createWorkspace(
     } catch (error) {
       if (!(error instanceof MissingRecordError)) throw error;
       const kvm = await resolveWorkspaceKvm(input.runtimeBackend, input.kvm);
-      const credentials = await ensureGitea(runner, options);
+      const credentials = externalCredentials ?? await ensureGitea(runner, options);
+      const gitBaseUrl = `${await giteaNestedBaseUrl(runner, credentials)}/${projectRecord.gitNamespace}`;
       record = {
         schemaVersion: 6,
         name,
@@ -101,7 +105,7 @@ export async function createWorkspace(
         capabilities,
         composeProjectName: `dim-${name}`,
         containerName: `dim-ws-${name}`,
-        networkName: GITEA_NETWORK,
+        networkName: credentials.kind === "managed" ? GITEA_NETWORK : "bridge",
         dockerVolumeName: `dim-ws-${name}-docker`,
         runtimeBackend: input.runtimeBackend,
         kvm,
@@ -111,7 +115,7 @@ export async function createWorkspace(
         routes: [],
         gitUserName,
         gitUserEmail,
-        gitBaseUrl: `http://dim-gitea:3000/${projectRecord.gitNamespace}`,
+        gitBaseUrl,
         hostAliases: {},
         projectManifestPath: "/run/dim/project.json",
         createdAt: now,
