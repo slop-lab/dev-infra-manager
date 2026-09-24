@@ -1,6 +1,7 @@
 export interface LifecycleOptions {
   stateRoot: string;
   giteaConnection: GiteaConnectionConfiguration;
+  qemuSchedulerConnection?: { readonly file: string };
   giteaImage: string;
   giteaHost: string;
   giteaPort: number;
@@ -86,9 +87,23 @@ export interface QemuCiRunnerExecutor {
   inheritsResources: boolean;
   labels: string[];
   jobImage: string;
+  scheduler?: QemuSchedulerIdentity;
   updatedAt: string;
   error?: string;
 }
+
+export type QemuSchedulerIdentity = {
+  readonly projectId: string;
+  readonly hostId: string;
+};
+
+export type QemuSchedulerProjectConnection = QemuSchedulerIdentity & {
+  readonly controllerEndpoint: string;
+  readonly supervisorEndpoint: string;
+  readonly webhookUrl: string;
+  readonly hostToken: string;
+  readonly webhookToken: string;
+};
 
 export interface CiRunnerRecord {
   schemaVersion: 8;

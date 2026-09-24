@@ -37,6 +37,9 @@ export function lifecycleOptionsForBackend(
     giteaConnection: env.DIM_GITEA_CONNECTION_FILE === undefined
       ? { kind: "managed" }
       : { kind: "external", file: path.resolve(env.DIM_GITEA_CONNECTION_FILE) },
+    ...(env.DIM_QEMU_SCHEDULER_CONNECTION_FILE === undefined
+      ? {}
+      : { qemuSchedulerConnection: { file: path.resolve(env.DIM_QEMU_SCHEDULER_CONNECTION_FILE) } }),
     giteaImage: env.DIM_GITEA_IMAGE ?? "gitea/gitea:1.27.0",
     giteaHost: env.DIM_GITEA_HOST ?? dockerHostName(env.DOCKER_HOST) ?? "127.0.0.1",
     giteaPort: positiveInteger(env.DIM_GITEA_PORT ?? "3300", "DIM_GITEA_PORT"),
