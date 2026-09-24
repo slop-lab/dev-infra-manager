@@ -168,7 +168,7 @@ Both private Docker daemons listen only on their dedicated Unix sockets. Their
 reviewed entrypoints pass the Unix host explicitly because an empty invocation
 of the upstream DinD entrypoint would also enable Docker TCP port 2375 when TLS
 is disabled. On first use, `agent-dind` gives the empty named home root to its
-mapped nonroot daemon identity with mode `0700`; a populated root with
+mapped inner agent identity with mode `0700`; a populated root with
 incompatible ownership or mode fails closed. Inner setup changes only that
 top-level directory to the existing nonroot agent identity and does not
 recursively rewrite persisted descendants. Agent tasks remain nonroot and keep

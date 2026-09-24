@@ -53,7 +53,7 @@ are authoritative on every setup: removing `secure` stops its outer daemon,
 and removing `documentation` removes the restart-enabled preview from the
 persistent agent daemon.
 On first use, `agent-dind` gives the empty named home root to its mapped
-nonroot daemon identity with mode `0700`; a populated root with incompatible
+mapped inner agent identity with mode `0700`; a populated root with incompatible
 ownership or mode fails closed. Inner startup changes only that top-level
 directory to `dim-agent` and preserves descendant ownership and modes. The
 Project task and OpenSSH identities remain the workspace owner's nonroot
