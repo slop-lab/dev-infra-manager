@@ -18,7 +18,9 @@ instead selects one operator-managed external Gitea service. The file MUST be
 a regular, DIM-user-owned mode-`0600` JSON file with an exact supported schema.
 It MUST provide distinct management API, host clone, workspace clone, and CI
 runner base URLs; administrator, constrained workspace-writer, and host
-maintainer credentials; and explicit Project identity bindings.
+maintainer credentials; a stable host ID; an explicit transport policy; and
+explicit Project identity bindings. HTTPS is the normal transport. Plain HTTP
+MUST be limited to loopback or an explicitly isolated network.
 
 **CONFIG-GIT-002:** DIM MUST validate every external URL and perform bounded
 health and authenticated-identity checks before lifecycle mutation. It MUST
@@ -32,6 +34,12 @@ Project ID, `dim-<project>` namespace, and positive Gitea organization ID
 explicitly. Every host sharing that Project MUST use the same binding. DIM
 MUST verify the existing organization by both ID and namespace and MUST reject
 an absent, changed, or unrelated binding rather than adopting by name.
+
+The administrator identity MUST report administrator status. Writer and
+maintainer identities MUST be distinct from each other and the administrator,
+authenticate as their configured login, and report non-administrator status.
+Project names, IDs, namespaces, organization IDs, and host IDs MUST be safe and
+unique within the connection file before they can select local state.
 
 **CONFIG-QEMU-SCHEDULER-001:** `DIM_QEMU_SCHEDULER_CONNECTION_FILE` MAY select
 an operator-managed shared QEMU demand scheduler. The file MUST be a regular,

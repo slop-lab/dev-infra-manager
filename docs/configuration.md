@@ -65,6 +65,8 @@ connection file to use an operator-managed external Gitea instance instead:
 ```json
 {
   "schemaVersion": 1,
+  "transport": "https",
+  "hostId": "builder-a",
   "apiBaseUrl": "https://gitea-control.example/api/v1",
   "hostBaseUrl": "https://git.example",
   "workspaceBaseUrl": "https://git.workspace.example",
@@ -95,6 +97,15 @@ credentials through the existing URL-scoped Git helpers. The operator owns
 service availability, users, organization creation, webhook target policy,
 permissions, and branch protection. DIM neither provisions nor stops the
 external service.
+
+Use `https` except for loopback-only `loopback-http` or explicitly isolated
+fixture or tunnel networks with `isolated-http`. The stable `hostId`
+distinguishes provider registrations created by different hosts and must match
+the shared QEMU scheduler host ID when that scheduler is configured. DIM
+verifies that the administrator is an administrator and that the distinct
+writer and maintainer logins are non-administrators. External repositories and
+organizations remain operator-owned: `repo delete` and `project purge` reject
+external mode, while `project remove` only detaches local DIM state.
 
 Pre-create each external organization and copy its numeric Gitea ID into the
 Project binding. Hosts that share a Project must share all three identity
