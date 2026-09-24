@@ -62,7 +62,11 @@ describe("rich example nested topology policy", () => {
     );
     const image = await readFile(resolve(root, "agent/Dockerfile"), "utf8");
 
-    expect(entrypoint).toContain("prepare_persistent_root /mnt/agent-home 700 \"agent home\"");
+    expect(entrypoint).toContain("/etc/subuid");
+    expect(entrypoint).toContain("mapped_agent_uid=$((subuid_start + DIM_WORKSPACE_UID - 1))");
+    expect(entrypoint).toContain("mapped_agent_gid=$((subgid_start + DIM_WORKSPACE_GID - 1))");
+    expect(entrypoint).toContain('prepare_persistent_root "$docker_data" "$rootless_owner"');
+    expect(entrypoint).toContain('prepare_persistent_root /mnt/agent-home "$mapped_agent_owner"');
     expect(entrypoint).toContain("incompatible ownership or mode");
     expect(entrypoint).not.toMatch(/chown\s+-R/);
     expect(initializer).toContain("chown dim-agent:dim-agent /home/dim-agent");

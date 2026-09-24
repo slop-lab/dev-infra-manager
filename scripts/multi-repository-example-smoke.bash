@@ -287,7 +287,14 @@ nested_output="$(dim workspace run "$workspace_name" bash -- \
 echo "$nested_output" | grep -q "Hello from Docker!"
 
 echo "[example-project] survive workspace restart with managed Git access"
-dim workspace restart "$workspace_name" >/dev/null
+if ! dim workspace restart "$workspace_name" >/dev/null; then
+  docker exec "$container_name" sh -c '
+    cd "$DIM_PROJECT_ROOT"
+    docker compose --project-name dim-project --file "$DIM_PROJECT_ROOT/.dim/docker-compose.yml" ps --all
+    docker compose --project-name dim-project --file "$DIM_PROJECT_ROOT/.dim/docker-compose.yml" logs agent-dind
+  ' >&2 || true
+  exit 1
+fi
 test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" -ne "0"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"
 dim workspace run "$workspace_name" bash -- -lc 'getent hosts dim-gitea >/dev/null'
