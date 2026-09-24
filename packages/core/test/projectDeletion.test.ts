@@ -136,15 +136,21 @@ describe("Project deletion", () => {
     await expect(stat(snapshotPath)).resolves.toBeDefined();
   });
 
-  it("rejects external Project purge before any remote or local deletion", async () => {
+  it("purges an external Project after verifying its organization identity", async () => {
+    // Given
     options = { ...options, giteaConnection: { kind: "external", file: "/external.json" } };
 
-    await expect(purgeProject(new RecordingRunner(), options, project.name))
-      .rejects.toThrow(/external Gitea resources are operator-owned/);
+    // When
+    await purgeProject(new RecordingRunner(), options, project.name);
 
-    expect(seams.giteaRequests).toEqual([]);
-    await expect(state.readProject(project.name)).resolves.toEqual(project);
-    await expect(stat(snapshotPath)).resolves.toBeDefined();
+    // Then
+    expect(seams.giteaRequests).toEqual([
+      "GET /orgs/dim-project",
+      "DELETE /repos/dim-project/root",
+      "DELETE /orgs/dim-project"
+    ]);
+    await expect(state.readProject(project.name)).rejects.toThrow(/not found/);
+    await expect(stat(snapshotPath)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it.each([

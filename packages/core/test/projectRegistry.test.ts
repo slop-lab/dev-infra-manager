@@ -3,12 +3,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
-import type { LifecycleOptions, ProjectRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
-import { ensureGitea, giteaRequest } from "../../../../core/packages/core/src/gitea.js";
+import type { LifecycleOptions } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import {
   branchProtectionOptions,
   createProjectRepository,
-  deleteProjectRepository,
   giteaRepositoryCreationOptions,
   normalizeRepositoryRef,
   prepareHostGitCredential,
@@ -107,91 +105,6 @@ describe("project registry", () => {
       enable_merge_whitelist: false,
       required_approvals: 0
     });
-  });
-
-  it("rejects deleting the project root repository", async () => {
-    const stateRoot = await mkdtemp(join(tmpdir(), "dim-project-registry-"));
-    cleanup.push(stateRoot); const state = new LifecycleState(stateRoot);
-    const now = new Date().toISOString();
-    const project: ProjectRecord = {
-      schemaVersion: 4,
-      id: "project-id",
-      name: "example",
-      gitNamespace: "dim-example",
-      giteaOrganizationId: 41,
-      phase: "ready",
-      rootRepositoryAlias: "root",
-      rootRef: "refs/heads/main",
-      repositories: [projectRepositoryFixture("root", "ready"), projectRepositoryFixture("extra", "ready")],
-      createdAt: now,
-      updatedAt: now
-    };
-    await state.claimProject(project);
-    await expect(deleteProjectRepository(new RecordingRunner(), { stateRoot } as LifecycleOptions, "example", "root")).rejects.toThrow(
-      "is the project root"
-    );
-  });
-
-  it("rejects external repository deletion before a remote request", async () => {
-    const stateRoot = await mkdtemp(join(tmpdir(), "dim-project-external-delete-"));
-    cleanup.push(stateRoot);
-    const state = new LifecycleState(stateRoot);
-    const now = new Date().toISOString();
-    await state.claimProject({
-      schemaVersion: 4,
-      id: "project-id",
-      name: "example",
-      gitNamespace: "dim-example",
-      giteaOrganizationId: 41,
-      phase: "ready",
-      repositories: [projectRepositoryFixture("target", "ready")],
-      createdAt: now,
-      updatedAt: now
-    });
-    vi.clearAllMocks();
-
-    await expect(deleteProjectRepository(new RecordingRunner(), {
-      stateRoot,
-      giteaConnection: { kind: "external", file: "/external.json" }
-    } as LifecycleOptions, "example", "target")).rejects.toThrow(/external Gitea resources are operator-owned/);
-
-    expect(giteaRequest).not.toHaveBeenCalled();
-    await expect(state.readProject("example")).resolves.toMatchObject({
-      repositories: expect.arrayContaining([expect.objectContaining({ alias: "target" })])
-    });
-  });
-
-  it("rejects deleting a repository while it is importing without side effects", async () => {
-    const stateRoot = await mkdtemp(join(tmpdir(), "dim-project-importing-delete-"));
-    cleanup.push(stateRoot); const state = new LifecycleState(stateRoot);
-    const now = new Date().toISOString();
-    const project: ProjectRecord = {
-      schemaVersion: 4, id: "project-id", name: "example", gitNamespace: "dim-example", giteaOrganizationId: 41, phase: "ready",
-      repositories: [{ ...projectRepositoryFixture("target", "importing"), createdAt: now, updatedAt: now }],
-      createdAt: now, updatedAt: now
-    };
-    await state.claimProject(project);
-    vi.clearAllMocks();
-
-    await expect(deleteProjectRepository(new RecordingRunner(), { stateRoot } as LifecycleOptions, "example", "target")).rejects.toThrow("is importing");
-
-    expect(ensureGitea).not.toHaveBeenCalled();
-    expect(giteaRequest).not.toHaveBeenCalled();
-    expect(await state.readProject("example")).toEqual(project);
-  });
-
-  it("deletes a ready target when another repository is importing", async () => {
-    const stateRoot = await mkdtemp(join(tmpdir(), "dim-project-sibling-import-"));
-    cleanup.push(stateRoot);
-    const state = new LifecycleState(stateRoot);
-    await state.claimProject({
-      schemaVersion: 4, id: "project-id", name: "example", gitNamespace: "dim-example", giteaOrganizationId: 41, phase: "ready",
-      repositories: [projectRepositoryFixture("target", "ready"), projectRepositoryFixture("other", "importing")],
-      createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
-    });
-    vi.clearAllMocks(); await deleteProjectRepository(new RecordingRunner(), { stateRoot } as LifecycleOptions, "example", "target");
-
-    expect((await state.readProject("example")).repositories.map((repo) => repo.alias)).toEqual(["other"]); expect(giteaRequest).toHaveBeenCalledOnce();
   });
 
   it("promotes an existing matching repository to the project root", async () => {
