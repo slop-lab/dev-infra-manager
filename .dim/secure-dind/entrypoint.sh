@@ -5,7 +5,8 @@ chown root:root /usr/bin/newuidmap /usr/bin/newgidmap
 chmod 4755 /usr/bin/newuidmap /usr/bin/newgidmap
 
 docker_data=/home/rootless/.local/share/docker
-mkdir -p "$docker_data" /run/user/1000 /mnt/workspace-shared-dind
+runtime_dir=/run/user/1000
+mkdir -p "$docker_data" "$runtime_dir" /mnt/workspace-shared-dind
 rootless_owner="$(id -u rootless):$(id -g rootless)"
 actual_owner="$(stat -c %u:%g "$docker_data")"
 if [ "$actual_owner" != "$rootless_owner" ]; then
@@ -15,9 +16,10 @@ if [ "$actual_owner" != "$rootless_owner" ]; then
   fi
   chown "$rootless_owner" "$docker_data"
 fi
-chown rootless:rootless /run/user/1000 /mnt/workspace-shared-dind
-chmod 0700 /run/user/1000
+chown rootless:rootless "$runtime_dir" /mnt/workspace-shared-dind
+chmod 0700 "$runtime_dir"
 chmod 1777 /mnt/workspace-shared-dind
 
-exec su-exec rootless env HOME=/home/rootless XDG_RUNTIME_DIR=/run/user/1000 \
-  dockerd-entrypoint.sh "$@"
+exec su-exec rootless env HOME=/home/rootless XDG_RUNTIME_DIR="$runtime_dir" \
+  DOCKER_HOST="unix://$runtime_dir/docker.sock" \
+  dockerd-entrypoint.sh dockerd --host="unix://$runtime_dir/docker.sock"

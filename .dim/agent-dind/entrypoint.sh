@@ -39,4 +39,4 @@ exec su-exec rootless env \
   HOME=/home/rootless \
   XDG_RUNTIME_DIR="$runtime_dir" \
   DOCKER_HOST="unix://$runtime_dir/docker.sock" \
-  dockerd-entrypoint.sh "$@"
+  dockerd-entrypoint.sh dockerd --host="unix://$runtime_dir/docker.sock"
