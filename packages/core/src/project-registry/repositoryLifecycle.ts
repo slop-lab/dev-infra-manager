@@ -27,14 +27,15 @@ export async function createProjectRepository(
     if (input.root && project.rootRepositoryAlias !== undefined && project.rootRepositoryAlias !== alias) {
       throw new UserError(`project '${projectName}' already has root repo '${project.rootRepositoryAlias}'`);
     }
+    const credentials = await ensureGitea(runner, options);
     const now = new Date().toISOString();
     let repo: ProjectRepositoryRecord = existingRepo === undefined
       ? {
           alias,
           providerRepoId: `${project.gitNamespace}/${alias}`,
           owner: project.gitNamespace,
-          hostUrl: giteaHostCloneUrl(options, project.gitNamespace, alias),
-          workspaceUrl: giteaInternalCloneUrl(project.gitNamespace, alias),
+          hostUrl: giteaHostCloneUrl(credentials, project.gitNamespace, alias),
+          workspaceUrl: giteaInternalCloneUrl(credentials, project.gitNamespace, alias),
           ...(input.ref === undefined ? {} : { ref: normalizeRepositoryRef(input.ref) }),
           phase: "creating",
           connections: [],
@@ -70,7 +71,6 @@ export async function createProjectRepository(
     await state.writeProject(project);
 
     try {
-      const credentials = await ensureGitea(runner, options);
       await createGiteaRepository(credentials, project.gitNamespace, alias, input.root);
       await grantRepositoryUsers(credentials, project.gitNamespace, alias);
       repo = { ...repo, phase: "ready", updatedAt: new Date().toISOString() };

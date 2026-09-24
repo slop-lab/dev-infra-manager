@@ -16,13 +16,26 @@ export async function createProject(
 ): Promise<ProjectRecord> {
   const name = validateLifecycleName(nameInput, "project");
   const state = new LifecycleState(options.stateRoot);
+  const externalCredentials = options.giteaConnection.kind === "external"
+    ? await ensureGitea(runner, options)
+    : undefined;
+  const gitNamespace = projectNamespace(name);
+  const binding = externalCredentials?.kind === "external"
+    ? externalCredentials.projectBindings[name]
+    : undefined;
+  if (externalCredentials !== undefined && binding === undefined) {
+    throw new UserError(`external Gitea connection has no explicit Project binding for '${name}'`);
+  }
+  if (binding !== undefined && binding.gitNamespace !== gitNamespace) {
+    throw new UserError(`external Gitea Project binding for '${name}' must use namespace '${gitNamespace}'`);
+  }
   const now = new Date().toISOString();
   let record: ProjectRecord = {
     schemaVersion: 4,
-    id: randomUUID(),
+    id: binding?.id ?? randomUUID(),
     name,
-    gitNamespace: projectNamespace(name),
-    giteaOrganizationId: null,
+    gitNamespace,
+    giteaOrganizationId: binding?.giteaOrganizationId ?? null,
     phase: "creating",
     repositories: [],
     createdAt: now,
@@ -33,6 +46,12 @@ export async function createProject(
   try {
     try {
       const existing = await state.readProject(name);
+      if (binding !== undefined
+        && (existing.id !== binding.id
+          || existing.gitNamespace !== binding.gitNamespace
+          || existing.giteaOrganizationId !== binding.giteaOrganizationId)) {
+        throw new UserError(`project '${name}' does not match its external Gitea Project binding`);
+      }
       if (existing.phase === "ready") throw new UserError(`project '${name}' already exists`);
       record = { ...existing, phase: "creating", updatedAt: now };
       delete record.error;
@@ -42,7 +61,7 @@ export async function createProject(
       await state.claimProject(record);
     }
     selected = true;
-    const credentials = await ensureGitea(runner, options);
+    const credentials = externalCredentials ?? await ensureGitea(runner, options);
     const giteaOrganizationId = await ensureOrganization(
       credentials,
       record.gitNamespace,
