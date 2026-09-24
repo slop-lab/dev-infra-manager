@@ -35,7 +35,6 @@ printf '%s\n' 'external-gitea: starting disposable service'
 
 admin_password="$(openssl rand -hex 24)"
 writer_password="$(openssl rand -hex 24)"
-maintainer_password="$(openssl rand -hex 24)"
 wrong_password="$(openssl rand -hex 24)"
 
 docker network create --label dim.verification=external-gitea "$network" >/dev/null
@@ -70,10 +69,6 @@ docker exec --user git "$gitea_container" gitea admin user create \
 docker exec --user git "$gitea_container" gitea admin user create \
   --username dim-workspace --password "$writer_password" --email workspace@dim.invalid \
   --must-change-password=false >/dev/null
-docker exec --user git "$gitea_container" gitea admin user create \
-  --username dim-host --password "$maintainer_password" --email host@dim.invalid \
-  --must-change-password=false >/dev/null
-
 organization_response="$work_dir/organization.json"
 curl --fail --silent --show-error --user "dim-operator:$admin_password" \
   --header 'content-type: application/json' --request POST \
@@ -113,9 +108,9 @@ write_connection() {
     --arg api "$gitea_url/api/v1" --arg host "$gitea_host_url" \
     --arg workspace "http://external-gitea:3000" --arg runner "http://external-gitea-runner:3000" \
     --arg host_id "$host_id" \
-    --arg admin "$password" --arg writer "$writer_password" --arg maintainer "$maintainer_password" \
+    --arg admin "$password" --arg writer "$writer_password" --arg maintainer "$password" \
     --argjson organization "$organization_id" \
-    '{schemaVersion:1,transport:"isolated-http",hostId:$host_id,apiBaseUrl:$api,hostBaseUrl:$host,workspaceBaseUrl:$workspace,runnerBaseUrl:$runner,credentials:{adminUsername:"dim-operator",adminPassword:$admin,writerUsername:"dim-workspace",writerPassword:$writer,maintainerUsername:"dim-host",maintainerPassword:$maintainer},projects:{shared:{id:"shared-project-id",gitNamespace:"dim-shared",giteaOrganizationId:$organization}}}' \
+    '{schemaVersion:1,transport:"isolated-http",hostId:$host_id,apiBaseUrl:$api,hostBaseUrl:$host,workspaceBaseUrl:$workspace,runnerBaseUrl:$runner,credentials:{adminUsername:"dim-operator",adminPassword:$admin,writerUsername:"dim-workspace",writerPassword:$writer,maintainerUsername:"dim-operator",maintainerPassword:$maintainer},projects:{shared:{id:"shared-project-id",gitNamespace:"dim-shared",giteaOrganizationId:$organization}}}' \
     >"$destination"
   chmod 0600 "$destination"
 }
@@ -209,6 +204,12 @@ admin_call client-a repo.prepare \
 admin_call client-b repo.prepare \
   '{"project":"shared","alias":"root","root":true,"ref":"main","protectedPatterns":[],"forcePushBlockedPatterns":[]}' \
   "$work_dir/repo-b.json"
+admin_call client-a repo.prepare \
+  '{"project":"shared","alias":"extra","root":false,"protectedPatterns":[],"forcePushBlockedPatterns":[]}' \
+  "$work_dir/extra-a.json"
+admin_call client-b repo.prepare \
+  '{"project":"shared","alias":"extra","root":false,"protectedPatterns":[],"forcePushBlockedPatterns":[]}' \
+  "$work_dir/extra-b.json"
 printf '%s\n' 'external-gitea: attached both clients to one Project repository'
 
 host_url="$gitea_host_url/dim-shared/root.git"
@@ -250,8 +251,8 @@ for client in client-a client-b; do
   username=dim-workspace
   password="$writer_password"
   if [[ "$client" == client-b ]]; then
-    username=dim-host
-    password="$maintainer_password"
+    username=dim-operator
+    password="$admin_password"
   fi
   env DIM_GIT_USERNAME="$username" DIM_GIT_TOKEN="$password" GIT_TERMINAL_PROMPT=0 \
     git -c credential.helper= -c "credential.helper=$credential_helper" \
@@ -291,33 +292,27 @@ if grep -qi 'authorization' "$work_dir/malicious-headers"; then
 fi
 printf '%s\n' 'external-gitea: x git withheld credentials from an unscoped remote'
 
-for operation in project.purge repo.delete; do
-  body='{"name":"shared"}'
-  [[ "$operation" == repo.delete ]] && body='{"project":"shared","alias":"root"}'
-  refusal="$work_dir/${operation//./-}-refusal.json"
-  status="$(curl --silent --unix-socket "$work_dir/client-a/runtime/admin.sock" \
-    --header 'content-type: application/json' --request POST --data "$body" \
-    --output "$refusal" --write-out '%{http_code}' "http://localhost/v1/call/$operation")"
-  [[ "$status" == 400 ]]
-  if ! jq -e '.error | test("operator-owned")' "$refusal" >/dev/null; then
-    printf '%s refusal was: %s\n' "$operation" "$(jq -c . "$refusal")" >&2
-    exit 1
-  fi
-  curl --fail --silent --show-error --user "dim-operator:$admin_password" "$gitea_url/api/v1/repos/dim-shared/root" >/dev/null
-done
-admin_call client-a project.remove '{"name":"shared"}' "$work_dir/remove-a.json"
-admin_call client-b repo.show '{"project":"shared","alias":"root"}' "$work_dir/repo-b-after-remove.json"
-jq -e '.phase == "ready"' "$work_dir/repo-b-after-remove.json" >/dev/null
-printf '%s\n' 'external-gitea: external deletion refused and local detach preserved the second host'
+admin_call client-a repo.delete '{"project":"shared","alias":"extra"}' "$work_dir/delete-extra-a.json"
+extra_status="$(curl --silent --user "dim-operator:$admin_password" --output /dev/null --write-out '%{http_code}' \
+  "$gitea_url/api/v1/repos/dim-shared/extra")"
+[[ "$extra_status" == 404 ]]
+admin_call client-b repo.show '{"project":"shared","alias":"extra"}' "$work_dir/extra-b-after-delete.json"
+jq -e '.phase == "ready"' "$work_dir/extra-b-after-delete.json" >/dev/null
+
+admin_call client-a project.purge '{"name":"shared"}' "$work_dir/purge-a.json"
+organization_status="$(curl --silent --user "dim-operator:$admin_password" --output /dev/null --write-out '%{http_code}' \
+  "$gitea_url/api/v1/orgs/dim-shared")"
+[[ "$organization_status" == 404 ]]
+admin_call client-b project.show '{"name":"shared"}' "$work_dir/project-b-after-purge.json"
+jq -e '.phase == "ready"' "$work_dir/project-b-after-purge.json" >/dev/null
+printf '%s\n' 'external-gitea: host-admin deletion removed shared remotes while the second host retained stale local records'
 
 admin_call client-a host.shutdown '{}' "$work_dir/shutdown-a.json"
 jq -e '.phase == "stopped"' "$work_dir/shutdown-a.json" >/dev/null
 curl --fail --silent "$gitea_url/api/healthz" >/dev/null
-admin_call client-b repo.show '{"project":"shared","alias":"root"}' "$work_dir/repo-b-after-shutdown.json"
-jq -e --arg host_url "$host_url" --arg workspace_url "http://external-gitea:3000/dim-shared/root.git" \
-  '.hostUrl == $host_url and .workspaceUrl == $workspace_url and .phase == "ready"' \
-  "$work_dir/repo-b-after-shutdown.json" >/dev/null
-printf '%s\n' 'external-gitea: preserved service and second client after host shutdown'
+admin_call client-b project.show '{"name":"shared"}' "$work_dir/project-b-after-shutdown.json"
+jq -e '.phase == "ready"' "$work_dir/project-b-after-shutdown.json" >/dev/null
+printf '%s\n' 'external-gitea: preserved the service and independent local state after host shutdown'
 
 if grep -q 'dim-gitea' "$work_dir/docker-invocations"; then
   printf 'controller attempted to access local dim-gitea\n' >&2
