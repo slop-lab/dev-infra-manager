@@ -40,6 +40,14 @@ packaged-shared-qemu-scheduler:
     just build-packages
     cd .. && bash verification/scripts/packaged-shared-qemu-scheduler-smoke.bash
 
+# Real two-logical-host shared scheduler job completion; requires x86-64, Docker, writable KVM, network, and >=4 GiB RAM.
+real-shared-qemu-jobs-kvm:
+    @[[ "$(uname -m)" == x86_64 ]] || { echo "real-shared-qemu-jobs-kvm requires x86-64" >&2; exit 2; }
+    @docker info >/dev/null 2>&1 || { echo "real-shared-qemu-jobs-kvm requires a reachable Docker daemon" >&2; exit 2; }
+    @[[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]] || { echo "real-shared-qemu-jobs-kvm requires an accessible character /dev/kvm" >&2; exit 2; }
+    just build-packages
+    cd .. && bash verification/scripts/real-shared-qemu-jobs-smoke.bash
+
 # Verify pinned workspace-user setup plus generic development-service exposure.
 workspace-user-setup:
     cd .. && bash verification/scripts/project-tool-tasks-smoke.bash
