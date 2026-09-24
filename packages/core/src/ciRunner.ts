@@ -67,6 +67,8 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
     if (executorKind === "qemu" && input.resources?.pidsLimit !== undefined) {
       throw new UserError("process limits apply only to the sysbox CI executor");
     }
+    const scheduler = executorKind === "qemu" ? await qemuSchedulerConnection(options, project) : undefined;
+    if (existing?.executor.kind === "qemu") assertPersistedQemuScheduler(existing, scheduler);
     if (mode === "start" && existing?.executor.kind === "sysbox") {
       await releaseProject();
       projectLockHeld = false;
@@ -78,8 +80,6 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       if (!await detectCiRunnerKvm()) throw new UserError("the qemu CI executor requires x86-64 and host /dev/kvm access");
       const projectHook = await restorePersistedQemuProjectHook({ stateRoot: options.stateRoot, projectId: existing.projectId, provenance: existing.executor.projectHook });
       const executor: QemuCiRunnerExecutor = { ...existing.executor, phase: "creating", updatedAt: new Date().toISOString() };
-      const scheduler = await qemuSchedulerConnection(options, project);
-      assertPersistedQemuScheduler(existing, scheduler);
       assertQemuSchedulerTopology(await state.listCiRunners(), projectName, scheduler, name);
       await removeCiRunnerContainer(runner, ciRunnerContainerPlan(existing, existing.executor));
       let record = await saveExecutor(state, existing, executor);
@@ -171,7 +171,6 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       ? { resources: previous.resources, inheritsResources: false }
       : effectiveQemuCiRunnerResources(options, input.resources);
     const projectHook = await prepareQemuProjectHookFromSnapshot({ stateRoot: options.stateRoot, snapshot });
-    const scheduler = await qemuSchedulerConnection(options, project);
     assertQemuSchedulerTopology(await state.listCiRunners(), projectName, scheduler, name);
     await releaseProject();
     projectLockHeld = false;
