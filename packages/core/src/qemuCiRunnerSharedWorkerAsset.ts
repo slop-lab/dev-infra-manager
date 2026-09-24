@@ -109,6 +109,7 @@ def shared_worker():
         lease_deadline = claim_started + lease["leaseSeconds"]
         print(f"qemu-ci-scheduler: capacity {capacity} claimed shared trigger job {trigger_job_id}", flush=True)
         process = None
+        supervisor_failed = False
         try:
             child_environment = {
                 key: value for key, value in os.environ.items()
@@ -147,6 +148,7 @@ def shared_worker():
                 failures = 0
         except (OSError, TimeoutError, json.JSONDecodeError, SchedulerProtocolError, RuntimeError, subprocess.CalledProcessError) as error:
             failures += 1
+            supervisor_failed = True
             print(f"qemu-ci-scheduler: shared supervisor failed: {error}", flush=True)
         finally:
             if process is not None:
@@ -164,5 +166,10 @@ def shared_worker():
                 print(f"qemu-ci-scheduler: shared claim release failed: {error}; retrying in {delay}s", flush=True)
                 if shutdown.wait(delay):
                     break
+        if supervisor_failed:
+            delay = min(2 ** max(failures, 1), 30)
+            print(f"qemu-ci-scheduler: unsuccessful shared supervisor; retrying in {delay}s", flush=True)
+            if shutdown.wait(delay):
+                break
 
 `;
