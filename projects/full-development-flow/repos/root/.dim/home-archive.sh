@@ -40,26 +40,27 @@ one_resource() {
 
 agent_container="$(one_resource container --all \
   --filter "label=com.docker.compose.project=$project" \
-  --filter "label=com.docker.compose.service=agent" \
+  --filter "label=com.docker.compose.service=agent-dind" \
   --filter "label=com.docker.compose.oneoff=False")"
 home_volume="$(one_resource volume \
   --filter "label=com.docker.compose.project=$project" \
   --filter "label=com.docker.compose.volume=agent-home")"
 agent_image="$(docker inspect --format '{{.Image}}' "$agent_container")"
-was_running="$(docker inspect --format '{{.State.Running}}' "$agent_container")"
+was_running="$(docker exec "$agent_container" \
+  docker inspect --format '{{.State.Running}}' dim-agent)"
 
 restart_agent() {
   status="$?"
   trap - 0
   if [ "$was_running" = true ]; then
-    docker start "$agent_container" >&2
+    docker exec "$agent_container" dim-agent-dind start >&2
   fi
   exit "$status"
 }
 trap restart_agent 0
 
 if [ "$was_running" = true ]; then
-  docker stop "$agent_container" >&2
+  docker exec "$agent_container" dim-agent-dind stop >&2
 fi
 
 case "$action" in
