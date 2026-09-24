@@ -114,7 +114,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   secret-bearing workloads without receiving agent source, home, Git
   credentials, or runtime sockets. A fixed application relay is the only
   agent-to-secret communication path. Minimal Projects remain free to use one
-  daemon or none when those authorities are absent.
+  daemon or none when those authorities are absent. These private daemons now
+  start with explicit Unix-only Docker listeners instead of inheriting the
+  upstream image's implicit TCP fallback. Profile reconciliation stops a
+  deselected secure daemon and removes a deselected documentation child from
+  persistent agent-DinD state. Secret operations execute reviewed scripts and
+  Compose definitions from the immutable root, and home archives consistently
+  stop and restart the inner agent while preserving restored file modes. Local
+  rich-example installation also publishes the complete exact-version package
+  closure, including the controller proxy before core.
 
 - The Gitea pull-request helper now waits up to 15 minutes by default for an
   exact commit's CI statuses, without periodic agent wake-ups while jobs remain
