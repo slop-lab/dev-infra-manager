@@ -1,7 +1,7 @@
 import { UserError } from "./errors.js";
 import { ciRunnerContainerLabels, ciRunnerContainerPlan } from "./ciRunnerContainer.js";
 import { validateLifecycleName } from "./lifecycleState.js";
-import type { CiRunnerRecord, QemuCiRunnerExecutor } from "./lifecycleTypes.js";
+import type { CiRunnerRecord, QemuCiRunnerExecutor, QemuSchedulerProjectConnection } from "./lifecycleTypes.js";
 import { boundedCiRunnerResourceName } from "./ciRunnerVolume.js";
 import type { CiRunnerVolumePlan } from "./ciRunnerVolume.js";
 import {
@@ -23,6 +23,7 @@ export interface QemuCiRunnerSupervisorLaunchPlan {
   readonly commonImageKey: string;
   readonly projectImageKey: string;
   readonly projectHook: PreparedQemuProjectHook;
+  readonly scheduler?: QemuSchedulerProjectConnection;
 }
 
 export interface QemuCiRunnerVolumeDeletionPlan {
@@ -40,8 +41,8 @@ export function ciRunnerQemuSupervisorName(project: string, capacity: string): s
   return resourceName(project, capacity, ["qemu", "supervisor"]);
 }
 
-export function ciRunnerQemuRunnerName(project: string, capacity: string): string {
-  return resourceName(project, capacity, ["qemu"]);
+export function ciRunnerQemuRunnerName(project: string, capacity: string, hostId?: string): string {
+  return resourceName(project, capacity, hostId === undefined ? ["qemu"] : [validateLifecycleName(hostId, "scheduler host"), "qemu"]);
 }
 
 export function ciRunnerQemuVolumeName(project: string, capacity: string): string {
@@ -75,20 +76,29 @@ export function ciRunnerQemuSupervisorLaunchArgs(plan: QemuCiRunnerSupervisorLau
   const capacity = validateLifecycleName(plan.record.name, "CI runner");
   const guestMemoryMiB = qemuMemoryMiB(plan.executor.resources.memory);
   const ownershipLabels = ciRunnerContainerLabels(ciRunnerContainerPlan(plan.record, plan.executor));
+  const schedulerArguments = plan.scheduler === undefined ? [
+    "--mount", `type=volume,source=${ciRunnerQemuDispatchVolumeName(project)},target=/var/lib/dim-qemu-ci-dispatch`,
+    "--env", `DIM_QEMU_WEBHOOK_AUTHORIZATION=${plan.authorization}`
+  ] : [
+    "--env", `DIM_QEMU_SCHEDULER_ENDPOINT=${plan.scheduler.supervisorEndpoint}`,
+    "--env", `DIM_QEMU_SCHEDULER_PROJECT_ID=${plan.scheduler.projectId}`,
+    "--env", `DIM_QEMU_SCHEDULER_HOST_ID=${plan.scheduler.hostId}`,
+    "--env", `DIM_QEMU_SCHEDULER_TOKEN=${plan.scheduler.hostToken}`
+  ];
   return [
     "run", "--detach", "--name", plan.executor.supervisorName, "--restart", "unless-stopped",
     "--network", CONTROL_NETWORK, "--runtime", "runc", "--cpus", plan.executor.resources.cpus,
     "--memory", `${guestMemoryMiB + 2048}m`, "--pids-limit", "1024", "--device", "/dev/kvm",
     "--group-add", String(plan.kvmGroupId()),
     "--mount", `type=volume,source=${plan.executor.volumeName},target=/var/lib/dim-qemu-ci`,
-    "--mount", `type=volume,source=${ciRunnerQemuDispatchVolumeName(project)},target=/var/lib/dim-qemu-ci-dispatch`,
+    ...schedulerArguments,
     "--mount", `type=volume,source=${ciRunnerQemuCommonCacheVolumeName()},target=${QEMU_CI_COMMON_MOUNT}`,
     "--mount", `type=volume,source=${ciRunnerQemuProjectCacheVolumeName(project)},target=${QEMU_CI_PROJECT_CACHE_MOUNT}`,
     "--mount", `type=bind,source=${plan.projectHook.path},target=${QEMU_CI_PROJECT_MOUNT}/cache.bash,readonly`,
     ...ownershipLabels.flatMap((label) => ["--label", label]),
     "--env", `GITEA_INSTANCE_URL=${plan.registration.instanceUrl}`,
     "--env", `GITEA_RUNNER_REGISTRATION_TOKEN=${plan.registration.token}`,
-    "--env", `GITEA_RUNNER_NAME=${ciRunnerQemuRunnerName(project, capacity)}`,
+    "--env", `GITEA_RUNNER_NAME=${ciRunnerQemuRunnerName(project, capacity, plan.scheduler?.hostId)}`,
     "--env", `DIM_CI_REGISTRY_CACHE_UPSTREAM=${REGISTRY_CACHE_ENDPOINT}`,
     "--env", `DIM_QEMU_CI_COMMON_IMAGE_KEY=${plan.commonImageKey}`,
     "--env", `DIM_QEMU_CI_PROJECT_IMAGE_KEY=${plan.projectImageKey}`,
@@ -101,7 +111,6 @@ export function ciRunnerQemuSupervisorLaunchArgs(plan: QemuCiRunnerSupervisorLau
     "--env", `DIM_QEMU_CI_CAPACITY=${capacity}`,
     "--env", `DIM_QEMU_CI_CPUS=${plan.executor.resources.cpus}`,
     "--env", `DIM_QEMU_CI_MEMORY_MB=${guestMemoryMiB}`,
-    "--env", `DIM_QEMU_WEBHOOK_AUTHORIZATION=${plan.authorization}`,
     plan.executor.image
   ];
 }
