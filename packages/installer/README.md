@@ -162,7 +162,18 @@ $XDG_DATA_HOME/dim/runtime/current/node_modules/.bin/dim
 (falling back to `~/.local/share/dim/runtime/current/...` when `XDG_DATA_HOME` is
 unset). Registry installs must match the installer's own version. Replacements
 are installed and verified in a temporary sibling directory before `current`
-is switched; temporary and backup directories are removed after success.
+is switched. The staged target core package then checks existing host, Project,
+workspace, and CI-runner state read-only with its own parsers. Missing state and
+the exact supported schemas proceed. The sole accepted historical case is host
+schema 1, which prints a warning and remains byte-identical until the controller
+performs its documented startup migration. Unknown plugin-private state is not
+part of this check. Temporary and backup directories are removed after success.
+
+Malformed, unsafe, or unsupported known state refuses installation before the
+runtime, config, PATH symlink, or plugin activation changes. Keep the currently
+pinned DIM version available to export needed data, then recreate the named
+incompatible resource and retry. The installer never converts or deletes old
+workspace, Project, or runner state.
 
 **Direct PATH (`--local-bin`)** additionally creates or replaces a symlink
 in the bin directory pointing at that versioned executable:
