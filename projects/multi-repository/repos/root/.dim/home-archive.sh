@@ -3,6 +3,7 @@ set -eu
 
 action="${1:?home archive action is required}"
 project="${COMPOSE_PROJECT_NAME:?COMPOSE_PROJECT_NAME is required}"
+helper_image=ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 
 case "$action" in
   backup)
@@ -45,7 +46,6 @@ agent_container="$(one_resource container --all \
 home_volume="$(one_resource volume \
   --filter "label=com.docker.compose.project=$project" \
   --filter "label=com.docker.compose.volume=agent-home")"
-agent_image="$(docker inspect --format '{{.Image}}' "$agent_container")"
 was_running="$(docker exec "$agent_container" \
   docker inspect --format '{{.State.Running}}' dim-agent)"
 
@@ -67,12 +67,12 @@ case "$action" in
   backup)
     docker run --rm --network none --read-only \
       --mount "type=volume,src=$home_volume,dst=/home,readonly" \
-      --entrypoint tar "$agent_image" -C /home -czf - .
+      --entrypoint tar "$helper_image" -C /home -czf - .
     ;;
   restore)
     docker run --rm --interactive --network none --read-only \
       --mount "type=volume,src=$home_volume,dst=/home" \
-      --entrypoint sh "$agent_image" -c \
+      --entrypoint sh "$helper_image" -c \
       'find /home -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && tar -C /home -xzf -'
     ;;
 esac
