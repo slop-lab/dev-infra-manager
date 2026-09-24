@@ -408,6 +408,8 @@ overrides are:
 
 - `DIM_STATE_ROOT`
 - `DIM_GITEA_PORT` (default `3300`)
+- `DIM_GITEA_CONNECTION_FILE` (explicit external Gitea connection and shared
+  Project bindings)
 - installed `workspaceBackend` from the DIM user configuration
 - `DIM_WORKSPACE_IMAGE`
 - `DIM_WORKSPACE_CPUS`, `DIM_WORKSPACE_MEMORY`, and `DIM_WORKSPACE_PIDS`

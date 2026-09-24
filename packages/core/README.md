@@ -81,7 +81,9 @@ with host credentials.
 `lifecycleOptions()` reads the same environment used by the CLI:
 
 - `DIM_STATE_ROOT`
-- `DIM_GITEA_IMAGE`, `DIM_GITEA_PORT`, and `DIM_GITEA_ADMIN_USERNAME`
+- `DIM_GITEA_IMAGE`, `DIM_GITEA_PORT`, and `DIM_GITEA_ADMIN_USERNAME` for the
+  default host-local managed service
+- `DIM_GITEA_CONNECTION_FILE` for an operator-managed external Gitea service
 - `DIM_GIT_USERNAME`
 - the installed `workspaceBackend`, `DIM_WORKSPACE_IMAGE`, and
   `DIM_WORKSPACE_RUNTIME`
@@ -131,6 +133,44 @@ malformed record, extra field, conflicting backup, symlink, or non-regular
 canonical, backup, or recognized temporary artifact fails closed without
 changing canonical state. No Project, workspace, runner, plugin, installer, or
 other state is migrated.
+
+When `DIM_GITEA_CONNECTION_FILE` is set, the mode-`0600`, DIM-user-owned JSON
+file is the complete external connection boundary:
+
+```json
+{
+  "schemaVersion": 1,
+  "apiBaseUrl": "https://gitea-control.example/api/v1",
+  "hostBaseUrl": "https://git.example",
+  "workspaceBaseUrl": "https://git.workspace.example",
+  "runnerBaseUrl": "https://git.runner.example",
+  "credentials": {
+    "adminUsername": "dim-operator",
+    "adminPassword": "replace-with-secret",
+    "writerUsername": "dim-workspace",
+    "writerPassword": "replace-with-secret",
+    "maintainerUsername": "dim-host",
+    "maintainerPassword": "replace-with-secret"
+  },
+  "projects": {
+    "acme": {
+      "id": "shared-project-id",
+      "gitNamespace": "dim-acme",
+      "giteaOrganizationId": 42
+    }
+  }
+}
+```
+
+The API, host-clone, workspace-clone, and runner endpoints are independent
+because those clients may use different routes to the same service. DIM
+validates the service and administrator identity before lifecycle mutation,
+but does not create or stop the external service, create credentials, change
+its organization-creation policy, or rewrite its webhook allowlist. The
+operator must provision the users, organization, permissions, and branch
+policy first. Each external Project requires an explicit shared ID, namespace,
+and Gitea organization ID; this lets multiple hosts attach to the same Project
+without adopting an unrelated same-name organization.
 
 Every managed CI runner requires `.dim/ci/runner.yml` in the protected Project
 root. Its strict schema declares ordinary and integration labels,
