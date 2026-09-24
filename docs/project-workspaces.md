@@ -36,6 +36,14 @@ repositories directly from the managed Git service into their own named
 volumes. `dim` does not require every repository to be cloned into the
 top-level workspace or mapped one-to-one to a container.
 
+The number of Project-owned nested daemons is a reviewed topology choice, not
+a DIM rule. A minimal Project may need none. A Project whose agent needs Docker
+may use one private agent daemon. A richer Project may add a second private
+daemon for secret-bearing workloads so the agent can control ordinary
+development containers without controlling the secret runtime. The complete
+examples use this two-daemon shape because they demonstrate both authorities;
+it is practical guidance, not a requirement to add unused layers.
+
 A Project may keep code that can affect secret-bearing environments in a
 separate repository with stricter review rules. DIM records that repository
 without assigning it a special runtime role; the root lifecycle and the
@@ -679,7 +687,8 @@ project choice rather than a `dim` requirement.
 The multi-repository container smoke covers:
 
 - A project repository containing `.dim/docker-compose.yml`.
-- Separate secret-handling and multiple product repositories.
+- Separate agent and secret daemon storage, with reviewed service-only
+  communication and no Docker control socket crossing between them.
 - Direct managed-Git access from nested services.
 - Service-owned persistent checkout volumes.
 - Compose profile selection stored by `create`.

@@ -28,9 +28,9 @@ Docker/Git terms aren't repeated here.
   “workspace container” when the distinction from the root repository
   matters.
 - **Project runtime** — the nested Docker runtime owned by trusted
-  Project lifecycle code in the workspace container. It runs trusted Project
-  services, including secret-bearing containers. It is distinct from an agent
-  container's private nested runtime.
+  Project lifecycle code in the workspace container. It runs the Project's
+  outer services, which may themselves be private daemons. It is distinct from
+  an agent container's private nested runtime.
 - **Agent container** — the untrusted coding environment associated with a
   workspace. DIM core does not create or configure it: reviewed Project code
   may define it as a service in the workspace's Project runtime, give it a
@@ -44,11 +44,12 @@ Docker/Git terms aren't repeated here.
   managed by host-side DIM (the CLI also exposes `dim controller serve`). Its
   Unix socket and workspace-scoped grant let trusted Project lifecycle code
   request narrow host capabilities. It does not deploy Project containers.
-- **Secret-bearing container** — a child of the Project runtime, separate from
-  the agent container and its nested runtime. Trusted Project lifecycle code
-  builds and deploys it from a human-reviewed ref. It may receive raw secrets;
-  the agent container receives neither those secrets nor control of this
-  container.
+- **Secret-bearing container** — a workload separate from the agent container
+  and its private runtime. It may be a direct child of the Project runtime or,
+  in richer Projects, a child of a separate secure daemon. Trusted Project
+  lifecycle code builds and deploys it from a human-reviewed ref. It may
+  receive raw secrets; the agent container receives neither those secrets nor
+  its runtime control socket.
 - **Verification runner** — a Project-scoped CI resource outside workspace
   state. It checks a separate repository checkout in disposable job containers
   without the host Docker socket or DIM workspace credentials.
