@@ -52,8 +52,10 @@ supervisor, and central webhook URLs plus Project API and webhook bearer tokens.
 MUST contain no credentials, query, or fragment. Plain HTTP is valid only for
 loopback or an explicitly isolated transport. Shared scheduling MUST require
 external Gitea and MUST reject mixed shared/local topology or changed
-persisted identity. When the variable is absent, existing host-local
-scheduling MUST remain unchanged.
+persisted identity before runtime mutation. The scheduler host ID MUST equal
+the external Gitea connection host ID. Every host attached to one Project MUST
+use the same Project API token and a distinct stable host ID. When the variable
+is absent, existing host-local scheduling MUST remain unchanged.
 
 The service-side Project binding MUST separately identify its webhook token,
 Project API token, and non-empty label set. The stable host ID is a
