@@ -26,7 +26,7 @@ const runner = {
   }
 } satisfies CommandRunner;
 const options = {
-  stateRoot: "/state", giteaImage: "gitea", giteaHost: "gitea", giteaPort: 3000,
+  stateRoot: "/state", giteaConnection: { kind: "managed" }, giteaImage: "gitea", giteaHost: "gitea", giteaPort: 3000,
   giteaAdminUsername: "admin", gitUsername: "writer", gitMaintainerUsername: "maintainer",
   defaultWorkspaceBackend: "sysbox", cpuCount: "4", memory: "8GiB", pidsLimit: "2048",
   controllerRuntimeDirectory: "/run/dim", controllerSocketPath: "/run/dim/controller.sock",

@@ -121,7 +121,7 @@ import { createCiRunner, restartCiRunner, startCiRunner } from "../../../../core
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 
 export const options = {
-  stateRoot: "", giteaImage: "gitea", giteaHost: "gitea", giteaPort: 3000,
+  stateRoot: "", giteaConnection: { kind: "managed" }, giteaImage: "gitea", giteaHost: "gitea", giteaPort: 3000,
   giteaAdminUsername: "admin", gitUsername: "writer", gitMaintainerUsername: "maintainer",
   defaultWorkspaceBackend: "sysbox", cpuCount: "4", memory: "8GiB", pidsLimit: "2048",
   controllerRuntimeDirectory: "/run/dim", controllerSocketPath: "/run/dim/controller.sock",
