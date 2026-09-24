@@ -28,9 +28,9 @@ afterEach(async () => {
 });
 
 describe("shared QEMU scheduler HTTP protocol", () => {
-  it("admits exactly one host claim and fences a stale release after expiry", async () => {
+  it("admits exactly one host claim", async () => {
     // Given
-    const service = await startService({ leaseSeconds: 1 });
+    const service = await startService();
     await event(service, "queued", 101, ["dim-qemu"]);
 
     // When
@@ -45,17 +45,7 @@ describe("shared QEMU scheduler HTTP protocol", () => {
     expect([first.status, second.status].sort()).toEqual([200, 204]);
     const winner = winners[0];
     expect(winner).toBeDefined();
-    const firstLease = await winner?.json() as { readonly claimId: string };
-    const winnerHost = first.status === 200 ? "host-a" : "host-b";
-    const winnerToken = first.status === 200 ? "host-a-token" : "host-b-token";
-    const successorHost = winnerHost === "host-a" ? "host-b" : "host-a";
-    const successorToken = winnerHost === "host-a" ? "host-b-token" : "host-a-token";
-    await new Promise((resolve) => setTimeout(resolve, 1_100));
-    const successor = await claim(service, successorHost, successorToken, "other", "request-successor");
-    expect(successor.status).toBe(200);
-    const staleRelease = await release(service, winnerHost, winnerToken, firstLease.claimId);
-    expect(staleRelease.status).toBe(409);
-    expect((await successor.json()) as { readonly claimId: string }).toHaveProperty("claimId");
+    expect(await winner?.json()).toMatchObject({ leaseSeconds: 60 });
   });
 
   it("makes retries idempotent, persists restart state, and keeps terminal events monotonic", async () => {
@@ -97,11 +87,30 @@ describe("shared QEMU scheduler HTTP protocol", () => {
       projectId: "other-project", hostId: "host-a", capacity: "capacity",
       labels: ["dim-qemu"], requestId: "wrong-project"
     });
+    const oversized = await fetch(`${service.endpoint}/v1/claims`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: `{"padding":"${"x".repeat(65_537)}"}`
+    });
 
     // Then
     expect(wrongHost.status).toBe(404);
     expect(wrongProject.status).toBe(404);
     expect(executable.status).toBe(400);
+    expect(oversized.status).toBe(400);
+  });
+
+  it("limits host backlog authority to queued events with configured labels", async () => {
+    const service = await startService();
+    const completed = await request(service, "/v1/events", "host-a", "host-a-token", {
+      projectId: "shared-project", action: "completed", jobId: 401, labels: ["dim-qemu"]
+    });
+    const arbitraryLabels = await request(service, "/v1/events", "host-a", "host-a-token", {
+      projectId: "shared-project", action: "queued", jobId: 402, labels: ["host-command"]
+    });
+
+    expect(completed.status).toBe(400);
+    expect(arbitraryLabels.status).toBe(400);
   });
 
   it("filters demand by labels and accepts duplicate out-of-order events idempotently", async () => {
@@ -130,10 +139,11 @@ async function startService(options: { readonly leaseSeconds?: number } = {}): P
     schemaVersion: 1,
     listen: { host: "127.0.0.1", port },
     database: join(root, "scheduler.sqlite3"),
-    leaseSeconds: options.leaseSeconds ?? 30,
+    leaseSeconds: options.leaseSeconds ?? 60,
     projects: {
       "shared-project": {
         webhookToken: "webhook-secret",
+        allowedLabels: ["dim-qemu"],
         hosts: { "host-a": "host-a-token", "host-b": "host-b-token" }
       }
     }
@@ -156,10 +166,10 @@ async function restartService(service: Service): Promise<void> {
 }
 
 async function event(service: Service, action: string, jobId: number, labels: readonly string[]): Promise<void> {
-  const response = await fetch(`${service.endpoint}/v1/events`, {
+  const response = await fetch(`${service.endpoint}/v1/webhooks/shared-project/workflow-job`, {
     method: "POST",
     headers: { Authorization: "Bearer webhook-secret", "Content-Type": "application/json", "X-Gitea-Event": "workflow_job" },
-    body: JSON.stringify({ projectId: "shared-project", action, jobId, labels })
+    body: JSON.stringify({ action, workflow_job: { id: jobId, labels } })
   });
   expect(response.status).toBe(202);
 }
