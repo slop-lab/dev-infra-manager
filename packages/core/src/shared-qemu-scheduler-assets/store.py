@@ -11,8 +11,9 @@ import time
 from protocol import HostId, ProjectId
 from storage import Transaction, prepare_database_path
 
-MAX_QUEUED_JOBS: Final = 10_000
+MAX_NONTERMINAL_JOBS: Final = 10_000
 MAX_COMPLETED_JOBS: Final = 10_000
+MAX_CLAIM_REQUESTS: Final = 100_000
 
 
 class StoreCapacityError(Exception):
@@ -111,13 +112,13 @@ class SchedulerStore:
             if current == "completed" or rank[action] < rank.get(current or "", 0):
                 return "ignored"
             state = "running" if action == "in_progress" else action
-            if current is None:
-                queued_count = int(connection.execute(
-                    "SELECT COUNT(*) FROM jobs WHERE project_id = ? AND state = 'queued'",
+            if current is None and state != "completed":
+                nonterminal_count = int(connection.execute(
+                    "SELECT COUNT(*) FROM jobs WHERE project_id = ? AND state != 'completed'",
                     (project_id,),
                 ).fetchone()[0])
-                if queued_count >= MAX_QUEUED_JOBS:
-                    raise StoreCapacityError("queued demand limit reached")
+                if nonterminal_count >= MAX_NONTERMINAL_JOBS:
+                    raise StoreCapacityError("nonterminal demand limit reached")
             if state == "completed" and current != "completed":
                 completed_count = int(connection.execute(
                     "SELECT COUNT(*) FROM jobs WHERE project_id = ? AND state = 'completed'",
@@ -185,6 +186,12 @@ class SchedulerStore:
             ).fetchone()
             if row is None:
                 return None
+            request_count = int(connection.execute(
+                "SELECT COUNT(*) FROM claim_requests WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()[0])
+            if request_count >= MAX_CLAIM_REQUESTS:
+                raise StoreCapacityError("claim request receipt limit reached")
             selected = int(row[0])
             claim_id = secrets.token_urlsafe(32)
             expires_at = now + self._lease_seconds
