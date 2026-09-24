@@ -26,7 +26,8 @@ partitioned beyond that bound. Deploy infrastructure fencing separately when
 that failure model must be covered.
 
 On each DIM host, copy `host-connection.json` to a private file, use a distinct
-stable `hostId` and the shared Project API token, set mode `0600`, and export its path:
+stable `hostId` equal to that host's external Gitea connection `hostId`, use the
+shared Project API token, set mode `0600`, and export its path:
 
 ```bash
 export DIM_QEMU_SCHEDULER_CONNECTION_FILE="$HOME/.config/dim/qemu-scheduler.json"
@@ -38,3 +39,9 @@ Gitea's organization `workflow_job` webhook with the exact `webhookUrl` and
 `webhookToken`. Do not put Gitea administrator credentials in either file.
 Leaving the environment variable unset uses the existing host-local scheduler;
 DIM rejects mixing local and shared modes for one Project.
+
+The service caps each Project at 10,000 queued or running jobs and 100,000
+claim request receipts. It returns HTTP `503` for new entries at saturation
+without evicting live claims or fences. Restore terminal webhook delivery to
+free nonterminal slots. Released receipts expire after seven days, while a
+receipt protecting a live claim remains until the claim is gone.
