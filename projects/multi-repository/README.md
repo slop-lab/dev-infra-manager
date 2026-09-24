@@ -130,9 +130,9 @@ explicitly for browser login; its first line is the username and its second is
 the password. The Project gives the agent the common
 `dim-development-service` helper and only an HTTPS development-URL socket. The
 helper lets the launcher choose its loopback port and routes the resulting URL
-through the lifecycle's fixed gateway in the direct `agent` container. The
-gateway is reachable over the Compose network without a host port publication;
-neither the tool nor its local port appears in `.dim`. Configure `https-ts`
+through the lifecycle's fixed gateway along the reviewed
+`agent-dind`/`dim-agent` path. The gateway is reachable without a host port
+publication; neither the tool nor its local port appears in `.dim`. Configure `https-ts`
 before launching with the executable HTTPS configuration:
 
 ```bash
@@ -180,28 +180,29 @@ home volume mounted read-only for backup or read-write for restore.
 
 The trusted root checkout owns `.dim/setup.sh`, Compose configuration, and the
 fixed `.dim/entrypoint.sh` task mapping. Setup obtains the host Git author
-through DIM's narrow host-input API and starts the Project-owned `agent`
-service.
+through DIM's narrow host-input API, starts `agent-dind`, and asks its reviewed
+launcher to create the actual `dim-agent` container.
 
 ```text
 host-side DIM runtime
 └── trusted workspace container
-    └── private Project Docker daemon
-        ├── unprivileged agent container
-        ├── privileged rootless-DinD sidecar
-        └── secret container built from the managed secrets repository
+    ├── agent-dind (private rootless Docker daemon)
+    │   └── dim-agent (unprivileged agent container)
+    └── secure-dind (optional private rootless Docker daemon)
+        └── dim-secret-service (reviewed secret-bearing container)
 ```
 
-The agent receives the host author, managed Project Git credentials, and the
-root checkout. It does not receive the host Docker socket or the trusted
-workspace Docker socket. The privileged sidecar runs a rootless Docker daemon
-inside the workspace's existing resource and isolation boundary; the agent
-reaches it over the private Compose network.
+The agent receives the host author, managed Project Git credentials, mutable
+Project source, and only the Unix socket of `agent-dind`. It receives neither
+the host Docker socket nor the trusted workspace or `secure-dind` socket. The
+outer Compose graph contains only the two daemon services; their inner
+containers remain inside the workspace's existing resource and isolation
+boundary.
 Agent tasks run as the workspace owner's nonroot identity and may use
 passwordless `sudo` only for root inside the agent container. That container
 root has neither the trusted workspace's runtime socket nor host authority.
 
-The agent and DinD sidecar share only the named volume mounted at
+The agent and `agent-dind` share only the named volume mounted at
 `/mnt/workspace-shared-dind`. Bind-mounted nested workloads must use a source
 below that path so the source has the same meaning from both containers.
 Because the unprivileged agent and rootless DinD may have different host UIDs,
@@ -216,7 +217,9 @@ the ordinary setup, Compose, entrypoint, and teardown contracts.
 ## Secret-bearing service
 
 A trusted operator can deploy the reviewed source from the managed `secrets`
-repository while supplying the secret out of band:
+repository while supplying the secret out of band. Deployment starts the
+optional `secure` profile, streams the reviewed build context into
+`secure-dind`, and passes the secret only to its launcher:
 
 ```bash
 EXAMPLE_SECRET=not-a-real-secret bash deploy-secret.bash
@@ -235,10 +238,12 @@ dim workspace run example-dev bash -- \
   -lc 'wget -qO- http://secret:7099/healthz'
 ```
 
-The health response reports only whether a secret was configured. The agent's
-private Docker daemon cannot list the trusted workspace's secret container,
-and the raw secret is not included in the agent environment. Never commit a
-real secret.
+The health response reports only whether a secret was configured. A fixed
+Project-reviewed TCP relay carries only this service traffic from the agent
+side to port 7099 in `secure-dind`; it carries no Docker control protocol. The
+agent's private Docker daemon cannot list the secure daemon's container, and
+neither the raw secret nor the secure daemon socket enters the agent
+environment. Never commit a real secret.
 
 Remove the service and workspace:
 
