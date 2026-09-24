@@ -192,6 +192,12 @@ scheduler, or compromised outside DIM can continue executing until its local
 supervisor runs cleanup. Use infrastructure-level fencing when that stronger
 guarantee is required.
 
+Every host for one Project presents the same Project API credential and its
+own stable host ID; that ID must also be the host ID in the external Gitea
+connection. Creating, starting, or restarting a capacity fails before runtime
+mutation when persisted local/shared mode, Project ID, or host ID differs from
+the current connection.
+
 Build the pinned service image from installed assets with `dim ci scheduler
 image build IMAGE`. Mount a service-user-owned mode-`0600` config and a durable
 database directory. The operator owns TLS or isolated-network transport and
@@ -216,6 +222,16 @@ capacity. This is one host-driven reconciliation pass, not a polling scheduler;
 the existing shared claims, label matching, event precedence, and completed
 tombstones govern replay exactly as they govern live delivery.
 
+Persistent admission is capped per Project at 10,000 combined queued and
+running jobs, 10,000 completed tombstones, and 100,000 claim request receipts.
+The service returns HTTP `503` rather than evicting nonterminal demand, claims,
+or live request fences. Completed events free nonterminal slots; completed
+tombstones and released receipts are retained for up to seven days, after which
+normal traffic prunes them. Operators recover nonterminal saturation by
+restoring terminal webhook delivery, and receipt saturation by allowing the
+retention window to expire. A receipt remains while its claim is live even
+after the ordinary retention deadline.
+
 Coordinator credentials remain in the DIM host process that installs the hook
 and lists jobs. Neither the supervisor nor its guest receives them. Supervisor
 health and replay use only the per-launch webhook authorization, passed to
@@ -238,7 +254,10 @@ trigger completes or its claim disappears or moves to another capacity;
 renewal of that trigger claim stops. Shutdown and scheduler state-I/O failures
 still terminate and reap the supervisor process group, and normal supervisor
 cleanup still removes per-run process state. Persisted queued demand resumes
-after a supervisor restart, so webhook redelivery is not required.
+after a supervisor restart, so webhook redelivery is not required. An
+unsuccessful supervisor is terminated and reaped, its claim is released, and
+the worker waits with shutdown-interruptible exponential backoff capped at 30
+seconds before requesting fresh work.
 
 The first matching QEMU job builds or reuses two immutable Packer layers. A
 host-scoped common base is keyed by the pinned Ubuntu cloud image, DIM
