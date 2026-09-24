@@ -165,6 +165,40 @@ describe("CI runner container stop ownership", () => {
     expect(runner.calls.some((call) => call[1] === "stop")).toBe(false);
   });
 
+  it("stops one shared host capacity without removing the central hook or the other host state", async () => {
+    // Given
+    const runner = new StatefulContainerRunner();
+    const hostA = {
+      ...READY_QEMU_RECORD,
+      name: "host-a-capacity",
+      executor: {
+        ...READY_QEMU_RECORD.executor,
+        supervisorName: "host-a-supervisor",
+        scheduler: { projectId: TEST_PROJECT.id, hostId: "host-a" }
+      }
+    } satisfies CiRunnerRecord;
+    const hostB = {
+      ...READY_QEMU_RECORD,
+      name: "host-b-capacity",
+      executor: {
+        ...READY_QEMU_RECORD.executor,
+        supervisorName: "host-b-supervisor",
+        scheduler: { projectId: TEST_PROJECT.id, hostId: "host-b" }
+      }
+    } satisfies CiRunnerRecord;
+    await state.writeCiRunner(hostA);
+    await state.writeCiRunner(hostB);
+
+    // When
+    const stopped = await stopCiRunner(runner, options, hostA.projectName, hostA.name);
+
+    // Then
+    expect(stopped.executor.phase).toBe("stopped");
+    expect(giteaCiCoordinator.removeWorkflowJobWebhook).not.toHaveBeenCalled();
+    await expect(state.readCiRunner(hostB.projectName, hostB.name)).resolves.toEqual(hostB);
+    expect(giteaCiCoordinator.reconcileWorkflowJobWebhookTargets).toHaveBeenCalledWith(runner, options);
+  });
+
   it("acquires the Project lock before the CI-runner lock and releases them in reverse order", async () => {
     // Given
     const events: string[] = [];

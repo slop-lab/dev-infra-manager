@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { deleteCiRunner } from "../../../../core/packages/core/src/ciRunner.js";
+import { ciRunnerQemuRunnerName } from "../../../../core/packages/core/src/qemuCiRunnerLifecycle.js";
 import { giteaCiCoordinator } from "../../../../core/packages/core/src/giteaCiCoordinator.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { CiRunnerRecord, LifecycleOptions, ProjectRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
@@ -218,5 +219,43 @@ describe("CI runner container deletion ownership", () => {
     expect(giteaCiCoordinator.removeWorkflowJobWebhook).not.toHaveBeenCalled();
     expect(giteaCiCoordinator.removeRunner).not.toHaveBeenCalled();
     await expect(state.readCiRunner(PROJECT.name, testCase.record.name)).resolves.toEqual(testCase.record);
+  });
+
+  it("deletes one shared host capacity without removing the central hook or the other host identity", async () => {
+    // Given
+    const runner = new StatefulContainerRunner();
+    const hostA = {
+      ...qemuRecord,
+      name: "host-a-capacity",
+      executor: {
+        ...qemuRecord.executor,
+        supervisorName: "host-a-supervisor",
+        scheduler: { projectId: PROJECT.id, hostId: "host-a" }
+      }
+    } satisfies CiRunnerRecord;
+    const hostB = {
+      ...qemuRecord,
+      name: "host-b-capacity",
+      executor: {
+        ...qemuRecord.executor,
+        supervisorName: "host-b-supervisor",
+        scheduler: { projectId: PROJECT.id, hostId: "host-b" }
+      }
+    } satisfies CiRunnerRecord;
+    await state.writeCiRunner(hostA);
+    await state.writeCiRunner(hostB);
+
+    // When
+    await deleteCiRunner(runner, options, PROJECT.name, hostA.name);
+
+    // Then
+    expect(giteaCiCoordinator.removeWorkflowJobWebhook).not.toHaveBeenCalled();
+    expect(giteaCiCoordinator.removeRunner).toHaveBeenCalledWith(
+      runner, options, PROJECT, ciRunnerQemuRunnerName(PROJECT.name, hostA.name, "host-a")
+    );
+    await expect(state.readCiRunner(PROJECT.name, hostB.name)).resolves.toEqual(hostB);
+    expect(giteaCiCoordinator.reconcileWorkflowJobWebhookTargets).toHaveBeenCalledWith(
+      runner, options, { project: PROJECT.name, name: hostA.name }
+    );
   });
 });
