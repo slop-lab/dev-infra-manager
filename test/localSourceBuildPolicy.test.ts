@@ -62,9 +62,13 @@ async function createFixture(): Promise<Fixture> {
 printf 'pack %s\\n' "$1" >>"$DIM_INVOCATIONS"
 mkdir -p "$1"
 cat >"$1/packages.json" <<'JSON'
-{"schemaVersion":1,"packages":[{"name":"@slop-lab/dim-cli","version":"0.9.0-local-${"a".repeat(64)}","file":"cli.tgz"}]}
+{"schemaVersion":1,"packages":[
+  {"name":"@slop-lab/dim-cli","version":"0.9.0-local-${"a".repeat(64)}","file":"cli.tgz"},
+  {"name":"@slop-lab/dim-installer","version":"0.9.0-local-${"a".repeat(64)}","file":"slop-lab-dim-installer-local.tgz"}
+]}
 JSON
 touch "$1/cli.tgz"
+touch "$1/slop-lab-dim-installer-local.tgz"
 `
   );
   await writeFile(
@@ -78,7 +82,20 @@ touch "$1/cli.tgz"
     flock:
       "#!/usr/bin/env bash\nfd=\"${!#}\"\nprintf 'lock %s\\n' \"$(readlink \"/proc/$PPID/fd/$fd\")\" >>\"$DIM_INVOCATIONS\"\n",
     id: "#!/usr/bin/env bash\ncase \"$1\" in -u) printf '1234\\n' ;; -g) printf '5678\\n' ;; esac\n",
-    node: `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`
+    node: `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`,
+    npm: `#!/usr/bin/env bash
+{ printf 'npm'; printf ' %s' "$@"; printf '\n'; } >>"$DIM_INVOCATIONS"
+prefix=""
+for ((index=1; index <= $#; index++)); do
+  if [[ "\${!index}" == "--prefix" ]]; then next=$((index + 1)); prefix="\${!next}"; fi
+done
+mkdir -p "$prefix/node_modules/.bin"
+cat >"$prefix/node_modules/.bin/dim" <<'SCRIPT'
+#!/usr/bin/env bash
+{ printf 'dim'; printf ' %s' "$@"; printf '\n'; } >>"$DIM_INVOCATIONS"
+SCRIPT
+chmod +x "$prefix/node_modules/.bin/dim"
+`
   };
   await Promise.all(
     Object.entries(toolsSource).map(async ([tool, source]) => {
