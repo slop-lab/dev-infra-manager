@@ -6,7 +6,7 @@ const scheduler = {
   projectId: "project-id", hostId: "host-a",
   controllerEndpoint: "https://control.example", supervisorEndpoint: "https://worker.example",
   webhookUrl: "https://hook.example/v1/webhooks/project-id/workflow-job",
-  hostToken: "host-token", webhookToken: "hook-token"
+  apiToken: "api-token", webhookToken: "hook-token"
 } satisfies QemuSchedulerProjectConnection;
 
 describe("shared QEMU scheduler topology", () => {

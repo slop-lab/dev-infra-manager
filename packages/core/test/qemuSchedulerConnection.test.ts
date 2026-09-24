@@ -29,7 +29,7 @@ describe("QEMU scheduler connection", () => {
       controllerEndpoint: "http://127.0.0.1:9080",
       supervisorEndpoint: "http://127.0.0.1:19080",
       webhookUrl: "http://127.0.0.1:29080/v1/webhooks/shared-project/workflow-job",
-      hostToken: "host-token", webhookToken: "webhook-token"
+      apiToken: "api-token", webhookToken: "webhook-token"
     });
   });
 
@@ -73,7 +73,7 @@ async function connectionFile(overrides: Readonly<Record<string, unknown>> = {})
     controllerEndpoint: overrides.controllerEndpoint ?? "http://127.0.0.1:9080",
     supervisorEndpoint: "http://127.0.0.1:19080",
     webhookUrl: "http://127.0.0.1:29080/v1/webhooks/shared-project/workflow-job",
-    hostToken: "host-token",
+    apiToken: "api-token",
     webhookToken: "webhook-token"
   };
   const rootFields = {
