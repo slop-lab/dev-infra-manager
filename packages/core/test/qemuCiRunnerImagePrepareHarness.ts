@@ -162,7 +162,9 @@ for argument in "$@"; do
     common_image=*) common="\${argument#*=}" ;;
   esac
 done
-mkdir -p "$output"
+[[ ! -e "$output" ]] || { printf 'fake Packer: output directory already exists: %s\n' "$output" >&2; exit 30; }
+[[ -d "$HOME" ]]
+mkdir "$output"
 if [[ "$template" == *common* ]]; then
   [[ ! -f "$root/packer-fail" || "$(cat "$root/packer-fail")" != common ]] || exit 29
   if [[ -f "$root/hold-common-$project_key" ]]; then
