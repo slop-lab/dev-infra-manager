@@ -39,7 +39,7 @@ export function parseProjectRecord(value: unknown): ProjectRecord {
   }
   const parsed = {
     schemaVersion: 4,
-    id: text(record.id, "Project state.id"),
+    id: identifier(record.id, "Project state.id"),
     name: validateLifecycleName(text(record.name, "Project state.name"), "project"),
     gitNamespace: validateLifecycleName(text(record.gitNamespace, "Project state.gitNamespace"), "Gitea organization"),
     giteaOrganizationId,
@@ -55,6 +55,12 @@ export function parseProjectRecord(value: unknown): ProjectRecord {
     ...(record.rootRef === undefined ? {} : { rootRef: text(record.rootRef, "Project state.rootRef") }),
     ...(record.error === undefined ? {} : { error: text(record.error, "Project state.error") })
   };
+}
+
+function identifier(value: unknown, label: string): string {
+  const parsed = text(value, label);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(parsed)) throw invalid(label);
+  return parsed;
 }
 
 function repositories(value: unknown): ProjectRepositoryRecord[] {

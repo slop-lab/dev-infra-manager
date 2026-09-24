@@ -72,6 +72,7 @@ export interface SysboxCiRunnerExecutor {
   resources: CiRunnerResources;
   inheritsResources: boolean;
   labels: string[];
+  providerRunnerName?: string;
   updatedAt: string;
   error?: string;
 }
@@ -145,6 +146,7 @@ export type GiteaConnection =
   | (GiteaConnectionBase & { readonly kind: "managed" })
   | (GiteaConnectionBase & {
       readonly kind: "external";
+      readonly hostId: string;
       readonly projectBindings: Readonly<Record<string, GiteaProjectBinding>>;
     });
 

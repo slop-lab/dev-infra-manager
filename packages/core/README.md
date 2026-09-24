@@ -140,6 +140,8 @@ file is the complete external connection boundary:
 ```json
 {
   "schemaVersion": 1,
+  "transport": "https",
+  "hostId": "builder-a",
   "apiBaseUrl": "https://gitea-control.example/api/v1",
   "hostBaseUrl": "https://git.example",
   "workspaceBaseUrl": "https://git.workspace.example",
@@ -164,13 +166,18 @@ file is the complete external connection boundary:
 
 The API, host-clone, workspace-clone, and runner endpoints are independent
 because those clients may use different routes to the same service. DIM
-validates the service and administrator identity before lifecycle mutation,
-but does not create or stop the external service, create credentials, change
-its organization-creation policy, or rewrite its webhook allowlist. The
-operator must provision the users, organization, permissions, and branch
-policy first. Each external Project requires an explicit shared ID, namespace,
-and Gitea organization ID; this lets multiple hosts attach to the same Project
-without adopting an unrelated same-name organization.
+requires HTTPS unless every endpoint is loopback HTTP or the operator selects
+`isolated-http` for an isolated network. It rejects redirects and bounds API
+requests to the configured API base. The administrator must report admin
+status; the distinct writer and maintainer identities must report non-admin
+status. DIM does not create or stop the external service, create credentials,
+delete its repositories or organizations, change its organization-creation
+policy, or rewrite its webhook allowlist. Use `project remove` to detach local
+state. The operator must provision the users, organization, permissions, and
+branch policy first. Each external Project requires a unique explicit shared
+ID, namespace, and Gitea organization ID; this lets multiple hosts attach to
+the same Project without adopting an unrelated same-name organization. The
+stable host ID scopes and persists Sysbox provider registrations across hosts.
 
 Every managed CI runner requires `.dim/ci/runner.yml` in the protected Project
 root. Its strict schema declares ordinary and integration labels,
