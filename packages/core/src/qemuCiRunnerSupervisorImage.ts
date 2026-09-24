@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { UserError } from "./errors.js";
 import {
@@ -127,7 +127,11 @@ export async function prepareQemuCiRunnerSupervisorImage(runner: StreamingComman
       ["project.pkr.hcl", QEMU_CI_PROJECT_PACKER_TEMPLATE, 0o600],
       ["provision-common.bash", QEMU_CI_COMMON_PROVISION_SCRIPT, 0o700]
     ];
-    await Promise.all(assets.map(([name, bytes, mode]) => writeFile(path.join(context, name), bytes, { mode })));
+    await Promise.all(assets.map(async ([name, bytes, mode]) => {
+      const asset = path.join(context, name);
+      await writeFile(asset, bytes, { mode });
+      await chmod(asset, mode);
+    }));
     const result = await runner.run("docker", ["build", "--iidfile", iidfile, "--tag", QEMU_CI_SUPERVISOR_IMAGE, context]);
     if (result.exitCode !== 0) throw new UserError(`failed to build QEMU runner supervisor: ${result.stderr.trim()}`);
     const imageId = (await readFile(iidfile, "utf8")).trim();
