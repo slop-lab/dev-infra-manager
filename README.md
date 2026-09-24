@@ -282,6 +282,14 @@ preserves unrelated OpenCode and OMO user configuration. It does not start
 OpenCode or perform provider authentication, and lifecycle setup never invokes
 it.
 
+OpenCode remains the default helper behavior. A reviewed Project may instead
+stream the same checksum-verified helper with the `codex` selection to install
+exactly `@openai/codex@0.156.1` and publish the same v1 launcher manifest. The
+helper does not log in, start Codex, or create or modify
+`$HOME/.codex/auth.json` or `$HOME/.codex/config.toml`. The paired examples
+repository documents the minimal selection at `use-cases/codex`; the existing
+generic SSH `ProxyCommand` is reused unchanged.
+
 To start an authenticated OpenCode Web server explicitly and request or reuse
 its workspace-scoped external URL, run the separate launcher after setup:
 

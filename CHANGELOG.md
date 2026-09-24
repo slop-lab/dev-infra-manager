@@ -90,7 +90,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   or automatic installation to DIM core. The canonical Project's `tool-setup`
   runs only its reviewed local utility; no-checkout bootstraps execute verified
   downloaded bytes through `bash`, and existing homes upgrade only when the
-  user explicitly reruns setup.
+  user explicitly reruns setup. The same helper can now explicitly select the
+  pinned Codex CLI while preserving Codex authentication and configuration;
+  OpenCode remains the default selection.
 
 - The canonical Project now maps an inner UID-0 agent onto the non-root
   workspace owner through a private rootless `agent-dind`. The non-root agent
