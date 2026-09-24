@@ -9,12 +9,13 @@ network="dim-external-gitea-$suffix"
 gitea_container="dim-external-gitea-$suffix"
 controller_a_pid=""
 controller_b_pid=""
+malicious_pid=""
 existing_dim_gitea="$(docker container inspect dim-gitea --format '{{.Id}}|{{.State.Running}}|{{.State.StartedAt}}|{{.RestartCount}}' 2>/dev/null || true)"
 umask 077
 
 cleanup() {
   local pid
-  for pid in "$controller_a_pid" "$controller_b_pid"; do
+  for pid in "$controller_a_pid" "$controller_b_pid" "$malicious_pid"; do
     if [[ -n "$pid" ]]; then
       kill "$pid" >/dev/null 2>&1 || true
       wait "$pid" >/dev/null 2>&1 || true
@@ -46,7 +47,7 @@ docker run --detach --name "$gitea_container" \
   --env GITEA__server__DISABLE_SSH=true \
   --env GITEA__service__DISABLE_REGISTRATION=true \
   "$gitea_image" >/dev/null
-docker network connect --alias external-gitea "$network" "$gitea_container"
+docker network connect --alias external-gitea --alias external-gitea-runner "$network" "$gitea_container"
 gitea_port="$(docker port "$gitea_container" 3000/tcp \
   | jq -Rrs 'split("\n") | map(select(length > 0)) | last | split(":") | last')"
 [[ "$gitea_port" =~ ^[0-9]+$ ]]
@@ -54,6 +55,7 @@ gitea_address="$(docker container inspect "$gitea_container" \
   --format '{{with index .NetworkSettings.Networks "bridge"}}{{.IPAddress}}{{end}}')"
 [[ -n "$gitea_address" ]]
 gitea_url="http://$gitea_address:3000"
+gitea_host_url="$gitea_url"
 for attempt in $(seq 1 90); do
   if curl --fail --silent "$gitea_url/api/healthz" >/dev/null 2>&1; then
     break
@@ -96,15 +98,24 @@ printf 'controller Docker operation denied: %s\n' "$1" >&2
 exit 97
 EOF
 chmod 0700 "$work_dir/fake-bin/docker"
+cat >"$work_dir/fake-bin/dim" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exec node --import "$DIM_SOURCE_ROOT/core-development/node_modules/tsx/dist/loader.mjs" \
+  "$DIM_SOURCE_ROOT/core/packages/cli/src/cli.ts" "$@"
+EOF
+chmod 0700 "$work_dir/fake-bin/dim"
 : >"$work_dir/docker-invocations"
 
 write_connection() {
-  local destination="$1" password="$2"
+  local destination="$1" password="$2" host_id="$3"
   jq -n \
-    --arg api "$gitea_url/api/v1" --arg endpoint "$gitea_url" \
+    --arg api "$gitea_url/api/v1" --arg host "$gitea_host_url" \
+    --arg workspace "http://external-gitea:3000" --arg runner "http://external-gitea-runner:3000" \
+    --arg host_id "$host_id" \
     --arg admin "$password" --arg writer "$writer_password" --arg maintainer "$maintainer_password" \
     --argjson organization "$organization_id" \
-    '{schemaVersion:1,apiBaseUrl:$api,hostBaseUrl:$endpoint,workspaceBaseUrl:$endpoint,runnerBaseUrl:$endpoint,credentials:{adminUsername:"dim-operator",adminPassword:$admin,writerUsername:"dim-workspace",writerPassword:$writer,maintainerUsername:"dim-host",maintainerPassword:$maintainer},projects:{shared:{id:"shared-project-id",gitNamespace:"dim-shared",giteaOrganizationId:$organization}}}' \
+    '{schemaVersion:1,transport:"isolated-http",hostId:$host_id,apiBaseUrl:$api,hostBaseUrl:$host,workspaceBaseUrl:$workspace,runnerBaseUrl:$runner,credentials:{adminUsername:"dim-operator",adminPassword:$admin,writerUsername:"dim-workspace",writerPassword:$writer,maintainerUsername:"dim-host",maintainerPassword:$maintainer},projects:{shared:{id:"shared-project-id",gitNamespace:"dim-shared",giteaOrganizationId:$organization}}}' \
     >"$destination"
   chmod 0600 "$destination"
 }
@@ -152,8 +163,8 @@ admin_call() {
 
 connection_a="$work_dir/client-a-connection.json"
 connection_b="$work_dir/client-b-connection.json"
-write_connection "$connection_a" "$wrong_password"
-write_connection "$connection_b" "$admin_password"
+write_connection "$connection_a" "$wrong_password" host-a
+write_connection "$connection_b" "$admin_password" host-b
 started_controller_pid=""
 start_controller client-a "$connection_a"
 controller_a_pid="$started_controller_pid"
@@ -179,18 +190,15 @@ if ! jq -er '.error | test("External Gitea (health check failed: 401|authenticat
   printf 'invalid credential error was: %s\n' "$(jq -r '.error // "missing error"' "$failure_body")" >&2
   exit 1
 fi
-write_connection "$connection_a" "$admin_password"
+write_connection "$connection_a" "$admin_password" host-a
 printf '%s\n' 'external-gitea: rejected invalid credential'
 
 service_a="$work_dir/service-a.json"
 service_b="$work_dir/service-b.json"
 admin_call client-a service.ensure '{}' "$service_a"
 admin_call client-b service.ensure '{}' "$service_b"
-for response in "$service_a" "$service_b"; do
-  jq -e --arg endpoint "$gitea_url" \
-    '.kind == "external" and .hostBaseUrl == $endpoint and .workspaceBaseUrl == $endpoint and .runnerBaseUrl == $endpoint' \
-    "$response" >/dev/null
-done
+jq -e --arg endpoint "$gitea_host_url" '.kind == "external" and .hostId == "host-a" and .hostBaseUrl == $endpoint' "$service_a" >/dev/null
+jq -e --arg endpoint "$gitea_host_url" '.kind == "external" and .hostId == "host-b" and .hostBaseUrl == $endpoint' "$service_b" >/dev/null
 printf '%s\n' 'external-gitea: validated endpoint roles'
 
 admin_call client-a project.create '{"name":"shared"}' "$work_dir/project-a.json"
@@ -203,7 +211,7 @@ admin_call client-b repo.prepare \
   "$work_dir/repo-b.json"
 printf '%s\n' 'external-gitea: attached both clients to one Project repository'
 
-host_url="$gitea_url/dim-shared/root.git"
+host_url="$gitea_host_url/dim-shared/root.git"
 jq -e --arg id shared-project-id --argjson organization "$organization_id" \
   '.id == $id and .giteaOrganizationId == $organization' "$work_dir/project-a.json" >/dev/null
 jq -e --arg id shared-project-id --argjson organization "$organization_id" \
@@ -212,7 +220,8 @@ jq -e --arg id shared-project-id --argjson organization "$organization_id" \
 [[ -f "$work_dir/client-b/state/projects/shared.json" ]]
 [[ "$(realpath "$work_dir/client-a/state")" != "$(realpath "$work_dir/client-b/state")" ]]
 for response in "$work_dir/repo-a.json" "$work_dir/repo-b.json"; do
-  jq -e --arg url "$host_url" '.repository.hostUrl == $url and .repository.workspaceUrl == $url' "$response" >/dev/null
+  jq -e --arg host_url "$host_url" --arg workspace_url "http://external-gitea:3000/dim-shared/root.git" \
+    '.repository.hostUrl == $host_url and .repository.workspaceUrl == $workspace_url' "$response" >/dev/null
 done
 curl --fail --silent --show-error --user "dim-operator:$admin_password" \
   --header 'content-type: application/json' --request PATCH --data '{"private":true}' \
@@ -251,11 +260,62 @@ for client in client-a client-b; do
 done
 printf '%s\n' 'external-gitea: cloned and read the private remote through both clients'
 
+: >"$work_dir/malicious-headers"
+env HEADERS_FILE="$work_dir/malicious-headers" PORT_FILE="$work_dir/malicious-port" node -e '
+  const fs = require("node:fs");
+  const http = require("node:http");
+  const server = http.createServer((request, response) => {
+    fs.appendFileSync(process.env.HEADERS_FILE, JSON.stringify(request.headers) + "\n");
+    response.writeHead(401, { "WWW-Authenticate": "Basic realm=attacker" }).end();
+  });
+  server.listen(0, "127.0.0.1", () => fs.writeFileSync(process.env.PORT_FILE, String(server.address().port)));
+' &
+malicious_pid=$!
+for attempt in $(seq 1 30); do
+  [[ -s "$work_dir/malicious-port" ]] && break
+  [[ "$attempt" -lt 30 ]] || exit 1
+  sleep 0.1
+done
+malicious_port="$(cat "$work_dir/malicious-port")"
+if env PATH="$work_dir/fake-bin:$PATH" DIM_SOURCE_ROOT="$root_dir" \
+  DIM_ADMIN_CONTROLLER_SOCKET="$work_dir/client-a/runtime/admin.sock" \
+  node --import "$root_dir/core-development/node_modules/tsx/dist/loader.mjs" \
+    "$root_dir/core/packages/cli/src/cli.ts" x git ls-remote "http://127.0.0.1:$malicious_port/steal" \
+    >/dev/null 2>&1; then
+  printf 'malicious Git remote unexpectedly succeeded\n' >&2
+  exit 1
+fi
+if grep -qi 'authorization' "$work_dir/malicious-headers"; then
+  printf 'malicious Git remote received DIM credentials\n' >&2
+  exit 1
+fi
+printf '%s\n' 'external-gitea: x git withheld credentials from an unscoped remote'
+
+for operation in project.purge repo.delete; do
+  body='{"name":"shared"}'
+  [[ "$operation" == repo.delete ]] && body='{"project":"shared","alias":"root"}'
+  refusal="$work_dir/${operation//./-}-refusal.json"
+  status="$(curl --silent --unix-socket "$work_dir/client-a/runtime/admin.sock" \
+    --header 'content-type: application/json' --request POST --data "$body" \
+    --output "$refusal" --write-out '%{http_code}' "http://localhost/v1/call/$operation")"
+  [[ "$status" == 400 ]]
+  if ! jq -e '.error | test("operator-owned")' "$refusal" >/dev/null; then
+    printf '%s refusal was: %s\n' "$operation" "$(jq -c . "$refusal")" >&2
+    exit 1
+  fi
+  curl --fail --silent --show-error --user "dim-operator:$admin_password" "$gitea_url/api/v1/repos/dim-shared/root" >/dev/null
+done
+admin_call client-a project.remove '{"name":"shared"}' "$work_dir/remove-a.json"
+admin_call client-b repo.show '{"project":"shared","alias":"root"}' "$work_dir/repo-b-after-remove.json"
+jq -e '.phase == "ready"' "$work_dir/repo-b-after-remove.json" >/dev/null
+printf '%s\n' 'external-gitea: external deletion refused and local detach preserved the second host'
+
 admin_call client-a host.shutdown '{}' "$work_dir/shutdown-a.json"
 jq -e '.phase == "stopped"' "$work_dir/shutdown-a.json" >/dev/null
 curl --fail --silent "$gitea_url/api/healthz" >/dev/null
 admin_call client-b repo.show '{"project":"shared","alias":"root"}' "$work_dir/repo-b-after-shutdown.json"
-jq -e --arg url "$host_url" '.hostUrl == $url and .workspaceUrl == $url and .phase == "ready"' \
+jq -e --arg host_url "$host_url" --arg workspace_url "http://external-gitea:3000/dim-shared/root.git" \
+  '.hostUrl == $host_url and .workspaceUrl == $workspace_url and .phase == "ready"' \
   "$work_dir/repo-b-after-shutdown.json" >/dev/null
 printf '%s\n' 'external-gitea: preserved service and second client after host shutdown'
 
