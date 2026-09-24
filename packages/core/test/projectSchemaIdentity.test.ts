@@ -91,4 +91,13 @@ describe("Project schema organization identity", () => {
     // Then
     await expect(read).resolves.toMatchObject({ phase: "creating", giteaOrganizationId: null });
   });
+
+  it("rejects an unsafe Project ID before it can select filesystem state", async () => {
+    await writeFile(state.projectPath("example"), JSON.stringify({
+      ...rawProject(4, 41),
+      id: "../other-project"
+    }));
+
+    await expect(state.readProject("example")).rejects.toThrow(/Project state.id/);
+  });
 });

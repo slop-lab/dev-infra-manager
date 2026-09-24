@@ -247,6 +247,7 @@ describe("Project Gitea organization identity", () => {
     // Given
     vi.mocked(ensureGitea).mockResolvedValue({
       kind: "external",
+      hostId: "host-a",
       adminUsername: "admin",
       adminPassword: "admin-secret",
       writerUsername: "writer",
@@ -287,6 +288,7 @@ describe("Project Gitea organization identity", () => {
     // Given
     vi.mocked(ensureGitea).mockResolvedValue({
       kind: "external",
+      hostId: "host-a",
       adminUsername: "admin",
       adminPassword: "admin-secret",
       writerUsername: "writer",

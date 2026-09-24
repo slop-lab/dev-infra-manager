@@ -1,5 +1,5 @@
 import { once } from "node:events";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,15 +40,16 @@ describe("external Gitea connection", () => {
     // Then
     expect(connection).toMatchObject({
       kind: "external",
+      hostId: "host-a",
       apiBaseUrl: `${endpoint}/api/v1`,
-      hostBaseUrl: "https://git.host.example",
-      workspaceBaseUrl: "https://git.workspace.example",
-      runnerBaseUrl: "https://git.runner.example"
+      hostBaseUrl: `${endpoint}/host`,
+      workspaceBaseUrl: `${endpoint}/workspace`,
+      runnerBaseUrl: `${endpoint}/runner`
     });
-    expect(giteaHostCloneUrl(connection, "dim-example", "root")).toBe("https://git.host.example/dim-example/root.git");
-    expect(giteaInternalCloneUrl(connection, "dim-example", "root")).toBe("https://git.workspace.example/dim-example/root.git");
-    await expect(giteaNestedBaseUrl(runner, connection)).resolves.toBe("https://git.workspace.example");
-    await expect(giteaRunnerBaseUrl(runner, connection)).resolves.toBe("https://git.runner.example");
+    expect(giteaHostCloneUrl(connection, "dim-example", "root")).toBe(`${endpoint}/host/dim-example/root.git`);
+    expect(giteaInternalCloneUrl(connection, "dim-example", "root")).toBe(`${endpoint}/workspace/dim-example/root.git`);
+    await expect(giteaNestedBaseUrl(runner, connection)).resolves.toBe(`${endpoint}/workspace`);
+    await expect(giteaRunnerBaseUrl(runner, connection)).resolves.toBe(`${endpoint}/runner`);
   });
 
   it("rejects invalid credentials before any Docker command", async () => {
@@ -76,6 +77,21 @@ describe("external Gitea connection", () => {
 
     // When / Then
     await expect(ensureGitea(rejectingDockerRunner(), options)).rejects.toThrow(/mode 0600/);
+  });
+
+  it("rejects a symlinked connection file without following it", async () => {
+    // Given
+    const endpoint = await authenticatedGiteaEndpoint(servers, "operator", "admin-secret");
+    const target = await externalConnectionFile(roots, endpoint);
+    const connectionFile = `${target}.link`;
+    await symlink(target, connectionFile);
+    const options = lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer",
+      DIM_GITEA_CONNECTION_FILE: connectionFile
+    });
+
+    // When / Then
+    await expect(ensureGitea(rejectingDockerRunner(), options)).rejects.toThrow(/regular file/);
   });
 
   it("rejects an invalid configured endpoint before any Docker command", async () => {
@@ -109,6 +125,56 @@ describe("external Gitea connection", () => {
       ["per-host-runner"]
     )).resolves.toBeUndefined();
   });
+
+  it.each([
+    ["administrator", { adminIsAdmin: false }, /administrator.*admin/],
+    ["writer", { writerIsAdmin: true }, /writer.*non-administrator/],
+    ["maintainer", { maintainerIsAdmin: true }, /maintainer.*non-administrator/]
+  ])("rejects an invalid %s role", async (_role, roleOverrides, message) => {
+    const endpoint = await authenticatedGiteaEndpoint(servers, "operator", "admin-secret", roleOverrides);
+    const connectionFile = await externalConnectionFile(roots, endpoint);
+    const options = lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer",
+      DIM_GITEA_CONNECTION_FILE: connectionFile
+    });
+
+    await expect(ensureGitea(rejectingDockerRunner(), options)).rejects.toThrow(message);
+  });
+
+  it("rejects duplicate role identities and unsafe Project bindings before transport", async () => {
+    const endpoint = await authenticatedGiteaEndpoint(servers, "operator", "admin-secret");
+    const duplicate = await externalConnectionFile(roots, endpoint, { writerUsername: "operator" });
+    const unsafe = await externalConnectionFile(roots, endpoint, { projectId: "../shared" });
+
+    await expect(ensureGitea(rejectingDockerRunner(), lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer", DIM_GITEA_CONNECTION_FILE: duplicate
+    }))).rejects.toThrow(/distinct role identities/);
+    await expect(ensureGitea(rejectingDockerRunner(), lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer", DIM_GITEA_CONNECTION_FILE: unsafe
+    }))).rejects.toThrow(/safe identifier/);
+  });
+
+  it("requires Project IDs, namespaces, and organization IDs to be unique", async () => {
+    // Given
+    const endpoint = await authenticatedGiteaEndpoint(servers, "operator", "admin-secret");
+    const connectionFile = await externalConnectionFile(roots, endpoint, {
+      additionalProject: { id: "shared-project-id", gitNamespace: "dim-other", giteaOrganizationId: 42 }
+    });
+
+    // When / Then
+    await expect(ensureGitea(rejectingDockerRunner(), lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer", DIM_GITEA_CONNECTION_FILE: connectionFile
+    }))).rejects.toThrow(/Project id.*unique/);
+  });
+
+  it("rejects HTTP unless the configured transport permits its network boundary", async () => {
+    const endpoint = await authenticatedGiteaEndpoint(servers, "operator", "admin-secret");
+    const connectionFile = await externalConnectionFile(roots, endpoint, { transport: "https" });
+
+    await expect(ensureGitea(rejectingDockerRunner(), lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer", DIM_GITEA_CONNECTION_FILE: connectionFile
+    }))).rejects.toThrow(/does not match configured https transport/);
+  });
 });
 
 function rejectingDockerRunner(): CommandRunner {
@@ -122,16 +188,26 @@ function rejectingDockerRunner(): CommandRunner {
 async function authenticatedGiteaEndpoint(
   servers: Server[],
   username: string,
-  password: string
+  password: string,
+  roles: {
+    readonly adminIsAdmin?: boolean;
+    readonly writerIsAdmin?: boolean;
+    readonly maintainerIsAdmin?: boolean;
+  } = {}
 ): Promise<string> {
-  const expectedAuthorization = `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+  const identities = new Map([
+    [`Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`, { login: username, is_admin: roles.adminIsAdmin ?? true }],
+    [`Basic ${Buffer.from("workspace-writer:writer-secret").toString("base64")}`, { login: "workspace-writer", is_admin: roles.writerIsAdmin ?? false }],
+    [`Basic ${Buffer.from("host-maintainer:maintainer-secret").toString("base64")}`, { login: "host-maintainer", is_admin: roles.maintainerIsAdmin ?? false }]
+  ]);
   const server = createServer((request, response) => {
     if (request.url === "/api/v1/version") {
       response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ version: "test" }));
       return;
     }
-    if (request.url === "/api/v1/user" && request.headers.authorization === expectedAuthorization) {
-      response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ login: username }));
+    const identity = request.headers.authorization === undefined ? undefined : identities.get(request.headers.authorization);
+    if (request.url === "/api/v1/user" && identity !== undefined) {
+      response.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(identity));
       return;
     }
     response.writeHead(401).end();
@@ -147,31 +223,41 @@ async function authenticatedGiteaEndpoint(
 async function externalConnectionFile(
   roots: string[],
   endpoint: string,
-  override: { readonly adminPassword?: string; readonly hostBaseUrl?: string } = {}
+  override: {
+    readonly adminPassword?: string;
+    readonly hostBaseUrl?: string;
+    readonly writerUsername?: string;
+    readonly projectId?: string;
+    readonly transport?: string;
+    readonly additionalProject?: Readonly<Record<string, unknown>>;
+  } = {}
 ): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "dim-external-gitea-"));
   roots.push(root);
   const connectionFile = join(root, "connection.json");
   await writeFile(connectionFile, JSON.stringify({
     schemaVersion: 1,
+    transport: override.transport ?? "loopback-http",
+    hostId: "host-a",
     apiBaseUrl: `${endpoint}/api/v1`,
-    hostBaseUrl: override.hostBaseUrl ?? "https://git.host.example",
-    workspaceBaseUrl: "https://git.workspace.example",
-    runnerBaseUrl: "https://git.runner.example",
+    hostBaseUrl: override.hostBaseUrl ?? `${endpoint}/host`,
+    workspaceBaseUrl: `${endpoint}/workspace`,
+    runnerBaseUrl: `${endpoint}/runner`,
     credentials: {
       adminUsername: "operator",
       adminPassword: override.adminPassword ?? "admin-secret",
-      writerUsername: "workspace-writer",
+      writerUsername: override.writerUsername ?? "workspace-writer",
       writerPassword: "writer-secret",
       maintainerUsername: "host-maintainer",
       maintainerPassword: "maintainer-secret"
     },
     projects: {
       example: {
-        id: "shared-project-id",
+        id: override.projectId ?? "shared-project-id",
         gitNamespace: "dim-example",
         giteaOrganizationId: 41
-      }
+      },
+      ...(override.additionalProject === undefined ? {} : { other: override.additionalProject })
     }
   }), { mode: 0o600 });
   return connectionFile;

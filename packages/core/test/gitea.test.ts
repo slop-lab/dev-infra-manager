@@ -2,7 +2,7 @@ import { once } from "node:events";
 import { createServer, type Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { giteaChangePasswordArgs, giteaNestedBaseUrl, giteaRequest, giteaWebhookConfigArgs, type GiteaConnection } from "../../../../core/packages/core/src/gitea.js";
-import { giteaHookIdsForUrl } from "../../../../core/packages/core/src/giteaCiCoordinator.js";
+import { giteaHookIdsForUrl, uniqueGiteaRunnerId } from "../../../../core/packages/core/src/giteaCiCoordinator.js";
 import type { CommandRunner } from "../../../../core/packages/core/src/types.js";
 
 describe("Gitea control endpoint", () => {
@@ -61,6 +61,49 @@ describe("Gitea control endpoint", () => {
     expect(connection.maintainerUsername).not.toBe(connection.writerUsername);
   });
 
+  it("rejects management API redirects instead of forwarding credentials", async () => {
+    const target = createServer((_request, response) => response.writeHead(200).end());
+    servers.push(target);
+    target.listen(0, "127.0.0.1");
+    await once(target, "listening");
+    const targetAddress = target.address();
+    if (!targetAddress || typeof targetAddress === "string") throw new Error("missing target address");
+    const source = createServer((_request, response) => {
+      response.writeHead(302, { Location: `http://127.0.0.1:${targetAddress.port}/stolen` }).end();
+    });
+    servers.push(source);
+    source.listen(0, "127.0.0.1");
+    await once(source, "listening");
+    const sourceAddress = source.address();
+    if (!sourceAddress || typeof sourceAddress === "string") throw new Error("missing source address");
+
+    await expect(giteaRequest({
+      kind: "managed",
+      adminUsername: "admin", adminPassword: "password",
+      writerUsername: "writer", writerPassword: "password",
+      maintainerUsername: "host", maintainerPassword: "password",
+      apiBaseUrl: `http://127.0.0.1:${sourceAddress.port}/api/v1`,
+      hostBaseUrl: "http://127.0.0.1", workspaceBaseUrl: "http://dim-gitea:3000", runnerBaseUrl: "http://dim-gitea:3000"
+    }, "POST", "/hook", { authorization_header: "Bearer secret" })).rejects.toThrow(/redirect/);
+  });
+
+  it("rejects management API paths outside the configured base", async () => {
+    const connection: GiteaConnection = {
+      kind: "managed",
+      adminUsername: "admin", adminPassword: "password",
+      writerUsername: "writer", writerPassword: "password",
+      maintainerUsername: "host", maintainerPassword: "password",
+      apiBaseUrl: "https://gitea.example/api/v1",
+      hostBaseUrl: "https://gitea.example",
+      workspaceBaseUrl: "http://dim-gitea:3000",
+      runnerBaseUrl: "http://dim-gitea:3000"
+    };
+
+    await expect(giteaRequest(connection, "POST", "//attacker.invalid/hook", {
+      authorization_header: "Bearer secret"
+    })).rejects.toThrow(/configured API base URL/);
+  });
+
   it("applies exact webhook targets through Gitea's environment-to-INI contract", () => {
     const args = giteaWebhookConfigArgs("gitea-container-id", [
       "dim-ci-example-qemu-supervisor",
@@ -90,5 +133,12 @@ describe("Gitea control endpoint", () => {
       { id: 3, config: { url: target } },
       { id: 4 }
     ], target)).toEqual([1, 3]);
+  });
+
+  it("rejects duplicate provider runner identities before remote deletion", () => {
+    expect(() => uniqueGiteaRunnerId([
+      { id: 1, name: "shared" },
+      { id: 2, name: "shared" }
+    ], "shared")).toThrow(/multiple CI coordinator runners/);
   });
 });
