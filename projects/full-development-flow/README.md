@@ -174,6 +174,11 @@ to its reviewed setup input and an OpenCode executable pinned in a
 contract-versioned manifest below the canonical agent home. The `agent` task
 rejects missing, unknown, or incompatible launcher state.
 
+The [Codex user-tool use case](../../use-cases/codex/README.md) selects pinned
+Codex with one Project-owned `.dim/project-tool.conf` file and the same setup,
+manifest launcher, persistent home, and generic SSH proxy. It does not copy or
+change this Project's nested-container topology.
+
 The launcher is an explicit action, not part of setup. It prints the external
 URL, username, and restricted credential-file path without printing the
 password, stores restricted state below the persistent user home, and reuses
