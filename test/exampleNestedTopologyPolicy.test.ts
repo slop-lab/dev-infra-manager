@@ -53,6 +53,23 @@ describe("rich example nested topology policy", () => {
     expect(`${agentEntrypoint}\n${secureEntrypoint}`).not.toContain('dockerd-entrypoint.sh "$@"');
   });
 
+  it.each(richExamples)("initializes persistent agent homes without recursive ownership rewrites for %s", async (example) => {
+    const root = resolve(workspaceRoot, "examples/projects", example, "repos/root/.dim");
+    const entrypoint = await readFile(resolve(root, "agent-dind/entrypoint.sh"), "utf8");
+    const initializer = await readFile(
+      resolve(root, example === "multi-repository" ? "agent-dind/agent.sh" : "agent/start-sshd.sh"),
+      "utf8"
+    );
+    const image = await readFile(resolve(root, "agent/Dockerfile"), "utf8");
+
+    expect(entrypoint).toContain("prepare_persistent_root /mnt/agent-home 700 \"agent home\"");
+    expect(entrypoint).toContain("incompatible ownership or mode");
+    expect(entrypoint).not.toMatch(/chown\s+-R/);
+    expect(initializer).toContain("chown dim-agent:dim-agent /home/dim-agent");
+    expect(initializer).not.toMatch(/chown\s+-R\s+dim-agent:dim-agent\s+\/home\/dim-agent/);
+    expect(image).toMatch(/apt-get install[^\n]*[\s\S]*?\bacl\b/);
+  });
+
   it.each(richExamples)("reconciles removed optional profiles for %s", async (example) => {
     // Given
     const root = resolve(workspaceRoot, "examples/projects", example, "repos/root/.dim");
