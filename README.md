@@ -291,7 +291,8 @@ just restart-controller
 ```
 
 Preparation requires Git, Docker with the Buildx plugin, Node.js 24 or 26, and
-pnpm 10. Installation also requires the existing DIM installer facade.
+pnpm 10. Installation requires npm directly or through mise; it does not trust
+the existing DIM installer facade to install the candidate.
 Preparation clones only `core`, `plugin-dns-cloudflare`, and
 `plugin-external-urls`; no workspace or `*-development` checkout is used. The
 caller may set `DIM_SOURCE_CORE_COMMIT`,
@@ -318,12 +319,16 @@ The preparation recipe tags the trusted workspace image with the package
 bundle's complete aggregate local version, built from the same
 `.local/production-source` snapshot, and records that tag, full source SHAs, a
 digest of the package bundle, and the resulting immutable image ID in ignored
-`.local` state. The
-install recipe installs the CLI and enables the prepared DNS Cloudflare and
-External URLs plugins through the existing DIM installer facade. It preserves
-other enabled plugins and is safe to repeat. It does not rebuild or restart
-anything. Missing, stale, or mismatched state fails before installation,
-including when package bytes or the image tag changed after preparation.
+`.local` state. The install recipe validates preparation, stages the exact
+installer tarball in a temporary directory outside the prepared bundle, and
+uses that target facade to install the CLI and enable the prepared DNS
+Cloudflare and External URLs plugins. An older standalone facade cannot
+retroactively enforce compatibility checks introduced by the candidate, so it
+is never used for the install operation. Mise may supply Node.js and npm, but
+does not select installer logic. The recipe preserves other enabled plugins
+and is safe to repeat. It does not rebuild or restart anything. Missing, stale,
+or mismatched state fails before installation, including when package bytes or
+the image tag changed after preparation.
 `just restart-controller` is the separate, explicit controller-restart stage.
 A failed preparation leaves no readiness marker. Preparation and installation
 hold the same exclusive lock under `.local`.

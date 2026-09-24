@@ -45,11 +45,22 @@ validate_preparation() {
 
 validate_preparation
 
+installer_tarballs=("$package_root"/slop-lab-dim-installer-*.tgz)
+test "${#installer_tarballs[@]}" -eq 1 && test -f "${installer_tarballs[0]}"
+staged_installer="$(mktemp -d "${TMPDIR:-/tmp}/dim-target-installer.XXXXXX")"
+cleanup() {
+  find "$staged_installer" -depth -delete 2>/dev/null || true
+}
+trap cleanup EXIT
+
 if command -v mise >/dev/null 2>&1; then
-  dim_command=(mise exec -- dim)
+  npm_command=(mise exec -- npm)
+  dim_command=(mise exec -- "$staged_installer/node_modules/.bin/dim")
 else
-  dim_command=(dim)
+  npm_command=(npm)
+  dim_command=("$staged_installer/node_modules/.bin/dim")
 fi
+"${npm_command[@]}" install --prefix "$staged_installer" --no-save --no-fund --no-audit "${installer_tarballs[0]}"
 
 echo "[host] install package bundle"
 "${dim_command[@]}" install-cli --local-packages "$package_root" --no-local-bin
