@@ -11,13 +11,17 @@ import { hostLifecycleOptions } from "./hostLifecycleFixture.js";
 vi.mock("../../../../core/packages/core/src/gitea.js", async (importOriginal) => ({
   ...await importOriginal<typeof import("../../../../core/packages/core/src/gitea.js")>(),
   ensureGitea: vi.fn(async () => ({
+    kind: "managed" as const,
     adminUsername: "admin",
     adminPassword: "admin-secret",
     writerUsername: "writer",
     writerPassword: "writer-secret",
     maintainerUsername: "maintainer",
     maintainerPassword: "maintainer-secret",
-    apiBaseUrl: "http://gitea.invalid/api/v1"
+    apiBaseUrl: "http://gitea.invalid/api/v1",
+    hostBaseUrl: "http://gitea.invalid",
+    workspaceBaseUrl: "http://dim-gitea:3000",
+    runnerBaseUrl: "http://dim-gitea:3000"
   })),
   giteaRequest: vi.fn()
 }));
@@ -67,13 +71,17 @@ describe("Project Gitea organization identity", () => {
   beforeEach(async () => {
     stateRoot = await mkdtemp(join(tmpdir(), "dim-project-organization-"));
     vi.mocked(ensureGitea).mockResolvedValue({
+      kind: "managed",
       adminUsername: "admin",
       adminPassword: "admin-secret",
       writerUsername: "writer",
       writerPassword: "writer-secret",
       maintainerUsername: "maintainer",
       maintainerPassword: "maintainer-secret",
-      apiBaseUrl: "http://gitea.invalid/api/v1"
+      apiBaseUrl: "http://gitea.invalid/api/v1",
+      hostBaseUrl: "http://gitea.invalid",
+      workspaceBaseUrl: "http://dim-gitea:3000",
+      runnerBaseUrl: "http://dim-gitea:3000"
     });
   });
 
@@ -233,5 +241,74 @@ describe("Project Gitea organization identity", () => {
     // Then
     await expect(creation).rejects.toThrow(/administrator reconciliation is required/);
     expect(requests).toEqual(["POST /orgs"]);
+  });
+
+  it("attaches an external host to an explicitly bound shared Project identity", async () => {
+    // Given
+    vi.mocked(ensureGitea).mockResolvedValue({
+      kind: "external",
+      adminUsername: "admin",
+      adminPassword: "admin-secret",
+      writerUsername: "writer",
+      writerPassword: "writer-secret",
+      maintainerUsername: "maintainer",
+      maintainerPassword: "maintainer-secret",
+      apiBaseUrl: "http://gitea.invalid/api/v1",
+      hostBaseUrl: "http://gitea.invalid",
+      workspaceBaseUrl: "http://gitea.invalid",
+      runnerBaseUrl: "http://gitea.invalid",
+      projectBindings: {
+        example: { id: "shared-project-id", gitNamespace: "dim-example", giteaOrganizationId: 41 }
+      }
+    });
+    const requests: string[] = [];
+    vi.mocked(giteaRequest).mockImplementation(async (_connection, method, path) => {
+      requests.push(`${method} ${path}`);
+      return organizationResponse({ id: 41, username: "dim-example" });
+    });
+
+    // When
+    const project = await createProject(new RecordingRunner(), {
+      ...hostLifecycleOptions(stateRoot),
+      giteaConnection: { kind: "external", file: "/run/secrets/gitea.json" }
+    }, "example");
+
+    // Then
+    expect(project).toMatchObject({
+      id: "shared-project-id",
+      gitNamespace: "dim-example",
+      giteaOrganizationId: 41,
+      phase: "ready"
+    });
+    expect(requests).toEqual(["GET /orgs/dim-example"]);
+  });
+
+  it("rejects an unbound external Project before claiming local state", async () => {
+    // Given
+    vi.mocked(ensureGitea).mockResolvedValue({
+      kind: "external",
+      adminUsername: "admin",
+      adminPassword: "admin-secret",
+      writerUsername: "writer",
+      writerPassword: "writer-secret",
+      maintainerUsername: "maintainer",
+      maintainerPassword: "maintainer-secret",
+      apiBaseUrl: "http://gitea.invalid/api/v1",
+      hostBaseUrl: "http://gitea.invalid",
+      workspaceBaseUrl: "http://gitea.invalid",
+      runnerBaseUrl: "http://gitea.invalid",
+      projectBindings: {}
+    });
+
+    // When
+    const creation = createProject(new RecordingRunner(), {
+      ...hostLifecycleOptions(stateRoot),
+      giteaConnection: { kind: "external", file: "/run/secrets/gitea.json" }
+    }, "example");
+
+    // Then
+    await expect(creation).rejects.toThrow(/no explicit Project binding/);
+    await expect(new LifecycleState(stateRoot).readProject("example")).rejects.toThrow();
+    expect(giteaRequest).not.toHaveBeenCalled();
   });
 });
