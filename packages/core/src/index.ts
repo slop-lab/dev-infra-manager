@@ -24,6 +24,7 @@ export {
 export * from "./projectRuntimeCgroups.js";
 export * from "./qemuSchedulerConnection.js";
 export * from "./sharedQemuSchedulerImage.js";
+export * from "./stateCompatibility.js";
 export * from "./repositorySet.js";
 export * from "./runner.js";
 export * from "./runtimeBackends.js";

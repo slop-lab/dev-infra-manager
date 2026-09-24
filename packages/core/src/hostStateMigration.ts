@@ -19,6 +19,19 @@ type ParsedHostState =
   | { readonly schema: 1; readonly converted: HostLifecycleRecord }
   | { readonly schema: 2; readonly record: HostLifecycleRecord };
 
+type MigrationPlan =
+  | { readonly kind: "unchanged"; readonly directory: string; readonly temporaries: readonly string[] }
+  | { readonly kind: "recovered"; readonly directory: string; readonly temporaries: readonly string[]; readonly record: HostLifecycleRecord }
+  | {
+      readonly kind: "migrated";
+      readonly directory: string;
+      readonly temporaries: readonly string[];
+      readonly backupPath: string;
+      readonly backupMissing: boolean;
+      readonly canonicalBytes: Buffer;
+      readonly record: HostLifecycleRecord;
+    };
+
 const TEMPORARY_PATTERN = /^host\.json\.schema-(?:1\.backup|2\.replace)\.tmp-\d+-[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 export async function migrateHostLifecycleState(state: LifecycleState): Promise<HostStateMigrationResult> {
@@ -31,6 +44,29 @@ export async function migrateHostLifecycleState(state: LifecycleState): Promise<
 }
 
 async function migrateLocked(canonicalPath: string): Promise<HostStateMigrationResult> {
+  const plan = await planMigration(canonicalPath);
+  await removeTemporaries(plan.directory, plan.temporaries);
+  switch (plan.kind) {
+    case "unchanged":
+      return { kind: "unchanged" };
+    case "recovered":
+      await replaceCanonical(canonicalPath, plan.record);
+      await validateCanonical(canonicalPath);
+      return { kind: "recovered" };
+    case "migrated":
+      if (plan.backupMissing) await publishBackup(plan.backupPath, plan.canonicalBytes);
+      await replaceCanonical(canonicalPath, plan.record);
+      await validateCanonical(canonicalPath);
+      return { kind: "migrated" };
+  }
+}
+
+export async function preflightHostLifecycleState(canonicalPath: string): Promise<HostStateMigrationResult> {
+  const plan = await planMigration(canonicalPath);
+  return { kind: plan.kind };
+}
+
+async function planMigration(canonicalPath: string): Promise<MigrationPlan> {
   const directory = path.dirname(canonicalPath);
   const backupPath = path.join(directory, "host.json.schema-1.bak");
   const canonical = await inspectArtifact(canonicalPath, "canonical host lifecycle state", false);
@@ -43,29 +79,28 @@ async function migrateLocked(canonicalPath: string): Promise<HostStateMigrationR
 
   if (canonical.kind === "missing") {
     if (parsedBackup === undefined) {
-      await removeTemporaries(directory, temporaries);
-      return { kind: "unchanged" };
+      return { kind: "unchanged", directory, temporaries };
     }
-    await removeTemporaries(directory, temporaries);
-    await replaceCanonical(canonicalPath, parsedBackup.converted);
-    await validateCanonical(canonicalPath);
-    return { kind: "recovered" };
+    return { kind: "recovered", directory, temporaries, record: parsedBackup.converted };
   }
 
   const parsedCanonical = parseState(canonical.bytes, canonicalPath);
   if (parsedCanonical.schema === 2) {
-    await removeTemporaries(directory, temporaries);
-    return { kind: "unchanged" };
+    return { kind: "unchanged", directory, temporaries };
   }
 
   if (backup.kind === "file" && !canonical.bytes.equals(backup.bytes)) {
     throw new UserError("host lifecycle schema 1 backup conflicts with canonical schema 1 bytes");
   }
-  await removeTemporaries(directory, temporaries);
-  if (backup.kind === "missing") await publishBackup(backupPath, canonical.bytes);
-  await replaceCanonical(canonicalPath, parsedCanonical.converted);
-  await validateCanonical(canonicalPath);
-  return { kind: "migrated" };
+  return {
+    kind: "migrated",
+    directory,
+    temporaries,
+    backupPath,
+    backupMissing: backup.kind === "missing",
+    canonicalBytes: canonical.bytes,
+    record: parsedCanonical.converted
+  };
 }
 
 async function inspectArtifact(target: string, label: string, requirePrivateMode: boolean): Promise<Artifact> {
