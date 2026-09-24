@@ -56,6 +56,14 @@ bash verification/scripts/local-ci-matrix.bash
 This uses mise to reproduce the Node.js 24/26 CI workflow matrix and the
 Node.js 26 container lane. Review every package dry-run listing and confirm it
 contains its README, MIT license, runtime files, and publishable manifest.
+Release evidence must also exercise installation against temporary state
+fixtures with the exact packed candidate bundle: missing and current state must
+pass, the one supported historical host record must pass without installation-
+time mutation and migrate only at controller startup, and malformed or
+unsupported known core state must refuse promotion while every state byte,
+installed runtime, facade, user config, plugin set, and image marker remains
+unchanged. The driver must prove the staged target core contract was used, not
+an older installed CLI or a mutable source tree.
 
 Run the manual backend gates locally from the committed release candidate:
 
