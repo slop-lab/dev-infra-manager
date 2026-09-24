@@ -43,7 +43,11 @@
   during controller startup, with a durable permanent backup, deterministic
   interruption recovery, authoritative schema 2 lifecycle evolution without
   rewriting the historical backup, and fail-closed handling of conflicting or
-  unsafe artifacts.
+  unsafe artifacts. CLI installation now runs the staged target core package's
+  read-only compatibility preflight before runtime, config, symlink, or plugin
+  promotion: missing and current state proceed, this exact host migration warns
+  without changing bytes, and malformed or unsupported Project, workspace,
+  runner, or host state refuses with export-and-recreate guidance.
 
 - Discover matching Gitea Actions jobs that were already queued when QEMU CI
   capacity is created, started, or restarted. DIM installs the webhook first,
