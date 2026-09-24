@@ -7,6 +7,7 @@ from typing import Final
 import hmac
 import json
 import signal
+import socket
 import sys
 import threading
 
@@ -16,6 +17,7 @@ from store import SchedulerStore, StoreCapacityError
 MAX_BODY: Final = 65_536
 MAX_HANDLERS: Final = 32
 REQUEST_DEADLINE_SECONDS: Final = 10
+REJECTION_DEADLINE_SECONDS: Final = 1
 
 
 class SchedulerServer(ThreadingHTTPServer):
@@ -27,14 +29,23 @@ class SchedulerServer(ThreadingHTTPServer):
         self._handler_slots = threading.BoundedSemaphore(MAX_HANDLERS)
         super().__init__((self.config.host, self.config.port), Handler)
 
-    def process_request(self, request: object, client_address: object) -> None:
+    def process_request(self, request: socket.socket, client_address: tuple[str, int]) -> None:
         if not self._handler_slots.acquire(blocking=False):
-            request.sendall(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
-            self.shutdown_request(request)
+            request.settimeout(REJECTION_DEADLINE_SECONDS)
+            try:
+                request.sendall(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            except OSError:
+                pass
+            finally:
+                self.shutdown_request(request)
             return
-        super().process_request(request, client_address)
+        try:
+            super().process_request(request, client_address)
+        except RuntimeError:
+            self._handler_slots.release()
+            raise
 
-    def process_request_thread(self, request: object, client_address: object) -> None:
+    def process_request_thread(self, request: socket.socket, client_address: tuple[str, int]) -> None:
         try:
             super().process_request_thread(request, client_address)
         finally:
@@ -47,12 +58,22 @@ class Handler(BaseHTTPRequestHandler):
     def setup(self) -> None:
         super().setup()
         self.connection.settimeout(REQUEST_DEADLINE_SECONDS)
-        self._deadline = threading.Timer(REQUEST_DEADLINE_SECONDS, self.connection.close)
+        self._deadline = threading.Timer(REQUEST_DEADLINE_SECONDS, self._expire_request)
         self._deadline.start()
 
     def finish(self) -> None:
-        self._deadline.cancel()
-        super().finish()
+        try:
+            super().finish()
+        finally:
+            self._deadline.cancel()
+
+    def _expire_request(self) -> None:
+        try:
+            self.connection.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        finally:
+            self.connection.close()
 
     def do_GET(self) -> None:
         if self.path != "/healthz":
