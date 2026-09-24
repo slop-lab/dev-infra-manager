@@ -117,8 +117,10 @@ namespace differs, so a same-name organization is never adopted implicitly.
 
 For QEMU capacity shared by multiple hosts, set
 `DIM_QEMU_SCHEDULER_CONNECTION_FILE` to a DIM-user-owned mode-`0600` file on
-each host. This mode requires external Gitea. Each host uses a stable `hostId`
-and the Project API token; the distinct central webhook token is configured in Gitea:
+each host. This mode requires external Gitea. Each host uses a distinct stable
+`hostId` equal to its external Gitea connection `hostId`; every host for the
+Project uses the same Project API token. The host ID is concurrency identity,
+not authorization. The distinct central webhook token is configured in Gitea:
 
 ```json
 {
@@ -143,6 +145,12 @@ networks (`isolated-http`). Endpoints contain no credentials. The service uses
 separate project-webhook and Project API bearer tokens and receives no Gitea
 administrator credential. Leaving the variable unset preserves host-local
 scheduling; a Project cannot mix the two modes.
+
+The packaged service caps each Project at 10,000 nonterminal jobs and 100,000
+claim request receipts. Saturation rejects new state with HTTP `503` without
+evicting existing claims or live fences. Terminal webhook delivery frees
+nonterminal slots. Receipts without a live claim expire after seven days, so
+normal release/reclaim churn recovers automatically after retention.
 
 The standalone service config uses a minimum `leaseSeconds` of `60`. Each
 Project entry includes `labels`, containing its QEMU integration labels such as
