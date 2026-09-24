@@ -103,6 +103,9 @@ export async function deleteProjectRepository(
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireProjectLock(projectName);
   try {
+    if (options.giteaConnection?.kind === "external") {
+      throw new UserError("external Gitea resources are operator-owned and cannot be deleted by DIM");
+    }
     const project = await deletableProjectRepository(state, projectName, alias);
     const credentials = await ensureGitea(runner, options);
     const response = await giteaRequest(credentials, "DELETE", `/repos/${project.gitNamespace}/${alias}`);
