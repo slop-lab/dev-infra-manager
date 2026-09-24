@@ -414,7 +414,10 @@ dim workspace run "$workspace_name" bash -- -lc \
   'printf "persistent-home\n" >"$HOME/journey-home"'
 dim workspace exec "$workspace_name" -- sh -c \
   'cd "$DIM_WORKSPACE_DATA/project"; printf "# dirty journey probe\n" >>ops/secret-service.sh; printf "untracked\n" >journey-untracked'
-dim workspace restart "$workspace_name" >/dev/null
+if ! dim workspace restart "$workspace_name" >/dev/null; then
+  diagnose_workspace_setup
+  exit 1
+fi
 dim workspace exec "$workspace_name" -- sh -c \
   'cd "$DIM_WORKSPACE_DATA/project"; grep -q "dirty journey probe" ops/secret-service.sh; test -f journey-untracked'
 
