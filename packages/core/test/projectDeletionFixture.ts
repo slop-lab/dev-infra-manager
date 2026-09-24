@@ -29,6 +29,7 @@ export const project = {
 export function lifecycleOptions(stateRoot: string): LifecycleOptions {
   return {
     stateRoot,
+    giteaConnection: { kind: "managed" },
     giteaImage: "gitea",
     giteaHost: "gitea",
     giteaPort: 3000,
