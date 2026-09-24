@@ -158,7 +158,7 @@ describe("full-development non-root SSH practical authority", () => {
     const entrypoint = await readFile(fullDevelopmentDindEntrypoint, "utf8");
 
     expect(entrypoint).toContain('DOCKER_HOST="unix://$runtime_dir/docker.sock"');
-    expect(entrypoint).toContain('dockerd-entrypoint.sh "$@"');
+    expect(entrypoint).toContain('dockerd-entrypoint.sh dockerd --host="unix://$runtime_dir/docker.sock"');
     expect(`${compose}\n${entrypoint}`).not.toMatch(/--host=tcp:|2375|2376/);
   });
 

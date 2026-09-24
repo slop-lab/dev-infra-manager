@@ -39,6 +39,35 @@ describe("rich example nested topology policy", () => {
     expect(setup).toContain('--bind-containers-json \'["agent-dind","dim-agent"]\'');
   });
 
+  it.each(richExamples)("starts each private daemon with one Unix listener for %s", async (example) => {
+    // Given
+    const root = resolve(workspaceRoot, "examples/projects", example, "repos/root/.dim");
+
+    // When
+    const agentEntrypoint = await readFile(resolve(root, "agent-dind/entrypoint.sh"), "utf8");
+    const secureEntrypoint = await readFile(resolve(root, "secure-dind/entrypoint.sh"), "utf8");
+
+    // Then
+    expect(agentEntrypoint).toContain('dockerd-entrypoint.sh dockerd --host="unix://$runtime_dir/docker.sock"');
+    expect(secureEntrypoint).toContain('dockerd-entrypoint.sh dockerd --host="unix://$runtime_dir/docker.sock"');
+    expect(`${agentEntrypoint}\n${secureEntrypoint}`).not.toContain('dockerd-entrypoint.sh "$@"');
+  });
+
+  it.each(richExamples)("reconciles removed optional profiles for %s", async (example) => {
+    // Given
+    const root = resolve(workspaceRoot, "examples/projects", example, "repos/root/.dim");
+
+    // When
+    const setup = await readFile(resolve(root, "setup.sh"), "utf8");
+    const agent = await readFile(resolve(root, "agent-dind/agent.sh"), "utf8");
+
+    // Then
+    expect(setup).toContain("--profile secure stop secure-dind");
+    expect(setup).toContain("--profile secure up --detach --force-recreate --wait --wait-timeout 60 secure-dind");
+    expect(setup).toContain("dim-agent-dind clear-documentation");
+    expect(agent).toContain("clear-documentation)");
+  });
+
   it.each(richExamples)("launches secret workloads in isolated secure storage for %s", async (example) => {
     // Given
     const project = resolve(workspaceRoot, "examples/projects", example);
@@ -48,6 +77,7 @@ describe("rich example nested topology policy", () => {
     const compose = await readFile(resolve(root, ".dim/docker-compose.yml"), "utf8");
     const launcher = await readFile(resolve(root, ".dim/secure-dind/service.sh"), "utf8");
     const operations = await readFile(resolve(root, "ops/secret-service.sh"), "utf8");
+    const deployment = await readFile(resolve(project, "deploy-secret.bash"), "utf8");
 
     // Then
     expect(compose).toContain("secure-dind-data:");
@@ -56,5 +86,9 @@ describe("rich example nested topology policy", () => {
     expect(launcher).toContain('--publish 7099:7099');
     expect(operations).toContain("secure-dind dim-secure-dind deploy");
     expect(operations).toContain("tar --exclude=.git -C \"$checkout\" -cf - .");
+    expect(operations).toContain('immutable_root="${DIM_PROJECT_ROOT:?DIM_PROJECT_ROOT is required}"');
+    expect(operations).toContain('cd "$immutable_root"');
+    expect(operations).toContain('--file "$immutable_root/.dim/docker-compose.yml"');
+    expect(deployment).toContain('sh "$DIM_PROJECT_ROOT/ops/secret-service.sh" deploy-secret');
   });
 });

@@ -27,6 +27,8 @@ source "$script_dir/lib/local-npm-registry.bash"
 source "$script_dir/lib/example-dim-install.bash"
 # shellcheck source=lib/test-registry-mirror.bash
 source "$script_dir/lib/test-registry-mirror.bash"
+# shellcheck source=lib/private-dind-assertions.bash
+source "$script_dir/lib/private-dind-assertions.bash"
 
 suffix="$PPID-$$"
 project_name="example-$suffix"
@@ -51,6 +53,14 @@ workspace_backend="${DIM_EXAMPLE_WORKSPACE_BACKEND:-sysbox}"
 bash "$script_dir/configure-user-backend.bash" "$workspace_backend"
 
 dim() { "$dim_bin" "$@"; }
+
+workspace_compose() {
+  dim workspace exec "$workspace_name" -- sh -eu -c '
+    cd "$DIM_PROJECT_ROOT"
+    exec docker compose --project-name dim-project \
+      --file "$DIM_PROJECT_ROOT/.dim/docker-compose.yml" "$@"
+  ' sh "$@"
+}
 
 cleanup() {
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
@@ -124,12 +134,8 @@ rm -rf "$source_root"
 
 echo "[example-project] 4. create the workspace (a real container)"
 if ! dim workspace create "$project_name" "$workspace_name" >/dev/null; then
-  dim workspace exec "$workspace_name" -- \
-    docker compose --project-name "dim-project" \
-    --file .dim/docker-compose.yml ps >&2 || true
-  dim workspace exec "$workspace_name" -- \
-    docker compose --project-name "dim-project" \
-    --file .dim/docker-compose.yml logs agent-dind >&2 || true
+  workspace_compose ps >&2 || true
+  workspace_compose logs agent-dind >&2 || true
   exit 1
 fi
 
@@ -171,13 +177,19 @@ test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" -ne "0"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"
 dim workspace run "$workspace_name" bash -- -lc 'getent hosts dim-gitea >/dev/null'
 dim workspace run "$workspace_name" bash -- -lc 'git ls-remote origin HEAD >/dev/null'
-dim workspace run "$workspace_name" bash -- -lc 'printf "multi-home\n" >"$HOME/archive-smoke"'
+dim workspace run "$workspace_name" bash -- -lc \
+  'umask 077; printf "multi-home\n" >"$HOME/archive-smoke"; chmod 0640 "$HOME/archive-smoke"'
 home_backup="$work_dir/agent-home.tar.gz"
 dim workspace run "$workspace_name" backup >"$home_backup"
 gzip -t "$home_backup"
+test "$(workspace_compose exec --no-TTY agent-dind docker inspect \
+  --format '{{.State.Running}}' dim-agent)" = true
 dim workspace run "$workspace_name" bash -- -lc 'rm "$HOME/archive-smoke"'
 dim workspace run "$workspace_name" restore <"$home_backup"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/archive-smoke"')" = multi-home
+test "$(dim workspace run "$workspace_name" bash -- -lc 'stat -c %a "$HOME/archive-smoke"')" = 640
+test "$(workspace_compose exec --no-TTY agent-dind docker inspect \
+  --format '{{.State.Running}}' dim-agent)" = true
 
 echo "[example-project] 7. explicitly install reviewed workspace-user tooling"
 if dim workspace run "$workspace_name" bash -- -lc 'command -v opencode' >/dev/null 2>&1; then
@@ -227,14 +239,11 @@ agent_commit_identity="$(dim workspace run "$workspace_name" bash -- -lc '
 ')"
 test "$agent_commit_identity" = "$dev_git_identity"
 
-outer_services="$(dim workspace exec "$workspace_name" -- \
-  docker compose --project-name "dim-project" --file .dim/docker-compose.yml \
-  ps --services --filter status=running)"
+outer_services="$(workspace_compose ps --services --filter status=running)"
 test "$outer_services" = agent-dind
-dind_container="$(dim workspace exec "$workspace_name" -- \
-  docker compose --project-name "dim-project" \
-  --file .dim/docker-compose.yml ps --quiet agent-dind)"
+dind_container="$(workspace_compose ps --quiet agent-dind)"
 test -n "$dind_container"
+dim_assert_private_dind_unix_only "$dind_container" /run/dim-agent-dind/docker.sock
 agent_container="$(dim workspace exec "$workspace_name" -- \
   docker exec "$dind_container" docker inspect --format '{{.Id}}' dim-agent)"
 test -n "$agent_container"
@@ -291,8 +300,8 @@ DIM_BIN="$dim_bin" EXAMPLE_SECRET=not-a-real-secret \
   bash "$repo_root/examples/projects/multi-repository/deploy-secret.bash" \
   "$workspace_name" >/dev/null
 
-root_health="$(dim workspace exec "$workspace_name" -- \
-  sh ops/secret-service.sh secret-health)"
+root_health="$(dim workspace exec "$workspace_name" -- sh -eu -c \
+  'exec sh "$DIM_PROJECT_ROOT/ops/secret-service.sh" secret-health')"
 echo "$root_health" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
 
 dev_health="$(dim workspace run "$workspace_name" bash -- \
@@ -310,14 +319,21 @@ fi
 leaked="$(dim workspace run "$workspace_name" bash -- \
   -lc 'env | grep -c EXAMPLE_SECRET || true')"
 test "$leaked" = "0"
-secure_container="$(dim workspace exec "$workspace_name" -- \
-  docker compose --project-name "dim-project" --file .dim/docker-compose.yml \
-  ps --quiet secure-dind)"
+dim workspace run "$workspace_name" bash -- -lc \
+  'test ! -e /run/dim-secure-dind; test ! -e /var/run/docker.sock'
+if dim workspace run "$workspace_name" bash -- -lc \
+  'wget -T 2 -qO- http://secret:2375/_ping' >/dev/null 2>&1; then
+  echo "agent reached Docker authority through the application bridge" >&2
+  exit 1
+fi
+secure_container="$(workspace_compose ps --quiet secure-dind)"
 test -n "$secure_container"
+dim_assert_private_dind_unix_only "$secure_container" /run/dim-secure-dind/docker.sock
 test "$(dim workspace exec "$workspace_name" -- docker inspect "$secure_container" \
   --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -c '^EXAMPLE_SECRET=' || true)" = 0
 
-dim workspace exec "$workspace_name" -- sh ops/secret-service.sh remove-secret >/dev/null
+dim workspace exec "$workspace_name" -- sh -eu -c \
+  'exec sh "$DIM_PROJECT_ROOT/ops/secret-service.sh" remove-secret' >/dev/null
 
 echo "[example-project] 11. clean up"
 dim workspace discard "$workspace_name" --yes >/dev/null

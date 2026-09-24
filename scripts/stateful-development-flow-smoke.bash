@@ -8,6 +8,7 @@ source "$script_dir/lib/test-registry-mirror.bash"
 source "$script_dir/lib/registry-cache-routing.bash"
 source "$script_dir/lib/registry-cache-routing-journey.bash"
 source "$script_dir/lib/stateful-development-flow.bash"
+source "$script_dir/lib/private-dind-assertions.bash"
 
 for required_command in ssh ssh-keygen sha256sum; do
   command -v "$required_command" >/dev/null || {
@@ -49,6 +50,14 @@ git config --file "$GIT_CONFIG_GLOBAL" user.name "Full Flow Host"
 git config --file "$GIT_CONFIG_GLOBAL" user.email "full-flow@dim.invalid"
 
 dim() { node "$dim_cli" "$@"; }
+
+workspace_compose() {
+  dim workspace exec "$workspace_name" -- sh -eu -c '
+    cd "$DIM_PROJECT_ROOT"
+    exec docker compose --project-name dim-project \
+      --file "$DIM_PROJECT_ROOT/.dim/docker-compose.yml" "$@"
+  ' sh "$@"
+}
 
 gitea_api_status() {
   local role="$1" method="$2" path="$3" response_file="$4" body="${5:-}"
@@ -239,14 +248,43 @@ test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" -ne "0"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"
 dim workspace run "$workspace_name" bash -- -lc 'getent hosts dim-gitea >/dev/null'
 dim workspace run "$workspace_name" bash -- -lc 'git ls-remote origin HEAD >/dev/null'
-dim workspace exec "$workspace_name" -- docker compose \
-  --project-name "$compose_name" --file .dim/docker-compose.yml \
-  exec --no-TTY agent-dind docker inspect dim-documentation-preview >/dev/null
+workspace_compose exec --no-TTY agent-dind docker inspect dim-documentation-preview >/dev/null
 dim workspace exec "$workspace_name" -- sh -c \
-  "docker image save alpine:3.22 | docker compose --project-name '$compose_name' --file .dim/docker-compose.yml exec --no-TTY agent-dind docker image load >/dev/null"
+  'docker image save alpine:3.22 | (cd "$DIM_PROJECT_ROOT" && docker compose --project-name dim-project --file "$DIM_PROJECT_ROOT/.dim/docker-compose.yml" exec --no-TTY agent-dind docker image load) >/dev/null'
 dim workspace run "$workspace_name" bash -- -lc \
   'docker info --format "{{json .SecurityOptions}}" | grep -q rootless; docker run --rm alpine:3.22 true'
 dim_cache_routing_workspace_routes "$workspace_name" "$compose_name"
+
+archive_restart_backup="$work_dir/archive-restart.tar.gz"
+dim workspace run "$workspace_name" bash -- -lc \
+  'umask 077; printf "archive-restart\n" >"$HOME/archive-restart"; chmod 0640 "$HOME/archive-restart"'
+dim workspace run "$workspace_name" backup >"$archive_restart_backup"
+gzip -t "$archive_restart_backup"
+test "$(workspace_compose exec --no-TTY agent-dind docker inspect \
+  --format '{{.State.Running}}' dim-agent)" = true
+dim workspace run "$workspace_name" bash -- -lc 'rm "$HOME/archive-restart"'
+dim workspace run "$workspace_name" restore <"$archive_restart_backup"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/archive-restart"')" = archive-restart
+test "$(dim workspace run "$workspace_name" bash -- -lc 'stat -c %a "$HOME/archive-restart"')" = 640
+test "$(workspace_compose exec --no-TTY agent-dind docker inspect \
+  --format '{{.State.Running}}' dim-agent)" = true
+
+dim workspace update "$workspace_name" --profile documentation --profile secure >/dev/null
+test "$(dim workspace show "$workspace_name" --json | jq -c .profiles)" = '["documentation","secure"]'
+secure_container="$(workspace_compose ps --all --quiet secure-dind)"
+test -n "$secure_container"
+test "$(docker inspect "$secure_container" --format '{{.State.Running}}')" = true
+dim_assert_private_dind_unix_only "$secure_container" /run/dim-secure-dind/docker.sock
+workspace_compose exec --no-TTY agent-dind docker inspect dim-documentation-preview >/dev/null
+dim workspace update "$workspace_name" --profile documentation >/dev/null
+test "$(docker inspect "$secure_container" --format '{{.State.Running}}')" = false
+dim workspace update "$workspace_name" --clear-profiles >/dev/null
+test "$(dim workspace show "$workspace_name" --json | jq -c .profiles)" = '[]'
+if workspace_compose exec --no-TTY agent-dind docker inspect dim-documentation-preview >/dev/null 2>&1; then
+  echo "documentation preview survived profile clearing" >&2
+  exit 1
+fi
+dim workspace update "$workspace_name" --profile documentation >/dev/null
 
 echo "[full-development-flow] connect through key-only OpenSSH ProxyCommand"
 dim workspace run "$workspace_name" bash -- -lc \
@@ -353,9 +391,9 @@ if ssh -F "$ssh_config" \
 fi
 outer_ssh_port="$(docker port "$container_name" 22/tcp 2>/dev/null || true)"
 test -z "$outer_ssh_port"
-dind_container="$(dim workspace exec "$workspace_name" -- \
-  docker compose --project-name "$compose_name" --file .dim/docker-compose.yml ps --quiet agent-dind)"
+dind_container="$(workspace_compose ps --quiet agent-dind)"
 test -n "$dind_container"
+dim_assert_private_dind_unix_only "$dind_container" /run/dim-agent-dind/docker.sock
 agent_container="$(dim workspace exec "$workspace_name" -- \
   docker exec "$dind_container" docker inspect --format '{{.Id}}' dim-agent)"
 test -n "$agent_container"
@@ -365,23 +403,14 @@ test "$(dim workspace exec "$workspace_name" -- docker exec "$dind_container" do
 nested_ssh_port="$(dim workspace exec "$workspace_name" -- docker exec "$dind_container" \
   docker port dim-agent 22/tcp 2>/dev/null || true)"
 test -z "$nested_ssh_port"
-dind_processes="$(dim workspace exec "$workspace_name" -- \
-  docker compose --project-name "$compose_name" --file .dim/docker-compose.yml \
-  exec --no-TTY agent-dind ps -o args)"
-grep -q -- '--host=unix:///run/dim-agent-dind/docker.sock' <<<"$dind_processes"
-if grep -Eq 'tcp://|(^|[^0-9])(2375|2376)([^0-9]|$)' <<<"$dind_processes"; then
-  echo "DinD unexpectedly exposed a TCP listener" >&2
-  exit 1
-fi
-
 echo "[full-development-flow] preserve Project-owned work across reviewed restart"
 dim workspace run "$workspace_name" bash -- -lc \
   'printf "persistent-home\n" >"$HOME/journey-home"'
 dim workspace exec "$workspace_name" -- sh -c \
-  'printf "# dirty journey probe\n" >>ops/secret-service.sh; printf "untracked\n" >journey-untracked'
+  'cd "$DIM_WORKSPACE_DATA/project"; printf "# dirty journey probe\n" >>ops/secret-service.sh; printf "untracked\n" >journey-untracked'
 dim workspace restart "$workspace_name" >/dev/null
 dim workspace exec "$workspace_name" -- sh -c \
-  'grep -q "dirty journey probe" ops/secret-service.sh; test -f journey-untracked'
+  'cd "$DIM_WORKSPACE_DATA/project"; grep -q "dirty journey probe" ops/secret-service.sh; test -f journey-untracked'
 
 review="$work_dir/review"
 dim x git clone --quiet "$(dim repo url "$project_name" root)" "$review"

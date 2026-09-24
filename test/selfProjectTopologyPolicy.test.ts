@@ -6,6 +6,16 @@ import { parse } from "yaml";
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 
 describe("DIM self-project topology policy", () => {
+  it("starts both private daemons with only their dedicated Unix listeners", async () => {
+    const projectRoot = resolve(workspaceRoot, "project/.dim");
+    const agentEntrypoint = await readFile(resolve(projectRoot, "agent-dind/entrypoint.sh"), "utf8");
+    const secureEntrypoint = await readFile(resolve(projectRoot, "secure-dind/entrypoint.sh"), "utf8");
+
+    expect(agentEntrypoint).toContain('dockerd-entrypoint.sh dockerd --host="unix://$runtime_dir/docker.sock"');
+    expect(secureEntrypoint).toContain('dockerd-entrypoint.sh dockerd --host="unix://$runtime_dir/docker.sock"');
+    expect(`${agentEntrypoint}\n${secureEntrypoint}`).not.toMatch(/dockerd-entrypoint\.sh "\$@"|2375|2376/);
+  });
+
   it("pins every split repository to its reviewed archive branch", async () => {
     const manifest = parse(await readFile(resolve(workspaceRoot, "project/.dim/repos.yml"), "utf8"));
     const expectedUpstreams = {
