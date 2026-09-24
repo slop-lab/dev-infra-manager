@@ -16,6 +16,12 @@ const TRANSPORTS = ["https", "loopback-http", "isolated-http"] as const;
 type Transport = (typeof TRANSPORTS)[number];
 
 export async function externalGiteaConnection(file: string): Promise<GiteaConnection> {
+  const connection = await configuredExternalGiteaConnection(file);
+  await validateExternalGitea(connection);
+  return connection;
+}
+
+export async function configuredExternalGiteaConnection(file: string): Promise<Extract<GiteaConnection, { readonly kind: "external" }>> {
   const input = exactRecord(await readConnectionFile(file), CONNECTION_FIELDS, "External Gitea connection");
   if (input.schemaVersion !== 1) throw new UserError("External Gitea connection schemaVersion must be 1");
   const transport = parseTransport(input.transport);
@@ -30,14 +36,13 @@ export async function externalGiteaConnection(file: string): Promise<GiteaConnec
     runnerBaseUrl: endpoint(input.runnerBaseUrl, "runnerBaseUrl", transport),
     ...credentials,
     projectBindings: parseProjectBindings(input.projects)
-  } satisfies GiteaConnection;
+  } satisfies Extract<GiteaConnection, { readonly kind: "external" }>;
   assertUnique([
     connection.apiBaseUrl,
     connection.hostBaseUrl,
     connection.workspaceBaseUrl,
     connection.runnerBaseUrl
   ], "endpoint");
-  await validateExternalGitea(connection);
   return connection;
 }
 

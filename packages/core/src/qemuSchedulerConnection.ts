@@ -1,5 +1,6 @@
 import { lstat, readFile } from "node:fs/promises";
 import { UserError } from "./errors.js";
+import { configuredExternalGiteaConnection } from "./giteaExternalConnection.js";
 import type { LifecycleOptions, ProjectRecord, QemuSchedulerProjectConnection } from "./lifecycleTypes.js";
 
 const ROOT_FIELDS = ["schemaVersion", "transport", "hostId", "projects"] as const;
@@ -16,6 +17,7 @@ export async function qemuSchedulerConnection(
   if (options.giteaConnection.kind !== "external") {
     throw new UserError("shared QEMU scheduling requires an external Gitea connection");
   }
+  const gitea = await configuredExternalGiteaConnection(options.giteaConnection.file);
   const metadata = await lstat(configured.file);
   if (!metadata.isFile()) throw new UserError("QEMU scheduler connection file must be a regular file");
   if ((metadata.mode & 0o077) !== 0) throw new UserError("QEMU scheduler connection file must have mode 0600");
@@ -33,6 +35,9 @@ export async function qemuSchedulerConnection(
   if (root.schemaVersion !== 1) throw new UserError("QEMU scheduler connection schemaVersion must be 1");
   const transport = parseTransport(root.transport);
   const hostId = identifier(root.hostId, "hostId");
+  if (hostId !== gitea.hostId) {
+    throw new UserError("QEMU scheduler host identity must match the external Gitea host identity");
+  }
   if (!isRecord(root.projects)) throw new UserError("QEMU scheduler projects must be an object");
   const rawProject = root.projects[project.name];
   if (rawProject === undefined) throw new UserError(`QEMU scheduler connection has no explicit Project binding for '${project.name}'`);
