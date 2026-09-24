@@ -17,16 +17,16 @@ owned by UID 10001, and set mode `0600`. Run the image with the file at
 volume. Terminate TLS in front of the service unless all traffic is confined to
 an explicitly isolated network.
 
-Keep `leaseSeconds` at 60 or greater and set `allowedLabels` to the reviewed
-QEMU integration labels for the Project. Host tokens may only replay queued
-demand using those labels; only the webhook token may advance jobs to running
+Keep `leaseSeconds` at 60 or greater and set `labels` to the Project's QEMU
+integration labels. The Project API token shared by its hosts may only seed queued
+demand matching those labels; only the webhook token may advance jobs to running
 or completed. A 20-second takeover grace and restart hold provide time for
 ordinary local cleanup, but they cannot externally fence a host paused or
 partitioned beyond that bound. Deploy infrastructure fencing separately when
 that failure model must be covered.
 
 On each DIM host, copy `host-connection.json` to a private file, use a distinct
-stable `hostId` and matching token, set mode `0600`, and export its path:
+stable `hostId` and the shared Project API token, set mode `0600`, and export its path:
 
 ```bash
 export DIM_QEMU_SCHEDULER_CONNECTION_FILE="$HOME/.config/dim/qemu-scheduler.json"
