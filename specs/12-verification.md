@@ -501,7 +501,12 @@ restart-enabled documentation child from persistent daemon state. Secret
 operations MUST execute from the immutable selected root, while mutable-file
 preservation probes MUST name the Project data checkout explicitly. Agent-home
 archive verification MUST stop and restart the inner agent, then preserve both
-file bytes and modes across restore.
+file bytes and modes across restore. The built rich agent images MUST contain
+the ACL utility their startup paths invoke. The gates MUST prove that an empty
+agent-home root is initialized for the mapped rootless owner, that populated
+incompatible state fails closed without recursive ownership changes, and that
+ordinary Project tasks and full-flow SSH retain their documented nonroot
+identity and persistent-home access.
 The single- and multi-repository example gates must also verify that their
 fresh rootless-DinD images retain executable UID/GID mapping helpers with a
 setuid fallback before exercising the private daemon.
