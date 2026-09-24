@@ -83,4 +83,16 @@ dim_publish_example_packages "$2"
       packageNames.map((name) => `${name}-0.9.0-local-test.tgz`)
     );
   });
+
+  it("purges DIM-owned snapshots before removing multi-repository smoke scratch state", async () => {
+    const smoke = await readFile(
+      resolve(workspaceRoot, "verification/scripts/multi-repository-example-smoke.bash"),
+      "utf8"
+    );
+
+    const purge = smoke.indexOf('dim project purge "$project_name" --yes');
+    const scratchRemoval = smoke.indexOf('rm -rf "$work_dir"');
+    expect(purge).toBeGreaterThan(-1);
+    expect(scratchRemoval).toBeGreaterThan(purge);
+  });
 });

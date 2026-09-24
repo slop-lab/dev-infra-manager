@@ -63,24 +63,24 @@ workspace_compose() {
 }
 
 cleanup() {
+  local status=$?
+  local scratch_removable=true
+  trap - EXIT
+  set +e
   if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
-    dim workspace discard "$workspace_name" --yes >/dev/null 2>&1 || true
+    dim workspace discard "$workspace_name" --yes >/dev/null 2>&1 || status=1
   fi
-  if docker container inspect dim-gitea >/dev/null 2>&1; then
-    local credentials admin_username admin_password
-    credentials="$(docker exec dim-gitea cat /data/dim/credentials.json 2>/dev/null || true)"
-    if [[ -n "$credentials" ]]; then
-      admin_username="$(printf '%s' "$credentials" | jq -r .adminUsername)"
-      admin_password="$(printf '%s' "$credentials" | jq -r .adminPassword)"
-      curl --fail --silent --show-error \
-        --user "$admin_username:$admin_password" \
-        --request DELETE \
-        "http://127.0.0.1:${DIM_GITEA_PORT:-3300}/api/v1/orgs/dim-$project_name" \
-        >/dev/null 2>&1 || true
-    fi
+  if [[ -f "$state_root/projects/$project_name.json" ]] &&
+    ! dim project purge "$project_name" --yes >/dev/null 2>&1; then
+    echo "DIM Project cleanup failed; preserving $work_dir" >&2
+    scratch_removable=false
+    status=1
   fi
   dim_stop_local_npm_registry
-  rm -rf "$work_dir"
+  if [[ "$scratch_removable" == true ]]; then
+    rm -rf "$work_dir"
+  fi
+  exit "$status"
 }
 trap cleanup EXIT
 
