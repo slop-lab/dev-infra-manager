@@ -8,7 +8,7 @@
       "controllerEndpoint": "https://scheduler-control.example",
       "supervisorEndpoint": "https://scheduler-workers.example",
       "webhookUrl": "https://scheduler-hooks.example/v1/webhooks/replace-with-project-id/workflow-job",
-      "hostToken": "replace-with-builder-a-token",
+      "apiToken": "replace-with-project-api-token",
       "webhookToken": "replace-with-webhook-token"
     }
   }

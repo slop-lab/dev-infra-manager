@@ -9,11 +9,8 @@
   "projects": {
     "replace-with-project-id": {
       "webhookToken": "replace-with-webhook-token",
-      "allowedLabels": ["dim-qemu", "integration"],
-      "hosts": {
-        "builder-a": "replace-with-builder-a-token",
-        "builder-b": "replace-with-builder-b-token"
-      }
+      "apiToken": "replace-with-project-api-token",
+      "labels": ["dim-qemu", "integration"]
     }
   }
 }
