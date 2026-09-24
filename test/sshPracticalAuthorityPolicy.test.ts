@@ -13,6 +13,8 @@ const fullDevelopmentDockerfile = resolve(fullDevelopmentDim, "agent/Dockerfile"
 const fullDevelopmentStartup = resolve(fullDevelopmentDim, "agent/start-sshd.sh");
 const fullDevelopmentShell = resolve(fullDevelopmentDim, "agent/dim-agent-shell");
 const fullDevelopmentCompose = resolve(fullDevelopmentDim, "docker-compose.yml");
+const fullDevelopmentAgentLauncher = resolve(fullDevelopmentDim, "agent-dind/agent.sh");
+const fullDevelopmentDindEntrypoint = resolve(fullDevelopmentDim, "agent-dind/entrypoint.sh");
 
 describe("canonical non-root SSH practical authority", () => {
   it("passes the bounded Git identity, credential, safe-directory, and no-prompt configuration", async () => {
@@ -141,36 +143,29 @@ describe("full-development non-root SSH practical authority", () => {
   it("shares only the private Unix Docker socket and keeps runtime state ephemeral", async () => {
     const compose = await readFile(fullDevelopmentCompose, "utf8");
     const startup = await readFile(fullDevelopmentStartup, "utf8");
-    const runtimeMounts =
-      compose.match(/^\s+- [^:\n]+:\/run\/dim-agent-dind$/gm)?.map((mount) => mount.trim()) ?? [];
+    const launcher = await readFile(fullDevelopmentAgentLauncher, "utf8");
 
-    expect(compose).toMatch(
-      /^  agent:[\s\S]*?^    depends_on:\n      agent-dind:\n        condition: service_healthy/m
-    );
-    expect(compose).not.toMatch(/^  agent:\n(?:(?!^  \S+:)[\s\S])*?^    ports:/m);
-    expect(
-      compose.match(/DOCKER_HOST: "unix:\/\/\/run\/dim-agent-dind\/docker\.sock"/g) ?? []
-    ).toHaveLength(2);
-    expect(runtimeMounts).toHaveLength(2);
-    expect(new Set(runtimeMounts).size).toBe(1);
+    expect(launcher).toContain("--env DOCKER_HOST=unix:///run/dim-agent-dind/docker.sock");
+    expect(launcher).toContain('dst=/run/dim-agent-dind/docker.sock"');
     expect(startup).toContain("test -S /run/dim-agent-dind/docker.sock");
-    expect(`${compose}\n${startup}`).not.toMatch(/tcp:\/\/|\/var\/run\/docker\.sock/);
-    expect(compose).toContain("- agent-home:/home/dim-agent");
-    expect(compose).not.toMatch(/-\s+[^:\n]+:\/run\/dim-agent(?:\s|$)/);
+    expect(`${compose}\n${launcher}\n${startup}`).not.toMatch(/tcp:\/\/|\/var\/run\/docker\.sock/);
+    expect(compose).toContain("- agent-home:/mnt/agent-home");
+    expect(launcher).toContain("src=/mnt/agent-home,dst=/home/dim-agent");
   });
 
   it("starts DinD explicitly with only the private Unix listener", async () => {
     const compose = await readFile(fullDevelopmentCompose, "utf8");
+    const entrypoint = await readFile(fullDevelopmentDindEntrypoint, "utf8");
 
-    expect(compose).toContain(
-      'command: ["dockerd", "--host=unix:///run/dim-agent-dind/docker.sock"]'
-    );
-    expect(compose).not.toMatch(/--host=tcp:|DOCKER_TLS_CERTDIR/);
+    expect(entrypoint).toContain('DOCKER_HOST="unix://$runtime_dir/docker.sock"');
+    expect(entrypoint).toContain('dockerd-entrypoint.sh "$@"');
+    expect(`${compose}\n${entrypoint}`).not.toMatch(/--host=tcp:|2375|2376/);
   });
 
   it("limits session state to Docker, bounded Git, and the constrained controller socket", async () => {
     const compose = await readFile(fullDevelopmentCompose, "utf8");
     const startup = await readFile(fullDevelopmentStartup, "utf8");
+    const launcher = await readFile(fullDevelopmentAgentLauncher, "utf8");
     const allowlist = startup
       .match(/allowed_environment=\(\n([\s\S]*?)\n\)/)?.[1]
       ?.trim()
@@ -196,7 +191,7 @@ describe("full-development non-root SSH practical authority", () => {
       "GIT_CONFIG_VALUE_2",
       "GIT_TERMINAL_PROMPT"
     ]);
-    expect(compose).toContain('DIM_CONTROLLER_SOCKET: "/run/dim/controller-proxy/agent.sock"');
+    expect(launcher).toContain("--env DIM_CONTROLLER_SOCKET=/run/dim/controller-proxy/agent.sock");
     for (const variable of [
       "DIM_GIT_USERNAME",
       "DIM_GIT_TOKEN",
@@ -205,29 +200,26 @@ describe("full-development non-root SSH practical authority", () => {
       "GIT_COMMITTER_NAME",
       "GIT_COMMITTER_EMAIL"
     ]) {
-      expect(compose).toMatch(new RegExp(`^\\s+${variable}:`, "m"));
+      expect(launcher).toContain(`--env \"${variable}=$${variable}\"`);
     }
-    expect(compose).toContain('GIT_CONFIG_COUNT: "3"');
-    expect(compose).toContain("GIT_CONFIG_KEY_0: credential.helper");
-    expect(compose).toContain(
-      'GIT_CONFIG_VALUE_0: "!f() { echo username=$$DIM_GIT_USERNAME; echo password=$$DIM_GIT_TOKEN; }; f"'
-    );
-    expect(compose).toContain("GIT_CONFIG_KEY_1: safe.directory");
-    expect(compose).toContain("GIT_CONFIG_VALUE_1: /workspace");
-    expect(compose).toContain("GIT_CONFIG_KEY_2: safe.directory");
-    expect(compose).toContain("GIT_CONFIG_VALUE_2: /workspace/*");
-    expect(compose).toContain('GIT_TERMINAL_PROMPT: "0"');
-    expect(`${compose}\n${startup}`).not.toMatch(
-      /DIM_CONTROLLER_TOKEN|DIM_EXTERNAL_URL_SOCKET|DIM_EXTERNAL_URL_CONTAINERS_JSON|DIM_QEMU_VERIFICATION_SOCKET/
+    expect(launcher).toContain("--env GIT_CONFIG_COUNT=3");
+    expect(launcher).toContain("--env GIT_CONFIG_KEY_0=credential.helper");
+    expect(launcher).toContain("--env GIT_CONFIG_KEY_1=safe.directory");
+    expect(launcher).toContain("--env GIT_CONFIG_VALUE_1=/workspace");
+    expect(launcher).toContain("--env GIT_CONFIG_KEY_2=safe.directory");
+    expect(launcher).toContain("--env 'GIT_CONFIG_VALUE_2=/workspace/*'");
+    expect(launcher).toContain("--env GIT_TERMINAL_PROMPT=0");
+    expect(`${compose}\n${launcher}\n${startup}`).not.toMatch(
+      /DIM_CONTROLLER_TOKEN|DIM_QEMU_VERIFICATION_SOCKET/
     );
   });
 
   it("checks the actual SSH listener with bounded healthcheck settings", async () => {
-    const compose = await readFile(fullDevelopmentCompose, "utf8");
+    const launcher = await readFile(fullDevelopmentAgentLauncher, "utf8");
 
-    expect(compose).toMatch(
-      /^  agent:\n(?:(?!^  \S+:)[\s\S])*?^    healthcheck:\n      test: \["CMD-SHELL", "nc -z 127\.0\.0\.1 22"\]\n      interval: 1s\n      timeout: 5s\n      retries: 60/m
-    );
+    expect(launcher).toContain("for attempt in $(seq 1 60)");
+    expect(launcher).toContain('docker exec "$agent_name" nc -z 127.0.0.1 22');
+    expect(launcher).toContain('test "$attempt" -lt 60');
   });
 
   it("waits boundedly for the actual SSH listener before setup returns", async () => {
@@ -236,6 +228,7 @@ describe("full-development non-root SSH practical authority", () => {
       "utf8"
     );
 
-    expect(setup).toContain("up --detach --build --force-recreate --wait --wait-timeout 60");
+    expect(setup).toContain("up --detach --force-recreate --wait --wait-timeout 60 agent-dind");
+    expect(setup).toContain("agent-dind dim-agent-dind setup");
   });
 });

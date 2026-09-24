@@ -239,10 +239,11 @@ test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" -ne "0"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"
 dim workspace run "$workspace_name" bash -- -lc 'getent hosts dim-gitea >/dev/null'
 dim workspace run "$workspace_name" bash -- -lc 'git ls-remote origin HEAD >/dev/null'
-dim workspace exec "$workspace_name" -- docker inspect \
-  "${compose_name}-documentation-preview-1" >/dev/null
+dim workspace exec "$workspace_name" -- docker compose \
+  --project-name "$compose_name" --file .dim/docker-compose.yml \
+  exec --no-TTY agent-dind docker inspect dim-documentation-preview >/dev/null
 dim workspace exec "$workspace_name" -- sh -c \
-  "docker image save alpine:3.22 | docker compose --project-name '$compose_name' --file .dim/docker-compose.yml exec --no-TTY agent docker image load >/dev/null"
+  "docker image save alpine:3.22 | docker compose --project-name '$compose_name' --file .dim/docker-compose.yml exec --no-TTY agent-dind docker image load >/dev/null"
 dim workspace run "$workspace_name" bash -- -lc \
   'docker info --format "{{json .SecurityOptions}}" | grep -q rootless; docker run --rm alpine:3.22 true'
 dim_cache_routing_workspace_routes "$workspace_name" "$compose_name"
@@ -352,14 +353,17 @@ if ssh -F "$ssh_config" \
 fi
 outer_ssh_port="$(docker port "$container_name" 22/tcp 2>/dev/null || true)"
 test -z "$outer_ssh_port"
+dind_container="$(dim workspace exec "$workspace_name" -- \
+  docker compose --project-name "$compose_name" --file .dim/docker-compose.yml ps --quiet agent-dind)"
+test -n "$dind_container"
 agent_container="$(dim workspace exec "$workspace_name" -- \
-  docker compose --project-name "$compose_name" --file .dim/docker-compose.yml ps --quiet agent)"
+  docker exec "$dind_container" docker inspect --format '{{.Id}}' dim-agent)"
 test -n "$agent_container"
-test "$(dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
+test "$(dim workspace exec "$workspace_name" -- docker exec "$dind_container" docker inspect dim-agent \
   --format '{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Type}}|{{.RW}}|{{.Source}}{{end}}{{end}}')" = \
-  "bind|true|$(jq -r .workspaceDataPath <<<"$workspace_json")/project"
-nested_ssh_port="$(dim workspace exec "$workspace_name" -- \
-  docker port "$agent_container" 22/tcp 2>/dev/null || true)"
+  "bind|true|/workspace"
+nested_ssh_port="$(dim workspace exec "$workspace_name" -- docker exec "$dind_container" \
+  docker port dim-agent 22/tcp 2>/dev/null || true)"
 test -z "$nested_ssh_port"
 dind_processes="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "$compose_name" --file .dim/docker-compose.yml \
