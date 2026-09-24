@@ -102,7 +102,7 @@ export type QemuSchedulerProjectConnection = QemuSchedulerIdentity & {
   readonly controllerEndpoint: string;
   readonly supervisorEndpoint: string;
   readonly webhookUrl: string;
-  readonly hostToken: string;
+  readonly apiToken: string;
   readonly webhookToken: string;
 };
 

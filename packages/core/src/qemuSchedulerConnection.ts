@@ -3,7 +3,7 @@ import { UserError } from "./errors.js";
 import type { LifecycleOptions, ProjectRecord, QemuSchedulerProjectConnection } from "./lifecycleTypes.js";
 
 const ROOT_FIELDS = ["schemaVersion", "transport", "hostId", "projects"] as const;
-const PROJECT_FIELDS = ["projectId", "controllerEndpoint", "supervisorEndpoint", "webhookUrl", "hostToken", "webhookToken"] as const;
+const PROJECT_FIELDS = ["projectId", "controllerEndpoint", "supervisorEndpoint", "webhookUrl", "apiToken", "webhookToken"] as const;
 const TRANSPORTS = ["https", "loopback-http", "isolated-http"] as const;
 type Transport = (typeof TRANSPORTS)[number];
 
@@ -45,7 +45,7 @@ export async function qemuSchedulerConnection(
     controllerEndpoint: endpoint(input.controllerEndpoint, "controllerEndpoint", transport, false),
     supervisorEndpoint: endpoint(input.supervisorEndpoint, "supervisorEndpoint", transport, false),
     webhookUrl: webhookEndpoint(input.webhookUrl, transport, projectId),
-    hostToken: text(input.hostToken, `projects.${project.name}.hostToken`),
+    apiToken: text(input.apiToken, `projects.${project.name}.apiToken`),
     webhookToken: text(input.webhookToken, `projects.${project.name}.webhookToken`)
   };
 }
