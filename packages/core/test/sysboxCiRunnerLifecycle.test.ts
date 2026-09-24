@@ -98,6 +98,33 @@ describe("Sysbox CI runner image lifecycle", () => {
     expect(runner.calls).toEqual([]);
   });
 
+  it("uses a host-scoped provider identity without changing the local container name", () => {
+    const executor = {
+      kind: "sysbox" as const,
+      phase: "ready" as const,
+      containerName: "dim-ci-example-primary-local",
+      volumeName: "dim-ci-example-primary-data",
+      image: IMAGE_ID,
+      runtime: "sysbox-runc",
+      resources: { cpus: "4", memory: "8g", pidsLimit: "2048" },
+      inheritsResources: true,
+      labels: ["dim"],
+      providerRunnerName: "dim-ci-example-primary-host-a",
+      updatedAt: "now"
+    };
+
+    const args = ciRunnerContainerArgs({
+      record: { projectName: "example", projectId: "project-id", name: "primary" },
+      executor,
+      labels: "dim"
+    });
+
+    expect(args).toEqual(expect.arrayContaining([
+      "--name", executor.containerName,
+      "--env", `GITEA_RUNNER_NAME=${executor.providerRunnerName}`
+    ]));
+  });
+
   it("rejects a mutable custom tag before running Docker", async () => {
     const runner = new ResolutionRunner([]);
 

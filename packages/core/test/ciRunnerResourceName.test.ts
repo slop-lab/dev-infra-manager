@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { boundedCiRunnerResourceName } from "../../../../core/packages/core/src/ciRunnerVolume.js";
-import { ciRunnerContainerName } from "../../../../core/packages/core/src/sysboxCiRunnerLifecycle.js";
+import { ciRunnerContainerName, ciRunnerProviderName } from "../../../../core/packages/core/src/sysboxCiRunnerLifecycle.js";
 
 describe("CI runner resource names", () => {
   it("keeps delimiter-ambiguous valid Project and runner tuples distinct", () => {
@@ -24,5 +24,13 @@ describe("CI runner resource names", () => {
     expect(first).toMatch(/^[a-z0-9][a-z0-9_.-]{0,62}$/);
     expect(first).toMatch(/-[0-9a-f]{16}$/);
     expect(first.length).toBeLessThanOrEqual(63);
+  });
+
+  it("keeps local Docker names host-local while isolating external provider registrations", () => {
+    expect(ciRunnerContainerName("project", "primary")).toBe(ciRunnerProviderName("project", "primary"));
+    expect(ciRunnerProviderName("project", "primary", "host-a"))
+      .not.toBe(ciRunnerProviderName("project", "primary", "host-b"));
+    expect(ciRunnerProviderName("project", "primary", "host-a"))
+      .not.toBe(ciRunnerContainerName("project", "primary"));
   });
 });
