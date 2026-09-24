@@ -169,15 +169,19 @@ because those clients may use different routes to the same service. DIM
 requires HTTPS unless every endpoint is loopback HTTP or the operator selects
 `isolated-http` for an isolated network. It rejects redirects and bounds API
 requests to the configured API base. The administrator must report admin
-status; the distinct writer and maintainer identities must report non-admin
-status. DIM does not create or stop the external service, create credentials,
-delete its repositories or organizations, change its organization-creation
-policy, or rewrite its webhook allowlist. Use `project remove` to detach local
-state. The operator must provision the users, organization, permissions, and
-branch policy first. Each external Project requires a unique explicit shared
-ID, namespace, and Gitea organization ID; this lets multiple hosts attach to
-the same Project without adopting an unrelated same-name organization. The
-stable host ID scopes and persists Sysbox provider registrations across hosts.
+status; the writer must be a distinct non-admin identity. The maintainer may
+reuse the administrator credentials, while a distinct maintainer must report
+non-admin status. DIM does not create or stop the external service, create
+credentials, change its organization-creation policy, or rewrite its webhook
+allowlist. Host-admin repository deletion and Project purge do delete external
+resources after the ordinary checks, affecting every host attached to the
+shared Project even though their local records remain. Use `project remove` to
+detach only local state. The operator must provision the users, organization,
+permissions, and branch policy first. Each external Project requires a unique
+explicit shared ID, namespace, and Gitea organization ID; this lets multiple
+hosts attach to the same Project without adopting an unrelated same-name
+organization. The stable host ID scopes and persists Sysbox provider
+registrations across hosts.
 
 Every managed CI runner requires `.dim/ci/runner.yml` in the protected Project
 root. Its strict schema declares ordinary and integration labels,
