@@ -92,6 +92,7 @@ def shared_worker():
                 "labels": sorted(dispatch_labels),
                 "requestId": request_id,
             })
+            shared_scheduler_ready.set()
             request_id = secrets.token_urlsafe(24)
         except (OSError, TimeoutError, json.JSONDecodeError, SchedulerProtocolError) as error:
             failures += 1
@@ -120,13 +121,15 @@ def shared_worker():
             )
             renewing = True
             while process.poll() is None:
+                if not renewing:
+                    if shutdown.wait(heartbeat_seconds):
+                        break
+                    continue
                 remaining = lease_deadline - time.monotonic()
                 if remaining <= 0:
                     raise RuntimeError("shared scheduler lease deadline elapsed")
                 if shutdown.wait(min(heartbeat_seconds, remaining)):
                     break
-                if not renewing:
-                    continue
                 renewal_started = time.monotonic()
                 state, renewed_seconds = scheduler_renew(claim_id, {
                     "projectId": scheduler_project_id,
