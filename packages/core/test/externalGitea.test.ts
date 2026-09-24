@@ -141,14 +141,35 @@ describe("external Gitea connection", () => {
     await expect(ensureGitea(rejectingDockerRunner(), options)).rejects.toThrow(message);
   });
 
-  it("rejects duplicate role identities and unsafe Project bindings before transport", async () => {
+  it("allows the host administrator and maintainer to share one privileged identity", async () => {
+    // Given
+    const endpoint = await authenticatedGiteaEndpoint(servers, "operator", "admin-secret");
+    const connectionFile = await externalConnectionFile(roots, endpoint, {
+      maintainerUsername: "operator",
+      maintainerPassword: "admin-secret"
+    });
+
+    // When
+    const connection = await ensureGitea(rejectingDockerRunner(), lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer", DIM_GITEA_CONNECTION_FILE: connectionFile
+    }));
+
+    // Then
+    expect(connection).toMatchObject({
+      adminUsername: "operator",
+      writerUsername: "workspace-writer",
+      maintainerUsername: "operator"
+    });
+  });
+
+  it("rejects a writer sharing a privileged identity and unsafe Project bindings before transport", async () => {
     const endpoint = await authenticatedGiteaEndpoint(servers, "operator", "admin-secret");
     const duplicate = await externalConnectionFile(roots, endpoint, { writerUsername: "operator" });
     const unsafe = await externalConnectionFile(roots, endpoint, { projectId: "../shared" });
 
     await expect(ensureGitea(rejectingDockerRunner(), lifecycleOptionsForBackend("sysbox", {
       HOME: "/home/developer", DIM_GITEA_CONNECTION_FILE: duplicate
-    }))).rejects.toThrow(/distinct role identities/);
+    }))).rejects.toThrow(/writer.*distinct/);
     await expect(ensureGitea(rejectingDockerRunner(), lifecycleOptionsForBackend("sysbox", {
       HOME: "/home/developer", DIM_GITEA_CONNECTION_FILE: unsafe
     }))).rejects.toThrow(/safe identifier/);
@@ -227,6 +248,8 @@ async function externalConnectionFile(
     readonly adminPassword?: string;
     readonly hostBaseUrl?: string;
     readonly writerUsername?: string;
+    readonly maintainerUsername?: string;
+    readonly maintainerPassword?: string;
     readonly projectId?: string;
     readonly transport?: string;
     readonly additionalProject?: Readonly<Record<string, unknown>>;
@@ -248,8 +271,8 @@ async function externalConnectionFile(
       adminPassword: override.adminPassword ?? "admin-secret",
       writerUsername: override.writerUsername ?? "workspace-writer",
       writerPassword: "writer-secret",
-      maintainerUsername: "host-maintainer",
-      maintainerPassword: "maintainer-secret"
+      maintainerUsername: override.maintainerUsername ?? "host-maintainer",
+      maintainerPassword: override.maintainerPassword ?? "maintainer-secret"
     },
     projects: {
       example: {

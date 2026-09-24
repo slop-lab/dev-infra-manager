@@ -115,6 +115,13 @@ it("isolates agent grants and discovery from the workspace controller", async ()
       method: "POST",
       headers: { authorization: `Bearer ${agentGrant}` }
     })).status).toBe(404);
+    for (const operation of ["project.purge", "repo.delete", "git.credentials"]) {
+      expect((await fetch(`${agentBase}/v1/call/${operation}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${agentGrant}`, "content-type": "application/json" },
+        body: "{}"
+      })).status).toBe(404);
+    }
     await plugins.dispose();
     await rm(stateRoot, { recursive: true, force: true });
   });
