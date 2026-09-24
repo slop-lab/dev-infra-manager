@@ -273,11 +273,14 @@ dim workspace update "$workspace_name" --profile documentation --profile secure 
 test "$(dim workspace show "$workspace_name" --json | jq -c .profiles)" = '["documentation","secure"]'
 secure_container="$(workspace_compose ps --all --quiet secure-dind)"
 test -n "$secure_container"
-test "$(docker inspect "$secure_container" --format '{{.State.Running}}')" = true
-dim_assert_private_dind_unix_only "$secure_container" /run/dim-secure-dind/docker.sock
+test "$(dim workspace exec "$workspace_name" -- docker inspect "$secure_container" --format '{{.State.Running}}')" = true
+(
+  docker() { dim workspace exec "$workspace_name" -- docker "$@"; }
+  dim_assert_private_dind_unix_only "$secure_container" /run/dim-secure-dind/docker.sock
+)
 workspace_compose exec --no-TTY agent-dind docker inspect dim-documentation-preview >/dev/null
 dim workspace update "$workspace_name" --profile documentation >/dev/null
-test "$(docker inspect "$secure_container" --format '{{.State.Running}}')" = false
+test "$(dim workspace exec "$workspace_name" -- docker inspect "$secure_container" --format '{{.State.Running}}')" = false
 dim workspace update "$workspace_name" --clear-profiles >/dev/null
 test "$(dim workspace show "$workspace_name" --json | jq -c .profiles)" = '[]'
 if workspace_compose exec --no-TTY agent-dind docker inspect dim-documentation-preview >/dev/null 2>&1; then
@@ -393,7 +396,10 @@ outer_ssh_port="$(docker port "$container_name" 22/tcp 2>/dev/null || true)"
 test -z "$outer_ssh_port"
 dind_container="$(workspace_compose ps --quiet agent-dind)"
 test -n "$dind_container"
-dim_assert_private_dind_unix_only "$dind_container" /run/dim-agent-dind/docker.sock
+(
+  docker() { dim workspace exec "$workspace_name" -- docker "$@"; }
+  dim_assert_private_dind_unix_only "$dind_container" /run/dim-agent-dind/docker.sock
+)
 agent_container="$(dim workspace exec "$workspace_name" -- \
   docker exec "$dind_container" docker inspect --format '{{.Id}}' dim-agent)"
 test -n "$agent_container"
