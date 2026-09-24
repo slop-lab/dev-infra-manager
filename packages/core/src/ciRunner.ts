@@ -18,6 +18,9 @@ import { resolveProtectedRootSnapshotLocked } from "./protectedRootSnapshot.js";
 import { configureSysboxRegistryMirror, ensureRegistryCache } from "./registryCache.js";
 import { BUILTIN_CI_RUNNER_DEFAULTS, detectCiRunnerKvm, effectiveCiRunnerResources, effectiveQemuCiRunnerResources } from "./ciRunnerResources.js";
 import { prepareQemuBacklogReplay } from "./qemuCiRunnerBacklog.js";
+import { prepareSharedQemuBacklogReplay } from "./qemuCiRunnerBacklog.js";
+import { qemuSchedulerConnection } from "./qemuSchedulerConnection.js";
+import { assertPersistedQemuScheduler, assertQemuSchedulerTopology } from "./qemuCiRunnerShared.js";
 import { ciRunnerContainerArgs, ciRunnerContainerName, ciRunnerVolumeName, removeSysboxRegistration,
   resolveSysboxRunnerImage, sysboxRegistrationExists } from "./sysboxCiRunnerLifecycle.js";
 
@@ -75,24 +78,31 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       if (!await detectCiRunnerKvm()) throw new UserError("the qemu CI executor requires x86-64 and host /dev/kvm access");
       const projectHook = await restorePersistedQemuProjectHook({ stateRoot: options.stateRoot, projectId: existing.projectId, provenance: existing.executor.projectHook });
       const executor: QemuCiRunnerExecutor = { ...existing.executor, phase: "creating", updatedAt: new Date().toISOString() };
+      const scheduler = await qemuSchedulerConnection(options, project);
+      assertPersistedQemuScheduler(existing, scheduler);
+      assertQemuSchedulerTopology(await state.listCiRunners(), projectName, scheduler, name);
       await removeCiRunnerContainer(runner, ciRunnerContainerPlan(existing, existing.executor));
       let record = await saveExecutor(state, existing, executor);
       const webhookUrl = ciRunnerQemuWebhookUrl(executor);
       try {
         await ensureRegistryCache(runner, options.stateRoot);
         await ensureCiRunnerVolume(runner, { name: executor.volumeName, resource: "ci-qemu-data", project: projectName, projectId: record.projectId });
-        await ensureCiRunnerVolume(runner, { name: ciRunnerQemuDispatchVolumeName(projectName), resource: "ci-qemu-dispatch", project: projectName, projectId: record.projectId });
+        if (scheduler === undefined) await ensureCiRunnerVolume(runner, { name: ciRunnerQemuDispatchVolumeName(projectName), resource: "ci-qemu-dispatch", project: projectName, projectId: record.projectId });
         await ensureCiRunnerVolume(runner, { name: ciRunnerQemuCommonCacheVolumeName(), resource: "ci-qemu-common-cache" });
         await ensureCiRunnerVolume(runner, { name: ciRunnerQemuProjectCacheVolumeName(projectName), resource: "ci-qemu-project-cache", project: projectName, projectId: record.projectId });
-        await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, project, webhookUrl);
-        await giteaCiCoordinator.removeRunner(runner, options, project, ciRunnerQemuRunnerName(projectName, name));
+        if (scheduler === undefined) await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, project, webhookUrl);
+        await giteaCiCoordinator.removeRunner(runner, options, project, ciRunnerQemuRunnerName(projectName, name, scheduler?.hostId));
         const imageKeys = qemuCiRunnerProductionImageKeys({ projectId: record.projectId, hook: executor.projectHook });
         const registration = await giteaCiCoordinator.prepareRunner(runner, options, project);
         const authorization = `Bearer ${randomBytes(32).toString("hex")}`;
-        const started = await runner.run("docker", ciRunnerQemuSupervisorLaunchArgs({ record, executor, registration, authorization, kvmGroupId: () => statSync("/dev/kvm").gid, ...imageKeys, projectHook }));
+        const started = await runner.run("docker", ciRunnerQemuSupervisorLaunchArgs({ record, executor, registration, authorization, kvmGroupId: () => statSync("/dev/kvm").gid, ...imageKeys, projectHook, ...(scheduler === undefined ? {} : { scheduler }) }));
         if (started.exitCode !== 0) throw new UserError(`failed to start QEMU CI runner '${projectName}/${name}': ${started.stderr.trim()}`);
-        const replayQueuedJob = await prepareQemuBacklogReplay({ runner, record, executor, authorization });
-        await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, { url: webhookUrl, authorizationHeader: authorization, replayQueuedJob });
+        const replayQueuedJob = scheduler === undefined
+          ? await prepareQemuBacklogReplay({ runner, record, executor, authorization })
+          : await prepareSharedQemuBacklogReplay(scheduler);
+        await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, scheduler === undefined
+          ? { url: webhookUrl, authorizationHeader: authorization, replayQueuedJob }
+          : { url: scheduler.webhookUrl, authorizationHeader: `Bearer ${scheduler.webhookToken}`, replayQueuedJob, central: true });
         record = { ...record, provider: registration.provider };
         return saveExecutor(state, record, ready(executor));
       } catch (error) { await saveExecutor(state, record, failed(executor, error)); throw error; }
@@ -150,6 +160,8 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       ? { resources: previous.resources, inheritsResources: false }
       : effectiveQemuCiRunnerResources(options, input.resources);
     const projectHook = await prepareQemuProjectHookFromSnapshot({ stateRoot: options.stateRoot, snapshot });
+    const scheduler = await qemuSchedulerConnection(options, project);
+    assertQemuSchedulerTopology(await state.listCiRunners(), projectName, scheduler, name);
     await releaseProject();
     projectLockHeld = false;
     const hostImage = await resolveSysboxRunnerImage(runner, options.stateRoot, options.ciRunnerImage);
@@ -161,6 +173,7 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       ...effective,
       labels: [...qemuCiRunnerLabelNames(runnerConfig.config)],
       jobImage: runnerConfig.config.workloads.integration.image,
+      ...(scheduler === undefined ? {} : { scheduler: { projectId: scheduler.projectId, hostId: scheduler.hostId } }),
       updatedAt: now
     };
     record = {
@@ -173,10 +186,10 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
     const webhookUrl = ciRunnerQemuWebhookUrl(executor);
     try {
       await ensureRegistryCache(runner, options.stateRoot);
-      await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, project, webhookUrl);
-      await giteaCiCoordinator.removeRunner(runner, options, project, ciRunnerQemuRunnerName(projectName, name));
+      if (scheduler === undefined) await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, project, webhookUrl);
+      await giteaCiCoordinator.removeRunner(runner, options, project, ciRunnerQemuRunnerName(projectName, name, scheduler?.hostId));
       await ensureCiRunnerVolume(runner, { name: executor.volumeName, resource: "ci-qemu-data", project: projectName, projectId: project.id });
-      await ensureCiRunnerVolume(runner, { name: ciRunnerQemuDispatchVolumeName(projectName), resource: "ci-qemu-dispatch", project: projectName, projectId: project.id });
+      if (scheduler === undefined) await ensureCiRunnerVolume(runner, { name: ciRunnerQemuDispatchVolumeName(projectName), resource: "ci-qemu-dispatch", project: projectName, projectId: project.id });
       await ensureCiRunnerVolume(runner, { name: ciRunnerQemuCommonCacheVolumeName(), resource: "ci-qemu-common-cache" });
       await ensureCiRunnerVolume(runner, { name: ciRunnerQemuProjectCacheVolumeName(projectName), resource: "ci-qemu-project-cache", project: projectName, projectId: project.id });
       const imageKeys = qemuCiRunnerProductionImageKeys({ projectId: project.id, hook: executor.projectHook });
@@ -198,11 +211,16 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
         authorization,
         kvmGroupId: () => statSync("/dev/kvm").gid,
         ...imageKeys,
-        projectHook
+        projectHook,
+        ...(scheduler === undefined ? {} : { scheduler })
       }));
       if (started.exitCode !== 0) throw new UserError(`failed to start QEMU CI runner '${projectName}/${name}': ${started.stderr.trim()}`);
-      const replayQueuedJob = await prepareQemuBacklogReplay({ runner, record, executor, authorization });
-      await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, { url: webhookUrl, authorizationHeader: authorization, replayQueuedJob });
+      const replayQueuedJob = scheduler === undefined
+        ? await prepareQemuBacklogReplay({ runner, record, executor, authorization })
+        : await prepareSharedQemuBacklogReplay(scheduler);
+      await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, scheduler === undefined
+        ? { url: webhookUrl, authorizationHeader: authorization, replayQueuedJob }
+        : { url: scheduler.webhookUrl, authorizationHeader: `Bearer ${scheduler.webhookToken}`, replayQueuedJob, central: true });
       record = { ...record, provider: registration.provider };
       return saveExecutor(state, record, ready(executor));
     } catch (error) { await saveExecutor(state, record, failed(executor, error)); throw error; }
@@ -223,7 +241,7 @@ export async function stopCiRunner(runner: StreamingCommandRunner, options: Life
     try {
       const projectRecord = await state.readProject(project); const record = await state.readCiRunner(project, name); const executor = record.executor;
       await stopCiRunnerContainer(runner, ciRunnerContainerPlan(record, executor));
-      if (executor.kind === "qemu") await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, projectRecord, ciRunnerQemuWebhookUrl(executor));
+      if (executor.kind === "qemu" && executor.scheduler === undefined) await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, projectRecord, ciRunnerQemuWebhookUrl(executor));
       const updated = await saveExecutor(state, record, { ...executor, phase: "stopped", updatedAt: new Date().toISOString() } as typeof executor);
       if (executor.kind === "qemu") await giteaCiCoordinator.reconcileWorkflowJobWebhookTargets(runner, options);
       return updated;
@@ -241,7 +259,9 @@ export async function deleteCiRunner(runner: StreamingCommandRunner, options: Li
       await giteaCiCoordinator.removeRunner(runner, options, projectRecord, executor.containerName);
       await removeCiRunnerVolume(runner, { name: executor.volumeName, resource: "ci-runner-data", project, projectId: record.projectId }, `sysbox CI runner data for '${project}/${name}'`);
     } else {
-      await removeCiRunnerContainer(runner, ciRunnerContainerPlan(record, executor)); await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, projectRecord, ciRunnerQemuWebhookUrl(executor)); await giteaCiCoordinator.removeRunner(runner, options, projectRecord, ciRunnerQemuRunnerName(project, name));
+      await removeCiRunnerContainer(runner, ciRunnerContainerPlan(record, executor));
+      if (executor.scheduler === undefined) await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, projectRecord, ciRunnerQemuWebhookUrl(executor));
+      await giteaCiCoordinator.removeRunner(runner, options, projectRecord, ciRunnerQemuRunnerName(project, name, executor.scheduler?.hostId));
       const remainingCapacityNames = (await state.listCiRunners()).filter((candidate) => candidate.projectName === project && candidate.name !== name && candidate.executor.kind === "qemu").map((candidate) => candidate.name);
       const volumes = ciRunnerQemuVolumeDeletionPlans({ project, projectId: record.projectId, capacityName: name, remainingCapacityNames });
       for (const volume of volumes) await removeCiRunnerVolume(runner, volume, `QEMU CI runner resource for '${project}/${name}'`);

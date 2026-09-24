@@ -343,6 +343,22 @@ dim ci runner create acme release qemu --cpus 6 --memory 12g
 QEMU maps CPU and memory overrides to guest vCPUs and RAM. `--pids`
 applies only to Sysbox runners.
 
+QEMU scheduling remains host-local unless
+`DIM_QEMU_SCHEDULER_CONNECTION_FILE` selects an operator-managed shared
+scheduler. To share queued demand across hosts using external Gitea, build the
+standalone image from this exact CLI release and deploy it with a durable
+volume and a service-user-owned mode-`0600` config:
+
+```bash
+dim ci scheduler image build registry.example/dim-qemu-scheduler:0.9.0
+```
+
+Each DIM host needs its own stable host ID and bearer token in its private
+connection file. The central service has a separate Gitea webhook token and no
+Gitea administrator credential. Use HTTPS, loopback HTTP, or an explicitly
+isolated HTTP network. See the shared QEMU scheduler example in the DIM
+examples repository for complete service and host files.
+
 On nested-KVM-capable hosts, enabling `qemu` starts a small trusted webhook
 supervisor that boots a fresh ephemeral VM only for a queued `dim-qemu` job.
 Workflow code sees only nested KVM inside that VM. Use `list`, `start`,
