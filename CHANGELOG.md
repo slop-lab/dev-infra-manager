@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Build the QEMU CI supervisor image successfully under restrictive caller
+  umasks by applying each generated build asset's intended mode explicitly.
+  The snapshot TLS CA remains readable by APT's sandboxed user while the build
+  context and private assets retain their restricted modes; TLS, signature,
+  artifact, and package pins remain unchanged.
+
 - Allow hosts to use one explicitly configured external Gitea service while
   retaining the existing local managed-Gitea default and one DIM controller on
   every host. A private connection file separates API, host, workspace, and
