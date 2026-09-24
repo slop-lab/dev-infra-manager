@@ -73,17 +73,14 @@ export const giteaCiCoordinator: CiCoordinator = {
     }
   },
   async ensureWorkflowJobWebhook(runner, options, project, input): Promise<void> {
-    await this.reconcileWorkflowJobWebhookTargets(runner, options);
+    if (input.central !== true) await this.reconcileWorkflowJobWebhookTargets(runner, options);
     const credentials = await ensureGitea(runner, options);
-    await removeHooksForUrl(credentials, project, input.url);
-    const response = await giteaRequest(credentials, "POST", giteaOrgHooksApiBase(project), {
-      type: "gitea",
-      active: true,
-      events: ["workflow_job"],
-      authorization_header: input.authorizationHeader,
-      config: { url: input.url, content_type: "json" }
-    });
-    if (!response.ok) throw new UserError(`failed to create CI coordinator webhook: ${response.status}`);
+    if (input.central === true) {
+      await ensureSingleHook(credentials, project, input.url, input.authorizationHeader);
+    } else {
+      await removeHooksForUrl(credentials, project, input.url);
+      await createHook(credentials, project, input.url, input.authorizationHeader);
+    }
     await replayQueuedJobs(credentials, project, input.replayQueuedJob);
   },
   async removeWorkflowJobWebhook(runner, options, project, url): Promise<void> {
@@ -99,6 +96,43 @@ export const giteaCiCoordinator: CiCoordinator = {
     await configureGiteaWebhookAllowedHosts(runner, options, allowedHosts);
   }
 };
+
+async function createHook(
+  credentials: Awaited<ReturnType<typeof ensureGitea>>,
+  project: ProjectRecord,
+  url: string,
+  authorizationHeader: string
+): Promise<void> {
+  const response = await giteaRequest(credentials, "POST", giteaOrgHooksApiBase(project), {
+    type: "gitea",
+    active: true,
+    events: ["workflow_job"],
+    authorization_header: authorizationHeader,
+    config: { url, content_type: "json" }
+  });
+  if (!response.ok) throw new UserError(`failed to create CI coordinator webhook: ${response.status}`);
+}
+
+async function ensureSingleHook(
+  credentials: Awaited<ReturnType<typeof ensureGitea>>,
+  project: ProjectRecord,
+  url: string,
+  authorizationHeader: string
+): Promise<void> {
+  const base = giteaOrgHooksApiBase(project);
+  const initial = await giteaRequest(credentials, "GET", base);
+  if (!initial.ok) throw new UserError(`failed to list CI coordinator webhooks: ${initial.status}`);
+  const initialHooks = await initial.json() as GiteaHookSummary[];
+  if (giteaHookIdsForUrl(initialHooks, url).length === 0) await createHook(credentials, project, url, authorizationHeader);
+  const final = await giteaRequest(credentials, "GET", base);
+  if (!final.ok) throw new UserError(`failed to list CI coordinator webhooks: ${final.status}`);
+  const ids = giteaHookIdsForUrl(await final.json() as GiteaHookSummary[], url).sort((left, right) => left - right);
+  if (ids.length === 0) throw new UserError("failed to create central CI coordinator webhook");
+  for (const id of ids.slice(1)) {
+    const removed = await giteaRequest(credentials, "DELETE", `${base}/${id}`);
+    if (!removed.ok && removed.status !== 404) throw new UserError(`failed to deduplicate central CI coordinator webhook: ${removed.status}`);
+  }
+}
 
 async function replayQueuedJobs(
   credentials: Awaited<ReturnType<typeof ensureGitea>>,

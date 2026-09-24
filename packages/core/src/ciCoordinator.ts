@@ -16,6 +16,7 @@ export type WorkflowJobWebhookInput = {
   readonly url: string;
   readonly authorizationHeader: string;
   readonly replayQueuedJob: (job: QueuedWorkflowJob) => Promise<void>;
+  readonly central?: boolean;
 };
 
 export interface CiCoordinator {

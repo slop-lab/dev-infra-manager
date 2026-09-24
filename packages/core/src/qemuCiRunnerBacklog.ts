@@ -1,7 +1,7 @@
 import type { QueuedWorkflowJob } from "./ciCoordinator.js";
 import { inspectCiRunnerContainer, ciRunnerContainerPlan } from "./ciRunnerContainer.js";
 import { UserError } from "./errors.js";
-import type { CiRunnerRecord, QemuCiRunnerExecutor } from "./lifecycleTypes.js";
+import type { CiRunnerRecord, QemuCiRunnerExecutor, QemuSchedulerProjectConnection } from "./lifecycleTypes.js";
 import type { StreamingCommandRunner } from "./types.js";
 
 type QemuBacklogReplayPlan = {
@@ -43,5 +43,30 @@ export async function prepareQemuBacklogReplay(
     if (replayed.exitCode !== 0) {
       throw new UserError(`failed to replay queued workflow job ${job.id}: ${replayed.stderr.trim()}`);
     }
+  };
+}
+
+export async function prepareSharedQemuBacklogReplay(
+  connection: QemuSchedulerProjectConnection
+): Promise<(job: QueuedWorkflowJob) => Promise<void>> {
+  const health = await fetch(`${connection.controllerEndpoint}/healthz`, { signal: AbortSignal.timeout(10_000) });
+  if (!health.ok) throw new UserError(`shared QEMU scheduler did not become ready: ${health.status}`);
+  return async (job) => {
+    const response = await fetch(`${connection.controllerEndpoint}/v1/events`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${connection.hostToken}`,
+        "Content-Type": "application/json",
+        "X-DIM-Host": connection.hostId
+      },
+      body: JSON.stringify({
+        projectId: connection.projectId,
+        action: "queued",
+        jobId: job.id,
+        labels: job.labels
+      }),
+      signal: AbortSignal.timeout(10_000)
+    });
+    if (response.status !== 202) throw new UserError(`failed to replay queued workflow job ${job.id} to shared scheduler: ${response.status}`);
   };
 }
