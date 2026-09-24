@@ -99,7 +99,7 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
         if (started.exitCode !== 0) throw new UserError(`failed to start QEMU CI runner '${projectName}/${name}': ${started.stderr.trim()}`);
         const replayQueuedJob = scheduler === undefined
           ? await prepareQemuBacklogReplay({ runner, record, executor, authorization })
-          : await prepareSharedQemuBacklogReplay(scheduler);
+          : await prepareSharedQemuBacklogReplay({ runner, record, executor, authorization }, scheduler);
         await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, scheduler === undefined
           ? { url: webhookUrl, authorizationHeader: authorization, replayQueuedJob }
           : { url: scheduler.webhookUrl, authorizationHeader: `Bearer ${scheduler.webhookToken}`, replayQueuedJob, central: true });
@@ -228,7 +228,7 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       if (started.exitCode !== 0) throw new UserError(`failed to start QEMU CI runner '${projectName}/${name}': ${started.stderr.trim()}`);
       const replayQueuedJob = scheduler === undefined
         ? await prepareQemuBacklogReplay({ runner, record, executor, authorization })
-        : await prepareSharedQemuBacklogReplay(scheduler);
+      : await prepareSharedQemuBacklogReplay({ runner, record, executor, authorization }, scheduler);
       await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, scheduler === undefined
         ? { url: webhookUrl, authorizationHeader: authorization, replayQueuedJob }
         : { url: scheduler.webhookUrl, authorizationHeader: `Bearer ${scheduler.webhookToken}`, replayQueuedJob, central: true });
