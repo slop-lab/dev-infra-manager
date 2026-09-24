@@ -7,6 +7,10 @@ DIM_PROJECT_TOOL_NAME=opencode
 DIM_PROJECT_TOOL_VERSION=1.18.31
 DIM_PROJECT_TOOL_EXECUTABLE=/home/dim-agent/.local/bin/opencode
 DIM_PROJECT_TOOL_RUNNER=/home/dim-agent/.local/libexec/dim-project-tool-launch
+DIM_PROJECT_TOOL_SETUP_ARGUMENT=
+if [ -f .dim/project-tool.conf ]; then
+  . .dim/project-tool.conf
+fi
 
 task="${1:?task is required}"
 shift
@@ -18,7 +22,11 @@ case "$task" in
   bash) set -- bash "$@" ;;
   tool-setup)
     test "$#" -eq 0 || { echo "tool-setup does not accept arguments" >&2; exit 2; }
-    set -- bash -s
+    if [ -n "$DIM_PROJECT_TOOL_SETUP_ARGUMENT" ]; then
+      set -- bash -s -- "$DIM_PROJECT_TOOL_SETUP_ARGUMENT"
+    else
+      set -- bash -s
+    fi
     ;;
   agent)
     set -- "$DIM_PROJECT_TOOL_RUNNER" \
