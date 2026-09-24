@@ -35,6 +35,11 @@ external-gitea-shared-control:
     just build-packages
     cd .. && bash verification/scripts/external-gitea-shared-control-smoke.bash
 
+# Build shipped scheduler bytes and run two generated shared workers with fake one-job processes.
+packaged-shared-qemu-scheduler:
+    just build-packages
+    cd .. && bash verification/scripts/packaged-shared-qemu-scheduler-smoke.bash
+
 # Verify pinned workspace-user setup plus generic development-service exposure.
 workspace-user-setup:
     cd .. && bash verification/scripts/project-tool-tasks-smoke.bash
