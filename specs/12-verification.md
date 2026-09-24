@@ -199,6 +199,18 @@ idempotent retries, lease expiry and fencing, authorization boundaries,
 bounded input, and process-group termination after uncertain renewal. They
 MUST prove scheduler tokens are absent from the child environment and local
 stop or deletion cannot remove a central webhook used by another host.
+The Docker integration lane MUST build the shipped scheduler image and execute
+two generated shared-worker programs with distinct host identities and one
+Project API token. It MUST prove authenticated readiness only after scheduler
+exchange, one claim, terminal retry convergence, detached one-job process
+survival, and one host stopping without disrupting the other host or the
+central webhook. This fixture MAY replace QEMU with a fake one-job process and
+an accelerated monotonic clock; when it does, it MUST state that it verifies
+packaging and shared-worker coordination rather than a QEMU or KVM boundary.
+The same lane MUST exercise two isolated controllers against one disposable
+external Gitea service, including shared administrator and maintainer
+credentials, host-authorized remote deletion, independent stale local records,
+and one host shutting down without stopping the service or the other host.
 Protocol tests MUST reject redirects, oversized or non-exact responses,
 sub-60-second leases, API-authenticated non-queued transitions, and MUST
 acknowledge unrelated queued labels without creating demand. Fake-clock tests MUST cover the
