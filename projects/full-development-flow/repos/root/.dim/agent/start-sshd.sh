@@ -18,7 +18,7 @@ trap cleanup EXIT
 
 install -d -m 0755 /run/sshd
 install -d -o root -g dim-agent -m 0750 "$runtime_dir"
-chown -R dim-agent:dim-agent /home/dim-agent
+chown dim-agent:dim-agent /home/dim-agent
 setfacl -R -m u:dim-agent:rwX /workspace
 find /workspace -type d -exec setfacl -m d:u:dim-agent:rwX {} +
 setfacl -m u:dim-agent:rw /run/dim-agent-dind/docker.sock
