@@ -13,12 +13,17 @@ describe("rich example nested topology policy", () => {
 
     // When
     const compose = parse(await readFile(resolve(root, "docker-compose.yml"), "utf8"));
+    const secureCompose = parse(await readFile(resolve(root, "secure-compose.yml"), "utf8"));
 
     // Then
-    expect(Object.keys(compose.services).sort()).toEqual(["agent-dind", "secure-dind"]);
-    expect(compose.services["secure-dind"].profiles).toEqual(["secure"]);
-    expect(JSON.stringify(compose)).not.toContain("2375");
-    expect(JSON.stringify(compose)).not.toContain("/var/run/docker.sock");
+    expect(compose.include).toEqual(["secure-compose.yml"]);
+    expect([...Object.keys(compose.services), ...Object.keys(secureCompose.services)].sort()).toEqual([
+      "agent-dind",
+      "secure-dind"
+    ]);
+    expect(secureCompose.services["secure-dind"].profiles).toEqual(["secure"]);
+    expect(JSON.stringify({ compose, secureCompose })).not.toContain("2375");
+    expect(JSON.stringify({ compose, secureCompose })).not.toContain("/var/run/docker.sock");
   });
 
   it.each(richExamples)("launches the agent on its daemon's private Unix socket for %s", async (example) => {
@@ -96,12 +101,18 @@ describe("rich example nested topology policy", () => {
 
     // When
     const compose = await readFile(resolve(root, ".dim/docker-compose.yml"), "utf8");
+    const secureComposePath = resolve(root, ".dim/secure-compose.yml");
+    const secureCompose = parse(await readFile(secureComposePath, "utf8"));
     const launcher = await readFile(resolve(root, ".dim/secure-dind/service.sh"), "utf8");
     const operations = await readFile(resolve(root, "ops/secret-service.sh"), "utf8");
     const deployment = await readFile(resolve(project, "deploy-secret.bash"), "utf8");
 
     // Then
-    expect(compose).toContain("secure-dind-data:");
+    expect(await readFile(secureComposePath, "utf8")).toContain("secure-dind-data:");
+    expect(Object.keys(secureCompose.services)).toEqual(["secure-dind"]);
+    expect(Object.keys(secureCompose.volumes)).toEqual(["secure-dind-data"]);
+    expect(JSON.stringify(secureCompose)).not.toContain("GIT_AUTHOR_");
+    expect(JSON.stringify(secureCompose)).not.toContain("GIT_COMMITTER_");
     expect(compose).not.toContain("EXAMPLE_SECRET:");
     expect(launcher).toContain('service_name="dim-secret-service"');
     expect(launcher).toContain('--publish 7099:7099');
@@ -109,7 +120,7 @@ describe("rich example nested topology policy", () => {
     expect(operations).toContain("tar --exclude=.git -C \"$checkout\" -cf - .");
     expect(operations).toContain('immutable_root="${DIM_PROJECT_ROOT:?DIM_PROJECT_ROOT is required}"');
     expect(operations).toContain('cd "$immutable_root"');
-    expect(operations).toContain('--file "$immutable_root/.dim/docker-compose.yml"');
+    expect(operations).toContain('--file "$immutable_root/.dim/secure-compose.yml"');
     expect(deployment).toContain('sh "$DIM_PROJECT_ROOT/ops/secret-service.sh" deploy-secret');
   });
 });
