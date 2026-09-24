@@ -29,7 +29,8 @@ case "$task" in
   ssh-proxy)
     test "$#" -eq 0 || { echo "ssh-proxy does not accept arguments" >&2; exit 2; }
     exec docker compose \
-      --file .dim/docker-compose.yml exec --no-TTY agent nc 127.0.0.1 22
+      --file .dim/docker-compose.yml exec --no-TTY \
+      --user root agent-dind dim-agent-dind exec nc 127.0.0.1 22
     ;;
   *)
     echo "unknown DIM project task: $task" >&2
@@ -40,9 +41,9 @@ esac
 if [ -t 0 ] && [ -t 1 ]; then
   exec docker compose \
     --file .dim/docker-compose.yml exec \
-    --user "$(id -u):$(id -g)" --env HOME=/home/dim-agent agent "$@"
+    --user root agent-dind dim-agent-dind exec "$@"
 else
   exec docker compose \
     --file .dim/docker-compose.yml exec --no-TTY \
-    --user "$(id -u):$(id -g)" --env HOME=/home/dim-agent agent "$@"
+    --user root agent-dind dim-agent-dind exec "$@"
 fi

@@ -14,7 +14,7 @@ test "$DIM_WORKSPACE_UID" -ne 0 && test "$DIM_WORKSPACE_GID" -ne 0 || {
 
 compose_host_aliases=/tmp/dim-example-compose-host-aliases.json
 jq -e '.hostAliases | type == "object"' "$DIM_PROJECT_MANIFEST" >/dev/null
-jq '{services:{agent:{extra_hosts:[.hostAliases | to_entries[] | .key as $host | .value[] | "\($host)=\(.)"]}}}' \
+jq '{services:{"agent-dind":{extra_hosts:[.hostAliases | to_entries[] | .key as $host | .value[] | "\($host)=\(.)"]}}}' \
   "$DIM_PROJECT_MANIFEST" >"$compose_host_aliases"
 
 export GIT_AUTHOR_NAME="$git_name"
@@ -22,6 +22,7 @@ export GIT_AUTHOR_EMAIL="$git_email"
 export GIT_COMMITTER_NAME="$git_name"
 export GIT_COMMITTER_EMAIL="$git_email"
 export DIM_WORKSPACE_UID DIM_WORKSPACE_GID
+export COMPOSE_BAKE=false
 
 proxy_dir=/tmp/dim-agent-controller
 proxy_socket="$proxy_dir/agent.sock"
@@ -36,10 +37,7 @@ if ! curl --fail --silent --unix-socket "$proxy_socket" \
     >"$proxy_dir/agent.log" 2>&1 &
   for attempt in $(seq 1 30); do
     test -S "$proxy_socket" && break
-    if [ "$attempt" -eq 30 ]; then
-      cat "$proxy_dir/agent.log" >&2
-      exit 1
-    fi
+    test "$attempt" -lt 30 || { cat "$proxy_dir/agent.log" >&2; exit 1; }
     sleep 1
   done
 fi
@@ -49,15 +47,26 @@ export DIM_DEVELOPMENT_GATEWAY_PORT
 dim-controller-proxy ensure external-url \
   --listen /tmp/dim-development-url/controller.sock \
   --ingress https-ts \
-  --bind-containers-json '["agent"]' \
+  --bind-containers-json '["agent-dind","dim-agent"]' \
   --bind-protocol http \
   --bind-port "$DIM_DEVELOPMENT_GATEWAY_PORT" \
   --directory-mode 0755 \
   --socket-mode 0666
 
 docker compose \
-  --file .dim/docker-compose.yml --file "$compose_host_aliases" "$@" \
-  up --detach --build --force-recreate --wait --wait-timeout 60
+  --file .dim/docker-compose.yml --file "$compose_host_aliases" \
+  build --quiet agent-dind
 docker compose \
-  --file .dim/docker-compose.yml exec --no-TTY agent \
-  chown -R "$DIM_WORKSPACE_UID:$DIM_WORKSPACE_GID" /home/dim-agent
+  --file .dim/docker-compose.yml --file "$compose_host_aliases" \
+  up --detach --force-recreate --wait --wait-timeout 60 agent-dind
+docker compose \
+  --file .dim/docker-compose.yml --file "$compose_host_aliases" \
+  exec --no-TTY --user root agent-dind dim-agent-dind setup
+
+case ",${COMPOSE_PROFILES:-}," in
+  *,documentation,*)
+    docker compose \
+      --file .dim/docker-compose.yml --file "$compose_host_aliases" \
+      exec --no-TTY --user root agent-dind dim-agent-dind documentation
+    ;;
+esac
