@@ -50,7 +50,12 @@
   ten-second total request lifetime, including slowly delivered headers and
   bodies. Saturated requests receive a bounded service-unavailable response,
   failed handler-thread startup releases its capacity, and the packaged image
-  now includes every scheduler storage module required at startup.
+  now includes every scheduler storage module required at startup. Per-Project
+  persistent state now rejects new entries after 10,000 nonterminal jobs or
+  100,000 claim receipts without evicting live fences, and unsuccessful shared
+  supervisors use bounded shutdown-interruptible backoff after release. Runner
+  admission also rejects scheduler mode, Project, or host identity changes
+  before mutation and requires the scheduler host ID to match external Gitea.
 
 - Keep the Docker CLI required by the pinned upstream Sysbox runner image's
   daemon readiness gate so persistent runners start instead of waiting
