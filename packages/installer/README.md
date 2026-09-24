@@ -200,27 +200,29 @@ executable path in its config and proxies every non-installer command to it.
 dim install-cli --no-local-bin
 ```
 
-For local DIM development, build a package bundle and install it behind the
-same facade without publishing or replacing the mise shim:
+For local DIM development, use the repository installation script. It stages
+the bundle's exact installer tarball outside the bundle and executes that
+target facade without replacing the mise shim before compatibility succeeds:
 
 ```bash
-bash verification/scripts/pack-local-packages.bash /tmp/dim-packages
-dim install-cli --local-packages /tmp/dim-packages --no-local-bin
+just install-dim-local
 ```
 
-The bundle's installer package is ignored so the currently selected facade
-remains responsible for dispatch. The installed CLI reports the version stored
-in config; package-manifest versions are not used to construct paths. Plugins
-share the runtime's `@slop-lab/dim-core`, whose exact peer dependency is
-checked by npm before installation succeeds.
+An already installed standalone or mise-managed facade cannot retroactively
+enforce compatibility checks introduced by a newer candidate. Local install
+scripts therefore use mise only to provide Node.js and npm, invoke the staged
+target facade by absolute path for `install-cli`, and update a direct global
+facade only after target validation and runtime promotion succeed. The
+installed CLI reports the version stored in config; package-manifest versions
+are not used to construct paths. Plugins share the runtime's
+`@slop-lab/dim-core`, whose exact peer dependency is checked by npm before
+installation succeeds.
 
 If preparation fails before this command with an error that describes the old
 `-local-<git-sha>` format, the selected production source predates the current
 aggregate SHA-256 package identity. Update the reviewed core and plugin source
 commits together, rebuild the bundle, and retry the same install command. Do
-not shorten the aggregate identity or relax its validation. A facade that
-already supports `--local-packages` passes the tarballs to npm and does not
-apply the package build's commit-length validation itself.
+not shorten the aggregate identity or relax its validation.
 
 **Default**: under `mise`, `--no-local-bin` is the default; everywhere else,
 `--local-bin` is the default. The explicit flag always wins over this
