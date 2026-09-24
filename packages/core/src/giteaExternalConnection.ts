@@ -37,12 +37,6 @@ export async function configuredExternalGiteaConnection(file: string): Promise<E
     ...credentials,
     projectBindings: parseProjectBindings(input.projects)
   } satisfies Extract<GiteaConnection, { readonly kind: "external" }>;
-  assertUnique([
-    connection.apiBaseUrl,
-    connection.hostBaseUrl,
-    connection.workspaceBaseUrl,
-    connection.runnerBaseUrl
-  ], "endpoint");
   return connection;
 }
 
