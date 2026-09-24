@@ -8,11 +8,14 @@
   runner endpoints, supplies existing scoped credentials, and binds shared
   Project and organization identities. The connection declares a stable host
   identity and HTTPS, loopback-HTTP, or isolated-HTTP transport policy; DIM
-  validates all three distinct user roles and unique Project bindings, rejects
-  API redirects, scopes host credentials to the configured URL, and host-scopes
-  shared Sysbox runner registrations. DIM validates health and authentication
-  before mutation but does not provision, stop, reconfigure, delete, or inject
-  aliases for the operator-owned service; repository permissions and branch
+  validates a distinct non-admin workspace writer, permits the host maintainer
+  to reuse the administrator credentials, and validates unique Project
+  bindings. It rejects API redirects, scopes host credentials to the configured
+  URL, and host-scopes shared Sysbox runner registrations. DIM validates health
+  and authentication before mutation but does not provision, stop, reconfigure,
+  or inject aliases for the operator-owned service. Explicit host-admin
+  repository deletion and Project purge remain available and affect every host
+  attached to those shared remote resources; repository permissions and branch
   protection remain enforced through the existing APIs.
 
 - Replace DIM-owned mutable repository reconciliation with a schema-6
