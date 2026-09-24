@@ -121,7 +121,7 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   persistent agent-DinD state. Secret operations execute reviewed scripts and
   Compose definitions from the immutable root, and home archives consistently
   stop and restart the inner agent while preserving restored file modes. Rich
-  agent homes now initialize empty named roots for the mapped rootless owner,
+  agent homes now initialize empty named roots for the mapped inner agent owner,
   reject populated incompatible roots without recursive ownership rewrites,
   and include the ACL tooling required by nonroot task and SSH access. Local
   rich-example installation also publishes the complete exact-version package
