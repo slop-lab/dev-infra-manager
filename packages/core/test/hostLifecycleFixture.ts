@@ -103,6 +103,7 @@ export function workspaceRecord(name: string, phase: WorkspacePhase): WorkspaceR
 export function hostLifecycleOptions(stateRoot: string): LifecycleOptions {
   return {
     stateRoot,
+    giteaConnection: { kind: "managed" },
     giteaImage: "gitea",
     giteaHost: "gitea",
     giteaPort: 3000,

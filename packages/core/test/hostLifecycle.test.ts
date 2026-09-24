@@ -74,6 +74,37 @@ describe("host lifecycle", () => {
     expect(calls.flat().join(" ")).not.toContain("volume");
   });
 
+  it("does not inspect or stop an externally managed Gitea service", async () => {
+    // Given
+    const calls: string[][] = [];
+    const runner: StreamingCommandRunner = {
+      async run(command, args) {
+        calls.push([command, ...args]);
+        if (args[0] === "container" && args[1] === "ls") {
+          return { command, args, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (args.includes("dim-registry-cache")) {
+          return { command, args, stdout: "", stderr: "no such container", exitCode: 1 };
+        }
+        throw new Error(`unexpected command: ${[command, ...args].join(" ")}`);
+      },
+      async runStreaming() {
+        throw new Error("no workspace should be stopped in this test");
+      }
+    };
+    const options = {
+      ...hostLifecycleOptions(root),
+      giteaConnection: { kind: "external" as const, file: "/run/secrets/gitea.json" }
+    };
+
+    // When
+    const result = await shutdownHost(runner, options);
+
+    // Then
+    expect(result.phase).toBe("stopped");
+    expect(calls.flat()).not.toContain("dim-gitea");
+  });
+
   it("starts managed infrastructure by its inspected immutable ID", async () => {
     const state = new LifecycleState(root);
     await state.writeHostLifecycle({
