@@ -33,6 +33,18 @@ explicitly. Every host sharing that Project MUST use the same binding. DIM
 MUST verify the existing organization by both ID and namespace and MUST reject
 an absent, changed, or unrelated binding rather than adopting by name.
 
+**CONFIG-QEMU-SCHEDULER-001:** `DIM_QEMU_SCHEDULER_CONNECTION_FILE` MAY select
+an operator-managed shared QEMU demand scheduler. The file MUST be a regular,
+DIM-user-owned mode-`0600` JSON file with exact schema version `1`, a stable
+host ID, one explicit transport policy, and per-Project bindings. Each binding
+MUST match the local immutable Project ID and provide distinct controller,
+supervisor, and central webhook URLs plus host and webhook bearer tokens. URLs
+MUST contain no credentials, query, or fragment. Plain HTTP is valid only for
+loopback or an explicitly isolated transport. Shared scheduling MUST require
+external Gitea and MUST reject mixed shared/local topology or changed
+persisted identity. When the variable is absent, existing host-local
+scheduling MUST remain unchanged.
+
 Project-specific Git namespaces, repository aliases, root repository/ref,
 profiles and backend choices belong to Project/workspace records. Raw
 credentials must not be written to those records.

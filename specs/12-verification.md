@@ -193,6 +193,12 @@ tests MUST also prove that a claimed job ID is only a demand trigger: swapped
 coordinator assignments, trigger completion, and missing or replaced trigger
 claims MUST leave every already-running generic capacity alive, while one-VM
 per-capacity, shutdown, state-I/O failure, and process cleanup remain enforced.
+Shared-scheduler tests MUST also execute two independent host clients against
+the packaged HTTP service and prove one claim per capacity, restart durability,
+idempotent retries, lease expiry and fencing, authorization boundaries,
+bounded input, and process-group termination after uncertain renewal. They
+MUST prove scheduler tokens are absent from the child environment and local
+stop or deletion cannot remove a central webhook used by another host.
 The route-policy test launches the checked-in advanced example server rather
 than maintaining a test-only webhook implementation.
 A Docker-capable lane MUST run `just verify headscale-tailnet-tcp`. It MUST

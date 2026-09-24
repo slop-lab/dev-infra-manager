@@ -325,7 +325,8 @@ and failure without upstream bypass during a cache or relay outage.
 Configuration inspection alone is insufficient. This requirement does not
 mandate packet capture or general network monitoring.
 
-**CI-QEMU-SCHEDULER-001:** The QEMU supervisors form a Project-scoped scheduler
+**CI-QEMU-SCHEDULER-001:** Without a shared scheduler connection, the QEMU
+supervisors form the existing host-local Project-scoped scheduler
 with one capacity per named runner. They MUST coordinate through a shared
 managed dispatch volume and atomically claim demand so duplicate provider
 deliveries cannot produce concurrent claims for one trigger. The scheduler
@@ -358,6 +359,17 @@ replacement of its trigger claim MUST stop claim renewal but MUST NOT terminate
 the running VM. Scheduler shutdown, scheduler state-I/O failure, supervisor
 exit, and bounded process termination and cleanup retain their existing
 behavior.
+
+When `CONFIG-QEMU-SCHEDULER-001` selects a shared service, that service MUST
+instead own Project demand and lease state in a transactionally durable SQLite
+database. Its authenticated HTTP surface MUST be limited to normalized events
+and capacity claim, renewal, and release; it MUST expose no generic state
+mutation or executable payload. Claims MUST use unguessable IDs, finite
+leases, idempotent request IDs, and fencing. Each host remains authoritative
+for its local supervisor and VM. Loss or uncertainty of renewal MUST stop and
+reap that process group before the capacity claims again. Scheduler credentials
+MUST never enter a guest or job environment. The service MUST hold no Gitea
+administrator credential.
 
 **CI-QEMU-BACKLOG-001:** QEMU runner create, start, and restart MUST make the
 supervisor healthy, install its authenticated workflow-job webhook, and perform
