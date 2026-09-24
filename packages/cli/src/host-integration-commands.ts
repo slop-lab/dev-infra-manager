@@ -1,8 +1,9 @@
 import { type Command } from "commander";
-import { lifecycleOptions, UserError } from "@slop-lab/dim-core";
+import { UserError } from "@slop-lab/dim-core";
 import {
   adminCall, adminStreamCall, controllerRequest, print, readStdin, runner, type JsonFlags
 } from "./cli-support.js";
+import { matchesGitCredentialScope } from "./gitCredentialScope.js";
 
 export function registerHostIntegrationCommands(program: Command): void {
   const host = program.command("host").description("Manage DIM host runtime lifecycle");
@@ -54,7 +55,7 @@ service.command("credentials")
 
 const x = program.command("x").description("Run a command with DIM-provided integration settings");
 x.command("git")
-  .description("Run Git with the managed host-maintainer credential")
+  .description("Run Git with the configured host-maintainer credential")
   .argument("<args...>")
   .allowUnknownOption(true)
   .action(async (args: string[]) => {
@@ -70,7 +71,7 @@ x.command("git")
     });
   });
 
-const gitIntegration = program.command("git").description("Configure Git access to DIM-managed repositories");
+const gitIntegration = program.command("git").description("Configure Git access to DIM Project repositories");
 gitIntegration.command("setup")
   .description("Install DIM's URL-scoped Git credential helper in global Git config")
   .action(async () => {
@@ -91,9 +92,8 @@ gitIntegration.command("credential-helper", { hidden: true })
         const separator = line.indexOf("=");
         return [line.slice(0, separator), line.slice(separator + 1)];
       }));
-    const options = lifecycleOptions();
-    if (fields.protocol !== "http" || fields.host !== `127.0.0.1:${options.giteaPort}`) return;
-    const credentials = await adminCall<{ username: string; password: string }>("git.credentials");
+    const credentials = await adminCall<{ username: string; password: string; baseUrl: string }>("git.credentials");
+    if (!matchesGitCredentialScope(fields, credentials.baseUrl)) return;
     console.log(`username=${credentials.username}`);
     console.log(`password=${credentials.password}`);
   });
