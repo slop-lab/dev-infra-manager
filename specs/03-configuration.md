@@ -35,11 +35,13 @@ explicitly. Every host sharing that Project MUST use the same binding. DIM
 MUST verify the existing organization by both ID and namespace and MUST reject
 an absent, changed, or unrelated binding rather than adopting by name.
 
-The administrator identity MUST report administrator status. Writer and
-maintainer identities MUST be distinct from each other and the administrator,
-authenticate as their configured login, and report non-administrator status.
-Project names, IDs, namespaces, organization IDs, and host IDs MUST be safe and
-unique within the connection file before they can select local state.
+The administrator identity MUST report administrator status. The writer MUST
+use an identity distinct from both privileged host identities, authenticate as
+its configured login, and report non-administrator status. The maintainer MAY
+reuse the administrator credentials; when configured as a distinct identity,
+it MUST authenticate as its configured login and report non-administrator
+status. Project names, IDs, namespaces, organization IDs, and host IDs MUST be
+safe and unique within the connection file before they can select local state.
 
 **CONFIG-QEMU-SCHEDULER-001:** `DIM_QEMU_SCHEDULER_CONNECTION_FILE` MAY select
 an operator-managed shared QEMU demand scheduler. The file MUST be a regular,

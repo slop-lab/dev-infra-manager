@@ -103,9 +103,12 @@ fixture or tunnel networks with `isolated-http`. The stable `hostId`
 distinguishes provider registrations created by different hosts and must match
 the shared QEMU scheduler host ID when that scheduler is configured. DIM
 verifies that the administrator is an administrator and that the distinct
-writer and maintainer logins are non-administrators. External repositories and
-organizations remain operator-owned: `repo delete` and `project purge` reject
-external mode, while `project remove` only detaches local DIM state.
+writer login is a non-administrator. The maintainer may reuse the administrator
+credentials; a distinct maintainer login must be a non-administrator.
+Host-admin `repo delete` and `project purge` requests delete external resources
+after the ordinary usage and identity checks. This affects every host sharing
+the repository or Project even though their independent local records remain.
+Use `project remove` when only the current host should detach its local state.
 
 Pre-create each external organization and copy its numeric Gitea ID into the
 Project binding. Hosts that share a Project must share all three identity
