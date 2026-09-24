@@ -10,6 +10,9 @@ import shutil
 import subprocess
 import threading
 import time
+import secrets
+import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 authorization = os.environ["DIM_QEMU_WEBHOOK_AUTHORIZATION"]
@@ -23,6 +26,10 @@ lock_path = state_path + ".lock"
 lease_seconds = 30
 completed_retention_seconds = 7 * 24 * 60 * 60
 heartbeat_seconds = float(os.environ.get("DIM_QEMU_SCHEDULER_HEARTBEAT_SECONDS", "5"))
+scheduler_endpoint = os.environ.get("DIM_QEMU_SCHEDULER_ENDPOINT", "").rstrip("/")
+scheduler_project_id = os.environ.get("DIM_QEMU_SCHEDULER_PROJECT_ID", "")
+scheduler_host_id = os.environ.get("DIM_QEMU_SCHEDULER_HOST_ID", "")
+scheduler_token = os.environ.get("DIM_QEMU_SCHEDULER_TOKEN", "")
 run_root = "/var/lib/dim-qemu-ci/runs"
 shutdown = threading.Event()
 pr_set_child_subreaper = 36
