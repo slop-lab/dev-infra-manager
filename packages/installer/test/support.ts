@@ -31,7 +31,7 @@ async function writeExecutable(target: string, content: string): Promise<void> {
  */
 export async function writeFakeCliNpm(
   scriptPath: string,
-  options: { argsFile: string; versionOutput: string }
+  options: { argsFile: string; versionOutput: string; preflightSource?: string }
 ): Promise<void> {
   const content = `#!/usr/bin/env node
 import { writeFileSync, mkdirSync, chmodSync } from "node:fs";
@@ -48,6 +48,13 @@ if (prefixIndex === -1) {
 const versionDirectory = args[prefixIndex + 1];
 const binDirectory = path.join(versionDirectory, "node_modules", ".bin");
 mkdirSync(binDirectory, { recursive: true });
+const coreDirectory = path.join(versionDirectory, "node_modules", "@slop-lab", "dim-core");
+mkdirSync(coreDirectory, { recursive: true });
+writeFileSync(path.join(coreDirectory, "package.json"), JSON.stringify({
+  type: "module",
+  exports: { ".": { import: "./index.js" } }
+}));
+writeFileSync(path.join(coreDirectory, "index.js"), ${JSON.stringify(options.preflightSource ?? "export async function preflightStateCompatibility() { return { warnings: [] }; }\n")});
 const stubPath = path.join(binDirectory, "dim");
 const stub = ${JSON.stringify(stubDimSource())}.replace("__VERSION__", ${JSON.stringify(options.versionOutput)});
 writeFileSync(stubPath, stub);

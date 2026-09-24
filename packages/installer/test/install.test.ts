@@ -1,4 +1,4 @@
-import { access, chmod, mkdir, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, readFile, readlink, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -215,6 +215,48 @@ describe("@slop-lab/dim-installer", () => {
       })).rejects.toThrow(/reports wrong-version, expected 2.0.0/);
 
       expect(await readFile(join(previous, "sentinel"), "utf8")).toBe("previous install");
+    });
+
+    it("runs the staged target core preflight before changing installed state", async () => {
+      // Given
+      const root = await tempDir("dim-install-preflight-refusal-");
+      const npm = join(root, "npm.mjs");
+      await writeFakeCliNpm(npm, {
+        argsFile: join(root, "arguments.json"),
+        versionOutput: "2.0.0",
+        preflightSource: `export async function preflightStateCompatibility() {
+  throw new Error("target core rejected workspace state");
+}\n`
+      });
+      const dataHome = join(root, "data-home");
+      const current = join(dataHome, "runtime", "current");
+      const configPath = join(root, "config.json");
+      const binDirectory = join(root, "bin");
+      const linkPath = join(binDirectory, "dim");
+      await mkdir(current, { recursive: true });
+      await mkdir(binDirectory);
+      await writeFile(join(current, "sentinel"), "previous runtime");
+      await writeFile(configPath, '{"schemaVersion":1,"preserved":"config"}\n');
+      await symlink(join(current, "node_modules", ".bin", "dim"), linkPath);
+      const configBefore = await readFile(configPath);
+      const linkBefore = await readlink(linkPath);
+
+      // When
+      const installation = installDimCli({
+        version: "2.0.0",
+        exposeOnPath: true,
+        npmCommand: npm,
+        dataHome,
+        configPath,
+        binDirectory
+      });
+
+      // Then
+      await expect(installation).rejects.toThrow(/target core rejected workspace state/);
+      expect(await readFile(join(current, "sentinel"), "utf8")).toBe("previous runtime");
+      expect(await readFile(configPath)).toEqual(configBefore);
+      expect(await readlink(linkPath)).toBe(linkBefore);
+      expect(await readdir(join(dataHome, "runtime"))).toEqual(["current"]);
     });
 
     it("restores current when configuration fails after promotion", async () => {
