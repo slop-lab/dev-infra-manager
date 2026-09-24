@@ -32,6 +32,11 @@ case "$task" in
     ;;
 esac
 
+if [ -t 0 ] && [ -t 1 ]; then
+  exec docker compose \
+    --file .dim/docker-compose.yml exec --interactive --tty \
+    --user root agent-dind dim-agent-dind exec "$@"
+fi
 exec docker compose \
-  --file .dim/docker-compose.yml exec \
-  --user "$(id -u):$(id -g)" --env HOME=/home/dim-agent agent "$@"
+  --file .dim/docker-compose.yml exec --no-TTY \
+  --user root agent-dind dim-agent-dind exec "$@"
