@@ -353,11 +353,13 @@ volume and a service-user-owned mode-`0600` config:
 dim ci scheduler image build registry.example/dim-qemu-scheduler:0.9.0
 ```
 
-Each DIM host needs its own stable host ID and bearer token in its private
-connection file. The central service has a separate Gitea webhook token and no
-Gitea administrator credential. Use HTTPS, loopback HTTP, or an explicitly
-isolated HTTP network. See the shared QEMU scheduler example in the DIM
-examples repository for complete service and host files.
+Each DIM host uses a distinct stable host ID that must equal that host's
+external Gitea connection `hostId`. All hosts attached to one Project use the
+same Project API bearer token; the host ID is concurrency identity, not
+authorization or a separate credential. The central service has a distinct
+Gitea webhook token and no Gitea administrator credential. Use HTTPS, loopback
+HTTP, or an explicitly isolated HTTP network. See the shared QEMU scheduler
+example in the DIM examples repository for complete service and host files.
 
 Configure a 60-second-or-longer lease and explicitly allow the Project's QEMU
 integration labels in the service config. DIM renews every five seconds with
@@ -365,6 +367,15 @@ two-second requests; the service retains expired ownership for a 20-second
 cleanup grace and holds outstanding queued claims across restart. This bounds
 normal failover but cannot fence a paused, partitioned, or compromised host at
 the infrastructure layer.
+
+The service admits at most 10,000 queued or running jobs and 100,000 claim
+request receipts per Project. New demand or claims receive HTTP `503` at
+saturation; existing jobs, claims, and live fences are not evicted. Restored
+terminal webhook delivery frees nonterminal capacity. Released claim receipts
+expire after seven days, while a receipt that still protects a live claim is
+retained until that claim is gone. Unsuccessful supervisors release only after
+termination and reaping, then retry with shutdown-interruptible exponential
+backoff capped at 30 seconds.
 
 On nested-KVM-capable hosts, enabling `qemu` starts a small trusted webhook
 supervisor that boots a fresh ephemeral VM only for a queued `dim-qemu` job.
