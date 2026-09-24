@@ -4,6 +4,7 @@ set -euo pipefail
 readonly OPENCODE_VERSION="1.18.31"
 readonly OMO_VERSION="4.19.4"
 readonly JSONC_PARSER_VERSION="3.3.1"
+readonly CODEX_VERSION="0.156.1"
 
 fail() {
   printf 'workspace-user-setup: %s\n' "$*" >&2
@@ -18,6 +19,20 @@ require_command bash
 require_command flock
 require_command node
 require_command npm
+
+(( $# <= 1 )) || fail 'expected at most one tool selection argument'
+selected_tool="${1:-opencode}"
+case "$selected_tool" in
+  opencode)
+    selected_version="$OPENCODE_VERSION"
+    selected_executable_name=opencode
+    ;;
+  codex)
+    selected_version="$CODEX_VERSION"
+    selected_executable_name=codex
+    ;;
+  *) fail "unsupported tool selection: $selected_tool" ;;
+esac
 
 [[ -n "${HOME:-}" ]] || fail 'HOME is not set'
 [[ "$HOME" = /* ]] || fail "HOME must be an absolute path: $HOME"
@@ -49,7 +64,7 @@ exec {setup_lock_fd}>"$lock_path"
 flock -n "$setup_lock_fd" || fail 'workspace user setup is already running'
 trap 'exit 130' HUP INT TERM
 
-preflight_output="$(node - "$HOME" "$config_home" "$cache_home" "$data_home" "$state_home" <<'NODE'
+preflight_output="$(node - "$HOME" "$config_home" "$cache_home" "$data_home" "$state_home" "$selected_tool" <<'NODE'
 const fs = require("node:fs")
 const path = require("node:path")
 
@@ -58,6 +73,7 @@ const requestedConfigHome = process.argv[3]
 const requestedCacheHome = process.argv[4]
 const requestedDataHome = process.argv[5]
 const requestedStateHome = process.argv[6]
+const selectedTool = process.argv[7]
 const home = fs.realpathSync(requestedHome)
 const requestedHomeAbsolute = path.resolve(requestedHome)
 
@@ -117,20 +133,24 @@ const installLibrary = ensureDirectory(path.join(installPrefix, "lib"), "npm lib
 ensureDirectory(path.join(installLibrary, "node_modules"), "npm package directory")
 const toolLauncherDirectory = ensureDirectory(path.join(installPrefix, "libexec"), "tool launcher directory")
 const toolStateDirectory = ensureDirectory(path.join(installPrefix, "state", "dim-project-tool"), "tool state directory")
-const omoDirectory = ensureDirectory(path.join(home, ".omo"), "OMO configuration directory")
-const configHome = ensureDirectory(rebaseFromRequestedHome(requestedConfigHome), "XDG configuration directory")
-const openCodeDirectory = ensureDirectory(path.join(configHome, "opencode"), "OpenCode configuration directory")
 const cacheHome = ensureDirectory(rebaseFromRequestedHome(requestedCacheHome), "XDG cache directory")
-const openCodeCache = ensureDirectory(path.join(cacheHome, "opencode"), "OpenCode cache directory")
-const packagesDirectory = ensureDirectory(path.join(openCodeCache, "packages"), "OpenCode package cache directory")
-const omoCacheCoordinate = path.join(packagesDirectory, "oh-my-openagent@4.19.4")
-try {
-  const coordinateStat = fs.lstatSync(omoCacheCoordinate)
-  if (coordinateStat.isSymbolicLink()) {
-    throw new Error(`OMO cache coordinate must not be a symbolic link: ${omoCacheCoordinate}`)
+let omoDirectory = ""
+let openCodeDirectory = ""
+if (selectedTool === "opencode") {
+  omoDirectory = ensureDirectory(path.join(home, ".omo"), "OMO configuration directory")
+  const configHome = ensureDirectory(rebaseFromRequestedHome(requestedConfigHome), "XDG configuration directory")
+  openCodeDirectory = ensureDirectory(path.join(configHome, "opencode"), "OpenCode configuration directory")
+  const openCodeCache = ensureDirectory(path.join(cacheHome, "opencode"), "OpenCode cache directory")
+  const packagesDirectory = ensureDirectory(path.join(openCodeCache, "packages"), "OpenCode package cache directory")
+  const omoCacheCoordinate = path.join(packagesDirectory, "oh-my-openagent@4.19.4")
+  try {
+    const coordinateStat = fs.lstatSync(omoCacheCoordinate)
+    if (coordinateStat.isSymbolicLink()) {
+      throw new Error(`OMO cache coordinate must not be a symbolic link: ${omoCacheCoordinate}`)
+    }
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error
   }
-} catch (error) {
-  if (error?.code !== "ENOENT") throw error
 }
 const dataHome = ensureDirectory(rebaseFromRequestedHome(requestedDataHome), "XDG data directory")
 const stateHome = ensureDirectory(rebaseFromRequestedHome(requestedStateHome), "XDG state directory")
@@ -185,20 +205,31 @@ export npm_config_userconfig="$npm_userconfig"
 export NPM_CONFIG_CACHE="$npm_cache"
 export npm_config_cache="$npm_cache"
 
-CI=1 \
-NPM_CONFIG_AUDIT=false \
-NPM_CONFIG_FUND=false \
-NPM_CONFIG_UPDATE_NOTIFIER=false \
-NPM_CONFIG_YES=true \
-npm install --global --prefix "$install_prefix" --no-progress --loglevel=error \
-  "opencode-ai@1.18.31" \
-  "oh-my-openagent@4.19.4" \
-  "jsonc-parser@3.3.1"
+if [[ "$selected_tool" = opencode ]]; then
+  CI=1 \
+  NPM_CONFIG_AUDIT=false \
+  NPM_CONFIG_FUND=false \
+  NPM_CONFIG_UPDATE_NOTIFIER=false \
+  NPM_CONFIG_YES=true \
+  npm install --global --prefix "$install_prefix" --no-progress --loglevel=error \
+    "opencode-ai@1.18.31" \
+    "oh-my-openagent@4.19.4" \
+    "jsonc-parser@3.3.1"
+else
+  CI=1 \
+  NPM_CONFIG_AUDIT=false \
+  NPM_CONFIG_FUND=false \
+  NPM_CONFIG_UPDATE_NOTIFIER=false \
+  NPM_CONFIG_YES=true \
+  npm install --global --prefix "$install_prefix" --no-progress --loglevel=error \
+    "@openai/codex@0.156.1"
+fi
 
-parser_path="$install_prefix/lib/node_modules/jsonc-parser"
-[[ -d "$parser_path" ]] || fail "JSONC parser installation is missing: $parser_path"
+if [[ "$selected_tool" = opencode ]]; then
+  parser_path="$install_prefix/lib/node_modules/jsonc-parser"
+  [[ -d "$parser_path" ]] || fail "JSONC parser installation is missing: $parser_path"
 
-node - "$parser_path" "$config_dir" "$omo_dir/omo.jsonc" <<'NODE'
+  node - "$parser_path" "$config_dir" "$omo_dir/omo.jsonc" <<'NODE'
 const crypto = require("node:crypto")
 const fs = require("node:fs")
 const path = require("node:path")
@@ -336,18 +367,24 @@ try {
 }
 NODE
 
-node - "$install_prefix" <<'NODE'
+fi
+
+node - "$install_prefix" "$selected_tool" <<'NODE'
 const fs = require("node:fs")
 const path = require("node:path")
 const prefix = process.argv[2]
-const expected = { "opencode-ai": "1.18.31", "oh-my-openagent": "4.19.4", "jsonc-parser": "3.3.1" }
+const selectedTool = process.argv[3]
+const expected = selectedTool === "opencode"
+  ? { "opencode-ai": "1.18.31", "oh-my-openagent": "4.19.4", "jsonc-parser": "3.3.1" }
+  : { "@openai/codex": "0.156.1" }
 for (const [name, version] of Object.entries(expected)) {
   const installed = JSON.parse(fs.readFileSync(path.join(prefix, "lib", "node_modules", name, "package.json"), "utf8")).version
   if (installed !== version) throw new Error(`expected ${name}@${version}, found ${installed}`)
 }
 NODE
 
-node - "$tool_launcher" "$tool_manifest" "$install_prefix/bin/opencode" <<'NODE'
+node - "$tool_launcher" "$tool_manifest" "$install_prefix/bin/$selected_executable_name" \
+  "$selected_tool" "$selected_version" <<'NODE'
 const crypto = require("node:crypto")
 const fs = require("node:fs")
 const path = require("node:path")
@@ -355,6 +392,8 @@ const path = require("node:path")
 const launcherPath = process.argv[2]
 const manifestPath = process.argv[3]
 const executablePath = process.argv[4]
+const selectedTool = process.argv[5]
+const selectedVersion = process.argv[6]
 const launcher = `#!/usr/bin/env bash
 set -euo pipefail
 
@@ -412,8 +451,8 @@ exec "$executable" "$@"
 `
 const manifest = {
   contractVersion: 1,
-  tool: "opencode",
-  version: "1.18.31",
+  tool: selectedTool,
+  version: selectedVersion,
   launchers: {
     agent: { executable: executablePath },
   },
@@ -441,7 +480,13 @@ replaceRegularFile(launcherPath, launcher, 0o700)
 replaceRegularFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 0o600)
 NODE
 
-printf '%s\n' \
-  "Installed opencode-ai@$OPENCODE_VERSION and oh-my-openagent@$OMO_VERSION under $install_prefix." \
-  "OpenCode configuration updated under $config_dir; OMO configuration updated at $omo_dir/omo.jsonc." \
-  "Start a new login shell so $install_prefix/bin is on PATH; OpenCode was not started."
+if [[ "$selected_tool" = opencode ]]; then
+  printf '%s\n' \
+    "Installed opencode-ai@$OPENCODE_VERSION and oh-my-openagent@$OMO_VERSION under $install_prefix." \
+    "OpenCode configuration updated under $config_dir; OMO configuration updated at $omo_dir/omo.jsonc." \
+    "Start a new login shell so $install_prefix/bin is on PATH; OpenCode was not started."
+else
+  printf '%s\n' \
+    "Installed @openai/codex@$CODEX_VERSION under $install_prefix." \
+    "Start a new login shell so $install_prefix/bin is on PATH; Codex was not started."
+fi
