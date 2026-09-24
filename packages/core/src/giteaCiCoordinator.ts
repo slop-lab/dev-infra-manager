@@ -21,9 +21,14 @@ type QueuedJobsEndpoint = {
 };
 
 interface GiteaHookSummary {
-  id: number;
-  config?: { url?: string };
+  readonly id: number;
+  readonly config?: { readonly url?: string };
 }
+
+type WorkflowJobHook = {
+  readonly url: string;
+  readonly authorizationHeader: string;
+};
 
 export function giteaHookIdsForUrl(hooks: GiteaHookSummary[], url: string): number[] {
   return hooks.filter((hook) => hook.config?.url === url).map((hook) => hook.id);
@@ -88,10 +93,10 @@ export const giteaCiCoordinator: CiCoordinator = {
     if (input.central !== true) await this.reconcileWorkflowJobWebhookTargets(runner, options);
     const credentials = await ensureGitea(runner, options);
     if (input.central === true) {
-      await ensureSingleHook(credentials, project, input.url, input.authorizationHeader);
+      await ensureSingleHook(credentials, project, { url: input.url, authorizationHeader: input.authorizationHeader });
     } else {
       await removeHooksForUrl(credentials, project, input.url);
-      await createHook(credentials, project, input.url, input.authorizationHeader);
+      await createHook(credentials, project, { url: input.url, authorizationHeader: input.authorizationHeader });
     }
     await replayQueuedJobs(credentials, project, input.replayQueuedJob);
   },
@@ -112,34 +117,39 @@ export const giteaCiCoordinator: CiCoordinator = {
 async function createHook(
   credentials: Awaited<ReturnType<typeof ensureGitea>>,
   project: ProjectRecord,
-  url: string,
-  authorizationHeader: string
-): Promise<void> {
-  const response = await giteaRequest(credentials, "POST", giteaOrgHooksApiBase(project), {
+  hook: WorkflowJobHook
+): Promise<Response> {
+  const response = await giteaRequest(credentials, "POST", giteaOrgHooksApiBase(project), workflowJobHookPayload(hook));
+  if (!response.ok) throw new UserError(`failed to create CI coordinator webhook: ${response.status}`);
+  return response;
+}
+
+function workflowJobHookPayload(hook: WorkflowJobHook): Readonly<Record<string, unknown>> {
+  return {
     type: "gitea",
     active: true,
     events: ["workflow_job"],
-    authorization_header: authorizationHeader,
-    config: { url, content_type: "json" }
-  });
-  if (!response.ok) throw new UserError(`failed to create CI coordinator webhook: ${response.status}`);
+    authorization_header: hook.authorizationHeader,
+    config: { url: hook.url, content_type: "json" }
+  };
 }
 
 async function ensureSingleHook(
   credentials: Awaited<ReturnType<typeof ensureGitea>>,
   project: ProjectRecord,
-  url: string,
-  authorizationHeader: string
+  hook: WorkflowJobHook
 ): Promise<void> {
   const base = giteaOrgHooksApiBase(project);
   const initial = await giteaRequest(credentials, "GET", base);
   if (!initial.ok) throw new UserError(`failed to list CI coordinator webhooks: ${initial.status}`);
   const initialHooks = await initial.json() as GiteaHookSummary[];
-  if (giteaHookIdsForUrl(initialHooks, url).length === 0) await createHook(credentials, project, url, authorizationHeader);
+  if (giteaHookIdsForUrl(initialHooks, hook.url).length === 0) await createHook(credentials, project, hook);
   const final = await giteaRequest(credentials, "GET", base);
   if (!final.ok) throw new UserError(`failed to list CI coordinator webhooks: ${final.status}`);
-  const ids = giteaHookIdsForUrl(await final.json() as GiteaHookSummary[], url).sort((left, right) => left - right);
+  const ids = giteaHookIdsForUrl(await final.json() as GiteaHookSummary[], hook.url).sort((left, right) => left - right);
   if (ids.length === 0) throw new UserError("failed to create central CI coordinator webhook");
+  const updated = await giteaRequest(credentials, "PATCH", `${base}/${ids[0]}`, workflowJobHookPayload(hook));
+  if (!updated.ok) throw new UserError(`failed to update central CI coordinator webhook: ${updated.status}`);
   for (const id of ids.slice(1)) {
     const removed = await giteaRequest(credentials, "DELETE", `${base}/${id}`);
     if (!removed.ok && removed.status !== 404) throw new UserError(`failed to deduplicate central CI coordinator webhook: ${removed.status}`);
