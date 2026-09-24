@@ -210,8 +210,7 @@ async function dispatchBuiltin(operation: string, context: BuiltinContext): Prom
     case "service.ensure": return ensureGitea(runner, lifecycle);
     case "git.credentials": return projectRegistry.prepareHostGitCredential(runner, lifecycle);
     case "git.setup": {
-      await projectRegistry.prepareHostGitCredential(runner, lifecycle);
-      const baseUrl = `http://127.0.0.1:${lifecycle.giteaPort}`;
+      const { baseUrl } = await projectRegistry.prepareHostGitCredential(runner, lifecycle);
       const helper = await runner.run("git", [
         "config", "--global", "--replace-all",
         `credential.${baseUrl}.helper`,

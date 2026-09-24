@@ -99,7 +99,8 @@ export async function prepareHostGitCredential(
   }
   return {
     username: credentials.maintainerUsername,
-    password: credentials.maintainerPassword
+    password: credentials.maintainerPassword,
+    baseUrl: credentials.hostBaseUrl
   };
 }
 

@@ -136,6 +136,7 @@ export type GiteaConnection =
 export interface HostGitCredential {
   username: string;
   password: string;
+  baseUrl: string;
 }
 
 export interface GiteaServiceRecord {
