@@ -55,8 +55,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   compatibility contract before runtime, facade, config, plugin, or image
   promotion. Unsupported or malformed known state refuses without mutation;
   missing state and the sole strict host startup migration remain compatible.
-  The non-mise path updates its global facade only after this guard succeeds and
-  uses the exact lockfile-owned Verdaccio binary on a random loopback port, with
+  Both mise and direct paths execute the exact bundled target facade because an
+  older standalone facade cannot enforce candidate checks; mise supplies only
+  the runtime environment, and the direct path updates its global facade only
+  after this guard succeeds. Prepared bundle bytes and readiness remain
+  unchanged on refusal. The local workflow also uses the exact lockfile-owned
+  Verdaccio binary on a random loopback port, with
   signup closed and mutation authenticated. `restart-controller` separately
   restarts the controller with the currently installed packages; image
   preparation, installation, and restart never implicitly invoke one another.

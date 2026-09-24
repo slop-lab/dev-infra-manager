@@ -119,10 +119,11 @@ These are distinct operations with separate readiness domains:
   the same shipped-asset command. Its exact output tags the local image and matches the
   aggregate local version selected by local packages. It does not install
   packages or restart the controller.
-- `install-local` builds local package tarballs and installs them through the
-  mise-managed installer facade when available, with a direct global
-  npm-prefix fallback. It does not build a workspace image or restart the
-  controller.
+- `install-local` builds local package tarballs, stages their exact target
+  installer outside the bundle, and invokes that facade for compatibility
+  checking and installation. Mise may provide Node.js and npm but never old
+  installer logic; the direct global facade is updated only after the target
+  succeeds. It does not build a workspace image or restart the controller.
 - `restart-controller` replaces the managed controller process with the
   currently installed DIM package set. It does not rebuild either packages or
   images.
