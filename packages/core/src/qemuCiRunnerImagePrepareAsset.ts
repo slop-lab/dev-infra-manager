@@ -174,7 +174,7 @@ if [[ -e "$common_directory" ]]; then
   check_common_chain "$common_image"
 else
   common_stage="$(mktemp -d "$common_root/staging/$common_key.XXXXXX")"
-  mkdir "$common_stage/output" "$common_stage/build"
+  mkdir "$common_stage/build"
   /usr/local/bin/dim-qemu-ci-verify-ubuntu-image "$common_stage/build"
   ssh-keygen -q -t ed25519 -N '' -f "$common_stage/build/id"
   env -i PATH="$PATH" HOME="$common_stage/build" PACKER_PLUGIN_PATH=/usr/local/lib/packer/plugins \
@@ -202,7 +202,7 @@ if [[ -e "$project_directory" ]]; then
   [[ "$(project_backing "$project_image")" == "$common_image" ]] || fail "published Project image has the wrong common backing"
 else
   project_stage="$(mktemp -d "$project_root/staging/$project_key.XXXXXX")"
-  mkdir "$project_stage/output" "$project_stage/build"
+  mkdir "$project_stage/build"
   ssh-keygen -q -t ed25519 -N '' -f "$project_stage/build/id"
   env -i PATH="$PATH" HOME="$project_stage/build" PACKER_PLUGIN_PATH=/usr/local/lib/packer/plugins \
     packer build -color=false \
