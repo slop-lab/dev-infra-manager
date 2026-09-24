@@ -93,7 +93,32 @@ $XDG_DATA_HOME/dim/runtime/current/node_modules/.bin/dim
 ```
 
 The installer prepares each replacement in a temporary sibling directory,
-verifies its executable, and then promotes it to `current`. It must restore the
+verifies its executable, and runs the staged target core package's read-only
+state-compatibility preflight before promoting it to `current`. The preflight
+uses `DIM_STATE_ROOT`, or the ordinary user-home default when it is unset, and
+checks every existing core-owned host, Project, workspace, and CI-runner record
+with that target package's parsers. It must use no currently installed CLI or
+mutable source checkout, create no lifecycle object, lock, or state directory,
+and perform no Docker, Git, or network operation. Plugin-private and otherwise
+unknown state families are outside this contract and are ignored.
+
+Known state files and recognized state-family directories must be inspected
+without following symbolic links; known records must be regular files. Missing
+state is compatible. Malformed or unsupported known state must stop installation
+with the family, path, schema failure, and guidance to keep the old pinned DIM
+version long enough to export needed data and recreate the resource. The error
+must not print state contents. Refusal must leave the current runtime, facade,
+user config, plugin activation, image state, and all state bytes unchanged;
+temporary package staging is not installed state and must be removed.
+
+The sole compatibility exception is a strict historical host schema-1 record
+accepted by the target's existing schema-1 converter. The preflight only warns
+that controller startup will perform the already-specified schema-1 to schema-2
+migration; installation itself must not migrate it. No workspace, Project,
+runner, or other state receives an automatic conversion, deletion, or
+delete-and-recreate path.
+
+After a successful preflight, the installer promotes the staged runtime. It must restore the
 previous `current` directory when promotion or configuration fails, and remove
 temporary and backup directories after success. DIM
 exposes no CLI version-selection or rollback contract.
@@ -175,6 +200,12 @@ Required tests cover:
 - managed-symlink create, idempotent replace, and rejection of an
   unmanaged/foreign path at the same location;
 - successful CLI replacement prunes old managed installation directories;
+- unsupported and malformed known state refuse installation before runtime,
+  config, facade, plugin, or symlink promotion and remain byte-identical;
+- missing state and exact current schemas pass, while exact historical host
+  schema 1 passes read-only with a controller-startup migration warning;
+- local-package installation resolves the preflight from the staged bundle's
+  core metadata and code rather than the old installed CLI;
 - proxy argv/cwd/env/stdio/exit-code fidelity;
 - stale config (missing executable, facade self-reference) surfaced as
   actionable errors, not silent fallback to a `PATH`-resolved `dim`;

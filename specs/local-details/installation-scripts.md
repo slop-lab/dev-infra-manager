@@ -117,7 +117,15 @@ image ID, and only then promotes it to
 `dev-infra-project-workspace:<shared aggregate local version>`. Its readiness
 state binds that versioned tag to the image ID and package/source digests.
 `install-local` recomputes the tag from the unchanged bundle and rejects stale
-or mismatched state before and after installation.
+or mismatched preparation state before and after installation. Both the
+reviewed-root prepared path and the assembled-development path rely on the
+installer facade's staged target-package state compatibility preflight before
+runtime promotion. When mise is unavailable, the assembled-development script
+stages the candidate installer privately, uses it to run the compatibility
+guard and runtime installation, and only then updates the global facade. A
+compatibility refusal must therefore precede facade, config, runtime, plugin,
+or image mutation. The existing preparation-image readiness checks and their
+ordering remain unchanged.
 
 For an assembled development checkout, `build-local-workspace-image` is the
 explicit local-image preparation step and MUST run before the matching local
