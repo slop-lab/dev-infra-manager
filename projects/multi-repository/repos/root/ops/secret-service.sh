@@ -3,6 +3,8 @@ set -eu
 
 task="${1:?secret service task is required}"
 shift
+immutable_root="${DIM_PROJECT_ROOT:?DIM_PROJECT_ROOT is required}"
+cd "$immutable_root"
 
 case "$task" in
   deploy-secret)
@@ -12,18 +14,18 @@ case "$task" in
     rm -rf "$checkout"
     git clone --branch main --single-branch \
       "$DIM_GIT_BASE_URL/secrets.git" "$checkout"
-    docker compose --file .dim/docker-compose.yml --profile secure \
+    docker compose --file "$immutable_root/.dim/docker-compose.yml" --profile secure \
       up --detach --build --wait secure-dind
     tar --exclude=.git -C "$checkout" -cf - . | docker compose \
-      --file .dim/docker-compose.yml exec --no-TTY \
+      --file "$immutable_root/.dim/docker-compose.yml" exec --no-TTY \
       --env "EXAMPLE_SECRET=$EXAMPLE_SECRET" secure-dind dim-secure-dind deploy
     ;;
   secret-health)
-    docker compose --file .dim/docker-compose.yml exec --no-TTY \
+    docker compose --file "$immutable_root/.dim/docker-compose.yml" exec --no-TTY \
       secure-dind dim-secure-dind health
     ;;
   remove-secret)
-    docker compose --file .dim/docker-compose.yml exec --no-TTY \
+    docker compose --file "$immutable_root/.dim/docker-compose.yml" exec --no-TTY \
       secure-dind dim-secure-dind remove
     ;;
   *)

@@ -44,3 +44,32 @@ docker compose \
 docker compose \
   --file .dim/docker-compose.yml --file "$compose_host_aliases" \
   exec --no-TTY --user root agent-dind dim-agent-dind setup
+
+case ",${COMPOSE_PROFILES:-}," in
+  *,secure,*)
+    docker compose \
+      --file .dim/docker-compose.yml --file "$compose_host_aliases" \
+      --profile secure build --quiet secure-dind
+    docker compose \
+      --file .dim/docker-compose.yml --file "$compose_host_aliases" \
+      --profile secure up --detach --force-recreate --wait --wait-timeout 60 secure-dind
+    ;;
+  *)
+    docker compose \
+      --file .dim/docker-compose.yml --file "$compose_host_aliases" \
+      --profile secure stop secure-dind
+    ;;
+esac
+
+case ",${COMPOSE_PROFILES:-}," in
+  *,documentation,*)
+    docker compose \
+      --file .dim/docker-compose.yml --file "$compose_host_aliases" \
+      exec --no-TTY --user root agent-dind dim-agent-dind documentation
+    ;;
+  *)
+    docker compose \
+      --file .dim/docker-compose.yml --file "$compose_host_aliases" \
+      exec --no-TTY --user root agent-dind dim-agent-dind clear-documentation
+    ;;
+esac

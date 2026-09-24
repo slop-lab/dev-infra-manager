@@ -40,7 +40,7 @@ one_resource() {
 
 agent_container="$(one_resource container --all \
   --filter "label=com.docker.compose.project=$project" \
-  --filter "label=com.docker.compose.service=agent" \
+  --filter "label=com.docker.compose.service=agent-dind" \
   --filter "label=com.docker.compose.oneoff=False")"
 home_volume="$(one_resource volume \
   --filter "label=com.docker.compose.project=$project" \
@@ -60,7 +60,7 @@ restart_agent() {
 trap restart_agent 0
 
 if [ "$was_running" = true ]; then
-  docker stop "$agent_container" >&2
+  docker exec "$agent_container" dim-agent-dind stop >&2
 fi
 
 case "$action" in

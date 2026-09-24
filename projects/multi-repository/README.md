@@ -164,6 +164,11 @@ the credential, URL, and shared gateway. Allow only trusted client UI origins.
 Another development service can use the same helper and choose any local port
 without changing `.dim`.
 
+Both private Docker daemons listen only on their dedicated Unix sockets. Their
+reviewed entrypoints pass the Unix host explicitly because an empty invocation
+of the upstream DinD entrypoint would also enable Docker TCP port 2375 when TLS
+is disabled.
+
 Export or restore only the Project-owned agent home as a gzip tar stream:
 
 ```bash
@@ -225,10 +230,17 @@ optional `secure` profile, streams the reviewed build context into
 EXAMPLE_SECRET=not-a-real-secret bash deploy-secret.bash
 ```
 
+The wrapper executes the operation and Compose definition from the immutable
+selected root, not from the agent-writable Project data checkout. Re-running
+setup treats the selected profiles as authoritative: clearing `secure` stops
+the outer secure daemon, and clearing `documentation` removes any old
+restart-enabled preview from the persistent agent daemon.
+
 Check it from the trusted workspace:
 
 ```bash
-dim workspace exec example-dev -- sh ops/secret-service.sh secret-health
+dim workspace exec example-dev -- sh -c \
+  'exec sh "$DIM_PROJECT_ROOT/ops/secret-service.sh" secret-health'
 ```
 
 Or through its constrained HTTP interface from the agent:
@@ -248,7 +260,8 @@ environment. Never commit a real secret.
 Remove the service and workspace:
 
 ```bash
-dim workspace exec example-dev -- sh ops/secret-service.sh remove-secret
+dim workspace exec example-dev -- sh -c \
+  'exec sh "$DIM_PROJECT_ROOT/ops/secret-service.sh" remove-secret'
 dim workspace discard example-dev --yes
 ```
 

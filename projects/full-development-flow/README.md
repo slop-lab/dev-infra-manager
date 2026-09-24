@@ -47,6 +47,11 @@ The trusted outer Compose graph contains only `agent-dind` and the optional
 `agent-dind`; the secret service runs inside `secure-dind`. The agent can use
 its private daemon's Unix socket but cannot access a host, trusted-workspace,
 or secure daemon socket, or the secret service's raw environment.
+Both private daemons start `dockerd` with only that explicit Unix listener;
+the upstream image's empty-argument TCP fallback is not used. Stored profiles
+are authoritative on every setup: removing `secure` stops its outer daemon,
+and removing `documentation` removes the restart-enabled preview from the
+persistent agent daemon.
 Ordinary agent tasks run as the workspace owner's nonroot identity and may use
 passwordless `sudo` only for root inside the agent container, without gaining
 trusted-workspace or host runtime authority.
@@ -248,6 +253,8 @@ EXAMPLE_SECRET=replace-me \
 
 The reviewed deployment streams source into `secure-dind`; it does not mount
 workspace source, agent home, Git credentials, or either Docker socket there.
+Its operational script and Compose definition are resolved from the immutable
+selected root rather than the mutable Project data checkout.
 The agent reaches only the service's fixed health endpoint through a reviewed
 port-7099 relay and cannot inspect the secure daemon or read the raw secret.
 

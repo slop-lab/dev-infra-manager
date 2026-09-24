@@ -62,6 +62,9 @@ case "${1:?private agent action is required}" in
     docker run --detach --name "$documentation_name" --restart unless-stopped \
       alpine:3.22 sh -c "printf 'documentation-ready\n' >/tmp/ready && sleep infinity" >/dev/null
     ;;
+  clear-documentation)
+    docker rm --force "$documentation_name" >/dev/null 2>&1 || true
+    ;;
   exec)
     shift
     if [ -t 0 ] && [ -t 1 ]; then
