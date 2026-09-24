@@ -46,6 +46,12 @@
   replay succeeds, without exposing coordinator credentials to the supervisor
   or guest.
 
+- Bound the shared QEMU scheduler to 32 concurrent request handlers and a
+  ten-second total request lifetime, including slowly delivered headers and
+  bodies. Saturated requests receive a bounded service-unavailable response,
+  failed handler-thread startup releases its capacity, and the packaged image
+  now includes every scheduler storage module required at startup.
+
 - Keep the Docker CLI required by the pinned upstream Sysbox runner image's
   daemon readiness gate so persistent runners start instead of waiting
   indefinitely, while Project jobs remain disposable containers without the
