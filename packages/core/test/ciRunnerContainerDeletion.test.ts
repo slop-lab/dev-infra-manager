@@ -110,6 +110,7 @@ describe("CI runner container deletion ownership", () => {
     state = new LifecycleState(root);
     options = {
       stateRoot: root,
+      giteaConnection: { kind: "managed" },
       giteaImage: "gitea",
       giteaHost: "gitea",
       giteaPort: 3000,

@@ -176,6 +176,7 @@ import { createCiRunner } from "../../../../core/packages/core/src/ciRunner.js";
 
 const options = {
   stateRoot: "/state",
+  giteaConnection: { kind: "managed" },
   giteaImage: "gitea",
   giteaHost: "gitea",
   giteaPort: 3000,
