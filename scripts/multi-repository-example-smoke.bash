@@ -227,24 +227,27 @@ agent_commit_identity="$(dim workspace run "$workspace_name" bash -- -lc '
 ')"
 test "$agent_commit_identity" = "$dev_git_identity"
 
-agent_container="$(dim workspace exec "$workspace_name" -- \
-  docker compose --project-name "dim-project" \
-  --file .dim/docker-compose.yml ps --quiet agent)"
-test -n "$agent_container"
-test "$(dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
-  --format '{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Type}}|{{.RW}}|{{.Source}}{{end}}{{end}}')" = \
-  "bind|true|$(jq -r .workspaceDataPath <<<"$workspace_json")/project"
-test "$(dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
-  --format '{{range .Mounts}}{{if eq .Destination "/home/dim-agent"}}{{.Type}}|{{.RW}}{{end}}{{end}}')" = \
-  "volume|true"
-dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
-  --format '{{.HostConfig.Privileged}}' | grep -qx false
-! dim workspace exec "$workspace_name" -- docker inspect "$agent_container" \
-  --format '{{json .Mounts}}' | grep -q /var/run/docker.sock
+outer_services="$(dim workspace exec "$workspace_name" -- \
+  docker compose --project-name "dim-project" --file .dim/docker-compose.yml \
+  ps --services --filter status=running)"
+test "$outer_services" = agent-dind
 dind_container="$(dim workspace exec "$workspace_name" -- \
   docker compose --project-name "dim-project" \
   --file .dim/docker-compose.yml ps --quiet agent-dind)"
 test -n "$dind_container"
+agent_container="$(dim workspace exec "$workspace_name" -- \
+  docker exec "$dind_container" docker inspect --format '{{.Id}}' dim-agent)"
+test -n "$agent_container"
+test "$(dim workspace exec "$workspace_name" -- docker exec "$dind_container" docker inspect dim-agent \
+  --format '{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Type}}|{{.RW}}|{{.Source}}{{end}}{{end}}')" = \
+  "bind|true|/workspace"
+test "$(dim workspace exec "$workspace_name" -- docker exec "$dind_container" docker inspect dim-agent \
+  --format '{{range .Mounts}}{{if eq .Destination "/home/dim-agent"}}{{.Type}}|{{.RW}}{{end}}{{end}}')" = \
+  "bind|true"
+dim workspace exec "$workspace_name" -- docker exec "$dind_container" docker inspect dim-agent \
+  --format '{{.HostConfig.Privileged}}' | grep -qx false
+! dim workspace exec "$workspace_name" -- docker exec "$dind_container" docker inspect dim-agent \
+  --format '{{json .Mounts}}' | grep -q /var/run/docker.sock
 if [[ -n "${DIM_DOCKER_REGISTRY_MIRROR:-}" ]]; then
   dim workspace exec "$workspace_name" -- \
     docker exec "$dind_container" docker info --format '{{json .RegistryConfig.Mirrors}}' |
@@ -307,6 +310,12 @@ fi
 leaked="$(dim workspace run "$workspace_name" bash -- \
   -lc 'env | grep -c EXAMPLE_SECRET || true')"
 test "$leaked" = "0"
+secure_container="$(dim workspace exec "$workspace_name" -- \
+  docker compose --project-name "dim-project" --file .dim/docker-compose.yml \
+  ps --quiet secure-dind)"
+test -n "$secure_container"
+test "$(dim workspace exec "$workspace_name" -- docker inspect "$secure_container" \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -c '^EXAMPLE_SECRET=' || true)" = 0
 
 dim workspace exec "$workspace_name" -- sh ops/secret-service.sh remove-secret >/dev/null
 
