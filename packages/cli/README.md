@@ -359,6 +359,13 @@ Gitea administrator credential. Use HTTPS, loopback HTTP, or an explicitly
 isolated HTTP network. See the shared QEMU scheduler example in the DIM
 examples repository for complete service and host files.
 
+Configure a 60-second-or-longer lease and explicitly allow the Project's QEMU
+integration labels in the service config. DIM renews every five seconds with
+two-second requests; the service retains expired ownership for a 20-second
+cleanup grace and holds outstanding queued claims across restart. This bounds
+normal failover but cannot fence a paused, partitioned, or compromised host at
+the infrastructure layer.
+
 On nested-KVM-capable hosts, enabling `qemu` starts a small trusted webhook
 supervisor that boots a fresh ephemeral VM only for a queued `dim-qemu` job.
 Workflow code sees only nested KVM inside that VM. Use `list`, `start`,
