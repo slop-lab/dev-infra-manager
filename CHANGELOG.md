@@ -51,6 +51,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   validates that prepared set before and after installing it without rebuilding.
   Both local installation paths explicitly enable the built DNS Cloudflare and
   External URLs plugins while preserving other enabled plugins. Installation
+  now stages the exact target package set and runs its read-only core-state
+  compatibility contract before runtime, facade, config, plugin, or image
+  promotion. Unsupported or malformed known state refuses without mutation;
+  missing state and the sole strict host startup migration remain compatible.
+  The non-mise path updates its global facade only after this guard succeeds and
   uses the exact lockfile-owned Verdaccio binary on a random loopback port, with
   signup closed and mutation authenticated. `restart-controller` separately
   restarts the controller with the currently installed packages; image
