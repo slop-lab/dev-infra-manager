@@ -27,6 +27,7 @@ DIM_GITEA_HOST
 DIM_GITEA_PORT
 DIM_GITEA_ADMIN_USERNAME
 DIM_GITEA_ADMIN_PASSWORD
+DIM_GITEA_CONNECTION_FILE
 DIM_GIT_USERNAME
 DIM_GIT_TOKEN
 DIM_GIT_MAINTAINER_USERNAME
@@ -55,6 +56,49 @@ embedded in repository URLs.
 `DIM_GITEA_HOST` defaults to the hostname in a TCP `DOCKER_HOST`, or to
 `127.0.0.1` for a local Docker daemon. Override it when the Docker daemon's
 published ports are reachable through a different hostname or address.
+
+Leave `DIM_GITEA_CONNECTION_FILE` unset for the existing DIM-managed local
+Gitea container and generated credential lifecycle. Set it to a private
+connection file to use an operator-managed external Gitea instance instead:
+
+```json
+{
+  "schemaVersion": 1,
+  "apiBaseUrl": "https://gitea-control.example/api/v1",
+  "hostBaseUrl": "https://git.example",
+  "workspaceBaseUrl": "https://git.workspace.example",
+  "runnerBaseUrl": "https://git.runner.example",
+  "credentials": {
+    "adminUsername": "dim-operator",
+    "adminPassword": "replace-with-secret",
+    "writerUsername": "dim-workspace",
+    "writerPassword": "replace-with-secret",
+    "maintainerUsername": "dim-host",
+    "maintainerPassword": "replace-with-secret"
+  },
+  "projects": {
+    "acme": {
+      "id": "shared-project-id",
+      "gitNamespace": "dim-acme",
+      "giteaOrganizationId": 42
+    }
+  }
+}
+```
+
+Create the file with mode `0600` under the DIM user's ownership. The four URLs
+may differ so each client receives an endpoint reachable from its own network;
+do not embed credentials in them. DIM checks `/version` and the authenticated
+administrator identity, then uses the configured writer and maintainer
+credentials through the existing URL-scoped Git helpers. The operator owns
+service availability, users, organization creation, webhook target policy,
+permissions, and branch protection. DIM neither provisions nor stops the
+external service.
+
+Pre-create each external organization and copy its numeric Gitea ID into the
+Project binding. Hosts that share a Project must share all three identity
+values. DIM rejects an unbound Project and an organization whose numeric ID or
+namespace differs, so a same-name organization is never adopted implicitly.
 
 `DIM_WORKSPACE_IMAGE` explicitly overrides the trusted workspace image. When
 unset, DIM selects `dev-infra-project-workspace:<installed package version>` so
