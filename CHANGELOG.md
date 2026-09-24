@@ -47,7 +47,9 @@
   read-only compatibility preflight before runtime, config, symlink, or plugin
   promotion: missing and current state proceed, this exact host migration warns
   without changing bytes, and malformed or unsupported Project, workspace,
-  runner, or host state refuses with export-and-recreate guidance.
+  runner, or host state refuses with export-and-recreate guidance. Local source
+  entrypoints stage and execute this exact target facade rather than relying on
+  an older standalone or mise-managed facade to enforce a newer contract.
 
 - Discover matching Gitea Actions jobs that were already queued when QEMU CI
   capacity is created, started, or restarted. DIM installs the webhook first,
