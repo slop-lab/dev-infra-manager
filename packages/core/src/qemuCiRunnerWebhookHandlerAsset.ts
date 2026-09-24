@@ -1,15 +1,18 @@
 export const QEMU_CI_WEBHOOK_HANDLER = `class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path != "/healthz" or not hmac.compare_digest(
+        if self.path != "/healthz" or not authorization or not hmac.compare_digest(
             self.headers.get("Authorization", ""), authorization
         ):
             self.send_error(404)
+            return
+        if scheduler_endpoint and not shared_scheduler_ready.is_set():
+            self.send_error(503)
             return
         self.send_response(200)
         self.end_headers()
 
     def do_POST(self):
-        if self.path != "/workflow-job" or not hmac.compare_digest(
+        if scheduler_endpoint or self.path != "/workflow-job" or not hmac.compare_digest(
             self.headers.get("Authorization", ""), authorization
         ):
             self.send_error(404)

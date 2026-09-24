@@ -80,10 +80,11 @@ export function ciRunnerQemuSupervisorLaunchArgs(plan: QemuCiRunnerSupervisorLau
     "--mount", `type=volume,source=${ciRunnerQemuDispatchVolumeName(project)},target=/var/lib/dim-qemu-ci-dispatch`,
     "--env", `DIM_QEMU_WEBHOOK_AUTHORIZATION=${plan.authorization}`
   ] : [
+    "--env", `DIM_QEMU_WEBHOOK_AUTHORIZATION=${plan.authorization}`,
     "--env", `DIM_QEMU_SCHEDULER_ENDPOINT=${plan.scheduler.supervisorEndpoint}`,
     "--env", `DIM_QEMU_SCHEDULER_PROJECT_ID=${plan.scheduler.projectId}`,
     "--env", `DIM_QEMU_SCHEDULER_HOST_ID=${plan.scheduler.hostId}`,
-    "--env", `DIM_QEMU_SCHEDULER_TOKEN=${plan.scheduler.hostToken}`
+    "--env", `DIM_QEMU_SCHEDULER_TOKEN=${plan.scheduler.apiToken}`
   ];
   return [
     "run", "--detach", "--name", plan.executor.supervisorName, "--restart", "unless-stopped",

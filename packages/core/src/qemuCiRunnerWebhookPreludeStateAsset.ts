@@ -32,6 +32,7 @@ scheduler_host_id = os.environ.get("DIM_QEMU_SCHEDULER_HOST_ID", "")
 scheduler_token = os.environ.get("DIM_QEMU_SCHEDULER_TOKEN", "")
 run_root = "/var/lib/dim-qemu-ci/runs"
 shutdown = threading.Event()
+shared_scheduler_ready = threading.Event()
 pr_set_child_subreaper = 36
 libc = ctypes.CDLL(None, use_errno=True)
 if libc.prctl(pr_set_child_subreaper, 1, 0, 0, 0) != 0:
