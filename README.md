@@ -8,9 +8,11 @@ Project examples are complete, copyable adoption shapes:
   default: one repository, no secrets or protected ref, resource limits, and
   a Project-owned agent/private DinD pair, and an optional external URL.
 - [`projects/two-repository/`](projects/two-repository/README.md) is a minimal
-  reusable root template paired with an ordinary application repository.
+  reusable root template paired with an ordinary application repository. It
+  deliberately needs no nested daemon or secret runtime.
 - [`projects/multi-repository/`](projects/multi-repository/README.md) adds
-  independent repository and secret-bearing review boundaries.
+  independent repository and secret-bearing review boundaries, with the agent
+  and reviewed secret service launched inside separate private daemons.
 - [`projects/full-development-flow/`](projects/full-development-flow/README.md)
   combines the principal Project capabilities in one adoption shape and is
   exercised by a stateful create-to-recovery journey.

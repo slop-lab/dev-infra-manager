@@ -4,14 +4,15 @@ This reference Project combines the DIM features that normally belong in one
 long-lived development environment:
 
 - a protected root repository plus reviewed `web` and `secrets` repositories;
-- a persistent, unprivileged agent home and private rootless Docker daemon;
+- a persistent, unprivileged agent home and an agent launched inside its
+  private rootless Docker daemon;
 - host-provided Git author identity and constrained managed-Git credentials;
 - an agent controller proxy that permits only an asynchronous self-restart;
-- an optional `documentation` Compose profile;
+- an optional `documentation` profile launched inside the agent daemon;
 - Project-owned `backup`, `restore`, `bash`, `tool-setup`, `agent`, and `ssh-proxy`
   tasks; and
-- a trusted, separately deployed secret-bearing service outside the agent's
-  private container daemon.
+- an optional `secure` daemon that launches the reviewed secret-bearing
+  service outside the agent's private container daemon.
 
 It intentionally contains no DIM CI-runner, registry-cache, failure-injection,
 or provider-specific configuration. Those are host or verification concerns.
@@ -41,8 +42,11 @@ dim workspace stop full-dev
 dim workspace start full-dev
 ```
 
-The agent can use its private Docker daemon but cannot access a host Docker
-socket or the trusted secret service's raw environment.
+The trusted outer Compose graph contains only `agent-dind` and the optional
+`secure-dind`. The actual agent and documentation preview run inside
+`agent-dind`; the secret service runs inside `secure-dind`. The agent can use
+its private daemon's Unix socket but cannot access a host, trusted-workspace,
+or secure daemon socket, or the secret service's raw environment.
 Ordinary agent tasks run as the workspace owner's nonroot identity and may use
 passwordless `sudo` only for root inside the agent container, without gaining
 trusted-workspace or host runtime authority.
@@ -178,9 +182,9 @@ explicitly for browser login; its first line is the username and its second is
 the password. The Project gives the agent the common
 `dim-development-service` helper and only an HTTPS development-URL socket. The
 helper lets the launcher choose its loopback port and routes the resulting URL
-through the lifecycle's fixed gateway in the direct `agent` container. The
-gateway is reachable over the Compose network without a host port publication;
-neither the tool nor its local port appears in `.dim`. Configure `https-ts`
+through the lifecycle's fixed gateway along the reviewed
+`agent-dind`/`dim-agent` path. The gateway is reachable without a host port
+publication; neither the tool nor its local port appears in `.dim`. Configure `https-ts`
 before launching with the executable HTTPS configuration:
 
 ```bash
@@ -228,13 +232,19 @@ work must be committed and pushed separately before discarding a workspace.
 
 ## Trusted deployment
 
-After reviewing the root and `secrets` repositories, a trusted host may deploy
-the secret-bearing service beside the Project-owned environment:
+After reviewing the root and `secrets` repositories, a trusted host may start
+the optional `secure` profile and deploy the secret-bearing service inside its
+separate daemon:
 
 ```bash
 EXAMPLE_SECRET=replace-me \
   bash examples/projects/full-development-flow/deploy-secret.bash full-dev
 ```
+
+The reviewed deployment streams source into `secure-dind`; it does not mount
+workspace source, agent home, Git credentials, or either Docker socket there.
+The agent reaches only the service's fixed health endpoint through a reviewed
+port-7099 relay and cannot inspect the secure daemon or read the raw secret.
 
 See `verification/scripts/stateful-development-flow-smoke.bash` for the disposable
 end-to-end release journey. It materializes this example and injects failures
