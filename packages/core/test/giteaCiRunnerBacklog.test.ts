@@ -104,11 +104,12 @@ describe("Gitea queued workflow-job reconciliation", () => {
       if (method === "GET" && path.endsWith("/hooks")) {
         hookLists += 1;
         return Response.json(hookLists === 1 ? [] : [
-          { id: 8, config: { url: centralUrl } },
+          { id: 8, active: false, events: ["push"], authorization_header: "Bearer stale", config: { url: centralUrl, content_type: "form" } },
           { id: 9, config: { url: centralUrl } }
         ]);
       }
       if (method === "POST" && path.endsWith("/hooks")) return new Response(null, { status: 201 });
+      if (method === "PATCH" && path.endsWith("/8")) return new Response(null, { status: 200 });
       if (method === "DELETE" && path.endsWith("/9")) return new Response(null, { status: 204 });
       return Response.json({ total_count: 0, jobs: [] });
     });
@@ -126,9 +127,17 @@ describe("Gitea queued workflow-job reconciliation", () => {
       "GET /orgs/dim-project/hooks",
       "POST /orgs/dim-project/hooks",
       "GET /orgs/dim-project/hooks",
+      "PATCH /orgs/dim-project/hooks/8",
       "DELETE /orgs/dim-project/hooks/9",
       "GET /orgs/dim-project/actions/jobs?status=queued&page=1&limit=100"
     ]);
+    expect(giteaRequest).toHaveBeenCalledWith(expect.anything(), "PATCH", "/orgs/dim-project/hooks/8", {
+      type: "gitea",
+      active: true,
+      events: ["workflow_job"],
+      authorization_header: "Bearer central-webhook-token",
+      config: { url: centralUrl, content_type: "json" }
+    });
   });
 
   it("fails closed when duplicate pages cannot account for the final queued total", async () => {
