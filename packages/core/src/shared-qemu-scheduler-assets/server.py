@@ -10,10 +10,12 @@ import signal
 import sys
 import threading
 
-from protocol import HostId, ProjectId, ProtocolError, exact_object, identifier, load_config, positive_integer, string_array, text
-from store import SchedulerStore
+from protocol import HostId, ProjectId, ProtocolError, exact_object, identifier, load_config, positive_integer, strict_json_loads, string_array, text
+from store import SchedulerStore, StoreCapacityError
 
 MAX_BODY: Final = 65_536
+MAX_HANDLERS: Final = 32
+REQUEST_DEADLINE_SECONDS: Final = 10
 
 
 class SchedulerServer(ThreadingHTTPServer):
@@ -22,7 +24,21 @@ class SchedulerServer(ThreadingHTTPServer):
     def __init__(self, config_path: Path) -> None:
         self.config = load_config(config_path)
         self.store = SchedulerStore(self.config.database, self.config.lease_seconds)
+        self._handler_slots = threading.BoundedSemaphore(MAX_HANDLERS)
         super().__init__((self.config.host, self.config.port), Handler)
+
+    def process_request(self, request: object, client_address: object) -> None:
+        if not self._handler_slots.acquire(blocking=False):
+            request.sendall(b"HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+            self.shutdown_request(request)
+            return
+        super().process_request(request, client_address)
+
+    def process_request_thread(self, request: object, client_address: object) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._handler_slots.release()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -30,7 +46,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def setup(self) -> None:
         super().setup()
-        self.connection.settimeout(10)
+        self.connection.settimeout(REQUEST_DEADLINE_SECONDS)
+        self._deadline = threading.Timer(REQUEST_DEADLINE_SECONDS, self.connection.close)
+        self._deadline.start()
+
+    def finish(self) -> None:
+        self._deadline.cancel()
+        super().finish()
 
     def do_GET(self) -> None:
         if self.path != "/healthz":
@@ -41,24 +63,33 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         try:
-            body = self._body()
             if self.path == "/v1/events":
-                self._event(body)
+                project_id = self._api_project()
+                if project_id is not None:
+                    self._event(project_id, self._body())
                 return
             webhook_parts = self.path.split("/")
             if len(webhook_parts) == 5 and webhook_parts[:3] == ["", "v1", "webhooks"] and webhook_parts[4:] == ["workflow-job"]:
-                self._webhook(ProjectId(identifier(webhook_parts[3], "project ID")), body)
+                project_id = ProjectId(identifier(webhook_parts[3], "project ID"))
+                if self._webhook_authorized(project_id):
+                    self._webhook(project_id, self._body())
                 return
             if self.path == "/v1/claims":
-                self._claim(body)
+                project_id = self._api_project()
+                if project_id is not None:
+                    self._claim(project_id, self._body())
                 return
             parts = self.path.split("/")
             if len(parts) == 5 and parts[:3] == ["", "v1", "claims"] and parts[4] in {"renew", "release"}:
-                self._lease(parts[3], parts[4], body)
+                project_id = self._api_project()
+                if project_id is not None:
+                    self._lease(project_id, parts[3], parts[4], self._body())
                 return
             self.send_error(404)
         except (ProtocolError, json.JSONDecodeError, UnicodeDecodeError):
             self.send_error(400)
+        except StoreCapacityError:
+            self.send_error(503)
 
     def _body(self) -> dict[str, object]:
         content_type = self.headers.get("Content-Type", "").split(";", 1)[0]
@@ -73,36 +104,34 @@ class Handler(BaseHTTPRequestHandler):
         return self._json_object(length)
 
     def _json_object(self, length: int) -> dict[str, object]:
-        value = json.loads(self.rfile.read(length).decode("utf-8"))
+        value = strict_json_loads(self.rfile.read(length).decode("utf-8"))
         if type(value) is not dict:
             raise ProtocolError("request must be an object")
         return value
 
-    def _event(self, body: dict[str, object]) -> None:
+    def _event(self, authorized_project_id: ProjectId, body: dict[str, object]) -> None:
         request = exact_object(body, {"projectId", "action", "jobId", "labels"}, "event")
         project_id = ProjectId(identifier(request["projectId"], "project ID"))
-        project = self.server.config.projects.get(project_id)
-        authorization = self.headers.get("Authorization", "")
-        host_id = self.headers.get("X-DIM-Host")
-        host_token = None if project is None or host_id is None else project.hosts.get(HostId(host_id))
-        if host_token is None or not hmac.compare_digest(authorization, f"Bearer {host_token}"):
+        if project_id != authorized_project_id:
             self.send_error(404)
             return
+        project = self.server.config.projects[project_id]
         action = text(request["action"], "action")
         if action != "queued":
             raise ProtocolError("host events may only seed queued demand")
         job_id = positive_integer(request["jobId"], "job ID", maximum=9_007_199_254_740_991)
         labels = string_array(request["labels"], "labels")
-        if not set(labels).issubset(project.allowed_labels):
-            raise ProtocolError("event labels are not allowed for this project")
+        if set(labels).isdisjoint(project.labels):
+            self.send_response(202)
+            self.end_headers()
+            return
         self.server.store.record_event(project_id, action, job_id, labels)
         self.send_response(202)
         self.end_headers()
 
     def _webhook(self, project_id: ProjectId, body: dict[str, object]) -> None:
         project = self.server.config.projects.get(project_id)
-        authorization = self.headers.get("Authorization", "")
-        if project is None or self.headers.get("X-Gitea-Event") != "workflow_job" or not hmac.compare_digest(authorization, f"Bearer {project.webhook_token}"):
+        if project is None:
             self.send_error(404)
             return
         action_value = body.get("action")
@@ -113,33 +142,50 @@ class Handler(BaseHTTPRequestHandler):
         if action not in {"queued", "in_progress", "completed"}:
             raise ProtocolError("invalid action")
         job_id = positive_integer(workflow_job_value.get("id"), "job ID", maximum=9_007_199_254_740_991)
-        labels = string_array(workflow_job_value.get("labels"), "labels")
+        labels = string_array(workflow_job_value.get("labels"), "labels", allow_empty=True)
+        if action == "queued" and set(labels).isdisjoint(project.labels):
+            self.send_response(202)
+            self.end_headers()
+            return
         self.server.store.record_event(project_id, action, job_id, labels)
         self.send_response(202)
         self.end_headers()
 
-    def _host(self, body: dict[str, object], fields: set[str]) -> tuple[dict[str, object], ProjectId, HostId]:
+    def _api_project(self) -> ProjectId | None:
+        authorization = self.headers.get("Authorization", "")
+        for project_id, project in self.server.config.projects.items():
+            if hmac.compare_digest(authorization, f"Bearer {project.api_token}"):
+                return project_id
+        self.send_error(404)
+        return None
+
+    def _webhook_authorized(self, project_id: ProjectId) -> bool:
+        project = self.server.config.projects.get(project_id)
+        authorization = self.headers.get("Authorization", "")
+        if project is not None and self.headers.get("X-Gitea-Event") == "workflow_job" and hmac.compare_digest(authorization, f"Bearer {project.webhook_token}"):
+            return True
+        self.send_error(404)
+        return False
+
+    def _host(self, authorized_project_id: ProjectId, body: dict[str, object], fields: set[str]) -> tuple[dict[str, object], ProjectId, HostId]:
         request = exact_object(body, fields | {"projectId", "hostId"}, "request")
         project_id = ProjectId(identifier(request["projectId"], "project ID"))
         host_id = HostId(identifier(request["hostId"], "host ID"))
-        project = self.server.config.projects.get(project_id)
-        token = None if project is None else project.hosts.get(host_id)
-        authorization = self.headers.get("Authorization", "")
-        if token is None or self.headers.get("X-DIM-Host") != host_id or not hmac.compare_digest(authorization, f"Bearer {token}"):
+        if project_id != authorized_project_id or self.headers.get("X-DIM-Host") != host_id:
             self.send_error(404)
             raise PermissionError
         return request, project_id, host_id
 
-    def _claim(self, body: dict[str, object]) -> None:
+    def _claim(self, authorized_project_id: ProjectId, body: dict[str, object]) -> None:
         try:
-            request, project_id, host_id = self._host(body, {"capacity", "labels", "requestId"})
+            request, project_id, host_id = self._host(authorized_project_id, body, {"capacity", "labels", "requestId"})
         except PermissionError:
             return
         lease = self.server.store.claim(
             project_id,
             host_id,
             identifier(request["capacity"], "capacity"),
-            self._allowed_labels(project_id, request["labels"]),
+            string_array(request["labels"], "labels"),
             identifier(request["requestId"], "request ID"),
         )
         if lease is None:
@@ -148,16 +194,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._json(200, {"jobId": lease.job_id, "claimId": lease.claim_id, "leaseExpiresAt": lease.expires_at, "leaseSeconds": lease.lease_seconds})
 
-    def _allowed_labels(self, project_id: ProjectId, value: object) -> tuple[str, ...]:
-        labels = string_array(value, "labels")
-        project = self.server.config.projects[project_id]
-        if not set(labels).issubset(project.allowed_labels):
-            raise ProtocolError("claim labels are not allowed for this project")
-        return labels
-
-    def _lease(self, claim_id_raw: str, operation: str, body: dict[str, object]) -> None:
+    def _lease(self, authorized_project_id: ProjectId, claim_id_raw: str, operation: str, body: dict[str, object]) -> None:
         try:
-            _request, project_id, host_id = self._host(body, set())
+            _request, project_id, host_id = self._host(authorized_project_id, body, set())
         except PermissionError:
             return
         claim_id = identifier(claim_id_raw, "claim ID")
