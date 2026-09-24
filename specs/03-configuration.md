@@ -45,6 +45,11 @@ external Gitea and MUST reject mixed shared/local topology or changed
 persisted identity. When the variable is absent, existing host-local
 scheduling MUST remain unchanged.
 
+The service-side Project binding MUST separately identify its webhook token,
+per-host tokens, and non-empty allowed-label set. Its configured lease MUST be
+at least 60 seconds. Host-authenticated requests MUST NOT introduce labels
+outside that reviewed set.
+
 Project-specific Git namespaces, repository aliases, root repository/ref,
 profiles and backend choices belong to Project/workspace records. Raw
 credentials must not be written to those records.

@@ -130,6 +130,12 @@ separate project-webhook and per-host bearer tokens and receives no Gitea
 administrator credential. Leaving the variable unset preserves host-local
 scheduling; a Project cannot mix the two modes.
 
+The standalone service config uses a minimum `leaseSeconds` of `60`. Each
+Project entry includes `allowedLabels`, containing only its reviewed QEMU
+integration labels such as `dim-qemu`. Host credentials may seed queued demand
+and claim capacity only with these labels; running and completed transitions
+require the Project webhook credential.
+
 `DIM_WORKSPACE_IMAGE` explicitly overrides the trusted workspace image. When
 unset, DIM selects `dev-infra-project-workspace:<installed package version>` so
 the image follows the exact release or aggregate-identity local package set,
