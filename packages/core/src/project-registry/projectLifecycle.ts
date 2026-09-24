@@ -119,9 +119,6 @@ export async function purgeProject(
       const project = await state.readProject(name);
       assertRepositoryTransfersComplete(project);
       await assertProjectUnused(state, name);
-      if (options.giteaConnection.kind === "external") {
-        throw new UserError("external Gitea resources are operator-owned; use project remove to detach local state");
-      }
       const credentials = await ensureGitea(runner, options);
       if (project.giteaOrganizationId === null) {
         throw new UserError(`project '${project.name}' has no trusted Gitea organization ID`);
