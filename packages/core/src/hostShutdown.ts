@@ -55,7 +55,9 @@ export async function shutdownHost(
       await attempt(errors, `stop managed container '${container}'`, () => stopManagedContainer(runner, container));
     }
     await attempt(errors, "stop registry cache", () => stopManagedContainer(runner, REGISTRY_CACHE_CONTAINER));
-    await attempt(errors, "stop Gitea", () => stopManagedContainer(runner, GITEA_CONTAINER));
+    if (options.giteaConnection.kind === "managed") {
+      await attempt(errors, "stop Gitea", () => stopManagedContainer(runner, GITEA_CONTAINER));
+    }
     record = {
       ...record,
       phase: errors.length === 0 ? "stopped" : "error",

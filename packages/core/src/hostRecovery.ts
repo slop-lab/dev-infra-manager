@@ -16,12 +16,13 @@ export async function startHost(
   try {
     const current = await state.readHostLifecycle();
     if (!current || current.phase === "ready") return current ?? readyRecord();
+    if (options.giteaConnection.kind === "external") await ensureGitea(runner, options);
     const entryPhase = current.phase;
     let record: HostLifecycleRecord = { ...current, phase: "starting", updatedAt: new Date().toISOString() };
     delete record.error;
     await state.writeHostLifecycle(record);
     try {
-      await ensureGitea(runner, options);
+      if (options.giteaConnection.kind === "managed") await ensureGitea(runner, options);
       await ensureRegistryCache(runner, options.stateRoot);
       for (const container of record.resumeManagedContainers) {
         await startManagedContainer(runner, container);
