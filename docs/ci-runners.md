@@ -181,12 +181,25 @@ after uncertain renewal it terminates and reaps its local process group before
 claiming again. Scheduler tokens are removed from the child environment and
 never reach a guest.
 
+Production leases are at least 60 seconds. Workers use two-second requests,
+five-second heartbeats, and a local monotonic deadline. The service delays
+takeover for at least 20 seconds after expiry and places outstanding queued
+claims on a recovery hold after restart, allowing a paused host time to stop
+its process group. This is bounded cooperative fencing, not an external kill
+switch: a host paused beyond both lease and grace, partitioned from the
+scheduler, or compromised outside DIM can continue executing until its local
+supervisor runs cleanup. Use infrastructure-level fencing when that stronger
+guarantee is required.
+
 Build the pinned service image from installed assets with `dim ci scheduler
 image build IMAGE`. Mount a service-user-owned mode-`0600` config and a durable
 database directory. The operator owns TLS or isolated-network transport and
 service lifecycle. Stopping or deleting one host's capacity does not remove the
 central webhook while another host may serve it. Shared mode requires external
 Gitea and rejects a Project that mixes host-local and shared scheduler state.
+The service config allowlists the integration labels that host-authenticated
+backlog replay and claims may use. Host credentials can seed only queued
+demand; running and completed transitions require the webhook credential.
 Creating, starting, or restarting capacity does not rely on future webhook
 redelivery to discover existing demand. After launching the supervisor, DIM
 inspects its complete ownership identity, addresses the resulting immutable
