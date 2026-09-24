@@ -495,14 +495,16 @@ raw-source root ending before the commit segment, normalize one optional
 trailing slash, and combine that root with the validated commit. They MUST NOT
 hard-code a provider raw-content hostname. The root README MAY use DIM's
 canonical GitHub raw source.
-The canonical self-Project's outer Compose graph contains only a private
-rootless `agent-dind` daemon. Its daemon user adopts the numeric UID/GID that
-owns the workspace checkout. That daemon owns the agent and ordinary development
-containers, and the agent receives only its private daemon socket. Rebuilding
-or replacing those inner workloads therefore requires no trusted workspace or
-host runtime socket. The agent may run as UID 0 inside the rootless daemon's
-user namespace: that UID maps to the non-root daemon UID which owns the
-checkout, rather than to root in the trusted workspace or on the host.
+The canonical self-Project's default outer Compose graph contains only a
+private rootless `agent-dind` daemon; its optional secure profile adds only a
+separate `secure-dind`. Its agent daemon user adopts the numeric UID/GID that
+owns the workspace checkout. That daemon owns the agent and ordinary
+development containers, and the agent receives only its private daemon socket.
+Rebuilding or replacing those inner workloads therefore requires no trusted
+workspace or host runtime socket. The agent may run as UID 0 inside the
+rootless daemon's user namespace: that UID maps to the non-root daemon UID
+which owns the checkout, rather than to root in the trusted workspace or on
+the host.
 The requirement that an agent process be non-root applies to containers whose
 root identity carries host or trusted-workspace authority. It does not prohibit
 UID 0 inside an explicitly rootless, subordinate-ID-mapped agent daemon.
@@ -547,9 +549,22 @@ carries full agent authority, but no host or Project-runtime authority. Codex
 remote access is one use case for this generic Project-owned task, not a DIM
 feature or command.
 
-Secret-bearing workloads must use a separate `secure-dind` daemon with
-separate runtime storage. The agent daemon socket, agent home, workspace source,
-and workspace Git credentials must not be mounted into that daemon.
+**WORKSPACE-PRIVATE-RUNTIMES-001:** DIM MUST NOT require a fixed count of
+Project-owned nested daemons. A reviewed Project MAY use zero daemons when it
+needs no nested container runtime, one private daemon for agent-controlled
+development workloads, or separate agent and secure daemons when it combines
+agent Docker authority with secret-bearing workloads. The complete rich
+examples and canonical self-Project use the separate-daemon shape as practical
+guidance, not as a universal two-DinD mandate.
+
+When a Project uses that separate-daemon shape, secret-bearing workloads MUST
+use `secure-dind` storage distinct from `agent-dind`. The agent daemon socket,
+agent home, workspace source, and workspace Git credentials MUST NOT be mounted
+into the secure daemon. The secure daemon socket and raw secret MUST NOT enter
+the agent. Any communication exposed to the agent MUST be a fixed,
+Project-reviewed application protocol endpoint rather than a Docker control
+endpoint. Neither daemon may receive a host or trusted-workspace runtime
+socket.
 The canonical self-Project exposes an agent-container `bash` task and
 Project-owned `backup`/`restore` tasks that stream a gzip tar archive of
 the agent home over stdout/stdin. Those canonical tasks temporarily stop the
