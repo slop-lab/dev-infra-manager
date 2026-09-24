@@ -115,6 +115,10 @@ vi.mock("../../../../core/packages/core/src/lifecycleState.js", async (importOri
         throw new MissingRecordError("CI runner 'project/runner' not found");
       }
 
+      async listCiRunners(): Promise<CiRunnerRecord[]> {
+        return [];
+      }
+
       async writeCiRunner(): Promise<void> {}
     }
   };
