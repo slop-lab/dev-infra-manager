@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Allow hosts to use one explicitly configured external Gitea service while
+  retaining the existing local managed-Gitea default and one DIM controller on
+  every host. A private connection file separates API, host, workspace, and
+  runner endpoints, supplies existing scoped credentials, and binds shared
+  Project and organization identities. DIM validates health and authentication
+  before mutation but does not provision, stop, reconfigure, or inject aliases
+  for the operator-owned service; repository permissions and branch protection
+  remain enforced through the existing APIs.
+
 - Replace DIM-owned mutable repository reconciliation with a schema-6
   workspace contract that mounts reviewed root bytes read-only and gives
   reviewed Project code a persistent data root. The schema-3 runtime manifest
