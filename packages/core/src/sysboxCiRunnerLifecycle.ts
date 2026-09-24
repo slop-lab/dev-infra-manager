@@ -26,6 +26,15 @@ export function ciRunnerContainerName(project: string, name: string): string {
   return resourcePrefix(project, name);
 }
 
+export function ciRunnerProviderName(project: string, name: string, hostId?: string): string {
+  return hostId === undefined
+    ? resourcePrefix(project, name)
+    : boundedCiRunnerResourceName([
+        "dim", "ci", validateLifecycleName(project, "project"), validateLifecycleName(name, "CI runner"),
+        validateLifecycleName(hostId, "external Gitea host")
+      ]);
+}
+
 export function ciRunnerVolumeName(project: string, name: string): string {
   return boundedCiRunnerResourceName([
     "dim", "ci", validateLifecycleName(project, "project"), validateLifecycleName(name, "CI runner"), "data"
@@ -52,7 +61,7 @@ export function ciRunnerContainerArgs(plan: SysboxCiRunnerContainerPlan): string
       `DIM_CI_REGISTRY_CACHE_UPSTREAM=${REGISTRY_CACHE_ENDPOINT}`
     ] : []),
     ...ownershipLabels.flatMap((label) => ["--label", label]),
-    "--env", `GITEA_RUNNER_NAME=${executor.containerName}`,
+    "--env", `GITEA_RUNNER_NAME=${executor.providerRunnerName ?? executor.containerName}`,
     "--env", `GITEA_RUNNER_LABELS=${plan.labels}`,
     "--env", "CONFIG_FILE=/etc/dim-act-runner.yml",
     ...(plan.registration ? [

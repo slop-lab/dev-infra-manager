@@ -21,7 +21,7 @@ import { prepareQemuBacklogReplay } from "./qemuCiRunnerBacklog.js";
 import { prepareSharedQemuBacklogReplay } from "./qemuCiRunnerBacklog.js";
 import { qemuSchedulerConnection } from "./qemuSchedulerConnection.js";
 import { assertPersistedQemuScheduler, assertQemuSchedulerTopology } from "./qemuCiRunnerShared.js";
-import { ciRunnerContainerArgs, ciRunnerContainerName, ciRunnerVolumeName, removeSysboxRegistration,
+import { ciRunnerContainerArgs, ciRunnerContainerName, ciRunnerProviderName, ciRunnerVolumeName, removeSysboxRegistration,
   resolveSysboxRunnerImage, sysboxRegistrationExists } from "./sysboxCiRunnerLifecycle.js";
 
 export { BUILTIN_CI_RUNNER_DEFAULTS, ciRunnerContainerArgs, ciRunnerContainerName, ciRunnerVolumeName, detectCiRunnerKvm, effectiveCiRunnerResources, effectiveQemuCiRunnerResources };
@@ -137,21 +137,32 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
           capacityName: name,
           executorKind
         });
+        const registration = await giteaCiCoordinator.prepareRunner(runner, options, project);
+        const providerRunnerName = ciRunnerProviderName(projectName, name, registration.hostId);
+        if (previous?.providerRunnerName !== undefined && previous.providerRunnerName !== providerRunnerName) {
+          throw new UserError(`CI runner '${projectName}/${name}' external host identity changed`);
+        }
         if (await sysboxRegistrationExists(runner, executor.volumeName)) {
-          await giteaCiCoordinator.removeRunner(runner, options, project, executor.containerName);
+          await giteaCiCoordinator.removeRunner(
+            runner,
+            options,
+            project,
+            previous?.providerRunnerName ?? providerRunnerName
+          );
           await removeSysboxRegistration(runner, executor.volumeName);
         }
-        const registration = await giteaCiCoordinator.prepareRunner(runner, options, project);
+        const registeredExecutor = { ...executor, providerRunnerName } satisfies SysboxCiRunnerExecutor;
+        record = await saveExecutor(state, record, registeredExecutor);
         const started = await runner.run("docker", ciRunnerContainerArgs({
           record,
-          executor,
+          executor: registeredExecutor,
           labels: ciRunnerLabels(runnerConfig.config),
           registration,
           registryMirror: true
         }));
         if (started.exitCode !== 0) throw new UserError(`failed to start sysbox CI runner '${projectName}/${name}': ${started.stderr.trim()}`);
         record = { ...record, provider: registration.provider };
-        return saveExecutor(state, record, ready(executor));
+        return saveExecutor(state, record, ready(registeredExecutor));
       } catch (error) { await saveExecutor(state, record, failed(executor, error)); throw error; }
     }
     if (!await detectCiRunnerKvm()) throw new UserError("the qemu CI executor requires x86-64 and host /dev/kvm access");
@@ -256,7 +267,12 @@ export async function deleteCiRunner(runner: StreamingCommandRunner, options: Li
     const record = await state.readCiRunner(project, name); const executor = record.executor; const projectRecord = await showProject(options, project);
     if (executor.kind === "sysbox") {
       await removeCiRunnerContainer(runner, ciRunnerContainerPlan(record, executor));
-      await giteaCiCoordinator.removeRunner(runner, options, projectRecord, executor.containerName);
+      await giteaCiCoordinator.removeRunner(
+        runner,
+        options,
+        projectRecord,
+        executor.providerRunnerName ?? executor.containerName
+      );
       await removeCiRunnerVolume(runner, { name: executor.volumeName, resource: "ci-runner-data", project, projectId: record.projectId }, `sysbox CI runner data for '${project}/${name}'`);
     } else {
       await removeCiRunnerContainer(runner, ciRunnerContainerPlan(record, executor));

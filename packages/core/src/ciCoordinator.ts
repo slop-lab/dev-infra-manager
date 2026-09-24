@@ -5,6 +5,7 @@ export interface CiRunnerRegistration {
   provider: string;
   instanceUrl: string;
   token: string;
+  hostId?: string;
 }
 
 export type QueuedWorkflowJob = {

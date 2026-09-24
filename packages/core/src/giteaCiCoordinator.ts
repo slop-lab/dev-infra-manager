@@ -29,6 +29,17 @@ export function giteaHookIdsForUrl(hooks: GiteaHookSummary[], url: string): numb
   return hooks.filter((hook) => hook.config?.url === url).map((hook) => hook.id);
 }
 
+export function uniqueGiteaRunnerId(
+  runners: readonly { readonly id: number; readonly name: string }[],
+  runnerName: string
+): number | undefined {
+  const matches = runners.filter((candidate) => candidate.name === runnerName);
+  if (matches.length > 1) {
+    throw new UserError(`multiple CI coordinator runners use provider identity '${runnerName}'`);
+  }
+  return matches[0]?.id;
+}
+
 async function removeHooksForUrl(credentials: Awaited<ReturnType<typeof ensureGitea>>, project: ProjectRecord, url: string): Promise<void> {
   const base = giteaOrgHooksApiBase(project);
   const response = await giteaRequest(credentials, "GET", base);
@@ -55,7 +66,8 @@ export const giteaCiCoordinator: CiCoordinator = {
     return {
       provider: "gitea-actions",
       instanceUrl: await giteaRunnerBaseUrl(runner, credentials),
-      token: body.token
+      token: body.token,
+      ...(credentials.kind === "external" ? { hostId: credentials.hostId } : {})
     };
   },
   async removeRunner(runner, options, project, runnerName): Promise<void> {
@@ -64,9 +76,9 @@ export const giteaCiCoordinator: CiCoordinator = {
     const response = await giteaRequest(credentials, "GET", base);
     if (!response.ok) throw new UserError(`failed to list CI coordinator runners: ${response.status}`);
     const body = await response.json() as { runners?: Array<{ id: number; name: string }> };
-    for (const candidate of body.runners ?? []) {
-      if (candidate.name !== runnerName) continue;
-      const removed = await giteaRequest(credentials, "DELETE", `${base}/${candidate.id}`);
+    const id = uniqueGiteaRunnerId(body.runners ?? [], runnerName);
+    if (id !== undefined) {
+      const removed = await giteaRequest(credentials, "DELETE", `${base}/${id}`);
       if (!removed.ok && removed.status !== 404) {
         throw new UserError(`failed to remove CI coordinator runner '${runnerName}': ${removed.status}`);
       }
