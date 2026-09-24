@@ -11,6 +11,7 @@ import {
   deleteProjectRepository,
   giteaRepositoryCreationOptions,
   normalizeRepositoryRef,
+  prepareHostGitCredential,
   prepareProjectRepositoryTransfer,
   projectNamespace
 } from "../../../../core/packages/core/src/projectRegistry.js";
@@ -20,10 +21,15 @@ import { projectRepositoryFixture } from "./projectRegistryFixture.js";
 vi.mock("../../../../core/packages/core/src/gitea.js", async (importOriginal) => ({
   ...await importOriginal<typeof import("../../../../core/packages/core/src/gitea.js")>(),
   ensureGitea: vi.fn(async () => ({
+    kind: "external" as const,
     adminUsername: "admin", adminPassword: "secret",
     writerUsername: "writer", writerPassword: "secret",
     maintainerUsername: "maintainer", maintainerPassword: "secret",
-    apiBaseUrl: "http://gitea.invalid/api/v1"
+    apiBaseUrl: "http://gitea.invalid/api/v1",
+    hostBaseUrl: "https://git.host.example/gitea",
+    workspaceBaseUrl: "https://git.workspace.example/gitea",
+    runnerBaseUrl: "https://git.runner.example/gitea",
+    projectBindings: {}
   })),
   giteaRequest: vi.fn(async () => new Response(null, { status: 204 }))
 }));
@@ -36,6 +42,20 @@ describe("project registry", () => {
   it("derives reserved managed namespaces", () => {
     expect(projectNamespace("acme")).toBe("dim-acme");
     expect(() => projectNamespace("../acme")).toThrow(/project name/);
+  });
+
+  it("returns the configured host URL with the maintainer credential", async () => {
+    const stateRoot = await mkdtemp(join(tmpdir(), "dim-host-git-credential-"));
+    cleanup.push(stateRoot);
+    const credential = await prepareHostGitCredential(
+      new RecordingRunner(),
+      { stateRoot } as LifecycleOptions
+    );
+    expect(credential).toEqual({
+      username: "maintainer",
+      password: "secret",
+      baseUrl: "https://git.host.example/gitea"
+    });
   });
 
   it("centralizes new managed issue trackers on the project root", () => {
