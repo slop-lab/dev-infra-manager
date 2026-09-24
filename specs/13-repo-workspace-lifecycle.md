@@ -573,7 +573,7 @@ ports 2375 or 2376. A reviewed application relay MUST NOT make either daemon's
 control API reachable from the other authority.
 An agent-home volume entering a rootless private daemon MUST be initialized
 only when its root is empty. Initialization MUST assign the top-level root to
-the daemon's mapped nonroot identity with owner-only access. A populated root
+the mapped inner agent identity with owner-only access. A populated root
 with incompatible ownership or mode MUST fail setup without recursively
 rewriting descendants. Inner agent startup may assign that top-level directory
 to its established task or SSH identity, but MUST preserve existing descendant
