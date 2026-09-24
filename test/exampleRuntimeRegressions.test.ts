@@ -54,6 +54,40 @@ esac
     expect(invocations).toContain("exec outer-agent-dind dim-agent-dind stop");
     expect(invocations).toContain("exec outer-agent-dind dim-agent-dind start");
     expect(invocations).not.toContain("stop outer-agent-dind");
+    expect(invocations).toMatch(
+      /run --rm --network none --read-only --mount type=volume,src=agent-home-volume,dst=\/home,readonly --entrypoint tar ubuntu@sha256:[0-9a-f]{64}/
+    );
+    expect(invocations).not.toContain("agent-dind-image");
+  });
+
+  it.each(richExamples)("preserves archive failure while restarting the inner agent for %s", async (example) => {
+    const root = await mkdtemp(resolve(tmpdir(), "dim-home-archive-error-test-"));
+    fixtureRoots.push(root);
+    const tools = resolve(root, "tools");
+    const calls = resolve(root, "docker.calls");
+    await mkdir(tools);
+    await writeFile(resolve(tools, "docker"), `#!/usr/bin/env sh
+set -eu
+printf '%s\n' "$*" >>"$DIM_TEST_DOCKER_CALLS"
+case "$1 $2" in
+  'container ls') printf 'outer-agent-dind\n' ;;
+  'volume ls') printf 'agent-home-volume\n' ;;
+  'exec outer-agent-dind')
+    if [ "$3 $4 \${5:-}" = 'docker inspect --format' ]; then printf 'true\n'; fi
+    ;;
+  'run --rm') exit 37 ;;
+esac
+`);
+    await chmod(resolve(tools, "docker"), 0o755);
+
+    const result = spawnSync(
+      "/usr/bin/sh",
+      [resolve(workspaceRoot, "examples/projects", example, "repos/root/.dim/home-archive.sh"), "backup"],
+      { env: { ...process.env, COMPOSE_PROJECT_NAME: "dim-project", DIM_TEST_DOCKER_CALLS: calls, PATH: `${tools}:/usr/bin:/bin` } }
+    );
+
+    expect(result.status).toBe(37);
+    expect(await readFile(calls, "utf8")).toContain("exec outer-agent-dind dim-agent-dind start");
   });
 
   it("publishes the complete local package closure in dependency order", async () => {
