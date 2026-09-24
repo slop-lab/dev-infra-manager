@@ -20,7 +20,7 @@ export async function externalGiteaConnection(file: string): Promise<GiteaConnec
   if (input.schemaVersion !== 1) throw new UserError("External Gitea connection schemaVersion must be 1");
   const transport = parseTransport(input.transport);
   const credentials = parseCredentials(input.credentials);
-  assertDistinctCredentials(credentials);
+  assertCredentialSeparation(credentials);
   const connection = {
     kind: "external",
     hostId: validateLifecycleName(text(input.hostId, "hostId"), "external Gitea host"),
@@ -72,7 +72,9 @@ async function validateExternalGitea(connection: GiteaConnection): Promise<void>
   if (!health.ok) throw new UserError(`External Gitea health check failed: ${health.status}`);
   await validateIdentity(connection, "administrator", connection.adminUsername, connection.adminPassword, true);
   await validateIdentity(connection, "writer", connection.writerUsername, connection.writerPassword, false);
-  await validateIdentity(connection, "maintainer", connection.maintainerUsername, connection.maintainerPassword, false);
+  if (connection.maintainerUsername !== connection.adminUsername) {
+    await validateIdentity(connection, "maintainer", connection.maintainerUsername, connection.maintainerPassword, false);
+  }
 }
 
 async function validateIdentity(
@@ -123,10 +125,14 @@ function parseCredentials(value: unknown): GiteaCredentials {
   };
 }
 
-function assertDistinctCredentials(credentials: GiteaCredentials): void {
-  const usernames = [credentials.adminUsername, credentials.writerUsername, credentials.maintainerUsername];
-  if (new Set(usernames).size !== usernames.length) {
-    throw new UserError("External Gitea credentials must use distinct role identities");
+function assertCredentialSeparation(credentials: GiteaCredentials): void {
+  if (credentials.writerUsername === credentials.adminUsername
+    || credentials.writerUsername === credentials.maintainerUsername) {
+    throw new UserError("External Gitea writer identity must be distinct from privileged host identities");
+  }
+  if (credentials.adminUsername === credentials.maintainerUsername
+    && credentials.adminPassword !== credentials.maintainerPassword) {
+    throw new UserError("External Gitea shared administrator and maintainer identity must use the same credentials");
   }
 }
 
