@@ -129,4 +129,16 @@ dim_publish_example_packages "$2"
     expect(purge).toBeGreaterThan(-1);
     expect(scratchRemoval).toBeGreaterThan(purge);
   });
+
+  it.each([
+    "multi-repository-example-smoke.bash",
+    "stateful-development-flow-smoke.bash"
+  ])("routes private daemon assertions through the workspace Docker daemon in %s", async (script) => {
+    const smoke = await readFile(resolve(workspaceRoot, "verification/scripts", script), "utf8");
+    const routedAssertions = smoke.match(
+      /docker\(\) \{ dim workspace exec "\$workspace_name" -- docker "\$@"; \}\n\s+dim_assert_private_dind_unix_only/g
+    );
+
+    expect(routedAssertions).toHaveLength(2);
+  });
 });

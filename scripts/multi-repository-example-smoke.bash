@@ -243,7 +243,10 @@ outer_services="$(workspace_compose ps --services --filter status=running)"
 test "$outer_services" = agent-dind
 dind_container="$(workspace_compose ps --quiet agent-dind)"
 test -n "$dind_container"
-dim_assert_private_dind_unix_only "$dind_container" /run/dim-agent-dind/docker.sock
+(
+  docker() { dim workspace exec "$workspace_name" -- docker "$@"; }
+  dim_assert_private_dind_unix_only "$dind_container" /run/dim-agent-dind/docker.sock
+)
 agent_container="$(dim workspace exec "$workspace_name" -- \
   docker exec "$dind_container" docker inspect --format '{{.Id}}' dim-agent)"
 test -n "$agent_container"
@@ -328,7 +331,10 @@ if dim workspace run "$workspace_name" bash -- -lc \
 fi
 secure_container="$(workspace_compose ps --quiet secure-dind)"
 test -n "$secure_container"
-dim_assert_private_dind_unix_only "$secure_container" /run/dim-secure-dind/docker.sock
+(
+  docker() { dim workspace exec "$workspace_name" -- docker "$@"; }
+  dim_assert_private_dind_unix_only "$secure_container" /run/dim-secure-dind/docker.sock
+)
 test "$(dim workspace exec "$workspace_name" -- docker inspect "$secure_container" \
   --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -c '^EXAMPLE_SECRET=' || true)" = 0
 
