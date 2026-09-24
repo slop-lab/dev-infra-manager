@@ -161,13 +161,32 @@ Gitea registration is
 only the current coordinator adapter, so replacing the built-in coordinator
 does not change this executor boundary.
 
-All QEMU supervisors in a Project form a shared scheduler, with one concurrent
-capacity per named runner. They persist demand and renewable capacity claims in
-a shared dispatch volume before acknowledging webhooks. Each update fsyncs its
-temporary state file, atomically replaces the durable file, and fsyncs the
-containing directory before HTTP `202`; a load, validation, or write error
-fails the acknowledgement. Duplicate deliveries remain idempotent, and each
-trigger has at most one active capacity claim.
+By default, QEMU supervisors on one host form a Project scheduler, with one
+concurrent capacity per named runner. They persist demand and renewable claims
+in a host-local dispatch volume before acknowledging webhooks. Each update
+fsyncs its temporary state file, atomically replaces the durable file, and
+fsyncs the containing directory before HTTP `202`; a load, validation, or
+write error fails the acknowledgement. Duplicate deliveries remain idempotent,
+and each trigger has at most one active capacity claim.
+
+For capacity spanning hosts, an operator may deploy the packaged standalone
+scheduler and configure each host with
+`DIM_QEMU_SCHEDULER_CONNECTION_FILE`. The service stores Project demand,
+completed tombstones, idempotency records, and fenced renewable leases in
+SQLite with WAL and full synchronization. Its API accepts only workflow-job
+events and claim, renewal, and release operations. Separate per-host and
+webhook bearer tokens prevent one host from claiming as another; the service
+receives no Gitea administrator credential. Each host still owns execution:
+after uncertain renewal it terminates and reaps its local process group before
+claiming again. Scheduler tokens are removed from the child environment and
+never reach a guest.
+
+Build the pinned service image from installed assets with `dim ci scheduler
+image build IMAGE`. Mount a service-user-owned mode-`0600` config and a durable
+database directory. The operator owns TLS or isolated-network transport and
+service lifecycle. Stopping or deleting one host's capacity does not remove the
+central webhook while another host may serve it. Shared mode requires external
+Gitea and rejects a Project that mixes host-local and shared scheduler state.
 Creating, starting, or restarting capacity does not rely on future webhook
 redelivery to discover existing demand. After launching the supervisor, DIM
 inspects its complete ownership identity, addresses the resulting immutable

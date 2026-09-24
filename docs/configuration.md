@@ -43,6 +43,7 @@ DIM_CI_RUNNER_RUNTIME
 DIM_CI_RUNNER_CPUS
 DIM_CI_RUNNER_MEMORY
 DIM_CI_RUNNER_PIDS
+DIM_QEMU_SCHEDULER_CONNECTION_FILE
 ```
 
 `DIM_GIT_USERNAME` and `DIM_GIT_TOKEN` identify the constrained writer exposed
@@ -99,6 +100,35 @@ Pre-create each external organization and copy its numeric Gitea ID into the
 Project binding. Hosts that share a Project must share all three identity
 values. DIM rejects an unbound Project and an organization whose numeric ID or
 namespace differs, so a same-name organization is never adopted implicitly.
+
+For QEMU capacity shared by multiple hosts, set
+`DIM_QEMU_SCHEDULER_CONNECTION_FILE` to a DIM-user-owned mode-`0600` file on
+each host. This mode requires external Gitea. Each host uses a stable `hostId`
+and its own host token; the central webhook token is configured in Gitea:
+
+```json
+{
+  "schemaVersion": 1,
+  "transport": "https",
+  "hostId": "builder-a",
+  "projects": {
+    "acme": {
+      "projectId": "copy-the-local-project-id",
+      "controllerEndpoint": "https://scheduler-control.example",
+      "supervisorEndpoint": "https://scheduler-workers.example",
+      "webhookUrl": "https://scheduler-hooks.example/v1/webhooks/copy-the-local-project-id/workflow-job",
+      "hostToken": "replace-with-this-host-token",
+      "webhookToken": "replace-with-webhook-token"
+    }
+  }
+}
+```
+
+Use `https` except for loopback-only (`loopback-http`) or explicitly isolated
+networks (`isolated-http`). Endpoints contain no credentials. The service uses
+separate project-webhook and per-host bearer tokens and receives no Gitea
+administrator credential. Leaving the variable unset preserves host-local
+scheduling; a Project cannot mix the two modes.
 
 `DIM_WORKSPACE_IMAGE` explicitly overrides the trusted workspace image. When
 unset, DIM selects `dev-infra-project-workspace:<installed package version>` so
