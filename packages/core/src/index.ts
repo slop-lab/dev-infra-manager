@@ -22,6 +22,8 @@ export {
   type ProtectedRootSnapshotRequest
 } from "./protectedRootSnapshot.js";
 export * from "./projectRuntimeCgroups.js";
+export * from "./qemuSchedulerConnection.js";
+export * from "./sharedQemuSchedulerImage.js";
 export * from "./repositorySet.js";
 export * from "./runner.js";
 export * from "./runtimeBackends.js";

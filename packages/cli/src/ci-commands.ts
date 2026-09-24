@@ -1,5 +1,5 @@
 import { type Command } from "commander";
-import { BUILTIN_CI_RUNNER_DEFAULTS, configuredCiRunnerDefaults, setConfiguredCiRunnerDefaults, UserError } from "@slop-lab/dim-core";
+import { BUILTIN_CI_RUNNER_DEFAULTS, buildSharedQemuSchedulerImage, configuredCiRunnerDefaults, ProcessRunner, setConfiguredCiRunnerDefaults, UserError } from "@slop-lab/dim-core";
 import {
   adminCall, adminStreamCall, ciExecutor, confirmAction, hasResourceFlags, print,
   printList, resourceInput, type JsonFlags, type ResourceFlags
@@ -7,6 +7,15 @@ import {
 
 export function registerCiCommands(program: Command): void {
   const ci = program.command("ci").description("Manage isolated CI execution");
+const schedulerImage = ci.command("scheduler").description("Manage shared QEMU scheduler deployment assets")
+  .command("image").description("Manage the shared QEMU scheduler image");
+schedulerImage.command("build")
+  .description("Build the separately deployed shared QEMU scheduler image")
+  .argument("<image>", "explicit non-latest image tag")
+  .action(async (image: string) => {
+    await buildSharedQemuSchedulerImage(new ProcessRunner(), image);
+    console.log(image);
+  });
 const ciRunner = ci.command("runner").description("Manage project CI runners");
 
 ciRunner.command("create")
