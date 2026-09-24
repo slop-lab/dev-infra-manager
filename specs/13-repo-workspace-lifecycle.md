@@ -991,10 +991,13 @@ MUST remove protected root snapshots before deleting the final Project state.
 If any required cleanup fails, the Project state MUST remain so a retry can
 complete cleanup. A purge retry MUST treat an already-absent managed Gitea
 repository or organization as successfully cleaned up.
-For external Gitea, `project purge --yes` and `repo delete --yes` MUST fail
-before any remote deletion because external repositories and organizations are
-operator-owned. `project remove` remains the local detach operation and MUST
-not mutate the external service.
+For external Gitea, the host-admin `project purge --yes` and `repo delete
+--yes` operations MUST perform the same checked remote deletion. Because the
+service and Project binding can be shared by independent DIM state roots, a
+successful deletion intentionally makes the deleted repository or organization
+unavailable to every other attached host; their local records are not
+coordinated or removed automatically. `project remove` remains the local
+detach operation and MUST NOT mutate the external service.
 
 ## Verification
 
