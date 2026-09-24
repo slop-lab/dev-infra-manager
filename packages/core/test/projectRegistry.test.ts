@@ -132,6 +132,35 @@ describe("project registry", () => {
     );
   });
 
+  it("rejects external repository deletion before a remote request", async () => {
+    const stateRoot = await mkdtemp(join(tmpdir(), "dim-project-external-delete-"));
+    cleanup.push(stateRoot);
+    const state = new LifecycleState(stateRoot);
+    const now = new Date().toISOString();
+    await state.claimProject({
+      schemaVersion: 4,
+      id: "project-id",
+      name: "example",
+      gitNamespace: "dim-example",
+      giteaOrganizationId: 41,
+      phase: "ready",
+      repositories: [projectRepositoryFixture("target", "ready")],
+      createdAt: now,
+      updatedAt: now
+    });
+    vi.clearAllMocks();
+
+    await expect(deleteProjectRepository(new RecordingRunner(), {
+      stateRoot,
+      giteaConnection: { kind: "external", file: "/external.json" }
+    } as LifecycleOptions, "example", "target")).rejects.toThrow(/external Gitea resources are operator-owned/);
+
+    expect(giteaRequest).not.toHaveBeenCalled();
+    await expect(state.readProject("example")).resolves.toMatchObject({
+      repositories: expect.arrayContaining([expect.objectContaining({ alias: "target" })])
+    });
+  });
+
   it("rejects deleting a repository while it is importing without side effects", async () => {
     const stateRoot = await mkdtemp(join(tmpdir(), "dim-project-importing-delete-"));
     cleanup.push(stateRoot); const state = new LifecycleState(stateRoot);

@@ -136,6 +136,17 @@ describe("Project deletion", () => {
     await expect(stat(snapshotPath)).resolves.toBeDefined();
   });
 
+  it("rejects external Project purge before any remote or local deletion", async () => {
+    options = { ...options, giteaConnection: { kind: "external", file: "/external.json" } };
+
+    await expect(purgeProject(new RecordingRunner(), options, project.name))
+      .rejects.toThrow(/external Gitea resources are operator-owned/);
+
+    expect(seams.giteaRequests).toEqual([]);
+    await expect(state.readProject(project.name)).resolves.toEqual(project);
+    await expect(stat(snapshotPath)).resolves.toBeDefined();
+  });
+
   it.each([
     ["remove", () => removeProject(options, project.name)],
     ["purge", () => purgeProject(new RecordingRunner(), options, project.name)]
