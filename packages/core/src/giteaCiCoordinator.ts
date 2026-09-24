@@ -1,5 +1,5 @@
 import { UserError } from "./errors.js";
-import { configureGiteaWebhookAllowedHosts, ensureGitea, giteaNestedBaseUrl, giteaRequest } from "./gitea.js";
+import { configureGiteaWebhookAllowedHosts, ensureGitea, giteaRequest, giteaRunnerBaseUrl } from "./gitea.js";
 import { LifecycleState } from "./lifecycleState.js";
 import type { CiCoordinator, CiRunnerRegistration, QueuedWorkflowJob } from "./ciCoordinator.js";
 import type { ProjectRecord } from "./lifecycleTypes.js";
@@ -54,7 +54,7 @@ export const giteaCiCoordinator: CiCoordinator = {
     if (!body.token) throw new UserError("CI coordinator returned an empty runner registration token");
     return {
       provider: "gitea-actions",
-      instanceUrl: await giteaNestedBaseUrl(runner),
+      instanceUrl: await giteaRunnerBaseUrl(runner, credentials),
       token: body.token
     };
   },
