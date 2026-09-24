@@ -174,8 +174,9 @@ scheduler and configure each host with
 `DIM_QEMU_SCHEDULER_CONNECTION_FILE`. The service stores Project demand,
 completed tombstones, idempotency records, and fenced renewable leases in
 SQLite with WAL and full synchronization. Its API accepts only workflow-job
-events and claim, renewal, and release operations. Separate per-host and
-webhook bearer tokens prevent one host from claiming as another; the service
+events and claim, renewal, and release operations. Separate Project API and
+webhook bearer tokens separate host operations from event integrity; stable
+host IDs provide concurrency identity rather than authorization. The service
 receives no Gitea administrator credential. Each host still owns execution:
 after uncertain renewal it terminates and reaps its local process group before
 claiming again. Scheduler tokens are removed from the child environment and
@@ -197,14 +198,15 @@ database directory. The operator owns TLS or isolated-network transport and
 service lifecycle. Stopping or deleting one host's capacity does not remove the
 central webhook while another host may serve it. Shared mode requires external
 Gitea and rejects a Project that mixes host-local and shared scheduler state.
-The service config allowlists the integration labels that host-authenticated
-backlog replay and claims may use. Host credentials can seed only queued
-demand; running and completed transitions require the webhook credential.
+The service config names the Project integration labels used to select demand.
+The shared Project API credential can seed only queued matching demand; running
+and completed transitions require the webhook credential.
 Creating, starting, or restarting capacity does not rely on future webhook
 redelivery to discover existing demand. After launching the supervisor, DIM
 inspects its complete ownership identity, addresses the resulting immutable
 container ID, and waits for its authorization-protected loopback health
-endpoint. DIM installs the `workflow_job` hook before listing queued
+endpoint, which becomes ready only after the worker completes an authenticated
+claim exchange with the shared service. DIM installs the `workflow_job` hook before listing queued
 organization jobs, traverses that API with bounded pagination, strictly parses
 positive job IDs, string labels, and queued status, deduplicates IDs, and
 replays normalized queued events through the same authenticated webhook

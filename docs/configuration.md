@@ -118,7 +118,7 @@ namespace differs, so a same-name organization is never adopted implicitly.
 For QEMU capacity shared by multiple hosts, set
 `DIM_QEMU_SCHEDULER_CONNECTION_FILE` to a DIM-user-owned mode-`0600` file on
 each host. This mode requires external Gitea. Each host uses a stable `hostId`
-and its own host token; the central webhook token is configured in Gitea:
+and the Project API token; the distinct central webhook token is configured in Gitea:
 
 ```json
 {
@@ -131,7 +131,7 @@ and its own host token; the central webhook token is configured in Gitea:
       "controllerEndpoint": "https://scheduler-control.example",
       "supervisorEndpoint": "https://scheduler-workers.example",
       "webhookUrl": "https://scheduler-hooks.example/v1/webhooks/copy-the-local-project-id/workflow-job",
-      "hostToken": "replace-with-this-host-token",
+      "apiToken": "replace-with-project-api-token",
       "webhookToken": "replace-with-webhook-token"
     }
   }
@@ -140,14 +140,14 @@ and its own host token; the central webhook token is configured in Gitea:
 
 Use `https` except for loopback-only (`loopback-http`) or explicitly isolated
 networks (`isolated-http`). Endpoints contain no credentials. The service uses
-separate project-webhook and per-host bearer tokens and receives no Gitea
+separate project-webhook and Project API bearer tokens and receives no Gitea
 administrator credential. Leaving the variable unset preserves host-local
 scheduling; a Project cannot mix the two modes.
 
 The standalone service config uses a minimum `leaseSeconds` of `60`. Each
-Project entry includes `allowedLabels`, containing only its reviewed QEMU
-integration labels such as `dim-qemu`. Host credentials may seed queued demand
-and claim capacity only with these labels; running and completed transitions
+Project entry includes `labels`, containing its QEMU integration labels such as
+`dim-qemu`. The shared Project API credential may seed queued demand matching
+these labels; running and completed transitions
 require the Project webhook credential.
 
 `DIM_WORKSPACE_IMAGE` explicitly overrides the trusted workspace image. When
