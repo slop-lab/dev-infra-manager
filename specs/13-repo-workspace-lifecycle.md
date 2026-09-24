@@ -99,9 +99,11 @@ left unchanged.
 
 ## Project namespace
 
-The built-in managed Git service is one DIM-owned Gitea instance. Each Project
-owns the reserved organization `dim-<project>` and repository aliases are
-scoped below it:
+The built-in managed Git service is one DIM-owned Gitea instance. An explicitly
+configured external Gitea service is operator-owned and shared independently
+of each host's unchanged DIM controller. In both modes each Project owns the
+reserved organization `dim-<project>` and repository aliases are scoped below
+it:
 
 ```text
 dim-acme/root
@@ -114,9 +116,10 @@ ID, repository catalog, and exactly one root repository/ref when runnable.
 Infrastructure implementation belongs to the root repository, not the Project
 state.
 
-Claims precede Gitea mutations. Project and repository reconciliation is
-serialized, records errors for diagnosis, and rejects unmanaged identity
-collisions.
+Claims precede Gitea mutations in managed mode. External mode validates its
+private connection and explicit shared Project binding before local claims or
+remote mutations. Project and repository reconciliation is serialized,
+records errors for diagnosis, and rejects unmanaged identity collisions.
 DIM MUST disable regular-user organization creation in managed Gitea with
 `[admin] DISABLE_REGULAR_ORG_CREATION`, whose container environment mapping is
 exactly `GITEA__admin__DISABLE_REGULAR_ORG_CREATION=true`.
