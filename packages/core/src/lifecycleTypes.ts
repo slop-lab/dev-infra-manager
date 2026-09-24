@@ -1,5 +1,6 @@
 export interface LifecycleOptions {
   stateRoot: string;
+  giteaConnection: GiteaConnectionConfiguration;
   giteaImage: string;
   giteaHost: string;
   giteaPort: number;
@@ -23,6 +24,10 @@ export interface LifecycleOptions {
   ciRunnerDefaultMemory: string;
   ciRunnerDefaultPidsLimit: string;
 }
+
+export type GiteaConnectionConfiguration =
+  | { readonly kind: "managed" }
+  | { readonly kind: "external"; readonly file: string };
 
 export interface HostLifecycleRecord {
   schemaVersion: 2;
@@ -107,6 +112,26 @@ export interface GiteaCredentials {
   maintainerUsername: string;
   maintainerPassword: string;
 }
+
+export type GiteaProjectBinding = {
+  readonly id: string;
+  readonly gitNamespace: string;
+  readonly giteaOrganizationId: number;
+};
+
+type GiteaConnectionBase = GiteaCredentials & {
+  readonly apiBaseUrl: string;
+  readonly hostBaseUrl: string;
+  readonly workspaceBaseUrl: string;
+  readonly runnerBaseUrl: string;
+};
+
+export type GiteaConnection =
+  | (GiteaConnectionBase & { readonly kind: "managed" })
+  | (GiteaConnectionBase & {
+      readonly kind: "external";
+      readonly projectBindings: Readonly<Record<string, GiteaProjectBinding>>;
+    });
 
 export interface HostGitCredential {
   username: string;

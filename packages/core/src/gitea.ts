@@ -1,6 +1,7 @@
 import { lookup } from "node:dns/promises";
 import { MissingRecordError, UserError } from "./errors.js";
 import { ensureGiteaCredentials } from "./giteaCredentials.js";
+import { externalGiteaConnection } from "./giteaExternalConnection.js";
 import {
   giteaChangePasswordArgs,
   giteaContainerCreationArgs,
@@ -13,16 +14,16 @@ import {
   inspectGiteaContainer
 } from "./giteaContainer.js";
 import { LifecycleState } from "./lifecycleState.js";
-import type { GiteaCredentials, GiteaServiceRecord, LifecycleOptions } from "./lifecycleTypes.js";
+import type { GiteaConnection, GiteaServiceRecord, LifecycleOptions } from "./lifecycleTypes.js";
 import type { CommandRunner } from "./types.js";
 
 export { giteaChangePasswordArgs, giteaWebhookConfigArgs, GITEA_CONTAINER, GITEA_NETWORK, GITEA_VOLUME };
-
-export interface GiteaConnection extends GiteaCredentials {
-  apiBaseUrl: string;
-}
+export type { GiteaConnection } from "./lifecycleTypes.js";
 
 export async function ensureGitea(runner: CommandRunner, options: LifecycleOptions): Promise<GiteaConnection> {
+  if (options.giteaConnection.kind === "external") {
+    return externalGiteaConnection(options.giteaConnection.file);
+  }
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireGiteaServiceLock();
   try {
@@ -82,6 +83,10 @@ export async function configureGiteaWebhookAllowedHosts(
   options: LifecycleOptions,
   hosts: string[]
 ): Promise<void> {
+  if (options.giteaConnection.kind === "external") {
+    await ensureGitea(runner, options);
+    return;
+  }
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireGiteaServiceLock();
   try {
@@ -142,15 +147,16 @@ async function ensureGiteaResources(runner: CommandRunner, options: LifecycleOpt
   return readyGiteaConnection(runner, options, containerId);
 }
 
-export function giteaInternalCloneUrl(owner: string, repo: string): string {
-  return `http://dim-gitea:3000/${owner}/${repo}.git`;
+export function giteaInternalCloneUrl(connection: GiteaConnection, owner: string, repo: string): string {
+  return `${connection.workspaceBaseUrl}/${owner}/${repo}.git`;
 }
 
-export function giteaHostCloneUrl(options: LifecycleOptions, owner: string, repo: string): string {
-  return `${giteaHostBaseUrl(options)}/${owner}/${repo}.git`;
+export function giteaHostCloneUrl(connection: GiteaConnection, owner: string, repo: string): string {
+  return `${connection.hostBaseUrl}/${owner}/${repo}.git`;
 }
 
-export async function giteaNestedBaseUrl(runner: CommandRunner): Promise<string> {
+export async function giteaNestedBaseUrl(runner: CommandRunner, connection: GiteaConnection): Promise<string> {
+  if (connection.kind === "external") return connection.workspaceBaseUrl;
   const result = await runner.run("docker", [
     "container", "inspect", GITEA_CONTAINER,
     "--format", `{{with index .NetworkSettings.Networks "${GITEA_NETWORK}"}}{{.IPAddress}}{{end}}`
@@ -159,6 +165,10 @@ export async function giteaNestedBaseUrl(runner: CommandRunner): Promise<string>
     throw new UserError(`Failed to resolve nested Gitea endpoint: ${(result.stderr || result.stdout).trim()}`);
   }
   return `http://${result.stdout.trim()}:3000`;
+}
+
+export async function giteaRunnerBaseUrl(runner: CommandRunner, connection: GiteaConnection): Promise<string> {
+  return connection.kind === "external" ? connection.runnerBaseUrl : giteaNestedBaseUrl(runner, connection);
 }
 
 export async function giteaRequest(
@@ -185,7 +195,14 @@ async function readyGiteaConnection(
 ): Promise<GiteaConnection> {
   const baseUrl = giteaHostBaseUrl(options);
   await waitForGitea(baseUrl);
-  return { ...await ensureGiteaCredentials(runner, options, containerId), apiBaseUrl: `${baseUrl}/api/v1` };
+  return {
+    kind: "managed",
+    ...await ensureGiteaCredentials(runner, options, containerId),
+    apiBaseUrl: `${baseUrl}/api/v1`,
+    hostBaseUrl: baseUrl,
+    workspaceBaseUrl: "http://dim-gitea:3000",
+    runnerBaseUrl: "http://dim-gitea:3000"
+  };
 }
 
 function giteaHostBaseUrl(options: LifecycleOptions): string {
