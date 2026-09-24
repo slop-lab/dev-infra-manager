@@ -7,6 +7,8 @@ work_dir="$(mktemp -d /tmp/dim-project-tool-tasks.XXXXXX)"
 trap 'rm -rf -- "$work_dir"' EXIT
 
 entrypoint="$repo_root/project/.dim/entrypoint.sh"
+rich_entrypoint="$repo_root/examples/projects/full-development-flow/repos/root/.dim/entrypoint.sh"
+codex_selection="$repo_root/examples/use-cases/codex/project-tool.conf"
 fixture_bin="$work_dir/bin"
 mkdir -p "$fixture_bin"
 
@@ -33,7 +35,7 @@ case "${1:-} ${2:-}" in
     exec bash "$DIM_TOOL_FIXTURE_LOCAL_SETUP"
     ;;
   "bash -s")
-    exec bash -s
+    exec "$@"
     ;;
   "$DIM_PROJECT_TOOL_RUNNER 1")
     [[ -e "$DIM_TOOL_FIXTURE_STATE" ]]
@@ -68,6 +70,16 @@ fi
 [[ "$(cat "$work_dir/setup-arguments.stderr")" = "tool-setup does not accept arguments" ]]
 agent_output="$(sh "$entrypoint" agent --mode fixture)"
 [[ "$agent_output" = "agent-ok --mode fixture" ]]
+
+mkdir -p "$work_dir/codex-project/.dim"
+cp "$codex_selection" "$work_dir/codex-project/.dim/project-tool.conf"
+codex_setup_output="$(printf 'test "$1" = codex && printf codex-setup-ok\n' | \
+  (cd "$work_dir/codex-project" && sh "$rich_entrypoint" tool-setup))"
+[[ "$codex_setup_output" = codex-setup-ok ]]
+codex_agent_output="$(cd "$work_dir/codex-project" && sh "$rich_entrypoint" agent --help)"
+[[ "$codex_agent_output" = "agent-ok /home/dim-agent/.local/bin/codex --help" ]]
+grep -Fq "$DIM_PROJECT_TOOL_RUNNER 1 agent codex 0.156.1 /home/dim-agent/.local/bin/codex --help" \
+  "$DIM_TOOL_FIXTURE_LOG"
 
 for task in unknown codex claude; do
   if sh "$entrypoint" "$task" >"$work_dir/$task.stdout" 2>"$work_dir/$task.stderr"; then
