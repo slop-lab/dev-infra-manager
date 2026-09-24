@@ -52,6 +52,7 @@ real-shared-qemu-jobs-kvm:
 workspace-user-setup:
     cd .. && bash verification/scripts/project-tool-tasks-smoke.bash
     cd .. && bash verification/scripts/workspace-user-setup-smoke.bash
+    cd .. && bash verification/scripts/codex-user-setup-smoke.bash
     cd .. && bash verification/scripts/workspace-user-setup-remote-bootstrap-smoke.bash
     cd .. && bash verification/scripts/opencode-web-launcher-smoke.bash
     cd .. && bash verification/scripts/opencode-web-launcher-failure-smoke.bash
