@@ -85,18 +85,17 @@ class Handler(BaseHTTPRequestHandler):
         authorization = self.headers.get("Authorization", "")
         host_id = self.headers.get("X-DIM-Host")
         host_token = None if project is None or host_id is None else project.hosts.get(HostId(host_id))
-        webhook_authorized = project is not None \
-            and self.headers.get("X-Gitea-Event") == "workflow_job" \
-            and hmac.compare_digest(authorization, f"Bearer {project.webhook_token}")
-        host_authorized = host_token is not None and hmac.compare_digest(authorization, f"Bearer {host_token}")
-        if not webhook_authorized and not host_authorized:
+        if host_token is None or not hmac.compare_digest(authorization, f"Bearer {host_token}"):
             self.send_error(404)
             return
         action = text(request["action"], "action")
-        if action not in {"queued", "in_progress", "completed"}:
-            raise ProtocolError("invalid action")
+        if action != "queued":
+            raise ProtocolError("host events may only seed queued demand")
         job_id = positive_integer(request["jobId"], "job ID", maximum=9_007_199_254_740_991)
-        self.server.store.record_event(project_id, action, job_id, string_array(request["labels"], "labels"))
+        labels = string_array(request["labels"], "labels")
+        if not set(labels).issubset(project.allowed_labels):
+            raise ProtocolError("event labels are not allowed for this project")
+        self.server.store.record_event(project_id, action, job_id, labels)
         self.send_response(202)
         self.end_headers()
 
@@ -140,14 +139,21 @@ class Handler(BaseHTTPRequestHandler):
             project_id,
             host_id,
             identifier(request["capacity"], "capacity"),
-            string_array(request["labels"], "labels"),
+            self._allowed_labels(project_id, request["labels"]),
             identifier(request["requestId"], "request ID"),
         )
         if lease is None:
             self.send_response(204)
             self.end_headers()
             return
-        self._json(200, {"jobId": lease.job_id, "claimId": lease.claim_id, "leaseExpiresAt": lease.expires_at})
+        self._json(200, {"jobId": lease.job_id, "claimId": lease.claim_id, "leaseExpiresAt": lease.expires_at, "leaseSeconds": lease.lease_seconds})
+
+    def _allowed_labels(self, project_id: ProjectId, value: object) -> tuple[str, ...]:
+        labels = string_array(value, "labels")
+        project = self.server.config.projects[project_id]
+        if not set(labels).issubset(project.allowed_labels):
+            raise ProtocolError("claim labels are not allowed for this project")
+        return labels
 
     def _lease(self, claim_id_raw: str, operation: str, body: dict[str, object]) -> None:
         try:
@@ -160,7 +166,10 @@ class Handler(BaseHTTPRequestHandler):
             if state == "lost":
                 self.send_error(409)
                 return
-            self._json(200, {"state": state})
+            body: dict[str, str | int | float] = {"state": state}
+            if state == "renewed":
+                body["leaseSeconds"] = self.server.config.lease_seconds
+            self._json(200, body)
             return
         if not self.server.store.release(project_id, host_id, claim_id):
             self.send_error(409)

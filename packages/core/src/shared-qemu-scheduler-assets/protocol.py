@@ -14,6 +14,7 @@ HostId = NewType("HostId", str)
 class ProjectAuth:
     webhook_token: str
     hosts: dict[HostId, str]
+    allowed_labels: frozenset[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,6 +44,8 @@ def load_config(path: Path) -> ServiceConfig:
     host = text(listen["host"], "listen.host")
     port = positive_integer(listen["port"], "listen.port", maximum=65535)
     lease_seconds = positive_integer(root["leaseSeconds"], "leaseSeconds", maximum=3600)
+    if lease_seconds < 60:
+        raise ProtocolError("leaseSeconds must be at least 60")
     database = Path(text(root["database"], "database")).resolve()
     projects_value = root["projects"]
     if type(projects_value) is not dict or not projects_value:
@@ -50,7 +53,7 @@ def load_config(path: Path) -> ServiceConfig:
     projects: dict[ProjectId, ProjectAuth] = {}
     for raw_project_id, raw_auth in projects_value.items():
         project_id = ProjectId(identifier(raw_project_id, "project ID"))
-        auth = exact_object(raw_auth, {"webhookToken", "hosts"}, f"project {project_id}")
+        auth = exact_object(raw_auth, {"webhookToken", "hosts", "allowedLabels"}, f"project {project_id}")
         hosts_value = auth["hosts"]
         if type(hosts_value) is not dict or not hosts_value:
             raise ProtocolError(f"project {project_id}.hosts must be a non-empty object")
@@ -58,7 +61,11 @@ def load_config(path: Path) -> ServiceConfig:
             HostId(identifier(raw_host_id, "host ID")): text(raw_token, "host token")
             for raw_host_id, raw_token in hosts_value.items()
         }
-        projects[project_id] = ProjectAuth(text(auth["webhookToken"], "webhook token"), hosts)
+        projects[project_id] = ProjectAuth(
+            text(auth["webhookToken"], "webhook token"),
+            hosts,
+            frozenset(string_array(auth["allowedLabels"], "allowed labels")),
+        )
     return ServiceConfig(host, port, database, lease_seconds, projects)
 
 

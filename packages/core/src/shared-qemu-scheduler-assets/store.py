@@ -16,13 +16,23 @@ class Lease:
     job_id: int
     claim_id: str
     expires_at: float
+    lease_seconds: int
 
 
 class SchedulerStore:
-    def __init__(self, path: Path, lease_seconds: int, clock: Callable[[], float] = time.time) -> None:
+    def __init__(
+        self,
+        path: Path,
+        lease_seconds: int,
+        clock: Callable[[], float] = time.time,
+        takeover_grace_seconds: int = 20,
+        restart_hold_seconds: int = 20,
+    ) -> None:
         self._path = path
         self._lease_seconds = lease_seconds
         self._clock = clock
+        self._takeover_grace_seconds = takeover_grace_seconds
+        self._restart_hold_seconds = restart_hold_seconds
         path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.executescript("""
@@ -48,11 +58,24 @@ class SchedulerStore:
                     UNIQUE (project_id, host_id, capacity),
                     UNIQUE (project_id, host_id, request_id)
                 );
+                CREATE TABLE IF NOT EXISTS scheduler_meta (
+                    key TEXT PRIMARY KEY,
+                    value REAL NOT NULL
+                );
             """)
+        with self._transaction() as connection:
+            now = self._now(connection)
+            connection.execute(
+                "UPDATE claims SET expires_at = MAX(expires_at, ?) "
+                "WHERE expires_at + ? > ? AND EXISTS ("
+                "SELECT 1 FROM jobs WHERE jobs.project_id = claims.project_id "
+                "AND jobs.job_id = claims.job_id AND jobs.state = 'queued')",
+                (now + self._restart_hold_seconds, self._takeover_grace_seconds, now),
+            )
 
     def record_event(self, project_id: ProjectId, action: str, job_id: int, labels: tuple[str, ...]) -> None:
-        now = self._clock()
         with self._transaction() as connection:
+            now = self._now(connection)
             self._prune(connection, now)
             row = connection.execute(
                 "SELECT state, completed_at FROM jobs WHERE project_id = ? AND job_id = ?",
@@ -77,15 +100,15 @@ class SchedulerStore:
                 )
 
     def claim(self, project_id: ProjectId, host_id: HostId, capacity: str, labels: tuple[str, ...], request_id: str) -> Lease | None:
-        now = self._clock()
         with self._transaction() as connection:
+            now = self._now(connection)
             self._prune(connection, now)
             prior = connection.execute(
                 "SELECT job_id, claim_id, expires_at FROM claims WHERE project_id = ? AND host_id = ? AND request_id = ?",
                 (project_id, host_id, request_id),
             ).fetchone()
             if prior is not None:
-                return Lease(int(prior[0]), str(prior[1]), float(prior[2]))
+                return Lease(int(prior[0]), str(prior[1]), float(prior[2]), self._lease_seconds)
             busy = connection.execute(
                 "SELECT 1 FROM claims WHERE project_id = ? AND host_id = ? AND capacity = ?",
                 (project_id, host_id, capacity),
@@ -107,20 +130,22 @@ class SchedulerStore:
                 "INSERT INTO claims(claim_id, project_id, job_id, host_id, capacity, request_id, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (claim_id, project_id, selected, host_id, capacity, request_id, expires_at),
             )
-            return Lease(selected, claim_id, expires_at)
+            return Lease(selected, claim_id, expires_at, self._lease_seconds)
 
     def renew(self, project_id: ProjectId, host_id: HostId, claim_id: str) -> str:
-        now = self._clock()
         with self._transaction() as connection:
+            now = self._now(connection)
             self._prune(connection, now)
             row = connection.execute(
-                "SELECT detached FROM claims WHERE project_id = ? AND host_id = ? AND claim_id = ?",
+                "SELECT detached, expires_at FROM claims WHERE project_id = ? AND host_id = ? AND claim_id = ?",
                 (project_id, host_id, claim_id),
             ).fetchone()
             if row is None:
                 return "lost"
             if int(row[0]) == 1:
                 return "detached"
+            if float(row[1]) <= now:
+                return "lost"
             connection.execute("UPDATE claims SET expires_at = ? WHERE claim_id = ?", (now + self._lease_seconds, claim_id))
             return "renewed"
 
@@ -139,15 +164,25 @@ class SchedulerStore:
         connection.execute("PRAGMA busy_timeout=5000")
         return connection
 
-    def _transaction(self) -> sqlite3.Connection:
+    def _transaction(self) -> _Transaction:
         connection = self._connect()
         connection.execute("BEGIN IMMEDIATE")
         return _Transaction(connection)
 
-    @staticmethod
-    def _prune(connection: sqlite3.Connection, now: float) -> None:
-        connection.execute("DELETE FROM claims WHERE expires_at <= ?", (now,))
+    def _prune(self, connection: sqlite3.Connection, now: float) -> None:
+        connection.execute("DELETE FROM claims WHERE expires_at + ? <= ?", (self._takeover_grace_seconds, now))
         connection.execute("DELETE FROM jobs WHERE state = 'completed' AND completed_at < ?", (now - 7 * 24 * 60 * 60,))
+
+    def _now(self, connection: sqlite3.Connection) -> float:
+        wall_now = self._clock()
+        row = connection.execute("SELECT value FROM scheduler_meta WHERE key = 'last_wall_clock'").fetchone()
+        effective_now = wall_now if row is None else max(wall_now, float(row[0]))
+        connection.execute(
+            "INSERT INTO scheduler_meta(key, value) VALUES ('last_wall_clock', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (effective_now,),
+        )
+        return effective_now
 
 
 class _Transaction:
