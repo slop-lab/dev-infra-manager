@@ -96,7 +96,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   workspace owner through a private rootless `agent-dind`. The non-root agent
   requirement now applies specifically to containers whose root identity has
   host or trusted-workspace authority; UID 0 inside the subordinate-ID-mapped
-  daemon is permitted and verified with a non-1000 workspace owner.
+  daemon is permitted and verified with a non-1000 workspace owner. The rich
+  multi-repository examples now use the same generic outer layout: the actual
+  agent and optional documentation preview run inside `agent-dind`, while an
+  optional, independently stored `secure-dind` launches reviewed
+  secret-bearing workloads without receiving agent source, home, Git
+  credentials, or runtime sockets. A fixed application relay is the only
+  agent-to-secret communication path. Minimal Projects remain free to use one
+  daemon or none when those authorities are absent.
 
 - The Gitea pull-request helper now waits up to 15 minutes by default for an
   exact commit's CI statuses, without periodic agent wake-ups while jobs remain
@@ -170,8 +177,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   test-only dependencies live in paired development repositories. The tracked
   ownership and extraction gate rejects unowned files and independently builds
   production sources before running their sibling development suites.
-- Reduced the canonical self-development outer Compose graph to a
-  `private-docker` rootless runtime and moved the agent inside it, so the agent
+- Reduced the canonical self-development outer Compose graph to an
+  `agent-dind` rootless runtime and moved the agent inside it, so the agent
   can manage its development containers without access to the trusted
   workspace or host runtime socket.
 - Published the actual Project repository catalog in the read-only workspace
