@@ -37,4 +37,16 @@ describe("lifecycle options", () => {
 
     expect(options.giteaHost).toBe("agent-dind");
   });
+
+  it("selects external Gitea only through an explicit connection file", () => {
+    const options = lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer",
+      DIM_GITEA_CONNECTION_FILE: "/run/secrets/dim-gitea.json"
+    });
+
+    expect(options.giteaConnection).toEqual({
+      kind: "external",
+      file: "/run/secrets/dim-gitea.json"
+    });
+  });
 });

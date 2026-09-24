@@ -19,7 +19,19 @@ describe("Gitea control endpoint", () => {
       }
     };
 
-    await expect(giteaNestedBaseUrl(runner)).resolves.toBe("http://172.20.0.4:3000");
+    await expect(giteaNestedBaseUrl(runner, {
+      kind: "managed",
+      adminUsername: "admin",
+      adminPassword: "password",
+      writerUsername: "writer",
+      writerPassword: "password",
+      maintainerUsername: "host",
+      maintainerPassword: "password",
+      apiBaseUrl: "http://127.0.0.1:3300/api/v1",
+      hostBaseUrl: "http://127.0.0.1:3300",
+      workspaceBaseUrl: "http://dim-gitea:3000",
+      runnerBaseUrl: "http://dim-gitea:3000"
+    })).resolves.toBe("http://172.20.0.4:3000");
   });
 
   it("sends management API requests to the resolved control endpoint", async () => {
@@ -32,13 +44,17 @@ describe("Gitea control endpoint", () => {
     const address = server.address();
     if (!address || typeof address === "string") throw new Error("missing address");
     const connection: GiteaConnection = {
+      kind: "managed",
       adminUsername: "admin",
       adminPassword: "password",
       writerUsername: "writer",
       writerPassword: "password",
       maintainerUsername: "host",
       maintainerPassword: "password",
-      apiBaseUrl: `http://127.0.0.1:${address.port}/api/v1`
+      apiBaseUrl: `http://127.0.0.1:${address.port}/api/v1`,
+      hostBaseUrl: `http://127.0.0.1:${address.port}`,
+      workspaceBaseUrl: "http://dim-gitea:3000",
+      runnerBaseUrl: "http://dim-gitea:3000"
     };
 
     await expect(giteaRequest(connection, "GET", "/version")).resolves.toMatchObject({ status: 200 });
