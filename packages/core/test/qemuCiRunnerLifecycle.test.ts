@@ -205,6 +205,33 @@ describe("QEMU CI runner layered image lifecycle", () => {
     expect(args).toContain(`DIM_QEMU_CI_PROJECT_HOOK_DIGEST=${hook.digest}`);
   });
 
+  it("routes shared scheduling without a local dispatch volume and makes runner names host-unique", () => {
+    // Given
+    const base = launchPlan({ ...hookProvenance, kind: "absent", path: "/state/noop/cache.bash", digest: QEMU_CI_NO_HOOK_DIGEST });
+    const scheduler = {
+      projectId: "project-id", hostId: "host-a",
+      controllerEndpoint: "https://scheduler-control.example",
+      supervisorEndpoint: "https://scheduler-supervisor.example",
+      webhookUrl: "https://scheduler.example/v1/webhooks/project-id/workflow-job",
+      hostToken: "host-token", webhookToken: "webhook-token"
+    };
+
+    // When
+    const args = ciRunnerQemuSupervisorLaunchArgs({ ...base, scheduler });
+
+    // Then
+    expect(args).toEqual(expect.arrayContaining([
+      "DIM_QEMU_SCHEDULER_ENDPOINT=https://scheduler-supervisor.example",
+      "DIM_QEMU_SCHEDULER_PROJECT_ID=project-id",
+      "DIM_QEMU_SCHEDULER_HOST_ID=host-a",
+      "DIM_QEMU_SCHEDULER_TOKEN=host-token",
+      `GITEA_RUNNER_NAME=${ciRunnerQemuRunnerName("example", "kvm-1", "host-a")}`
+    ]));
+    expect(args.join(" ")).not.toContain("dim-qemu-ci-dispatch");
+    expect(args.join(" ")).not.toContain("DIM_QEMU_WEBHOOK_AUTHORIZATION");
+    expect(ciRunnerQemuRunnerName("example", "kvm-1", "host-a")).not.toBe(ciRunnerQemuRunnerName("example", "kvm-1", "host-b"));
+  });
+
   it("rejects incomplete image keys before building supervisor arguments", () => {
     // Given: a launch plan with a truncated common image key.
     const plan = { ...launchPlan({ ...hookProvenance, kind: "absent", path: "/state/noop/cache.bash", digest: QEMU_CI_NO_HOOK_DIGEST }), commonImageKey: "a".repeat(16) };

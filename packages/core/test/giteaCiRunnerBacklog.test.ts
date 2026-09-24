@@ -95,6 +95,42 @@ describe("Gitea queued workflow-job reconciliation", () => {
     expect(replayed.map((job) => job.id)).toEqual(Array.from({ length: 205 }, (_, index) => index + 1));
   });
 
+  it("converges duplicate central webhook creation to one target without host-local allowlist mutation", async () => {
+    // Given
+    const centralUrl = "https://scheduler.example/v1/webhooks/project-id/workflow-job";
+    let hookLists = 0;
+    vi.mocked(giteaRequest).mockImplementation(async (_credentials, method, path) => {
+      seams.requests.push(`${method} ${path}`);
+      if (method === "GET" && path.endsWith("/hooks")) {
+        hookLists += 1;
+        return Response.json(hookLists === 1 ? [] : [
+          { id: 8, config: { url: centralUrl } },
+          { id: 9, config: { url: centralUrl } }
+        ]);
+      }
+      if (method === "POST" && path.endsWith("/hooks")) return new Response(null, { status: 201 });
+      if (method === "DELETE" && path.endsWith("/9")) return new Response(null, { status: 204 });
+      return Response.json({ total_count: 0, jobs: [] });
+    });
+
+    // When
+    await giteaCiCoordinator.ensureWorkflowJobWebhook(runner, options, project, {
+      url: centralUrl,
+      authorizationHeader: "Bearer central-webhook-token",
+      replayQueuedJob: async () => {},
+      central: true
+    });
+
+    // Then
+    expect(seams.requests).toEqual([
+      "GET /orgs/dim-project/hooks",
+      "POST /orgs/dim-project/hooks",
+      "GET /orgs/dim-project/hooks",
+      "DELETE /orgs/dim-project/hooks/9",
+      "GET /orgs/dim-project/actions/jobs?status=queued&page=1&limit=100"
+    ]);
+  });
+
   it("fails closed when duplicate pages cannot account for the final queued total", async () => {
     // Given
     const replayed: number[] = [];
