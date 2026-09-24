@@ -11,6 +11,7 @@ type Fixture = {
   readonly root: string;
   readonly tools: string;
   readonly log: string;
+  readonly oldFacadeMutation: string;
 };
 
 async function createFixture(): Promise<Fixture> {
@@ -18,6 +19,7 @@ async function createFixture(): Promise<Fixture> {
   fixtureRoots.push(root);
   const tools = resolve(root, "tools");
   const log = resolve(root, "invocations.log");
+  const oldFacadeMutation = resolve(root, "old-facade-mutated");
   await mkdir(tools);
   await writeFile(resolve(tools, "bash"), `#!/usr/bin/bash
 set -euo pipefail
@@ -38,15 +40,11 @@ JSON
 `);
   await writeFile(resolve(tools, "mise"), `#!/usr/bin/bash
 { printf 'mise'; printf ' %s' "$@"; printf '\n'; } >>"$DIM_INVOCATIONS"
-if [[ "\${DIM_PLUGIN_FAILURE:-0}" == 1 && "$*" == *" enable-plugin "* ]]; then exit 41; fi
+[[ "$1" == "exec" && "$2" == "--" ]]
+shift 2
+exec "$@"
 `);
-  await Promise.all(["bash", "mise"].map((tool) => chmod(resolve(tools, tool), 0o755)));
-  return { root, tools, log };
-}
-
-async function removeMise(fixture: Fixture): Promise<void> {
-  await rm(resolve(fixture.tools, "mise"));
-  await writeFile(resolve(fixture.tools, "npm"), `#!/usr/bin/bash
+  await writeFile(resolve(tools, "npm"), `#!/usr/bin/bash
 set -euo pipefail
 { printf 'npm'; printf ' %s' "$@"; printf '\n'; } >>"$DIM_INVOCATIONS"
 prefix=""
@@ -61,12 +59,22 @@ if [[ "$*" == *" --global "* ]]; then bin="$prefix/bin"; else bin="$prefix/node_
 mkdir -p "$bin"
 cat >"$bin/dim" <<'SCRIPT'
 #!/usr/bin/bash
-{ printf 'dim'; printf ' %s' "$@"; printf '\n'; } >>"$DIM_INVOCATIONS"
+{ printf 'target-dim'; printf ' %s' "$@"; printf '\n'; } >>"$DIM_INVOCATIONS"
 if [[ "\${DIM_PREFLIGHT_FAILURE:-0}" == 1 && "$1" == "install-cli" ]]; then exit 47; fi
+if [[ "\${DIM_PLUGIN_FAILURE:-0}" == 1 && "$1" == "enable-plugin" ]]; then exit 41; fi
 SCRIPT
 chmod +x "$bin/dim"
 `);
-  await chmod(resolve(fixture.tools, "npm"), 0o755);
+  await writeFile(resolve(tools, "dim"), `#!/usr/bin/bash
+touch "$DIM_OLD_FACADE_MUTATION"
+{ printf 'old-dim'; printf ' %s' "$@"; printf '\n'; } >>"$DIM_INVOCATIONS"
+`);
+  await Promise.all(["bash", "mise", "npm", "dim"].map((tool) => chmod(resolve(tools, tool), 0o755)));
+  return { root, tools, log, oldFacadeMutation };
+}
+
+async function removeMise(fixture: Fixture): Promise<void> {
+  await rm(resolve(fixture.tools, "mise"));
 }
 
 function runInstaller(fixture: Fixture, environment: Readonly<Record<string, string>> = {}) {
@@ -77,6 +85,7 @@ function runInstaller(fixture: Fixture, environment: Readonly<Record<string, str
       PATH: `${fixture.tools}:/usr/bin:/bin`,
       HOME: resolve(fixture.root, "home"),
       DIM_INVOCATIONS: fixture.log,
+      DIM_OLD_FACADE_MUTATION: fixture.oldFacadeMutation,
       ...environment
     }
   });
@@ -97,10 +106,13 @@ describe("local install facade", () => {
 
     // Then
     expect(result.status, result.stderr).toBe(0);
-    expect(invocations).toMatch(/^mise exec -- dim install-cli --local-packages .* --no-local-bin$/m);
-    expect(invocations).toContain("mise exec -- dim enable-plugin @slop-lab/dim-plugin-dns-cloudflare @slop-lab/dim-plugin-external-urls");
+    expect(invocations).toMatch(/^mise exec -- npm install --prefix \/tmp\/dim-target-installer\.[^ ]+ --no-save --no-fund --no-audit /m);
+    expect(invocations).toMatch(/^target-dim install-cli --local-packages .* --no-local-bin$/m);
+    expect(invocations).toContain("target-dim enable-plugin @slop-lab/dim-plugin-dns-cloudflare @slop-lab/dim-plugin-external-urls");
+    expect(invocations).not.toContain("mise exec -- dim");
     expect(invocations).not.toContain("unrelated-plugin-local.tgz");
     expect(invocations.indexOf(" install-cli ")).toBeLessThan(invocations.indexOf(" enable-plugin "));
+    await expect(readFile(fixture.oldFacadeMutation)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("propagates plugin activation failure", async () => {
@@ -129,11 +141,12 @@ describe("local install facade", () => {
 
     // Then
     expect(result.status).toBe(47);
-    expect(invocations).toMatch(/^npm install --prefix .*\/installer --no-save --no-fund --no-audit /m);
-    expect(invocations).toMatch(/^dim install-cli --local-packages .* --no-local-bin$/m);
+    expect(invocations).toMatch(/^npm install --prefix \/tmp\/dim-target-installer\.[^ ]+ --no-save --no-fund --no-audit /m);
+    expect(invocations).toMatch(/^target-dim install-cli --local-packages .* --no-local-bin$/m);
     expect(invocations).not.toContain("npm install --global");
     expect(invocations).not.toContain("enable-plugin");
     await expect(readFile(resolve(installPrefix, "bin", "dim"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(fixture.oldFacadeMutation)).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("promotes the non-mise facade only after target compatibility succeeds", async () => {
