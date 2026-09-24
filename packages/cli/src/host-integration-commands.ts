@@ -3,7 +3,7 @@ import { UserError } from "@slop-lab/dim-core";
 import {
   adminCall, adminStreamCall, controllerRequest, print, readStdin, runner, type JsonFlags
 } from "./cli-support.js";
-import { matchesGitCredentialScope } from "./gitCredentialScope.js";
+import { gitCredentialArguments, matchesGitCredentialScope } from "./gitCredentialScope.js";
 
 export function registerHostIntegrationCommands(program: Command): void {
   const host = program.command("host").description("Manage DIM host runtime lifecycle");
@@ -59,13 +59,9 @@ x.command("git")
   .argument("<args...>")
   .allowUnknownOption(true)
   .action(async (args: string[]) => {
-    const credentials = await adminCall<{ username: string; password: string }>("git.credentials");
-    const helper = "!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f";
-    process.exitCode = await runner.runStreaming("git", ["-c", `credential.helper=${helper}`, ...args], {
+    process.exitCode = await runner.runStreaming("git", gitCredentialArguments(args), {
       env: {
         ...process.env,
-        DIM_GIT_USERNAME: credentials.username,
-        DIM_GIT_TOKEN: credentials.password,
         GIT_TERMINAL_PROMPT: "0"
       }
     });
