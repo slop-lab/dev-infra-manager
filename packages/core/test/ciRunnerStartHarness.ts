@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { vi } from "vitest";
 import type { ResolvedCiRunnerConfig } from "../../../../core/packages/core/src/ciRunnerConfig.js";
 import type { CiRunnerRecord, LifecycleOptions, ProjectRecord, ProjectRepositoryRecord,
-  QemuCiProjectHookProvenance, QemuCiRunnerExecutor } from "../../../../core/packages/core/src/lifecycleTypes.js";
+  QemuCiProjectHookProvenance, QemuCiRunnerExecutor, QemuSchedulerProjectConnection } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { PreparedQemuProjectHook, RestorePersistedQemuProjectHookInput } from "../../../../core/packages/core/src/qemuCiRunnerImage.js";
 import type { ProtectedRootSnapshot } from "../../../../core/packages/core/src/protectedRootSnapshot.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
@@ -42,6 +42,7 @@ const hoistedTestState = vi.hoisted(() => {
     events: new Array<string>(), launches: new Array<readonly string[]>(), dockerCalls: new Array<readonly string[]>(),
     imageKeyInputs: new Array<{ readonly projectId: string; readonly hook: QemuCiProjectHookProvenance }>(),
     webhookFailures: new Array<Error>(),
+    schedulerConnection: undefined as QemuSchedulerProjectConnection | undefined,
     project, snapshot, resolvedConfig, currentHook
   };
 });
@@ -77,6 +78,12 @@ vi.mock("../../../../core/packages/core/src/qemuCiRunnerSupervisorImage.js", asy
     prepareQemuCiRunnerSupervisorImage: vi.fn(async () => { hoistedTestState.events.push("current:supervisor-image"); return `sha256:${"f".repeat(64)}`; })
   };
 });
+vi.mock("../../../../core/packages/core/src/qemuSchedulerConnection.js", () => ({
+  qemuSchedulerConnection: vi.fn(async () => {
+    hoistedTestState.events.push("current:scheduler");
+    return hoistedTestState.schedulerConnection;
+  })
+}));
 vi.mock("../../../../core/packages/core/src/sysboxCiRunnerLifecycle.js", async (importOriginal) => ({
   ...await importOriginal<typeof import("../../../../core/packages/core/src/sysboxCiRunnerLifecycle.js")>(),
   resolveSysboxRunnerImage: vi.fn(async () => { hoistedTestState.events.push("current:host-image"); return `sha256:${"5".repeat(64)}`; })
@@ -189,7 +196,7 @@ export class StartRunner implements StreamingCommandRunner {
 
 export async function setUpQemuStartTest(): Promise<QemuStartContext> {
   testState.events.length = 0; testState.launches.length = 0; testState.dockerCalls.length = 0;
-  testState.imageKeyInputs.length = 0; testState.webhookFailures.length = 0;
+  testState.imageKeyInputs.length = 0; testState.webhookFailures.length = 0; testState.schedulerConnection = undefined;
   const stateRoot = await mkdtemp(join(tmpdir(), "dim-ci-runner-start-"));
   options.stateRoot = stateRoot;
   const state = new LifecycleState(stateRoot);

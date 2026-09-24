@@ -121,4 +121,33 @@ describe("QEMU CI runner stopped start", () => {
       jobImage: testState.resolvedConfig.config.workloads.integration.image
     });
   });
+
+  it.each([
+    ["local to shared", undefined, { projectId: "project-id", hostId: "host-a" }],
+    ["shared to local", { projectId: "project-id", hostId: "host-a" }, undefined],
+    ["shared host change", { projectId: "project-id", hostId: "host-a" }, { projectId: "project-id", hostId: "host-b" }],
+    ["shared Project change", { projectId: "project-id", hostId: "host-a" }, { projectId: "other-project", hostId: "host-a" }]
+  ] as const)("rejects a %s before restart reconciliation mutates state", async (_name, persisted, configured) => {
+    // Given
+    const runner = new StartRunner();
+    const executor = { ...context.record.executor, ...(persisted === undefined ? {} : { scheduler: persisted }) };
+    await context.state.writeCiRunner({ ...context.record, executor });
+    testState.schedulerConnection = configured === undefined ? undefined : {
+      ...configured,
+      controllerEndpoint: "https://scheduler.example",
+      supervisorEndpoint: "https://worker.example",
+      webhookUrl: `https://scheduler.example/v1/webhooks/${configured.projectId}/workflow-job`,
+      apiToken: "api-token",
+      webhookToken: "webhook-token"
+    };
+
+    // When / Then
+    await expect(restartCiRunner(runner, options, {
+      project: context.record.projectName,
+      name: context.record.name
+    })).rejects.toThrow(/scheduler mode or identity changed/);
+    expect(testState.events).not.toEqual(expect.arrayContaining(["current:root", "current:hook", "runtime:remove-container"]));
+    expect(testState.dockerCalls).toEqual([]);
+    expect((await context.state.readCiRunner(context.record.projectName, context.record.name)).executor).toEqual(executor);
+  });
 });
