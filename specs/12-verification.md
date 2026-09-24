@@ -200,8 +200,8 @@ bounded input, and process-group termination after uncertain renewal. They
 MUST prove scheduler tokens are absent from the child environment and local
 stop or deletion cannot remove a central webhook used by another host.
 Protocol tests MUST reject redirects, oversized or non-exact responses,
-sub-60-second leases, host-authenticated non-queued transitions, and labels
-outside the configured Project allowlist. Fake-clock tests MUST cover the
+sub-60-second leases, API-authenticated non-queued transitions, and MUST
+acknowledge unrelated queued labels without creating demand. Fake-clock tests MUST cover the
 takeover grace and one-time restart hold without real-time waits.
 The route-policy test launches the checked-in advanced example server rather
 than maintaining a test-only webhook implementation.

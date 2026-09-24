@@ -48,7 +48,7 @@ an operator-managed shared QEMU demand scheduler. The file MUST be a regular,
 DIM-user-owned mode-`0600` JSON file with exact schema version `1`, a stable
 host ID, one explicit transport policy, and per-Project bindings. Each binding
 MUST match the local immutable Project ID and provide distinct controller,
-supervisor, and central webhook URLs plus host and webhook bearer tokens. URLs
+supervisor, and central webhook URLs plus Project API and webhook bearer tokens. URLs
 MUST contain no credentials, query, or fragment. Plain HTTP is valid only for
 loopback or an explicitly isolated transport. Shared scheduling MUST require
 external Gitea and MUST reject mixed shared/local topology or changed
@@ -56,9 +56,10 @@ persisted identity. When the variable is absent, existing host-local
 scheduling MUST remain unchanged.
 
 The service-side Project binding MUST separately identify its webhook token,
-per-host tokens, and non-empty allowed-label set. Its configured lease MUST be
-at least 60 seconds. Host-authenticated requests MUST NOT introduce labels
-outside that reviewed set.
+Project API token, and non-empty label set. The stable host ID is a
+concurrency identity, not an authorization principal. Its configured lease MUST be
+at least 60 seconds. API-authenticated queued events outside that Project label
+set MUST be acknowledged without creating demand.
 
 Project-specific Git namespaces, repository aliases, root repository/ref,
 profiles and backend choices belong to Project/workspace records. Raw

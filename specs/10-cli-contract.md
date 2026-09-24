@@ -370,9 +370,9 @@ MUST use bounded two-second HTTP operations, renew at most every five seconds,
 and derive a local monotonic deadline from the request start and negotiated
 lease duration. The service MUST retain an expired claim for at least 20
 seconds before takeover and MUST apply a one-time recovery hold to outstanding
-queued claims on restart without reviving terminal demand. Host credentials
-MAY seed only queued backlog events whose labels are in the service's reviewed
-Project allowlist; only the webhook credential may report running or completed
+queued claims on restart without reviving terminal demand. The Project API
+credential MAY seed only queued backlog events matching the service's Project
+labels; only the webhook credential may report running or completed
 transitions. Each host remains authoritative
 for its local supervisor and VM. Loss or uncertainty of renewal MUST stop and
 reap that process group before the capacity claims again. Scheduler credentials
