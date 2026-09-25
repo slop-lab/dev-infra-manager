@@ -8,6 +8,22 @@ docker_socket="${DOCKER_HOST#unix://}"
 
 case "${1:?private agent action is required}" in
   setup)
+    outer_agent_ip="$(hostname -i)"
+    if ! printf '%s\n' "$outer_agent_ip" | awk '
+      /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ {
+        split($0, octets, ".")
+        for (octet = 1; octet <= 4; octet++) {
+          if (octets[octet] > 255) exit 1
+        }
+        if (octets[1] == 0 || octets[1] == 127 || octets[1] >= 224 ||
+            (octets[1] == 169 && octets[2] == 254)) exit 1
+        valid = 1
+      }
+      END { exit valid ? 0 : 1 }
+    '; then
+      echo "outer agent address is not one routable IPv4 address: $outer_agent_ip" >&2
+      exit 1
+    fi
     docker build --quiet --tag "$agent_image" \
       --build-arg "DIM_WORKSPACE_UID=$DIM_WORKSPACE_UID" \
       --build-arg "DIM_WORKSPACE_GID=$DIM_WORKSPACE_GID" \
@@ -16,7 +32,7 @@ case "${1:?private agent action is required}" in
     set -- run --detach --name "$agent_name" --restart unless-stopped \
       --publish "$DIM_DEVELOPMENT_GATEWAY_PORT:$DIM_DEVELOPMENT_GATEWAY_PORT" \
       --label dev.dim.role=agent \
-      --add-host secret:host-gateway \
+      --add-host "secret:$outer_agent_ip" \
       --env DOCKER_HOST=unix:///run/dim-agent-dind/docker.sock \
       --env HOME=/home/dim-agent \
       --env PATH=/home/dim-agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
