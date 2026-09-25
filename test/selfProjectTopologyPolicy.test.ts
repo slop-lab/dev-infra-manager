@@ -48,26 +48,29 @@ describe("DIM self-project topology policy", () => {
       expect(repository.root).toBe(alias === "root" ? true : undefined);
     }
 
-    const smoke = await readFile(resolve(workspaceRoot, "verification/scripts/container-self-project-smoke.bash"), "utf8");
-    const repositoryLoop = smoke.match(/for repository in ([\s\S]*?); do/);
+    const setup = await readFile(
+      resolve(workspaceRoot, "verification/scripts/lib/container-self-project-setup.bash"),
+      "utf8"
+    );
+    const repositoryLoop = setup.match(/for repository in ([\s\S]*?); do/);
     expect(repositoryLoop?.[1]?.replaceAll("\\", "").trim().split(/\s+/).sort()).toEqual(expected.sort());
-    expect(smoke).toContain('git init --bare "$source_root/remotes/archive.git"');
-    expect(smoke).toContain('git -C "$repository_path" push "$source_root/remotes/archive.git" \\');
-    expect(smoke).toContain('"HEAD:refs/heads/dev/$repository"');
+    expect(setup).toContain('git init --bare "$source_root/remotes/archive.git"');
+    expect(setup).toContain('git -C "$repository_path" push "$source_root/remotes/archive.git" \\');
+    expect(setup).toContain('"HEAD:refs/heads/dev/$repository"');
 
-    const createStart = smoke.indexOf('dim project create "$project_name" \\');
-    const createEnd = smoke.indexOf("\nverification_stage=", createStart);
-    const createCommand = smoke.slice(createStart, createEnd);
+    const createStart = setup.indexOf('dim project create "$project_name" \\');
+    const createEnd = setup.indexOf("\n  verification_stage=", createStart);
+    const createCommand = setup.slice(createStart, createEnd);
     expect(createCommand).toContain('--bootstrap-git-url "$source_root/remotes/archive.git"');
     expect(createCommand).toContain('--bootstrap-git-ref "$root_ref"');
     expect(createCommand).not.toContain("--apply-repos");
-    expect(smoke).toContain("config.import = { main: `dev/${repository}` }");
-    expect(smoke).toContain('--initial-branch="dev/$repository"');
-    expect(smoke).toContain(".schemaVersion == 3");
-    expect(smoke).toContain('.root.repository == "root"');
-    expect(smoke).toContain('.root.path == "/run/dim/project-root"');
-    expect(smoke).not.toContain(".repositories | keys");
-    expect(smoke).toContain('> >(tee "$workspace_creation_log") 2>&1');
+    expect(setup).toContain("config.import = { main: `dev/${repository}` }");
+    expect(setup).toContain('--initial-branch="dev/$repository"');
+    expect(setup).toContain(".schemaVersion == 3");
+    expect(setup).toContain('.root.repository == "root"');
+    expect(setup).toContain('.root.path == "/run/dim/project-root"');
+    expect(setup).not.toContain(".repositories | keys");
+    expect(setup).toContain('> >(tee "$workspace_creation_log") 2>&1');
 
     const agentChecks = await readFile(
       resolve(workspaceRoot, "verification/scripts/lib/container-self-project-agent-checks.bash"),
