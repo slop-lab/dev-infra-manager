@@ -70,13 +70,13 @@ fi
 case "$action" in
   backup)
     docker run --rm --network none --read-only \
-      --mount "type=volume,src=$home_volume,dst=/home,readonly" \
-      --entrypoint tar "$archive_image" -C /home -czf - .
+      --mount "type=volume,src=$home_volume,dst=/mnt/agent-home,readonly" \
+      --entrypoint tar "$archive_image" -C /mnt/agent-home -czf - .
     ;;
   restore)
     docker run --rm --interactive --network none --read-only \
-      --mount "type=volume,src=$home_volume,dst=/home" \
+      --mount "type=volume,src=$home_volume,dst=/mnt/agent-home" \
       --entrypoint sh "$archive_image" -c \
-      'find /home -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && tar -C /home -xzf -'
+      'find /mnt/agent-home -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && tar -C /mnt/agent-home -xzf -'
     ;;
 esac
