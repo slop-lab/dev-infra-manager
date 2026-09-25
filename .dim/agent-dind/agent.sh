@@ -14,6 +14,7 @@ case "${1:?private agent action is required}" in
     test -r /run/dim/project.json
     test -d /workspace/agent
     docker build --quiet --tag "$agent_image" \
+      --build-arg DIM_AGENT_UID="$DIM_AGENT_UID" \
       --file /workspace/agent/Dockerfile /workspace >/dev/null
     docker rm --force "$agent_name" >/dev/null 2>&1 || true
     set -- run --detach --name "$agent_name" --restart unless-stopped \
@@ -62,6 +63,7 @@ case "${1:?private agent action is required}" in
     test "$(docker exec "$agent_name" id -u)" = 0
     test "$(docker exec "$agent_name" stat -c %u /workspace)" = 0
     docker exec \
+      --env CI=1 \
       --workdir /workspace "$agent_name" \
       pnpm install --frozen-lockfile
     ;;

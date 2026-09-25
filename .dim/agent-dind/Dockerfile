@@ -9,7 +9,7 @@ RUN apk add --no-cache jq shadow su-exec \
   && groupmod --gid "${DIM_GID}" rootless \
   && usermod --uid "${DIM_UID}" --gid "${DIM_GID}" rootless \
   && chown -R rootless:rootless /home/rootless \
-  && mkdir -p /mnt/workspace-shared-dind \
+  && mkdir -p /mnt/agent-home /mnt/workspace-shared-dind \
   && chmod 1777 /mnt/workspace-shared-dind \
   && chown root:root /usr/bin/newuidmap /usr/bin/newgidmap \
   && chmod 4755 /usr/bin/newuidmap /usr/bin/newgidmap
