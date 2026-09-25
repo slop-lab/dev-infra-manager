@@ -314,8 +314,12 @@ root_health="$(dim workspace exec "$workspace_name" -- sh -eu -c \
   'exec sh "$DIM_PROJECT_ROOT/ops/secret-service.sh" secret-health')"
 echo "$root_health" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
 
-dev_health="$(dim workspace run "$workspace_name" bash -- \
-  -lc 'wget -qO- http://secret:7099/healthz')"
+if ! dev_health="$(dim workspace run "$workspace_name" bash -- \
+  -lc 'curl --fail --silent --show-error --max-time 5 http://secret:7099/healthz')"; then
+  workspace_compose exec --no-TTY agent-dind sh -c 'hostname -i; netstat -lnt' >&2 || true
+  dim workspace run "$workspace_name" bash -- -lc 'getent hosts secret' >&2 || true
+  exit 1
+fi
 echo "$dev_health" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
 
 # The agent container has a different Docker daemon and cannot see the
@@ -332,7 +336,7 @@ test "$leaked" = "0"
 dim workspace run "$workspace_name" bash -- -lc \
   'test ! -e /run/dim-secure-dind; test ! -e /var/run/docker.sock'
 if dim workspace run "$workspace_name" bash -- -lc \
-  'wget -T 2 -qO- http://secret:2375/_ping' >/dev/null 2>&1; then
+  'curl --fail --silent --show-error --max-time 2 http://secret:2375/_ping' >/dev/null 2>&1; then
   echo "agent reached Docker authority through the application bridge" >&2
   exit 1
 fi
