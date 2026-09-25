@@ -146,7 +146,9 @@
   completion, so maintenance waits for them before target capture and drain;
   later queued operations reread host state and reject while it is non-ready.
   Internal workspace recovery remains available to the admitted host-start
-  operation without reopening ordinary workspace administration.
+  operation through an authenticated controller grant only for a listed
+  workspace while its setup is replaying, without reopening ordinary workspace
+  administration.
   Repeated start attempts retain pending recovery intent after partial failure,
   skip targets already ready, replay
   interrupted workspace setup from immutable state, and normalize interrupted
