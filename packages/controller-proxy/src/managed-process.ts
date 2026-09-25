@@ -26,6 +26,22 @@ export async function currentProcessIdentity(): Promise<ProcessIdentity> {
   return { pid: process.pid, startTime };
 }
 
+export async function currentPidNamespace(): Promise<string> {
+  const namespace = await readlink("/proc/self/ns/pid");
+  if (!/^pid:\[\d+\]$/.test(namespace)) {
+    throw new ProcessIdentityError(`invalid PID namespace identity: ${namespace}`);
+  }
+  return namespace;
+}
+
+export async function currentPidNamespaceStartTime(): Promise<string> {
+  const startTime = await processStartTime(1);
+  if (startTime === undefined) {
+    throw new ProcessIdentityError("cannot read PID namespace init process identity");
+  }
+  return startTime;
+}
+
 export async function processIdentityStatus(
   identity: ProcessIdentity,
   commandMarker?: string

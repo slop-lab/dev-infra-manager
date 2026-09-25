@@ -5,6 +5,8 @@ import net from "node:net";
 import path from "node:path";
 import {
   acquireProcessLock,
+  currentPidNamespace,
+  currentPidNamespaceStartTime,
   processIdentityStatus,
   processOwnsUnixSocket,
   processStartTime,
@@ -32,7 +34,9 @@ export type ManagedProxyResult = {
 };
 
 type ManagedProxyState = ProcessIdentity & {
-  readonly version: 1;
+  readonly version: 3;
+  readonly pidNamespace: string;
+  readonly pidNamespaceStartTime: string;
   readonly fingerprint: string;
 };
 
@@ -76,22 +80,28 @@ async function reconcile(options: ManagedProxyOptions): Promise<ManagedProxyResu
       throw new ManagedProxyError(`managed proxy socket exists without owned process state: ${options.listen}`);
     }
   } else {
-    const status = await processIdentityStatus(state, options.command.identityMarker);
-    if (status === "mismatched") {
-      throw new ManagedProxyError(`managed proxy PID ${state.pid} has an unknown process identity`);
-    }
-    if (status === "matching" && state.fingerprint === options.fingerprint
-      && await socketReady(
-        options.listen,
-        state,
-        options.command.identityMarker,
-        Math.min(POLL_INTERVAL_MS * 2, startupTimeoutMs)
-      )) {
-      return { action: "reused", pid: state.pid };
-    }
-    if (status === "matching") {
-      await terminate(state, options.command.identityMarker, options.terminationTimeoutMs ?? DEFAULT_TIMEOUT_MS);
+    if (state.pidNamespace !== await currentPidNamespace()
+      || state.pidNamespaceStartTime !== await currentPidNamespaceStartTime()) {
+      await rm(options.listen, { force: true });
       action = "restarted";
+    } else {
+      const status = await processIdentityStatus(state, options.command.identityMarker);
+      if (status === "mismatched") {
+        throw new ManagedProxyError(`managed proxy PID ${state.pid} has an unknown process identity`);
+      }
+      if (status === "matching" && state.fingerprint === options.fingerprint
+        && await socketReady(
+          options.listen,
+          state,
+          options.command.identityMarker,
+          Math.min(POLL_INTERVAL_MS * 2, startupTimeoutMs)
+        )) {
+        return { action: "reused", pid: state.pid };
+      }
+      if (status === "matching") {
+        await terminate(state, options.command.identityMarker, options.terminationTimeoutMs ?? DEFAULT_TIMEOUT_MS);
+        action = "restarted";
+      }
     }
     await rm(statePath, { force: true });
   }
@@ -107,7 +117,13 @@ async function reconcile(options: ManagedProxyOptions): Promise<ManagedProxyResu
       options.command.identityMarker,
       startupTimeoutMs
     );
-    await writeState(statePath, { version: 1, ...identity, fingerprint: options.fingerprint });
+    await writeState(statePath, {
+      version: 3,
+      ...identity,
+      pidNamespace: await currentPidNamespace(),
+      pidNamespaceStartTime: await currentPidNamespaceStartTime(),
+      fingerprint: options.fingerprint
+    });
   } catch (error) {
     await terminate(identity, options.command.identityMarker, options.terminationTimeoutMs ?? DEFAULT_TIMEOUT_MS);
     throw error;
@@ -212,11 +228,19 @@ async function readState(statePath: string): Promise<ManagedProxyState | undefin
   try {
     const value: unknown = JSON.parse(await readFile(statePath, "utf8"));
     const identity = processIdentity(value);
-    if (identity === undefined || !isObject(value) || value.version !== 1
+    if (identity === undefined || !isObject(value) || value.version !== 3
+      || typeof value.pidNamespace !== "string" || !/^pid:\[\d+\]$/.test(value.pidNamespace)
+      || typeof value.pidNamespaceStartTime !== "string" || !/^\d+$/.test(value.pidNamespaceStartTime)
       || typeof value.fingerprint !== "string" || value.fingerprint.length === 0) {
       throw new ManagedProxyError(`invalid managed proxy state: ${statePath}`);
     }
-    return { version: 1, ...identity, fingerprint: value.fingerprint };
+    return {
+      version: 3,
+      ...identity,
+      pidNamespace: value.pidNamespace,
+      pidNamespaceStartTime: value.pidNamespaceStartTime,
+      fingerprint: value.fingerprint
+    };
   } catch (error) {
     if (isMissing(error)) return undefined;
     throw error;
