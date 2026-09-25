@@ -51,7 +51,9 @@ describe("QEMU root command authority", () => {
     const readiness = setup.slice(setup.indexOf("fingerprint="), setup.indexOf("\n  current="));
 
     expect.soft(readiness).toContain('if(v.state!=="live"||typeof v.pid!=="string")process.exit(1)');
-    expect.soft(readiness).toContain('ps -o uid= -p "$owner_pid"');
+    expect.soft(readiness).toContain('owner_uid="$(awk \'$1 == "Uid:" { print $2; exit }\' "/proc/$owner_pid/status" 2>/dev/null)"');
+    expect.soft(readiness).toContain('test "$owner_uid" = 0');
+    expect(readiness).not.toContain("ps -o uid=");
     expect(readiness).not.toContain("service_wrapper_pid");
   });
 });

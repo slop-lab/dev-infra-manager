@@ -2,7 +2,7 @@ verify_agent_dind() {
   local agent_dind_container
   agent_dind_container="$(dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-project" \
-    --file .dim/docker-compose.yml ps --quiet agent-dind)"
+    --file /run/dim/project-root/.dim/docker-compose.yml ps --quiet agent-dind)"
   test -n "$agent_dind_container"
   dim workspace exec "$workspace_name" -- \
     docker inspect --format '{{.State.Health.Status}}' "$agent_dind_container" | grep -qx healthy
@@ -16,16 +16,18 @@ verify_agent_dind() {
     }
   fi
   dim workspace exec "$workspace_name" -- \
-    docker compose --project-name "dim-project" \
-    --file .dim/docker-compose.yml exec --no-TTY --user root agent-dind \
+    docker exec --user root "$agent_dind_container" \
     sh -eu -c '
       socket="${DOCKER_HOST#unix://}"
       test -S "$socket" || { echo "agent-dind Docker socket is missing: $socket" >&2; exit 1; }
       test -d /home/rootless/.local/share/docker || { echo "agent-dind data directory is missing" >&2; exit 1; }
       home_owner="$(stat -c %u:%g /mnt/agent-home)"
       workspace_owner="$(stat -c %u:%g /workspace)"
-      test "$home_owner" = "$workspace_owner" || {
-        echo "agent home owner $home_owner does not match workspace owner $workspace_owner" >&2
+      subuid_start="$(grep "^rootless:" /etc/subuid | cut -d: -f2)"
+      subgid_start="$(grep "^rootless:" /etc/subgid | cut -d: -f2)"
+      mapped_home_owner="$((subuid_start + DIM_AGENT_UID - 1)):$((subgid_start + DIM_AGENT_UID - 1))"
+      test "$home_owner" = "$mapped_home_owner" || {
+        echo "agent home owner $home_owner does not match mapped agent owner $mapped_home_owner" >&2
         exit 1
       }
       security_options="$(docker info --format "{{json .SecurityOptions}}")"
@@ -66,8 +68,11 @@ grep -Fq "tty-required-ok" <<<"$tty_output"
 
 if [[ -c /dev/kvm ]]; then
   verification_stage="agent-controlled QEMU probe"
+  dim workspace run "$workspace_name" bash -- -c \
+    'cat > /tmp/dim-self-qemu-client.mjs && chmod 0555 /tmp/dim-self-qemu-client.mjs' \
+    <"$project_source/.dim/qemu-client.mjs"
   if ! qemu_probe_output="$(dim workspace run "$workspace_name" bash -- -lc \
-    'node /workspace/project/.dim/qemu-client.mjs probe' 2>&1)"; then
+    'node /tmp/dim-self-qemu-client.mjs probe' 2>&1)"; then
     printf '%s\n' "$qemu_probe_output" >&2
     exit 1
   fi
@@ -90,8 +95,9 @@ if ! restart_error="$(dim workspace restart "$workspace_name" 2>&1)"; then
   printf '%s\n' "$restart_error" >&2
   dim workspace show "$workspace_name" >&2 || true
   dim workspace exec "$workspace_name" -- git -C /workspace/project status --short >&2 || true
-  dim workspace exec "$workspace_name" -- \
-    docker compose --project-name "dim-project" --file .dim/docker-compose.yml ps >&2 || true
+    dim workspace exec "$workspace_name" -- \
+      docker compose --project-name "dim-project" \
+        --file /run/dim/project-root/.dim/docker-compose.yml ps >&2 || true
   exit 1
 fi
 workspace_json="$(dim workspace show "$workspace_name" --json)"
@@ -120,7 +126,8 @@ original_memory="$(jq -r .memory <<<"$workspace_json")"
 original_pids="$(jq -r .pidsLimit <<<"$workspace_json")"
 if [[ -c /dev/kvm ]]; then
   test "$(jq -r .kvm <<<"$workspace_json")" = "true"
-  test "$(dim workspace exec "$workspace_name" -- sh .dim/kvm.sh)" = "workspace-kvm-ok"
+  test "$(dim workspace exec "$workspace_name" -- \
+    sh /run/dim/project-root/.dim/kvm.sh)" = "workspace-kvm-ok"
 else
   test "$(jq -r .kvm <<<"$workspace_json")" = "false"
 fi
@@ -139,7 +146,7 @@ assert_opencode_absent
 
 verification_stage="workspace reviewed-file contract"
 dim workspace exec "$workspace_name" -- \
-  sh -c 'test -r .dim/setup.sh && test ! -x .dim/setup.sh && test -r .dim/entrypoint.sh && test ! -x .dim/entrypoint.sh && test -r .dim/docker-compose.yml && test "$DIM_GIT_BASE_URL" = "$(jq -r .gitBaseUrl "$DIM_PROJECT_MANIFEST")" && test -n "$(jq -r ".hostAliases[\"dim-gitea\"][0]" "$DIM_PROJECT_MANIFEST")"'
+  sh -c 'test -r "$DIM_PROJECT_ROOT/.dim/setup.sh" && test ! -x "$DIM_PROJECT_ROOT/.dim/setup.sh" && test -r "$DIM_PROJECT_ROOT/.dim/entrypoint.sh" && test ! -x "$DIM_PROJECT_ROOT/.dim/entrypoint.sh" && test -r "$DIM_PROJECT_ROOT/.dim/docker-compose.yml" && test "$DIM_GIT_BASE_URL" = "$(jq -r .gitBaseUrl "$DIM_PROJECT_MANIFEST")" && test -n "$(jq -r ".hostAliases[\"dim-gitea\"][0]" "$DIM_PROJECT_MANIFEST")"'
 test "$(dim workspace show "$workspace_name" --json | jq -r .rootRef)" = "refs/heads/main"
 agent_git_identity="$(dim workspace run "$workspace_name" bash -- -lc \
   'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
