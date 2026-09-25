@@ -10,7 +10,11 @@ import {
   managedProxyStatePath,
   type ManagedProxyCommand
 } from "../../../../core/packages/controller-proxy/src/managed-proxy.js";
-import { processStartTime } from "../../../../core/packages/controller-proxy/src/managed-process.js";
+import {
+  currentPidNamespace,
+  currentPidNamespaceStartTime,
+  processStartTime
+} from "../../../../core/packages/controller-proxy/src/managed-process.js";
 
 describe("managed controller proxy", () => {
   const roots: string[] = [];
@@ -107,6 +111,30 @@ describe("managed controller proxy", () => {
     expect(() => process.kill(first.pid, 0)).not.toThrow();
   });
 
+  it("replaces stale state from a recycled PID namespace without signaling the reused PID", async () => {
+    // Given
+    const fixture = await managedFixture();
+    const first = await ensureManagedProxy(fixture.options("policy-a"));
+    pids.add(first.pid);
+    const statePath = managedProxyStatePath(fixture.listen);
+    const state: unknown = JSON.parse(await readFile(statePath, "utf8"));
+    if (!isObject(state)) throw new Error("expected managed proxy state object");
+    await writeFile(statePath, `${JSON.stringify({
+      ...state,
+      pidNamespaceStartTime: "0",
+      startTime: "0"
+    })}\n`, { mode: 0o600 });
+
+    // When
+    const second = await ensureManagedProxy(fixture.options("policy-a"));
+    pids.add(second.pid);
+
+    // Then
+    expect(second.action).toBe("restarted");
+    expect(second.pid).not.toBe(first.pid);
+    expect(() => process.kill(first.pid, 0)).not.toThrow();
+  });
+
   it("bounds a socket probe that never settles", async () => {
     // Given
     const fixture = await managedFixture();
@@ -191,9 +219,11 @@ describe("managed controller proxy", () => {
     const startTime = await processStartTime(child.pid);
     if (startTime === undefined) throw new Error("fixture child requires start identity");
     await writeFile(managedProxyStatePath(fixture.listen), JSON.stringify({
-      version: 1,
+      version: 3,
       pid: child.pid,
       startTime,
+      pidNamespace: await currentPidNamespace(),
+      pidNamespaceStartTime: await currentPidNamespaceStartTime(),
       fingerprint: "policy-a"
     }));
 
