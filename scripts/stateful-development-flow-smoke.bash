@@ -165,6 +165,7 @@ just build-packages
 just build-workspace-image
 printf '#!/usr/bin/env bash\nexec node %q "$@"\n' "$dim_cli" >"$dim_bin"
 chmod 0700 "$dim_bin"
+export PATH="$work_dir:$PATH"
 ssh-keygen -q -t ed25519 -N '' -f "$ssh_key"
 ssh-keygen -q -t ed25519 -N '' -f "$wrong_ssh_key"
 cat >"$ssh_config" <<EOF
