@@ -249,8 +249,7 @@ test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"
 dim workspace run "$workspace_name" bash -- -lc 'getent hosts dim-gitea >/dev/null'
 dim workspace run "$workspace_name" bash -- -lc 'git ls-remote origin HEAD >/dev/null'
 workspace_compose exec --no-TTY agent-dind docker inspect dim-documentation-preview >/dev/null
-dim workspace exec "$workspace_name" -- sh -c \
-  'docker image save alpine:3.22 | (cd "$DIM_PROJECT_ROOT" && docker compose --project-name dim-project --file "$DIM_PROJECT_ROOT/.dim/docker-compose.yml" exec --no-TTY agent-dind docker image load) >/dev/null'
+workspace_compose exec --no-TTY agent-dind docker image inspect alpine:3.22 >/dev/null
 dim workspace run "$workspace_name" bash -- -lc \
   'docker info --format "{{json .SecurityOptions}}" | grep -q rootless; docker run --rm alpine:3.22 true'
 dim_cache_routing_workspace_routes "$workspace_name" "$compose_name"
