@@ -199,7 +199,8 @@ bash "$script_dir/configure-user-backend.bash" "${DIM_EXAMPLE_WORKSPACE_BACKEND:
 bash examples/projects/full-development-flow/create-repositories.bash "$repositories" >/dev/null
 dim_apply_test_registry_mirror "$repositories/root"
 install_stateful_setup_hook
-git -C "$repositories/root" add .dim
+printf 'reviewed-v1\n' >"$repositories/root/reviewed-version.txt"
+git -C "$repositories/root" add .dim reviewed-version.txt
 git -C "$repositories/root" commit -m "add stateful journey hooks" >/dev/null
 
 start_controller
@@ -433,7 +434,11 @@ if ! dim workspace restart "$workspace_name" >/dev/null; then
   diagnose_workspace_setup
   exit 1
 fi
-test "$(dim workspace run "$workspace_name" bash -- -lc 'cat reviewed-version.txt')" = reviewed-v1
+test "$(dim workspace exec "$workspace_name" -- sh -c 'cat "$DIM_PROJECT_ROOT/reviewed-version.txt"')" = reviewed-v2
+test "$(dim workspace exec "$workspace_name" -- sh -c 'cat "$DIM_WORKSPACE_DATA/project/reviewed-version.txt"')" = reviewed-v1
+dim workspace exec "$workspace_name" -- sh -c \
+  'cd "$DIM_WORKSPACE_DATA/project"; grep -q "dirty journey probe" ops/secret-service.sh; test -f journey-untracked'
+test "$(dim workspace run "$workspace_name" bash -- -lc 'cat /workspace/reviewed-version.txt')" = reviewed-v1
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/journey-home"')" = persistent-home
 test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" -ne "0"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"
@@ -501,7 +506,7 @@ docker_volume_name="$(jq -er .dockerVolumeName <<<"$workspace_json")"
 record_ssh_host_key rotated
 dim workspace run "$workspace_name" restore <"$backup"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/journey-home"')" = persistent-home
-test "$(dim workspace run "$workspace_name" bash -- -lc 'cat reviewed-version.txt')" = reviewed-v2
+test "$(dim workspace run "$workspace_name" bash -- -lc 'cat /workspace/reviewed-version.txt')" = reviewed-v2
 assert_ssh_session
 dim_cache_routing_workspace_outage "$workspace_name"
 dim workspace discard "$workspace_name" --yes >/dev/null
