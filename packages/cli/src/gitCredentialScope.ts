@@ -20,6 +20,7 @@ export function gitCredentialArguments(args: readonly string[]): string[] {
   return [
     "-c", "credential.helper=",
     "-c", "credential.helper=!dim git credential-helper",
+    "-c", "credential.useHttpPath=true",
     ...args
   ];
 }
