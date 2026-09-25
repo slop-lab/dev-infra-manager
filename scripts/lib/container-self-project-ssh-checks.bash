@@ -1,3 +1,4 @@
+self_project_ssh_checks() {
 verification_stage="authenticated non-root SSH authority"
 if [[ -c /dev/kvm ]]; then
   dim workspace run "$workspace_name" bash -- -c \
@@ -6,10 +7,7 @@ if [[ -c /dev/kvm ]]; then
 fi
 dim workspace run "$workspace_name" bash -- -lc \
   "printf '%s\\n' ordinary-task >journey-self-ssh-existing"
-dim workspace run "$workspace_name" bash -- -lc \
-  'umask 077; mkdir -p "$HOME/.ssh"; touch "$HOME/.ssh/authorized_keys"; chmod 0700 "$HOME/.ssh"; chmod 0600 "$HOME/.ssh/authorized_keys"; cat >>"$HOME/.ssh/authorized_keys"; chown -R dim-agent:dim-agent "$HOME/.ssh"' \
-  <"$ssh_key.pub"
-record_self_ssh_host_key initial
+prepare_self_ssh_access
 verification_stage="authenticated non-root SSH session"
 assert_self_ssh_session
 verification_stage="authenticated non-root SSH authority"
@@ -97,3 +95,4 @@ nested_ssh_port="$(dim workspace exec "$workspace_name" -- docker exec "$agent_d
 test -z "$nested_ssh_port"
 verification_stage="SSH QEMU probe cleanup"
 dim workspace run "$workspace_name" bash -- -c 'rm /tmp/dim-self-qemu-client.mjs'
+}

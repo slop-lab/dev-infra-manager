@@ -4,6 +4,7 @@ ssh_config="$state_root/ssh-config"
 wrong_ssh_config="$state_root/wrong-ssh-config"
 ssh_known_hosts="$state_root/ssh-known-hosts"
 ssh_host_public_key="$state_root/ssh-host-ed25519.pub"
+ssh_host_fingerprint_file="$state_root/ssh-host-fingerprint"
 ssh_proxy="$state_root/dim-ssh-proxy"
 ssh_alias="$workspace_name-agent"
 ssh_host_fingerprint=""
@@ -46,6 +47,13 @@ EOF
   chmod 0600 "$ssh_config" "$wrong_ssh_config"
 }
 
+prepare_self_ssh_access() {
+  dim workspace run "$workspace_name" bash -- -lc \
+    'umask 077; mkdir -p "$HOME/.ssh"; touch "$HOME/.ssh/authorized_keys"; chmod 0700 "$HOME/.ssh"; chmod 0600 "$HOME/.ssh/authorized_keys"; cat >>"$HOME/.ssh/authorized_keys"; chown -R dim-agent:dim-agent "$HOME/.ssh"' \
+    <"$ssh_key.pub"
+  record_self_ssh_host_key initial
+}
+
 record_self_ssh_host_key() {
   local expected_change="$1"
   local trusted_fingerprint local_fingerprint key_type key_data
@@ -61,10 +69,14 @@ record_self_ssh_host_key() {
   test "$local_fingerprint" = "$trusted_fingerprint"
   case "$expected_change" in
     initial) ;;
-    rotated) test "$local_fingerprint" != "$ssh_host_fingerprint" ;;
+    rotated)
+      ssh_host_fingerprint="$(<"$ssh_host_fingerprint_file")"
+      test "$local_fingerprint" != "$ssh_host_fingerprint"
+      ;;
     *) echo "unknown self-Project SSH host-key expectation: $expected_change" >&2; return 2 ;;
   esac
   ssh_host_fingerprint="$local_fingerprint"
+  printf '%s\n' "$ssh_host_fingerprint" >"$ssh_host_fingerprint_file"
   read -r key_type key_data _ <"$ssh_host_public_key"
   printf '%s %s %s\n' "$ssh_alias" "$key_type" "$key_data" >"$ssh_known_hosts"
   chmod 0600 "$ssh_known_hosts"

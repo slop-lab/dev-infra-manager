@@ -89,7 +89,7 @@ describe("capable-host SSH journeys", () => {
     expect(journey).not.toContain("test ! -e /var/run/docker.sock");
     expect(smoke).toContain(`'"Destination":"/run/docker.sock"'`);
     expect(smoke).toContain("grep -q /var/run/docker.sock");
-    expect(journey).toContain('chown -R dim-agent:dim-agent "$HOME/.ssh"');
+    expect(smoke).toContain('chown -R dim-agent:dim-agent "$HOME/.ssh"');
     expect(journey).toContain('self-ssh-authority-failed=%s');
     expect(journey).not.toContain('self-ssh-authority-failed=$DIM_GIT_TOKEN');
   });
