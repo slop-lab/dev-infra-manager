@@ -179,6 +179,7 @@ cleanup() {
   fi
   stop_controller
   find "$controller_runtime_dir" -depth -delete 2>/dev/null || true
+  find "$state_root/assets/project-roots" -type d -exec chmod u+w -- {} + 2>/dev/null || true
   find "$work_dir" -depth -delete 2>/dev/null || true
   exit "$status"
 }
