@@ -173,7 +173,7 @@ dim project create "$project_name" \
   --bootstrap-git-ref "$root_ref" >/dev/null
 verification_stage="workspace creation"
 if ! dim workspace create "$project_name" "$workspace_name" \
-  >"$workspace_creation_log" 2>&1; then
+  > >(tee "$workspace_creation_log") 2>&1; then
   dim workspace exec "$workspace_name" -- \
     docker compose --project-name "dim-project" --file .dim/docker-compose.yml ps >&2 || true
   dim workspace exec "$workspace_name" -- \
@@ -186,10 +186,15 @@ workspace_json="$(dim workspace show "$workspace_name" --json)"
 container_name="$(jq -er .containerName <<<"$workspace_json")"
 workspace_volume_name="$(jq -er .dockerVolumeName <<<"$workspace_json")"
 test "$(jq -r .phase <<<"$workspace_json")" = ready
-verification_stage="workspace repository manifest"
-expected_repositories='["core","core-development","development","examples","plugin-dns-cloudflare","plugin-dns-cloudflare-development","plugin-external-urls","plugin-external-urls-development","root","specification","verification"]'
-test "$(dim workspace exec "$workspace_name" -- jq -c '.repositories | keys' /run/dim/project.json)" = \
-  "$expected_repositories"
+verification_stage="workspace runtime manifest"
+dim workspace exec "$workspace_name" -- jq -e '
+  .schemaVersion == 3 and
+  .project.name == "dim-self-smoke" and
+  .root.repository == "root" and
+  .root.ref == "refs/heads/main" and
+  .root.path == "/run/dim/project-root" and
+  .data.path == "/var/lib/dim/workspace-data"
+' /run/dim/project.json >/dev/null
 verification_stage="workspace registry mirror"
 dim workspace exec "$workspace_name" -- \
   docker info --format '{{json .RegistryConfig.Mirrors}}' |

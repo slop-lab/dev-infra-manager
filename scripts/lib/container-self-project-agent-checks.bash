@@ -112,11 +112,15 @@ test "$(dim workspace run "$workspace_name" bash -- -lc \
 setup_state_after="$(workspace_user_setup_state)"
 test "$setup_state_after" = "$setup_state_before"
 
+dim workspace run "$workspace_name" bash -- -c \
+  'mkdir -p /tmp/dim-self-project-root/.dim; cat > /tmp/dim-self-project-root/.dim/reconcile-repositories.sh' \
+  <"$project_source/.dim/reconcile-repositories.sh"
 dim workspace run "$workspace_name" bash -- -lc \
-  "DIM_EXPECT_ARCHIVE_URL='$source_root/remotes/archive.git' just check-source" >/dev/null
+  "DIM_ROOT_REPOSITORY=/tmp/dim-self-project-root bash verification/scripts/repository-materialization-smoke.bash" >/dev/null
 if [[ "${DIM_SELF_VERIFY_AGENT:-0}" == 1 ]]; then
   verification_stage="full agent verification"
   dim workspace run "$workspace_name" bash -- -lc \
-    "DIM_EXPECT_ARCHIVE_URL='$source_root/remotes/archive.git' just verify agent" \
+    "DIM_ROOT_REPOSITORY=/tmp/dim-self-project-root DIM_EXPECT_ARCHIVE_URL='$source_root/remotes/archive.git' just verify agent" \
     >"$agent_verification_log" 2>&1
 fi
+dim workspace run "$workspace_name" bash -- -c 'rm -rf /tmp/dim-self-project-root'

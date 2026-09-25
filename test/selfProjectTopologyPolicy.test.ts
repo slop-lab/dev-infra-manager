@@ -63,5 +63,20 @@ describe("DIM self-project topology policy", () => {
     expect(createCommand).not.toContain("--apply-repos");
     expect(smoke).toContain("config.import = { main: `dev/${repository}` }");
     expect(smoke).toContain('--initial-branch="dev/$repository"');
+    expect(smoke).toContain(".schemaVersion == 3");
+    expect(smoke).toContain('.root.repository == "root"');
+    expect(smoke).toContain('.root.path == "/run/dim/project-root"');
+    expect(smoke).not.toContain(".repositories | keys");
+    expect(smoke).toContain('> >(tee "$workspace_creation_log") 2>&1');
+
+    const agentChecks = await readFile(
+      resolve(workspaceRoot, "verification/scripts/lib/container-self-project-agent-checks.bash"),
+      "utf8"
+    );
+    expect(agentChecks).toContain("cat > /tmp/dim-self-project-root/.dim/reconcile-repositories.sh");
+    expect(agentChecks).toContain("DIM_ROOT_REPOSITORY=/tmp/dim-self-project-root");
+    expect(agentChecks).toContain("bash verification/scripts/repository-materialization-smoke.bash");
+    expect(agentChecks).not.toContain("just check-source");
+    expect(agentChecks).toContain("rm -rf /tmp/dim-self-project-root");
   });
 });
