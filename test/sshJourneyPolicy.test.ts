@@ -7,6 +7,7 @@ const statefulSmoke = resolve(verificationRoot, "scripts/stateful-development-fl
 const selfSmoke = resolve(verificationRoot, "scripts/container-self-project-smoke.bash");
 const selfSshFixture = resolve(verificationRoot, "scripts/lib/container-self-project-ssh-fixture.bash");
 const selfSshChecks = resolve(verificationRoot, "scripts/lib/container-self-project-ssh-checks.bash");
+const selfAgentChecks = resolve(verificationRoot, "scripts/lib/container-self-project-agent-checks.bash");
 
 function section(source: string, start: string, end: string): string {
   return source.slice(source.indexOf(start), source.indexOf(end));
@@ -74,14 +75,23 @@ describe("capable-host SSH journeys", () => {
 
   it("proves canonical self-Project SSH authority and denials through the nested rootless agent", async () => {
     const smoke = (await Promise.all(
-      [selfSmoke, selfSshFixture, selfSshChecks].map(async (path) => readFile(path, "utf8"))
+      [selfSmoke, selfSshFixture, selfSshChecks, selfAgentChecks].map(async (path) => readFile(path, "utf8"))
     )).join("\n");
     const journey = section(smoke, 'verification_stage="authenticated non-root SSH authority"', 'verification_stage="agent identity"');
     expectSshClientPolicy(smoke);
     expectPracticalAuthority(journey, "unix:///run/docker.sock");
+    expect(journey).toContain("node /tmp/dim-self-qemu-client.mjs probe");
+    expect(journey).toContain("node /tmp/dim-self-qemu-client.mjs status");
+    expect(journey).toContain("cat > /tmp/dim-self-qemu-client.mjs");
     expect(journey).toContain('test "$GIT_TERMINAL_PROMPT" = 0');
+    expect(journey).toContain("git -C /workspace ls-remote origin HEAD");
     expect(journey).toContain("test -S /run/docker.sock");
-    expect(journey).toContain("test ! -e /var/run/docker.sock");
+    expect(journey).not.toContain("test ! -e /var/run/docker.sock");
+    expect(smoke).toContain(`'"Destination":"/run/docker.sock"'`);
+    expect(smoke).toContain("grep -q /var/run/docker.sock");
+    expect(journey).toContain('chown -R dim-agent:dim-agent "$HOME/.ssh"');
+    expect(journey).toContain('self-ssh-authority-failed=%s');
+    expect(journey).not.toContain('self-ssh-authority-failed=$DIM_GIT_TOKEN');
   });
 
   it("keeps tokens out of SSH verification output while proving override denial", async () => {
