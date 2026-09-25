@@ -127,7 +127,8 @@ if [ "${DIM_WORKSPACE_KVM}" = 1 ]; then
   for _ in $(seq 1 50); do
     candidate="$(qemu_root_owner inspect "$qemu_owner_file" "$qemu_socket" "$qemu_service_cwd" 2>/dev/null)" || candidate=
     owner_pid="$(printf '%s' "$candidate" | "$qemu_node" -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{const v=JSON.parse(s);if(v.state!=="live"||typeof v.pid!=="string")process.exit(1);process.stdout.write(v.pid)})' 2>/dev/null)" || owner_pid=
-    if test -n "$owner_pid" && test "$(ps -o uid= -p "$owner_pid" | tr -d ' ')" = 0 &&
+    owner_uid="$(awk '$1 == "Uid:" { print $2; exit }' "/proc/$owner_pid/status" 2>/dev/null)" || owner_uid=
+    if test -n "$owner_pid" && test "$owner_uid" = 0 &&
       test "$(stat -c %u:%g:%a "$qemu_owner_file")" = 0:0:600 &&
       test "$(stat -c %u:%g:%a "$qemu_socket")" = 0:0:666 &&
       test "$(stat -c %u:%g:%a "$qemu_lease")" = 0:0:666; then
