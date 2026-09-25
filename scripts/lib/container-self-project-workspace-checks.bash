@@ -42,6 +42,7 @@ assert_opencode_absent() {
   dim workspace run "$workspace_name" bash -- -lc '! command -v opencode >/dev/null 2>&1'
 }
 
+self_project_workspace_checks() {
 verification_stage="initial agent-dind contract"
 verify_agent_dind
 assert_opencode_absent
@@ -197,3 +198,4 @@ agent_commit_identity="$(dim workspace run "$workspace_name" bash -- -lc '
   git log -1 --format="%an <%ae>|%cn <%ce>"
 ')"
 test "$agent_commit_identity" = "$agent_git_identity"
+}
