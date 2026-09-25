@@ -252,7 +252,7 @@ Or through its constrained HTTP interface from the agent:
 
 ```bash
 dim workspace run example-dev bash -- \
-  -lc 'wget -qO- http://secret:7099/healthz'
+  -lc 'curl --fail --silent --show-error --max-time 5 http://secret:7099/healthz'
 ```
 
 The health response reports only whether a secret was configured. A fixed
