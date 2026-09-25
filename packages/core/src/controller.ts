@@ -85,6 +85,7 @@ export interface DimControllerOptions {
   restartWorkspace?(workspace: ControllerWorkspace): Promise<void>;
   maxBodyBytes?: number;
   hostReady?(): Promise<boolean>;
+  admitDuringHostRecovery?(workspace: ControllerWorkspace): Promise<boolean>;
 }
 
 export function configuredDimController(
@@ -98,6 +99,12 @@ export function configuredDimController(
     routes: controllerRoutesForAudience(plugins.controllerRoutes, "workspace"),
     hostInputProviders: plugins.hostInputProviders,
     hostReady: async () => (await hostLifecycleStatus(lifecycle)).phase === "ready",
+    admitDuringHostRecovery: async (workspace) => {
+      const host = await hostLifecycleStatus(lifecycle);
+      if (host.phase !== "starting" || !host.resumeWorkspaces.includes(workspace.name)) return false;
+      const record = await state.readWorkspace(workspace.name);
+      return record.phase === "setting-up" && record.projectId === workspace.projectId;
+    },
     authenticate: async (token) => {
       const workspace = await state.authenticateWorkspaceGrant(token);
       return workspace && {
@@ -205,10 +212,16 @@ async function handleRequest(
     const ready = options.hostReady === undefined || await options.hostReady();
     return sendJson(response, 200, { ok: true, ready, apiVersion: 1 });
   }
+  let workspace: ControllerWorkspace | undefined;
   if (options.hostReady !== undefined && !await options.hostReady()) {
-    return sendJson(response, 503, { error: "DIM host is not ready" });
+    workspace = await authenticate(options, request);
+    if (workspace === undefined
+      || options.admitDuringHostRecovery === undefined
+      || !await options.admitDuringHostRecovery(workspace)) {
+      return sendJson(response, 503, { error: "DIM host is not ready" });
+    }
   }
-  const workspace = await authenticate(options, request);
+  workspace ??= await authenticate(options, request);
   if (!workspace) return sendJson(response, 401, { error: "invalid workspace grant" });
   if (request.method === "GET" && url.pathname === "/api") {
     return sendJson(response, 200, {
