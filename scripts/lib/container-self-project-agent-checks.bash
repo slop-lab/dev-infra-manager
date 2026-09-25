@@ -1,3 +1,37 @@
+prepare_workspace_user_setup() {
+  verification_stage="explicit workspace-user setup"
+  (
+    cd "$integrated_source/scripts"
+    sha256sum --check workspace-user-setup.bash.sha256
+  )
+  dim workspace run "$workspace_name" bash -- -lc \
+    'command -v flock >/dev/null || { echo "flock is required for workspace user setup" >&2; exit 1; }'
+  dim workspace run "$workspace_name" tool-setup >/dev/null
+}
+
+workspace_user_setup_state() {
+  dim workspace run "$workspace_name" agent -- --version | grep -qx 1.18.31
+  dim workspace run "$workspace_name" bash -- -lc \
+    'node /workspace/verification/scripts/lib/workspace-user-setup-assertions.cjs "$HOME/.local" "$HOME/.config/opencode/opencode.json" "$HOME/.omo/omo.jsonc" fresh'
+  dim workspace run "$workspace_name" bash -- -lc \
+    'sha256sum "$HOME/.config/opencode/opencode.json" "$HOME/.omo/omo.jsonc"'
+}
+
+self_project_agent_checks() {
+workspace_json="$(dim workspace show "$workspace_name" --json)"
+workspace_owner_uid="$(dim workspace exec "$workspace_name" -- stat -c %u /workspace)"
+agent_git_identity="$(dim workspace run "$workspace_name" bash -- -lc \
+  'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
+dim workspace run "$workspace_name" bash -- -lc '
+  if [[ ! -e /home/dim-agent/.dim-home-metadata-sentinel ]]; then
+    printf "preserve metadata\n" > /home/dim-agent/.dim-home-metadata-sentinel
+    chown dim-agent:dim-agent /home/dim-agent/.dim-home-metadata-sentinel
+    chmod 0640 /home/dim-agent/.dim-home-metadata-sentinel
+  fi
+'
+home_metadata_before="$(dim workspace run "$workspace_name" bash -- -lc \
+  'stat -c %u:%g:%a /home/dim-agent/.dim-home-metadata-sentinel')"
+
 verification_stage="protected and unprotected repository pushes"
 if dim workspace run "$workspace_name" bash -- -lc \
   'git push origin HEAD:refs/heads/main >/dev/null 2>&1'; then
@@ -74,22 +108,7 @@ for removed_task in codex claude check; do
   test "$(tr -d '\r' <"$removed_task_error")" = "unknown DIM project task: $removed_task"
 done
 
-verification_stage="explicit workspace-user setup"
-(
-  cd "$integrated_source/scripts"
-  sha256sum --check workspace-user-setup.bash.sha256
-)
-dim workspace run "$workspace_name" bash -- -lc \
-  'command -v flock >/dev/null || { echo "flock is required for workspace user setup" >&2; exit 1; }'
-dim workspace run "$workspace_name" tool-setup >/dev/null
-
-workspace_user_setup_state() {
-  dim workspace run "$workspace_name" agent -- --version | grep -qx 1.18.31
-  dim workspace run "$workspace_name" bash -- -lc \
-    'node /workspace/verification/scripts/lib/workspace-user-setup-assertions.cjs "$HOME/.local" "$HOME/.config/opencode/opencode.json" "$HOME/.omo/omo.jsonc" fresh'
-  dim workspace run "$workspace_name" bash -- -lc \
-    'sha256sum "$HOME/.config/opencode/opencode.json" "$HOME/.omo/omo.jsonc"'
-}
+prepare_workspace_user_setup
 
 inner_agent_id() {
   local outer_agent_dind
@@ -124,3 +143,4 @@ if [[ "${DIM_SELF_VERIFY_AGENT:-0}" == 1 ]]; then
     >"$agent_verification_log" 2>&1
 fi
 dim workspace run "$workspace_name" bash -- -c 'rm -rf /tmp/dim-self-project-root'
+}
