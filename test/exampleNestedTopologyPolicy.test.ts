@@ -38,6 +38,9 @@ describe("rich example nested topology policy", () => {
     // Then
     expect(launcher).toContain('agent_name="dim-agent"');
     expect(launcher).toContain("DOCKER_HOST=unix:///run/dim-agent-dind/docker.sock");
+    expect(launcher).toContain('outer_agent_ip="$(hostname -i)"');
+    expect(launcher).toContain('--add-host "secret:$outer_agent_ip"');
+    expect(launcher).not.toContain("secret:host-gateway");
     expect(launcher).toContain("DIM_EXTERNAL_URL_CONTAINERS_JSON");
     expect(launcher).toContain('["agent-dind","dim-agent"]');
     expect(entrypoint).toContain("agent-dind dim-agent-dind exec");
