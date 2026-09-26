@@ -1,5 +1,5 @@
 import { type Command } from "commander";
-import { UserError } from "@slop-lab/dim-core";
+import { buildSharedGitSyncImage, ProcessRunner, UserError } from "@slop-lab/dim-core";
 import {
   addRepository, adminCall, approveRepositoryPlan, applyRepositorySet, commaSeparated,
   confirmAction, fetchRepository, offerRootRepositorySet, print, printList,
@@ -9,6 +9,15 @@ import {
 
 export function registerRepositoryCommands(program: Command): void {
   const repo = program.command("repo").description("Manage project-scoped repositories");
+  const syncServiceImage = repo.command("sync-service").description("Manage shared Git-host sync deployment assets")
+    .command("image").description("Manage the shared Git-host sync service image");
+  syncServiceImage.command("build")
+    .description("Build the separately deployed shared Git-host sync service image")
+    .argument("<image>", "explicit non-latest image tag")
+    .action(async (image: string) => {
+      await buildSharedGitSyncImage(new ProcessRunner(), image);
+      console.log(image);
+    });
 
 repo.command("add")
   .description("Add an empty repository or import an external Git URL")
