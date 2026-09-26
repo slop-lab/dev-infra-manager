@@ -60,6 +60,15 @@ dim repo fetch example root
 Use `--prune` to remove only stale `upstream/*` tracking branches. Tags keep
 their original names and conflicting tag updates are rejected.
 
+Fetch and publish require the optional Git-host synchronization capability
+selected by `DIM_GIT_SYNC_CONNECTION_FILE`; they fail closed when it is not
+deployed. The service runs beside Gitea repository storage and keeps a
+credential-free `dim-upstream` remote on the actual bare repository, so
+repeated operations do not clone all objects into temporary storage. Visible
+fetch updates still pass through Gitea's normal receive path. See the
+[shared Git-host synchronization example](../../examples/features/shared-git-sync/README.md)
+for the service registry, transport allowlist, and host connection files.
+
 Publishing uses reviewed branch mappings from `.dim/repos.yml` and is never
 forced:
 
