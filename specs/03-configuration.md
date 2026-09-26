@@ -43,6 +43,26 @@ it MUST authenticate as its configured login and report non-administrator
 status. Project names, IDs, namespaces, organization IDs, and host IDs MUST be
 safe and unique within the connection file before they can select local state.
 
+**CONFIG-GIT-SYNC-001:** `DIM_GIT_SYNC_CONNECTION_FILE` MUST explicitly select
+an operator-deployed repository synchronization service on the physical Git
+host. The regular, DIM-user-owned, mode-`0600` exact-schema file MUST contain a
+credential-free endpoint, bearer token, stable Git host ID, bounded timeout,
+and HTTPS, loopback-HTTP, or isolated-HTTP transport policy. Its host ID MUST
+equal the external Gitea host ID when external Gitea is configured. Without
+this file, `repo fetch` and `repo publish` MUST fail closed and MUST NOT fall
+back to temporary bare repositories or generic remote execution.
+
+The service's separate private configuration MUST map every accepted Project
+ID and repository alias to one relative bare-repository path below a fixed root
+and one credential-free managed receive URL. It MUST explicitly allow upstream
+HTTPS, HTTP, SSH, or local-path locations. Requests MUST NOT select managed
+repository paths, managed URLs, Git options, commands, or arbitrary
+environment. Local upstream paths are paths on the Git host and MUST remain
+below configured roots. SSH authentication and host verification belong to the
+service account. HTTP credentials MAY cross the authenticated request only for
+that operation and MUST NOT enter URLs, logs, service configuration, or
+persistent Git configuration.
+
 **CONFIG-QEMU-SCHEDULER-001:** `DIM_QEMU_SCHEDULER_CONNECTION_FILE` MAY select
 an operator-managed shared QEMU demand scheduler. The file MUST be a regular,
 DIM-user-owned mode-`0600` JSON file with exact schema version `1`, a stable
