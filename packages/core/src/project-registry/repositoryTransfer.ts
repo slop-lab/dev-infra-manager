@@ -7,6 +7,7 @@ import type { RepositoryRefNamespace } from "../repositorySet.js";
 import type { CommandRunner } from "../types.js";
 import { createGiteaRepository } from "./giteaRepository.js";
 import { normalizeRepositoryRef } from "../repositoryRef.js";
+import { gitSyncConnection } from "../gitSyncConnection.js";
 import { assertReadyProject, sameRepositoryTransport } from "./helpers.js";
 import { grantRepositoryTransferUser, grantRepositoryUsers } from "./repositoryMembership.js";
 import { showProjectRepository } from "./queries.js";
@@ -27,13 +28,19 @@ export async function prepareProjectRepositorySync(
     throw new UserError(`repo '${projectName}/${alias}' has no external origin`);
   }
   const credentials = await ensureGitea(runner, options);
+  const connectionService = await gitSyncConnection(options);
+  const project = await new LifecycleState(options.stateRoot).readProject(projectName);
   return {
+    projectId: project.id,
+    repositoryAlias: repository.alias,
     externalUrl: connection.url,
     ...(connection.refNamespace === undefined ? {} : { refNamespace: connection.refNamespace }),
     publishBranches: connection.publishBranches ?? {},
-    managedUrl: repository.hostUrl,
     writerUsername: credentials.writerUsername,
-    writerPassword: credentials.writerPassword
+    writerPassword: credentials.writerPassword,
+    syncEndpoint: connectionService.endpoint,
+    syncToken: connectionService.token,
+    syncTimeoutSeconds: connectionService.timeoutSeconds
   };
 }
 

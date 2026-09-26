@@ -33,10 +33,14 @@ export interface PreparedRepositoryTransfer {
 }
 
 export interface PreparedRepositorySync {
+  projectId: string;
+  repositoryAlias: string;
   externalUrl: string;
   refNamespace?: RepositoryRefNamespace;
-  managedUrl: string;
   writerUsername: string;
   writerPassword: string;
   publishBranches: Record<string, string>;
+  syncEndpoint: string;
+  syncToken: string;
+  syncTimeoutSeconds: number;
 }
