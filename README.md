@@ -27,6 +27,7 @@ support process:
 - [Tailnet SSH over a raw TCP ingress](features/tailnet-ssh/README.md)
 - [External URL route policy](features/external-url-route-policy/README.md)
 - [Several managed repositories in one upstream](features/shared-upstream/README.md)
+- [Shared Git-host synchronization service](features/shared-git-sync/README.md)
 - [Project runtime cgroups](features/project-runtime-cgroups/README.md)
 
 ## Verification
