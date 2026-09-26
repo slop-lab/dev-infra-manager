@@ -1,9 +1,6 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { spawn } from "node:child_process";
 import {
   mapExternalRefToRepository,
-  mapRepositoryRefToExternal,
   UserError,
   type RepositoryRefNamespace
 } from "@slop-lab/dim-core";
@@ -20,67 +17,35 @@ export interface PreparedRepositoryTransfer {
 }
 
 export interface PreparedRepositorySync {
+  projectId: string;
+  repositoryAlias: string;
   externalUrl: string;
   refNamespace?: RepositoryRefNamespace;
-  managedUrl: string;
   writerUsername: string;
   writerPassword: string;
   publishBranches: Record<string, string>;
+  syncEndpoint: string;
+  syncToken: string;
+  syncTimeoutSeconds: number;
 }
+
+type GitCredential = {
+  readonly username: string;
+  readonly password: string;
+};
 
 export async function fetchRepository(projectName: string, alias: string, prune: boolean): Promise<void> {
   const prepared = await adminCall<PreparedRepositorySync>("repo.sync-prepare", {
     project: projectName,
     alias
   });
-  const temporary = await mkdtemp(path.join(tmpdir(), "dim-repo-fetch-"));
-  const gitDirectory = path.join(temporary, "sync.git");
-  try {
-    await runGit(["init", "--bare", gitDirectory], process.env, "initialize temporary repository");
-    await runGit([
-      "--git-dir", gitDirectory,
-      "fetch", "--no-tags", prepared.externalUrl,
-      "+refs/heads/*:refs/dim-external/heads/*",
-      "+refs/tags/*:refs/dim-external/tags/*"
-    ], process.env, `fetch external repository '${projectName}/${alias}'`);
-    await materializeExternalRefs(gitDirectory, prepared.refNamespace, true);
-
-    const managedEnvironment = managedGitEnvironment(prepared);
-    const upstreamRefs = await localRefs(gitDirectory, "refs/heads/upstream");
-    const tagRefs = await localRefs(gitDirectory, "refs/tags");
-    const managedUpstreamRefs = prune
-      ? await remoteRefs(prepared.managedUrl, "refs/heads/upstream/*", managedEnvironment)
-      : [];
-    const branchRefspecs = upstreamRefs.map((ref) => `+${ref}:${ref}`);
-    if (prune) {
-      const fetched = new Set(upstreamRefs);
-      branchRefspecs.push(...managedUpstreamRefs.filter((ref) => !fetched.has(ref)).map((ref) => `:${ref}`));
-    }
-    const tagRefspecs = tagRefs.map((ref) => `${ref}:${ref}`);
-    if (tagRefspecs.length > 0) {
-      await runGit([
-        "--git-dir", gitDirectory,
-        "push", "--dry-run", "--atomic", prepared.managedUrl,
-        ...tagRefspecs
-      ], managedEnvironment, `check tags for '${projectName}/${alias}'`);
-    }
-    if (branchRefspecs.length > 0) {
-      await runGit([
-        "--git-dir", gitDirectory,
-        "push", "--atomic", prepared.managedUrl,
-        ...branchRefspecs
-      ], managedEnvironment, `update upstream branches for '${projectName}/${alias}'`);
-    }
-    if (tagRefspecs.length > 0) {
-      await runGit([
-        "--git-dir", gitDirectory,
-        "push", "--atomic", prepared.managedUrl,
-        ...tagRefspecs
-      ], managedEnvironment, `update tags for '${projectName}/${alias}'`);
-    }
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
-  }
+  await syncRequest(prepared, "fetch", {
+    externalUrl: prepared.externalUrl,
+    refNamespace: prepared.refNamespace ?? null,
+    prune,
+    externalCredential: await externalCredential(prepared.externalUrl, prepared.syncTimeoutSeconds),
+    managedCredential: { username: prepared.writerUsername, password: prepared.writerPassword }
+  });
 }
 
 export async function publishRepositories(projectName: string, alias?: string): Promise<string[]> {
@@ -101,36 +66,77 @@ async function publishRepository(projectName: string, alias: string): Promise<vo
     project: projectName,
     alias
   });
-  const refspecs = Object.entries(prepared.publishBranches).map(([source, destination]) =>
-    `refs/heads/${source}:refs/heads/${destination}`
-  );
-  if (refspecs.length === 0) throw new UserError(`repo '${projectName}/${alias}' has no publish policy`);
-  const temporary = await mkdtemp(path.join(tmpdir(), "dim-repo-push-"));
-  const gitDirectory = path.join(temporary, "sync.git");
-  try {
-    await runGit(["init", "--bare", gitDirectory], process.env, "initialize temporary repository");
-    const sourceRefs = [...new Set(refspecs.map((refspec) => {
-      const source = refspec.slice(0, refspec.indexOf(":"));
-      return `${source}:${source}`;
-    }))];
-    await runGit([
-      "--git-dir", gitDirectory,
-      "fetch", prepared.managedUrl,
-      ...sourceRefs
-    ], managedGitEnvironment(prepared), `read managed repository '${projectName}/${alias}'`);
-    const externalRefspecs = refspecs.map((refspec) => {
-      const separator = refspec.indexOf(":");
-      const source = refspec.slice(0, separator);
-      const destination = refspec.slice(separator + 1);
-      return `${source}:${mapRepositoryRefToExternal(prepared.refNamespace, destination)}`;
+  if (Object.keys(prepared.publishBranches).length === 0) {
+    throw new UserError(`repo '${projectName}/${alias}' has no publish policy`);
+  }
+  await syncRequest(prepared, "publish", {
+    externalUrl: prepared.externalUrl,
+    refNamespace: prepared.refNamespace ?? null,
+    publishBranches: prepared.publishBranches,
+    externalCredential: await externalCredential(prepared.externalUrl, prepared.syncTimeoutSeconds)
+  });
+}
+
+async function syncRequest(
+  prepared: PreparedRepositorySync,
+  operation: "fetch" | "publish",
+  body: Readonly<Record<string, unknown>>
+): Promise<void> {
+  const pathname = `/v1/repositories/${encodeURIComponent(prepared.projectId)}/${encodeURIComponent(prepared.repositoryAlias)}/${operation}`;
+  const response = await fetch(`${prepared.syncEndpoint}${pathname}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${prepared.syncToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    redirect: "manual",
+    signal: AbortSignal.timeout(prepared.syncTimeoutSeconds * 1_000)
+  });
+  if (response.status >= 300 && response.status < 400) {
+    throw new UserError("Git sync service redirects are not allowed");
+  }
+  if (!response.ok) throw new UserError(`Git sync service rejected ${operation} (${response.status})`);
+}
+
+async function externalCredential(url: string, timeoutSeconds: number): Promise<GitCredential | null> {
+  if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
+  const result = await new Promise<{ readonly exitCode: number; readonly stdout: string }>((resolve) => {
+    const child = spawn("git", ["credential", "fill"], {
+      detached: true,
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+      stdio: ["pipe", "pipe", "ignore"]
     });
-    await runGit([
-      "--git-dir", gitDirectory,
-      "push", prepared.externalUrl,
-      ...externalRefspecs
-    ], process.env, `push external repository '${projectName}/${alias}'`);
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
+    let stdout = "";
+    let forceTimer: NodeJS.Timeout | undefined;
+    const timeout = setTimeout(() => {
+      terminateCredentialProcess(child, "SIGTERM");
+      forceTimer = setTimeout(() => terminateCredentialProcess(child, "SIGKILL"), 2_000);
+    }, timeoutSeconds * 1_000);
+    const finish = (exitCode: number): void => {
+      clearTimeout(timeout);
+      if (forceTimer !== undefined) clearTimeout(forceTimer);
+      resolve({ exitCode, stdout });
+    };
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => { stdout += chunk; });
+    child.on("error", () => finish(127));
+    child.on("close", (exitCode) => finish(exitCode ?? 1));
+    child.stdin.end(`url=${url}\n\n`);
+  });
+  if (result.exitCode !== 0) return null;
+  const fields = new Map(result.stdout.split("\n").flatMap((line) => {
+    const separator = line.indexOf("=");
+    return separator < 1 ? [] : [[line.slice(0, separator), line.slice(separator + 1)]];
+  }));
+  const username = fields.get("username");
+  const password = fields.get("password");
+  return username === undefined || password === undefined ? null : { username, password };
+}
+
+function terminateCredentialProcess(child: import("node:child_process").ChildProcess, signal: NodeJS.Signals): void {
+  if (child.pid === undefined || child.exitCode !== null) return;
+  try {
+    process.kill(-child.pid, signal);
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) throw error;
   }
 }
 
