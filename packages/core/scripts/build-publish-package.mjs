@@ -47,3 +47,8 @@ await cp(
   new URL("../dist/shared-qemu-scheduler-assets", import.meta.url),
   { recursive: true }
 );
+await cp(
+  new URL("../src/shared-git-sync-assets", import.meta.url),
+  new URL("../dist/shared-git-sync-assets", import.meta.url),
+  { recursive: true }
+);

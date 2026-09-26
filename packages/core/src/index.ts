@@ -6,6 +6,7 @@ export * from "./ciRunner.js";
 export * from "./commandSessions.js";
 export * from "./errors.js";
 export * from "./gitea.js";
+export * from "./gitSyncConnection.js";
 export * from "./lifecycleOptions.js";
 export * from "./lifecycleState.js";
 export * from "./lifecycleTypes.js";
@@ -24,6 +25,7 @@ export {
 export * from "./projectRuntimeCgroups.js";
 export * from "./qemuSchedulerConnection.js";
 export * from "./sharedQemuSchedulerImage.js";
+export * from "./sharedGitSyncImage.js";
 export * from "./stateCompatibility.js";
 export * from "./repositorySet.js";
 export * from "./runner.js";
