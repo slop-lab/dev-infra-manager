@@ -116,6 +116,16 @@ ID, repository catalog, and exactly one root repository/ref when runnable.
 Infrastructure implementation belongs to the root repository, not the Project
 state.
 
+Repository fetch and publish require a separately deployed narrow
+synchronization service on the physical Git host in both managed and external
+Gitea topologies. DIM controllers remain on their existing hosts and receive no
+filesystem or generic command route to that server. The service's private
+registry binds Project IDs and aliases to actual Gitea bare repositories; the
+caller supplies no managed path. A direct upstream fetch may write only the
+service-owned hidden namespace. Every visible managed ref update returns
+through Gitea receive-pack, and outbound publication remains selective and
+non-forced.
+
 Claims precede Gitea mutations in managed mode. External mode validates its
 private connection and explicit shared Project binding before local claims or
 remote mutations. Project and repository reconciliation is serialized,
