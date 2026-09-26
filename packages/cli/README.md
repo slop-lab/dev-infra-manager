@@ -270,8 +270,23 @@ dim repo publish acme product
 dim repo publish acme
 ```
 
-External authentication comes from the invoking host Git process. Publishing
-is non-forced.
+HTTP authentication is resolved from the invoking host's Git credential helper
+and forwarded only for the request. SSH authentication and local paths belong
+to the configured service account on the Git host. Publishing is non-forced.
+
+Deploy the narrow service beside Gitea repository storage before using these
+commands:
+
+```bash
+dim repo sync-service image build registry.example/dim-git-sync:0.9.0
+export DIM_GIT_SYNC_CONNECTION_FILE="$HOME/.config/dim/git-sync.json"
+```
+
+The service keeps a credential-free `dim-upstream` remote in the actual bare
+repository and resolves aliases through its private registry. It is an
+optional explicit capability: commands fail closed when it is absent, with no
+temporary-clone fallback. The shared Git-host synchronization example contains
+complete service and host files.
 
 Use independent `import` and `publish` mappings when a managed repository's
 branch name differs from its external archive branch:
@@ -448,6 +463,7 @@ overrides are:
 - `DIM_GITEA_PORT` (default `3300`)
 - `DIM_GITEA_CONNECTION_FILE` (explicit external Gitea connection and shared
   Project bindings)
+- `DIM_GIT_SYNC_CONNECTION_FILE` (explicit physical-Git-host sync service)
 - installed `workspaceBackend` from the DIM user configuration
 - `DIM_WORKSPACE_IMAGE`
 - `DIM_WORKSPACE_CPUS`, `DIM_WORKSPACE_MEMORY`, and `DIM_WORKSPACE_PIDS`
