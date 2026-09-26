@@ -37,6 +37,9 @@ export function lifecycleOptionsForBackend(
     giteaConnection: env.DIM_GITEA_CONNECTION_FILE === undefined
       ? { kind: "managed" }
       : { kind: "external", file: path.resolve(env.DIM_GITEA_CONNECTION_FILE) },
+    ...(env.DIM_GIT_SYNC_CONNECTION_FILE === undefined
+      ? {}
+      : { gitSyncConnection: { file: path.resolve(env.DIM_GIT_SYNC_CONNECTION_FILE) } }),
     ...(env.DIM_QEMU_SCHEDULER_CONNECTION_FILE === undefined
       ? {}
       : { qemuSchedulerConnection: { file: path.resolve(env.DIM_QEMU_SCHEDULER_CONNECTION_FILE) } }),

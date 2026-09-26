@@ -1,6 +1,7 @@
 export interface LifecycleOptions {
   stateRoot: string;
   giteaConnection: GiteaConnectionConfiguration;
+  gitSyncConnection?: { readonly file: string };
   qemuSchedulerConnection?: { readonly file: string };
   giteaImage: string;
   giteaHost: string;
@@ -155,6 +156,13 @@ export interface HostGitCredential {
   password: string;
   baseUrl: string;
 }
+
+export type GitSyncConnection = {
+  readonly endpoint: string;
+  readonly hostId: string;
+  readonly token: string;
+  readonly timeoutSeconds: number;
+};
 
 export interface GiteaServiceRecord {
   phase: "creating" | "ready" | "error";
