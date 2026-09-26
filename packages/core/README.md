@@ -84,6 +84,7 @@ with host credentials.
 - `DIM_GITEA_IMAGE`, `DIM_GITEA_PORT`, and `DIM_GITEA_ADMIN_USERNAME` for the
   default host-local managed service
 - `DIM_GITEA_CONNECTION_FILE` for an operator-managed external Gitea service
+- `DIM_GIT_SYNC_CONNECTION_FILE` for the separately deployed Git-host sync service
 - `DIM_GIT_USERNAME`
 - the installed `workspaceBackend`, `DIM_WORKSPACE_IMAGE`, and
   `DIM_WORKSPACE_RUNTIME`
@@ -182,6 +183,15 @@ explicit shared ID, namespace, and Gitea organization ID; this lets multiple
 hosts attach to the same Project without adopting an unrelated same-name
 organization. The stable host ID scopes and persists Sysbox provider
 registrations across hosts.
+
+Repository fetch and publish do not run in the DIM controller or a temporary
+clone. Build the version-pinned service image with
+`dim repo sync-service image build IMAGE`, deploy it beside Gitea repository
+storage, and point `DIM_GIT_SYNC_CONNECTION_FILE` at a private connection file.
+The service has a separate private alias registry and transport allowlist; it
+receives no arbitrary command or caller-selected filesystem path. Absence of
+the connection file makes synchronization fail closed. Initial `repo add`
+imports remain local host Git operations.
 
 Every managed CI runner requires `.dim/ci/runner.yml` in the protected Project
 root. Its strict schema declares ordinary and integration labels,
