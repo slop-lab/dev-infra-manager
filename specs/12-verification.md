@@ -147,6 +147,20 @@ resource's expected type and name. They MUST reject daemon connection and
 permission failures, wrong names, wrong resource types, and prefixed or
 suffixed absence text without mutation or later reconciliation.
 
+Git-host synchronization verification MUST drive the authenticated HTTP
+service and CLI surfaces against disposable Git and Gitea repositories.
+Repeated fetch and publish operations MUST use the same actual bare repository,
+retain one credential-free deterministic remote, create no full temporary
+clone, remove the hidden staging namespace, preserve unrelated and protected
+refs, reject tag conflicts, and reject non-fast-forward publication. Gitea
+integration MUST prove that visible updates traverse receive hooks and refresh
+provider-visible branch state. Boundary tests MUST reject unknown aliases,
+caller-selected paths, disallowed transports, credential-bearing URLs,
+malformed mappings, arbitrary refspecs, redirects, oversized bodies, wrong
+tokens, concurrent same-repository requests, and timeout residue. Tests MUST
+inspect persistent Git configuration and service output for credential
+absence.
+
 The Sysbox lane of `verification/scripts/kvm-host-install-smoke.bash` must enable a real
 Project CI runner inside its disposable QEMU guest and inspect the effective
 Docker runtime, CPU quota, memory limit, PID limit, non-privileged flag, and

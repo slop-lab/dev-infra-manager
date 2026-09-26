@@ -14,8 +14,8 @@
 - Commands that inspect or mutate DIM state are clients of the managed
   host-admin controller API. Long-running calls and `exec`/`run` use controller
   command sessions rather than starting host runtime commands in the CLI.
-  Local process adapters are limited to external Git transport (`repo` import,
-  fetch, publish, and `x git`), the Git credential helper, controller bootstrap,
+  Local process adapters are limited to external Git import and credential
+  discovery for repository synchronization, `x git`, the Git credential helper, controller bootstrap,
   and pre-controller backend diagnosis. They obtain DIM-owned state and
   credentials through the admin API.
 - Every ordinary built-in other than the runtime-session exceptions below, and
@@ -205,10 +205,14 @@ another prompt because it introduces no additional host Git origin. Otherwise
 the CLI asks in a TTY and non-interactive use requires `--apply-repos`.
 `repo apply` requires `--yes` in non-interactive use. `--no-apply-repos`
 always skips discovery without disabling later clone-free `repo apply`.
-Repository-set planning and all state transitions use the admin API. External
-clone/push transport is a local CLI adapter so current host credential helpers,
-SSH configuration, and SSH agent are used. The managed Gitea credential is
-applied only to the destination push.
+Repository-set planning and all state transitions use the admin API. Initial
+import remains a local CLI adapter, so current host credential helpers, SSH
+configuration, and SSH agent apply to `repo add`. Fetch and publish use the
+explicitly configured service on the physical Git host. For HTTP upstreams,
+the CLI MAY resolve its existing credential helper and forward the result only
+in that authenticated request. SSH synchronization uses the service account's
+key and host verification; local paths are interpreted on the Git host and
+must satisfy its configured root allowlist.
 If root transfer fails after Project creation, repeating `project create` with
 the same URL re-reads the manifest and derives the same root alias before
 retrying that failed transfer. The explicit `--root` form likewise retries
@@ -254,9 +258,26 @@ repository that has a non-empty policy, in alias order. A repository without a
 policy cannot be published explicitly. Namespace prefixes are applied only at
 the external boundary.
 
-Both operations use temporary bare Git storage. The invoking host Git process
-supplies credentials for the external URL, while DIM credentials are installed
-only for the separate managed-Gitea command.
+**CLI-REPO-SYNC-001:** Both operations MUST address one trusted Project ID and
+repository alias through the configured Git-host service. The service MUST
+resolve that identity through its private registry, serialize operations per
+bare repository, and retain one deterministic `dim-upstream` remote in the
+actual managed bare repository. Its URL and fetch refspecs MUST contain no
+credential. Fetch MUST write external objects only to a hidden service-owned
+namespace, then update visible `upstream/*` branches and allowed tags through
+Gitea's receive path so hooks, protected-ref policy, and provider-visible state
+remain authoritative. The hidden namespace MUST be removed after every
+completed or failed request. Publish MUST read that same bare repository and
+push only explicit reviewed branch mappings, without force, deletion, tags, or
+arbitrary refspecs.
+
+The service MUST reject unknown aliases and disallowed transports before Git
+execution, use a scrubbed subprocess environment, and bound request bodies,
+handlers, lock acquisition, and Git process groups. Error responses MUST NOT
+include Git output. Credentials are request-scoped and memory-only. Concurrent
+operations for one repository MUST NOT overlap ref mutation. Timeout MUST
+terminate and reap the complete Git process group before releasing that
+repository's lock.
 
 ## CI runners
 
