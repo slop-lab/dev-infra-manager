@@ -49,4 +49,15 @@ describe("lifecycle options", () => {
       file: "/run/secrets/dim-gitea.json"
     });
   });
+
+  it("selects Git-host synchronization only through an explicit connection file", () => {
+    const options = lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer",
+      DIM_GIT_SYNC_CONNECTION_FILE: "/run/secrets/dim-git-sync.json"
+    });
+
+    expect(options.gitSyncConnection).toEqual({
+      file: "/run/secrets/dim-git-sync.json"
+    });
+  });
 });
