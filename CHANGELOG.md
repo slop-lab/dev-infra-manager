@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Run repository fetch and selective non-force publication through an
+  explicitly configured narrow service on the physical Git host. The service
+  resolves Project and repository aliases from a private registry, reuses the
+  actual Gitea bare repository and a credential-free persistent upstream
+  remote, stages fetched objects only in a hidden namespace, and sends visible
+  updates through Gitea's receive path. It rejects unregistered repositories
+  and disallowed transports, keeps credentials request-scoped, serializes each
+  repository, and fails closed instead of restoring temporary clones when the
+  capability is absent.
+
 - Build the QEMU CI supervisor image successfully under restrictive caller
   umasks by applying each generated build asset's intended mode explicitly.
   The snapshot TLS CA remains readable by APT's sandboxed user while the build
