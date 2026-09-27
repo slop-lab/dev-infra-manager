@@ -17,14 +17,13 @@ describe("immutable workspace lifecycle dispatch", () => {
     state = new LifecycleState(root);
     project = projectFixture();
     record = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
       rootCommit: COMMIT,
-      rootSnapshotPath: join(root, "assets", "project-roots", "project-id", COMMIT),
       workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready",
       profiles: ["development"],
@@ -46,7 +45,7 @@ describe("immutable workspace lifecycle dispatch", () => {
       createdAt: "now",
       updatedAt: "now"
     };
-    await mkdir(record.rootSnapshotPath, { recursive: true });
+    await mkdir(join(root, "assets", "project-roots", record.projectId, record.rootCommit), { recursive: true });
     await state.claimProject(project);
     await state.claimWorkspace(record);
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
@@ -68,7 +67,7 @@ it("rejects obsolete repository catalogs in schema 6 state", async () => {
   await expect(state.readWorkspace(record.name)).rejects.toThrow(/obsolete repository catalog/);
 });
 
-it("rejects a schema 6 record with a noncanonical data path", async () => {
+  it("rejects a schema 6 record with a noncanonical data path", async () => {
   // Given
   await writeFile(state.workspacePath(record.name), JSON.stringify({
     ...record,
@@ -76,6 +75,27 @@ it("rejects a schema 6 record with a noncanonical data path", async () => {
   }));
 
   // When / Then
-  await expect(state.readWorkspace(record.name)).rejects.toThrow(/workspace data path/);
+    await expect(state.readWorkspace(record.name)).rejects.toThrow(/workspace data path/);
+  });
+
+  it("accepts schema 7 state without a persisted protected-root path", async () => {
+    // Given
+    await writeFile(state.workspacePath(record.name), JSON.stringify({
+      ...record
+    }));
+
+    // When / Then
+    await expect(state.readWorkspace(record.name)).resolves.not.toHaveProperty("rootSnapshotPath");
+  });
+
+  it("rejects schema 7 state that persists a protected-root path", async () => {
+    // Given
+    await writeFile(state.workspacePath(record.name), JSON.stringify({
+      ...record,
+      rootSnapshotPath: join(root, "other-root")
+    }));
+
+    // When / Then
+    await expect(state.readWorkspace(record.name)).rejects.toThrow(/obsolete protected-root path/);
   });
 });

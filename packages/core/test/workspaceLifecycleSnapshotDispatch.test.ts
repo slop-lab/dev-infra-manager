@@ -22,14 +22,13 @@ describe("immutable workspace lifecycle dispatch", () => {
     state = new LifecycleState(root);
     project = projectFixture();
     record = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
       rootCommit: COMMIT,
-      rootSnapshotPath: join(root, "assets", "project-roots", "project-id", COMMIT),
       workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready",
       profiles: ["development"],
@@ -51,7 +50,7 @@ describe("immutable workspace lifecycle dispatch", () => {
       createdAt: "now",
       updatedAt: "now"
     };
-    await mkdir(record.rootSnapshotPath, { recursive: true });
+    await mkdir(join(root, "assets", "project-roots", record.projectId, record.rootCommit), { recursive: true });
     await state.claimProject(project);
     await state.claimWorkspace(record);
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
@@ -65,7 +64,9 @@ describe("immutable workspace lifecycle dispatch", () => {
 it("dispatches entrypoint bytes from the recorded snapshot and exposes mutable Project data separately", async () => {
     // Given
     const runner = new LifecycleRunner();
-    runner.containerInspect = workspaceContainerInspect(record);
+    runner.containerInspect = workspaceContainerInspect(record, {
+      rootSnapshotPath: join(root, "assets", "project-roots", record.projectId, record.rootCommit)
+    });
 
     // When
     await runWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), {
@@ -85,7 +86,9 @@ it("dispatches entrypoint bytes from the recorded snapshot and exposes mutable P
 it("retries setup from the recorded commit without resolving a mutable branch", async () => {
     // Given
     const runner = new LifecycleRunner();
-    runner.containerInspect = workspaceContainerInspect(record);
+    runner.containerInspect = workspaceContainerInspect(record, {
+      rootSnapshotPath: join(root, "assets", "project-roots", record.projectId, record.rootCommit)
+    });
 
     // When
     await setupWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
@@ -98,7 +101,9 @@ it("retries setup from the recorded commit without resolving a mutable branch", 
 it("runs Compose fallback and its relative build context from immutable snapshot bytes", async () => {
     // Given
     const runner = new LifecycleRunner(new Set([".dim/docker-compose.yml"]));
-    runner.containerInspect = workspaceContainerInspect(record);
+    runner.containerInspect = workspaceContainerInspect(record, {
+      rootSnapshotPath: join(root, "assets", "project-roots", record.projectId, record.rootCommit)
+    });
 
     // When
     await setupWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
@@ -113,8 +118,9 @@ it("runs Compose fallback and its relative build context from immutable snapshot
 it("fails closed before trusted dispatch when the recorded snapshot is missing", async () => {
     // Given
     const runner = new LifecycleRunner();
-    runner.containerInspect = workspaceContainerInspect(record);
-    await rm(record.rootSnapshotPath, { recursive: true, force: true });
+    const rootSnapshotPath = join(root, "assets", "project-roots", record.projectId, record.rootCommit);
+    runner.containerInspect = workspaceContainerInspect(record, { rootSnapshotPath });
+    await rm(rootSnapshotPath, { recursive: true, force: true });
 
     // When / Then
     await expect(runWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), {

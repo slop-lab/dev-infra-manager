@@ -22,14 +22,13 @@ describe("immutable workspace lifecycle dispatch", () => {
     state = new LifecycleState(root);
     project = projectFixture();
     record = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
       rootCommit: COMMIT,
-      rootSnapshotPath: join(root, "assets", "project-roots", "project-id", COMMIT),
       workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready",
       profiles: ["development"],
@@ -51,7 +50,7 @@ describe("immutable workspace lifecycle dispatch", () => {
       createdAt: "now",
       updatedAt: "now"
     };
-    await mkdir(record.rootSnapshotPath, { recursive: true });
+    await mkdir(join(root, "assets", "project-roots", record.projectId, record.rootCommit), { recursive: true });
     await state.claimProject(project);
     await state.claimWorkspace(record);
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
@@ -64,7 +63,9 @@ describe("immutable workspace lifecycle dispatch", () => {
 
 it("publishes a setup-error manifest solely from the recorded root contract", async () => {
     const runner = new LifecycleRunner();
-    runner.containerInspect = workspaceContainerInspect(record);
+    runner.containerInspect = workspaceContainerInspect(record, {
+      rootSnapshotPath: join(root, "assets", "project-roots", record.projectId, record.rootCommit)
+    });
     const failed = { ...record, phase: "setup-error" } as const;
     await state.writeWorkspace(failed);
 
@@ -81,7 +82,9 @@ it("publishes a setup-error manifest solely from the recorded root contract", as
 
   it("recovers a failed initial manifest publication without Git mutation", async () => {
     const runner = new LifecycleRunner();
-    runner.containerInspect = workspaceContainerInspect(record);
+    runner.containerInspect = workspaceContainerInspect(record, {
+      rootSnapshotPath: join(root, "assets", "project-roots", record.projectId, record.rootCommit)
+    });
     const failed = { ...record, phase: "error" } as const;
     await state.writeWorkspace(failed);
 
@@ -95,7 +98,9 @@ it("publishes a setup-error manifest solely from the recorded root contract", as
     const interrupted = { ...record, phase: "setup-error" as const };
     await state.writeWorkspace(interrupted);
     const runner = new LifecycleRunner();
-    runner.containerInspect = workspaceContainerInspect(record)
+    runner.containerInspect = workspaceContainerInspect(record, {
+      rootSnapshotPath: join(root, "assets", "project-roots", record.projectId, record.rootCommit)
+    })
       .replace("|project-id|", "|foreign-project-id|");
 
     await expect(setupWorkspace(
@@ -106,7 +111,6 @@ it("publishes a setup-error manifest solely from the recorded root contract", as
     await expect(state.readWorkspace(record.name)).resolves.toMatchObject({
       phase: "error",
       rootCommit: interrupted.rootCommit,
-      rootSnapshotPath: interrupted.rootSnapshotPath,
       error: "Docker container 'dim-ws-work-1' conflicts with DIM ownership"
     });
     expect(runner.runCalls.some((call) => call.includes("git"))).toBe(false);
@@ -127,7 +131,8 @@ it("publishes a setup-error manifest solely from the recorded root contract", as
     );
 
     // Then
-    expect(recovered).toMatchObject({ phase: "ready", rootSnapshotPath: record.rootSnapshotPath });
+    expect(recovered).toMatchObject({ phase: "ready", rootCommit: record.rootCommit });
+    expect(recovered).not.toHaveProperty("rootSnapshotPath");
     expect(runner.runCalls).toContainEqual(["docker", "container", "rm", "--force", "workspace-container-id"]);
     expect(runner.publishedManifests).toHaveLength(1);
     expect(runner.streamingCalls).toHaveLength(1);
@@ -135,7 +140,9 @@ it("publishes a setup-error manifest solely from the recorded root contract", as
 
   it("recovers an omitted root ref from its recorded symbolic HEAD resolution after refs move", async () => {
     const runner = new LifecycleRunner();
-    runner.containerInspect = workspaceContainerInspect(record);
+    runner.containerInspect = workspaceContainerInspect(record, {
+      rootSnapshotPath: join(root, "assets", "project-roots", record.projectId, record.rootCommit)
+    });
     const headProject = { ...project };
     delete headProject.rootRef;
     await state.writeProject(headProject);
