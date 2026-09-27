@@ -37,6 +37,9 @@ install-local:
 restart-controller:
     if command -v mise >/dev/null 2>&1; then mise exec -- dim controller restart; else "${DIM_INSTALL_PREFIX:-$HOME/.local}/bin/dim" controller restart; fi
 
+# Install local DIM packages before restarting the managed control plane.
+install-local-control-plane: install-local restart-controller
+
 # Builds image dependencies and core first, then runs the local dim CLI from source (no install needed).
 run-cli *args:
     pnpm --filter @slop-lab/dim-controller-proxy run build
