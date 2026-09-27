@@ -62,8 +62,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   unchanged on refusal. The local workflow also uses the exact lockfile-owned
   Verdaccio binary on a random loopback port, with
   signup closed and mutation authenticated. `restart-controller` separately
-  restarts the controller with the currently installed packages; image
-  preparation, installation, and restart never implicitly invoke one another.
+  restarts the controller with the currently installed packages;
+  `install-local-control-plane` explicitly composes installation and restart
+  in that order without restarting when installation fails. Image preparation
+  remains separate.
   Published CLI installations can now explicitly run `dim workspace image
   build` from any directory. The core package ships the complete trusted build
   context and references the exact-version controller-proxy package, so the

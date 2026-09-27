@@ -20,6 +20,7 @@ just build-workspace-image # run the source CLI's shipped-asset release image bu
 just build-local-workspace-image # prepare the aggregate-local workspace image with Docker Buildx
 just install-local   # install local packages without restarting the controller
 just restart-controller # restart the controller with the installed packages
+just install-local-control-plane # install packages, then restart the controller
 just doctor          # host readiness: dev tools, Docker, selected backend, cgroup v2
 just run-cli -- --help # build core, then run dim from source without installing it
 ```
@@ -127,6 +128,9 @@ These are distinct operations with separate readiness domains:
 - `restart-controller` replaces the managed controller process with the
   currently installed DIM package set. It does not rebuild either packages or
   images.
+- `install-local-control-plane` composes `install-local` and
+  `restart-controller` in that order; an installation failure prevents the
+  restart. Keep the separate recipes when the stages require independent review.
 - `doctor` reports host readiness for development tools, Docker, the selected
   backend, and cgroup v2. Run the stronger verification gates separately when
   their image, container, or host behavior is the readiness domain in question.
