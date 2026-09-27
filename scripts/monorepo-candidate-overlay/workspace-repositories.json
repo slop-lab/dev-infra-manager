@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "repositories": {
+    "root": { "ref": "main", "path": "workspace" }
+  }
+}

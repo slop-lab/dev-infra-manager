@@ -1,0 +1,5 @@
+# Review requests for the trusted Project contract, policy, and candidate provenance.
+(^|/)\.dim/.* @dim-dim/Owners
+(^|/)\.gitea/.* @dim-dim/Owners
+^\.monorepo-candidate/.* @dim-dim/Owners
+^CODEOWNERS$ @dim-dim/Owners

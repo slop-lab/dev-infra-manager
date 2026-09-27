@@ -1,0 +1,13 @@
+schemaVersion: 1
+upstreams:
+  root:
+    url: https://github.com/slop-lab/dev-infra-manager.git
+repositories:
+  root:
+    upstream: root
+    root: true
+    ref: main
+    import: {main: main}
+    protect: [main]
+    blockForcePush: [main]
+    publish: {main: main}
