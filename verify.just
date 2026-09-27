@@ -35,6 +35,10 @@ external-gitea-shared-control:
     just build-packages
     cd .. && bash verification/scripts/external-gitea-shared-control-smoke.bash
 
+# Verify reviewed-ref authorization against a disposable digest-pinned Gitea instance.
+gitea-repository-policy:
+    cd .. && bash verification/scripts/gitea-repository-policy-smoke.bash
+
 # Build shipped scheduler bytes and run two generated shared workers with fake one-job processes.
 packaged-shared-qemu-scheduler:
     just build-packages
