@@ -61,14 +61,13 @@ it("publishes only the immutable root contract and generic runtime data", async 
       updatedAt: now
     };
     const workspace = {
-      schemaVersion: 6 as const,
+    schemaVersion: 7 as const,
       name: "work",
       projectId: project.id,
       projectName: project.name,
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
       rootCommit: "a".repeat(40),
-      rootSnapshotPath: "/state/assets/project-roots/project-id/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready" as const,
       profiles: [],

@@ -32,13 +32,13 @@ describe("project and workspace lifecycle", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-it("rejects schema 5 workspace records without modifying them", async () => {
+it.each([5, 6] as const)("rejects schema %i workspace records without modifying them", async (schemaVersion) => {
     const state = new LifecycleState(root);
     const now = new Date().toISOString();
     await mkdir(join(root, "workspaces"), { recursive: true });
     const path = join(root, "workspaces", "legacy.json");
     const original = `${JSON.stringify({
-      schemaVersion: 5,
+      schemaVersion,
       name: "legacy",
       projectPath: "/workspace/project",
       repositorySnapshot: { root: { commit: "a".repeat(40) } },
@@ -60,11 +60,10 @@ it("rejects workspace state from removed backends", async () => {
     const state = new LifecycleState(root);
     await mkdir(join(root, "workspaces"), { recursive: true });
     await writeFile(join(root, "workspaces", "obsolete.json"), JSON.stringify({
-      schemaVersion: 6,
+      schemaVersion: 7,
       name: "obsolete",
       runtimeBackend: "runc",
       rootCommit: "a".repeat(40),
-      rootSnapshotPath: "/missing"
     }));
 
     await expect(state.readWorkspace("obsolete")).rejects.toThrow(/supports only sysbox/);
