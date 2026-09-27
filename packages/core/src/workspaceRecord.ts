@@ -6,8 +6,11 @@ import { WORKSPACE_DATA } from "./workspaceLifecycleTypes.js";
 export function assertWorkspaceRecord(value: unknown, source: string): asserts value is WorkspaceRecord {
   if (!isRecord(value)) throw new UserError(`workspace state at '${source}' must be an object`);
   const name = typeof value.name === "string" ? value.name : source;
-  assertSchemaVersion(value, "workspace", name, 6);
+  assertSchemaVersion(value, "workspace", name, 7);
   assertSysboxWorkspace(value, name);
+  if (Object.hasOwn(value, "rootSnapshotPath")) {
+    throw new UserError(`workspace '${name}' contains an obsolete protected-root path; export needed data and recreate the workspace`);
+  }
   if (Object.hasOwn(value, "repositorySnapshot") || Object.hasOwn(value, "repositoryRefOverrides")) {
     throw new UserError(`workspace '${name}' contains an obsolete repository catalog; export needed data and recreate the workspace`);
   }

@@ -247,14 +247,13 @@ export interface WorkspaceCapabilityRecord {
 }
 
 export interface WorkspaceRecord {
-  schemaVersion: 6;
+  schemaVersion: 7;
   name: string;
   projectId: string;
   projectName: string;
   rootRepositoryAlias: string;
   rootRef: string;
   rootCommit: string;
-  rootSnapshotPath: string;
   workspaceDataPath: string;
   phase: WorkspacePhase;
   profiles: string[];

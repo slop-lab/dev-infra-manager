@@ -246,7 +246,7 @@ export class LifecycleState {
   }
 
   async listWorkspaces(): Promise<WorkspaceRecord[]> {
-    const records = await listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace", 6);
+    const records = await listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace", 7);
     for (const record of records) {
       assertWorkspaceRecord(record, this.workspacePath(record.name));
     }
