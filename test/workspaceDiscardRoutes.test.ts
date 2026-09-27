@@ -108,14 +108,13 @@ class MissingResourceRunner implements StreamingCommandRunner {
 
 function workspaceRecord(): WorkspaceRecord {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     name: "work",
     projectId: "project",
     projectName: "project",
     rootRepositoryAlias: "root",
     rootRef: "refs/heads/main",
     rootCommit: "a".repeat(40),
-    rootSnapshotPath: "/tmp/dim-root",
     workspaceDataPath: "/var/lib/dim/workspace-data",
     phase: "ready",
     profiles: [],
