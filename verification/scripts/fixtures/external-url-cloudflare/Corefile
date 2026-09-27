@@ -1,0 +1,7 @@
+smoke.test:53 {
+    file /zones/smoke.test.zone {
+        reload 1s
+    }
+    log
+    errors
+}

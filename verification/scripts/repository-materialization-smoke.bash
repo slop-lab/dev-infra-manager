@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+workspace_root="$(cd -- "$script_dir/../.." && pwd)"
+root_repository="${DIM_ROOT_REPOSITORY:-$workspace_root/project}"
+reconcile="$root_repository/.dim/reconcile-repositories.sh"
+test -f "$reconcile" || {
+  echo "root repository lifecycle not found: $reconcile" >&2
+  exit 1
+}
+work_dir="$(mktemp -d /tmp/dim-repository-materialization.XXXXXX)"
+cleanup() { find "$work_dir" -depth -delete 2>/dev/null || true; }
+trap cleanup EXIT
+
+repositories=(development core core-development plugin-dns-cloudflare plugin-dns-cloudflare-development plugin-external-urls plugin-external-urls-development verification examples specification)
+project_root="$work_dir/project-root"
+workspace_data="$work_dir/data"
+integrated="$workspace_data/workspace"
+mkdir -p "$work_dir/sources" "$project_root/.dim" "$workspace_data"
+manifest="$work_dir/project.json"
+policy="$project_root/.dim/workspace-repositories.json"
+printf '{"schemaVersion":1,"repositories":{' >"$policy"
+separator=""
+for repository in "${repositories[@]}"; do
+  source="$work_dir/sources/$repository.git"
+  worktree="$work_dir/$repository"
+  ref=main
+  git init --bare "$source" >/dev/null
+  git init --initial-branch="$ref" "$worktree" >/dev/null
+  git -C "$worktree" config user.name "Repository materialization smoke"
+  git -C "$worktree" config user.email "smoke@dim.invalid"
+  printf '%s\n' "$repository-initial" >"$worktree/content.txt"
+  git -C "$worktree" add content.txt
+  git -C "$worktree" commit -m initial >/dev/null
+  git -C "$worktree" remote add origin "$source"
+  git -C "$worktree" push origin "$ref" >/dev/null
+  case "$repository" in
+    development) relative_path=workspace ;;
+    *) relative_path="workspace/$repository" ;;
+  esac
+  printf '%s"%s":{"ref":"%s","path":"%s"}' \
+    "$separator" "$repository" "$ref" "$relative_path" >>"$policy"
+  separator=,
+done
+printf '}}\n' >>"$policy"
+jq -n \
+  --arg root "$project_root" \
+  --arg data "$workspace_data" \
+  --arg git_base "$work_dir/sources" \
+  '{
+    schemaVersion: 3,
+    root: {
+      repository: "root",
+      ref: "refs/heads/main",
+      commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      path: $root
+    },
+    data: {path: $data},
+    gitBaseUrl: $git_base,
+    hostAliases: {},
+    runtime: {capabilities: []}
+  }' >"$manifest"
+
+DIM_PROJECT_ROOT="$project_root" DIM_PROJECT_MANIFEST="$manifest" \
+  DIM_WORKSPACE_DATA="$workspace_data" \
+  sh "$reconcile"
+
+for repository in "${repositories[@]}"; do
+  case "$repository" in
+    development) path="$integrated" ;;
+    *) path="$integrated/$repository" ;;
+  esac
+  test "$(git -C "$path" branch --show-current)" = main
+  test "$(cat "$path/content.txt")" = "$repository-initial"
+done
+
+# The reviewed outer lifecycle never invokes Git in an existing agent-controlled
+# checkout. Both clean and dirty trees remain untouched; the agent can update a
+# clean checkout using its own Git process.
+printf 'core-updated\n' >"$work_dir/core/content.txt"
+git -C "$work_dir/core" commit -am update >/dev/null
+git -C "$work_dir/core" push origin main >/dev/null
+printf 'agent-work\n' >>"$integrated/core-development/content.txt"
+mkdir "$work_dir/no-git"
+printf '#!/bin/sh\necho "trusted setup invoked Git for an existing checkout" >&2\nexit 99\n' \
+  >"$work_dir/no-git/git"
+chmod +x "$work_dir/no-git/git"
+PATH="$work_dir/no-git:$PATH" \
+  DIM_PROJECT_ROOT="$project_root" DIM_PROJECT_MANIFEST="$manifest" \
+  DIM_WORKSPACE_DATA="$workspace_data" \
+  sh "$reconcile"
+test "$(cat "$integrated/core/content.txt")" = core-initial
+grep -q agent-work "$integrated/core-development/content.txt"
+git -C "$integrated/core" pull --ff-only >/dev/null
+test "$(cat "$integrated/core/content.txt")" = core-updated
+
+# An existing self-Project checkout cannot redirect trusted exclusion writes
+# through repository metadata links outside persistent workspace data.
+hostile_root="$work_dir/hostile-project-root"
+hostile_data="$work_dir/hostile-data"
+outside_git="$work_dir/outside-git"
+mkdir -p "$hostile_root/.dim" "$hostile_data/workspace" "$outside_git/info"
+printf '%s\n' outside-before >"$outside_git/info/exclude"
+ln -s "$outside_git" "$hostile_data/workspace/.git"
+printf '%s\n' '{"schemaVersion":1,"repositories":{"development":{"ref":"main","path":"workspace"}}}' \
+  >"$hostile_root/.dim/workspace-repositories.json"
+if DIM_PROJECT_ROOT="$hostile_root" DIM_PROJECT_MANIFEST="$manifest" \
+  DIM_WORKSPACE_DATA="$hostile_data" sh "$reconcile"; then
+  echo "repository materialization accepted a symbolic-link .git directory" >&2
+  exit 1
+fi
+test "$(cat "$outside_git/info/exclude")" = outside-before
+
+echo repository-materialization-smoke-ok

@@ -1,0 +1,172 @@
+name: Verify repository set
+
+on:
+  workflow_call:
+    inputs:
+      candidate-repository:
+        type: string
+        required: true
+      candidate-ref:
+        type: string
+        required: true
+      development-ref:
+        type: string
+        required: false
+        default: ''
+      root-ref:
+        type: string
+        required: false
+        default: ''
+      verification-ref:
+        type: string
+        required: false
+        default: ''
+      gate:
+        type: string
+        required: false
+        default: source
+      runner-label:
+        type: string
+        required: false
+        default: dim
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ${{ inputs.runner-label || 'dim' }}
+    # The QEMU lane installs a clean host and verifies the Sysbox contract.
+    timeout-minutes: ${{ (inputs.gate == 'kvm' || inputs.gate == 'kvm-control' || inputs.gate == 'cache-routing-kvm' || inputs.gate == 'qemu-ci-image-layers-kvm') && 60 || 30 }}
+    steps:
+      - name: Check out development root
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/development
+          ref: ${{ inputs.development-ref || (gitea.event_name == 'workflow_call' && inputs.candidate-repository == 'development' && inputs.candidate-ref) || 'main' }}
+          path: snapshot
+      - name: Check out root
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/root
+          ref: ${{ inputs.root-ref || (gitea.event_name == 'workflow_call' && inputs.candidate-repository == 'root' && inputs.candidate-ref) || 'main' }}
+          path: snapshot/project
+      - name: Check out repositories
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/core
+          path: snapshot/core
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/core-development
+          path: snapshot/core-development
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/plugin-dns-cloudflare
+          path: snapshot/plugin-dns-cloudflare
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/plugin-dns-cloudflare-development
+          path: snapshot/plugin-dns-cloudflare-development
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/plugin-external-urls
+          path: snapshot/plugin-external-urls
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/plugin-external-urls-development
+          path: snapshot/plugin-external-urls-development
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/verification
+          ref: ${{ inputs.verification-ref || (gitea.event_name == 'workflow_call' && inputs.candidate-repository == 'verification' && inputs.candidate-ref) || (gitea.event_name != 'workflow_call' && gitea.sha) || 'main' }}
+          path: snapshot/verification
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/examples
+          path: snapshot/examples
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/specification
+          path: snapshot/specification
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.13.1
+      - name: Install repository-set dependencies
+        working-directory: snapshot
+        run: pnpm install --frozen-lockfile
+      - name: Record exact repository set
+        run: bash snapshot/verification/scripts/write-repository-set-evidence.bash snapshot
+      - name: Upload repository-set evidence
+        uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
+        with:
+          name: repository-set-${{ gitea.sha }}-${{ inputs.gate || 'source' }}
+          path: snapshot/repository-set.json
+          retention-days: 30
+      - name: Verify source repository set
+        if: ${{ !inputs.gate || inputs.gate == 'source' }}
+        working-directory: snapshot
+        env:
+          # Resize is not observed in the current Sysbox-hosted runner. This
+          # records that CI-environment behavior without assigning its cause.
+          DIM_TEST_PTY_RESIZE: unsupported
+        run: |
+          apt-get update
+          apt-get install --yes tini=0.19.0-1
+          bash verification/scripts/repository-materialization-smoke.bash
+          pnpm run workspace:check
+          tini -s -- pnpm run workspace:test
+          pnpm run workspace:build
+      - name: Verify container integration
+        if: ${{ inputs.gate == 'container' }}
+        working-directory: snapshot
+        run: |
+          just check-source
+          just verify workspace-runtime
+          bash verification/scripts/container-cgroup-smoke.bash
+      - name: Verify full development integration
+        if: ${{ inputs.gate == 'integration' }}
+        working-directory: snapshot
+        run: |
+          just check-source
+          just verify workspace-user-setup
+          just verify headscale-tailnet-tcp
+          just verify external-gitea-shared-control
+          just verify packaged-shared-qemu-scheduler
+          DIM_DOCKER_REGISTRY_MIRROR=http://host.docker.internal:5000 \
+            just verify full-development
+      - name: Verify QEMU backend integration
+        if: ${{ inputs.gate == 'kvm' }}
+        working-directory: snapshot
+        run: |
+          test -r /dev/kvm -a -w /dev/kvm
+          bash verification/scripts/with-ci-registry-cache.bash --qemu-relay \
+            env JUST_UNSTABLE=1 just verify environments-kvm
+      - name: Verify agent-controlled QEMU host integration
+        if: ${{ inputs.gate == 'kvm-control' }}
+        working-directory: snapshot
+        run: |
+          test -r /dev/kvm -a -w /dev/kvm
+          bash verification/scripts/with-ci-registry-cache.bash --qemu-relay \
+            env JUST_UNSTABLE=1 just verify agent-control-kvm
+      - name: Verify route-specific Sysbox registry cache
+        if: ${{ inputs.gate == 'cache-routing-sysbox' }}
+        working-directory: snapshot
+        run: |
+          just verify cache-routing-sysbox
+      - name: Verify route-specific KVM registry cache
+        if: ${{ inputs.gate == 'cache-routing-kvm' }}
+        working-directory: snapshot
+        run: |
+          test -r /dev/kvm -a -w /dev/kvm
+          just verify cache-routing-kvm
+      - name: Verify QEMU CI image layers
+        if: ${{ inputs.gate == 'qemu-ci-image-layers-kvm' }}
+        working-directory: snapshot
+        run: |
+          test -r /dev/kvm -a -w /dev/kvm
+          just verify qemu-ci-image-layers-kvm
