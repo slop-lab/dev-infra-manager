@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Require an Owner-approved pull request for every ordinary update to a
+  reviewed Project root branch. Only the host-side maintainer retains direct
+  publication authority; repository Owners and administrators cannot use the
+  routine direct-push or merge-override paths. CODEOWNERS routes additional
+  review for lifecycle and policy files without treating filenames alone as
+  proof of the trusted execution inputs.
+
 - Run repository fetch and selective non-force publication through an
   explicitly configured narrow service on the physical Git host. The service
   resolves Project and repository aliases from a private registry, reuses the

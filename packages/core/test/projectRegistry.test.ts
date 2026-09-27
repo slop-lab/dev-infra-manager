@@ -76,7 +76,7 @@ describe("project registry", () => {
     expect(() => normalizeRepositoryRef("bad..ref")).toThrow(/repository ref/);
   });
 
-  it("allows only the host maintainer to push protected refs", () => {
+  it("requires review for every ordinary protected-ref update", () => {
     const options = branchProtectionOptions({
       adminUsername: "dim-admin",
       maintainerUsername: "dim-host"
@@ -85,11 +85,20 @@ describe("project registry", () => {
       enable_push: true,
       enable_push_whitelist: true,
       push_whitelist_usernames: ["dim-host"],
-      push_whitelist_teams: ["Owners"],
+      push_whitelist_teams: [],
       enable_force_push: false,
       merge_whitelist_usernames: ["dim-admin"],
       merge_whitelist_teams: ["Owners"],
-      block_admin_merge_override: false
+      block_admin_merge_override: true,
+      enable_approvals_whitelist: true,
+      approvals_whitelist_teams: ["Owners"],
+      enable_bypass_allowlist: false,
+      bypass_allowlist_usernames: [],
+      bypass_allowlist_teams: [],
+      push_whitelist_deploy_keys: false,
+      block_on_official_review_requests: true,
+      unprotected_file_patterns: "",
+      protected_file_patterns: ""
     });
     expect(JSON.stringify(options)).not.toContain("dim-workspace");
   });
