@@ -37,14 +37,13 @@ it("updates a claimed workspace container and persists its effective resources",
     const state = new LifecycleState(root);
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
       rootCommit: "a".repeat(40),
-      rootSnapshotPath: join(root, "assets", "project-roots", "project-id", "a".repeat(40)),
       workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready",
       profiles: [],
@@ -72,7 +71,9 @@ it("updates a claimed workspace container and persists its effective resources",
       async run(command: string, args: string[]): Promise<CommandResult> {
         calls.push([command, ...args]);
         if ((args[0] === "container" && args[1] === "inspect") || args[0] === "inspect") {
-          return { command, args, stdout: `${workspaceContainerInspect(record)}\n`, stderr: "", exitCode: 0 };
+          return { command, args, stdout: `${workspaceContainerInspect(record, {
+            rootSnapshotPath: join(root, "assets", "project-roots", record.projectId, record.rootCommit)
+          })}\n`, stderr: "", exitCode: 0 };
         }
         return { command, args, stdout: "dim-ws-work-1\n", stderr: "", exitCode: 0 };
       },

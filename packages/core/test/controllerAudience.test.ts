@@ -44,14 +44,13 @@ it("isolates agent grants and discovery from the workspace controller", async ()
     const state = new LifecycleState(stateRoot);
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
-      schemaVersion: 6,
+      schemaVersion: 7,
       name: "work",
       projectId: "pid",
       projectName: "project",
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
       rootCommit: "a".repeat(40),
-      rootSnapshotPath: "/state/assets/project-roots/pid/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready",
       profiles: [],

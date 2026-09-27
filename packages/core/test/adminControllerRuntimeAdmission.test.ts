@@ -8,6 +8,7 @@ import { configuredDimAdminController } from "../../../../core/packages/core/src
 import { withHostRuntimeAdmission } from "../../../../core/packages/core/src/hostAdminAdmission.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import { registerPlugins, type RegisteredDimPlugins } from "../../../../core/packages/core/src/plugin.js";
+import { protectedRootSnapshotPath } from "../../../../core/packages/core/src/protectedRootSnapshot.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { WORKSPACE_RUNTIME_CONFIG_VERSION } from "../../../../core/packages/core/src/workspaceLifecycleTypes.js";
 import { workspaceContainerLabels } from "../../../../core/packages/core/src/workspaceResourceOwnership.js";
@@ -43,13 +44,15 @@ class RuntimeRunner implements StreamingCommandRunner {
   readonly #streamWaiters = new Map<number, Barrier>();
   readonly #finish = new Barrier();
 
+  constructor(private readonly stateRoot: string) {}
+
   async run(command: string, args: string[]): Promise<CommandResult> {
     const container = args[2] ?? "";
     const record = workspaceRecord(container.replace("dim-ws-", ""), "ready");
     const labels = workspaceContainerLabels(record).map((label) => label.slice(label.indexOf("=") + 1));
     const mounts = JSON.stringify([{
       Type: "bind",
-      Source: record.rootSnapshotPath,
+      Source: protectedRootSnapshotPath(this.stateRoot, record.projectId, record.rootCommit),
       Destination: "/run/dim/project-root",
       RW: false
     }]);
@@ -96,7 +99,7 @@ describe("admin runtime admission", () => {
     await state.claimWorkspace(workspaceRecord("second", "ready"));
     const lock = new AdmissionLock();
     vi.spyOn(LifecycleState.prototype, "acquireHostLifecycleLock").mockImplementation(() => lock.acquire());
-    const runner = new RuntimeRunner();
+    const runner = new RuntimeRunner(root);
     const plugins = await registerPlugins([]);
     pluginSets.push(plugins);
     const server = configuredDimAdminController(hostLifecycleOptions(root), plugins, runner);
