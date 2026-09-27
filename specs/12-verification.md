@@ -1,5 +1,16 @@
 # Verification
 
+For a single-tree Project with trusted lifecycle code and agent-changeable
+sources, verification MUST exercise the actual Git-host protected-ref policy:
+ordinary writers and repository owners cannot directly update `main`, including
+renames, deletions, and changes outside `.dim`; proposal branches remain
+writable; and reviewed pull requests require a current designated human
+approval before merge. The host-only maintainer remains an explicit trusted
+exception, and force pushes remain disabled. Project-specific CI MUST report
+the exact candidate commit and complete tree used to test whether `.dim` and
+its dependencies are safe; a successful test is review evidence, not a
+replacement for Git-host authorization.
+
 ## Scope
 
 This specification defines the minimum verification gates for development.
