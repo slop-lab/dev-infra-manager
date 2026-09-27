@@ -20,11 +20,14 @@ const EXCEPTIONAL_EXIT_CODES = [2, 125, 127] as const;
 class LifecycleProbeRunner extends LifecycleRunner {
   constructor(
     record: WorkspaceRecord,
+    stateRoot: string,
     private readonly probePath: string,
     private readonly probeExitCode: number
   ) {
     super(new Set());
-    this.containerInspect = workspaceContainerInspect(record);
+    this.containerInspect = workspaceContainerInspect(record, {
+      rootSnapshotPath: join(stateRoot, "assets", "project-roots", record.projectId, record.rootCommit)
+    });
   }
 
   override async run(command: string, args: string[]): Promise<CommandResult> {
@@ -43,14 +46,13 @@ class LifecycleProbeRunner extends LifecycleRunner {
 
 function workspaceFixture(root: string): WorkspaceRecord {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     name: "work-1",
     projectId: "project-id",
     projectName: "project",
     rootRepositoryAlias: "root",
     rootRef: "refs/heads/main",
     rootCommit: COMMIT,
-    rootSnapshotPath: join(root, "assets", "project-roots", "project-id", COMMIT),
     workspaceDataPath: "/var/lib/dim/workspace-data",
     phase: "ready",
     profiles: ["development"],
@@ -81,7 +83,7 @@ describe("lifecycle file probes", () => {
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "dim-lifecycle-probe-"));
     record = workspaceFixture(root);
-    await mkdir(record.rootSnapshotPath, { recursive: true });
+    await mkdir(join(root, "assets", "project-roots", record.projectId, record.rootCommit), { recursive: true });
     await new LifecycleState(root).claimWorkspace(record);
   });
 
@@ -93,7 +95,7 @@ describe("lifecycle file probes", () => {
     "treats probe exit %i as file presence %s",
     async (exitCode, expected) => {
       // Given
-      const runner = new LifecycleProbeRunner(record, ".dim/setup.sh", exitCode);
+      const runner = new LifecycleProbeRunner(record, root, ".dim/setup.sh", exitCode);
 
       // When
       const present = await lifecycleFileExists(runner, record, ".dim/setup.sh");
@@ -105,7 +107,7 @@ describe("lifecycle file probes", () => {
 
   it.each(EXCEPTIONAL_EXIT_CODES)("rejects setup probe exit %i before setup dispatch", async (exitCode) => {
     // Given
-    const runner = new LifecycleProbeRunner(record, ".dim/setup.sh", exitCode);
+    const runner = new LifecycleProbeRunner(record, root, ".dim/setup.sh", exitCode);
 
     // When
     const setup = runProjectSetup(runner, record, false, false);
@@ -117,10 +119,10 @@ describe("lifecycle file probes", () => {
 
   it.each(EXCEPTIONAL_EXIT_CODES)("rejects teardown probe exit %i before teardown dispatch", async (exitCode) => {
     // Given
-    const runner = new LifecycleProbeRunner(record, ".dim/teardown.sh", exitCode);
+    const runner = new LifecycleProbeRunner(record, root, ".dim/teardown.sh", exitCode);
 
     // When
-    const teardown = runProjectTeardown(runner, record, false);
+    const teardown = runProjectTeardown(runner, root, record, false);
 
     // Then
     await expect(teardown).rejects.toThrow(`probe diagnostic ${exitCode}`);
@@ -129,9 +131,9 @@ describe("lifecycle file probes", () => {
 
   it.each([
     ["setup", ".dim/setup.sh", (runner: LifecycleRunner, current: WorkspaceRecord) => runProjectSetup(runner, current, false, false)],
-    ["teardown", ".dim/teardown.sh", (runner: LifecycleRunner, current: WorkspaceRecord) => runProjectTeardown(runner, current, false)]
+    ["teardown", ".dim/teardown.sh", (runner: LifecycleRunner, current: WorkspaceRecord) => runProjectTeardown(runner, root, current, false)]
   ] as const)("dispatches project %s as the unprivileged workspace user", async (_name, path, invoke) => {
-    const runner = new LifecycleProbeRunner(record, path, 0);
+    const runner = new LifecycleProbeRunner(record, root, path, 0);
 
     await invoke(runner, record);
 
@@ -141,7 +143,7 @@ describe("lifecycle file probes", () => {
 
   it.each(EXCEPTIONAL_EXIT_CODES)("rejects Compose probe exit %i before Compose dispatch", async (exitCode) => {
     // Given
-    const runner = new LifecycleProbeRunner(record, ".dim/docker-compose.yml", exitCode);
+    const runner = new LifecycleProbeRunner(record, root, ".dim/docker-compose.yml", exitCode);
 
     // When
     const setup = runProjectSetup(runner, record, false, false);
@@ -155,7 +157,7 @@ describe("lifecycle file probes", () => {
     "rejects entrypoint probe exit %i before direct-command fallback dispatch",
     async (exitCode) => {
       // Given
-      const runner = new LifecycleProbeRunner(record, ".dim/entrypoint.sh", exitCode);
+    const runner = new LifecycleProbeRunner(record, root, ".dim/entrypoint.sh", exitCode);
 
       // When
       const run = runWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), {

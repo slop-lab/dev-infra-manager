@@ -4,14 +4,13 @@ import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecyc
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 
 const workspace = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   name: "work",
   projectId: "project",
   projectName: "project",
   rootRepositoryAlias: "root",
   rootRef: "refs/heads/main",
   rootCommit: "a".repeat(40),
-  rootSnapshotPath: "/tmp/root",
   workspaceDataPath: "/var/lib/dim/workspace-data",
   phase: "ready",
   profiles: [],

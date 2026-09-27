@@ -97,14 +97,13 @@ it("restarts under Project and setup locks without inspecting or changing worksp
       updatedAt: now
     };
     const workspace: WorkspaceRecord = {
-      schemaVersion: 6,
+    schemaVersion: 7,
       name: "work-1",
       projectId: project.id,
       projectName: project.name,
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
       rootCommit: "a".repeat(40),
-      rootSnapshotPath: join(root, "assets", "project-roots", project.id, "a".repeat(40)),
       workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready",
       profiles: ["development"],
@@ -128,7 +127,8 @@ it("restarts under Project and setup locks without inspecting or changing worksp
       updatedAt: now
     };
     await state.claimProject(project);
-    await mkdir(workspace.rootSnapshotPath, { recursive: true });
+    const rootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
+    await mkdir(rootSnapshotPath, { recursive: true });
     await state.claimWorkspace(workspace);
     const calls: string[][] = [];
     let stopCalls = 0;
@@ -174,7 +174,7 @@ it("restarts under Project and setup locks without inspecting or changing worksp
         if (args[0] === "container" && args[1] === "inspect" && args[2] === workspace.containerName) {
           expect(projectLocked).toBe(true);
           expect(setupLocked).toBe(true);
-          return { command, args, stdout: `${workspaceContainerInspect(workspace)}\n`, stderr: "", exitCode: 0 };
+          return { command, args, stdout: `${workspaceContainerInspect(workspace, { rootSnapshotPath })}\n`, stderr: "", exitCode: 0 };
         }
         if (args.includes("ls-remote")) {
           return {
