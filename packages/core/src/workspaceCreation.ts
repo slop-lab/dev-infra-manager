@@ -91,14 +91,13 @@ export async function createWorkspace(
       const credentials = externalCredentials ?? await ensureGitea(runner, options);
       const gitBaseUrl = `${await giteaNestedBaseUrl(runner, credentials)}/${projectRecord.gitNamespace}`;
       record = {
-        schemaVersion: 6,
+        schemaVersion: 7,
         name,
         projectId: projectRecord.id,
         projectName: projectRecord.name,
         rootRepositoryAlias: repo.alias,
         rootRef: selectedRoot.rootRef,
         rootCommit: selectedRoot.rootCommit,
-        rootSnapshotPath: selectedRoot.rootSnapshotPath,
         workspaceDataPath: "/var/lib/dim/workspace-data",
         phase: "creating",
         profiles,

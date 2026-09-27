@@ -1,4 +1,5 @@
 import type { WorkspaceRecord } from "./lifecycleTypes.js";
+import type { ProtectedRootSnapshot } from "./protectedRootSnapshot.js";
 
 export const WORKSPACE_USER = "dim";
 export const WORKSPACE_RUNTIME_CONFIG_VERSION = "8";
@@ -26,6 +27,6 @@ export interface WorkspaceResourceInput {
 }
 
 export type WorkspacePublicationTarget = Pick<
-  WorkspaceRecord,
+  ProtectedRootSnapshot,
   "rootRef" | "rootCommit" | "rootSnapshotPath"
 >;

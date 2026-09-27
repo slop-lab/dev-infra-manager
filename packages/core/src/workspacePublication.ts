@@ -13,7 +13,6 @@ export async function recordSelectedRoot(
     ...record,
     rootRef: target.rootRef,
     rootCommit: target.rootCommit,
-    rootSnapshotPath: target.rootSnapshotPath,
     phase: "setting-up" as const,
     updatedAt: new Date().toISOString()
   };
