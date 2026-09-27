@@ -1,0 +1,5 @@
+# These rules route sensitive monorepo reviews; branch protection requires an Owner approval for every PR.
+(^|/)\.dim/.* @dim-dim/Owners
+(^|/)\.gitea/.* @dim-dim/Owners
+^project/.* @dim-dim/Owners
+^CODEOWNERS$ @dim-dim/Owners
