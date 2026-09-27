@@ -8,6 +8,7 @@ import type {
   WorkspaceRecord
 } from "./lifecycleTypes.js";
 import type { StreamingCommandRunner } from "./types.js";
+import { protectedRootSnapshotPath } from "./protectedRootSnapshot.js";
 import { writeProjectManifest } from "./workspaceRepositorySnapshot.js";
 import { assertContainerRunning, reconcileContainer } from "./workspaceContainer.js";
 import type { WorkspaceGitEnvironment } from "./workspaceLifecycleTypes.js";
@@ -45,7 +46,7 @@ export async function setupWorkspace(
       if (record.projectName !== initialRecord.projectName || record.projectId !== initialRecord.projectId) {
         throw new UserError(`project '${record.projectName}' identity changed`);
       }
-      await assertRootSnapshot(record);
+      await assertRootSnapshot(options.stateRoot, record);
       if (record.phase === "setting-up" || record.phase === "setup-error" || record.phase === "error") {
         const project = await state.readProject(record.projectName);
         if (project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
@@ -62,7 +63,7 @@ export async function setupWorkspace(
           target: {
             rootRef: record.rootRef,
             rootCommit: record.rootCommit,
-            rootSnapshotPath: record.rootSnapshotPath
+            rootSnapshotPath: protectedRootSnapshotPath(options.stateRoot, record.projectId, record.rootCommit)
           }
         });
       }
@@ -84,8 +85,8 @@ export async function setupWorkspaceLocked(
   forceRecreate = false
 ): Promise<WorkspaceRecord> {
   let record = initialRecord;
-  const containerId = await assertContainerRunning(runner, record);
-  await assertRootSnapshot(record);
+  const containerId = await assertContainerRunning(runner, options.stateRoot, record);
+  await assertRootSnapshot(options.stateRoot, record);
   const startedAt = new Date().toISOString();
   record = {
     ...record,

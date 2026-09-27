@@ -2,6 +2,7 @@ import { UserError } from "./errors.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
 import type { ProtectedRootSnapshot } from "./protectedRootSnapshot.js";
+import { protectedRootSnapshotPath } from "./protectedRootSnapshot.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { assertContainerRunning } from "./workspaceContainer.js";
 import type { WorkspaceResourceInput } from "./workspaceLifecycleTypes.js";
@@ -30,13 +31,14 @@ export async function runnableWorkspace(
   if (record.phase !== "ready") {
     throw new UserError(`workspace '${record.name}' is not ready (phase: ${record.phase}); run dim workspace setup`);
   }
-  const containerId = await assertContainerRunning(runner, record);
+  const containerId = await assertContainerRunning(runner, options.stateRoot, record);
   return { ...record, containerName: containerId };
 }
 
 export async function reconcileWorkspaceRuntimeState(
   runner: StreamingCommandRunner,
   state: LifecycleState,
+  stateRoot: string,
   record: WorkspaceRecord
 ): Promise<WorkspaceRecord> {
   if (record.phase !== "ready" && record.phase !== "stopped") return record;
@@ -44,7 +46,7 @@ export async function reconcileWorkspaceRuntimeState(
   const running = container?.running ?? false;
   // A running outer container is not sufficient evidence that reviewed Project
   // setup completed. Only DIM setup may promote a workspace back to ready.
-  if (running && container?.rootSnapshotPath !== record.rootSnapshotPath) {
+  if (running && container?.rootSnapshotPath !== protectedRootSnapshotPath(stateRoot, record.projectId, record.rootCommit)) {
     const error = "workspace container root does not match its recorded immutable root";
     const reconciled = { ...record, phase: "error" as const, error, updatedAt: new Date().toISOString() };
     await state.writeWorkspace(reconciled);
@@ -66,7 +68,7 @@ export async function showWorkspace(
   const workspaceName = validateLifecycleName(name, "workspace");
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
-    return await reconcileWorkspaceRuntimeState(runner, state, await state.readWorkspace(workspaceName));
+    return await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(workspaceName));
   } finally {
     await release();
   }
@@ -82,7 +84,7 @@ export async function listWorkspaces(
   for (const record of records) {
     const release = await state.acquireWorkspaceSetupLock(record.name);
     try {
-      reconciled.push(await reconcileWorkspaceRuntimeState(runner, state, await state.readWorkspace(record.name)));
+      reconciled.push(await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(record.name)));
     } finally {
       await release();
     }

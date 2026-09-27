@@ -36,8 +36,8 @@ export async function updateWorkspace(
       if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
       const oldProfiles = record.profiles;
       const nextProfiles = profiles === undefined ? oldProfiles : validateWorkspaceProfiles(profiles);
-      let containerId = await assertContainerRunning(runner, record);
-      if (record.rootSnapshotPath !== selectedRoot.rootSnapshotPath) {
+      let containerId = await assertContainerRunning(runner, options.stateRoot, record);
+      if (record.rootCommit !== selectedRoot.rootCommit) {
         record = await recordSelectedRoot(state, record, selectedRoot);
         const reconciled = await reconcileProjectContainer({
           runner,
@@ -98,7 +98,7 @@ async function startWorkspaceLocked(
   workspaceName: string,
   selectedRoot: ProtectedRootSnapshot
 ): Promise<WorkspaceRecord> {
-  let record = await reconcileWorkspaceRuntimeState(runner, state, await state.readWorkspace(workspaceName));
+  let record = await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(workspaceName));
   if (record.phase !== "stopped") {
     throw new UserError(`workspace '${workspaceName}' is not stopped; use restart to apply project changes`);
   }
@@ -132,12 +132,12 @@ export async function restartWorkspace(
     await assertSelectedProjectUnchanged(state, selectedRoot);
     const release = await state.acquireWorkspaceSetupLock(workspaceName);
     try {
-      const record = await reconcileWorkspaceRuntimeState(runner, state, await state.readWorkspace(workspaceName));
+      const record = await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(workspaceName));
       if (record.phase === "stopped") {
         return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot);
       }
       if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
-      const containerId = await assertContainerRunning(runner, record);
+      const containerId = await assertContainerRunning(runner, options.stateRoot, record);
       await stopWorkspaceLocked(runner, state, record);
       return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot);
     } finally {
