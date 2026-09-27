@@ -219,8 +219,9 @@ For create, start, update, and restart, DIM resolves a
 single concrete branch covered by the root repository's applied protection,
 pins its exact commit, and atomically publishes the complete commit tree below
 the controller-owned content-addressed assets path. The workspace record uses
-schema version `6` and records only that root ref, commit, snapshot path, and
-the canonical workspace-data path. It contains no repository catalog or
+schema version `7` and records only that root ref, commit, and the canonical
+workspace-data path. The protected-root path is derived from the state root,
+Project ID, and exact commit rather than persisted. The record contains no repository catalog or
 per-repository ref overrides. Older workspace schemas and records containing
 obsolete checkout-layout fields are rejected before mutation, with guidance
 to export important data and recreate the workspace.
@@ -976,7 +977,8 @@ longer selected.
 
 **WORKSPACE-IMMUTABLE-ROOT-MOUNT-001:** Before trusted setup or task dispatch,
 DIM MUST inspect the owned container by immutable container ID and verify that
-exactly one read-only bind mount maps the recorded root snapshot source to
+exactly one read-only bind mount maps the canonical root snapshot source derived
+from the state root, Project ID, and recorded commit to
 `/run/dim/project-root`. A selected-root change MUST enter a non-ready phase
 before replacement. Replacement MUST remove only the inspected owned container
 and MUST preserve its named persistent data volume. Any replacement,
@@ -984,7 +986,7 @@ publication, or setup failure MUST remain non-ready. Recovery MUST reconcile a
 mismatched owned mount or reject it before executing trusted Project bytes.
 
 **WORKSPACE-SELECTED-ROOT-PUBLICATION-001:** After preflight accepts a selected
-root, DIM MUST atomically record its ref, commit, snapshot path, and a non-ready
+root, DIM MUST atomically record its ref, commit, and a non-ready
 workspace phase before mutating the Project runtime manifest. The
 workspace MUST remain non-ready until publication and setup complete and the final
 ready record is durably published. Any manifest, setup, or final ready-state
@@ -1064,7 +1066,7 @@ Required tests cover:
   Gitea repository-to-organization cleanup order, protected-snapshot cleanup
   before Project state deletion, retained state after cleanup failure, and
   successful retry when managed Gitea resources are already absent;
-- schema-`6` root identity and canonical workspace-data path, schema-`3`
+- schema-`7` root identity, commit-derived protected-root path, and canonical workspace-data path, schema-`3`
   catalog-free runtime publication, and rejection of obsolete state before
   mutation;
 - Project-owned non-root ref selection, staged hook-safe materialization,
@@ -1075,7 +1077,7 @@ Required tests cover:
 - refusal to delete the selected importing repository before provider or state
   mutation, without blocking deletion of a ready target whose sibling imports;
 - protected-root commit pinning, atomic full-tree snapshot publication,
-  separate `rootSnapshotPath` retention, read-only outer mounting, mutable-file
+  canonical path derivation without `rootSnapshotPath` retention, read-only outer mounting, mutable-file
   substitution resistance, missing snapshot rejection, and retry/discard
   provenance pinning;
 - selected-root metadata publication before checkout or manifest mutation,
