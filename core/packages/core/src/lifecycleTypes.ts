@@ -1,0 +1,280 @@
+export interface LifecycleOptions {
+  stateRoot: string;
+  giteaConnection: GiteaConnectionConfiguration;
+  gitSyncConnection?: { readonly file: string };
+  qemuSchedulerConnection?: { readonly file: string };
+  giteaImage: string;
+  giteaHost: string;
+  giteaPort: number;
+  giteaAdminUsername: string;
+  gitUsername: string;
+  gitMaintainerUsername: string;
+  defaultWorkspaceBackend: WorkspaceRuntimeBackendKind;
+  workspaceImage?: string;
+  workspaceRuntime?: string;
+  workspacePrivileged?: boolean;
+  cpuCount: string;
+  memory: string;
+  pidsLimit: string;
+  controllerRuntimeDirectory: string;
+  controllerSocketPath: string;
+  agentControllerSocketPath: string;
+  adminControllerSocketPath: string;
+  ciRunnerImage: string;
+  ciRunnerRuntime: string;
+  ciRunnerDefaultCpus: string;
+  ciRunnerDefaultMemory: string;
+  ciRunnerDefaultPidsLimit: string;
+}
+
+export type GiteaConnectionConfiguration =
+  | { readonly kind: "managed" }
+  | { readonly kind: "external"; readonly file: string };
+
+export interface HostLifecycleRecord {
+  schemaVersion: 2;
+  phase: "ready" | "stopping" | "stopped" | "starting" | "error";
+  resumeWorkspaces: string[];
+  restartCiRunners: Array<{ project: string; name: string }>;
+  resumeManagedContainers: string[];
+  updatedAt: string;
+  error?: string;
+}
+
+export interface CiRunnerResources {
+  cpus: string;
+  memory: string;
+  pidsLimit: string;
+}
+
+export type CiRunnerExecutorKind = "sysbox" | "qemu";
+export type CiRunnerPhase = "creating" | "ready" | "stopped" | "error";
+
+export interface QemuCiProjectHookProvenance {
+  sourceRef: string;
+  sourceCommit: string;
+  kind: "present" | "absent";
+  digest: string;
+}
+
+export interface CiRunnerConfigProvenance {
+  sourceRef: string;
+  sourceCommit: string;
+  configDigest: string;
+}
+
+export interface SysboxCiRunnerExecutor {
+  kind: "sysbox";
+  phase: CiRunnerPhase;
+  containerName: string;
+  volumeName: string;
+  image: string;
+  runtime: string;
+  resources: CiRunnerResources;
+  inheritsResources: boolean;
+  labels: string[];
+  providerRunnerName?: string;
+  updatedAt: string;
+  error?: string;
+}
+
+export interface QemuCiRunnerExecutor {
+  kind: "qemu";
+  phase: CiRunnerPhase;
+  supervisorName: string;
+  volumeName: string;
+  image: string;
+  projectHook: QemuCiProjectHookProvenance;
+  resources: Pick<CiRunnerResources, "cpus" | "memory">;
+  inheritsResources: boolean;
+  labels: string[];
+  jobImage: string;
+  scheduler?: QemuSchedulerIdentity;
+  updatedAt: string;
+  error?: string;
+}
+
+export type QemuSchedulerIdentity = {
+  readonly projectId: string;
+  readonly hostId: string;
+};
+
+export type QemuSchedulerProjectConnection = QemuSchedulerIdentity & {
+  readonly controllerEndpoint: string;
+  readonly supervisorEndpoint: string;
+  readonly webhookUrl: string;
+  readonly apiToken: string;
+  readonly webhookToken: string;
+};
+
+export interface CiRunnerRecord {
+  schemaVersion: 8;
+  name: string;
+  projectId: string;
+  projectName: string;
+  provider: string;
+  config: CiRunnerConfigProvenance;
+  executor: SysboxCiRunnerExecutor | QemuCiRunnerExecutor;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type WorkspaceRuntimeBackendKind = "sysbox";
+
+export interface GiteaCredentials {
+  adminUsername: string;
+  adminPassword: string;
+  writerUsername: string;
+  writerPassword: string;
+  maintainerUsername: string;
+  maintainerPassword: string;
+}
+
+export type GiteaProjectBinding = {
+  readonly id: string;
+  readonly gitNamespace: string;
+  readonly giteaOrganizationId: number;
+};
+
+type GiteaConnectionBase = GiteaCredentials & {
+  readonly apiBaseUrl: string;
+  readonly hostBaseUrl: string;
+  readonly workspaceBaseUrl: string;
+  readonly runnerBaseUrl: string;
+};
+
+export type GiteaConnection =
+  | (GiteaConnectionBase & { readonly kind: "managed" })
+  | (GiteaConnectionBase & {
+      readonly kind: "external";
+      readonly hostId: string;
+      readonly projectBindings: Readonly<Record<string, GiteaProjectBinding>>;
+    });
+
+export interface HostGitCredential {
+  username: string;
+  password: string;
+  baseUrl: string;
+}
+
+export type GitSyncConnection = {
+  readonly endpoint: string;
+  readonly hostId: string;
+  readonly token: string;
+  readonly timeoutSeconds: number;
+};
+
+export interface GiteaServiceRecord {
+  phase: "creating" | "ready" | "error";
+  containerName: string;
+  networkName: string;
+  volumeName: string;
+  image: string;
+  port: number;
+  createdAt: string;
+  updatedAt: string;
+  error?: string;
+}
+
+export type ProjectPhase = "creating" | "ready" | "error";
+export type ProjectRepositoryPhase = "creating" | "importing" | "ready" | "error";
+
+export interface RepositoryConnection {
+  name: "origin";
+  url: string;
+  refNamespace?: {
+    prefix?: string;
+    fallback?: boolean;
+    excludedPrefixes?: string[];
+    branches?: Record<string, string>;
+  };
+  publishBranches?: Record<string, string>;
+}
+
+export interface ProjectRepositoryRecord {
+  alias: string;
+  ref?: string;
+  providerRepoId: string;
+  owner: string;
+  hostUrl: string;
+  workspaceUrl: string;
+  phase: ProjectRepositoryPhase;
+  connections: RepositoryConnection[];
+  transferId?: string;
+  protectedPatterns: string[];
+  forcePushBlockedPatterns?: string[];
+  protectionPhase: "pending" | "applied";
+  createdAt: string;
+  updatedAt: string;
+  error?: string;
+}
+
+export interface ProjectRecord {
+  schemaVersion: 4;
+  id: string;
+  name: string;
+  gitNamespace: string;
+  giteaOrganizationId: number | null;
+  phase: ProjectPhase;
+  rootRepositoryAlias?: string;
+  rootRef?: string;
+  repositories: ProjectRepositoryRecord[];
+  createdAt: string;
+  updatedAt: string;
+  error?: string;
+}
+
+export type WorkspacePhase = "creating" | "setting-up" | "ready" | "stopped" | "setup-error" | "error";
+
+export interface WorkspaceSetupRecord {
+  startedAt: string;
+  completedAt?: string;
+  exitCode?: number;
+  error?: string;
+}
+
+export type WorkspaceCapabilityRequirement = "required" | "recommended";
+export interface WorkspaceCapabilityRecord {
+  name: string;
+  requirement: WorkspaceCapabilityRequirement;
+  status: "provided" | "unavailable";
+  plugin?: string;
+  detail?: string;
+  capabilities?: string[];
+  securityOptions?: string[];
+  devices?: string[];
+  environment?: Record<string, string>;
+}
+
+export interface WorkspaceRecord {
+  schemaVersion: 7;
+  name: string;
+  projectId: string;
+  projectName: string;
+  rootRepositoryAlias: string;
+  rootRef: string;
+  rootCommit: string;
+  workspaceDataPath: string;
+  phase: WorkspacePhase;
+  profiles: string[];
+  capabilities?: WorkspaceCapabilityRecord[];
+  composeProjectName: string;
+  containerName: string;
+  networkName: string;
+  dockerVolumeName: string;
+  runtimeBackend: WorkspaceRuntimeBackendKind;
+  kvm: boolean;
+  cpuCount: string;
+  memory: string;
+  pidsLimit: string;
+  routes: string[];
+  gitUserName: string;
+  gitUserEmail: string;
+  gitBaseUrl: string;
+  hostAliases: Record<string, string[]>;
+  projectManifestPath: string;
+  createdAt: string;
+  updatedAt: string;
+  lastSetup?: WorkspaceSetupRecord;
+  error?: string;
+}
