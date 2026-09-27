@@ -1,0 +1,45 @@
+include:
+  - secure-compose.yml
+
+services:
+  agent-dind:
+    build:
+      context: agent-dind
+      args:
+        DIM_UID: "${DIM_WORKSPACE_UID:-1000}"
+        DIM_GID: "${DIM_WORKSPACE_GID:-1000}"
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+      DIM_WORKSPACE_UID: "${DIM_WORKSPACE_UID:?}"
+      DIM_WORKSPACE_GID: "${DIM_WORKSPACE_GID:?}"
+      DIM_GIT_USERNAME: "${DIM_GIT_USERNAME:?}"
+      DIM_GIT_TOKEN: "${DIM_GIT_TOKEN:?}"
+      GIT_AUTHOR_NAME: "${GIT_AUTHOR_NAME:?}"
+      GIT_AUTHOR_EMAIL: "${GIT_AUTHOR_EMAIL:?}"
+      GIT_COMMITTER_NAME: "${GIT_COMMITTER_NAME:?}"
+      GIT_COMMITTER_EMAIL: "${GIT_COMMITTER_EMAIL:?}"
+      DIM_DEVELOPMENT_GATEWAY_PORT: "${DIM_DEVELOPMENT_GATEWAY_PORT:?}"
+    expose:
+      - "${DIM_DEVELOPMENT_GATEWAY_PORT:?}"
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+    volumes:
+      - "${DIM_WORKSPACE_DATA:?}/project:/workspace"
+      - "${DIM_PROJECT_ROOT:?}:/run/dim/project-root:ro"
+      - "${DIM_PROJECT_MANIFEST:?}:/run/dim/project.json:ro"
+      - agent-home:/mnt/agent-home
+      - agent-dind-data:/home/rootless/.local/share/docker
+      - agent-dind-shared:/mnt/workspace-shared-dind
+      - /tmp/dim-agent-controller:/run/dim/controller-proxy:ro
+      - /tmp/dim-development-url:/run/dim/development-url:ro
+      - /usr/local/lib/dim/controller-proxy:/usr/local/lib/dim/controller-proxy:ro
+    working_dir: /workspace
+
+volumes:
+  agent-home:
+  agent-dind-data:
+  agent-dind-shared:

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "listen": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
+  "repositoriesRoot": "/data/git/repositories",
+  "stateRoot": "/var/lib/dim-git-sync",
+  "apiToken": "replace-with-service-token",
+  "timeoutSeconds": 300,
+  "transportPolicy": {
+    "httpsHosts": ["github.com", "gitlab.example"],
+    "httpHosts": [],
+    "sshHosts": ["gitlab.example"],
+    "localRoots": ["/srv/dim-git-imports"]
+  },
+  "repositories": {
+    "replace-with-project-id/root": {
+      "relativePath": "dim-acme/root.git",
+      "managedUrl": "http://gitea:3000/dim-acme/root.git"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+services:
+  ssh:
+    profiles: [development]
+    build:
+      context: ../ssh
+    volumes:
+      - ssh-host-keys:/var/lib/ssh-host-keys
+    healthcheck:
+      test: [CMD, nc, -z, 127.0.0.1, "22"]
+      interval: 1s
+      timeout: 1s
+      retries: 30
+
+volumes:
+  ssh-host-keys:
