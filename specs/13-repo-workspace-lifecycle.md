@@ -188,6 +188,17 @@ DIM revokes transfer authority before applying protection, and grants ordinary
 repository users only after protection succeeds. Transfer or protection
 failure leaves the repository non-ready and non-writable by ordinary users.
 
+For a reviewed root branch, protection MUST reject ordinary direct pushes and
+force pushes while requiring an approval by a designated human reviewer for
+every pull request. The host-only maintainer remains the explicit recovery and
+publication authority. Repository owners are not direct-push exceptions;
+administrators MUST NOT bypass pull-request reviews in routine merges. Neither
+protected-file patterns, which also reject reviewed merges, nor unprotected-file
+patterns, whose path classification is insufficient for rename-safe exceptions,
+may be used to simulate selective path review. Projects may add CODEOWNERS for
+paths such as `.dim/**`, with any missing or newly introduced paths still
+requiring the general pull-request approval.
+
 Deleting a repository MUST reject the selected target while its phase is
 `importing`, before any Gitea or Project-state mutation. An importing sibling
 MUST NOT block deletion of a different `ready` target.

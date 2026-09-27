@@ -129,6 +129,17 @@ Agents must not directly update protected refs.
 Protected refs must be updated through Git-host review/merge or trusted
 host-side administrative operations.
 
+For a Project that combines trusted lifecycle and agent-changeable sources in
+one repository, every ordinary update to its selected root ref MUST enter
+through a reviewed pull request. The workspace writer and ordinary repository
+owners MUST NOT directly push that ref, including changes outside `.dim`.
+Project-defined code-owner rules MAY request additional review for sensitive
+paths, but path matching alone does not prove the dependency closure of trusted
+scripts, Docker build contexts, or lifecycle hooks. The Project owns that
+verification and the human reviewer must inspect its result against the
+complete selected commit tree before trusting the ref. DIM does not infer a
+safe subtree from filenames.
+
 The host-side operation MUST use a distinct managed maintainer credential.
 That credential MUST NOT be returned by the workspace controller or injected
 into a workspace, agent, nested container, or CI runner. Protected-ref push
