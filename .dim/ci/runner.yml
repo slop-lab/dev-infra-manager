@@ -1,0 +1,29 @@
+schemaVersion: 1
+workloads:
+  ordinary:
+    labels:
+      - dim
+    image: nixery.dev/shell/bash/coreutils/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:e191da897cdbfad45bb0f6a84e1d93d8628dabb9a1c2aa1c1897759d6b3078e3
+    tools:
+      - bash
+      - curl
+      - git
+      - just
+      - node
+      - python3
+    capabilities: []
+  integration:
+    labels:
+      - dim-container-integration
+    image: nixery.dev/shell/bash/coreutils/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:e191da897cdbfad45bb0f6a84e1d93d8628dabb9a1c2aa1c1897759d6b3078e3
+    tools:
+      - bash
+      - curl
+      - docker
+      - git
+      - just
+      - node
+      - python3
+      - socat
+    capabilities:
+      - nested-docker
