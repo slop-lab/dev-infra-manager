@@ -1,0 +1,4 @@
+# Review requests for the trusted Project contract and review policy.
+(^|/)\.dim/.* @dim-dim/Owners
+(^|/)\.gitea/.* @dim-dim/Owners
+^CODEOWNERS$ @dim-dim/Owners

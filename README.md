@@ -6,6 +6,13 @@ runtime and assembles the independently managed repositories under
 `/workspace`. Ordinary source, tests, tooling, examples, and specifications do
 not live in this repository.
 
+For a future single-tree Project, `main` requires a pull request with an
+Owner approval for every ordinary change. `.gitea/CODEOWNERS` requests an
+additional reviewer for `.dim` and review-policy files. The Project's own
+verification must show that the selected complete tree is safe for trusted
+lifecycle execution; CODEOWNERS patterns alone cannot prove which external
+inputs a script or Docker build consumes.
+
 [`.dim/repos.yml`](.dim/repos.yml) is the reviewed repository catalog. The
 lifecycle clones the `development` repository at `/workspace` and the other
 registered repositories as siblings (`core`, `core-development`, plugin
@@ -190,6 +197,21 @@ checks from the assembled development workspace:
 pnpm install --frozen-lockfile
 just check-source
 ```
+
+### Prepare a single-tree migration candidate
+
+`scripts/build-monorepo-candidate.bash` builds a disposable candidate from
+eleven explicit full commit IDs. Supply each repository path and reviewed SHA
+with `--source NAME PATH FULL_COMMIT`, including `development` and `root`;
+the script rejects missing sources, abbreviated IDs, and tree collisions.
+Development history stays at the repository root, root lifecycle code becomes
+top-level `.dim`, and the other histories become ordinary subdirectories.
+The candidate records original commit and tree IDs plus the exact candidate
+overlay bytes and digests in `.monorepo-candidate/`. It has no Git remote and
+does not update the current Project or either upstream. Check its evidence,
+single-repository materialization, package build, and Project-specific gate
+before proposing a reviewed migration. A green source-only gate does not
+authorize updating `main` or retiring the split repositories.
 
 ## Connect to the agent with OpenSSH
 
