@@ -14,3 +14,6 @@ install-local:
 # Restart the managed controller with the currently installed DIM package set.
 restart-controller:
     if command -v mise >/dev/null 2>&1; then mise exec -- dim controller restart; else dim controller restart; fi
+
+# Install prepared local DIM packages before restarting the managed control plane.
+install-local-control-plane: install-local restart-controller

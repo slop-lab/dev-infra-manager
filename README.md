@@ -290,6 +290,11 @@ just install-local
 just restart-controller
 ```
 
+To install the prepared local packages and restart the controller in one
+ordered operation, use `just install-local-control-plane`. It skips the
+restart if installation fails; the separate recipes remain available for
+independent review or scheduling.
+
 Preparation requires Git, Docker with the Buildx plugin, Node.js 24 or 26, and
 pnpm 10. Installation requires npm directly or through mise; it does not trust
 the existing DIM installer facade to install the candidate.
