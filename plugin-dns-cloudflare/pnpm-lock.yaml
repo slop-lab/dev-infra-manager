@@ -1,0 +1,76 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@slop-lab/dim-contracts-external-url':
+        specifier: 0.8.0
+        version: 0.8.0
+      '@slop-lab/dim-core':
+        specifier: 0.8.0
+        version: 0.8.0
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      package.json-minifier:
+        specifier: 0.0.6
+        version: 0.0.6
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+packages:
+
+  '@slop-lab/dim-contracts-external-url@0.8.0':
+    resolution: {integrity: sha512-j1/Jl6cbOAtXg89q09DMAQ36RGlqBf/S5GlLBzFjAQr7qExaSfTQmFts+fIDMZ108O88U6UVwBbd94naTKcNsQ==}
+    engines: {node: ^24.0.0 || ^26.0.0}
+
+  '@slop-lab/dim-core@0.8.0':
+    resolution: {integrity: sha512-Up3qEDB36GkF2FLSV6XkX9v/ETezMdHWAPyjzzZnfRRiuLZa7XWvWKGTK0AfHw0Pw9w0zBqhXUCZvkulaFs/cA==}
+    engines: {node: ^24.0.0 || ^26.0.0}
+
+  '@types/node@24.13.3':
+    resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
+
+  package.json-minifier@0.0.6:
+    resolution: {integrity: sha512-exxM3mV0MwjPgDDCC1W7C2ccyYiud/x86yUfVGA8A+/sqd+N44kSJqGM5YIzTsIwiF1m2aNQ4bEhnoEdUwb3vA==}
+    hasBin: true
+
+  typescript@5.8.3:
+    resolution: {integrity: sha512-p1diW6TqL9L07nNxvRMM7hMMw4c5XOo/1ibL4aAIGmSAt9slTE1Xgw5KWuof2uTOvCg9BY7ZRi+GaF+7sfgPeQ==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+  undici-types@7.18.2:
+    resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
+
+  yaml@2.8.3:
+    resolution: {integrity: sha512-AvbaCLOO2Otw/lW5bmh9d/WEdcDFdQp2Z2ZUH3pX9U2ihyUY0nvLv7J6TrWowklRGPYbB/IuIMfYgxaCPg5Bpg==}
+    engines: {node: '>= 14.6'}
+    hasBin: true
+
+snapshots:
+
+  '@slop-lab/dim-contracts-external-url@0.8.0': {}
+
+  '@slop-lab/dim-core@0.8.0':
+    dependencies:
+      yaml: 2.8.3
+
+  '@types/node@24.13.3':
+    dependencies:
+      undici-types: 7.18.2
+
+  package.json-minifier@0.0.6: {}
+
+  typescript@5.8.3: {}
+
+  undici-types@7.18.2: {}
+
+  yaml@2.8.3: {}
