@@ -18,6 +18,7 @@ export * from "./pluginLoader.js";
 export * from "./projectRegistry.js";
 export {
   removeProtectedRootSnapshots,
+  protectedRootSnapshotPath,
   resolveProtectedRootSnapshot,
   type ProtectedRootSnapshot,
   type ProtectedRootSnapshotRequest

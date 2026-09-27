@@ -40,6 +40,12 @@ export type LockedProtectedRootSnapshotRequest = Omit<ProtectedRootSnapshotReque
   readonly project: ProjectRecord;
 };
 
+export function protectedRootSnapshotPath(stateRoot: string, projectId: string, rootCommit: string): string {
+  if (!/^[A-Za-z0-9-]+$/.test(projectId)) throw new UserError(`project ID '${projectId}' is invalid`);
+  if (!/^[0-9a-f]{40}$/.test(rootCommit)) throw new UserError(`root commit '${rootCommit}' is invalid`);
+  return path.join(stateRoot, "assets", "project-roots", projectId, rootCommit);
+}
+
 export async function removeProtectedRootSnapshots(stateRoot: string, projectId: string): Promise<void> {
   if (!/^[A-Za-z0-9-]+$/.test(projectId)) throw new UserError(`project ID '${projectId}' is invalid`);
   const root = path.join(stateRoot, "assets", "project-roots", projectId);
@@ -108,7 +114,7 @@ async function publishRootSnapshot(
   }
 ): Promise<string> {
   const parent = path.join(input.stateRoot, "assets", "project-roots", input.project.id);
-  const target = path.join(parent, input.commit);
+  const target = protectedRootSnapshotPath(input.stateRoot, input.project.id, input.commit);
   try {
     if ((await lstat(target)).isDirectory()) return target;
     throw new UserError(`protected root snapshot '${target}' is not a directory`);
