@@ -35,9 +35,9 @@ describe("workspace update setup lock", () => {
     project = projectFixture();
     workspace = workspaceFixture(root, project);
     runner = new UpdateRunner();
-    runner.containerRootSnapshotPath = workspace.rootSnapshotPath;
+    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
     await state.claimProject(project);
-    await mkdir(workspace.rootSnapshotPath, { recursive: true });
+    await mkdir(runner.containerRootSnapshotPath, { recursive: true });
     await mkdir(join(root, "assets", "project-roots", project.id, COMMIT), { recursive: true });
     await state.claimWorkspace(workspace);
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
@@ -56,8 +56,7 @@ it("replays the recorded root and manifest before direct setup recovery from set
       ...workspace,
       phase: "setting-up",
       rootRef: "refs/heads/main",
-      rootCommit: COMMIT,
-      rootSnapshotPath: targetSnapshotPath
+      rootCommit: COMMIT
     } as const;
     await state.writeWorkspace(interrupted);
     runner = new UpdateRunner(0, 0);
@@ -67,7 +66,8 @@ it("replays the recorded root and manifest before direct setup recovery from set
     const recovered = await setupWorkspace(runner, options(root), workspace.name);
 
     // Then
-    expect(recovered).toMatchObject({ phase: "ready", rootCommit: COMMIT, rootSnapshotPath: targetSnapshotPath });
+    expect(recovered).toMatchObject({ phase: "ready", rootCommit: COMMIT });
+    expect(recovered).not.toHaveProperty("rootSnapshotPath");
     expect(runner.runCalls.some((call) => call.includes("ls-remote"))).toBe(false);
     expect(runner.runCalls.some((call) => call.includes("fetch"))).toBe(false);
     expect(runner.publishedManifests[0]).not.toHaveProperty("repositories");
@@ -114,7 +114,7 @@ it("recovers an interruption after snapshot persistence without resolving moved 
 it("recovers a manifest failure through direct setup from the recorded root", async () => {
     // Given
     runner = new UpdateRunner(1, 0);
-    runner.containerRootSnapshotPath = workspace.rootSnapshotPath;
+    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
     await expect(updateWorkspace(runner, options(root), workspace.name)).rejects.toThrow(
       /failed to write project runtime manifest/
     );

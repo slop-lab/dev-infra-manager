@@ -91,14 +91,13 @@ export function repositorySnapshot(rootCommit = COMMIT) {
 
 export function workspaceFixture(stateRoot: string, project: ProjectRecord): WorkspaceRecord {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     name: "work-1",
     projectId: project.id,
     projectName: project.name,
     rootRepositoryAlias: "root",
     rootRef: "refs/heads/main",
     rootCommit: INITIAL_COMMIT,
-    rootSnapshotPath: join(stateRoot, "assets", "project-roots", project.id, INITIAL_COMMIT),
     workspaceDataPath: "/var/lib/dim/workspace-data",
     phase: "ready",
     profiles: ["development"],

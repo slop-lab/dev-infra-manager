@@ -35,9 +35,9 @@ describe("workspace update setup lock", () => {
     project = projectFixture();
     workspace = workspaceFixture(root, project);
     runner = new UpdateRunner();
-    runner.containerRootSnapshotPath = workspace.rootSnapshotPath;
+    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
     await state.claimProject(project);
-    await mkdir(workspace.rootSnapshotPath, { recursive: true });
+    await mkdir(runner.containerRootSnapshotPath, { recursive: true });
     await mkdir(join(root, "assets", "project-roots", project.id, COMMIT), { recursive: true });
     await state.claimWorkspace(workspace);
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));

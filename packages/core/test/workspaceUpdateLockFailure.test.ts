@@ -35,9 +35,9 @@ describe("workspace update setup lock", () => {
     project = projectFixture();
     workspace = workspaceFixture(root, project);
     runner = new UpdateRunner();
-    runner.containerRootSnapshotPath = workspace.rootSnapshotPath;
+    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
     await state.claimProject(project);
-    await mkdir(workspace.rootSnapshotPath, { recursive: true });
+    await mkdir(runner.containerRootSnapshotPath, { recursive: true });
     await mkdir(join(root, "assets", "project-roots", project.id, COMMIT), { recursive: true });
     await state.claimWorkspace(workspace);
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
@@ -52,7 +52,7 @@ describe("workspace update setup lock", () => {
 it("keeps a post-fast-forward manifest failure non-ready and blocks run", async () => {
     // Given
     runner = new UpdateRunner(1);
-    runner.containerRootSnapshotPath = workspace.rootSnapshotPath;
+    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
 
     // When
     const updating = updateWorkspace(runner, options(root), workspace.name);
@@ -112,7 +112,7 @@ it("persists setup-error when the final ready write fails after manifest publica
 it("recovers a failed manifest publication through a later update", async () => {
     // Given
     runner = new UpdateRunner(1);
-    runner.containerRootSnapshotPath = workspace.rootSnapshotPath;
+    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
     await expect(updateWorkspace(runner, options(root), workspace.name)).rejects.toThrow(
       /failed to write project runtime manifest/
     );
@@ -132,7 +132,7 @@ it("recovers a failed manifest publication through a later update", async () => 
   it("does not publish ready between selected-root publication and failed Project setup", async () => {
     // Given
     runner = new UpdateRunner(0, 17);
-    runner.containerRootSnapshotPath = workspace.rootSnapshotPath;
+    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
     const persistedPhases: WorkspaceRecord["phase"][] = [];
     const writeWorkspace = LifecycleState.prototype.writeWorkspace;
     vi.spyOn(LifecycleState.prototype, "writeWorkspace").mockImplementation(async function (
@@ -173,7 +173,8 @@ it("recovers a failed manifest publication through a later update", async () => 
     const updated = await updateWorkspace(runner, options(root), workspace.name);
 
     // Then
-    expect(updated).toMatchObject({ phase: "ready", rootCommit: COMMIT, rootSnapshotPath: selectedRootPath });
+    expect(updated).toMatchObject({ phase: "ready", rootCommit: COMMIT });
+    expect(updated).not.toHaveProperty("rootSnapshotPath");
     expect(runner.lifecycleEvents).toEqual(["container-remove", "container-create", "manifest-publication"]);
     expect(runner.containerRootSnapshotPath).toBe(selectedRootPath);
     expect(runner.runCalls.some((call) => call[1] === "volume" && call[2] === "rm")).toBe(false);
@@ -182,7 +183,7 @@ it("recovers a failed manifest publication through a later update", async () => 
   it("keeps the owned outer container when the approved root is unchanged", async () => {
     // Given
     const selectedRootPath = join(root, "assets", "project-roots", project.id, COMMIT);
-    workspace = { ...workspace, rootCommit: COMMIT, rootSnapshotPath: selectedRootPath };
+    workspace = { ...workspace, rootCommit: COMMIT };
     await state.writeWorkspace(workspace);
     runner.containerRootSnapshotPath = selectedRootPath;
 
