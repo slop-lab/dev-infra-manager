@@ -9,6 +9,7 @@ import { LifecycleState } from "../../../../core/packages/core/src/lifecycleStat
 import type { LifecycleOptions, ProjectRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import { createWorkspace } from "../../../../core/packages/core/src/workspaceCreation.js";
 import {
+  protectedRootSnapshotPath,
   removeProtectedRootSnapshots,
   resolveProtectedRootSnapshot,
   type ProtectedRootSnapshot
@@ -61,6 +62,22 @@ describe("protected Project root snapshots", () => {
   let root = "";
   let options: LifecycleOptions;
   let project: ProjectRecord;
+
+  it("derives the protected-root path solely from state, Project identity, and commit", () => {
+    // Given / When
+    const snapshotPath = protectedRootSnapshotPath("/state", "project-id", COMMIT);
+
+    // Then
+    expect(snapshotPath).toBe(join("/state", "assets", "project-roots", "project-id", COMMIT));
+  });
+
+  it.each([
+    ["invalid Project identity", "../project", COMMIT, /project ID/],
+    ["invalid root commit", "project-id", "../commit", /root commit/]
+  ] as const)("rejects %s before deriving a protected-root path", (_case, projectId, commit, expected) => {
+    // Given / When / Then
+    expect(() => protectedRootSnapshotPath("/state", projectId, commit)).toThrow(expected);
+  });
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "dim-protected-root-"));
