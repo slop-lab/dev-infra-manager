@@ -1,5 +1,5 @@
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
-import { cp, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { expect } from "vitest";
@@ -58,6 +58,10 @@ async function createRepository(root: string, name: FixtureRepository["name"]): 
   }
   if (name === "root") {
     await cp(rootContract, resolve(path, ".dim"), { recursive: true });
+    if ((await readFile(resolve(path, ".dim/qemu-service.mjs"), "utf8"))
+      .includes('"/workspace/.dim/qemu-verify.bash"')) {
+      successfulGit(path, ["apply", "--reverse", resolve(workspaceRoot, "scripts/monorepo-candidate-overlay/qemu-root-layout.patch")]);
+    }
     await mkdir(resolve(path, "scripts"));
     for (const script of [
       "build-monorepo-candidate.bash",
