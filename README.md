@@ -201,17 +201,42 @@ just check-source
 ### Prepare a single-tree migration candidate
 
 `scripts/build-monorepo-candidate.bash` builds a disposable candidate from
-eleven explicit full commit IDs. Supply each repository path and reviewed SHA
-with `--source NAME PATH FULL_COMMIT`, including `development` and `root`;
-the script rejects missing sources, abbreviated IDs, and tree collisions.
-Development history stays at the repository root, root lifecycle code becomes
-top-level `.dim`, and the other histories become ordinary subdirectories.
-The candidate records original commit and tree IDs plus the exact candidate
-overlay bytes and digests in `.monorepo-candidate/`. It has no Git remote and
-does not update the current Project or either upstream. Check its evidence,
-single-repository materialization, package build, and Project-specific gate
-before proposing a reviewed migration. A green source-only gate does not
-authorize updating `main` or retiring the split repositories.
+twelve explicit full commit IDs: the canonical GitHub development history and
+all eleven managed Gitea histories. The GitHub clone must be complete, not
+shallow or partial: every historical blob must be available before publication.
+Supply the local GitHub clone and reviewed
+SHA with the required `--github-development-source PATH FULL_COMMIT` option,
+then supply every Gitea repository path and reviewed SHA with
+`--source NAME PATH FULL_COMMIT`:
+
+```bash
+bash scripts/build-monorepo-candidate.bash /tmp/dim-monorepo-candidate \
+  --github-development-source /path/to/github-development "$GITHUB_DEVELOPMENT_SHA" \
+  --source development /workspace "$GITEA_DEVELOPMENT_SHA" \
+  --source root /workspace/project "$GITEA_ROOT_SHA" \
+  --source core /workspace/core "$GITEA_CORE_SHA" \
+  --source core-development /workspace/core-development "$GITEA_CORE_DEVELOPMENT_SHA" \
+  --source plugin-dns-cloudflare /workspace/plugin-dns-cloudflare "$GITEA_DNS_SHA" \
+  --source plugin-dns-cloudflare-development /workspace/plugin-dns-cloudflare-development "$GITEA_DNS_DEVELOPMENT_SHA" \
+  --source plugin-external-urls /workspace/plugin-external-urls "$GITEA_EXTERNAL_URLS_SHA" \
+  --source plugin-external-urls-development /workspace/plugin-external-urls-development "$GITEA_EXTERNAL_URLS_DEVELOPMENT_SHA" \
+  --source verification /workspace/verification "$GITEA_VERIFICATION_SHA" \
+  --source examples /workspace/examples "$GITEA_EXAMPLES_SHA" \
+  --source specification /workspace/specification "$GITEA_SPECIFICATION_SHA"
+```
+
+The script rejects missing sources, abbreviated IDs, unavailable commits, and
+tree collisions. The selected Gitea development tree stays at the repository
+root. A dedicated two-parent history-only commit adds the GitHub development
+tip without importing its tree, root lifecycle code becomes top-level `.dim`,
+and the other Gitea histories become ordinary subdirectories. The candidate
+records all source commit and tree IDs, including separate GitHub ancestry
+evidence, plus the exact candidate overlay bytes and digests in
+`.monorepo-candidate/`. It has no Git remote and does not update the current
+Project or either upstream. Check its evidence, single-repository
+materialization, package build, and Project-specific gate before proposing a
+reviewed migration. A green source-only gate does not authorize updating
+`main` or retiring the split repositories.
 
 ## Connect to the agent with OpenSSH
 
