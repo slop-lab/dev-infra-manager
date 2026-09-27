@@ -8,6 +8,7 @@ const workspaceRoot = resolve(import.meta.dirname, "../..");
 const builder = resolve(workspaceRoot, "project/scripts/build-monorepo-candidate.bash");
 const rootContract = resolve(workspaceRoot, "project/.dim");
 const repositories = [
+  ["github-development", ""],
   ["development", ""],
   ["root", "."],
   ["core", "core"],
@@ -59,12 +60,15 @@ async function createRepository(root: string, name: FixtureRepository["name"]): 
     await cp(rootContract, resolve(path, ".dim"), { recursive: true });
     await mkdir(resolve(path, "scripts"));
     for (const script of [
+      "build-monorepo-candidate.bash",
       "build-workspace-image.bash", "install-source-build.bash", "local-package-version.bash",
       "local-preparation-state.bash", "pack-local-packages.mjs", "pack-source-build.bash",
-      "prepare-source-build.bash",
+      "prepare-source-build.bash", "monorepo-candidate-assembly.bash",
     ]) {
       await cp(resolve(workspaceRoot, "project/scripts", script), resolve(path, "scripts", script));
     }
+    await cp(resolve(workspaceRoot, "project/scripts/monorepo-candidate-overlay"),
+      resolve(path, "scripts/monorepo-candidate-overlay"), { recursive: true });
   }
   if (name === "verification") {
     await mkdir(resolve(path, "test"));
@@ -111,7 +115,12 @@ export async function createFixture(): Promise<readonly FixtureRepository[]> {
 
 export function runBuilder(output: string, sources: readonly FixtureRepository[]): SpawnSyncReturns<string> {
   const arguments_ = [output];
+  const githubDevelopment = sources.find(({ name }) => name === "github-development");
+  if (githubDevelopment !== undefined) {
+    arguments_.push("--github-development-source", githubDevelopment.path, githubDevelopment.sha);
+  }
   for (const source of sources) {
+    if (source.name === "github-development") continue;
     arguments_.push("--source", source.name, source.path, source.sha);
   }
   return spawnSync("/usr/bin/bash", [builder, ...arguments_], {

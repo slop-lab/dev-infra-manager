@@ -32,6 +32,13 @@ describe("monorepo candidate builder", () => {
   it("assembles exact feature tips with preserved ancestry and trees", async () => {
     // Given
     const sources = await createFixture();
+    expect(sources).toHaveLength(12);
+    const githubDevelopment = sources.find(({ name }) => name === "github-development");
+    const development = sources.find(({ name }) => name === "development");
+    expect(githubDevelopment).toBeDefined();
+    expect(development).toBeDefined();
+    expect(git(development?.path ?? "", ["merge-base", githubDevelopment?.sha ?? "", development?.sha ?? ""]).status)
+      .not.toBe(0);
     const verification = sources.find(({ name }) => name === "verification");
     expect(successfulGit(verification?.path ?? "", ["ls-tree", "-r", "--name-only", "HEAD"]))
       .toContain("test/localSourceBuildPolicy.test.ts");
@@ -53,11 +60,23 @@ describe("monorepo candidate builder", () => {
       expect(successfulGit(source.path, ["status", "--porcelain=v1"])).toBe(source.status);
       expect(successfulGit(source.path, ["remote", "-v"])).toBe(source.remotes);
     }
+    const githubParentLine = successfulGit(output, ["rev-list", "--parents", "HEAD"])
+      .split("\n")
+      .map((line) => line.split(" "))
+      .find(([, ...parents]) => parents.includes(githubDevelopment?.sha ?? ""));
+    expect(githubParentLine?.slice(1)).toEqual([development?.sha, githubDevelopment?.sha]);
+    expect(successfulGit(output, ["rev-parse", `${githubParentLine?.[0] ?? "missing"}^{tree}`])).toBe(development?.tree);
+    expect(await readFile(resolve(output, "content.txt"), "utf8")).toBe("candidate-development\n");
     expect(await readFile(resolve(output, "core/content.txt"), "utf8")).toBe("candidate-core\n");
     const evidence = await readFile(resolve(output, ".monorepo-candidate/sources.tsv"), "utf8");
     for (const source of sources) {
+      if (source.name === "github-development") continue;
       expect(evidence).toContain(`${source.name}\t${source.destination || "."}\t${source.sha}\t${source.tree}\t`);
     }
+    expect(evidence.trim().split("\n")).toHaveLength(12);
+    expect(await readFile(resolve(output, ".monorepo-candidate/github-development.tsv"), "utf8"))
+      .toBe(`repository\tsource_commit\tsource_tree\tancestry_policy\n` +
+        `github-development\t${githubDevelopment?.sha}\t${githubDevelopment?.tree}\thistory-only-merge-parent\n`);
   });
 
   it("materializes one operational Project repository", async () => {
@@ -172,10 +191,12 @@ describe("monorepo candidate builder", () => {
     expect(git(outputRoot, ["-C", output, "status"]).status).not.toBe(0);
   });
 
-  it("rejects symbolic or abbreviated refs before creating output", async () => {
+  it("rejects an abbreviated GitHub development ref before creating output", async () => {
     // Given
     const sources = await createFixture();
-    const invalidSources = sources.map((source) => source.name === "root" ? { ...source, sha: "candidate-tip" } : source);
+    const invalidSources = sources.map((source) => source.name === "github-development"
+      ? { ...source, sha: "candidate-tip" }
+      : source);
     const outputRoot = await createFixtureRoot("dim-monorepo-ref-output-");
     const output = resolve(outputRoot, "candidate");
 
@@ -184,7 +205,56 @@ describe("monorepo candidate builder", () => {
 
     // Then
     expect(result.status).toBe(2);
-    expect(result.stderr).toContain("root commit must be exactly 40 lowercase hexadecimal characters");
+    expect(result.stderr).toContain("GitHub development commit must be exactly 40 lowercase hexadecimal characters");
+    expect(git(outputRoot, ["-C", output, "status"]).status).not.toBe(0);
+  });
+
+  it("rejects a missing GitHub development source before creating output", async () => {
+    // Given
+    const sources = (await createFixture()).filter(({ name }) => name !== "github-development");
+    const outputRoot = await createFixtureRoot("dim-monorepo-missing-github-output-");
+    const output = resolve(outputRoot, "candidate");
+
+    // When
+    const result = runBuilder(output, sources);
+
+    // Then
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("missing GitHub development source");
+    expect(git(outputRoot, ["-C", output, "status"]).status).not.toBe(0);
+  });
+
+  it("rejects an unavailable GitHub development commit before creating output", async () => {
+    // Given
+    const sources = (await createFixture()).map((source) => source.name === "github-development"
+      ? { ...source, sha: "ffffffffffffffffffffffffffffffffffffffff" }
+      : source);
+    const outputRoot = await createFixtureRoot("dim-monorepo-unavailable-github-output-");
+    const output = resolve(outputRoot, "candidate");
+
+    // When
+    const result = runBuilder(output, sources);
+
+    // Then
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("GitHub development commit is unavailable: ffffffffffffffffffffffffffffffffffffffff");
+    expect(git(outputRoot, ["-C", output, "status"]).status).not.toBe(0);
+  });
+
+  it("rejects a partial GitHub history before creating output", async () => {
+    // Given
+    const sources = await createFixture();
+    const github = sources.find(({ name }) => name === "github-development");
+    successfulGit(github?.path ?? "", ["config", "remote.origin.promisor", "true"]);
+    const outputRoot = await createFixtureRoot("dim-monorepo-partial-github-output-");
+    const output = resolve(outputRoot, "candidate");
+
+    // When
+    const result = runBuilder(output, sources);
+
+    // Then
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("GitHub development source must contain complete history and blobs");
     expect(git(outputRoot, ["-C", output, "status"]).status).not.toBe(0);
   });
 });
