@@ -9,6 +9,7 @@ import {
   REGISTRY_CACHE_ENDPOINT
 } from "./registryCache.js";
 import { workspaceRuntimePlan } from "./runtimeBackends.js";
+import { protectedRootSnapshotPath } from "./protectedRootSnapshot.js";
 import type { StreamingCommandRunner } from "./types.js";
 import {
   PROJECT_ROOT,
@@ -28,13 +29,14 @@ import {
 
 export async function assertContainerRunning(
   runner: StreamingCommandRunner,
+  stateRoot: string,
   record: WorkspaceRecord
 ): Promise<string> {
   const container = await inspectWorkspaceContainer(runner, record);
   if (container === undefined || !container.running) {
     throw new UserError(`workspace '${record.name}' is stopped; run dim workspace start`);
   }
-  if (container.rootSnapshotPath !== record.rootSnapshotPath) {
+  if (container.rootSnapshotPath !== protectedRootSnapshotPath(stateRoot, record.projectId, record.rootCommit)) {
     throw new UserError(`workspace '${record.name}' container root does not match its recorded immutable root`);
   }
   return container.id;
@@ -46,7 +48,7 @@ export async function reconcileContainer(
   record: WorkspaceRecord,
   git: WorkspaceGitEnvironment
 ): Promise<string> {
-  await assertRootSnapshot(record);
+  await assertRootSnapshot(options.stateRoot, record);
   if (record.kvm) {
     try {
       await probeKvmDevice();
@@ -72,7 +74,7 @@ export async function reconcileContainer(
     }
   }
   if (container.runtimeConfig !== WORKSPACE_RUNTIME_CONFIG_VERSION
-    || container.rootSnapshotPath !== record.rootSnapshotPath) {
+    || container.rootSnapshotPath !== protectedRootSnapshotPath(options.stateRoot, record.projectId, record.rootCommit)) {
     const removed = await runner.run("docker", ["container", "rm", "--force", container.id]);
     if (removed.exitCode !== 0 && !isMissingContainer(removed.stderr, container.id)) {
       throw new UserError(`failed to replace workspace container: ${removed.stderr.trim()}`);
@@ -89,7 +91,7 @@ export async function reconcileContainer(
     if (container.runtimeConfig !== WORKSPACE_RUNTIME_CONFIG_VERSION) {
       throw new UserError(`workspace container '${record.containerName}' has stale runtime configuration`);
     }
-    if (container.rootSnapshotPath !== record.rootSnapshotPath) {
+    if (container.rootSnapshotPath !== protectedRootSnapshotPath(options.stateRoot, record.projectId, record.rootCommit)) {
       throw new UserError(`workspace container '${record.containerName}' has the wrong immutable Project root`);
     }
   }
@@ -142,7 +144,7 @@ export function workspaceContainerArgs(
     "--memory-swap", record.memory,
     "--pids-limit", record.pidsLimit,
     "--mount", `type=volume,source=${record.dockerVolumeName},target=${plan.runtimeDataPath}`,
-    "--mount", `type=bind,source=${record.rootSnapshotPath},target=${PROJECT_ROOT},readonly`,
+    "--mount", `type=bind,source=${protectedRootSnapshotPath(options.stateRoot, record.projectId, record.rootCommit)},target=${PROJECT_ROOT},readonly`,
     "--mount", `type=bind,source=${path.dirname(options.controllerSocketPath)},target=/run/dim/controller`,
     "--mount", `type=bind,source=${path.dirname(options.agentControllerSocketPath)},target=/run/dim/agent-controller`,
     ...workspaceContainerLabels(record).flatMap((label) => ["--label", label]),

@@ -3,6 +3,7 @@ import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type { LifecycleOptions } from "./lifecycleTypes.js";
 import type { WorkspaceDiscardHook } from "./plugin.js";
 import type { StreamingCommandRunner } from "./types.js";
+import { protectedRootSnapshotPath } from "./protectedRootSnapshot.js";
 import { waitForInnerDocker } from "./workspaceContainer.js";
 import { runProjectTeardown } from "./workspaceProjectCommands.js";
 import {
@@ -36,13 +37,16 @@ export async function discardWorkspace(
     const container = await inspectWorkspaceContainer(runner, record);
     const volume = await inspectWorkspaceVolume(runner, record);
     if (container !== undefined) {
+      if (container.rootSnapshotPath !== protectedRootSnapshotPath(options.stateRoot, record.projectId, record.rootCommit)) {
+        throw new UserError(`workspace '${record.name}' container root does not match its recorded immutable root`);
+      }
       const inspectedRecord = { ...record, containerName: container.id };
       if (!container.running) {
         const started = await runner.run("docker", ["start", container.id]);
         if (started.exitCode !== 0) throw new UserError(`failed to start workspace '${record.name}' for teardown`);
         await waitForInnerDocker(runner, container.id);
       }
-      await runProjectTeardown(runner, inspectedRecord, keepVolume);
+      await runProjectTeardown(runner, options.stateRoot, inspectedRecord, keepVolume);
       const removed = await runner.run("docker", ["container", "rm", "--force", container.id]);
       if (removed.exitCode !== 0 && !isMissingContainer(removed.stderr, container.id)) {
         throw new UserError(`failed to remove workspace container: ${removed.stderr.trim()}`);

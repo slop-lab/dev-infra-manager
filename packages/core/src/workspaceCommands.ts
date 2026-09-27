@@ -19,7 +19,7 @@ export async function runWorkspace(
 ): Promise<number> {
   const record = await runnableWorkspace(runner, options, input.name);
   if (input.command.length === 0) throw new UserError("dim workspace run requires a task");
-  await assertRootSnapshot(record);
+  await assertRootSnapshot(options.stateRoot, record);
   const hasEntrypoint = await lifecycleFileExists(runner, record, ".dim/entrypoint.sh");
   if (!hasEntrypoint) throw new UserError("reviewed Project root does not define .dim/entrypoint.sh");
   return streamLifecycleCommand(
@@ -37,7 +37,7 @@ export async function execWorkspace(
   input: WorkspaceCommandInput
 ): Promise<number> {
   const persistedRecord = await showWorkspace(runner, options, input.name);
-  const containerId = await assertContainerRunning(runner, persistedRecord);
+  const containerId = await assertContainerRunning(runner, options.stateRoot, persistedRecord);
   const record = { ...persistedRecord, containerName: containerId };
   if (input.command.length === 0) throw new UserError("dim workspace exec requires a command");
   return streamProjectCommand(runner, record, input.command, input.interactive, true);

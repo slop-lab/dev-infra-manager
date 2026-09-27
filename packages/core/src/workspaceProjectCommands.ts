@@ -1,6 +1,7 @@
 import { stat } from "node:fs/promises";
 import { UserError } from "./errors.js";
 import type { WorkspaceRecord } from "./lifecycleTypes.js";
+import { protectedRootSnapshotPath } from "./protectedRootSnapshot.js";
 import type { CommandResult, StreamingCommandRunner } from "./types.js";
 import {
   PROJECT_COMPOSE_NAME,
@@ -75,10 +76,11 @@ export async function runProjectSetup(
 
 export async function runProjectTeardown(
   runner: StreamingCommandRunner,
+  stateRoot: string,
   record: WorkspaceRecord,
   keepVolume: boolean
 ): Promise<void> {
-  await assertRootSnapshot(record);
+  await assertRootSnapshot(stateRoot, record);
   const root = lifecycleRoot(record);
   if (await lifecycleFileExists(runner, record, ".dim/teardown.sh")) {
     const exitCode = await streamLifecycleCommand(runner, record, [
@@ -145,9 +147,9 @@ export function lifecycleRoot(record: WorkspaceRecord): string {
   return PROJECT_ROOT;
 }
 
-export async function assertRootSnapshot(record: WorkspaceRecord): Promise<void> {
+export async function assertRootSnapshot(stateRoot: string, record: WorkspaceRecord): Promise<void> {
   try {
-    const snapshot = await stat(record.rootSnapshotPath);
+    const snapshot = await stat(protectedRootSnapshotPath(stateRoot, record.projectId, record.rootCommit));
     if (snapshot.isDirectory()) return;
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
