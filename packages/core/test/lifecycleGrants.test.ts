@@ -52,14 +52,13 @@ it("creates and authenticates a workspace-scoped external URL grant", async () =
     const state = new LifecycleState(root);
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
-      schemaVersion: 6,
+    schemaVersion: 7,
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
       rootRepositoryAlias: "root",
       rootRef: "refs/heads/main",
       rootCommit: "a".repeat(40),
-      rootSnapshotPath: join(root, "assets", "project-roots", "project-id", "a".repeat(40)),
       workspaceDataPath: "/var/lib/dim/workspace-data",
       phase: "ready",
       profiles: [],

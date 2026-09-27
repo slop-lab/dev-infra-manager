@@ -69,14 +69,13 @@ export function hostRecord(
 
 export function workspaceRecord(name: string, phase: WorkspacePhase): WorkspaceRecord {
   return {
-    schemaVersion: 6,
+    schemaVersion: 7,
     name,
     projectId: HOST_PROJECT.id,
     projectName: HOST_PROJECT.name,
     rootRepositoryAlias: "root",
     rootRef: "refs/heads/main",
     rootCommit: "a".repeat(40),
-    rootSnapshotPath: `/snapshots/${name}`,
     workspaceDataPath: "/var/lib/dim/workspace-data",
     phase,
     profiles: [],
