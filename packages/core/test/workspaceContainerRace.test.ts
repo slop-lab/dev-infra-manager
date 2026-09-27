@@ -144,14 +144,15 @@ class WorkspaceDockerRunner implements StreamingCommandRunner {
   }
 }
 
+let root = "";
+
 describe("workspace container reconciliation ownership races", () => {
-  let root = "";
   let record: WorkspaceRecord;
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "dim-workspace-container-race-"));
     record = workspaceFixture(root, projectFixture());
-    await mkdir(record.rootSnapshotPath, { recursive: true });
+    await mkdir(join(root, "assets", "project-roots", record.projectId, record.rootCommit), { recursive: true });
     await new LifecycleState(root).claimWorkspace(record);
   });
 
@@ -231,7 +232,7 @@ describe("workspace container reconciliation ownership races", () => {
     expect(runner.calls).toContainEqual(["docker", "container", "rm", "--force", "old-root-id"]);
     expect(runner.current(record.containerName)).toMatchObject({
       id: "created-id",
-      rootSnapshotPath: record.rootSnapshotPath
+      rootSnapshotPath: join(root, "assets", "project-roots", record.projectId, record.rootCommit)
     });
   });
 
@@ -267,7 +268,7 @@ function container(
     labels: input.foreign ? foreignLabels(labels) : labels,
     running: input.running,
     runtimeConfig: input.runtimeConfig ?? "8",
-    rootSnapshotPath: input.rootSnapshotPath ?? record.rootSnapshotPath
+    rootSnapshotPath: input.rootSnapshotPath ?? join(root, "assets", "project-roots", record.projectId, record.rootCommit)
   };
 }
 

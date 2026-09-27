@@ -10,14 +10,13 @@ import { discardWorkspace } from "../../../../core/packages/core/src/workspaceLi
 import { workspaceContainerInspect, workspaceVolumeInspect } from "./workspaceOwnershipFixture.js";
 
 const WORKSPACE = {
-    schemaVersion: 6,
+  schemaVersion: 7,
   name: "work-1",
   projectId: "project-id",
   projectName: "project",
   rootRepositoryAlias: "root",
   rootRef: "refs/heads/main",
   rootCommit: "a".repeat(40),
-  rootSnapshotPath: "/tmp/dim-test-project-root",
     workspaceDataPath: "/var/lib/dim/workspace-data",
   phase: "ready",
   profiles: ["development"],
@@ -41,6 +40,7 @@ const WORKSPACE = {
 } satisfies WorkspaceRecord;
 
 const CONTAINER_ID = "c".repeat(64);
+let rootSnapshotPath = "";
 
 class DiscardRunner implements StreamingCommandRunner {
   readonly runCalls: string[][] = [];
@@ -57,7 +57,7 @@ class DiscardRunner implements StreamingCommandRunner {
       return {
         command,
         args,
-        stdout: `${workspaceContainerInspect(WORKSPACE, { id: CONTAINER_ID })}\n`,
+        stdout: `${workspaceContainerInspect(WORKSPACE, { id: CONTAINER_ID, rootSnapshotPath })}\n`,
         stderr: "",
         exitCode: 0
       };
@@ -95,8 +95,8 @@ describe("workspace discard teardown intent", () => {
 
   beforeEach(async () => {
     root = await mkdtemp(join(tmpdir(), "dim-workspace-discard-"));
-    WORKSPACE.rootSnapshotPath = join(root, "assets", "project-roots", "project-id", WORKSPACE.rootCommit);
-    await mkdir(WORKSPACE.rootSnapshotPath, { recursive: true });
+    rootSnapshotPath = join(root, "assets", "project-roots", "project-id", WORKSPACE.rootCommit);
+    await mkdir(rootSnapshotPath, { recursive: true });
     await new LifecycleState(root).claimWorkspace(WORKSPACE);
   });
 

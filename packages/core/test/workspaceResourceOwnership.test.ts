@@ -20,7 +20,7 @@ const RECORD = {
   rootSnapshotPath: "/var/lib/dim/project-roots/project-id/approved"
 } satisfies Pick<WorkspaceRecord,
   "name" | "projectName" | "projectId" | "rootRepositoryAlias" | "runtimeBackend" |
-  "containerName" | "dockerVolumeName" | "rootSnapshotPath">;
+  "containerName" | "dockerVolumeName"> & { readonly rootSnapshotPath: string };
 
 const CONTAINER_LABELS = [
   "dim.managed=true",
