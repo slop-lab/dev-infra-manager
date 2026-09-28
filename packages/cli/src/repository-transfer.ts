@@ -15,12 +15,30 @@ import type { RepositorySetPlan } from "./repository-set-types.js";
 export async function applyRepositorySet(
   projectName: string,
   set: RepositorySet,
-  plan: RepositorySetPlan
+  plan: RepositorySetPlan,
+  rebind?: { readonly alias: string; readonly expectedOriginTip: string }
 ): Promise<Record<string, unknown>[]> {
   const results: Record<string, unknown>[] = [];
   for (const action of plan.actions) {
     if (action.action === "unchanged") continue;
     if (action.action === "conflict") throw new UserError(`repository '${action.alias}' conflicts with existing state`);
+    if (action.action === "rebind") {
+      if (rebind === undefined || rebind.alias !== action.alias) {
+        throw new UserError(`repository '${action.alias}' origin rebind was not authorized`);
+      }
+      if (action.expectedOriginDigest === undefined) {
+        throw new UserError(`repository '${action.alias}' origin rebind plan is incomplete`);
+      }
+      results.push(await adminCall<Record<string, unknown>>("repo.rebind-origin", {
+        project: projectName,
+        alias: rebind.alias,
+        expectedOldOriginDigest: action.expectedOriginDigest,
+        expectedOriginTip: rebind.expectedOriginTip,
+        approved: true,
+        repositorySet: set
+      }));
+      continue;
+    }
     const result = await addRepository(projectName, action.alias, action.entry, set);
     const repository = (result.repository ?? result) as Record<string, unknown>;
     results.push(repository.protectionPhase === "pending"
