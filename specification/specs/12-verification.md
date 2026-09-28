@@ -11,6 +11,16 @@ the exact candidate commit and complete tree used to test whether `.dim` and
 its dependencies are safe; a successful test is review evidence, not a
 replacement for Git-host authorization.
 
+Origin-rebind verification MUST include a real disposable Git history where
+the new exact external tip descends from the managed protected-root tip while
+the managed ref remains unchanged. It MUST reject an unrelated history, stale
+old-origin digest, moved managed or external tip, changed ref mapping or
+protection policy, unsafe URL, and missing explicit approval. The default
+`repo apply --file` origin conflict MUST remain a refusal. A monorepo Project
+gate MUST run against the exact complete candidate tree, record its commit,
+tree, imported source SHAs and overlay digest, and report unavailable QEMU
+capacity as unavailable rather than a pass.
+
 ## Scope
 
 This specification defines the minimum verification gates for development.
