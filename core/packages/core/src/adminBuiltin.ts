@@ -56,8 +56,18 @@ async function dispatchBuiltin(operation: string, context: BuiltinContext): Prom
         lifecycle,
         text("project"),
         validateRepositorySet(input.repositorySet),
-        input.createProject === true
+        input.createProject === true,
+        input.rebindOrigin === undefined ? {} : { rebindOrigin: text("rebindOrigin") }
       );
+    case "repo.rebind-origin":
+      return projectRegistry.rebindProjectRootOrigin(runner, lifecycle, {
+        project: text("project"),
+        alias: text("alias"),
+        expectedOldOriginDigest: text("expectedOldOriginDigest"),
+        expectedOriginTip: text("expectedOriginTip"),
+        approved: input.approved === true,
+        repositorySet: validateRepositorySet(input.repositorySet)
+      });
     case "repo.prepare": {
       const alias = text("alias");
       const repositorySet = validateRepositorySet({
