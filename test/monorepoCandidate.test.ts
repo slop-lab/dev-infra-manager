@@ -97,8 +97,20 @@ describe("monorepo candidate builder", () => {
       .toContain('"/workspace/.dim/qemu-verify.bash"');
     expect(await readFile(resolve(output, ".dim/qemu-verify.bash"), "utf8"))
       .toContain('test -d "$repo_root/.dim"');
-    expect(await readFile(resolve(output, ".gitea/CODEOWNERS"), "utf8"))
-      .toContain("^\\.monorepo-candidate/.* @dim-dim/Owners");
+    const codeowners = await readFile(resolve(output, ".gitea/CODEOWNERS"), "utf8");
+    for (const trustedInput of [
+      ".dim/setup.sh", ".dim/ci/runner.yml", ".gitea/workflows/verify.yml",
+      "scripts/workspace-user-setup.bash", "scripts/monorepo-candidate-assembly.bash",
+      "agent/Dockerfile", "images/project-workspace/Dockerfile",
+      "core/packages/core/src/project-registry/repositoryProtection.ts",
+      "verification/scripts/container-self-project-smoke.bash", "justfile", "pnpm-lock.yaml",
+      ".monorepo-candidate/sources.tsv"
+    ]) {
+      expect(codeowners.split("\n").some((line) => {
+        const rule = line.split(" ")[0];
+        return rule !== undefined && rule !== "" && !rule.startsWith("#") && new RegExp(rule).test(trustedInput);
+      }), trustedInput).toBe(true);
+    }
     const development = sources.find(({ name }) => name === "development");
     expect(development).toBeDefined();
     expect(await readFile(resolve(output, ".gitea/workflows/verify.yml"), "utf8"))
