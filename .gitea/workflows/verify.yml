@@ -3,7 +3,7 @@ name: Verify development repository set
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, feature/monorepo-one-tree]
   workflow_dispatch:
 
 permissions:
