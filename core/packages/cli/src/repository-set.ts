@@ -84,9 +84,15 @@ export async function resolveRepositorySet(projectName: string, file?: string): 
 export async function repositorySetPlan(
   projectName: string,
   set: RepositorySet,
-  createProject: boolean
+  createProject: boolean,
+  rebindOrigin?: string
 ): Promise<RepositorySetPlan> {
-  return adminCall("repo.plan", { project: projectName, createProject, repositorySet: set });
+  return adminCall("repo.plan", {
+    project: projectName,
+    createProject,
+    repositorySet: set,
+    ...(rebindOrigin === undefined ? {} : { rebindOrigin })
+  });
 }
 
 export async function approveRepositoryPlan(plan: RepositorySetPlan, yes: boolean, show = true): Promise<void> {
@@ -96,6 +102,9 @@ export async function approveRepositoryPlan(plan: RepositorySetPlan, yes: boolea
       const source = action.entry.url
         ?? (action.entry.upstream === undefined ? "(empty)" : `upstream:${action.entry.upstream}`);
       console.log(`${action.action}\t${action.alias}\t${source}${action.detail ? `\t${action.detail}` : ""}`);
+    }
+    for (const alias of plan.preservedAliases ?? []) {
+      console.log(`preserve\t${alias}\t(existing repository omitted from manifest)`);
     }
   }
   const conflicts = plan.actions.filter(({ action }) => action === "conflict");

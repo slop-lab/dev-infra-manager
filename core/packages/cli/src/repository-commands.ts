@@ -67,13 +67,37 @@ repo.command("apply")
   .description("Reconcile repositories from repos.yml")
   .argument("<project>")
   .option("--file <file>", "read an explicit repos.yml instead of the managed root")
+  .option("--rebind-origin <alias>", "rebind only the existing ready root origin")
+  .option("--expect-origin-tip <full-sha>", "require this exact 40-character lowercase origin tip")
   .option("--yes", "apply without prompting")
   .option("--json", "print machine-readable JSON")
-  .action(async (projectName: string, flags: JsonFlags & { file?: string; yes?: boolean }) => {
+  .action(async (projectName: string, flags: JsonFlags & {
+    file?: string;
+    yes?: boolean;
+    rebindOrigin?: string;
+    expectOriginTip?: string;
+  }) => {
+    const requestedRebind = flags.rebindOrigin !== undefined || flags.expectOriginTip !== undefined;
+    if (requestedRebind && (flags.rebindOrigin === undefined || flags.expectOriginTip === undefined || flags.yes !== true)) {
+      throw new UserError("--rebind-origin, --expect-origin-tip, and --yes are required together");
+    }
+    if (flags.expectOriginTip !== undefined && !/^[0-9a-f]{40}$/.test(flags.expectOriginTip)) {
+      throw new UserError("--expect-origin-tip must be exactly 40 lowercase hexadecimal characters");
+    }
     const set = await resolveRepositorySet(projectName, flags.file);
-    const plan = await repositorySetPlan(projectName, set, false);
+    const plan = await repositorySetPlan(projectName, set, false, flags.rebindOrigin);
     await approveRepositoryPlan(plan, flags.yes ?? false, !flags.json);
-    print(await applyRepositorySet(projectName, set, plan), flags);
+    if (requestedRebind && plan.actions.some(({ action }) => action !== "unchanged" && action !== "rebind")) {
+      throw new UserError("root origin rebind cannot be combined with other repository changes");
+    }
+    print(await applyRepositorySet(
+      projectName,
+      set,
+      plan,
+      flags.rebindOrigin === undefined || flags.expectOriginTip === undefined
+        ? undefined
+        : { alias: flags.rebindOrigin, expectedOriginTip: flags.expectOriginTip }
+    ), flags);
   });
 
 repo.command("list")
