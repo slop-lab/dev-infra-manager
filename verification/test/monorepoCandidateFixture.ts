@@ -76,6 +76,9 @@ async function createRepository(root: string, name: FixtureRepository["name"]): 
   }
   if (name === "verification") {
     await mkdir(resolve(path, "test"));
+    await mkdir(resolve(path, ".gitea/workflows"), { recursive: true });
+    await cp(resolve(workspaceRoot, "verification/.gitea/workflows/repository-set.yml"),
+      resolve(path, ".gitea/workflows/repository-set.yml"));
     await cp(resolve(workspaceRoot, "verification/scripts"), resolve(path, "scripts"), { recursive: true });
     for (const fixture of [
       "localControlPlaneInstall.test.ts", "localSourceBuildPolicy.test.ts",

@@ -34,6 +34,11 @@ verification_sources=(
   "$verification_root"/scripts/**/*.bash
 )
 
+# The split-only reusable workflow is still callable, but the single-tree
+# candidate owns its push/PR gates at the repository root.
+replace_all $'  pull_request:\n  push:\n    branches: [main]\n  workflow_dispatch:\n' '' \
+  "$verification_root/.gitea/workflows/repository-set.yml"
+
 replace_all '../../project/.dim/' '../../.dim/' "${verification_sources[@]}"
 replace_all 'resolve(workspaceRoot, "project/.dim")' 'resolve(workspaceRoot, ".dim")' "${verification_sources[@]}"
 replace_all 'project/.dim/' '.dim/' "${verification_sources[@]}"

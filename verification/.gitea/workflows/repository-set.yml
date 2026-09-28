@@ -29,10 +29,6 @@ on:
         type: string
         required: false
         default: dim
-  pull_request:
-  push:
-    branches: [main]
-  workflow_dispatch:
 
 permissions:
   contents: read
