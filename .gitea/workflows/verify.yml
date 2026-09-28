@@ -24,13 +24,6 @@ jobs:
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
           version: 10.13.1
-      - name: Use pnpm without the runner image's missing sed binary
-        run: |
-          test "$(node /setup-pnpm/node_modules/pnpm/bin/pnpm.cjs --version)" = 10.13.1
-          mkdir -p "$RUNNER_TEMP/dim-bin"
-          printf '#!/bin/sh\nexec node /setup-pnpm/node_modules/pnpm/bin/pnpm.cjs "$@"\n' >"$RUNNER_TEMP/dim-bin/pnpm"
-          chmod 0755 "$RUNNER_TEMP/dim-bin/pnpm"
-          echo "$RUNNER_TEMP/dim-bin" >>"$GITHUB_PATH"
       - name: Verify one-tree source and provenance
         working-directory: snapshot
         run: |
@@ -59,13 +52,6 @@ jobs:
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
           version: 10.13.1
-      - name: Use pnpm without the runner image's missing sed binary
-        run: |
-          test "$(node /setup-pnpm/node_modules/pnpm/bin/pnpm.cjs --version)" = 10.13.1
-          mkdir -p "$RUNNER_TEMP/dim-bin"
-          printf '#!/bin/sh\nexec node /setup-pnpm/node_modules/pnpm/bin/pnpm.cjs "$@"\n' >"$RUNNER_TEMP/dim-bin/pnpm"
-          chmod 0755 "$RUNNER_TEMP/dim-bin/pnpm"
-          echo "$RUNNER_TEMP/dim-bin" >>"$GITHUB_PATH"
       - name: Verify the complete candidate in disposable nested KVM
         working-directory: snapshot
         run: |
