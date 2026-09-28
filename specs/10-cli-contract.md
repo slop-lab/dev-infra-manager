@@ -151,6 +151,7 @@ dim repo fetch PROJECT ALIAS [--prune]
 dim repo publish PROJECT [ALIAS]
 dim repo plan PROJECT [--file FILE]
 dim repo apply PROJECT [--file FILE] [--yes]
+dim repo apply PROJECT --file FILE --rebind-origin ROOT_ALIAS --expect-origin-tip FULL_COMMIT --yes
 dim repo protect PROJECT ALIAS
 dim repo list PROJECT
 dim repo show PROJECT ALIAS
@@ -187,7 +188,16 @@ only its named external branches and does not import tags.
 `root: true`. `repo apply` updates an existing Project without deleting
 repositories omitted from the file. Reapplying an identical entry is a no-op;
 an existing alias with a different URL, root role/ref, or protection policy is
-a conflict rather than an implicit mutation. With no `--file`, it reads the
+a conflict rather than an implicit mutation. The explicit rebind form is the
+only exception for a ready, protected Project root: it MUST require an
+unchanged alias, concrete branch ref, ref mapping, publish mapping, and
+protection policy, a credential-free HTTPS destination, and an exact complete
+lowercase expected origin commit. Under the Project lock it MUST prove that
+the current managed root tip is an ancestor of that advertised commit and
+recheck both tips and the old origin before atomically changing only the
+recorded origin URL. It MUST NOT move a managed ref, import objects into the
+managed repository, change protection, delete omitted aliases, or rewrite
+workspace state. Incompatible state fails without mutation. With no `--file`, it reads the
 managed root's optional `.dim/repos.yml`. Because that file is read without a
 local checkout, its Git URLs must be network/scp-style URLs or absolute
 filesystem paths; relative filesystem paths are rejected as ambiguous. An

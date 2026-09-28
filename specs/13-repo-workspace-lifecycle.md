@@ -215,6 +215,17 @@ to those GitLab upstreams. Integrated canonical publication and release on
 GitHub remain separate trusted maintainer actions outside that command's
 authority.
 
+An existing ready root origin is not replaced by an ordinary repository-set
+apply. An explicit, reviewed root-origin rebind MAY change only the recorded
+external URL when the alias, selected protected ref, namespace mapping,
+publication policy, and protection policy are unchanged. The new origin MUST
+advertise an operator-supplied complete commit ID and include the current
+managed root tip in its ancestry. DIM MUST recheck both tips and the recorded
+old origin under the Project lock before publishing that connection update.
+This changes no managed ref or workspace snapshot and does not remove aliases
+omitted from the new repository set. Retirement of old repositories and
+workspaces remains an explicit maintenance action after review and verification.
+
 ## Root workspace contract
 
 A workspace binds permanently to a Project ID. DIM mounts the selected root
