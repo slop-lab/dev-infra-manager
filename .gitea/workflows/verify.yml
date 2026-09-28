@@ -1,4 +1,4 @@
-name: Verify development repository set
+name: Verify monorepo candidate
 
 on:
   pull_request:
@@ -10,12 +10,39 @@ permissions:
   contents: read
 
 jobs:
-  repository-set:
-    if: ${{ gitea.ref != 'refs/heads/feature/monorepo-one-tree' && gitea.head_ref != 'feature/monorepo-one-tree' }}
-    uses: dim-dim/verification/.gitea/workflows/repository-set.yml@8796955f39fc2564b293d284fed927e7bf98c8e4
-    with:
-      candidate-repository: development
-      candidate-ref: ${{ gitea.sha }}
+  monorepo-source:
+    runs-on: dim
+    timeout-minutes: 45
+    steps:
+      - name: Check out the exact monorepo candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/development
+          ref: ${{ gitea.sha }}
+          path: snapshot
+      - name: Set up pinned pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.13.1
+      - name: Use pnpm without the runner image's missing sed binary
+        run: |
+          test "$(node /setup-pnpm/node_modules/pnpm/bin/pnpm.cjs --version)" = 10.13.1
+          mkdir -p "$RUNNER_TEMP/dim-bin"
+          printf '#!/bin/sh\nexec node /setup-pnpm/node_modules/pnpm/bin/pnpm.cjs "$@"\n' >"$RUNNER_TEMP/dim-bin/pnpm"
+          chmod 0755 "$RUNNER_TEMP/dim-bin/pnpm"
+          echo "$RUNNER_TEMP/dim-bin" >>"$GITHUB_PATH"
+      - name: Verify one-tree source and provenance
+        working-directory: snapshot
+        run: |
+          test -f .monorepo-candidate/sources.tsv
+          test -f .monorepo-candidate/github-development.tsv
+          test -f .monorepo-candidate/overlay.digest
+          git fsck --full --no-reflogs
+          pnpm install --frozen-lockfile
+          just typecheck
+          just build-packages
+          pnpm --dir verification run test
+          pnpm --dir core-development run test
 
   monorepo-qemu:
     if: ${{ gitea.ref == 'refs/heads/feature/monorepo-one-tree' || gitea.head_ref == 'feature/monorepo-one-tree' }}
@@ -28,10 +55,17 @@ jobs:
           repository: dim-dim/development
           ref: ${{ gitea.sha }}
           path: snapshot
-      - name: Set up pnpm
+      - name: Set up pinned pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
           version: 10.13.1
+      - name: Use pnpm without the runner image's missing sed binary
+        run: |
+          test "$(node /setup-pnpm/node_modules/pnpm/bin/pnpm.cjs --version)" = 10.13.1
+          mkdir -p "$RUNNER_TEMP/dim-bin"
+          printf '#!/bin/sh\nexec node /setup-pnpm/node_modules/pnpm/bin/pnpm.cjs "$@"\n' >"$RUNNER_TEMP/dim-bin/pnpm"
+          chmod 0755 "$RUNNER_TEMP/dim-bin/pnpm"
+          echo "$RUNNER_TEMP/dim-bin" >>"$GITHUB_PATH"
       - name: Verify the complete candidate in disposable nested KVM
         working-directory: snapshot
         run: |
