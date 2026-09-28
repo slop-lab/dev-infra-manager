@@ -20,16 +20,31 @@ jobs:
           repository: dim-dim/development
           ref: ${{ gitea.sha }}
           path: snapshot
-      - name: Require the reviewed job-image tool
+      - name: Require the reviewed verification tools
         run: |
-          command -v sed
-          sed --version >/dev/null
+          for tool in sed awk cmp setsid tini; do command -v "$tool"; done
+      - name: Prepare disposable job paths for host-script tests
+        run: |
+          test "$(id -u)" -eq 0
+          for binary in /bin/*; do
+            target="/usr/bin/${binary##*/}"
+            test -e "$target" || ln -s "$binary" "$target"
+          done
+          install -d /usr/local/bin
+          test -e /usr/local/bin/just || ln -s "$(command -v just)" /usr/local/bin/just
+          test -e /etc/passwd || printf 'root:x:0:0:root:/root:/bin/bash\n' >/etc/passwd
+          test -e /etc/group || printf 'root:x:0:\n' >/etc/group
       - name: Set up pinned pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
           version: 10.13.1
       - name: Verify one-tree source and provenance
         working-directory: snapshot
+        env:
+          GIT_AUTHOR_NAME: DIM candidate CI
+          GIT_AUTHOR_EMAIL: dim-ci@example.invalid
+          GIT_COMMITTER_NAME: DIM candidate CI
+          GIT_COMMITTER_EMAIL: dim-ci@example.invalid
         run: |
           test -f .monorepo-candidate/sources.tsv
           test -f .monorepo-candidate/github-development.tsv
@@ -38,8 +53,8 @@ jobs:
           pnpm install --frozen-lockfile
           just typecheck
           just build-packages
-          pnpm --dir verification run test
-          pnpm --dir core-development run test
+          tini -s -- pnpm --dir verification run test
+          tini -s -- pnpm --dir core-development run test
 
   monorepo-qemu:
     if: ${{ gitea.ref == 'refs/heads/feature/monorepo-one-tree' || gitea.head_ref == 'feature/monorepo-one-tree' }}
