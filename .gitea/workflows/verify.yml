@@ -11,7 +11,45 @@ permissions:
 
 jobs:
   repository-set:
+    if: ${{ gitea.ref != 'refs/heads/feature/monorepo-one-tree' && gitea.head_ref != 'feature/monorepo-one-tree' }}
     uses: dim-dim/verification/.gitea/workflows/repository-set.yml@8796955f39fc2564b293d284fed927e7bf98c8e4
     with:
       candidate-repository: development
       candidate-ref: ${{ gitea.sha }}
+
+  monorepo-qemu:
+    if: ${{ gitea.ref == 'refs/heads/feature/monorepo-one-tree' || gitea.head_ref == 'feature/monorepo-one-tree' }}
+    runs-on: dim-qemu
+    timeout-minutes: 120
+    steps:
+      - name: Check out the exact monorepo candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/development
+          ref: ${{ gitea.sha }}
+          path: snapshot
+      - name: Set up pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.13.1
+      - name: Verify the complete candidate in disposable nested KVM
+        working-directory: snapshot
+        run: |
+          test -r /dev/kvm && test -w /dev/kvm
+          test -f .monorepo-candidate/sources.tsv
+          test -f .monorepo-candidate/github-development.tsv
+          test -f .monorepo-candidate/overlay.digest
+          printf 'candidate_commit=%s\ncandidate_tree=%s\n' "$(git rev-parse HEAD)" "$(git rev-parse 'HEAD^{tree}')"
+          sha256sum .monorepo-candidate/sources.tsv .monorepo-candidate/github-development.tsv .monorepo-candidate/overlay.tsv
+          git fsck --full --no-reflogs
+          pnpm install --frozen-lockfile
+          just typecheck
+          just build-packages
+          DIM_QEMU_SOURCE_ROOT="$PWD" JUST_UNSTABLE=1 just verify environments-kvm
+      - name: Retain candidate provenance for human review
+        if: always()
+        uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
+        with:
+          name: monorepo-candidate-${{ gitea.sha }}
+          path: snapshot/.monorepo-candidate/
+          retention-days: 30
