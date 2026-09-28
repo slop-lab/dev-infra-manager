@@ -1,5 +1,6 @@
 import type { ProjectRepositoryRecord } from "../lifecycleTypes.js";
 import type { RepositoryRefNamespace, RepositorySetEntry } from "../repositorySet.js";
+export type { RebindProjectRootOriginInput } from "./repositoryOriginRebind.js";
 
 export interface CreateRepositoryInput {
   project: string;
@@ -11,16 +12,22 @@ export interface CreateRepositoryInput {
 }
 
 export interface RepositorySetPlanAction {
-  action: "create" | "retry" | "unchanged" | "conflict";
+  action: "create" | "retry" | "unchanged" | "conflict" | "rebind";
   alias: string;
   entry: RepositorySetEntry;
   detail?: string;
+  expectedOriginDigest?: string;
 }
+
+export type RepositorySetPlanOptions = {
+  readonly rebindOrigin?: string;
+};
 
 export interface RepositorySetPlan {
   project: string;
   createProject: boolean;
   actions: RepositorySetPlanAction[];
+  preservedAliases?: string[];
 }
 
 export interface PreparedRepositoryTransfer {
