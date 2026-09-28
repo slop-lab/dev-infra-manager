@@ -13,6 +13,7 @@ export {
 } from "./project-registry/queries.js";
 export { createProjectRepository, deleteProjectRepository } from "./project-registry/repositoryLifecycle.js";
 export { planProjectRepositorySet } from "./project-registry/repositoryPlanning.js";
+export { rebindProjectRootOrigin } from "./project-registry/repositoryOriginRebind.js";
 export {
   applyProjectRepositoryProtection,
   branchProtectionOptions,
@@ -31,5 +32,7 @@ export type {
   PreparedRepositorySync,
   PreparedRepositoryTransfer,
   RepositorySetPlan,
-  RepositorySetPlanAction
+  RepositorySetPlanAction,
+  RepositorySetPlanOptions,
+  RebindProjectRootOriginInput
 } from "./project-registry/types.js";
