@@ -7,13 +7,15 @@ import {
   type RepositorySet
 } from "../repositorySet.js";
 import { sameRepositoryTransport } from "./helpers.js";
-import type { RepositorySetPlan, RepositorySetPlanAction } from "./types.js";
+import { repositoryOriginDigest } from "./repositoryOriginRebind.js";
+import type { RepositorySetPlan, RepositorySetPlanAction, RepositorySetPlanOptions } from "./types.js";
 
 export async function planProjectRepositorySet(
   options: LifecycleOptions,
   projectNameInput: string,
   set: RepositorySet,
-  createProject: boolean
+  createProject: boolean,
+  planOptions: RepositorySetPlanOptions = {}
 ): Promise<RepositorySetPlan> {
   const projectName = validateLifecycleName(projectNameInput, "project");
   let project: ProjectRecord | undefined;
@@ -38,6 +40,24 @@ export async function planProjectRepositorySet(
     if (JSON.stringify(existingConnection) !== JSON.stringify(requestedConnection === undefined
       ? undefined
       : { name: "origin", ...requestedConnection })) {
+      const canRebind = planOptions.rebindOrigin === alias
+        && project?.rootRepositoryAlias === alias
+        && entry.root
+        && existing.phase === "ready"
+        && existing.protectionPhase === "applied"
+        && existing.ref === entry.ref
+        && existingConnection !== undefined
+        && requestedConnection !== undefined
+        && JSON.stringify(existingConnection.refNamespace) === JSON.stringify(requestedConnection.refNamespace)
+        && JSON.stringify(existingConnection.publishBranches ?? {}) === JSON.stringify(requestedConnection.publishBranches ?? {})
+        && JSON.stringify(existing.protectedPatterns) === JSON.stringify(entry.protectedPatterns)
+        && JSON.stringify(existing.forcePushBlockedPatterns ?? []) === JSON.stringify(entry.forcePushBlockedPatterns);
+      if (canRebind) {
+        return {
+          action: "rebind", alias, entry, detail: "explicit root origin rebind",
+          expectedOriginDigest: repositoryOriginDigest(existingConnection.url)
+        };
+      }
       return {
         action: "conflict",
         alias,
@@ -59,6 +79,9 @@ export async function planProjectRepositorySet(
     if (existing.phase === "ready") return { action: "unchanged", alias, entry };
     return { action: "retry", alias, entry, detail: `current phase is ${existing.phase}` };
   });
+  if (planOptions.rebindOrigin !== undefined && !actions.some(({ alias }) => alias === planOptions.rebindOrigin)) {
+    throw new UserError(`repository set has no repository '${planOptions.rebindOrigin}'`);
+  }
   const requestedRoot = actions.find(({ entry }) => entry.root);
   if (project?.rootRepositoryAlias && requestedRoot && project.rootRepositoryAlias !== requestedRoot.alias) {
     actions.push({
@@ -68,5 +91,16 @@ export async function planProjectRepositorySet(
       detail: `project root is already '${project.rootRepositoryAlias}'`
     });
   }
-  return { project: projectName, createProject, actions };
+  const preservedAliases = planOptions.rebindOrigin === undefined
+    ? undefined
+    : project?.repositories
+        .filter(({ alias }) => set.repositories[alias] === undefined)
+        .map(({ alias }) => alias)
+        .sort();
+  return {
+    project: projectName,
+    createProject,
+    actions,
+    ...(preservedAliases === undefined ? {} : { preservedAliases })
+  };
 }
