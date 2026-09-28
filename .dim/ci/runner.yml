@@ -3,29 +3,45 @@ workloads:
   ordinary:
     labels:
       - dim
-    image: nixery.dev/shell/bash/coreutils/gnused/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:b4e3c6aaa9811c46033acb0a71706082f8ce3c9f629ddad71af24918432d211e
+    image: nixery.dev/shell/bash/coreutils/gnused/gawk/jq/findutils/gnugrep/perl/util-linux/diffutils/tini/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:ff3c058b36be01e839a7f419fd5b18a574b9a8084fc883ea88ccb9e7dc353b6a
     tools:
+      - awk
       - bash
+      - cmp
       - curl
+      - find
       - git
+      - grep
       - just
+      - jq
       - node
+      - perl
       - python3
       - sed
+      - setsid
+      - tini
     capabilities: []
   integration:
     labels:
       - dim-container-integration
-    image: nixery.dev/shell/bash/coreutils/gnused/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:b4e3c6aaa9811c46033acb0a71706082f8ce3c9f629ddad71af24918432d211e
+    image: nixery.dev/shell/bash/coreutils/gnused/gawk/jq/findutils/gnugrep/perl/util-linux/diffutils/tini/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:ff3c058b36be01e839a7f419fd5b18a574b9a8084fc883ea88ccb9e7dc353b6a
     tools:
+      - awk
       - bash
+      - cmp
       - curl
       - docker
+      - find
       - git
+      - grep
       - just
+      - jq
       - node
+      - perl
       - python3
       - sed
+      - setsid
       - socat
+      - tini
     capabilities:
       - nested-docker
