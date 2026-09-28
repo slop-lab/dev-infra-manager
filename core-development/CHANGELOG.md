@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Allow a reviewed maintenance-window repository apply to rebind only an
+  existing ready Project root's external origin with an explicit root alias,
+  exact full lowercase expected tip, and non-interactive approval. The locked
+  transition requires unchanged root and protection policy, verifies the new
+  HTTPS origin twice, requires the old managed protected-root tip to be an
+  ancestor, and changes no managed ref, omitted alias, or workspace state;
+  ordinary origin mismatches remain conflicts.
+
 - Require an Owner-approved pull request for every ordinary update to a
   reviewed Project root branch. Only the host-side maintainer retains direct
   publication authority; repository Owners and administrators cannot use the

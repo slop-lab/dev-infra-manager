@@ -150,6 +150,37 @@ Declining or using `--no-apply-repos` does not require another clone. Run
 managed root. `project create --repos FILE` is reserved for a standalone local
 bootstrap manifest.
 
+An existing root origin remains a conflict during ordinary apply. To replace
+only that recorded URL during a reviewed maintenance window, first quiesce
+Project writers and stop its workspaces and CI runners. Review the candidate
+manifest, verify the new HTTPS origin's protected branch tip independently,
+and then supply the exact full lowercase commit ID:
+
+```bash
+dim repo apply acme --file candidate/.dim/repos.yml \
+  --rebind-origin root \
+  --expect-origin-tip 0123456789abcdef0123456789abcdef01234567 \
+  --yes
+```
+
+All three rebind options are required together. DIM accepts only an existing,
+ready, protection-applied Project root whose alias, concrete root ref, ref
+mapping, publish mapping, and protection policy exactly match the reviewed
+manifest. The new URL must be credential-free HTTPS, must still advertise the
+expected commit when the locked update completes, and the current managed root
+tip must be an ancestor of that commit. DIM also rejects the update if the
+managed tip or recorded old URL changes during verification.
+
+This operation changes no managed Git ref, branch protection, repository
+identity, omitted repository record, or workspace record. In particular,
+aliases omitted from the candidate manifest are reported as `preserve` and
+remain registered. Existing workspaces remain pinned to their previous root
+snapshot; for a conversion
+where they need not remain restartable, discard and recreate them after
+inspecting `dim repo show acme root` and a fresh `dim repo plan acme --file
+candidate/.dim/repos.yml`. Do not restart old workspaces as part of the
+conversion.
+
 ## External workspace URLs
 
 The optional external URL system plugin exposes named ingresses. Configure a
