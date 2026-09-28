@@ -26,6 +26,7 @@ jobs:
       - name: Prepare disposable job paths for host-script tests
         run: |
           test "$(id -u)" -eq 0
+          chmod 1777 /tmp
           for binary in /bin/*; do
             target="/usr/bin/${binary##*/}"
             test -e "$target" || ln -s "$binary" "$target"
