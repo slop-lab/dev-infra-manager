@@ -3,7 +3,7 @@ workloads:
   ordinary:
     labels:
       - dim
-    image: nixery.dev/shell/bash/coreutils/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:e191da897cdbfad45bb0f6a84e1d93d8628dabb9a1c2aa1c1897759d6b3078e3
+    image: nixery.dev/shell/bash/coreutils/gnused/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:b4e3c6aaa9811c46033acb0a71706082f8ce3c9f629ddad71af24918432d211e
     tools:
       - bash
       - curl
@@ -11,11 +11,12 @@ workloads:
       - just
       - node
       - python3
+      - sed
     capabilities: []
   integration:
     labels:
       - dim-container-integration
-    image: nixery.dev/shell/bash/coreutils/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:e191da897cdbfad45bb0f6a84e1d93d8628dabb9a1c2aa1c1897759d6b3078e3
+    image: nixery.dev/shell/bash/coreutils/gnused/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:b4e3c6aaa9811c46033acb0a71706082f8ce3c9f629ddad71af24918432d211e
     tools:
       - bash
       - curl
@@ -24,6 +25,7 @@ workloads:
       - just
       - node
       - python3
+      - sed
       - socat
     capabilities:
       - nested-docker
