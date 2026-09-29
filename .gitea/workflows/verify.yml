@@ -54,7 +54,7 @@ jobs:
           pnpm install --frozen-lockfile
           just typecheck
           just build-packages
-          tini -s -- pnpm --dir verification run test
+          tini -s -- pnpm --dir verification exec vitest run --no-file-parallelism
           tini -s -- pnpm --dir core-development run test
 
   monorepo-qemu:
