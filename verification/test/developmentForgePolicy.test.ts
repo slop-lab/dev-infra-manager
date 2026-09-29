@@ -59,6 +59,8 @@ describe("DIM development forge policy", () => {
     const source = await readFile(hook, "utf8");
     expect(source).toContain("noble-server-cloudimg-amd64.img");
     expect(source).toContain("6e40c07ae715f744f84af0bec76415cc1987dd115b4b8de437818561f01a3733");
+    expect(source).toContain("https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img");
+    expect(source).not.toContain("https://cloud-images.ubuntu.com/noble/current/");
     expect(source).toContain("sha256sum --check");
   });
 

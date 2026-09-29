@@ -10,7 +10,7 @@ if echo "$checksum  $cache_directory/$image" | sha256sum --check --status; then
   exit 0
 fi
 curl -fsSLo "$cache_directory/$image.tmp" \
-  "https://cloud-images.ubuntu.com/noble/current/$image"
+  "https://cloud-images.ubuntu.com/releases/noble/release-20260814/ubuntu-24.04-server-cloudimg-amd64.img"
 echo "$checksum  $cache_directory/$image.tmp" | sha256sum --check
 mv "$cache_directory/$image.tmp" "$cache_directory/$image"
 chmod 0444 "$cache_directory/$image"
