@@ -74,24 +74,54 @@ jobs:
         run: |
           command -v sed
           sed --version >/dev/null
-      - name: Set up pinned pnpm
-        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
-        with:
-          version: 10.13.1
       - name: Verify the complete candidate in disposable nested KVM
         working-directory: snapshot
+        env:
+          DIM_CANDIDATE_SHA: ${{ gitea.sha }}
+          DIM_QEMU_JOB_IMAGE: nixery.dev/shell/bash/coreutils/gnused/gawk/jq/findutils/gnugrep/perl/util-linux/diffutils/tini/qemu/cloud-utils/openssh/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:db4fdcd4ba76e74e65fdf9c62f42cc656bc54fa338511c245cd957640c572746
         run: |
-          test -r /dev/kvm && test -w /dev/kvm
+          set -euo pipefail
+          [[ "$DIM_CANDIDATE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$DIM_CANDIDATE_SHA"
           test -f .monorepo-candidate/sources.tsv
           test -f .monorepo-candidate/github-development.tsv
           test -f .monorepo-candidate/overlay.digest
-          printf 'candidate_commit=%s\ncandidate_tree=%s\n' "$(git rev-parse HEAD)" "$(git rev-parse 'HEAD^{tree}')"
+          candidate_tree="$(git rev-parse 'HEAD^{tree}')"
+          printf 'candidate_commit=%s\ncandidate_tree=%s\n' "$DIM_CANDIDATE_SHA" "$candidate_tree"
           sha256sum .monorepo-candidate/sources.tsv .monorepo-candidate/github-development.tsv .monorepo-candidate/overlay.tsv
           git fsck --full --no-reflogs
-          pnpm install --frozen-lockfile
-          just typecheck
-          just build-packages
-          DIM_QEMU_SOURCE_ROOT="$PWD" JUST_UNSTABLE=1 just verify environments-kvm
+          test ! -e /dev/kvm || { echo 'QEMU job container must not receive /dev/kvm' >&2; exit 2; }
+          test -S /var/run/docker.sock || { echo 'guest-private Docker socket is unavailable' >&2; exit 2; }
+          test "${DOCKER_HOST:-unix:///var/run/docker.sock}" = unix:///var/run/docker.sock || { echo 'unexpected Docker endpoint' >&2; exit 2; }
+          docker_host_name="$(docker info --format '{{.Name}}')"
+          test "$docker_host_name" = dim-qemu-ci || { echo "unexpected QEMU guest Docker daemon: $docker_host_name" >&2; exit 2; }
+          child_id=""
+          trap 'test -z "$child_id" || docker rm -f "$child_id" >/dev/null' EXIT
+          child_id="$(docker create --device=/dev/kvm --network bridge \
+            --workdir /snapshot --env "DIM_CANDIDATE_SHA=$DIM_CANDIDATE_SHA" \
+            --env "DIM_CANDIDATE_TREE=$candidate_tree" --entrypoint /bin/bash \
+            "$DIM_QEMU_JOB_IMAGE" -euc '
+              set -o pipefail
+              test ! -S /var/run/docker.sock || { echo "nested KVM child must not receive a Docker socket" >&2; exit 2; }
+              test -c /dev/kvm && test -r /dev/kvm && test -w /dev/kvm || { echo "nested KVM device is unavailable" >&2; exit 2; }
+              test "$(git rev-parse HEAD)" = "$DIM_CANDIDATE_SHA"
+              test "$(git rev-parse "HEAD^{tree}")" = "$DIM_CANDIDATE_TREE"
+              git fsck --full --no-reflogs
+              bash .dim/qemu-verify.bash --probe
+              chmod 1777 /tmp
+              npm install --silent --no-audit --no-fund --prefix /tmp/dim-pnpm pnpm@10.13.1
+              export PATH="/tmp/dim-pnpm/node_modules/.bin:$PATH"
+              pnpm install --frozen-lockfile
+              just typecheck
+              just build-packages
+              DIM_QEMU_SOURCE_ROOT="$PWD" JUST_UNSTABLE=1 just verify environments-kvm
+            ')"
+          test "$(docker inspect --format '{{.HostConfig.Privileged}}|{{len .HostConfig.Devices}}|{{.HostConfig.NetworkMode}}' "$child_id")" = 'false|1|bridge'
+          test "$(docker inspect --format '{{range .HostConfig.Devices}}{{.PathOnHost}}:{{.PathInContainer}}{{end}}' "$child_id")" = /dev/kvm:/dev/kvm
+          test "$(docker inspect --format '{{len .Mounts}}' "$child_id")" = 0
+          tar -C "$PWD" --exclude=./.git/config --exclude=./node_modules --exclude=./.local -cf - . | docker cp - "$child_id":/snapshot
+          docker start -a "$child_id"
+          test "$(docker inspect --format '{{.State.ExitCode}}' "$child_id")" = 0
       - name: Retain candidate provenance for human review
         if: always()
         uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
