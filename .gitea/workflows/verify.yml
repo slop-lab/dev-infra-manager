@@ -55,7 +55,9 @@ jobs:
           just typecheck
           just build-packages
           tini -s -- pnpm --dir verification exec vitest run --no-file-parallelism
-          tini -s -- pnpm --dir core-development run test
+          pnpm --dir core/packages/controller-proxy run build
+          tini -s -- pnpm --dir core-development exec vitest run --no-file-parallelism packages/core/test packages/controller-proxy/test packages/installer/test packages/contracts/external-url/test
+          tini -s -- pnpm --dir core-development run test:cli
 
   monorepo-qemu:
     if: ${{ gitea.ref == 'refs/heads/feature/monorepo-one-tree' || gitea.head_ref == 'feature/monorepo-one-tree' }}
