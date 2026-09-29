@@ -110,15 +110,19 @@ describe("DIM development forge policy", () => {
 
   it("owns CI job images and required tools in the protected Project contract", async () => {
     const contract = parse(await readFile(resolve(workspaceRoot, ".dim/ci/runner.yml"), "utf8"));
-    const expectedImage =
+    const ordinaryImage =
       "nixery.dev/shell/bash/coreutils/gnused/gawk/jq/findutils/gnugrep/perl/util-linux/diffutils/tini/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:ff3c058b36be01e839a7f419fd5b18a574b9a8084fc883ea88ccb9e7dc353b6a";
+    const integrationImage =
+      "nixery.dev/shell/bash/coreutils/gnused/gawk/jq/findutils/gnugrep/perl/util-linux/diffutils/tini/qemu/cloud-utils/openssh/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:db4fdcd4ba76e74e65fdf9c62f42cc656bc54fa338511c245cd957640c572746";
     expect(contract.schemaVersion).toBe(1);
     expect(Object.keys(contract.workloads).sort()).toEqual(["integration", "ordinary"]);
     expect(contract.workloads.ordinary.labels).toEqual(["dim"]);
     expect(contract.workloads.integration.labels).toEqual(["dim-container-integration"]);
     expect(contract.workloads.integration.capabilities).toEqual(["nested-docker"]);
+    expect(contract.workloads.ordinary.image).toBe(ordinaryImage);
+    expect(contract.workloads.integration.image).toBe(integrationImage);
+    expect(contract.workloads.integration.tools).toEqual(expect.arrayContaining(["qemu-system-x86_64", "qemu-img", "cloud-localds", "ssh", "ssh-keygen"]));
     for (const workload of Object.values(contract.workloads) as Array<Record<string, unknown>>) {
-      expect(workload.image).toBe(expectedImage);
       expect(workload.image).toMatch(/@sha256:[0-9a-f]{64}$/);
       expect(String(workload.image).split("@")[0]).not.toMatch(/:[^/]+$/);
       expect(workload.tools).toEqual(expect.arrayContaining(["awk", "bash", "cmp", "git", "grep", "jq", "node", "python3", "sed", "setsid", "tini"]));

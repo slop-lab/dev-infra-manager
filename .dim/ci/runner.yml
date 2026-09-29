@@ -24,10 +24,11 @@ workloads:
   integration:
     labels:
       - dim-container-integration
-    image: nixery.dev/shell/bash/coreutils/gnused/gawk/jq/findutils/gnugrep/perl/util-linux/diffutils/tini/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:ff3c058b36be01e839a7f419fd5b18a574b9a8084fc883ea88ccb9e7dc353b6a
+    image: nixery.dev/shell/bash/coreutils/gnused/gawk/jq/findutils/gnugrep/perl/util-linux/diffutils/tini/qemu/cloud-utils/openssh/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:db4fdcd4ba76e74e65fdf9c62f42cc656bc54fa338511c245cd957640c572746
     tools:
       - awk
       - bash
+      - cloud-localds
       - cmp
       - curl
       - docker
@@ -39,9 +40,13 @@ workloads:
       - node
       - perl
       - python3
+      - qemu-img
+      - qemu-system-x86_64
       - sed
       - setsid
       - socat
+      - ssh
+      - ssh-keygen
       - tini
     capabilities:
       - nested-docker
