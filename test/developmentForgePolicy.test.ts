@@ -109,7 +109,7 @@ describe("DIM development forge policy", () => {
   it("owns CI job images and required tools in the protected Project contract", async () => {
     const contract = parse(await readFile(resolve(workspaceRoot, "project/.dim/ci/runner.yml"), "utf8"));
     const expectedImage =
-      "nixery.dev/shell/bash/coreutils/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:e191da897cdbfad45bb0f6a84e1d93d8628dabb9a1c2aa1c1897759d6b3078e3";
+      "nixery.dev/shell/bash/coreutils/gnused/gnutar/gzip/curl/git/nodejs/python3/docker-client/just/socat@sha256:b4e3c6aaa9811c46033acb0a71706082f8ce3c9f629ddad71af24918432d211e";
     expect(contract.schemaVersion).toBe(1);
     expect(Object.keys(contract.workloads).sort()).toEqual(["integration", "ordinary"]);
     expect(contract.workloads.ordinary.labels).toEqual(["dim"]);
@@ -119,7 +119,7 @@ describe("DIM development forge policy", () => {
       expect(workload.image).toBe(expectedImage);
       expect(workload.image).toMatch(/@sha256:[0-9a-f]{64}$/);
       expect(String(workload.image).split("@")[0]).not.toMatch(/:[^/]+$/);
-      expect(workload.tools).toEqual(expect.arrayContaining(["bash", "git", "node", "python3"]));
+      expect(workload.tools).toEqual(expect.arrayContaining(["bash", "git", "node", "python3", "sed"]));
     }
   });
 
