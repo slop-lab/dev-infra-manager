@@ -22,6 +22,7 @@ const overlayInputs = [
   ["workspace-repositories.json", ".dim/workspace-repositories.json"],
   ["reconcile-repositories.sh", ".dim/reconcile-repositories.sh"],
   ["qemu-root-layout.patch", "git-apply"],
+  ["repository-materialization-smoke.bash", "verification/scripts/repository-materialization-smoke.bash"],
 ] as const;
 
 afterEach(async () => {
@@ -99,6 +100,11 @@ describe("monorepo candidate builder", () => {
       .toContain('test -d "$repo_root/.dim"');
     expect(await readFile(resolve(output, "verification/scripts/repository-materialization-smoke.bash"), "utf8"))
       .toContain('root_repository="${DIM_ROOT_REPOSITORY:-$workspace_root}"');
+    const materializationSmoke = spawnSync("bash", [resolve(output, "verification/scripts/repository-materialization-smoke.bash")], {
+      encoding: "utf8", env: { ...process.env, GIT_MASTER: "1" }
+    });
+    expect(materializationSmoke.status, materializationSmoke.stderr).toBe(0);
+    expect(materializationSmoke.stdout).toContain("repository-materialization-smoke-ok");
     const codeowners = await readFile(resolve(output, ".gitea/CODEOWNERS"), "utf8");
     for (const trustedInput of [
       ".dim/setup.sh", ".dim/ci/runner.yml", ".gitea/workflows/verify.yml",
