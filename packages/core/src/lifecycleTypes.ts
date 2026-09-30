@@ -3,6 +3,7 @@ export interface LifecycleOptions {
   giteaConnection: GiteaConnectionConfiguration;
   gitSyncConnection?: { readonly file: string };
   qemuSchedulerConnection?: { readonly file: string };
+  ordinaryCiPoolConnection?: { readonly file: string };
   giteaImage: string;
   giteaHost: string;
   giteaPort: number;
