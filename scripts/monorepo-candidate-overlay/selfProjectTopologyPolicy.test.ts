@@ -67,6 +67,7 @@ describe("DIM monorepo self-project topology policy", () => {
     expect(overlayLines.map(([, target]) => target).sort()).toEqual([
       ".dim/reconcile-repositories.sh", ".dim/repos.yml", ".dim/workspace-repositories.json",
       ".gitea/CODEOWNERS", "git-apply", "verification-layout",
+      "verification/scripts/repository-materialization-smoke.bash",
       "verification/test/selfProjectTopologyPolicy.test.ts"
     ]);
   });
