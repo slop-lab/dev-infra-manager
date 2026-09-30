@@ -77,6 +77,8 @@ for repository in "${repositories[@]:1}"; do
     GIT_MASTER=1 git -C "$staging" read-tree --prefix="$destination/" -u "$source_ref^{tree}"
     if [[ "$repository" == verification ]]; then
       bash "$overlay_snapshot/adapt-verification-layout.bash" "$staging"
+      cp -- "$overlay_snapshot/repository-materialization-smoke.bash" \
+        "$staging/verification/scripts/repository-materialization-smoke.bash"
       cp -- "$overlay_snapshot/selfProjectTopologyPolicy.test.ts" \
         "$staging/verification/test/selfProjectTopologyPolicy.test.ts"
       GIT_MASTER=1 git -C "$staging" add verification

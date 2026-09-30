@@ -56,8 +56,8 @@ output=$1
 shift
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 overlay="$script_dir/monorepo-candidate-overlay"
-overlay_inputs=(CODEOWNERS repos.yml workspace-repositories.json reconcile-repositories.sh qemu-root-layout.patch adapt-verification-layout.bash selfProjectTopologyPolicy.test.ts)
-overlay_targets=(.gitea/CODEOWNERS .dim/repos.yml .dim/workspace-repositories.json .dim/reconcile-repositories.sh git-apply verification-layout verification/test/selfProjectTopologyPolicy.test.ts)
+overlay_inputs=(CODEOWNERS repos.yml workspace-repositories.json reconcile-repositories.sh qemu-root-layout.patch adapt-verification-layout.bash repository-materialization-smoke.bash selfProjectTopologyPolicy.test.ts)
+overlay_targets=(.gitea/CODEOWNERS .dim/repos.yml .dim/workspace-repositories.json .dim/reconcile-repositories.sh git-apply verification-layout verification/scripts/repository-materialization-smoke.bash verification/test/selfProjectTopologyPolicy.test.ts)
 
 while [[ "$#" -gt 0 ]]; do
   if [[ "$1" == "--github-development-source" ]]; then
