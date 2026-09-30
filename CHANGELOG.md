@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Include GNU sed in the exact pinned self-Project CI job image so pnpm's
+  generated command shims execute in ordinary and QEMU runner jobs. The runner
+  configuration checks for sed before registration; adopting the reviewed
+  root commit requires reconciling the existing runners to select the new
+  image.
+
 ### Changed
 
 - Workspaces now expose reviewed root lifecycle bytes read-only while Project
