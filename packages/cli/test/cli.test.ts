@@ -170,6 +170,17 @@ test("CI runner commands expose lifecycle and configurable defaults", () => {
   assert.match(missingDefaults.stderr, /required option/);
 });
 
+test("ordinary CI pool commands separate control-plane service and host capacity", () => {
+  const help = run(["ci", "ordinary-pool", "--help"]);
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /service[\s\S]*worker|worker[\s\S]*service/);
+  for (const [args, expected] of [[["service", "run"], /<config>/], [["worker", "run-once"], /<capacity>/], [["worker", "serve"], /<capacity>/]] as const) {
+    const result = run(["ci", "ordinary-pool", ...args, "--help"]);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, expected);
+  }
+});
+
 test("host lifecycle commands expose volume-preserving maintenance", () => {
   const help = run(["host", "--help"]);
   assert.equal(help.status, 0);
