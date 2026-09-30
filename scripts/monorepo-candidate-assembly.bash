@@ -53,7 +53,9 @@ for repository in "${repositories[@]:1}"; do
   source_ref="refs/monorepo-sources/$repository"
 
   GIT_MASTER=1 git -C "$staging" fetch --quiet --no-tags "$source_path" "$commit:$source_ref"
-  GIT_MASTER=1 git -C "$staging" merge --quiet --allow-unrelated-histories --no-commit -s ours "$source_ref"
+  GIT_MASTER=1 git -C "$staging" -c user.name="DIM Monorepo Candidate" \
+    -c user.email="monorepo-candidate@dim.invalid" \
+    merge --quiet --allow-unrelated-histories --no-commit -s ours "$source_ref"
   if [[ "$repository" == root ]]; then
     if [[ "$(GIT_MASTER=1 git -C "$source_path" cat-file -t "$commit:.dim" 2>/dev/null)" != tree ]]; then
       echo "root source does not contain a .dim Project contract" >&2
