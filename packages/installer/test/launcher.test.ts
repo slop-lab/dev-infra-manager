@@ -1,7 +1,7 @@
 import { chmod, copyFile, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 import { makeTempDir } from "./support.js";
 
@@ -33,6 +33,13 @@ async function executable(path: string, body: string): Promise<void> {
   await chmod(path, 0o755);
 }
 
+function installedCommand(name: string): string {
+  const result = spawnSync("sh", ["-c", `command -v ${name}`], { encoding: "utf8" });
+  const path = result.stdout.trim();
+  if (result.status !== 0 || !path.startsWith("/")) throw new Error(`${name} is required for the launcher fixture`);
+  return path;
+}
+
 describe("published dim launcher", () => {
   const temporaryDirectories: string[] = [];
 
@@ -47,8 +54,8 @@ describe("published dim launcher", () => {
     const launcher = join(root, "dim");
     const record = join(root, "args");
     await mkdir(bin);
-    await symlink("/usr/bin/dirname", join(bin, "dirname"));
-    await symlink("/usr/bin/readlink", join(bin, "readlink"));
+    await symlink(installedCommand("dirname"), join(bin, "dirname"));
+    await symlink(installedCommand("readlink"), join(bin, "readlink"));
     await copyFile(launcherSource, launcher);
     await chmod(launcher, 0o755);
     await writeFile(join(root, "cli.js"), "");
