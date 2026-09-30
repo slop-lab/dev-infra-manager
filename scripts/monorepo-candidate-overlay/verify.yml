@@ -36,8 +36,9 @@ jobs:
       - name: Verify complete candidate source tree
         env:
           DIM_TEST_PTY_RESIZE: unsupported
+          NODE_OPTIONS: --disable-warning=ExperimentalWarning
         run: |
-          source_tmp="$(mktemp -d /tmp/dim-candidate-source.XXXXXX)"
+          source_tmp="$(mktemp -d /tmp/dcs.XXXXXX)"
           chmod 1777 "$source_tmp"
           export TMPDIR="$source_tmp"
           pnpm install --frozen-lockfile
