@@ -107,12 +107,18 @@ run_step() {
   fi
 }
 workbench_snapshot="$workdir/workbench"
+components=(project core core-development plugin-dns-cloudflare \
+  plugin-dns-cloudflare-development plugin-external-urls \
+  plugin-external-urls-development verification examples specification)
 snapshot_repository() {
   local source="$1" destination="$2"
   mkdir -p "$destination"
   tar -C "$(dirname "$source")" --exclude=.git --exclude=.local --exclude=node_modules \
     -cf - -- "$(basename "$source")" | tar --strip-components=1 -x -C "$destination"
   git -C "$destination" init --initial-branch=main >/dev/null
+  if [[ "$source" == "$repo_root" ]]; then
+    printf '/%s/\n' "${components[@]}" >> "$destination/.git/info/exclude"
+  fi
   git -C "$destination" add -A
   git -C "$destination" -c user.name="DIM Snapshot" -c user.email="snapshot@dim.invalid" \
     commit -m "snapshot $(basename "$source")" >/dev/null
@@ -121,9 +127,7 @@ inputs_root="$workdir/dim-inputs"
 if [[ "$cache_routing" == false ]]; then
   mkdir -p "$workbench_snapshot"
   snapshot_repository "$repo_root" "$workbench_snapshot"
-  for component in project core core-development plugin-dns-cloudflare \
-    plugin-dns-cloudflare-development plugin-external-urls \
-    plugin-external-urls-development verification examples specification; do
+  for component in "${components[@]}"; do
     rm -rf "$workbench_snapshot/$component"
     snapshot_repository "$repo_root/$component" "$workbench_snapshot/$component"
   done

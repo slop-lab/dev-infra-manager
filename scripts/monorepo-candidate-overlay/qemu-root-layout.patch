@@ -22,16 +22,24 @@ diff --git a/.dim/qemu-verify.bash b/.dim/qemu-verify.bash
  cache="${DIM_KVM_IMAGE_CACHE:-$repo_root/.local/kvm}"
  mkdir -p "$cache/runs"
  workdir="$(mktemp -d "$cache/runs/local.XXXXXX")"
-@@ -121,12 +121,6 @@ inputs_root="$workdir/dim-inputs"
+@@ -109,5 +109,2 @@
+ workbench_snapshot="$workdir/workbench"
+-components=(project core core-development plugin-dns-cloudflare \
+-  plugin-dns-cloudflare-development plugin-external-urls \
+-  plugin-external-urls-development verification examples specification)
+ snapshot_repository() {
+@@ -118,5 +115,2 @@ snapshot_repository() {
+   git -C "$destination" init --initial-branch=main >/dev/null
+-  if [[ "$source" == "$repo_root" ]]; then
+-    printf '/%s/\n' "${components[@]}" >> "$destination/.git/info/exclude"
+-  fi
+   git -C "$destination" add -A
+@@ -127,8 +121,4 @@ inputs_root="$workdir/dim-inputs"
  if [[ "$cache_routing" == false ]]; then
    mkdir -p "$workbench_snapshot"
    snapshot_repository "$repo_root" "$workbench_snapshot"
--  for component in project core core-development plugin-dns-cloudflare \
--    plugin-dns-cloudflare-development plugin-external-urls \
--    plugin-external-urls-development verification examples specification; do
+-  for component in "${components[@]}"; do
 -    rm -rf "$workbench_snapshot/$component"
 -    snapshot_repository "$repo_root/$component" "$workbench_snapshot/$component"
 -  done
    tar -C "$workdir" -czf "$workdir/workbench.tar.gz" workbench
-   mkdir -p "$inputs_root"
-   while IFS=$'\t' read -r name source; do
