@@ -27,6 +27,19 @@ Git tree. It MUST keep each child independently materialized as a Git
 repository after snapshot transfer; a parent checkout containing plain child
 directories is not a valid verification fixture.
 
+A single-tree candidate MUST replace split-repository CI workflows with
+candidate-only, reviewed workflow bytes recorded in the overlay digest. The
+ordinary source job MUST check out one exact candidate SHA, verify its full
+tree and the imported source ancestry, source trees, GitHub history, and
+overlay bytes, then run the complete source gate. The manually dispatched
+release gate MUST require a full lowercase candidate SHA matching the
+selected dispatch ref; its container-integration and disposable-QEMU Sysbox
+jobs MUST independently check out and verify that same SHA without persisting
+checkout credentials. Each lane reports its own result and immutable
+evidence. A source pass or unavailable QEMU capacity MUST NOT count as a full
+release pass, and CI evidence MUST NOT grant protected-ref publication or
+host deployment authority.
+
 ## Scope
 
 This specification defines the minimum verification gates for development.
