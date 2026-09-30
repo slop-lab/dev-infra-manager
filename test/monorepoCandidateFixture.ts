@@ -127,9 +127,21 @@ export function runBuilder(output: string, sources: readonly FixtureRepository[]
     if (source.name === "github-development") continue;
     arguments_.push("--source", source.name, source.path, source.sha);
   }
+  const environment: NodeJS.ProcessEnv = {
+    ...process.env,
+    GIT_MASTER: "1",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "user.useConfigOnly",
+    GIT_CONFIG_VALUE_0: "true",
+  };
+  for (const name of ["GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL", "EMAIL"]) {
+    delete environment[name];
+  }
   return spawnSync("/usr/bin/bash", [builder, ...arguments_], {
     encoding: "utf8",
-    env: { ...process.env, GIT_MASTER: "1" },
+    env: environment,
   });
 }
 
