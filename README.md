@@ -238,6 +238,29 @@ materialization, package build, and Project-specific gate before proposing a
 reviewed migration. A green source-only gate does not authorize updating
 `main` or retiring the split repositories.
 
+The candidate records its own `verify.yml`, manually dispatched
+`release-gate.yml`, and provenance verifier as reviewed overlay inputs.
+Publish its exact commit only to a Gitea proposal branch such as
+`candidate/monorepo-SHA` for a source-gate run. The source job verifies one
+complete checkout, imported source ancestry and trees, and overlay digests;
+its result is not the container or Sysbox host gate. Dispatch the candidate's
+release workflow against that same branch with its complete `candidate_sha`
+input to request independent container-integration and disposable-QEMU Sysbox
+jobs. Preserve their SHA-specific evidence and treat a missing QEMU job as
+unavailable, not as a pass. These jobs execute untrusted candidate code only
+in isolated runners and do not install DIM or update protected refs on the
+live host.
+
+The coding-agent workspace cannot reach the host-admin socket and cannot
+perform the final conversion. After a human reviews the exact candidate and
+both release jobs succeed, a trusted publisher must first make the reviewed
+commit available at the chosen external Git origin. Only then may the host
+maintainer run the guarded `dim repo apply --file FILE --rebind-origin root
+--expect-origin-tip FULL_COMMIT --yes` command with unchanged root protection
+and an exact advertised commit descended from the managed root tip. Protected
+`main` publication, GitHub publication, and replacement of existing
+workspaces remain separate reviewed operations.
+
 ## Connect to the agent with OpenSSH
 
 The generic `ssh-proxy` Project task carries an unmodified SSH byte stream to
