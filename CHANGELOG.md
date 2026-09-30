@@ -7,11 +7,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
-- Include GNU sed in the exact pinned self-Project CI job image so pnpm's
-  generated command shims execute in ordinary and QEMU runner jobs. The runner
-  configuration checks for sed before registration; adopting the reviewed
-  root commit requires reconciling the existing runners to select the new
-  image.
+- Pin the self-Project CI job image with the complete source-verification
+  toolchain, including GNU sed for pnpm's generated shims, findutils, jq,
+  grep, awk, util-linux and tini. Runner admission probes the declared tools;
+  adopting the reviewed root commit requires reconciling existing runners
+  to select the new image.
 
 ### Changed
 
