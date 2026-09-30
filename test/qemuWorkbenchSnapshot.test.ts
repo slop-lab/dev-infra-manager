@@ -1,10 +1,13 @@
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const launcher = resolve(import.meta.dirname, "../../project/.dim/qemu-verify.bash");
+const workspaceRoot = resolve(import.meta.dirname, "../..");
+const splitLayout = existsSync(resolve(workspaceRoot, "project/.git"));
 const roots: string[] = [];
 
 afterEach(async () => {
@@ -12,7 +15,7 @@ afterEach(async () => {
 });
 
 describe("trusted QEMU workbench snapshot", () => {
-  it("keeps split repositories out of the development Git tree", async () => {
+  it("keeps independently owned children separate only in the split layout", async () => {
     // Given: the trusted launcher receives an assembled workbench, not a clean
     // development-only directory.
     const root = await mkdtemp(join(tmpdir(), "dim-qemu-workbench-"));
@@ -26,7 +29,7 @@ describe("trusted QEMU workbench snapshot", () => {
     for (const child of children) {
       await mkdir(join(source, child));
       await writeFile(join(source, child, "marker.txt"), `${child}\n`);
-      runGit(["init", "--initial-branch=main", join(source, child)], root);
+      if (splitLayout) runGit(["init", "--initial-branch=main", join(source, child)], root);
     }
     const script = await readFile(launcher, "utf8");
     const snapshotFunction = /^snapshot_repository\(\) \{[\s\S]*?^\}/m.exec(script)?.[0];
@@ -39,16 +42,20 @@ describe("trusted QEMU workbench snapshot", () => {
     });
     expect(run.status, run.stderr).toBe(0);
 
-    // Then: parent Git owns only its own files, including nested directories
-    // whose names coincide with a child repository name.
+    // Then: the split parent omits children, while a single-tree candidate
+    // includes those same source paths as ordinary tracked code.
     const tracked = runGit(["ls-tree", "-r", "--name-only", "HEAD"], snapshot).split("\n");
     expect(tracked).toContain("docs/core/keep.txt");
     for (const child of children) {
-      expect(tracked.some((path) => path.startsWith(`${child}/`))).toBe(false);
-      expect(runGit(["check-ignore", `${child}/marker.txt`], snapshot).trim()).toBe(`${child}/marker.txt`);
-      await rm(join(snapshot, child), { recursive: true });
-      runGit(["init", "--initial-branch=main", join(snapshot, child)], root);
-      await writeFile(join(snapshot, child, "marker.txt"), `${child}\n`);
+      if (splitLayout) {
+        expect(tracked.some((path) => path.startsWith(`${child}/`))).toBe(false);
+        expect(runGit(["check-ignore", `${child}/marker.txt`], snapshot).trim()).toBe(`${child}/marker.txt`);
+        await rm(join(snapshot, child), { recursive: true });
+        runGit(["init", "--initial-branch=main", join(snapshot, child)], root);
+        await writeFile(join(snapshot, child, "marker.txt"), `${child}\n`);
+      } else {
+        expect(tracked).toContain(`${child}/marker.txt`);
+      }
     }
     expect(runGit(["status", "--porcelain"], snapshot)).toBe("");
   });
