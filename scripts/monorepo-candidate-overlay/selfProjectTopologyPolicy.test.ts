@@ -66,7 +66,8 @@ describe("DIM monorepo self-project topology policy", () => {
     expect(overlayLines.every((fields) => fields.length === 3 && /^[0-9a-f]{64}$/.test(fields[2] ?? ""))).toBe(true);
     expect(overlayLines.map(([, target]) => target).sort()).toEqual([
       ".dim/reconcile-repositories.sh", ".dim/repos.yml", ".dim/workspace-repositories.json",
-      ".gitea/CODEOWNERS", "git-apply", "verification-layout",
+      ".gitea/CODEOWNERS", ".gitea/workflows/release-gate.yml", ".gitea/workflows/verify.yml",
+      "git-apply", "verification-layout", "verification/scripts/monorepo-candidate-evidence.mjs",
       "verification/scripts/repository-materialization-smoke.bash",
       "verification/test/selfProjectTopologyPolicy.test.ts"
     ]);

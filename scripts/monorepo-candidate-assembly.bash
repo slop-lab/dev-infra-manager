@@ -70,15 +70,20 @@ for repository in "${repositories[@]:1}"; do
     cp -- "$overlay_snapshot/workspace-repositories.json" "$staging/.dim/workspace-repositories.json"
     cp -- "$overlay_snapshot/reconcile-repositories.sh" "$staging/.dim/reconcile-repositories.sh"
     GIT_MASTER=1 git -C "$staging" apply "$overlay_snapshot/qemu-root-layout.patch"
-    mkdir -p -- "$staging/.gitea"
+    mkdir -p -- "$staging/.gitea/workflows"
     cp -- "$overlay_snapshot/CODEOWNERS" "$staging/.gitea/CODEOWNERS"
-    GIT_MASTER=1 git -C "$staging" add .dim .gitea/CODEOWNERS "${root_script_paths[@]}"
+    cp -- "$overlay_snapshot/verify.yml" "$staging/.gitea/workflows/verify.yml"
+    cp -- "$overlay_snapshot/release-gate.yml" "$staging/.gitea/workflows/release-gate.yml"
+    GIT_MASTER=1 git -C "$staging" add .dim .gitea/CODEOWNERS \
+      .gitea/workflows/verify.yml .gitea/workflows/release-gate.yml "${root_script_paths[@]}"
   else
     GIT_MASTER=1 git -C "$staging" read-tree --prefix="$destination/" -u "$source_ref^{tree}"
     if [[ "$repository" == verification ]]; then
       bash "$overlay_snapshot/adapt-verification-layout.bash" "$staging"
       cp -- "$overlay_snapshot/repository-materialization-smoke.bash" \
         "$staging/verification/scripts/repository-materialization-smoke.bash"
+      cp -- "$overlay_snapshot/monorepo-candidate-evidence.mjs" \
+        "$staging/verification/scripts/monorepo-candidate-evidence.mjs"
       cp -- "$overlay_snapshot/selfProjectTopologyPolicy.test.ts" \
         "$staging/verification/test/selfProjectTopologyPolicy.test.ts"
       GIT_MASTER=1 git -C "$staging" add verification
@@ -94,6 +99,7 @@ mapfile -d '' -t development_paths < <(
 if [[ "${#development_paths[@]}" -gt 0 ]]; then
   GIT_MASTER=1 git -C "$staging" diff --quiet "$development_commit" HEAD -- \
     "${development_paths[@]}" ':(exclude).gitea/CODEOWNERS' \
+    ':(exclude).gitea/workflows/verify.yml' ':(exclude).gitea/workflows/release-gate.yml' \
     "${root_script_paths[@]/#/:(exclude)}"
 fi
 
