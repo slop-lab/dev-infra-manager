@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Let trusted hosts share ordinary Sysbox CI capacity across explicitly
+  enrolled DIM Projects on one external Gitea control plane. Each host
+  verifies the Project and organization identity before one-job registration,
+  fences a named capacity with a renewable claim, safely reaps an expired
+  worker, and uses one digest-pinned job image and the managed registry cache.
+  Pool configuration and organization webhooks remain operator-owned; QEMU
+  integration capacity and Project-specific hooks remain separate.
+
 - Allow a reviewed maintenance-window repository apply to rebind only an
   existing ready Project root's external origin with an explicit root alias,
   exact full lowercase expected tip, and non-interactive approval. The locked
