@@ -23,6 +23,9 @@ const overlayInputs = [
   ["reconcile-repositories.sh", ".dim/reconcile-repositories.sh"],
   ["qemu-root-layout.patch", "git-apply"],
   ["repository-materialization-smoke.bash", "verification/scripts/repository-materialization-smoke.bash"],
+  ["verify.yml", ".gitea/workflows/verify.yml"],
+  ["release-gate.yml", ".gitea/workflows/release-gate.yml"],
+  ["monorepo-candidate-evidence.mjs", "verification/scripts/monorepo-candidate-evidence.mjs"],
 ] as const;
 
 afterEach(async () => {
@@ -98,8 +101,10 @@ describe("monorepo candidate builder", () => {
       .toContain('"/workspace/.dim/qemu-verify.bash"');
     expect(await readFile(resolve(output, ".dim/qemu-verify.bash"), "utf8"))
       .toContain('test -d "$repo_root/.dim"');
-    expect(await readFile(resolve(output, "verification/scripts/repository-materialization-smoke.bash"), "utf8"))
-      .toContain('root_repository="${DIM_ROOT_REPOSITORY:-$workspace_root}"');
+    const candidateSmoke = await readFile(resolve(output, "verification/scripts/repository-materialization-smoke.bash"), "utf8");
+    expect(candidateSmoke).toContain('root_repository="${DIM_ROOT_REPOSITORY:-$workspace_root}"');
+    expect(candidateSmoke).not.toContain("command -v jq");
+    expect(candidateSmoke).toContain("node --input-type=module");
     const materializationSmoke = spawnSync("bash", [resolve(output, "verification/scripts/repository-materialization-smoke.bash")], {
       encoding: "utf8", env: { ...process.env, GIT_MASTER: "1" }
     });
@@ -122,7 +127,9 @@ describe("monorepo candidate builder", () => {
     const development = sources.find(({ name }) => name === "development");
     expect(development).toBeDefined();
     expect(await readFile(resolve(output, ".gitea/workflows/verify.yml"), "utf8"))
-      .toBe(await readFile(resolve(development?.path ?? "", ".gitea/workflows/verify.yml"), "utf8"));
+      .toBe(await readFile(resolve(overlayRoot, "verify.yml"), "utf8"));
+    expect(await readFile(resolve(output, ".gitea/workflows/release-gate.yml"), "utf8"))
+      .toBe(await readFile(resolve(overlayRoot, "release-gate.yml"), "utf8"));
 
     const overlayEvidence = resolve(output, ".monorepo-candidate");
     const overlayManifest = await readFile(resolve(overlayEvidence, "overlay.tsv"), "utf8");
