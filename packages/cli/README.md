@@ -389,6 +389,29 @@ dim ci runner create acme release qemu --cpus 6 --memory 12g
 QEMU maps CPU and memory overrides to guest vCPUs and RAM. `--pids`
 applies only to Sysbox runners.
 
+For an operator-managed **ordinary Sysbox pool**, enroll only explicit DIM
+Projects and named host capacities with one external Gitea service. Stop
+conflicting Project-scoped Sysbox runners before enabling it. The service
+reads a private, mode-`0600` JSON config containing a durable SQLite path,
+digest-pinned shared job image, ordinary label, Project IDs and Gitea
+organization IDs, host capacities, and distinct webhook and host tokens:
+
+```bash
+dim ci ordinary-pool service run /path/to/private-service.json
+export DIM_GITEA_CONNECTION_FILE=/path/to/private-external-gitea.json
+export DIM_ORDINARY_CI_POOL_CONNECTION_FILE=/path/to/private-host-pool.json
+dim ci ordinary-pool worker serve primary
+```
+
+Run one worker per capacity on each trusted host. `worker run-once primary`
+processes at most one claim for controlled verification. Each host's private
+connection must have the same host ID as its external Gitea connection and
+must bind every enrolled Project by exact organization ID. Provision the
+organization `workflow_job` hooks and reconcile any already-queued jobs
+before live use; the pool CLI does not install hooks or replay backlog. The
+service never registers an instance-wide runner and QEMU integration runners
+retain their independent Project-specific hook and cache boundaries.
+
 QEMU scheduling remains host-local unless
 `DIM_QEMU_SCHEDULER_CONNECTION_FILE` selects an operator-managed shared
 scheduler. To share queued demand across hosts using external Gitea, build the

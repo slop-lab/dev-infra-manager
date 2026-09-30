@@ -1,5 +1,16 @@
 import { type Command } from "commander";
-import { BUILTIN_CI_RUNNER_DEFAULTS, buildSharedQemuSchedulerImage, configuredCiRunnerDefaults, ProcessRunner, setConfiguredCiRunnerDefaults, UserError } from "@slop-lab/dim-core";
+import {
+  BUILTIN_CI_RUNNER_DEFAULTS,
+  buildSharedQemuSchedulerImage,
+  configuredCiRunnerDefaults,
+  lifecycleOptions,
+  ProcessRunner,
+  runOrdinaryCiPoolCapacity,
+  runOrdinaryCiPoolCapacityOnce,
+  runOrdinaryCiPoolService,
+  setConfiguredCiRunnerDefaults,
+  UserError
+} from "@slop-lab/dim-core";
 import {
   adminCall, adminStreamCall, ciExecutor, confirmAction, hasResourceFlags, print,
   printList, resourceInput, type JsonFlags, type ResourceFlags
@@ -17,6 +28,56 @@ schedulerImage.command("build")
     console.log(image);
   });
 const ciRunner = ci.command("runner").description("Manage project CI runners");
+const ordinaryPool = ci.command("ordinary-pool").description("Manage host-scoped ordinary CI capacity");
+const ordinaryService = ordinaryPool.command("service").description("Run the ordinary CI control plane");
+ordinaryService.command("run")
+  .description("Run the ordinary CI control plane from a private reviewed config")
+  .argument("<config>")
+  .action(async (config: string) => {
+    const abort = new AbortController();
+    const stop = () => abort.abort();
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+    try { await runOrdinaryCiPoolService(config, abort.signal); }
+    finally {
+      process.off("SIGINT", stop);
+      process.off("SIGTERM", stop);
+    }
+  });
+const ordinaryWorker = ordinaryPool.command("worker").description("Run one host capacity claim");
+ordinaryWorker.command("serve")
+  .description("Continuously serve one ordinary CI host capacity")
+  .argument("<capacity>")
+  .action(async (capacity: string) => {
+    const abort = new AbortController();
+    const stop = () => abort.abort();
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+    try {
+      await runOrdinaryCiPoolCapacity(new ProcessRunner(), lifecycleOptions(), capacity, abort.signal);
+    } finally {
+      process.off("SIGINT", stop);
+      process.off("SIGTERM", stop);
+    }
+  });
+ordinaryWorker.command("run-once")
+  .description("Claim and execute at most one ordinary CI job")
+  .argument("<capacity>")
+  .action(async (capacity: string) => {
+    const abort = new AbortController();
+    const stop = () => abort.abort();
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+    try {
+      const result = await runOrdinaryCiPoolCapacityOnce(
+        new ProcessRunner(), lifecycleOptions(), capacity, abort.signal
+      );
+      console.log(JSON.stringify(result));
+    } finally {
+      process.off("SIGINT", stop);
+      process.off("SIGTERM", stop);
+    }
+  });
 
 ciRunner.command("create")
   .description("Create a named CI runner")

@@ -84,6 +84,8 @@ with host credentials.
 - `DIM_GITEA_IMAGE`, `DIM_GITEA_PORT`, and `DIM_GITEA_ADMIN_USERNAME` for the
   default host-local managed service
 - `DIM_GITEA_CONNECTION_FILE` for an operator-managed external Gitea service
+- `DIM_ORDINARY_CI_POOL_CONNECTION_FILE` for a private, host-bound connection
+  to the optional ordinary Sysbox CI pool
 - `DIM_GIT_SYNC_CONNECTION_FILE` for the separately deployed Git-host sync service
 - `DIM_GIT_USERNAME`
 - the installed `workspaceBackend`, `DIM_WORKSPACE_IMAGE`, and
@@ -193,12 +195,21 @@ receives no arbitrary command or caller-selected filesystem path. Absence of
 the connection file makes synchronization fail closed. Initial `repo add`
 imports remain local host Git operations.
 
-Every managed CI runner requires `.dim/ci/runner.yml` in the protected Project
+Every Project-scoped managed CI runner requires `.dim/ci/runner.yml` in the protected Project
 root. Its strict schema declares ordinary and integration labels,
 digest-pinned disposable job images, required executables, and the integration
 workload's `nested-docker` capability. DIM records the exact source ref, commit,
 and configuration digest, probes both workloads before registration, and never
 runs Project workflow commands in the runner host container.
+
+The optional ordinary pool is a separate, operator-managed service for
+explicitly enrolled DIM Projects using external Gitea. It claims named
+capacities across hosts and registers one ephemeral organization runner per
+job using a common digest-pinned disposable job image. Its control plane
+stores demand and renewable leases in SQLite, while each host independently
+checks its trusted organization binding and uses a mode-`0600` connection
+file. It does not register an instance-wide runner, automatically configure
+Gitea organization webhooks, or replace the Project-scoped QEMU path.
 
 For QEMU CI capacity, a Project may provide `.dim/ci/qemu-cache.bash`. DIM
 requires applied root protection, resolves the configured root or symbolic
