@@ -25,6 +25,10 @@ export interface PrepareResult {
 const commonKey = "a".repeat(64);
 
 export async function createPrepareHarness(): Promise<PrepareHarness> {
+  const flockCommand = spawnSync("sh", ["-c", "command -v flock"], { encoding: "utf8" });
+  if (flockCommand.status !== 0 || !flockCommand.stdout.trim().startsWith("/")) {
+    throw new Error("flock is required for QEMU image preparation tests");
+  }
   const root = await mkdtemp(join(tmpdir(), "dim-qemu-image-prepare-"));
   const bin = join(root, "bin");
   const commonRoot = join(root, "common");
@@ -66,6 +70,7 @@ export async function createPrepareHarness(): Promise<PrepareHarness> {
         DIM_QEMU_CI_PROJECT_HOOK_DIGEST: QEMU_CI_NO_HOOK_DIGEST,
         DIM_QEMU_CI_PROJECT_HOOK_SOURCE_REF: "refs/heads/main",
         DIM_QEMU_CI_PROJECT_HOOK_SOURCE_COMMIT: "f".repeat(40),
+        DIM_TEST_REAL_FLOCK: flockCommand.stdout.trim(),
         ...extra
       },
       stdio: ["ignore", "pipe", "pipe"]
@@ -142,7 +147,7 @@ case "\${1:-}" in
     ;;
   8) touch "$root/project-lock-ready-$DIM_QEMU_CI_PROJECT_IMAGE_KEY" ;;
 esac
-exec /usr/bin/flock "$@"
+exec "$DIM_TEST_REAL_FLOCK" "$@"
 `;
 
 const fakePacker = `#!/usr/bin/env bash
