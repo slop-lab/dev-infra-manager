@@ -34,11 +34,17 @@ jobs:
           version: 10.13.1
       - name: Provide host tool paths in the disposable container job
         run: |
-          install -d /usr/bin /usr/local/bin
+          install -d /usr/bin /usr/local/bin /lib64
           for tool in bash curl cut git grep head install node nohup rm sh sleep sort true; do
             ln -s -- "$(type -P "$tool")" "/usr/bin/$tool"
           done
           ln -s -- "$(type -P just)" /usr/local/bin/just
+          glibc_loaders=(/nix/store/*-glibc-*/lib/ld-linux-x86-64.so.2)
+          [[ ${#glibc_loaders[@]} == 1 && -x ${glibc_loaders[0]} ]] || {
+            printf 'pinned CI image must contain exactly one glibc loader\n' >&2
+            exit 1
+          }
+          ln -s -- "${glibc_loaders[0]}" /lib64/ld-linux-x86-64.so.2
           printf 'root:x:0:0:root:/root:/bin/sh\n' >/etc/passwd
           printf 'root:x:0:\n' >/etc/group
       - name: Verify complete container integration
