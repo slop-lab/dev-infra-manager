@@ -30,9 +30,11 @@ jobs:
       - name: Provide host tool paths in the disposable source job
         run: |
           install -d /usr/bin
-          for tool in git grep sort head cut; do
-            ln -s -- "$(command -v "$tool")" "/usr/bin/$tool"
+          for tool in bash curl cut git grep head install node nohup rm sh sleep sort true; do
+            ln -s -- "$(type -P "$tool")" "/usr/bin/$tool"
           done
+          printf 'root:x:0:0:root:/root:/bin/sh\n' >/etc/passwd
+          printf 'root:x:0:\n' >/etc/group
       - name: Verify complete candidate source tree
         env:
           DIM_TEST_PTY_RESIZE: unsupported
