@@ -71,12 +71,13 @@ fi
 agent_output="$(sh "$entrypoint" agent --mode fixture)"
 [[ "$agent_output" = "agent-ok --mode fixture" ]]
 
-mkdir -p "$work_dir/codex-project/.dim"
-cp "$codex_selection" "$work_dir/codex-project/.dim/project-tool.conf"
+codex_root="$work_dir/codex-project"
+mkdir -p "$codex_root/.dim"
+cp "$codex_selection" "$codex_root/.dim/project-tool.conf"
 codex_setup_output="$(printf 'test "$1" = codex && printf codex-setup-ok\n' | \
-  (cd "$work_dir/codex-project" && sh "$rich_entrypoint" tool-setup))"
+  (cd "$codex_root" && sh "$rich_entrypoint" tool-setup))"
 [[ "$codex_setup_output" = codex-setup-ok ]]
-codex_agent_output="$(cd "$work_dir/codex-project" && sh "$rich_entrypoint" agent --help)"
+codex_agent_output="$(cd "$codex_root" && sh "$rich_entrypoint" agent --help)"
 [[ "$codex_agent_output" = "agent-ok /home/dim-agent/.local/bin/codex --help" ]]
 grep -Fq "$DIM_PROJECT_TOOL_RUNNER 1 agent codex 0.156.1 /home/dim-agent/.local/bin/codex --help" \
   "$DIM_TOOL_FIXTURE_LOG"
