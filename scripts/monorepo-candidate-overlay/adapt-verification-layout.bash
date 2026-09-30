@@ -42,10 +42,6 @@ replace_all 'project/README.md' 'README.md' "${verification_sources[@]}"
 replace_all 'project/.gitea/' '.gitea/' "${verification_sources[@]}"
 replace_all 'resolve(workspaceRoot, "project")' 'workspaceRoot' "${verification_sources[@]}"
 replace_all 'resolve(import.meta.dirname, "../../project")' 'resolve(import.meta.dirname, "../..")' "${verification_sources[@]}"
-replace_all 'root_repository="${DIM_ROOT_REPOSITORY:-$workspace_root/project}"' \
-  'root_repository="${DIM_ROOT_REPOSITORY:-$workspace_root}"' \
-  "$verification_root/scripts/repository-materialization-smoke.bash"
-
 replace_all '$repo_root/project}"' '$repo_root}"' "$verification_root/scripts/local-build-version.bash"
 replace_all 'mkdir(serviceDirectory)' 'mkdir(serviceDirectory, { mode: 0o755 })' \
   "$verification_root/test/qemuSetupOwnership.test.ts"
