@@ -97,6 +97,8 @@ describe("monorepo candidate builder", () => {
       .toContain('"/workspace/.dim/qemu-verify.bash"');
     expect(await readFile(resolve(output, ".dim/qemu-verify.bash"), "utf8"))
       .toContain('test -d "$repo_root/.dim"');
+    expect(await readFile(resolve(output, "verification/scripts/repository-materialization-smoke.bash"), "utf8"))
+      .toContain('root_repository="${DIM_ROOT_REPOSITORY:-$workspace_root}"');
     const codeowners = await readFile(resolve(output, ".gitea/CODEOWNERS"), "utf8");
     for (const trustedInput of [
       ".dim/setup.sh", ".dim/ci/runner.yml", ".gitea/workflows/verify.yml",
