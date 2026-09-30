@@ -29,10 +29,11 @@ jobs:
           version: 10.13.1
       - name: Provide host tool paths in the disposable source job
         run: |
-          install -d /usr/bin
+          install -d /usr/bin /usr/local/bin
           for tool in bash curl cut git grep head install node nohup rm sh sleep sort true; do
             ln -s -- "$(type -P "$tool")" "/usr/bin/$tool"
           done
+          ln -s -- "$(type -P just)" /usr/local/bin/just
           printf 'root:x:0:0:root:/root:/bin/sh\n' >/etc/passwd
           printf 'root:x:0:\n' >/etc/group
       - name: Verify complete candidate source tree
@@ -44,7 +45,7 @@ jobs:
           chmod 1777 "$source_tmp"
           export TMPDIR="$source_tmp"
           pnpm install --frozen-lockfile
-          just check-source
+          "$(type -P tini)" -s -- /usr/local/bin/just check-source
       - name: Upload exact-tree evidence
         if: always()
         uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
