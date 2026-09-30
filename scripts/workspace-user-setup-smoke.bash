@@ -465,7 +465,7 @@ case "${WORKSPACE_SETUP_NPM_MODE:-skip}" in
     mkdir "$guard"
     trap 'rmdir "$guard"' EXIT
     sleep 1
-    "$REAL_NPM" "$@"
+    PATH="$REAL_NPM_PATH" "$REAL_NPM" "$@"
     ;;
   skip) ;;
   *) exit 98 ;;
@@ -473,6 +473,7 @@ esac
 EOF
 chmod 0700 "$work_dir/tools/npm"
 export REAL_NPM="$real_npm"
+export REAL_NPM_PATH="$system_path"
 export PATH="$work_dir/tools:$system_path"
 
 owner_death_marker="$work_dir/owner-death-entered"
