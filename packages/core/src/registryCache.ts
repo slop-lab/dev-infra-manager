@@ -75,10 +75,7 @@ export async function configureSysboxRegistryMirror(
 }
 
 export function sysboxRegistryConfigArgs(volumeName: string): string[] {
-  const config = Buffer.from(`${JSON.stringify({
-    "registry-mirrors": [`http://${REGISTRY_CACHE_ENDPOINT}`],
-    "insecure-registries": [REGISTRY_CACHE_ENDPOINT]
-  }, null, 2)}\n`).toString("base64");
+  const config = Buffer.from(sysboxRegistryDaemonConfig()).toString("base64");
   return [
     "run", "--rm",
     "--mount", `type=volume,source=${volumeName},target=/data`,
@@ -87,6 +84,13 @@ export function sysboxRegistryConfigArgs(volumeName: string): string[] {
     REGISTRY_CACHE_IMAGE,
     "-c", "printf %s \"$DIM_REGISTRY_DAEMON_CONFIG\" | base64 -d > /data/docker-daemon.json && chmod 0444 /data/docker-daemon.json"
   ];
+}
+
+export function sysboxRegistryDaemonConfig(): string {
+  return `${JSON.stringify({
+    "registry-mirrors": [`http://${REGISTRY_CACHE_ENDPOINT}`],
+    "insecure-registries": [REGISTRY_CACHE_ENDPOINT]
+  }, null, 2)}\n`;
 }
 
 async function startRegistryCache(runner: StreamingCommandRunner): Promise<void> {
