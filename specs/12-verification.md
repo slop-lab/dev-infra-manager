@@ -21,6 +21,12 @@ gate MUST run against the exact complete candidate tree, record its commit,
 tree, imported source SHAs and overlay digest, and report unavailable QEMU
 capacity as unavailable rather than a pass.
 
+A split-Project QEMU gate MUST snapshot the development root without adding
+its separately owned Project root or sibling repositories to the development
+Git tree. It MUST keep each child independently materialized as a Git
+repository after snapshot transfer; a parent checkout containing plain child
+directories is not a valid verification fixture.
+
 ## Scope
 
 This specification defines the minimum verification gates for development.
@@ -192,6 +198,47 @@ smoke against a non-root repository.
 organization-scoped runner
 for a multi-repository Project, open a pull request in a non-root repository,
 and wait for that repository's real workflow to succeed.
+
+For `CI-ORDINARY-POOL-001`, deterministic service and worker tests MUST
+exercise two independently identified hosts and two enrolled organizations:
+each host must be able to run an ordinary job for the other host's Project
+without adopting its local Project record. Tests MUST reject a foreign
+organization or mismatched organization ID, a mismatched host binding, an
+unknown host or capacity, mutable images, unauthenticated webhooks, and an
+instance-wide runner registration. They MUST prove exclusive claims and
+durable queue state across service restart, expired-claim fencing until
+ownership-safe container cleanup, lease-loss termination before release,
+and preservation of foreign same-name Docker resources. Runner argument
+inspection MUST exclude the host Docker socket and `/dev/kvm`, prove Sysbox
+and cgroup limits, verify temporary registration-token cleanup, and prove
+that its nested daemon uses the host registry cache and fails without direct
+Docker Hub fallback when that cache is unavailable. A same-name Gitea
+organization replaced with a different ID MUST fail before token request.
+`in_progress` MUST permit renewal while a completed claimed job MUST reject
+renewal. Normal completion with an in-flight renewal MUST NOT report lease
+loss. Host maintenance MUST exclude disposable pool containers from restart
+state, stop them, and block new claims until the host is ready again.
+
+The disposable-QEMU Sysbox gate runs `just verify ordinary-ci-pool-live`
+before other guest work. It MUST use a real Gitea service, organization
+webhooks, two Project workflows and ephemeral Sysbox runners, prove cross-Project
+dispatch for two distinct host identities, and inspect resource and device
+boundaries. These two identities share one disposable guest and Docker daemon;
+passing this gate MUST NOT be reported as the independent two-physical-host
+deployment proof below.
+
+Before accepting a live pool deployment, a separate Sysbox-capable host gate
+MUST use the actual external Gitea service and two DIM Projects on at least
+two hosts: deliver authenticated organization webhooks, run a real workflow
+from each Project on the other host, inspect the effective runner runtime,
+mounts, CPU, memory and PID limits, and confirm that an unrelated Gitea
+organization cannot dispatch into the pool. Interrupt one worker during a
+claimed job, then restart it and verify that its owned container is reaped
+before that host capacity accepts another claim, while the other host
+continues to serve. A fake Docker
+runner or simulated Gitea endpoint is useful unit evidence but is NOT
+evidence that the live Gitea/Sysbox isolation boundary works. Keep the QEMU
+integration gate separate until shared QEMU scheduling is explicitly adopted.
 
 `just verify plugin-install` builds the publishable packages and verifies
 plugin installation through their packaged shape. It is separate because it

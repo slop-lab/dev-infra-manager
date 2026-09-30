@@ -303,12 +303,59 @@ dim ci runner delete PROJECT RUNNER --yes
 dim ci runner defaults show
 dim ci runner defaults set --cpus COUNT --memory SIZE --pids COUNT
 dim ci runner defaults reset
+dim ci ordinary-pool service run CONFIG
+dim ci ordinary-pool worker serve CAPACITY
+dim ci ordinary-pool worker run-once CAPACITY
 ```
 
 `create` rejects an existing Project/runner identity. `start`, `restart`, and
 `stop` require an existing runner; `start` additionally requires its phase to
 be `stopped`. `delete` is the only command that removes provider registration,
 local data, and lifecycle state.
+
+**CI-ORDINARY-POOL-001:** The optional ordinary CI pool is a separate,
+operator-managed control plane for explicitly enrolled DIM Projects on one
+external Gitea service. It MUST NOT register an instance-wide Gitea runner or
+admit other organizations just because they share that instance. Its private
+service configuration MUST identify each Project by shared Project ID, reserved
+`dim-` organization name, and positive Gitea organization ID, and identify each
+host and named capacity independently. A host MUST match its external Gitea
+host ID and its reviewed Project binding, including organization ID, before
+registering an ephemeral organization runner. A host need not have that
+Project in its local lifecycle state. One configured digest-pinned disposable
+job image and one ordinary runner label are shared across the enrolled
+Projects; the operator MUST review the common image and remove conflicting
+legacy Sysbox runner capacity before enabling the pool. This path is not an
+alternative way to expose Gitea administrator credentials to jobs.
+
+The service accepts authenticated organization `workflow_job` events only
+when the event's organization and repository owner both match the enrolled
+organization. Claims are exclusive per host and named capacity and carry
+renewable leases. An expired claim MUST fence new work on that capacity until
+the host has inspected and reaped its own container and acknowledged recovery;
+unknown or foreign containers MUST NOT be removed. Loss of renewal MUST stop
+the worker before its claim is released. A completed job MUST stop renewing
+its claim even when its one-shot runner has not yet consumed that job;
+`in_progress` alone MUST NOT cancel a running claim. Workers MUST hold host
+lifecycle admission across job execution and cleanup, and host shutdown MUST
+stop but MUST NOT schedule disposable pool containers for restart. The host
+runner MUST use Sysbox,
+bounded resources, one ephemeral job, no host Docker socket or `/dev/kvm`,
+and a registration credential confined to a temporary read-only mount. Its
+nested Docker daemon MUST use the managed host registry cache with no direct
+Docker Hub fallback, as required by `CI-CACHE-ROUTING-001`. The
+pool service has no Gitea administrator credential. Operator-managed webhook
+provisioning and queued-job reconciliation are prerequisites for live use;
+neither is silently inferred from a local Project runner.
+
+`service run` reads a mode-`0600`, owner-controlled JSON service config, and
+`worker serve` continuously claims one configured host capacity using
+`DIM_ORDINARY_CI_POOL_CONNECTION_FILE` alongside the external Gitea connection
+file. `worker run-once` processes at most one claim, printing an idle or
+completed result. These host-operator commands do not grant workspace/agent
+access to pool tokens. Pooling QEMU integration runners is not part of this
+ordinary path; the existing Project-scoped QEMU scheduler and Project-specific
+hook and cache boundaries remain in force.
 
 For a stopped QEMU runner, `start` MUST preserve its schema-`8` runner config
 and hook artifact and provenance, supervisor image, job image, labels, effective
