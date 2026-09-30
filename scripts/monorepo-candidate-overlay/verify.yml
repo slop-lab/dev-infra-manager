@@ -31,6 +31,9 @@ jobs:
         env:
           DIM_TEST_PTY_RESIZE: unsupported
         run: |
+          source_tmp="$(mktemp -d /tmp/dim-candidate-source.XXXXXX)"
+          chmod 1777 "$source_tmp"
+          export TMPDIR="$source_tmp"
           pnpm install --frozen-lockfile
           just check-source
       - name: Upload exact-tree evidence
