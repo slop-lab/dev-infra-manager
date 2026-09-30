@@ -105,6 +105,32 @@ describe("host lifecycle", () => {
     expect(calls.flat()).not.toContain("dim-gitea");
   });
 
+  it("stops ephemeral pooled CI containers without persisting them as restart targets", async () => {
+    // Given
+    const name = "dim-ci-ordinary-host-a-primary-abcdef012345";
+    const calls: string[][] = [];
+    const runner: StreamingCommandRunner = {
+      async run(command, args) {
+        calls.push([command, ...args]);
+        const stdout = args[0] === "container" && args[1] === "ls" ? `${name}\n`
+          : args[0] === "container" && args[1] === "inspect" ? "owned-pool-id|true|true\n" : "";
+        return { command, args, stdout, stderr: "", exitCode: 0 };
+      },
+      async runStreaming() { return 0; }
+    };
+
+    // When
+    const stopped = await shutdownHost(runner, hostLifecycleOptions(root));
+
+    // Then
+    expect(stopped.resumeManagedContainers).toEqual([]);
+    expect(calls).toContainEqual([
+      "docker", "container", "ls", "--filter", "label=dim.managed=true",
+      "--filter", "label=dim.resource=ci-ordinary-job", "--format", "{{.Names}}"
+    ]);
+    expect(calls).toContainEqual(["docker", "stop", "owned-pool-id"]);
+  });
+
   it("starts managed infrastructure by its inspected immutable ID", async () => {
     const state = new LifecycleState(root);
     await state.writeHostLifecycle({
