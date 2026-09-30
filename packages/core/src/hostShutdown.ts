@@ -29,11 +29,14 @@ export async function shutdownHost(
     const runnerContainers = new Set(ciRunners.map((ciRunner) => ciRunner.executor.kind === "sysbox"
       ? ciRunner.executor.containerName
       : ciRunner.executor.supervisorName));
+    const ordinaryContainers = await listRunningManagedContainers(runner, "label=dim.resource=ci-ordinary-job");
+    const ordinaryNames = new Set(ordinaryContainers);
     const resumeManagedContainers = (await listRunningManagedContainers(runner)).filter((name) =>
       name !== GITEA_CONTAINER
       && name !== REGISTRY_CACHE_CONTAINER
       && !workspaceContainers.has(name)
-      && !runnerContainers.has(name));
+      && !runnerContainers.has(name)
+      && !ordinaryNames.has(name));
     let record: HostLifecycleRecord = {
       schemaVersion: 2,
       phase: "stopping",
@@ -50,6 +53,9 @@ export async function shutdownHost(
     }
     for (const workspace of resumeWorkspaces) {
       await attempt(errors, `stop workspace '${workspace}'`, () => stopWorkspace(runner, options, workspace));
+    }
+    for (const container of ordinaryContainers) {
+      await attempt(errors, `stop disposable CI container '${container}'`, () => stopManagedContainer(runner, container));
     }
     for (const container of resumeManagedContainers) {
       await attempt(errors, `stop managed container '${container}'`, () => stopManagedContainer(runner, container));
@@ -87,9 +93,11 @@ async function stopManagedContainer(runner: StreamingCommandRunner, name: string
   if (stopped.exitCode !== 0) throw new UserError(`failed to stop '${name}': ${stopped.stderr.trim()}`);
 }
 
-async function listRunningManagedContainers(runner: StreamingCommandRunner): Promise<string[]> {
+async function listRunningManagedContainers(runner: StreamingCommandRunner, resourceFilter?: string): Promise<string[]> {
   const listed = await runner.run("docker", [
-    "container", "ls", "--filter", "label=dim.managed=true", "--format", "{{.Names}}"
+    "container", "ls", "--filter", "label=dim.managed=true",
+    ...(resourceFilter === undefined ? [] : ["--filter", resourceFilter]),
+    "--format", "{{.Names}}"
   ]);
   if (listed.exitCode !== 0) throw new UserError(`cannot list DIM-managed containers: ${listed.stderr.trim()}`);
   return listed.stdout.split(/\r?\n/).map((name) => name.trim()).filter(Boolean).sort();
