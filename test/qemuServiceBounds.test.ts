@@ -1,5 +1,6 @@
-import { lstat, readFile, readdir } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { request, type ClientRequest, type IncomingMessage } from "node:http";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { http, readEvents, startService, waitForExit } from "./qemuServiceTestSupport.js";
@@ -48,13 +49,18 @@ function groupIsGone(pid: number): boolean {
 async function launcherPid(path: string): Promise<number> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
     try {
-      const pid = Number.parseInt(await readFile(path, "utf8"), 10);
-      await new Promise((resolveWait) => setTimeout(resolveWait, 20));
-      return pid;
+      const value = await readFile(path, "utf8");
+      if (/^[1-9][0-9]*\n?$/.test(value)) {
+        const pid = Number(value);
+        if (Number.isSafeInteger(pid)) {
+          await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+          return pid;
+        }
+      }
     } catch (error) {
       if (typeof error !== "object" || error === null || !("code" in error) || error.code !== "ENOENT") throw error;
-      await new Promise((resolveWait) => setTimeout(resolveWait, 10));
     }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 10));
   }
   throw new TypeError("launcher PID was not published");
 }
@@ -64,6 +70,20 @@ afterEach(() => {
 });
 
 describe("QEMU service resource bounds", () => {
+  it("rejects an incomplete launcher PID instead of treating it as a process group", async () => {
+    // Given: shell redirection has created the PID file but has not written its contents.
+    const root = await mkdtemp(resolve(tmpdir(), "dim-incomplete-launcher-pid-"));
+    try {
+      const path = resolve(root, "launcher.pid");
+      await writeFile(path, "");
+
+      // When / Then: an incomplete publication cannot become a PID.
+      await expect(launcherPid(path)).rejects.toThrow("launcher PID was not published");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("rejects follower 17 before headers and admits another after one closes", async () => {
     const fixture = await startService("hold");
     await http(fixture, { body: { inputs: [], mode: "run" }, method: "POST", path: "/v1/run" });
