@@ -57,11 +57,12 @@ jobs:
           export TMPDIR="$source_tmp"
           pnpm install --frozen-lockfile
           "$(type -P tini)" -s -- /usr/local/bin/just check-source
-          just verify workspace-user-setup
-          just verify headscale-tailnet-tcp
-          just verify external-gitea-shared-control
-          just verify packaged-shared-qemu-scheduler
-          DIM_DOCKER_REGISTRY_MIRROR=http://host.docker.internal:5000 just verify full-development
+          "$(type -P tini)" -s -- /usr/local/bin/just verify workspace-user-setup
+          "$(type -P tini)" -s -- /usr/local/bin/just verify headscale-tailnet-tcp
+          "$(type -P tini)" -s -- /usr/local/bin/just verify external-gitea-shared-control
+          "$(type -P tini)" -s -- /usr/local/bin/just verify packaged-shared-qemu-scheduler
+          DIM_DOCKER_REGISTRY_MIRROR=http://host.docker.internal:5000 \
+            "$(type -P tini)" -s -- /usr/local/bin/just verify full-development
       - name: Upload exact-tree evidence
         if: always()
         uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
