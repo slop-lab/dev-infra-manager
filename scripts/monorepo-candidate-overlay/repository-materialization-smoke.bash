@@ -6,7 +6,7 @@ workspace_root="$(cd -- "$script_dir/../.." && pwd)"
 root_repository="${DIM_ROOT_REPOSITORY:-$workspace_root}"
 reconcile="$root_repository/.dim/reconcile-repositories.sh"
 test -f "$reconcile" || { echo "single-tree lifecycle not found: $reconcile" >&2; exit 1; }
-command -v jq >/dev/null || { echo "jq is required" >&2; exit 2; }
+command -v node >/dev/null || { echo "Node.js is required" >&2; exit 2; }
 
 work_dir="$(mktemp -d /tmp/dim-single-repository-materialization.XXXXXX)"
 cleanup() { rm -rf -- "$work_dir"; }
@@ -26,9 +26,17 @@ GIT_MASTER=1 git -C "$source" -c user.name="DIM Snapshot" -c user.email="snapsho
   commit -m initial >/dev/null
 GIT_MASTER=1 git -C "$source" push "$remote" main >/dev/null
 cp -- "$root_repository/.dim/workspace-repositories.json" "$project_root/.dim/workspace-repositories.json"
-jq -n --arg root "$project_root" --arg data "$workspace_data" --arg base "$work_dir/remotes" \
-  '{schemaVersion:3,root:{repository:"root",ref:"refs/heads/main",commit:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",path:$root},data:{path:$data},gitBaseUrl:$base,hostAliases:{},runtime:{capabilities:[]}}' \
-  >"$manifest"
+node --input-type=module - "$project_root" "$workspace_data" "$work_dir/remotes" >"$manifest" <<'NODE'
+const [root, data, gitBaseUrl] = process.argv.slice(2);
+console.log(JSON.stringify({
+  schemaVersion: 3,
+  root: { repository: "root", ref: "refs/heads/main", commit: "a".repeat(40), path: root },
+  data: { path: data },
+  gitBaseUrl,
+  hostAliases: {},
+  runtime: { capabilities: [] }
+}));
+NODE
 
 DIM_PROJECT_ROOT="$project_root" DIM_PROJECT_MANIFEST="$manifest" \
   DIM_WORKSPACE_DATA="$workspace_data" sh "$reconcile"
