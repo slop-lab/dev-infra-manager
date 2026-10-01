@@ -21,13 +21,13 @@ cleanup() {
       wait "$pid" >/dev/null 2>&1 || true
     fi
   done
-  docker container rm --force "$gitea_container" >/dev/null 2>&1 || true
-  docker network rm "$network" >/dev/null 2>&1 || true
+  timeout --kill-after=5s 20s docker container rm --force "$gitea_container" >/dev/null 2>&1 || true
+  timeout --kill-after=5s 20s docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf -- "$work_dir"
 }
 trap cleanup EXIT
 
-for command in curl docker git jq node openssl; do
+for command in curl docker git jq node openssl timeout; do
   command -v "$command" >/dev/null || { printf '%s is required\n' "$command" >&2; exit 2; }
 done
 docker info >/dev/null
@@ -38,7 +38,8 @@ writer_password="$(openssl rand -hex 24)"
 wrong_password="$(openssl rand -hex 24)"
 
 docker network create --label dim.verification=external-gitea "$network" >/dev/null
-docker run --detach --name "$gitea_container" \
+printf '%s\n' 'external-gitea: creating disposable container'
+timeout --kill-after=5s 90s docker create --name "$gitea_container" \
   --label dim.verification=external-gitea \
   --publish 127.0.0.1::3000 \
   --env GITEA__database__DB_TYPE=sqlite3 \
@@ -46,7 +47,10 @@ docker run --detach --name "$gitea_container" \
   --env GITEA__server__DISABLE_SSH=true \
   --env GITEA__service__DISABLE_REGISTRATION=true \
   "$gitea_image" >/dev/null
-docker network connect --alias external-gitea --alias external-gitea-runner "$network" "$gitea_container"
+printf '%s\n' 'external-gitea: starting disposable container'
+timeout --kill-after=5s 90s docker start "$gitea_container" >/dev/null
+printf '%s\n' 'external-gitea: connecting disposable network'
+timeout --kill-after=5s 30s docker network connect --alias external-gitea --alias external-gitea-runner "$network" "$gitea_container"
 gitea_port="$(docker port "$gitea_container" 3000/tcp \
   | jq -Rrs 'split("\n") | map(select(length > 0)) | last | split(":") | last')"
 [[ "$gitea_port" =~ ^[0-9]+$ ]]
@@ -55,8 +59,9 @@ gitea_address="$(docker container inspect "$gitea_container" \
 [[ -n "$gitea_address" ]]
 gitea_url="http://$gitea_address:3000"
 gitea_host_url="$gitea_url"
+printf '%s\n' 'external-gitea: waiting for service health'
 for attempt in $(seq 1 90); do
-  if curl --fail --silent "$gitea_url/api/healthz" >/dev/null 2>&1; then
+  if curl --fail --silent --connect-timeout 1 --max-time 2 "$gitea_url/api/healthz" >/dev/null 2>&1; then
     break
   fi
   [[ "$attempt" -lt 90 ]] || { docker logs "$gitea_container" >&2; exit 1; }
@@ -318,7 +323,9 @@ if grep -q 'dim-gitea' "$work_dir/docker-invocations"; then
   printf 'controller attempted to access local dim-gitea\n' >&2
   exit 1
 fi
-[[ "$(wc -l <"$work_dir/docker-invocations")" -eq 2 ]]
+[[ "$(wc -l <"$work_dir/docker-invocations")" -eq 3 ]]
+grep -qx 'container ls --filter label=dim.managed=true --filter label=dim.resource=ci-ordinary-job --format {{.Names}}' \
+  "$work_dir/docker-invocations"
 grep -qx 'container ls --filter label=dim.managed=true --format {{.Names}}' "$work_dir/docker-invocations"
 grep -qx 'container inspect dim-registry-cache --format {{.Id}}|{{index .Config.Labels "dim.managed"}}|{{.State.Running}}' \
   "$work_dir/docker-invocations"
