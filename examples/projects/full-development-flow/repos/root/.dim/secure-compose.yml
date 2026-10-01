@@ -1,0 +1,18 @@
+services:
+  secure-dind:
+    profiles: [secure]
+    build:
+      context: secure-dind
+    privileged: true
+    environment:
+      DOCKER_TLS_CERTDIR: ""
+    healthcheck:
+      test: ["CMD", "docker", "info"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+    volumes:
+      - secure-dind-data:/home/rootless/.local/share/docker
+
+volumes:
+  secure-dind-data:

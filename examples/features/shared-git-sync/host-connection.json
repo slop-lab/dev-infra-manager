@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "transport": "https",
+  "hostId": "builder-a",
+  "endpoint": "https://git-sync.example",
+  "token": "replace-with-service-token",
+  "timeoutSeconds": 300
+}

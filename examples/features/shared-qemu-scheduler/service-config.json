@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "listen": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
+  "database": "/var/lib/dim-scheduler/scheduler.sqlite3",
+  "leaseSeconds": 60,
+  "projects": {
+    "replace-with-project-id": {
+      "webhookToken": "replace-with-webhook-token",
+      "apiToken": "replace-with-project-api-token",
+      "labels": ["dim-qemu", "integration"]
+    }
+  }
+}
