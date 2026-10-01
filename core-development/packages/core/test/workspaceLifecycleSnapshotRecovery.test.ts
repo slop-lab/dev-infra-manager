@@ -111,7 +111,7 @@ it("publishes a setup-error manifest solely from the recorded root contract", as
     await expect(state.readWorkspace(record.name)).resolves.toMatchObject({
       phase: "error",
       rootCommit: interrupted.rootCommit,
-      error: "Docker container 'dim-ws-work-1' conflicts with DIM ownership"
+      error: "workspace reconciliation at container inspection: Docker container 'dim-ws-work-1' conflicts with DIM ownership"
     });
     expect(runner.runCalls.some((call) => call.includes("git"))).toBe(false);
   });

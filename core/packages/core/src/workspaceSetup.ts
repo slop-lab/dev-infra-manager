@@ -171,9 +171,12 @@ export async function reconcileProjectContainer(
 ): Promise<{ readonly record: WorkspaceRecord; readonly containerId: string }> {
   const release = await input.state.acquireWorkspaceLock(input.record.name);
   let record = await input.state.readWorkspace(input.record.name);
+  let stage = "container inspection";
   try {
     await inspectWorkspaceContainer(input.runner, record);
+    stage = "managed Git reconciliation";
     const credentials = await ensureGitea(input.runner, input.options);
+    stage = "managed Git address discovery";
     const gitBaseUrl = `${await giteaNestedBaseUrl(input.runner, credentials)}/${input.project.gitNamespace}`;
     record = {
       ...record,
@@ -184,24 +187,28 @@ export async function reconcileProjectContainer(
         ? { "dim-gitea": [new URL(gitBaseUrl).hostname] }
         : {}
     };
+    stage = "workspace metadata publication";
     await input.state.writeWorkspace(record);
+    stage = "workspace container reconciliation";
     const containerId = await reconcileContainer(
       input.runner,
       input.options,
       record,
       gitEnvironment(record, credentials)
     );
+    stage = "host-input helper installation";
     await installHostInputHelper(input.runner, { ...record, containerName: containerId });
     return { record, containerId };
   } catch (error) {
+    const detail = `workspace reconciliation at ${stage}: ${error instanceof Error ? error.message : String(error)}`;
     record = {
       ...record,
       phase: "error",
-      error: error instanceof Error ? error.message : String(error),
+      error: detail,
       updatedAt: new Date().toISOString()
     };
     await input.state.writeWorkspace(record);
-    throw error;
+    throw new UserError(detail, { cause: error });
   } finally {
     await release();
   }

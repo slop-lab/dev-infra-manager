@@ -72,6 +72,26 @@ it("keeps a post-fast-forward manifest failure non-ready and blocks run", async 
     expect(runner.streamingCalls).toHaveLength(0);
   });
 
+  it("identifies host-input helper installation when workspace reconciliation fails", async () => {
+    // Given
+    const run = runner.run.bind(runner);
+    runner.run = async (command, args) => args.some((argument) => argument.startsWith("DIM_HOST_INPUT_HELPER_B64="))
+      ? { command, args, stdout: "", stderr: "injected permission failure", exitCode: 1 }
+      : run(command, args);
+
+    // When
+    const updating = updateWorkspace(runner, options(root), workspace.name);
+
+    // Then
+    await expect(updating).rejects.toThrow(
+      "workspace reconciliation at host-input helper installation: failed to install host input helper: injected permission failure"
+    );
+    await expect(state.readWorkspace(workspace.name)).resolves.toMatchObject({
+      phase: "error",
+      error: "workspace reconciliation at host-input helper installation: failed to install host input helper: injected permission failure"
+    });
+  });
+
 it("persists setup-error when the final ready write fails after manifest publication", async () => {
     // Given
     const writeWorkspace = LifecycleState.prototype.writeWorkspace;
