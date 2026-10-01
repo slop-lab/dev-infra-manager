@@ -222,4 +222,33 @@ describe("workspace discard teardown intent", () => {
       await expect(state.authenticateAgentGrant(agentGrant)).resolves.toBeUndefined();
     }
   );
+
+  it("revokes authority before a failing discard hook runs", async () => {
+    // Given
+    const state = new LifecycleState(root);
+    const workspaceGrant = await state.ensureWorkspaceGrant(WORKSPACE.name);
+    const agentGrant = await state.ensureAgentGrant(WORKSPACE.name);
+    let observedPhase: WorkspaceRecord["phase"] | undefined;
+    let workspaceAuthorized = false;
+    let agentAuthorized = false;
+
+    // When
+    const discarded = discardWorkspace(new DiscardRunner(), lifecycleOptionsForBackend("sysbox", {
+      DIM_STATE_ROOT: root
+    }), WORKSPACE.name, false, [{
+      async beforeDiscard() {
+        observedPhase = (await state.readWorkspace(WORKSPACE.name)).phase;
+        workspaceAuthorized = await state.authenticateWorkspaceGrant(workspaceGrant) !== undefined;
+        agentAuthorized = await state.authenticateAgentGrant(agentGrant) !== undefined;
+        throw new Error("hook failed");
+      }
+    }]);
+
+    // Then
+    await expect(discarded).rejects.toThrow("hook failed");
+    expect(observedPhase).toBe("discarding");
+    expect(workspaceAuthorized).toBe(false);
+    expect(agentAuthorized).toBe(false);
+    await expect(state.readWorkspace(WORKSPACE.name)).resolves.toMatchObject({ phase: "discarding" });
+  });
 });
