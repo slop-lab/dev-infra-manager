@@ -44,7 +44,8 @@ it("isolates agent grants and discovery from the workspace controller", async ()
     const state = new LifecycleState(stateRoot);
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
-      schemaVersion: 7,
+      schemaVersion: 8,
+      workspaceId: "A".repeat(43),
       name: "work",
       projectId: "pid",
       projectName: "project",

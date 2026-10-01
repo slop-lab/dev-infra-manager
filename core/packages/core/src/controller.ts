@@ -103,12 +103,12 @@ export function configuredDimController(
       const host = await hostLifecycleStatus(lifecycle);
       if (host.phase !== "starting" || !host.resumeWorkspaces.includes(workspace.name)) return false;
       const record = await state.readWorkspace(workspace.name);
-      return record.phase === "setting-up" && record.projectId === workspace.projectId;
+      return record.phase === "setting-up" && record.workspaceId === workspace.id;
     },
     authenticate: async (token) => {
       const workspace = await state.authenticateWorkspaceGrant(token);
       return workspace && {
-        id: `${workspace.projectId}:${workspace.name}`,
+        id: workspace.workspaceId,
         name: workspace.name,
         projectId: workspace.projectId,
         projectName: workspace.projectName
@@ -116,12 +116,12 @@ export function configuredDimController(
     },
     resolveTarget: async (workspace, target, mode) => {
       const record = await state.readWorkspace(workspace.name);
-      if (record.projectId !== workspace.projectId) throw new UserError("workspace identity changed");
+      if (record.workspaceId !== workspace.id) throw new UserError("workspace identity changed");
       return resolveWorkspaceTarget(runner, record, target, mode);
     },
     restartWorkspace: async (workspace) => {
       const record = await state.readWorkspace(workspace.name);
-      if (record.projectId !== workspace.projectId) throw new UserError("workspace identity changed");
+      if (record.workspaceId !== workspace.id) throw new UserError("workspace identity changed");
       await restartWorkspaceLifecycle(runner, lifecycle, workspace.name);
     }
   });
@@ -140,7 +140,7 @@ export function configuredDimAgentController(
     authenticate: async (token) => {
       const workspace = await state.authenticateAgentGrant(token);
       return workspace && {
-        id: `${workspace.projectId}:${workspace.name}`,
+        id: workspace.workspaceId,
         name: workspace.name,
         projectId: workspace.projectId,
         projectName: workspace.projectName
@@ -148,7 +148,7 @@ export function configuredDimAgentController(
     },
     resolveTarget: async (workspace, target, mode) => {
       const record = await state.readWorkspace(workspace.name);
-      if (record.projectId !== workspace.projectId) throw new UserError("workspace identity changed");
+      if (record.workspaceId !== workspace.id) throw new UserError("workspace identity changed");
       return resolveWorkspaceTarget(runner, record, target, mode);
     }
   });
@@ -171,14 +171,14 @@ export async function initializeControllerRoutes(
     stateRoot: lifecycle.stateRoot,
     runner,
     listWorkspaces: async () => (await listWorkspaceRecords(runner, lifecycle)).map((workspace) => ({
-      id: `${workspace.projectId}:${workspace.name}`,
+      id: workspace.workspaceId,
       name: workspace.name,
       projectId: workspace.projectId,
       projectName: workspace.projectName
     })),
     resolveTarget: async (workspace, target, mode) => {
       const record = await state.readWorkspace(workspace.name);
-      if (record.projectId !== workspace.projectId) throw new UserError("workspace identity changed");
+      if (record.workspaceId !== workspace.id) throw new UserError("workspace identity changed");
       return resolveWorkspaceTarget(runner, record, target, mode);
     }
   };
