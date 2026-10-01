@@ -35,6 +35,10 @@ export class LifecycleState {
     return this.grants.ensure(await this.readWorkspace(name), "agent");
   }
 
+  async readWorkspaceGrant(name: string): Promise<string> {
+    return this.grants.read(await this.readWorkspace(name), "workspace");
+  }
+
   async authenticateWorkspaceGrant(token: string): Promise<WorkspaceRecord | undefined> {
     return this.grants.authenticate(token, "workspace", (name) => this.readWorkspace(name));
   }

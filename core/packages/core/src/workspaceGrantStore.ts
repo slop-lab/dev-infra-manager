@@ -31,6 +31,10 @@ export class WorkspaceGrantStore {
     }
   }
 
+  async read(record: Pick<WorkspaceRecord, "name" | "workspaceId">, audience: GrantAudience): Promise<string> {
+    return (await readFile(this.pathFor(record.name, record.workspaceId, audience), "utf8")).trim();
+  }
+
   async authenticate(
     token: string,
     audience: GrantAudience,
