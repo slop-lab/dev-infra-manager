@@ -332,7 +332,12 @@ The external URL plugin unit suite must exercise real HTTP forwarding through
 configured listeners sharing the hostname registry, generated URL shape,
 concurrent automatic-name allocation, default workspace-prefix rejection,
 webhook approval and response bounds, forwarded-header normalization, and
-independent route claim revocation. The Cloudflare plugin suite must verify named driver
+independent route claim revocation. For `CLI-EXTERNAL-URL-HOST-LIST-001`, CLI
+and plugin tests MUST prove a two-workspace host inventory with Project and
+workspace names, unchanged single-workspace listing through `--workspace`,
+denial of the host action through a workspace or agent grant, missing-plugin
+failure, omission of internal identity and claim fields, and rejection above
+the 1,000-route bound. The Cloudflare plugin suite must verify named driver
 registration, provider/record argument normalization, and DNS reconciliation.
 For `CLI-EXTERNAL-URL-TCP-001`, the suite MUST exercise authenticated raw TCP
 forwarding, rejection before a valid claim, exact-target idempotence, collision

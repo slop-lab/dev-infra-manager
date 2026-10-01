@@ -825,6 +825,17 @@ dim external-url revoke URL_ID [--workspace WORKSPACE]
 dim host-input get PROVIDER KEY [--parameters STRING]
 ```
 
+**CLI-EXTERNAL-URL-HOST-LIST-001:** On a host with no workspace or agent
+controller credential in the environment, `dim external-url list` MUST use the
+host-admin socket and return routes for every current workspace. Each route MUST
+identify its Project and workspace by name. The complete response MUST be
+bounded to 1,000 routes and fail rather than truncate when that bound would be
+exceeded. It MUST NOT return controller grants, provider arguments, internal
+route claims, or workspace IDs. `--workspace WORKSPACE` MUST retain the
+single-workspace controller-grant path. Inside a workspace or agent environment,
+omitting `--workspace` MUST retain the authenticated caller's workspace scope.
+Workspace and agent grants MUST NOT authorize the host-wide admin action.
+
 Provider and ingress arguments are forwarded as an ordered string array and
 interpreted only by the selected plugin driver. The CLI does not encode a
 driver-specific JSON schema.
@@ -877,7 +888,8 @@ state, binary, or credentials to a workspace or target container.
 
 Inside a workspace the controller endpoint and grant come from
 `DIM_CONTROLLER_SOCKET` and `DIM_CONTROLLER_TOKEN`. On the host, `--workspace`
-loads that workspace's stored grant and uses DIM's managed controller socket.
+loads that workspace's stored grant and uses DIM's managed controller socket;
+without `--workspace`, `list` uses the host-admin inventory described above.
 
 ## Git integration
 
