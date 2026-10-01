@@ -17,7 +17,8 @@ describe("immutable workspace lifecycle dispatch", () => {
     state = new LifecycleState(root);
     project = projectFixture();
     record = {
-      schemaVersion: 7,
+      schemaVersion: 8,
+      workspaceId: "A".repeat(43),
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
@@ -56,7 +57,7 @@ describe("immutable workspace lifecycle dispatch", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-it("rejects obsolete repository catalogs in schema 6 state", async () => {
+it("rejects obsolete repository catalogs in schema 8 state", async () => {
   // Given
   await writeFile(state.workspacePath(record.name), JSON.stringify({
     ...record,
@@ -67,7 +68,7 @@ it("rejects obsolete repository catalogs in schema 6 state", async () => {
   await expect(state.readWorkspace(record.name)).rejects.toThrow(/obsolete repository catalog/);
 });
 
-  it("rejects a schema 6 record with a noncanonical data path", async () => {
+  it("rejects a schema 8 record with a noncanonical data path", async () => {
   // Given
   await writeFile(state.workspacePath(record.name), JSON.stringify({
     ...record,
@@ -78,7 +79,7 @@ it("rejects obsolete repository catalogs in schema 6 state", async () => {
     await expect(state.readWorkspace(record.name)).rejects.toThrow(/workspace data path/);
   });
 
-  it("accepts schema 7 state without a persisted protected-root path", async () => {
+  it("accepts schema 8 state without a persisted protected-root path", async () => {
     // Given
     await writeFile(state.workspacePath(record.name), JSON.stringify({
       ...record
@@ -88,7 +89,7 @@ it("rejects obsolete repository catalogs in schema 6 state", async () => {
     await expect(state.readWorkspace(record.name)).resolves.not.toHaveProperty("rootSnapshotPath");
   });
 
-  it("rejects schema 7 state that persists a protected-root path", async () => {
+  it("rejects schema 8 state that persists a protected-root path", async () => {
     // Given
     await writeFile(state.workspacePath(record.name), JSON.stringify({
       ...record,

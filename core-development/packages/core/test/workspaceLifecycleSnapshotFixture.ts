@@ -11,6 +11,7 @@ export const MOVED_SOURCE_COMMIT = "c".repeat(40);
 
 const WORKSPACE_IDENTITY = {
   name: "work-1",
+  workspaceId: "A".repeat(43),
   projectId: "project-id",
   projectName: "project",
   rootRepositoryAlias: "root",
