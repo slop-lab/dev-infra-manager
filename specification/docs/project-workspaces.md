@@ -398,14 +398,14 @@ symlink is exported as its canonical target. OpenCode configuration stays below
 The canonical self-Project and full-development-flow example keep temporary
 OpenCode artifacts out of the agent container's ordinary `/tmp`. Their private
 daemon owns a distinct `dim-agent-tmp` volume, mounted only in the untrusted
-agent at `/tmp/opencode`, and sets `TMPDIR` to that path. This volume is not the
+agent at `/mnt/opencode-tmp`, and sets `TMPDIR` to that path. This volume is not the
 agent home and carries no user configuration, credentials, trusted runtime
 socket, or secret-bearing data. Setup initializes only an empty root to the
 agent UID/GID with mode `0700`; a symlink or populated root with incompatible
 ownership or mode stops setup. Recreating the inner agent preserves temporary
-artifacts. Ordinary discard removes the exact labeled temporary volume, while
-`--keep-volume` retains it with the private daemon store. Home backup and
-restore continue to include only the named agent-home volume.
+artifacts. Both ordinary discard and `--keep-volume` remove the exact labeled
+temporary volume. `--keep-volume` still retains the agent home and private
+daemon store. Home backup and restore include only the named agent-home volume.
 
 The canonical self-development Project's `tool-setup` task executes its
 reviewed local utility and does not consume downloaded stdin. Its no-checkout
