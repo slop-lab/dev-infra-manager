@@ -62,7 +62,7 @@ describe("workspace instance route authority", () => {
         };
       },
       runWorkspaceRequest: async (workspace, operation) => {
-        const release = await state.acquireWorkspaceSetupLock(workspace.name);
+        const release = await state.acquireWorkspaceAuthorityLock(workspace.name);
         try {
           const record = await state.readWorkspace(workspace.name);
           if (record.workspaceId !== workspace.id || record.phase === "discarding") {
