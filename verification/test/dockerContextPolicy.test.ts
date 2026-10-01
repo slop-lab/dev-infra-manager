@@ -17,11 +17,13 @@ describe("root Docker context policy", () => {
       "!agent/",
       "agent/*",
       "!agent/dim-agent-shell",
-      "!agent/start-sshd.sh"
+      "!agent/start-sshd.sh",
+      "!agent/prepare-agent-tmp.sh"
     ]);
     expect(rules.indexOf("!agent/")).toBeLessThan(rules.indexOf("agent/*"));
     expect(rules.indexOf("agent/*")).toBeLessThan(rules.indexOf("!agent/dim-agent-shell"));
     expect(rules.indexOf("!agent/dim-agent-shell")).toBeLessThan(rules.indexOf("!agent/start-sshd.sh"));
+    expect(rules.indexOf("!agent/start-sshd.sh")).toBeLessThan(rules.indexOf("!agent/prepare-agent-tmp.sh"));
     expect(agentRules).not.toContain("!agent/**");
     expect(agentRules).not.toContain("!agent/*");
     expect(await readFile(resolve(workspaceRoot, "agent/start-sshd.sh"), "utf8")).toContain("#!/usr/bin/env bash");
