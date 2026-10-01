@@ -37,7 +37,8 @@ The downloaded `workspace-user-setup.bash.sha256` must be verified before the
 helper is streamed. The checksum and helper must come from the same full
 development commit. No coding-agent package is baked into an image.
 
-For Remote SSH, use the full-development-flow `ProxyCommand` unchanged:
+For Remote SSH on the DIM host, use the full-development-flow `ProxyCommand`
+unchanged:
 
 ```sshconfig
 Host full-dev-agent
@@ -48,5 +49,10 @@ Host full-dev-agent
 ```
 
 Verify each recreated workspace's host-key fingerprint as described by the
-base example. Codex is only an OpenSSH client use case; DIM core and the proxy
+base example. For a client on another machine, use its
+[`host-name-*` host-scoped SSH configuration](../../projects/full-development-flow/README.md#connect-with-openssh)
+with a fixed DIM host and workspace. Select `host-name-full-dev` in Codex
+Remote SSH after independently checking both the DIM host key and the agent
+host-key fingerprint. No Codex-specific port forwarding or DIM privilege is
+needed; Codex is only an OpenSSH client use case, and DIM core and the proxy
 protocol remain unaware of it.

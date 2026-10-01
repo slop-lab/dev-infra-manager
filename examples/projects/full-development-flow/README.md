@@ -107,6 +107,31 @@ Connect with `ssh full-dev-agent`. Standard OpenSSH features that operate over
 this transport can support shells, editors, file transfer, and Codex Remote
 SSH workflows; Codex is a use case, not part of the proxy protocol.
 
+For a client on a different machine, use a host-scoped OpenSSH alias instead.
+Here `remote-main` is an independently configured SSH connection to the DIM
+host, and the host runs its own `dim` CLI. The pattern names only aliases for
+this **one** workspace on this **one** host:
+
+```sshconfig
+Host host-name-*
+    HostName dim-agent
+    HostKeyAlias dim-agent-remote-main
+    User dim-agent
+    RequestTTY no
+    ProxyCommand ssh -T remote-main dim workspace run full-dev ssh-proxy
+```
+
+Connect with `ssh host-name-full-dev` or select that alias in an editor's
+Remote SSH picker. The outer `ssh -T remote-main` authenticates to the DIM host;
+the inner SSH client separately authenticates to `dim-agent` over the byte
+stream. Check the agent host-key fingerprint above before accepting it. The
+fixed `HostKeyAlias` keeps all aliases for this workspace under one known-host
+identity; after agent recreation, verify the new fingerprint before replacing
+that known-host entry. For another DIM host or workspace, use a separate,
+non-overlapping `Host` pattern with its own fixed remote host, workspace name,
+and host-key alias. Do not interpolate an untrusted SSH hostname into a shell
+command or disable host-key checking to share this pattern.
+
 `dim workspace stop` preserves the named agent-home volume. A subsequent
 `dim workspace start` reruns setup, which recreates the agent container and
 generates new host keys; verify the new fingerprint before reconnecting. The
