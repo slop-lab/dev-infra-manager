@@ -51,6 +51,18 @@ test("workspace lifecycle guidance is not duplicated when controller context alr
   assert.equal(guidanceOccurrences(result.stderr), 1);
 });
 
+test("workspace lifecycle guidance preserves stage context and the original failure", async () => {
+  const { result } = await runCommand(
+    ["workspace", "setup", "candidate"],
+    "workspace setup at Project setup: project setup exited with 17"
+  );
+
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /workspace setup at Project setup/);
+  assert.match(result.stderr, /project setup exited with 17/);
+  assert.equal(guidanceOccurrences(result.stderr), 1);
+});
+
 test("unrelated workspace controller-session failures do not recommend doctor", async (context) => {
   const scenarios = [
     { operation: "workspace.run", args: ["workspace", "run", "candidate", "task"] },
