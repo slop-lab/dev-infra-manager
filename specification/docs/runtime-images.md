@@ -16,11 +16,10 @@ GID, and tags `dev-infra-project-workspace:<installed DIM package version>`.
 IDs, digest references, untagged references, and `latest` are rejected before
 Docker runs.
 
-For an assembled development checkout, prepare the matching local image before
-installing or using local packages:
+Prepare the matched package and image candidate before installing it:
 
 ```bash
-just build-local-workspace-image
+just prepare-local
 just install-local
 ```
 

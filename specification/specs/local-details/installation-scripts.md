@@ -133,13 +133,14 @@ must therefore precede facade, config, runtime, plugin, or image mutation and
 must preserve prepared bundle bytes and readiness. The existing preparation-
 image readiness checks and their ordering remain unchanged.
 
-For an assembled development checkout, `build-local-workspace-image` is the
-explicit local-image preparation step and MUST run before the matching local
-packages are used. `install-local` does not build that image. The release
-`build-workspace-image` path MUST remain distinct and delegate to the explicit
-CLI build with the exact release version. A published CLI MUST perform that
-same build from its shipped package assets without source-development tools.
-None of these paths uses `latest`.
+`build-local-workspace-image` remains an image-only convenience path for the
+current working tree and does not create prepared package readiness.
+`prepare-local` is the required path for a matched package/image candidate;
+`install-local` consumes that prepared candidate and does not build an image.
+The release `build-workspace-image` path MUST remain distinct and delegate to
+the explicit CLI build with the exact release version. A published CLI MUST
+perform that same build from its shipped package assets without
+source-development tools. None of these paths uses `latest`.
 
 ## Smoke Script
 
