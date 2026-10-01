@@ -2,9 +2,9 @@
 
 This covers building and verifying `dev-infra-manager` (DIM) itself from
 source. For using DIM in another project, see [README.md](README.md).
-DIM normally develops itself through its managed Git host while GitHub remains
-the canonical public source; see
-[DIM Development Repositories](specification/docs/development-repositories.md).
+DIM is developed from this integrated root monorepo. GitHub remains the
+canonical public source; managed Git hosting is an internal review and CI
+implementation detail.
 
 ## Quick reference
 
@@ -17,8 +17,9 @@ just check-source    # typecheck + test + package builds; only Node.js and pnpm 
 just verify agent    # strongest gate supported inside this repository's DIM agent
 bash verification/scripts/local-ci-matrix.bash # exact Node.js 24/26 CI matrix via mise
 just build-workspace-image # run the source CLI's shipped-asset release image build
-just build-local-workspace-image # prepare the aggregate-local workspace image with Docker Buildx
-just install-local   # install local packages without restarting the controller
+just build-local-workspace-image # image-only build for the current worktree
+just prepare-local   # matched package/image candidate from one reviewed root commit
+just install-local   # install the prepared candidate without restarting the controller
 just restart-controller # restart the controller with the installed packages
 just install-local-control-plane # install packages, then restart the controller
 just doctor          # host readiness: dev tools, Docker, selected backend, cgroup v2
@@ -102,7 +103,7 @@ dependencies, then runs `just check-source`, `just verify plugin-install`,
 ## Preparing local DIM changes
 
 ```bash
-just build-local-workspace-image
+just prepare-local
 just install-local
 # just restart-controller # optional: start the installed package set
 just doctor
@@ -114,17 +115,16 @@ These are distinct operations with separate readiness domains:
   delegates to `dim workspace image build`, and uses `--load` to prepare
   `dev-infra-project-workspace:<release version>` in the local Docker image
   store, and does not install packages or restart the controller.
-- `build-local-workspace-image` is the aggregate-local recipe. It requires
-  Docker Buildx, invokes `verification/scripts/local-build-version.bash` once,
-  builds the source CLI packages with that aggregate identity, and delegates to
-  the same shipped-asset command. Its exact output tags the local image and matches the
-  aggregate local version selected by local packages. It does not install
-  packages or restart the controller.
-- `install-local` builds local package tarballs, stages their exact target
-  installer outside the bundle, and invokes that facade for compatibility
-  checking and installation. Mise may provide Node.js and npm but never old
-  installer logic; the direct global facade is updated only after the target
-  succeeds. It does not build a workspace image or restart the controller.
+- `build-local-workspace-image` is an image-only convenience for the current
+  worktree. It does not create prepared package readiness.
+- `prepare-local` accepts one exact reviewed root commit, archives its
+  production source and aggregate lock without replacement refs, installs the
+  disposable workspace with the frozen lock, and builds all package tarballs
+  and the trusted image under one local version. Complete packages and
+  readiness are promoted only after image identity verification succeeds.
+- `install-local` validates and consumes that prepared candidate before and
+  after installation. Mise may provide Node.js and npm but never old installer
+  logic. It does not rebuild the image or restart the controller.
 - `restart-controller` replaces the managed controller process with the
   currently installed DIM package set. It does not rebuild either packages or
   images.

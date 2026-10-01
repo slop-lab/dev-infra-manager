@@ -57,11 +57,10 @@ protected ref or trusted Project runtime
 artifact, signing, publishing, or deployment
 ```
 
-DIM's canonical integrated public source repository is GitHub. DIM's 11 split
-development repositories use GitLab upstreams, while a self-development
-Project's managed Gitea and `act_runner` provide internal review and CI.
-Neither managed implementation is part of the long-term Project contract. See
-[DIM Development Repositories](specification/docs/development-repositories.md).
+DIM's canonical public source is this integrated root monorepo on GitHub. A
+self-development Project's managed Git service and runner may provide internal
+review and CI, but neither managed implementation is part of the long-term
+Project contract.
 
 Workspaces persist. Verification runs separately in disposable job containers.
 Secret-bearing Project services must be built and deployed from reviewed refs.
@@ -156,9 +155,10 @@ different image reference is required.
 current UID and GID and the trusted assets shipped with the CLI's exact core and
 controller-proxy versions. An explicitly tagged `DIM_WORKSPACE_IMAGE` may
 replace the default destination; IDs, digests, untagged destinations, and
-`latest` are rejected. Contributors preparing an aggregate local source set
-use `just build-local-workspace-image`, documented in
-[CONTRIBUTING.md](CONTRIBUTING.md), to create the corresponding exact local tag.
+`latest` are rejected. Contributors use `just prepare-local` to build a matched
+package/image candidate from one reviewed root commit. The separate `just
+build-local-workspace-image` recipe is an image-only convenience for the current
+worktree; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Run `just` as your normal user, including when it is managed by mise. The
 installer invokes `sudo` only for host changes, and adds the invoking user to

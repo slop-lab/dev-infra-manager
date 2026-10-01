@@ -231,9 +231,10 @@ using assets shipped with the exact CLI/core/controller-proxy release; it does
 not require a source checkout, `just`, pnpm, or a running controller. A missing
 image is distinct from a controller, host, or workspace readiness problem.
 Controller restart and workspace lifecycle commands do not build workspace
-images. Contributors can invoke the same path through `just
-build-workspace-image`, while aggregate-local source preparation remains the
-separate `just build-local-workspace-image` workflow.
+images. Contributors can invoke the same release path through `just
+build-workspace-image`. Use `just prepare-local` for a matched package/image
+candidate; `just build-local-workspace-image` is only an image-only convenience
+for the current worktree.
 
 Run the integration smoke test:
 
@@ -342,10 +343,11 @@ just verify example sysbox use
 just verify example sysbox use ci-runner
 ```
 
-For local development, `just install-local` builds the publishable package
-tarballs. When mise is available it automatically invokes the mise-selected
-installer facade and keeps `dim` proxied through that facade; without mise it
-retains the direct installation under `${DIM_INSTALL_PREFIX:-~/.local}`.
+For a matched local candidate, run `just prepare-local` and then `just
+install-local`. Preparation archives one exact root commit and its aggregate
+lock, builds the package tarballs and image under one version, and publishes
+readiness only after successful staging. Installation validates and consumes
+that candidate without rebuilding the image or restarting the controller.
 
 The example recipe accepts `current-installed` or `sysbox`. The named backend creates
 one disposable QEMU guest per selected example and invokes
