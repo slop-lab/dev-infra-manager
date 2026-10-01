@@ -76,7 +76,8 @@ it("claims project and workspace names atomically", async () => {
     expect(await state.listProjects()).toEqual([project]);
 
     const workspace: WorkspaceRecord = {
-      schemaVersion: 7,
+      schemaVersion: 8,
+      workspaceId: "A".repeat(43),
       name: "work-1",
       projectId: project.id,
       projectName: project.name,

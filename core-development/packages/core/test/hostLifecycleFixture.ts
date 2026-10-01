@@ -69,7 +69,8 @@ export function hostRecord(
 
 export function workspaceRecord(name: string, phase: WorkspacePhase): WorkspaceRecord {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
+    workspaceId: "A".repeat(43),
     name,
     projectId: HOST_PROJECT.id,
     projectName: HOST_PROJECT.name,

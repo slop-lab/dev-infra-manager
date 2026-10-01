@@ -41,7 +41,8 @@ it("builds a persistent container with credentials but no host mounts or socket"
     });
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
-      schemaVersion: 7,
+      schemaVersion: 8,
+      workspaceId: "A".repeat(43),
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
