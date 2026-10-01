@@ -38,7 +38,7 @@ discard_agent_tmp() {
     --file /tmp/dim-project-compose-host-aliases.json \
     exec --no-TTY --user root agent-dind dim-agent-dind discard-agent-tmp
 }
-test "$keep_volumes" = 1 || discard_agent_tmp
+discard_agent_tmp
 set -- "$@" --remove-orphans
 
 docker compose \
