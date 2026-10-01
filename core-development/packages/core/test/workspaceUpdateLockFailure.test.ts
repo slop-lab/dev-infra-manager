@@ -114,6 +114,7 @@ it("keeps a post-fast-forward manifest failure non-ready and blocks run", async 
     // Given
     await state.removeWorkspace(workspace.name);
     runner = new UpdateRunner(1);
+    runner.containerExists = false;
     runner.containerRootSnapshotPath = join(root, "assets", "project-roots", project.id, COMMIT);
 
     // When

@@ -91,7 +91,8 @@ export function repositorySnapshot(rootCommit = COMMIT) {
 
 export function workspaceFixture(stateRoot: string, project: ProjectRecord): WorkspaceRecord {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
+    workspaceId: "A".repeat(43),
     name: "work-1",
     projectId: project.id,
     projectName: project.name,

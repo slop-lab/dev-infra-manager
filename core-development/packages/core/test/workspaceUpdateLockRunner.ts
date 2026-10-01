@@ -5,6 +5,7 @@ import { workspaceContainerInspect, workspaceVolumeInspect } from "./workspaceOw
 
 const WORKSPACE_IDENTITY = {
   name: "work-1",
+  workspaceId: "A".repeat(43),
   projectId: "project-id",
   projectName: "project",
   rootRepositoryAlias: "root",
@@ -57,6 +58,7 @@ export class UpdateRunner implements StreamingCommandRunner {
   headCommit = HEAD_COMMIT;
   containerRootSnapshotPath = "";
   containerExists = true;
+  workspaceId = WORKSPACE_IDENTITY.workspaceId;
 
   constructor(
     private remainingManifestFailures = 0,
@@ -102,7 +104,7 @@ export class UpdateRunner implements StreamingCommandRunner {
       if (!this.containerExists) {
         return { command, args, stdout: "", stderr: `Error: No such object: ${WORKSPACE_IDENTITY.containerName}`, exitCode: 1 };
       }
-      return result(command, args, `${workspaceContainerInspect(WORKSPACE_IDENTITY, {
+      return result(command, args, `${workspaceContainerInspect({ ...WORKSPACE_IDENTITY, workspaceId: this.workspaceId }, {
         rootSnapshotPath: this.containerRootSnapshotPath
       })}\n`);
     }
@@ -112,6 +114,8 @@ export class UpdateRunner implements StreamingCommandRunner {
       return result(command, args);
     }
     if (args[0] === "run") {
+      const workspaceIdLabel = args.find((argument) => argument.startsWith("dim.workspace-id="));
+      this.workspaceId = workspaceIdLabel?.slice("dim.workspace-id=".length) ?? this.workspaceId;
       const rootMount = args.find((argument) => argument.includes("target=/run/dim/project-root"));
       this.containerRootSnapshotPath = rootMount?.match(/source=([^,]+)/)?.[1] ?? "missing";
       this.containerExists = true;
