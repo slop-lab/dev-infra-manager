@@ -1,6 +1,6 @@
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -83,6 +83,8 @@ if [[ "$1 $2" == 'image inspect' ]]; then
   image_ref="\${!#}"
   if [[ "$image_ref" == dev-infra-project-workspace:prepare-* ]]; then
     printf 'sha256:%064d\n' 1
+  elif [[ "$image_ref" == dev-infra-project-workspace:rollback-* && -f "$DIM_DOCKER_ROLLBACK_ID_FILE" ]]; then
+    cat "$DIM_DOCKER_ROLLBACK_ID_FILE"
   elif [[ -f "$DIM_DOCKER_FINAL_ID_FILE" ]]; then
     cat "$DIM_DOCKER_FINAL_ID_FILE"
   else
@@ -91,8 +93,11 @@ if [[ "$1 $2" == 'image inspect' ]]; then
 elif [[ "$1 $2" == 'image tag' ]]; then
   if [[ "$4" == dev-infra-project-workspace:rollback-* ]]; then
     cat "$DIM_DOCKER_FINAL_ID_FILE" >"$DIM_DOCKER_ROLLBACK_ID_FILE"
+  elif [[ "\${DIM_IMAGE_RESTORE_FAILURE:-0}" == 1 && "$3" == dev-infra-project-workspace:rollback-* ]]; then
+    exit 45
   elif [[ "$3" == dev-infra-project-workspace:prepare-* ]]; then
     printf 'sha256:%064d\n' 1 >"$DIM_DOCKER_FINAL_ID_FILE"
+    if [[ "\${DIM_FINAL_TAG_FAILURE_AFTER_MUTATION:-0}" == 1 ]]; then exit 46; fi
   elif [[ "$3" == dev-infra-project-workspace:rollback-* ]]; then
     cat "$DIM_DOCKER_ROLLBACK_ID_FILE" >"$DIM_DOCKER_FINAL_ID_FILE"
   else
@@ -113,6 +118,12 @@ fi
     mv: `#!/usr/bin/env bash
 { printf 'mv'; printf ' %s' "$@"; printf '\n'; } >>"$DIM_INVOCATIONS"
 if [[ "\${DIM_READINESS_MOVE_FAILURE:-0}" == 1 && "$2" == */readiness && "$3" == */prepared-local.state ]]; then exit 42; fi
+if [[ "\${DIM_FOREIGN_RETAG_ON_READINESS_FAILURE:-0}" == 1 && "$2" == */readiness && "$3" == */prepared-local.state ]]; then
+  printf 'sha256:%064d\n' 3 >"$DIM_DOCKER_FINAL_ID_FILE"
+  exit 42
+fi
+if [[ "\${DIM_PACKAGE_RESTORE_FAILURE:-0}" == 1 && "$2" == */previous-packages && "$3" == */dim-packages ]]; then exit 43; fi
+if [[ "\${DIM_READINESS_RESTORE_FAILURE:-0}" == 1 && "$2" == */previous-readiness && "$3" == */prepared-local.state ]]; then exit 44; fi
 exec /usr/bin/mv "$@"
 `,
     node: `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} "$@"\n`,
@@ -152,6 +163,11 @@ function runScript(fixture: Fixture, script: string, environment: Readonly<Recor
       ...environment
     }
   });
+}
+
+async function retainedPreparationRoots(fixture: Fixture): Promise<readonly string[]> {
+  const localRoot = resolve(fixture.root, ".local");
+  return (await readdir(localRoot)).filter((entry) => entry.startsWith("prepare.")).map((entry) => resolve(localRoot, entry));
 }
 
 afterEach(async () => {
@@ -396,7 +412,7 @@ describe("local source build policy", () => {
     expect(invocations).not.toMatch(/(?:install|restart|latest)/);
   });
 
-  it("packs and loads a temporary-tag image before promoting readiness", async () => {
+  it("publishes the final image tag only after packages and readiness", async () => {
     // Given
     const fixture = await createFixture();
 
@@ -414,6 +430,9 @@ describe("local source build policy", () => {
       invocations.indexOf("state dev-infra-project-workspace:prepare-1234-")
     );
     expect(invocations.indexOf("state dev-infra-project-workspace:prepare-1234-")).toBeLessThan(
+      invocations.indexOf(`docker image tag dev-infra-project-workspace:prepare-1234-`)
+    );
+    expect(invocations.lastIndexOf("mv -- ")).toBeLessThan(
       invocations.indexOf(`docker image tag dev-infra-project-workspace:prepare-1234-`)
     );
     expect(invocations).toContain(
@@ -498,31 +517,30 @@ describe("local source build policy", () => {
     });
   });
 
-  it("restores the prior image, packages, and readiness when readiness publication fails", async () => {
+  it("does not overwrite a foreign retag when readiness publication fails", async () => {
     // Given
     const fixture = await createFixture();
     const packages = resolve(fixture.root, ".local/dim-packages");
     const priorImageId = `sha256:${"2".repeat(64)}`;
+    const foreignImageId = `sha256:${"0".repeat(63)}3`;
     await mkdir(packages, { recursive: true });
     await writeFile(resolve(packages, "previous-candidate"), "preserved\n");
     await writeFile(fixture.readiness, "state=old\n");
     await writeFile(fixture.imageState, `${priorImageId}\n`);
 
     // When
-    const result = runScript(fixture, "prepare-source-build.bash", { DIM_READINESS_MOVE_FAILURE: "1" });
+    const result = runScript(fixture, "prepare-source-build.bash", { DIM_FOREIGN_RETAG_ON_READINESS_FAILURE: "1" });
     const invocations = await readFile(fixture.log, "utf8");
 
     // Then
     expect(result.status).toBe(42);
     expect(await readFile(resolve(packages, "previous-candidate"), "utf8")).toBe("preserved\n");
     expect(await readFile(fixture.readiness, "utf8")).toBe("state=old\n");
-    expect((await readFile(fixture.imageState, "utf8")).trim()).toBe(priorImageId);
-    expect(invocations).toMatch(/docker image tag dev-infra-project-workspace:prepare-1234-\d+ dev-infra-project-workspace:0\.9\.0-local-a{64}/);
-    expect(invocations).toMatch(new RegExp(`docker image tag dev-infra-project-workspace:0\\.9\\.0-local-a{64} dev-infra-project-workspace:rollback-1234-\\d+`));
-    expect(invocations).toMatch(new RegExp(`docker image tag dev-infra-project-workspace:rollback-1234-\\d+ dev-infra-project-workspace:0\\.9\\.0-local-a{64}`));
+    expect((await readFile(fixture.imageState, "utf8")).trim()).toBe(foreignImageId);
+    expect(invocations).not.toMatch(/docker image (?:tag|rm) .* dev-infra-project-workspace:0\.9\.0-local-a{64}/);
   });
 
-  it("removes the new image tag and candidate when first readiness publication fails", async () => {
+  it("publishes no image tag or candidate when first readiness publication fails", async () => {
     // Given
     const fixture = await createFixture();
 
@@ -537,7 +555,79 @@ describe("local source build policy", () => {
     await expect(readFile(resolve(fixture.root, ".local/dim-packages/packages.json"), "utf8")).rejects.toMatchObject({
       code: "ENOENT"
     });
-    expect(invocations).toContain(`docker image rm dev-infra-project-workspace:0.9.0-local-${"a".repeat(64)}`);
+    expect(invocations).not.toMatch(/docker image (?:tag|rm) .* dev-infra-project-workspace:0\.9\.0-local-a{64}/);
+  });
+
+  it("retains prior packages when package restoration fails", async () => {
+    // Given
+    const fixture = await createFixture();
+    const packages = resolve(fixture.root, ".local/dim-packages");
+    await mkdir(packages, { recursive: true });
+    await writeFile(resolve(packages, "previous-candidate"), "preserved\n");
+    await writeFile(fixture.readiness, "state=old\n");
+
+    // When
+    const result = runScript(fixture, "prepare-source-build.bash", {
+      DIM_PACKAGE_RESTORE_FAILURE: "1",
+      DIM_READINESS_MOVE_FAILURE: "1"
+    });
+    const recoveryRoots = await retainedPreparationRoots(fixture);
+
+    // Then
+    expect(result.status).toBe(42);
+    expect(recoveryRoots).toHaveLength(1);
+    expect(await readFile(resolve(recoveryRoots[0]!, "previous-packages/previous-candidate"), "utf8")).toBe("preserved\n");
+    expect(result.stderr).toContain(`rollback incomplete; recovery data retained at ${recoveryRoots[0]}`);
+  });
+
+  it("retains prior readiness when readiness restoration fails", async () => {
+    // Given
+    const fixture = await createFixture();
+    const packages = resolve(fixture.root, ".local/dim-packages");
+    await mkdir(packages, { recursive: true });
+    await writeFile(resolve(packages, "previous-candidate"), "preserved\n");
+    await writeFile(fixture.readiness, "state=old\n");
+
+    // When
+    const result = runScript(fixture, "prepare-source-build.bash", {
+      DIM_READINESS_MOVE_FAILURE: "1",
+      DIM_READINESS_RESTORE_FAILURE: "1"
+    });
+    const recoveryRoots = await retainedPreparationRoots(fixture);
+
+    // Then
+    expect(result.status).toBe(42);
+    expect(recoveryRoots).toHaveLength(1);
+    expect(await readFile(resolve(recoveryRoots[0]!, "previous-readiness"), "utf8")).toBe("state=old\n");
+    expect(result.stderr).toContain(`rollback incomplete; recovery data retained at ${recoveryRoots[0]}`);
+  });
+
+  it("retains image recovery references when final image publication fails after mutation", async () => {
+    // Given
+    const fixture = await createFixture();
+    const packages = resolve(fixture.root, ".local/dim-packages");
+    const priorImageId = `sha256:${"2".repeat(64)}`;
+    const promotedImageId = `sha256:${"0".repeat(63)}1`;
+    await mkdir(packages, { recursive: true });
+    await writeFile(resolve(packages, "previous-candidate"), "preserved\n");
+    await writeFile(fixture.readiness, "state=old\n");
+    await writeFile(fixture.imageState, `${priorImageId}\n`);
+
+    // When
+    const result = runScript(fixture, "prepare-source-build.bash", {
+      DIM_FINAL_TAG_FAILURE_AFTER_MUTATION: "1",
+      DIM_IMAGE_RESTORE_FAILURE: "1"
+    });
+    const invocations = await readFile(fixture.log, "utf8");
+    const recoveryRoots = await retainedPreparationRoots(fixture);
+
+    // Then
+    expect(result.status).not.toBe(0);
+    expect((await readFile(fixture.imageState, "utf8")).trim()).toBe(promotedImageId);
+    expect((await readFile(resolve(fixture.root, "rollback-image-id"), "utf8")).trim()).toBe(priorImageId);
+    expect(invocations).not.toMatch(/docker image (?:tag|rm) dev-infra-project-workspace:rollback-1234-\d+ dev-infra-project-workspace:0\.9\.0-local-a{64}/);
+    expect(recoveryRoots).toHaveLength(1);
+    expect(result.stderr).toContain("image publication requires manual recovery");
   });
 
   it("rejects a symlinked package publication path without changing its target", async () => {

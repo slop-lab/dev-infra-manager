@@ -22,6 +22,7 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
   const log = resolve(root, "invocations.log");
   await mkdir(scripts, { recursive: true });
   await mkdir(tools, { recursive: true });
+  await writeFile(log, "");
   await writeFile(resolve(root, "pnpm-lock.yaml"), fixtureLockfile);
   await writeFile(resolve(root, ".head"), `${fixtureRootCommit}\n`);
   const productionPackageDirectories = [

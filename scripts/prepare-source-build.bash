@@ -52,36 +52,94 @@ packages_promoted=0
 previous_readiness_saved=0
 readiness_promoted=0
 previous_image_saved=0
-image_promoted=0
+image_publication_attempted=0
+temporary_image_id=""
+previous_image_id=""
 published=0
 
 cleanup() {
   status="$?"
-  set +e
+  trap - EXIT
+  rollback_failed=0
   if [[ "$published" -eq 0 ]]; then
     if [[ "$readiness_promoted" -eq 1 ]]; then
-      rm -f -- "$readiness_file"
+      if ! mv -- "$readiness_file" "$stage_root/failed-readiness"; then
+        echo "failed to preserve unpublished readiness at $stage_root/failed-readiness" >&2
+        rollback_failed=1
+      fi
     fi
     if [[ "$previous_readiness_saved" -eq 1 ]]; then
-      mv -- "$previous_readiness" "$readiness_file"
+      if [[ -e "$readiness_file" ]]; then
+        echo "refusing to overwrite readiness while restoring $previous_readiness" >&2
+        rollback_failed=1
+      elif ! mv -- "$previous_readiness" "$readiness_file"; then
+        echo "failed to restore readiness from $previous_readiness" >&2
+        rollback_failed=1
+      fi
     fi
     if [[ "$packages_promoted" -eq 1 ]]; then
-      mv -- "$package_root" "$stage_root/failed-packages"
+      if ! mv -- "$package_root" "$stage_root/failed-packages"; then
+        echo "failed to preserve unpublished packages at $stage_root/failed-packages" >&2
+        rollback_failed=1
+      fi
     fi
     if [[ "$previous_packages_saved" -eq 1 ]]; then
-      mv -- "$previous_packages" "$package_root"
+      if [[ -e "$package_root" ]]; then
+        echo "refusing to overwrite packages while restoring $previous_packages" >&2
+        rollback_failed=1
+      elif ! mv -- "$previous_packages" "$package_root"; then
+        echo "failed to restore packages from $previous_packages" >&2
+        rollback_failed=1
+      fi
     fi
-    if [[ "$image_promoted" -eq 1 ]]; then
+    if [[ "$image_publication_attempted" -eq 1 ]]; then
+      echo "image publication requires manual recovery; refusing to mutate $final_image_ref" >&2
+      echo "prepared image retained at $temporary_image_ref ($temporary_image_id)" >&2
       if [[ "$previous_image_saved" -eq 1 ]]; then
-        docker image tag "$rollback_image_ref" "$final_image_ref"
-      else
-        docker image rm "$final_image_ref" >/dev/null
+        echo "previous image retained at $rollback_image_ref ($previous_image_id)" >&2
+      fi
+      rollback_failed=1
+    fi
+  fi
+  if [[ "$image_publication_attempted" -eq 0 || "$published" -eq 1 ]]; then
+    if [[ -n "$temporary_image_id" ]]; then
+      if ! current_temporary_image_id="$(docker image inspect --format '{{.Id}}' "$temporary_image_ref" 2>/dev/null)"; then
+        echo "failed to verify temporary image ownership for $temporary_image_ref" >&2
+        rollback_failed=1
+      elif [[ "$current_temporary_image_id" != "$temporary_image_id" ]]; then
+        echo "refusing to remove changed temporary image $temporary_image_ref" >&2
+        rollback_failed=1
+      elif ! docker image rm "$temporary_image_ref" >/dev/null; then
+        echo "failed to remove temporary image $temporary_image_ref" >&2
+        rollback_failed=1
+      fi
+    fi
+    if [[ "$previous_image_saved" -eq 1 ]]; then
+      if ! current_rollback_image_id="$(docker image inspect --format '{{.Id}}' "$rollback_image_ref" 2>/dev/null)"; then
+        echo "failed to verify rollback image ownership for $rollback_image_ref" >&2
+        rollback_failed=1
+      elif [[ "$current_rollback_image_id" != "$previous_image_id" ]]; then
+        echo "refusing to remove changed rollback image $rollback_image_ref" >&2
+        rollback_failed=1
+      elif ! docker image rm "$rollback_image_ref" >/dev/null; then
+        echo "failed to remove rollback image $rollback_image_ref" >&2
+        rollback_failed=1
       fi
     fi
   fi
-  docker image rm "$temporary_image_ref" >/dev/null 2>&1 || true
-  docker image rm "$rollback_image_ref" >/dev/null 2>&1 || true
-  rm -rf -- "$stage_root"
+  if [[ "$rollback_failed" -eq 1 ]]; then
+    echo "rollback incomplete; recovery data retained at $stage_root" >&2
+    if [[ "$status" -eq 0 ]]; then
+      status=1
+    fi
+  else
+    if ! rm -rf -- "$stage_root"; then
+      echo "failed to remove completed staging path $stage_root" >&2
+      if [[ "$status" -eq 0 ]]; then
+        status=1
+      fi
+    fi
+  fi
   exit "$status"
 }
 trap cleanup EXIT
@@ -99,18 +157,6 @@ DIM_LOCAL_IMAGE_RECORD_REF="$final_image_ref" \
   bash "$repo_root/scripts/local-preparation-state.bash" >"$readiness_stage"
 
 temporary_image_id="$(docker image inspect --format '{{.Id}}' "$temporary_image_ref")"
-if docker image inspect --format '{{.Id}}' "$final_image_ref" >/dev/null 2>&1; then
-  docker image tag "$final_image_ref" "$rollback_image_ref"
-  previous_image_saved=1
-fi
-docker image tag "$temporary_image_ref" "$final_image_ref"
-image_promoted=1
-final_image_id="$(docker image inspect --format '{{.Id}}' "$final_image_ref")"
-if [[ "$final_image_id" != "$temporary_image_id" ]]; then
-  echo "promoted image ID does not match the prepared image" >&2
-  exit 1
-fi
-
 if [[ -d "$package_root" ]]; then
   mv -- "$package_root" "$previous_packages"
   previous_packages_saved=1
@@ -123,6 +169,13 @@ if [[ -f "$readiness_file" ]]; then
 fi
 mv -- "$readiness_stage" "$readiness_file"
 readiness_promoted=1
+
+if previous_image_id="$(docker image inspect --format '{{.Id}}' "$final_image_ref" 2>/dev/null)"; then
+  docker image tag "$final_image_ref" "$rollback_image_ref"
+  previous_image_saved=1
+fi
+image_publication_attempted=1
+docker image tag "$temporary_image_ref" "$final_image_ref"
 published=1
 
 echo "[host] local source build is prepared"
