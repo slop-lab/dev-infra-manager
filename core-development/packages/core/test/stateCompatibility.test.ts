@@ -86,7 +86,7 @@ describe("installation state compatibility preflight", () => {
     // Given
     const stateRoot = await temporaryRoot();
     const target = join(stateRoot, "workspaces", "work-1.json");
-    const bytes = `${JSON.stringify({ ...workspaceRecord("work-1", "ready"), schemaVersion: 5 })}\n`;
+    const bytes = `${JSON.stringify({ ...workspaceRecord("work-1", "ready"), schemaVersion: 7 })}\n`;
     await writeJson(target, JSON.parse(bytes));
     const before = await readFile(target);
 
@@ -94,7 +94,7 @@ describe("installation state compatibility preflight", () => {
     const preflight = preflightStateCompatibility({ DIM_STATE_ROOT: stateRoot });
 
     // Then
-    await expect(preflight).rejects.toThrow(/workspace.*work-1\.json.*schema 5.*pinned DIM version.*export.*recreate/is);
+    await expect(preflight).rejects.toThrow(/workspace.*work-1\.json.*schema 7.*expected 8.*pinned DIM version.*export.*recreate/is);
     expect(await readFile(target)).toEqual(before);
     expect(await readdir(stateRoot)).toEqual(["workspaces"]);
   });

@@ -57,13 +57,16 @@
   attached to those shared remote resources; repository permissions and branch
   protection remain enforced through the existing APIs.
 
-- Replace DIM-owned mutable repository reconciliation with a schema-7
+- Replace DIM-owned mutable repository reconciliation with a schema-8
   workspace contract that mounts reviewed root bytes read-only and gives
   reviewed Project code a persistent data root. The schema-3 runtime manifest
   no longer publishes a repository catalog or accepts per-workspace ref
   overrides. Protected-root paths are derived from the state root, Project ID,
-  and exact commit instead of being persisted; incompatible old workspace state
-  is rejected before mutation.
+  and exact commit instead of being persisted. Each workspace instance now has
+  a fresh 256-bit ID that binds controller and agent grants, plugin routes, and
+  runtime ownership across stop/start while preventing same-name recreation
+  from inheriting authority. Schema-7 and other incompatible workspace state is
+  rejected unchanged with pinned-version export and recreate guidance.
 
 - Select the default trusted workspace image by the exact installed DIM package
   version instead of the mutable `latest` tag, while retaining

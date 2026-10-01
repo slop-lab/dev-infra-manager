@@ -135,7 +135,11 @@ retains the original bytes permanently in mode-`0600`
 malformed record, extra field, conflicting backup, symlink, or non-regular
 canonical, backup, or recognized temporary artifact fails closed without
 changing canonical state. No Project, workspace, runner, plugin, installer, or
-other state is migrated.
+other state is migrated. Workspace schema 8 adds a fresh 256-bit instance ID
+that binds grants and plugin authority independently of the display name.
+Schema-7 workspace records are rejected unchanged; use the prior pinned DIM
+version to export needed Project/user data, then discard and recreate the
+workspace. Retained data does not retain grants, routes, or approvals.
 
 When `DIM_GITEA_CONNECTION_FILE` is set, the mode-`0600`, DIM-user-owned JSON
 file is the complete external connection boundary:
