@@ -6,7 +6,7 @@ ARG DIM_AGENT_UID=1000
 
 RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-       acl bash ca-certificates curl git jq netcat-openbsd openssh-server tini util-linux \
+       acl bash ca-certificates curl git jq netcat-openbsd openssh-server python3 tini util-linux \
  && rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub \
  && rm -rf /var/lib/apt/lists/* \
  && test "$DIM_AGENT_UID" -ne 0 \

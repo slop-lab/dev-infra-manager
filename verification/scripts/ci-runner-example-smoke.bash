@@ -73,6 +73,9 @@ cleanup() {
   if [[ -f "$state_root/ci-runners/$project_name/$runner_name.json" ]]; then
     dim ci runner delete "$project_name" "$runner_name" --yes >/dev/null 2>&1 || true
   fi
+  if [[ -f "$state_root/projects/$project_name.json" ]]; then
+    dim project purge "$project_name" --yes >/dev/null 2>&1 || true
+  fi
   if docker container inspect dim-gitea >/dev/null 2>&1; then
     gitea_api DELETE "/orgs/$organization" >/dev/null 2>&1 || true
   fi

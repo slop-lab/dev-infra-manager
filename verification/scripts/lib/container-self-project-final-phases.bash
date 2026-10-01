@@ -1,5 +1,14 @@
 self_project_publication_checks() {
   verification_stage="repository publication"
+  if [[ "$self_project_single_tree" == true ]]; then
+    publication_error="$state_root/publication.stderr"
+    if dim repo publish "$project_name" >"$state_root/publication.stdout" 2>"$publication_error"; then
+      echo "single-tree external publication unexpectedly succeeded without host Git sync authority" >&2
+      return 1
+    fi
+    grep -Fq "repository synchronization requires DIM_GIT_SYNC_CONNECTION_FILE" "$publication_error"
+    return 0
+  fi
   dim repo publish "$project_name" >/dev/null
   for repository in root development core core-development plugin-dns-cloudflare plugin-dns-cloudflare-development plugin-external-urls plugin-external-urls-development verification examples specification; do
     managed_sha="$(git ls-remote "$(dim repo url "$project_name" "$repository")" refs/heads/main | cut -f1)"

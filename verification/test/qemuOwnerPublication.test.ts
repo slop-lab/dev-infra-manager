@@ -18,7 +18,7 @@ describe("QEMU structured service ownership", () => {
     }
   });
 
-  it("atomically publishes a mode-0600 schema-1 owner record instead of service.pid", async () => {
+  it("atomically publishes a mode-0600 schema-2 owner record instead of service.pid", async () => {
     const fixture = await startService("exit");
     const ownerPath = resolve(fixture.root, "service-owner.json");
 
@@ -37,8 +37,8 @@ describe("QEMU structured service ownership", () => {
     expect.soft(mode).toBe(0o600);
     expect.soft(Number(socket.mode & 0o7777n)).toBe(0o666);
     expect.soft(Number(lease.mode & 0o7777n)).toBe(0o666);
-    expect.soft(owner).toMatchObject({ schema: 1, pid: String(fixture.process.pid) });
-    expect.soft(Object.keys(owner).sort()).toEqual(["argv", "cwd", "executable", "pid", "schema", "socket", "startTicks"]);
+    expect.soft(owner).toMatchObject({ schema: 2, pid: String(fixture.process.pid) });
+    expect.soft(Object.keys(owner).sort()).toEqual(["argv", "cwd", "executable", "pid", "pidNamespace", "schema", "socket", "startTicks"]);
     expect.soft(owner.socket).toEqual({ device: socket.dev.toString(), inode: socket.ino.toString() });
     expect.soft(owner.socket).toEqual({ device: lease.dev.toString(), inode: lease.ino.toString() });
     expect.soft({ device: lease.dev, inode: lease.ino }).toEqual({ device: socket.dev, inode: socket.ino });

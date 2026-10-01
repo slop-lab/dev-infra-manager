@@ -38,17 +38,29 @@ if dim workspace run "$workspace_name" bash -- -lc \
   echo 'protected development main accepted a workspace push' >&2
   exit 1
 fi
-core_proposal=agent/split-repository-smoke
+core_proposal=agent/repository-proposal-smoke
+proposal_directory=/workspace/core
+proposal_file=split-proposal.txt
+if [[ "$self_project_single_tree" == true ]]; then
+  proposal_directory=/workspace
+  proposal_file=core/monorepo-proposal.txt
+fi
 dim workspace run "$workspace_name" bash -- -lc "
-  cd /workspace/core
+  cd '$proposal_directory'
   git checkout -b '$core_proposal'
-  printf 'split proposal\n' > split-proposal.txt
-  git add split-proposal.txt
-  git commit -m 'verify split repository proposal' >/dev/null
+  printf 'proposal\n' > '$proposal_file'
+  git add '$proposal_file'
+  git commit -m 'verify repository proposal' >/dev/null
   git push origin HEAD:'refs/heads/$core_proposal' >/dev/null
-  git push origin HEAD:refs/heads/main >/dev/null
+  if [[ '$self_project_single_tree' == true ]]; then
+    ! git push origin HEAD:refs/heads/main >/dev/null 2>&1
+  else
+    git push origin HEAD:refs/heads/main >/dev/null
+  fi
 "
-git ls-remote "$(dim repo url "$project_name" core)" "refs/heads/$core_proposal" | grep -q .
+proposal_repository=core
+[[ "$self_project_single_tree" != true ]] || proposal_repository=root
+git ls-remote "$(dim repo url "$project_name" "$proposal_repository")" "refs/heads/$core_proposal" | grep -q .
 
 verification_stage="agent-dind mount and privilege contract"
 agent_dind_container="$(dim workspace exec "$workspace_name" -- \
@@ -134,6 +146,9 @@ test "$setup_state_after" = "$setup_state_before"
 dim workspace run "$workspace_name" bash -- -c \
   'mkdir -p /tmp/dim-self-project-root/.dim; cat > /tmp/dim-self-project-root/.dim/reconcile-repositories.sh' \
   <"$project_source/.dim/reconcile-repositories.sh"
+dim workspace run "$workspace_name" bash -- -c \
+  'cat > /tmp/dim-self-project-root/.dim/workspace-repositories.json' \
+  <"$project_source/.dim/workspace-repositories.json"
 dim workspace run "$workspace_name" bash -- -lc \
   "DIM_ROOT_REPOSITORY=/tmp/dim-self-project-root bash verification/scripts/repository-materialization-smoke.bash" >/dev/null
 if [[ "${DIM_SELF_VERIFY_AGENT:-0}" == 1 ]]; then

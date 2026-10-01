@@ -13,8 +13,13 @@ prepare_self_project_workspace() {
       mkdir -p "$source_root/repositories/$repository"
       git -C "$DIM_GIT_CLONE_SOURCE" archive HEAD | tar -x -C "$source_root/repositories/$repository"
     done
+  elif [[ -d "$project_source/.git" && -d "$project_source/core" && -d "$project_source/verification" ]]; then
+    self_project_single_tree=true
+    mkdir -p "$source_root/repositories/root"
+    dim_prepare_clone_source "$project_source" "$source_root/snapshot-root"
+    git -C "$DIM_GIT_CLONE_SOURCE" archive HEAD | tar -x -C "$source_root/repositories/root"
   else
-    echo "split DIM repository set is required for self-Project verification" >&2
+    echo "assembled split or single-tree DIM repository set is required for self-Project verification" >&2
     return 2
   fi
   project_source="$source_root/repositories/root"

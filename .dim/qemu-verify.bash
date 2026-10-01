@@ -91,6 +91,10 @@ test -r /dev/kvm && test -w /dev/kvm || { echo "/dev/kvm is not accessible" >&2;
 repo_root="${DIM_QEMU_SOURCE_ROOT:-/workspace}"
 test -d "$repo_root/.dim" || { echo "DIM_QEMU_SOURCE_ROOT is not an assembled Project worktree" >&2; exit 2; }
 cache="${DIM_KVM_IMAGE_CACHE:-$repo_root/.local/kvm}"
+guest_cpus="${DIM_KVM_SMOKE_CPUS:-4}"
+guest_memory_mb="${DIM_KVM_SMOKE_MEMORY_MB:-4096}"
+[[ "$guest_cpus" =~ ^[1-9][0-9]*$ ]] || { echo "DIM_KVM_SMOKE_CPUS must be a positive integer" >&2; exit 2; }
+[[ "$guest_memory_mb" =~ ^[1-9][0-9]*$ ]] || { echo "DIM_KVM_SMOKE_MEMORY_MB must be a positive integer" >&2; exit 2; }
 mkdir -p "$cache/runs"
 workdir="$(mktemp -d "$cache/runs/local.XXXXXX")"
 step_log="$workdir/step.log"
@@ -134,6 +138,12 @@ if [[ "$cache_routing" == false ]]; then
 fi
 pid=""
 cleanup() {
+  local status=$?
+  if [[ "${DIM_KVM_PRESERVE_ON_FAILURE:-0}" == 1 && "$status" -ne 0 ]]; then
+    disown "$pid" >/dev/null 2>&1 || true
+    echo "kvm[$backend]: preserving failed guest pid=$pid workdir=$workdir" >&2
+    return
+  fi
   if [[ -n "$pid" ]]; then
     kill "$pid" >/dev/null 2>&1 || true
     wait "$pid" >/dev/null 2>&1 || true
@@ -182,7 +192,7 @@ else
     "$workdir/user-data" "$workdir/meta-data"
 fi
 qemu-img create -q -f qcow2 -F qcow2 -b "$image" "$workdir/root.qcow2" "${DIM_KVM_SMOKE_DISK_SIZE:-32G}"
-qemu-system-x86_64 -enable-kvm -cpu host -m "${DIM_KVM_SMOKE_MEMORY_MB:-4096}" -smp 4 -nographic -drive "file=$workdir/root.qcow2,if=virtio" -drive "file=$workdir/seed.img,format=raw,if=virtio" -netdev user,id=n,hostfwd=tcp:127.0.0.1:22222-:22 -device virtio-net-pci,netdev=n >"$workdir/qemu.log" 2>&1 & pid=$!
+qemu-system-x86_64 -enable-kvm -cpu host -m "$guest_memory_mb" -smp "$guest_cpus" -nographic -drive "file=$workdir/root.qcow2,if=virtio" -drive "file=$workdir/seed.img,format=raw,if=virtio" -netdev user,id=n,hostfwd=tcp:127.0.0.1:22222-:22 -device virtio-net-pci,netdev=n >"$workdir/qemu.log" 2>&1 & pid=$!
 ssh_args=(-i "$workdir/id" -p 22222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=2)
 clone_repository() {
   ssh "${ssh_args[@]}" dim@127.0.0.1 "mkdir -p dim && tar -C dim -xzf -" <"$workdir/workbench.tar.gz"
@@ -303,7 +313,7 @@ run_step "install full-development verification tools" \
     sudo npm install --global pnpm@10.13.1 >/dev/null
     cd dim/workbench
     pnpm install --frozen-lockfile >/dev/null
-    pnpm --filter @slop-lab/dim-controller-proxy run build >/dev/null
+    pnpm run workspace:build >/dev/null
   '
 run_step "install $backend backend" install_backend
 run_step "build local backend smoke image" ssh "${ssh_args[@]}" dim@127.0.0.1 '

@@ -45,7 +45,7 @@ export async function rm(path,...args){
    await writeFile(runner, `import { lstat,readdir,readFile } from "node:fs/promises";
 import { publishOwner } from ${JSON.stringify(artifactUrl)};
 const file={device:"0",inode:"1",path:"/bin/sh"};
-const record={argv:["node"],cwd:{...file,path:process.env.DIM_TEST_ROOT},executable:file,pid:"1",schema:1,socket:{device:"0",inode:"1"},startTicks:"1"};
+const record={argv:["node"],cwd:{...file,path:process.env.DIM_TEST_ROOT},executable:file,pid:"1",pidNamespace:{device:"0",inode:"2"},schema:2,socket:{device:"0",inode:"1"},startTicks:"1"};
 try{await publishOwner(process.env.DIM_TEST_OWNER,record)}
 catch(error){const errors=error instanceof AggregateError?error.errors:[error];process.stdout.write(JSON.stringify(errors.map(value=>value.message)))}
 const names=await readdir(process.env.DIM_TEST_ROOT);const removing=names.find(name=>name.includes("service-owner.json.removing-"));const removingPath=process.env.DIM_TEST_ROOT+"/"+removing;const stats=removing?await lstat(removingPath,{bigint:true}):null;process.stderr.write(JSON.stringify({expected:JSON.stringify(record)+"\\n",names,owner:names.includes("service-owner.json")?await readFile(process.env.DIM_TEST_OWNER,"utf8"):null,removing:removing?await readFile(removingPath,"utf8"):null,removingIdentity:stats?{device:stats.dev.toString(),inode:stats.ino.toString()}:null,sourceIdentity:removing?JSON.parse(await readFile(process.env.DIM_TEST_QUARANTINE_IDENTITY,"utf8")):null}));`);

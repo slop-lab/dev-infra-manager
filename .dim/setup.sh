@@ -55,7 +55,13 @@ if ! curl --fail --silent --unix-socket "$external_url_proxy_socket" \
     old_proxy_pid="$(cat "$external_url_proxy_dir/proxy.pid")"
     case "$old_proxy_pid" in
       ''|*[!0-9]*) ;;
-      *) kill "$old_proxy_pid" 2>/dev/null || true ;;
+      *)
+        if [ "$old_proxy_pid" != "$$" ] && [ "$old_proxy_pid" != "$PPID" ] &&
+          [ -r "/proc/$old_proxy_pid/cmdline" ] &&
+          tr '\000' '\n' <"/proc/$old_proxy_pid/cmdline" | grep -Fq dim-controller-proxy; then
+          kill "$old_proxy_pid" 2>/dev/null || true
+        fi
+        ;;
     esac
   fi
   rm -rf "$external_url_proxy_dir"

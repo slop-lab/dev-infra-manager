@@ -72,7 +72,12 @@ describe("DIM development forge policy", () => {
     expect(kvm).toContain('2>&1 | tee "$step_log"');
     expect(gate).toContain(".dim/qemu-service.mjs");
     expect(gate).toContain('node "$client" run');
-    expect(kvm.indexOf("pnpm --filter @slop-lab/dim-controller-proxy run build")).toBeLessThan(
+    expect(kvm).toContain("pnpm run workspace:build");
+    expect(kvm).toContain('guest_cpus="${DIM_KVM_SMOKE_CPUS:-4}"');
+    expect(kvm).toContain('-smp "$guest_cpus"');
+    expect(kvm).toContain('${DIM_KVM_PRESERVE_ON_FAILURE:-0}');
+    expect(kvm).toContain("preserving failed guest");
+    expect(kvm.indexOf("pnpm run workspace:build")).toBeLessThan(
       kvm.indexOf('run_step "install $backend backend"')
     );
     expect(recipes).toContain("DIM_EXAMPLE_WORKSPACE_BACKEND=sysbox");
@@ -123,6 +128,18 @@ describe("DIM development forge policy", () => {
         "awk", "bash", "find", "flock", "git", "grep", "jq", "node", "perl", "python3", "readlink", "sed", "tini"
       ]));
     }
+  });
+
+  it("gives the managed CI runner example its own protected runner contract", async () => {
+    const contract = parse(await readFile(
+      resolve(workspaceRoot, "examples/features/ci-runner/repos/root/.dim/ci/runner.yml"),
+      "utf8",
+    ));
+
+    expect(contract.schemaVersion).toBe(1);
+    expect(contract.workloads.ordinary.labels).toEqual(["dim"]);
+    expect(contract.workloads.integration.capabilities).toEqual(["nested-docker"]);
+    expect(contract.workloads.ordinary.image).toMatch(/@sha256:[0-9a-f]{64}$/);
   });
 
   it("runs all managed workflow labels in disposable job containers", async () => {

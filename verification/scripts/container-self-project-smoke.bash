@@ -18,6 +18,7 @@ verification_stage="initialization"
 dim_bin="${DIM_BIN:-$PWD/core/packages/cli/dist/cli.js}"
 project_source="$(cd -- "$script_dir/../.." && pwd)"
 integrated_source="$project_source"
+self_project_single_tree=false
 # shellcheck source=lib/container-self-project-ssh-fixture.bash
 source "$script_dir/lib/container-self-project-ssh-fixture.bash"
 # shellcheck source=lib/self-project-phase-runner.bash

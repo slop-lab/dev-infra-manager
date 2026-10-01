@@ -48,6 +48,13 @@ describe("root Docker context policy", () => {
     expect(dockerfile).toMatch(/(?:passwd -d|usermod --unlock) dim-agent/);
   });
 
+  it("installs Python for source checks that exercise the shipped Python services", async () => {
+    const dockerfile = await readFile(resolve(workspaceRoot, "agent/Dockerfile"), "utf8");
+    const packages = dockerfile.slice(dockerfile.indexOf("apt-get install"), dockerfile.indexOf("rm -f /etc/ssh"));
+
+    expect(packages).toMatch(/\bpython3\b/);
+  });
+
   it("replaces the ambient sshd configuration with a closed server policy", async () => {
     const dockerfile = await readFile(resolve(workspaceRoot, "agent/Dockerfile"), "utf8");
 

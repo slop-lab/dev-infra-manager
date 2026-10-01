@@ -36,12 +36,21 @@ test("external Git credentials reject another authority or path", () => {
 });
 
 test("x git delegates credentials to the same URL-scoped helper without secret environment injection", () => {
-  assert.deepEqual(gitCredentialArguments(["clone", "http://attacker.invalid/repo"]), [
+  assert.deepEqual(gitCredentialArguments(
+    ["clone", "http://attacker.invalid/repo"],
+    ["/usr/bin/node", "/opt/dim cli.js"],
+  ), [
     "-c", "credential.helper=",
-    "-c", "credential.helper=!dim git credential-helper",
+    "-c", "credential.helper=!'/usr/bin/node' '/opt/dim cli.js' git credential-helper",
     "-c", "credential.useHttpPath=true",
     "clone", "http://attacker.invalid/repo"
   ]);
+});
+
+test("x git quotes a CLI path containing a shell metacharacter", () => {
+  const arguments_ = gitCredentialArguments(["status"], ["/usr/bin/node", "/opt/dim's cli.js"]);
+
+  assert.equal(arguments_[3], "credential.helper=!'/usr/bin/node' '/opt/dim'\"'\"'s cli.js' git credential-helper");
 });
 
 test("x git authenticates a scoped HTTP request through the reviewed credential helper", async () => {

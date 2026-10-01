@@ -51,13 +51,13 @@ describe("QEMU socket inode lease", () => {
     expect({ device: lease.dev, inode: lease.ino }).toEqual({ device: socket.dev, inode: socket.ino });
   });
 
-  it("keeps schema 1 exact while requiring the public socket and lease to match", async () => {
+  it("keeps schema 2 exact while requiring the public socket and lease to match", async () => {
     const { ownerPath, socketPath } = await fixture();
 
     const record = await createOwnerRecord(socketPath);
     await publishOwner(ownerPath, record);
 
-    expect.soft(Object.keys(record).sort()).toEqual(["argv", "cwd", "executable", "pid", "schema", "socket", "startTicks"]);
+    expect.soft(Object.keys(record).sort()).toEqual(["argv", "cwd", "executable", "pid", "pidNamespace", "schema", "socket", "startTicks"]);
     expect.soft(Object.keys(record.socket).sort()).toEqual(["device", "inode"]);
     await rm(socketLeasePath(socketPath));
     await expect(inspectOwner(ownerPath, socketPath, process.cwd())).rejects.toThrow("ambiguous");

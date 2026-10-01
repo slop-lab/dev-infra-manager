@@ -13,13 +13,17 @@ diff --git a/.dim/qemu-service.mjs b/.dim/qemu-service.mjs
 diff --git a/.dim/qemu-verify.bash b/.dim/qemu-verify.bash
 --- a/.dim/qemu-verify.bash
 +++ b/.dim/qemu-verify.bash
-@@ -89,7 +89,7 @@ if ! command -v cloud-localds >/dev/null && ! command -v genisoimage >/dev/null;
+@@ -89,11 +89,11 @@ if ! command -v cloud-localds >/dev/null && ! command -v genisoimage >/dev/null;
  fi
  test -r /dev/kvm && test -w /dev/kvm || { echo "/dev/kvm is not accessible" >&2; exit 2; }
  repo_root="${DIM_QEMU_SOURCE_ROOT:-/workspace}"
 -test -d "$repo_root/project/.dim" || { echo "DIM_QEMU_SOURCE_ROOT is not an assembled Project worktree" >&2; exit 2; }
 +test -d "$repo_root/.dim" || { echo "DIM_QEMU_SOURCE_ROOT is not an assembled Project worktree" >&2; exit 2; }
  cache="${DIM_KVM_IMAGE_CACHE:-$repo_root/.local/kvm}"
+ guest_cpus="${DIM_KVM_SMOKE_CPUS:-4}"
+ guest_memory_mb="${DIM_KVM_SMOKE_MEMORY_MB:-4096}"
+ [[ "$guest_cpus" =~ ^[1-9][0-9]*$ ]] || { echo "DIM_KVM_SMOKE_CPUS must be a positive integer" >&2; exit 2; }
+ [[ "$guest_memory_mb" =~ ^[1-9][0-9]*$ ]] || { echo "DIM_KVM_SMOKE_MEMORY_MB must be a positive integer" >&2; exit 2; }
  mkdir -p "$cache/runs"
  workdir="$(mktemp -d "$cache/runs/local.XXXXXX")"
 @@ -109,5 +109,2 @@

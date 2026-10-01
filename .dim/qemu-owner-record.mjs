@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const OWNER_KEYS = ["argv", "cwd", "executable", "pid", "schema", "socket", "startTicks"];
+const OWNER_KEYS = ["argv", "cwd", "executable", "pid", "pidNamespace", "schema", "socket", "startTicks"];
 const FILE_KEYS = ["device", "inode", "path"];
 const SOCKET_KEYS = ["device", "inode"];
 const FINGERPRINT_KEYS = ["owner", "pid", "socket", "startTicks", "state"];
@@ -45,7 +45,7 @@ export function parseOwnerFingerprint(value) {
 }
 
 export function parseOwnerRecord(value) {
-  if (!exactKeys(value, OWNER_KEYS) || value.schema !== 1
+  if (!exactKeys(value, OWNER_KEYS) || value.schema !== 2
     || !decimal(value.pid, true) || BigInt(value.pid) > MAX_SAFE_PID || BigInt(value.pid) > PID_MAX
     || !decimal(value.startTicks, true) || !Array.isArray(value.argv) || value.argv.length === 0
     || value.argv.some((entry) => typeof entry !== "string") || !exactKeys(value.socket, SOCKET_KEYS)
@@ -54,5 +54,6 @@ export function parseOwnerRecord(value) {
   }
   parseFileIdentity(value.executable);
   parseFileIdentity(value.cwd);
+  parseArtifactIdentity(value.pidNamespace);
   return value;
 }

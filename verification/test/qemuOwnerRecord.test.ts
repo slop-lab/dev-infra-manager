@@ -98,6 +98,22 @@ describe("QEMU owner record contract", () => {
     await expect(lstat(socketLeasePath(socketPath))).rejects.toThrow();
   });
 
+  it("retires residue from an earlier PID namespace without trusting a reused PID", async () => {
+    const { ownerPath, socketPath } = await fixture();
+    const record = await createOwnerRecord(socketPath);
+    const staleNamespace = {
+      ...record.pidNamespace,
+      inode: (BigInt(record.pidNamespace.inode) + 1n).toString(),
+    };
+    await publishOwner(ownerPath, { ...record, pidNamespace: staleNamespace });
+
+    expect.soft((await inspectOwner(ownerPath, socketPath, process.cwd())).state).toBe("dead");
+    await retireOwner(ownerPath, socketPath, process.cwd(), 1);
+
+    await expect(lstat(ownerPath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(lstat(socketPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("preserves replaced owner and socket inodes during cleanup", async () => {
     const first = await fixture();
     const record = await createOwnerRecord(first.socketPath);

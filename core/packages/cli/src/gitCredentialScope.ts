@@ -16,10 +16,18 @@ export function matchesGitCredentialScope(
   return scopePath === "" || credential.pathname === scopePath || credential.pathname.startsWith(`${scopePath}/`);
 }
 
-export function gitCredentialArguments(args: readonly string[]): string[] {
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+
+export function gitCredentialArguments(
+  args: readonly string[],
+  cliCommand: readonly string[] = [process.execPath, process.argv[1] ?? "dim"]
+): string[] {
+  const helper = `!${cliCommand.map(shellQuote).join(" ")} git credential-helper`;
   return [
     "-c", "credential.helper=",
-    "-c", "credential.helper=!dim git credential-helper",
+    "-c", `credential.helper=${helper}`,
     "-c", "credential.useHttpPath=true",
     ...args
   ];

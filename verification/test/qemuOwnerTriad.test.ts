@@ -83,7 +83,7 @@ describe("QEMU owner artifact triad", () => {
     const paths = await fixture();
     await chmod(paths.ownerPath, 0o640);
     await expect(inspectOwner(paths.ownerPath, paths.socketPath, process.cwd())).rejects.toThrow("ambiguous");
-    expect(await readFile(paths.ownerPath, "utf8")).toContain('"schema":1');
+    expect(await readFile(paths.ownerPath, "utf8")).toContain('"schema":2');
   });
 
   it("prints an exact fingerprint and rejects mismatched retire-exact input", async () => {

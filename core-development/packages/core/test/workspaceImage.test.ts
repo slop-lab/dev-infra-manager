@@ -91,6 +91,12 @@ describe("workspace image asset parity", () => {
     expect(entrypoint).not.toContain("chown -R");
     expect(entrypoint).toContain('initialize_root /var/lib/dim/workspace-data "workspace data"');
   });
+
+  it("includes Python for repository checks that exercise shipped Python services", async () => {
+    const dockerfile = await readFile(path.join(canonicalWorkspaceImageAssets, "Dockerfile"), "utf8");
+
+    expect(dockerfile).toMatch(/apk add --no-cache[^\n]*\bpython3\b/);
+  });
 });
 
 describe("workspace image inspection", () => {

@@ -13,16 +13,18 @@ async function fileIdentity(path) {
 
 async function processIdentity(pid) {
   const proc = `/proc/${pid}`;
-  const [statText, command, executable, cwd] = await Promise.all([
+  const [statText, command, executable, cwd, pidNamespaceStats] = await Promise.all([
     readFile(`${proc}/stat`, "utf8"),
     readFile(`${proc}/cmdline`),
     fileIdentity(`${proc}/exe`),
     fileIdentity(`${proc}/cwd`),
+    stat(`${proc}/ns/pid`, { bigint: true }),
   ]);
   const end = command.at(-1) === 0 ? -1 : undefined;
   const argv = command.subarray(0, end).toString().split("\0");
   const fields = statText.slice(statText.lastIndexOf(")") + 2).split(" ");
-  return { argv, cwd, executable, pid: String(pid), startTicks: fields[19] };
+  return { argv, cwd, executable, pid: String(pid),
+    pidNamespace: identity(pidNamespaceStats), startTicks: fields[19] };
 }
 
 function sameFile(left, right) {
@@ -31,6 +33,7 @@ function sameFile(left, right) {
 
 function sameProcess(record, actual) {
   return record.pid === actual.pid && record.startTicks === actual.startTicks
+    && sameIdentity(record.pidNamespace, actual.pidNamespace)
     && JSON.stringify(record.argv) === JSON.stringify(actual.argv)
     && sameFile(record.executable, actual.executable) && sameFile(record.cwd, actual.cwd);
 }
@@ -62,6 +65,7 @@ export async function inspectOwner(ownerPath, socketPath, expectedCwd) {
     const result = { owner: identity(ownerStats), record, socket };
     try {
       const actual = await processIdentity(Number(record.pid));
+      if (!sameIdentity(record.pidNamespace, actual.pidNamespace)) return { ...result, state: "dead" };
       if (!sameProcess(record, actual)) throw new Error("service process identity mismatch");
       return { ...result, state: "live" };
     } catch (error) {
@@ -82,7 +86,7 @@ export async function createOwnerRecord(socketPath) {
     || !sameIdentity(identity(socketStats), identity(leaseStats))) {
     throw new Error("service socket lease mismatch");
   }
-  return { ...current, schema: 1, socket: identity(socketStats) };
+  return { ...current, schema: 2, socket: identity(socketStats) };
 }
 
 export function ownerFingerprint(inspected) {
@@ -119,6 +123,10 @@ async function inspectRetirementProgress(inspected, ownerPath, socketPath) {
   if (!ownerStats && socketStats) throw new Error("ambiguous service ownership artifacts");
   try {
     const actual = await processIdentity(Number(inspected.record.pid));
+    if (!sameIdentity(inspected.record.pidNamespace, actual.pidNamespace)) {
+      if (ownerStats && socketStats) return { state: "dead" };
+      throw new Error("ambiguous service ownership artifacts");
+    }
     if (!sameProcess(inspected.record, actual)) throw new Error("service process identity mismatch");
     return { state: "live" };
   } catch (error) {
