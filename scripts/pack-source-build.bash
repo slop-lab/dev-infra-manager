@@ -21,12 +21,18 @@ for variable in "${obsolete_inputs[@]}"; do
 done
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-commit="${DIM_SOURCE_ROOT_COMMIT:-$(git -C "$repo_root" rev-parse HEAD)}"
+legacy_source_root="$repo_root/.local/production-source"
+if [[ -L "$legacy_source_root" ]]; then
+  echo "refusing symlinked source-build path: $legacy_source_root" >&2
+  exit 1
+fi
+
+commit="${DIM_SOURCE_ROOT_COMMIT:-$(GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" rev-parse HEAD)}"
 if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
   echo "DIM_SOURCE_ROOT_COMMIT must be exactly 40 lowercase hexadecimal characters" >&2
   exit 2
 fi
-resolved_commit="$(git -C "$repo_root" rev-parse "$commit")"
+resolved_commit="$(GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" rev-parse --verify "${commit}^{commit}")"
 if [[ "$resolved_commit" != "$commit" ]]; then
   echo "root resolved to $resolved_commit instead of required commit $commit" >&2
   exit 1
@@ -34,19 +40,56 @@ fi
 printf '[source] root %s\n' "$resolved_commit"
 
 output_directory="$1"
-mkdir -p "$output_directory"
-output_directory="$(cd -- "$output_directory" && pwd)"
-local_root="$repo_root/.local"
-source_root="$local_root/production-source"
-source_archive="$local_root/production-source.$$.tar"
-mkdir -p "$source_root"
-find "$source_root" -mindepth 1 -depth -delete
+if [[ -L "$output_directory" ]]; then
+  echo "refusing symlinked package output: $output_directory" >&2
+  exit 1
+fi
+output_parent="$(dirname -- "$output_directory")"
+if [[ ! -d "$output_parent" || -L "$output_parent" ]]; then
+  echo "package output parent must be an existing non-symlink directory: $output_parent" >&2
+  exit 1
+fi
+output_parent="$(cd -- "$output_parent" && pwd -P)"
+output_directory="$output_parent/$(basename -- "$output_directory")"
+if [[ -e "$output_directory" && ! -d "$output_directory" ]]; then
+  echo "package output must be a directory: $output_directory" >&2
+  exit 1
+fi
+
+output_stage="$(mktemp -d "$output_parent/.dim-packages.XXXXXX")"
+output_backup=""
+source_archive="$(mktemp "${TMPDIR:-/tmp}/dim-production-source.XXXXXX.tar")"
+owns_source_root=0
+published=0
+if [[ -n "${DIM_SOURCE_BUILD_ROOT:-}" ]]; then
+  source_root="$DIM_SOURCE_BUILD_ROOT"
+  if [[ -e "$source_root" || -L "$source_root" ]]; then
+    echo "source build staging path already exists: $source_root" >&2
+    exit 1
+  fi
+  mkdir -m 700 -- "$source_root"
+else
+  source_root="$(mktemp -d "${TMPDIR:-/tmp}/dim-production-source.XXXXXX")"
+  owns_source_root=1
+fi
+
 cleanup() {
+  status="$?"
   rm -f -- "$source_archive"
+  if [[ "$published" -eq 0 ]]; then
+    rm -rf -- "$output_stage"
+    if [[ -n "$output_backup" && -d "$output_backup" && ! -e "$output_directory" ]]; then
+      mv -- "$output_backup" "$output_directory"
+    fi
+  fi
+  if [[ "$owns_source_root" -eq 1 ]]; then
+    rm -rf -- "$source_root"
+  fi
+  exit "$status"
 }
 trap cleanup EXIT
 
-git -C "$repo_root" archive --format=tar --output "$source_archive" "$commit" -- \
+GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" archive --format=tar --output "$source_archive" "$commit" -- \
   pnpm-lock.yaml \
   core \
   plugin-dns-cloudflare \
@@ -69,7 +112,7 @@ linkWorkspacePackages: true
 EOF
 
 aggregate_lock="$source_root/pnpm-lock.yaml"
-if [[ ! -f "$aggregate_lock" ]]; then
+if [[ ! -f "$aggregate_lock" || -L "$aggregate_lock" ]]; then
   echo "aggregate source-build lock is missing from reviewed commit $commit" >&2
   exit 1
 fi
@@ -93,4 +136,16 @@ pnpm --dir "$source_root/plugin-dns-cloudflare" run build
 pnpm --dir "$source_root/plugin-external-urls" run build
 
 echo "[source] create install bundle"
-node "$repo_root/scripts/pack-local-packages.mjs" "$source_root" "$output_directory"
+node "$repo_root/scripts/pack-local-packages.mjs" "$source_root" "$output_stage"
+cp -- "$source_root/.dim-source-state" "$output_stage/.dim-source-state"
+
+if [[ -d "$output_directory" ]]; then
+  output_backup="$(mktemp -d "$output_parent/.dim-packages-backup.XXXXXX")"
+  rmdir -- "$output_backup"
+  mv -- "$output_directory" "$output_backup"
+fi
+mv -- "$output_stage" "$output_directory"
+published=1
+if [[ -n "$output_backup" ]]; then
+  rm -rf -- "$output_backup"
+fi
