@@ -95,6 +95,20 @@ it("keeps a post-fast-forward manifest failure non-ready and blocks run", async 
     });
   });
 
+  it("identifies invalid update profiles as profile validation", async () => {
+    // Given / When
+    const updating = updateWorkspace(runner, options(root), workspace.name, ["bad,profile"]);
+
+    // Then
+    await expect(updating).rejects.toMatchObject({
+      message: "workspace update at profile validation: workspace profile 'bad,profile' must match [a-z0-9][a-z0-9_.-]{0,63}",
+      cause: expect.objectContaining({
+        message: "workspace profile 'bad,profile' must match [a-z0-9][a-z0-9_.-]{0,63}"
+      })
+    });
+    expect(runner.lifecycleEvents).toEqual([]);
+  });
+
 it("persists setup-error when the final ready write fails after manifest publication", async () => {
     // Given
     const writeWorkspace = LifecycleState.prototype.writeWorkspace;

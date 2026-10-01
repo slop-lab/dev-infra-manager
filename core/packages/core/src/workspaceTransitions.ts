@@ -47,6 +47,7 @@ export async function updateWorkspace(
         let record = await state.readWorkspace(workspaceName);
         if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
         const oldProfiles = record.profiles;
+        setStage("profile validation");
         const nextProfiles = profiles === undefined ? oldProfiles : validateWorkspaceProfiles(profiles);
         setStage("workspace container readiness");
         let containerId = await assertContainerRunning(runner, options.stateRoot, record);
