@@ -185,4 +185,39 @@ describe("real Git local source build safety", () => {
     expect(git(fixture.root, "status", "--short").stdout).not.toContain("package.json");
   });
 
+  it("computes identical readiness for identical bundles at different paths", async () => {
+    // Given
+    const fixture = await createRealGitFixture();
+    const stateScript = resolve(fixture.root, "scripts/local-preparation-state.bash");
+    await copyFile(resolve(workspaceRoot, "scripts/local-preparation-state.bash"), stateScript);
+    const firstPackages = resolve(fixture.root, "first-packages");
+    const secondPackages = resolve(fixture.root, "second-packages");
+    await Promise.all([mkdir(firstPackages), mkdir(secondPackages)]);
+    for (const packageRoot of [firstPackages, secondPackages]) {
+      await writeFile(resolve(packageRoot, "packages.json"), "{}\n");
+      await writeFile(resolve(packageRoot, "package.tgz"), "package bytes\n");
+      await writeFile(resolve(packageRoot, ".dim-source-state"), `root=${fixture.selectedCommit}\n`);
+    }
+    const environment = {
+      PATH: `${fixture.tools}:/usr/bin:/bin`,
+      DIM_LOCAL_IMAGE_INSPECT_REF: "temporary-image",
+      DIM_LOCAL_IMAGE_RECORD_REF: "final-image"
+    } as const;
+
+    // When
+    const first = spawnSync("/usr/bin/bash", [stateScript], {
+      encoding: "utf8",
+      env: { ...environment, DIM_LOCAL_PACKAGE_ROOT: firstPackages }
+    });
+    const second = spawnSync("/usr/bin/bash", [stateScript], {
+      encoding: "utf8",
+      env: { ...environment, DIM_LOCAL_PACKAGE_ROOT: secondPackages }
+    });
+
+    // Then
+    expect(first.status).toBe(0);
+    expect(second.status).toBe(0);
+    expect(second.stdout).toBe(first.stdout);
+  });
+
 });

@@ -18,6 +18,12 @@ command -v flock >/dev/null 2>&1 || {
 }
 
 mkdir -p "$local_root"
+for path in "$local_root" "$package_root" "$readiness_file" "$lock_file"; do
+  if [[ -L "$path" ]]; then
+    echo "refusing symlinked local installation path: $path" >&2
+    exit 1
+  fi
+done
 exec 9>"$lock_file"
 flock --exclusive 9
 test -r "$readiness_file" || {
@@ -33,6 +39,7 @@ validate_preparation() {
     exit 1
   }
   current_state="$(
+    DIM_LOCAL_PACKAGE_ROOT="$package_root" \
     DIM_LOCAL_IMAGE_INSPECT_REF="$image_ref" \
     DIM_LOCAL_IMAGE_RECORD_REF="$image_ref" \
       bash "$repo_root/scripts/local-preparation-state.bash"
@@ -46,7 +53,7 @@ validate_preparation() {
 validate_preparation
 
 installer_tarballs=("$package_root"/slop-lab-dim-installer-*.tgz)
-test "${#installer_tarballs[@]}" -eq 1 && test -f "${installer_tarballs[0]}"
+test "${#installer_tarballs[@]}" -eq 1 && test -f "${installer_tarballs[0]}" && test ! -L "${installer_tarballs[0]}"
 staged_installer="$(mktemp -d "${TMPDIR:-/tmp}/dim-target-installer.XXXXXX")"
 cleanup() {
   find "$staged_installer" -depth -delete 2>/dev/null || true

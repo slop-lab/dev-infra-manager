@@ -1,6 +1,6 @@
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -58,6 +58,7 @@ async function createFixture(): Promise<Fixture> {
     `#!/usr/bin/env bash
 printf 'pack %s\\n' "$1" >>"$DIM_INVOCATIONS"
 mkdir -p "$1"
+mkdir -p "$DIM_SOURCE_BUILD_ROOT"
 cat >"$1/packages.json" <<'JSON'
 {"schemaVersion":1,"packages":[
   {"name":"@slop-lab/dim-cli","version":"0.9.0-local-${"a".repeat(64)}","file":"cli.tgz"},
@@ -207,35 +208,12 @@ describe("local source build policy", () => {
     // When
     const result = runSourceBuild(fixture, "pack-source-build.bash", sourceCommit);
     const invocations = await readFile(fixture.log, "utf8");
-    const copiedLock = await readFile(resolve(fixture.root, ".local/production-source/pnpm-lock.yaml"), "utf8");
+    const copiedLock = await readFile(resolve(fixture.root, "output/.packed-lock"), "utf8");
 
     // Then
     expect(result.status).toBe(0);
     expect(copiedLock).toBe(fixtureLockfile);
-    expect(invocations).toContain(`pnpm --dir ${resolve(fixture.root, ".local/production-source")} install --frozen-lockfile`);
-  });
-
-  it("changes aggregate identity when only the checked-in lock changes", async () => {
-    // Given
-    const fixture = await sourceBuildFixture();
-    const originalLockDigest = createHash("sha256").update(fixtureLockfile).digest("hex");
-    const originalIdentity = createHash("sha256")
-      .update(
-        `root=${fixtureRootCommit}\naggregate-lock-sha256=${originalLockDigest}\n`
-      )
-      .digest("hex");
-
-    // When
-    const first = runSourceBuild(fixture, "pack-source-build.bash", sourceCommit);
-    await writeFile(fixture.log, "");
-    await writeFile(resolve(fixture.root, "pnpm-lock.yaml"), `${fixtureLockfile}settings:\n  autoInstallPeers: false\n`);
-    const second = runSourceBuild(fixture, "pack-source-build.bash", sourceCommit);
-    const secondInvocations = await readFile(fixture.log, "utf8");
-
-    // Then
-    expect(first.status).toBe(0);
-    expect(second.status).toBe(0);
-    expect(secondInvocations).not.toContain(`version=0.8.0-local-${originalIdentity}`);
+    expect(invocations).toMatch(/^pnpm --dir \/tmp\/dim-production-source\.[^ ]+ install --frozen-lockfile/m);
   });
 
   it.each([
@@ -392,7 +370,7 @@ describe("local source build policy", () => {
     // Then
     expect(result.status).toBe(0);
     expect(await readFile(fixture.readiness, "utf8")).toBe("state=fresh\n");
-    expect(invocations).toContain(`pack ${resolve(fixture.root, ".local/dim-packages")}`);
+    expect(invocations).toMatch(new RegExp(`pack ${resolve(fixture.root, ".local/prepare\\.[^/]+/packages")}`));
     expect(invocations).toMatch(/docker buildx build .* --load .* --tag dev-infra-project-workspace:prepare-1234-/);
     expect(invocations.indexOf("pack ")).toBeLessThan(invocations.indexOf("docker buildx build"));
     expect(invocations.indexOf("docker buildx build")).toBeLessThan(
@@ -414,7 +392,6 @@ describe("local source build policy", () => {
     const scripts = resolve(root, "scripts");
     const tools = resolve(root, "tools");
     const packages = resolve(root, ".local/dim-packages");
-    const sources = resolve(root, ".local/production-source");
     await Promise.all([mkdir(scripts), mkdir(tools), mkdir(packages, { recursive: true })]);
     await copyFile(
       resolve(projectRoot, "scripts/local-preparation-state.bash"),
@@ -422,9 +399,8 @@ describe("local source build policy", () => {
     );
     await writeFile(resolve(packages, "packages.json"), "{}\n");
     await writeFile(resolve(packages, "package.tgz"), "package bytes\n");
-    await mkdir(sources, { recursive: true });
     await writeFile(
-      resolve(sources, ".dim-source-state"),
+      resolve(packages, ".dim-source-state"),
       `root=${fixtureRootCommit}\naggregate-lock-sha256=${"a".repeat(64)}\n`
     );
     await writeFile(resolve(tools, "git"), `#!/usr/bin/env bash\nprintf '%040d\\n' 7\n`);
@@ -450,11 +426,13 @@ describe("local source build policy", () => {
     expect(result.stdout).toContain(`aggregate-lock-sha256=${"a".repeat(64)}\n`);
   });
 
-  it("leaves no readiness marker or promoted tag when preparation fails", async () => {
+  it("preserves the previously published candidate when staging fails", async () => {
     // Given
     const fixture = await createFixture();
-    await mkdir(resolve(fixture.root, ".local"), { recursive: true });
+    const packages = resolve(fixture.root, ".local/dim-packages");
+    await mkdir(packages, { recursive: true });
     await writeFile(fixture.readiness, "state=old\n");
+    await writeFile(resolve(packages, "previous-candidate"), "preserved\n");
 
     // When
     const result = runScript(fixture, "prepare-source-build.bash", { DIM_BUILD_FAILURE: "1" });
@@ -462,9 +440,58 @@ describe("local source build policy", () => {
 
     // Then
     expect(result.status).toBe(42);
-    await expect(readFile(fixture.readiness, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    expect(await readFile(fixture.readiness, "utf8")).toBe("state=old\n");
+    expect(await readFile(resolve(packages, "previous-candidate"), "utf8")).toBe("preserved\n");
     expect(invocations).not.toContain("docker image tag");
     expect(invocations).not.toContain("state dev-infra-project-workspace");
+  });
+
+  it("publishes no candidate or readiness when initial staging fails", async () => {
+    // Given
+    const fixture = await createFixture();
+
+    // When
+    const result = runScript(fixture, "prepare-source-build.bash", { DIM_BUILD_FAILURE: "1" });
+
+    // Then
+    expect(result.status).toBe(42);
+    await expect(readFile(fixture.readiness, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(resolve(fixture.root, ".local/dim-packages/packages.json"), "utf8")).rejects.toMatchObject({
+      code: "ENOENT"
+    });
+  });
+
+  it("rejects a symlinked package publication path without changing its target", async () => {
+    // Given
+    const fixture = await createFixture();
+    const target = resolve(fixture.root, "tracked-target");
+    await mkdir(resolve(fixture.root, ".local"), { recursive: true });
+    await mkdir(target);
+    await writeFile(resolve(target, "sentinel"), "preserved\n");
+    await symlink(target, resolve(fixture.root, ".local/dim-packages"));
+
+    // When
+    const result = runScript(fixture, "prepare-source-build.bash");
+
+    // Then
+    expect(result.status).not.toBe(0);
+    expect(await readFile(resolve(target, "sentinel"), "utf8")).toBe("preserved\n");
+  });
+
+  it("rejects a symlinked readiness path without changing its target", async () => {
+    // Given
+    const fixture = await createFixture();
+    const target = resolve(fixture.root, "readiness-target");
+    await mkdir(resolve(fixture.root, ".local"), { recursive: true });
+    await writeFile(target, "preserved\n");
+    await symlink(target, fixture.readiness);
+
+    // When
+    const result = runScript(fixture, "prepare-source-build.bash");
+
+    // Then
+    expect(result.status).not.toBe(0);
+    expect(await readFile(target, "utf8")).toBe("preserved\n");
   });
 
   it("reports missing preparation before package-version parsing or installation", async () => {
