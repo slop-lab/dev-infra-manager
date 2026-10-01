@@ -1,6 +1,4 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { lifecycleOptions, UserError } from "@slop-lab/dim-core";
+import { LifecycleState, lifecycleOptions, MissingRecordError, UserError } from "@slop-lab/dim-core";
 import { ensureManagedController } from "./managed-controller.js";
 import { adminErrorDetail, unixHttpRequest } from "./controller-transport.js";
 
@@ -92,9 +90,10 @@ export async function controllerRequest(
     const options = lifecycleOptions();
     socketPath ??= options.controllerSocketPath;
     try {
-      token = (await readFile(path.join(options.stateRoot, "workspace-grants", workspace), "utf8")).trim();
+      token = await new LifecycleState(options.stateRoot).readWorkspaceGrant(workspace);
     } catch (error) {
-      if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      if (error instanceof MissingRecordError
+        || (error instanceof Error && "code" in error && error.code === "ENOENT")) {
         throw new WorkspaceControllerGrantNotFoundError(`workspace '${workspace}' has no controller grant`);
       }
       throw error;

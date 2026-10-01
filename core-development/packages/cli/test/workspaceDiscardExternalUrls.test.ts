@@ -8,7 +8,13 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { lifecycleOptions } from "../../../../core/packages/core/src/index.js";
+import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+import {
+  controllerRequest,
+  WorkspaceControllerGrantNotFoundError
+} from "../../../../core/packages/cli/src/controller-client.js";
 import { revokeWorkspaceExternalUrls } from "../../../../core/packages/cli/src/workspace-lifecycle-commands.js";
+import { workspaceRecord } from "../../core/test/hostLifecycleFixture.js";
 
 const cli = fileURLToPath(new URL("../../../../core/packages/cli/src/cli.ts", import.meta.url));
 
@@ -36,18 +42,25 @@ test("discard cleanup skips only an absent workspace controller grant", async (c
     await assert.doesNotReject(revokeWorkspaceExternalUrls("work-1"));
   });
 
-  await mkdir(path.join(stateRoot, "workspace-grants"), { recursive: true });
-  await writeFile(path.join(stateRoot, "workspace-grants", "work-1"), "grant\n");
+  const state = new LifecycleState(stateRoot);
+  const record = workspaceRecord("work-1", "ready");
+  await state.claimWorkspace(record);
+  const currentGrant = await state.ensureWorkspaceGrant(record.name);
 
   await context.test("unavailable optional route remains skippable", async () => {
     const socketPath = path.join(root, "not-found.sock");
-    const server = createServer((_request, response) => response.writeHead(404).end());
+    let authorization: string | undefined;
+    const server = createServer((request, response) => {
+      authorization = request.headers.authorization;
+      response.writeHead(404).end();
+    });
     server.listen(socketPath);
     await once(server, "listening");
     context.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
     process.env.DIM_CONTROLLER_SOCKET = socketPath;
 
     await assert.doesNotReject(revokeWorkspaceExternalUrls("work-1"));
+    assert.equal(authorization, `Bearer ${currentGrant}`);
   });
 
   await context.test("authorization failure remains fatal", async () => {
@@ -69,8 +82,36 @@ test("discard cleanup skips only an absent workspace controller grant", async (c
     await assert.rejects(revokeWorkspaceExternalUrls("work-1"), /ENOENT|connect/);
   });
 
+  const replacement = { ...record, workspaceId: "B".repeat(43) };
+  await state.writeWorkspace(replacement);
+
+  await context.test("same-name replacement does not use the stale instance grant", async () => {
+    await assert.rejects(
+      controllerRequest("/api/urls", {}, record.name),
+      WorkspaceControllerGrantNotFoundError
+    );
+  });
+
+  const replacementGrant = await state.ensureWorkspaceGrant(replacement.name);
+
+  await context.test("same-name replacement uses its fresh instance grant", async () => {
+    const socketPath = path.join(root, "replacement.sock");
+    let authorization: string | undefined;
+    const server = createServer((request, response) => {
+      authorization = request.headers.authorization;
+      response.writeHead(204).end();
+    });
+    server.listen(socketPath);
+    await once(server, "listening");
+    context.after(() => new Promise<void>((resolve) => server.close(() => resolve())));
+    process.env.DIM_CONTROLLER_SOCKET = socketPath;
+
+    await assert.doesNotReject(controllerRequest("/api/urls", {}, replacement.name));
+    assert.equal(authorization, `Bearer ${replacementGrant}`);
+  });
+
   await context.test("CLI continues to the discard session when the grant is absent", async () => {
-    await rm(path.join(stateRoot, "workspace-grants", "work-1"));
+    await state.removeWorkspaceGrant(replacement);
     delete process.env.DIM_CONTROLLER_SOCKET;
     const options = lifecycleOptions();
     const operations: string[] = [];
