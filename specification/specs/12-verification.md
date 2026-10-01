@@ -155,15 +155,17 @@ without cloning historical split repositories and derives the shared local
 package and image version from the SHA-256 digest of the root commit record
 plus the SHA-256 digest of the reviewed aggregate dependency lock. Executable
 tests MUST prove that the archived production workspace installs with the
-frozen lock. With the source commit held constant, changing only the lock MUST
-change the aggregate local version. Missing and stale locks MUST each fail
-before package build, package publication, or image publication without
-modifying tracked source. Real-Git tests MUST prove that replacement refs do
-not change archived bytes, full-length tree object IDs are rejected before
-dependency installation, and uncommitted lock drift does not alter the selected
-commit. Symlink probes for persistent source, package, readiness, and output
-paths MUST fail without changing their targets. Failed staging MUST preserve
-the previously published candidate and readiness.
+frozen lock. Two genuine reviewed commits whose committed aggregate lockfiles
+differ MUST produce different aggregate local versions. Missing and stale locks
+MUST each fail before package build, package publication, or image publication
+without modifying tracked source. Real-Git tests MUST prove that replacement
+refs do not change archived bytes, full-length tree object IDs are rejected
+before dependency installation, and uncommitted lock drift does not alter the
+selected commit. Symlink probes for persistent source, package, readiness, and
+output paths MUST fail without changing their targets. Failed staging or late
+publication MUST preserve the previously published packages, readiness, and
+versioned image identity; when no previous candidate exists, failure MUST leave
+none of those publication artifacts behind.
 
 `just verify workspace-user-setup` MUST supplement launcher mocks with the real
 pinned OpenCode `1.18.31` runtime in a disposable home without provider
