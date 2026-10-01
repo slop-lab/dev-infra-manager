@@ -158,7 +158,12 @@ tests MUST prove that the archived production workspace installs with the
 frozen lock. With the source commit held constant, changing only the lock MUST
 change the aggregate local version. Missing and stale locks MUST each fail
 before package build, package publication, or image publication without
-modifying tracked source.
+modifying tracked source. Real-Git tests MUST prove that replacement refs do
+not change archived bytes, full-length tree object IDs are rejected before
+dependency installation, and uncommitted lock drift does not alter the selected
+commit. Symlink probes for persistent source, package, readiness, and output
+paths MUST fail without changing their targets. Failed staging MUST preserve
+the previously published candidate and readiness.
 
 `just verify workspace-user-setup` MUST supplement launcher mocks with the real
 pinned OpenCode `1.18.31` runtime in a disposable home without provider

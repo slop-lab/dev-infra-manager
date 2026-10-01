@@ -111,6 +111,11 @@ with the frozen lock. A missing lock or one that is stale for the archived
 workspace MUST fail preparation before package build, package publication, or
 image publication. Preparation MUST NOT clone historical split production
 repositories or modify the reviewed checkout to reconcile a lock mismatch.
+Commit validation and archive operations MUST ignore Git replacement refs and
+MUST reject trees, blobs, and other non-commit objects. Source, package, and
+readiness staging MUST use private nonce paths; persistent path symlinks MUST
+be rejected. A failed stage MUST leave the previously published package bundle
+and readiness unchanged.
 
 The reviewed root `prepare-local` path MUST build every production package
 tarball and the trusted workspace image under exactly one aggregate local
@@ -119,7 +124,9 @@ image ID, and only then promotes it to
 `dev-infra-project-workspace:<shared aggregate local version>`. Its readiness
 state binds that versioned tag to the image ID and package/source digests.
 `install-local` recomputes the tag from the unchanged bundle and rejects stale
-or mismatched preparation state before and after installation. Both the
+or mismatched preparation state before and after installation. Complete staged
+packages are promoted as one generation, the final image tag is verified
+against the temporary image ID, and readiness is published last. Both the
 reviewed-root prepared path and the assembled-development path MUST stage the
 installer tarball from the validated candidate bundle in a temporary directory
 outside that bundle, then use that target facade for `install-cli` and its
