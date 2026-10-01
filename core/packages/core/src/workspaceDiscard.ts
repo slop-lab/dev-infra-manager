@@ -1,6 +1,6 @@
 import { UserError } from "./errors.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
-import type { LifecycleOptions } from "./lifecycleTypes.js";
+import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
 import type { WorkspaceDiscardHook } from "./plugin.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { protectedRootSnapshotPath } from "./protectedRootSnapshot.js";
@@ -24,11 +24,17 @@ export async function discardWorkspace(
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
-    const record = await state.readWorkspace(workspaceName);
-    const discarding = { ...record, phase: "discarding" as const, updatedAt: new Date().toISOString() };
-    await state.writeWorkspace(discarding);
-    await state.removeWorkspaceGrant(record);
-    await state.removeAgentGrant(record);
+    const releaseAuthority = await state.acquireWorkspaceAuthorityLock(workspaceName);
+    let record: WorkspaceRecord;
+    try {
+      record = await state.readWorkspace(workspaceName);
+      const discarding = { ...record, phase: "discarding" as const, updatedAt: new Date().toISOString() };
+      await state.writeWorkspace(discarding);
+      await state.removeWorkspaceGrant(record);
+      await state.removeAgentGrant(record);
+    } finally {
+      await releaseAuthority();
+    }
     for (const hook of hooks) {
       await hook.beforeDiscard({
         workspaceId: record.workspaceId,
