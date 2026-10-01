@@ -3,6 +3,7 @@ set -eu
 
 agent_name="dim-agent"
 agent_image="dim-${DIM_WORKSPACE_NAME:?}-agent"
+agent_tmp_volume="dim-agent-tmp"
 docker_socket="${DOCKER_HOST#unix://}"
 
 agent_dind() {
@@ -17,11 +18,25 @@ case "${1:?private agent action is required}" in
       --build-arg DIM_AGENT_UID="$DIM_AGENT_UID" \
       --file /workspace/agent/Dockerfile /workspace >/dev/null
     docker rm --force "$agent_name" >/dev/null 2>&1 || true
+    if ! docker volume inspect "$agent_tmp_volume" >/dev/null 2>&1; then
+      docker volume create --label dev.dim.role=agent-tmp "$agent_tmp_volume" >/dev/null
+    fi
+    test "$(docker volume inspect --format '{{ index .Labels "dev.dim.role" }}' "$agent_tmp_volume")" = agent-tmp || {
+      echo "$agent_tmp_volume is not the owned agent temporary volume" >&2
+      exit 1
+    }
+    docker run --rm --network none --read-only --user 0:0 \
+      --env "DIM_AGENT_UID=$DIM_AGENT_UID" \
+      --env "DIM_AGENT_GID=$DIM_AGENT_UID" \
+      --env DIM_AGENT_TMPDIR=/tmp/opencode \
+      --mount type=volume,src="$agent_tmp_volume",dst=/tmp/opencode \
+      "$agent_image" /usr/local/bin/prepare-agent-tmp
     set -- run --detach --name "$agent_name" --restart unless-stopped \
       --publish "$DIM_DEVELOPMENT_GATEWAY_PORT:$DIM_DEVELOPMENT_GATEWAY_PORT" \
       --label dev.dim.role=agent \
       --env DOCKER_HOST=unix:///run/docker.sock \
       --env HOME=/home/dim-agent \
+      --env TMPDIR=/tmp/opencode \
       --env PATH=/home/dim-agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
       --env DIM_QEMU_VERIFICATION_SOCKET=/run/dim/qemu-verification/service.sock \
       --env DIM_EXTERNAL_URL_SOCKET=/run/dim/external-url/controller.sock \
@@ -48,6 +63,7 @@ case "${1:?private agent action is required}" in
       --env 'GIT_CONFIG_VALUE_2=/workspace/*' \
       --mount type=bind,src=/workspace,dst=/workspace \
       --mount type=bind,src=/mnt/agent-home,dst=/home/dim-agent \
+      --mount type=volume,src="$agent_tmp_volume",dst=/tmp/opencode \
       --mount type=bind,src=/mnt/workspace-shared-dind,dst=/mnt/workspace-shared-dind \
       --mount type=bind,src=/run/dim/qemu-verification,dst=/run/dim/qemu-verification,readonly \
       --mount "type=bind,src=$docker_socket,dst=/run/docker.sock" \
@@ -66,6 +82,17 @@ case "${1:?private agent action is required}" in
       --env CI=1 \
       --workdir /workspace "$agent_name" \
       pnpm install --frozen-lockfile
+    ;;
+  discard-agent-tmp)
+    if ! docker volume inspect "$agent_tmp_volume" >/dev/null 2>&1; then
+      exit 0
+    fi
+    test "$(docker volume inspect --format '{{ index .Labels "dev.dim.role" }}' "$agent_tmp_volume")" = agent-tmp || {
+      echo "$agent_tmp_volume is not the owned agent temporary volume" >&2
+      exit 1
+    }
+    docker rm --force "$agent_name" >/dev/null 2>&1 || true
+    docker volume rm "$agent_tmp_volume" >/dev/null
     ;;
   exec)
     shift

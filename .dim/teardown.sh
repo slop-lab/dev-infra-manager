@@ -28,6 +28,17 @@ sudo -n /usr/bin/env -i PATH=/usr/bin:/bin HOME=/root \
 
 set -- down
 test "$keep_volumes" = 1 || set -- "$@" --volumes
+discard_agent_tmp() {
+  agent_dind_id="$(docker compose \
+    --file .dim/docker-compose.yml \
+    --file /tmp/dim-project-compose-host-aliases.json \
+    ps --quiet agent-dind)"
+  test -z "$agent_dind_id" || docker compose \
+    --file .dim/docker-compose.yml \
+    --file /tmp/dim-project-compose-host-aliases.json \
+    exec --no-TTY --user root agent-dind dim-agent-dind discard-agent-tmp
+}
+test "$keep_volumes" = 1 || discard_agent_tmp
 set -- "$@" --remove-orphans
 
 docker compose \
