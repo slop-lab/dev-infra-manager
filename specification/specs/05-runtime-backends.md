@@ -2,8 +2,14 @@
 
 ## Scope
 
-DIM supports one workspace backend: `sysbox`. Backend selection is therefore
-not a Project extension point.
+The currently implemented workspace backend is `sysbox`. Backend selection is
+therefore not a Project extension point in this implementation profile. The
+target multi-backend contract reserves `container` for this Sysbox-based shape
+and `vm` for a persistent VM shape, but this profile makes no claim that either
+target identity is implemented. `TRUST-RUNTIME-001` and `STATE-BACKEND-001` in
+[Trust and Lifecycle Capability Matrix](04-trust-lifecycle-capability-matrix.md)
+define the gate and incompatible-state transition for a release that adopts
+them.
 
 The trusted workspace infrastructure container is a privileged Docker
 container using the host's ordinary `runc` runtime. It owns the Project engine,
@@ -16,7 +22,10 @@ isolation backend.
 Workspace metadata and managed-container labels MUST record `sysbox`.
 Configuration or existing state naming any other backend MUST be rejected;
 DIM does not provide compatibility aliases or state migration for removed
-pre-stable backends.
+pre-stable backends. In particular, a later `container` release MUST reject
+this historical `sysbox` state unchanged rather than treating the two names as
+aliases. Operators preserve needed data through the old pinned release's
+export path, discard, fresh creation, and explicit restore.
 
 DIM persists the trusted Project Docker engine at `/var/lib/docker`. The daemon
 MUST disable Docker's containerd snapshotter because Docker 29 otherwise keeps

@@ -11,12 +11,16 @@ The system has four major execution boundaries:
 
 The agent container boundary is untrusted.
 The secret-bearing runtime boundary is trusted only after human review of its effective source and runtime definition.
-The trusted Project lifecycle boundary is privileged. Its code runs in the
-workspace container outside the agent container, owns the Project runtime, and
-deploys secret-bearing workloads. It is an authority boundary and need not be
-one long-running controller process. Host-side DIM creates and reconciles the
-workspace container and runs the DIM host controller. A project must directly
-review the complete pinned DIM revision before trusting these layers.
+The trusted Project lifecycle boundary is privileged. Its code runs outside
+the untrusted agent execution boundary, owns the Project runtime, and deploys
+secret-bearing workloads. The current container profile places it in the
+trusted workspace container; a VM workspace places it outside the guest. It is
+an authority boundary and need not be one long-running controller process.
+Host-side DIM creates and reconciles the selected workspace runtime and runs
+the DIM host controller. A project must directly review the complete pinned
+DIM revision before trusting these layers. The exact cross-backend authority
+matrix is `TRUST-RUNTIME-001` in
+[Trust and Lifecycle Capability Matrix](04-trust-lifecycle-capability-matrix.md).
 
 ## Agent Container Boundary
 
@@ -85,7 +89,8 @@ review purposes.
 
 Trusted Project lifecycle code:
 
-- Runs in the workspace container, outside the agent container.
+- Runs outside the untrusted agent execution boundary. For a VM workspace it
+  MUST remain outside the guest.
 - Owns the Project runtime.
 - Defines, starts, and reconciles agent and secret-bearing Project services.
 - Explicitly decides whether an agent may trigger its reviewed setup again by
@@ -93,9 +98,10 @@ Trusted Project lifecycle code:
 - Keeps the agent's inner runtime separate from its own runtime.
 - Deploys secret-bearing containers only from approved refs.
 - May receive available host `/dev/kvm` under the immutable creation-time KVM
-  policy when its backend supports KVM; interactive creation confirms this
-  recommended grant. Host devices must not be passed into the untrusted agent
-  container.
+  policy only for a backend profile that defines that trusted capability;
+  interactive creation confirms this recommended grant for the current
+  container profile. Host devices must not be passed into an untrusted agent
+  container or VM guest.
 
 ## DIM Host Boundary
 
@@ -126,8 +132,10 @@ Managed Git repositories are the transition point from untrusted agent output to
 
 Agents may push proposal refs.
 Agents must not directly update protected refs.
-Protected refs must be updated through Git-host review/merge or trusted
-host-side administrative operations.
+Protected refs must be updated through the complete-tree review and atomic
+promotion operation in `TRUST-PROMOTION-001` and
+`TRUST-PROMOTION-CAS-001`. A host administrative credential does not create a
+routine review-bypass path.
 
 For a Project that combines trusted lifecycle and agent-changeable sources in
 one repository, every ordinary update to its selected root ref MUST enter
@@ -149,10 +157,14 @@ when the current adapter realizes it as a managed Gitea user.
 
 ## Backend Boundary
 
-Sysbox defines the untrusted agent boundary. The trusted workspace
-infrastructure uses ordinary runc, while the agent and its private rootless
-Docker run in an unprivileged `sysbox-runc` container. DIM MUST reject any
-other configured or recorded workspace backend.
+The current implementation profile uses Sysbox to define the untrusted agent
+boundary. The trusted workspace infrastructure uses ordinary runc, while the
+agent and its private rootless Docker run in an unprivileged `sysbox-runc`
+container. A multi-backend implementation MUST preserve
+`TRUST-RUNTIME-001`; adding a VM mechanism does not move trusted lifecycle or
+secret-bearing execution into the guest and does not make the mechanism itself
+a security guarantee. Backend identity and incompatible-state handling follow
+`STATE-BACKEND-001`.
 
 Storage backend choice changes disk enforcement.
 
