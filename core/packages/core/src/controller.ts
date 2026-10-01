@@ -5,6 +5,7 @@ import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
 import { ProcessRunner } from "./runner.js";
 import { hostLifecycleStatus } from "./hostLifecycle.js";
+import { bufferControllerRequestBody, parseControllerJsonBody } from "./controllerRequestBody.js";
 import type { StreamingCommandRunner } from "./types.js";
 import {
   listWorkspaces as listWorkspaceRecords,
@@ -230,9 +231,10 @@ async function handleRequest(
   }
   workspace ??= await authenticate(options, request);
   if (!workspace) return sendJson(response, 401, { error: "invalid workspace grant" });
+  const body = await bufferControllerRequestBody(request, options.maxBodyBytes ?? 16_384);
   return options.runWorkspaceRequest(
     workspace,
-    () => handleAuthenticatedRequest(options, pendingRestarts, request, response, url, workspace)
+    () => handleAuthenticatedRequest(options, pendingRestarts, request, response, url, workspace, body)
   );
 }
 
@@ -242,7 +244,8 @@ async function handleAuthenticatedRequest(
   request: IncomingMessage,
   response: ServerResponse,
   url: URL,
-  workspace: ControllerWorkspace
+  workspace: ControllerWorkspace,
+  body: Buffer
 ): Promise<void> {
   if (request.method === "GET" && url.pathname === "/api") {
     return sendJson(response, 200, {
@@ -287,16 +290,16 @@ async function handleAuthenticatedRequest(
     const name = decodeURIComponent(url.pathname.slice("/api/host-inputs/".length));
     const provider = options.hostInputProviders?.get(name);
     if (!provider) return sendJson(response, 404, { error: "host input provider not found" });
-    const body = await readJson(request, options.maxBodyBytes ?? 16_384);
-    if (!body || typeof body !== "object" || typeof (body as { key?: unknown }).key !== "string") {
+    const input = parseControllerJsonBody(body, options.maxBodyBytes ?? 16_384);
+    if (!input || typeof input !== "object" || typeof (input as { key?: unknown }).key !== "string") {
       throw new UserError("host input request requires a string key");
     }
-    const parameters = (body as { parameters?: unknown }).parameters;
+    const parameters = (input as { parameters?: unknown }).parameters;
     if (parameters !== undefined && typeof parameters !== "string") {
       throw new UserError("host input request parameters must be a string");
     }
     const value = await provider.resolve({
-      key: (body as { key: string }).key,
+      key: (input as { key: string }).key,
       ...(parameters === undefined ? {} : { parameters })
     }, {
       projectId: workspace.projectId,
@@ -315,7 +318,7 @@ async function handleAuthenticatedRequest(
       params,
       request,
       stateRoot: options.stateRoot,
-      readJson: (limit = options.maxBodyBytes ?? 16_384) => readJson(request, limit),
+      readJson: async (limit = options.maxBodyBytes ?? 16_384) => parseControllerJsonBody(body, limit),
       resolveTarget: (target, mode) => options.resolveTarget(workspace, target, mode)
     });
     if (!result) {
@@ -338,7 +341,7 @@ async function runWorkspaceRequest<T>(
   workspace: ControllerWorkspace,
   operation: () => Promise<T>
 ): Promise<T> {
-  const release = await state.acquireWorkspaceSetupLock(workspace.name);
+  const release = await state.acquireWorkspaceAuthorityLock(workspace.name);
   try {
     const record = await state.readWorkspace(workspace.name);
     if (record.workspaceId !== workspace.id || record.phase === "discarding") {
@@ -371,22 +374,6 @@ async function authenticate(options: DimControllerOptions, request: IncomingMess
   const header = request.headers.authorization;
   if (!header?.startsWith("Bearer ")) return undefined;
   return options.authenticate(header.slice("Bearer ".length));
-}
-
-async function readJson(request: IncomingMessage, limit: number): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of request) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    size += buffer.length;
-    if (size > limit) throw new UserError("request body is too large");
-    chunks.push(buffer);
-  }
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  } catch {
-    throw new UserError("request body must be valid JSON");
-  }
 }
 
 function sendJson(

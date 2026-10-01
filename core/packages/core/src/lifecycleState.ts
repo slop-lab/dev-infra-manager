@@ -211,6 +211,10 @@ export class LifecycleState {
     return acquireLifecycleLock({ root: this.root, name: `workspace-${validateLifecycleName(name, "workspace")}-setup`, description: `workspace '${name}' setup`, options: this.lockOptions });
   }
 
+  async acquireWorkspaceAuthorityLock(name: string): Promise<() => Promise<void>> {
+    return acquireLifecycleLock({ root: this.root, name: `workspace-${validateLifecycleName(name, "workspace")}-authority`, description: `workspace '${name}' authority`, options: this.lockOptions });
+  }
+
   async listWorkspaces(): Promise<WorkspaceRecord[]> {
     const records = await listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace", 8);
     for (const record of records) {
