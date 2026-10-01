@@ -70,6 +70,7 @@ export interface ControllerRuntimeContext {
     target: WorkspaceTarget,
     mode: "container-dns" | "container-ip"
   ): Promise<ResolvedWorkspaceTarget>;
+  runWorkspaceRequest<T>(workspace: ControllerWorkspace, operation: () => Promise<T>): Promise<T>;
 }
 
 export interface DimControllerOptions {
@@ -83,6 +84,7 @@ export interface DimControllerOptions {
     mode: "container-dns" | "container-ip"
   ): Promise<ResolvedWorkspaceTarget>;
   restartWorkspace?(workspace: ControllerWorkspace): Promise<void>;
+  runWorkspaceRequest<T>(workspace: ControllerWorkspace, operation: () => Promise<T>): Promise<T>;
   maxBodyBytes?: number;
   hostReady?(): Promise<boolean>;
   admitDuringHostRecovery?(workspace: ControllerWorkspace): Promise<boolean>;
@@ -114,6 +116,7 @@ export function configuredDimController(
         projectName: workspace.projectName
       };
     },
+    runWorkspaceRequest: (workspace, operation) => runWorkspaceRequest(state, workspace, operation),
     resolveTarget: async (workspace, target, mode) => {
       const record = await state.readWorkspace(workspace.name);
       if (record.workspaceId !== workspace.id) throw new UserError("workspace identity changed");
@@ -146,6 +149,7 @@ export function configuredDimAgentController(
         projectName: workspace.projectName
       };
     },
+    runWorkspaceRequest: (workspace, operation) => runWorkspaceRequest(state, workspace, operation),
     resolveTarget: async (workspace, target, mode) => {
       const record = await state.readWorkspace(workspace.name);
       if (record.workspaceId !== workspace.id) throw new UserError("workspace identity changed");
@@ -170,12 +174,15 @@ export async function initializeControllerRoutes(
   const runtime: ControllerRuntimeContext = {
     stateRoot: lifecycle.stateRoot,
     runner,
-    listWorkspaces: async () => (await listWorkspaceRecords(runner, lifecycle)).map((workspace) => ({
-      id: workspace.workspaceId,
-      name: workspace.name,
-      projectId: workspace.projectId,
-      projectName: workspace.projectName
-    })),
+    listWorkspaces: async () => (await listWorkspaceRecords(runner, lifecycle))
+      .filter((workspace) => workspace.phase !== "discarding")
+      .map((workspace) => ({
+        id: workspace.workspaceId,
+        name: workspace.name,
+        projectId: workspace.projectId,
+        projectName: workspace.projectName
+      })),
+    runWorkspaceRequest: (workspace, operation) => runWorkspaceRequest(state, workspace, operation),
     resolveTarget: async (workspace, target, mode) => {
       const record = await state.readWorkspace(workspace.name);
       if (record.workspaceId !== workspace.id) throw new UserError("workspace identity changed");
@@ -223,6 +230,20 @@ async function handleRequest(
   }
   workspace ??= await authenticate(options, request);
   if (!workspace) return sendJson(response, 401, { error: "invalid workspace grant" });
+  return options.runWorkspaceRequest(
+    workspace,
+    () => handleAuthenticatedRequest(options, pendingRestarts, request, response, url, workspace)
+  );
+}
+
+async function handleAuthenticatedRequest(
+  options: DimControllerOptions,
+  pendingRestarts: Set<string>,
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+  workspace: ControllerWorkspace
+): Promise<void> {
   if (request.method === "GET" && url.pathname === "/api") {
     return sendJson(response, 200, {
       apiVersion: 1,
@@ -310,6 +331,23 @@ async function handleRequest(
     return;
   }
   sendJson(response, 404, { error: "not found" });
+}
+
+async function runWorkspaceRequest<T>(
+  state: LifecycleState,
+  workspace: ControllerWorkspace,
+  operation: () => Promise<T>
+): Promise<T> {
+  const release = await state.acquireWorkspaceSetupLock(workspace.name);
+  try {
+    const record = await state.readWorkspace(workspace.name);
+    if (record.workspaceId !== workspace.id || record.phase === "discarding") {
+      throw new UserError("workspace authority is no longer active");
+    }
+    return await operation();
+  } finally {
+    await release();
+  }
 }
 
 function matchRoute(path: string, requestPath: string): Record<string, string> | undefined {

@@ -24,6 +24,7 @@ it("accepts an asynchronous restart only for the authenticated workspace", async
     const restartWorkspace = vi.fn(async () => undefined);
     const server = createDimController({
       stateRoot: "/state",
+      runWorkspaceRequest: async (_workspace, operation) => operation(),
       authenticate: async (token) => token === "grant"
         ? { id: "project-id:work", name: "work", projectId: "project-id", projectName: "project" }
         : undefined,

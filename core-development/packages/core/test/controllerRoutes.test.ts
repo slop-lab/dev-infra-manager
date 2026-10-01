@@ -7,11 +7,14 @@ import {
   configuredDimAgentController,
   configuredDimController,
   controllerRoutesForAudience,
-  createDimController
+  createDimController,
+  initializeControllerRoutes
 } from "../../../../core/packages/core/src/controller.js";
+import { UserError } from "../../../../core/packages/core/src/errors.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { LifecycleOptions, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import { DIM_PLUGIN_API_VERSION, registerPlugin } from "../../../../core/packages/core/src/plugin.js";
+import { workspaceRecord } from "./hostLifecycleFixture.js";
 
 describe("DIM controller", () => {
   const servers: ReturnType<typeof createDimController>[] = [];
@@ -29,6 +32,7 @@ it("authenticates, discovers plugin routes, dispatches parameters, and resolves 
     }));
     const server = createDimController({
       stateRoot: "/state",
+      runWorkspaceRequest: async (_workspace, operation) => operation(),
       authenticate: async (token) => token === "grant"
         ? { id: "id", name: "work", projectId: "pid", projectName: "project" }
         : undefined,
@@ -95,6 +99,7 @@ it("resolves registered host inputs with authenticated workspace context", async
     const resolve = vi.fn(async () => "Developer");
     const server = createDimController({
       stateRoot: "/state",
+      runWorkspaceRequest: async (_workspace, operation) => operation(),
       authenticate: async (token) => token === "grant"
         ? { id: "id", name: "work", projectId: "pid", projectName: "project" }
         : undefined,
@@ -121,5 +126,83 @@ it("resolves registered host inputs with authenticated workspace context", async
       { key: "name" },
       { projectId: "pid", projectName: "project", workspaceName: "work" }
     );
+  });
+
+  it("revalidates an authenticated workspace before dispatch", async () => {
+    // Given
+    let releaseAuthentication = () => {};
+    const authenticationReleased = new Promise<void>((resolve) => { releaseAuthentication = resolve; });
+    let authenticationObserved = () => {};
+    const authenticationStarted = new Promise<void>((resolve) => { authenticationObserved = resolve; });
+    let active = true;
+    const handle = vi.fn(async () => ({ status: 201 }));
+    const server = createDimController({
+      stateRoot: "/state",
+      authenticate: async () => {
+        authenticationObserved();
+        await authenticationReleased;
+        return { id: "instance", name: "work", projectId: "pid", projectName: "project" };
+      },
+      runWorkspaceRequest: async (_workspace, operation) => {
+        if (!active) throw new UserError("workspace authority is no longer active");
+        return operation();
+      },
+      resolveTarget: vi.fn(),
+      routes: [{ method: "POST", path: "/mutation", summary: "Mutate", audiences: ["workspace"], handle }]
+    });
+    servers.push(server);
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing address");
+
+    // When
+    const responsePending = fetch(`http://127.0.0.1:${address.port}/api/mutation`, {
+      method: "POST",
+      headers: { authorization: "Bearer grant" }
+    });
+    await authenticationStarted;
+    active = false;
+    releaseAuthentication();
+    const response = await responsePending;
+
+    // Then
+    expect(response.status).toBe(400);
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it("excludes discarding workspaces from controller route restoration", async () => {
+    // Given
+    const root = await mkdtemp(join(tmpdir(), "dim-controller-restore-"));
+    const state = new LifecycleState(root);
+    await state.claimWorkspace(workspaceRecord("discarding", "discarding"));
+    const restored: string[] = [];
+    const plugin = await registerPlugin({
+      name: "test",
+      apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) {
+        host.registerControllerRoute({
+          method: "GET",
+          path: "/restore",
+          summary: "Restore",
+          audiences: ["workspace"],
+          initialize: async (runtime) => {
+            restored.push(...(await runtime.listWorkspaces()).map(({ name }) => name));
+          },
+          handle: async () => ({ status: 204 })
+        });
+      }
+    });
+
+    // When
+    await initializeControllerRoutes({ stateRoot: root, defaultWorkspaceBackend: "sysbox" } as LifecycleOptions, plugin, {
+      run: async (command, args) => ({ command, args, stdout: "", stderr: "", exitCode: 0 }),
+      runStreaming: async () => 0
+    });
+
+    // Then
+    expect(restored).toEqual([]);
+    await plugin.dispose();
+    await rm(root, { recursive: true, force: true });
   });
 });
