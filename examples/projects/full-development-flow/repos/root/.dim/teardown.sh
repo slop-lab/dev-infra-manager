@@ -16,7 +16,7 @@ discard_agent_tmp() {
     --file .dim/docker-compose.yml exec --no-TTY --user root \
     agent-dind dim-agent-dind discard-agent-tmp
 }
-test "$keep_volumes" = 1 || discard_agent_tmp
+discard_agent_tmp
 
 set -- down
 test "$keep_volumes" = 1 || set -- "$@" --volumes

@@ -19,8 +19,10 @@ describe("full-development-flow agent temporary volume policy", () => {
 
     expect(launcher).toContain('agent_tmp_volume="dim-agent-tmp"');
     expect(launcher).toContain("--label dev.dim.role=agent-tmp");
-    expect(launcher).toContain("--env TMPDIR=/tmp/opencode");
-    expect(launcher).toContain('--mount type=volume,src="$agent_tmp_volume",dst=/tmp/opencode');
+    expect(launcher).toContain("--env TMPDIR=/mnt/opencode-tmp");
+    expect(launcher).toContain('--mount type=volume,src="$agent_tmp_volume",dst=/mnt/opencode-tmp');
+    expect(launcher).not.toContain("TMPDIR=/tmp");
+    expect(launcher).not.toContain("dst=/tmp");
     expect(dockerfile).toContain("prepare-agent-tmp.sh /usr/local/bin/prepare-agent-tmp");
     expect(entrypoint).toContain("  TMPDIR");
     expect(entrypoint).toContain('runuser -u dim-agent -- touch "$tmp_probe"');
@@ -36,7 +38,7 @@ describe("full-development-flow agent temporary volume policy", () => {
     expect(helper).not.toMatch(/chown\s+-R|chmod\s+-R|rm\s+-rf/);
   });
 
-  it("removes only the owned TMPDIR volume on ordinary discard", async () => {
+  it("removes only the owned TMPDIR volume in both discard modes", async () => {
     const [launcher, teardown] = await Promise.all([
       readFile(resolve(runtimeRoot, "agent-dind/agent.sh"), "utf8"),
       readFile(resolve(runtimeRoot, "teardown.sh"), "utf8"),
@@ -46,6 +48,7 @@ describe("full-development-flow agent temporary volume policy", () => {
     expect(launcher).toContain("dev.dim.role=agent-tmp");
     expect(launcher).toContain('docker volume rm "$agent_tmp_volume"');
     expect(teardown).toContain("dim-agent-dind discard-agent-tmp");
-    expect(teardown).toContain('test "$keep_volumes" = 1 ||');
+    expect(teardown).toMatch(/\ndiscard_agent_tmp\n/);
+    expect(teardown).not.toContain('test "$keep_volumes" = 1 || discard_agent_tmp');
   });
 });

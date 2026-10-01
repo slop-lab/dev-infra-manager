@@ -40,8 +40,8 @@ case "${1:?private agent action is required}" in
     docker run --rm --network none --read-only --user 0:0 \
       --env "DIM_AGENT_UID=$DIM_WORKSPACE_UID" \
       --env "DIM_AGENT_GID=$DIM_WORKSPACE_GID" \
-      --env DIM_AGENT_TMPDIR=/tmp/opencode \
-      --mount type=volume,src="$agent_tmp_volume",dst=/tmp/opencode \
+      --env DIM_AGENT_TMPDIR=/mnt/opencode-tmp \
+      --mount type=volume,src="$agent_tmp_volume",dst=/mnt/opencode-tmp \
       "$agent_image" /usr/local/bin/prepare-agent-tmp
     set -- run --detach --name "$agent_name" --restart unless-stopped \
       --publish "$DIM_DEVELOPMENT_GATEWAY_PORT:$DIM_DEVELOPMENT_GATEWAY_PORT" \
@@ -49,7 +49,7 @@ case "${1:?private agent action is required}" in
       --add-host "secret:$outer_agent_ip" \
       --env DOCKER_HOST=unix:///run/dim-agent-dind/docker.sock \
       --env HOME=/home/dim-agent \
-      --env TMPDIR=/tmp/opencode \
+      --env TMPDIR=/mnt/opencode-tmp \
       --env PATH=/home/dim-agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
       --env DIM_CONTROLLER_SOCKET=/run/dim/controller-proxy/agent.sock \
       --env DIM_DEVELOPMENT_URL_SOCKET=/run/dim/development-url/controller.sock \
@@ -73,7 +73,7 @@ case "${1:?private agent action is required}" in
       --env 'GIT_CONFIG_VALUE_2=/workspace/*' \
       --mount type=bind,src=/workspace,dst=/workspace \
       --mount type=bind,src=/mnt/agent-home,dst=/home/dim-agent \
-      --mount type=volume,src="$agent_tmp_volume",dst=/tmp/opencode \
+      --mount type=volume,src="$agent_tmp_volume",dst=/mnt/opencode-tmp \
       --mount type=bind,src=/mnt/workspace-shared-dind,dst=/mnt/workspace-shared-dind \
       --mount "type=bind,src=$docker_socket,dst=/run/dim-agent-dind/docker.sock" \
       --workdir /workspace
