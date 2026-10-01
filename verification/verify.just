@@ -90,6 +90,10 @@ agent:
 agent-docker:
     cd .. && bash verification/scripts/agent-docker-smoke.bash
 
+# Prove the dedicated agent TMPDIR volume lifecycle on the host runc Docker backend.
+agent-temp-volume-docker:
+    cd .. && bash verification/scripts/agent-temporary-volume-smoke.bash
+
 # Prove cold, warm, and unavailable pull-through-cache routing with a disposable nested Docker daemon.
 cache-routing-docker:
     cd .. && bash verification/scripts/registry-cache-routing-smoke.bash --docker-only
