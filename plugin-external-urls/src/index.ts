@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import https from "node:https";
 import net from "node:net";
@@ -39,6 +39,15 @@ import {
   workspaceSubdomainPrefix,
   type ExternalUrlRoutePolicyConfig
 } from "./routePolicy.js";
+import {
+  deduplicateRoutes,
+  ExternalUrlStore,
+  hostUrlList,
+  publicEntries,
+  publicEntry,
+  type ExternalRoute,
+  type StoredUrl
+} from "./routeStore.js";
 import { TcpIngressListener } from "./tcpIngress.js";
 import {
   EXTERNAL_URL_INGRESS_DRIVER_EXTENSION,
@@ -77,27 +86,6 @@ interface NormalizedRequest {
   subdomain?: string;
   target: WorkspaceTarget;
   path?: string;
-}
-
-interface ExternalRoute {
-  id: string;
-  ingress: string;
-  authority: string;
-  ingressId?: string;
-  url?: string;
-}
-
-interface StoredUrl {
-  id: string;
-  workspace: string;
-  workspaceId: string;
-  ingress: string;
-  subdomain?: string;
-  target: WorkspaceTarget;
-  path?: string;
-  route: ExternalRoute;
-  url: string;
-  createdAt: string;
 }
 
 interface IngressListener {
@@ -148,7 +136,7 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
       host.registerAdminRoute({
         method: "POST",
         path: "/external-url/:action",
-        summary: "Manage External URL DNS providers and ingresses",
+        summary: "Manage External URL DNS providers, ingresses, and host route inventory",
         async handle(context) {
           return {
             body: await mutations.run(() => externalUrlAdmin(
@@ -351,6 +339,7 @@ async function externalUrlAdmin(
     }
     return result as string[];
   };
+  if (action === "url-list") return hostUrlList(context.lifecycle.stateRoot);
   const config = await readExternalUrlConfig();
   switch (action) {
     case "dns-provider-add": {
@@ -880,71 +869,6 @@ async function removeWorkspaceRoutes(
   }
 }
 
-class ExternalUrlStore {
-  constructor(readonly stateRoot: string) {}
-
-  async list(workspaceId: string): Promise<StoredUrl[]> {
-    const directory = this.directory(workspaceId);
-    try {
-      const names = await readdir(directory);
-      return await Promise.all(names.filter((name) => name.endsWith(".json")).map(async (name) => {
-        const value = JSON.parse(await readFile(path.join(directory, name), "utf8")) as unknown;
-        return storedUrl(value);
-      }));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw error;
-    }
-  }
-
-  async put(entry: StoredUrl): Promise<void> {
-    const target = this.entryPath(entry.workspaceId, entry.id);
-    await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
-    const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
-    await writeFile(temporary, `${JSON.stringify(entry, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-    await rename(temporary, target);
-  }
-
-  async remove(entry: StoredUrl): Promise<void> {
-    await rm(this.entryPath(entry.workspaceId, entry.id), { force: true });
-  }
-
-  async removeIngress(ingress: string): Promise<void> {
-    const root = path.join(this.stateRoot, "plugins", "external-urls");
-    let workspaces: string[];
-    try {
-      workspaces = await readdir(root);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-      throw error;
-    }
-    for (const workspace of workspaces) {
-      const directory = path.join(root, workspace);
-      let names: string[];
-      try {
-        names = await readdir(directory);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOTDIR") continue;
-        throw error;
-      }
-      for (const name of names.filter((candidate) => candidate.endsWith(".json"))) {
-        const target = path.join(directory, name);
-        const entry = storedUrl(JSON.parse(await readFile(target, "utf8")) as unknown);
-        if (entry.ingress === ingress) await rm(target, { force: true });
-      }
-    }
-  }
-
-  private directory(workspaceId: string): string {
-    return path.join(this.stateRoot, "plugins", "external-urls", Buffer.from(workspaceId).toString("base64url"));
-  }
-
-  private entryPath(workspaceId: string, id: string): string {
-    if (!/^[a-f0-9-]{36}$/.test(id)) throw new UserError("invalid external URL id");
-    return path.join(this.directory(workspaceId), `${id}.json`);
-  }
-}
-
 class WorkspaceRouteRegistry {
   readonly #routes = new Map<string, {
     upstream: ResolvedWorkspaceTarget;
@@ -1253,18 +1177,6 @@ function required<T>(values: ReadonlyMap<string, T>, name: string): T {
   return value;
 }
 
-function publicEntries(entries: StoredUrl[]) {
-  return entries.map(publicEntry);
-}
-
-function publicEntry({ route: _route, workspaceId: _workspaceId, ...entry }: StoredUrl) {
-  return entry;
-}
-
-function deduplicateRoutes(entries: StoredUrl[]): StoredUrl[] {
-  return [...new Map(entries.map((entry) => [entry.route.id, entry])).values()];
-}
-
 function storedRequest(entry: StoredUrl): NormalizedRequest {
   return {
     ingress: entry.ingress,
@@ -1272,19 +1184,6 @@ function storedRequest(entry: StoredUrl): NormalizedRequest {
     target: entry.target,
     ...(entry.path === undefined ? {} : { path: entry.path })
   };
-}
-
-function storedUrl(value: unknown): StoredUrl {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("invalid stored external URL");
-  }
-  const candidate = value as StoredUrl;
-  if (typeof candidate.ingress !== "string"
-    || (candidate.subdomain !== undefined && typeof candidate.subdomain !== "string")
-    || typeof candidate.route?.ingress !== "string") {
-    throw new Error(`invalid stored external URL '${candidate.id}'`);
-  }
-  return candidate;
 }
 
 function requestsEqual(left: NormalizedRequest, right: NormalizedRequest): boolean {
