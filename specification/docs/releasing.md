@@ -192,15 +192,15 @@ future npm major may reject.
 
 Tracked publishable-package manifests remain `private: true`; builds generate
 minimal publish manifests without development scripts or dependencies. A
-normal release build preserves the exact tracked version. Local source
-preparation requires `DIM_SOURCE_CORE_COMMIT`,
-`DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT`, and
-`DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT`, each set to an exact 40-character
-production commit. Bundle builders set `DIM_LOCAL_BUILD_VERSION` to
-`VERSION-local-AGGREGATE_SHA[-dirty]`, where `AGGREGATE_SHA` is the SHA-256 of
-the ordered repository-name and full-commit records. Exact internal
-dependencies use that same version, preventing a package manager from treating
-different local source sets as an already-installed release.
+normal release build preserves the exact tracked version. Reviewed local
+source preparation accepts `DIM_SOURCE_ROOT_COMMIT` as one exact 40-character
+monorepo commit and defaults it to the current root commit. Bundle builders set
+`DIM_LOCAL_BUILD_VERSION` to `VERSION-local-AGGREGATE_SHA`, where
+`AGGREGATE_SHA` is the SHA-256 of the root commit record and reviewed aggregate
+lock digest. The separate assembled-working-tree helper appends `-dirty` when
+tracked local files differ. Exact internal dependencies use that same version,
+preventing a package manager from treating different local source sets as an
+already-installed release.
 
 ```bash
 pnpm --recursive run build

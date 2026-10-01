@@ -25,12 +25,13 @@ just install-local
 ```
 
 The local package tarballs and image use exactly one aggregate local version.
-Its identity covers the exact production source commits and the SHA-256 digest
-of the reviewed aggregate dependency lock owned by the root repository. The
-synthetic production workspace copies that lock and installs dependencies with
-the frozen lock. A missing or stale lock stops preparation before package or
-image publication. The root repository's `just prepare-local` workflow
-prepares the same matched package and image set before `just install-local`.
+Its identity covers one exact root monorepo commit and the SHA-256 digest of
+the reviewed aggregate dependency lock from that commit. The temporary
+production workspace is archived from that commit and installs dependencies
+with the frozen lock. A missing or stale lock stops preparation before package
+or image publication without changing tracked source. The root repository's
+`just prepare-local` workflow prepares the same matched package and image set
+before `just install-local`.
 
 Check whether the configured image exists locally without building it:
 
