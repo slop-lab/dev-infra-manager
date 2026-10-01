@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Let `dim external-url list` use the host-admin controller to show a bounded
+  all-workspace route inventory with Project and workspace names when invoked
+  on the host. `--workspace` and workspace/agent environments remain scoped to
+  one workspace, and the host inventory omits internal route identity and
+  credential-bearing configuration.
+
 - Let trusted hosts share ordinary Sysbox CI capacity across explicitly
   enrolled DIM Projects on one external Gitea control plane. Each host
   verifies the Project and organization identity before one-job registration,

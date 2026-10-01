@@ -199,8 +199,12 @@ dim external-url request --ingress local-http --container dev --port 3000
 dim external-url list
 ```
 
-These commands normally run with the current workspace's controller socket
-and grant. `--workspace work-1` is available for host-side administration.
+Discovery, requests, revocation, and listing inside a workspace use its
+controller socket and grant. On the host, `dim external-url list` uses the
+host-admin socket to show every current workspace's routes with Project and
+workspace names; `--workspace work-1` retains a single-workspace listing.
+The host-wide inventory is capped at 1,000 routes and is unavailable through a
+workspace or agent grant.
 
 Cloudflare DNS and Caddy HTTPS setup are documented in the
 [External URLs guide](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/external-urls.md).
