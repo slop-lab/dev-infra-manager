@@ -1,0 +1,358 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Executes examples/projects/multi-repository/README.md, command for command,
+# against a real Docker daemon and the environment's managed Gitea. Update
+# that doc (and the repository skeletons under
+# examples/projects/multi-repository/repos/)
+# alongside this script if either changes; it
+# change; it exists specifically so the example cannot silently drift from
+# what actually works.
+#
+# DIM isn't installed from the published package here (today's changes
+# aren't released yet): it's built locally, packed, and installed through
+# the installer facade (`dim install-cli`) against a disposable local npm
+# registry, matching how a real user would install it once released.
+#
+# Requires: Docker, a reachable `dim-gitea` container (this repository's own
+# dev environment provides one; see docs/repo-workspaces.md), and network
+# access to install the local registry package itself.
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd -- "$script_dir/../.." && pwd)"
+workspace_setup_assertions="$script_dir/lib/workspace-user-setup-assertions.cjs"
+# shellcheck source=lib/local-npm-registry.bash
+source "$script_dir/lib/local-npm-registry.bash"
+# shellcheck source=lib/example-dim-install.bash
+source "$script_dir/lib/example-dim-install.bash"
+# shellcheck source=lib/test-registry-mirror.bash
+source "$script_dir/lib/test-registry-mirror.bash"
+# shellcheck source=lib/private-dind-assertions.bash
+source "$script_dir/lib/private-dind-assertions.bash"
+
+suffix="$PPID-$$"
+project_name="example-$suffix"
+workspace_name="example-dev-$suffix"
+work_dir="$(mktemp -d /tmp/dim-example-project.XXXXXX)"
+state_root="$work_dir/state"
+source_root="$work_dir/source"
+install_prefix="$work_dir/install"
+dim_bin="$install_prefix/bin/dim"
+
+export DIM_STATE_ROOT="$state_root"
+export DIM_CONFIG_PATH="$work_dir/config/dim.json"
+# Isolate where install-cli puts the versioned DIM CLI too, not just state/
+# config: package.json's version doesn't change between local test runs, and
+# npm treats an already-installed version as up to date even when a fresh
+# local registry republished different content under that same version.
+export DIM_DATA_HOME="$work_dir/data"
+export GIT_CONFIG_GLOBAL="$work_dir/host.gitconfig"
+git config --file "$GIT_CONFIG_GLOBAL" user.name "Example Host Developer"
+git config --file "$GIT_CONFIG_GLOBAL" user.email "host-developer@dim.invalid"
+workspace_backend="${DIM_EXAMPLE_WORKSPACE_BACKEND:-sysbox}"
+bash "$script_dir/configure-user-backend.bash" "$workspace_backend"
+
+dim() { "$dim_bin" "$@"; }
+
+workspace_compose() {
+  dim workspace exec "$workspace_name" -- sh -eu -c '
+    cd "$DIM_PROJECT_ROOT"
+    exec docker compose --project-name dim-project \
+      --file "$DIM_PROJECT_ROOT/.dim/docker-compose.yml" "$@"
+  ' sh "$@"
+}
+
+cleanup() {
+  local status=$?
+  local scratch_removable=true
+  trap - EXIT
+  set +e
+  if [[ -f "$state_root/workspaces/$workspace_name.json" ]]; then
+    dim workspace discard "$workspace_name" --yes >/dev/null 2>&1 || status=1
+  fi
+  if [[ -f "$state_root/projects/$project_name.json" ]] &&
+    ! dim project purge "$project_name" --yes >/dev/null 2>&1; then
+    echo "DIM Project cleanup failed; preserving $work_dir" >&2
+    scratch_removable=false
+    status=1
+  fi
+  dim_stop_local_npm_registry
+  if [[ "$scratch_removable" == true ]]; then
+    rm -rf "$work_dir"
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+
+cd "$repo_root"
+local_version="$(bash "$script_dir/local-build-version.bash")"
+workspace_image="dev-infra-project-workspace:$local_version"
+echo "[multi-repository] build and pack local packages"
+echo "[multi-repository] 1. install DIM through the installer facade"
+dim_install_example_cli "$repo_root" "$work_dir" "$install_prefix"
+test "$DIM_EXAMPLE_DIM_BIN" = "$dim_bin"
+test -x "$dim_bin"
+docker build \
+  --quiet \
+  --build-arg "DIM_UID=$(id -u)" \
+  --build-arg "DIM_GID=$(id -g)" \
+  --tag "$workspace_image" \
+  --file "$repo_root/core/images/project-workspace/Dockerfile" \
+  "$repo_root" >/dev/null
+dim doctor
+
+echo "[multi-repository] 2. create the example repositories"
+bash "$repo_root/examples/projects/multi-repository/create-repositories.bash" \
+  "$source_root" >/dev/null
+
+root_repo="$source_root/root"
+dim_apply_test_registry_mirror "$root_repo"
+if [[ -n "${DIM_DOCKER_REGISTRY_MIRROR:-}" ]]; then
+  git -C "$root_repo" add .dim/setup.sh .dim/ci-registry-mirror.override.yml
+  git -C "$root_repo" commit -m "configure test registry mirror" >/dev/null
+fi
+
+echo "[multi-repository] 3. register the Project and its repositories"
+DIM_BIN="$dim_bin" bash \
+  "$repo_root/examples/projects/multi-repository/register-project.bash" \
+  "$project_name" "$source_root" >/dev/null
+
+# The whole point of --protect at create time: confirm the root branch is
+# actually protected, not just reported as such (repo protect "succeeds"
+# even with nothing configured, per projectRegistry.ts). Re-pushing the
+# identical ref would be a silent no-op either way, so make a real commit.
+printf '\n' >> "$root_repo/.dim/docker-compose.yml"
+git -C "$root_repo" commit -am "attempted direct push" >/dev/null
+if dim x git -C "$root_repo" push "$(dim repo url "$project_name" root)" main >/dev/null 2>&1; then
+  echo "protected branch unexpectedly accepted a direct push" >&2
+  exit 1
+fi
+
+# Registration must be sufficient: the seed checkouts don't need to survive
+# for workspace creation to clone the root repository on its own.
+rm -rf "$source_root"
+
+echo "[example-project] 4. create the workspace (a real container)"
+if ! dim workspace create "$project_name" "$workspace_name" >/dev/null; then
+  workspace_compose ps >&2 || true
+  workspace_compose logs agent-dind >&2 || true
+  exit 1
+fi
+
+echo "[example-project] 5. confirm it's real"
+# The workspace's actual container name is an implementation detail of
+# `dim`, not something to guess: read it back from `dim workspace show --json` rather
+# than assuming a `dim-ws-<name>`-shaped prefix.
+workspace_json="$(dim workspace show "$workspace_name" --json)"
+test "$(jq -r .phase <<<"$workspace_json")" = "ready"
+test "$(jq -r .runtimeBackend <<<"$workspace_json")" = "$workspace_backend"
+test "$(jq -r '.profiles | length' <<<"$workspace_json")" = "0"
+container_name="$(jq -r .containerName <<<"$workspace_json")"
+docker ps --filter "name=$container_name" --format '{{.Names}}' | grep -qx "$container_name"
+dim workspace exec "$workspace_name" -- hostname >/dev/null
+original_cpus="$(jq -r .cpuCount <<<"$workspace_json")"
+original_memory="$(jq -r .memory <<<"$workspace_json")"
+original_pids="$(jq -r .pidsLimit <<<"$workspace_json")"
+updated_resources="$(dim workspace resources "$workspace_name" \
+  --cpus 1.25 --memory 2g --pids 1024 --json)"
+test "$(jq -r .cpuCount <<<"$updated_resources")" = "1.25"
+test "$(jq -r .memory <<<"$updated_resources")" = "2g"
+test "$(jq -r .pidsLimit <<<"$updated_resources")" = "1024"
+test "$(docker inspect "$container_name" --format \
+  '{{.HostConfig.NanoCpus}}|{{.HostConfig.Memory}}|{{.HostConfig.MemorySwap}}|{{.HostConfig.PidsLimit}}')" = \
+  "1250000000|2147483648|2147483648|1024"
+dim workspace resources "$workspace_name" \
+  --cpus "$original_cpus" --memory "$original_memory" --pids "$original_pids" >/dev/null
+
+echo "[example-project] 6. run the project task"
+set +e
+bash_output="$(dim workspace run "$workspace_name" bash -- -lc 'printf project-bash-ok')"
+bash_status=$?
+set -e
+if [[ "$bash_status" -ne 0 || "$bash_output" != "project-bash-ok" ]]; then
+  echo "bash task failed ($bash_status), output: '$bash_output'" >&2
+  exit 1
+fi
+test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" -ne "0"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"
+dim workspace run "$workspace_name" bash -- -lc 'getent hosts dim-gitea >/dev/null'
+dim workspace run "$workspace_name" bash -- -lc 'git ls-remote origin HEAD >/dev/null'
+dim workspace run "$workspace_name" bash -- -lc \
+  'umask 077; printf "multi-home\n" >"$HOME/archive-smoke"; chmod 0640 "$HOME/archive-smoke"'
+home_backup="$work_dir/agent-home.tar.gz"
+dim workspace run "$workspace_name" backup >"$home_backup"
+gzip -t "$home_backup"
+test "$(workspace_compose exec --no-TTY agent-dind docker inspect \
+  --format '{{.State.Running}}' dim-agent)" = true
+dim workspace run "$workspace_name" bash -- -lc 'rm "$HOME/archive-smoke"'
+dim workspace run "$workspace_name" restore <"$home_backup"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/archive-smoke"')" = multi-home
+test "$(dim workspace run "$workspace_name" bash -- -lc 'stat -c %a "$HOME/archive-smoke"')" = 640
+test "$(workspace_compose exec --no-TTY agent-dind docker inspect \
+  --format '{{.State.Running}}' dim-agent)" = true
+
+echo "[example-project] 7. explicitly install reviewed workspace-user tooling"
+if dim workspace run "$workspace_name" bash -- -lc 'command -v opencode' >/dev/null 2>&1; then
+  echo "workspace lifecycle unexpectedly installed OpenCode" >&2
+  exit 1
+fi
+assert_unknown_task() {
+  local task="$1"
+  local error_file="$work_dir/$task-task.stderr"
+  if dim workspace run "$workspace_name" "$task" >"$work_dir/$task-task.stdout" 2>"$error_file"; then
+    echo "removed '$task' task unexpectedly succeeded" >&2
+    exit 1
+  fi
+  test "$(tr -d '\r' <"$error_file")" = "unknown DIM project task: $task"
+}
+assert_unknown_task codex
+assert_unknown_task claude
+(
+  cd "$repo_root/scripts"
+  sha256sum --check workspace-user-setup.bash.sha256
+)
+dim workspace run "$workspace_name" tool-setup <"$repo_root/scripts/workspace-user-setup.bash"
+
+workspace_user_setup_state() {
+  dim workspace run "$workspace_name" agent -- --version | grep -qx 1.18.31
+  dim workspace run "$workspace_name" bash -- -lc \
+    'node - "$HOME/.local" "$HOME/.config/opencode/opencode.json" "$HOME/.omo/omo.jsonc" fresh' \
+    <"$workspace_setup_assertions"
+  dim workspace run "$workspace_name" bash -- -lc \
+    'sha256sum "$HOME/.config/opencode/opencode.json" "$HOME/.omo/omo.jsonc"'
+}
+
+setup_state_before="$(workspace_user_setup_state)"
+dim workspace run "$workspace_name" tool-setup <"$repo_root/scripts/workspace-user-setup.bash"
+setup_state_after="$(workspace_user_setup_state)"
+test "$setup_state_after" = "$setup_state_before"
+
+dev_git_identity="$(dim workspace run "$workspace_name" bash -- \
+  -lc 'printf "%s <%s>|%s <%s>" "$GIT_AUTHOR_NAME" "$GIT_AUTHOR_EMAIL" "$GIT_COMMITTER_NAME" "$GIT_COMMITTER_EMAIL"')"
+test "$dev_git_identity" = \
+  "Example Host Developer <host-developer@dim.invalid>|Example Host Developer <host-developer@dim.invalid>"
+agent_commit_identity="$(dim workspace run "$workspace_name" bash -- -lc '
+  printf "%s\n" "agent commit" > agent-commit.txt
+  git add agent-commit.txt
+  git commit -m "verify host identity" >/dev/null
+  git log -1 --format="%an <%ae>|%cn <%ce>"
+')"
+test "$agent_commit_identity" = "$dev_git_identity"
+
+outer_services="$(workspace_compose ps --services --filter status=running)"
+test "$outer_services" = agent-dind
+dind_container="$(workspace_compose ps --quiet agent-dind)"
+test -n "$dind_container"
+(
+  docker() { dim workspace exec "$workspace_name" -- docker "$@"; }
+  dim_assert_private_dind_unix_only "$dind_container" /run/dim-agent-dind/docker.sock
+)
+agent_container="$(dim workspace exec "$workspace_name" -- \
+  docker exec "$dind_container" docker inspect --format '{{.Id}}' dim-agent)"
+test -n "$agent_container"
+test "$(dim workspace exec "$workspace_name" -- docker exec "$dind_container" docker inspect dim-agent \
+  --format '{{range .Mounts}}{{if eq .Destination "/workspace"}}{{.Type}}|{{.RW}}|{{.Source}}{{end}}{{end}}')" = \
+  "bind|true|/workspace"
+test "$(dim workspace exec "$workspace_name" -- docker exec "$dind_container" docker inspect dim-agent \
+  --format '{{range .Mounts}}{{if eq .Destination "/home/dim-agent"}}{{.Type}}|{{.RW}}{{end}}{{end}}')" = \
+  "bind|true"
+dim workspace exec "$workspace_name" -- docker exec "$dind_container" docker inspect dim-agent \
+  --format '{{.HostConfig.Privileged}}' | grep -qx false
+! dim workspace exec "$workspace_name" -- docker exec "$dind_container" docker inspect dim-agent \
+  --format '{{json .Mounts}}' | grep -q /var/run/docker.sock
+if [[ -n "${DIM_DOCKER_REGISTRY_MIRROR:-}" ]]; then
+  dim workspace exec "$workspace_name" -- \
+    docker exec "$dind_container" docker info --format '{{json .RegistryConfig.Mirrors}}' |
+    grep -Fq "$DIM_DOCKER_REGISTRY_MIRROR"
+fi
+dim workspace exec "$workspace_name" -- docker inspect "$dind_container" \
+  --format '{{.HostConfig.Privileged}}' | grep -qx true
+dim workspace exec "$workspace_name" -- docker exec "$dind_container" \
+  sh -eu -c 'test -u /usr/bin/newuidmap; test -u /usr/bin/newgidmap'
+dim workspace run "$workspace_name" bash -- -lc '
+  docker info --format "{{json .SecurityOptions}}" | grep -q rootless
+  rm -rf /mnt/workspace-shared-dind/bind-smoke
+  mkdir -m 0777 /mnt/workspace-shared-dind/bind-smoke
+  printf "from-agent\n" > /mnt/workspace-shared-dind/bind-smoke/input
+  docker run --rm \
+    --mount type=bind,source=/mnt/workspace-shared-dind/bind-smoke,target=/shared \
+    alpine:3.22 sh -c \
+      "test \"\$(cat /shared/input)\" = from-agent; printf \"from-dind\\n\" > /shared/output"
+  test "$(cat /mnt/workspace-shared-dind/bind-smoke/output)" = from-dind
+'
+
+echo "[example-project] 8. create a nested container from inside the dev container"
+nested_output="$(dim workspace run "$workspace_name" bash -- \
+  -lc 'docker run --rm hello-world')"
+echo "$nested_output" | grep -q "Hello from Docker!"
+
+echo "[example-project] survive workspace restart with managed Git access"
+if ! dim workspace restart "$workspace_name" >/dev/null; then
+  docker exec "$container_name" sh -c '
+    cd "$DIM_PROJECT_ROOT"
+    docker compose --project-name dim-project --file "$DIM_PROJECT_ROOT/.dim/docker-compose.yml" ps --all
+    docker compose --project-name dim-project --file "$DIM_PROJECT_ROOT/.dim/docker-compose.yml" logs agent-dind
+  ' >&2 || true
+  exit 1
+fi
+test "$(dim workspace run "$workspace_name" bash -- -lc 'id -u')" -ne "0"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'sudo -n id -u')" = "0"
+dim workspace run "$workspace_name" bash -- -lc 'getent hosts dim-gitea >/dev/null'
+dim workspace run "$workspace_name" bash -- -lc 'git ls-remote origin HEAD >/dev/null'
+
+echo "[example-project] 9. reach another managed repository"
+web_content="$(dim workspace exec "$workspace_name" -- sh -c \
+  'git clone "$DIM_GIT_BASE_URL/web.git" /tmp/web >/dev/null 2>&1 && cat /tmp/web/app.txt')"
+test "$web_content" = "hello from example-web"
+
+echo "[example-project] 10. deploy the secret-bearing service at the trusted root boundary"
+DIM_BIN="$dim_bin" EXAMPLE_SECRET=not-a-real-secret \
+  bash "$repo_root/examples/projects/multi-repository/deploy-secret.bash" \
+  "$workspace_name" >/dev/null
+
+root_health="$(dim workspace exec "$workspace_name" -- sh -eu -c \
+  'exec sh "$DIM_PROJECT_ROOT/ops/secret-service.sh" secret-health')"
+echo "$root_health" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
+
+if ! dev_health="$(dim workspace run "$workspace_name" bash -- \
+  -lc 'curl --fail --silent --show-error --max-time 5 http://secret:7099/healthz')"; then
+  workspace_compose exec --no-TTY agent-dind sh -c 'hostname -i; netstat -lnt' >&2 || true
+  dim workspace run "$workspace_name" bash -- -lc 'getent hosts secret' >&2 || true
+  exit 1
+fi
+echo "$dev_health" | jq -e '.ok == true and .secretConfigured == true' >/dev/null
+
+# The agent container has a different Docker daemon and cannot see the
+# root-level controller's secret-bearing container or raw secret.
+agent_containers="$(dim workspace run "$workspace_name" bash -- \
+  -lc "docker ps --format '{{.Names}}'")"
+if grep -q secret <<<"$agent_containers"; then
+  echo "agent Docker daemon unexpectedly sees the secret-bearing container" >&2
+  exit 1
+fi
+leaked="$(dim workspace run "$workspace_name" bash -- \
+  -lc 'env | grep -c EXAMPLE_SECRET || true')"
+test "$leaked" = "0"
+dim workspace run "$workspace_name" bash -- -lc \
+  'test ! -e /run/dim-secure-dind; test ! -e /var/run/docker.sock'
+if dim workspace run "$workspace_name" bash -- -lc \
+  'curl --fail --silent --show-error --max-time 2 http://secret:2375/_ping' >/dev/null 2>&1; then
+  echo "agent reached Docker authority through the application bridge" >&2
+  exit 1
+fi
+secure_container="$(workspace_compose ps --quiet secure-dind)"
+test -n "$secure_container"
+(
+  docker() { dim workspace exec "$workspace_name" -- docker "$@"; }
+  dim_assert_private_dind_unix_only "$secure_container" /run/dim-secure-dind/docker.sock
+)
+test "$(dim workspace exec "$workspace_name" -- docker inspect "$secure_container" \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -c '^EXAMPLE_SECRET=' || true)" = 0
+
+dim workspace exec "$workspace_name" -- sh -eu -c \
+  'exec sh "$DIM_PROJECT_ROOT/ops/secret-service.sh" remove-secret' >/dev/null
+
+echo "[example-project] 11. clean up"
+dim workspace discard "$workspace_name" --yes >/dev/null
+
+echo "multi-repository-example-smoke-ok"
