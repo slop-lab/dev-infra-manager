@@ -32,11 +32,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for command in curl docker git hostname jq node openssl timeout; do
+for command in curl docker git jq node openssl timeout; do
   command -v "$command" >/dev/null || { printf '%s is required\n' "$command" >&2; exit 2; }
 done
 docker info >/dev/null
-job_ref="$(hostname)"
+read -r job_ref </etc/hostname
 [[ "$job_ref" =~ ^[0-9a-f]{12,64}$ ]] || { printf 'Docker job hostname is not a container ID\n' >&2; exit 1; }
 job_record="$(docker container inspect "$job_ref" --format '{{.Id}}|{{.State.Running}}')"
 IFS='|' read -r job_id job_running <<<"$job_record"
