@@ -148,17 +148,17 @@ components in the core and CLI source graphs. Its graph check MUST follow
 relative runtime imports and re-exports recursively while excluding type-only
 edges, and its own fixtures MUST prove that a nested cycle is detected.
 
-Local source-preparation tests MUST require the three named inputs
-`DIM_SOURCE_CORE_COMMIT`, `DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT`, and
-`DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT` as exact 40-character commits. They
-MUST prove detached checkout of each full commit and derive the shared local
-package and image version from the SHA-256 digest of the ordered
-repository-name and full-commit records plus the SHA-256 digest of the reviewed
-root-owned aggregate dependency lock. Executable tests MUST prove that the
-synthetic production workspace copies that lock and installs with the frozen
-lock. With source commits held constant, changing only the lock MUST change the
-aggregate local version. Missing and stale locks MUST each fail before package
-build, package publication, or image publication.
+Local source-preparation tests MUST accept only `DIM_SOURCE_ROOT_COMMIT` as an
+optional exact 40-character commit, defaulting to the current reviewed root
+monorepo commit. They MUST prove that preparation archives that one commit
+without cloning historical split repositories and derives the shared local
+package and image version from the SHA-256 digest of the root commit record
+plus the SHA-256 digest of the reviewed aggregate dependency lock. Executable
+tests MUST prove that the archived production workspace installs with the
+frozen lock. With the source commit held constant, changing only the lock MUST
+change the aggregate local version. Missing and stale locks MUST each fail
+before package build, package publication, or image publication without
+modifying tracked source.
 
 `just verify workspace-user-setup` MUST supplement launcher mocks with the real
 pinned OpenCode `1.18.31` runtime in a disposable home without provider

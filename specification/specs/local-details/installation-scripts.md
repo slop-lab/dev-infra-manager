@@ -101,14 +101,16 @@ Behavior:
 
 ## Local Source Preparation
 
-The reviewed root repository MUST own the aggregate dependency lock used for
-local source preparation. The aggregate local identity MUST be the SHA-256
-digest of the ordered production repository-name and exact-commit records plus
-the SHA-256 digest of that reviewed lock. Preparation MUST copy the lock into
-the isolated synthetic production workspace and install its dependencies with
-the frozen lock. A missing lock or one that is stale for the synthetic
+The reviewed root monorepo MUST own the aggregate dependency lock used for
+local source preparation. Preparation accepts only one exact root commit and
+MUST archive the production package trees and lock from that commit into an
+isolated temporary production workspace. The aggregate local identity MUST be
+the SHA-256 digest of the root commit record plus the SHA-256 digest of that
+reviewed lock. Preparation MUST install the archived workspace dependencies
+with the frozen lock. A missing lock or one that is stale for the archived
 workspace MUST fail preparation before package build, package publication, or
-image publication.
+image publication. Preparation MUST NOT clone historical split production
+repositories or modify the reviewed checkout to reconcile a lock mismatch.
 
 The reviewed root `prepare-local` path MUST build every production package
 tarball and the trusted workspace image under exactly one aggregate local
