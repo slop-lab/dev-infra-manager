@@ -891,9 +891,11 @@ through environment and a one-command credential helper. The admin API returns
 the provider-neutral `username` and `password` credential shape; it does not
 expose the workspace writer or provider-administrator credential. The command
 does not put credentials in argv or repository URLs. Existing Git credential
-helpers and SSH agents remain valid alternatives. The maintainer may push
-protected refs through the provider's explicit push allowlist; force-push
-policy is unchanged.
+helpers and SSH agents remain valid alternatives. The maintainer may submit the
+checked protected-ref compare-and-swap operation through the provider's
+explicit push allowlist. It MUST NOT expose a direct review-bypass push path;
+`TRUST-PROMOTION-001` and `TRUST-PROMOTION-CAS-001` remain mandatory.
+Force-push policy is unchanged.
 
 `git setup` installs a URL-scoped, path-aware global Git credential helper for
 ordinary host-side Git commands. The requested URL path remains available for

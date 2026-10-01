@@ -47,6 +47,12 @@ MUST be a positive integer. A `ready` Project MUST have a non-null
 `giteaOrganizationId`. Incompatible pre-stable schemas are rejected without
 mutation unless a release explicitly defines a migration.
 
+Workspace IDs are authority identities under `WORKSPACE-AUTHORITY-001` in
+[Trust and Lifecycle Capability Matrix](04-trust-lifecycle-capability-matrix.md).
+Stop, start, restart, setup, and update retain that ID. Discard ends it, and
+same-name recreation MUST issue a fresh ID; retained data and deterministic
+resource names MUST NOT authorize the new instance.
+
 Host lifecycle state uses schema version `2`. It has exactly the required
 `schemaVersion`, `phase`, `resumeWorkspaces`, `restartCiRunners`,
 `resumeManagedContainers`, and `updatedAt` fields, plus optional `error`.
@@ -191,7 +197,9 @@ failure leaves the repository non-ready and non-writable by ordinary users.
 For a reviewed root branch, protection MUST reject ordinary direct pushes and
 force pushes while requiring an approval by a designated human reviewer for
 every pull request. The host-only maintainer remains the explicit recovery and
-publication authority. Repository owners are not direct-push exceptions;
+publication identity, but protected publication MUST pass
+`TRUST-PROMOTION-001` and `TRUST-PROMOTION-CAS-001`; it is not a review-bypass
+authority. Repository owners are not direct-push exceptions;
 administrators MUST NOT bypass pull-request reviews in routine merges. Neither
 protected-file patterns, which also reject reviewed merges, nor unprotected-file
 patterns, whose path classification is insufficient for rename-safe exceptions,
@@ -1053,6 +1061,13 @@ created inside that engine are Project-owned resources. Their retention at
 `--keep-volume` depends on the teardown contract above and on retaining the
 outer engine volume. Discard does not delete Project metadata or managed Git
 repositories.
+
+Both discard forms MUST revoke workspace and agent grants and External URL
+routes before state removal. `--keep-volume` retains data only. A later
+same-name create MUST use a fresh workspace ID and fresh grants, and every
+token, route ID, approval, slug, or permalink bound to the discarded ID MUST
+remain invalid as required by `WORKSPACE-AUTHORITY-001` and
+`URL-APPROVAL-001`.
 
 **PROJECT-DELETION-001:** `project remove` and `project purge --yes` MUST
 acquire the Project lock and then the Project-scoped CI-runner lock. Both MUST
