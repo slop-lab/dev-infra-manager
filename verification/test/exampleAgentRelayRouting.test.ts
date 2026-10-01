@@ -23,6 +23,7 @@ async function prepareTools(hostnameOutput: string): Promise<Readonly<{ calls: s
     `#!/usr/bin/env sh
 set -eu
 printf '%s\n' "$*" >>"$DIM_TEST_DOCKER_CALLS"
+if [ "$1 $2 $3" = 'volume inspect --format' ]; then printf 'agent-tmp\n'; fi
 `
   );
   await writeFile(

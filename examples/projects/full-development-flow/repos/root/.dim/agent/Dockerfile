@@ -68,8 +68,9 @@ COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose \
   /usr/local/libexec/docker/cli-plugins/docker-compose
 COPY dim-agent-shell /usr/local/bin/dim-agent-shell
 COPY start-sshd.sh /usr/local/bin/start-sshd
+COPY prepare-agent-tmp.sh /usr/local/bin/prepare-agent-tmp
 RUN npm install --global pnpm@10.13.1
-RUN chmod 0755 /usr/local/bin/dim-agent-shell /usr/local/bin/start-sshd \
+RUN chmod 0755 /usr/local/bin/dim-agent-shell /usr/local/bin/start-sshd /usr/local/bin/prepare-agent-tmp \
  && ln -s /usr/local/lib/dim/controller-proxy/development-service-cli.js \
       /usr/local/bin/dim-development-service
 

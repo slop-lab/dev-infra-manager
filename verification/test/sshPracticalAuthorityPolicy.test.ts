@@ -175,6 +175,7 @@ describe("full-development non-root SSH practical authority", () => {
       "PATH",
       "HOME",
       "DOCKER_HOST",
+      "TMPDIR",
       "DIM_CONTROLLER_SOCKET",
       "DIM_GIT_USERNAME",
       "DIM_GIT_TOKEN",

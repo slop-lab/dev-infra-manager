@@ -9,9 +9,10 @@ runtime_dir=/run/dim-agent
 environment_file="$runtime_dir/environment"
 workspace_probe="/workspace/.dim-agent-ssh-probe.$$"
 home_probe="/home/dim-agent/.dim-agent-ssh-probe.$$"
+tmp_probe="$TMPDIR/.dim-agent-ssh-probe.$$"
 environment_temp=
 cleanup() {
-  rm -f "$workspace_probe" "$home_probe"
+  rm -f "$workspace_probe" "$home_probe" "$tmp_probe"
   test -z "$environment_temp" || rm -f "$environment_temp"
 }
 trap cleanup EXIT
@@ -30,6 +31,7 @@ allowed_environment=(
   PATH
   HOME
   DOCKER_HOST
+  TMPDIR
   DIM_CONTROLLER_SOCKET
   DIM_GIT_USERNAME
   DIM_GIT_TOKEN
@@ -67,6 +69,8 @@ runuser -u dim-agent -- touch "$workspace_probe"
 runuser -u dim-agent -- rm "$workspace_probe"
 runuser -u dim-agent -- touch "$home_probe"
 runuser -u dim-agent -- rm "$home_probe"
+runuser -u dim-agent -- touch "$tmp_probe"
+runuser -u dim-agent -- rm "$tmp_probe"
 runuser -u dim-agent -- test -r "$environment_file"
 runuser -u dim-agent -- /usr/local/bin/dim-agent-shell -c \
   'test "$HOME" = /home/dim-agent && test "$DOCKER_HOST" = unix:///run/dim-agent-dind/docker.sock'
