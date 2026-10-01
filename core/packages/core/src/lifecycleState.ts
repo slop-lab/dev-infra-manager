@@ -1,5 +1,4 @@
-import { randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdir, open, readFile, readdir, rm, rmdir } from "node:fs/promises";
+import { mkdir, open, readdir, rm, rmdir } from "node:fs/promises";
 import path from "node:path";
 import { MissingRecordError, UserError } from "./errors.js";
 import { assertCiRunnerRecord } from "./ciRunnerRecord.js";
@@ -9,11 +8,16 @@ import { atomicWrite, listRecords, readJson, validateLifecycleName } from "./lif
 import type { CiRunnerRecord, GiteaServiceRecord, HostLifecycleRecord, ProjectRecord, WorkspaceRecord } from "./lifecycleTypes.js";
 import { parseProjectRecord } from "./projectRecord.js";
 import { assertWorkspaceRecord } from "./workspaceRecord.js";
+import { WorkspaceGrantStore } from "./workspaceGrantStore.js";
 
 export { validateLifecycleName } from "./lifecycleRecord.js";
 
 export class LifecycleState {
-  constructor(readonly root: string, private readonly lockOptions: LifecycleLockOptions = {}) {}
+  private readonly grants: WorkspaceGrantStore;
+
+  constructor(readonly root: string, private readonly lockOptions: LifecycleLockOptions = {}) {
+    this.grants = new WorkspaceGrantStore(root);
+  }
 
   projectPath(name: string): string {
     return path.join(this.root, "projects", `${validateLifecycleName(name, "project")}.json`);
@@ -23,71 +27,29 @@ export class LifecycleState {
     return path.join(this.root, "workspaces", `${validateLifecycleName(name, "workspace")}.json`);
   }
 
-  workspaceGrantPath(name: string): string {
-    return path.join(this.root, "workspace-grants", validateLifecycleName(name, "workspace"));
-  }
-
-  agentGrantPath(name: string): string {
-    return path.join(this.root, "agent-grants", validateLifecycleName(name, "workspace"));
-  }
-
   async ensureWorkspaceGrant(name: string): Promise<string> {
-    return this.ensureGrant(this.workspaceGrantPath(name), validateLifecycleName(name, "workspace"));
+    return this.grants.ensure(await this.readWorkspace(name), "workspace");
   }
 
   async ensureAgentGrant(name: string): Promise<string> {
-    return this.ensureGrant(this.agentGrantPath(name), validateLifecycleName(name, "workspace"));
+    return this.grants.ensure(await this.readWorkspace(name), "agent");
   }
 
   async authenticateWorkspaceGrant(token: string): Promise<WorkspaceRecord | undefined> {
-    return this.authenticateGrant(token, (name) => this.workspaceGrantPath(name));
+    return this.grants.authenticate(token, "workspace", (name) => this.readWorkspace(name));
   }
 
   async authenticateAgentGrant(token: string): Promise<WorkspaceRecord | undefined> {
-    return this.authenticateGrant(token, (name) => this.agentGrantPath(name));
+    return this.grants.authenticate(token, "agent", (name) => this.readWorkspace(name));
   }
 
-  private async ensureGrant(target: string, workspace: string): Promise<string> {
-    await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
-    try {
-      return (await readFile(target, "utf8")).trim();
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    const token = `${workspace}.${randomBytes(32).toString("base64url")}`;
-    try {
-      const handle = await open(target, "wx", 0o600);
-      await handle.writeFile(`${token}\n`, "utf8");
-      await handle.close();
-      return token;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") return (await readFile(target, "utf8")).trim();
-      throw error;
-    }
+  async removeWorkspaceGrant(record: Pick<WorkspaceRecord, "name" | "workspaceId">): Promise<void> {
+    await this.grants.remove(record, "workspace");
   }
 
-  private async authenticateGrant(
-    token: string,
-    pathFor: (name: string) => string
-  ): Promise<WorkspaceRecord | undefined> {
-    const separator = token.lastIndexOf(".");
-    if (separator < 1) return undefined;
-    const name = token.slice(0, separator);
-    try {
-      validateLifecycleName(name, "workspace");
-      const expected = (await readFile(pathFor(name), "utf8")).trim();
-      const actualBuffer = Buffer.from(token);
-      const expectedBuffer = Buffer.from(expected);
-      if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) return undefined;
-      return await this.readWorkspace(name);
-    } catch {
-      return undefined;
-    }
+  async removeAgentGrant(record: Pick<WorkspaceRecord, "name" | "workspaceId">): Promise<void> {
+    await this.grants.remove(record, "agent");
   }
-
-  async removeWorkspaceGrant(name: string): Promise<void> { await rm(this.workspaceGrantPath(name), { force: true }); }
-
-  async removeAgentGrant(name: string): Promise<void> { await rm(this.agentGrantPath(name), { force: true }); }
 
   giteaServicePath(): string {
     return path.join(this.root, "services", "gitea.json");
@@ -246,7 +208,7 @@ export class LifecycleState {
   }
 
   async listWorkspaces(): Promise<WorkspaceRecord[]> {
-    const records = await listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace", 7);
+    const records = await listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace", 8);
     for (const record of records) {
       assertWorkspaceRecord(record, this.workspacePath(record.name));
     }

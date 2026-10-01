@@ -20,6 +20,7 @@ export interface HostInputProvider {
 }
 
 export interface WorkspaceCapabilityContext {
+  readonly workspaceId: string;
   readonly projectId: string;
   readonly projectName: string;
   readonly workspaceName: string;

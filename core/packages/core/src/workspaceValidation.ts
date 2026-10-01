@@ -1,11 +1,10 @@
 import { stat } from "node:fs/promises";
 import { UserError } from "./errors.js";
 import type {
-  ProjectRecord,
   WorkspaceCapabilityRecord,
   WorkspaceRecord
 } from "./lifecycleTypes.js";
-import type { RegisteredDimPlugins } from "./plugin.js";
+import type { RegisteredDimPlugins, WorkspaceCapabilityContext } from "./plugin.js";
 
 export function validateWorkspaceResources(resources: {
   cpuCount: string;
@@ -36,15 +35,12 @@ export function validateWorkspaceProfiles(values: string[]): string[] {
 }
 
 export async function resolveWorkspaceCapabilities(
-  required: string[],
-  recommended: string[],
-  project: ProjectRecord,
-  workspaceName: string,
-  runtimeBackend: WorkspaceRecord["runtimeBackend"],
+  requirements: { readonly required: readonly string[]; readonly recommended: readonly string[] },
+  context: WorkspaceCapabilityContext,
   providers: RegisteredDimPlugins["workspaceCapabilityProviders"]
 ): Promise<WorkspaceCapabilityRecord[]> {
-  const requests = [...required.map((name) => ({ name, requirement: "required" as const })),
-    ...recommended.map((name) => ({ name, requirement: "recommended" as const }))];
+  const requests = [...requirements.required.map((name) => ({ name, requirement: "required" as const })),
+    ...requirements.recommended.map((name) => ({ name, requirement: "recommended" as const }))];
   const seen = new Set<string>();
   const resolved: WorkspaceCapabilityRecord[] = [];
   for (const request of requests) {
@@ -62,9 +58,7 @@ export async function resolveWorkspaceCapabilities(
       continue;
     }
     try {
-      const provision = await registered.provider.provision({
-        projectId: project.id, projectName: project.name, workspaceName, runtimeBackend
-      });
+      const provision = await registered.provider.provision(context);
       const capabilities = [...(provision.capabilities ?? [])];
       const securityOptions = [...(provision.securityOptions ?? [])];
       const devices = [...(provision.devices ?? [])];

@@ -32,27 +32,54 @@ describe("project and workspace lifecycle", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-it("fails closed for required plugin capabilities and reports missing recommendations", async () => {
+  it("fails closed for required plugin capabilities and reports missing recommendations", async () => {
     const project = {
     schemaVersion: 4, id: "project-id", name: "project", gitNamespace: "dim-project", giteaOrganizationId: 41,
       phase: "ready", rootRepositoryAlias: "root", rootRef: "refs/heads/main",
       repositories: [], createdAt: "now", updatedAt: "now"
     } satisfies ProjectRecord;
+    const context = {
+      workspaceId: "A".repeat(43), projectId: project.id, projectName: project.name,
+      workspaceName: "work-1", runtimeBackend: "sysbox" as const
+    };
     await expect(resolveWorkspaceCapabilities(
-      ["missing"], [], project, "work-1", "sysbox", new Map()
+      { required: ["missing"], recommended: [] }, context, new Map()
     )).rejects.toThrow(/required workspace capability 'missing'/);
     await expect(resolveWorkspaceCapabilities(
-      [], ["missing"], project, "work-1", "sysbox", new Map()
+      { required: [], recommended: ["missing"] }, context, new Map()
     )).resolves.toEqual([{
       name: "missing", requirement: "recommended", status: "unavailable", detail: "no installed provider"
     }]);
   });
 
-it("creates and authenticates a workspace-scoped external URL grant", async () => {
+  it("binds workspace capability provisioning to the workspace instance ID", async () => {
+    // Given
+    const provision = vi.fn(async () => ({}));
+    const context = {
+      workspaceId: "A".repeat(43),
+      projectId: "project-id",
+      projectName: "project",
+      workspaceName: "work-1",
+      runtimeBackend: "sysbox" as const
+    };
+
+    // When
+    await resolveWorkspaceCapabilities(
+      { required: ["device"], recommended: [] },
+      context,
+      new Map([["device", { plugin: "test", provider: { provision } }]])
+    );
+
+    // Then
+    expect(provision).toHaveBeenCalledWith(context);
+  });
+
+  it("creates and authenticates a workspace-scoped external URL grant", async () => {
     const state = new LifecycleState(root);
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
-    schemaVersion: 7,
+    schemaVersion: 8,
+      workspaceId: "A".repeat(43),
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
@@ -82,18 +109,71 @@ it("creates and authenticates a workspace-scoped external URL grant", async () =
     };
     await state.claimWorkspace(record);
     const grant = await state.ensureWorkspaceGrant(record.name);
-    expect(grant).toMatch(/^work-1\./);
+    expect(grant).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]+$/);
     expect(await state.ensureWorkspaceGrant(record.name)).toBe(grant);
     expect(await state.authenticateWorkspaceGrant(grant)).toEqual(record);
     expect(await state.authenticateWorkspaceGrant(`${grant}x`)).toBeUndefined();
     const agentGrant = await state.ensureAgentGrant(record.name);
-    expect(agentGrant).toMatch(/^work-1\./);
+    expect(agentGrant).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]+$/);
     expect(await state.authenticateAgentGrant(agentGrant)).toEqual(record);
     expect(await state.authenticateWorkspaceGrant(agentGrant)).toBeUndefined();
     expect(await state.authenticateAgentGrant(grant)).toBeUndefined();
-    await state.removeWorkspaceGrant(record.name);
-    await state.removeAgentGrant(record.name);
+    await state.removeWorkspaceGrant(record);
+    await state.removeAgentGrant(record);
     expect(await state.authenticateWorkspaceGrant(grant)).toBeUndefined();
     expect(await state.authenticateAgentGrant(agentGrant)).toBeUndefined();
+  });
+
+  it("denies captured grants after interrupted discard and same-name recreation", async () => {
+    // Given
+    const state = new LifecycleState(root);
+    const now = new Date().toISOString();
+    const record: WorkspaceRecord = {
+      schemaVersion: 8,
+      workspaceId: "A".repeat(43),
+      name: "work-1",
+      projectId: "project-id",
+      projectName: "project",
+      rootRepositoryAlias: "root",
+      rootRef: "refs/heads/main",
+      rootCommit: "a".repeat(40),
+      workspaceDataPath: "/var/lib/dim/workspace-data",
+      phase: "ready",
+      profiles: [],
+      composeProjectName: "dim-work-1",
+      containerName: "dim-ws-work-1",
+      networkName: "dim-control",
+      dockerVolumeName: "dim-ws-work-1-docker",
+      runtimeBackend: "sysbox",
+      kvm: false,
+      cpuCount: "2",
+      memory: "4g",
+      pidsLimit: "2048",
+      routes: [],
+      gitUserName: "Agent",
+      gitUserEmail: "agent@example.invalid",
+      gitBaseUrl: "http://dim-gitea:3000/dim-project",
+      hostAliases: {},
+      projectManifestPath: "/run/dim/project.json",
+      createdAt: now,
+      updatedAt: now
+    };
+    await state.claimWorkspace(record);
+    const capturedWorkspaceGrant = await state.ensureWorkspaceGrant(record.name);
+    const capturedAgentGrant = await state.ensureAgentGrant(record.name);
+
+    // When
+    await state.removeWorkspace(record.name);
+    await state.claimWorkspace({
+      ...record,
+      workspaceId: "B".repeat(43),
+      createdAt: new Date(Date.now() + 1).toISOString()
+    });
+
+    // Then
+    expect(await state.authenticateWorkspaceGrant(capturedWorkspaceGrant)).toBeUndefined();
+    expect(await state.authenticateAgentGrant(capturedAgentGrant)).toBeUndefined();
+    expect(await state.ensureWorkspaceGrant(record.name)).not.toBe(capturedWorkspaceGrant);
+    expect(await state.ensureAgentGrant(record.name)).not.toBe(capturedAgentGrant);
   });
 });
