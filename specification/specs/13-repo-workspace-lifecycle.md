@@ -1071,6 +1071,12 @@ token, route ID, approval, slug, or permalink bound to the discarded ID MUST
 remain invalid as required by `WORKSPACE-AUTHORITY-001` and
 `URL-APPROVAL-001`.
 
+The `discarding` phase and grant revocation MUST be durable before cleanup hooks
+run. Controller and plugin operations authenticated before that transition MUST
+revalidate the workspace ID and phase under the workspace lifecycle lock before
+dispatch. Host shutdown MUST stop an owned running container left in
+`discarding` without changing that phase or scheduling it for normal resume.
+
 **PROJECT-DELETION-001:** `project remove` and `project purge --yes` MUST
 acquire the Project lock and then the Project-scoped CI-runner lock. Both MUST
 refuse while the Project is referenced. `project remove` MUST leave the

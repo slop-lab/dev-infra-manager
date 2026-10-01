@@ -185,9 +185,12 @@ authentication because it names the discarded workspace ID. Creation MUST
 recompute backend/device capabilities and MUST NOT infer them from retained
 data.
 
-Discard MUST revoke External URL routes before removing controller grants and
-workspace state. If cleanup fails, the workspace MUST remain non-ready and all
-old grants and routes MUST be denied while an ownership-safe retry completes.
+Discard MUST atomically publish the non-ready `discarding` phase and revoke
+controller grants before invoking route or Project cleanup. Authenticated
+controller dispatch and startup route restoration MUST revalidate the workspace
+ID and active phase under the same lifecycle serialization boundary. If cleanup
+fails, the workspace MUST remain non-ready and all old grants and routes MUST be
+denied while an ownership-safe retry completes.
 
 ## External URL approval
 
