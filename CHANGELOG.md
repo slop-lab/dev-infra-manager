@@ -41,20 +41,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   are also removed by inspected immutable ID, while their Docker socket volumes
   are necessarily removed by name only after immediate ownership reinspection.
 
-- Local source workflows now distinguish the dirty-worktree convenience path
-  from exact-commit Project preparation. Top-level
-  `build-local-workspace-image` explicitly prepares the trusted workspace image
-  under the exact version emitted by `verification/scripts/local-build-version.bash`,
-  while `install-local` only packages and installs the current development
-  worktree. Both paths give every DIM component a shared version containing the
-  aggregate SHA-256 of their repository-name/full-commit records and the root
-  aggregate lock, with dirty state marked for the top-level path. Project
-  `prepare-local` resolves omitted source inputs to each production repository's
-  latest default-branch commit while still accepting exact reviewed commits,
-  prepares the package bundle and trusted workspace image under that bundle's
-  complete aggregate local version, and records the image tag, package-bundle
-  digest, and immutable image ID as provenance. Project `install-local`
-  validates that prepared set before and after installing it without rebuilding.
+- Local source workflows now prepare one reviewed root-monorepo commit and its
+  committed aggregate dependency lock in isolated disposable staging. The
+  `prepare-local` path rejects non-commit Git objects, ignores replacement
+  refs, installs with the frozen lock, and publishes the complete package
+  bundle, image identity, and readiness only after every stage succeeds.
+  `install-local` validates and installs that prepared candidate without
+  rebuilding it. `build-local-workspace-image` remains an image-only
+  convenience for the current worktree and does not publish package readiness.
+  Failed or redirected staging cannot mutate tracked source or replace the
+  previously prepared candidate.
   Both local installation paths explicitly enable the built DNS Cloudflare and
   External URLs plugins while preserving other enabled plugins. Installation
   now stages the exact target package set and runs its read-only core-state
