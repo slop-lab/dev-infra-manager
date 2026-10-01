@@ -65,8 +65,11 @@
   and exact commit instead of being persisted. Each workspace instance now has
   a fresh 256-bit ID that binds controller and agent grants, plugin routes, and
   runtime ownership across stop/start while preventing same-name recreation
-  from inheriting authority. Schema-7 and other incompatible workspace state is
-  rejected unchanged with pinned-version export and recreate guidance.
+  from inheriting authority. Discard now publishes its non-ready phase and
+  revokes grants before cleanup, while controller/plugin dispatch, host
+  shutdown, and host CLI grant lookup revalidate the current instance. Schema-7
+  and other incompatible workspace state is rejected unchanged with
+  pinned-version export and recreate guidance.
 
 - Select the default trusted workspace image by the exact installed DIM package
   version instead of the mutable `latest` tag, while retaining
