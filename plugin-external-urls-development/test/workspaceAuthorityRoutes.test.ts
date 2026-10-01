@@ -4,26 +4,27 @@ import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { configuredDimAdminController, createDimController, registerPlugins } from "@slop-lab/dim-core";
+import { createDimController, registerPlugins, UserError } from "@slop-lab/dim-core";
 import { LifecycleState } from "../../core/packages/core/src/lifecycleState.js";
-import type { LifecycleOptions, WorkspaceRecord } from "../../core/packages/core/src/lifecycleTypes.js";
-import type { CommandResult, StreamingCommandRunner } from "../../core/packages/core/src/types.js";
+import type { WorkspaceRecord } from "../../core/packages/core/src/lifecycleTypes.js";
 import { createExternalUrlsPlugin } from "../../plugin-external-urls/src/index.js";
 
-describe("authoritative workspace discard", () => {
+describe("workspace instance route authority", () => {
   const cleanup: Array<() => Promise<void>> = [];
 
   afterEach(async () => {
     await Promise.all(cleanup.splice(0).reverse().map((operation) => operation()));
   });
 
-  it("revokes plugin routes before removing a workspace without a controller grant", async () => {
-    // Given: a persisted TCP route for a workspace whose controller grant is absent.
-    const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-discard-routes-"));
+  it("denies a request authenticated by a replaced instance and accepts the fresh grant", async () => {
+    // Given
+    const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-route-authority-"));
     cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
-    const record = workspaceRecord();
+    const oldRecord = workspaceRecord("A".repeat(43));
+    const newRecord = workspaceRecord("B".repeat(43));
     const state = new LifecycleState(stateRoot);
-    await state.claimWorkspace(record);
+    await state.claimWorkspace(oldRecord);
+    const staleGrant = await state.ensureWorkspaceGrant(oldRecord.name);
     const target = net.createServer((socket) => socket.pipe(socket));
     await listen(target);
     cleanup.push(() => close(target));
@@ -38,16 +39,40 @@ describe("authoritative workspace discard", () => {
       } }
     })]);
     cleanup.push(() => plugins.dispose());
+    let authenticationObserved = () => {};
+    const authenticationStarted = new Promise<void>((resolve) => { authenticationObserved = resolve; });
+    let releaseAuthentication = () => {};
+    const authenticationReleased = new Promise<void>((resolve) => { releaseAuthentication = resolve; });
+    let gateFirstAuthentication = true;
     const controller = createDimController({
       stateRoot,
-      runWorkspaceRequest: async (_workspace, operation) => operation(),
       routes: plugins.controllerRoutes,
-      authenticate: async () => ({
-        id: record.workspaceId,
-        name: record.name,
-        projectId: record.projectId,
-        projectName: record.projectName
-      }),
+      authenticate: async (token) => {
+        const record = await state.authenticateWorkspaceGrant(token);
+        if (gateFirstAuthentication) {
+          gateFirstAuthentication = false;
+          authenticationObserved();
+          await authenticationReleased;
+        }
+        return record && {
+          id: record.workspaceId,
+          name: record.name,
+          projectId: record.projectId,
+          projectName: record.projectName
+        };
+      },
+      runWorkspaceRequest: async (workspace, operation) => {
+        const release = await state.acquireWorkspaceSetupLock(workspace.name);
+        try {
+          const record = await state.readWorkspace(workspace.name);
+          if (record.workspaceId !== workspace.id || record.phase === "discarding") {
+            throw new UserError("workspace authority is no longer active");
+          }
+          return await operation();
+        } finally {
+          await release();
+        }
+      },
       resolveTarget: async (_workspace, requested) => ({
         protocol: requested.protocol,
         host: "127.0.0.1",
@@ -57,60 +82,36 @@ describe("authoritative workspace discard", () => {
     });
     await listen(controller);
     cleanup.push(() => close(controller));
-    const controllerBase = `http://127.0.0.1:${address(controller).port}`;
-    expect((await fetch(`${controllerBase}/api/urls`, {
-      method: "POST",
-      headers: { authorization: "Bearer grant", "content-type": "application/json" },
-      body: JSON.stringify({
-        ingress: "tcp",
-        target: { containers: ["parent", "leaf"], port: 22, protocol: "tcp" }
-      })
-    })).status).toBe(201);
-    expect(await exchange(listenPort, "before-discard")).toBe("before-discard");
+    const endpoint = `http://127.0.0.1:${address(controller).port}/api/urls`;
 
-    // When: the authoritative admin API discards the workspace directly.
-    const lifecycle = { stateRoot, defaultWorkspaceBackend: "sysbox" } as LifecycleOptions;
-    const admin = configuredDimAdminController(lifecycle, plugins, new MissingResourceRunner(record));
-    await listen(admin);
-    cleanup.push(() => close(admin));
-    const response = await fetch(`http://127.0.0.1:${address(admin).port}/v1/call/workspace.discard`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: record.name, keepVolume: false })
-    });
+    // When: authentication observes the old instance before same-name replacement.
+    const staleRequest = createRoute(endpoint, staleGrant);
+    await authenticationStarted;
+    await state.removeWorkspaceGrant(oldRecord);
+    await state.writeWorkspace(newRecord);
+    const freshGrant = await state.ensureWorkspaceGrant(newRecord.name);
+    releaseAuthentication();
 
-    // Then: route persistence and live listener ownership are gone before workspace state.
-    expect(response.status).toBe(200);
-    await expect(state.readWorkspace(record.name)).rejects.toThrow();
-    await expect(exchange(listenPort, "after-discard")).rejects.toThrow();
+    // Then: stale dispatch cannot persist a route, while current authority can.
+    expect((await staleRequest).status).toBe(400);
+    await expect(exchange(listenPort, "stale")).rejects.toThrow();
+    expect((await createRoute(endpoint, freshGrant)).status).toBe(201);
+    await expect(exchange(listenPort, "fresh")).resolves.toBe("fresh");
   });
 });
 
-class MissingResourceRunner implements StreamingCommandRunner {
-  constructor(private readonly workspace: WorkspaceRecord) {}
-
-  async run(command: string, args: string[]): Promise<CommandResult> {
-    const volume = args[0] === "volume";
-    return {
-      command,
-      args,
-      stdout: "",
-      stderr: volume
-        ? `Error: No such volume: ${this.workspace.dockerVolumeName}`
-        : `Error: No such container: ${this.workspace.containerName}`,
-      exitCode: 1
-    };
-  }
-
-  async runStreaming(): Promise<number> {
-    return 0;
-  }
+function createRoute(endpoint: string, grant: string): Promise<Response> {
+  return fetch(endpoint, {
+    method: "POST",
+    headers: { authorization: `Bearer ${grant}`, "content-type": "application/json" },
+    body: JSON.stringify({ ingress: "tcp", target: { containers: [], port: 22, protocol: "tcp" } })
+  });
 }
 
-function workspaceRecord(): WorkspaceRecord {
+function workspaceRecord(workspaceId: string): WorkspaceRecord {
   return {
     schemaVersion: 8,
-    workspaceId: "A".repeat(43),
+    workspaceId,
     name: "work",
     projectId: "project",
     projectName: "project",
@@ -135,8 +136,8 @@ function workspaceRecord(): WorkspaceRecord {
     gitBaseUrl: "http://dim-gitea:3000/project",
     hostAliases: {},
     projectManifestPath: "/run/dim/project.json",
-    createdAt: "2026-09-23T00:00:00.000Z",
-    updatedAt: "2026-09-23T00:00:00.000Z"
+    createdAt: "2026-10-01T00:00:00.000Z",
+    updatedAt: "2026-10-01T00:00:00.000Z"
   };
 }
 
@@ -167,15 +168,9 @@ async function exchange(port: number, message: string): Promise<string> {
   socket.connect(port, "127.0.0.1");
   await once(socket, "connect");
   return new Promise((resolve, reject) => {
-    let received = false;
-    socket.once("data", (chunk) => {
-      received = true;
-      resolve(String(chunk));
-    });
+    socket.once("data", (chunk) => resolve(String(chunk)));
     socket.once("error", reject);
-    socket.once("close", () => {
-      if (!received) reject(new Error("connection closed without data"));
-    });
+    socket.once("close", () => reject(new Error("connection closed without data")));
     socket.write(message);
   });
 }

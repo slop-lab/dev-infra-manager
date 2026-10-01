@@ -299,6 +299,7 @@ describe("external URLs plugin", () => {
         runStreaming: vi.fn(async () => 0)
       },
       listWorkspaces: async () => [workspace],
+      runWorkspaceRequest: async (_workspace, operation) => operation(),
       resolveTarget
     })).resolves.toBeUndefined();
 
@@ -349,6 +350,7 @@ describe("external URLs plugin", () => {
     };
     const controller = createDimController({
       stateRoot,
+      runWorkspaceRequest: async (_workspace, operation) => operation(),
       routes: registered.controllerRoutes,
       authenticate: async () => workspace,
       resolveTarget: async (_workspace, target) => ({
@@ -406,6 +408,7 @@ describe("external URLs plugin", () => {
     close.push(() => registered.dispose());
     const controller = createDimController({
       stateRoot,
+      runWorkspaceRequest: async (_workspace, operation) => operation(),
       routes: registered.controllerRoutes,
       authenticate: async () => ({ id: "id", name: "work-1", projectId: "pid", projectName: "project" }),
       resolveTarget: async () => {
@@ -474,6 +477,7 @@ describe("external URLs plugin", () => {
     }));
     const controller = createDimController({
       stateRoot,
+      runWorkspaceRequest: async (_workspace, operation) => operation(),
       routes: registered.controllerRoutes,
       authenticate: async () => ({ id: "id", name: "work-1", projectId: "pid", projectName: "project" }),
       resolveTarget

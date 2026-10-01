@@ -56,6 +56,7 @@ describe("external URL ingress removal", () => {
     cleanup.push(() => plugins.dispose());
     const controller = createDimController({
       stateRoot,
+      runWorkspaceRequest: async (_workspace, operation) => operation(),
       routes: plugins.controllerRoutes,
       authenticate: async () => workspace,
       resolveTarget: async (_workspace, requested) => ({
@@ -112,6 +113,7 @@ describe("external URL ingress removal", () => {
       stateRoot,
       runner: { run: vi.fn(), runStreaming: vi.fn() },
       listWorkspaces: async () => [workspace],
+      runWorkspaceRequest: async (_workspace, operation) => operation(),
       resolveTarget
     });
 

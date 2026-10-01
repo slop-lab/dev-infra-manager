@@ -195,10 +195,14 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
         for (const workspace of await runtime.listWorkspaces()) {
           for (const entry of deduplicateRoutes(await store.list(workspace.id))) {
             try {
-              await reconcileStoredRoute(entry, required(ingresses, entry.ingress), {
-                workspace,
-                resolveTarget: (target, mode) => runtime.resolveTarget(workspace, target, mode)
-              });
+              await runtime.runWorkspaceRequest(workspace, () => reconcileStoredRoute(
+                entry,
+                required(ingresses, entry.ingress),
+                {
+                  workspace,
+                  resolveTarget: (target, mode) => runtime.resolveTarget(workspace, target, mode)
+                }
+              ));
             } catch (error) {
               host.logger.error("DIM external URL route reconciliation failed", {
                 workspace: workspace.name,

@@ -40,6 +40,7 @@ describe("TCP external ingress", () => {
     const workspace = { id: "project:work", name: "work", projectId: "project", projectName: "project" };
     const controller = createDimController({
       stateRoot,
+      runWorkspaceRequest: async (_workspace, operation) => operation(),
       routes: registered.controllerRoutes,
       authenticate: async (token) => token === "valid" ? workspace : undefined,
       resolveTarget: async (_workspace, requested) => ({
@@ -99,6 +100,7 @@ describe("TCP external ingress", () => {
     const workspace = { id: "project:work", name: "work", projectId: "project", projectName: "project" };
     const controller = createDimController({
       stateRoot,
+      runWorkspaceRequest: async (_workspace, operation) => operation(),
       routes: registered.controllerRoutes,
       authenticate: async () => workspace,
       resolveTarget: async (_workspace, target) => ({
@@ -139,6 +141,7 @@ describe("TCP external ingress", () => {
     const first = await registerPlugins([createExternalUrlsPlugin(options)]);
     const controller = createDimController({
       stateRoot,
+      runWorkspaceRequest: async (_workspace, operation) => operation(),
       routes: first.controllerRoutes,
       authenticate: async () => workspace,
       resolveTarget: async (_workspace, target) => ({
@@ -174,6 +177,7 @@ describe("TCP external ingress", () => {
       stateRoot,
       runner: { run: runner.run.bind(runner), runStreaming: async () => 0 },
       listWorkspaces: async () => [workspace],
+      runWorkspaceRequest: async (_workspace, operation) => operation(),
       resolveTarget: async (_workspace, target) => resolveTarget(target)
     });
 

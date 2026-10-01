@@ -122,6 +122,7 @@ async function startHarness(
   cleanup.push(() => registered.dispose());
   const controller = createDimController({
     stateRoot,
+    runWorkspaceRequest: async (_workspace, operation) => operation(),
     routes: registered.controllerRoutes,
     authenticate: async () => workspace,
     resolveTarget: async (_workspace, target) => ({
