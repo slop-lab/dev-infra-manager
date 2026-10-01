@@ -967,6 +967,20 @@ bind-mounts it into the inner agent as `/home/dim-agent`; task dispatch sets
 `HOME` to that path. Agent configuration persists across task processes and
 inner-container recreation, while workspace discard removes the volume through
 reviewed teardown.
+
+**PROJECT-AGENT-TMPDIR-001:** The canonical self-Project and representative
+full-development-flow Project MUST set the agent process `TMPDIR` to
+`/tmp/opencode`, backed by a dedicated Project-owned named volume in the
+agent's private daemon. Only the untrusted agent container mounts that volume;
+the home, configuration, credential, trusted-workspace, and secret-bearing
+runtime mounts remain separate. Before agent launch, reviewed Project code MUST
+require a real, non-symlink directory owned by the agent UID and GID with mode
+`0700`. It MAY initialize an empty new volume, but MUST reject a populated root
+with incompatible ownership or mode without recursively rewriting or deleting
+its contents. The volume MUST survive inner-agent recreation. Custom teardown
+MUST preserve it for `--keep-volume` and remove only its exact owned name on
+ordinary discard before the private daemon store is removed.
+
 The optional canonical workspace-user bootstrap installs pinned OpenCode and
 companion package versions below that home. OpenCode configuration remains in
 its home-confined XDG directory. OMO 4.19.4 configuration is
