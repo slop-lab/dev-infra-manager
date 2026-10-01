@@ -30,6 +30,7 @@ describe("single-tree candidate CI", () => {
     const evidence = JSON.parse(await readFile(evidencePath, "utf8"));
     const sourceWorkflow = await readFile(resolve(candidate, ".gitea/workflows/verify.yml"), "utf8");
     const releaseWorkflow = await readFile(resolve(candidate, ".gitea/workflows/release-gate.yml"), "utf8");
+    const qemuLauncher = await readFile(resolve(candidate, ".dim/qemu-verify.bash"), "utf8");
 
     // Then
     expect(verified.status, verified.stderr).toBe(0);
@@ -77,8 +78,9 @@ describe("single-tree candidate CI", () => {
     expect(releaseWorkflow).not.toContain("dim-dim/verification/.gitea/workflows");
     expect(releaseWorkflow).not.toContain("root-ref");
     expect(sourceWorkflow).toContain("just check-source");
-    expect(releaseWorkflow).toContain("just verify full-development");
+    expect(releaseWorkflow).not.toContain("just verify full-development");
     expect(releaseWorkflow).toContain("just verify environments-kvm");
+    expect(qemuLauncher).toContain("just verify full-development");
     expect(releaseWorkflow.match(/test "\$DIM_EXPECTED_CANDIDATE_SHA" = "\$DIM_DISPATCH_SHA"/g)).toHaveLength(2);
   });
 
