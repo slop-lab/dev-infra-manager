@@ -40,6 +40,61 @@ evidence. A source pass or unavailable QEMU capacity MUST NOT count as a full
 release pass, and CI evidence MUST NOT grant protected-ref publication or
 host deployment authority.
 
+## Trust and lifecycle contract gates
+
+Verification of
+[Trust and Lifecycle Capability Matrix](04-trust-lifecycle-capability-matrix.md)
+MUST distinguish contract evidence from unavailable runtime capability.
+
+For `TRUST-PROMOTION-001` and `TRUST-PROMOTION-CAS-001`, deterministic tests
+MUST bind review and every required job to one repository, protected ref,
+expected head, candidate commit and tree, policy revision, review revision, and
+job-set revision. They MUST enumerate additions, modifications, deletions,
+renames, modes, and symbolic links in the complete change set. Tests MUST
+reject path-only approval, self or workload approval, stale or revoked
+approval, missing or wrong-attempt jobs, changed policy/tree/head, non-descendant
+candidates, protected deletion, and force push. A concurrent promotion test
+MUST prove that exactly one compare-and-swap succeeds and every loser leaves
+the winning ref unchanged. Live Git-host evidence MUST exercise the actual
+protected policy and atomic old-object-ID update; a mock alone is insufficient.
+
+For `TRUST-RUNTIME-001`, each implemented backend MUST run the same
+backend-neutral agent journey. A supported VM backend additionally requires a
+KVM-capable host gate covering create, stop, start, restart, host reboot,
+persistent data, guest-private Docker, network targeting, resource limits,
+memory reclamation, and ownership-safe failure recovery. From inside the guest,
+the gate MUST reject or prove absence of raw secrets, secret volumes, host
+Docker and hypervisor sockets, host-admin and workspace-controller grants,
+`/dev/kvm`, promotion credentials, and other-workspace data. The trusted
+Project hook and secret-bearing service MUST execute outside the guest from the
+approved immutable root. Missing KVM reports blocked and is not passing
+evidence.
+
+For `STATE-BACKEND-001`, compatibility tests MUST preserve the exact bytes and
+resources for historical `sysbox`, cross-backend, unknown-schema, unknown-field,
+and mixed-label input while rejecting before runtime, plugin, or hook mutation.
+An implemented `container` release MUST prove that it neither aliases nor
+silently relabels historical `sysbox` state. Export/discard/create/restore is a
+separate explicit journey; it is not a parser migration test.
+
+For `WORKSPACE-AUTHORITY-001` and `URL-APPROVAL-001`, one continuous journey
+MUST distinguish stop/start of one workspace ID from discard and same-name
+creation of a fresh ID. It MUST prove that declared retained data and agent
+home bytes survive `--keep-volume`, while old grants, tokens, sockets, route
+IDs, approvals, slugs, permalinks, device grants, and runtime generations do
+not authorize the new instance. An approval-required route MUST be unreachable
+in `pending`, reachable only after host approval, unavailable while stopped,
+restored only for the same approved route tuple on same-instance start, and
+unreachable after revocation, target drift, discard, controller restart while
+pending, or same-name recreation. A forged cross-workspace approval MUST fail.
+
+For `PROJECT-HOOK-DEFAULTS-001`, every backend MUST test hook-present, Compose
+fallback, no-op setup, entrypoint-present, direct-command fallback,
+teardown-present, and Compose/no-op teardown cases from one immutable root.
+Guest mutation, symlink escape, moved root, and missing lifecycle-file probe
+failure MUST start no trusted hook. VM evidence MUST show that hook authority
+and secret-bearing operations remain outside the guest.
+
 ## Scope
 
 This specification defines the minimum verification gates for development.
