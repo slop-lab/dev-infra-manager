@@ -152,6 +152,13 @@ The exact host lifecycle schema-1 to schema-2 migration remains the sole
 existing automatic state migration and grants no precedent for backend,
 workspace, Project, runner, or plugin state conversion.
 
+Workspace schema `8` is the first schema implementing the workspace instance
+identity in this contract. Schema-`7` workspace records MUST be rejected
+unchanged with instructions to use the prior pinned release to export needed
+Project/user data before discard and recreation. Implementations MUST NOT infer
+an instance ID from the Project ID, display name, runtime resource, retained
+volume, grant file, or plugin state.
+
 ## Workspace lifecycle and retained data
 
 **WORKSPACE-AUTHORITY-001:** Grants, sockets, route approvals, device grants,
