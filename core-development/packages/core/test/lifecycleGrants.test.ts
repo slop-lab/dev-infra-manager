@@ -173,7 +173,13 @@ describe("project and workspace lifecycle", () => {
     // Then
     expect(await state.authenticateWorkspaceGrant(capturedWorkspaceGrant)).toBeUndefined();
     expect(await state.authenticateAgentGrant(capturedAgentGrant)).toBeUndefined();
-    expect(await state.ensureWorkspaceGrant(record.name)).not.toBe(capturedWorkspaceGrant);
-    expect(await state.ensureAgentGrant(record.name)).not.toBe(capturedAgentGrant);
+    const freshWorkspaceGrant = await state.ensureWorkspaceGrant(record.name);
+    const freshAgentGrant = await state.ensureAgentGrant(record.name);
+    expect(freshWorkspaceGrant).not.toBe(capturedWorkspaceGrant);
+    expect(freshAgentGrant).not.toBe(capturedAgentGrant);
+    await state.removeWorkspaceGrant(record);
+    await state.removeAgentGrant(record);
+    expect((await state.authenticateWorkspaceGrant(freshWorkspaceGrant))?.workspaceId).toBe("B".repeat(43));
+    expect((await state.authenticateAgentGrant(freshAgentGrant))?.workspaceId).toBe("B".repeat(43));
   });
 });
