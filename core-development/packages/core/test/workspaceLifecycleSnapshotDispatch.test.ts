@@ -22,7 +22,8 @@ describe("immutable workspace lifecycle dispatch", () => {
     state = new LifecycleState(root);
     project = projectFixture();
     record = {
-      schemaVersion: 7,
+      schemaVersion: 8,
+      workspaceId: "A".repeat(43),
       name: "work-1",
       projectId: "project-id",
       projectName: "project",

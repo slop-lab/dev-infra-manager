@@ -4,7 +4,8 @@ import type { WorkspaceRecord } from "../../../../core/packages/core/src/lifecyc
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 
 const workspace = {
-  schemaVersion: 7,
+  schemaVersion: 8,
+  workspaceId: "A".repeat(43),
   name: "work",
   projectId: "project",
   projectName: "project",
