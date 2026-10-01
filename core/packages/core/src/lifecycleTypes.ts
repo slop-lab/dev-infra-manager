@@ -225,7 +225,7 @@ export interface ProjectRecord {
   error?: string;
 }
 
-export type WorkspacePhase = "creating" | "setting-up" | "ready" | "stopped" | "setup-error" | "error";
+export type WorkspacePhase = "creating" | "setting-up" | "ready" | "stopped" | "setup-error" | "error" | "discarding";
 
 export interface WorkspaceSetupRecord {
   startedAt: string;
@@ -248,7 +248,8 @@ export interface WorkspaceCapabilityRecord {
 }
 
 export interface WorkspaceRecord {
-  schemaVersion: 7;
+  schemaVersion: 8;
+  workspaceId: string;
   name: string;
   projectId: string;
   projectName: string;

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { MissingRecordError, UserError } from "./errors.js";
 import { ensureGitea, giteaNestedBaseUrl, GITEA_NETWORK } from "./gitea.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
@@ -9,6 +10,7 @@ import type { StreamingCommandRunner } from "./types.js";
 import { runWorkspaceLifecycle, runWorkspaceLifecycleStage } from "./workspaceLifecycleError.js";
 import { reconcileProject, setupWorkspaceLocked } from "./workspaceSetup.js";
 import { assertSelectedProjectUnchanged } from "./workspaceState.js";
+import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
 import {
   resolveWorkspaceCapabilities,
   resolveWorkspaceKvm,
@@ -56,87 +58,105 @@ export async function createWorkspace(
     setStage("Project lock acquisition");
     const releaseProject = await state.acquireProjectLock(project);
     try {
-      setStage("protected root validation");
-      await assertSelectedProjectUnchanged(state, selectedRoot);
-      const projectRecord = selectedRoot.project;
-      setStage("workspace capability resolution");
-      const capabilities = await resolveWorkspaceCapabilities(
-        input.requiredCapabilities ?? [], input.recommendedCapabilities ?? [], projectRecord, name,
-        input.runtimeBackend, plugins.workspaceCapabilityProviders
-      );
-      const repo = selectedRoot.repository;
-      const now = new Date().toISOString();
-      const gitUserName = input.gitUserName ?? process.env.DIM_GIT_USER_NAME ?? `dim/${name}`;
-      const gitUserEmail = input.gitUserEmail ?? process.env.DIM_GIT_USER_EMAIL ?? `${name}@dim.invalid`;
-      let record: WorkspaceRecord;
-      try {
-        setStage("workspace state loading");
-        record = await state.readWorkspace(name);
-        if (record.projectId !== projectRecord.id) {
-          throw new UserError(`workspace '${name}' is already bound to project '${record.projectName}'`);
-        }
-        if (record.profiles.join("\0") !== profiles.join("\0")) {
-          throw new UserError(`workspace '${name}' already exists with different profiles; use dim workspace update`);
-        }
-        if (JSON.stringify(record.capabilities ?? []) !== JSON.stringify(capabilities)) {
-          throw new UserError(`workspace '${name}' already exists with different capability requests`);
-        }
-        if (record.runtimeBackend !== input.runtimeBackend) {
-          throw new UserError(`workspace '${name}' already exists with backend '${record.runtimeBackend}'`);
-        }
-        if (input.kvm !== undefined && record.kvm !== input.kvm) {
-          throw new UserError(`workspace '${name}' already exists with KVM ${record.kvm ? "enabled" : "disabled"}`);
-        }
-        if (
-          record.cpuCount !== (input.cpuCount ?? options.cpuCount)
-          || record.memory !== (input.memory ?? options.memory)
-          || record.pidsLimit !== (input.pidsLimit ?? options.pidsLimit)
-        ) {
-          throw new UserError(`workspace '${name}' already exists with different resource limits`);
-        }
-      } catch (error) {
-        if (!(error instanceof MissingRecordError)) throw error;
-        setStage("runtime capability resolution");
-        const kvm = await resolveWorkspaceKvm(input.runtimeBackend, input.kvm);
-        setStage("managed Git address discovery");
-        const credentials = externalCredentials ?? await ensureGitea(runner, options);
-        const gitBaseUrl = `${await giteaNestedBaseUrl(runner, credentials)}/${projectRecord.gitNamespace}`;
-        record = {
-          schemaVersion: 7,
-          name,
-          projectId: projectRecord.id,
-          projectName: projectRecord.name,
-          rootRepositoryAlias: repo.alias,
-          rootRef: selectedRoot.rootRef,
-          rootCommit: selectedRoot.rootCommit,
-          workspaceDataPath: "/var/lib/dim/workspace-data",
-          phase: "creating",
-          profiles,
-          capabilities,
-          composeProjectName: `dim-${name}`,
-          containerName: `dim-ws-${name}`,
-          networkName: credentials.kind === "managed" ? GITEA_NETWORK : "bridge",
-          dockerVolumeName: `dim-ws-${name}-docker`,
-          runtimeBackend: input.runtimeBackend,
-          kvm,
-          cpuCount: input.cpuCount ?? options.cpuCount,
-          memory: input.memory ?? options.memory,
-          pidsLimit: input.pidsLimit ?? options.pidsLimit,
-          routes: [],
-          gitUserName,
-          gitUserEmail,
-          gitBaseUrl,
-          hostAliases: {},
-          projectManifestPath: "/run/dim/project.json",
-          createdAt: now,
-          updatedAt: now
-        };
-        setStage("workspace state claim");
-        await state.claimWorkspace(record);
-      }
       setStage("workspace setup lock acquisition");
       const release = await state.acquireWorkspaceSetupLock(name);
       try {
+        setStage("protected root validation");
+        await assertSelectedProjectUnchanged(state, selectedRoot);
+        const projectRecord = selectedRoot.project;
+        let existing: WorkspaceRecord | undefined;
+        try {
+          setStage("workspace state loading");
+          existing = await state.readWorkspace(name);
+          assertWorkspaceLifecycleActive(existing);
+        } catch (error) {
+          if (!(error instanceof MissingRecordError)) throw error;
+        }
+        const workspaceId = existing?.workspaceId ?? randomBytes(32).toString("base64url");
+        setStage("workspace capability resolution");
+        const capabilities = await resolveWorkspaceCapabilities(
+          {
+            required: input.requiredCapabilities ?? [],
+            recommended: input.recommendedCapabilities ?? []
+          },
+          {
+            workspaceId,
+            projectId: projectRecord.id,
+            projectName: projectRecord.name,
+            workspaceName: name,
+            runtimeBackend: input.runtimeBackend
+          },
+          plugins.workspaceCapabilityProviders
+        );
+        const repo = selectedRoot.repository;
+        const now = new Date().toISOString();
+        const gitUserName = input.gitUserName ?? process.env.DIM_GIT_USER_NAME ?? `dim/${name}`;
+        const gitUserEmail = input.gitUserEmail ?? process.env.DIM_GIT_USER_EMAIL ?? `${name}@dim.invalid`;
+        let record: WorkspaceRecord;
+        if (existing !== undefined) {
+          record = existing;
+          if (record.projectId !== projectRecord.id) {
+            throw new UserError(`workspace '${name}' is already bound to project '${record.projectName}'`);
+          }
+          if (record.profiles.join("\0") !== profiles.join("\0")) {
+            throw new UserError(`workspace '${name}' already exists with different profiles; use dim workspace update`);
+          }
+          if (JSON.stringify(record.capabilities ?? []) !== JSON.stringify(capabilities)) {
+            throw new UserError(`workspace '${name}' already exists with different capability requests`);
+          }
+          if (record.runtimeBackend !== input.runtimeBackend) {
+            throw new UserError(`workspace '${name}' already exists with backend '${record.runtimeBackend}'`);
+          }
+          if (input.kvm !== undefined && record.kvm !== input.kvm) {
+            throw new UserError(`workspace '${name}' already exists with KVM ${record.kvm ? "enabled" : "disabled"}`);
+          }
+          if (
+            record.cpuCount !== (input.cpuCount ?? options.cpuCount)
+            || record.memory !== (input.memory ?? options.memory)
+            || record.pidsLimit !== (input.pidsLimit ?? options.pidsLimit)
+          ) {
+            throw new UserError(`workspace '${name}' already exists with different resource limits`);
+          }
+        } else {
+          setStage("runtime capability resolution");
+          const kvm = await resolveWorkspaceKvm(input.runtimeBackend, input.kvm);
+          setStage("managed Git address discovery");
+          const credentials = externalCredentials ?? await ensureGitea(runner, options);
+          const gitBaseUrl = `${await giteaNestedBaseUrl(runner, credentials)}/${projectRecord.gitNamespace}`;
+          record = {
+            schemaVersion: 8,
+            workspaceId,
+            name,
+            projectId: projectRecord.id,
+            projectName: projectRecord.name,
+            rootRepositoryAlias: repo.alias,
+            rootRef: selectedRoot.rootRef,
+            rootCommit: selectedRoot.rootCommit,
+            workspaceDataPath: "/var/lib/dim/workspace-data",
+            phase: "creating",
+            profiles,
+            capabilities,
+            composeProjectName: `dim-${name}`,
+            containerName: `dim-ws-${name}`,
+            networkName: credentials.kind === "managed" ? GITEA_NETWORK : "bridge",
+            dockerVolumeName: `dim-ws-${name}-docker`,
+            runtimeBackend: input.runtimeBackend,
+            kvm,
+            cpuCount: input.cpuCount ?? options.cpuCount,
+            memory: input.memory ?? options.memory,
+            pidsLimit: input.pidsLimit ?? options.pidsLimit,
+            routes: [],
+            gitUserName,
+            gitUserEmail,
+            gitBaseUrl,
+            hostAliases: {},
+            projectManifestPath: "/run/dim/project.json",
+            createdAt: now,
+            updatedAt: now
+          };
+          setStage("workspace state claim");
+          await state.claimWorkspace(record);
+        }
         setStage("workspace reconciliation");
         const reconciled = await reconcileProject(runner, options, state, record, projectRecord, repo, setStage);
         return await setupWorkspaceLocked(runner, options, state, reconciled, false, false, setStage);

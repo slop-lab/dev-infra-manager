@@ -56,17 +56,20 @@ it.each([5, 6] as const)("rejects schema %i workspace records without modifying 
     await expect(readFile(path, "utf8")).resolves.toBe(original);
   });
 
-it("rejects workspace state from removed backends", async () => {
+it("rejects schema 7 workspace state without modifying it", async () => {
     const state = new LifecycleState(root);
     await mkdir(join(root, "workspaces"), { recursive: true });
-    await writeFile(join(root, "workspaces", "obsolete.json"), JSON.stringify({
+    const target = join(root, "workspaces", "obsolete.json");
+    const original = JSON.stringify({
       schemaVersion: 7,
       name: "obsolete",
-      runtimeBackend: "runc",
+      runtimeBackend: "sysbox",
       rootCommit: "a".repeat(40),
-    }));
+    });
+    await writeFile(target, original);
 
-    await expect(state.readWorkspace("obsolete")).rejects.toThrow(/supports only sysbox/);
-    await expect(state.listWorkspaces()).rejects.toThrow(/supports only sysbox/);
+    await expect(state.readWorkspace("obsolete")).rejects.toThrow(/schema 7.*expected 8.*export.*recreate/i);
+    await expect(state.listWorkspaces()).rejects.toThrow(/schema 7.*expected 8.*export.*recreate/i);
+    await expect(readFile(target, "utf8")).resolves.toBe(original);
   });
 });
