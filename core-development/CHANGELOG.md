@@ -67,9 +67,12 @@
   runtime ownership across stop/start while preventing same-name recreation
   from inheriting authority. Discard now publishes its non-ready phase and
   revokes grants before cleanup, while controller/plugin dispatch, host
-  shutdown, and host CLI grant lookup revalidate the current instance. Schema-7
-  and other incompatible workspace state is rejected unchanged with
-  pinned-version export and recreate guidance.
+  shutdown, and host CLI grant lookup revalidate the current instance. A
+  distinct per-workspace authority lock preserves that revalidation without
+  deadlocking setup-time host inputs, and controllers buffer bounded request
+  bodies before acquiring authority so partial agent requests cannot delay
+  discard denial. Schema-7 and other incompatible workspace state is rejected
+  unchanged with pinned-version export and recreate guidance.
 
 - Select the default trusted workspace image by the exact installed DIM package
   version instead of the mutable `latest` tag, while retaining
