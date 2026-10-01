@@ -61,6 +61,12 @@ UID/GID.
 Ordinary agent tasks run as the workspace owner's nonroot identity and may use
 passwordless `sudo` only for root inside the agent container, without gaining
 trusted-workspace or host runtime authority.
+The agent's `TMPDIR` is `/tmp/opencode`, backed by a separate
+`dim-agent-tmp` volume inside the private daemon. It is owned by the agent with
+mode `0700`, survives agent-container recreation, and is not part of the
+persistent home or its backup. Setup rejects a symlink or a populated root with
+incompatible ownership or mode. Ordinary workspace discard removes this exact
+owned volume; `--keep-volume` retains it with the private daemon store.
 
 ## Connect with OpenSSH
 
