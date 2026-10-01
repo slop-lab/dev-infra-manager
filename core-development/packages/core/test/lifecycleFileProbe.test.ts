@@ -46,7 +46,8 @@ class LifecycleProbeRunner extends LifecycleRunner {
 
 function workspaceFixture(root: string): WorkspaceRecord {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
+    workspaceId: "A".repeat(43),
     name: "work-1",
     projectId: "project-id",
     projectName: "project",

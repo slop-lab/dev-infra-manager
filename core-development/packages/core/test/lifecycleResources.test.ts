@@ -37,7 +37,8 @@ it("updates a claimed workspace container and persists its effective resources",
     const state = new LifecycleState(root);
     const now = new Date().toISOString();
     const record: WorkspaceRecord = {
-      schemaVersion: 7,
+      schemaVersion: 8,
+      workspaceId: "A".repeat(43),
       name: "work-1",
       projectId: "project-id",
       projectName: "project",
