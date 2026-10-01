@@ -8,6 +8,7 @@ import { createProject, planProjectRepositorySet } from "../../../../core/packag
 import { parseRepositorySetYaml } from "../../../../core/packages/core/src/repositorySet.js";
 import type { StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { createWorkspace } from "../../../../core/packages/core/src/workspaceCreation.js";
+import { setupWorkspace } from "../../../../core/packages/core/src/workspaceSetup.js";
 import { hostLifecycleOptions } from "./hostLifecycleFixture.js";
 
 const dependencyState = vi.hoisted(() => ({
@@ -130,8 +131,27 @@ describe("lifecycle record absence callers", () => {
     });
 
     // Then
-    await expect(creation).rejects.toBe(READ_FAILURE);
+    await expect(creation).rejects.toMatchObject({
+      message: `workspace create at workspace state loading: ${READ_FAILURE.message}`,
+      cause: READ_FAILURE
+    });
     expect(claim).not.toHaveBeenCalled();
+    expect(ensureGitea).not.toHaveBeenCalled();
+  });
+
+  it("attributes setup workspace-record failures without dispatching runtime work", async () => {
+    // Given
+    vi.spyOn(LifecycleState.prototype, "readWorkspace").mockRejectedValue(READ_FAILURE);
+
+    // When
+    const lifecycle = setupWorkspace(RUNNER, OPTIONS, "workspace");
+
+    // Then
+    await expect(lifecycle).rejects.toMatchObject({
+      message: `workspace setup at workspace state loading: ${READ_FAILURE.message}`,
+      cause: READ_FAILURE
+    });
+    expect(dependencyState.snapshotCalls).toBe(0);
     expect(ensureGitea).not.toHaveBeenCalled();
   });
 

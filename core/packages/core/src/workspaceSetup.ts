@@ -13,6 +13,11 @@ import { writeProjectManifest } from "./workspaceRepositorySnapshot.js";
 import { assertContainerRunning, reconcileContainer } from "./workspaceContainer.js";
 import type { WorkspaceGitEnvironment } from "./workspaceLifecycleTypes.js";
 import {
+  runWorkspaceLifecycle,
+  runWorkspaceLifecycleStage,
+  type SetWorkspaceLifecycleStage
+} from "./workspaceLifecycleError.js";
+import {
   assertRootSnapshot,
   installHostInputHelper,
   runProjectSetup
@@ -35,45 +40,55 @@ export async function setupWorkspace(
   name: string,
   profilesChanged = false
 ): Promise<WorkspaceRecord> {
-  const workspaceName = validateLifecycleName(name, "workspace");
-  const state = new LifecycleState(options.stateRoot);
-  const initialRecord = await state.readWorkspace(workspaceName);
-  const releaseProject = await state.acquireProjectLock(initialRecord.projectName);
-  try {
-    const release = await state.acquireWorkspaceSetupLock(workspaceName);
+  return runWorkspaceLifecycle("setup", async (setStage) => {
+    const workspaceName = validateLifecycleName(name, "workspace");
+    const state = new LifecycleState(options.stateRoot);
+    setStage("workspace state loading");
+    const initialRecord = await state.readWorkspace(workspaceName);
+    setStage("Project lock acquisition");
+    const releaseProject = await state.acquireProjectLock(initialRecord.projectName);
     try {
-      let record = await state.readWorkspace(workspaceName);
-      if (record.projectName !== initialRecord.projectName || record.projectId !== initialRecord.projectId) {
-        throw new UserError(`project '${record.projectName}' identity changed`);
+      setStage("workspace setup lock acquisition");
+      const release = await state.acquireWorkspaceSetupLock(workspaceName);
+      try {
+        setStage("workspace state loading");
+        let record = await state.readWorkspace(workspaceName);
+        if (record.projectName !== initialRecord.projectName || record.projectId !== initialRecord.projectId) {
+          throw new UserError(`project '${record.projectName}' identity changed`);
+        }
+        setStage("protected root validation");
+        await assertRootSnapshot(options.stateRoot, record);
+        if (record.phase === "setting-up" || record.phase === "setup-error" || record.phase === "error") {
+          setStage("Project state loading");
+          const project = await state.readProject(record.projectName);
+          if (project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
+          const repo = project.repositories.find((candidate) => candidate.alias === record.rootRepositoryAlias);
+          if (repo === undefined) throw new UserError(`project '${project.name}' root repository is missing`);
+          setStage("workspace reconciliation");
+          const reconciled = await reconcileProjectContainer({ runner, options, state, record, project, repo });
+          record = reconciled.record;
+          const containerId = reconciled.containerId;
+          setStage("protected root publication");
+          record = await applySelectedRoot({
+            runner,
+            state,
+            record,
+            containerId,
+            target: {
+              rootRef: record.rootRef,
+              rootCommit: record.rootCommit,
+              rootSnapshotPath: protectedRootSnapshotPath(options.stateRoot, record.projectId, record.rootCommit)
+            }
+          });
+        }
+        return await setupWorkspaceLocked(runner, options, state, record, profilesChanged, false, setStage);
+      } finally {
+        await runWorkspaceLifecycleStage("setup", "workspace setup lock release", release);
       }
-      await assertRootSnapshot(options.stateRoot, record);
-      if (record.phase === "setting-up" || record.phase === "setup-error" || record.phase === "error") {
-        const project = await state.readProject(record.projectName);
-        if (project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
-        const repo = project.repositories.find((candidate) => candidate.alias === record.rootRepositoryAlias);
-        if (repo === undefined) throw new UserError(`project '${project.name}' root repository is missing`);
-        const reconciled = await reconcileProjectContainer({ runner, options, state, record, project, repo });
-        record = reconciled.record;
-        const containerId = reconciled.containerId;
-        record = await applySelectedRoot({
-          runner,
-          state,
-          record,
-          containerId,
-          target: {
-            rootRef: record.rootRef,
-            rootCommit: record.rootCommit,
-            rootSnapshotPath: protectedRootSnapshotPath(options.stateRoot, record.projectId, record.rootCommit)
-          }
-        });
-      }
-      return await setupWorkspaceLocked(runner, options, state, record, profilesChanged);
     } finally {
-      await release();
+      await runWorkspaceLifecycleStage("setup", "Project lock release", releaseProject);
     }
-  } finally {
-    await releaseProject();
-  }
+  });
 }
 
 export async function setupWorkspaceLocked(
@@ -82,10 +97,13 @@ export async function setupWorkspaceLocked(
   state: LifecycleState,
   initialRecord: WorkspaceRecord,
   profilesChanged = false,
-  forceRecreate = false
+  forceRecreate = false,
+  setStage: SetWorkspaceLifecycleStage = () => undefined
 ): Promise<WorkspaceRecord> {
   let record = initialRecord;
+  setStage("workspace container readiness");
   const containerId = await assertContainerRunning(runner, options.stateRoot, record);
+  setStage("protected root validation");
   await assertRootSnapshot(options.stateRoot, record);
   const startedAt = new Date().toISOString();
   record = {
@@ -95,8 +113,10 @@ export async function setupWorkspaceLocked(
     updatedAt: startedAt
   };
   delete record.error;
+  setStage("setup-state publication");
   await state.writeWorkspace(record);
 
+  setStage("Project setup");
   const exitCode = await runProjectSetup(
     runner,
     { ...record, containerName: containerId },
@@ -113,7 +133,9 @@ export async function setupWorkspaceLocked(
       updatedAt: completedAt,
       error: setupError
     };
+    setStage("setup-error publication");
     await state.writeWorkspace(record);
+    setStage("Project setup");
     throw new UserError(setupError);
   }
   record = {
@@ -124,14 +146,17 @@ export async function setupWorkspaceLocked(
   };
   delete record.error;
   try {
+    setStage("ready-state publication");
     await state.writeWorkspace(record);
   } catch (error) {
+    setStage("setup-error publication");
     await state.writeWorkspace({
       ...record,
       phase: "setup-error",
       error: error instanceof Error ? error.message : String(error),
       updatedAt: new Date().toISOString()
     });
+    setStage("ready-state publication");
     throw error;
   }
   return record;
