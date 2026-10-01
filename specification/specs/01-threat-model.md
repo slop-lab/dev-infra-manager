@@ -49,7 +49,11 @@ The agent is assumed to be capable of:
 - Do not mount the host or Project runtime Docker socket into agent
   containers.
 - Do not mount secret-bearing volumes into agent containers.
-- Block direct pushes to protected refs in managed bare repositories.
+- Block ordinary direct pushes, force pushes, deletion, and every other
+  unreviewed direct update to protected refs in managed repositories. Permit
+  only the host maintainer's complete-tree-reviewed, exact-evidence, atomic
+  compare-and-swap promotion
+  defined by `TRUST-PROMOTION-001` and `TRUST-PROMOTION-CAS-001`.
 - Deploy secret-bearing containers only from configured approved refs.
 - Treat Project lifecycle and secret runtime code as trusted-boundary code.
 - Keep named workspaces isolated from one another.

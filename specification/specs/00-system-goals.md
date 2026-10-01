@@ -35,8 +35,14 @@ The system must prevent that agent from:
   Gitea writer credential may be injected when its server-side permissions
   cannot modify protected refs or secret-bearing runtime state.
 - Secret-bearing runtime deployment must use the configured approved Git ref.
-- Protected Git refs must reject direct push through managed Gitea policy.
-- Managed pull request merge is the path that updates protected refs in normal operation.
+- Protected Git refs must reject ordinary direct pushes, force pushes,
+  deletion, and every other unreviewed direct update through managed Git
+  policy. Only the host-side checked promotion operation in
+  `TRUST-PROMOTION-001` and
+  `TRUST-PROMOTION-CAS-001` may atomically update the expected old object ID to
+  the exact reviewed candidate.
+- Managed pull request promotion through that checked compare-and-swap
+  operation is the only normal path that updates protected refs.
 - Runtime backend selection and storage backend selection must be independent.
 - `directory` storage does not enforce `diskBytes` and must be treated as a compatibility backend.
 - `doctor` must check the workspace runtime backend recorded during host installation.
