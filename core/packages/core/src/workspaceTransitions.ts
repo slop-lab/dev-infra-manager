@@ -61,7 +61,8 @@ export async function updateWorkspace(
             state,
             record,
             project: selectedRoot.project,
-            repo: selectedRoot.repository
+            repo: selectedRoot.repository,
+            setStage
           });
           record = reconciled.record;
           containerId = reconciled.containerId;
@@ -142,7 +143,8 @@ async function startWorkspaceLocked(
     state,
     record,
     project: selectedRoot.project,
-    repo: selectedRoot.repository
+    repo: selectedRoot.repository,
+    setStage
   });
   setStage("protected root publication");
   const updated = await applySelectedRoot({

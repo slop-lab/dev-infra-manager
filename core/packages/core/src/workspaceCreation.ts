@@ -138,7 +138,7 @@ export async function createWorkspace(
       const release = await state.acquireWorkspaceSetupLock(name);
       try {
         setStage("workspace reconciliation");
-        const reconciled = await reconcileProject(runner, options, state, record, projectRecord, repo);
+        const reconciled = await reconcileProject(runner, options, state, record, projectRecord, repo, setStage);
         return await setupWorkspaceLocked(runner, options, state, reconciled, false, false, setStage);
       } finally {
         await runWorkspaceLifecycleStage("create", "workspace setup lock release", release);

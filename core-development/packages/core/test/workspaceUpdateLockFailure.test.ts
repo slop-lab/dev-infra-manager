@@ -13,6 +13,7 @@ import type {
   StreamingCommandRunner
 } from "../../../../core/packages/core/src/types.js";
 import {
+  createWorkspace,
   runWorkspace,
   setupWorkspace,
   updateWorkspace,
@@ -107,6 +108,57 @@ it("keeps a post-fast-forward manifest failure non-ready and blocks run", async 
       })
     });
     expect(runner.lifecycleEvents).toEqual([]);
+  });
+
+  it("identifies create-time Project manifest publication failures", async () => {
+    // Given
+    await state.removeWorkspace(workspace.name);
+    runner = new UpdateRunner(1);
+    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", project.id, COMMIT);
+
+    // When
+    const creation = createWorkspace(runner, options(root), {
+      project: project.name,
+      name: workspace.name,
+      profiles: workspace.profiles,
+      runtimeBackend: "sysbox",
+      kvm: false
+    });
+
+    // Then
+    await expect(creation).rejects.toMatchObject({
+      message: "workspace create at Project manifest publication: failed to write project runtime manifest: injected manifest failure",
+      cause: expect.objectContaining({
+        message: "failed to write project runtime manifest: injected manifest failure"
+      })
+    });
+  });
+
+  it("identifies reconciliation workspace-lock release failures after releasing the real lock", async () => {
+    // Given
+    const acquireWorkspaceLock = LifecycleState.prototype.acquireWorkspaceLock;
+    let releaseAttempts = 0;
+    vi.spyOn(LifecycleState.prototype, "acquireWorkspaceLock").mockImplementation(async function (
+      this: LifecycleState,
+      name: string
+    ) {
+      const release = await acquireWorkspaceLock.call(this, name);
+      return async () => {
+        releaseAttempts += 1;
+        await release();
+        throw new Error("injected reconciliation lock release failure");
+      };
+    });
+
+    // When
+    const updating = updateWorkspace(runner, options(root), workspace.name);
+
+    // Then
+    await expect(updating).rejects.toMatchObject({
+      message: "workspace update at workspace reconciliation lock release: injected reconciliation lock release failure",
+      cause: expect.objectContaining({ message: "injected reconciliation lock release failure" })
+    });
+    expect(releaseAttempts).toBe(1);
   });
 
 it("persists setup-error when the final ready write fails after manifest publication", async () => {

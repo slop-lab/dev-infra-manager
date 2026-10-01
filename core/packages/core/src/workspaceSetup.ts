@@ -32,6 +32,7 @@ type ReconcileProjectContainerInput = {
   readonly record: WorkspaceRecord;
   readonly project: ProjectRecord;
   readonly repo: ProjectRecord["repositories"][number];
+  readonly setStage: SetWorkspaceLifecycleStage;
 };
 
 export async function setupWorkspace(
@@ -65,7 +66,7 @@ export async function setupWorkspace(
           const repo = project.repositories.find((candidate) => candidate.alias === record.rootRepositoryAlias);
           if (repo === undefined) throw new UserError(`project '${project.name}' root repository is missing`);
           setStage("workspace reconciliation");
-          const reconciled = await reconcileProjectContainer({ runner, options, state, record, project, repo });
+          const reconciled = await reconcileProjectContainer({ runner, options, state, record, project, repo, setStage });
           record = reconciled.record;
           const containerId = reconciled.containerId;
           setStage("protected root publication");
@@ -168,15 +169,18 @@ export async function reconcileProject(
   state: LifecycleState,
   initialRecord: WorkspaceRecord,
   project: ProjectRecord,
-  repo: ProjectRecord["repositories"][number]
+  repo: ProjectRecord["repositories"][number],
+  setStage: SetWorkspaceLifecycleStage
 ): Promise<WorkspaceRecord> {
   const reconciled = await reconcileProjectContainer({
-    runner, options, state, record: initialRecord, project, repo
+    runner, options, state, record: initialRecord, project, repo, setStage
   });
   let record = reconciled.record;
   try {
+    setStage("Project manifest publication");
     await writeProjectManifest(runner, { ...record, containerName: reconciled.containerId });
     record = { ...record, updatedAt: new Date().toISOString() };
+    setStage("workspace state publication");
     await state.writeWorkspace(record);
     return record;
   } catch (error) {
@@ -235,7 +239,9 @@ export async function reconcileProjectContainer(
     await input.state.writeWorkspace(record);
     throw new UserError(detail, { cause: error });
   } finally {
+    input.setStage("workspace reconciliation lock release");
     await release();
+    input.setStage("workspace reconciliation");
   }
 }
 
