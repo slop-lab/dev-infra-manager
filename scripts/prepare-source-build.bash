@@ -12,6 +12,7 @@ package_root="$local_root/dim-packages"
 readiness_file="$local_root/prepared-local.state"
 lock_file="$local_root/prepare-install.lock"
 temporary_image_ref="dev-infra-project-workspace:prepare-$(id -u)-$$"
+rollback_image_ref="dev-infra-project-workspace:rollback-$(id -u)-$$"
 
 command -v flock >/dev/null 2>&1 || {
   echo "prepare-local requires flock" >&2
@@ -45,18 +46,41 @@ source_stage="$stage_root/source"
 package_stage="$stage_root/packages"
 readiness_stage="$stage_root/readiness"
 previous_packages="$stage_root/previous-packages"
-package_swapped=0
+previous_readiness="$stage_root/previous-readiness"
+previous_packages_saved=0
+packages_promoted=0
+previous_readiness_saved=0
+readiness_promoted=0
+previous_image_saved=0
+image_promoted=0
 published=0
 
 cleanup() {
   status="$?"
-  if [[ "$published" -eq 0 && "$package_swapped" -eq 1 ]]; then
-    mv -- "$package_root" "$stage_root/failed-packages"
-    if [[ -d "$previous_packages" ]]; then
+  set +e
+  if [[ "$published" -eq 0 ]]; then
+    if [[ "$readiness_promoted" -eq 1 ]]; then
+      rm -f -- "$readiness_file"
+    fi
+    if [[ "$previous_readiness_saved" -eq 1 ]]; then
+      mv -- "$previous_readiness" "$readiness_file"
+    fi
+    if [[ "$packages_promoted" -eq 1 ]]; then
+      mv -- "$package_root" "$stage_root/failed-packages"
+    fi
+    if [[ "$previous_packages_saved" -eq 1 ]]; then
       mv -- "$previous_packages" "$package_root"
+    fi
+    if [[ "$image_promoted" -eq 1 ]]; then
+      if [[ "$previous_image_saved" -eq 1 ]]; then
+        docker image tag "$rollback_image_ref" "$final_image_ref"
+      else
+        docker image rm "$final_image_ref" >/dev/null
+      fi
     fi
   fi
   docker image rm "$temporary_image_ref" >/dev/null 2>&1 || true
+  docker image rm "$rollback_image_ref" >/dev/null 2>&1 || true
   rm -rf -- "$stage_root"
   exit "$status"
 }
@@ -75,7 +99,12 @@ DIM_LOCAL_IMAGE_RECORD_REF="$final_image_ref" \
   bash "$repo_root/scripts/local-preparation-state.bash" >"$readiness_stage"
 
 temporary_image_id="$(docker image inspect --format '{{.Id}}' "$temporary_image_ref")"
+if docker image inspect --format '{{.Id}}' "$final_image_ref" >/dev/null 2>&1; then
+  docker image tag "$final_image_ref" "$rollback_image_ref"
+  previous_image_saved=1
+fi
 docker image tag "$temporary_image_ref" "$final_image_ref"
+image_promoted=1
 final_image_id="$(docker image inspect --format '{{.Id}}' "$final_image_ref")"
 if [[ "$final_image_id" != "$temporary_image_id" ]]; then
   echo "promoted image ID does not match the prepared image" >&2
@@ -84,10 +113,16 @@ fi
 
 if [[ -d "$package_root" ]]; then
   mv -- "$package_root" "$previous_packages"
+  previous_packages_saved=1
 fi
 mv -- "$package_stage" "$package_root"
-package_swapped=1
+packages_promoted=1
+if [[ -f "$readiness_file" ]]; then
+  mv -- "$readiness_file" "$previous_readiness"
+  previous_readiness_saved=1
+fi
 mv -- "$readiness_stage" "$readiness_file"
+readiness_promoted=1
 published=1
 
 echo "[host] local source build is prepared"
