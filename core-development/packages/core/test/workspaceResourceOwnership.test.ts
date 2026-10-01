@@ -11,6 +11,7 @@ import {
 
 const RECORD = {
   name: "work-1",
+  workspaceId: "A".repeat(43),
   projectName: "project",
   projectId: "project-id",
   rootRepositoryAlias: "root",
@@ -19,19 +20,20 @@ const RECORD = {
   dockerVolumeName: "dim-ws-work-1-docker",
   rootSnapshotPath: "/var/lib/dim/project-roots/project-id/approved"
 } satisfies Pick<WorkspaceRecord,
-  "name" | "projectName" | "projectId" | "rootRepositoryAlias" | "runtimeBackend" |
+  "name" | "workspaceId" | "projectName" | "projectId" | "rootRepositoryAlias" | "runtimeBackend" |
   "containerName" | "dockerVolumeName"> & { readonly rootSnapshotPath: string };
 
 const CONTAINER_LABELS = [
   "dim.managed=true",
   "dim.owner=dim",
   "dim.workspace=work-1",
+  `dim.workspace-id=${"A".repeat(43)}`,
   "dim.project=project",
   "dim.project-id=project-id",
   "dim.repo=root",
   "dim.backend=sysbox",
   "dim.resource=workspace",
-  `dim.digest=${identityDigest(["dim-ws-work-1", "work-1", "project", "project-id", "root", "sysbox", "workspace", "container"])}`
+  `dim.digest=${identityDigest(["dim-ws-work-1", "work-1", "A".repeat(43), "project", "project-id", "root", "sysbox", "workspace", "container"])}`
 ] as const;
 
 const VOLUME_LABELS = [

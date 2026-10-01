@@ -5,7 +5,7 @@ import {
 } from "../../../../core/packages/core/src/workspaceResourceOwnership.js";
 
 type WorkspaceIdentity = Pick<WorkspaceRecord,
-  "name" | "projectName" | "projectId" | "rootRepositoryAlias" | "runtimeBackend" |
+  "name" | "workspaceId" | "projectName" | "projectId" | "rootRepositoryAlias" | "runtimeBackend" |
   "containerName" | "dockerVolumeName"> & { readonly rootSnapshotPath?: string };
 
 export function workspaceContainerInspect(

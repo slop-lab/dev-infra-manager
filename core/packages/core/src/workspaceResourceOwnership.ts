@@ -5,13 +5,14 @@ import type { StreamingCommandRunner } from "./types.js";
 import { PROJECT_ROOT } from "./workspaceLifecycleTypes.js";
 
 type WorkspaceIdentity = Pick<WorkspaceRecord,
-  "name" | "projectName" | "projectId" | "rootRepositoryAlias" | "runtimeBackend" |
+  "name" | "workspaceId" | "projectName" | "projectId" | "rootRepositoryAlias" | "runtimeBackend" |
   "containerName" | "dockerVolumeName">;
 
 const CONTAINER_LABEL_KEYS = [
   "dim.managed",
   "dim.owner",
   "dim.workspace",
+  "dim.workspace-id",
   "dim.project",
   "dim.project-id",
   "dim.repo",
@@ -54,6 +55,7 @@ export function workspaceContainerLabels(record: WorkspaceIdentity): readonly st
   const fields = [
     record.containerName,
     record.name,
+    record.workspaceId,
     record.projectName,
     record.projectId,
     record.rootRepositoryAlias,
@@ -65,6 +67,7 @@ export function workspaceContainerLabels(record: WorkspaceIdentity): readonly st
     "dim.managed=true",
     "dim.owner=dim",
     `dim.workspace=${record.name}`,
+    `dim.workspace-id=${record.workspaceId}`,
     `dim.project=${record.projectName}`,
     `dim.project-id=${record.projectId}`,
     `dim.repo=${record.rootRepositoryAlias}`,
