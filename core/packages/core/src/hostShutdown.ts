@@ -5,7 +5,7 @@ import { LifecycleState } from "./lifecycleState.js";
 import type { HostLifecycleRecord, LifecycleOptions } from "./lifecycleTypes.js";
 import { REGISTRY_CACHE_CONTAINER } from "./registryCache.js";
 import type { StreamingCommandRunner } from "./types.js";
-import { listWorkspaces, stopWorkspace } from "./workspaceLifecycle.js";
+import { listWorkspaces, stopWorkspaceForHostShutdown } from "./workspaceLifecycle.js";
 
 export async function shutdownHost(
   runner: StreamingCommandRunner,
@@ -18,8 +18,12 @@ export async function shutdownHost(
     if (current && current.phase !== "ready") {
       throw new UserError(`DIM host is already ${current.phase}; run dim host start to recover it`);
     }
-    const resumeWorkspaces = (await listWorkspaces(runner, options))
+    const workspaces = await listWorkspaces(runner, options);
+    const resumeWorkspaces = workspaces
       .filter((workspace) => workspace.phase === "ready")
+      .map((workspace) => workspace.name);
+    const shutdownWorkspaces = workspaces
+      .filter((workspace) => workspace.phase === "ready" || workspace.phase === "discarding")
       .map((workspace) => workspace.name);
     const ciRunners = await state.listCiRunners();
     const restartCiRunners = ciRunners
@@ -51,8 +55,8 @@ export async function shutdownHost(
       await attempt(errors, `stop CI runner '${target.project}/${target.name}'`, () =>
         stopCiRunner(runner, options, target.project, target.name));
     }
-    for (const workspace of resumeWorkspaces) {
-      await attempt(errors, `stop workspace '${workspace}'`, () => stopWorkspace(runner, options, workspace));
+    for (const workspace of shutdownWorkspaces) {
+      await attempt(errors, `stop workspace '${workspace}'`, () => stopWorkspaceForHostShutdown(runner, options, workspace));
     }
     for (const container of ordinaryContainers) {
       await attempt(errors, `stop disposable CI container '${container}'`, () => stopManagedContainer(runner, container));

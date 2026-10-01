@@ -17,6 +17,7 @@ export {
   listWorkspaces,
   showWorkspace,
   stopWorkspace,
+  stopWorkspaceForHostShutdown,
   updateWorkspaceResources
 } from "./workspaceState.js";
 export {

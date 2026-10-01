@@ -152,6 +152,31 @@ export async function stopWorkspace(
   }
 }
 
+export async function stopWorkspaceForHostShutdown(
+  runner: StreamingCommandRunner,
+  options: LifecycleOptions,
+  name: string
+): Promise<void> {
+  const state = new LifecycleState(options.stateRoot);
+  const workspaceName = validateLifecycleName(name, "workspace");
+  const release = await state.acquireWorkspaceSetupLock(workspaceName);
+  try {
+    const record = await state.readWorkspace(workspaceName);
+    if (record.phase !== "discarding") {
+      await stopWorkspaceLocked(runner, state, record);
+      return;
+    }
+    const container = await inspectWorkspaceContainer(runner, record);
+    if (!container?.running) return;
+    const stopped = await runner.run("docker", ["stop", container.id]);
+    if (stopped.exitCode !== 0 && !isMissingContainer(stopped.stderr, container.id)) {
+      throw new UserError(`failed to stop workspace '${record.name}': ${stopped.stderr.trim()}`);
+    }
+  } finally {
+    await release();
+  }
+}
+
 export async function stopWorkspaceLocked(
   runner: StreamingCommandRunner,
   state: LifecycleState,
