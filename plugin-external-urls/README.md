@@ -44,6 +44,13 @@ dim external-url request \
 dim external-url list --workspace feature-123
 ```
 
+On the host, omit `--workspace` to list routes for every current workspace.
+That inventory includes Project and workspace names, is capped at 1,000 routes,
+and is available only through DIM's host-admin socket. Workspace and agent
+controller grants continue to list only their own workspace and cannot invoke
+the host-wide action. Neither listing returns controller grants, provider
+arguments, or credentials.
+
 Targets may be the workspace root, one named child container, or a container
 inside that child. DIM resolves the target through the workspace runtime
 rather than accepting an arbitrary host address.
