@@ -163,9 +163,14 @@ refs do not change archived bytes, full-length tree object IDs are rejected
 before dependency installation, and uncommitted lock drift does not alter the
 selected commit. Symlink probes for persistent source, package, readiness, and
 output paths MUST fail without changing their targets. Failed staging or late
-publication MUST preserve the previously published packages, readiness, and
-versioned image identity; when no previous candidate exists, failure MUST leave
-none of those publication artifacts behind.
+publication MUST preserve recoverable copies of the previously published
+packages and readiness. Tests MUST inject package and readiness restoration
+failures and prove that recovery data remains at a reported private staging
+path. The shared versioned image tag MUST be the final publication mutation.
+Tests MUST prove that a concurrent foreign retag is never overwritten or
+removed, and that an image-tag operation which reports failure retains the
+prepared and prior private image references for explicit operator recovery
+instead of attempting an unsafe shared-tag rollback.
 
 `just verify workspace-user-setup` MUST supplement launcher mocks with the real
 pinned OpenCode `1.18.31` runtime in a disposable home without provider
