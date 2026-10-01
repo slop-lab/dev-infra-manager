@@ -58,7 +58,9 @@ it("keeps a post-fast-forward manifest failure non-ready and blocks run", async 
     const updating = updateWorkspace(runner, options(root), workspace.name);
 
     // Then
-    await expect(updating).rejects.toThrow(/failed to write project runtime manifest: injected manifest failure/);
+    await expect(updating).rejects.toThrow(
+      /workspace update at protected root publication: failed to write project runtime manifest: injected manifest failure/
+    );
     await expect(state.readWorkspace(workspace.name)).resolves.toMatchObject({
       phase: "setup-error",
       rootCommit: COMMIT,
@@ -84,8 +86,9 @@ it("keeps a post-fast-forward manifest failure non-ready and blocks run", async 
 
     // Then
     await expect(updating).rejects.toThrow(
-      "workspace reconciliation at host-input helper installation: failed to install host input helper: injected permission failure"
+      "workspace update at workspace reconciliation: workspace reconciliation at host-input helper installation: failed to install host input helper: injected permission failure"
     );
+    await expect(updating).rejects.not.toThrow(/writer-secret|admin-secret|maintainer-secret/);
     await expect(state.readWorkspace(workspace.name)).resolves.toMatchObject({
       phase: "error",
       error: "workspace reconciliation at host-input helper installation: failed to install host input helper: injected permission failure"
@@ -114,7 +117,9 @@ it("persists setup-error when the final ready write fails after manifest publica
     const updating = updateWorkspace(runner, options(root), workspace.name);
 
     // Then
-    await expect(updating).rejects.toThrow("injected ready write failure");
+    await expect(updating).rejects.toThrow(
+      "workspace update at ready-state publication: injected ready write failure"
+    );
     expect(runner.manifestPublicationAttempts).toBe(1);
     await expect(state.readWorkspace(workspace.name)).resolves.toMatchObject({
       phase: "setup-error",
@@ -167,7 +172,10 @@ it("recovers a failed manifest publication through a later update", async () => 
     const updating = updateWorkspace(runner, options(root), workspace.name);
 
     // Then
-    await expect(updating).rejects.toThrow(/project setup exited with 17/);
+    await expect(updating).rejects.toMatchObject({
+      message: "workspace update at Project setup: project setup exited with 17",
+      cause: expect.objectContaining({ message: "project setup exited with 17" })
+    });
     expect(runner.lifecycleEvents).toEqual([
       "container-remove", "container-create", "manifest-publication", "project-setup"
     ]);

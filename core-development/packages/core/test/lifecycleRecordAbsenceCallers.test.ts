@@ -9,6 +9,11 @@ import { parseRepositorySetYaml } from "../../../../core/packages/core/src/repos
 import type { StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { createWorkspace } from "../../../../core/packages/core/src/workspaceCreation.js";
 import { setupWorkspace } from "../../../../core/packages/core/src/workspaceSetup.js";
+import {
+  restartWorkspace,
+  startWorkspace,
+  updateWorkspace
+} from "../../../../core/packages/core/src/workspaceTransitions.js";
 import { hostLifecycleOptions } from "./hostLifecycleFixture.js";
 
 const dependencyState = vi.hoisted(() => ({
@@ -149,6 +154,26 @@ describe("lifecycle record absence callers", () => {
     // Then
     await expect(lifecycle).rejects.toMatchObject({
       message: `workspace setup at workspace state loading: ${READ_FAILURE.message}`,
+      cause: READ_FAILURE
+    });
+    expect(dependencyState.snapshotCalls).toBe(0);
+    expect(ensureGitea).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { operation: "update", invoke: () => updateWorkspace(RUNNER, OPTIONS, "workspace") },
+    { operation: "start", invoke: () => startWorkspace(RUNNER, OPTIONS, "workspace") },
+    { operation: "restart", invoke: () => restartWorkspace(RUNNER, OPTIONS, "workspace") }
+  ])("attributes $operation workspace-record failures without dispatching runtime work", async ({ operation, invoke }) => {
+    // Given
+    vi.spyOn(LifecycleState.prototype, "readWorkspace").mockRejectedValue(READ_FAILURE);
+
+    // When
+    const lifecycle = invoke();
+
+    // Then
+    await expect(lifecycle).rejects.toMatchObject({
+      message: `workspace ${operation} at workspace state loading: ${READ_FAILURE.message}`,
       cause: READ_FAILURE
     });
     expect(dependencyState.snapshotCalls).toBe(0);

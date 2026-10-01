@@ -3,6 +3,11 @@ import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
 import { resolveProtectedRootSnapshot } from "./protectedRootSnapshot.js";
 import type { StreamingCommandRunner } from "./types.js";
+import {
+  runWorkspaceLifecycle,
+  runWorkspaceLifecycleStage,
+  type SetWorkspaceLifecycleStage
+} from "./workspaceLifecycleError.js";
 import { assertContainerRunning } from "./workspaceContainer.js";
 import {
   applySelectedRoot,
@@ -23,49 +28,64 @@ export async function updateWorkspace(
   name: string,
   profiles?: string[]
 ): Promise<WorkspaceRecord> {
-  const workspaceName = validateLifecycleName(name, "workspace");
-  const state = new LifecycleState(options.stateRoot);
-  const initialRecord = await state.readWorkspace(workspaceName);
-  const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: initialRecord.projectName });
-  const releaseProject = await state.acquireProjectLock(initialRecord.projectName);
-  try {
-    await assertSelectedProjectUnchanged(state, selectedRoot);
-    const release = await state.acquireWorkspaceSetupLock(workspaceName);
+  return runWorkspaceLifecycle("update", async (setStage) => {
+    const workspaceName = validateLifecycleName(name, "workspace");
+    const state = new LifecycleState(options.stateRoot);
+    setStage("workspace state loading");
+    const initialRecord = await state.readWorkspace(workspaceName);
+    setStage("protected root selection");
+    const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: initialRecord.projectName });
+    setStage("Project lock acquisition");
+    const releaseProject = await state.acquireProjectLock(initialRecord.projectName);
     try {
-      let record = await state.readWorkspace(workspaceName);
-      if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
-      const oldProfiles = record.profiles;
-      const nextProfiles = profiles === undefined ? oldProfiles : validateWorkspaceProfiles(profiles);
-      let containerId = await assertContainerRunning(runner, options.stateRoot, record);
-      if (record.rootCommit !== selectedRoot.rootCommit) {
-        record = await recordSelectedRoot(state, record, selectedRoot);
-        const reconciled = await reconcileProjectContainer({
+      setStage("protected root validation");
+      await assertSelectedProjectUnchanged(state, selectedRoot);
+      setStage("workspace setup lock acquisition");
+      const release = await state.acquireWorkspaceSetupLock(workspaceName);
+      try {
+        setStage("workspace state loading");
+        let record = await state.readWorkspace(workspaceName);
+        if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
+        const oldProfiles = record.profiles;
+        const nextProfiles = profiles === undefined ? oldProfiles : validateWorkspaceProfiles(profiles);
+        setStage("workspace container readiness");
+        let containerId = await assertContainerRunning(runner, options.stateRoot, record);
+        if (record.rootCommit !== selectedRoot.rootCommit) {
+          setStage("selected root recording");
+          record = await recordSelectedRoot(state, record, selectedRoot);
+          setStage("workspace reconciliation");
+          const reconciled = await reconcileProjectContainer({
+            runner,
+            options,
+            state,
+            record,
+            project: selectedRoot.project,
+            repo: selectedRoot.repository
+          });
+          record = reconciled.record;
+          containerId = reconciled.containerId;
+        }
+        setStage("protected root publication");
+        record = await applySelectedRoot({ runner, state, record, target: selectedRoot, containerId });
+        record = { ...record, profiles: nextProfiles, updatedAt: new Date().toISOString() };
+        setStage("workspace state publication");
+        await state.writeWorkspace(record);
+        return await setupWorkspaceLocked(
           runner,
           options,
           state,
           record,
-          project: selectedRoot.project,
-          repo: selectedRoot.repository
-        });
-        record = reconciled.record;
-        containerId = reconciled.containerId;
+          oldProfiles.join("\0") !== nextProfiles.join("\0"),
+          false,
+          setStage
+        );
+      } finally {
+        await runWorkspaceLifecycleStage("update", "workspace setup lock release", release);
       }
-      record = await applySelectedRoot({ runner, state, record, target: selectedRoot, containerId });
-      record = { ...record, profiles: nextProfiles, updatedAt: new Date().toISOString() };
-      await state.writeWorkspace(record);
-      return await setupWorkspaceLocked(
-        runner,
-        options,
-        state,
-        record,
-        oldProfiles.join("\0") !== nextProfiles.join("\0")
-      );
     } finally {
-      await release();
+      await runWorkspaceLifecycleStage("update", "Project lock release", releaseProject);
     }
-  } finally {
-    await releaseProject();
-  }
+  });
 }
 
 export async function startWorkspace(
@@ -73,22 +93,29 @@ export async function startWorkspace(
   options: LifecycleOptions,
   name: string
 ): Promise<WorkspaceRecord> {
-  const workspaceName = validateLifecycleName(name, "workspace");
-  const state = new LifecycleState(options.stateRoot);
-  const record = await state.readWorkspace(workspaceName);
-  const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: record.projectName });
-  const releaseProject = await state.acquireProjectLock(record.projectName);
-  try {
-    await assertSelectedProjectUnchanged(state, selectedRoot);
-    const release = await state.acquireWorkspaceSetupLock(workspaceName);
+  return runWorkspaceLifecycle("start", async (setStage) => {
+    const workspaceName = validateLifecycleName(name, "workspace");
+    const state = new LifecycleState(options.stateRoot);
+    setStage("workspace state loading");
+    const record = await state.readWorkspace(workspaceName);
+    setStage("protected root selection");
+    const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: record.projectName });
+    setStage("Project lock acquisition");
+    const releaseProject = await state.acquireProjectLock(record.projectName);
     try {
-      return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot);
+      setStage("protected root validation");
+      await assertSelectedProjectUnchanged(state, selectedRoot);
+      setStage("workspace setup lock acquisition");
+      const release = await state.acquireWorkspaceSetupLock(workspaceName);
+      try {
+        return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot, setStage);
+      } finally {
+        await runWorkspaceLifecycleStage("start", "workspace setup lock release", release);
+      }
     } finally {
-      await release();
+      await runWorkspaceLifecycleStage("start", "Project lock release", releaseProject);
     }
-  } finally {
-    await releaseProject();
-  }
+  });
 }
 
 async function startWorkspaceLocked(
@@ -96,14 +123,18 @@ async function startWorkspaceLocked(
   options: LifecycleOptions,
   state: LifecycleState,
   workspaceName: string,
-  selectedRoot: ProtectedRootSnapshot
+  selectedRoot: ProtectedRootSnapshot,
+  setStage: SetWorkspaceLifecycleStage
 ): Promise<WorkspaceRecord> {
+  setStage("workspace runtime reconciliation");
   let record = await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(workspaceName));
   if (record.phase !== "stopped") {
     throw new UserError(`workspace '${workspaceName}' is not stopped; use restart to apply project changes`);
   }
   if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
+  setStage("selected root recording");
   record = await recordSelectedRoot(state, record, selectedRoot);
+  setStage("workspace reconciliation");
   const reconciled = await reconcileProjectContainer({
     runner,
     options,
@@ -112,10 +143,11 @@ async function startWorkspaceLocked(
     project: selectedRoot.project,
     repo: selectedRoot.repository
   });
+  setStage("protected root publication");
   const updated = await applySelectedRoot({
     runner, state, record: reconciled.record, target: selectedRoot, containerId: reconciled.containerId
   });
-  return setupWorkspaceLocked(runner, options, state, updated, false, true);
+  return setupWorkspaceLocked(runner, options, state, updated, false, true, setStage);
 }
 
 export async function restartWorkspace(
@@ -123,27 +155,37 @@ export async function restartWorkspace(
   options: LifecycleOptions,
   name: string
 ): Promise<WorkspaceRecord> {
-  const workspaceName = validateLifecycleName(name, "workspace");
-  const state = new LifecycleState(options.stateRoot);
-  const initialRecord = await state.readWorkspace(workspaceName);
-  const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: initialRecord.projectName });
-  const releaseProject = await state.acquireProjectLock(initialRecord.projectName);
-  try {
-    await assertSelectedProjectUnchanged(state, selectedRoot);
-    const release = await state.acquireWorkspaceSetupLock(workspaceName);
+  return runWorkspaceLifecycle("restart", async (setStage) => {
+    const workspaceName = validateLifecycleName(name, "workspace");
+    const state = new LifecycleState(options.stateRoot);
+    setStage("workspace state loading");
+    const initialRecord = await state.readWorkspace(workspaceName);
+    setStage("protected root selection");
+    const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: initialRecord.projectName });
+    setStage("Project lock acquisition");
+    const releaseProject = await state.acquireProjectLock(initialRecord.projectName);
     try {
-      const record = await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(workspaceName));
-      if (record.phase === "stopped") {
-        return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot);
+      setStage("protected root validation");
+      await assertSelectedProjectUnchanged(state, selectedRoot);
+      setStage("workspace setup lock acquisition");
+      const release = await state.acquireWorkspaceSetupLock(workspaceName);
+      try {
+        setStage("workspace runtime reconciliation");
+        const record = await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(workspaceName));
+        if (record.phase === "stopped") {
+          return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot, setStage);
+        }
+        if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
+        setStage("workspace container readiness");
+        const containerId = await assertContainerRunning(runner, options.stateRoot, record);
+        setStage("workspace stop");
+        await stopWorkspaceLocked(runner, state, record);
+        return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot, setStage);
+      } finally {
+        await runWorkspaceLifecycleStage("restart", "workspace setup lock release", release);
       }
-      if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
-      const containerId = await assertContainerRunning(runner, options.stateRoot, record);
-      await stopWorkspaceLocked(runner, state, record);
-      return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot);
     } finally {
-      await release();
+      await runWorkspaceLifecycleStage("restart", "Project lock release", releaseProject);
     }
-  } finally {
-    await releaseProject();
-  }
+  });
 }
