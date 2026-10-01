@@ -5,7 +5,7 @@ uses the host-only admin socket; URL operations are available through the
 authenticated workspace and agent sockets:
 
 ```text
-POST   /v1/external-url/:action    # host administration
+POST   /v1/external-url/:action    # host administration, including host-wide listing
 
 GET    /api
 GET    /api/urls
@@ -251,7 +251,7 @@ HTTP and Caddy listeners using the same domain share its hostname routes.
 They must therefore configure the same route policy and upstream resolution
 mode; DIM rejects ambiguous configurations at controller startup.
 
-List and revoke:
+List and revoke one workspace:
 
 ```bash
 dim external-url list --workspace WORKSPACE
@@ -266,6 +266,21 @@ workspace use omits the option and automatically uses
 dim external-url list
 dim external-url revoke URL_ID
 ```
+
+On the host, listing without a workspace selector uses the mode-`0600`
+host-admin socket and returns every current workspace's routes with `project`
+and `workspace` names:
+
+```bash
+dim external-url list
+dim external-url list --json
+```
+
+The host inventory is capped at 1,000 routes and fails instead of returning a
+partial result above that bound. It omits workspace IDs, internal route claims,
+controller grants, provider arguments, and credentials. The host-wide action is
+not registered on the workspace or agent controller; a workspace or agent grant
+continues to see only its own `/api/urls` response.
 
 ## HTTP and HTTPS with Cloudflare DNS and Caddy
 
