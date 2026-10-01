@@ -711,10 +711,10 @@ inside `agent-dind` and MUST NOT be replaced
 with a host or trusted-workspace runtime socket.
 For `PROJECT-AGENT-TMPDIR-001`, static self-Project and
 full-development-flow tests MUST prove the dedicated volume name, ownership
-label, `/tmp/opencode` mount, `TMPDIR`, and retained-versus-ordinary teardown
-branches. A Docker-only runc driver MUST prove that `TMPDIR` differs from
-`/tmp`, the agent UID can write a mode-`0700` root, bytes survive agent
-container replacement, ordinary discard removes the exact temporary volume
+label, `/mnt/opencode-tmp` mount, `TMPDIR`, and removal in both ordinary and
+`--keep-volume` teardown branches. A Docker-only runc driver MUST prove that
+`TMPDIR` differs from `/tmp`, the agent UID can write a mode-`0700` root, bytes survive agent
+container replacement, both discard modes remove the exact temporary volume
 without deleting an unrelated Project volume, and populated wrong-owner and
 symlink roots fail closed. The Sysbox end-to-end gate MUST repeat the agent
 restart and discard assertions on a capable host; an unavailable Sysbox or KVM
