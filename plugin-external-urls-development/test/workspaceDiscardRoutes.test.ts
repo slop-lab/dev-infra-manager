@@ -42,7 +42,7 @@ describe("authoritative workspace discard", () => {
       stateRoot,
       routes: plugins.controllerRoutes,
       authenticate: async () => ({
-        id: `${record.projectId}:${record.name}`,
+        id: record.workspaceId,
         name: record.name,
         projectId: record.projectId,
         projectName: record.projectName
@@ -108,7 +108,8 @@ class MissingResourceRunner implements StreamingCommandRunner {
 
 function workspaceRecord(): WorkspaceRecord {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
+    workspaceId: "A".repeat(43),
     name: "work",
     projectId: "project",
     projectName: "project",

@@ -15,6 +15,7 @@ import {
 const CONTAINER_ID = "a".repeat(64);
 const IDENTITY = {
   name: "work-1",
+  workspaceId: "A".repeat(43),
   projectId: "project-id",
   projectName: "project",
   rootRepositoryAlias: "root",
@@ -123,7 +124,7 @@ describe("workspace discard ownership", () => {
     expect(runner.streamingCalls).toHaveLength(0);
     expect(runner.runCalls.some((call) => call[1] === "container" && call[2] === "rm")).toBe(false);
     expect(runner.runCalls.some((call) => call[1] === "volume" && call[2] === "rm")).toBe(false);
-    await expect(state.readWorkspace(workspace.name)).resolves.toEqual(workspace);
+    await expect(state.readWorkspace(workspace.name)).resolves.toMatchObject({ phase: "discarding" });
   });
 
   it.each([
@@ -141,7 +142,7 @@ describe("workspace discard ownership", () => {
     expect(runner.streamingCalls).toHaveLength(0);
     expect(runner.runCalls.some((call) => call[1] === "container" && call[2] === "rm")).toBe(false);
     expect(runner.runCalls.some((call) => call[1] === "volume" && call[2] === "rm")).toBe(false);
-    await expect(state.readWorkspace(workspace.name)).resolves.toEqual(workspace);
+    await expect(state.readWorkspace(workspace.name)).resolves.toMatchObject({ phase: "discarding" });
   });
 
   it("validates a retained volume before Project teardown", async () => {
@@ -216,7 +217,7 @@ describe("workspace discard ownership", () => {
     const finalInspect = runner.runCalls.at(-1);
     expect(finalInspect?.slice(1, 3)).toEqual(["volume", "inspect"]);
     expect(runner.runCalls.some((call) => call[1] === "volume" && call[2] === "rm")).toBe(false);
-    await expect(state.readWorkspace(workspace.name)).resolves.toEqual(workspace);
+    await expect(state.readWorkspace(workspace.name)).resolves.toMatchObject({ phase: "discarding" });
   });
 
   it("treats exactly absent resources as a safe discard retry", async () => {
@@ -240,7 +241,8 @@ describe("workspace discard ownership", () => {
 function workspaceRecord(): WorkspaceRecord {
   const timestamp = "2026-09-12T00:00:00.000Z";
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
+    workspaceId: "A".repeat(43),
     name: "work-1",
     projectId: "project-id",
     projectName: "project",

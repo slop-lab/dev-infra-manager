@@ -10,7 +10,8 @@ import { discardWorkspace } from "../../../../core/packages/core/src/workspaceLi
 import { workspaceContainerInspect, workspaceVolumeInspect } from "./workspaceOwnershipFixture.js";
 
 const WORKSPACE = {
-  schemaVersion: 7,
+  schemaVersion: 8,
+  workspaceId: "A".repeat(43),
   name: "work-1",
   projectId: "project-id",
   projectName: "project",
@@ -194,7 +195,7 @@ describe("workspace discard teardown intent", () => {
   });
 
   it.each(["custom", "compose"] as const)(
-    "preserves every workspace asset when %s teardown exits nonzero",
+    "retains workspace data but revokes authority when %s teardown exits nonzero",
     async (teardownKind) => {
       // Given
       const state = new LifecycleState(root);
@@ -213,9 +214,12 @@ describe("workspace discard teardown intent", () => {
       expect(runner.runCalls).not.toContainEqual([
         "docker", "volume", "rm", WORKSPACE.dockerVolumeName
       ]);
-      await expect(state.readWorkspace(WORKSPACE.name)).resolves.toEqual(WORKSPACE);
-      await expect(state.authenticateWorkspaceGrant(workspaceGrant)).resolves.toEqual(WORKSPACE);
-      await expect(state.authenticateAgentGrant(agentGrant)).resolves.toEqual(WORKSPACE);
+      await expect(state.readWorkspace(WORKSPACE.name)).resolves.toMatchObject({
+        workspaceId: WORKSPACE.workspaceId,
+        phase: "discarding"
+      });
+      await expect(state.authenticateWorkspaceGrant(workspaceGrant)).resolves.toBeUndefined();
+      await expect(state.authenticateAgentGrant(agentGrant)).resolves.toBeUndefined();
     }
   );
 });

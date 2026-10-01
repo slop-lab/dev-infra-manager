@@ -27,13 +27,17 @@ export async function discardWorkspace(
     const record = await state.readWorkspace(workspaceName);
     for (const hook of hooks) {
       await hook.beforeDiscard({
-        workspaceId: `${record.projectId}:${record.name}`,
+        workspaceId: record.workspaceId,
         workspaceName: record.name,
         projectId: record.projectId,
         projectName: record.projectName,
         stateRoot: options.stateRoot
       });
     }
+    const discarding = { ...record, phase: "discarding" as const, updatedAt: new Date().toISOString() };
+    await state.writeWorkspace(discarding);
+    await state.removeWorkspaceGrant(record);
+    await state.removeAgentGrant(record);
     const container = await inspectWorkspaceContainer(runner, record);
     const volume = await inspectWorkspaceVolume(runner, record);
     if (container !== undefined) {
@@ -62,8 +66,6 @@ export async function discardWorkspace(
       }
     }
     await state.removeWorkspace(workspaceName);
-    await state.removeWorkspaceGrant(workspaceName);
-    await state.removeAgentGrant(workspaceName);
   } finally {
     await release();
   }
