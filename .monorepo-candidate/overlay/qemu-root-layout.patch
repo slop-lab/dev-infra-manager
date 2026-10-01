@@ -1,0 +1,45 @@
+diff --git a/.dim/qemu-service.mjs b/.dim/qemu-service.mjs
+--- a/.dim/qemu-service.mjs
++++ b/.dim/qemu-service.mjs
+@@ -9,7 +9,7 @@ import { snapshotInputs } from "./qemu-snapshot.mjs";
+ 
+ const sourceRoot = await realpath(process.env.DIM_QEMU_SOURCE_ROOT ?? "/workspace");
+ const socketPath = process.env.DIM_QEMU_SERVICE_SOCKET ?? "/tmp/dim-qemu-verification/service.sock";
+-const launcher = process.env.DIM_QEMU_LAUNCHER ?? "/workspace/project/.dim/qemu-verify.bash";
++const launcher = process.env.DIM_QEMU_LAUNCHER ?? "/workspace/.dim/qemu-verify.bash";
+ const serviceDirectory = path.dirname(socketPath);
+ const pidPath = path.join(serviceDirectory, "service.pid");
+ const ownerPath = path.join(serviceDirectory, "service-owner.json");
+diff --git a/.dim/qemu-verify.bash b/.dim/qemu-verify.bash
+--- a/.dim/qemu-verify.bash
++++ b/.dim/qemu-verify.bash
+@@ -89,7 +89,7 @@ if ! command -v cloud-localds >/dev/null && ! command -v genisoimage >/dev/null;
+ fi
+ test -r /dev/kvm && test -w /dev/kvm || { echo "/dev/kvm is not accessible" >&2; exit 2; }
+ repo_root="${DIM_QEMU_SOURCE_ROOT:-/workspace}"
+-test -d "$repo_root/project/.dim" || { echo "DIM_QEMU_SOURCE_ROOT is not an assembled Project worktree" >&2; exit 2; }
++test -d "$repo_root/.dim" || { echo "DIM_QEMU_SOURCE_ROOT is not an assembled Project worktree" >&2; exit 2; }
+ cache="${DIM_KVM_IMAGE_CACHE:-$repo_root/.local/kvm}"
+ mkdir -p "$cache/runs"
+ workdir="$(mktemp -d "$cache/runs/local.XXXXXX")"
+@@ -109,5 +109,2 @@
+ workbench_snapshot="$workdir/workbench"
+-components=(project core core-development plugin-dns-cloudflare \
+-  plugin-dns-cloudflare-development plugin-external-urls \
+-  plugin-external-urls-development verification examples specification)
+ snapshot_repository() {
+@@ -118,5 +115,2 @@ snapshot_repository() {
+   git -C "$destination" init --initial-branch=main >/dev/null
+-  if [[ "$source" == "$repo_root" ]]; then
+-    printf '/%s/\n' "${components[@]}" >> "$destination/.git/info/exclude"
+-  fi
+   git -C "$destination" add -A
+@@ -127,8 +121,4 @@ inputs_root="$workdir/dim-inputs"
+ if [[ "$cache_routing" == false ]]; then
+   mkdir -p "$workbench_snapshot"
+   snapshot_repository "$repo_root" "$workbench_snapshot"
+-  for component in "${components[@]}"; do
+-    rm -rf "$workbench_snapshot/$component"
+-    snapshot_repository "$repo_root/$component" "$workbench_snapshot/$component"
+-  done
+   tar -C "$workdir" -czf "$workdir/workbench.tar.gz" workbench

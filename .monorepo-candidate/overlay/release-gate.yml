@@ -1,0 +1,120 @@
+name: Verify single-tree release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_sha:
+        description: Exact reviewed 40-character candidate commit on the selected ref
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  container-integration:
+    runs-on: dim-container-integration
+    timeout-minutes: 120
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify dispatch identity and candidate ancestry
+        env:
+          DIM_EXPECTED_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          DIM_DISPATCH_SHA: ${{ gitea.sha }}
+        run: |
+          test "$DIM_EXPECTED_CANDIDATE_SHA" = "$DIM_DISPATCH_SHA"
+          node verification/scripts/monorepo-candidate-evidence.mjs "$DIM_EXPECTED_CANDIDATE_SHA" /tmp/dim-candidate-evidence.json
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.13.1
+      - name: Provide host tool paths in the disposable container job
+        run: |
+          install -d /usr/bin /usr/local/bin /lib64
+          for tool in bash curl cut git grep head install node nohup rm sh sleep sort true; do
+            ln -s -- "$(type -P "$tool")" "/usr/bin/$tool"
+          done
+          ln -s -- "$(type -P just)" /usr/local/bin/just
+          openssl_bins=(/nix/store/*-openssl-*-bin/bin/openssl)
+          [[ ${#openssl_bins[@]} == 1 && -x ${openssl_bins[0]} ]] || {
+            printf 'pinned CI image must contain exactly one OpenSSL executable\n' >&2
+            exit 1
+          }
+          ln -s -- "${openssl_bins[0]}" /usr/bin/openssl
+          glibc_loaders=(/nix/store/*-glibc-*/lib/ld-linux-x86-64.so.2)
+          [[ ${#glibc_loaders[@]} == 1 && -x ${glibc_loaders[0]} ]] || {
+            printf 'pinned CI image must contain exactly one glibc loader\n' >&2
+            exit 1
+          }
+          ln -s -- "${glibc_loaders[0]}" /lib64/ld-linux-x86-64.so.2
+          printf 'root:x:0:0:root:/root:/bin/sh\n' >/etc/passwd
+          printf 'root:x:0:\n' >/etc/group
+      - name: Verify portable container integration
+        env:
+          DIM_TEST_PTY_RESIZE: unsupported
+          NODE_OPTIONS: --disable-warning=ExperimentalWarning
+        run: |
+          source_tmp="$(mktemp -d /tmp/dcs.XXXXXX)"
+          chmod 1777 "$source_tmp"
+          export TMPDIR="$source_tmp"
+          pnpm install --frozen-lockfile
+          "$(type -P tini)" -s -- /usr/local/bin/just check-source
+          "$(type -P tini)" -s -- /usr/local/bin/just verify workspace-user-setup
+          "$(type -P tini)" -s -- /usr/local/bin/just verify headscale-tailnet-tcp
+          "$(type -P tini)" -s -- /usr/local/bin/just verify external-gitea-shared-control
+          "$(type -P tini)" -s -- /usr/local/bin/just verify packaged-shared-qemu-scheduler
+      - name: Upload exact-tree evidence
+        if: always()
+        uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
+        with:
+          name: candidate-container-${{ gitea.sha }}
+          path: |
+            /tmp/dim-candidate-evidence.json
+            .monorepo-candidate/sources.tsv
+            .monorepo-candidate/github-development.tsv
+            .monorepo-candidate/overlay.tsv
+            .monorepo-candidate/overlay.digest
+          retention-days: 30
+
+  qemu-sysbox:
+    runs-on: dim-qemu
+    timeout-minutes: 120
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify dispatch identity and candidate ancestry
+        env:
+          DIM_EXPECTED_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          DIM_DISPATCH_SHA: ${{ gitea.sha }}
+        run: |
+          test "$DIM_EXPECTED_CANDIDATE_SHA" = "$DIM_DISPATCH_SHA"
+          node verification/scripts/monorepo-candidate-evidence.mjs "$DIM_EXPECTED_CANDIDATE_SHA" /tmp/dim-candidate-evidence.json
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.13.1
+      - name: Verify disposable Sysbox host
+        run: |
+          test -r /dev/kvm -a -w /dev/kvm
+          pnpm install --frozen-lockfile
+          bash verification/scripts/with-ci-registry-cache.bash --qemu-relay \
+            env JUST_UNSTABLE=1 just verify environments-kvm
+      - name: Upload exact-tree evidence
+        if: always()
+        uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
+        with:
+          name: candidate-qemu-${{ gitea.sha }}
+          path: |
+            /tmp/dim-candidate-evidence.json
+            .monorepo-candidate/sources.tsv
+            .monorepo-candidate/github-development.tsv
+            .monorepo-candidate/overlay.tsv
+            .monorepo-candidate/overlay.digest
+          retention-days: 30

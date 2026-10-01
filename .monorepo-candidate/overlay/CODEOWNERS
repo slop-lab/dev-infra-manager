@@ -1,0 +1,13 @@
+# Review requests for the trusted Project contract, policy, and candidate provenance.
+(^|/)\.dim/.* @dim-dim/Owners
+(^|/)\.gitea/.* @dim-dim/Owners
+^project/.* @dim-dim/Owners
+^scripts/.* @dim-dim/Owners
+^agent/.* @dim-dim/Owners
+^images/.* @dim-dim/Owners
+^core/.* @dim-dim/Owners
+^verification/.* @dim-dim/Owners
+^justfile$ @dim-dim/Owners
+^pnpm-lock[.]yaml$ @dim-dim/Owners
+^\.monorepo-candidate/.* @dim-dim/Owners
+^CODEOWNERS$ @dim-dim/Owners
