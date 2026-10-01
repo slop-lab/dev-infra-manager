@@ -10,8 +10,6 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
 root_repository="${DIM_ROOT_REPOSITORY_PATH:-$repo_root}"
 aggregate_lock="$root_repository/pnpm-lock.yaml"
-repositories=(core plugin-dns-cloudflare plugin-external-urls)
-commits=()
 local_dirty=""
 
 if [[ ! -f "$aggregate_lock" ]]; then
@@ -20,21 +18,17 @@ if [[ ! -f "$aggregate_lock" ]]; then
 fi
 
 cd "$repo_root"
-for repository in "${repositories[@]}"; do
-  commits+=("$(GIT_MASTER=1 git -C "$repository" rev-parse HEAD)")
-  repository_status="$(GIT_MASTER=1 git -C "$repository" status --porcelain)"
-  if [[ -n "$repository_status" ]]; then
-    local_dirty=-dirty
-  fi
-done
+commit="$(GIT_MASTER=1 git -C "$root_repository" rev-parse HEAD)"
+repository_status="$(GIT_MASTER=1 git -C "$root_repository" status --porcelain --untracked-files=no)"
+if [[ -n "$repository_status" ]]; then
+  local_dirty=-dirty
+fi
 
 source_version="$(node -p 'require(process.argv[1]).version' "$repo_root/core/package.json")"
 aggregate_lock_sha="$(sha256sum "$aggregate_lock" | cut -d ' ' -f 1)"
 [[ "$aggregate_lock_sha" =~ ^[0-9a-f]{64}$ ]]
 aggregate_sha="$({
-  for index in "${!repositories[@]}"; do
-    printf '%s=%s\n' "${repositories[$index]}" "${commits[$index]}"
-  done
+  printf 'root=%s\n' "$commit"
   printf 'aggregate-lock-sha256=%s\n' "$aggregate_lock_sha"
 } | sha256sum | cut -d ' ' -f 1)"
 [[ "$aggregate_sha" =~ ^[0-9a-f]{64}$ ]]

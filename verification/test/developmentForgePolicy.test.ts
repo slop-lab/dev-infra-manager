@@ -19,8 +19,7 @@ describe("DIM development forge policy", () => {
     );
     expect(localPack).toContain('bash "$script_dir/local-build-version.bash"');
     expect(localPack).toContain("DIM_LOCAL_BUILD_VERSION");
-    expect(localVersion).toContain("repositories=(core plugin-dns-cloudflare plugin-external-urls)");
-    expect(localVersion).toContain("GIT_MASTER=1 git -C");
+    expect(localVersion).toContain('git -C "$root_repository"');
     expect(localVersion).toContain("rev-parse HEAD");
     expect(localVersion).not.toContain("rev-parse --short");
     expect(localVersion).toContain("aggregate-lock-sha256");
@@ -29,17 +28,12 @@ describe("DIM development forge policy", () => {
     const sourcePack = await readFile(resolve(projectRoot, "scripts/pack-source-build.bash"), "utf8");
     expect(sourcePack).toContain("git -C");
     expect(sourcePack).toContain("rev-parse HEAD");
-    for (const variable of [
-      "DIM_SOURCE_CORE_COMMIT",
-      "DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT",
-      "DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT"
-    ]) {
-      expect(sourcePack).toContain(variable);
-    }
+    expect(sourcePack).toContain("DIM_SOURCE_ROOT_COMMIT");
+    expect(sourcePack).toContain("archive --format=tar");
     expect(sourcePack).toContain("sha256sum");
     expect(sourcePack).toContain("DIM_LOCAL_BUILD_VERSION");
     expect(sourcePack).toContain("-local-");
-    expect(sourcePack).toContain("-dirty");
+    expect(sourcePack).not.toContain("DIM_SOURCE_REPOSITORY_BASE_URL%/");
   });
 
   it("uses the exact reviewed Verdaccio dependency from the verification workspace", async () => {
