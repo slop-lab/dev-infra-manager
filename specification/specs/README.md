@@ -47,6 +47,7 @@ instead be split.
 | [Threat Model](01-threat-model.md) | Intent | Assumptions, assets, required defenses, residual risk |
 | [Trust Boundaries](02-boundaries-and-trust.md) | Contract | Normative isolation and authority boundaries |
 | [Configuration](03-configuration.md) | Contract | Mixed with current environment-variable choices |
+| [Trust and Lifecycle Capability Matrix](04-trust-lifecycle-capability-matrix.md) | Contract | Cross-package promotion, backend, state, workspace-authority, URL-approval, and hook transitions |
 | [Runtime Backends](05-runtime-backends.md) | Implementation profile | Must preserve the trust and resource contracts |
 | [CLI Contract](10-cli-contract.md) | Contract | User-visible commands, output, and failure behavior |
 | [Doctor Checks](11-doctor-checks.md) | Verification | Includes some user-visible diagnostic contracts |
