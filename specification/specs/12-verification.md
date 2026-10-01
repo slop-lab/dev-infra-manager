@@ -516,7 +516,7 @@ Deterministic workspace recovery tests MUST prove that direct `setup` from both
 `setting-up` and `setup-error` acquires the Project lock before the workspace
 setup lock, revalidates Project and workspace identity while both are held,
 and republishes the recorded immutable root and schema-3 runtime manifest
-before Project setup and final `ready` publication. They MUST prove schema `7`
+before Project setup and final `ready` publication. They MUST prove schema `8`
 retains the root ref, exact commit, and canonical workspace-data
 path without a repository catalog. The workspace must remain non-ready
 throughout setup, moved root refs cannot change the recorded selection, and DIM
@@ -527,7 +527,7 @@ Lifecycle-file probe tests MUST cover `.dim/setup.sh`, `.dim/entrypoint.sh`,
 code `0` means present, only exit code `1` means absent, and every other exit
 code aborts before hook, Compose, or direct-command fallback dispatch.
 
-Workspace selection tests MUST prove that schema `7` records one immutable root
+Workspace selection tests MUST prove that schema `8` records one immutable root
 selection and the canonical persistent data path without a persisted snapshot
 path, repository catalog,
 or ref overrides. They MUST prove that older schemas and obsolete checkout

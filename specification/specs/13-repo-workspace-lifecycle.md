@@ -249,12 +249,14 @@ For create, start, update, and restart, DIM resolves a
 single concrete branch covered by the root repository's applied protection,
 pins its exact commit, and atomically publishes the complete commit tree below
 the controller-owned content-addressed assets path. The workspace record uses
-schema version `7` and records only that root ref, commit, and the canonical
-workspace-data path. The protected-root path is derived from the state root,
+schema version `8` and records a fresh 256-bit workspace instance ID together
+with that root ref, commit, and the canonical workspace-data path. The
+protected-root path is derived from the state root,
 Project ID, and exact commit rather than persisted. The record contains no repository catalog or
-per-repository ref overrides. Older workspace schemas and records containing
+per-repository ref overrides. Schema `7`, older workspace schemas, and records containing
 obsolete checkout-layout fields are rejected before mutation, with guidance
-to export important data and recreate the workspace.
+to use the prior pinned release to export important Project/user data and then
+discard and recreate the workspace. No workspace-state migration is defined.
 
 The selected Project-root snapshot is mounted read-only only into the trusted
 outer workspace. It is not writable agent data. Setup, entrypoint,
