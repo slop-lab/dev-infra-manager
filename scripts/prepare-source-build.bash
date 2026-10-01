@@ -176,6 +176,11 @@ if previous_image_id="$(docker image inspect --format '{{.Id}}' "$final_image_re
 fi
 image_publication_attempted=1
 docker image tag "$temporary_image_ref" "$final_image_ref"
+final_image_id="$(docker image inspect --format '{{.Id}}' "$final_image_ref")"
+if [[ "$final_image_id" != "$temporary_image_id" ]]; then
+  echo "promoted image ID does not match the prepared image" >&2
+  exit 1
+fi
 published=1
 
 echo "[host] local source build is prepared"

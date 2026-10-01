@@ -85,6 +85,9 @@ if [[ "$1 $2" == 'image inspect' ]]; then
     printf 'sha256:%064d\n' 1
   elif [[ "$image_ref" == dev-infra-project-workspace:rollback-* && -f "$DIM_DOCKER_ROLLBACK_ID_FILE" ]]; then
     cat "$DIM_DOCKER_ROLLBACK_ID_FILE"
+  elif [[ "\${DIM_FOREIGN_FINAL_INSPECT:-0}" == 1 && "$image_ref" == dev-infra-project-workspace:0.9.0-local-* && "$(cat "$DIM_DOCKER_FINAL_ID_FILE" 2>/dev/null)" == "$(printf 'sha256:%064d' 1)" ]]; then
+    printf 'sha256:%064d\n' 3 >"$DIM_DOCKER_FINAL_ID_FILE"
+    cat "$DIM_DOCKER_FINAL_ID_FILE"
   elif [[ -f "$DIM_DOCKER_FINAL_ID_FILE" ]]; then
     cat "$DIM_DOCKER_FINAL_ID_FILE"
   else
@@ -627,6 +630,36 @@ describe("local source build policy", () => {
     expect((await readFile(resolve(fixture.root, "rollback-image-id"), "utf8")).trim()).toBe(priorImageId);
     expect(invocations).not.toMatch(/docker image (?:tag|rm) dev-infra-project-workspace:rollback-1234-\d+ dev-infra-project-workspace:0\.9\.0-local-a{64}/);
     expect(recoveryRoots).toHaveLength(1);
+    expect(result.stderr).toContain("image publication requires manual recovery");
+  });
+
+  it("fails closed when the final tag inspects as a foreign image", async () => {
+    // Given
+    const fixture = await createFixture();
+    const packages = resolve(fixture.root, ".local/dim-packages");
+    const priorImageId = `sha256:${"2".repeat(64)}`;
+    const foreignImageId = `sha256:${"0".repeat(63)}3`;
+    await mkdir(packages, { recursive: true });
+    await writeFile(resolve(packages, "previous-candidate"), "preserved\n");
+    await writeFile(fixture.readiness, "state=old\n");
+    await writeFile(fixture.imageState, `${priorImageId}\n`);
+
+    // When
+    const result = runScript(fixture, "prepare-source-build.bash", { DIM_FOREIGN_FINAL_INSPECT: "1" });
+    const invocations = await readFile(fixture.log, "utf8");
+    const recoveryRoots = await retainedPreparationRoots(fixture);
+
+    // Then
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).not.toContain("local source build is prepared");
+    expect((await readFile(fixture.imageState, "utf8")).trim()).toBe(foreignImageId);
+    expect((await readFile(resolve(fixture.root, "rollback-image-id"), "utf8")).trim()).toBe(priorImageId);
+    expect(await readFile(resolve(packages, "previous-candidate"), "utf8")).toBe("preserved\n");
+    expect(await readFile(fixture.readiness, "utf8")).toBe("state=old\n");
+    expect(invocations).not.toMatch(/docker image (?:tag|rm) dev-infra-project-workspace:rollback-1234-\d+ dev-infra-project-workspace:0\.9\.0-local-a{64}/);
+    expect(invocations).not.toMatch(/docker image rm dev-infra-project-workspace:prepare-1234-\d+/);
+    expect(recoveryRoots).toHaveLength(1);
+    expect(result.stderr).toContain("promoted image ID does not match the prepared image");
     expect(result.stderr).toContain("image publication requires manual recovery");
   });
 
