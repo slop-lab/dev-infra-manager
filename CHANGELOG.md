@@ -49,8 +49,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `install-local` validates and installs that prepared candidate without
   rebuilding it. `build-local-workspace-image` remains an image-only
   convenience for the current worktree and does not publish package readiness.
-  Failed or redirected staging cannot mutate tracked source or replace the
-  previously prepared candidate.
+  Failed or redirected staging cannot mutate tracked source. Failed
+  publication restores the previous package bundle, readiness, and versioned
+  image identity, or removes every new artifact when no prior candidate exists.
   Both local installation paths explicitly enable the built DNS Cloudflare and
   External URLs plugins while preserving other enabled plugins. Installation
   now stages the exact target package set and runs its read-only core-state
