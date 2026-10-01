@@ -135,12 +135,23 @@ externalUrl.command("request")
   });
 
 externalUrl.command("list")
-  .description("List external URLs for the current workspace")
+  .description("List external URLs for every workspace on the host or one selected workspace")
   .option("--workspace <name>", "use a host-side workspace grant")
   .option("--json", "print machine-readable JSON")
-  .action(async (flags: WorkspaceControllerFlags) =>
-    print(await externalUrlControllerRequest("/api/urls", {}, flags.workspace), flags)
-  );
+  .action(async (flags: WorkspaceControllerFlags) => {
+    const workspaceEnvironment = (process.env.DIM_CONTROLLER_SOCKET !== undefined
+      || process.env.DIM_CONTROLLER_API !== undefined
+      || process.env.DIM_AGENT_CONTROLLER_SOCKET !== undefined)
+      && (process.env.DIM_CONTROLLER_TOKEN !== undefined
+        || process.env.DIM_AGENT_CONTROLLER_TOKEN !== undefined);
+    if (flags.workspace !== undefined || workspaceEnvironment) {
+      print(await externalUrlControllerRequest("/api/urls", {}, flags.workspace), flags);
+      return;
+    }
+    const result = await externalUrlAdmin<{ urls: Record<string, unknown>[] }>("url-list");
+    if (flags.json) print(result, flags);
+    else printList(result.urls, ["project", "workspace", "ingress", "url"], flags);
+  });
 
 externalUrl.command("revoke")
   .description("Revoke an external URL in the current workspace")
