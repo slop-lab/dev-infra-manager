@@ -1073,8 +1073,13 @@ remain invalid as required by `WORKSPACE-AUTHORITY-001` and
 
 The `discarding` phase and grant revocation MUST be durable before cleanup hooks
 run. Controller and plugin operations authenticated before that transition MUST
-revalidate the workspace ID and phase under the workspace lifecycle lock before
-dispatch. Host shutdown MUST stop an owned running container left in
+fully buffer any untrusted request body within the controller bound, then
+revalidate the workspace ID and phase under the workspace authority lock before
+dispatch. The authority lock is distinct from the workspace setup lock so
+Project setup can call host-input providers while retaining exclusive setup
+ownership. Discard MUST acquire setup and then authority, publish `discarding`
+and revoke grants while both are held, and release authority before cleanup.
+No path may hold authority while waiting for setup. Host shutdown MUST stop an owned running container left in
 `discarding` without changing that phase or scheduling it for normal resume.
 
 **PROJECT-DELETION-001:** `project remove` and `project purge --yes` MUST

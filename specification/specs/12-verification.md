@@ -87,6 +87,10 @@ in `pending`, reachable only after host approval, unavailable while stopped,
 restored only for the same approved route tuple on same-instance start, and
 unreachable after revocation, target drift, discard, controller restart while
 pending, or same-name recreation. A forged cross-workspace approval MUST fail.
+Real-controller concurrency tests MUST also prove that setup can resolve a host
+input while it owns the workspace setup lock, and that a valid agent grant with
+an incomplete or oversized request body never acquires workspace authority or
+delays durable discard denial.
 
 For `PROJECT-HOOK-DEFAULTS-001`, every backend MUST test hook-present, Compose
 fallback, no-op setup, entrypoint-present, direct-command fallback,

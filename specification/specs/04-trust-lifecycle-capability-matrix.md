@@ -188,9 +188,14 @@ data.
 Discard MUST atomically publish the non-ready `discarding` phase and revoke
 controller grants before invoking route or Project cleanup. Authenticated
 controller dispatch and startup route restoration MUST revalidate the workspace
-ID and active phase under the same lifecycle serialization boundary. If cleanup
-fails, the workspace MUST remain non-ready and all old grants and routes MUST be
-denied while an ownership-safe retry completes.
+ID and active phase under a per-workspace authority lock. Controller request
+bodies MUST be completely buffered within the configured bound before that
+authority lock is acquired. The authority lock MUST be distinct from the setup
+lock so reviewed Project setup can call host-input routes while holding the
+setup lock. Discard MUST acquire the setup lock before the authority lock and
+publish denial while both are held. If cleanup fails, the workspace MUST remain
+non-ready and all old grants and routes MUST be denied while an ownership-safe
+retry completes.
 
 ## External URL approval
 
