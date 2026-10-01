@@ -29,9 +29,13 @@ check-source:
     just test
     just build-packages
 
-# Build and install the local DIM package set without changing the managed controller.
+# Prepare matched package and image candidates from one reviewed monorepo commit.
+prepare-local:
+    bash scripts/prepare-source-build.bash
+
+# Install the prepared local DIM package set without changing the managed controller.
 install-local:
-    bash verification/scripts/install-dim-local.bash
+    bash scripts/install-source-build.bash
 
 # Restart the managed controller with the currently installed DIM package set.
 restart-controller:

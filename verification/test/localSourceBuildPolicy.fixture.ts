@@ -7,6 +7,7 @@ const workspaceRoot = resolve(import.meta.dirname, "../..");
 
 export const fixturePackageManifest = '{"name":"fixture-package","version":"0.8.0"}\n';
 export const fixtureLockfile = "lockfileVersion: '9.0'\n";
+export const fixtureRootCommit = "7".repeat(40);
 
 export type SourceBuildFixture = {
   readonly root: string;
@@ -22,6 +23,23 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
   await mkdir(scripts, { recursive: true });
   await mkdir(tools, { recursive: true });
   await writeFile(resolve(root, "pnpm-lock.yaml"), fixtureLockfile);
+  await writeFile(resolve(root, ".head"), `${fixtureRootCommit}\n`);
+  const productionPackageDirectories = [
+    "core/packages/core",
+    "core/packages/cli",
+    "core/packages/installer",
+    "core/packages/controller-proxy",
+    "core/packages/contracts/external-url",
+    "plugin-dns-cloudflare",
+    "plugin-external-urls"
+  ] as const;
+  await Promise.all(
+    productionPackageDirectories.map(async (directory) => {
+      await mkdir(resolve(root, directory), { recursive: true });
+      await writeFile(resolve(root, directory, "package.json"), fixturePackageManifest);
+    })
+  );
+  await writeFile(resolve(root, "core/package.json"), fixturePackageManifest);
   const projectRoot = process.env.DIM_TEST_ROOT_REPOSITORY ?? workspaceRoot;
   await Promise.all(
     ["pack-source-build.bash", "prepare-source-build.bash", "build-workspace-image.bash", "local-package-version.bash"].map((script) =>
@@ -44,14 +62,19 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
       "    'remote get-url origin') printf '%s\\n' '/fixtures/root.git' ;;",
       "    'fetch --quiet origin') ;;",
       "    'checkout --quiet --detach') printf '%s\\n' \"$4\" >\"$directory/.head\" ;;",
-      "    'rev-parse HEAD ')",
-      "      if [[ \"$(basename \"$directory\")\" == \"${DIM_GIT_MISMATCH_REPOSITORY:-}\" ]]; then",
+      "    'rev-parse HEAD ') cat \"$directory/.head\" ;;",
+      "    'rev-parse '*)",
+      "      if [[ \"${DIM_GIT_MISMATCH_ROOT:-0}\" == 1 ]]; then",
       "        printf '%040d\\n' 9",
       "      else",
-      "        cat \"$directory/.head\"",
+      "        printf '%s\\n' \"$2\"",
       "      fi",
       "      ;;",
       "    'status --porcelain ') ;;",
+      "    'archive --format=tar --output')",
+      "      output=\"$4\"",
+      "      /usr/bin/tar -C \"$directory\" -cf \"$output\" pnpm-lock.yaml core plugin-dns-cloudflare plugin-external-urls",
+      "      ;;",
       "    *) exit 91 ;;",
       "  esac",
       "elif [[ \"$1\" == 'ls-remote' ]]; then",

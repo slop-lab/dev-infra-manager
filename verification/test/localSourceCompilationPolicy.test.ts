@@ -3,17 +3,13 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createSourceBuildFixture,
-  fixtureLockfile,
   fixturePackageManifest,
+  fixtureRootCommit,
   runSourceBuild,
   type SourceBuildFixture
 } from "./localSourceBuildPolicy.fixture.js";
 
-const commits = {
-  DIM_SOURCE_CORE_COMMIT: "1".repeat(40),
-  DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT: "2".repeat(40),
-  DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT: "3".repeat(40)
-} as const;
+const sourceCommit = { DIM_SOURCE_ROOT_COMMIT: fixtureRootCommit } as const;
 
 const fixtures: SourceBuildFixture[] = [];
 
@@ -27,7 +23,7 @@ describe("exact source plugin compilation", () => {
     fixtures.push(fixture);
     const sourceRoot = resolve(fixture.root, ".local/production-source");
 
-    const result = runSourceBuild(fixture, "pack-source-build.bash", commits);
+    const result = runSourceBuild(fixture, "pack-source-build.bash", sourceCommit);
     const invocations = (await readFile(fixture.log, "utf8")).trim().split("\n");
 
     expect(result.status).toBe(0);
@@ -41,7 +37,6 @@ describe("exact source plugin compilation", () => {
     expect(invocations.at(-1)).toMatch(/^node .*pack-local-packages\.mjs /);
     for (const repository of ["plugin-dns-cloudflare", "plugin-external-urls"]) {
       expect(await readFile(resolve(sourceRoot, repository, "package.json"), "utf8")).toBe(fixturePackageManifest);
-      expect(await readFile(resolve(sourceRoot, repository, "pnpm-lock.yaml"), "utf8")).toBe(fixtureLockfile);
     }
   });
 
@@ -51,7 +46,7 @@ describe("exact source plugin compilation", () => {
     const sourceRoot = resolve(fixture.root, ".local/production-source");
 
     const result = runSourceBuild(fixture, "pack-source-build.bash", {
-      ...commits,
+      ...sourceCommit,
       DIM_WORKSPACE_INSTALL_FAILURE: "1"
     });
     const invocations = await readFile(fixture.log, "utf8");

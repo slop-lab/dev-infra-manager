@@ -11,17 +11,13 @@ package_root="$repo_root/.local/dim-packages"
 source_root="$repo_root/.local/production-source"
 image_inspect_ref="${DIM_LOCAL_IMAGE_INSPECT_REF:?DIM_LOCAL_IMAGE_INSPECT_REF is required}"
 image_record_ref="${DIM_LOCAL_IMAGE_RECORD_REF:?DIM_LOCAL_IMAGE_RECORD_REF is required}"
-repositories=(core plugin-dns-cloudflare plugin-external-urls)
 
 test -r "$package_root/packages.json"
 compgen -G "$package_root/*.tgz" >/dev/null
 
 printf 'schema=1\n'
-for repository in "${repositories[@]}"; do
-  source_sha="$(git -C "$source_root/$repository" rev-parse HEAD)"
-  [[ "$source_sha" =~ ^[0-9a-f]{40,64}$ ]]
-  printf 'source.%s=%s\n' "$repository" "$source_sha"
-done
+test -r "$source_root/.dim-source-state"
+cat -- "$source_root/.dim-source-state"
 
 package_sha="$({
   cd -- "$package_root"

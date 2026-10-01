@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   createSourceBuildFixture,
   fixtureLockfile,
+  fixtureRootCommit,
   runSourceBuild,
   type SourceBuildFixture
 } from "./localSourceBuildPolicy.fixture.js";
@@ -16,11 +17,7 @@ const workspaceRoot = resolve(import.meta.dirname, "../..");
 const projectRoot = process.env.DIM_TEST_ROOT_REPOSITORY ?? workspaceRoot;
 const fixtureRoots: string[] = [];
 
-const commits = {
-  DIM_SOURCE_CORE_COMMIT: "1".repeat(40),
-  DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT: "2".repeat(40),
-  DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT: "3".repeat(40)
-} as const;
+const sourceCommit = { DIM_SOURCE_ROOT_COMMIT: fixtureRootCommit } as const;
 
 const publishPackageVersionHelpers = [
   resolve(import.meta.dirname, "../../core/scripts/publish-package-version.mjs"),
@@ -124,12 +121,30 @@ afterEach(async () => {
 });
 
 describe("local source build policy", () => {
+  it("prepares one reviewed monorepo commit without cloning split repositories", async () => {
+    // Given
+    const fixture = await sourceBuildFixture();
+
+    // When
+    const result = runSourceBuild(fixture, "pack-source-build.bash", {
+      DIM_SOURCE_ROOT_COMMIT: fixtureRootCommit
+    });
+    const invocations = await readFile(fixture.log, "utf8");
+
+    // Then
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain(`[source] root ${fixtureRootCommit}`);
+    expect(invocations).toContain(`git -C ${fixture.root} archive --format=tar --output`);
+    expect(invocations).not.toMatch(/^git (?:ls-remote|clone) /m);
+  });
+
   it.each([
-    { name: "a branch", environment: { ...commits, DIM_SOURCE_CORE_COMMIT: "main" } },
-    { name: "a tag", environment: { ...commits, DIM_SOURCE_CORE_COMMIT: "v0.8.0" } },
-    { name: "an abbreviated commit", environment: { ...commits, DIM_SOURCE_CORE_COMMIT: "1".repeat(12) } },
-    { name: "an uppercase commit", environment: { ...commits, DIM_SOURCE_CORE_COMMIT: "A".repeat(40) } },
-    { name: "the obsolete shared ref", environment: { ...commits, DIM_SOURCE_REF: "main" } }
+    { name: "a branch", environment: { DIM_SOURCE_ROOT_COMMIT: "main" } },
+    { name: "a tag", environment: { DIM_SOURCE_ROOT_COMMIT: "v0.8.0" } },
+    { name: "an abbreviated commit", environment: { DIM_SOURCE_ROOT_COMMIT: "1".repeat(12) } },
+    { name: "an uppercase commit", environment: { DIM_SOURCE_ROOT_COMMIT: "A".repeat(40) } },
+    { name: "the obsolete shared ref", environment: { DIM_SOURCE_REF: "main" } },
+    { name: "an obsolete split commit", environment: { DIM_SOURCE_CORE_COMMIT: "1".repeat(40) } }
   ])("rejects $name commit input before package or image build execution", async ({ environment }) => {
     // Given
     const fixture = await sourceBuildFixture();
@@ -143,7 +158,7 @@ describe("local source build policy", () => {
     expect(invocations).not.toMatch(/^(?:pnpm|docker buildx build)/m);
   });
 
-  it("resolves omitted inputs once and verifies the resulting exact commits", async () => {
+  it("uses the current reviewed root commit when the input is omitted", async () => {
     // Given
     const fixture = await sourceBuildFixture();
 
@@ -152,36 +167,35 @@ describe("local source build policy", () => {
     const invocations = await readFile(fixture.log, "utf8");
 
     // Then
-    const resolvedCoreCommit = `${"0".repeat(39)}1`;
     expect(result.status).toBe(0);
-    expect(invocations.match(/^git ls-remote /gm)).toHaveLength(3);
-    expect(invocations).toContain(`fetch --quiet origin ${resolvedCoreCommit}`);
-    expect(result.stdout).toContain(`[source] core ${resolvedCoreCommit}`);
+    expect(invocations).toContain(`git -C ${fixture.root} rev-parse HEAD`);
+    expect(invocations).not.toMatch(/^git (?:ls-remote|clone) /m);
+    expect(result.stdout).toContain(`[source] root ${fixtureRootCommit}`);
   });
 
-  it("fetches exact commits, verifies detached HEADs, and derives version identity from every repository", async () => {
+  it("archives the exact root commit and derives one monorepo version identity", async () => {
     // Given
     const fixture = await sourceBuildFixture();
-    const changedPluginCommits = { ...commits, DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT: "4".repeat(40) };
+    const changedRootCommit = { DIM_SOURCE_ROOT_COMMIT: "8".repeat(40) };
     const expectedDigest = createHash("sha256")
       .update(
-        `core=${commits.DIM_SOURCE_CORE_COMMIT}\nplugin-dns-cloudflare=${commits.DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT}\nplugin-external-urls=${commits.DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT}\naggregate-lock-sha256=${createHash("sha256").update(fixtureLockfile).digest("hex")}\n`
+        `root=${fixtureRootCommit}\naggregate-lock-sha256=${createHash("sha256").update(fixtureLockfile).digest("hex")}\n`
       )
       .digest("hex");
 
     // When
-    const first = runSourceBuild(fixture, "pack-source-build.bash", commits);
+    const first = runSourceBuild(fixture, "pack-source-build.bash", sourceCommit);
     const firstInvocations = await readFile(fixture.log, "utf8");
     await writeFile(fixture.log, "");
-    const second = runSourceBuild(fixture, "pack-source-build.bash", changedPluginCommits);
+    const second = runSourceBuild(fixture, "pack-source-build.bash", changedRootCommit);
     const secondInvocations = await readFile(fixture.log, "utf8");
 
     // Then
     expect(first.status).toBe(0);
     expect(second.status).toBe(0);
-    expect(first.stdout).toContain(`[source] core ${commits.DIM_SOURCE_CORE_COMMIT}`);
-    expect(firstInvocations).toContain(`fetch --quiet origin ${commits.DIM_SOURCE_CORE_COMMIT}`);
-    expect(firstInvocations).toContain(`checkout --quiet --detach ${commits.DIM_SOURCE_CORE_COMMIT}`);
+    expect(first.stdout).toContain(`[source] root ${fixtureRootCommit}`);
+    expect(firstInvocations).toContain(`archive --format=tar --output`);
+    expect(firstInvocations).toContain(fixtureRootCommit);
     expect(firstInvocations).toContain(`version=0.8.0-local-${expectedDigest}`);
     expect(secondInvocations).not.toContain(`version=0.8.0-local-${expectedDigest}`);
   });
@@ -191,7 +205,7 @@ describe("local source build policy", () => {
     const fixture = await sourceBuildFixture();
 
     // When
-    const result = runSourceBuild(fixture, "pack-source-build.bash", commits);
+    const result = runSourceBuild(fixture, "pack-source-build.bash", sourceCommit);
     const invocations = await readFile(fixture.log, "utf8");
     const copiedLock = await readFile(resolve(fixture.root, ".local/production-source/pnpm-lock.yaml"), "utf8");
 
@@ -207,15 +221,15 @@ describe("local source build policy", () => {
     const originalLockDigest = createHash("sha256").update(fixtureLockfile).digest("hex");
     const originalIdentity = createHash("sha256")
       .update(
-        `core=${commits.DIM_SOURCE_CORE_COMMIT}\nplugin-dns-cloudflare=${commits.DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT}\nplugin-external-urls=${commits.DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT}\naggregate-lock-sha256=${originalLockDigest}\n`
+        `root=${fixtureRootCommit}\naggregate-lock-sha256=${originalLockDigest}\n`
       )
       .digest("hex");
 
     // When
-    const first = runSourceBuild(fixture, "pack-source-build.bash", commits);
+    const first = runSourceBuild(fixture, "pack-source-build.bash", sourceCommit);
     await writeFile(fixture.log, "");
     await writeFile(resolve(fixture.root, "pnpm-lock.yaml"), `${fixtureLockfile}settings:\n  autoInstallPeers: false\n`);
-    const second = runSourceBuild(fixture, "pack-source-build.bash", commits);
+    const second = runSourceBuild(fixture, "pack-source-build.bash", sourceCommit);
     const secondInvocations = await readFile(fixture.log, "utf8");
 
     // Then
@@ -230,12 +244,13 @@ describe("local source build policy", () => {
   ])("rejects a $name aggregate lock before build, pack, or image publication", async (scenario) => {
     // Given
     const fixture = await sourceBuildFixture();
+    const sourceManifest = await readFile(resolve(fixture.root, "core/package.json"), "utf8");
     if (scenario.removeLock) {
       await rm(resolve(fixture.root, "pnpm-lock.yaml"));
     }
 
     // When
-    const result = runSourceBuild(fixture, "prepare-source-build.bash", { ...commits, ...scenario.environment });
+    const result = runSourceBuild(fixture, "prepare-source-build.bash", { ...sourceCommit, ...scenario.environment });
     const invocations = await readFile(fixture.log, "utf8");
 
     // Then
@@ -244,13 +259,14 @@ describe("local source build policy", () => {
     expect(invocations).not.toMatch(/^node .*pack-local-packages\.mjs/m);
     expect(invocations).not.toMatch(/^docker buildx build/m);
     expect(invocations).not.toMatch(/^docker image tag/m);
+    expect(await readFile(resolve(fixture.root, "core/package.json"), "utf8")).toBe(sourceManifest);
   });
 
   it.each(["", "-dirty"])("accepts the computed aggregate identity in every production package helper%s", (suffix) => {
     // Given
     const aggregate = createHash("sha256")
       .update(
-        `core=${commits.DIM_SOURCE_CORE_COMMIT}\nplugin-dns-cloudflare=${commits.DIM_SOURCE_PLUGIN_DNS_CLOUDFLARE_COMMIT}\nplugin-external-urls=${commits.DIM_SOURCE_PLUGIN_EXTERNAL_URLS_COMMIT}\naggregate-lock-sha256=${createHash("sha256").update(fixtureLockfile).digest("hex")}\n`
+        `root=${fixtureRootCommit}\naggregate-lock-sha256=${createHash("sha256").update(fixtureLockfile).digest("hex")}\n`
       )
       .digest("hex");
     const localVersion = `0.8.0-local-${aggregate}${suffix}`;
@@ -283,14 +299,14 @@ describe("local source build policy", () => {
     }
   });
 
-  it("rejects a checkout whose full HEAD differs before dependency installation", async () => {
+  it("rejects a root commit that resolves differently before dependency installation", async () => {
     // Given
     const fixture = await sourceBuildFixture();
 
     // When
     const result = runSourceBuild(fixture, "pack-source-build.bash", {
-      ...commits,
-      DIM_GIT_MISMATCH_REPOSITORY: "plugin-dns-cloudflare"
+      ...sourceCommit,
+      DIM_GIT_MISMATCH_ROOT: "1"
     });
     const invocations = await readFile(fixture.log, "utf8");
 
@@ -314,13 +330,14 @@ describe("local source build policy", () => {
     ].map((script) => readFile(resolve(workspaceRoot, "verification/scripts", script), "utf8")));
 
     // Then
+    expect(packaging).toContain('git -C "$repo_root" archive');
     expect(packaging).toContain('cat >"$source_root/pnpm-workspace.yaml"');
-    expect(packaging).toContain('cp -- "$aggregate_lock" "$source_root/pnpm-lock.yaml"');
     expect(packaging).toContain('pnpm --dir "$source_root" install --frozen-lockfile');
     expect(packaging).toContain("aggregate-lock-sha256=%s");
     expect(installation).not.toMatch(/(?:systemctl|dim)\s+(?:restart|controller restart)/);
     expect(recipes).toContain(`build-local-workspace-image:\n    image_version="$(bash verification/scripts/local-build-version.bash)"`);
-    expect(recipes).toContain("install-local:\n    bash verification/scripts/install-dim-local.bash");
+    expect(recipes).toContain("prepare-local:\n    bash scripts/prepare-source-build.bash");
+    expect(recipes).toContain("install-local:\n    bash scripts/install-source-build.bash");
     expect(recipes).toContain("restart-controller:");
     expect(recipes.indexOf("install-local:")).toBeLessThan(recipes.indexOf("restart-controller:"));
     expect(imageConsumers.every((script) => script.includes('local_version="$(bash "$script_dir/local-build-version.bash")"'))).toBe(true);
@@ -405,9 +422,11 @@ describe("local source build policy", () => {
     );
     await writeFile(resolve(packages, "packages.json"), "{}\n");
     await writeFile(resolve(packages, "package.tgz"), "package bytes\n");
-    for (const repository of ["core", "plugin-dns-cloudflare", "plugin-external-urls"]) {
-      await mkdir(resolve(sources, repository), { recursive: true });
-    }
+    await mkdir(sources, { recursive: true });
+    await writeFile(
+      resolve(sources, ".dim-source-state"),
+      `root=${fixtureRootCommit}\naggregate-lock-sha256=${"a".repeat(64)}\n`
+    );
     await writeFile(resolve(tools, "git"), `#!/usr/bin/env bash\nprintf '%040d\\n' 7\n`);
     await writeFile(resolve(tools, "docker"), `#!/usr/bin/env bash\nprintf 'sha256:%064d\\n' 8\n`);
     await Promise.all(["git", "docker"].map((tool) => chmod(resolve(tools, tool), 0o755)));
@@ -427,6 +446,8 @@ describe("local source build policy", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(`image.ref=${imageTag}\n`);
     expect(result.stdout).toContain(`image.id=sha256:${"0".repeat(63)}8\n`);
+    expect(result.stdout).toContain(`root=${fixtureRootCommit}\n`);
+    expect(result.stdout).toContain(`aggregate-lock-sha256=${"a".repeat(64)}\n`);
   });
 
   it("leaves no readiness marker or promoted tag when preparation fails", async () => {
