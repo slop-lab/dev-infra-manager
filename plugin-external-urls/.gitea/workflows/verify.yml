@@ -1,0 +1,46 @@
+name: Verify external URLs plugin
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: dim
+    steps:
+      - name: Check out workspace definition
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/development
+          path: snapshot
+      - name: Check out core source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: dim-dim/core
+          path: snapshot/core
+      - name: Check out plugin candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: snapshot/plugin-external-urls
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.13.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - working-directory: snapshot
+        run: pnpm install --frozen-lockfile
+      - working-directory: snapshot
+        run: pnpm --filter @slop-lab/dim-plugin-external-urls run check
+      - working-directory: snapshot
+        run: pnpm --filter @slop-lab/dim-plugin-external-urls run pack:dry-run
+  development:
+    uses: dim-dim/plugin-external-urls-development/.gitea/workflows/verify.yml@a22f2a2ba1100387704a88b98ef0eda11b4f7e66
+    with:
+      source-ref: ${{ gitea.sha }}
+      development-ref: main
