@@ -1,0 +1,5 @@
+{
+  "extends": "../plugin-external-urls/tsconfig.base.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["test/**/*.ts"]
+}
