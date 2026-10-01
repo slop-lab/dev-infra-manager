@@ -85,6 +85,8 @@ async function recoverWorkspace(
       return;
     case "creating":
       throw new UserError(`workspace '${name}' is still creating and cannot be recovered by host start`);
+    case "discarding":
+      throw new UserError(`workspace '${name}' discard is incomplete; retry workspace discard`);
     default:
       return assertNeverPhase(workspace.phase, "workspace");
   }

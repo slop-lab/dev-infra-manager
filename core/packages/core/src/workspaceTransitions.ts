@@ -21,6 +21,7 @@ import {
   stopWorkspaceLocked
 } from "./workspaceState.js";
 import { validateWorkspaceProfiles } from "./workspaceValidation.js";
+import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
 
 export async function updateWorkspace(
   runner: StreamingCommandRunner,
@@ -33,6 +34,7 @@ export async function updateWorkspace(
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
     const initialRecord = await state.readWorkspace(workspaceName);
+    assertWorkspaceLifecycleActive(initialRecord);
     setStage("protected root selection");
     const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: initialRecord.projectName });
     setStage("Project lock acquisition");
@@ -45,6 +47,7 @@ export async function updateWorkspace(
       try {
         setStage("workspace state loading");
         let record = await state.readWorkspace(workspaceName);
+        assertWorkspaceLifecycleActive(record);
         if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
         const oldProfiles = record.profiles;
         setStage("profile validation");
@@ -100,6 +103,7 @@ export async function startWorkspace(
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
     const record = await state.readWorkspace(workspaceName);
+    assertWorkspaceLifecycleActive(record);
     setStage("protected root selection");
     const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: record.projectName });
     setStage("Project lock acquisition");
@@ -130,6 +134,7 @@ async function startWorkspaceLocked(
 ): Promise<WorkspaceRecord> {
   setStage("workspace runtime reconciliation");
   let record = await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(workspaceName));
+  assertWorkspaceLifecycleActive(record);
   if (record.phase !== "stopped") {
     throw new UserError(`workspace '${workspaceName}' is not stopped; use restart to apply project changes`);
   }
@@ -163,6 +168,7 @@ export async function restartWorkspace(
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
     const initialRecord = await state.readWorkspace(workspaceName);
+    assertWorkspaceLifecycleActive(initialRecord);
     setStage("protected root selection");
     const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: initialRecord.projectName });
     setStage("Project lock acquisition");
@@ -175,6 +181,7 @@ export async function restartWorkspace(
       try {
         setStage("workspace runtime reconciliation");
         const record = await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(workspaceName));
+        assertWorkspaceLifecycleActive(record);
         if (record.phase === "stopped") {
           return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot, setStage);
         }

@@ -24,6 +24,7 @@ import {
 } from "./workspaceProjectCommands.js";
 import { applySelectedRoot } from "./workspacePublication.js";
 import { inspectWorkspaceContainer } from "./workspaceResourceOwnership.js";
+import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
 
 type ReconcileProjectContainerInput = {
   readonly runner: StreamingCommandRunner;
@@ -46,6 +47,7 @@ export async function setupWorkspace(
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
     const initialRecord = await state.readWorkspace(workspaceName);
+    assertWorkspaceLifecycleActive(initialRecord);
     setStage("Project lock acquisition");
     const releaseProject = await state.acquireProjectLock(initialRecord.projectName);
     try {
@@ -54,6 +56,7 @@ export async function setupWorkspace(
       try {
         setStage("workspace state loading");
         let record = await state.readWorkspace(workspaceName);
+        assertWorkspaceLifecycleActive(record);
         if (record.projectName !== initialRecord.projectName || record.projectId !== initialRecord.projectId) {
           throw new UserError(`project '${record.projectName}' identity changed`);
         }

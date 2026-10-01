@@ -11,6 +11,7 @@ import {
   isMissingContainer
 } from "./workspaceResourceOwnership.js";
 import { validateWorkspaceResources } from "./workspaceValidation.js";
+import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
 
 export async function assertSelectedProjectUnchanged(
   state: LifecycleState,
@@ -106,6 +107,7 @@ export async function updateWorkspaceResources(
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
     const record = await state.readWorkspace(workspaceName);
+    assertWorkspaceLifecycleActive(record);
     const resources = {
       cpuCount: input.cpuCount ?? record.cpuCount,
       memory: input.memory ?? record.memory,
@@ -155,6 +157,7 @@ export async function stopWorkspaceLocked(
   state: LifecycleState,
   initialRecord: WorkspaceRecord
 ): Promise<void> {
+  assertWorkspaceLifecycleActive(initialRecord);
   const container = await inspectWorkspaceContainer(runner, initialRecord);
   if (container?.running) {
     const stopped = await runner.run("docker", ["stop", container.id]);
