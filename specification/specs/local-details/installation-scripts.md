@@ -115,8 +115,9 @@ Commit validation and archive operations MUST ignore Git replacement refs and
 MUST reject trees, blobs, and other non-commit objects. Source, package, and
 readiness staging MUST use private nonce paths; persistent path symlinks MUST
 be rejected. A failed stage or publication MUST restore the previously
-published package bundle, readiness, and versioned image identity. If no prior
-generation exists, failure MUST remove every newly published artifact.
+published package bundle and readiness. Every rollback operation MUST be
+checked. If restoration fails, preparation MUST report and retain the private
+staging path containing recovery data instead of deleting it.
 
 The reviewed root `prepare-local` path MUST build every production package
 tarball and the trusted workspace image under exactly one aggregate local
@@ -126,11 +127,15 @@ image ID, and only then promotes it to
 state binds that versioned tag to the image ID and package/source digests.
 `install-local` recomputes the tag from the unchanged bundle and rejects stale
 or mismatched preparation state before and after installation. Complete staged
-packages are promoted as one generation, the final image tag is verified
-against the temporary image ID, and readiness is published last. Any prior
-versioned image is held under a private rollback tag until package and
-readiness publication succeeds. Both the reviewed-root prepared path and the
-assembled-development path MUST stage the
+packages and readiness are promoted under the shared preparation lock before
+the final versioned image tag is created as the last fallible publication
+operation. Any prior versioned image is first held under a private rollback
+tag. Docker's tag API has no compare-and-swap rollback, so a final-tag command
+that reports failure after a possible mutation MUST NOT trigger an automatic
+restore or removal by shared tag name. Preparation instead fails closed,
+retains the prepared and prior private image references plus staging recovery
+data, and reports that explicit operator recovery is required. Both the
+reviewed-root prepared path and the assembled-development path MUST stage the
 installer tarball from the validated candidate bundle in a temporary directory
 outside that bundle, then use that target facade for `install-cli` and its
 target-package state compatibility preflight before runtime promotion. An
