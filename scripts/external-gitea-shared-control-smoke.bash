@@ -10,6 +10,8 @@ gitea_container="dim-external-gitea-$suffix"
 controller_a_pid=""
 controller_b_pid=""
 malicious_pid=""
+job_id=""
+job_connected=false
 existing_dim_gitea="$(docker container inspect dim-gitea --format '{{.Id}}|{{.State.Running}}|{{.State.StartedAt}}|{{.RestartCount}}' 2>/dev/null || true)"
 umask 077
 
@@ -21,16 +23,27 @@ cleanup() {
       wait "$pid" >/dev/null 2>&1 || true
     fi
   done
+  if [[ "$job_connected" == true ]]; then
+    timeout --kill-after=5s 20s docker network disconnect "$network" "$job_id" >/dev/null 2>&1 || true
+  fi
   timeout --kill-after=5s 20s docker container rm --force "$gitea_container" >/dev/null 2>&1 || true
   timeout --kill-after=5s 20s docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf -- "$work_dir"
 }
 trap cleanup EXIT
 
-for command in curl docker git jq node openssl timeout; do
+for command in curl docker git hostname jq node openssl timeout; do
   command -v "$command" >/dev/null || { printf '%s is required\n' "$command" >&2; exit 2; }
 done
 docker info >/dev/null
+job_ref="$(hostname)"
+[[ "$job_ref" =~ ^[0-9a-f]{12,64}$ ]] || { printf 'Docker job hostname is not a container ID\n' >&2; exit 1; }
+job_record="$(docker container inspect "$job_ref" --format '{{.Id}}|{{.State.Running}}')"
+IFS='|' read -r job_id job_running <<<"$job_record"
+[[ "$job_id" == "$job_ref"* && "$job_running" == true ]] || {
+  printf 'Docker job identity does not match the current running container\n' >&2
+  exit 1
+}
 printf '%s\n' 'external-gitea: starting disposable service'
 
 admin_password="$(openssl rand -hex 24)"
@@ -41,7 +54,7 @@ docker network create --label dim.verification=external-gitea "$network" >/dev/n
 printf '%s\n' 'external-gitea: creating disposable container'
 timeout --kill-after=5s 90s docker create --name "$gitea_container" \
   --label dim.verification=external-gitea \
-  --publish 127.0.0.1::3000 \
+  --network "$network" --network-alias external-gitea --network-alias external-gitea-runner \
   --env GITEA__database__DB_TYPE=sqlite3 \
   --env GITEA__security__INSTALL_LOCK=true \
   --env GITEA__server__DISABLE_SSH=true \
@@ -49,19 +62,16 @@ timeout --kill-after=5s 90s docker create --name "$gitea_container" \
   "$gitea_image" >/dev/null
 printf '%s\n' 'external-gitea: starting disposable container'
 timeout --kill-after=5s 90s docker start "$gitea_container" >/dev/null
-printf '%s\n' 'external-gitea: connecting disposable network'
-timeout --kill-after=5s 30s docker network connect --alias external-gitea --alias external-gitea-runner "$network" "$gitea_container"
-gitea_port="$(docker port "$gitea_container" 3000/tcp \
-  | jq -Rrs 'split("\n") | map(select(length > 0)) | last | split(":") | last')"
-[[ "$gitea_port" =~ ^[0-9]+$ ]]
-gitea_address="$(docker container inspect "$gitea_container" \
-  --format '{{with index .NetworkSettings.Networks "bridge"}}{{.IPAddress}}{{end}}')"
-[[ -n "$gitea_address" ]]
-gitea_url="http://$gitea_address:3000"
+printf '%s\n' 'external-gitea: connecting job to disposable network'
+timeout --kill-after=5s 30s docker network connect "$network" "$job_id"
+job_connected=true
+gitea_url="http://external-gitea:3000"
 gitea_host_url="$gitea_url"
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}external-gitea,external-gitea-runner"
+export no_proxy="${no_proxy:+$no_proxy,}external-gitea,external-gitea-runner"
 printf '%s\n' 'external-gitea: waiting for service health'
 for attempt in $(seq 1 90); do
-  if curl --fail --silent --connect-timeout 1 --max-time 2 "$gitea_url/api/healthz" >/dev/null 2>&1; then
+  if curl --noproxy '*' --fail --silent --connect-timeout 1 --max-time 2 "$gitea_url/api/healthz" >/dev/null 2>&1; then
     break
   fi
   [[ "$attempt" -lt 90 ]] || { docker logs "$gitea_container" >&2; exit 1; }
