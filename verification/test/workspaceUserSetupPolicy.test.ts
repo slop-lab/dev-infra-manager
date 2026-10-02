@@ -196,7 +196,7 @@ describe("workspace-user setup policy", () => {
     expect(source).not.toMatch(/@latest\b|\/latest(?:\/|\b)/);
     expect(source).not.toMatch(/(?:curl|wget)[^\n]*(?:opencode\.ai\/install|\/(?:main|master|HEAD)\/)/);
     expect(source).not.toMatch(/\bgit\s+clone[^\n]*(?:--branch|-b)\s+\S+/);
-    expect(source).not.toMatch(/\bdim\s+(?:install-plugin|controller)\b/);
+    expect(source).not.toMatch(/\bdim\s+(?:installer|controller)\b/);
     expect(source).not.toMatch(/\bDIM_(?:CONTROLLER|PLUGIN)(?:_[A-Z0-9_]+)?\b/);
     expect(source).not.toMatch(/\bDIM_[A-Z0-9_]*(?:TOKEN|GRANT)\b/);
   });
