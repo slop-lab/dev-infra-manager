@@ -1,5 +1,6 @@
 import type { ProjectRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
+import { ownedGiteaContainerInspect, ownedGiteaResourceInspect } from "./giteaServiceFixture.js";
 import { workspaceContainerInspect, workspaceVolumeInspect } from "./workspaceOwnershipFixture.js";
 
 
@@ -33,19 +34,27 @@ export class LifecycleRunner implements StreamingCommandRunner {
       return { command, args, stdout: `${MOVED_SOURCE_COMMIT}\trefs/heads/development\n`, stderr: "", exitCode: 0 };
     }
     if (args[0] === "network" && args[1] === "inspect") {
-      return { command, args, stdout: "true\n", stderr: "", exitCode: 0 };
+      const stdout = args.some((argument) => argument.includes("dim.service-id"))
+        ? ownedGiteaResourceInspect("network")
+        : "true";
+      return { command, args, stdout: `${stdout}\n`, stderr: "", exitCode: 0 };
     }
     if (args[0] === "volume" && args[1] === "inspect") {
-      const stdout = args.some((argument) => argument.includes("dim.resource"))
+      const stdout = args[2] === WORKSPACE_IDENTITY.dockerVolumeName
         ? `${workspaceVolumeInspect(WORKSPACE_IDENTITY)}\n`
-        : "true\n";
+        : args[2] === "dim-gitea-data"
+          ? `${ownedGiteaResourceInspect("volume")}\n`
+          : "true\n";
       return { command, args, stdout, stderr: "", exitCode: 0 };
     }
     if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-gitea") {
-      const stdout = args.some((argument) => argument.includes("IPAddress"))
-        ? "172.20.0.2\n"
-        : "gitea-container-id|true|true\n";
-      return { command, args, stdout, stderr: "", exitCode: 0 };
+      return {
+        command,
+        args,
+        stdout: `${ownedGiteaContainerInspect("gitea-container-id", true)}\n`,
+        stderr: "",
+        exitCode: 0
+      };
     }
     if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-registry-cache") {
       return {

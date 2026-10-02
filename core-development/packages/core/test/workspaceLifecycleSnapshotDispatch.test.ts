@@ -8,6 +8,7 @@ import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/c
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { runWorkspace, setupWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
 
+import { claimTestGiteaService } from "./giteaServiceFixture.js";
 import { COMMIT, LifecycleRunner, MOVED_SOURCE_COMMIT, projectFixture, repositorySnapshot } from "./workspaceLifecycleSnapshotFixture.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
 
@@ -53,6 +54,7 @@ describe("immutable workspace lifecycle dispatch", () => {
     };
     await mkdir(join(root, "assets", "project-roots", record.projectId, record.rootCommit), { recursive: true });
     await state.claimProject(project);
+    await claimTestGiteaService(root, 3300);
     await state.claimWorkspace(record);
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 200 }));
   });

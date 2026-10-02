@@ -56,7 +56,7 @@ export async function reconcileContainer(
       throw new UserError(`workspace '${record.name}' requires host /dev/kvm`);
     }
   }
-  await ensureRegistryCache(runner, options.stateRoot);
+  await ensureRegistryCache(runner, options);
   await reconcileDockerVolume(runner, record);
   const state = new LifecycleState(options.stateRoot);
   const controllerGrant = await state.ensureWorkspaceGrant(record.name);
