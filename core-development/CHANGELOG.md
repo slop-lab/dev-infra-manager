@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add a standalone DIM-owned Git smart-HTTP foundation with exact
+  Project/repository registration, identity-scoped reads, and workspace-bound
+  proposal pushes. Its server-side receive policy denies protected refs, tags,
+  deletion, force updates, foreign namespaces, unsafe paths, and invalid
+  credentials. It is not yet selected by Project lifecycle code and exposes no
+  issue tracker, review, merge, or protected-promotion authority; existing
+  managed and external Gitea behavior remains unchanged while complete-tree
+  review and exact-evidence compare-and-swap promotion remain future gates.
+
 - Let `dim external-url list` use the host-admin controller to show a bounded
   all-workspace route inventory with Project and workspace names when invoked
   on the host. `--workspace` and workspace/agent environments remain scoped to
