@@ -57,12 +57,18 @@ dim-controller-proxy external-url \
   --ingress https-ts \
   --bind-containers-json '["agent"]' \
   --bind-protocol http \
-  --bind-port 4096
+  --bind-port 4096 \
+  --bind-service-subdomain opencode-web=feature-123--opencode
 ```
 
-The binding options are an optional group. Omitting the group preserves the
-generic ingress-only capability. Supplying it makes target matching exact for
-creation, filtered listing, and revocation authorization. Projects must use a
+The target binding options are an optional group. Omitting the group preserves
+the generic ingress-only capability. Supplying it makes target matching exact
+for creation, filtered listing, and revocation authorization. Optional repeated
+`--bind-service-subdomain SERVICE=SUBDOMAIN` values additionally restrict the
+bound socket to reviewed logical-service mappings. The caller supplies the
+logical service name, while the proxy injects the exact subdomain and rejects
+unknown services or caller-supplied authority fields. Service mappings require
+the complete target-binding group. Projects must use a
 distinct socket for a narrower application capability instead of narrowing an
 existing generic socket used by other clients.
 
@@ -76,8 +82,11 @@ dim-development-service expose \
   --name preview --port 5173 --ingress https-ts --require-scheme https
 ```
 
-The caller's POST body contains only `ingress`; the trusted proxy injects the
-gateway target. The lazily managed gateway listens on `0.0.0.0:G` inside the
+The helper's POST body contains `ingress` and its logical service name. A
+service-bound trusted proxy injects both the reviewed workspace-qualified
+subdomain and gateway target. A generic target-bound proxy accepts the logical
+name for helper compatibility but strips it before forwarding, so the caller
+still cannot select an authority. The lazily managed gateway listens on `0.0.0.0:G` inside the
 agent container so the trusted ingress can reach it, and routes each returned
 exact authority only to an application at `127.0.0.1:PORT`, including WebSocket
 upgrades. Where nested container publication is required, trusted Project code
@@ -86,10 +95,11 @@ stores that bound target port. Re-exposing a stable name with another local
 port retains the URL and URL ID. The generic
 ingress-only External URL capability remains a separate socket and contract.
 
-Binding fixes the external target, not authority among processes inside one
-agent. Code that can access the development socket can publish any service its
-existing agent network authority can reach through local loopback. This helper
-therefore avoids granting container-target selection but does not create a
+Target binding alone fixes the external target, not authority. A service
+mapping also fixes the allowed logical names and exact subdomains. Code that
+can access the development socket can publish any listed service from its
+existing agent loopback authority. This helper therefore avoids granting
+container-target or arbitrary-subdomain selection but does not create a
 security boundary between mutually untrusted processes in the same agent.
 
 ## Named ingresses
