@@ -4,6 +4,7 @@ export * from "./controller-health.js";
 export * from "./controller-session.js";
 export * from "./controller-transport.js";
 export * from "./managed-controller.js";
+export * from "./local-progress.js";
 export * from "./repository-set.js";
 export * from "./repository-set-types.js";
 export * from "./repository-sync.js";

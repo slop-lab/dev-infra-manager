@@ -7,6 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import type { CliProgress, ProgressStream } from "../../../../core/packages/cli/src/cli-progress.js";
 import { readAdminSession } from "../../../../core/packages/cli/src/cli-support.js";
+import { withLocalProgress } from "../../../../core/packages/cli/src/local-progress.js";
 import { readCliSource } from "./sourceArchitecture.js";
 
 class RecordingProgress implements CliProgress {
@@ -126,6 +127,27 @@ test("top-level and nested exec/run calls retain raw stream options and SIGINT c
   assert.equal(rawCalls?.length, 4);
   assert.match(support, /const requestCancellation = \(\): Promise<void> => \{[\s\S]{0,400}method: "DELETE"[\s\S]*const cancel = \(\) => \{\s+progress\.stop\(\);\s+void requestCancellation\(\)/);
   assert.match(support, /process\.once\("SIGINT", cancel\)/);
+});
+
+test("local operation SIGINT aborts work and removes its signal listener", async () => {
+  const listeners = process.listeners("SIGINT");
+  const operation = withLocalProgress("repo.fetch", async ({ signal }) => new Promise<never>((_resolve, reject) => {
+    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  }));
+  const signalHandler = process.listeners("SIGINT").find((listener) => !listeners.includes(listener));
+
+  assert.ok(signalHandler);
+  signalHandler("SIGINT");
+  await assert.rejects(operation, /repo\.fetch cancelled/);
+  assert.deepEqual(process.listeners("SIGINT"), listeners);
+});
+
+test("local operation failures remove their signal listener unchanged", async () => {
+  const listeners = process.listeners("SIGINT");
+  const failure = new Error("repository failed unchanged");
+
+  await assert.rejects(withLocalProgress("repo.publish", async () => { throw failure; }), failure);
+  assert.deepEqual(process.listeners("SIGINT"), listeners);
 });
 
 function writeEvent(response: ServerResponse, event: object): void {
