@@ -21,6 +21,7 @@ describe("Gitea control endpoint", () => {
 
     await expect(giteaNestedBaseUrl(runner, {
       kind: "managed",
+      endpointAddress: "172.20.0.4",
       adminUsername: "admin",
       adminPassword: "password",
       writerUsername: "writer",
@@ -34,6 +35,35 @@ describe("Gitea control endpoint", () => {
     })).resolves.toBe("http://172.20.0.4:3000");
   });
 
+  it("retains the leased managed endpoint when Docker reports address drift", async () => {
+    // Given
+    const runner: CommandRunner = {
+      async run(command, args) {
+        return { command, args, stdout: "172.20.0.99\n", stderr: "", exitCode: 0 };
+      }
+    };
+    const connection = {
+      kind: "managed" as const,
+      endpointAddress: "172.20.0.4",
+      adminUsername: "admin",
+      adminPassword: "password",
+      writerUsername: "writer",
+      writerPassword: "password",
+      maintainerUsername: "host",
+      maintainerPassword: "password",
+      apiBaseUrl: "http://127.0.0.1:3300/api/v1",
+      hostBaseUrl: "http://127.0.0.1:3300",
+      workspaceBaseUrl: "http://dim-gitea:3000",
+      runnerBaseUrl: "http://dim-gitea:3000"
+    };
+
+    // When
+    const nestedBaseUrl = await giteaNestedBaseUrl(runner, connection);
+
+    // Then
+    expect(nestedBaseUrl).toBe("http://172.20.0.4:3000");
+  });
+
   it("sends management API requests to the resolved control endpoint", async () => {
     const server = createServer((request, response) => {
       response.writeHead(request.url === "/api/v1/version" ? 200 : 404).end();
@@ -45,6 +75,7 @@ describe("Gitea control endpoint", () => {
     if (!address || typeof address === "string") throw new Error("missing address");
     const connection: GiteaConnection = {
       kind: "managed",
+      endpointAddress: "172.20.0.4",
       adminUsername: "admin",
       adminPassword: "password",
       writerUsername: "writer",
@@ -79,6 +110,7 @@ describe("Gitea control endpoint", () => {
 
     await expect(giteaRequest({
       kind: "managed",
+      endpointAddress: "172.20.0.4",
       adminUsername: "admin", adminPassword: "password",
       writerUsername: "writer", writerPassword: "password",
       maintainerUsername: "host", maintainerPassword: "password",
@@ -90,6 +122,7 @@ describe("Gitea control endpoint", () => {
   it("rejects management API paths outside the configured base", async () => {
     const connection: GiteaConnection = {
       kind: "managed",
+      endpointAddress: "172.20.0.4",
       adminUsername: "admin", adminPassword: "password",
       writerUsername: "writer", writerPassword: "password",
       maintainerUsername: "host", maintainerPassword: "password",
