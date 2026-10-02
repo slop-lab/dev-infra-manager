@@ -142,6 +142,29 @@ test("a rejected cancellation request settles the stream call and restores liste
   assert.deepEqual(listenerCounts(), listeners);
 });
 
+test("an acknowledged cancellation settles while the event stream remains open", async () => {
+  const listeners = listenerCounts();
+  const signalListeners = process.listeners("SIGINT");
+  await withController({}, async ({ events }) => {
+    const call = adminStreamCall("workspace.exec");
+    const eventResponse = await events;
+    const signalHandler = process.listeners("SIGINT").find((listener) => !signalListeners.includes(listener));
+    assert.ok(signalHandler);
+    signalHandler("SIGINT");
+    let timer: NodeJS.Timeout | undefined;
+    const settlementTimeout = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error("cancellation did not settle")), 500);
+    });
+    try {
+      await assert.rejects(Promise.race([call, settlementTimeout]), /command session 'session' cancelled/);
+    } finally {
+      if (timer) clearTimeout(timer);
+      eventResponse.destroy();
+    }
+  });
+  assert.deepEqual(listenerCounts(), listeners);
+});
+
 function listenerCounts(): { readonly data: number; readonly end: number; readonly resize: number; readonly sigint: number } {
   return {
     data: process.stdin.listenerCount("data"),

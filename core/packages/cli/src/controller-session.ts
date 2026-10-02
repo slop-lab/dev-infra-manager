@@ -66,6 +66,7 @@ export async function adminStreamCall<T = unknown>(
       if (response.status < 200 || response.status >= 300) {
         throw new UserError(adminErrorDetail(response.body) || `command session cancellation failed (${response.status})`);
       }
+      sessionAbort.abort(new UserError(`command session '${id}' cancelled`));
     })().catch(recordFailure);
     return cancellationRequest;
   };
