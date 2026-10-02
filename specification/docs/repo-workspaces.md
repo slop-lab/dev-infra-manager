@@ -267,6 +267,24 @@ That backup is immutable historical recovery material, not a live mirror;
 after migration, valid schema `2` `host.json` is authoritative and may evolve
 without matching the backup.
 
+Managed-Gitea service state is strict schema `2`. It records the service and
+resource ownership identities, requested image reference, immutable `imageId`,
+immutable `networkId`, `resourcesEstablished`, and the leased
+`endpointAddress`, along with the resource names, phase, port, and timestamps.
+The initial claim has `resourcesEstablished: false`; DIM sets it to `true` only
+after both base resources have been created or ownership-checked and the
+network ID has been recorded. After that point, a missing network or data
+volume fails closed instead of being recreated. Container inspection also
+requires the recorded image ID, network ID, and writable data-volume mount.
+
+There is no migration from schema-less or schema-1 managed-Gitea records
+because they lack the complete evidence required by schema 2. DIM rejects them
+unchanged rather than adopting same-name Docker resources. Stop DIM and use the
+prior pinned release to export or otherwise preserve needed repository data.
+Remove only resources whose ownership is independently verified. Retain any
+unverifiable data volume or other resource, and don't recreate the managed
+service under a conflicting name.
+
 Host maintenance state must be a structurally valid schema `2` record with its
 exact phase, workspace, CI-runner, managed-container, and timestamp fields,
 plus an optional error. Invalid or unknown structure is rejected unchanged
@@ -277,7 +295,12 @@ non-regular canonical, backup, or recognized temporary artifact stops
 controller startup without mutation. Interrupted migration is safe to retry;
 an absent canonical record is recovered from a valid permanent backup.
 
-If `dim host start` enters from `ready`, it dispatches no recovery. From
+If `dim host start` enters from `ready`, it reconciles only the managed-Git
+endpoint lease and dispatches no workspace, generic-container, or CI recovery.
+The lease retains the address already installed in long-lived workspace and
+nested-service aliases. A missing owned Git container is recreated at that
+address; a foreign same-name replacement or changed address fails closed
+without reconnecting or mutating a running workspace. From
 `stopped`, `starting`, or `error`, listed ready runners are left alone, stopped
 runners start, and creating or errored runners are ownership-safely stopped
 before start. Entry from `stopping` uses the same matrix but also stops and
