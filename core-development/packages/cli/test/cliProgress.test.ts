@@ -180,12 +180,46 @@ test("every lifecycle and CI progress operation has one stable label", () => {
     "workspace.create", "workspace.resources", "workspace.setup", "workspace.update",
     "workspace.start", "workspace.restart", "workspace.stop", "workspace.discard",
     "ci.runner.create", "ci.runner.start", "ci.runner.restart", "ci.runner.stop", "ci.runner.delete",
-    "ci.runner.logs", "host.start", "host.shutdown"
+    "ci.runner.logs", "host.start", "host.shutdown", "image.workspace.build",
+    "image.git-sync.build", "image.qemu-scheduler.build", "repo.import", "repo.fetch",
+    "repo.publish", "repo.apply", "project.create"
   ]);
   for (const operation of streamProgressOperations) assert.equal(typeof streamProgressLabel(operation), "string");
   assert.equal(streamProgressLabel("workspace.align"), undefined);
   assert.equal(streamProgressLabel("workspace.exec"), undefined);
   assert.equal(streamProgressLabel("workspace.run"), undefined);
+});
+
+test("direct operations show only truthful remaining milestones", () => {
+  const scheduler = new TestScheduler();
+  const stream = new MemoryStream(true);
+  const progress = createAdminStreamProgress("repo.import", {}, { scheduler, stream, ...timing });
+
+  scheduler.advance(1_000);
+  assert.match(stream.chunks.at(-1) ?? "", /Current: repository preparation/);
+  assert.match(stream.chunks.at(-1) ?? "", /Remaining: source fetch, managed Git push, import finalization/);
+
+  progress.update("source fetch");
+  scheduler.advance(1_000);
+  assert.match(stream.chunks.at(-1) ?? "", /Current: source fetch/);
+  assert.match(stream.chunks.at(-1) ?? "", /Remaining: managed Git push, import finalization/);
+
+  progress.update("ref materialization");
+  scheduler.advance(1_000);
+  assert.match(stream.chunks.at(-1) ?? "", /Current: ref materialization/);
+  assert.doesNotMatch(stream.chunks.at(-1) ?? "", /source fetch/);
+});
+
+test("unknown direct stages cannot disclose controller or credential text", () => {
+  const scheduler = new TestScheduler();
+  const stream = new MemoryStream(true);
+  const progress = createAdminStreamProgress("repo.fetch", {}, { scheduler, stream, ...timing });
+
+  progress.update("Bearer secret-token");
+  scheduler.advance(1_000);
+
+  assert.match(stream.chunks.join(""), /Current: repository preparation/);
+  assert.doesNotMatch(stream.chunks.join(""), /secret-token/);
 });
 
 test("TTY progress never contaminates JSON stdout", () => {

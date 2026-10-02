@@ -1,4 +1,4 @@
-import { initialWorkspaceProgress, workspaceProgressStage } from "./workspace-progress.js";
+import { initialOperationProgress, operationProgressStage } from "./operation-progress.js";
 
 export const streamProgressOperations = [
   "workspace.create",
@@ -16,7 +16,15 @@ export const streamProgressOperations = [
   "ci.runner.delete",
   "ci.runner.logs",
   "host.start",
-  "host.shutdown"
+  "host.shutdown",
+  "image.workspace.build",
+  "image.git-sync.build",
+  "image.qemu-scheduler.build",
+  "repo.import",
+  "repo.fetch",
+  "repo.publish",
+  "repo.apply",
+  "project.create"
 ] as const;
 
 type StreamProgressOperation = (typeof streamProgressOperations)[number];
@@ -37,7 +45,15 @@ const streamProgressLabels = {
   "ci.runner.delete": "Deleting CI runner",
   "ci.runner.logs": "Following CI runner logs",
   "host.start": "Starting host runtimes",
-  "host.shutdown": "Stopping host runtimes"
+  "host.shutdown": "Stopping host runtimes",
+  "image.workspace.build": "Building workspace image",
+  "image.git-sync.build": "Building Git sync image",
+  "image.qemu-scheduler.build": "Building QEMU scheduler image",
+  "repo.import": "Importing repository",
+  "repo.fetch": "Fetching repository",
+  "repo.publish": "Publishing repository",
+  "repo.apply": "Applying repository set",
+  "project.create": "Creating Project"
 } satisfies Record<StreamProgressOperation, string>;
 
 const spinnerFrames = ["-", "\\", "|", "/"] as const;
@@ -113,7 +129,7 @@ export function createAdminStreamProgress(
   const stream = dependencies.stream ?? process.stderr;
   const label = options.stdin || options.terminal ? undefined : streamProgressLabel(operation);
   if (label === undefined || stream.isTTY !== true) return inactiveProgress;
-  const initialStatus = initialWorkspaceProgress(operation);
+  const initialStatus = initialOperationProgress(operation);
 
   const scheduler = dependencies.scheduler ?? defaultScheduler;
   const idleDelayMs = dependencies.idleDelayMs ?? defaultIdleDelayMs;
@@ -169,7 +185,7 @@ export function createAdminStreamProgress(
     },
     update(stage) {
       if (stopped) return;
-      const status = workspaceProgressStage(operation, stage);
+      const status = operationProgressStage(operation, stage);
       if (status === undefined) return;
       current = status.current;
       remaining = status.remaining;
