@@ -44,7 +44,7 @@ fi
 
 DIM_DEVELOPMENT_GATEWAY_PORT="$(dim-development-service gateway-port)"
 export DIM_DEVELOPMENT_GATEWAY_PORT
-opencode_workspace_slug="$(printf '%s' "${DIM_WORKSPACE_NAME:?}" | sed 's/[._]/-/g; s/-*$//')--opencode"
+opencode_workspace_slug="$(dim-development-service workspace-subdomain --workspace "${DIM_WORKSPACE_NAME:?}" --service opencode)"
 dim-controller-proxy ensure external-url \
   --listen /tmp/dim-development-url/controller.sock \
   --ingress https-ts \
