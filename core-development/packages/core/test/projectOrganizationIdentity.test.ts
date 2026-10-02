@@ -11,7 +11,8 @@ import { hostLifecycleOptions } from "./hostLifecycleFixture.js";
 vi.mock("../../../../core/packages/core/src/gitea.js", async (importOriginal) => ({
   ...await importOriginal<typeof import("../../../../core/packages/core/src/gitea.js")>(),
   ensureGitea: vi.fn(async () => ({
-    kind: "managed" as const,
+  kind: "managed" as const,
+  endpointAddress: "172.20.0.2",
     adminUsername: "admin",
     adminPassword: "admin-secret",
     writerUsername: "writer",
@@ -72,6 +73,7 @@ describe("Project Gitea organization identity", () => {
     stateRoot = await mkdtemp(join(tmpdir(), "dim-project-organization-"));
     vi.mocked(ensureGitea).mockResolvedValue({
       kind: "managed",
+      endpointAddress: "172.20.0.2",
       adminUsername: "admin",
       adminPassword: "admin-secret",
       writerUsername: "writer",

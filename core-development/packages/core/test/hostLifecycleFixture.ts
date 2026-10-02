@@ -104,7 +104,7 @@ export function hostLifecycleOptions(stateRoot: string): LifecycleOptions {
   return {
     stateRoot,
     giteaConnection: { kind: "managed" },
-    giteaImage: "gitea",
+    giteaImage: "gitea/gitea:1.27.0",
     giteaHost: "gitea",
     giteaPort: 3000,
     giteaAdminUsername: "admin",
