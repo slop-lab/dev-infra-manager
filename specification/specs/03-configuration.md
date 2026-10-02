@@ -1,9 +1,99 @@
 # Configuration
 
+**Kind: Contract**
+
 DIM configuration is environment-based. `DIM_STATE_ROOT` selects the
 schema-versioned state root; Gitea, workspace backend, image and resource
 options use the `DIM_GITEA_*`, `DIM_GIT_*`, and `DIM_WORKSPACE_*` variables
 documented in `docs/configuration.md`.
+
+## Workspace backend admission
+
+**CONFIG-BACKEND-001:** Backend configuration is trusted host input, not a
+Project extension point. The current release accepts exactly the scalar user
+configuration `workspaceBackend: "sysbox"`, creates only workspace schema `8`
+records whose `runtimeBackend` is `sysbox`, and MUST reject `container`, `vm`,
+and every other value before plugin, hook, grant, state, or runtime mutation.
+`DIM_WORKSPACE_RUNTIME`, `DIM_WORKSPACE_PRIVILEGED`, image overrides, Compose
+configuration, and capability-provider output MUST NOT change that backend
+identity or select a VM manager.
+
+The target multi-backend contract reserves the scalar values `container` and
+`vm`. They remain invalid in this release. A future release MAY accept one only
+when its immutable release capability manifest names an implemented backend
+profile and version, the profile's required live development gate has passed,
+and local host preflight succeeds. An operator setting, environment variable,
+Project file, plugin, guest response, or retained resource MUST NOT declare a
+candidate profile supported or override the release-selected profile.
+
+The initial target mappings are exact:
+
+| Configured backend | Release-selected profile | Status in this release |
+| --- | --- | --- |
+| `sysbox` | historical schema-`8` profile | Supported and the only accepted value |
+| `container` | `sysbox-container` version `1` | Reserved; rejected until implemented by a target release |
+| `vm` | `incus-vm` version `1` | Evaluation candidate; rejected until the live KVM gate passes and a later release enables it |
+
+The alternate `libvirt-vm` version `1` profile is not a configuration fallback.
+It MAY replace the `vm` mapping only in an explicit later release after a
+reproducible `incus-vm` gate failure and after passing the unchanged VM gate
+itself. A runtime error MUST NOT switch an existing or newly requested
+workspace between Incus and libvirt.
+
+**CONFIG-BACKEND-002:** The release-selected profile is persisted in target
+schema `9` workspace state as `runtimeBackendProfile`; it is not copied from
+untrusted input. A new-workspace request MAY choose only a backend identity
+enabled by the installed release and local host. Omission MAY use the trusted
+host default. The selected backend, profile, and profile version become
+immutable when the workspace record is created. Project configuration MAY
+request backend-neutral capabilities, but MUST NOT provide provider sockets,
+driver names, Incus projects or profiles, libvirt URIs or XML, QEMU arguments,
+host paths, networks, storage pools, devices, cloud-init, or provider resource
+names.
+
+For `vm`, local preflight MUST verify KVM availability to the trusted host
+service, the exact supported Incus/client compatibility, pinned guest image,
+restricted Project policy, allowed storage driver and pool, managed network
+policy, resource and balloon support, and the absence of conflicting owned or
+foreign resources. Missing or indeterminate prerequisites are an admission
+failure. Preflight MUST NOT install packages, change host policy, create Incus
+resources, or expose `/dev/kvm` or a provider API to the guest. The complete
+candidate profile and live gate are in
+[Workspace Runtime Backend](05-runtime-backends.md#incus-vm-candidate-version-1).
+
+Configuration and state admission MUST produce these results:
+
+| Input | Result |
+| --- | --- |
+| Current release with `workspaceBackend: "sysbox"` and exact current state | Accept under the current Sysbox profile |
+| Current release with `workspaceBackend: "container"` or `"vm"` | Reject as unsupported before mutation; do not claim a candidate gate passed |
+| Target release with a newly selected enabled backend and exact release profile, plus successful local preflight | Permit creation of a fresh schema-`9` workspace record |
+| Target release with `vm` while KVM, Incus, image, storage, network, balloon, restriction, or release-gate support is absent or indeterminate | Reject before provider or state mutation and report the failed prerequisite |
+| Target release with `workspaceBackend: "sysbox"` or schema-`8` `runtimeBackend: "sysbox"` | Reject unchanged with prior-release export/discard/create/restore guidance; never alias to `container` |
+| Existing `container` workspace requested as `vm`, or existing `vm` requested as `container` | Reject unchanged before contacting either provider |
+| Unknown backend, profile, profile version, state schema, provider field, device, label, or mixed provider identity | Reject unchanged before plugin, hook, grant, network, storage, or runtime mutation |
+| Guest, Project, plugin, or environment supplies low-level Incus/libvirt/QEMU/device/network/storage settings | Reject the settings; do not widen the release profile |
+| Incus operation fails after admission | Preserve the `incus-vm` identity and follow its failure policy; never retry through libvirt or another profile |
+
+**CONFIG-BACKEND-003:** Backend state transitions follow
+`STATE-BACKEND-001`. No workspace config or state migration exists from
+historical `sysbox` to `container` or `vm`, between `container` and `vm`, or
+between VM profiles. A target release MUST leave the old configuration file,
+workspace record, labels, and provider resources byte-for-byte unchanged when
+rejecting them. It MUST direct the operator to keep the old exact release,
+export declared Project/user data through a reviewed Project-owned task,
+validate that backend-neutral archive outside DIM state, discard with the old
+release, create a fresh workspace instance on the selected supported backend,
+and explicitly restore the archive.
+
+`discard --keep-volume`, raw provider volume transfer, engine-store copying,
+record editing, relabeling, and same-name resource adoption are not transition
+mechanisms. Exports MUST exclude DIM state, grants, sockets, credentials,
+routes, approvals, device decisions, provider metadata, and runtime-manager
+state. If the old pinned release cannot validate the old state or the export
+fails, the transition stops without changing that state. The exact target
+schema and rejection matrix are in
+[Workspace Runtime Backend](05-runtime-backends.md#versioned-target-state-and-transition).
 
 The configured Gitea host and port form the host-facing repository and
 management endpoint. `DIM_GITEA_HOST` overrides the host. Otherwise DIM uses
@@ -84,8 +174,9 @@ at least 60 seconds. API-authenticated queued events outside that Project label
 set MUST be acknowledged without creating demand.
 
 Project-specific Git namespaces, repository aliases, root repository/ref,
-profiles and backend choices belong to Project/workspace records. Raw
-credentials must not be written to those records.
+profiles, and the trusted host's effective backend choice belong to
+Project/workspace records. Raw credentials and provider-selection input must
+not be written to those records.
 
 There is no legacy bare-Git PR store, separate controller config, or job
 storage. DIM is pre-stable and rejects incompatible configuration or state
