@@ -40,7 +40,7 @@ describe("ordinary CI pool external Project binding", () => {
       if (path === "/v1/claims") {
         response.writeHead(200, { "content-type": "application/json" });
         response.end(JSON.stringify({
-          claimId: "claim-beta", jobId: 203, projectId: "project-b", projectName: "beta",
+          claimId: "claim-beta", admissionId: "a".repeat(64), jobId: 203, projectId: "project-b", projectName: "beta",
           organization: "dim-beta", organizationId: 42, jobImage: JOB_IMAGE,
           runnerLabel: "dim-ordinary", leaseMilliseconds: 60_000
         }));

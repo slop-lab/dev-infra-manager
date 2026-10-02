@@ -10,7 +10,7 @@ import type { CommandRunner } from "./types.js";
 export type OrdinaryPoolClaimResult =
   | { readonly kind: "idle" }
   | { readonly kind: "claimed"; readonly claim: OrdinaryPoolClaim }
-  | { readonly kind: "recovery"; readonly claimId: string; readonly projectId: string };
+  | { readonly kind: "recovery"; readonly claimId: string; readonly projectId: string; readonly admissionId: string };
 
 export async function prepareOrdinaryPoolGiteaRunner(
   runner: CommandRunner,
@@ -124,7 +124,7 @@ function poolRequest(
 
 function parseClaim(value: unknown): OrdinaryPoolClaim {
   if (!isRecord(value)) throw new UserError("ordinary CI pool returned an invalid claim");
-  const fields = ["claimId", "jobId", "projectId", "projectName", "organization", "organizationId", "jobImage", "runnerLabel", "leaseMilliseconds"] as const;
+  const fields = ["claimId", "admissionId", "jobId", "projectId", "projectName", "organization", "organizationId", "jobImage", "runnerLabel", "leaseMilliseconds"] as const;
   if (Object.keys(value).length !== fields.length || fields.some((field) => value[field] === undefined)
     || fields.filter((field) => field !== "jobId" && field !== "organizationId" && field !== "leaseMilliseconds")
       .some((field) => typeof value[field] !== "string")
@@ -134,20 +134,25 @@ function parseClaim(value: unknown): OrdinaryPoolClaim {
     throw new UserError("ordinary CI pool returned an invalid claim");
   }
   return {
-    claimId: String(value.claimId), jobId: Number(value.jobId), projectId: String(value.projectId),
+    claimId: String(value.claimId), admissionId: String(value.admissionId),
+    jobId: Number(value.jobId), projectId: String(value.projectId),
     projectName: String(value.projectName), organization: String(value.organization),
     organizationId: Number(value.organizationId), jobImage: String(value.jobImage), runnerLabel: String(value.runnerLabel),
     leaseMilliseconds: Number(value.leaseMilliseconds)
   };
 }
 
-function parseRecovery(value: unknown): { readonly claimId: string; readonly projectId: string } {
+function parseRecovery(value: unknown): { readonly claimId: string; readonly projectId: string; readonly admissionId: string } {
   if (!isRecord(value) || !isRecord(value.expiredClaim) || Object.keys(value).length !== 1
-    || Object.keys(value.expiredClaim).length !== 2 || typeof value.expiredClaim.claimId !== "string"
-    || typeof value.expiredClaim.projectId !== "string") {
+    || Object.keys(value.expiredClaim).length !== 3 || typeof value.expiredClaim.claimId !== "string"
+    || typeof value.expiredClaim.projectId !== "string" || typeof value.expiredClaim.admissionId !== "string") {
     throw new UserError("ordinary CI pool returned an invalid recovery claim");
   }
-  return { claimId: value.expiredClaim.claimId, projectId: value.expiredClaim.projectId };
+  return {
+    claimId: value.expiredClaim.claimId,
+    projectId: value.expiredClaim.projectId,
+    admissionId: value.expiredClaim.admissionId
+  };
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
