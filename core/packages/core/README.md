@@ -126,7 +126,15 @@ workspace creation then resolves the root repository's symbolic `HEAD` and
 fails if no `HEAD` exists.
 
 The default state root is `~/.local/state/dim`; the default managed Gitea port
-is `3300`. DIM rejects incompatible pre-stable state except for the single
+is `3300`. Managed Gitea state uses strict schema `2` to record service and
+resource ownership identities, immutable image and network IDs,
+resource-establishment state, and the leased endpoint address. Schema-less and
+schema-1 service state is rejected unchanged because it lacks that evidence.
+Stop DIM and use the prior pinned release to export or otherwise preserve
+needed repository data. Remove only independently verified resources; retain
+any unverifiable data volume or other resource, and don't recreate the service
+under a conflicting name. DIM rejects other incompatible pre-stable state
+except for the single
 lossless host lifecycle transition from schema 1 to schema 2. At controller
 startup, `migrateHostLifecycleState` runs under the host lifecycle lock before
 plugins or listeners, renames only `resumeCiRunners` to `restartCiRunners`, and
