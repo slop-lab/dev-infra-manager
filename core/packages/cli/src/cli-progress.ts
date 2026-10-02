@@ -1,3 +1,5 @@
+import { initialWorkspaceProgress, workspaceProgressStage } from "./workspace-progress.js";
+
 export const streamProgressOperations = [
   "workspace.create",
   "workspace.resources",
@@ -55,11 +57,13 @@ export interface ProgressScheduler {
 
 export interface ProgressStream {
   readonly isTTY?: boolean;
+  readonly columns?: number;
   write(chunk: string | Uint8Array): boolean;
 }
 
 export interface CliProgress {
   activity(): void;
+  update(stage: string): void;
   stop(): void;
 }
 
@@ -90,6 +94,7 @@ const defaultScheduler: ProgressScheduler = {
 
 const inactiveProgress: CliProgress = {
   activity() {},
+  update() {},
   stop() {}
 };
 
@@ -108,6 +113,7 @@ export function createAdminStreamProgress(
   const stream = dependencies.stream ?? process.stderr;
   const label = options.stdin || options.terminal ? undefined : streamProgressLabel(operation);
   if (label === undefined || stream.isTTY !== true) return inactiveProgress;
+  const initialStatus = initialWorkspaceProgress(operation);
 
   const scheduler = dependencies.scheduler ?? defaultScheduler;
   const idleDelayMs = dependencies.idleDelayMs ?? defaultIdleDelayMs;
@@ -116,6 +122,9 @@ export function createAdminStreamProgress(
   let frameIndex = 0;
   let visible = false;
   let stopped = false;
+  let current = initialStatus?.current ?? label;
+  let remaining = initialStatus?.remaining ?? [];
+  let visibleLines = 0;
 
   const cancelTimer = (): void => {
     if (timer === undefined) return;
@@ -125,14 +134,27 @@ export function createAdminStreamProgress(
   const clear = (): void => {
     if (!visible) return;
     stream.write(clearLine);
+    for (let line = 1; line < visibleLines; line += 1) stream.write(`\u001b[1A${clearLine}`);
     visible = false;
+    visibleLines = 0;
+  };
+  const resetIdleDelay = (): void => {
+    cancelTimer();
+    clear();
+    schedule(idleDelayMs);
   };
   const schedule = (delay: number): void => {
     timer = scheduler.setTimeout(() => {
       timer = undefined;
       if (stopped) return;
-      stream.write(`\r${spinnerFrames[frameIndex] ?? "-"} ${label}`);
+      clear();
+      const lines = [
+        `${spinnerFrames[frameIndex] ?? "-"} Current: ${current}`,
+        ...(remaining.length > 0 ? [`  Remaining: ${remaining.join(", ")}`] : [])
+      ].map((line) => fitTerminalWidth(line, stream.columns));
+      stream.write(`\r${lines.join("\n")}`);
       visible = true;
+      visibleLines = lines.length;
       frameIndex = (frameIndex + 1) % spinnerFrames.length;
       schedule(frameIntervalMs);
     }, delay);
@@ -143,9 +165,15 @@ export function createAdminStreamProgress(
   return {
     activity() {
       if (stopped) return;
-      cancelTimer();
-      clear();
-      schedule(idleDelayMs);
+      resetIdleDelay();
+    },
+    update(stage) {
+      if (stopped) return;
+      const status = workspaceProgressStage(operation, stage);
+      if (status === undefined) return;
+      current = status.current;
+      remaining = status.remaining;
+      resetIdleDelay();
     },
     stop() {
       if (stopped) return;
@@ -154,4 +182,10 @@ export function createAdminStreamProgress(
       clear();
     }
   };
+}
+
+function fitTerminalWidth(line: string, columns: number | undefined): string {
+  if (columns === undefined || columns < 1 || line.length <= columns) return line;
+  if (columns <= 3) return line.slice(0, columns);
+  return `${line.slice(0, columns - 3)}...`;
 }

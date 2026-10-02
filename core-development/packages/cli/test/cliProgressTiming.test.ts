@@ -103,7 +103,7 @@ interface SessionControl<T> {
   readonly result: Promise<T>;
 }
 
-test("default TTY progress renders only after five idle seconds", () => {
+test("workspace lifecycle progress renders current and remaining work after five idle seconds", () => {
   const clock = new FakeClock();
   const terminal = new ByteStream(true);
   const progress = createAdminStreamProgress("workspace.create", {}, { scheduler: clock, stream: terminal });
@@ -112,10 +112,41 @@ test("default TTY progress renders only after five idle seconds", () => {
   assert.equal(terminal.chunks.length, 0);
   clock.advance(1);
 
-  assert.match(terminal.bytes().toString(), /^\r- Creating workspace/);
+  assert.match(
+    terminal.bytes().toString(),
+    /^\r- Current: input validation\n  Remaining: Project setup, ready-state publication/
+  );
   assert.equal(clock.maximumActiveTimers, 1);
   progress.stop();
   assert.equal(clock.activeTimers, 0);
+});
+
+test("workspace lifecycle stage events replace current work and omit completed stages", async () => {
+  const clock = new FakeClock();
+  const terminal = new ByteStream(true);
+  const stdout = new ByteStream(false);
+  let rendered = "";
+  const progress = createAdminStreamProgress(
+    "workspace.restart",
+    {},
+    { scheduler: clock, stream: terminal, idleDelayMs: 5_000, frameIntervalMs: 100 }
+  );
+
+  await withSession(
+    { progress, stdout, stderr: new ByteStream(false) },
+    async ({ response, result }) => {
+      writeEvent(response, { type: "progress", stage: "Project setup" });
+      writeEvent(response, streamEvent("stdout", Buffer.from("checkpoint\n")));
+      await stdout.waitForCount(1);
+      clock.advance(5_000);
+      rendered = terminal.bytes().toString();
+
+      writeEvent(response, { type: "result", result: { ok: true } });
+      response.end();
+      assert.deepEqual(await result, { ok: true });
+    }
+  );
+  assert.match(rendered, /^\r- Current: Project setup\n  Remaining: ready-state publication/);
 });
 
 test("each stdout and stderr chunk restarts the full idle delay", async () => {
@@ -140,7 +171,7 @@ test("each stdout and stderr chunk restarts the full idle delay", async () => {
     clock.advance(4_999);
     assert.equal(terminal.chunks.length, 0);
     clock.advance(1);
-    assert.match(terminal.bytes().toString(), /Setting up workspace/);
+    assert.match(terminal.bytes().toString(), /Current: input validation/);
 
     writeEvent(response, { type: "result", result: { exitCode: 23 } });
     response.end();
@@ -148,6 +179,7 @@ test("each stdout and stderr chunk restarts the full idle delay", async () => {
   });
 
   assert.equal(terminal.chunks.filter((chunk) => chunk.equals(Buffer.from("\r\u001b[K"))).length, 1);
+  assert.equal(terminal.chunks.filter((chunk) => chunk.equals(Buffer.from("\u001b[1A\r\u001b[K"))).length, 1);
   assert.equal(clock.activeTimers, 0);
   assert.equal(clock.maximumActiveTimers, 1);
 });

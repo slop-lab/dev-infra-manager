@@ -157,6 +157,7 @@ interface AdminSessionReadOptions {
 
 const inactiveSessionProgress: CliProgress = {
   activity() {},
+  update() {},
   stop() {}
 };
 
@@ -219,7 +220,7 @@ export function readAdminSession<T = unknown>(
             const data = block.split("\n").find((line) => line.startsWith("data: "))?.slice(6);
             if (!data) continue;
             const event = JSON.parse(data) as {
-              type: string; data?: string; encoding?: string; result?: T; error?: string
+              type: string; data?: string; encoding?: string; result?: T; error?: string; stage?: string
             };
             if ((event.type === "stdout" || event.type === "stderr") && event.data) {
               if (event.encoding !== "base64") {
@@ -230,6 +231,7 @@ export function readAdminSession<T = unknown>(
               if (event.type === "stdout") stdout.write(output);
               else stderr.write(output);
             }
+            else if (event.type === "progress" && typeof event.stage === "string") progress.update(event.stage);
             else if (event.type === "result") succeed(event.result as T);
             else if (event.type === "error") fail(new UserError(event.error ?? `${id} failed`));
           }
