@@ -100,9 +100,8 @@ Source: https://github.com/slop-lab/dev-infra-manager`;
 
 Running via the DIM installer facade${installerSuffix}. The following installer commands are also
 available:
-  dim installer        interactive installer UI
-  dim install-cli      install or upgrade the DIM CLI
-  dim install-plugin   install a DIM plugin`;
+  dim installer install core     install or upgrade DIM core
+  dim installer install plugin   install a DIM plugin`;
   };
 }
 

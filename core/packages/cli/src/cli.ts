@@ -4,6 +4,7 @@ import { UserError } from "@slop-lab/dim-core";
 import { installerFacadeHelpText } from "./cli-support.js";
 import { registerCiCommands } from "./ci-commands.js";
 import { registerControllerCommands } from "./controller-commands.js";
+import { registerControlPlaneInstallCommand } from "./control-plane-install-command.js";
 import { registerDoctorAndPluginCommands } from "./doctor-plugin-commands.js";
 import { registerExternalUrlCommands } from "./external-url-commands.js";
 import { registerHostIntegrationCommands } from "./host-integration-commands.js";
@@ -33,6 +34,7 @@ registerWorkspaceLifecycleCommands(workspace);
 registerDoctorAndPluginCommands(program);
 registerExternalUrlCommands(program);
 registerControllerCommands(program);
+registerControlPlaneInstallCommand(program);
 registerHostIntegrationCommands(program);
 
 program.exitOverride();

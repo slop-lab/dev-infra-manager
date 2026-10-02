@@ -18,6 +18,19 @@ test("root help identifies the canonical source repository", () => {
   assert.match(help.stdout, new RegExp(sourceRepositoryUrl.replaceAll("/", "\\/")));
 });
 
+test("install-cp fails closed until reviewed control-plane deployment inputs exist", () => {
+  const help = run(["install-cp", "--help"]);
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /control-plane-only host/);
+  assert.doesNotMatch(help.stdout, /web UI/i);
+
+  const result = run(["install-cp"]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /native Git service configuration/);
+  assert.match(result.stderr, /CI scheduler\/webhook deployment/);
+  assert.doesNotMatch(result.stderr, /token|password|secret/i);
+});
+
 test("managed controller restarts preserve the workspace-mounted runtime directory", async () => {
   const source = await readCliSource("systemd-controller", "managed-controller");
   const entryAndBarrel = `${await readFile(cli, "utf8")}\n${await readFile(cliSupport, "utf8")}`;
