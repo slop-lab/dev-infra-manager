@@ -1,6 +1,6 @@
 import { CONTROL_NETWORK } from "./registryCache.js";
 import { UserError } from "./errors.js";
-import type { LifecycleOptions } from "./lifecycleTypes.js";
+import type { GiteaServiceRecord, LifecycleOptions } from "./lifecycleTypes.js";
 import type { CommandRunner } from "./types.js";
 
 export const GITEA_CONTAINER = "dim-gitea";
@@ -12,42 +12,43 @@ const ORGANIZATION_POLICY_ENV = "GITEA__admin__DISABLE_REGULAR_ORG_CREATION=true
 export type GiteaContainer = {
   readonly id: string;
   readonly running: boolean;
+  readonly endpointAddress: string;
 };
 
-type ResourcePlan = {
-  readonly type: "network" | "volume";
-  readonly inspectArgs: readonly string[];
-  readonly createArgs: readonly string[];
-  readonly name: string;
-};
-
-const missingResourceDiagnostic = {
-  network: (name: string) => `Error response from daemon: network ${name} not found`,
-  volume: (name: string) => `Error response from daemon: get ${name}: no such volume`
-} as const satisfies Record<ResourcePlan["type"], (name: string) => string>;
+export type GiteaResourceLease = Pick<
+  GiteaServiceRecord,
+  "serviceId" | "containerOwnershipId" | "networkOwnershipId" | "volumeOwnershipId"
+  | "imageId" | "networkId" | "volumeName"
+>;
 
 export function giteaContainerCreationArgs(
   options: LifecycleOptions,
   publishAddress: string,
-  rootUrl: string
+  rootUrl: string,
+  lease: GiteaResourceLease,
+  endpointAddress?: string
 ): string[] {
   return [
-    "run", "--detach",
+    "container", "create",
     "--name", GITEA_CONTAINER,
     "--restart", "unless-stopped",
     "--network", GITEA_NETWORK,
     "--network-alias", "dim-gitea",
+    ...(endpointAddress === undefined ? [] : ["--ip", endpointAddress]),
     "--publish", `${publishAddress}:${options.giteaPort}:3000`,
     "--mount", `type=volume,source=${GITEA_VOLUME},target=/data`,
     "--label", "dim.managed=true",
+    "--label", "dim.owner=dim",
+    "--label", `dim.service-id=${lease.serviceId}`,
     "--label", "dim.resource=gitea",
+    "--label", `dim.resource-id=${lease.containerOwnershipId}`,
     "--env", "GITEA__database__DB_TYPE=sqlite3",
     "--env", "GITEA__server__DISABLE_SSH=true",
     "--env", `GITEA__server__ROOT_URL=${rootUrl}/`,
     "--env", "GITEA__service__DISABLE_REGISTRATION=true",
     "--env", ORGANIZATION_POLICY_ENV,
     "--env", "GITEA__security__INSTALL_LOCK=true",
-    options.giteaImage
+    lease.imageId
   ];
 }
 
@@ -106,43 +107,41 @@ export function giteaOrganizationPolicyEditArgs(containerId: string): string[] {
   ];
 }
 
-export async function inspectGiteaContainer(runner: CommandRunner): Promise<GiteaContainer | undefined> {
+export async function inspectGiteaContainer(
+  runner: CommandRunner,
+  lease: GiteaResourceLease,
+  target = GITEA_CONTAINER
+): Promise<GiteaContainer | undefined> {
   const inspected = await runner.run("docker", [
-    "container", "inspect", GITEA_CONTAINER,
-    "--format", "{{.Id}}|{{index .Config.Labels \"dim.managed\"}}|{{.State.Running}}"
+    "container", "inspect", target,
+    "--format", `{{.Id}}|{{index .Config.Labels "dim.managed"}}|{{index .Config.Labels "dim.owner"}}|{{index .Config.Labels "dim.service-id"}}|{{index .Config.Labels "dim.resource"}}|{{index .Config.Labels "dim.resource-id"}}|{{.State.Running}}|{{with index .NetworkSettings.Networks "${GITEA_NETWORK}"}}{{.IPAddress}}|{{.NetworkID}}{{end}}|{{.Image}}|{{range .Mounts}}{{if eq .Destination "/data"}}{{.Type}}|{{.Name}}|{{.RW}}{{end}}{{end}}`
   ]);
   if (inspected.exitCode !== 0) {
     const diagnostic = inspected.stderr.trim();
     if ([
-      `Error: No such container: ${GITEA_CONTAINER}`,
-      `Error: No such object: ${GITEA_CONTAINER}`,
-      `Error response from daemon: No such container: ${GITEA_CONTAINER}`,
-      `Error response from daemon: No such object: ${GITEA_CONTAINER}`
+      `Error: No such container: ${target}`,
+      `Error: No such object: ${target}`,
+      `Error response from daemon: No such container: ${target}`,
+      `Error response from daemon: No such object: ${target}`
     ].includes(diagnostic)) return undefined;
     throw new UserError(`Failed to inspect Gitea container: ${diagnostic}`);
   }
   const fields = inspected.stdout.trim().split("|");
-  const [id, managed, running] = fields;
-  if (fields.length !== 3 || id === undefined || id.length === 0 || managed !== "true"
-    || (running !== "true" && running !== "false")) {
+  const [id, managed, owner, serviceId, resource, resourceId, running, endpointAddress,
+    networkId, imageId, mountType, mountName, mountWritable] = fields;
+  if (fields.length !== 13 || id === undefined || id.length === 0 || managed !== "true" || owner !== "dim"
+    || serviceId !== lease.serviceId || resource !== "gitea" || resourceId !== lease.containerOwnershipId
+    || (running !== "true" && running !== "false") || endpointAddress === undefined || endpointAddress.length === 0) {
     throw new UserError(`Docker resource '${GITEA_CONTAINER}' exists but is not managed by dim`);
   }
-  return { id, running: running === "true" };
-}
-
-export async function ensureGiteaBaseResources(runner: CommandRunner): Promise<void> {
-  await ensureResource(runner, {
-    type: "network",
-    inspectArgs: ["network", "inspect", GITEA_NETWORK, "--format", "{{index .Labels \"dim.managed\"}}"],
-    createArgs: ["network", "create", "--label", "dim.managed=true", "--label", "dim.resource=network", GITEA_NETWORK],
-    name: GITEA_NETWORK
-  });
-  await ensureResource(runner, {
-    type: "volume",
-    inspectArgs: ["volume", "inspect", GITEA_VOLUME, "--format", "{{index .Labels \"dim.managed\"}}"],
-    createArgs: ["volume", "create", "--label", "dim.managed=true", "--label", "dim.resource=gitea-data", GITEA_VOLUME],
-    name: GITEA_VOLUME
-  });
+  if (imageId !== lease.imageId) throw new UserError(`Docker resource '${GITEA_CONTAINER}' uses an unverified image`);
+  if (lease.networkId === undefined || networkId !== lease.networkId) {
+    throw new UserError(`Docker resource '${GITEA_CONTAINER}' uses an unverified network`);
+  }
+  if (mountType !== "volume" || mountName !== lease.volumeName || mountWritable !== "true") {
+    throw new UserError(`Docker resource '${GITEA_CONTAINER}' uses an unverified data volume mount`);
+  }
+  return { id, running: running === "true", endpointAddress };
 }
 
 export async function ensureGiteaOrganizationPolicy(runner: CommandRunner, containerId: string): Promise<void> {
@@ -167,22 +166,6 @@ async function hasCanonicalGiteaOrganizationPolicy(runner: CommandRunner, contai
   if (current === "true") return true;
   if (current === "false") return false;
   throw new UserError(`Failed to inspect Gitea organization policy: unexpected output '${current}'`);
-}
-
-async function ensureResource(runner: CommandRunner, plan: ResourcePlan): Promise<void> {
-  const inspected = await runner.run("docker", [...plan.inspectArgs]);
-  if (inspected.exitCode === 0) {
-    if (inspected.stdout.trim() !== "true") {
-      throw new UserError(`Docker resource '${plan.name}' exists but is not managed by dim`);
-    }
-    return;
-  }
-  if (inspected.stderr.trim().toLowerCase() !== missingResourceDiagnostic[plan.type](plan.name).toLowerCase()) {
-    throw new UserError(
-      `Failed to inspect Docker ${plan.type} '${plan.name}': stderr: ${inspected.stderr.trim()}; stdout: ${inspected.stdout.trim()}`
-    );
-  }
-  assertCommand(await runner.run("docker", [...plan.createArgs]), `create Docker ${plan.createArgs[0]}`);
 }
 
 function assertCommand(result: { readonly exitCode: number; readonly stdout?: string; readonly stderr: string }, action: string): void {

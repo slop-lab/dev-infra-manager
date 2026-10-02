@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { UserError } from "../../../../core/packages/core/src/errors.js";
 import {
-  ensureGiteaBaseResources,
   GITEA_NETWORK,
   GITEA_VOLUME
 } from "../../../../core/packages/core/src/giteaContainer.js";
+import { ensureGiteaBaseResources } from "../../../../core/packages/core/src/giteaResources.js";
 import type { CommandResult, CommandRunner } from "../../../../core/packages/core/src/types.js";
 
 type ResourceType = "network" | "volume";
@@ -14,9 +14,19 @@ type InspectionCase = {
   readonly diagnostic: string;
 };
 
+const LEASE = {
+  serviceId: "S".repeat(43),
+  containerOwnershipId: "C".repeat(43),
+  networkOwnershipId: "N".repeat(43),
+  volumeOwnershipId: "V".repeat(43),
+  imageId: `sha256:${"a".repeat(64)}`,
+  volumeName: GITEA_VOLUME
+};
+
 class ResourceInspectionRunner implements CommandRunner {
   readonly calls: string[][] = [];
   readonly mutations: ResourceType[] = [];
+  private readonly created = new Set<ResourceType>();
 
   constructor(
     private readonly failingResource: ResourceType,
@@ -25,11 +35,19 @@ class ResourceInspectionRunner implements CommandRunner {
 
   async run(command: string, args: string[]): Promise<CommandResult> {
     this.calls.push([command, ...args]);
-    if (args[0] === this.failingResource && args[1] === "inspect") {
+    if (args[0] === this.failingResource && args[1] === "inspect" && !this.created.has(this.failingResource)) {
       return result(command, args, { exitCode: 1, stderr: this.diagnostic });
     }
-    if (args[1] === "inspect") return result(command, args, { exitCode: 0, stdout: "true\n" });
+    if (args[1] === "inspect") {
+      const resource = args[0] === "network" ? "network" : "gitea-data";
+      const ownershipId = args[0] === "network" ? LEASE.networkOwnershipId : LEASE.volumeOwnershipId;
+      return result(command, args, {
+        exitCode: 0,
+        stdout: `${args[0] === "network" ? `${"b".repeat(64)}|` : ""}true|dim|${LEASE.serviceId}|${resource}|${ownershipId}\n`
+      });
+    }
     if (args[1] === "create" && (args[0] === "network" || args[0] === "volume")) {
+      this.created.add(args[0]);
       this.mutations.push(args[0]);
     }
     return result(command, args, { exitCode: 0 });
@@ -85,7 +103,7 @@ describe("managed Gitea Docker resource inspection", () => {
       const runner = new ResourceInspectionRunner(resource, diagnostic);
 
       // When
-      await ensureGiteaBaseResources(runner);
+      await ensureGiteaBaseResources(runner, LEASE, true);
 
       // Then
       expect(runner.mutations).toEqual([resource]);
@@ -99,7 +117,7 @@ describe("managed Gitea Docker resource inspection", () => {
       const runner = new ResourceInspectionRunner(resource, diagnostic);
 
       // When
-      const [outcome] = await Promise.allSettled([ensureGiteaBaseResources(runner)]);
+      const [outcome] = await Promise.allSettled([ensureGiteaBaseResources(runner, LEASE, true)]);
 
       // Then
       expect.soft(outcome).toMatchObject({ status: "rejected", reason: expect.any(UserError) });
