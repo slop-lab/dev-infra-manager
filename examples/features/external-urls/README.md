@@ -18,7 +18,7 @@ server images are pinned by digest.
 Wildcard DNS for `*.host.tail.test` must resolve to this host. Then run:
 
 ```bash
-dim install-plugin \
+dim installer install plugin \
   '@slop-lab/dim-plugin-dns-cloudflare@0.9.0' \
   '@slop-lab/dim-plugin-external-urls@0.9.0'
 dim plugin list

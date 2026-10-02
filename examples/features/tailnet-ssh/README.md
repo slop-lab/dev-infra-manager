@@ -25,7 +25,7 @@ dependency.
 Install and explicitly enable the External URLs plugin at DIM's exact version:
 
 ```bash
-npx '@slop-lab/dim-installer@0.9.0' install-plugin \
+npx '@slop-lab/dim-installer@0.9.0' installer install plugin \
   '@slop-lab/dim-plugin-external-urls@0.9.0'
 dim plugin list
 ```
