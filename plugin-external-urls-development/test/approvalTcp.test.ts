@@ -82,7 +82,27 @@ it("gates an approval-required TCP listener until host approval and disconnects 
   expect(await exchange(ingressPort, "approved")).toBe("approved");
   expect((await adminAction(base, "url-revoke", pending.id)).status).toBe(200);
   await expect(exchange(ingressPort, "revoked")).rejects.toThrow();
+
+  const replacementResponse = await requestUrl(controller, "tcp");
+  const replacement = route(await replacementResponse.json());
+  expect(replacement.approval).toBe("pending");
+  expect((await adminAction(base, "url-approve", replacement.id)).status).toBe(200);
+  expect(await exchange(ingressPort, "replacement")).toBe("replacement");
+  const deleted = await fetch(
+    `http://127.0.0.1:${serverPort(controller)}/api/urls/${replacement.id}`,
+    { method: "DELETE", headers: { authorization: "Bearer grant" } }
+  );
+  expect(deleted.status).toBe(204);
+  await expect(exchange(ingressPort, "deleted")).rejects.toThrow();
 });
+
+function requestUrl(controller: http.Server, ingress: string): Promise<Response> {
+  return fetch(`http://127.0.0.1:${serverPort(controller)}/api/urls`, {
+    method: "POST",
+    headers: { authorization: "Bearer grant", "content-type": "application/json" },
+    body: JSON.stringify({ ingress, target: { containers: ["ssh"], port: 22, protocol: "tcp" } })
+  });
+}
 
 function adminAction(base: string, action: string, id: string): Promise<Response> {
   return fetch(`${base}/${action}`, {
