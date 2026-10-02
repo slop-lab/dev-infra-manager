@@ -117,7 +117,8 @@ process identity in mode-restricted state below the user home, reports the
 credential-file path without printing the password, and polls the authenticated
 health endpoint. It invokes `dim-development-service expose` with a stable name,
 the selected local port, and an HTTPS requirement. Its only DIM capability is
-`DIM_DEVELOPMENT_URL_SOCKET`; the trusted proxy injects the fixed gateway target,
+`OPENCODE_WEB_URL_SOCKET`; it does not consume the generic
+`DIM_DEVELOPMENT_URL_SOCKET`. The trusted proxy injects the fixed gateway target,
 so the launcher receives no target/container metadata. It proves that its exact
 recorded process owns the listening socket and bounds lock, helper, readiness,
 and cleanup waits. Another ingress must already be allowed by the reviewed

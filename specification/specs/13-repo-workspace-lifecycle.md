@@ -438,10 +438,13 @@ output. It MUST report the restricted credential-file path so the user can
 explicitly read its two-line username/password content. The launcher MUST use
 `dim-development-service expose` with a stable service name, the selected local
 port, ingress, and HTTPS requirement. Its DIM integration MUST depend only on
-`DIM_DEVELOPMENT_URL_SOCKET`, with no target/container metadata and no fallback
-to the generic external URL capability. The trusted proxy MUST inject an exact
+`OPENCODE_WEB_URL_SOCKET`, with no target/container metadata and no fallback
+to the generic `DIM_DEVELOPMENT_URL_SOCKET` or external URL capabilities. The
+trusted proxy MUST inject an exact
 container path, HTTP protocol, and shared gateway port after authorizing the
-ingress-only request. Trusted nested routing MUST map the queried gateway port
+ingress-only request. It MUST bind the stable service name to a deterministic,
+collision-resistant workspace label no longer than 63 characters. Trusted
+nested routing MUST map the queried gateway port
 to the same container port (`G:G`) where publication is required. The gateway
 MAY listen on the agent container's interfaces at that port, but MUST forward
 application traffic only to `127.0.0.1:PORT`. The launcher MUST establish

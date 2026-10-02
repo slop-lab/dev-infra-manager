@@ -454,8 +454,9 @@ recorded live process after proving that process owns the listening socket,
 and it must not discover and kill processes by command substring. External
 exposure uses `dim-development-service expose` with a stable service name, the
 selected local port, and an HTTPS scheme requirement. The launcher receives
-only `DIM_DEVELOPMENT_URL_SOCKET`, not target/container metadata, a raw
-controller grant, or a host secret. The helper owns stable URL reuse and a
+only `OPENCODE_WEB_URL_SOCKET`, not the generic
+`DIM_DEVELOPMENT_URL_SOCKET`, target/container metadata, a raw controller
+grant, or a host secret. The helper owns stable URL reuse and a
 shared gateway that listens on the agent-container gateway port and forwards
 only to loopback applications; changing the application port updates only its
 named gateway route. Lock acquisition, the complete helper process tree,
