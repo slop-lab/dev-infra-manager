@@ -7,7 +7,6 @@ work_dir="$(mktemp -d /tmp/dim-opencode-web-real.XXXXXX)"
 fixture_pid=""
 proxy_pid=""
 server_pid=""
-service_pid=""
 wildcard_pid=""
 
 process_start_time() {
@@ -42,12 +41,10 @@ stop_owned_gateway() {
 cleanup() {
   local status=$?
   [[ -z "$server_pid" ]] || kill "$server_pid" 2>/dev/null || true
-  [[ -z "$service_pid" ]] || kill "$service_pid" 2>/dev/null || true
   [[ -z "$wildcard_pid" ]] || kill -KILL "$wildcard_pid" 2>/dev/null || true
   [[ -z "$proxy_pid" ]] || kill "$proxy_pid" 2>/dev/null || true
   [[ -z "$fixture_pid" ]] || kill "$fixture_pid" 2>/dev/null || true
   [[ -z "$server_pid" ]] || wait "$server_pid" 2>/dev/null || true
-  [[ -z "$service_pid" ]] || wait "$service_pid" 2>/dev/null || true
   [[ -z "$wildcard_pid" ]] || wait "$wildcard_pid" 2>/dev/null || true
   [[ -z "$proxy_pid" ]] || wait "$proxy_pid" 2>/dev/null || true
   [[ -z "$fixture_pid" ]] || wait "$fixture_pid" 2>/dev/null || true
@@ -95,9 +92,8 @@ ln -s "$repo_root/core/packages/controller-proxy/dist/development-service-cli.js
 ln -s "$repo_root/core/packages/controller-proxy/dist/cli.js" "$work_dir/tools/dim-controller-proxy"
 
 opencode_port="$(available_port)"
-service_port="$(available_port)"
-replacement_port="$(available_port)"
 external_port="$(available_port)"
+opencode_host="fixture--opencode.example.test"
 source_socket="$work_dir/source.sock"
 proxy_socket="$work_dir/proxy.sock"
 development_socket="$work_dir/development.sock"
@@ -118,6 +114,7 @@ done
 DIM_CONTROLLER_SOCKET="$source_socket" DIM_CONTROLLER_TOKEN=fixture-token \
   "$work_dir/tools/dim-controller-proxy" external-url --listen "$proxy_socket" --ingress https-ts \
   --bind-containers-json '["fixture"]' --bind-protocol http --bind-port 31887 \
+  --bind-service-subdomain opencode-web=fixture--opencode \
   >"$work_dir/proxy.log" 2>&1 &
 proxy_pid=$!
 for attempt in $(seq 1 100); do
@@ -131,12 +128,12 @@ run_launcher() {
   local selected_ingress="${2:-https-ts}"
   if (($# >= 3)); then
     env -i HOME="$work_dir/home" PATH="$work_dir/tools:/usr/local/bin:/usr/bin:/bin" \
-      DIM_DEVELOPMENT_URL_SOCKET="$development_socket" OPENCODE_WEB_PORT="$selected_port" \
+      OPENCODE_WEB_URL_SOCKET="$development_socket" OPENCODE_WEB_PORT="$selected_port" \
       OPENCODE_WEB_INGRESS="$selected_ingress" OPENCODE_WEB_CORS_ORIGINS="$3" \
       bash "$repo_root/scripts/opencode-web.bash"
   else
     env -i HOME="$work_dir/home" PATH="$work_dir/tools:/usr/local/bin:/usr/bin:/bin" \
-      DIM_DEVELOPMENT_URL_SOCKET="$development_socket" OPENCODE_WEB_PORT="$selected_port" \
+      OPENCODE_WEB_URL_SOCKET="$development_socket" OPENCODE_WEB_PORT="$selected_port" \
       OPENCODE_WEB_INGRESS="$selected_ingress" \
       bash "$repo_root/scripts/opencode-web.bash"
   fi
@@ -191,20 +188,20 @@ credential_file="$work_dir/home/.local/state/opencode-web/credentials"
 password="$(sed -n '2p' "$credential_file")"
 server_pid="$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/server.pid")"
 opencode_url="$(sed -n 's/^url: //p' <<<"$first_output")"
-[[ "$opencode_url" = "https://service-1.example.test:$external_port" ]]
+[[ "$opencode_url" = "https://$opencode_host:$external_port" ]]
 [[ "$opencode_port" != 4096 ]]
-[[ "$(curl --noproxy '*' --insecure --silent --resolve "service-1.example.test:$external_port:127.0.0.1" \
+[[ "$(curl --noproxy '*' --insecure --silent --resolve "$opencode_host:$external_port:127.0.0.1" \
   --output /dev/null --write-out '%{http_code}' "$opencode_url/global/health")" = 401 ]]
 auth_config="$work_dir/curl-auth"
 printf 'user = "opencode:%s"\n' "$password" >"$auth_config"
 chmod 0600 "$auth_config"
 [[ "$(curl --config "$auth_config" --noproxy '*' --insecure --silent \
-  --resolve "service-1.example.test:$external_port:127.0.0.1" --output /dev/null \
+  --resolve "$opencode_host:$external_port:127.0.0.1" --output /dev/null \
   --write-out '%{http_code}' "$opencode_url/global/health")" = 200 ]]
 
 default_preflight_headers="$work_dir/default-preflight.headers"
 default_preflight_status="$(curl --noproxy '*' --insecure --silent \
-  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$default_preflight_headers" \
+  --resolve "$opencode_host:$external_port:127.0.0.1" --dump-header "$default_preflight_headers" \
   --output /dev/null --write-out '%{http_code}' --request OPTIONS \
   --header 'Origin: https://localhost:4096' --header 'Access-Control-Request-Method: GET' \
   --header 'Access-Control-Request-Headers: authorization,content-type' "$opencode_url/global/health")"
@@ -214,7 +211,7 @@ assert_header "$default_preflight_headers" 'access-control-allow-headers: author
 
 default_get_headers="$work_dir/default-get.headers"
 default_get_status="$(curl --config "$auth_config" --noproxy '*' --insecure --silent \
-  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$default_get_headers" \
+  --resolve "$opencode_host:$external_port:127.0.0.1" --dump-header "$default_get_headers" \
   --output /dev/null --write-out '%{http_code}' --header 'Origin: https://localhost:4096' \
   "$opencode_url/global/health")"
 [[ "$default_get_status" = 200 ]]
@@ -222,7 +219,7 @@ assert_header "$default_get_headers" 'access-control-allow-origin: https://local
 
 missing_auth_headers="$work_dir/missing-auth.headers"
 missing_auth_status="$(curl --noproxy '*' --insecure --silent \
-  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$missing_auth_headers" \
+  --resolve "$opencode_host:$external_port:127.0.0.1" --dump-header "$missing_auth_headers" \
   --output /dev/null --write-out '%{http_code}' --header 'Origin: https://localhost:4096' \
   "$opencode_url/global/health")"
 [[ "$missing_auth_status" = 401 ]]
@@ -230,7 +227,7 @@ assert_header "$missing_auth_headers" 'access-control-allow-origin: https://loca
 
 wrong_auth_headers="$work_dir/wrong-auth.headers"
 wrong_auth_status="$(curl --user 'opencode:wrong' --noproxy '*' --insecure --silent \
-  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$wrong_auth_headers" \
+  --resolve "$opencode_host:$external_port:127.0.0.1" --dump-header "$wrong_auth_headers" \
   --output /dev/null --write-out '%{http_code}' --header 'Origin: https://localhost:4096' \
   "$opencode_url/global/health")"
 [[ "$wrong_auth_status" = 401 ]]
@@ -238,7 +235,7 @@ assert_header "$wrong_auth_headers" 'access-control-allow-origin: https://localh
 
 untrusted_headers="$work_dir/untrusted.headers"
 untrusted_status="$(curl --config "$auth_config" --noproxy '*' --insecure --silent \
-  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$untrusted_headers" \
+  --resolve "$opencode_host:$external_port:127.0.0.1" --dump-header "$untrusted_headers" \
   --output /dev/null --write-out '%{http_code}' --header 'Origin: https://untrusted.example' \
   "$opencode_url/global/health")"
 [[ "$untrusted_status" = 200 ]]
@@ -253,7 +250,10 @@ grep -Fq 'OPENCODE_WEB_CORS_ORIGINS' "$work_dir/wildcard.stderr"
 [[ "$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/server.pid")" = "$server_pid" ]]
 kill -0 "$server_pid"
 
-additional_output="$(run_launcher "$opencode_port" https-ts "$additional_origins" 2>"$work_dir/additional.stderr")"
+if ! additional_output="$(run_launcher "$opencode_port" https-ts "$additional_origins" 2>"$work_dir/additional.stderr")"; then
+  cat "$work_dir/additional.stderr" >&2
+  exit 1
+fi
 additional_pid="$(cut -d ' ' -f 1 "$work_dir/home/.local/state/opencode-web/server.pid")"
 [[ "$additional_output" = "$first_output" ]]
 [[ "$additional_pid" != "$server_pid" ]]
@@ -263,7 +263,7 @@ server_pid="$additional_pid"
 
 remote_preflight_headers="$work_dir/remote-preflight.headers"
 remote_preflight_status="$(curl --noproxy '*' --insecure --silent \
-  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$remote_preflight_headers" \
+  --resolve "$opencode_host:$external_port:127.0.0.1" --dump-header "$remote_preflight_headers" \
   --output /dev/null --write-out '%{http_code}' --request OPTIONS \
   --header 'Origin: https://remote-web.example' --header 'Access-Control-Request-Method: GET' \
   --header 'Access-Control-Request-Headers: authorization,content-type' "$opencode_url/global/health")"
@@ -273,7 +273,7 @@ assert_header "$remote_preflight_headers" 'access-control-allow-headers: authori
 
 remote_get_headers="$work_dir/remote-get.headers"
 remote_get_status="$(curl --config "$auth_config" --noproxy '*' --insecure --silent \
-  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$remote_get_headers" \
+  --resolve "$opencode_host:$external_port:127.0.0.1" --dump-header "$remote_get_headers" \
   --output /dev/null --write-out '%{http_code}' --header 'Origin: https://remote-web.example' \
   "$opencode_url/global/health")"
 [[ "$remote_get_status" = 200 ]]
@@ -292,69 +292,36 @@ server_pid="$removed_pid"
 [[ "$(sed -n '2p' "$credential_file")" = "$password" ]]
 removed_remote_headers="$work_dir/removed-remote.headers"
 removed_remote_status="$(curl --config "$auth_config" --noproxy '*' --insecure --silent \
-  --resolve "service-1.example.test:$external_port:127.0.0.1" --dump-header "$removed_remote_headers" \
+  --resolve "$opencode_host:$external_port:127.0.0.1" --dump-header "$removed_remote_headers" \
   --output /dev/null --write-out '%{http_code}' --header 'Origin: https://remote-web.example' \
   "$opencode_url/global/health")"
 [[ "$removed_remote_status" = 200 ]]
 assert_no_header "$removed_remote_headers" 'access-control-allow-origin'
 
-cat >"$work_dir/service.mjs" <<'EOF'
-import http from "node:http";
-const [portText, label] = process.argv.slice(2);
-const server = http.createServer((_request, response) => response.end(label));
-server.on("upgrade", (_request, socket) => socket.end("HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\nhello"));
-server.listen(Number.parseInt(portText, 10), "127.0.0.1");
-EOF
-node "$work_dir/service.mjs" "$service_port" first &
-service_pid=$!
-for attempt in $(seq 1 100); do
-  [[ "$(curl --silent "http://127.0.0.1:$service_port" || true)" = first ]] && break
-  [[ "$attempt" -lt 100 ]] || { printf 'generic service did not become ready\n' >&2; exit 1; }
-  sleep 0.02
-done
-generic_url="$(HOME="$work_dir/home" PATH="$work_dir/tools:/usr/local/bin:/usr/bin:/bin" \
+if HOME="$work_dir/home" PATH="$work_dir/tools:/usr/local/bin:/usr/bin:/bin" \
   DIM_DEVELOPMENT_URL_SOCKET="$development_socket" dim-development-service expose \
-  --name generic-http --port "$service_port" --ingress https-ts --require-scheme https)"
-[[ "$generic_url" = "https://service-2.example.test:$external_port" ]]
-[[ "$(curl --noproxy '*' --insecure --silent --resolve "service-2.example.test:$external_port:127.0.0.1" "$generic_url")" = first ]]
-node - "$external_port" <<'NODE'
-import tls from "node:tls";
-const port = Number.parseInt(process.argv[2], 10);
-const socket = tls.connect({ host: "127.0.0.1", port, rejectUnauthorized: false }, () => {
-  socket.write(`GET /socket HTTP/1.1\r\nHost: service-2.example.test:${port}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n`);
-});
-let response = "";
-socket.on("data", (chunk) => {
-  response += chunk.toString("utf8");
-  if (response.includes("hello")) socket.end();
-});
-socket.on("close", () => process.exit(response.includes("101 Switching Protocols") && response.includes("hello") ? 0 : 1));
-socket.on("error", () => process.exit(1));
-NODE
-
-kill "$service_pid"
-wait "$service_pid" 2>/dev/null || true
-node "$work_dir/service.mjs" "$replacement_port" second &
-service_pid=$!
-for attempt in $(seq 1 100); do
-  [[ "$(curl --silent "http://127.0.0.1:$replacement_port" || true)" = second ]] && break
-  [[ "$attempt" -lt 100 ]] || { printf 'replacement service did not become ready\n' >&2; exit 1; }
-  sleep 0.02
-done
-reused_url="$(HOME="$work_dir/home" PATH="$work_dir/tools:/usr/local/bin:/usr/bin:/bin" \
-  DIM_DEVELOPMENT_URL_SOCKET="$development_socket" dim-development-service expose \
-  --name generic-http --port "$replacement_port" --ingress https-ts --require-scheme https)"
-[[ "$reused_url" = "$generic_url" ]]
-[[ "$(curl --noproxy '*' --insecure --silent --resolve "service-2.example.test:$external_port:127.0.0.1" "$reused_url")" = second ]]
+  --name generic-http --port 5173 --ingress https-ts --require-scheme https \
+  >"$work_dir/wrong-service.stdout" 2>"$work_dir/wrong-service.stderr"; then
+  printf 'OpenCode-bound proxy accepted an unreviewed service name\n' >&2
+  exit 1
+fi
+grep -Fq 'external URL registration failed (403)' "$work_dir/wrong-service.stderr"
 
 node - "$before_requests" "$after_requests" <<'NODE'
 import fs from "node:fs";
 const [beforeFile, afterFile] = process.argv.slice(2);
 const before = fs.readFileSync(beforeFile, "utf8").trim().split("\n").map(JSON.parse);
 const after = fs.readFileSync(afterFile, "utf8").trim().split("\n").map(JSON.parse);
-if (before.length !== 2 || before.some((body) => JSON.stringify(body) !== '{"ingress":"https-ts"}')) process.exit(1);
+if (before.length !== 2
+  || JSON.stringify(before[0]) !== '{"ingress":"https-ts","service":"opencode-web"}'
+  || JSON.stringify(before[1]) !== '{"ingress":"https-ts","service":"generic-http"}') {
+  throw new Error(`unexpected helper requests: ${JSON.stringify(before)}`);
+}
 const target = { containers: ["fixture"], protocol: "http", port: 31887 };
-if (after.length !== 2 || after.some((body) => JSON.stringify(body.target) !== JSON.stringify(target))) process.exit(1);
+if (after.length !== 1 || after[0].subdomain !== "fixture--opencode"
+  || JSON.stringify(after[0].target) !== JSON.stringify(target)) {
+  throw new Error(`unexpected bound requests: ${JSON.stringify(after)}`);
+}
 NODE
 
 second_output="$(run_launcher 2>"$work_dir/second.stderr")"
@@ -389,7 +356,6 @@ server_pid=""
 ! curl --silent --max-time 1 "http://127.0.0.1:$failure_port/global/health" >/dev/null
 kill -0 "$gateway_pid"
 [[ "$(process_start_time "$gateway_pid")" = "$gateway_start" ]]
-[[ "$(curl --noproxy '*' --insecure --silent --resolve "service-2.example.test:$external_port:127.0.0.1" "$generic_url")" = second ]]
 
 stop_owned_gateway
 [[ ! -e "$work_dir/home/.local/state/dim/development-service/gateway.identity.json" ]]

@@ -40,7 +40,9 @@ http.createServer(async (request, response) => {
     const created = {
       id: `url-${index}`,
       ingress: body.ingress,
-      url: `https://service-${index}.example.test:${externalPort}`,
+      subdomain: body.subdomain,
+      url: `https://${body.subdomain}.example.test:${externalPort}`,
+      permalink: `https://fixture-permalink-url-${index}.example.test:${externalPort}`,
       target: body.target
     };
     urls.push(created);
