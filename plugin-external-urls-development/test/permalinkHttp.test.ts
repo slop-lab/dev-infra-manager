@@ -80,6 +80,44 @@ describe.each([
   });
 });
 
+it("keeps dual authorities exclusive when another workspace resolves to the same target", async () => {
+  // Given: one pending route and a policy that selects the same slug for every workspace.
+  const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-permalink-exclusive-"));
+  cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
+  const state = new LifecycleState(stateRoot);
+  await state.claimWorkspace(workspaceRecord(workspace));
+  await state.claimWorkspace(workspaceRecord(foreign));
+  const upstream = http.createServer((_request, response) => response.end("exclusive-target"));
+  await listen(upstream);
+  cleanup.push(() => closeServer(upstream));
+  const ingressPort = await availablePort();
+  const sharedPolicy = await policyServer("shared-slug");
+  const started = await startApprovalHttpPlugin({
+    stateRoot,
+    ingressPort,
+    targetPort: serverPort(upstream),
+    routePolicy: { driver: "webhook", argument: JSON.stringify({ url: sharedPolicy }) }
+  });
+  cleanup.push(() => started.close());
+  const first = externalRoute(await (await requestUrl(started.controllerBase, "workspace-grant")).json());
+  const slug = new URL(first.url).hostname;
+  const permalink = new URL(first.permalink).hostname;
+  expect(await proxyRequest(ingressPort, slug)).toMatchObject({ status: 404 });
+  expect(await proxyRequest(ingressPort, permalink)).toMatchObject({ status: 404 });
+  expect((await adminAction(started.adminBase, "url-approve", first.id)).status).toBe(200);
+
+  // When: a foreign pending route requests that same slug and exact upstream.
+  const collision = await requestUrl(started.controllerBase, "foreign-grant");
+
+  // Then: the request is rejected atomically and the first route alone remains reachable until revocation.
+  expect(collision.status).toBe(400);
+  expect(await proxyRequest(ingressPort, slug)).toEqual({ status: 200, body: "exclusive-target" });
+  expect(await proxyRequest(ingressPort, permalink)).toEqual({ status: 200, body: "exclusive-target" });
+  expect((await adminAction(started.adminBase, "url-revoke", first.id)).status).toBe(200);
+  expect(await proxyRequest(ingressPort, slug)).toMatchObject({ status: 404 });
+  expect(await proxyRequest(ingressPort, permalink)).toMatchObject({ status: 404 });
+});
+
 it("keeps the permalink stable across same-instance slug policy changes and denies it after recreation", async () => {
   // Given: an approved route whose policy rewrites its requested slug.
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-permalink-lifecycle-"));
@@ -168,11 +206,62 @@ it("rejects a dual-authority collision without leaving a partial claim", () => {
     upstream: secondTarget,
     enabled: true,
     beforeRebind: () => {}
-  })).toThrow("already targets another service");
+  })).toThrow("already belongs to another route");
 
   // Then: the free slug was not partially claimed.
   expect(registry.target("free.example.test")).toBeUndefined();
   expect(registry.target("occupied.example.test")?.claim).toBe("first-claim");
+});
+
+it("rejects a distinct claim for an authority with the same upstream", () => {
+  // Given: an approved claim exclusively owns one authority and upstream.
+  const registry = new WorkspaceRouteRegistry();
+  const target = { protocol: "http" as const, host: "127.0.0.1", port: 3000, fingerprint: "shared" };
+  registry.provision({
+    authorities: ["shared.example.test"],
+    claim: "approved-claim",
+    upstream: target,
+    enabled: true,
+    beforeRebind: () => {}
+  });
+
+  // When: a pending route with a distinct claim requests the same authority and upstream.
+  expect(() => registry.provision({
+    authorities: ["shared.example.test"],
+    claim: "pending-claim",
+    upstream: target,
+    enabled: false,
+    beforeRebind: () => {}
+  })).toThrow("already belongs to another route");
+
+  // Then: only the original approved claim can resolve the authority.
+  expect(registry.target("shared.example.test")?.claim).toBe("approved-claim");
+});
+
+it("rejects a same-upstream collision before acquiring any authority", () => {
+  // Given: one claim owns the second authority for a shared upstream.
+  const registry = new WorkspaceRouteRegistry();
+  const target = { protocol: "http" as const, host: "127.0.0.1", port: 3000, fingerprint: "shared" };
+  registry.provision({
+    authorities: ["occupied.example.test"],
+    claim: "approved-claim",
+    upstream: target,
+    enabled: true,
+    beforeRebind: () => {}
+  });
+
+  // When: a distinct pending claim requests a free slug and that occupied authority atomically.
+  expect(() => registry.provision({
+    authorities: ["free.example.test", "occupied.example.test"],
+    claim: "pending-claim",
+    upstream: target,
+    enabled: false,
+    beforeRebind: () => {}
+  })).toThrow("already belongs to another route");
+
+  // Then: no partial slug claim exists and the original owner is unchanged.
+  expect(registry.target("free.example.test")).toBeUndefined();
+  expect(registry.target("occupied.example.test")?.claim).toBe("approved-claim");
 });
 
 function externalRoute(value: unknown): {

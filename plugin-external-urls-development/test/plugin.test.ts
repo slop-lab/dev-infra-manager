@@ -561,9 +561,8 @@ describe("external URLs plugin", () => {
         target: { containers: ["dev", "deep"], port: 8080 }
       })
     });
-    expect(secondFrontend.status).toBe(201);
-    const secondBody = await secondFrontend.json() as { urls: Array<{ id: string; url: string }> };
-    expect(secondBody.urls[0]?.url).toBe("https://work-1--deep.builder.tail.example.test/");
+    expect(secondFrontend.status).toBe(400);
+    expect((await secondFrontend.json() as { error: string }).error).toContain("already belongs to another route");
 
     const rejected = await fetch(`${base}/api/urls`, {
       method: "POST",
@@ -578,16 +577,12 @@ describe("external URLs plugin", () => {
     expect((await rejected.json() as { error: string }).error).toContain("must start with 'work-1--'");
 
     const listed = await fetch(`${base}/api/urls`, { headers });
-    expect((await listed.json() as { urls: unknown[] }).urls).toHaveLength(2);
+    expect((await listed.json() as { urls: unknown[] }).urls).toHaveLength(1);
     expect((await fetch(`${base}/api/urls/${body.urls[0]?.id}`, {
       method: "DELETE",
       headers
     })).status).toBe(204);
-    expect(await proxyRequest(controllerProxyPort, "work-1--deep.builder.tail.example.test")).toBe("nested workspace app");
-    expect((await fetch(`${base}/api/urls/${secondBody.urls[0]?.id}`, {
-      method: "DELETE",
-      headers
-    })).status).toBe(204);
+    expect(await proxyRequest(controllerProxyPort, "work-1--deep.builder.tail.example.test")).toBe("404");
   });
 
   it("rejects invalid ingress configuration", () => {

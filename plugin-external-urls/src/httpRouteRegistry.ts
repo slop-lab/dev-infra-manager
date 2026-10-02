@@ -23,9 +23,9 @@ export class WorkspaceRouteRegistry {
     if (authorities.length === 0) throw new UserError("external route requires at least one authority");
     for (const authority of authorities) {
       const existing = this.#routes.get(authority);
-      if (existing === undefined || JSON.stringify(existing.upstream) === JSON.stringify(input.upstream)) continue;
+      if (existing === undefined) continue;
       if (existing.claims.size !== 1 || !existing.claims.has(input.claim)) {
-        throw new UserError(`external route '${authority}' already targets another service`);
+        throw new UserError(`external route '${authority}' already belongs to another route`);
       }
     }
     const requiresRebind = authorities.some((authority) => {
