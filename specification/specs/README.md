@@ -56,7 +56,7 @@ instead be split.
 | [Installer Facade](14-installer-facade.md) | Contract | Mixed with installation implementation choices |
 | [Image Entrypoints](local-details/image-entrypoints.md) | Implementation profile | Image-local compatibility details |
 | [Installation Scripts](local-details/installation-scripts.md) | Implementation profile | Script and packaging details |
-| [Native Git Transport and Review Evidence](local-details/native-git-transport.md) | Implementation profile | Proposal-only smart HTTP plus non-promotable complete-tree human-review evidence; CI and CAS promotion are deferred |
+| [Native Git Transport and Review Evidence](local-details/native-git-transport.md) | Implementation profile | Proposal-only smart HTTP plus complete-tree review, exact CI evidence, and checked host-only CAS promotion |
 
 ## Requirement Traceability
 
