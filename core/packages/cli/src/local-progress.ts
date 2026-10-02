@@ -19,7 +19,7 @@ export async function withLocalProgress<T>(
     progress.stop();
     abort.abort(new UserError(`${operation} cancelled`));
   };
-  process.once("SIGINT", cancel);
+  process.on("SIGINT", cancel);
   try {
     return await action({
       signal: abort.signal,

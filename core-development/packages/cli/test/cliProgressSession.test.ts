@@ -142,6 +142,31 @@ test("local operation SIGINT aborts work and removes its signal listener", async
   assert.deepEqual(process.listeners("SIGINT"), listeners);
 });
 
+test("local operation handles repeated SIGINT until cleanup completes", async () => {
+  const listeners = process.listeners("SIGINT");
+  let finish: (() => void) | undefined;
+  const operation = withLocalProgress("repo.fetch", async ({ signal }) => {
+    await new Promise<void>((resolve) => {
+      signal.addEventListener("abort", () => resolve(), { once: true });
+    });
+    await new Promise<void>((resolve) => { finish = resolve; });
+  });
+  const handler = process.listeners("SIGINT").find((listener) => !listeners.includes(listener));
+
+  try {
+    assert.ok(handler);
+    process.emit("SIGINT");
+    assert.ok(process.listeners("SIGINT").includes(handler));
+    process.emit("SIGINT");
+    assert.ok(process.listeners("SIGINT").includes(handler));
+  } finally {
+    await Promise.resolve();
+    finish?.();
+    await operation;
+  }
+  assert.deepEqual(process.listeners("SIGINT"), listeners);
+});
+
 test("local operation failures remove their signal listener unchanged", async () => {
   const listeners = process.listeners("SIGINT");
   const failure = new Error("repository failed unchanged");
