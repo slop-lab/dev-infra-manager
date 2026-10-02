@@ -72,6 +72,7 @@ package-packs:
     cd .. && pnpm --filter @slop-lab/dim-core run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-contracts-external-url run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-controller-proxy run pack:dry-run
+    cd .. && pnpm --filter @slop-lab/dim-native-git run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-plugin-external-urls run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-plugin-dns-cloudflare run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-cli run pack:dry-run
