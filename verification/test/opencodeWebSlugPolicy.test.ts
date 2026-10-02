@@ -27,10 +27,25 @@ describe.each(setupFiles)("OpenCode service slug policy in %s", (setupFile) => {
     // Then: one exact mapping derives the authority from the trusted workspace name.
     expect(serviceBindings).toHaveLength(1);
     expect(source).toContain("${DIM_WORKSPACE_NAME:?}");
-    expect(source).toContain("--opencode");
+    expect(source).toContain('dim-development-service workspace-subdomain');
+    expect(source).toContain('--service opencode');
+    expect(source).not.toContain("sed 's/[._]/-/g");
     expect(source).toContain('"opencode-web=$opencode_workspace_slug"');
     expect(source).toContain("--listen /tmp/dim-development-url/controller.sock");
     expect(source).toContain("--listen /tmp/dim-development-url/opencode.sock");
+  });
+});
+
+describe("recommended OpenCode ingress policy", () => {
+  it("requires host approval for each requested route", async () => {
+    // Given: the reviewed helper that configures the recommended Web ingress.
+    const source = await readFile(resolve(workspaceRoot, "examples/projects/configure-web-ingress.bash"), "utf8");
+
+    // When: the ingress-add arguments are inspected.
+    const ingressAdd = source.slice(source.indexOf("external-url ingress add caddy"));
+
+    // Then: route approval is mandatory before reachability.
+    expect(ingressAdd).toContain("--require-approval");
   });
 });
 

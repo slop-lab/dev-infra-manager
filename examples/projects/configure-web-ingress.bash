@@ -25,6 +25,7 @@ set -- external-url ingress add caddy \
   --domain "$domain" \
   --listen-host "$listen_host" \
   --listen-port "$listen_port" \
+  --require-approval \
   --dns-provider web-cloudflare \
   --dns-argument "$dns_argument"
 if [[ -n "${DIM_EXTERNAL_URL_ACME_EMAIL:-}" ]]; then
