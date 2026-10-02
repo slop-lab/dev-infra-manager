@@ -31,8 +31,12 @@ RUN chmod +x /usr/local/bin/dim-project-entrypoint /usr/local/bin/dim-git-askpas
   /usr/local/bin/dim-project-cgroup \
   /usr/local/lib/dim/controller-proxy/cli.js \
   /usr/local/lib/dim/controller-proxy/development-service-cli.js \
+  /usr/local/lib/dim/controller-proxy/workspace-resources-cli.js \
+  /usr/local/lib/dim/controller-proxy/nproc-cli.js \
   && ln -s /usr/local/lib/dim/controller-proxy/cli.js /usr/local/bin/dim-controller-proxy \
-  && ln -s /usr/local/lib/dim/controller-proxy/development-service-cli.js /usr/local/bin/dim-development-service
+  && ln -s /usr/local/lib/dim/controller-proxy/development-service-cli.js /usr/local/bin/dim-development-service \
+  && ln -s /usr/local/lib/dim/controller-proxy/workspace-resources-cli.js /usr/local/bin/dim-workspace-resources \
+  && ln -s /usr/local/lib/dim/controller-proxy/nproc-cli.js /usr/local/bin/dim-nproc
 
 WORKDIR /workspace
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/dim-project-entrypoint"]
