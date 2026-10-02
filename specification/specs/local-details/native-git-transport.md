@@ -5,10 +5,13 @@
 ## Scope
 
 `@slop-lab/dim-native-git` is DIM-owned Git smart-HTTP transport plus durable
-complete-tree human-review evidence. It supplies registered repository storage,
-authenticated read transport, workspace-scoped proposal pushes, immutable
-review objects, and approval/revocation. It does not implement issues, pull
-requests, CI status evidence, merge policy, or protected-ref promotion.
+complete-tree human-review and exact CI evidence with checked protected
+promotion. It supplies registered repository storage, authenticated read
+transport, workspace-scoped proposal pushes, immutable review objects,
+approval/revocation, per-job terminal status records, and one host-only
+serialized compare-and-swap operation. It does not implement issues, pull
+requests, workflow execution, general merge administration, or provider
+Actions compatibility.
 
 The package is additive and not yet selected by core Project lifecycle code.
 Managed and external Gitea remain the current lifecycle implementation while
@@ -26,10 +29,13 @@ usernames, identities naming an unregistered repository, unknown fields, and
 malformed identifiers before listening.
 
 Repositories may declare protected-ref review policies with exact policy,
-required-review, and required-job-set revisions; baseline reviewer IDs; and
-path-prefix rules that add reviewers. Reviewer and administrator credentials
+required-review, and required-job-set revisions; required job names; baseline
+reviewer IDs; and path-prefix rules that add reviewers. Reviewer and administrator credentials
 remain Project/repository scoped. Reviewers have no Git write role.
 Administrators can inspect and revoke evidence but cannot approve.
+CI credentials additionally bind one job name and cannot report another job;
+promoter credentials have no Git transport role and cannot bypass the checked
+promotion operation.
 
 HTTP repository paths contain only validated Project and repository IDs. The
 service resolves them through the startup registry and constructs
@@ -105,14 +111,32 @@ protected head, proposal commit/tree, policy/revision, writer, or reviewer
 identity drift makes approval stale. Restart with unchanged state preserves
 approval but grants no additional authority.
 
-## Deferred CI and promotion authority
+## Exact CI evidence and protected promotion
 
-The review surface satisfies the human complete-tree evidence portion of
-`TRUST-PROMOTION-001`; it does not record CI results and cannot promote.
-`TRUST-PROMOTION-CAS-001` remains fail closed: no merge or promotion endpoint,
-maintainer identity, or administrator direct-write path exists. Later work must
-add exact-head CI evidence and a distinct host-only serialized compare-and-swap
-operation without changing the proposal-only receive policy.
+The status API accepts only the native schema-1 `dim.ci.job.completed` event
+envelope. Its payload binds the review's Project, repository, protected ref,
+expected head, candidate commit and tree, policy, review, and job-set revisions,
+plus the authenticated job name, positive attempt, and terminal result. The
+format is a DIM event contract and makes no claim of GitHub Actions or provider
+API compatibility. One immutable mode-`0600` record may exist for each review,
+job, and attempt; an exact replay is idempotent and conflicting evidence for the
+same attempt is rejected. Startup validates record schema, digest, path, mode,
+and ownership. Promotion considers the highest recorded attempt for every
+currently required job and requires each to be `success` from the currently
+configured identity for that job.
+
+The promotion API accepts only a Project/repository-scoped promoter identity.
+The service serializes approval, revocation, CI status, and promotion decisions
+per repository/protected ref. While inside that boundary, promotion rereads the
+review, current policy, live protected and proposal refs, candidate tree,
+current complete human approvals, exact current CI evidence, and descendant
+ancestry. It then executes one Git `update-ref --stdin` transaction that locks
+and verifies the proposal ref at the reviewed candidate while comparing and
+swapping the protected ref from the expected head to that candidate. Every
+mismatch leaves the protected ref unchanged, and concurrent candidates from
+one expected head permit one winner. Retry returns `already-current` only for
+the exact candidate with otherwise current evidence. Deletion, force, generic
+administrator writes, and direct smart-HTTP protected writes remain absent.
 
 ## Verification
 
@@ -128,4 +152,10 @@ The review driver creates a real candidate with additions, deletion, rename,
 mode change, and symbolic-link change; inspects exact refs, SHAs, paths, and
 status through the API and CLI; and proves whole-tree path-owner approval,
 revocation, identity/ref/tree/policy staleness, restart durability, Project and
-role denials, and unchanged protected refs.
+role denials. The promotion driver records exact per-job terminal evidence,
+restarts the service, compares real `rev-parse` values before and after
+promotion, and proves idempotent retry. Competing real candidates prove exactly
+one CAS winner. Missing, failed/latest-attempt, nonterminal, foreign,
+tuple-mismatched, injected, revoked, stale-policy/head, and non-descendant cases
+leave the protected ref unchanged; smart-HTTP force and deletion denials remain
+in the transport gate.
