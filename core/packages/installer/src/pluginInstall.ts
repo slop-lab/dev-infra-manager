@@ -3,10 +3,12 @@ import { constants } from "node:fs";
 import { access, copyFile, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { atomicWrite, readManifest, readPackageJson, run } from "./runtimeFiles.js";
+import type { InstallerOperation } from "./installProgress.js";
 
 export interface InstallOptions {
   readonly pluginHome: string;
   readonly npmCommand?: string;
+  readonly operation?: InstallerOperation;
 }
 
 export async function installPlugins(specifiers: readonly string[], options: InstallOptions): Promise<string[]> {
@@ -26,7 +28,9 @@ export async function installPlugins(specifiers: readonly string[], options: Ins
     } catch (error) {
       if (errorCode(error) !== "ENOENT") throw error;
     }
+    options.operation?.reportProgress("package installation");
     const installed = await installPluginsInStage(specifiers, options, stagingDirectory);
+    options.operation?.reportProgress("runtime promotion");
     try {
       await rename(currentDirectory, backupDirectory);
       previousMoved = true;
@@ -36,8 +40,14 @@ export async function installPlugins(specifiers: readonly string[], options: Ins
     await rename(stagingDirectory, currentDirectory);
     promoted = true;
     controllerRestartAttempted = true;
+    options.operation?.reportProgress("controller readiness");
     try {
-      await run(path.join(currentDirectory, "node_modules", ".bin", "dim"), ["controller", "restart"], currentDirectory);
+      await run(
+        path.join(currentDirectory, "node_modules", ".bin", "dim"),
+        ["controller", "restart"],
+        currentDirectory,
+        options.operation
+      );
     } catch (error) {
       throw new Error("target controller restart/readiness failed", { cause: error });
     }
@@ -48,7 +58,12 @@ export async function installPlugins(specifiers: readonly string[], options: Ins
     if (previousMoved) {
       await rename(backupDirectory, currentDirectory);
       if (controllerRestartAttempted) {
-        await run(path.join(currentDirectory, "node_modules", ".bin", "dim"), ["controller", "restart"], currentDirectory);
+        options.operation?.activity();
+        await run(
+          path.join(currentDirectory, "node_modules", ".bin", "dim"),
+          ["controller", "restart"],
+          currentDirectory
+        );
       }
     }
     throw error;
@@ -66,7 +81,12 @@ async function installPluginsInStage(
   const before = await readPackageJson(packagePath);
   if (!before) await writeFile(packagePath, `${JSON.stringify({ private: true }, null, 2)}\n`, { mode: 0o600 });
   const durableSpecifiers = await Promise.all(specifiers.map((specifier) => persistLocalSpecifier(specifier, stagingDirectory)));
-  await run(options.npmCommand ?? "npm", ["install", "--save-exact", "--no-fund", "--no-audit", ...durableSpecifiers], stagingDirectory);
+  await run(
+    options.npmCommand ?? "npm",
+    ["install", "--save-exact", "--no-fund", "--no-audit", ...durableSpecifiers],
+    stagingDirectory,
+    options.operation
+  );
   const after = await readPackageJson(packagePath);
   const dependencies = after?.dependencies ?? {};
   const previousDependencies = before?.dependencies ?? {};

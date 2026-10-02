@@ -408,6 +408,38 @@ describe("@slop-lab/dim-installer", () => {
         argv: ["controller", "restart"]
       });
     });
+
+    it("restarts the restored runtime after cancellation during target readiness", async () => {
+      const root = await tempDir("dim-install-cancelled-controller-");
+      const npm = join(root, "npm.mjs");
+      await writeFakeCliNpm(npm, {
+        argsFile: join(root, "npm-arguments.json"),
+        versionOutput: "2.0.0"
+      });
+      const dataHome = join(root, "data-home");
+      const previousExecutable = join(dataHome, "runtime", "current", "node_modules", ".bin", "dim");
+      const previousControllerArgs = join(root, "previous-controller-arguments.json");
+      await mkdir(dirname(previousExecutable), { recursive: true });
+      await writeStubCli(previousExecutable, { versionOutput: "1.0.0", echoFile: previousControllerArgs });
+      const abort = new AbortController();
+
+      await expect(installDimCli({
+        version: "2.0.0",
+        exposeOnPath: false,
+        npmCommand: npm,
+        dataHome,
+        configPath: join(root, "dim.json"),
+        operation: {
+          signal: abort.signal,
+          activity: vi.fn(),
+          reportProgress(stage) { if (stage === "controller readiness") abort.abort(new Error("cancelled")); }
+        }
+      })).rejects.toThrow();
+
+      expect(JSON.parse(await readFile(previousControllerArgs, "utf8"))).toMatchObject({
+        argv: ["controller", "restart"]
+      });
+    });
   });
 
   describe("readLocalPackageBundle", () => {

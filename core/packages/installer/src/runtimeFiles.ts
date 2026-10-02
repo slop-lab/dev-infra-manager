@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { InstallerOperation } from "./installProgress.js";
 
 export type PluginManifest = {
   readonly schemaVersion: 1;
@@ -40,9 +41,30 @@ export async function atomicWrite(target: string, value: unknown): Promise<void>
   await rename(temporary, target);
 }
 
-export async function run(command: string, args: readonly string[], cwd: string): Promise<void> {
+export async function run(
+  command: string,
+  args: readonly string[],
+  cwd: string,
+  operation?: InstallerOperation
+): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: "inherit" });
+    const child = spawn(command, args, {
+      cwd,
+      detached: operation !== undefined,
+      stdio: operation === undefined ? "inherit" : ["inherit", "pipe", "pipe"]
+    });
+    if (operation !== undefined) {
+      child.stdout?.on("data", (chunk: Buffer) => { operation.activity(); process.stdout.write(chunk); });
+      child.stderr?.on("data", (chunk: Buffer) => { operation.activity(); process.stderr.write(chunk); });
+      const abort = (): void => {
+        if (child.pid === undefined) return;
+        try { process.kill(-child.pid, "SIGTERM"); }
+        catch { child.kill("SIGTERM"); }
+      };
+      if (operation.signal.aborted) abort();
+      else operation.signal.addEventListener("abort", abort, { once: true });
+      child.once("close", () => operation.signal.removeEventListener("abort", abort));
+    }
     child.once("error", reject);
     child.once("exit", (code, signal) => {
       if (code === 0) resolve();

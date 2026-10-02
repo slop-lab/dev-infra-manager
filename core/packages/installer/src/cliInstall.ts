@@ -13,6 +13,7 @@ import {
 } from "./installConfig.js";
 import { atomicWrite, readManifest, readPackageJson, run } from "./runtimeFiles.js";
 import { runStagedStatePreflight } from "./statePreflight.js";
+import type { InstallerOperation } from "./installProgress.js";
 
 export interface CliInstallOptions {
   readonly version?: string;
@@ -23,6 +24,7 @@ export interface CliInstallOptions {
   readonly configPath?: string;
   readonly dataHome?: string;
   readonly npmCommand?: string;
+  readonly operation?: InstallerOperation;
 }
 
 export interface LocalPackageBundle {
@@ -71,15 +73,18 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
     await run(options.npmCommand ?? "npm", [
       "install", "--prefix", stagingDirectory, "--save-exact", "--no-fund", "--no-audit",
       ...packageSpecifiers
-    ], stagingDirectory);
+    ], stagingDirectory, options.operation);
+    options.operation?.reportProgress("version verification");
     const stagingExecutable = path.join(stagingDirectory, "node_modules", ".bin", "dim");
     await access(stagingExecutable, constants.X_OK);
     const installedVersion = await queryCliVersion(stagingExecutable);
     if (options.version && installedVersion !== options.version) {
       throw new Error(`installed DIM CLI reports ${installedVersion}, expected ${options.version}`);
     }
+    options.operation?.reportProgress("state preflight");
     await runStagedStatePreflight(stagingDirectory);
     await atomicWrite(path.join(stagingDirectory, "plugins.json"), previousManifest);
+    options.operation?.reportProgress("runtime promotion");
     try {
       await rename(currentDirectory, backupDirectory);
       previousMoved = true;
@@ -91,8 +96,9 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
     const executable = cliExecutable(dataHome);
     await access(executable, constants.X_OK);
     controllerRestartAttempted = true;
+    options.operation?.reportProgress("controller readiness");
     try {
-      await run(executable, ["controller", "restart"], currentDirectory);
+      await run(executable, ["controller", "restart"], currentDirectory, options.operation);
     } catch (error) {
       throw new Error("target controller restart/readiness failed", { cause: error });
     }
@@ -103,6 +109,7 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
       symlinkSnapshot = await snapshotManagedSymlink(installedSymlink, managedRoot);
       await installManagedSymlink(installedSymlink, executable, managedRoot);
     }
+    options.operation?.reportProgress("configuration");
     const config = await readUserConfig(configPath);
     await writeUserConfig(configPath, { ...config, cli: { mode, version: installedVersion, executable } });
     committed = true;
@@ -115,6 +122,7 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
         await rename(backupDirectory, currentDirectory);
         if (installedSymlink && symlinkSnapshot) await restoreManagedSymlink(installedSymlink, symlinkSnapshot);
         if (controllerRestartAttempted) {
+          options.operation?.activity();
           await run(cliExecutable(dataHome), ["controller", "restart"], currentDirectory);
         }
       }
