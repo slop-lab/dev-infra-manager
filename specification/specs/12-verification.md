@@ -52,7 +52,7 @@ expected head, candidate commit and tree, policy revision, review revision, and
 job-set revision. They MUST enumerate additions, modifications, deletions,
 renames, modes, and symbolic links in the complete change set. Tests MUST
 reject path-only approval, self or workload approval, stale or revoked
-approval, missing or wrong-attempt jobs, changed policy/tree/head, non-descendant
+approval, missing, unknown, future, late, revoked, or wrong-attempt jobs, changed policy/tree/head, non-descendant
 candidates, protected deletion, and force push. A concurrent promotion test
 MUST prove that exactly one compare-and-swap succeeds and every loser leaves
 the winning ref unchanged. Live Git-host evidence MUST exercise the actual
@@ -64,12 +64,14 @@ base-to-candidate diff through the reviewer API and CLI, persist immutable
 approval and revocation across restart, invalidate changed refs, trees, policy,
 or bound identities, and deny writer/read-only/administrator/foreign approval.
 The host API MUST additionally persist authenticated exact per-job terminal
-evidence, reject nonterminal, foreign, tuple-mismatched, conflicting, missing,
-and superseded-success input, and select the highest attempt. With every
+evidence, require a durable scheduler-issued current attempt identity, and
+reject nonterminal, foreign, tuple-mismatched, conflicting, missing, unknown,
+future, late, revoked, and superseded-success input. With every
 required current approval and successful job present, one Git ref transaction
 MUST verify the proposal ref and compare-and-swap the protected old object ID
 to the candidate. Tests MUST prove restart persistence, exact-candidate
-idempotence, one concurrent winner, role separation, and unchanged protected
+idempotence, one concurrent winner, cross-process single-owner enforcement,
+role separation, and unchanged protected
 refs for every denial. Smart HTTP MUST remain proposal-only.
 
 For `TRUST-RUNTIME-001`, each implemented backend MUST run the same

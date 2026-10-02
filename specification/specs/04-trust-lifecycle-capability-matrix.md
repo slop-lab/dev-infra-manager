@@ -43,8 +43,9 @@ candidate tree, policy revision, required-job-set revision, job name, attempt,
 and terminal result. CI MUST NOT update a protected ref, approve its own
 candidate, or convert unavailable capacity into success.
 Each result MUST be authenticated as the configured identity for that exact
-Project, repository, and job. When several attempts exist, the highest recorded
-attempt is current; an earlier success MUST NOT override a later failure or
+Project, repository, and job. The host scheduler MUST durably issue the current
+attempt and its unguessable identity before reporting; unknown, future, old, or
+revoked attempts MUST fail. An earlier success MUST NOT override a later failure or
 cancellation. Missing, malformed, foreign, nonterminal, or tuple-mismatched
 input is not successful CI evidence.
 
@@ -79,6 +80,7 @@ review or promotion, and MUST NOT be reported as one.
 | Workspace writer | Create and update proposal refs | Update, delete, or force a protected ref |
 | Human reviewer | Approve or reject one immutable complete-tree proposal | Self-approve, approve only selected paths, or reuse approval after tuple drift |
 | CI identity | Report one job attempt for the exact candidate tuple | Approve, merge, deploy, or report a different head/tree as the candidate |
+| Host scheduler | Issue or revoke the current job attempt | Report a result, approve, promote, or write refs |
 | Host promoter | Perform the checked atomic old-ID to candidate-ID update | Bypass review/jobs, ignore policy drift, or overwrite a concurrently moved ref |
 | Repository owner or provider administrator | Configure policy through host administration | Routine direct push or provider review bypass |
 
