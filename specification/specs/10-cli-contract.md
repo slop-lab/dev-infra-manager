@@ -85,9 +85,17 @@ stdout or stderr.
 command session MAY render an idle spinner only when stderr is a TTY. They MUST
 NOT emit spinner frames or terminal-control bytes to non-TTY output, JSON
 stdout, or the byte streams of interactive `exec` and `run` sessions.
+For workspace `create`, `setup`, `update`, `start`, and `restart`, a visible
+spinner MUST identify the current fixed lifecycle stage and the guaranteed
+major work that remains. The controller MUST report a stage only when it enters
+that stage. The client MUST render only recognized fixed labels, MUST NOT
+interpolate arbitrary controller or command data, and MUST omit conditional
+stages until the controller reports that they apply. Other eligible command
+sessions MUST continue to identify the current operation while idle.
 Non-TTY lifecycle and CI output MUST retain deterministic Project stage lines.
-The client MUST clear any spinner on final result, error, disconnect,
-cancellation, or local interruption.
+The client MUST clear the complete progress block before streamed stdout or
+stderr and on final result, error, disconnect, cancellation, or local
+interruption. Each progress row MUST fit the active terminal width.
 
 ## Projects
 

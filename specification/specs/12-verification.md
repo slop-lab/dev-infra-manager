@@ -1215,8 +1215,13 @@ For `CLI-STREAM-PROGRESS-001`, CLI tests must prove that lifecycle and CI
 streams show an idle spinner only on TTY stderr, retain deterministic Project
 stage lines in non-TTY output, and emit no spinner or terminal-control bytes to
 non-TTY output, JSON stdout, or interactive `exec` and `run` byte streams.
+Workspace lifecycle tests must prove that entered fixed stages update the
+current-stage row, guaranteed remaining milestones disappear when completed,
+conditional stages appear only after their event, unknown stage text is not
+rendered, and progress rows do not exceed the active terminal width. Real-PTY
+verification must include wide-character output after a visible progress block.
 Result, error, disconnect, cancellation, and local interruption must each clear
-the spinner.
+the complete progress block and leave no active timer or listener.
 
 For `WORKSPACE-SSH-PROXY-001`, Project verification must connect through raw
 stdio with no TTY, accept only key authentication after checking the generated
