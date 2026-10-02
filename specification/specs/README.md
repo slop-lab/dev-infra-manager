@@ -56,6 +56,7 @@ instead be split.
 | [Installer Facade](14-installer-facade.md) | Contract | Mixed with installation implementation choices |
 | [Image Entrypoints](local-details/image-entrypoints.md) | Implementation profile | Image-local compatibility details |
 | [Installation Scripts](local-details/installation-scripts.md) | Implementation profile | Script and packaging details |
+| [Native Git Transport Foundation](local-details/native-git-transport.md) | Implementation profile | Proposal-only smart-HTTP boundary; review and protected promotion are deferred |
 
 ## Requirement Traceability
 
