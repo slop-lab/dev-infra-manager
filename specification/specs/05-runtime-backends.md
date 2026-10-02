@@ -123,12 +123,18 @@ The binding is shared by the Project's workspaces and may be removed only by
 explicit Project removal after no workspace references it and an exact
 ownership reinspection succeeds.
 
-The Incus project MUST enable project-owned profiles and storage volumes,
+The Incus project MUST set `restricted=true` and
+`restricted.backups=allow`, enable project-owned profiles and storage volumes,
 restrict NICs and disks to managed resources, restrict accessible networks and
 storage pools to the recorded allowlist, and block PCI, proxy, Unix-device,
-low-level VM, and nested-virtualization configuration. Project aggregate CPU,
-memory, disk, and VM-count limits MUST be finite host policy even when a
-workspace requests an unlimited per-workspace value in a later contract.
+low-level VM, and nested-virtualization configuration. Restricted Incus
+projects otherwise default `restricted.backups` to `block`; version `1` pins
+`allow` because its required instance and custom-volume export gate uses the
+backup API. This permission does not grant backup authority to the guest: only
+the trusted host service receives the Incus API socket and credential, and it
+MUST ownership-check the stopped instance or volume before export. Project
+aggregate CPU, memory, disk, and VM-count limits MUST be finite host policy even
+when a workspace requests an unlimited per-workspace value in a later contract.
 
 Every instance, custom volume, and network MUST carry provider metadata for the
 DIM Project ID, workspace ID, backend identity, backend profile and version,
@@ -179,10 +185,18 @@ The expanded device set MUST contain only:
 4. one read-only disk whose source is exactly `agent:config` for the
    release-pinned Incus agent; and
 5. one read-only generated cloud-init disk whose source is exactly
-   `cloud-init:config`. Incus MUST generate it from only the pinned
+   `cloud-init:config`. Incus MUST generate it from the pinned
    `cloud-init.user-data`, `cloud-init.vendor-data`, and
-   `cloud-init.network-config` instance keys, and expanded configuration MUST
-   match those inputs before first start.
+   `cloud-init.network-config` instance keys plus deterministic metadata whose
+   only keys are `instance-id` and `local-hostname`. `instance-id` MUST equal
+   the Incus-generated cloud-init ID captured in the creation-attempt record
+   and target workspace state; `local-hostname` MUST equal the exact recorded
+   provider instance name. `user.meta-data` and the legacy `user.user-data`,
+   `user.vendor-data`, and `user.network-config` keys MUST be absent, and every
+   other legacy `user.*-data` cloud-init input MUST be rejected. Before first
+   start, DIM MUST verify the expanded configuration and rendered media against
+   those exact approved inputs and metadata; an extra, missing, or changed key
+   is a device mismatch.
 
 The profile MUST reject host-path disks, secret volumes, physical or SR-IOV
 NICs, arbitrary proxy devices, host Unix devices, host `/dev/kvm`, and every
@@ -246,7 +260,11 @@ memory to reach the requested value plus at most the greater of 64 MiB or two
 percent within 120 seconds. A timeout, missing agent, balloon refusal, or
 partial resource update MUST roll back to the prior effective values and leave
 the persisted resource record unchanged. If rollback or read-back is uncertain,
-the workspace remains non-ready and no success is reported.
+the workspace remains non-ready and no success is reported. The candidate
+profile MUST NOT become supported unless its live gate demonstrates at least
+one successful decrease to a lower finite target within that bound; rollback
+is failure handling for an individual update, not a substitute for working
+memory reclamation.
 
 The pinned guest image MUST contain a root-owned, non-writable
 `dim-guest-workload` launcher and systemd slice. The host adapter invokes only
@@ -314,7 +332,8 @@ the JSON is an embedded fragment, not a complete workspace record:
     "providerProjectId": "project-owned-binding-id",
     "instance": {
       "id": "generated-provider-resource-id",
-      "name": "non-authorizing-provider-locator"
+      "name": "non-authorizing-provider-locator",
+      "cloudInitInstanceId": "incus-generated-cloud-init-id"
     },
     "dataVolume": {
       "id": "generated-provider-resource-id",
@@ -331,7 +350,8 @@ the JSON is an embedded fragment, not a complete workspace record:
 For `container`, `runtimeBackendProfile` is exactly
 `{"name":"sysbox-container","version":1}` and `runtimeResources` contains
 exactly `container`, `dataVolume`, and `network` objects with the same exact
-`id` and `name` fields. The VM `providerProjectId` is a foreign key to the
+`id` and `name` fields; `cloudInitInstanceId` exists only on the VM `instance`
+object. The VM `providerProjectId` is a foreign key to the
 Project-owned runtime-provider binding, not a workspace-owned Incus project.
 All generated IDs are immutable random identities stored both in state and
 provider metadata; names are non-authorizing locators. Exact-schema parsing
@@ -382,8 +402,10 @@ KVM-capable host:
 4. the managed NIC reaches allowed destinations but not other workspaces or
    host control networks;
 5. finite CPU, memory, and PID limits are observed, a memory increase succeeds,
-   and balloon-based decrease either converges within the bound or fails with
-   the prior effective state preserved;
+   and at least one balloon-based decrease to a lower finite target, with guest
+   resident use below that target, converges within 120 seconds and the stated
+   tolerance; a separate injected refusal or timeout preserves the prior
+   effective state, and a candidate whose every decrease fails cannot pass;
 6. while stopped, the root instance and custom data volume are exported
    separately, each archive receives a SHA-256 digest, and clean recovery
    recreates the restricted Project/network, restores the data volume before
