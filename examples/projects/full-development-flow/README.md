@@ -62,12 +62,14 @@ Ordinary agent tasks run as the workspace owner's nonroot identity and may use
 passwordless `sudo` only for root inside the agent container, without gaining
 trusted-workspace or host runtime authority.
 The agent's `TMPDIR` is `/mnt/opencode-tmp`, backed by a separate
-`dim-agent-tmp` volume inside the private daemon. It is owned by the agent with
-mode `0700`, survives agent-container recreation, and is not part of the
-persistent home or its backup. Setup rejects a symlink or a populated root with
-incompatible ownership or mode. Both ordinary workspace discard and
-`--keep-volume` remove this exact owned volume; `--keep-volume` still retains
-the agent home and private daemon store.
+Project-runtime `agent-tmp` volume mounted through the private daemon. It is
+owned by the agent with mode `0700`, survives agent and private-daemon container
+recreation, and is not part of the persistent home or its backup. Before the
+private daemon starts, setup rejects driver options, incorrect Compose labels,
+or an identity shared with agent home; it also rejects a symlink or a populated
+root with incompatible ownership or mode. Both ordinary workspace discard and
+`--keep-volume` remove this exact owned volume even when the private daemon is
+stopped; `--keep-volume` still retains the agent home and private daemon store.
 
 ## Connect with OpenSSH
 
