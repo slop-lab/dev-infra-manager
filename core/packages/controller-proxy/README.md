@@ -25,7 +25,8 @@ the trusted upstream grant:
 ```bash
 dim-controller-proxy agent \
   --listen /run/dim/agent-controller/controller.sock \
-  --allow-workspace-restart
+  --allow-workspace-restart \
+  --allow-workspace-resources
 ```
 
 The same helper is available to reviewed Node.js policy code:
@@ -45,6 +46,21 @@ explicit `maxBodyBytes` limit.
 Allowing self-restart lets the agent trigger reviewed Project setup again and
 may affect availability. Project root code must opt in deliberately; the agent
 still cannot select another workspace or access a host-admin route.
+
+The resource option permits only bodyless `GET /api/workspace/resources` for
+the workspace bound to the upstream agent grant. Mount the derived socket into
+the agent and set `DIM_CONTROLLER_SOCKET` to it; do not pass the upstream grant.
+The packaged read-only helpers then provide JSON and `nproc`-compatible output:
+
+```bash
+dim-workspace-resources show
+dim-nproc
+```
+
+`dim-nproc` floors fractional assignments, returns at least one, and caps the
+result by CPUs visible to the process. An unavailable or unlimited (`max`)
+assignment fails instead of reporting host capacity. Neither helper accepts a
+workspace selector or reads Docker/cgroup state.
 
 ## External URL preset
 
