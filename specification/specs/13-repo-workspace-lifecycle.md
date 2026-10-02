@@ -149,6 +149,51 @@ critical section. After a successful ownership inspection, container start,
 policy inspection and editing, restart, and credential access MUST use only the
 returned immutable container ID, never the deterministic name.
 
+**MANAGED-GIT-ENDPOINT-001:** Managed Gitea service state uses strict schema
+version `2`. Its exact record contains the service and three resource ownership
+identities; phase; container, control-network, and data-volume names; requested
+image reference and immutable `imageId`; `resourcesEstablished`; port; creation
+and update timestamps; and, when established, `networkId`. `endpointAddress`
+and `error` are optional according to phase. Before creating any Docker
+resource, DIM MUST resolve the requested image to its immutable ID and durably
+claim a fresh service identity and distinct collision-resistant ownership
+identities for its container, control network, and data volume. Each resource
+MUST carry the exact managed owner, service identity, resource kind, and
+resource identity labels from that claim. Container creation MUST use the
+recorded `imageId`, not the mutable image reference. Inspection MUST reject an
+image-ID mismatch, a network-ID mismatch, or an unexpected data-volume mount.
+A same-name resource with missing, malformed, or mismatched identity is foreign
+and MUST be rejected without starting, restarting, reconnecting, relabeling,
+removing, or otherwise mutating it.
+
+The initial claim MUST set `resourcesEstablished` to `false`. DIM MAY change it
+to `true` only after it has created or successfully inspected both base
+resources and recorded the immutable `networkId`. Once it is `true`, a missing
+network or data volume is an error and MUST NOT be recreated. A true value
+without `networkId`, or ready state without established resources, is invalid
+and MUST be rejected unchanged.
+
+The service record MUST retain the first successfully inspected control-network
+address as its endpoint lease before ready publication. Recreating a missing
+owned container MUST request that exact address. An existing owned container
+at another address is drift and MUST be rejected without changing any running
+workspace or its aliases. Recovery MUST NOT disconnect and reconnect a live
+workspace, remove its aliases wholesale, or adopt a current same-name resource
+as authority. Managed-controller startup MUST reconcile this lease even when
+host lifecycle state is already `ready`; it MUST NOT replay workspace, generic
+container, or CI recovery intent in that state. Endpoint lease publication
+MUST precede readiness, policy, and credential work so interruption and retry
+retain the same address.
+
+Schema-less and schema-`1` managed-Gitea service records are obsolete and MUST
+be rejected unchanged. No migration is defined because they lack the complete
+immutable image, network, resource-establishment, and endpoint evidence needed
+to prove safe ownership. Operators MUST stop DIM and use the prior pinned DIM
+version to export or otherwise preserve needed repository data. They MAY remove
+only resources whose ownership they independently verify. An unverifiable data
+volume or other resource MUST be retained and MUST block recreation under the
+same name rather than be deleted or adopted.
+
 Managed Gitea network and volume inspection MUST classify a resource as absent
 only when the trimmed Docker diagnostic equals, case-insensitively,
 `Error response from daemon: network <expected-name> not found` for a network
@@ -350,8 +395,11 @@ DIM registers only endpoints granted to that workspace; Project lifecycle
 code selects which nested services receive them. The canonical self-Project
 generates a Compose override that applies the mapping to its private runtime,
 which copies the reviewed aliases onto the agent container it creates.
-This is a static bootstrap registry: address changes take effect when setup
-reconciles the workspace and recreates the affected Project service.
+This is a static bootstrap registry. The built-in managed Git address is an
+endpoint lease under `MANAGED-GIT-ENDPOINT-001`; address drift is rejected
+rather than applied to a live workspace. For another granted endpoint, an
+address change takes effect only when setup reconciles the workspace and
+recreates the affected Project service.
 
 The runtime manifest uses schema version `3`. It records only the immutable
 root identity and path, the persistent data path, the Project-specific managed
