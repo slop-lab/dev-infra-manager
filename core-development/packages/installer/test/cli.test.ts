@@ -187,6 +187,66 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(result.stderr).toContain("CLI must be installed before plugins");
   });
 
+  it("rejects a missing configured CLI before plugin npm mutation", async () => {
+    // Given
+    const root = await tempDir("dim-plugin-missing-configured-cli-");
+    const { env, configPath } = await baseEnv(root);
+    const bin = join(root, "bin");
+    const npmArgs = join(root, "npm-args.json");
+    await mkdir(dirname(configPath), { recursive: true });
+    await mkdir(bin, { recursive: true });
+    await writeFile(configPath, JSON.stringify({
+      schemaVersion: 1,
+      cli: { mode: "proxied", version: "1.0.0", executable: join(root, "missing-dim") }
+    }));
+    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "1.0.0" });
+
+    // When
+    const result = await runCli(
+      ["installer", "install", "plugin", "@example/plugin@1.0.0"],
+      tsxPath!,
+      { ...env, PATH: `${bin}:${env.PATH}` },
+      root
+    );
+
+    // Then
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("not executable");
+    await expect(access(npmArgs)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects a configured CLI version mismatch before plugin npm mutation", async () => {
+    // Given
+    const root = await tempDir("dim-plugin-mismatched-configured-cli-");
+    const { env, configPath, dataHome } = await baseEnv(root);
+    const pluginHome = join(dataHome, "runtime", "current");
+    const executable = join(pluginHome, "node_modules", ".bin", "dim");
+    const bin = join(root, "bin");
+    const npmArgs = join(root, "npm-args.json");
+    await mkdir(dirname(configPath), { recursive: true });
+    await mkdir(dirname(executable), { recursive: true });
+    await mkdir(bin, { recursive: true });
+    await writeStubCli(executable, { versionOutput: "2.0.0" });
+    await writeFile(configPath, JSON.stringify({
+      schemaVersion: 1,
+      cli: { mode: "proxied", version: "1.0.0", executable }
+    }));
+    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "1.0.0" });
+
+    // When
+    const result = await runCli(
+      ["installer", "install", "plugin", "@example/plugin@1.0.0"],
+      tsxPath!,
+      { ...env, PATH: `${bin}:${env.PATH}` },
+      root
+    );
+
+    // Then
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("configured version 1.0.0 does not match installed 2.0.0");
+    await expect(access(npmArgs)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("enables multiple installed plugins in one command", async () => {
     const root = await tempDir("dim-enable-plugins-");
     const { env, configPath, dataHome } = await baseEnv(root);

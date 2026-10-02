@@ -8,9 +8,11 @@ import {
   defaultPluginHome,
   installDimCli,
   installPlugins,
+  queryCliVersion,
   readLocalPackageBundle,
   removePlugins,
-  setPluginsEnabled
+  setPluginsEnabled,
+  validateConfiguredCli
 } from "./install.js";
 import { localBinPrompt } from "./installMode.js";
 import { printFacadeHelp, printInstallCoreHelp, printInstallerHelp, printInstallPluginHelp } from "./installerHelp.js";
@@ -126,8 +128,14 @@ async function installPluginCommand(commandArgs: readonly string[]): Promise<voi
 }
 
 async function installPluginPackages(specifiers: readonly string[]): Promise<void> {
-  if (await configuredCli() === undefined) {
+  const cli = await configuredCli();
+  if (cli === undefined) {
     throw new Error("DIM CLI must be installed before plugins so npm can validate the shared runtime");
+  }
+  const executable = await validateConfiguredCli(cli, process.argv[1]);
+  const installedVersion = await queryCliVersion(executable);
+  if (installedVersion !== cli.version) {
+    throw new Error(`configured version ${cli.version} does not match installed ${installedVersion}; run 'dim installer install core' to repair`);
   }
   const home = defaultPluginHome();
   for (const name of await installPlugins(specifiers, { pluginHome: home })) console.log(`Installed and enabled ${name}`);
