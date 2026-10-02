@@ -13,6 +13,8 @@ import {
   sysboxRegistryConfigArgs
 } from "../../../../core/packages/core/src/registryCache.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
+import { claimTestGiteaService } from "./giteaServiceFixture.js";
+import { hostLifecycleOptions } from "./hostLifecycleFixture.js";
 
 type InspectTarget = "network" | "volume" | "container";
 
@@ -153,6 +155,30 @@ describe("registry cache", () => {
     expect(args).not.toContain("--add-host=registry-1.docker.io:127.0.0.1");
     expect(args).not.toContain("--add-host=auth.docker.io:127.0.0.1");
     expect(REGISTRY_CACHE_IMAGE).toMatch(/^registry@sha256:[0-9a-f]{64}$/);
+  });
+
+  it("rejects a foreign shared control network in managed-Gitea mode without mutation", async () => {
+    // Given
+    await claimTestGiteaService(stateRoot);
+    const runner: StreamingCommandRunner = {
+      async run(command, args) {
+        const stdout = args[0] === "network" && args[1] === "inspect"
+          ? args.some((argument) => argument.includes("dim.service-id"))
+            ? "true|foreign|foreign-service|network|foreign-resource\n"
+            : "true\n"
+          : args[0] === "volume" && args[1] === "inspect"
+            ? "true\n"
+            : `true|true|${REGISTRY_CACHE_IMAGE}\n`;
+        return { command, args, stdout, stderr: "", exitCode: 0 };
+      },
+      async runStreaming() { return 0; }
+    };
+
+    // When
+    const reconciliation = ensureRegistryCache(runner, hostLifecycleOptions(stateRoot));
+
+    // Then
+    await expect(reconciliation).rejects.toThrow(/not managed by dim/);
   });
 
   it("writes the Sysbox daemon mirror into its existing runner volume", () => {

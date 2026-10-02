@@ -1,5 +1,6 @@
 import { UserError } from "./errors.js";
 import { LifecycleState } from "./lifecycleState.js";
+import type { GiteaServiceRecord, LifecycleOptions } from "./lifecycleTypes.js";
 import type { StreamingCommandRunner } from "./types.js";
 
 export const CONTROL_NETWORK = "dim-control";
@@ -16,6 +17,8 @@ type ManagedResourcePlan = {
   readonly name: string;
   readonly inspectArgs: string[];
   readonly createArgs: string[];
+  readonly expectedInspection?: string;
+  readonly createMissing?: boolean;
 };
 
 const missingResourceDiagnostic = {
@@ -26,44 +29,83 @@ const missingResourceDiagnostic = {
 
 export async function ensureRegistryCache(
   runner: StreamingCommandRunner,
-  stateRoot: string
+  input: string | LifecycleOptions
 ): Promise<void> {
-  const release = await new LifecycleState(stateRoot).acquireRegistryCacheLock();
+  const stateRoot = typeof input === "string" ? input : input.stateRoot;
+  const state = new LifecycleState(stateRoot);
+  const managed = typeof input === "string" || input.giteaConnection.kind === "external"
+    ? undefined
+    : await acquireManagedNetworkLease(state);
   try {
-    await ensureManagedResource(runner, {
-      type: "network",
-      name: CONTROL_NETWORK,
-      inspectArgs: ["network", "inspect", CONTROL_NETWORK, "--format", "{{index .Labels \"dim.managed\"}}"],
-      createArgs: ["network", "create", "--label", "dim.managed=true", "--label", "dim.resource=network", CONTROL_NETWORK]
-    });
-    await ensureManagedResource(runner, {
-      type: "volume",
-      name: REGISTRY_CACHE_VOLUME,
-      inspectArgs: ["volume", "inspect", REGISTRY_CACHE_VOLUME, "--format", "{{index .Labels \"dim.managed\"}}"],
-      createArgs: ["volume", "create", "--label", "dim.managed=true", "--label", "dim.resource=registry-cache-data", REGISTRY_CACHE_VOLUME]
-    });
+    const release = await state.acquireRegistryCacheLock();
+    try {
+      await ensureManagedResource(runner, {
+        type: "network",
+        name: CONTROL_NETWORK,
+        inspectArgs: managed === undefined
+          ? ["network", "inspect", CONTROL_NETWORK, "--format", "{{index .Labels \"dim.managed\"}}"]
+          : ["network", "inspect", CONTROL_NETWORK, "--format", "{{.Id}}|{{index .Labels \"dim.managed\"}}|{{index .Labels \"dim.owner\"}}|{{index .Labels \"dim.service-id\"}}|{{index .Labels \"dim.resource\"}}|{{index .Labels \"dim.resource-id\"}}"],
+        createArgs: ["network", "create", "--label", "dim.managed=true", "--label", "dim.resource=network", CONTROL_NETWORK],
+        ...(managed === undefined ? {} : {
+          expectedInspection: `${managed.networkId}|true|dim|${managed.serviceId}|network|${managed.networkOwnershipId}`,
+          createMissing: false
+        })
+      });
+      await ensureManagedResource(runner, {
+        type: "volume",
+        name: REGISTRY_CACHE_VOLUME,
+        inspectArgs: ["volume", "inspect", REGISTRY_CACHE_VOLUME, "--format", "{{index .Labels \"dim.managed\"}}"],
+        createArgs: ["volume", "create", "--label", "dim.managed=true", "--label", "dim.resource=registry-cache-data", REGISTRY_CACHE_VOLUME]
+      });
 
-    const inspect = await runner.run("docker", [
-      "container", "inspect", REGISTRY_CACHE_CONTAINER,
-      "--format", "{{index .Config.Labels \"dim.managed\"}}|{{.State.Running}}|{{.Config.Image}}"
-    ]);
-    if (inspect.exitCode === 0) {
-      const [managed, running, image] = inspect.stdout.trim().split("|");
-      if (managed !== "true") throw new UserError(`Docker resource '${REGISTRY_CACHE_CONTAINER}' exists but is not managed by dim`);
-      if (image !== REGISTRY_CACHE_IMAGE) {
-        assertCommand(await runner.run("docker", ["container", "rm", "--force", REGISTRY_CACHE_CONTAINER]), "replace registry cache");
-        await startRegistryCache(runner);
-      } else if (running !== "true") {
-        assertCommand(await runner.run("docker", ["start", REGISTRY_CACHE_CONTAINER]), "start registry cache");
+      const inspect = await runner.run("docker", [
+        "container", "inspect", REGISTRY_CACHE_CONTAINER,
+        "--format", "{{index .Config.Labels \"dim.managed\"}}|{{.State.Running}}|{{.Config.Image}}"
+      ]);
+      if (inspect.exitCode === 0) {
+        const [managed, running, image] = inspect.stdout.trim().split("|");
+        if (managed !== "true") throw new UserError(`Docker resource '${REGISTRY_CACHE_CONTAINER}' exists but is not managed by dim`);
+        if (image !== REGISTRY_CACHE_IMAGE) {
+          assertCommand(await runner.run("docker", ["container", "rm", "--force", REGISTRY_CACHE_CONTAINER]), "replace registry cache");
+          await startRegistryCache(runner);
+        } else if (running !== "true") {
+          assertCommand(await runner.run("docker", ["start", REGISTRY_CACHE_CONTAINER]), "start registry cache");
+        }
+        return;
       }
-      return;
+      if (!isMissingDockerResource("container", REGISTRY_CACHE_CONTAINER, inspect.stderr)) {
+        throw new UserError(`failed to inspect Docker container '${REGISTRY_CACHE_CONTAINER}': ${inspect.stderr.trim()}`);
+      }
+      await startRegistryCache(runner);
+    } finally {
+      await release();
     }
-    if (!isMissingDockerResource("container", REGISTRY_CACHE_CONTAINER, inspect.stderr)) {
-      throw new UserError(`failed to inspect Docker container '${REGISTRY_CACHE_CONTAINER}': ${inspect.stderr.trim()}`);
-    }
-    await startRegistryCache(runner);
   } finally {
+    await managed?.release();
+  }
+}
+
+type ManagedNetworkLease = Pick<GiteaServiceRecord, "serviceId" | "networkOwnershipId"> & {
+  readonly networkId: string;
+  readonly release: () => Promise<void>;
+};
+
+async function acquireManagedNetworkLease(state: LifecycleState): Promise<ManagedNetworkLease> {
+  const release = await state.acquireGiteaServiceLock();
+  try {
+    const record = await state.readGiteaService();
+    if (!record.resourcesEstablished || record.networkId === undefined) {
+      throw new UserError("Managed Gitea control-network lease is not established");
+    }
+    return {
+      serviceId: record.serviceId,
+      networkOwnershipId: record.networkOwnershipId,
+      networkId: record.networkId,
+      release
+    };
+  } catch (error) {
     await release();
+    throw error;
   }
 }
 
@@ -122,12 +164,15 @@ async function ensureManagedResource(
 ): Promise<void> {
   const inspected = await runner.run("docker", plan.inspectArgs);
   if (inspected.exitCode === 0) {
-    if (inspected.stdout.trim() !== "true") throw new UserError(`Docker resource '${plan.name}' exists but is not managed by dim`);
+    if (inspected.stdout.trim() !== (plan.expectedInspection ?? "true")) {
+      throw new UserError(`Docker resource '${plan.name}' exists but is not managed by dim`);
+    }
     return;
   }
   if (!isMissingDockerResource(plan.type, plan.name, inspected.stderr)) {
     throw new UserError(`failed to inspect Docker ${plan.type} '${plan.name}': ${inspected.stderr.trim()}`);
   }
+  if (plan.createMissing === false) throw new UserError(`Established Docker ${plan.type} '${plan.name}' is missing`);
   assertCommand(await runner.run("docker", plan.createArgs), `create Docker ${plan.type}`);
 }
 
