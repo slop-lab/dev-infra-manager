@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   resolveRepositoryConnection,
   UserError,
+  type LongOperationOptions,
   type RepositorySet,
   type RepositorySetEntry
 } from "@slop-lab/dim-core";
@@ -16,7 +17,8 @@ export async function applyRepositorySet(
   projectName: string,
   set: RepositorySet,
   plan: RepositorySetPlan,
-  rebind?: { readonly alias: string; readonly expectedOriginTip: string }
+  rebind?: { readonly alias: string; readonly expectedOriginTip: string },
+  operation: LongOperationOptions = {}
 ): Promise<Record<string, unknown>[]> {
   const results: Record<string, unknown>[] = [];
   for (const action of plan.actions) {
@@ -36,13 +38,17 @@ export async function applyRepositorySet(
         expectedOriginTip: rebind.expectedOriginTip,
         approved: true,
         repositorySet: set
-      }));
+      }, operation.signal));
       continue;
     }
-    const result = await addRepository(projectName, action.alias, action.entry, set);
+    const result = await addRepository(projectName, action.alias, action.entry, set, operation);
     const repository = (result.repository ?? result) as Record<string, unknown>;
     results.push(repository.protectionPhase === "pending"
-      ? await adminCall<Record<string, unknown>>("repo.protect", { project: projectName, alias: action.alias })
+      ? await adminCall<Record<string, unknown>>(
+        "repo.protect",
+        { project: projectName, alias: action.alias },
+        operation.signal
+      )
       : result);
   }
   return results;
@@ -52,7 +58,8 @@ export async function addRepository(
   projectName: string,
   alias: string,
   entry: RepositorySetEntry & { mirror?: boolean },
-  set?: RepositorySet
+  set?: RepositorySet,
+  operation: LongOperationOptions = {}
 ): Promise<Record<string, unknown>> {
   const connection = set === undefined
     ? (entry.url === undefined ? undefined : { url: entry.url })
@@ -69,12 +76,20 @@ export async function addRepository(
       ...(connection.publishBranches === undefined ? {} : { publishBranches: connection.publishBranches })
     }),
     ...(entry.ref === undefined ? {} : { ref: entry.ref })
-  });
+  }, operation.signal);
   if (!prepared.transferId || !prepared.sourceUrl) return prepared.repository;
   const temporary = await mkdtemp(path.join(tmpdir(), "dim-repo-transfer-"));
   const mirror = path.join(temporary, "source.git");
   try {
-    let exitCode = await runner.runStreaming("git", ["init", "--bare", mirror], { env: process.env });
+    const streams = {
+      ...(operation.stdout === undefined ? {} : { stdout: operation.stdout }),
+      ...(operation.stderr === undefined ? {} : { stderr: operation.stderr })
+    };
+    operation.reportProgress?.("source fetch");
+    let exitCode = await runner.runStreaming("git", ["init", "--bare", mirror], {
+      env: process.env, ...streams, ...(operation.signal === undefined ? {} : { signal: operation.signal })
+    });
+    operation.signal?.throwIfAborted();
     if (exitCode === 0) {
       exitCode = await runner.runStreaming("git", [
         "--git-dir", mirror,
@@ -82,21 +97,24 @@ export async function addRepository(
         ...(entry.mirror
           ? ["+refs/*:refs/*"]
           : ["+refs/heads/*:refs/dim-external/heads/*", "+refs/tags/*:refs/dim-external/tags/*"])
-      ], { env: process.env });
+      ], { env: process.env, ...streams, ...(operation.signal === undefined ? {} : { signal: operation.signal }) });
+      operation.signal?.throwIfAborted();
     }
     if (exitCode === 0 && !entry.mirror) {
-      await materializeExternalRefs(mirror, connection?.refNamespace, false);
+      operation.reportProgress?.("ref materialization");
+      await materializeExternalRefs(mirror, connection?.refNamespace, false, operation);
     }
     if (exitCode === 0) {
       if (!prepared.writerUsername || !prepared.writerPassword) {
         throw new UserError("controller did not provide managed Git transfer credentials");
       }
       const helper = "!f() { echo username=$DIM_GIT_USERNAME; echo password=$DIM_GIT_TOKEN; }; f";
+      operation.reportProgress?.("managed Git push");
       const importedRefs = entry.mirror
         ? []
         : [
-            ...(await localRefs(mirror, "refs/heads")).map((ref) => `${ref}:${ref}`),
-            ...(await localRefs(mirror, "refs/tags")).map((ref) => `${ref}:${ref}`)
+          ...(await localRefs(mirror, "refs/heads", operation)).map((ref) => `${ref}:${ref}`),
+          ...(await localRefs(mirror, "refs/tags", operation)).map((ref) => `${ref}:${ref}`)
           ];
       if (!entry.mirror && importedRefs.length === 0) {
         throw new UserError(`external repository '${projectName}/${alias}' contains no branches or tags`);
@@ -115,8 +133,11 @@ export async function addRepository(
           DIM_GIT_USERNAME: prepared.writerUsername,
           DIM_GIT_TOKEN: prepared.writerPassword,
           GIT_TERMINAL_PROMPT: "0"
-        }
+        },
+        ...streams,
+        ...(operation.signal === undefined ? {} : { signal: operation.signal })
       });
+      operation.signal?.throwIfAborted();
     }
     if (exitCode !== 0) {
       await adminCall("repo.complete", {
@@ -128,12 +149,13 @@ export async function addRepository(
       });
       throw new UserError(`failed to import repository '${projectName}/${alias}'`);
     }
+    operation.reportProgress?.("import finalization");
     return await adminCall<Record<string, unknown>>("repo.complete", {
       project: projectName,
       alias,
       transferId: prepared.transferId,
       success: true
-    });
+    }, operation.signal);
   } catch (error) {
     if (!(error instanceof UserError && error.message.startsWith("failed to import repository"))) {
       await adminCall("repo.complete", {

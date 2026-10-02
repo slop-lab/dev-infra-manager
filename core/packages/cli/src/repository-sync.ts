@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import {
   mapExternalRefToRepository,
   UserError,
+  type LongOperationOptions,
   type RepositoryRefNamespace
 } from "@slop-lab/dim-core";
 import { adminCall } from "./controller-client.js";
@@ -34,53 +35,77 @@ type GitCredential = {
   readonly password: string;
 };
 
-export async function fetchRepository(projectName: string, alias: string, prune: boolean): Promise<void> {
+export async function fetchRepository(
+  projectName: string,
+  alias: string,
+  prune: boolean,
+  operation: LongOperationOptions = {}
+): Promise<void> {
   const prepared = await adminCall<PreparedRepositorySync>("repo.sync-prepare", {
     project: projectName,
     alias
-  });
+  }, operation.signal);
+  if (prepared.externalUrl.startsWith("http://") || prepared.externalUrl.startsWith("https://")) {
+    operation.reportProgress?.("credential lookup");
+  }
+  const credential = await externalCredential(prepared.externalUrl, prepared.syncTimeoutSeconds, operation.signal);
+  operation.reportProgress?.("synchronization");
   await syncRequest(prepared, "fetch", {
     externalUrl: prepared.externalUrl,
     refNamespace: prepared.refNamespace ?? null,
     prune,
-    externalCredential: await externalCredential(prepared.externalUrl, prepared.syncTimeoutSeconds),
+    externalCredential: credential,
     managedCredential: { username: prepared.writerUsername, password: prepared.writerPassword }
-  });
+  }, operation.signal);
 }
 
-export async function publishRepositories(projectName: string, alias?: string): Promise<string[]> {
+export async function publishRepositories(
+  projectName: string,
+  alias?: string,
+  operation: LongOperationOptions = {}
+): Promise<string[]> {
   const aliases = alias === undefined
     ? (await adminCall<Array<{ alias: string; connections: Array<{ publishBranches?: Record<string, string> }> }>>(
-        "repo.list", { project: projectName }
+        "repo.list", { project: projectName }, operation.signal
       )).filter((repository) => repository.connections.some(
         (connection) => Object.keys(connection.publishBranches ?? {}).length > 0
       )).map((repository) => repository.alias)
     : [alias];
   if (aliases.length === 0) throw new UserError(`project '${projectName}' has no repositories configured for publish`);
-  for (const repositoryAlias of aliases) await publishRepository(projectName, repositoryAlias);
+  for (const repositoryAlias of aliases) await publishRepository(projectName, repositoryAlias, operation);
   return aliases;
 }
 
-async function publishRepository(projectName: string, alias: string): Promise<void> {
+async function publishRepository(
+  projectName: string,
+  alias: string,
+  operation: LongOperationOptions
+): Promise<void> {
   const prepared = await adminCall<PreparedRepositorySync>("repo.sync-prepare", {
     project: projectName,
     alias
-  });
+  }, operation.signal);
   if (Object.keys(prepared.publishBranches).length === 0) {
     throw new UserError(`repo '${projectName}/${alias}' has no publish policy`);
   }
+  if (prepared.externalUrl.startsWith("http://") || prepared.externalUrl.startsWith("https://")) {
+    operation.reportProgress?.("credential lookup");
+  }
+  const credential = await externalCredential(prepared.externalUrl, prepared.syncTimeoutSeconds, operation.signal);
+  operation.reportProgress?.("synchronization");
   await syncRequest(prepared, "publish", {
     externalUrl: prepared.externalUrl,
     refNamespace: prepared.refNamespace ?? null,
     publishBranches: prepared.publishBranches,
-    externalCredential: await externalCredential(prepared.externalUrl, prepared.syncTimeoutSeconds)
-  });
+    externalCredential: credential
+  }, operation.signal);
 }
 
 async function syncRequest(
   prepared: PreparedRepositorySync,
   operation: "fetch" | "publish",
-  body: Readonly<Record<string, unknown>>
+  body: Readonly<Record<string, unknown>>,
+  signal?: AbortSignal
 ): Promise<void> {
   const pathname = `/v1/repositories/${encodeURIComponent(prepared.projectId)}/${encodeURIComponent(prepared.repositoryAlias)}/${operation}`;
   const response = await fetch(`${prepared.syncEndpoint}${pathname}`, {
@@ -88,7 +113,9 @@ async function syncRequest(
     headers: { Authorization: `Bearer ${prepared.syncToken}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
     redirect: "manual",
-    signal: AbortSignal.timeout(prepared.syncTimeoutSeconds * 1_000)
+    signal: signal === undefined
+      ? AbortSignal.timeout(prepared.syncTimeoutSeconds * 1_000)
+      : AbortSignal.any([signal, AbortSignal.timeout(prepared.syncTimeoutSeconds * 1_000)])
   });
   if (response.status >= 300 && response.status < 400) {
     throw new UserError("Git sync service redirects are not allowed");
@@ -96,7 +123,11 @@ async function syncRequest(
   if (!response.ok) throw new UserError(`Git sync service rejected ${operation} (${response.status})`);
 }
 
-async function externalCredential(url: string, timeoutSeconds: number): Promise<GitCredential | null> {
+async function externalCredential(
+  url: string,
+  timeoutSeconds: number,
+  signal?: AbortSignal
+): Promise<GitCredential | null> {
   if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
   const result = await new Promise<{ readonly exitCode: number; readonly stdout: string }>((resolve) => {
     const child = spawn("git", ["credential", "fill"], {
@@ -110,9 +141,13 @@ async function externalCredential(url: string, timeoutSeconds: number): Promise<
       terminateCredentialProcess(child, "SIGTERM");
       forceTimer = setTimeout(() => terminateCredentialProcess(child, "SIGKILL"), 2_000);
     }, timeoutSeconds * 1_000);
+    const abort = (): void => terminateCredentialProcess(child, "SIGTERM");
+    if (signal?.aborted) abort();
+    else signal?.addEventListener("abort", abort, { once: true });
     const finish = (exitCode: number): void => {
       clearTimeout(timeout);
       if (forceTimer !== undefined) clearTimeout(forceTimer);
+      signal?.removeEventListener("abort", abort);
       resolve({ exitCode, stdout });
     };
     child.stdout.setEncoding("utf8");
@@ -159,16 +194,32 @@ export function isBranchOrTagRef(ref: string): boolean {
   return ref.startsWith("refs/heads/") || ref.startsWith("refs/tags/");
 }
 
-export async function runGit(args: string[], env: NodeJS.ProcessEnv, action: string): Promise<void> {
-  const exitCode = await runner.runStreaming("git", args, { env });
+export async function runGit(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  action: string,
+  operation: LongOperationOptions = {}
+): Promise<void> {
+  const exitCode = await runner.runStreaming("git", args, {
+    env,
+    ...(operation.signal === undefined ? {} : { signal: operation.signal }),
+    ...(operation.stdout === undefined ? {} : { stdout: operation.stdout }),
+    ...(operation.stderr === undefined ? {} : { stderr: operation.stderr })
+  });
+  operation.signal?.throwIfAborted();
   if (exitCode !== 0) throw new UserError(`failed to ${action}: git exited with code ${exitCode}`);
 }
 
-export async function localRefs(gitDirectory: string, prefix: string): Promise<string[]> {
+export async function localRefs(
+  gitDirectory: string,
+  prefix: string,
+  operation: LongOperationOptions = {}
+): Promise<string[]> {
   const result = await runner.run("git", [
     "--git-dir", gitDirectory,
     "for-each-ref", "--format=%(refname)", prefix
-  ], { env: process.env });
+  ], { env: process.env, ...(operation.signal === undefined ? {} : { signal: operation.signal }) });
+  operation.signal?.throwIfAborted();
   if (result.exitCode !== 0) throw new UserError("failed to inspect fetched refs");
   return result.stdout.split("\n").map((ref) => ref.trim()).filter(Boolean);
 }
@@ -176,12 +227,14 @@ export async function localRefs(gitDirectory: string, prefix: string): Promise<s
 export async function materializeExternalRefs(
   gitDirectory: string,
   namespace: RepositoryRefNamespace | undefined,
-  upstreamBranches: boolean
+  upstreamBranches: boolean,
+  operation: LongOperationOptions = {}
 ): Promise<void> {
   const result = await runner.run("git", [
     "--git-dir", gitDirectory,
     "for-each-ref", "--format=%(objectname) %(refname)", "refs/dim-external"
-  ], { env: process.env });
+  ], { env: process.env, ...(operation.signal === undefined ? {} : { signal: operation.signal }) });
+  operation.signal?.throwIfAborted();
   if (result.exitCode !== 0) throw new UserError("failed to inspect external refs");
   for (const line of result.stdout.split("\n").map((item) => item.trim()).filter(Boolean)) {
     const separator = line.indexOf(" ");
@@ -198,7 +251,8 @@ export async function materializeExternalRefs(
     await runGit(
       ["--git-dir", gitDirectory, "update-ref", targetRef, objectId],
       process.env,
-      `map external ref '${externalRef}'`
+      `map external ref '${externalRef}'`,
+      operation
     );
   }
 }
