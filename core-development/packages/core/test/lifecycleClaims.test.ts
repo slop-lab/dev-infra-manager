@@ -36,11 +36,18 @@ it("claims project and workspace names atomically", async () => {
     const state = new LifecycleState(root);
     const now = new Date().toISOString();
     const service = {
+      schemaVersion: 2 as const,
+      serviceId: "S".repeat(43),
+      containerOwnershipId: "C".repeat(43),
+      networkOwnershipId: "N".repeat(43),
+      volumeOwnershipId: "V".repeat(43),
       phase: "creating" as const,
       containerName: "dim-gitea",
       networkName: "dim-control",
       volumeName: "dim-gitea-data",
       image: "gitea/gitea:1.27.0",
+      imageId: `sha256:${"a".repeat(64)}`,
+      resourcesEstablished: false,
       port: 3300,
       createdAt: now,
       updatedAt: now

@@ -145,7 +145,7 @@ type GiteaConnectionBase = GiteaCredentials & {
 };
 
 export type GiteaConnection =
-  | (GiteaConnectionBase & { readonly kind: "managed" })
+  | (GiteaConnectionBase & { readonly kind: "managed"; readonly endpointAddress: string })
   | (GiteaConnectionBase & {
       readonly kind: "external";
       readonly hostId: string;
@@ -166,12 +166,21 @@ export type GitSyncConnection = {
 };
 
 export interface GiteaServiceRecord {
+  schemaVersion: 2;
+  serviceId: string;
+  containerOwnershipId: string;
+  networkOwnershipId: string;
+  volumeOwnershipId: string;
   phase: "creating" | "ready" | "error";
   containerName: string;
   networkName: string;
   volumeName: string;
   image: string;
+  imageId: string;
+  networkId?: string;
+  resourcesEstablished: boolean;
   port: number;
+  endpointAddress?: string;
   createdAt: string;
   updatedAt: string;
   error?: string;

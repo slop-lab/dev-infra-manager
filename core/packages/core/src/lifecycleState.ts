@@ -3,6 +3,7 @@ import path from "node:path";
 import { MissingRecordError, UserError } from "./errors.js";
 import { assertCiRunnerRecord } from "./ciRunnerRecord.js";
 import { parseHostLifecycleRecord } from "./hostLifecycleRecord.js";
+import { parseGiteaServiceRecord } from "./giteaServiceRecord.js";
 import { acquireLifecycleLock, type LifecycleLockOptions } from "./lifecycleLock.js";
 import { atomicWrite, listRecords, readJson, validateLifecycleName } from "./lifecycleRecord.js";
 import type { CiRunnerRecord, GiteaServiceRecord, HostLifecycleRecord, ProjectRecord, WorkspaceRecord } from "./lifecycleTypes.js";
@@ -164,7 +165,7 @@ export class LifecycleState {
   }
 
   async readGiteaService(): Promise<GiteaServiceRecord> {
-    return readJson(this.giteaServicePath(), "Gitea service state not found");
+    return parseGiteaServiceRecord(await readJson<unknown>(this.giteaServicePath(), "Gitea service state not found"));
   }
 
   async writeGiteaService(record: GiteaServiceRecord): Promise<void> {
