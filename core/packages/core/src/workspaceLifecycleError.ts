@@ -3,6 +3,7 @@ import { UserError } from "./errors.js";
 
 export type WorkspaceLifecycleOperation = "create" | "setup" | "update" | "start" | "restart";
 export type SetWorkspaceLifecycleStage = (stage: string) => void;
+export type SetWorkspaceLifecycleErrorStage = (stage: string) => void;
 export type ReportWorkspaceLifecycleProgress = (
   operation: WorkspaceLifecycleOperation,
   stage: string
@@ -26,7 +27,10 @@ class WorkspaceLifecycleError extends UserError {
 
 export async function runWorkspaceLifecycle<T>(
   operation: WorkspaceLifecycleOperation,
-  action: (setStage: SetWorkspaceLifecycleStage) => Promise<T>
+  action: (
+    setStage: SetWorkspaceLifecycleStage,
+    setErrorStage: SetWorkspaceLifecycleErrorStage
+  ) => Promise<T>
 ): Promise<T> {
   return executeWorkspaceLifecycle(operation, "input validation", action);
 }
@@ -41,16 +45,22 @@ export function withWorkspaceLifecycleProgress<T>(
 async function executeWorkspaceLifecycle<T>(
   operation: WorkspaceLifecycleOperation,
   initialStage: string,
-  action: (setStage: SetWorkspaceLifecycleStage) => Promise<T>
+  action: (
+    setStage: SetWorkspaceLifecycleStage,
+    setErrorStage: SetWorkspaceLifecycleErrorStage
+  ) => Promise<T>
 ): Promise<T> {
   let stage = initialStage;
   const setStage = (nextStage: string): void => {
     stage = nextStage;
     lifecycleProgress.getStore()?.(operation, stage);
   };
+  const setErrorStage = (nextStage: string): void => {
+    stage = nextStage;
+  };
   setStage(initialStage);
   try {
-    return await action(setStage);
+    return await action(setStage, setErrorStage);
   } catch (error) {
     if (error instanceof WorkspaceLifecycleError && error.operation === operation) throw error;
     throw new WorkspaceLifecycleError(operation, stage, error);
