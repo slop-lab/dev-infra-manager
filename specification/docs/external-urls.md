@@ -112,7 +112,8 @@ dim external-url ingress add http --name local-http \
   --description "Local development URL" \
   --scheme http \
   --domain dev.test --public-port 8080 \
-  --listen-host 0.0.0.0 --listen-port auto
+  --listen-host 0.0.0.0 --listen-port auto \
+  --require-approval
 ```
 
 The CLI sends provider and ingress requests to the plugin's admin API. The
@@ -128,7 +129,10 @@ HTTP router is allocated at runtime and is never written to the user
 configuration. The CLI restarts the managed controller after ingress changes;
 the controller reconciles provider DNS and the Caddy container automatically.
 
-Discovery exposes only each ingress's `name`, `description`, and `scheme`.
+`--require-approval` makes every route requested through that ingress wait for
+separate host administration. Omitting it preserves immediate routing for
+existing ingresses. Discovery exposes only each ingress's `name`, `description`,
+and `scheme`.
 Workspaces cannot select domains, listener addresses, upstream hosts, or
 arbitrary provider configuration.
 
@@ -201,7 +205,24 @@ relay inside the project-root container. An ingress using `container-ip`
 reaches the root container's managed-network IP; `container-dns` is intended
 for a router attached to the managed Docker network.
 
-The ingress returns the externally reachable URL. A request may provide any
+The ingress returns the reserved external URL and its approval state. The state
+is `not-required` for an ordinary ingress and `pending` for an
+approval-required ingress. A pending request succeeds but both HTTP/WebSocket
+and raw TCP traffic remain denied. On the host, inspect the redacted inventory
+and approve the exact route ID:
+
+```bash
+dim external-url list
+dim external-url approve URL_ID
+```
+
+Approval changes the state to `approved` and enables only the persisted
+workspace instance, ingress policy revision, logical target, protocol, port,
+and authority bound to that ID. Controller restart restores an approved route
+only for the same workspace instance and exact tuple. A changed policy or a
+same-name workspace recreation cannot reuse the old approval.
+
+A request may provide any
 relative DNS name with `--subdomain`. The default `workspace-prefix` route
 policy accepts it only when it starts with `WORKSPACE--`; when omitted, DIM
 assigns the first available `WORKSPACE--INDEX` name. An ingress may replace
@@ -248,8 +269,9 @@ External URL example intentionally uses only the default workspace-prefix
 policy.
 
 HTTP and Caddy listeners using the same domain share its hostname routes.
-They must therefore configure the same route policy and upstream resolution
-mode; DIM rejects ambiguous configurations at controller startup.
+They must therefore configure the same route policy, upstream resolution mode,
+and approval requirement; DIM rejects ambiguous configurations at controller
+startup.
 
 List and revoke one workspace:
 
@@ -266,6 +288,13 @@ workspace use omits the option and automatically uses
 dim external-url list
 dim external-url revoke URL_ID
 ```
+
+On a host, `dim external-url revoke URL_ID` uses the host-admin socket and may
+revoke any current route. In a workspace or agent environment, or with
+`--workspace`, it remains scoped to that workspace. Revocation reports
+`revoked`, immediately removes reachability, and is terminal for that route ID;
+a later exposure request receives a fresh pending ID. Workspace and agent
+controller routes do not expose approval.
 
 On the host, listing without a workspace selector uses the mode-`0600`
 host-admin socket and returns every current workspace's routes with `project`

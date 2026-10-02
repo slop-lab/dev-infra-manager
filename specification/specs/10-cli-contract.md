@@ -822,8 +822,21 @@ dim external-url request [--workspace WORKSPACE] --ingress NAME
   [--subdomain NAME] [--container NAME ...] --port PORT [--protocol http|https|tcp]
 dim external-url list [--workspace WORKSPACE] [--json]
 dim external-url revoke URL_ID [--workspace WORKSPACE]
+dim external-url approve URL_ID
 dim host-input get PROVIDER KEY [--parameters STRING]
 ```
+
+**CLI-EXTERNAL-URL-APPROVAL-001:** `dim external-url ingress add
+--require-approval` MUST configure per-route host approval independently of
+driver-private arguments. A valid request on that ingress MUST succeed with a
+redacted `pending` route while every HTTP, WebSocket, and TCP data-plane path
+denies traffic. `dim external-url approve URL_ID` MUST use only the host-admin
+socket. Host invocation of `dim external-url revoke URL_ID` with no workspace
+credential MUST also use that socket; workspace, agent, and `--workspace`
+invocations remain limited to revoking their own route. Approval MUST enable
+only the exact tuple required by `URL-APPROVAL-001`. Revocation MUST be
+terminal for that ID, and the observable route state MUST distinguish
+`not-required`, `pending`, `approved`, and `revoked`.
 
 **CLI-EXTERNAL-URL-HOST-LIST-001:** On a host with no workspace or agent
 controller credential in the environment, `dim external-url list` MUST use the
