@@ -42,6 +42,14 @@ export function withWorkspaceLifecycleProgress<T>(
   return lifecycleProgress.run(report, action);
 }
 
+export function combineWorkspaceLifecycleFailures(primary: unknown, secondary: unknown): AggregateError {
+  return new AggregateError(
+    [primary, secondary],
+    primary instanceof Error ? primary.message : String(primary),
+    { cause: primary }
+  );
+}
+
 async function executeWorkspaceLifecycle<T>(
   operation: WorkspaceLifecycleOperation,
   initialStage: string,
@@ -50,20 +58,22 @@ async function executeWorkspaceLifecycle<T>(
     setErrorStage: SetWorkspaceLifecycleErrorStage
   ) => Promise<T>
 ): Promise<T> {
-  let stage = initialStage;
+  let errorStage = initialStage;
+  let errorStageAttributed = false;
   const setStage = (nextStage: string): void => {
-    stage = nextStage;
-    lifecycleProgress.getStore()?.(operation, stage);
+    if (!errorStageAttributed) errorStage = nextStage;
+    lifecycleProgress.getStore()?.(operation, nextStage);
   };
   const setErrorStage = (nextStage: string): void => {
-    stage = nextStage;
+    errorStage = nextStage;
+    errorStageAttributed = true;
   };
   setStage(initialStage);
   try {
     return await action(setStage, setErrorStage);
   } catch (error) {
     if (error instanceof WorkspaceLifecycleError && error.operation === operation) throw error;
-    throw new WorkspaceLifecycleError(operation, stage, error);
+    throw new WorkspaceLifecycleError(operation, errorStage, error);
   }
 }
 

@@ -34,4 +34,28 @@ describe("workspace lifecycle progress", () => {
 
     expect(stages).toEqual(["workspace setup lock release"]);
   });
+
+  it("keeps explicit failure attribution while reporting fallback progress", async () => {
+    const stages: string[] = [];
+
+    const lifecycle = withWorkspaceLifecycleProgress(
+      (_operation, stage) => stages.push(stage),
+      () => runWorkspaceLifecycle("setup", async (setStage, setErrorStage) => {
+        setStage("ready-state publication");
+        setErrorStage("ready-state publication");
+        setStage("setup-error publication");
+        throw new Error("fallback failed");
+      })
+    );
+
+    await expect(lifecycle).rejects.toMatchObject({
+      message: "workspace setup at ready-state publication: fallback failed",
+      cause: expect.objectContaining({ message: "fallback failed" })
+    });
+    expect(stages).toEqual([
+      "input validation",
+      "ready-state publication",
+      "setup-error publication"
+    ]);
+  });
 });
