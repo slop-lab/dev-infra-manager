@@ -95,6 +95,32 @@ describe("installer progress", () => {
     expect(process.listeners("SIGINT")).toEqual(listeners);
   });
 
+  it("keeps handling SIGINT until cancelled installation has finished restoring state", async () => {
+    const listeners = process.listeners("SIGINT");
+    let finish: (() => void) | undefined;
+    const installation = withInstallerProgress("core", async ({ signal }) => {
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+        signal.addEventListener("abort", () => resolve(), { once: true });
+      });
+      await new Promise<void>((resolve) => { finish = resolve; });
+    });
+    const handler = process.listeners("SIGINT").find((listener) => !listeners.includes(listener));
+
+    try {
+      expect(handler).toBeDefined();
+      process.emit("SIGINT");
+      expect(process.listeners("SIGINT")).toContain(handler);
+      process.emit("SIGINT");
+      expect(process.listeners("SIGINT")).toContain(handler);
+    } finally {
+      await Promise.resolve();
+      finish?.();
+      await installation;
+    }
+    expect(process.listeners("SIGINT")).toEqual(listeners);
+  });
+
   it("installer failures remove their signal listener unchanged", async () => {
     const listeners = process.listeners("SIGINT");
     const failure = new Error("installation failed unchanged");

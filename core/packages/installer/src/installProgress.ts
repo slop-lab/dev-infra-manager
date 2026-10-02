@@ -123,7 +123,7 @@ export async function withInstallerProgress<T>(
   const progress = createInstallerProgress(operation);
   const abort = new AbortController();
   const cancel = (): void => progress.cancel(() => abort.abort(new Error(`installer ${operation} cancelled`)));
-  process.once("SIGINT", cancel);
+  process.on("SIGINT", cancel);
   try {
     return await action({
       signal: abort.signal,
