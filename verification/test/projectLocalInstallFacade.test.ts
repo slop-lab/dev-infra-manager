@@ -57,7 +57,7 @@ exec ${JSON.stringify(process.execPath)} "$@"
   await writeFile(resolve(tools, "dim"), `#!/usr/bin/bash
 touch "$DIM_OLD_FACADE_MUTATION"
 { printf 'old-dim'; printf ' %s' "$@"; printf '\n'; } >>"$DIM_INVOCATIONS"
-if [[ "$1" == "install-cli" ]]; then
+if [[ "$1 $2 $3" == "installer install core" ]]; then
   for variable in DIM_RUNTIME_MARKER DIM_CONFIG_MARKER DIM_FACADE_MARKER DIM_PLUGINS_MARKER DIM_IMAGE_MARKER; do
     if [[ -n "\${!variable:-}" ]]; then printf 'mutated\n' >"\${!variable}"; fi
   done
@@ -78,8 +78,8 @@ mkdir -p "$prefix/node_modules/.bin"
 cat >"$prefix/node_modules/.bin/dim" <<'SCRIPT'
 #!/usr/bin/bash
 { printf 'target-dim'; printf ' %s' "$@"; printf '\n'; } >>"$DIM_INVOCATIONS"
-if [[ "\${DIM_PREFLIGHT_FAILURE:-0}" == 1 && "$1" == "install-cli" ]]; then exit 47; fi
-if [[ "\${DIM_PLUGIN_FAILURE:-0}" == 1 && "$1" == "enable-plugin" ]]; then exit 42; fi
+if [[ "\${DIM_PREFLIGHT_FAILURE:-0}" == 1 && "$1 $2 $3" == "installer install core" ]]; then exit 47; fi
+if [[ "\${DIM_PLUGIN_FAILURE:-0}" == 1 && "$1 $2" == "installer enable-plugin" ]]; then exit 42; fi
 SCRIPT
 chmod +x "$prefix/node_modules/.bin/dim"
 `);
@@ -121,11 +121,11 @@ describe("Project local install facade", () => {
     // Then
     expect(result.status, result.stderr).toBe(0);
     expect(invocations).toMatch(/^npm install --prefix \/tmp\/dim-target-installer\.[^ ]+ --no-save --no-fund --no-audit /m);
-    expect(invocations).toMatch(/^target-dim install-cli --local-packages .* --no-local-bin$/m);
-    expect(invocations).toContain("target-dim enable-plugin @slop-lab/dim-plugin-dns-cloudflare @slop-lab/dim-plugin-external-urls");
+    expect(invocations).toMatch(/^target-dim installer install core --local-packages .* --no-local-bin$/m);
+    expect(invocations).toContain("target-dim installer enable-plugin @slop-lab/dim-plugin-dns-cloudflare @slop-lab/dim-plugin-external-urls");
     expect(invocations).not.toContain("old-dim");
     expect(invocations).not.toContain("unrelated-plugin-local.tgz");
-    expect(invocations.indexOf(" install-cli ")).toBeLessThan(invocations.indexOf(" enable-plugin "));
+    expect(invocations.indexOf(" installer install core ")).toBeLessThan(invocations.indexOf(" installer enable-plugin "));
     expect(invocations.match(/^state /gm)).toHaveLength(2);
     expect(invocations).toContain(`state ${imageRef} ${imageRef}`);
     await expect(readFile(fixture.oldFacadeMutation)).rejects.toMatchObject({ code: "ENOENT" });
@@ -174,9 +174,9 @@ describe("Project local install facade", () => {
 
     // Then
     expect(result.status).toBe(47);
-    expect(invocations).toMatch(/^target-dim install-cli /m);
+    expect(invocations).toMatch(/^target-dim installer install core /m);
     expect(invocations).not.toContain("old-dim");
-    expect(invocations).not.toContain("enable-plugin");
+    expect(invocations).not.toContain("installer enable-plugin");
     expect(await Promise.all(protectedPaths.map((path) => readFile(path)))).toEqual(before);
     await expect(readFile(fixture.oldFacadeMutation)).rejects.toMatchObject({ code: "ENOENT" });
   });
