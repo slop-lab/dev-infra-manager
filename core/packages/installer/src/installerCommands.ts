@@ -17,6 +17,7 @@ import {
 import { localBinPrompt } from "./installMode.js";
 import { printFacadeHelp, printInstallCoreHelp, printInstallerHelp, printInstallPluginHelp } from "./installerHelp.js";
 import { installerVersion } from "./installerVersion.js";
+import { withInstallerProgress } from "./installProgress.js";
 
 export async function installerCommand(input: readonly string[]): Promise<void> {
   let commandArgs = input;
@@ -96,9 +97,13 @@ async function installCoreCommand(commandArgs: readonly string[]): Promise<void>
   const bundle = parsed.values["local-packages"]
     ? await readLocalPackageBundle(parsed.values["local-packages"])
     : undefined;
-  const installed = bundle
-    ? await installDimCli({ ...bundle, exposeOnPath, binDirectory })
-    : await installDimCli({ version: await installerVersion(), exposeOnPath, binDirectory });
+  const installed = bundle === undefined
+    ? await withInstallerProgress("core", async (operation) => installDimCli({
+      version: await installerVersion(), exposeOnPath, binDirectory, operation
+    }))
+    : await withInstallerProgress("core", (operation) => installDimCli({
+      ...bundle, exposeOnPath, binDirectory, operation
+    }));
   console.log(`${bundle ? "Installed local" : "Installed"} DIM CLI ${installed.version} at ${installed.executable}`);
   if (installed.symlink) console.log(`Linked ${installed.symlink} -> ${installed.executable}`);
   else console.log("DIM CLI will be invoked through the installer facade; no local bin symlink was created");
@@ -106,7 +111,8 @@ async function installCoreCommand(commandArgs: readonly string[]): Promise<void>
 
 async function installCore(exposeOnPath: boolean, binDirectory: string): Promise<void> {
   const version = await installerVersion();
-  const installed = await installDimCli({ version, exposeOnPath, binDirectory });
+  const installed = await withInstallerProgress("core", (operation) =>
+    installDimCli({ version, exposeOnPath, binDirectory, operation }));
   console.log(`Installed DIM CLI ${version} at ${installed.executable}`);
   if (!installed.symlink) {
     console.log("DIM CLI will be invoked through the installer facade; no local bin symlink was created");
@@ -138,7 +144,9 @@ async function installPluginPackages(specifiers: readonly string[]): Promise<voi
     throw new Error(`configured version ${cli.version} does not match installed ${installedVersion}; run 'dim installer install core' to repair`);
   }
   const home = defaultPluginHome();
-  for (const name of await installPlugins(specifiers, { pluginHome: home })) console.log(`Installed and enabled ${name}`);
+  const installed = await withInstallerProgress("plugin", (operation) =>
+    installPlugins(specifiers, { pluginHome: home, operation }));
+  for (const name of installed) console.log(`Installed and enabled ${name}`);
   console.log(`Plugin home: ${home}`);
 }
 
