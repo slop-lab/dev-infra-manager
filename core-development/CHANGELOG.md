@@ -2,14 +2,20 @@
 
 ## Unreleased
 
-- Add a standalone DIM-owned Git smart-HTTP foundation with exact
+- Add a standalone DIM-owned Git smart-HTTP host with exact
   Project/repository registration, identity-scoped reads, and workspace-bound
   proposal pushes. Its server-side receive policy denies protected refs, tags,
   deletion, force updates, foreign namespaces, unsafe paths, and invalid
-  credentials. It is not yet selected by Project lifecycle code and exposes no
-  issue tracker, review, merge, or protected-promotion authority; existing
-  managed and external Gitea behavior remains unchanged while complete-tree
-  review and exact-evidence compare-and-swap promotion remain future gates.
+  credentials. Host-scoped reviewer API and CLI operations now persist
+  immutable complete-tree proposal evidence, including deletion, rename, mode,
+  and symbolic-link changes; apply path-owner rules only to add whole-tree
+  human reviewers; and record or revoke approval bound to exact refs, heads,
+  commits, trees, policies, and identities. Ref, tree, policy, or identity drift
+  makes approval stale across restart. It is not yet selected by Project
+  lifecycle code and exposes no issue tracker, CI status, merge, or
+  protected-promotion authority; existing managed and external Gitea behavior
+  remains unchanged while exact-evidence CI and compare-and-swap promotion
+  remain future gates.
 
 - Let an agent with an explicitly filtered resource-read proxy query only its
   own accepted workspace CPU, memory, and PID assignments. The packaged
