@@ -5,11 +5,11 @@ import { type Command } from "commander";
 import {
   configuredDimAdminController, configuredDimAgentController, configuredDimController,
   initializeControllerRoutes, LifecycleState, lifecycleOptions, loadInstalledPlugins,
-  migrateHostLifecycleState, resolvePluginHome, UserError
+  migrateHostLifecycleState, reconcileReadyHostManagedGit, resolvePluginHome, UserError
 } from "@slop-lab/dim-core";
 import {
   claimControllerPid, closeControllerServer, pidFileOwnedByCurrentProcess,
-  prepareControllerSocket, restartManagedController
+  prepareControllerSocket, restartManagedController, runner
 } from "./cli-support.js";
 
 export function registerControllerCommands(program: Command): void {
@@ -67,6 +67,9 @@ controller.command("serve")
       } else if (migration.kind === "recovered") {
         console.log("Recovered host lifecycle state schema 2 from the schema 1 backup");
       }
+      await controllerStartupStage("reconciling managed Git service", async () => {
+        await reconcileReadyHostManagedGit(runner, options);
+      });
       const loadedPlugins = await controllerStartupStage(
         "loading plugins",
         async () => await loadInstalledPlugins(await resolvePluginHome())
