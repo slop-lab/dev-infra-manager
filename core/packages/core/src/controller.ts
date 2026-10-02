@@ -12,6 +12,7 @@ import {
   PROJECT_COMPOSE_NAME,
   restartWorkspace as restartWorkspaceLifecycle
 } from "./workspaceLifecycle.js";
+import { workspaceResourcesRoute } from "./workspaceResourcesRoute.js";
 
 export type ControllerMethod = "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
 export type ControllerAudience = "workspace" | "agent";
@@ -139,7 +140,7 @@ export function configuredDimAgentController(
   const state = new LifecycleState(lifecycle.stateRoot);
   return createDimController({
     stateRoot: lifecycle.stateRoot,
-    routes: controllerRoutesForAudience(plugins.controllerRoutes, "agent"),
+    routes: [workspaceResourcesRoute(state), ...controllerRoutesForAudience(plugins.controllerRoutes, "agent")],
     hostReady: async () => (await hostLifecycleStatus(lifecycle)).phase === "ready",
     authenticate: async (token) => {
       const workspace = await state.authenticateAgentGrant(token);
