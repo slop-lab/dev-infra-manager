@@ -711,14 +711,20 @@ inside `agent-dind` and MUST NOT be replaced
 with a host or trusted-workspace runtime socket.
 For `PROJECT-AGENT-TMPDIR-001`, static self-Project and
 full-development-flow tests MUST prove the dedicated volume name, ownership
-label, `/mnt/opencode-tmp` mount, `TMPDIR`, and removal in both ordinary and
-`--keep-volume` teardown branches. A Docker-only runc driver MUST prove that
-`TMPDIR` differs from `/tmp`, the agent UID can write a mode-`0700` root, bytes survive agent
-container replacement, both discard modes remove the exact temporary volume
-without deleting an unrelated Project volume, and populated wrong-owner and
-symlink roots fail closed. The Sysbox end-to-end gate MUST repeat the agent
-restart and discard assertions on a capable host; an unavailable Sysbox or KVM
-environment is blocked evidence rather than a pass.
+label, local driver without options, distinct home and temporary mount
+identities, `/mnt/opencode-tmp` bind mount, `TMPDIR`, pre-start validation, and
+stopped-container removal in both ordinary and `--keep-volume` teardown
+branches. A Docker-only runc driver MUST execute the production setup and
+teardown scripts and prove that bytes survive private-daemon container
+replacement, both discard modes remove the exact temporary volume after the
+daemon is stopped without deleting agent home in keep-volume mode or an
+unrelated Project volume, and a label-correct bind-backed temporary volume that
+aliases the home path fails before the daemon starts. The agent filesystem
+checks MUST additionally prove that `TMPDIR` differs from `/tmp`, the agent UID
+can write a mode-`0700` root, and populated wrong-owner and symlink roots fail
+closed. The Sysbox end-to-end gate MUST repeat the agent restart and discard
+assertions on a capable host; an unavailable Sysbox or KVM environment is
+blocked evidence rather than a pass.
 The gate MUST also verify that workspace creation, setup, start, restart, and
 update do not install coding-agent tools. The canonical workspace-user setup
 script and its `.sha256` file MUST be published by the development repository.

@@ -970,16 +970,23 @@ reviewed teardown.
 
 **PROJECT-AGENT-TMPDIR-001:** The canonical self-Project and representative
 full-development-flow Project MUST set the agent process `TMPDIR` to
-`/mnt/opencode-tmp`, backed by a dedicated Project-owned named volume in the
-agent's private daemon. Only the untrusted agent container mounts that volume;
-the home, configuration, credential, trusted-workspace, and secret-bearing
-runtime mounts remain separate. Before agent launch, reviewed Project code MUST
-require a real, non-symlink directory owned by the agent UID and GID with mode
-`0700`. It MAY initialize an empty new volume, but MUST reject a populated root
-with incompatible ownership or mode without recursively rewriting or deleting
-its contents. The volume MUST survive inner-agent recreation. Custom teardown
-MUST remove only its exact owned name on both ordinary discard and
-`--keep-volume` before the private daemon store is removed or retained.
+`/mnt/opencode-tmp`, backed by a dedicated Project-runtime named volume mounted
+into the private daemon at `/mnt/agent-tmp` and bind-mounted only into the
+untrusted agent container. The volume MUST use the local driver without driver
+options, carry the exact Compose Project and logical-volume labels plus
+`dev.dim.role=agent-tmp`, and be distinct from the agent-home volume. Reviewed
+Project setup MUST validate that metadata on the created but unstarted private
+daemon container before starting it. The home, configuration, credential,
+trusted-workspace, and secret-bearing runtime mounts remain separate. Before
+agent launch, reviewed Project code MUST require a real, non-symlink directory
+owned by the agent UID and GID with mode `0700`. It MAY initialize an empty new
+volume, but MUST reject a populated root with incompatible ownership or mode
+without recursively rewriting or deleting its contents. The volume MUST
+survive inner-agent recreation. Custom teardown MUST locate it through stopped
+or running private-daemon container metadata, validate the same exact ownership
+metadata, remove the private-daemon container without starting it, and remove
+only that volume on both ordinary discard and `--keep-volume` before the
+remaining private daemon store is removed or retained.
 
 The optional canonical workspace-user bootstrap installs pinned OpenCode and
 companion package versions below that home. OpenCode configuration remains in
