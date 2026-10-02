@@ -142,11 +142,12 @@ dim-development-service expose \
   --name preview --port 5173 --ingress https-ts --require-scheme https
 ```
 
-The command prints the external URL. It lazily starts one user-owned gateway
+The command prints the policy-selected external URL. It lazily starts one user-owned gateway
 listening on `0.0.0.0:31887` so the trusted ingress can reach it, registers only
-`{ "ingress": "https-ts" }` through the bound socket, and routes the returned
-exact authority to the local application at `127.0.0.1:5173`. HTTP and
-WebSocket upgrades use the same route. Repeating the
+`{ "ingress": "https-ts" }` through the bound socket, and routes both returned
+exact authorities, the selected slug and stable permalink, to the local
+application at `127.0.0.1:5173`. HTTP and WebSocket upgrades use the same
+route. Repeating the
 same service name with another local port retains its URL and URL ID while
 updating the gateway route. The gateway is shared across tool launchers and is
 not owned or stopped by any one launcher.

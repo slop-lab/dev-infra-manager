@@ -101,7 +101,7 @@ async function proxyHttp(
     port: selected.route.targetPort,
     method: request.method,
     path: request.url,
-    headers: forwardedHeaders(request.headers, selected.route.authority)
+    headers: forwardedHeaders(request.headers, selected.authority)
   }, (upstreamResponse) => {
     response.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
     upstreamResponse.pipe(response);
@@ -129,7 +129,7 @@ function proxyUpgrade(
     port: selected.route.targetPort,
     method: request.method,
     path: request.url,
-    headers: upgradeHeaders(request.headers, selected.route.authority)
+    headers: upgradeHeaders(request.headers, selected.authority)
   });
   upstream.once("upgrade", (upstreamResponse, upstreamSocket, upstreamHead) => {
     const status = `HTTP/${upstreamResponse.httpVersion} ${upstreamResponse.statusCode ?? 101} ${upstreamResponse.statusMessage ?? "Switching Protocols"}`;
@@ -147,7 +147,7 @@ function proxyUpgrade(
 }
 
 type RouteSelection =
-  | { readonly kind: "route"; readonly route: DevelopmentServiceRoute }
+  | { readonly kind: "route"; readonly route: DevelopmentServiceRoute; readonly authority: string }
   | { readonly kind: "error"; readonly status: 400 | 404 };
 
 function selectRoute(
@@ -164,7 +164,9 @@ function selectRoute(
       return { kind: "error", status: 400 };
     }
     const route = routeByAuthority(routes, forwardedHost ?? host);
-    return route === undefined ? { kind: "error", status: 404 } : { kind: "route", route };
+    return route === undefined
+      ? { kind: "error", status: 404 }
+      : { kind: "route", route, authority: forwardedHost ?? host };
   } catch (error) {
     if (error instanceof DevelopmentServiceStateError) return { kind: "error", status: 400 };
     throw error;
@@ -193,15 +195,19 @@ function routeByAuthority(
   routes: ReadonlyMap<string, DevelopmentServiceRoute>,
   authority: string
 ): DevelopmentServiceRoute | undefined {
-  return [...routes.values()].find((route) => route.authority === authority);
+  return [...routes.values()].find((route) =>
+    route.authority === authority || route.permalinkAuthority === authority);
 }
 
 function assertRouteAvailable(
   routes: ReadonlyMap<string, DevelopmentServiceRoute>,
   candidate: DevelopmentServiceRoute
 ): void {
+  const candidateAuthorities = new Set([candidate.authority, candidate.permalinkAuthority]);
   const collision = [...routes.values()].find((route) => route.name !== candidate.name
-    && (route.authority === candidate.authority || route.urlId === candidate.urlId));
+    && (candidateAuthorities.has(route.authority)
+      || candidateAuthorities.has(route.permalinkAuthority)
+      || route.urlId === candidate.urlId));
   if (collision !== undefined) {
     throw new DevelopmentServiceGatewayError(`external URL is already assigned to service '${collision.name}'`);
   }

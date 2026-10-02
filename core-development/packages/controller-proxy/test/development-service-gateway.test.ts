@@ -28,6 +28,11 @@ describe("development service gateway", () => {
     await gateway.setRoute(route(second.port));
     const secondResponse = await httpRequest(gatewayPort, { host: "demo.example.test" });
     expect(secondResponse).toEqual({ status: 200, body: "second:demo.example.test" });
+    const permalinkResponse = await httpRequest(gatewayPort, {
+      host: `127.0.0.1:${gatewayPort}`,
+      "x-forwarded-host": "demo-permalink-url-1.example.test"
+    });
+    expect(permalinkResponse).toEqual({ status: 200, body: "second:demo-permalink-url-1.example.test" });
   });
 
   it("accepts peer-interface traffic while keeping application upstreams on loopback", async () => {
@@ -105,6 +110,8 @@ function route(targetPort: number) {
     urlId: "url-1",
     url: "https://demo.example.test",
     authority: "demo.example.test",
+    permalink: "https://demo-permalink-url-1.example.test",
+    permalinkAuthority: "demo-permalink-url-1.example.test",
     ingress: "https-main",
     targetPort
   };
