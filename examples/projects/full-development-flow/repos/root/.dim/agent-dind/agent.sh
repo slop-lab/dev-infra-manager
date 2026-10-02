@@ -3,7 +3,6 @@ set -eu
 
 agent_name="dim-agent"
 agent_image="dim-example-agent"
-agent_tmp_volume="dim-agent-tmp"
 documentation_name="dim-documentation-preview"
 docker_socket="${DOCKER_HOST#unix://}"
 
@@ -30,18 +29,11 @@ case "${1:?private agent action is required}" in
       --build-arg "DIM_WORKSPACE_GID=$DIM_WORKSPACE_GID" \
       /run/dim/project-root/.dim/agent >/dev/null
     docker rm --force "$agent_name" >/dev/null 2>&1 || true
-    if ! docker volume inspect "$agent_tmp_volume" >/dev/null 2>&1; then
-      docker volume create --label dev.dim.role=agent-tmp "$agent_tmp_volume" >/dev/null
-    fi
-    test "$(docker volume inspect --format '{{ index .Labels "dev.dim.role" }}' "$agent_tmp_volume")" = agent-tmp || {
-      echo "$agent_tmp_volume is not the owned agent temporary volume" >&2
-      exit 1
-    }
     docker run --rm --network none --read-only --user 0:0 \
       --env "DIM_AGENT_UID=$DIM_WORKSPACE_UID" \
       --env "DIM_AGENT_GID=$DIM_WORKSPACE_GID" \
       --env DIM_AGENT_TMPDIR=/mnt/opencode-tmp \
-      --mount type=volume,src="$agent_tmp_volume",dst=/mnt/opencode-tmp \
+      --mount type=bind,src=/mnt/agent-tmp,dst=/mnt/opencode-tmp \
       "$agent_image" /usr/local/bin/prepare-agent-tmp
     set -- run --detach --name "$agent_name" --restart unless-stopped \
       --publish "$DIM_DEVELOPMENT_GATEWAY_PORT:$DIM_DEVELOPMENT_GATEWAY_PORT" \
@@ -73,7 +65,7 @@ case "${1:?private agent action is required}" in
       --env 'GIT_CONFIG_VALUE_2=/workspace/*' \
       --mount type=bind,src=/workspace,dst=/workspace \
       --mount type=bind,src=/mnt/agent-home,dst=/home/dim-agent \
-      --mount type=volume,src="$agent_tmp_volume",dst=/mnt/opencode-tmp \
+      --mount type=bind,src=/mnt/agent-tmp,dst=/mnt/opencode-tmp \
       --mount type=bind,src=/mnt/workspace-shared-dind,dst=/mnt/workspace-shared-dind \
       --mount "type=bind,src=$docker_socket,dst=/run/dim-agent-dind/docker.sock" \
       --workdir /workspace
@@ -88,17 +80,6 @@ case "${1:?private agent action is required}" in
       test "$attempt" -lt 60 || { docker logs "$agent_name" >&2; exit 1; }
       sleep 1
     done
-    ;;
-  discard-agent-tmp)
-    if ! docker volume inspect "$agent_tmp_volume" >/dev/null 2>&1; then
-      exit 0
-    fi
-    test "$(docker volume inspect --format '{{ index .Labels "dev.dim.role" }}' "$agent_tmp_volume")" = agent-tmp || {
-      echo "$agent_tmp_volume is not the owned agent temporary volume" >&2
-      exit 1
-    }
-    docker rm --force "$agent_name" >/dev/null 2>&1 || true
-    docker volume rm "$agent_tmp_volume" >/dev/null
     ;;
   documentation)
     docker rm --force "$documentation_name" >/dev/null 2>&1 || true

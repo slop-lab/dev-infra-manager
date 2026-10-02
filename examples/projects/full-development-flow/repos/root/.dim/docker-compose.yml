@@ -32,6 +32,7 @@ services:
       - "${DIM_PROJECT_ROOT:?}:/run/dim/project-root:ro"
       - "${DIM_PROJECT_MANIFEST:?}:/run/dim/project.json:ro"
       - agent-home:/mnt/agent-home
+      - agent-tmp:/mnt/agent-tmp
       - agent-dind-data:/home/rootless/.local/share/docker
       - agent-dind-shared:/mnt/workspace-shared-dind
       - /tmp/dim-agent-controller:/run/dim/controller-proxy:ro
@@ -41,5 +42,8 @@ services:
 
 volumes:
   agent-home:
+  agent-tmp:
+    labels:
+      dev.dim.role: agent-tmp
   agent-dind-data:
   agent-dind-shared:
