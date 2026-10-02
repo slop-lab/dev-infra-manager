@@ -621,6 +621,71 @@ describe("external URLs plugin", () => {
         }
       }
     })).toThrow(/same upstream mode, route policy, and approval requirement/);
+
+    expect(() => createExternalUrlsPlugin({
+      ingresses: {
+        loopback: {
+          description: "Loopback gated URL",
+          scheme: "http",
+          domain: "EXAMPLE.TEST.",
+          listenHost: "127.0.0.1",
+          listenPort: 8080,
+          approvalRequired: true
+        },
+        public: {
+          description: "Public gated URL",
+          scheme: "http",
+          domain: "example.test",
+          listenHost: "0.0.0.0",
+          listenPort: 8081,
+          approvalRequired: true
+        }
+      }
+    })).toThrow(/same approval exposure/);
+
+    expect(() => createExternalUrlsPlugin({
+      ingresses: {
+        http: {
+          description: "HTTP gated URL",
+          scheme: "http",
+          domain: "example.test",
+          listenHost: "127.0.0.1",
+          listenPort: 8080,
+          approvalRequired: true
+        },
+        https: {
+          description: "HTTPS gated URL",
+          scheme: "https",
+          domain: "example.test",
+          listenHost: "127.0.0.1",
+          listenPort: 8080,
+          approvalRequired: true
+        }
+      }
+    })).toThrow(/same approval exposure/);
+
+    expect(() => createExternalUrlsPlugin({
+      ingresses: {
+        first: {
+          description: "First managed ingress",
+          scheme: "https",
+          domain: "EXAMPLE.TEST.",
+          listenHost: "127.0.0.1",
+          listenPort: 32001,
+          approvalRequired: true,
+          approvalExposure: { listenHost: "0.0.0.0", listenPort: 443 }
+        },
+        second: {
+          description: "Second managed ingress",
+          scheme: "https",
+          domain: "example.test",
+          listenHost: "127.0.0.1",
+          listenPort: 32002,
+          approvalRequired: true,
+          approvalExposure: { listenHost: "0.0.0.0", listenPort: 443 }
+        }
+      }
+    })).not.toThrow();
   });
 
 });

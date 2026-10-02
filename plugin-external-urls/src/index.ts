@@ -819,7 +819,7 @@ async function reconcileStoredRoute(
   const policyChanged = ingress.options.approvalRequired === true
     && entry.policyRevision !== ingress.policyRevision;
   const current = policyChanged
-    ? { ...entry, approval: "pending" as const, policyRevision: ingress.policyRevision }
+    ? { ...entry, approval: "pending" as const }
     : entry;
   if (policyChanged) {
     await store.put(current);
@@ -832,9 +832,24 @@ async function reconcileStoredRoute(
     current.route.ingressId ?? current.id,
     current.approval
   );
-  if (reconciled.route.authority === current.route.authority) return current;
-  if (reconciled.acquired) await ingress.listener.revoke(reconciled.route).catch(() => {});
-  throw new Error(`external route '${current.route.id}' changed authority during reconciliation`);
+  if (!policyChanged) {
+    if (reconciled.route.authority === current.route.authority) return current;
+    if (reconciled.acquired) await ingress.listener.revoke(reconciled.route).catch(() => {});
+    throw new Error(`external route '${current.route.id}' changed authority during reconciliation`);
+  }
+  const url = reconciled.route.url;
+  if (url === undefined) {
+    if (reconciled.acquired) await ingress.listener.revoke(reconciled.route).catch(() => {});
+    throw new Error(`ingress '${current.ingress}' did not return a public URL`);
+  }
+  const updated = { ...current, route: reconciled.route, url, policyRevision: ingress.policyRevision };
+  try {
+    await store.put(updated);
+    return updated;
+  } catch (error) {
+    if (reconciled.acquired) await ingress.listener.revoke(reconciled.route).catch(() => {});
+    throw error;
+  }
 }
 
 async function createUrl(
@@ -1007,6 +1022,7 @@ function validateOptions(options: ExternalUrlsPluginOptions): void {
     upstreamMode: "container-dns" | "container-ip";
     routePolicy: string;
     approvalRequired: boolean;
+    approvalExposure: string;
   }>();
   for (const [name, ingress] of entries) {
     if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(name)) throw new Error(`invalid external URL ingress '${name}'`);
@@ -1037,7 +1053,13 @@ function validateOptions(options: ExternalUrlsPluginOptions): void {
       name,
       upstreamMode: ingress.upstreamMode ?? "container-ip",
       routePolicy: JSON.stringify(ingress.routePolicy ?? { driver: "workspace-prefix" }),
-      approvalRequired: ingress.approvalRequired === true
+      approvalRequired: ingress.approvalRequired === true,
+      approvalExposure: JSON.stringify({
+        scheme: ingress.scheme,
+        port: ingress.port ?? (ingress.scheme === "https" ? 443 : 80),
+        listenHost: (ingress.approvalExposure?.listenHost ?? ingress.listenHost).toLowerCase(),
+        listenPort: ingress.approvalExposure?.listenPort ?? ingress.listenPort
+      })
     };
     const existing = domains.get(domain);
     if (existing && (existing.upstreamMode !== routing.upstreamMode
@@ -1046,6 +1068,12 @@ function validateOptions(options: ExternalUrlsPluginOptions): void {
       throw new Error(
         `external URL ingresses '${existing.name}' and '${name}' share domain '${domain}' `
         + "and must use the same upstream mode, route policy, and approval requirement"
+      );
+    }
+    if (existing && routing.approvalRequired && existing.approvalExposure !== routing.approvalExposure) {
+      throw new Error(
+        `external URL ingresses '${existing.name}' and '${name}' share domain '${domain}' `
+        + "and must use the same approval exposure"
       );
     }
     domains.set(domain, routing);
