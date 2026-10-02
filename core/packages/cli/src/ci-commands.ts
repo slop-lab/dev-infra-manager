@@ -13,7 +13,7 @@ import {
 } from "@slop-lab/dim-core";
 import {
   adminCall, adminStreamCall, ciExecutor, confirmAction, hasResourceFlags, print,
-  printList, resourceInput, type JsonFlags, type ResourceFlags
+  printList, resourceInput, withLocalProgress, type JsonFlags, type ResourceFlags
 } from "./cli-support.js";
 
 export function registerCiCommands(program: Command): void {
@@ -24,7 +24,8 @@ schedulerImage.command("build")
   .description("Build the separately deployed shared QEMU scheduler image")
   .argument("<image>", "explicit non-latest image tag")
   .action(async (image: string) => {
-    await buildSharedQemuSchedulerImage(new ProcessRunner(), image);
+    await withLocalProgress("image.qemu-scheduler.build", ({ signal, reportProgress }) =>
+      buildSharedQemuSchedulerImage(new ProcessRunner(), image, { signal, reportProgress }));
     console.log(image);
   });
 const ciRunner = ci.command("runner").description("Manage project CI runners");

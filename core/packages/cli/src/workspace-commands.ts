@@ -3,7 +3,7 @@ import { buildWorkspaceImage, detectWorkspaceKvm, inspectWorkspaceImage, lifecyc
 import {
   adminCall, adminStreamCall, collect, confirmRecommended, ensureManagedController,
   hasResourceFlags, interactive, print, printActionResult, printList, resourceInput, runner,
-  workspaceLifecycleStreamCall, type JsonFlags, type ResourceFlags, type WorkspaceCreateFlags
+  withLocalProgress, workspaceLifecycleStreamCall, type JsonFlags, type ResourceFlags, type WorkspaceCreateFlags
 } from "./cli-support.js";
 
 export function registerWorkspaceCommands(program: Command): Command {
@@ -14,7 +14,8 @@ const workspaceImage = workspace.command("image").description("Build or inspect 
 workspaceImage.command("build")
   .description("Build the configured workspace image from installed trusted assets")
   .action(async () => {
-    const result = await buildWorkspaceImage(runner);
+    const result = await withLocalProgress("image.workspace.build", ({ signal, reportProgress }) =>
+      buildWorkspaceImage(runner, process.env, { signal, reportProgress }));
     console.log(`Built workspace image ${result.image}`);
   });
 
