@@ -146,7 +146,9 @@ the password. The Project gives the agent the common
 helper lets the launcher select its loopback port and routes the resulting URL
 through the lifecycle's fixed gateway in the direct `agent` container. The
 gateway is reachable over the Compose network without a host port publication;
-neither the tool nor its local port appears in `.dim`. Configure `https-ts`
+reviewed `.dim` setup binds `opencode-web` to the exact workspace-scoped
+`<workspace>--opencode` subdomain and denies other logical service names on
+this socket. The application port remains gateway-local. Configure `https-ts`
 before launching with the reviewed executable configuration shared by the
 Project examples:
 
@@ -174,8 +176,8 @@ route. The browser must still send the reported Basic Auth credential in the
 `Authorization` header. Repeating the same configuration reuses the owned
 process; changing the port or CORS list restarts only that process and retains
 the credential, URL, and shared gateway. Allow only trusted client UI origins.
-Another development service can use the same helper and choose any local port
-without changing `.dim`.
+Other development services can use the generic development URL socket and
+choose any local port without changing `.dim`.
 
 The Project also owns a simple streaming backup contract for the agent home.
 Backup data uses stdout and restore data uses stdin; diagnostics remain on

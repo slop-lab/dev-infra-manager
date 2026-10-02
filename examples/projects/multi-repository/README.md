@@ -132,7 +132,10 @@ the password. The Project gives the agent the common
 helper lets the launcher choose its loopback port and routes the resulting URL
 through the lifecycle's fixed gateway along the reviewed
 `agent-dind`/`dim-agent` path. The gateway is reachable without a host port
-publication; neither the tool nor its local port appears in `.dim`. Configure `https-ts`
+publication. Reviewed `.dim` setup binds `opencode-web` to the exact
+workspace-scoped `<workspace>--opencode` subdomain; other logical service
+names are denied on this socket. The application port remains gateway-local.
+Configure `https-ts`
 before launching with the executable HTTPS configuration:
 
 ```bash
@@ -161,8 +164,8 @@ route. The browser must still send the reported Basic Auth credential in the
 `Authorization` header. Repeating the same configuration reuses the owned
 process; changing the port or CORS list restarts only that process and retains
 the credential, URL, and shared gateway. Allow only trusted client UI origins.
-Another development service can use the same helper and choose any local port
-without changing `.dim`.
+Other development services can use the generic development URL socket and
+choose any local port without changing `.dim`.
 
 Both private Docker daemons listen only on their dedicated Unix sockets. Their
 reviewed entrypoints pass the Unix host explicitly because an empty invocation
