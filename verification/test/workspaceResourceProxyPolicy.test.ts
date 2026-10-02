@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "../..");
 const selfDim = resolve(root, ".dim");
+const fullDim = resolve(root, "examples/projects/full-development-flow/repos/root/.dim");
 
 describe("workspace resource proxy Project wiring", () => {
   it("wires the self Project resource proxy through the nested agent and SSH environment", async () => {
@@ -23,6 +24,29 @@ describe("workspace resource proxy Project wiring", () => {
     expect(launcher).toContain("src=/run/dim/controller-proxy,dst=/run/dim/controller-proxy,readonly");
     expect(ssh).toMatch(/^\s+DIM_AGENT_CONTROLLER_SOCKET$/m);
     expect(combined).not.toContain("DIM_AGENT_CONTROLLER_TOKEN=/run/");
+  });
+
+  it("keeps full-flow restart and resource proxies on separate derived sockets", async () => {
+    // Given
+    const setup = await readFile(resolve(fullDim, "setup.sh"), "utf8");
+    const launcher = await readFile(resolve(fullDim, "agent-dind/agent.sh"), "utf8");
+    const image = await readFile(resolve(fullDim, "agent/Dockerfile"), "utf8");
+    const ssh = await readFile(resolve(fullDim, "agent/start-sshd.sh"), "utf8");
+
+    // When
+    const proxyStarts = setup.match(/dim-controller-proxy agent \\/g) ?? [];
+
+    // Then
+    expect(proxyStarts).toHaveLength(2);
+    expect(setup).toContain('resource_proxy_socket="$proxy_dir/resources.sock"');
+    expect(setup).toContain("--allow-workspace-restart");
+    expect(setup).toContain("--allow-workspace-resources");
+    expect(launcher).toContain("--env DIM_CONTROLLER_SOCKET=/run/dim/controller-proxy/agent.sock");
+    expect(launcher).toContain("--env DIM_AGENT_CONTROLLER_SOCKET=/run/dim/controller-proxy/resources.sock");
+    expect(image).toContain("/usr/local/bin/dim-workspace-resources");
+    expect(image).toContain("/usr/local/bin/dim-nproc");
+    expect(ssh).toMatch(/^\s+DIM_CONTROLLER_SOCKET$/m);
+    expect(ssh).toMatch(/^\s+DIM_AGENT_CONTROLLER_SOCKET$/m);
   });
 
 });
