@@ -31,7 +31,13 @@ async function writeExecutable(target: string, content: string): Promise<void> {
  */
 export async function writeFakeCliNpm(
   scriptPath: string,
-  options: { argsFile: string; versionOutput: string; preflightSource?: string }
+  options: {
+    argsFile: string;
+    versionOutput: string;
+    preflightSource?: string;
+    controllerArgsFile?: string;
+    controllerExitCode?: number;
+  }
 ): Promise<void> {
   const content = `#!/usr/bin/env node
 import { writeFileSync, mkdirSync, chmodSync } from "node:fs";
@@ -56,7 +62,7 @@ writeFileSync(path.join(coreDirectory, "package.json"), JSON.stringify({
 }));
 writeFileSync(path.join(coreDirectory, "index.js"), ${JSON.stringify(options.preflightSource ?? "export async function preflightStateCompatibility() { return { warnings: [] }; }\n")});
 const stubPath = path.join(binDirectory, "dim");
-const stub = ${JSON.stringify(stubDimSource())}.replace("__VERSION__", ${JSON.stringify(options.versionOutput)});
+const stub = ${JSON.stringify(stubDimSource(options))}.replace("__VERSION__", ${JSON.stringify(options.versionOutput)});
 writeFileSync(stubPath, stub);
 chmodSync(stubPath, 0o755);
 process.exit(0);
@@ -73,7 +79,7 @@ process.exit(0);
  */
 export async function writeFakePluginNpm(
   scriptPath: string,
-  options: { argsFile: string; skipNames?: string[] }
+  options: { argsFile: string; skipNames?: string[]; exitCode?: number }
 ): Promise<void> {
   const content = `#!/usr/bin/env node
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -107,18 +113,26 @@ for (const specifier of specifiers) {
   pkg.dependencies[name] = version;
 }
 writeFileSync(pkgPath, \`\${JSON.stringify(pkg, null, 2)}\\n\`);
-process.exit(0);
+process.exit(${options.exitCode ?? 0});
 `;
   await writeExecutable(scriptPath, content);
 }
 
-function stubDimSource(): string {
+function stubDimSource(options: { controllerArgsFile?: string; controllerExitCode?: number }): string {
   return `#!/usr/bin/env node
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 const args = process.argv.slice(2);
 if (args[0] === "--version") {
   console.log("__VERSION__");
   process.exit(0);
 }
+${options.controllerArgsFile ? `if (args[0] === "controller" && args[1] === "restart") {
+  const target = ${JSON.stringify(options.controllerArgsFile)};
+  const calls = existsSync(target) ? JSON.parse(readFileSync(target, "utf8")) : [];
+  calls.push(args);
+  writeFileSync(target, JSON.stringify(calls));
+  process.exit(${options.controllerExitCode ?? 0});
+}` : ""}
 console.log("dim", args.join(" "));
 process.exit(0);
 `;

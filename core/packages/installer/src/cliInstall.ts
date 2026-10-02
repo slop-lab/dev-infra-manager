@@ -60,6 +60,7 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
   let previousMoved = false;
   let promoted = false;
   let committed = false;
+  let controllerRestartAttempted = false;
   let installedSymlink: string | undefined;
   try {
     await run(options.npmCommand ?? "npm", [
@@ -84,6 +85,12 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
     promoted = true;
     const executable = cliExecutable(dataHome);
     await access(executable, constants.X_OK);
+    controllerRestartAttempted = true;
+    try {
+      await run(executable, ["controller", "restart"], currentDirectory);
+    } catch (error) {
+      throw new Error("target controller restart/readiness failed", { cause: error });
+    }
     const mode = options.exposeOnPath ? "direct" : "proxied";
     if (options.exposeOnPath) {
       const binDirectory = path.resolve(options.binDirectory ?? defaultBinDirectory());
@@ -98,7 +105,12 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
   } catch (error) {
     if (!committed) {
       if (promoted) await rm(currentDirectory, { recursive: true, force: true });
-      if (previousMoved) await rename(backupDirectory, currentDirectory);
+      if (previousMoved) {
+        await rename(backupDirectory, currentDirectory);
+        if (controllerRestartAttempted) {
+          await run(cliExecutable(dataHome), ["controller", "restart"], currentDirectory);
+        }
+      }
       else if (installedSymlink) await unlink(installedSymlink).catch(() => undefined);
     }
     throw error;
@@ -166,7 +178,7 @@ export async function validateConfiguredCli(cli: DimCliConfig, facadePath: strin
   try {
     await access(executable, constants.X_OK);
   } catch {
-    throw new Error(`DIM CLI ${cli.version} is configured at ${executable}, but it is not executable; run 'dim install-cli'`);
+    throw new Error(`DIM CLI ${cli.version} is configured at ${executable}, but it is not executable; run 'dim installer install core'`);
   }
   if (facadePath !== undefined) {
     try {

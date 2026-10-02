@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { access, copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { atomicWrite, readManifest, readPackageJson, run } from "./runtimeFiles.js";
 
@@ -11,12 +11,50 @@ export interface InstallOptions {
 
 export async function installPlugins(specifiers: readonly string[], options: InstallOptions): Promise<string[]> {
   if (specifiers.length === 0) throw new Error("at least one plugin package is required");
-  await mkdir(options.pluginHome, { recursive: true, mode: 0o700 });
-  const packagePath = path.join(options.pluginHome, "package.json");
+  for (const specifier of specifiers) assertExactPluginSpecifier(specifier);
+  const currentDirectory = path.resolve(options.pluginHome);
+  const managedRoot = path.dirname(currentDirectory);
+  await mkdir(managedRoot, { recursive: true, mode: 0o700 });
+  const stagingDirectory = await mkdtemp(path.join(managedRoot, ".plugin-staging-"));
+  const backupDirectory = path.join(managedRoot, `.plugin-previous-${process.pid}-${Date.now()}`);
+  let previousMoved = false;
+  let promoted = false;
+  try {
+    try {
+      await cp(currentDirectory, stagingDirectory, { recursive: true });
+    } catch (error) {
+      if (errorCode(error) !== "ENOENT") throw error;
+    }
+    const installed = await installPluginsInStage(specifiers, options, stagingDirectory);
+    try {
+      await rename(currentDirectory, backupDirectory);
+      previousMoved = true;
+    } catch (error) {
+      if (errorCode(error) !== "ENOENT") throw error;
+    }
+    await rename(stagingDirectory, currentDirectory);
+    promoted = true;
+    await rm(backupDirectory, { recursive: true, force: true });
+    return installed;
+  } catch (error) {
+    if (promoted) await rm(currentDirectory, { recursive: true, force: true });
+    if (previousMoved) await rename(backupDirectory, currentDirectory);
+    throw error;
+  } finally {
+    await rm(stagingDirectory, { recursive: true, force: true });
+  }
+}
+
+async function installPluginsInStage(
+  specifiers: readonly string[],
+  options: InstallOptions,
+  stagingDirectory: string
+): Promise<string[]> {
+  const packagePath = path.join(stagingDirectory, "package.json");
   const before = await readPackageJson(packagePath);
   if (!before) await writeFile(packagePath, `${JSON.stringify({ private: true }, null, 2)}\n`, { mode: 0o600 });
-  const durableSpecifiers = await Promise.all(specifiers.map((specifier) => persistLocalSpecifier(specifier, options.pluginHome)));
-  await run(options.npmCommand ?? "npm", ["install", "--save-exact", "--no-fund", "--no-audit", ...durableSpecifiers], options.pluginHome);
+  const durableSpecifiers = await Promise.all(specifiers.map((specifier) => persistLocalSpecifier(specifier, stagingDirectory)));
+  await run(options.npmCommand ?? "npm", ["install", "--save-exact", "--no-fund", "--no-audit", ...durableSpecifiers], stagingDirectory);
   const after = await readPackageJson(packagePath);
   const dependencies = after?.dependencies ?? {};
   const previousDependencies = before?.dependencies ?? {};
@@ -26,11 +64,21 @@ export async function installPlugins(specifiers: readonly string[], options: Ins
   for (const name of installed) {
     if (!(name in dependencies)) throw new Error(`npm did not install '${name}' as a direct plugin dependency`);
   }
-  const manifestPath = path.join(options.pluginHome, "plugins.json");
+  const manifestPath = path.join(stagingDirectory, "plugins.json");
   const manifest = await readManifest(manifestPath);
   const plugins = [...new Set([...manifest.plugins, ...installed])].sort();
   await atomicWrite(manifestPath, { schemaVersion: 1, plugins });
   return installed;
+}
+
+function assertExactPluginSpecifier(specifier: string): void {
+  const candidate = specifier.startsWith("file:") ? specifier.slice(5) : specifier;
+  if (candidate.endsWith(".tgz")) return;
+  const packageName = "(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*";
+  const exactVersion = "\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?";
+  if (!new RegExp(`^${packageName}@${exactVersion}$`).test(specifier)) {
+    throw new Error(`plugin package '${specifier}' must use an exact version or a local .tgz archive`);
+  }
 }
 
 export async function setPluginsEnabled(

@@ -96,7 +96,8 @@ describe("@slop-lab/dim-installer", () => {
       const root = await tempDir("dim-install-cli-");
       const npm = join(root, "npm.mjs");
       const argumentsFile = join(root, "arguments.json");
-      await writeFakeCliNpm(npm, { argsFile: argumentsFile, versionOutput: "9.9.9" });
+      const controllerArgsFile = join(root, "controller-arguments.json");
+      await writeFakeCliNpm(npm, { argsFile: argumentsFile, versionOutput: "9.9.9", controllerArgsFile });
 
       const dataHome = join(root, "data-home");
       const configPath = join(root, "config", "dim", "config.json");
@@ -138,6 +139,7 @@ describe("@slop-lab/dim-installer", () => {
         version: "9.9.9",
         executable
       });
+      expect(JSON.parse(await readFile(controllerArgsFile, "utf8"))).toEqual([["controller", "restart"]]);
     });
 
     it("creates a managed ~/.local/bin symlink in direct mode", async () => {
@@ -280,6 +282,39 @@ describe("@slop-lab/dim-installer", () => {
 
       expect(await readFile(join(current, "sentinel"), "utf8")).toBe("previous install");
     });
+
+    it("restores and restarts the previous runtime when target controller readiness fails", async () => {
+      const root = await tempDir("dim-install-failed-controller-");
+      const npm = join(root, "npm.mjs");
+      const targetControllerArgs = join(root, "target-controller-arguments.json");
+      await writeFakeCliNpm(npm, {
+        argsFile: join(root, "npm-arguments.json"),
+        versionOutput: "2.0.0",
+        controllerArgsFile: targetControllerArgs,
+        controllerExitCode: 9
+      });
+      const dataHome = join(root, "data-home");
+      const current = join(dataHome, "runtime", "current");
+      const previousExecutable = join(current, "node_modules", ".bin", "dim");
+      const previousControllerArgs = join(root, "previous-controller-arguments.json");
+      await mkdir(dirname(previousExecutable), { recursive: true });
+      await writeStubCli(previousExecutable, { versionOutput: "1.0.0", echoFile: previousControllerArgs });
+      await writeFile(join(current, "sentinel"), "previous install");
+
+      await expect(installDimCli({
+        version: "2.0.0",
+        exposeOnPath: false,
+        npmCommand: npm,
+        dataHome,
+        configPath: join(root, "dim.json")
+      })).rejects.toThrow(/controller restart/);
+
+      expect(await readFile(join(current, "sentinel"), "utf8")).toBe("previous install");
+      expect(JSON.parse(await readFile(targetControllerArgs, "utf8"))).toEqual([["controller", "restart"]]);
+      expect(JSON.parse(await readFile(previousControllerArgs, "utf8"))).toMatchObject({
+        argv: ["controller", "restart"]
+      });
+    });
   });
 
   describe("readLocalPackageBundle", () => {
@@ -373,7 +408,7 @@ describe("@slop-lab/dim-installer", () => {
     it("throws a helpful error when the executable is missing", async () => {
       const root = await tempDir("dim-validate-missing-");
       const cli = { mode: "proxied" as const, version: "1.0.0", executable: join(root, "does-not-exist") };
-      await expect(validateConfiguredCli(cli, undefined)).rejects.toThrow(/run 'dim install-cli'/);
+      await expect(validateConfiguredCli(cli, undefined)).rejects.toThrow(/run 'dim installer install core'/);
     });
 
     it("throws when the executable exists but is not executable", async () => {
@@ -491,8 +526,41 @@ describe("@slop-lab/dim-installer", () => {
       ).rejects.toThrow(/did not install 'dim-plugin-example' as a direct plugin dependency/);
     });
 
+    it("keeps the prior plugin runtime when npm mutates staging and then fails", async () => {
+      const root = await tempDir("dim-install-plugins-rollback-");
+      const pluginHome = join(root, "runtime", "current");
+      await mkdir(pluginHome, { recursive: true });
+      await writeFile(join(pluginHome, "package.json"), JSON.stringify({
+        private: true,
+        dependencies: { "existing-plugin": "1.0.0" }
+      }));
+      await writeFile(join(pluginHome, "plugins.json"), JSON.stringify({
+        schemaVersion: 1,
+        plugins: ["existing-plugin"]
+      }));
+      const npm = join(root, "npm.mjs");
+      await writeFakePluginNpm(npm, { argsFile: join(root, "arguments.json"), exitCode: 8 });
+
+      await expect(installPlugins(["new-plugin@2.0.0"], { pluginHome, npmCommand: npm })).rejects.toThrow(/exited with 8/);
+
+      expect(JSON.parse(await readFile(join(pluginHome, "package.json"), "utf8"))).toEqual({
+        private: true,
+        dependencies: { "existing-plugin": "1.0.0" }
+      });
+      expect(JSON.parse(await readFile(join(pluginHome, "plugins.json"), "utf8"))).toEqual({
+        schemaVersion: 1,
+        plugins: ["existing-plugin"]
+      });
+    });
+
     it("requires at least one plugin specifier", async () => {
       await expect(installPlugins([], { pluginHome: "/irrelevant" })).rejects.toThrow(/at least one plugin package/);
+    });
+
+    it("rejects mutable registry plugin specifiers", async () => {
+      for (const specifier of ["example", "example@latest", "example@^1.2.3", "@scope/example@1.x"]) {
+        await expect(installPlugins([specifier], { pluginHome: "/irrelevant" })).rejects.toThrow(/exact version/);
+      }
     });
   });
 
