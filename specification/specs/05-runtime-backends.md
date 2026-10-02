@@ -188,15 +188,21 @@ The expanded device set MUST contain only:
    `cloud-init:config`. Incus MUST generate it from the pinned
    `cloud-init.user-data`, `cloud-init.vendor-data`, and
    `cloud-init.network-config` instance keys plus deterministic metadata whose
-   only keys are `instance-id` and `local-hostname`. `instance-id` MUST equal
-   the Incus-generated cloud-init ID captured in the creation-attempt record
-   and target workspace state; `local-hostname` MUST equal the exact recorded
-   provider instance name. `user.meta-data` and the legacy `user.user-data`,
-   `user.vendor-data`, and `user.network-config` keys MUST be absent, and every
-   other legacy `user.*-data` cloud-init input MUST be rejected. Before first
-   start, DIM MUST verify the expanded configuration and rendered media against
-   those exact approved inputs and metadata; an extra, missing, or changed key
-   is a device mismatch.
+   only keys are `instance-id` and `local-hostname`; both values MUST equal the
+   exact recorded provider instance name. `user.meta-data` and the legacy
+   `user.user-data`, `user.vendor-data`, and `user.network-config` keys MUST be
+   absent, and every other legacy `user.*-data` cloud-init input MUST be
+   rejected.
+
+DIM MUST verify the expanded configuration and approved inputs before first
+start. Because Incus renders the generated ISO when the disk device starts,
+the first start MUST be a controlled validation boot. Using the pinned guest
+image and authenticated Incus agent, DIM MUST read the mounted read-only media
+and verify the exact approved payloads plus `instance-id` and `local-hostname`
+equal to the recorded provider instance name. Until that validation succeeds,
+DIM MUST NOT accept workspace readiness, run a Project hook, issue a grant,
+enable a route, or dispatch Project or user code. An extra, missing, or changed
+key is a device mismatch and MUST follow the non-ready boot-failure policy.
 
 The profile MUST reject host-path disks, secret volumes, physical or SR-IOV
 NICs, arbitrary proxy devices, host Unix devices, host `/dev/kvm`, and every
@@ -332,8 +338,7 @@ the JSON is an embedded fragment, not a complete workspace record:
     "providerProjectId": "project-owned-binding-id",
     "instance": {
       "id": "generated-provider-resource-id",
-      "name": "non-authorizing-provider-locator",
-      "cloudInitInstanceId": "incus-generated-cloud-init-id"
+      "name": "non-authorizing-provider-locator"
     },
     "dataVolume": {
       "id": "generated-provider-resource-id",
@@ -350,8 +355,7 @@ the JSON is an embedded fragment, not a complete workspace record:
 For `container`, `runtimeBackendProfile` is exactly
 `{"name":"sysbox-container","version":1}` and `runtimeResources` contains
 exactly `container`, `dataVolume`, and `network` objects with the same exact
-`id` and `name` fields; `cloudInitInstanceId` exists only on the VM `instance`
-object. The VM `providerProjectId` is a foreign key to the
+`id` and `name` fields. The VM `providerProjectId` is a foreign key to the
 Project-owned runtime-provider binding, not a workspace-owned Incus project.
 All generated IDs are immutable random identities stored both in state and
 provider metadata; names are non-authorizing locators. Exact-schema parsing

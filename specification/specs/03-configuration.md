@@ -55,8 +55,9 @@ For `vm`, local preflight MUST verify KVM availability to the trusted host
 service, the exact supported Incus/client compatibility, pinned guest image,
 restricted Project policy including `restricted=true` and
 `restricted.backups=allow`, allowed storage driver and pool, managed network
-policy, deterministic cloud-init metadata with legacy `user.*` cloud-init
-inputs absent, resource support backed by a live-gate successful bounded memory
+policy, deterministic provider-name cloud-init metadata with legacy `user.*`
+cloud-init inputs absent and the controlled-first-boot validation barrier
+available, resource support backed by a live-gate successful bounded memory
 decrease, and the absence of conflicting owned or foreign resources. Missing
 or indeterminate prerequisites are an admission failure. Preflight MUST NOT
 install packages, change host policy, create Incus resources, or expose
@@ -71,7 +72,7 @@ Configuration and state admission MUST produce these results:
 | Current release with `workspaceBackend: "sysbox"` and exact current state | Accept under the current Sysbox profile |
 | Current release with `workspaceBackend: "container"` or `"vm"` | Reject as unsupported before mutation; do not claim a candidate gate passed |
 | Target release with a newly selected enabled backend and exact release profile, plus successful local preflight | Permit creation of a fresh schema-`9` workspace record |
-| Target release with `vm` while KVM, Incus, image, storage, network, successful memory decrease, exact cloud-init metadata, host-only backup permission, restriction, or release-gate support is absent or indeterminate | Reject before provider or state mutation and report the failed prerequisite |
+| Target release with `vm` while KVM, Incus, image, storage, network, successful memory decrease, provider-name cloud-init metadata, controlled-first-boot validation, host-only backup permission, restriction, or release-gate support is absent or indeterminate | Reject before provider or state mutation and report the failed prerequisite |
 | Target release with `workspaceBackend: "sysbox"` or schema-`8` `runtimeBackend: "sysbox"` | Reject unchanged with prior-release export/discard/create/restore guidance; never alias to `container` |
 | Existing `container` workspace requested as `vm`, or existing `vm` requested as `container` | Reject unchanged before contacting either provider |
 | Unknown backend, profile, profile version, state schema, provider field, device, label, or mixed provider identity | Reject unchanged before plugin, hook, grant, network, storage, or runtime mutation |
