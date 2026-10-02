@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Let an agent with an explicitly filtered resource-read proxy query only its
+  own accepted workspace CPU, memory, and PID assignments. The packaged
+  `dim-nproc` helper floors fractional CPU quotas, caps output by visible CPUs,
+  and fails on unavailable or unlimited assignments instead of reporting host
+  capacity; no host-admin socket, runtime socket, or workspace selector is
+  exposed.
+
 - Let `dim external-url list` use the host-admin controller to show a bounded
   all-workspace route inventory with Project and workspace names when invoked
   on the host. `--workspace` and workspace/agent environments remain scoped to
