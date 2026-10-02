@@ -643,6 +643,25 @@ normalizes interrupted CI runner creation through an ownership-checked
 stop/start. A workspace still being created fails closed. The host clears its
 recovery lists only when every target has recovered.
 
+Managed Gitea has an independent strict schema-2 resource and endpoint lease.
+The record binds the service, container, control network, data volume,
+immutable image ID, immutable network ID, resource-establishment state, and the
+endpoint address copied into workspace `hostAliases`. Once
+`resourcesEstablished` is true, a missing network or volume fails closed
+instead of being recreated. Controller startup reconciles the lease even when
+host lifecycle state is already ready. Recovery may recreate a missing owned
+container only with the recorded `imageId`, `networkId`, data-volume mount, and
+`endpointAddress`. A same-name foreign resource, mismatched immutable ID, or
+changed address is rejected without adoption, alias replacement, or live
+workspace reconnection.
+
+Schema-less and schema-1 Gitea records have no safe migration because they lack
+the complete evidence required by schema 2. Stop DIM and use the prior pinned
+release to export or otherwise preserve needed repository data. Remove only
+resources whose ownership is independently verified. Keep any unverifiable
+data volume or other resource in place, and don't recreate the managed service
+under a conflicting name.
+
 DIM configures its workspace Docker engine to use the same managed,
 host-scoped anonymous Docker Hub pull-through cache as managed CI runners.
 The cache remains outside Project-defined networks and Project code does not
