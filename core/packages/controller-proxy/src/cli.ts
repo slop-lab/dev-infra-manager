@@ -23,6 +23,7 @@ async function main(arguments_: string[]): Promise<void> {
   let bindContainersJson: string | undefined;
   let bindProtocol: "http" | "https" | "tcp" | undefined;
   let bindPort: number | undefined;
+  const bindServiceSubdomains: Record<string, string> = {};
   let allowWorkspaceRestart = false;
   for (let index = presetIndex + 1; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
@@ -31,6 +32,11 @@ async function main(arguments_: string[]): Promise<void> {
     else if (argument === "--bind-containers-json") bindContainersJson = requiredValue(arguments_, ++index, argument);
     else if (argument === "--bind-protocol") bindProtocol = protocol(requiredValue(arguments_, ++index, argument));
     else if (argument === "--bind-port") bindPort = port(requiredValue(arguments_, ++index, argument));
+    else if (argument === "--bind-service-subdomain") {
+      const [service, subdomain, extra] = requiredValue(arguments_, ++index, argument).split("=");
+      if (service === undefined || subdomain === undefined || extra !== undefined || service in bindServiceSubdomains) usage();
+      bindServiceSubdomains[service] = subdomain;
+    }
     else if (argument === "--allow-workspace-restart") allowWorkspaceRestart = true;
     else if (argument === "--socket-mode") socketMode = mode(requiredValue(arguments_, ++index, argument));
     else if (argument === "--directory-mode") directoryMode = mode(requiredValue(arguments_, ++index, argument));
@@ -44,6 +50,7 @@ async function main(arguments_: string[]): Promise<void> {
     || (preset === "external-url" && allowWorkspaceRestart)
     || (preset === "agent" && ingresses.length > 0)
     || (bindOptions.some((value) => value !== undefined) && !hasBoundTarget)
+    || (Object.keys(bindServiceSubdomains).length > 0 && !hasBoundTarget)
     || (preset === "agent" && hasBoundTarget)
     || (ensure && preset !== "external-url")) usage();
   let boundTarget: ExternalUrlTarget | undefined;
@@ -65,6 +72,7 @@ async function main(arguments_: string[]): Promise<void> {
         directoryMode,
         ingresses,
         boundTarget,
+        bindServiceSubdomains,
         sourceSocket,
         token
       })),
@@ -85,7 +93,10 @@ async function main(arguments_: string[]): Promise<void> {
       directoryMode,
       capabilities: [externalUrlProxy({
         allowedIngresses: ingresses,
-        ...(boundTarget === undefined ? {} : { boundTarget })
+        ...(boundTarget === undefined ? {} : { boundTarget }),
+        ...(Object.keys(bindServiceSubdomains).length === 0
+          ? {}
+          : { boundServiceSubdomains: bindServiceSubdomains })
       })]
     })
     : createAgentControllerProxy({
@@ -142,9 +153,11 @@ function usage(): never {
   throw new Error(
     "usage: dim-controller-proxy external-url --listen SOCKET --ingress NAME [--ingress NAME ...]\n"
     + "       [--bind-containers-json JSON --bind-protocol http|https|tcp --bind-port PORT]\n"
+    + "       [--bind-service-subdomain SERVICE=SUBDOMAIN ...]\n"
     + "       [--directory-mode MODE] [--socket-mode MODE]\n"
     + "   or: dim-controller-proxy ensure external-url --listen SOCKET --ingress NAME [--ingress NAME ...]\n"
     + "       [--bind-containers-json JSON --bind-protocol http|https|tcp --bind-port PORT]\n"
+    + "       [--bind-service-subdomain SERVICE=SUBDOMAIN ...]\n"
     + "       [--directory-mode MODE] [--socket-mode MODE]\n"
     + "   or: dim-controller-proxy agent --listen SOCKET --allow-workspace-restart\n"
     + "       [--directory-mode MODE] [--socket-mode MODE]\n"

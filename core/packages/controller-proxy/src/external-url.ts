@@ -14,6 +14,7 @@ export interface ExternalUrlIngress {
 export interface ExternalUrlProxyOptions {
   readonly allowedIngresses: readonly string[];
   readonly boundTarget?: ExternalUrlTarget;
+  readonly boundServiceSubdomains?: Readonly<Record<string, string>>;
 }
 
 export interface ExternalUrlTarget {
@@ -29,10 +30,22 @@ export function externalUrlProxy(options: ExternalUrlProxyOptions): ControllerPr
   if (options.boundTarget !== undefined && boundTargetKey === undefined) {
     throw new Error("external URL proxy received an invalid bound target");
   }
+  const serviceSubdomains = new Map(Object.entries(options.boundServiceSubdomains ?? {}));
+  if (serviceSubdomains.size > 0 && options.boundTarget === undefined) {
+    throw new Error("external URL proxy service subdomains require a bound target");
+  }
+  for (const [service, subdomain] of serviceSubdomains) {
+    if (!isServiceName(service) || !isSubdomain(subdomain)) {
+      throw new Error("external URL proxy received an invalid service subdomain binding");
+    }
+  }
+  const allowedSubdomains = new Set(serviceSubdomains.values());
   const isAllowed = (entry: Record<string, unknown>): boolean =>
     typeof entry.ingress === "string"
     && allowed.has(entry.ingress)
-    && (boundTargetKey === undefined || boundTargetKey === targetKey(entry.target));
+    && (boundTargetKey === undefined || boundTargetKey === targetKey(entry.target))
+    && (allowedSubdomains.size === 0
+      || (typeof entry.subdomain === "string" && allowedSubdomains.has(entry.subdomain)));
   return {
     async authorize(request, upstream) {
       if (request.method === "GET" && request.path === "/api") return true;
@@ -41,7 +54,17 @@ export function externalUrlProxy(options: ExternalUrlProxyOptions): ControllerPr
         const body = jsonObject(request.body);
         if (typeof body.ingress !== "string" || !allowed.has(body.ingress)) return false;
         if (boundTargetKey === undefined) return true;
-        if (!Object.hasOwn(body, "ingress") || Object.keys(body).length !== 1) return false;
+        const service = body.service;
+        if (serviceSubdomains.size === 0) {
+          const keys = Object.keys(body);
+          if (!Object.hasOwn(body, "ingress")
+            || (keys.length !== 1 && !(keys.length === 2 && typeof service === "string"
+              && isServiceName(service) && Object.hasOwn(body, "service")))) return false;
+        } else if (typeof service !== "string"
+          || !serviceSubdomains.has(service)
+          || Object.keys(body).length !== 2
+          || !Object.hasOwn(body, "ingress")
+          || !Object.hasOwn(body, "service")) return false;
         return (await currentIngresses(upstream)).some((ingress) =>
           ingress.name === body.ingress && compatibleScheme(options.boundTarget, ingress.scheme));
       }
@@ -58,6 +81,9 @@ export function externalUrlProxy(options: ExternalUrlProxyOptions): ControllerPr
         ...request,
         body: Buffer.from(JSON.stringify({
           ingress: jsonObject(request.body).ingress,
+          ...(serviceSubdomains.size === 0
+            ? {}
+            : { subdomain: serviceSubdomains.get(String(jsonObject(request.body).service)) }),
           target: options.boundTarget
         }))
       };
@@ -93,6 +119,18 @@ export function externalUrlProxy(options: ExternalUrlProxyOptions): ControllerPr
       return jsonResponse(response, { ...body, urls });
     }
   };
+}
+
+function isServiceName(value: string): boolean {
+  return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(value);
+}
+
+function isSubdomain(value: string): boolean {
+  return value.length > 0
+    && value.length <= 253
+    && !value.endsWith(".")
+    && value.split(".").every((label) =>
+      label.length > 0 && label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label));
 }
 
 function targetKey(value: unknown): string | undefined {
