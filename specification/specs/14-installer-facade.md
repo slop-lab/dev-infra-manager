@@ -3,10 +3,9 @@
 ## Scope
 
 `@slop-lab/dim-installer` exposes an executable also named `dim`. It is a thin
-facade: it owns installation and installed-plugin lifecycle commands and proxies everything else to a
+facade: it owns only the `installer` namespace and proxies everything else to a
 separately installed `@slop-lab/dim-cli`. `@slop-lab/dim-cli` must not
-implement `installer`, `install-cli`, `install-plugin`, `enable-plugin`,
-`disable-plugin`, or `remove-plugin`, and the facade
+implement `installer`, and the facade
 must not duplicate `@slop-lab/dim-cli`'s command tree or reimplement its
 behavior.
 
@@ -23,12 +22,12 @@ a supported Node.js on `PATH`.
 The facade owns:
 
 ```bash
-dim installer                # interactive installer (TTY only), always
-dim install-cli [options]
-dim install-plugin PACKAGE@EXACT_VERSION...
-dim enable-plugin PACKAGE...
-dim disable-plugin PACKAGE...
-dim remove-plugin PACKAGE...
+dim installer                         # interactive installer (TTY only), always
+dim installer install core [options]
+dim installer install plugin PACKAGE@EXACT_VERSION...
+dim installer enable-plugin PACKAGE...
+dim installer disable-plugin PACKAGE...
+dim installer remove-plugin PACKAGE...
 ```
 
 `dim` with no arguments at all is an alias for `dim installer` only while no
@@ -38,7 +37,9 @@ keeps the ergonomic bare-word default useful for both a brand-new install
 and an already-set-up one, without requiring an already-set-up user to type
 `dim installer` explicitly just to avoid the wizard.
 
-Every other invocation, including `dim plugin ...` (a `dim-cli` command),
+Repeated leading `installer` namespace tokens are accepted before the
+installer command. Every other invocation, including `dim plugin ...` and
+`dim install-cp` (`dim-cli` commands),
 is forwarded unchanged.
 
 ## Dispatch
@@ -57,7 +58,7 @@ no args, CLI set          -> proxied to the configured executable (empty argv;
                             with a non-fatal warning when the configured
                             version does not match the version the resolved
                             executable actually reports
-anything else, no CLI     -> exit 2 with a message pointing at `install-cli`
+anything else, no CLI     -> exit 2 with a message pointing at `installer install core`
 anything else, CLI set    -> proxied to the configured executable
 ```
 
@@ -118,8 +119,12 @@ migration; installation itself must not migrate it. No workspace, Project,
 runner, or other state receives an automatic conversion, deletion, or
 delete-and-recreate path.
 
-After a successful preflight, the installer promotes the staged runtime. It must restore the
-previous `current` directory when promotion or configuration fails, and remove
+After a successful preflight, the installer promotes the staged runtime and
+invokes the promoted CLI's `controller restart` subcommand exactly once. That
+subcommand's controller readiness check is part of the installation
+transaction. If restart/readiness or later configuration fails, the installer
+must restore the previous `current` directory and restart the prior controller.
+It must remove
 temporary and backup directories after success. DIM
 exposes no CLI version-selection or rollback contract.
 
@@ -144,13 +149,15 @@ installer version. Interactive yes/no questions must phrase the recommended
 mode positively and use `Y` as their displayed default, so repeatedly answering
 `y` or pressing Enter preserves the environment-specific recommended mode.
 
-`install-cli --local-packages PATH` must accept a schema-1 `packages.json`
+`installer install core --local-packages PATH` must accept a schema-1 `packages.json`
 bundle produced by the repository package script. It installs every tarball
 except `@slop-lab/dim-installer` in one npm transaction and records the version
 reported by the installed CLI. The normal direct/proxied selection still
 applies; manifest versions do not select filesystem paths.
 
-Plugins install into the same `runtime/current` npm project. Plugin packages
+Plugins install into a temporary sibling copy of the same `runtime/current`
+npm project and replace `current` only after npm and activation-manifest
+validation succeed. Plugin packages
 must declare the exact compatible `@slop-lab/dim-core` as a peer dependency so
 npm rejects an incompatible host before activation. CLI replacement reinstalls
 the enabled plugin set in staging and must succeed as one dependency graph
@@ -182,9 +189,9 @@ byte-identical output to unset when unset.
 
 ## Plugin installation
 
-`dim install-plugin` requires an installed CLI because plugins join its npm
+`dim installer install plugin` requires an installed CLI because plugins join its npm
 project and npm must validate their core peer dependency against that runtime.
-`enable-plugin`, `disable-plugin`, and `remove-plugin` provide recovery without
+`installer enable-plugin`, `installer disable-plugin`, and `installer remove-plugin` provide recovery without
 hand-editing the managed npm project or activation manifest.
 
 ## Verification
@@ -217,3 +224,10 @@ Required tests cover:
   disposable local npm registry (`just verify mise-install-smoke`), covering
   the mise-detected `--no-local-bin` default and an explicit
   `--local-bin` override.
+
+`dim install-cp` belongs to `@slop-lab/dim-cli`, not the facade. It is reserved
+for control-plane-only host installation of the native Git host and CI
+scheduler/webhook services, never a separate web UI. Until reviewed deployment
+inputs define service configuration, storage ownership, supervision,
+readiness, and rollback for both service families, the command must fail closed
+with an actionable missing-dependency error and must make no host change.
