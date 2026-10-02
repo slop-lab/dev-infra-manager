@@ -6,6 +6,11 @@ import { ensureGitea } from "../../../../core/packages/core/src/gitea.js";
 import type { CommandResult, CommandRunner } from "../../../../core/packages/core/src/types.js";
 import { GITEA_CREDENTIALS } from "./giteaOrganizationPolicyFixture.js";
 import { hostLifecycleOptions } from "./hostLifecycleFixture.js";
+import {
+  claimTestGiteaService,
+  ownedGiteaContainerInspect,
+  ownedGiteaResourceInspect
+} from "./giteaServiceFixture.js";
 
 const CREDENTIAL_PATH = "/data/dim/credentials.json";
 const MISSING_CREDENTIAL_EXIT_CODE = 42;
@@ -24,9 +29,11 @@ class CredentialRunner implements CommandRunner {
 
   async run(command: string, args: string[]): Promise<CommandResult> {
     this.calls.push([command, ...args]);
-    if (args[0] === "network" || args[0] === "volume") return result(command, args, { exitCode: 0, stdout: "true\n" });
+    if ((args[0] === "network" || args[0] === "volume") && args[1] === "inspect") {
+      return result(command, args, { exitCode: 0, stdout: `${ownedGiteaResourceInspect(args[0])}\n` });
+    }
     if (args[0] === "container" && args[1] === "inspect") {
-      return result(command, args, { exitCode: 0, stdout: "credential-container-id|true|true\n" });
+      return result(command, args, { exitCode: 0, stdout: `${ownedGiteaContainerInspect("credential-container-id", true)}\n` });
     }
     if (args.some((argument) => argument.startsWith("DIM_CREDENTIALS="))) {
       this.mutations.push("store");
@@ -73,6 +80,7 @@ describe("managed Gitea credential reconciliation", () => {
     // Given
     const stateRoot = await mkdtemp(join(tmpdir(), "dim-gitea-credentials-"));
     cleanup.push(stateRoot);
+    await claimTestGiteaService(stateRoot);
     const runner = new CredentialRunner({ exitCode: MISSING_CREDENTIAL_EXIT_CODE });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
 
@@ -94,6 +102,7 @@ describe("managed Gitea credential reconciliation", () => {
     // Given
     const stateRoot = await mkdtemp(join(tmpdir(), "dim-gitea-credentials-"));
     cleanup.push(stateRoot);
+    await claimTestGiteaService(stateRoot);
     const runner = new CredentialRunner(credentialRead);
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
 
@@ -127,6 +136,7 @@ describe("managed Gitea credential reconciliation", () => {
     // Given
     const stateRoot = await mkdtemp(join(tmpdir(), "dim-gitea-credentials-"));
     cleanup.push(stateRoot);
+    await claimTestGiteaService(stateRoot);
     const runner = new CredentialRunner({ exitCode: 0, stdout });
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
 

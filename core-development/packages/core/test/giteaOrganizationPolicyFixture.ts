@@ -1,4 +1,5 @@
 import type { CommandResult, CommandRunner, RunOptions } from "../../../../core/packages/core/src/types.js";
+import { ownedGiteaContainerInspect, ownedGiteaResourceInspect } from "./giteaServiceFixture.js";
 
 export const GITEA_CREDENTIALS = {
   adminUsername: "admin",
@@ -34,10 +35,12 @@ export class GiteaPolicyRunner implements CommandRunner {
 
   async run(command: string, args: string[], _options?: RunOptions): Promise<CommandResult> {
     this.calls.push([command, ...args]);
-    if (args[0] === "network" || args[0] === "volume") return result(command, args, 0, "true\n");
+    if ((args[0] === "network" || args[0] === "volume") && args[1] === "inspect") {
+      return result(command, args, 0, `${ownedGiteaResourceInspect(args[0])}\n`);
+    }
     if (args[0] === "container" && args[1] === "inspect") return this.inspect(command, args);
-    if (args[0] === "run") {
-      const created = { id: "created-gitea-id", managed: true, running: true, policyEntries: [true] };
+    if (args[0] === "container" && args[1] === "create") {
+      const created = { id: "created-gitea-id", managed: true, running: false, policyEntries: [true] };
       this.add(created);
       return result(command, args, 0, `${created.id}\n`);
     }
@@ -57,7 +60,7 @@ export class GiteaPolicyRunner implements CommandRunner {
     if (container === undefined) return result(command, args, 1, "", "Error: No such container: dim-gitea");
     const format = args.at(-1) ?? "";
     const stdout = format.includes("{{.Id}}")
-      ? `${container.id}|${String(container.managed)}|${String(container.running)}\n`
+      ? `${ownedGiteaContainerInspect(container.id, container.running, container.managed)}\n`
       : `${String(container.managed)}|${String(container.running)}\n`;
     if (this.replacementAfterInspect !== undefined) {
       this.add(this.replacementAfterInspect);

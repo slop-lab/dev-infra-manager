@@ -15,6 +15,11 @@ import {
   giteaContainer
 } from "./giteaOrganizationPolicyFixture.js";
 import { hostLifecycleOptions } from "./hostLifecycleFixture.js";
+import {
+  claimTestGiteaService,
+  ownedGiteaContainerInspect,
+  ownedGiteaResourceInspect
+} from "./giteaServiceFixture.js";
 
 vi.mock("node:dns/promises", () => ({
   lookup: vi.fn(async () => ({ address: "127.0.0.1", family: 4 }))
@@ -25,21 +30,30 @@ const CREDENTIAL_PATH = "/data/dim/credentials.json";
 
 class GiteaCreationRunner implements CommandRunner {
   readonly calls: string[][] = [];
+  private created = false;
+  private running = false;
 
   async run(command: string, args: string[], _options?: RunOptions): Promise<CommandResult> {
     this.calls.push([command, ...args]);
-    if (args[0] === "network" || args[0] === "volume") {
-      return { command, args, stdout: "true\n", stderr: "", exitCode: 0 };
+    if ((args[0] === "network" || args[0] === "volume") && args[1] === "inspect") {
+      return { command, args, stdout: `${ownedGiteaResourceInspect(args[0])}\n`, stderr: "", exitCode: 0 };
     }
     if (args[0] === "container" && args[1] === "inspect") {
-      return { command, args, stdout: "", stderr: "Error: No such container: dim-gitea", exitCode: 1 };
+      return this.created
+        ? { command, args, stdout: `${ownedGiteaContainerInspect("created-gitea-id", this.running)}\n`, stderr: "", exitCode: 0 }
+        : { command, args, stdout: "", stderr: `Error: No such container: ${args[2] ?? "dim-gitea"}`, exitCode: 1 };
     }
     if (args.some((argument) => argument.includes(CREDENTIAL_PATH))) {
       return { command, args, stdout: JSON.stringify(GITEA_CREDENTIALS), stderr: "", exitCode: 0 };
     }
-    if (args[0] === "run") {
+    if (args.some((argument) => argument.includes("awk"))) {
+      return { command, args, stdout: "true\n", stderr: "", exitCode: 0 };
+    }
+    if (args[0] === "container" && args[1] === "create") {
+      this.created = true;
       return { command, args, stdout: "created-gitea-id\n", stderr: "", exitCode: 0 };
     }
+    if (args[0] === "start") this.running = true;
     return { command, args, stdout: "", stderr: "", exitCode: 0 };
   }
 }
@@ -94,6 +108,7 @@ describe("managed Gitea organization policy", () => {
     // Given
     const stateRoot = await mkdtemp(join(tmpdir(), "dim-gitea-policy-"));
     cleanup.push(stateRoot);
+    await claimTestGiteaService(stateRoot);
     const runner = new GiteaCreationRunner();
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
 
@@ -101,7 +116,7 @@ describe("managed Gitea organization policy", () => {
     await ensureGitea(runner, hostLifecycleOptions(stateRoot));
 
     // Then
-    const creation = runner.calls.find((call) => call[1] === "run");
+    const creation = runner.calls.find((call) => call[1] === "container" && call[2] === "create");
     expect(creation?.filter((argument) =>
       argument === "GITEA__admin__DISABLE_REGULAR_ORG_CREATION=true")).toHaveLength(1);
     expect(creation).not.toContain("GITEA__service__DEFAULT_ALLOW_CREATE_ORGANIZATION=false");
@@ -111,6 +126,7 @@ describe("managed Gitea organization policy", () => {
     // Given
     const stateRoot = await mkdtemp(join(tmpdir(), "dim-gitea-policy-"));
     cleanup.push(stateRoot);
+    await claimTestGiteaService(stateRoot);
     const runner = new GiteaPolicyRunner(giteaContainer({
       id: "owned-gitea-id", running: true, policyEntries: [false]
     }));
@@ -134,6 +150,7 @@ describe("managed Gitea organization policy", () => {
     // Given
     const stateRoot = await mkdtemp(join(tmpdir(), "dim-gitea-policy-"));
     cleanup.push(stateRoot);
+    await claimTestGiteaService(stateRoot);
     const runner = new GiteaPolicyRunner(giteaContainer({
       id: "stopped-gitea-id", running: false, policyEntries: [false]
     }));
@@ -152,6 +169,7 @@ describe("managed Gitea organization policy", () => {
     // Given
     const stateRoot = await mkdtemp(join(tmpdir(), "dim-gitea-policy-"));
     cleanup.push(stateRoot);
+    await claimTestGiteaService(stateRoot);
     const runner = new GiteaPolicyRunner(giteaContainer({
       id: "foreign-gitea-id", running: false, policyEntries: [false], managed: false
     }));
@@ -176,6 +194,7 @@ describe("managed Gitea organization policy", () => {
     // Given
     const stateRoot = await mkdtemp(join(tmpdir(), "dim-gitea-policy-"));
     cleanup.push(stateRoot);
+    await claimTestGiteaService(stateRoot);
     const runner = new GiteaPolicyRunner(giteaContainer({
       id: "owned-gitea-id", running, policyEntries: [false]
     }), failure);
@@ -197,6 +216,7 @@ describe("managed Gitea organization policy", () => {
     // Given
     const stateRoot = await mkdtemp(join(tmpdir(), "dim-gitea-policy-"));
     cleanup.push(stateRoot);
+    await claimTestGiteaService(stateRoot);
     const runner = new GiteaPolicyRunner(giteaContainer({
       id: "owned-gitea-id", running: true, policyEntries: [false]
     }), "policy-revert");
