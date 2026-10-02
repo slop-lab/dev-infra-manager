@@ -139,5 +139,5 @@ without using a real DNS account:
 
 ```bash
 just verify example current-installed auto external-urls
-just verify example runc use external-urls
+just verify example sysbox use external-urls
 ```

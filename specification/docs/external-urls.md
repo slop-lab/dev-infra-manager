@@ -45,8 +45,12 @@ Only the proxy socket directory is mounted into `dev`. The preset permits
 filtered discovery, list, request, and individual revoke operations for the
 named ingress and denies all other controller routes. Advanced reviewed policies use
 `createControllerProxy` and `externalUrlProxy` from
-`@slop-lab/dim-controller-proxy`; the runnable form is in the
-[External URL example](../../examples/features/external-urls/README.md).
+`@slop-lab/dim-controller-proxy`; its
+[package documentation](../../core/packages/controller-proxy/README.md#external-url-preset)
+provides runnable proxy commands. The
+[External URL example](../../examples/features/external-urls/README.md) instead
+invokes `dim external-url request --workspace external-dev` from the host. It
+mounts no controller socket or grant into either nested service.
 
 A caller-specific capability may pin its target at the trusted Project
 lifecycle boundary:
