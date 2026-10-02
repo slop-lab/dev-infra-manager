@@ -110,8 +110,8 @@ version1="$(dim --version)"
 grep -q "DIM installer $DIM_PACKAGE_VERSION" <<<"$version1"
 grep -q "DIM CLI: not installed" <<<"$version1"
 
-echo "[container] dim install-cli with no explicit flag under mise (expect --no-local-bin default)"
-dim install-cli
+echo "[container] dim installer install core with no explicit flag under mise (expect --no-local-bin default)"
+dim installer install core
 test ! -e "$HOME/.local/bin/dim"
 config_path="$HOME/.config/dim/config.json"
 mode="$(mise exec node@24 -- node -e "console.log(JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).cli.mode)" "$config_path")"
@@ -133,7 +133,7 @@ if mise ls --global | grep -Eq '^node[[:space:]]'; then
 fi
 
 echo "[container] explicit --local-bin overrides the mise auto-detected default"
-dim install-cli --local-bin
+dim installer install core --local-bin
 test -L "$HOME/.local/bin/dim"
 readlink -f "$HOME/.local/bin/dim" | grep -q "/dim/runtime/current/"
 

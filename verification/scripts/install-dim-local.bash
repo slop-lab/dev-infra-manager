@@ -37,10 +37,10 @@ else
 fi
 "${npm_command[@]}" install --prefix "$staged_installer" --no-save --no-fund --no-audit "${installer_tarballs[0]}"
 
-"${dim_command[@]}" install-cli --local-packages "$package_root" --no-local-bin
+"${dim_command[@]}" installer install core --local-packages "$package_root" --no-local-bin
 if [[ "$uses_mise" -eq 0 ]]; then
   npm install --global --prefix "$install_prefix" "${installer_tarballs[0]}"
   dim_command=("$install_prefix/bin/dim")
 fi
-"${dim_command[@]}" enable-plugin "${plugins[@]}"
+  "${dim_command[@]}" installer enable-plugin "${plugins[@]}"
 echo "Installed the local DIM build and enabled its DNS and External URLs plugins"

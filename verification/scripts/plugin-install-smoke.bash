@@ -131,10 +131,10 @@ installer_tarball="$(pnpm --dir core/packages/installer/dist pack --pack-destina
 npm install --prefix "$installer_prefix" "$root/$installer_tarball" >/dev/null
 
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
-  install-cli --local-packages "$package_bundle" --no-local-bin >/dev/null
+  installer install core --local-packages "$package_bundle" --no-local-bin >/dev/null
 
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
-  install-plugin \
+  installer install plugin \
   "$root/$plugin_tarball" \
   >/dev/null
 
@@ -147,7 +147,7 @@ test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smo
 # caller's temporary tarball still existing.
 rm "$root/$plugin_tarball"
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
-  install-cli --local-packages "$package_bundle" --no-local-bin >/dev/null
+  installer install core --local-packages "$package_bundle" --no-local-bin >/dev/null
 result="$(DIM_STATE_ROOT="$root/state" DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" node core/packages/cli/dist/cli.js plugin list --json)"
 test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smoke"
 
@@ -166,7 +166,7 @@ incompatible_tarball="$(pnpm --dir "$incompatible_source" pack --pack-destinatio
 package_before="$(sha256sum "$plugin_home/package.json")"
 manifest_before="$(sha256sum "$plugin_home/plugins.json")"
 if DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
-  install-plugin "$root/$incompatible_tarball" >/dev/null 2>&1; then
+  installer install plugin "$root/$incompatible_tarball" >/dev/null 2>&1; then
   echo "incompatible plugin unexpectedly installed" >&2
   exit 1
 fi
@@ -174,15 +174,15 @@ test "$(sha256sum "$plugin_home/package.json")" = "$package_before"
 test "$(sha256sum "$plugin_home/plugins.json")" = "$manifest_before"
 
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
-  disable-plugin '@example/dim-plugin-smoke' >/dev/null
+  installer disable-plugin '@example/dim-plugin-smoke' >/dev/null
 test "$(jq '.plugins | length' "$plugin_home/plugins.json")" = 0
 
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
-  enable-plugin '@example/dim-plugin-smoke' >/dev/null
+  installer enable-plugin '@example/dim-plugin-smoke' >/dev/null
 test "$(jq -r '.plugins[0]' "$plugin_home/plugins.json")" = "@example/dim-plugin-smoke"
 
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
-  remove-plugin '@example/dim-plugin-smoke' >/dev/null
+  installer remove-plugin '@example/dim-plugin-smoke' >/dev/null
 test "$(jq '.plugins | length' "$plugin_home/plugins.json")" = 0
 test "$(jq '.dependencies | has("@example/dim-plugin-smoke")' "$plugin_home/package.json")" = false
 test -z "$(find "$data_home/runtime/sources" -type f -print -quit)"
