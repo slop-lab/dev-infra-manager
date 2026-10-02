@@ -88,7 +88,7 @@ printf '%s\n' "\${DIM_INVOKED_VIA_MISE:-}" >${JSON.stringify(`${record}.env`)}
 printf '%s\n' "$@" >${JSON.stringify(record)}
 `);
 
-    const result = await run(launcher, ["install-cli"], bin);
+    const result = await run(launcher, ["installer", "install", "core"], bin);
 
     expect(result.code).toBe(0);
     expect((await readFile(`${record}.env`, "utf8")).trim()).toBe("1");
@@ -98,7 +98,9 @@ printf '%s\n' "$@" >${JSON.stringify(record)}
       "--",
       "node",
       join(dirname(launcher), "cli.js"),
-      "install-cli"
+      "installer",
+      "install",
+      "core"
     ]);
   });
 

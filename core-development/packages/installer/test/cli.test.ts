@@ -125,7 +125,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     const result = await runCli(["workspace", "list"], tsxPath!, env, root);
     expect(result.code).toBe(2);
     expect(result.stderr).toContain("DIM CLI is not installed");
-    expect(result.stderr).toContain("dim install-cli");
+    expect(result.stderr).toContain("dim installer install core");
   });
 
   it("dim (no args, non-TTY) prints facade help and fails instead of hanging", async () => {
@@ -137,34 +137,52 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(result.stderr).toContain("interactive installation requires a TTY");
   });
 
-  it("dim installer <garbage> is rejected as an unknown argument", async () => {
+  it("dim installer <garbage> is rejected as an unknown command", async () => {
     const root = await tempDir("dim-cli-installer-garbage-");
     const { env } = await baseEnv(root);
     const result = await runCli(["installer", "garbage"], tsxPath!, env, root);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("unknown installer argument: garbage");
+    expect(result.stderr).toContain("unknown installer command: garbage");
   });
 
-  it("dim install-cli rejects --no-local-bin combined with --local-bin", async () => {
+  it("accepts repeated installer namespace tokens", async () => {
+    const root = await tempDir("dim-cli-installer-repeated-");
+    const { env } = await baseEnv(root);
+    const result = await runCli(["installer", "installer", "install", "core", "--help"], tsxPath!, env, root);
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Usage: dim installer install core");
+  });
+
+  it("rejects removed top-level installer commands", async () => {
+    const root = await tempDir("dim-cli-legacy-install-");
+    const { env } = await baseEnv(root);
+    for (const command of ["install-cli", "install-plugin"]) {
+      const result = await runCli([command], tsxPath!, env, root);
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain("DIM CLI is not installed");
+    }
+  });
+
+  it("dim installer install core rejects --no-local-bin combined with --local-bin", async () => {
     const root = await tempDir("dim-cli-conflicting-flags-");
     const { env } = await baseEnv(root);
-    const result = await runCli(["install-cli", "--no-local-bin", "--local-bin"], tsxPath!, env, root);
+    const result = await runCli(["installer", "install", "core", "--no-local-bin", "--local-bin"], tsxPath!, env, root);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("--no-local-bin and --local-bin cannot be used together");
   });
 
-  it("dim install-cli rejects unknown flags", async () => {
+  it("dim installer install core rejects unknown flags", async () => {
     const root = await tempDir("dim-cli-unknown-flag-");
     const { env } = await baseEnv(root);
-    const result = await runCli(["install-cli", "--bogus-flag"], tsxPath!, env, root);
+    const result = await runCli(["installer", "install", "core", "--bogus-flag"], tsxPath!, env, root);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("dim:");
   });
 
-  it("dim install-plugin requires the shared CLI runtime first", async () => {
+  it("dim installer install plugin requires the shared CLI runtime first", async () => {
     const root = await tempDir("dim-plugin-before-cli-");
     const { env } = await baseEnv(root);
-    const result = await runCli(["install-plugin", "@example/plugin@1.0.0"], tsxPath!, env, root);
+    const result = await runCli(["installer", "install", "plugin", "@example/plugin@1.0.0"], tsxPath!, env, root);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("CLI must be installed before plugins");
   });
@@ -186,7 +204,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     }));
     await writeFile(join(pluginHome, "plugins.json"), '{"schemaVersion":1,"plugins":[]}\n');
 
-    const result = await runCli(["enable-plugin", "plugin-two", "plugin-one"], tsxPath!, env, root);
+    const result = await runCli(["installer", "enable-plugin", "plugin-two", "plugin-one"], tsxPath!, env, root);
 
     expect(result.code).toBe(0);
     expect(result.stdout).toBe("Enabled plugin-two\nEnabled plugin-one\n");
@@ -196,10 +214,10 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     });
   });
 
-  it("dim install-cli help warns about direct mode under mise", async () => {
+  it("dim installer install core help warns about direct mode under mise", async () => {
     const root = await tempDir("dim-cli-mise-help-");
     const { env } = await baseEnv(root);
-    const result = await runCli(["install-cli", "--help"], tsxPath!, { ...env, MISE_SHELL: "bash" }, root);
+    const result = await runCli(["installer", "install", "core", "--help"], tsxPath!, { ...env, MISE_SHELL: "bash" }, root);
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("--local-bin under mise may shadow its dim shim");
     expect(result.stdout).toContain("bypass the installer facade");
@@ -227,7 +245,7 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     }));
 
     const result = await runCli(
-      ["install-cli", "--local-packages", bundle, "--no-local-bin"],
+      ["installer", "install", "core", "--local-packages", bundle, "--no-local-bin"],
       tsxPath!,
       { ...env, PATH: `${bin}:${env.PATH}` },
       root
@@ -357,6 +375,6 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
 
     const result = await runCli(["workspace", "list"], tsxPath!, env, root);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain("run 'dim install-cli'");
+    expect(result.stderr).toContain("run 'dim installer install core'");
   });
 });
