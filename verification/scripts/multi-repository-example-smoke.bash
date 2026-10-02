@@ -11,7 +11,7 @@ set -euo pipefail
 #
 # DIM isn't installed from the published package here (today's changes
 # aren't released yet): it's built locally, packed, and installed through
-# the installer facade (`dim install-cli`) against a disposable local npm
+# the installer facade (`dim installer install core`) against a disposable local npm
 # registry, matching how a real user would install it once released.
 #
 # Requires: Docker, a reachable `dim-gitea` container (this repository's own
@@ -41,7 +41,7 @@ dim_bin="$install_prefix/bin/dim"
 
 export DIM_STATE_ROOT="$state_root"
 export DIM_CONFIG_PATH="$work_dir/config/dim.json"
-# Isolate where install-cli puts the versioned DIM CLI too, not just state/
+# Isolate where the core installer puts the versioned DIM CLI too, not just state/
 # config: package.json's version doesn't change between local test runs, and
 # npm treats an already-installed version as up to date even when a fresh
 # local registry republished different content under that same version.

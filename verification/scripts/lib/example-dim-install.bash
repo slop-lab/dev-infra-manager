@@ -26,5 +26,5 @@ dim_install_example_cli() {
   npm install --global --prefix "$install_prefix" \
     "$work_dir"/*dim-installer*.tgz --silent >/dev/null
   DIM_EXAMPLE_DIM_BIN="$install_prefix/bin/dim"
-  "$DIM_EXAMPLE_DIM_BIN" install-cli --no-local-bin >/dev/null
+"$DIM_EXAMPLE_DIM_BIN" installer install core --no-local-bin >/dev/null
 }
