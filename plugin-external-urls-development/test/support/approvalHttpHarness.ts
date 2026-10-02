@@ -12,6 +12,7 @@ import {
 } from "@slop-lab/dim-core";
 import { vi } from "vitest";
 import { createExternalUrlsPlugin } from "../../../plugin-external-urls/src/index.js";
+import type { ExternalUrlRoutePolicyConfig } from "../../../plugin-external-urls/src/routePolicy.js";
 
 export const workspace = { id: "A".repeat(43), name: "work", projectId: "project-id", projectName: "project" };
 export const foreign = { id: "B".repeat(43), name: "foreign", projectId: "project-id", projectName: "project" };
@@ -29,6 +30,8 @@ interface ApprovalHttpPluginOptions {
     readonly listenHost: string;
     readonly listenPort: number;
   };
+  readonly routePolicy?: ExternalUrlRoutePolicyConfig;
+  readonly workspace?: ControllerWorkspace;
 }
 
 export async function startApprovalHttpPlugin(options: ApprovalHttpPluginOptions) {
@@ -41,7 +44,9 @@ export async function startApprovalHttpPlugin(options: ApprovalHttpPluginOptions
     listenHost = "127.0.0.1",
     publicPort,
     failInitializationResolution = false,
-    approvalExposure
+    approvalExposure,
+    routePolicy,
+    workspace: selectedWorkspace = workspace
   } = options;
   const registered = await registerPlugins([createExternalUrlsPlugin({
     ingresses: { public: {
@@ -52,6 +57,7 @@ export async function startApprovalHttpPlugin(options: ApprovalHttpPluginOptions
       listenPort: ingressPort,
       ...(publicPort === undefined ? {} : { port: publicPort }),
       ...(approvalExposure === undefined ? {} : { approvalExposure }),
+      ...(routePolicy === undefined ? {} : { routePolicy }),
       approvalRequired: true
     } }
   })]);
@@ -68,7 +74,7 @@ export async function startApprovalHttpPlugin(options: ApprovalHttpPluginOptions
     await initializeRoute({
       stateRoot,
       runner: { run: runner.run.bind(runner), runStreaming: vi.fn(async () => 0) },
-      listWorkspaces: async () => [workspace],
+      listWorkspaces: async () => [selectedWorkspace],
       runWorkspaceRequest: async (_workspace, operation) => operation(),
       resolveTarget: async () => {
         if (failInitializationResolution) throw new Error("injected first target resolution failure");
@@ -79,7 +85,9 @@ export async function startApprovalHttpPlugin(options: ApprovalHttpPluginOptions
   const controller = createDimController({
     stateRoot,
     routes: registered.controllerRoutes,
-    authenticate: async (token) => token === "workspace-grant" ? workspace : token === "foreign-grant" ? foreign : undefined,
+    authenticate: async (token) => token === "workspace-grant"
+      ? selectedWorkspace
+      : token === "foreign-grant" ? foreign : undefined,
     runWorkspaceRequest: async (_workspace, operation) => operation(),
     resolveTarget
   });
@@ -149,12 +157,15 @@ export async function storedApproval(stateRoot: string, workspaceId: string): Pr
   return stored.approval;
 }
 
-export function proxyRequest(port: number): Promise<{ readonly status: number; readonly body: string }> {
+export function proxyRequest(
+  port: number,
+  host = "work--app.example.test"
+): Promise<{ readonly status: number; readonly body: string }> {
   return new Promise((resolve, reject) => {
     const request = http.request({
       hostname: "127.0.0.1",
       port,
-      headers: { host: "work--app.example.test" }
+      headers: { host }
     }, (response) => {
       const chunks: Buffer[] = [];
       response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));

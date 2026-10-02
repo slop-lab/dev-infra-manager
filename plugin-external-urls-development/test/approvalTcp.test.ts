@@ -52,6 +52,7 @@ it("gates an approval-required TCP listener until host approval and disconnects 
   // Then: the request succeeds but the listener closes traffic while pending.
   expect(created.status).toBe(201);
   expect(pending.approval).toBe("pending");
+  expect(pending.permalink).toBeUndefined();
   await expect(exchange(ingressPort, "pending")).rejects.toThrow();
 
   // When: host administration approves and then revokes that exact route ID.
@@ -159,7 +160,12 @@ function adminAction(base: string, action: string, id: string): Promise<Response
   });
 }
 
-function route(value: unknown): { readonly id: string; readonly approval: string; readonly url: string } {
+function route(value: unknown): {
+  readonly id: string;
+  readonly approval: string;
+  readonly url: string;
+  readonly permalink?: string;
+} {
   if (!value || typeof value !== "object" || !("urls" in value) || !Array.isArray(value.urls)) {
     throw new Error("expected external URL response");
   }
@@ -169,7 +175,10 @@ function route(value: unknown): { readonly id: string; readonly approval: string
     || !("url" in entry) || typeof entry.url !== "string") {
     throw new Error("expected external URL route status");
   }
-  return { id: entry.id, approval: entry.approval, url: entry.url };
+  const permalink = "permalink" in entry && typeof entry.permalink === "string"
+    ? entry.permalink
+    : undefined;
+  return { id: entry.id, approval: entry.approval, url: entry.url, ...(permalink === undefined ? {} : { permalink }) };
 }
 
 interface ApprovalTcpPluginOptions {

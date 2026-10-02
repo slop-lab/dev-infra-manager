@@ -98,7 +98,8 @@ interface IngressListener {
     request: NormalizedRequest,
     upstream: ResolvedWorkspaceTarget,
     routeId?: string,
-    approval?: ExternalUrlApproval
+    approval?: ExternalUrlApproval,
+    publicRouteId?: string
   ): Promise<{ readonly route: ExternalRoute; readonly acquired: boolean }>;
   revoke(route: ExternalRoute): Promise<void>;
   setApproval(route: ExternalRoute, enabled: boolean): void;
@@ -816,12 +817,14 @@ async function reconcileStoredRoute(
   context: RouteReconciliationContext
 ): Promise<StoredUrl> {
   if (entry.approval === "revoked") return entry;
-  const policyChanged = ingress.options.approvalRequired === true
-    && entry.policyRevision !== ingress.policyRevision;
-  const current = policyChanged
+  const missingPermalink = entry.subdomain !== undefined
+    && (entry.permalink === undefined || entry.route.permalinkAuthority === undefined);
+  const policyChanged = entry.policyRevision !== ingress.policyRevision;
+  const approvalChanged = ingress.options.approvalRequired === true && (policyChanged || missingPermalink);
+  const current = approvalChanged
     ? { ...entry, approval: "pending" as const }
     : entry;
-  if (policyChanged) {
+  if (approvalChanged) {
     await store.put(current);
   }
   const upstream = await context.resolveTarget(current.target, ingress.listener.upstreamMode);
@@ -830,10 +833,12 @@ async function reconcileStoredRoute(
     storedRequest(current),
     upstream,
     current.route.ingressId ?? current.id,
-    current.approval
+    current.approval,
+    current.subdomain === undefined ? undefined : current.id
   );
-  if (!policyChanged) {
-    if (reconciled.route.authority === current.route.authority) return current;
+  if (!policyChanged && !missingPermalink) {
+    if (reconciled.route.authority === current.route.authority
+      && reconciled.route.permalinkAuthority === current.route.permalinkAuthority) return current;
     if (reconciled.acquired) await ingress.listener.revoke(reconciled.route).catch(() => {});
     throw new Error(`external route '${current.route.id}' changed authority during reconciliation`);
   }
@@ -842,7 +847,18 @@ async function reconcileStoredRoute(
     if (reconciled.acquired) await ingress.listener.revoke(reconciled.route).catch(() => {});
     throw new Error(`ingress '${current.ingress}' did not return a public URL`);
   }
-  const updated = { ...current, route: reconciled.route, url, policyRevision: ingress.policyRevision };
+  const permalink = reconciled.route.permalink;
+  if (current.subdomain !== undefined && permalink === undefined) {
+    if (reconciled.acquired) await ingress.listener.revoke(reconciled.route).catch(() => {});
+    throw new Error(`ingress '${current.ingress}' did not return a permalink URL`);
+  }
+  const updated = {
+    ...current,
+    route: reconciled.route,
+    url,
+    ...(permalink === undefined ? {} : { permalink }),
+    policyRevision: ingress.policyRevision
+  };
   try {
     await store.put(updated);
     return updated;
@@ -878,11 +894,22 @@ async function createUrl(
   const id = randomUUID();
   const approval: ExternalUrlApproval = ingress.options.approvalRequired === true ? "pending" : "not-required";
   const claim = approval === "not-required" ? routeClaim(context.workspace, request) : id;
-  const provisioned = await ingress.listener.provision(context.workspace, request, upstream, claim, approval);
+  const provisioned = await ingress.listener.provision(
+    context.workspace,
+    request,
+    upstream,
+    claim,
+    approval,
+    request.subdomain === undefined ? undefined : id
+  );
   try {
     const { route } = provisioned;
     const url = route.url;
     if (!url) throw new Error(`ingress '${request.ingress}' did not return a public URL`);
+    const permalink = route.permalink;
+    if (request.subdomain !== undefined && permalink === undefined) {
+      throw new Error(`ingress '${request.ingress}' did not return a permalink URL`);
+    }
     const entry: StoredUrl = {
       id,
       workspace: context.workspace.name,
@@ -893,6 +920,7 @@ async function createUrl(
       ...(request.path === undefined ? {} : { path: request.path }),
       route,
       url,
+      ...(permalink === undefined ? {} : { permalink }),
       approval,
       policyRevision: ingress.policyRevision,
       createdAt: new Date().toISOString()
