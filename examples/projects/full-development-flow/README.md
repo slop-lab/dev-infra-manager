@@ -7,7 +7,8 @@ long-lived development environment:
 - a persistent, unprivileged agent home and an agent launched inside its
   private rootless Docker daemon;
 - host-provided Git author identity and constrained managed-Git credentials;
-- an agent controller proxy that permits only an asynchronous self-restart;
+- separate restricted controller proxies for asynchronous self-restart and
+  read-only workspace resource queries;
 - an optional `documentation` profile launched inside the agent daemon;
 - Project-owned `backup`, `restore`, `bash`, `tool-setup`, `agent`, and `ssh-proxy`
   tasks; and
