@@ -25,8 +25,10 @@ host until the live two-host Gitea/Sysbox gate in
 4. Supply a private, persistent SQLite database on the control-plane host.
    Retain it across service restarts. Back up the database together with its
    write-ahead-log files using SQLite-safe backup procedures, not a live file
-   copy. Run the service behind an operator-controlled HTTPS endpoint (or an
-   explicitly isolated network); do not publish its tokens to workspaces.
+   copy. The database has a strict schema version; schema-less and unsupported
+   databases are rejected unchanged without implicit migration. Run the service
+   behind an operator-controlled HTTPS endpoint (or an explicitly isolated
+   network); do not publish its tokens to workspaces.
 5. Configure one organization `workflow_job` webhook per enrolled Project,
    pointing at `/v1/webhooks/PROJECT_ID/workflow-job` on the pool service and
    sending `Authorization: Bearer WEBHOOK_TOKEN`. Gitea must permit only that
@@ -97,6 +99,13 @@ force a new claim. A job completed by Gitea may be delivered again; verify
 results at the coordinator, not solely from the pool's `completed` claim
 output. The service's `/healthz` endpoint is process health, not evidence of
 webhook installation or available workers.
+
+Queued jobs and claims retain a public admission ID for the operator Project
+binding, common job image, and runner label in effect when the webhook was
+accepted. Tokens are excluded. Changing any bound identity leaves old queued
+demand inactive; an expired old claim still requires host cleanup, but its
+recovery acknowledgement does not requeue it under the new policy. Submit a
+fresh authenticated webhook event to create demand for the new admission ID.
 
 ## Disposable-QEMU verification
 
