@@ -84,6 +84,8 @@ function route(name: string, targetPort: number, urlId = name) {
     urlId,
     url: `https://${name}.example.test`,
     authority: `${name}.example.test`,
+    permalink: `https://${name}-permalink-${urlId}.example.test`,
+    permalinkAuthority: `${name}-permalink-${urlId}.example.test`,
     ingress: "https-main",
     targetPort
   };

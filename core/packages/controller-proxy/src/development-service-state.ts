@@ -10,6 +10,8 @@ export type DevelopmentServiceRoute = {
   readonly urlId: string;
   readonly url: string;
   readonly authority: string;
+  readonly permalink: string;
+  readonly permalinkAuthority: string;
   readonly ingress: string;
   readonly targetPort: number;
 };
@@ -110,9 +112,12 @@ export function isDevelopmentServiceRoute(value: unknown): value is DevelopmentS
     && value.urlId.length > 0
     && typeof value.url === "string"
     && typeof value.authority === "string"
+    && typeof value.permalink === "string"
+    && typeof value.permalinkAuthority === "string"
     && typeof value.ingress === "string"
     && isPort(value.targetPort)
-    && routeUrlMatches(value.url, value.authority);
+    && routeUrlMatches(value.url, value.authority)
+    && routeUrlMatches(value.permalink, value.permalinkAuthority);
 }
 
 export function isPort(value: unknown): value is number {
