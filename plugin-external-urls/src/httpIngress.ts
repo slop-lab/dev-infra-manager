@@ -12,7 +12,11 @@ import {
 } from "@slop-lab/dim-core";
 import { HttpFlowTracker, type HttpFlow } from "./httpFlows.js";
 import { WorkspaceRouteRegistry } from "./httpRouteRegistry.js";
-import { applyRoutePolicy, type ExternalUrlRoutePolicyConfig } from "./routePolicy.js";
+import {
+  applyRoutePolicy,
+  workspacePermalinkSubdomain,
+  type ExternalUrlRoutePolicyConfig
+} from "./routePolicy.js";
 import type { ExternalRoute, ExternalUrlApproval } from "./routeStore.js";
 
 export interface HttpIngressRequest {
@@ -77,7 +81,8 @@ export class WorkspaceIngressListener {
     request: HttpIngressRequest,
     upstream: ResolvedWorkspaceTarget,
     routeId = randomUUID(),
-    approval: ExternalUrlApproval = "not-required"
+    approval: ExternalUrlApproval = "not-required",
+    publicRouteId?: string
   ) {
     await this.#ready;
     if (request.subdomain === undefined) throw new UserError("HTTP ingress requests require a subdomain");
@@ -89,9 +94,12 @@ export class WorkspaceIngressListener {
     });
     validateSubdomain(subdomain);
     const authority = `${subdomain}.${normalizeDomain(this.#domain)}`;
+    const permalinkAuthority = publicRouteId === undefined
+      ? undefined
+      : `${workspacePermalinkSubdomain(workspace.name, publicRouteId)}.${normalizeDomain(this.#domain)}`;
     const claim = routeId;
     const acquired = this.#registry.provision({
-      authority,
+      authorities: permalinkAuthority === undefined ? [authority] : [authority, permalinkAuthority],
       claim,
       upstream,
       enabled: approval === "not-required" || approval === "approved",
@@ -99,7 +107,23 @@ export class WorkspaceIngressListener {
     });
     const publicAuthority = `${authority}${this.#port === undefined ? "" : `:${this.#port}`}`;
     const url = validateExternalUrl(`${this.#scheme}://${publicAuthority}${request.path ?? "/"}`);
-    return { acquired, route: { id: randomUUID(), ingress: this.name, authority, ingressId: claim, url } };
+    const permalink = permalinkAuthority === undefined
+      ? undefined
+      : validateExternalUrl(
+          `${this.#scheme}://${permalinkAuthority}${this.#port === undefined ? "" : `:${this.#port}`}${request.path ?? "/"}`
+        );
+    return {
+      acquired,
+      route: {
+        id: randomUUID(),
+        ingress: this.name,
+        authority,
+        ...(permalinkAuthority === undefined ? {} : { permalinkAuthority }),
+        ingressId: claim,
+        url,
+        ...(permalink === undefined ? {} : { permalink })
+      }
+    };
   }
 
   ready(): Promise<void> {
@@ -108,13 +132,13 @@ export class WorkspaceIngressListener {
 
   async revoke(route: ExternalRoute): Promise<void> {
     const claim = route.ingressId ?? route.authority;
-    this.#registry.revoke(route.authority, claim);
+    this.#registry.revoke(routeAuthorities(route), claim);
     this.#flows.destroyClaim(claim);
   }
 
   setApproval(route: ExternalRoute, enabled: boolean): void {
     const claim = route.ingressId ?? route.authority;
-    this.#registry.setApproval(route.authority, claim, enabled);
+    this.#registry.setApproval(routeAuthorities(route), claim, enabled);
     if (!enabled) this.#flows.destroyClaim(claim);
   }
 
@@ -209,6 +233,12 @@ export class WorkspaceIngressListener {
     client.once("close", destroy);
     client.once("error", destroy);
   }
+}
+
+function routeAuthorities(route: ExternalRoute): readonly string[] {
+  return route.permalinkAuthority === undefined
+    ? [route.authority]
+    : [route.authority, route.permalinkAuthority];
 }
 
 function validateExternalUrl(value: string): string {
