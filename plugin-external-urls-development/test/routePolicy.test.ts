@@ -4,9 +4,11 @@ import { mkdtemp, rm } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { workspaceServiceSubdomain } from "@slop-lab/dim-contracts-external-url";
 import {
   applyRoutePolicy,
-  workspacePermalinkSubdomain
+  workspacePermalinkSubdomain,
+  workspaceSubdomainPrefix
 } from "../../plugin-external-urls/src/routePolicy.js";
 
 describe("external URL route policies", () => {
@@ -25,6 +27,36 @@ describe("external URL route policies", () => {
       ...request,
       requestedSubdomain: "docs"
     })).rejects.toThrow("must start with 'work-1--'");
+  });
+
+  it("allows only the authenticated workspace exact OpenCode label", async () => {
+    // Given: colliding legacy spellings belonging to different workspaces.
+    const owner = "work.foo";
+    const otherWorkspace = "work_foo";
+    const request = {
+      workspace: { id: "workspace-id", name: owner },
+      ingress: "public",
+      requestedSubdomain: workspaceServiceSubdomain(owner, "opencode"),
+      domain: "example.test"
+    };
+
+    // When: the owner and another workspace request their exact labels.
+    await expect(applyRoutePolicy(undefined, request)).resolves.toBe(request.requestedSubdomain);
+
+    // Then: the other workspace's identity is not accepted for the owner.
+    await expect(applyRoutePolicy(undefined, {
+      ...request,
+      requestedSubdomain: workspaceServiceSubdomain(otherWorkspace, "opencode")
+    })).rejects.toThrow(`must start with '${workspaceSubdomainPrefix(owner)}' or equal`);
+  });
+
+  it("preserves the generic workspace prefix contract", () => {
+    // Given: punctuation variants that intentionally normalize for generic routes.
+    // When: their generic prefixes are generated.
+    const prefixes = ["work.foo", "work_foo", "work-foo"].map(workspaceSubdomainPrefix);
+
+    // Then: the existing generic normalization remains unchanged.
+    expect(prefixes).toEqual(["work-foo--", "work-foo--", "work-foo--"]);
   });
 
   it("builds a stable DNS-label permalink from workspace and route identity", () => {

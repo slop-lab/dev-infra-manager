@@ -1,6 +1,7 @@
 import http from "node:http";
 import https from "node:https";
 import { UserError, type ControllerWorkspace } from "@slop-lab/dim-core";
+import { workspaceServiceSubdomain } from "@slop-lab/dim-contracts-external-url";
 
 export type ExternalUrlRoutePolicyConfig =
   | { driver: "workspace-prefix" }
@@ -32,10 +33,13 @@ export async function applyRoutePolicy(
   request: ExternalUrlRoutePolicyRequest
 ): Promise<string> {
   if (!config || config.driver === "workspace-prefix") {
-    if (!request.requestedSubdomain.startsWith(workspaceSubdomainPrefix(request.workspace.name))) {
+    const workspacePrefix = workspaceSubdomainPrefix(request.workspace.name);
+    const opencodeSubdomain = workspaceServiceSubdomain(request.workspace.name, "opencode");
+    if (!request.requestedSubdomain.startsWith(workspacePrefix)
+      && request.requestedSubdomain !== opencodeSubdomain) {
       throw new UserError(
         `subdomain '${request.requestedSubdomain}' must start with `
-        + `'${workspaceSubdomainPrefix(request.workspace.name)}'`
+        + `'${workspacePrefix}' or equal '${opencodeSubdomain}'`
       );
     }
     return request.requestedSubdomain;
