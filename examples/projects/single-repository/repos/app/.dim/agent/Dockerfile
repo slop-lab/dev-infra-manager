@@ -50,7 +50,11 @@ COPY --from=docker-cli /usr/local/libexec/docker/cli-plugins/docker-compose \
   /usr/local/libexec/docker/cli-plugins/docker-compose
 COPY start.sh /usr/local/bin/start-single-app
 RUN ln -s /usr/local/lib/dim/controller-proxy/development-service-cli.js \
-      /usr/local/bin/dim-development-service
+      /usr/local/bin/dim-development-service \
+ && ln -s /usr/local/lib/dim/controller-proxy/workspace-resources-cli.js \
+      /usr/local/bin/dim-workspace-resources \
+ && ln -s /usr/local/lib/dim/controller-proxy/nproc-cli.js \
+      /usr/local/bin/dim-nproc
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["sh", "/usr/local/bin/start-single-app"]
