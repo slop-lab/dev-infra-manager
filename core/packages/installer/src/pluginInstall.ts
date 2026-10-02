@@ -19,6 +19,7 @@ export async function installPlugins(specifiers: readonly string[], options: Ins
   const backupDirectory = path.join(managedRoot, `.plugin-previous-${process.pid}-${Date.now()}`);
   let previousMoved = false;
   let promoted = false;
+  let controllerRestartAttempted = false;
   try {
     try {
       await cp(currentDirectory, stagingDirectory, { recursive: true });
@@ -34,11 +35,22 @@ export async function installPlugins(specifiers: readonly string[], options: Ins
     }
     await rename(stagingDirectory, currentDirectory);
     promoted = true;
+    controllerRestartAttempted = true;
+    try {
+      await run(path.join(currentDirectory, "node_modules", ".bin", "dim"), ["controller", "restart"], currentDirectory);
+    } catch (error) {
+      throw new Error("target controller restart/readiness failed", { cause: error });
+    }
     await rm(backupDirectory, { recursive: true, force: true });
     return installed;
   } catch (error) {
     if (promoted) await rm(currentDirectory, { recursive: true, force: true });
-    if (previousMoved) await rename(backupDirectory, currentDirectory);
+    if (previousMoved) {
+      await rename(backupDirectory, currentDirectory);
+      if (controllerRestartAttempted) {
+        await run(path.join(currentDirectory, "node_modules", ".bin", "dim"), ["controller", "restart"], currentDirectory);
+      }
+    }
     throw error;
   } finally {
     await rm(stagingDirectory, { recursive: true, force: true });

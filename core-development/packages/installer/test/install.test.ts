@@ -283,6 +283,99 @@ describe("@slop-lab/dim-installer", () => {
       expect(await readFile(join(current, "sentinel"), "utf8")).toBe("previous install");
     });
 
+    it("restores the prior managed symlink when direct installation fails after promotion", async () => {
+      // Given
+      const root = await tempDir("dim-install-direct-link-rollback-");
+      const npm = join(root, "npm.mjs");
+      await writeFakeCliNpm(npm, { argsFile: join(root, "arguments.json"), versionOutput: "2.0.0" });
+      const dataHome = join(root, "data-home");
+      const current = join(dataHome, "runtime", "current");
+      const previousExecutable = join(current, "node_modules", ".bin", "dim");
+      const priorManagedTarget = join(dataHome, "runtime", "prior-link-target", "dim");
+      const binDirectory = join(root, "bin");
+      const linkPath = join(binDirectory, "dim");
+      const configPath = join(root, "dim.json");
+      await mkdir(dirname(previousExecutable), { recursive: true });
+      await mkdir(dirname(priorManagedTarget), { recursive: true });
+      await mkdir(binDirectory, { recursive: true });
+      await writeStubCli(previousExecutable, { versionOutput: "1.0.0" });
+      await writeStubCli(priorManagedTarget, { versionOutput: "1.0.0" });
+      await symlink(priorManagedTarget, linkPath);
+      await writeFile(configPath, "not json");
+
+      // When
+      const installation = installDimCli({
+        version: "2.0.0",
+        exposeOnPath: true,
+        npmCommand: npm,
+        dataHome,
+        binDirectory,
+        configPath
+      });
+
+      // Then
+      await expect(installation).rejects.toThrow();
+      expect(await readlink(linkPath)).toBe(priorManagedTarget);
+    });
+
+    it("removes a newly added direct symlink when a formerly proxied installation rolls back", async () => {
+      // Given
+      const root = await tempDir("dim-install-new-link-rollback-");
+      const npm = join(root, "npm.mjs");
+      await writeFakeCliNpm(npm, { argsFile: join(root, "arguments.json"), versionOutput: "2.0.0" });
+      const dataHome = join(root, "data-home");
+      const previousExecutable = join(dataHome, "runtime", "current", "node_modules", ".bin", "dim");
+      const binDirectory = join(root, "bin");
+      const linkPath = join(binDirectory, "dim");
+      const configPath = join(root, "dim.json");
+      await mkdir(dirname(previousExecutable), { recursive: true });
+      await writeStubCli(previousExecutable, { versionOutput: "1.0.0" });
+      await writeFile(configPath, "not json");
+
+      // When
+      const installation = installDimCli({
+        version: "2.0.0",
+        exposeOnPath: true,
+        npmCommand: npm,
+        dataHome,
+        binDirectory,
+        configPath
+      });
+
+      // Then
+      await expect(installation).rejects.toThrow();
+      await expect(access(linkPath)).rejects.toMatchObject({ code: "ENOENT" });
+    });
+
+    it("preserves a foreign bin file when direct installation rejects it", async () => {
+      // Given
+      const root = await tempDir("dim-install-foreign-bin-");
+      const npm = join(root, "npm.mjs");
+      await writeFakeCliNpm(npm, { argsFile: join(root, "arguments.json"), versionOutput: "2.0.0" });
+      const dataHome = join(root, "data-home");
+      const previousExecutable = join(dataHome, "runtime", "current", "node_modules", ".bin", "dim");
+      const binDirectory = join(root, "bin");
+      const linkPath = join(binDirectory, "dim");
+      await mkdir(dirname(previousExecutable), { recursive: true });
+      await mkdir(binDirectory, { recursive: true });
+      await writeStubCli(previousExecutable, { versionOutput: "1.0.0" });
+      await writeFile(linkPath, "user-owned dim");
+
+      // When
+      const installation = installDimCli({
+        version: "2.0.0",
+        exposeOnPath: true,
+        npmCommand: npm,
+        dataHome,
+        binDirectory,
+        configPath: join(root, "dim.json")
+      });
+
+      // Then
+      await expect(installation).rejects.toThrow(/not managed by DIM installer/);
+      expect(await readFile(linkPath, "utf8")).toBe("user-owned dim");
+    });
+
     it("restores and restarts the previous runtime when target controller readiness fails", async () => {
       const root = await tempDir("dim-install-failed-controller-");
       const npm = join(root, "npm.mjs");
@@ -472,6 +565,8 @@ describe("@slop-lab/dim-installer", () => {
       await writeFakePluginNpm(npm, { argsFile: argumentsFile });
 
       const pluginHome = join(root, "plugins");
+      await mkdir(join(pluginHome, "node_modules", ".bin"), { recursive: true });
+      await writeStubCli(join(pluginHome, "node_modules", ".bin", "dim"), { versionOutput: "1.0.0" });
       const installed = await installPlugins(
         ["@dev-infra-manager/plugin-github@1.0.0", "dim-plugin-example@2.0.0"],
         { pluginHome, npmCommand: npm }
@@ -502,6 +597,8 @@ describe("@slop-lab/dim-installer", () => {
         join(pluginHome, "plugins.json"),
         JSON.stringify({ schemaVersion: 1, plugins: ["zzz-existing-plugin"] })
       );
+      await mkdir(join(pluginHome, "node_modules", ".bin"), { recursive: true });
+      await writeStubCli(join(pluginHome, "node_modules", ".bin", "dim"), { versionOutput: "1.0.0" });
 
       const npm = join(root, "npm.mjs");
       await writeFakePluginNpm(npm, { argsFile: join(root, "arguments.json") });
@@ -551,6 +648,53 @@ describe("@slop-lab/dim-installer", () => {
         schemaVersion: 1,
         plugins: ["existing-plugin"]
       });
+    });
+
+    it("restores and restarts the prior plugin runtime when controller readiness fails", async () => {
+      // Given
+      const root = await tempDir("dim-install-plugin-controller-rollback-");
+      const pluginHome = join(root, "runtime", "current");
+      const executable = join(pluginHome, "node_modules", ".bin", "dim");
+      const controllerCalls = join(root, "controller-calls.json");
+      await mkdir(dirname(executable), { recursive: true });
+      await writeFile(join(pluginHome, "package.json"), JSON.stringify({
+        private: true,
+        dependencies: { "existing-plugin": "1.0.0" }
+      }));
+      await writeFile(join(pluginHome, "plugins.json"), JSON.stringify({
+        schemaVersion: 1,
+        plugins: ["existing-plugin"]
+      }));
+      await writeFile(executable, `#!/usr/bin/env node
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+const dependencies = JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8")).dependencies ?? {};
+const calls = existsSync(${JSON.stringify(controllerCalls)}) ? JSON.parse(readFileSync(${JSON.stringify(controllerCalls)}, "utf8")) : [];
+calls.push(Object.keys(dependencies).sort());
+writeFileSync(${JSON.stringify(controllerCalls)}, JSON.stringify(calls));
+process.exit("new-plugin" in dependencies ? 9 : 0);
+`);
+      await chmod(executable, 0o755);
+      const npm = join(root, "npm.mjs");
+      await writeFakePluginNpm(npm, { argsFile: join(root, "arguments.json") });
+
+      // When
+      const installation = installPlugins(["new-plugin@2.0.0"], { pluginHome, npmCommand: npm });
+
+      // Then
+      await expect(installation).rejects.toThrow(/controller restart/);
+      expect(JSON.parse(await readFile(join(pluginHome, "package.json"), "utf8"))).toEqual({
+        private: true,
+        dependencies: { "existing-plugin": "1.0.0" }
+      });
+      expect(JSON.parse(await readFile(join(pluginHome, "plugins.json"), "utf8"))).toEqual({
+        schemaVersion: 1,
+        plugins: ["existing-plugin"]
+      });
+      expect(JSON.parse(await readFile(controllerCalls, "utf8"))).toEqual([
+        ["existing-plugin", "new-plugin"],
+        ["existing-plugin"]
+      ]);
     });
 
     it("requires at least one plugin specifier", async () => {

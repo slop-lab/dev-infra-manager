@@ -37,6 +37,10 @@ export interface InstalledCli {
   readonly symlink?: string;
 }
 
+type ManagedSymlinkSnapshot =
+  | { readonly kind: "absent" }
+  | { readonly kind: "present"; readonly target: string };
+
 export async function installDimCli(options: CliInstallOptions): Promise<InstalledCli> {
   const dataHome = path.resolve(options.dataHome ?? defaultDataHome());
   const managedRoot = path.join(dataHome, "runtime");
@@ -62,6 +66,7 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
   let committed = false;
   let controllerRestartAttempted = false;
   let installedSymlink: string | undefined;
+  let symlinkSnapshot: ManagedSymlinkSnapshot | undefined;
   try {
     await run(options.npmCommand ?? "npm", [
       "install", "--prefix", stagingDirectory, "--save-exact", "--no-fund", "--no-audit",
@@ -95,6 +100,7 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
     if (options.exposeOnPath) {
       const binDirectory = path.resolve(options.binDirectory ?? defaultBinDirectory());
       installedSymlink = path.join(binDirectory, "dim");
+      symlinkSnapshot = await snapshotManagedSymlink(installedSymlink, managedRoot);
       await installManagedSymlink(installedSymlink, executable, managedRoot);
     }
     const config = await readUserConfig(configPath);
@@ -107,11 +113,12 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
       if (promoted) await rm(currentDirectory, { recursive: true, force: true });
       if (previousMoved) {
         await rename(backupDirectory, currentDirectory);
+        if (installedSymlink && symlinkSnapshot) await restoreManagedSymlink(installedSymlink, symlinkSnapshot);
         if (controllerRestartAttempted) {
           await run(cliExecutable(dataHome), ["controller", "restart"], currentDirectory);
         }
       }
-      else if (installedSymlink) await unlink(installedSymlink).catch(() => undefined);
+      else if (installedSymlink && symlinkSnapshot) await restoreManagedSymlink(installedSymlink, symlinkSnapshot);
     }
     throw error;
   } finally {
@@ -151,20 +158,41 @@ export async function readLocalPackageBundle(directory: string): Promise<LocalPa
 export async function installManagedSymlink(linkPath: string, target: string, managedRoot: string): Promise<void> {
   const absoluteLink = path.resolve(linkPath);
   const absoluteTarget = path.resolve(target);
-  const absoluteManagedRoot = path.resolve(managedRoot);
   await mkdir(path.dirname(absoluteLink), { recursive: true, mode: 0o700 });
+  await snapshotManagedSymlink(absoluteLink, managedRoot);
+  await replaceSymlink(absoluteLink, absoluteTarget);
+}
+
+async function snapshotManagedSymlink(linkPath: string, managedRoot: string): Promise<ManagedSymlinkSnapshot> {
+  const absoluteLink = path.resolve(linkPath);
+  const absoluteManagedRoot = path.resolve(managedRoot);
   try {
     const existing = await lstat(absoluteLink);
     if (!existing.isSymbolicLink()) throw new Error(`${absoluteLink} already exists and is not managed by DIM installer`);
-    const resolvedTarget = path.resolve(path.dirname(absoluteLink), await readlink(absoluteLink));
+    const target = await readlink(absoluteLink);
+    const resolvedTarget = path.resolve(path.dirname(absoluteLink), target);
     if (!isWithin(resolvedTarget, absoluteManagedRoot)) {
       throw new Error(`${absoluteLink} already exists and is not managed by DIM installer`);
     }
+    return { kind: "present", target };
   } catch (error) {
-    if (errorCode(error) !== "ENOENT") throw error;
+    if (errorCode(error) === "ENOENT") return { kind: "absent" };
+    throw error;
   }
+}
+
+async function restoreManagedSymlink(linkPath: string, snapshot: ManagedSymlinkSnapshot): Promise<void> {
+  if (snapshot.kind === "absent") {
+    await unlink(linkPath);
+    return;
+  }
+  await replaceSymlink(linkPath, snapshot.target);
+}
+
+async function replaceSymlink(linkPath: string, target: string): Promise<void> {
+  const absoluteLink = path.resolve(linkPath);
   const temporary = `${absoluteLink}.tmp-${process.pid}-${Date.now()}`;
-  await symlink(absoluteTarget, temporary);
+  await symlink(target, temporary);
   try {
     await rename(temporary, absoluteLink);
   } catch (error) {
