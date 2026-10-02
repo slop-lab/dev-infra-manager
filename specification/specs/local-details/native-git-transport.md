@@ -16,8 +16,9 @@ the native path is independently reviewed and completed.
 
 ## Inputs and identity
 
-Startup consumes a strict schema-1 configuration. It pins an absolute Git
-executable and its exact `git version` output, one absolute storage root,
+Startup consumes a strict schema-1 configuration. It pins a trusted regular
+Git executable, its filesystem identity, and its exact `git version` output,
+one absolute storage root,
 registered `(Project ID, repository ID)` tuples, and credentials bound to one
 Project and explicit repository IDs. Writer credentials additionally bind one
 workspace ID. Configuration rejects duplicate repository tuples, duplicate
@@ -46,12 +47,15 @@ Additional query parameters, methods, endpoints, encoded separators,
 unregistered IDs, and mismatched content types are rejected before spawning
 Git. The child receives a fixed allowlist of CGI and DIM identity variables,
 not the service process environment. Request size, CGI header size, stderr
-capture, HTTP timeouts, and protocol negotiation values are bounded.
+capture, backend concurrency, HTTP timeouts, and protocol negotiation values
+are bounded. Each backend spawn rechecks the executable identity and overrides
+repository-controlled hook and receive settings.
 
 ## Proposal-only receive policy
 
-Repository initialization installs a server-side `pre-receive` policy and
-enables receive-pack only behind the HTTP authorization layer. A workspace
+Repository initialization rejects symbolic links in registered repository and
+hook paths, installs a server-side `pre-receive` policy without following
+links, and enables receive-pack only behind the HTTP authorization layer. A workspace
 writer may create or fast-forward only:
 
 ```text
@@ -59,8 +63,9 @@ refs/heads/proposals/<bound-workspace-id>/<safe-name>
 ```
 
 The hook rejects protected refs, tags, foreign workspace namespaces, malformed
-proposal names, deletion, and non-fast-forward proposal updates before Git
-moves any ref. Git's receive quarantine remains in effect on rejection.
+proposal names, and deletion. The forced effective receive configuration
+rejects non-fast-forward updates before Git moves any ref. Git's receive
+quarantine remains in effect on rejection.
 
 There is no transport identity that may write a protected ref. Host setup may
 perform an initial import directly against owned storage before service
@@ -82,4 +87,6 @@ bare repositories over HTTP. They prove two Projects are isolated, authorized
 clone and fetch work, an authorized workspace can update only its proposal
 namespace, and reader pushes, foreign repositories, invalid credentials,
 traversal, tags, cross-workspace refs, protected direct/force/deletion pushes,
-and unsafe refs fail without changing the tested bare refs.
+and unsafe refs fail without changing the tested bare refs. Adversarial tests
+also cover redirected hooks, repository and hook symbolic links, executable
+replacement, and malformed uploads followed by a successful liveness request.
