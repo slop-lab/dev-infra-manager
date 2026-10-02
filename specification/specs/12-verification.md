@@ -58,13 +58,19 @@ MUST prove that exactly one compare-and-swap succeeds and every loser leaves
 the winning ref unchanged. Live Git-host evidence MUST exercise the actual
 protected policy and atomic old-object-ID update; a mock alone is insufficient.
 
-The native Git review-only gate covers this contract independently of
-promotion: a real bare repository and Git CLI MUST expose the complete
+The native Git gate covers this contract through a real bare repository and
+Git CLI. It MUST expose the complete
 base-to-candidate diff through the reviewer API and CLI, persist immutable
 approval and revocation across restart, invalidate changed refs, trees, policy,
-or bound identities, deny writer/read-only/administrator/foreign approval, and
-leave the protected ref unchanged. Passing this subset MUST NOT be reported as
-CI evidence or `TRUST-PROMOTION-CAS-001` evidence.
+or bound identities, and deny writer/read-only/administrator/foreign approval.
+The host API MUST additionally persist authenticated exact per-job terminal
+evidence, reject nonterminal, foreign, tuple-mismatched, conflicting, missing,
+and superseded-success input, and select the highest attempt. With every
+required current approval and successful job present, one Git ref transaction
+MUST verify the proposal ref and compare-and-swap the protected old object ID
+to the candidate. Tests MUST prove restart persistence, exact-candidate
+idempotence, one concurrent winner, role separation, and unchanged protected
+refs for every denial. Smart HTTP MUST remain proposal-only.
 
 For `TRUST-RUNTIME-001`, each implemented backend MUST run the same
 backend-neutral agent journey. A supported VM backend additionally requires a
