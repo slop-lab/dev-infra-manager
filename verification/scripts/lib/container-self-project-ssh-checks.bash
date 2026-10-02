@@ -53,10 +53,20 @@ test -n "$DIM_GIT_TOKEN"
 git -C /workspace ls-remote origin HEAD >/dev/null
 ssh_assertion=external-url-authority
 test -S "$DIM_EXTERNAL_URL_SOCKET"
+test -S "$DIM_AGENT_CONTROLLER_SOCKET"
 test ! -e /run/dim/controller/controller.sock
 test -z "${DIM_CONTROLLER_TOKEN:-}"
+test -z "${DIM_AGENT_CONTROLLER_TOKEN:-}"
 curl --fail --silent --unix-socket "$DIM_EXTERNAL_URL_SOCKET" http://dim-controller/api |
   jq -e '.routes | type == "array"' >/dev/null
+dim-workspace-resources show | jq -e '
+  (.cpuCount | type == "string") and
+  (.memory | type == "string") and
+  (.pidsLimit | type == "string")' >/dev/null
+test "$(dim-nproc)" -ge 1
+test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --unix-socket "$DIM_AGENT_CONTROLLER_SOCKET" --request POST \
+  http://dim-controller/api/workspace/restart)" = 403
 ssh_assertion=qemu-authority
 if test -S "$DIM_QEMU_VERIFICATION_SOCKET"; then
   node /tmp/dim-self-qemu-client.mjs probe

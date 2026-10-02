@@ -24,11 +24,18 @@ output.exports = {
     types: "./development-service.d.ts",
     import: "./development-service.js",
     default: "./development-service.js"
+  },
+  "./workspace-resources": {
+    types: "./workspace-resources.d.ts",
+    import: "./workspace-resources.js",
+    default: "./workspace-resources.js"
   }
 };
 output.bin = {
   "dim-controller-proxy": "cli.js",
-  "dim-development-service": "development-service-cli.js"
+  "dim-development-service": "development-service-cli.js",
+  "dim-workspace-resources": "workspace-resources-cli.js",
+  "dim-nproc": "nproc-cli.js"
 };
 delete output.private;
 

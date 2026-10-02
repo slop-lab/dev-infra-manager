@@ -56,10 +56,12 @@ Agent tasks run as the workspace owner's nonroot identity and may use
 passwordless `sudo` only for root inside the agent container; this grants no
 root or runtime-control authority in the trusted workspace or on the host.
 
-Reviewed setup code also creates a deny-by-default agent controller proxy. The
-agent receives only its derived socket, not the workspace grant or original
-controller socket. This example allows one exact operation: asynchronously
-restart the authenticated workspace.
+Reviewed setup code creates separate deny-by-default controller proxies for
+the workspace and agent audiences. The agent receives only the derived
+sockets, not either grant or original controller socket. The workspace proxy
+allows one exact operation, asynchronously restarting the authenticated
+workspace. The agent proxy allows only reading that workspace's accepted
+resource assignment.
 
 ```bash
 dim workspace run single-dev bash -- -lc '
@@ -70,6 +72,16 @@ dim workspace run single-dev bash -- -lc '
 
 The request cannot name or restart another workspace. The host controller
 derives the target from the scoped grant held by the trusted proxy.
+
+```bash
+dim workspace run single-dev bash -- -lc '
+  dim-workspace-resources show
+  dim-nproc
+'
+```
+
+The resource helpers use `DIM_AGENT_CONTROLLER_SOCKET`; restart remains on
+`DIM_CONTROLLER_SOCKET`. Neither derived socket exposes host administration.
 
 ```bash
 dim workspace create single-app single-dev \

@@ -39,7 +39,7 @@ it("exposes only routes explicitly assigned to an audience", () => {
       .toEqual(["/agent", "/shared"]);
   });
 
-it("isolates agent grants and discovery from the workspace controller", async () => {
+  it("isolates agent grants and discovery from the workspace controller", async () => {
     const stateRoot = await mkdtemp(join(tmpdir(), "dim-agent-controller-"));
     const state = new LifecycleState(stateRoot);
     const now = new Date().toISOString();
@@ -109,7 +109,7 @@ it("isolates agent grants and discovery from the workspace controller", async ()
     const discovery = await (await fetch(`${agentBase}/api`, {
       headers: { authorization: `Bearer ${agentGrant}` }
     })).json() as { routes: Array<{ path: string }>; hostInputProviders: string[] };
-    expect(discovery.routes.map(({ path }) => path)).toEqual(["/api/safe"]);
+    expect(discovery.routes.map(({ path }) => path)).toEqual(["/api/workspace/resources", "/api/safe"]);
     expect(discovery.hostInputProviders).toEqual([]);
     expect((await fetch(`${agentBase}/api/workspace/restart`, {
       method: "POST",
@@ -122,6 +122,78 @@ it("isolates agent grants and discovery from the workspace controller", async ()
         body: "{}"
       })).status).toBe(404);
     }
+    await plugins.dispose();
+    await rm(stateRoot, { recursive: true, force: true });
+  });
+
+  it("returns only the authenticated agent workspace resource assignment", async () => {
+    // Given
+    const stateRoot = await mkdtemp(join(tmpdir(), "dim-agent-resources-"));
+    const state = new LifecycleState(stateRoot);
+    const now = new Date().toISOString();
+    const workspace = (name: string, workspaceId: string, cpuCount: string): WorkspaceRecord => ({
+      schemaVersion: 8,
+      workspaceId,
+      name,
+      projectId: `project-${name}`,
+      projectName: `project-${name}`,
+      rootRepositoryAlias: "root",
+      rootRef: "refs/heads/main",
+      rootCommit: "a".repeat(40),
+      workspaceDataPath: "/var/lib/dim/workspace-data",
+      phase: "ready",
+      profiles: [],
+      composeProjectName: `dim-${name}`,
+      containerName: `dim-ws-${name}`,
+      networkName: "dim-control",
+      dockerVolumeName: `dim-ws-${name}-docker`,
+      runtimeBackend: "sysbox",
+      kvm: false,
+      cpuCount,
+      memory: name === "a" ? "5g" : "9g",
+      pidsLimit: name === "a" ? "500" : "900",
+      routes: [],
+      gitUserName: "Agent",
+      gitUserEmail: "agent@example.invalid",
+      gitBaseUrl: `http://dim-gitea:3000/dim-${name}`,
+      hostAliases: {},
+      projectManifestPath: "/run/dim/project.json",
+      createdAt: now,
+      updatedAt: now
+    });
+    await state.claimWorkspace(workspace("a", "A".repeat(43), "2.5"));
+    await state.claimWorkspace(workspace("b", "B".repeat(43), "6"));
+    const agentGrantA = await state.ensureAgentGrant("a");
+    const agentGrantB = await state.ensureAgentGrant("b");
+    const workspaceGrantA = await state.ensureWorkspaceGrant("a");
+    const plugins = await registerPlugin({
+      name: "no-routes",
+      apiVersion: DIM_PLUGIN_API_VERSION,
+      register() {}
+    });
+    const server = configuredDimAgentController({ stateRoot } as LifecycleOptions, plugins);
+    servers.push(server);
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing address");
+    const base = `http://127.0.0.1:${address.port}`;
+    const get = (path: string, token: string) => fetch(`${base}${path}`, {
+      headers: { authorization: `Bearer ${token}` }
+    });
+
+    // When
+    const responseA = await get("/api/workspace/resources", agentGrantA);
+    const responseB = await get("/api/workspace/resources", agentGrantB);
+
+    // Then
+    expect(responseA.status).toBe(200);
+    expect(await responseA.json()).toEqual({ cpuCount: "2.5", memory: "5g", pidsLimit: "500" });
+    expect(responseB.status).toBe(200);
+    expect(await responseB.json()).toEqual({ cpuCount: "6", memory: "9g", pidsLimit: "900" });
+    expect((await get("/api/workspace/resources/b", agentGrantA)).status).toBe(404);
+    expect((await get("/api/workspace/resources?workspace=b", agentGrantA)).status).toBe(400);
+    expect((await get("/api/workspace/resources", workspaceGrantA)).status).toBe(401);
     await plugins.dispose();
     await rm(stateRoot, { recursive: true, force: true });
   });

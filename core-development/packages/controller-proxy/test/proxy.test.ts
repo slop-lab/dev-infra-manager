@@ -193,6 +193,7 @@ describe("controller proxy", () => {
           apiVersion: 1,
           routes: [
             { method: "POST", path: "/api/workspace/restart" },
+            { method: "GET", path: "/api/workspace/resources" },
             { method: "POST", path: "/api/urls" }
           ],
           hostInputProviders: ["builtin.git-author"]
@@ -208,18 +209,26 @@ describe("controller proxy", () => {
       sourceSocket,
       token: "workspace.secret",
       listen,
-      routes: [{ method: "POST", path: "/api/workspace/restart" }]
+      routes: [
+        { method: "POST", path: "/api/workspace/restart" },
+        { method: "GET", path: "/api/workspace/resources" }
+      ]
     });
     await proxy.listen();
     cleanup.push(() => proxy.close());
 
     const discovery = await request(listen, "GET", "/api");
     expect(JSON.parse(discovery.body)).toMatchObject({
-      routes: [{ method: "POST", path: "/api/workspace/restart" }],
+      routes: [
+        { method: "POST", path: "/api/workspace/restart" },
+        { method: "GET", path: "/api/workspace/resources" }
+      ],
       hostInputProviders: []
     });
     expect((await request(listen, "POST", "/api/workspace/restart")).status).toBe(202);
     expect((await request(listen, "POST", "/api/workspace/restart", { force: true })).status).toBe(403);
+    expect((await request(listen, "GET", "/api/workspace/resources")).status).toBe(202);
+    expect((await request(listen, "POST", "/api/workspace/resources")).status).toBe(403);
     expect((await request(listen, "POST", "/api/urls")).status).toBe(403);
     expect((await request(listen, "POST", "/api/host-inputs/builtin.git-author", { key: "name" })).status).toBe(403);
   });

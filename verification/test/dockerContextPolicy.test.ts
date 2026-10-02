@@ -57,6 +57,15 @@ describe("root Docker context policy", () => {
     expect(packages).toMatch(/\bpython3\b/);
   });
 
+  it("installs the scoped workspace nproc helper without host-admin access", async () => {
+    const dockerfile = await readFile(resolve(workspaceRoot, "agent/Dockerfile"), "utf8");
+
+    expect(dockerfile).toContain(
+      "ln -s /usr/local/lib/dim/controller-proxy/nproc-cli.js \\\n      /usr/local/bin/dim-nproc"
+    );
+    expect(dockerfile).not.toContain("/run/dim/admin");
+  });
+
   it("replaces the ambient sshd configuration with a closed server policy", async () => {
     const dockerfile = await readFile(resolve(workspaceRoot, "agent/Dockerfile"), "utf8");
 

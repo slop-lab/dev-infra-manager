@@ -13,19 +13,25 @@ npm install --save-exact '@slop-lab/dim-controller-proxy@0.9.0'
 
 The package is ESM-only, requires Node.js 24 or 26, includes TypeScript
 declarations, and installs the `dim-controller-proxy` and
-`dim-development-service` executables.
+`dim-development-service`, `dim-workspace-resources`, and `dim-nproc`
+executables.
 
 ## Agent preset
 
 The agent preset builds an exact-route, deny-by-default policy, filters
-controller discovery to that allowlist, and removes host-input discovery. This
-form allows an agent to request a restart of only the workspace identified by
-the trusted upstream grant:
+controller discovery to that allowlist, and removes host-input discovery.
+Restart and resource reads use different upstream audiences and therefore MUST
+run on separate derived sockets. The restart proxy reads
+`DIM_CONTROLLER_SOCKET` and `DIM_CONTROLLER_TOKEN`:
 
 ```bash
 dim-controller-proxy agent \
-  --listen /run/dim/agent-controller/controller.sock \
+  --listen /run/dim/agent-controller/restart.sock \
   --allow-workspace-restart
+
+dim-controller-proxy agent \
+  --listen /run/dim/agent-controller/resources.sock \
+  --allow-workspace-resources
 ```
 
 The same helper is available to reviewed Node.js policy code:
@@ -45,6 +51,25 @@ explicit `maxBodyBytes` limit.
 Allowing self-restart lets the agent trigger reviewed Project setup again and
 may affect availability. Project root code must opt in deliberately; the agent
 still cannot select another workspace or access a host-admin route.
+
+The resource option reads `DIM_AGENT_CONTROLLER_SOCKET` and
+`DIM_AGENT_CONTROLLER_TOKEN` and permits only bodyless
+`GET /api/workspace/resources` for the workspace bound to that upstream agent
+grant. The two allow flags cannot be combined. Mount both derived sockets into
+the agent, set `DIM_CONTROLLER_SOCKET` to the restart proxy and
+`DIM_AGENT_CONTROLLER_SOCKET` to the resource proxy, and do not pass either
+upstream grant.
+The packaged read-only helpers then provide JSON and `nproc`-compatible output:
+
+```bash
+dim-workspace-resources show
+dim-nproc
+```
+
+`dim-nproc` floors fractional assignments, returns at least one, and caps the
+result by CPUs visible to the process. An unavailable or unlimited (`max`)
+assignment fails instead of reporting host capacity. Neither helper accepts a
+workspace selector or reads Docker/cgroup state.
 
 ## External URL preset
 

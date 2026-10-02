@@ -44,6 +44,7 @@ case "${1:?private agent action is required}" in
       --env TMPDIR=/mnt/opencode-tmp \
       --env PATH=/home/dim-agent/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
       --env DIM_CONTROLLER_SOCKET=/run/dim/controller-proxy/agent.sock \
+      --env DIM_AGENT_CONTROLLER_SOCKET=/run/dim/controller-proxy/resources.sock \
       --env DIM_DEVELOPMENT_URL_SOCKET=/run/dim/development-url/controller.sock \
       --env OPENCODE_WEB_URL_SOCKET=/run/dim/development-url/opencode.sock \
       --env 'DIM_EXTERNAL_URL_CONTAINERS_JSON=["agent-dind","dim-agent"]' \

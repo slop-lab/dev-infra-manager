@@ -63,7 +63,11 @@ RUN npm install --global pnpm@10.13.1
 RUN chmod 0755 /usr/local/bin/dim-agent-shell /usr/local/bin/start-sshd /usr/local/bin/prepare-agent-tmp \
  && chown dim-agent:dim-agent /home/dim-agent \
  && ln -s /usr/local/lib/dim/controller-proxy/development-service-cli.js \
-      /usr/local/bin/dim-development-service
+      /usr/local/bin/dim-development-service \
+ && ln -s /usr/local/lib/dim/controller-proxy/workspace-resources-cli.js \
+      /usr/local/bin/dim-workspace-resources \
+ && ln -s /usr/local/lib/dim/controller-proxy/nproc-cli.js \
+      /usr/local/bin/dim-nproc
 ENV PATH="/home/dim-agent/.local/bin:${PATH}"
 WORKDIR /workspace
 

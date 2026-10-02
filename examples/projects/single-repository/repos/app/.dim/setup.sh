@@ -44,6 +44,22 @@ if ! curl --fail --silent --unix-socket "$proxy_socket" \
   done
 fi
 
+resource_proxy_socket="$proxy_dir/resources.sock"
+if ! curl --fail --silent --unix-socket "$resource_proxy_socket" \
+  http://dim-controller/api >/dev/null 2>&1; then
+  dim-controller-proxy agent \
+    --listen "$resource_proxy_socket" \
+    --directory-mode 0755 \
+    --socket-mode 0666 \
+    --allow-workspace-resources \
+    >"$proxy_dir/resources.log" 2>&1 &
+  for attempt in $(seq 1 30); do
+    test -S "$resource_proxy_socket" && break
+    test "$attempt" -lt 30 || { cat "$proxy_dir/resources.log" >&2; exit 1; }
+    sleep 1
+  done
+fi
+
 DIM_DEVELOPMENT_GATEWAY_PORT="$(dim-development-service gateway-port)"
 export DIM_DEVELOPMENT_GATEWAY_PORT
 opencode_workspace_slug="$(dim-development-service workspace-subdomain --workspace "${DIM_WORKSPACE_NAME:?}" --service opencode)"

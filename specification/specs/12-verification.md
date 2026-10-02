@@ -1155,13 +1155,22 @@ one-repository shape under `examples/projects/single-repository/`: no
 `.dim/repos.yml`, no protected ref or secret service, a direct agent-style
 push to `main`, explicit workspace resource limits, and an unprivileged
 Project-owned agent serving the application through its private rootless DinD
-sidecar boundary. It must also prove that the agent receives a filtered
-controller proxy with only bodyless self-restart permission, cannot reach host
-inputs, and can request an asynchronous restart of its own workspace. The
+sidecar boundary. It must also prove that the agent receives separate filtered
+workspace-audience and agent-audience proxy sockets with only bodyless
+self-restart and resource-read permissions respectively, cannot reach host
+inputs through either, and can request an asynchronous restart of its own
+workspace. The resource helper must use only the derived agent-audience socket;
+the proxies must receive no host-admin authority and must reject a configuration
+that combines the two audiences. Resource verification must use two
+workspace grants with different assignments, prove that neither grant can name
+or read the other workspace, prove that CPU `2.5` produces `dim-nproc` output
+`2`, and prove that missing or unlimited CPU assignments fail instead of
+falling back to host capacity. The
 workspace/agent controller boundary must additionally prove that the agent
 grant cannot authenticate to the workspace socket, the workspace grant cannot
 authenticate to the agent socket, agent discovery omits restart and host
 inputs, and an explicitly agent-audience External URL route remains usable.
+The agent fixture must not mount the host-admin controller socket.
 The smoke accepts `DIM_EXAMPLE_WORK_ROOT` so a remote or sibling DinD daemon can
 resolve controller-socket bind sources through a shared absolute path.
 

@@ -87,6 +87,12 @@ dim workspace exec "$workspace_name" -- docker inspect --format '{{.HostConfig.P
   "$agent_dind_container" | grep -qx true
 verification_stage="agent username contract"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'id -un')" = root
+verification_stage="agent workspace resource helpers"
+expected_resources="$(jq -c '{cpuCount,memory,pidsLimit}' <<<"$workspace_json")"
+test "$(dim workspace run "$workspace_name" bash -- -lc 'dim-workspace-resources show')" = \
+  "$expected_resources"
+dim workspace run "$workspace_name" bash -- -lc \
+  'test -S "$DIM_AGENT_CONTROLLER_SOCKET"; test "$(dim-nproc)" -ge 1; test -z "${DIM_AGENT_CONTROLLER_TOKEN:-}"'
 verification_stage="agent rootless UID mapping contract"
 dim workspace run "$workspace_name" bash -- -lc \
   'test "$(id -u)" = 0 && test "$(stat -c %u /workspace)" = 0'

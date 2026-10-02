@@ -145,6 +145,21 @@ test "$(jq -r '.routes | length' <<<"$controller_discovery")" = "1"
 test "$(jq -r '.routes[0] | "\(.method) \(.path)"' <<<"$controller_discovery")" = \
   "POST /api/workspace/restart"
 test "$(jq -r '.hostInputProviders | length' <<<"$controller_discovery")" = "0"
+resource_discovery="$(dim workspace run "$workspace_name" bash -- -lc '
+  curl --fail --silent --unix-socket "$DIM_AGENT_CONTROLLER_SOCKET" http://dim-controller/api
+')"
+test "$(jq -r '.routes | length' <<<"$resource_discovery")" = "1"
+test "$(jq -r '.routes[0] | "\(.method) \(.path)"' <<<"$resource_discovery")" = \
+  "GET /api/workspace/resources"
+test "$(dim workspace run "$workspace_name" bash -- -lc '
+  dim-workspace-resources show
+')" = '{"cpuCount":"2","memory":"2g","pidsLimit":"512"}'
+test "$(dim workspace run "$workspace_name" bash -- -lc 'test "$(dim-nproc)" = 2; printf 2')" = 2
+test "$(dim workspace run "$workspace_name" bash -- -lc '
+  curl --silent --output /dev/null --write-out "%{http_code}" \
+    --unix-socket "$DIM_AGENT_CONTROLLER_SOCKET" --request POST \
+    http://dim-controller/api/workspace/restart
+')" = "403"
 test "$(dim workspace run "$workspace_name" bash -- -lc '
   curl --silent --output /dev/null --write-out "%{http_code}" \
     --unix-socket "$DIM_CONTROLLER_SOCKET" --request POST \
