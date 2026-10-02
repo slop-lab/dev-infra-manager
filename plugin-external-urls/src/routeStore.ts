@@ -4,6 +4,9 @@ import { LifecycleState, UserError, type WorkspaceTarget } from "@slop-lab/dim-c
 
 const HOST_URL_LIST_LIMIT = 1_000;
 
+export const EXTERNAL_URL_APPROVALS = ["not-required", "pending", "approved", "revoked"] as const;
+export type ExternalUrlApproval = (typeof EXTERNAL_URL_APPROVALS)[number];
+
 export interface ExternalRoute {
   id: string;
   ingress: string;
@@ -22,6 +25,8 @@ export interface StoredUrl {
   path?: string;
   route: ExternalRoute;
   url: string;
+  approval: ExternalUrlApproval;
+  policyRevision?: string;
   createdAt: string;
 }
 
@@ -55,6 +60,15 @@ export class ExternalUrlStore {
 
   async remove(entry: StoredUrl): Promise<void> {
     await rm(this.entryPath(entry.workspaceId, entry.id), { force: true });
+  }
+
+  async current(id: string): Promise<StoredUrl | undefined> {
+    const workspaces = await new LifecycleState(this.stateRoot).listWorkspaces();
+    for (const workspace of workspaces) {
+      const entry = (await this.list(workspace.workspaceId)).find((candidate) => candidate.id === id);
+      if (entry !== undefined) return entry;
+    }
+    return undefined;
   }
 
   async removeIngress(ingress: string): Promise<void> {
@@ -109,7 +123,12 @@ export function publicEntries(entries: readonly StoredUrl[]): readonly Record<st
   return entries.map(publicEntry);
 }
 
-export function publicEntry({ route: _route, workspaceId: _workspaceId, ...entry }: StoredUrl) {
+export function publicEntry({
+  route: _route,
+  workspaceId: _workspaceId,
+  policyRevision: _policyRevision,
+  ...entry
+}: StoredUrl) {
   return entry;
 }
 
@@ -118,7 +137,13 @@ export function deduplicateRoutes(entries: readonly StoredUrl[]): StoredUrl[] {
 }
 
 function hostEntry(
-  { route: _route, workspaceId: _workspaceId, workspace: _workspace, ...entry }: StoredUrl,
+  {
+    route: _route,
+    workspaceId: _workspaceId,
+    workspace: _workspace,
+    policyRevision: _policyRevision,
+    ...entry
+  }: StoredUrl,
   project: string,
   workspace: string
 ): Record<string, unknown> {
@@ -132,8 +157,9 @@ function storedUrl(value: unknown): StoredUrl {
   const candidate = value as StoredUrl;
   if (typeof candidate.ingress !== "string"
     || (candidate.subdomain !== undefined && typeof candidate.subdomain !== "string")
-    || typeof candidate.route?.ingress !== "string") {
+    || typeof candidate.route?.ingress !== "string"
+    || (candidate.approval !== undefined && !EXTERNAL_URL_APPROVALS.includes(candidate.approval))) {
     throw new Error(`invalid stored external URL '${candidate.id}'`);
   }
-  return candidate;
+  return candidate.approval === undefined ? { ...candidate, approval: "not-required" } : candidate;
 }

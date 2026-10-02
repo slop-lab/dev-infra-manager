@@ -602,6 +602,25 @@ describe("external URLs plugin", () => {
         }
       }
     })).toThrow(/scheme must be http, https, or tcp/);
+    expect(() => createExternalUrlsPlugin({
+      ingresses: {
+        immediate: {
+          description: "Immediate URL",
+          scheme: "http",
+          domain: "example.test",
+          listenHost: "127.0.0.1",
+          listenPort: 0
+        },
+        gated: {
+          description: "Gated URL",
+          scheme: "https",
+          domain: "example.test",
+          listenHost: "127.0.0.1",
+          listenPort: 0,
+          approvalRequired: true
+        }
+      }
+    })).toThrow(/same upstream mode, route policy, and approval requirement/);
   });
 
 });

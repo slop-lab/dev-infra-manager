@@ -104,9 +104,11 @@ it("lists every current workspace route only through the bounded host admin acti
     { project: "beta", workspace: "work-b" }
   ]);
   for (const entry of body.urls) {
+    expect(entry.approval).toBe("not-required");
     expect(entry).not.toHaveProperty("projectId");
     expect(entry).not.toHaveProperty("workspaceId");
     expect(entry).not.toHaveProperty("route");
+    expect(entry).not.toHaveProperty("policyRevision");
     expect(entry).not.toHaveProperty("token");
   }
 });

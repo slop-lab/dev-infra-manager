@@ -1,5 +1,6 @@
 import net from "node:net";
 import { UserError, type ControllerWorkspace, type ResolvedWorkspaceTarget, type WorkspaceTarget } from "@slop-lab/dim-core";
+import type { ExternalUrlApproval } from "./routeStore.js";
 
 export interface TcpIngressRequest {
   readonly target: WorkspaceTarget;
@@ -49,7 +50,11 @@ export class TcpIngressListener {
   readonly #maxConnections: number;
   readonly #connectTimeoutMs: number;
   readonly #idleTimeoutMs: number;
-  #route: { readonly claim: string; readonly upstream: ResolvedWorkspaceTarget } | undefined;
+  #route: {
+    readonly claim: string;
+    readonly upstream: ResolvedWorkspaceTarget;
+    readonly enabled: boolean;
+  } | undefined;
 
   constructor(options: TcpIngressOptions) {
     this.name = options.name;
@@ -75,14 +80,16 @@ export class TcpIngressListener {
   async provision(
     workspace: ControllerWorkspace,
     request: TcpIngressRequest,
-    upstream: ResolvedWorkspaceTarget
+    upstream: ResolvedWorkspaceTarget,
+    routeId = `${workspace.id}\u0000${JSON.stringify(request.target)}`,
+    approval: ExternalUrlApproval = "not-required"
   ): Promise<TcpIngressProvision> {
     await this.#ready;
     if (request.path !== undefined) throw new UserError("TCP ingress requests do not accept a URL path");
     if (request.target.protocol !== "tcp" || upstream.protocol !== "tcp") {
       throw new UserError("TCP ingresses require target.protocol 'tcp'");
     }
-    const claim = `${workspace.id}\u0000${JSON.stringify(request.target)}`;
+    const claim = routeId;
     if (this.#route !== undefined && this.#route.claim !== claim) {
       throw new UserError(`TCP ingress '${this.name}' already targets another service`);
     }
@@ -90,7 +97,7 @@ export class TcpIngressListener {
     if (!acquired && JSON.stringify(this.#route?.upstream) !== JSON.stringify(upstream)) {
       this.#destroyConnections();
     }
-    this.#route = { claim, upstream };
+    this.#route = { claim, upstream, enabled: approval === "not-required" || approval === "approved" };
     return {
       acquired,
       route: {
@@ -109,6 +116,12 @@ export class TcpIngressListener {
     this.#destroyConnections();
   }
 
+  setApproval(route: TcpExternalRoute, enabled: boolean): void {
+    if (this.#route?.claim !== route.ingressId) throw new UserError("external URL route is not active");
+    this.#route = { ...this.#route, enabled };
+    if (!enabled) this.#destroyConnections();
+  }
+
   async close(): Promise<void> {
     await this.#ready.catch(() => undefined);
     if (!this.#server.listening) return;
@@ -122,7 +135,7 @@ export class TcpIngressListener {
 
   #forward(client: net.Socket): void {
     const route = this.#route;
-    if (route === undefined) {
+    if (route === undefined || !route.enabled) {
       client.destroy();
       return;
     }

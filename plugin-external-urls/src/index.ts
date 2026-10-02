@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import http, { type IncomingMessage, type ServerResponse } from "node:http";
 import https from "node:https";
@@ -45,6 +45,7 @@ import {
   hostUrlList,
   publicEntries,
   publicEntry,
+  type ExternalUrlApproval,
   type ExternalRoute,
   type StoredUrl
 } from "./routeStore.js";
@@ -67,6 +68,7 @@ export interface ExternalUrlIngressOptions {
   listenPort: number;
   upstreamMode?: "container-dns" | "container-ip";
   routePolicy?: ExternalUrlRoutePolicyConfig;
+  approvalRequired?: boolean;
 }
 
 export interface ExternalUrlsPluginOptions {
@@ -94,9 +96,12 @@ interface IngressListener {
   provision(
     workspace: ControllerWorkspace,
     request: NormalizedRequest,
-    upstream: ResolvedWorkspaceTarget
+    upstream: ResolvedWorkspaceTarget,
+    routeId?: string,
+    approval?: ExternalUrlApproval
   ): Promise<{ readonly route: ExternalRoute; readonly acquired: boolean }>;
   revoke(route: ExternalRoute): Promise<void>;
+  setApproval(route: ExternalRoute, enabled: boolean): void;
   ready(): Promise<void>;
   close(): Promise<void>;
 }
@@ -104,6 +109,7 @@ interface IngressListener {
 interface ConfiguredIngress {
   options: ExternalUrlIngressOptions;
   listener: IngressListener;
+  policyRevision: string;
 }
 
 interface RouteReconciliationContext {
@@ -151,6 +157,7 @@ export function createExternalUrlsPlugin(options: ExternalUrlsPluginOptions): Di
       for (const [name, ingress] of Object.entries(options.ingresses)) {
         ingresses.set(name, {
           options: ingress,
+          policyRevision: ingressPolicyRevision(name, ingress),
           listener: ingress.scheme === "tcp"
             ? new TcpIngressListener({
                 name,
@@ -276,7 +283,8 @@ export async function externalUrlsPluginFromConfig(
         listenHost: "127.0.0.1",
         listenPort: routerPort,
         ...(argument.upstreamMode === undefined ? {} : { upstreamMode: argument.upstreamMode }),
-        ...(argument.routePolicy === undefined ? {} : { routePolicy: argument.routePolicy })
+        ...(argument.routePolicy === undefined ? {} : { routePolicy: argument.routePolicy }),
+        ...(ingress.approvalRequired === undefined ? {} : { approvalRequired: ingress.approvalRequired })
       };
       managedCaddy[name] = {
         argument: { ...argument, listenPort: argument.listenPort },
@@ -296,7 +304,8 @@ export async function externalUrlsPluginFromConfig(
         listenHost: argument.listenHost,
         listenPort: argument.listenPort,
         ...(argument.upstreamMode === undefined ? {} : { upstreamMode: argument.upstreamMode }),
-        ...(argument.routePolicy === undefined ? {} : { routePolicy: argument.routePolicy })
+        ...(argument.routePolicy === undefined ? {} : { routePolicy: argument.routePolicy }),
+        ...(ingress.approvalRequired === undefined ? {} : { approvalRequired: ingress.approvalRequired })
       };
     } else {
       const runtime = await tailscaleIngressDriver.runtime(ingress.argument);
@@ -306,7 +315,8 @@ export async function externalUrlsPluginFromConfig(
         domain: runtime.publicHost,
         listenHost: runtime.listenHost,
         listenPort: runtime.listenPort,
-        upstreamMode: runtime.upstreamMode
+        upstreamMode: runtime.upstreamMode,
+        ...(ingress.approvalRequired === undefined ? {} : { approvalRequired: ingress.approvalRequired })
       };
     }
   }
@@ -342,6 +352,10 @@ async function externalUrlAdmin(
   if (action === "url-list") return hostUrlList(context.lifecycle.stateRoot);
   const config = await readExternalUrlConfig();
   switch (action) {
+    case "url-approve":
+      return transitionRouteApproval(context.lifecycle.stateRoot, ingresses, text("id"), "approved");
+    case "url-revoke":
+      return transitionRouteApproval(context.lifecycle.stateRoot, ingresses, text("id"), "revoked");
     case "dns-provider-add": {
       const driver = text("driver");
       const implementation = dnsDriver(host, driver);
@@ -382,6 +396,9 @@ async function externalUrlAdmin(
         throw new UserError("scheme must be http, https, or tcp");
       }
       let argument = await configureIngressArguments(host, driver, scheme, strings("arguments"));
+      if (input.approvalRequired !== undefined && typeof input.approvalRequired !== "boolean") {
+        throw new UserError("approvalRequired must be a boolean");
+      }
       if (driver === "caddy") {
         const parsed = parseCaddyIngressArgument(argument);
         const dnsProvider = parsed.dnsProvider;
@@ -400,7 +417,8 @@ async function externalUrlAdmin(
         driver,
         description: text("description"),
         scheme,
-        argument
+        argument,
+        approvalRequired: input.approvalRequired === true
       };
       config.ingresses[text("name")] = ingress;
       await writeExternalUrlConfig(config);
@@ -449,6 +467,36 @@ async function externalUrlAdmin(
     }
     default: throw new UserError(`unknown External URL admin action '${action}'`);
   }
+}
+
+async function transitionRouteApproval(
+  stateRoot: string,
+  ingresses: ReadonlyMap<string, ConfiguredIngress>,
+  id: string,
+  approval: "approved" | "revoked"
+): Promise<{ readonly urls: readonly Record<string, unknown>[] }> {
+  const store = new ExternalUrlStore(stateRoot);
+  const entry = await store.current(id);
+  if (entry === undefined) throw new UserError(`external URL '${id}' not found`);
+  const ingress = required(ingresses, entry.ingress);
+  if (approval === "approved") {
+    if (entry.approval !== "pending") {
+      throw new UserError(`external URL '${id}' is ${entry.approval} and cannot be approved`);
+    }
+    if (entry.policyRevision !== ingress.policyRevision) {
+      throw new UserError(`external URL '${id}' approval does not match the current ingress policy`);
+    }
+    ingress.listener.setApproval(entry.route, false);
+    const updated = { ...entry, approval } satisfies StoredUrl;
+    await store.put(updated);
+    ingress.listener.setApproval(entry.route, true);
+    return { urls: [publicEntry(updated)] };
+  }
+  if (entry.approval === "revoked") return { urls: [publicEntry(entry)] };
+  const updated = { ...entry, approval } satisfies StoredUrl;
+  await store.put(updated);
+  await ingress.listener.revoke(entry.route);
+  return { urls: [publicEntry(updated)] };
 }
 
 async function reconcileManagedCaddy(
@@ -770,8 +818,18 @@ async function reconcileStoredRoute(
   ingress: ConfiguredIngress,
   context: RouteReconciliationContext
 ): Promise<void> {
+  if (entry.approval === "revoked") return;
+  if (ingress.options.approvalRequired === true && entry.policyRevision !== ingress.policyRevision) {
+    throw new UserError(`external route '${entry.id}' approval does not match the current ingress policy`);
+  }
   const upstream = await context.resolveTarget(entry.target, ingress.listener.upstreamMode);
-  const reconciled = await ingress.listener.provision(context.workspace, storedRequest(entry), upstream);
+  const reconciled = await ingress.listener.provision(
+    context.workspace,
+    storedRequest(entry),
+    upstream,
+    entry.route.ingressId ?? entry.id,
+    entry.approval
+  );
   if (reconciled.route.authority === entry.route.authority) return;
   if (reconciled.acquired) await ingress.listener.revoke(reconciled.route).catch(() => {});
   throw new Error(`external route '${entry.route.id}' changed authority during reconciliation`);
@@ -794,19 +852,22 @@ async function createUrl(
     input.subdomain = `${prefix}${index}`;
   }
   const request = validateRequest(input, ingress.options.scheme);
-  const existing = entries.find((entry) => requestsEqual(storedRequest(entry), request));
+  const existing = entries.find((entry) => entry.approval !== "revoked" && requestsEqual(storedRequest(entry), request));
   if (existing !== undefined) {
     await reconcileStoredRoute(existing, ingress, context);
     return { status: 200, body: { urls: [publicEntry(existing)] } };
   }
   const upstream = await context.resolveTarget(request.target, ingress.listener.upstreamMode);
-  const provisioned = await ingress.listener.provision(context.workspace, request, upstream);
+  const id = randomUUID();
+  const approval: ExternalUrlApproval = ingress.options.approvalRequired === true ? "pending" : "not-required";
+  const claim = approval === "not-required" ? routeClaim(context.workspace, request) : id;
+  const provisioned = await ingress.listener.provision(context.workspace, request, upstream, claim, approval);
   try {
     const { route } = provisioned;
     const url = route.url;
     if (!url) throw new Error(`ingress '${request.ingress}' did not return a public URL`);
     const entry: StoredUrl = {
-      id: randomUUID(),
+      id,
       workspace: context.workspace.name,
       workspaceId: context.workspace.id,
       ingress: request.ingress,
@@ -815,6 +876,8 @@ async function createUrl(
       ...(request.path === undefined ? {} : { path: request.path }),
       route,
       url,
+      approval,
+      policyRevision: ingress.policyRevision,
       createdAt: new Date().toISOString()
     };
     await store.put(entry);
@@ -872,10 +935,10 @@ async function removeWorkspaceRoutes(
 class WorkspaceRouteRegistry {
   readonly #routes = new Map<string, {
     upstream: ResolvedWorkspaceTarget;
-    claims: Set<string>;
+    claims: Map<string, boolean>;
   }>();
 
-  provision(authority: string, claim: string, upstream: ResolvedWorkspaceTarget): boolean {
+  provision(authority: string, claim: string, upstream: ResolvedWorkspaceTarget, enabled: boolean): boolean {
     const existing = this.#routes.get(authority);
     if (existing && JSON.stringify(existing.upstream) !== JSON.stringify(upstream)) {
       if (existing.claims.size !== 1 || !existing.claims.has(claim)) {
@@ -886,10 +949,10 @@ class WorkspaceRouteRegistry {
     }
     if (existing) {
       const acquired = !existing.claims.has(claim);
-      existing.claims.add(claim);
+      existing.claims.set(claim, enabled);
       return acquired;
     }
-    this.#routes.set(authority, { upstream, claims: new Set([claim]) });
+    this.#routes.set(authority, { upstream, claims: new Map([[claim, enabled]]) });
     return true;
   }
 
@@ -900,8 +963,17 @@ class WorkspaceRouteRegistry {
     if (existing.claims.size === 0) this.#routes.delete(authority);
   }
 
-  target(host: string): ResolvedWorkspaceTarget | undefined {
-    return this.#routes.get(host.toLowerCase().replace(/\.$/, ""))?.upstream;
+  setApproval(authority: string, claim: string, enabled: boolean): void {
+    const existing = this.#routes.get(authority);
+    if (existing === undefined || !existing.claims.has(claim)) throw new UserError("external URL route is not active");
+    existing.claims.set(claim, enabled);
+  }
+
+  target(host: string): { readonly upstream: ResolvedWorkspaceTarget; readonly claim: string } | undefined {
+    const route = this.#routes.get(host.toLowerCase().replace(/\.$/, ""));
+    if (route === undefined) return undefined;
+    const claim = [...route.claims].find(([, enabled]) => enabled)?.[0];
+    return claim === undefined ? undefined : { upstream: route.upstream, claim };
   }
 }
 
@@ -925,7 +997,11 @@ class WorkspaceIngressListener implements IngressListener {
   readonly #domain: string;
   readonly #port: number | undefined;
   readonly #routePolicy: ExternalUrlRoutePolicyConfig | undefined;
-  readonly #upgrades = new Set<{ readonly client: import("node:stream").Duplex; readonly upstream: net.Socket }>();
+  readonly #upgrades = new Set<{
+    readonly claim: string;
+    readonly client: import("node:stream").Duplex;
+    readonly upstream: net.Socket;
+  }>();
 
   constructor(
     registry: WorkspaceRouteRegistry,
@@ -956,7 +1032,13 @@ class WorkspaceIngressListener implements IngressListener {
     });
   }
 
-  async provision(workspace: ControllerWorkspace, request: NormalizedRequest, upstream: ResolvedWorkspaceTarget) {
+  async provision(
+    workspace: ControllerWorkspace,
+    request: NormalizedRequest,
+    upstream: ResolvedWorkspaceTarget,
+    routeId = randomUUID(),
+    approval: ExternalUrlApproval = "not-required"
+  ) {
     await this.#ready;
     if (request.subdomain === undefined) throw new UserError("HTTP ingress requests require a subdomain");
     const subdomain = await applyRoutePolicy(this.#routePolicy, {
@@ -967,8 +1049,13 @@ class WorkspaceIngressListener implements IngressListener {
     });
     validateSubdomain(subdomain);
     const authority = `${subdomain}.${normalizeDomain(this.#domain)}`;
-    const claim = routeClaim(workspace, request);
-    const acquired = this.#registry.provision(authority, claim, upstream);
+    const claim = routeId;
+    const acquired = this.#registry.provision(
+      authority,
+      claim,
+      upstream,
+      approval === "not-required" || approval === "approved"
+    );
     const publicAuthority = `${authority}${
       this.#port === undefined ? "" : `:${this.#port}`
     }`;
@@ -982,6 +1069,22 @@ class WorkspaceIngressListener implements IngressListener {
 
   async revoke(route: ExternalRoute): Promise<void> {
     this.#registry.revoke(route.authority, route.ingressId ?? route.authority);
+    for (const upgrade of this.#upgrades) {
+      if (upgrade.claim !== route.ingressId) continue;
+      upgrade.client.destroy();
+      upgrade.upstream.destroy();
+    }
+  }
+
+  setApproval(route: ExternalRoute, enabled: boolean): void {
+    const claim = route.ingressId ?? route.authority;
+    this.#registry.setApproval(route.authority, claim, enabled);
+    if (enabled) return;
+    for (const upgrade of this.#upgrades) {
+      if (upgrade.claim !== claim) continue;
+      upgrade.client.destroy();
+      upgrade.upstream.destroy();
+    }
   }
 
   async close(): Promise<void> {
@@ -999,18 +1102,19 @@ class WorkspaceIngressListener implements IngressListener {
     await closed;
   }
 
-  #target(request: IncomingMessage): ResolvedWorkspaceTarget | undefined {
+  #target(request: IncomingMessage): { readonly upstream: ResolvedWorkspaceTarget; readonly claim: string } | undefined {
     const hostname = (request.headers.host ?? "").split(":")[0]?.toLowerCase() ?? "";
     return this.#registry.target(hostname);
   }
 
   #proxy(request: IncomingMessage, response: ServerResponse): void {
-    const target = this.#target(request);
-    if (!target) {
+    const selected = this.#target(request);
+    if (!selected) {
       response.writeHead(404, { "content-type": "application/json" });
       response.end('{"error":"external route not found"}\n');
       return;
     }
+    const target = selected.upstream;
     const transport = target.protocol === "https" ? https : http;
     const upstream = transport.request({
       hostname: target.host,
@@ -1036,16 +1140,17 @@ class WorkspaceIngressListener implements IngressListener {
   }
 
   #upgrade(request: IncomingMessage, client: import("node:stream").Duplex, head: Buffer): void {
-    const target = this.#target(request);
-    if (!target) {
+    const selected = this.#target(request);
+    if (!selected) {
       client.destroy();
       return;
     }
+    const target = selected.upstream;
     const connect = target.protocol === "https"
       ? () => tls.connect(target.port, target.host)
       : () => net.connect(target.port, target.host);
     const upstream = connect();
-    const upgrade = { client, upstream };
+    const upgrade = { claim: selected.claim, client, upstream };
     this.#upgrades.add(upgrade);
     const destroy = () => {
       this.#upgrades.delete(upgrade);
@@ -1128,6 +1233,7 @@ function validateOptions(options: ExternalUrlsPluginOptions): void {
     name: string;
     upstreamMode: "container-dns" | "container-ip";
     routePolicy: string;
+    approvalRequired: boolean;
   }>();
   for (const [name, ingress] of entries) {
     if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(name)) throw new Error(`invalid external URL ingress '${name}'`);
@@ -1157,14 +1263,16 @@ function validateOptions(options: ExternalUrlsPluginOptions): void {
     const routing = {
       name,
       upstreamMode: ingress.upstreamMode ?? "container-ip",
-      routePolicy: JSON.stringify(ingress.routePolicy ?? { driver: "workspace-prefix" })
+      routePolicy: JSON.stringify(ingress.routePolicy ?? { driver: "workspace-prefix" }),
+      approvalRequired: ingress.approvalRequired === true
     };
     const existing = domains.get(domain);
     if (existing && (existing.upstreamMode !== routing.upstreamMode
-      || existing.routePolicy !== routing.routePolicy)) {
+      || existing.routePolicy !== routing.routePolicy
+      || existing.approvalRequired !== routing.approvalRequired)) {
       throw new Error(
         `external URL ingresses '${existing.name}' and '${name}' share domain '${domain}' `
-        + "and must use the same upstream mode and route policy"
+        + "and must use the same upstream mode, route policy, and approval requirement"
       );
     }
     domains.set(domain, routing);
@@ -1222,16 +1330,23 @@ function proxyHeaders(headers: IncomingMessage["headers"]): IncomingMessage["hea
 }
 
 function routeClaim(workspace: ControllerWorkspace, request: NormalizedRequest): string {
-  return [
-    workspace.id,
-    request.ingress,
-    request.subdomain,
-    JSON.stringify(request.target)
-  ].join("\u0000");
+  return [workspace.id, request.ingress, request.subdomain, JSON.stringify(request.target)].join("\u0000");
 }
 
 function normalizeDomain(value: string): string {
   return value.toLowerCase().replace(/^\.+|\.+$/g, "");
+}
+
+function ingressPolicyRevision(name: string, ingress: ExternalUrlIngressOptions): string {
+  return createHash("sha256").update(JSON.stringify({
+    name,
+    scheme: ingress.scheme,
+    domain: normalizeDomain(ingress.domain),
+    port: ingress.port,
+    upstreamMode: ingress.upstreamMode ?? "container-ip",
+    routePolicy: ingress.routePolicy ?? { driver: "workspace-prefix" },
+    approvalRequired: ingress.approvalRequired === true
+  })).digest("hex");
 }
 
 function upstreamMode(value: string): "container-dns" | "container-ip" {
