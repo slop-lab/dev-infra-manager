@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { fileURLToPath } from "node:url";
+import { workspaceServiceSubdomain } from "@slop-lab/dim-contracts-external-url";
 import { exposeDevelopmentService } from "./development-service-expose.js";
 import {
   ensureDevelopmentServiceGateway,
@@ -13,6 +14,7 @@ import {
 
 const HELP = `Usage:
   dim-development-service gateway-port
+  dim-development-service workspace-subdomain --workspace NAME --service NAME
   dim-development-service expose --name NAME --port PORT --ingress NAME [--require-scheme https]
   dim-development-service --help
 `;
@@ -33,6 +35,14 @@ export async function runDevelopmentServiceCli(arguments_: readonly string[]): P
   if (command === "gateway-port") {
     if (arguments_.length !== 1) throw new DevelopmentServiceCliError("gateway-port accepts no options");
     process.stdout.write(`${DEVELOPMENT_SERVICE_GATEWAY_PORT}\n`);
+    return;
+  }
+  if (command === "workspace-subdomain") {
+    if (arguments_.length !== 5 || arguments_[1] !== "--workspace" || arguments_[3] !== "--service"
+      || arguments_[2] === undefined || arguments_[4] === undefined) {
+      throw new DevelopmentServiceCliError("workspace-subdomain requires --workspace NAME --service NAME");
+    }
+    process.stdout.write(`${workspaceServiceSubdomain(arguments_[2], arguments_[4])}\n`);
     return;
   }
   if (command === "__gateway") {
