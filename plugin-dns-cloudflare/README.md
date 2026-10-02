@@ -9,7 +9,7 @@ managed HTTPS ingress.
 Install the provider and External URLs plugin at the same exact DIM version:
 
 ```bash
-npx '@slop-lab/dim-installer@0.9.0' install-plugin \
+npx '@slop-lab/dim-installer@0.9.0' installer install plugin \
   '@slop-lab/dim-plugin-external-urls@0.9.0' \
   '@slop-lab/dim-plugin-dns-cloudflare@0.9.0'
 ```
