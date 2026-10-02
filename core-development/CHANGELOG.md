@@ -11,7 +11,13 @@
   traffic remains denied; host-only approval enables the exact persisted route,
   and terminal host revocation or deletion removes reachability and active flows
   without allowing an agent, foreign workspace, changed external listener
-  policy, or recreated workspace to reuse the ID.
+   policy, or recreated workspace to reuse the ID.
+  Hostname-routed HTTP and HTTPS requests now also return a stable per-route
+  permalink alongside the policy-selected slug. Both authorities are claimed
+  atomically and share approval, target rebinding, revocation, and deletion;
+  policy slug changes retain the permalink while requiring fresh approval, and
+  workspace recreation receives a new one. Raw TCP routes remain address-and-
+  port URLs without DNS permalinks.
 
 - Let trusted hosts share ordinary Sysbox CI capacity across explicitly
   enrolled DIM Projects on one external Gitea control plane. Each host

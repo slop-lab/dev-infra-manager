@@ -206,8 +206,8 @@ workspace request reserves a route ID and its authorities in `pending`, but the
 gateway MUST deny traffic until a host administrator approves it.
 
 Approval MUST bind the workspace ID, route ID, ingress identity and policy
-revision, exact logical target descriptor, protocol, port, and every mutable
-slug or permalink authority returned for the route. The agent and workspace
+revision, exact logical target descriptor, protocol, port, and every slug or
+permalink authority returned for the route. The agent and workspace
 grants MUST NOT approve a route. They MAY revoke their own route. Host
 administration MAY approve a pending route or revoke any route after verifying
 that exact tuple. Revocation is terminal; later exposure requires a new route
@@ -228,6 +228,16 @@ approval value. Workspace stop makes the route unavailable without converting
 after target resolution. Target, ingress policy, or workspace-ID change MUST
 deny the old route. Mutable slug and permalink forms share one approval and
 revoke together.
+
+A hostname-routed HTTP or HTTPS route MUST return both its policy-selected slug
+URL and a stable permalink URL. The permalink authority MUST use
+`WORKSPACE-permalink-ROUTE_ID.DOMAIN`, remain bound to the route ID when policy
+drift changes its slug, and return to `pending` with that route. The registry
+MUST claim or reject both authorities atomically, and both authorities MUST
+select the same current target and lifecycle state. A fresh route, including a
+same-name workspace recreation, MUST receive a fresh route ID and permalink.
+Raw TCP routes remain address-and-port routes and MUST NOT return or reserve a
+hostname permalink.
 
 ## Project-owned hook defaults
 

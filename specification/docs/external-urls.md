@@ -205,8 +205,20 @@ relay inside the project-root container. An ingress using `container-ip`
 reaches the root container's managed-network IP; `container-dns` is intended
 for a router attached to the managed Docker network.
 
-The ingress returns the reserved external URL and its approval state. The state
-is `not-required` for an ordinary ingress and `pending` for an
+For an HTTP or HTTPS ingress, the request returns two URLs with the same target
+and lifecycle: the policy-selected slug in `url` and a stable route permalink in
+`permalink`. The permalink authority is
+`WORKSPACE-permalink-ROUTE_ID.DOMAIN`. A same-instance policy change may replace
+the slug and require fresh approval, but the route ID and permalink remain
+stable. Both authorities are reserved atomically, become reachable through the
+same approval, follow target rebinding together, and are removed together on
+revocation or deletion. Discard and same-name recreation create a fresh route
+ID and permalink; the old authorities remain denied. Raw TCP ingresses continue
+to return only their `tcp://ADDRESS:PORT` URL and do not create DNS names or
+permalinks.
+
+The ingress also returns the route's approval state. The state is
+`not-required` for an ordinary ingress and `pending` for an
 approval-required ingress. A pending request succeeds but both HTTP/WebSocket
 and raw TCP traffic remain denied. On the host, inspect the redacted inventory
 and approve the exact route ID:
