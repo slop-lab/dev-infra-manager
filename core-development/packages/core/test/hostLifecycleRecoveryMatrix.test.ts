@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as ciRunner from "../../../../core/packages/core/src/ciRunner.js";
 import * as gitea from "../../../../core/packages/core/src/gitea.js";
-import { startHost } from "../../../../core/packages/core/src/hostLifecycle.js";
+import { hostLifecycleStatus, startHost } from "../../../../core/packages/core/src/hostLifecycle.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import * as registryCache from "../../../../core/packages/core/src/registryCache.js";
 import * as workspaceLifecycle from "../../../../core/packages/core/src/workspaceLifecycle.js";
@@ -72,7 +72,7 @@ describe("host lifecycle recovery matrix", () => {
     }
   );
 
-  it("dispatches no recovery when host state is ready", async () => {
+  it("reconciles managed Git without replaying recovery when host state is ready", async () => {
     // Given
     const state = new LifecycleState(root);
     const ready = {
@@ -94,11 +94,93 @@ describe("host lifecycle recovery matrix", () => {
     // Then
     expect(result).toEqual(ready);
     expect(runner.calls).toEqual([]);
-    expect(gitea.ensureGitea).not.toHaveBeenCalled();
+    expect(gitea.ensureGitea).toHaveBeenCalledOnce();
     expect(registryCache.ensureRegistryCache).not.toHaveBeenCalled();
     expect(workspaceLifecycle.showWorkspace).not.toHaveBeenCalled();
     expect(ciRunner.startCiRunner).not.toHaveBeenCalled();
     expect(ciRunner.stopCiRunner).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid managed Git before publishing ready when host state is absent", async () => {
+    // Given
+    const runner = new StatefulContainerRunner();
+    vi.mocked(gitea.ensureGitea).mockRejectedValueOnce(new Error("managed Git endpoint is invalid"));
+    vi.spyOn(workspaceLifecycle, "showWorkspace");
+    vi.spyOn(ciRunner, "startCiRunner");
+    vi.spyOn(ciRunner, "stopCiRunner");
+
+    // When
+    const recovery = startHost(runner, hostLifecycleOptions(root));
+
+    // Then
+    await expect(recovery).rejects.toThrow("managed Git endpoint is invalid");
+    expect(gitea.ensureGitea).toHaveBeenCalledOnce();
+    expect(registryCache.ensureRegistryCache).not.toHaveBeenCalled();
+    expect(workspaceLifecycle.showWorkspace).not.toHaveBeenCalled();
+    expect(ciRunner.startCiRunner).not.toHaveBeenCalled();
+    expect(ciRunner.stopCiRunner).not.toHaveBeenCalled();
+    expect(runner.calls).toEqual([]);
+  });
+
+  it.each(["absent", "ready"] as const)(
+    "persists an error without stale recovery intent when managed Git reconciliation fails from %s state",
+    async (entryState) => {
+      // Given
+      const state = new LifecycleState(root);
+      const options = hostLifecycleOptions(root);
+      if (entryState === "ready") {
+        await state.writeHostLifecycle({
+          ...hostRecord("ready", {
+            resumeWorkspaces: ["workspace"],
+            restartCiRunners: [{ project: "project", name: "runner" }]
+          }),
+          resumeManagedContainers: ["managed"]
+        });
+      }
+      await expect(hostLifecycleStatus(options)).resolves.toMatchObject({ phase: "ready" });
+      vi.mocked(gitea.ensureGitea).mockRejectedValueOnce(new Error("managed Git reconciliation failed"));
+
+      // When
+      const recovery = startHost(new StatefulContainerRunner(), options);
+
+      // Then
+      await expect(recovery).rejects.toThrow("managed Git reconciliation failed");
+      await expect(hostLifecycleStatus(options)).resolves.toMatchObject({
+        phase: "error",
+        error: "managed Git reconciliation failed",
+        resumeWorkspaces: [],
+        restartCiRunners: [],
+        resumeManagedContainers: []
+      });
+    }
+  );
+
+  it("publishes ready after reconciling managed Git when host state is absent", async () => {
+    // Given
+    const runner = new StatefulContainerRunner();
+
+    // When
+    const result = await startHost(runner, hostLifecycleOptions(root));
+
+    // Then
+    expect(result.phase).toBe("ready");
+    expect(gitea.ensureGitea).toHaveBeenCalledOnce();
+  });
+
+  it("preserves external Git behavior when host state is absent", async () => {
+    // Given
+    const runner = new StatefulContainerRunner();
+    const options = {
+      ...hostLifecycleOptions(root),
+      giteaConnection: { kind: "external" as const, file: "/run/secrets/gitea.json" }
+    };
+
+    // When
+    const result = await startHost(runner, options);
+
+    // Then
+    expect(result.phase).toBe("ready");
+    expect(gitea.ensureGitea).not.toHaveBeenCalled();
   });
 
   it("rejects malformed schema 2 state without mutation or dispatch", async () => {

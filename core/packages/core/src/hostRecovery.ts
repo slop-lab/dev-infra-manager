@@ -1,11 +1,33 @@
 import { recoverCiRunner } from "./ciRunnerRecovery.js";
-import { UserError } from "./errors.js";
+import { MissingRecordError, UserError } from "./errors.js";
 import { ensureGitea } from "./gitea.js";
 import { LifecycleState } from "./lifecycleState.js";
 import type { HostLifecycleRecord, LifecycleOptions } from "./lifecycleTypes.js";
 import { ensureRegistryCache } from "./registryCache.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { setupWorkspace, showWorkspace, startWorkspace } from "./workspaceLifecycle.js";
+
+export async function reconcileReadyHostManagedGit(
+  runner: StreamingCommandRunner,
+  options: LifecycleOptions
+): Promise<void> {
+  if (options.giteaConnection.kind === "external") return;
+  const state = new LifecycleState(options.stateRoot);
+  const release = await state.acquireHostLifecycleLock();
+  try {
+    const current = await state.readHostLifecycle();
+    if (current !== undefined && current.phase !== "ready") return;
+    try {
+      await state.readGiteaService();
+    } catch (error) {
+      if (error instanceof MissingRecordError) return;
+      throw error;
+    }
+    await reconcileReadyManagedGit(runner, options, state, current ?? readyRecord());
+  } finally {
+    await release();
+  }
+}
 
 export async function startHost(
   runner: StreamingCommandRunner,
@@ -15,7 +37,12 @@ export async function startHost(
   const release = await state.acquireHostLifecycleLock();
   try {
     const current = await state.readHostLifecycle();
-    if (!current || current.phase === "ready") return current ?? readyRecord();
+    if (!current || current.phase === "ready") {
+      const record = current ?? readyRecord();
+      if (options.giteaConnection.kind === "external") return record;
+      await reconcileReadyManagedGit(runner, options, state, record);
+      return record;
+    }
     if (options.giteaConnection.kind === "external") await ensureGitea(runner, options);
     const entryPhase = current.phase;
     let record: HostLifecycleRecord = { ...current, phase: "starting", updatedAt: new Date().toISOString() };
@@ -23,7 +50,7 @@ export async function startHost(
     await state.writeHostLifecycle(record);
     try {
       if (options.giteaConnection.kind === "managed") await ensureGitea(runner, options);
-      await ensureRegistryCache(runner, options.stateRoot);
+      await ensureRegistryCache(runner, options);
       for (const container of record.resumeManagedContainers) {
         await startManagedContainer(runner, container);
       }
@@ -63,6 +90,29 @@ export async function startHost(
     return record;
   } finally {
     await release();
+  }
+}
+
+async function reconcileReadyManagedGit(
+  runner: StreamingCommandRunner,
+  options: LifecycleOptions,
+  state: LifecycleState,
+  record: HostLifecycleRecord
+): Promise<void> {
+  try {
+    await ensureGitea(runner, options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await state.writeHostLifecycle({
+      ...record,
+      phase: "error",
+      resumeWorkspaces: [],
+      restartCiRunners: [],
+      resumeManagedContainers: [],
+      error: message,
+      updatedAt: new Date().toISOString()
+    });
+    throw new UserError(message);
   }
 }
 

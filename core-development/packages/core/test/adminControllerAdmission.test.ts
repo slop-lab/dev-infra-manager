@@ -9,6 +9,11 @@ import { LifecycleState } from "../../../../core/packages/core/src/lifecycleStat
 import type { RegisteredDimPlugins } from "../../../../core/packages/core/src/plugin.js";
 import { DIM_PLUGIN_API_VERSION, registerPlugin, registerPlugins } from "../../../../core/packages/core/src/plugin.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
+import {
+  claimTestGiteaService,
+  ownedGiteaContainerInspect,
+  ownedGiteaResourceInspect
+} from "./giteaServiceFixture.js";
 import { hostLifecycleOptions, hostRecord } from "./hostLifecycleFixture.js";
 
 class Barrier {
@@ -84,7 +89,23 @@ class AdminRunner implements StreamingCommandRunner {
       return result(command, args);
     }
     if (args[0] === "container" && args[1] === "inspect") {
-      return { ...result(command, args), stderr: "No such container", exitCode: 1 };
+      if (args[2] === "dim-gitea") {
+        return result(command, args, `${ownedGiteaContainerInspect("gitea-container-id", true)}\n`);
+      }
+      return { ...result(command, args), stderr: `Error: No such container: ${args[2]}`, exitCode: 1 };
+    }
+    if ((args[0] === "network" || args[0] === "volume") && args[1] === "inspect") {
+      return result(command, args, `${ownedGiteaResourceInspect(args[0])}\n`);
+    }
+    if (args[0] === "exec" && args.some((argument) => argument.includes("/data/dim/credentials.json"))) {
+      return result(command, args, JSON.stringify({
+        adminUsername: "admin", adminPassword: "admin-secret",
+        writerUsername: "writer", writerPassword: "writer-secret",
+        maintainerUsername: "maintainer", maintainerPassword: "maintainer-secret"
+      }));
+    }
+    if (args[0] === "exec" && args.some((argument) => argument.includes("awk"))) {
+      return result(command, args, "true\n");
     }
     return result(command, args, "ok\n");
   }
@@ -220,6 +241,11 @@ describe("admin host admission", () => {
       acquisitions += 1;
       return async () => undefined;
     });
+    const fetchImplementation = globalThis.fetch;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
+      String(input).startsWith("http://gitea:3000/")
+        ? Promise.resolve(new Response(null, { status: 200 }))
+        : fetchImplementation(input, init));
     const plugins = await registerPlugins([]);
     pluginSets.push(plugins);
     const base = await startServer(root, plugins, new AdminRunner());
@@ -253,6 +279,7 @@ describe("admin host admission", () => {
   }
 
   async function startServer(root: string, plugins: RegisteredDimPlugins, runner: StreamingCommandRunner): Promise<string> {
+    await claimTestGiteaService(root);
     const server = configuredDimAdminController(hostLifecycleOptions(root), plugins, runner);
     servers.push(server);
     server.listen(0, "127.0.0.1");
