@@ -137,7 +137,7 @@ retains the prepared and prior private image references plus staging recovery
 data, and reports that explicit operator recovery is required. Both the
 reviewed-root prepared path and the assembled-development path MUST stage the
 installer tarball from the validated candidate bundle in a temporary directory
-outside that bundle, then use that target facade for `install-cli` and its
+outside that bundle, then use that target facade for `installer install core` and its
 target-package state compatibility preflight before runtime promotion. An
 existing standalone or mise-managed facade cannot retroactively provide a
 candidate check and MUST NOT perform this install operation. Mise may supply
@@ -221,7 +221,7 @@ verification/scripts/plugin-install-smoke.bash
 ```
 
 Packs a synthetic plugin package and the `install` package, installs the
-installer into a temporary prefix, runs `dim install-plugin` against the
+installer into a temporary prefix, runs `dim installer install plugin` against the
 packed plugin tarball, and confirms `dim plugin list` (a `dim-cli` command,
 run directly against the packed CLI) reports it enabled.
 
