@@ -893,6 +893,14 @@ from the authenticated workspace grant, returns `202` before lifecycle work
 begins, and asynchronously performs the ordinary stop, root fast-forward, and
 setup sequence. A caller cannot name or restart another workspace.
 
+`GET /api/workspace/resources` is built into only the agent controller. It
+accepts no body, path parameter, query parameter, workspace name, or workspace
+ID. Under the authenticated workspace authority lock, it returns only that
+workspace record's accepted `cpuCount`, `memory`, and `pidsLimit`. It returns no
+workspace identity, runtime identifier, grant, path, route, or host capacity.
+Workspace grants cannot authenticate to this route, and host-admin authority is
+not required or exposed.
+
 Plugins must declare a non-empty audience set for every scoped controller
 route. Omitted or invalid audiences reject plugin startup. Workspace discovery
 includes only `workspace` routes; agent discovery includes only `agent` routes
@@ -909,7 +917,10 @@ ingress and filters discovery/list/revoke operations to its ingress allowlist. P
 mount only the derived proxy socket directory into development containers.
 The standard agent-policy helper accepts exact method/path rules, defaults
 each route to an empty request body, filters discovery to those rules, and
-removes host-input discovery.
+removes host-input discovery. Its `--allow-workspace-resources` option adds
+only bodyless `GET /api/workspace/resources`; projects pass the derived proxy
+socket, without the upstream grant, to agent containers as
+`DIM_CONTROLLER_SOCKET`.
 
 Plugins register host administration routes separately from scoped controller
 routes. Administration routes run only on the host-admin socket. Marking a

@@ -7,6 +7,18 @@ An operator may change this aggregate boundary after creation with
 `dim workspace resources WORKSPACE` and any combination of `--cpus`, `--memory`, and
 `--pids`; omitted limits remain unchanged.
 
+Reviewed Project lifecycle code may expose the built-in, agent-audience
+`GET /api/workspace/resources` route through an exact-route
+`dim-controller-proxy` socket. `dim-workspace-resources show` reads that socket
+and reports only the authenticated workspace's accepted CPU, memory, and PID
+assignments as JSON. It accepts no workspace selector. `dim-nproc` reads the
+same route and prints
+`max(1, floor(assigned CPU count))`, capped by the CPUs visible to the calling
+process. A missing, non-numeric, unlimited (`max`), or otherwise unavailable
+CPU assignment is an error; the helper never substitutes the host CPU count as
+the workspace assignment. These helpers do not inspect Docker or cgroup files
+and receive neither a controller grant nor the host-admin socket.
+
 After the nested engine starts, DIM records its cgroup driver and the writable
 cgroup v2 boundary in the read-only Project manifest. DIM exposes safe
 delegation automatically; reviewed setup may use `dim-project-cgroup` to
