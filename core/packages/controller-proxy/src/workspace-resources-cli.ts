@@ -23,9 +23,9 @@ export async function runWorkspaceResourcesCli(arguments_: readonly string[]): P
   if (arguments_.length > 1 || (command !== "show" && command !== "nproc")) {
     throw new WorkspaceResourcesCliError(HELP.trimEnd());
   }
-  const socketPath = process.env.DIM_CONTROLLER_SOCKET;
+  const socketPath = process.env.DIM_AGENT_CONTROLLER_SOCKET;
   if (!socketPath) {
-    throw new WorkspaceResourcesCliError("DIM_CONTROLLER_SOCKET is required");
+    throw new WorkspaceResourcesCliError("DIM_AGENT_CONTROLLER_SOCKET is required");
   }
   const resources = await readWorkspaceResources(socketPath);
   if (command === "show") {
