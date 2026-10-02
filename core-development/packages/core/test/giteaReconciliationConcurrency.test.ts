@@ -12,6 +12,7 @@ import {
   type GiteaRuntimeState
 } from "./giteaReconciliationFixture.js";
 import { hostLifecycleOptions } from "./hostLifecycleFixture.js";
+import { claimTestGiteaService } from "./giteaServiceFixture.js";
 
 vi.mock("node:dns/promises", () => ({
   lookup: vi.fn(async () => ({ address: "127.0.0.1", family: 4 }))
@@ -63,6 +64,7 @@ describe("managed Gitea reconciliation concurrency", () => {
       "network-create",
       "volume-create",
       "container-create",
+      "start:created-gitea-id",
       "user-create",
       "user-create",
       "user-create",
@@ -79,6 +81,7 @@ describe("managed Gitea reconciliation concurrency", () => {
       containerId: "configured-gitea-id",
       credentials: true
     };
+    await claimTestGiteaService(stateRoot);
     const runner = new ConcurrentGiteaRunner(runtime, "webhook-edit");
     const options = hostLifecycleOptions(stateRoot);
     const configuration = configureGiteaWebhookAllowedHosts(runner, options, ["ci-target"]);

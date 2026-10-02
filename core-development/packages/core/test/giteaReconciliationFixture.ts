@@ -1,5 +1,6 @@
 import type { CommandResult, CommandRunner } from "../../../../core/packages/core/src/types.js";
 import { GITEA_CREDENTIALS } from "./giteaOrganizationPolicyFixture.js";
+import { TEST_GITEA_SERVICE } from "./giteaServiceFixture.js";
 
 const CREDENTIAL_PATH = "/data/dim/credentials.json";
 
@@ -22,7 +23,13 @@ export type GiteaRuntimeState = {
   network: boolean;
   volume: boolean;
   containerId: string | undefined;
+  containerRunning?: boolean;
   credentials: boolean;
+  serviceId?: string;
+  containerOwnershipId?: string;
+  networkOwnershipId?: string;
+  volumeOwnershipId?: string;
+  networkId?: string;
 };
 
 type BlockOperation = "network-create" | "webhook-edit";
@@ -50,18 +57,30 @@ export class ConcurrentGiteaRunner implements CommandRunner {
       return result(command, args, { exitCode: 1, stderr: "interleaved command" });
     }
     if (args[0] === "container" && args[1] === "inspect") return this.inspectContainer(command, args);
+    if (args[0] === "image" && args[1] === "inspect") {
+      return result(command, args, { exitCode: 0, stdout: `${TEST_GITEA_SERVICE.imageId}\n` });
+    }
+    if (args[0] === "pull") return result(command, args, { exitCode: 0 });
     if (args[0] === "network" && args[1] === "inspect") return this.inspectResource(command, args, this.state.network);
     if (args[0] === "volume" && args[1] === "inspect") return this.inspectResource(command, args, this.state.volume);
     if (args[0] === "network" && args[1] === "create") return this.createNetwork(command, args);
     if (args[0] === "volume" && args[1] === "create") {
       this.state.volume = true;
+      this.state.volumeOwnershipId = label(args, "dim.resource-id");
       this.mutations.push("volume-create");
       return result(command, args, { exitCode: 0 });
     }
-    if (args[0] === "run") {
+    if (args[0] === "container" && args[1] === "create") {
       this.state.containerId = "created-gitea-id";
+      this.state.containerRunning = false;
+      this.state.containerOwnershipId = label(args, "dim.resource-id");
       this.mutations.push("container-create");
       return result(command, args, { exitCode: 0, stdout: "created-gitea-id\n" });
+    }
+    if (args[0] === "start") {
+      this.state.containerRunning = true;
+      this.mutations.push(`start:${args[1] ?? ""}`);
+      return result(command, args, { exitCode: 0 });
     }
     if (args[0] === "restart") {
       this.mutations.push(`restart:${args[1] ?? ""}`);
@@ -74,12 +93,35 @@ export class ConcurrentGiteaRunner implements CommandRunner {
   private inspectContainer(command: string, args: string[]): CommandResult {
     return this.state.containerId === undefined
       ? result(command, args, { exitCode: 1, stderr: "Error: No such container: dim-gitea" })
-      : result(command, args, { exitCode: 0, stdout: `${this.state.containerId}|true|true\n` });
+      : result(command, args, { exitCode: 0, stdout: [
+        this.state.containerId,
+        "true",
+        "dim",
+        this.state.serviceId ?? TEST_GITEA_SERVICE.serviceId,
+        "gitea",
+        this.state.containerOwnershipId ?? TEST_GITEA_SERVICE.containerOwnershipId,
+        String(this.state.containerRunning ?? true),
+        TEST_GITEA_SERVICE.endpointAddress,
+        this.state.networkId ?? TEST_GITEA_SERVICE.networkId,
+        TEST_GITEA_SERVICE.imageId,
+        "volume",
+        TEST_GITEA_SERVICE.volumeName,
+        "true"
+      ].join("|") + "\n" });
   }
 
   private inspectResource(command: string, args: string[], exists: boolean): CommandResult {
     return exists
-      ? result(command, args, { exitCode: 0, stdout: "true\n" })
+      ? result(command, args, { exitCode: 0, stdout: [
+        ...(args[0] === "network" ? [this.state.networkId ?? TEST_GITEA_SERVICE.networkId] : []),
+        "true",
+        "dim",
+        this.state.serviceId ?? TEST_GITEA_SERVICE.serviceId,
+        args[0] === "network" ? "network" : "gitea-data",
+        args[0] === "network"
+          ? this.state.networkOwnershipId ?? TEST_GITEA_SERVICE.networkOwnershipId
+          : this.state.volumeOwnershipId ?? TEST_GITEA_SERVICE.volumeOwnershipId
+      ].join("|") + "\n" })
       : result(command, args, {
         exitCode: 1,
         stderr: args[0] === "network"
@@ -92,6 +134,9 @@ export class ConcurrentGiteaRunner implements CommandRunner {
     const blocked = await this.block("network-create", command, args);
     if (blocked !== undefined) return blocked;
     this.state.network = true;
+    this.state.networkId = TEST_GITEA_SERVICE.networkId;
+    this.state.serviceId = label(args, "dim.service-id");
+    this.state.networkOwnershipId = label(args, "dim.resource-id");
     this.mutations.push("network-create");
     return result(command, args, { exitCode: 0 });
   }
@@ -138,6 +183,12 @@ export class ConcurrentGiteaRunner implements CommandRunner {
       ? result(command, args, { exitCode: 1, stderr: "injected mutation failure" })
       : undefined;
   }
+}
+
+function label(args: readonly string[], name: string): string {
+  const value = args.find((argument) => argument.startsWith(`${name}=`));
+  if (value === undefined) throw new Error(`missing ${name} label`);
+  return value.slice(name.length + 1);
 }
 
 function result(
