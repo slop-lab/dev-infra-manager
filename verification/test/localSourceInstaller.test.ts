@@ -76,8 +76,8 @@ describe("local source installation", () => {
     const facade = resolve(installPrefix, "bin", "dim");
 
     // When
-    const firstInstall = run(facade, ["install-cli", "--local-packages", bundle, "--no-local-bin"], environment);
-    const replacementInstall = run(facade, ["install-cli", "--local-packages", bundle, "--no-local-bin"], environment);
+  const firstInstall = run(facade, ["installer", "install", "core", "--local-packages", bundle, "--no-local-bin"], environment);
+  const replacementInstall = run(facade, ["installer", "install", "core", "--local-packages", bundle, "--no-local-bin"], environment);
     const version = run(facade, ["--version"], environment);
 
     // Then
@@ -150,7 +150,7 @@ describe("local source installation", () => {
     ]);
 
     // When
-    const installation = run(facade, ["install-cli", "--local-packages", bundle, "--no-local-bin"], environment);
+  const installation = run(facade, ["installer", "install", "core", "--local-packages", bundle, "--no-local-bin"], environment);
 
     // Then
     expect(installation.status).toBe(1);

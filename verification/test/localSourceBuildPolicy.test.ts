@@ -710,7 +710,7 @@ describe("local source build policy", () => {
     // Then
     expect(result.status).toBe(1);
     expect(result.stderr).toBe("local source build is not prepared; run just prepare-local\n");
-    expect(invocations).not.toContain("dim install-cli");
+    expect(invocations).not.toContain("dim installer install core");
     expect(invocations).not.toContain("dim controller restart");
     expect(invocations).not.toContain("pack ");
     expect(invocations).not.toContain("docker build");
@@ -733,7 +733,7 @@ describe("local source build policy", () => {
 
     // Then
     expect(result.status).toBe(1);
-    expect(invocations).not.toContain("dim install-cli");
+    expect(invocations).not.toContain("dim installer install core");
     expect(invocations).not.toContain("dim controller restart");
     expect(invocations).not.toContain("pack ");
     expect(invocations).not.toContain("docker build");
@@ -752,7 +752,7 @@ describe("local source build policy", () => {
 
     // Then
     expect(result.status).toBe(0);
-    expect(invocations).toContain("dim install-cli");
+    expect(invocations).toContain("dim installer install core");
     expect(invocations).toContain("dim --version");
     expect(invocations).not.toContain("dim controller restart");
     expect(invocations).toContain(
@@ -781,7 +781,7 @@ describe("local source build policy", () => {
     expect(preparationInvocations).toContain(`lock ${lockPath}`);
     expect(invocations.match(new RegExp(`lock ${lockPath}`, "g"))).toHaveLength(1);
     expect(invocations.match(/^state /gm)).toHaveLength(2);
-    expect(invocations).toContain("dim install-cli");
+    expect(invocations).toContain("dim installer install core");
     expect(invocations).not.toContain("dim controller restart");
     expect(invocations).not.toMatch(/^pack /m);
     expect(invocations).not.toContain("docker build");

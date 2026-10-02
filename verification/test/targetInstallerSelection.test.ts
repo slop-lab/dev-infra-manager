@@ -120,7 +120,7 @@ describe("target installer selection", () => {
     expect(installation.stderr).toMatch(/workspace.*schema 5.*pinned DIM version.*export.*recreate/is);
     expect(installation.stderr).not.toContain("do-not-print");
     expect(invocations).toMatch(/^mise exec -- npm install --prefix .*dim-target-installer\./m);
-    expect(invocations).toMatch(/^mise exec -- .*dim-target-installer\..*\/dim install-cli /m);
+    expect(invocations).toMatch(/^mise exec -- .*dim-target-installer\..*\/dim installer install core /m);
     expect(invocations).not.toContain("mise exec -- dim");
     expect(invocations).not.toContain("npm install --global");
     expect(await Promise.all(protectedPaths.map((path) => readFile(path)))).toEqual(before);
