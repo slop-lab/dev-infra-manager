@@ -17,7 +17,7 @@ describe("development service exposure", () => {
 
     expect(first).toBe("https://demo.example.test");
     expect(second).toBe(first);
-    expect(fixture.posts).toEqual([{ ingress: "https-main" }]);
+    expect(fixture.posts).toEqual([{ ingress: "https-main", service: "demo" }]);
     expect((await fixture.gateway.getRoute("demo"))?.targetPort).toBe(4102);
   });
 
@@ -30,7 +30,7 @@ describe("development service exposure", () => {
     ]);
 
     expect(exposed).toEqual(["https://demo.example.test", "https://demo.example.test"]);
-    expect(fixture.posts).toEqual([{ ingress: "https-main" }]);
+    expect(fixture.posts).toEqual([{ ingress: "https-main", service: "demo" }]);
     expect([4101, 4102]).toContain((await fixture.gateway.getRoute("demo"))?.targetPort);
   });
 
@@ -68,7 +68,7 @@ describe("development service exposure", () => {
 
     // Then: the gateway adopts the current slug without registering a duplicate URL.
     expect(exposed).toBe("https://changed.example.test");
-    expect(fixture.posts).toEqual([{ ingress: "https-main" }]);
+    expect(fixture.posts).toEqual([{ ingress: "https-main", service: "demo" }]);
     expect(await fixture.gateway.getRoute("demo")).toMatchObject({
       urlId: "url-1",
       authority: "changed.example.test",

@@ -54,7 +54,7 @@ async function exposeLocked(options: ExposeDevelopmentServiceOptions): Promise<s
       return updated.url;
     }
   }
-  const created = await createExternalUrl(options.developmentUrlSocket, options.ingress);
+  const created = await createExternalUrl(options.developmentUrlSocket, options.ingress, options.name);
   if (created.ingress !== options.ingress) {
     throw new DevelopmentServiceExposureError("external URL response used an unexpected ingress");
   }
@@ -85,8 +85,8 @@ async function listExternalUrls(socketPath: string): Promise<readonly ExternalUr
   return response.body.urls.filter(isExternalUrl);
 }
 
-async function createExternalUrl(socketPath: string, ingress: string): Promise<ExternalUrl> {
-  const response = await developmentUrlRequest(socketPath, "POST", "/api/urls", { ingress });
+async function createExternalUrl(socketPath: string, ingress: string, service: string): Promise<ExternalUrl> {
+  const response = await developmentUrlRequest(socketPath, "POST", "/api/urls", { ingress, service });
   if (response.status !== 201 || !isObject(response.body) || !Array.isArray(response.body.urls)) {
     throw new DevelopmentServiceExposureError(`external URL registration failed (${response.status})`);
   }
