@@ -1,9 +1,10 @@
 # `@slop-lab/dim-native-git`
 
-DIM-owned Git smart-HTTP transport for registered Project repositories. This
-package is a narrow foundation for clone, fetch, and workspace proposal pushes;
-it is not an issue tracker, pull-request implementation, review service, or
-protected-ref promotion service.
+DIM-owned Git smart-HTTP transport and complete-tree review evidence for
+registered Project repositories. This package supports clone, fetch, workspace
+proposal pushes, and host-side inspection and human approval of immutable
+proposal tuples. It is not an issue tracker, merge service, CI status service,
+or protected-ref promotion service.
 
 ## Security boundary
 
@@ -17,10 +18,21 @@ refs/heads/proposals/<workspace-id>/
 ```
 
 The server-side `pre-receive` policy denies all other refs, proposal deletion,
-and non-fast-forward proposal updates. There is deliberately no administrator,
-maintainer, or protected-ref write identity in this transport. Until DIM's
-separate complete-tree review and compare-and-swap promotion operations are
-implemented, protected refs cannot be changed through this service.
+and non-fast-forward proposal updates. Reviewer and administrator identities
+cannot use Git transport. Reviewers may approve only a complete immutable
+base-to-candidate review for which policy designates them; administrators may
+inspect and revoke but cannot approve. Approval is durable evidence only. No
+identity or endpoint in this package can merge or update a protected ref.
+
+Each review binds the Project and repository, protected and proposal refs,
+expected protected head, candidate commit and tree, policy, review, and job-set
+revisions, proposal writer, required human reviewers, complete changed-path
+metadata, and binary-preserving patch evidence. Changed paths include old and
+new modes and object IDs, rename/copy identity, and symbolic-link targets.
+Path-prefix rules may add required reviewers based on either side of a rename,
+but every approval still covers the entire review object. A moved protected or
+proposal ref, changed candidate tree, changed policy, or changed bound identity
+makes existing approval stale.
 
 Unknown routes, foreign Projects, foreign repositories, malformed paths, and
 unregistered repositories are not passed to Git. Both receive-pack discovery
@@ -40,7 +52,7 @@ plaintext network.
 The executable accepts exactly one absolute JSON configuration path:
 
 ```bash
-dim-native-git /etc/dim/native-git.json
+dim-native-git serve /etc/dim/native-git.json
 ```
 
 The configuration must be a caller-owned, non-symlink, mode-`0600` regular
@@ -56,9 +68,21 @@ Example schema-1 configuration:
   "storageRoot": "/var/lib/dim/native-git",
   "gitExecutable": "/usr/bin/git",
   "gitVersion": "2.43.0",
-  "repositories": [
-    { "projectId": "project-a", "repositoryId": "root" }
-  ],
+  "repositories": [{
+    "projectId": "project-a",
+    "repositoryId": "root",
+    "reviewPolicies": [{
+      "protectedRef": "refs/heads/main",
+      "policyRevision": "policy-1",
+      "requiredReviewRevision": "reviews-1",
+      "requiredJobSetRevision": "jobs-1",
+      "requiredReviewerIds": ["owner"],
+      "pathReviewerRules": [{
+        "pathPrefix": ".dim/",
+        "reviewerIds": ["lifecycle-owner"]
+      }]
+    }]
+  }],
   "identities": [
     {
       "role": "writer",
@@ -67,6 +91,29 @@ Example schema-1 configuration:
       "projectId": "project-a",
       "repositoryIds": ["root"],
       "workspaceId": "workspace-a"
+    },
+    {
+      "role": "reviewer",
+      "username": "owner-reviewer",
+      "password": "replace-with-random-secret",
+      "projectId": "project-a",
+      "repositoryIds": ["root"],
+      "reviewerId": "owner"
+    },
+    {
+      "role": "reviewer",
+      "username": "lifecycle-reviewer",
+      "password": "replace-with-random-secret",
+      "projectId": "project-a",
+      "repositoryIds": ["root"],
+      "reviewerId": "lifecycle-owner"
+    },
+    {
+      "role": "administrator",
+      "username": "review-admin",
+      "password": "replace-with-random-secret",
+      "projectId": "project-a",
+      "repositoryIds": ["root"]
     }
   ]
 }
@@ -78,11 +125,37 @@ repository IDs, creates a bare repository below `storageRoot`, pins receive
 policy, and installs the proposal-only hook. Initial import is a separate
 trusted host operation and is not exposed over HTTP.
 
+## Review administration
+
+The review CLI calls the authenticated review API. Supply credentials through
+the environment so passwords do not appear in command arguments or output:
+
+```bash
+export DIM_NATIVE_GIT_USERNAME=owner-reviewer
+export DIM_NATIVE_GIT_PASSWORD='replace-with-random-secret'
+
+dim-native-git review http://127.0.0.1:9080 inspect \
+  project-a root refs/heads/main \
+  refs/heads/proposals/workspace-a/change-1
+dim-native-git review http://127.0.0.1:9080 show \
+  project-a root REVIEW_ID
+dim-native-git review http://127.0.0.1:9080 approve \
+  project-a root REVIEW_ID
+dim-native-git review http://127.0.0.1:9080 revoke \
+  project-a root REVIEW_ID APPROVAL_ID
+```
+
+`inspect` and `show` return the exact SHAs, refs, changed paths, modes,
+symbolic-link targets, patch, required reviewers, and current status as JSON.
+Review objects and approval/revocation events are immutable mode-`0600` records
+inside the owned bare repository and are validated when the service restarts.
+
 ## Current integration status
 
 This package is additive and is not selected by `@slop-lab/dim-core` yet.
-Existing managed and external Gitea lifecycle behavior remains unchanged. A
-later integration must add immutable complete-tree proposals and human review,
-then exact-evidence serialized protected promotion satisfying
-`TRUST-PROMOTION-001` and `TRUST-PROMOTION-CAS-001`. This transport grants none
-of that authority.
+Existing managed and external Gitea lifecycle behavior remains unchanged. This
+package now supplies the complete-tree proposal and human-review evidence from
+`TRUST-PROMOTION-001`, but that evidence is deliberately non-promotable. A
+later integration must add exact CI evidence and a separate serialized
+compare-and-swap promotion operation satisfying `TRUST-PROMOTION-CAS-001`.
+This package grants no protected-write authority.
