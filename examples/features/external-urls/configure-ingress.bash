@@ -16,4 +16,5 @@ listen_port="${DIM_EXTERNAL_URL_LISTEN_PORT:-8080}"
   --public-port "$public_port" \
   --listen-host "$listen_host" \
   --listen-port "$listen_port" \
-  --upstream-mode container-ip
+  --upstream-mode container-ip \
+  --require-approval

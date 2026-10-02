@@ -141,4 +141,57 @@ dim_publish_example_packages "$2"
 
     expect(routedAssertions).toHaveLength(2);
   });
+
+  it("configures the external URL example with host approval required", async () => {
+    // Given: a recording DIM executable used by the checked-in host configuration script.
+    const root = await mkdtemp(resolve(tmpdir(), "dim-external-url-config-test-"));
+    fixtureRoots.push(root);
+    const dim = resolve(root, "dim");
+    const calls = resolve(root, "dim.calls");
+    await writeFile(dim, "#!/usr/bin/env sh\nprintf '%s\\n' \"$*\" >>\"$DIM_TEST_CALLS\"\n");
+    await chmod(dim, 0o755);
+
+    // When: the example configures its default ingress.
+    const result = spawnSync(
+      "/usr/bin/bash",
+      [resolve(workspaceRoot, "examples/features/external-urls/configure-ingress.bash")],
+      { encoding: "utf8", env: { ...process.env, DIM_BIN: dim, DIM_TEST_CALLS: calls } }
+    );
+
+    // Then: host approval is an explicit part of the ingress contract.
+    expect(result.status, result.stderr).toBe(0);
+    expect(await readFile(calls, "utf8")).toContain("--require-approval");
+  });
+
+  it("requests the example routes through a workspace-scoped DIM grant", async () => {
+    // Given: a recording DIM executable standing in for the pinned host CLI.
+    const root = await mkdtemp(resolve(tmpdir(), "dim-external-url-request-test-"));
+    fixtureRoots.push(root);
+    const dim = resolve(root, "dim");
+    const calls = resolve(root, "dim.calls");
+    await writeFile(dim, "#!/usr/bin/env sh\nprintf '%s\\n' \"$*\" >>\"$DIM_TEST_CALLS\"\n");
+    await chmod(dim, 0o755);
+
+    // When: the checked-in host helper requests routes for one workspace.
+    const result = spawnSync(
+      "/usr/bin/bash",
+      [resolve(workspaceRoot, "examples/features/external-urls/request-urls.bash"), "external-dev"],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          DIM_BIN: dim,
+          DIM_TEST_CALLS: calls,
+        }
+      }
+    );
+
+    // Then: discovery and both nested targets use the supported CLI surface.
+    expect(result.status, result.stderr).toBe(0);
+    expect((await readFile(calls, "utf8")).trim().split("\n")).toEqual([
+      "external-url discover --workspace external-dev --json",
+      "external-url request --workspace external-dev --ingress local-http --container dev --port 8080 --json",
+      "external-url request --workspace external-dev --ingress local-http --container dev --container deep --port 5678 --json"
+    ]);
+  });
 });
