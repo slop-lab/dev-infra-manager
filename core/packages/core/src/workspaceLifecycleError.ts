@@ -1,7 +1,14 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { UserError } from "./errors.js";
 
 export type WorkspaceLifecycleOperation = "create" | "setup" | "update" | "start" | "restart";
 export type SetWorkspaceLifecycleStage = (stage: string) => void;
+export type ReportWorkspaceLifecycleProgress = (
+  operation: WorkspaceLifecycleOperation,
+  stage: string
+) => void;
+
+const lifecycleProgress = new AsyncLocalStorage<ReportWorkspaceLifecycleProgress>();
 
 class WorkspaceLifecycleError extends UserError {
   readonly operation: WorkspaceLifecycleOperation;
@@ -21,9 +28,29 @@ export async function runWorkspaceLifecycle<T>(
   operation: WorkspaceLifecycleOperation,
   action: (setStage: SetWorkspaceLifecycleStage) => Promise<T>
 ): Promise<T> {
-  let stage = "input validation";
+  return executeWorkspaceLifecycle(operation, "input validation", action);
+}
+
+export function withWorkspaceLifecycleProgress<T>(
+  report: ReportWorkspaceLifecycleProgress,
+  action: () => Promise<T>
+): Promise<T> {
+  return lifecycleProgress.run(report, action);
+}
+
+async function executeWorkspaceLifecycle<T>(
+  operation: WorkspaceLifecycleOperation,
+  initialStage: string,
+  action: (setStage: SetWorkspaceLifecycleStage) => Promise<T>
+): Promise<T> {
+  let stage = initialStage;
+  const setStage = (nextStage: string): void => {
+    stage = nextStage;
+    lifecycleProgress.getStore()?.(operation, stage);
+  };
+  setStage(initialStage);
   try {
-    return await action((nextStage) => { stage = nextStage; });
+    return await action(setStage);
   } catch (error) {
     if (error instanceof WorkspaceLifecycleError && error.operation === operation) throw error;
     throw new WorkspaceLifecycleError(operation, stage, error);
@@ -35,8 +62,5 @@ export async function runWorkspaceLifecycleStage<T>(
   stage: string,
   action: () => Promise<T>
 ): Promise<T> {
-  return runWorkspaceLifecycle(operation, async (setStage) => {
-    setStage(stage);
-    return action();
-  });
+  return executeWorkspaceLifecycle(operation, stage, async () => action());
 }

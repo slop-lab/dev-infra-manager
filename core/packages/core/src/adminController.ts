@@ -9,6 +9,7 @@ import type { LifecycleOptions } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
 import { ProcessRunner } from "./runner.js";
 import type { StreamingCommandRunner } from "./types.js";
+import { withWorkspaceLifecycleProgress } from "./workspaceLifecycleError.js";
 
 export interface AdminRouteContext {
   readonly params: Readonly<Record<string, string>>;
@@ -83,7 +84,12 @@ async function handleAdminRequest(context: AdminRequest): Promise<void> {
     if (!STREAMABLE_OPERATIONS.has(operation)) throw new UserError(`operation '${operation}' is not streamable`);
     const body = input.input === undefined ? {} : record(input.input);
     const id = sessions.start(
-      (sessionRunner) => adminBuiltinCall(operation, { input: body, lifecycle, runner: sessionRunner, plugins }),
+      (sessionRunner, reportProgress) => withWorkspaceLifecycleProgress(
+        (lifecycleOperation, stage) => {
+          if (`workspace.${lifecycleOperation}` === operation) reportProgress(stage);
+        },
+        () => adminBuiltinCall(operation, { input: body, lifecycle, runner: sessionRunner, plugins })
+      ),
       terminalSize(body.terminal)
     );
     return sendJson(response, 202, { id });
