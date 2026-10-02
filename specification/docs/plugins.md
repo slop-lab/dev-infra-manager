@@ -106,7 +106,7 @@ routes use `registerAdminRoute` and cannot be exposed by this field.
 Install and explicitly enable a plugin package with:
 
 ```bash
-npx '@slop-lab/dim-installer@0.9.0' install-plugin '@example/dim-plugin@1.2.3'
+npx '@slop-lab/dim-installer@0.9.0' installer install plugin '@example/dim-plugin@1.2.3'
 dim plugin list
 ```
 
@@ -114,9 +114,9 @@ If a plugin prevents controller startup, disable it without importing it, then
 enable it after correction or remove it entirely:
 
 ```bash
-dim disable-plugin '@example/dim-plugin'
-dim enable-plugin '@example/dim-plugin'
-dim remove-plugin '@example/dim-plugin'
+dim installer disable-plugin '@example/dim-plugin'
+dim installer enable-plugin '@example/dim-plugin'
+dim installer remove-plugin '@example/dim-plugin'
 ```
 
 The installer maintains one npm project under

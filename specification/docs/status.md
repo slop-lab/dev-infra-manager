@@ -50,7 +50,7 @@ Implemented:
   dedicated agent controller socket and optional Project narrowing proxy.
 - Automatic host KVM forwarding for supported trusted workspace backends.
 - A thin installer facade (`@slop-lab/dim-installer`, also exposing `dim`) that
-  installs the unified runtime via `install-cli`/`install-plugin` and
+installs the unified runtime via `installer install core|plugin` and
   proxies operational commands to its managed `@slop-lab/dim-cli`,
   verified through `mise use --raw --global` in a disposable container and against the
   canonical Project example.

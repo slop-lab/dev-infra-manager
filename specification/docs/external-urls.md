@@ -356,7 +356,7 @@ https://*.remote.example.com:8443 → Caddy 100.64.0.10:8443   ├→ workspace 
 Configure the Cloudflare adapter and both ingresses:
 
 ```bash
-dim install-plugin \
+dim installer install plugin \
   '@slop-lab/dim-plugin-dns-cloudflare@0.9.0' \
   '@slop-lab/dim-plugin-external-urls@0.9.0'
 
