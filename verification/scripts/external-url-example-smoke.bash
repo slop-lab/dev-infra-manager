@@ -9,7 +9,8 @@ root_container="dim-ext-root-$suffix"
 dns_container="dim-ext-dns-$suffix"
 coredns_container="dim-ext-coredns-$suffix"
 workspace_name="external-$suffix"
-grant="$workspace_name.smoke-grant"
+workspace_id="$(printf 'A%.0s' {1..43})"
+grant="$(node -e 'process.stdout.write(Buffer.from(process.argv[1]).toString("base64url"))' "$workspace_name").$workspace_id.$(printf 'B%.0s' {1..43})"
 state_root="$(mktemp -d /tmp/dim-external-state.XXXXXX)"
 plugin_home="$(mktemp -d /tmp/dim-external-plugins.XXXXXX)"
 cli_home="$(mktemp -d /tmp/dim-external-cli.XXXXXX)"
@@ -188,15 +189,16 @@ jq -n \
   --arg container "$root_container" \
   --arg network "$network" \
   --arg now "$now" \
+  --arg workspaceId "$workspace_id" \
   '{
-    schemaVersion: 6,
+    schemaVersion: 8,
+    workspaceId: $workspaceId,
     name: $name,
     projectId: "external-example-project-id",
     projectName: "external-example",
     rootRepositoryAlias: "root",
     rootRef: "refs/heads/main",
     rootCommit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    rootSnapshotPath: "/run/dim/project-root",
     workspaceDataPath: "/var/lib/dim/workspace-data",
     phase: "ready",
     profiles: ["development"],
@@ -218,8 +220,8 @@ jq -n \
     createdAt: $now,
     updatedAt: $now
   }' > "$state_root/workspaces/$workspace_name.json"
-printf '%s\n' "$grant" > "$state_root/workspace-grants/$workspace_name"
-chmod 0600 "$state_root/workspace-grants/$workspace_name"
+printf '%s\n' "$grant" > "$state_root/workspace-grants/$workspace_name.$workspace_id"
+chmod 0600 "$state_root/workspace-grants/$workspace_name.$workspace_id"
 DIM_BIN="$dim_bin" \
 DIM_STATE_ROOT="$state_root" \
 DIM_PLUGIN_HOME="$plugin_home" \
@@ -286,35 +288,24 @@ run_dim() {
     node core/packages/cli/dist/cli.js "$@"
 }
 
-echo "[external-url-example] discover plugin routes and request nested URLs"
-discovery="$(run_dim external-url discover --json)"
-printf '%s' "$discovery" | jq -e \
-  '.[] | select(.name == "local-http")' \
-  >/dev/null
-
-docker exec --user dim --workdir /workspace/project "$root_container" \
-  bash .dim/create-urls.bash \
-  >"$state_root/create-urls.log"
+echo "[external-url-example] discover plugin routes and request pending nested URLs"
+DIM_BIN="$dim_bin" \
+DIM_STATE_ROOT="$state_root" \
+DIM_CONFIG_PATH="$state_root/dim.json" \
+DIM_CONTROLLER_SOCKET="$controller_socket" \
+DIM_ADMIN_CONTROLLER_SOCKET="$admin_socket" \
+  bash examples/features/external-urls/request-urls.bash "$workspace_name" \
+  >"$state_root/request-urls.log"
 dev_container=dim-external-example-dev-1
 test -z "$(docker exec "$root_container" docker exec "$dev_container" \
   sh -c 'printf %s "${DIM_CONTROLLER_TOKEN-}"')"
 docker exec "$root_container" docker exec "$dev_container" \
   test ! -e /run/dim/controller/controller.sock
-test "$(docker exec "$root_container" docker exec "$dev_container" \
-  curl --silent --output /dev/null --write-out '%{http_code}' \
-    --unix-socket /run/dim/controller-proxy/external-url.sock \
-    --header 'Content-Type: application/json' \
-    --data '{"key":"name"}' \
-    http://dim-controller/api/host-inputs/builtin.git-author)" = "403"
-test "$(docker exec "$root_container" docker exec "$dev_container" \
-  curl --silent --output /dev/null --write-out '%{http_code}' \
-    --unix-socket /run/dim/controller-proxy/external-url.sock \
-    --header 'Content-Type: application/json' \
-    --data '{"ingress":"local-loopback","target":{"containers":["dev"],"port":8080,"protocol":"http"}}' \
-    http://dim-controller/api/urls)" = "403"
 created_urls="$(run_dim external-url list --json)"
 dev_created="$(printf '%s' "$created_urls" | jq -ec '.urls[] | select(.target.containers == ["dev"])')"
 deep_created="$(printf '%s' "$created_urls" | jq -ec '.urls[] | select(.target.containers == ["dev","deep"])')"
+test "$(printf '%s' "$dev_created" | jq -er '.approval')" = "pending"
+test "$(printf '%s' "$deep_created" | jq -er '.approval')" = "pending"
 test "$(printf '%s' "$dev_created" | jq -er '.subdomain')" = "${workspace_name}--0"
 test "$(printf '%s' "$deep_created" | jq -er '.subdomain')" = "${workspace_name}--1"
 loopback_created="$(
@@ -408,9 +399,23 @@ dns_ip="$(docker container inspect "$dns_container" --format "{{(index .NetworkS
 
 external_curl() {
   docker run --rm --network "$client_network" --dns "$dns_ip" \
-    curlimages/curl:8.12.1 "$@"
+    curlimages/curl:8.12.1@sha256:94e9e444bcba979c2ea12e27ae39bee4cd10bc7041a472c4727a558e213744e6 \
+    "$@"
 }
 
+test "$(external_curl --silent --output /dev/null --write-out '%{http_code}' \
+  "$dev_url")" = "404"
+test "$(external_curl --silent --output /dev/null --write-out '%{http_code}' \
+  "$deep_url")" = "404"
+dev_id="$(printf '%s' "$dev_created" | jq -er '.id')"
+deep_id="$(printf '%s' "$deep_created" | jq -er '.id')"
+test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --unix-socket "$controller_socket" \
+  --header "Authorization: Bearer $grant" \
+  --request POST \
+  "http://dim-controller/api/urls/$dev_id/approve")" = "404"
+run_dim external-url approve "$dev_id"
+run_dim external-url approve "$deep_id"
 test "$(external_curl \
   --fail --silent --show-error "$dev_url")" = "hello-from-dev"
 test "$(external_curl \
@@ -422,14 +427,12 @@ if external_curl --fail --silent --show-error "$loopback_url" >/dev/null 2>&1; t
   exit 1
 fi
 
-dev_id="$(printf '%s' "$dev_created" | jq -er '.id')"
-run_dim external-url revoke "$dev_id"
-test "$(external_curl --silent --output /dev/null --write-out '%{http_code}' \
-  "$dev_url")" = "404"
-
-run_dim external-url revoke \
-  "$(printf '%s' "$deep_created" | jq -er '.id')"
 run_dim external-url revoke \
   "$(printf '%s' "$loopback_created" | jq -er '.urls[0].id')"
+run_dim workspace discard "$workspace_name" --yes
+test "$(external_curl --silent --output /dev/null --write-out '%{http_code}' \
+  "$dev_url")" = "404"
+test "$(external_curl --silent --output /dev/null --write-out '%{http_code}' \
+  "$deep_url")" = "404"
 
 echo "external-url-example-smoke-ok"
