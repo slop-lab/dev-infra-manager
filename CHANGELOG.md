@@ -86,10 +86,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   starts password-protected OpenCode Web, persists its generated credential in
   restricted user-home state, safely reuses only its owned healthy process,
   binds any selected application port only on loopback, and uses the generic
-  development-service helper to retain one workspace URL without giving the
-  tool container metadata or broader controller authority. The same trusted
-  gateway can expose other agent-selected loopback services without Project
-  changes while its bound proxy keeps the external target fixed. The launcher
+  development-service helper to retain the exact workspace-scoped `opencode`
+  slug without giving the tool container metadata, arbitrary-subdomain
+  selection, or broader controller authority. Reviewed Project proxy config
+  maps the fixed `opencode-web` logical service to that slug and the fixed
+  gateway target; unknown services and caller-supplied authority fields fail
+  closed. The launcher
   now always supplies the exact `https://localhost:4096` CORS origin and accepts
   a normalized JSON list of additional exact HTTP or HTTPS client UI origins.
   It rejects invalid values and unsupported wildcards before creating state.

@@ -313,9 +313,12 @@ healthy process and matching URL. It never kills an unrecorded OpenCode
 process. OpenCode binds only to `127.0.0.1` on `OPENCODE_WEB_PORT` (default
 `4096`). The launcher asks the generic `dim-development-service` helper to
 expose the stable `opencode-web` service name and consumes only
-`DIM_DEVELOPMENT_URL_SOCKET`; it uses no container path, gateway target port, raw
-controller grant, or host secret. The default `https-ts` ingress must already
-be allowed by the trusted bound proxy. `OPENCODE_WEB_INGRESS` selects another
+`OPENCODE_WEB_URL_SOCKET`; it uses no container path, gateway target port, raw
+controller grant, or host secret. Reviewed Project setup binds that service
+name to the exact workspace-scoped `<workspace>--opencode` subdomain and the
+fixed development gateway target. The proxy rejects other service names and
+caller-supplied subdomains. The default `https-ts`
+ingress must already be allowed by the trusted bound proxy. `OPENCODE_WEB_INGRESS` selects another
 allowed HTTPS ingress, but cannot widen that proxy policy. The launcher requires
 the installed helper and GNU `timeout`; it bounds the complete helper process
 tree and cleans up only a newly started OpenCode process when exposure fails.
