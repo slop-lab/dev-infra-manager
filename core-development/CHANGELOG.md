@@ -6,7 +6,11 @@
   all-workspace route inventory with Project and workspace names when invoked
   on the host. `--workspace` and workspace/agent environments remain scoped to
   one workspace, and the host inventory omits internal route identity and
-  credential-bearing configuration.
+  credential-bearing configuration. Ingresses may now require per-route host
+  approval: requests reserve a pending URL while HTTP, WebSocket, and TCP
+  traffic remains denied; host-only approval enables the exact persisted route,
+  and terminal host revocation removes reachability without allowing an agent,
+  foreign workspace, changed policy, or recreated workspace to reuse the ID.
 
 - Let trusted hosts share ordinary Sysbox CI capacity across explicitly
   enrolled DIM Projects on one external Gitea control plane. Each host
