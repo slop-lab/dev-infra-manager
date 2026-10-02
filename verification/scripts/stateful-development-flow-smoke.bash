@@ -307,7 +307,7 @@ test "$(getent passwd dim-agent | cut -d: -f7)" = /usr/local/bin/dim-agent-shell
 test "$(stat -c '%U:%G:%a' /run/dim-agent/environment)" = root:dim-agent:440
 test ! -w /run/dim-agent/environment
 expected_bridge_variables="$(printf '%s\n' \
-  PATH HOME DOCKER_HOST DIM_CONTROLLER_SOCKET DIM_GIT_USERNAME DIM_GIT_TOKEN \
+  PATH HOME DOCKER_HOST DIM_CONTROLLER_SOCKET DIM_AGENT_CONTROLLER_SOCKET DIM_GIT_USERNAME DIM_GIT_TOKEN \
   GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL \
   GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 GIT_CONFIG_KEY_1 \
   GIT_CONFIG_VALUE_1 GIT_CONFIG_KEY_2 GIT_CONFIG_VALUE_2 GIT_TERMINAL_PROMPT)"
@@ -352,10 +352,18 @@ test "$(git config --get-all safe.directory)" = "$(printf '/workspace\n/workspac
 test -n "$DIM_GIT_TOKEN"
 GIT_TERMINAL_PROMPT=0 git -C /workspace ls-remote origin HEAD >/dev/null
 test -S "$DIM_CONTROLLER_SOCKET"
+test -S "$DIM_AGENT_CONTROLLER_SOCKET"
 test ! -e /run/dim/controller/controller.sock
 test -z "${DIM_CONTROLLER_TOKEN:-}"
+test -z "${DIM_AGENT_CONTROLLER_TOKEN:-}"
 curl --fail --silent --unix-socket "$DIM_CONTROLLER_SOCKET" http://dim-controller/api |
   jq -e '.routes | type == "array"' >/dev/null
+test "$(dim-workspace-resources show)" = \
+  '{"cpuCount":"2","memory":"3g","pidsLimit":"768"}'
+test "$(dim-nproc)" = 2
+test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --unix-socket "$DIM_AGENT_CONTROLLER_SOCKET" --request POST \
+  http://dim-controller/api/workspace/restart)" = 403
 if test -n "${DIM_EXTERNAL_URL_SOCKET:-}" && test -S "$DIM_EXTERNAL_URL_SOCKET"; then
   curl --fail --silent --unix-socket "$DIM_EXTERNAL_URL_SOCKET" http://dim-controller/api |
     jq -e '.routes | type == "array"' >/dev/null

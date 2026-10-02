@@ -177,6 +177,7 @@ describe("full-development non-root SSH practical authority", () => {
       "DOCKER_HOST",
       "TMPDIR",
       "DIM_CONTROLLER_SOCKET",
+      "DIM_AGENT_CONTROLLER_SOCKET",
       "DIM_GIT_USERNAME",
       "DIM_GIT_TOKEN",
       "GIT_AUTHOR_NAME",
@@ -193,6 +194,7 @@ describe("full-development non-root SSH practical authority", () => {
       "GIT_TERMINAL_PROMPT"
     ]);
     expect(launcher).toContain("--env DIM_CONTROLLER_SOCKET=/run/dim/controller-proxy/agent.sock");
+    expect(launcher).toContain("--env DIM_AGENT_CONTROLLER_SOCKET=/run/dim/controller-proxy/resources.sock");
     for (const variable of [
       "DIM_GIT_USERNAME",
       "DIM_GIT_TOKEN",
@@ -211,7 +213,7 @@ describe("full-development non-root SSH practical authority", () => {
     expect(launcher).toContain("--env 'GIT_CONFIG_VALUE_2=/workspace/*'");
     expect(launcher).toContain("--env GIT_TERMINAL_PROMPT=0");
     expect(`${compose}\n${launcher}\n${startup}`).not.toMatch(
-      /DIM_CONTROLLER_TOKEN|DIM_QEMU_VERIFICATION_SOCKET/
+      /DIM_(?:AGENT_)?CONTROLLER_TOKEN|DIM_QEMU_VERIFICATION_SOCKET/
     );
   });
 
