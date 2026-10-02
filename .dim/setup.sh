@@ -207,8 +207,12 @@ echo "[setup] build and start agent runtime" >&2
 compose build --quiet agent-dind
 # An outer workspace stop terminates nested containers without letting their
 # daemon preserve a restartable process state. Recreate Project containers on
-# every setup while retaining their named data and home volumes.
-compose up --detach --force-recreate --wait agent-dind
+# every setup while retaining their named data, home, and temporary volumes.
+compose create --force-recreate agent-dind
+agent_dind_id="$(compose ps --all --quiet agent-dind)"
+test -n "$agent_dind_id"
+sh .dim/agent-tmp-volume.sh prepare "$agent_dind_id"
+compose up --detach --wait agent-dind
 verify_idmap_helpers agent-dind
 echo "[setup] configure agent and install dependencies" >&2
 compose exec --no-TTY --user root agent-dind dim-agent-dind setup
