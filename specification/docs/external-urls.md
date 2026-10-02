@@ -220,7 +220,12 @@ Approval changes the state to `approved` and enables only the persisted
 workspace instance, ingress policy revision, logical target, protocol, port,
 and authority bound to that ID. Controller restart restores an approved route
 only for the same workspace instance and exact tuple. A changed policy or a
-same-name workspace recreation cannot reuse the old approval.
+same-name workspace recreation cannot reuse the old approval. The policy
+revision includes the stable external listener address and port, but excludes
+the ephemeral loopback router allocated behind managed Caddy. Policy drift
+returns the route to `pending` for a fresh host decision. Revocation, deletion,
+and target rebinding close active HTTP streams, WebSocket upgrades, and TCP
+flows for the exact route claim before removing or replacing it.
 
 A request may provide any
 relative DNS name with `--subdomain`. The default `workspace-prefix` route
