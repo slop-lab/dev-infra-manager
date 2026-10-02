@@ -242,7 +242,7 @@ Configure `https-ts`
 before launching with the executable HTTPS configuration:
 
 ```bash
-dim install-plugin \
+dim installer install plugin \
   '@slop-lab/dim-plugin-dns-cloudflare@0.9.0' \
   '@slop-lab/dim-plugin-external-urls@0.9.0'
 CF_API_TOKEN=... \

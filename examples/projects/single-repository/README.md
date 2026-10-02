@@ -17,7 +17,7 @@ Install the external URL and Cloudflare DNS plugins if you want the optional
 HTTPS Web URL steps:
 
 ```bash
-dim install-plugin \
+dim installer install plugin \
   '@slop-lab/dim-plugin-dns-cloudflare@0.9.0' \
   '@slop-lab/dim-plugin-external-urls@0.9.0'
 ```
