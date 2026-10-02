@@ -11,8 +11,10 @@ export interface ExternalRoute {
   id: string;
   ingress: string;
   authority: string;
+  permalinkAuthority?: string;
   ingressId?: string;
   url?: string;
+  permalink?: string;
 }
 
 export interface StoredUrl {
@@ -25,6 +27,7 @@ export interface StoredUrl {
   path?: string;
   route: ExternalRoute;
   url: string;
+  permalink?: string;
   approval: ExternalUrlApproval;
   policyRevision?: string;
   createdAt: string;

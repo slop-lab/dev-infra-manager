@@ -4,7 +4,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { applyRoutePolicy } from "../../plugin-external-urls/src/routePolicy.js";
+import {
+  applyRoutePolicy,
+  workspacePermalinkSubdomain
+} from "../../plugin-external-urls/src/routePolicy.js";
 
 describe("external URL route policies", () => {
   const cleanup: Array<() => Promise<void>> = [];
@@ -22,6 +25,15 @@ describe("external URL route policies", () => {
       ...request,
       requestedSubdomain: "docs"
     })).rejects.toThrow("must start with 'work-1--'");
+  });
+
+  it("builds a stable DNS-label permalink from workspace and route identity", () => {
+    const routeId = "11111111-1111-4111-8111-111111111111";
+    const label = workspacePermalinkSubdomain("Feature-Workspace-With-A-Long-Name", routeId);
+
+    expect(label).toBe(`feature-workspac-permalink-${routeId}`);
+    expect(label.length).toBeLessThanOrEqual(63);
+    expect(label).toMatch(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/);
   });
 
   it("supports a fail-closed policy webhook over a Unix socket", async () => {

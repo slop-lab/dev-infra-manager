@@ -51,6 +51,11 @@ export function workspaceSubdomainPrefix(workspaceName: string): string {
   return `${normalized.slice(0, 41)}-${stableHash(normalized).toString(16).padStart(8, "0")}--`;
 }
 
+export function workspacePermalinkSubdomain(workspaceName: string, routeId: string): string {
+  const normalized = workspaceName.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/^-+|-+$/g, "") || "workspace";
+  return `${normalized.slice(0, 16)}-permalink-${routeId}`;
+}
+
 function parseWebhookArgument(
   argument: string,
   error: (detail: string) => Error = (detail) => new Error(`webhook routePolicy ${detail}`)
