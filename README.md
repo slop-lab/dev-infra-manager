@@ -194,7 +194,7 @@ Pin an exact, reviewed version — never `latest`:
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-installer@0.8.0'
-dim install-cli
+dim installer install core
 ```
 
 The mise-installed facade provisions Node.js 24 on demand when no supported
@@ -205,18 +205,23 @@ or, without mise:
 
 ```bash
 npx '@slop-lab/dim-installer@0.8.0'
-npx '@slop-lab/dim-installer@0.8.0' install-cli
-npx '@slop-lab/dim-installer@0.8.0' install-plugin '@example/dim-plugin@1.2.3'
+npx '@slop-lab/dim-installer@0.8.0' installer install core
+npx '@slop-lab/dim-installer@0.8.0' installer install plugin '@example/dim-plugin@1.2.3'
 ```
 
-`@slop-lab/dim-installer` is a thin facade: it owns only `installer`,
-`install-cli`, and `install-plugin`, and proxies every other command to a
+`@slop-lab/dim-installer` is a thin facade: it owns only the `installer`
+namespace and proxies every other command to a
 separately installed `@slop-lab/dim-cli`. Bare `dim` opens an interactive
 installer only until a CLI is configured; after that it behaves like `dim
 --help`, and `dim installer` is what reopens the prompt. Installation
 choices persist under `${XDG_CONFIG_HOME:-~/.config}/dim/config.json`. See
 the [installer README](https://www.npmjs.com/package/@slop-lab/dim-installer)
 for the full command reference.
+
+`dim install-cp` is the CLI command reserved for a control-plane-only host.
+It currently fails closed with the missing reviewed native Git and CI
+scheduler/webhook deployment contracts; it does not claim success or install a
+separate web UI.
 
 Check the installed backend before creating a workspace:
 

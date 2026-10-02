@@ -64,11 +64,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   after this guard succeeds. Prepared bundle bytes and readiness remain
   unchanged on refusal. The local workflow also uses the exact lockfile-owned
   Verdaccio binary on a random loopback port, with
-  signup closed and mutation authenticated. `restart-controller` separately
-  restarts the controller with the currently installed packages;
-  `install-local-control-plane` explicitly composes installation and restart
-  in that order without restarting when installation fails. Image preparation
-  remains separate.
+  signup closed and mutation authenticated. Image preparation remains
+  separate.
+  The published installer now owns only the nested `installer` namespace:
+  `installer install core|plugin` replaces the old top-level install verbs,
+  registry plugins require exact versions, plugin graph changes stage before
+  promotion, and core promotion restarts and verifies the controller exactly
+  once. Failed readiness restores the prior runtime and controller. The
+  CLI-owned `install-cp` command fails closed without host changes until the
+  native Git and CI scheduler/webhook services have reviewed deployment
+  inputs; no separate web UI is installed.
   Published CLI installations can now explicitly run `dim workspace image
   build` from any directory. The core package ships the complete trusted build
   context and references the exact-version controller-proxy package, so the
