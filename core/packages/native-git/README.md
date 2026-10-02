@@ -25,8 +25,11 @@ implemented, protected refs cannot be changed through this service.
 Unknown routes, foreign Projects, foreign repositories, malformed paths, and
 unregistered repositories are not passed to Git. Both receive-pack discovery
 and receive-pack RPC require an authorized writer. The configured absolute Git
-executable must report the exact configured `gitVersion` before the service
-listens.
+executable must be a trusted regular file, report the exact configured
+`gitVersion`, and retain the same filesystem identity for the service lifetime.
+Registered repository and hook paths reject symbolic links, and each backend
+invocation overrides repository-controlled hook and receive policy settings.
+Backend process concurrency, request size, and execution time are bounded.
 
 Terminate TLS in a reviewed reverse proxy or expose the service only on a
 private isolated network. Basic credentials must not cross an untrusted
