@@ -265,6 +265,13 @@ If a controller command session for `create`, `setup`, `update`, `start`, or
 `dim doctor` to check host readiness. `dim doctor` is diagnostic only; it does
 not repair workspace lifecycle state or retry the failed command.
 
+On a TTY, a workspace lifecycle command that is silent for five seconds shows
+the exact current lifecycle stage and the guaranteed major work still to run.
+Conditional stages appear only after the controller enters them. Any command
+output clears the transient status first. Redirected output, JSON stdout, and
+interactive `exec` or `run` streams never receive progress or terminal-control
+bytes.
+
 DIM only performs fast-forward root updates. It will not overwrite divergent
 workspace history.
 
