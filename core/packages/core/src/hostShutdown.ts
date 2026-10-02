@@ -1,6 +1,7 @@
 import { stopCiRunner } from "./ciRunner.js";
 import { UserError } from "./errors.js";
 import { GITEA_CONTAINER } from "./gitea.js";
+import { inspectGiteaContainer } from "./giteaContainer.js";
 import { LifecycleState } from "./lifecycleState.js";
 import type { HostLifecycleRecord, LifecycleOptions } from "./lifecycleTypes.js";
 import { REGISTRY_CACHE_CONTAINER } from "./registryCache.js";
@@ -66,7 +67,13 @@ export async function shutdownHost(
     }
     await attempt(errors, "stop registry cache", () => stopManagedContainer(runner, REGISTRY_CACHE_CONTAINER));
     if (options.giteaConnection.kind === "managed") {
-      await attempt(errors, "stop Gitea", () => stopManagedContainer(runner, GITEA_CONTAINER));
+      await attempt(errors, "stop Gitea", async () => {
+        const service = await state.readGiteaService();
+        const container = await inspectGiteaContainer(runner, service);
+        if (container === undefined || !container.running) return;
+        const stopped = await runner.run("docker", ["stop", container.id]);
+        if (stopped.exitCode !== 0) throw new UserError(`failed to stop '${GITEA_CONTAINER}': ${stopped.stderr.trim()}`);
+      });
     }
     record = {
       ...record,

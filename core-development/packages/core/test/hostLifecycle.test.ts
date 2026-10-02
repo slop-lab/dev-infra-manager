@@ -11,6 +11,7 @@ import type { StreamingCommandRunner } from "../../../../core/packages/core/src/
 import * as workspaceLifecycle from "../../../../core/packages/core/src/workspaceLifecycle.js";
 import { ownedLabels } from "./ciRunnerContainerFixture.js";
 import { StatefulContainerRunner } from "./ciRunnerContainerRunner.js";
+import { claimTestGiteaService, ownedGiteaContainerInspect } from "./giteaServiceFixture.js";
 import {
   HOST_PROJECT,
   HOST_QEMU_RUNNER,
@@ -42,11 +43,15 @@ describe("host lifecycle", () => {
   });
 
   it("stops managed infrastructure without removing containers or volumes", async () => {
+    await claimTestGiteaService(root);
     const calls: string[][] = [];
     const runner: StreamingCommandRunner = {
       async run(command, args) {
         calls.push([command, ...args]);
         if (args.includes("inspect")) {
+          if (args[2] === "dim-gitea") {
+            return { command, args, stdout: `${ownedGiteaContainerInspect("owned-gitea-id", true)}\n`, stderr: "", exitCode: 0 };
+          }
           return { command, args, stdout: "owned-infrastructure-id|true|true\n", stderr: "", exitCode: 0 };
         }
         if (args[0] === "container" && args[1] === "ls") {
@@ -68,7 +73,7 @@ describe("host lifecycle", () => {
     expect(result.phase).toBe("stopped");
     expect(calls.filter((call) => call[1] === "stop").map((call) => call[2])).toEqual([
       "owned-infrastructure-id",
-      "owned-infrastructure-id"
+      "owned-gitea-id"
     ]);
     expect(calls.flat().join(" ")).not.toMatch(/\b(?:rm|remove|down|prune)\b/);
     expect(calls.flat().join(" ")).not.toContain("volume");
@@ -105,15 +110,49 @@ describe("host lifecycle", () => {
     expect(calls.flat()).not.toContain("dim-gitea");
   });
 
+  it("rejects a foreign managed-Git replacement during shutdown without stopping it", async () => {
+    // Given
+    await claimTestGiteaService(root);
+    const calls: string[][] = [];
+    const runner: StreamingCommandRunner = {
+      async run(command, args) {
+        calls.push([command, ...args]);
+        if (args[0] === "container" && args[1] === "ls") {
+          return { command, args, stdout: "", stderr: "", exitCode: 0 };
+        }
+        if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-registry-cache") {
+          return { command, args, stdout: "", stderr: "no such container", exitCode: 1 };
+        }
+        if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-gitea") {
+          return { command, args, stdout: `${ownedGiteaContainerInspect("foreign-gitea-id", true, false)}\n`, stderr: "", exitCode: 0 };
+        }
+        throw new Error(`unexpected command: ${[command, ...args].join(" ")}`);
+      },
+      async runStreaming() {
+        throw new Error("no streaming command expected");
+      }
+    };
+
+    // When
+    const shutdown = shutdownHost(runner, hostLifecycleOptions(root));
+
+    // Then
+    await expect(shutdown).rejects.toThrow(/stop Gitea.*not managed by dim/);
+    expect(calls.some((call) => call[1] === "stop")).toBe(false);
+  });
+
   it("stops ephemeral pooled CI containers without persisting them as restart targets", async () => {
     // Given
     const name = "dim-ci-ordinary-host-a-primary-abcdef012345";
+    await claimTestGiteaService(root);
     const calls: string[][] = [];
     const runner: StreamingCommandRunner = {
       async run(command, args) {
         calls.push([command, ...args]);
         const stdout = args[0] === "container" && args[1] === "ls" ? `${name}\n`
-          : args[0] === "container" && args[1] === "inspect" ? "owned-pool-id|true|true\n" : "";
+          : args[0] === "container" && args[1] === "inspect" && args[2] === "dim-gitea"
+            ? `${ownedGiteaContainerInspect("owned-gitea-id", true)}\n`
+            : args[0] === "container" && args[1] === "inspect" ? "owned-pool-id|true|true\n" : "";
         return { command, args, stdout, stderr: "", exitCode: 0 };
       },
       async runStreaming() { return 0; }

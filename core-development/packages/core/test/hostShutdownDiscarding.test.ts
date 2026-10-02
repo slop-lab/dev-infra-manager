@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { shutdownHost } from "../../../../core/packages/core/src/hostLifecycle.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
+import { claimTestGiteaService } from "./giteaServiceFixture.js";
 import { hostLifecycleOptions, workspaceRecord } from "./hostLifecycleFixture.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
 
@@ -20,6 +21,7 @@ describe("host shutdown with interrupted discard", () => {
     root = await mkdtemp(join(tmpdir(), "dim-host-discarding-"));
     const record = workspaceRecord("discarding", "discarding");
     const state = new LifecycleState(root);
+    await claimTestGiteaService(root);
     await state.claimWorkspace(record);
     const runner = new DiscardingWorkspaceRunner(record);
 
@@ -48,7 +50,7 @@ class DiscardingWorkspaceRunner implements StreamingCommandRunner {
       return { command, args, stdout: `${workspaceContainerInspect(this.record)}\n`, stderr: "", exitCode: 0 };
     }
     if (args[0] === "container" && args[1] === "inspect") {
-      return { command, args, stdout: "", stderr: `No such container: ${args[2]}`, exitCode: 1 };
+      return { command, args, stdout: "", stderr: `Error: No such container: ${args[2]}`, exitCode: 1 };
     }
     if (args[0] === "stop") {
       return { command, args, stdout: `${args[1]}\n`, stderr: "", exitCode: 0 };
