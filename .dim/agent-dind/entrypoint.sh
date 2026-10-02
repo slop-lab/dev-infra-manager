@@ -6,7 +6,7 @@ chmod 4755 /usr/bin/newuidmap /usr/bin/newgidmap
 
 runtime_dir="/run/user/$(id -u rootless)"
 docker_data=/home/rootless/.local/share/docker
-mkdir -p "$runtime_dir" "$docker_data" /mnt/agent-home /mnt/workspace-shared-dind
+mkdir -p "$runtime_dir" "$docker_data" /mnt/agent-home /mnt/agent-tmp /mnt/workspace-shared-dind
 rootless_owner="$(id -u rootless):$(id -g rootless)"
 subuid_start="$(awk -F: '$1 == "rootless" { print $2; exit }' /etc/subuid)"
 subuid_count="$(awk -F: '$1 == "rootless" { print $3; exit }' /etc/subuid)"
@@ -43,6 +43,7 @@ prepare_persistent_root() {
 
 prepare_persistent_root "$docker_data" "$rootless_owner" "" "agent Docker data"
 prepare_persistent_root /mnt/agent-home "$mapped_agent_owner" 700 "agent home"
+prepare_persistent_root /mnt/agent-tmp "$mapped_agent_owner" 700 "agent temporary storage"
 chown rootless:rootless "$runtime_dir"
 chmod 0700 "$runtime_dir"
 chmod 1777 /mnt/workspace-shared-dind

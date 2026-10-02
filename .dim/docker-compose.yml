@@ -29,6 +29,7 @@ services:
       - "${DIM_PROJECT_ROOT:?}:/run/dim/project-root:ro"
       - "${DIM_PROJECT_MANIFEST:?}:/run/dim/project.json:ro"
       - agent-home:/mnt/agent-home
+      - agent-tmp:/mnt/agent-tmp
       - agent-dind-rootless-data:/home/rootless/.local/share/docker
       - agent-dind-shared:/mnt/workspace-shared-dind
       - /tmp/dim-qemu-verification:/run/dim/qemu-verification:ro
@@ -59,6 +60,9 @@ services:
 
 volumes:
   agent-home:
+  agent-tmp:
+    labels:
+      dev.dim.role: agent-tmp
   agent-dind-rootless-data:
   # Inner workloads may use different mapped UIDs. The private shared volume
   # therefore has a sticky writable root, and bind-source directories below it
