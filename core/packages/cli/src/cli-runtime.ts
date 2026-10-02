@@ -46,6 +46,7 @@ export interface IngressAddFlags {
   name: string;
   description: string;
   scheme: "http" | "https" | "tcp";
+  requireApproval?: boolean;
 }
 
 export interface ExternalUrlCreateFlags extends JsonFlags {

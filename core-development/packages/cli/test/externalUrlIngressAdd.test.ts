@@ -43,9 +43,29 @@ test("published ingress add dispatches TCP driver arguments to host admin", asyn
         name: "tailnet-ssh",
         description: "Tailnet SSH",
         scheme: "tcp",
+        approvalRequired: false,
         arguments: ["--listen-port", "49152"]
       }
     }]);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("published ingress add sends the host approval requirement separately from driver arguments", async () => {
+  const fixture = await createAdminFixture();
+  try {
+    const result = await runPublishedCli([...ingressArgs("tcp"), "--require-approval"], fixture.environment);
+
+    assert.equal(result.status, 2);
+    assert.deepEqual(fixture.requests[0]?.body, {
+      driver: "tailscale",
+      name: "tailnet-ssh",
+      description: "Tailnet SSH",
+      scheme: "tcp",
+      approvalRequired: true,
+      arguments: ["--listen-port", "49152"]
+    });
   } finally {
     await fixture.close();
   }
@@ -59,6 +79,24 @@ test("published ingress add rejects an unsupported scheme before host admin", as
     assert.equal(result.status, 2);
     assert.match(result.stderr, /--scheme must be http, https, or tcp/);
     assert.deepEqual(fixture.requests, []);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("published approve and host revoke dispatch only to host administration", async () => {
+  const fixture = await createAdminFixture();
+  try {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const approve = await runPublishedCli(["external-url", "approve", id], fixture.environment);
+    const revoke = await runPublishedCli(["external-url", "revoke", id], fixture.environment);
+
+    assert.equal(approve.status, 2);
+    assert.equal(revoke.status, 2);
+    assert.deepEqual(fixture.requests, [
+      { path: "/v1/external-url/url-approve", body: { id } },
+      { path: "/v1/external-url/url-revoke", body: { id } }
+    ]);
   } finally {
     await fixture.close();
   }
@@ -85,7 +123,7 @@ async function createAdminFixture(): Promise<AdminFixture> {
       response.writeHead(200).end();
       return;
     }
-    if (request.method === "POST" && request.url === "/v1/external-url/ingress-add") {
+    if (request.method === "POST" && request.url?.startsWith("/v1/external-url/")) {
       requests.push({ path: request.url, body: await requestBody(request) });
       response.writeHead(400, { "content-type": "application/json" });
       response.end('{"error":"fixture captured ingress-add"}');

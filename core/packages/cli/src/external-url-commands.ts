@@ -35,6 +35,7 @@ externalUrlIngress.command("add")
   .requiredOption("--name <name>")
   .requiredOption("--description <text>")
   .requiredOption("--scheme <scheme>", "http, https, or tcp")
+  .option("--require-approval", "require host-admin approval for each requested route")
   .allowUnknownOption()
   .action(async (driver: string, driverArguments: string[], flags: IngressAddFlags) => {
     if (flags.scheme !== "http" && flags.scheme !== "https" && flags.scheme !== "tcp") {
@@ -45,6 +46,7 @@ externalUrlIngress.command("add")
       name: flags.name,
       description: flags.description,
       scheme: flags.scheme,
+      approvalRequired: flags.requireApproval === true,
       arguments: driverArguments
     });
     await restartManagedController(lifecycleOptions());
@@ -154,10 +156,26 @@ externalUrl.command("list")
   });
 
 externalUrl.command("revoke")
-  .description("Revoke an external URL in the current workspace")
+  .description("Revoke an external URL as host admin or in the selected workspace")
   .argument("<id>")
   .option("--workspace <name>", "use a host-side workspace grant")
   .action(async (id: string, flags: WorkspaceControllerFlags) => {
-    await externalUrlControllerRequest(`/api/urls/${encodeURIComponent(id)}`, { method: "DELETE" }, flags.workspace);
+    const workspaceEnvironment = (process.env.DIM_CONTROLLER_SOCKET !== undefined
+      || process.env.DIM_CONTROLLER_API !== undefined
+      || process.env.DIM_AGENT_CONTROLLER_SOCKET !== undefined)
+      && (process.env.DIM_CONTROLLER_TOKEN !== undefined
+        || process.env.DIM_AGENT_CONTROLLER_TOKEN !== undefined);
+    if (flags.workspace !== undefined || workspaceEnvironment) {
+      await externalUrlControllerRequest(`/api/urls/${encodeURIComponent(id)}`, { method: "DELETE" }, flags.workspace);
+      return;
+    }
+    await externalUrlAdmin("url-revoke", { id });
+  });
+
+externalUrl.command("approve")
+  .description("Approve one pending external URL as host administrator")
+  .argument("<id>")
+  .action(async (id: string) => {
+    await externalUrlAdmin("url-approve", { id });
   });
 }
