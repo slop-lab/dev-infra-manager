@@ -3,9 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { UserError } from "./errors.js";
-import type { CommandRunner } from "./types.js";
+import type { CommandRunner, LongOperationOptions } from "./types.js";
 
-export async function buildSharedQemuSchedulerImage(runner: CommandRunner, image: string): Promise<void> {
+export async function buildSharedQemuSchedulerImage(
+  runner: CommandRunner,
+  image: string,
+  operation: LongOperationOptions = {}
+): Promise<void> {
   if (!/^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]+)?\/)*[a-z0-9]+(?:[._-][a-z0-9]+)*:[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(image)
     || image.endsWith(":latest")) {
     throw new UserError("shared QEMU scheduler image destination must be an explicit non-latest tag");
@@ -14,7 +18,11 @@ export async function buildSharedQemuSchedulerImage(runner: CommandRunner, image
   const context = join(root, "context");
   try {
     await cp(fileURLToPath(new URL("./shared-qemu-scheduler-assets", import.meta.url)), context, { recursive: true });
-    const result = await runner.run("docker", ["buildx", "build", "--load", "--tag", image, "."], { cwd: context });
+    operation.reportProgress?.("Docker image build");
+    const result = await runner.run("docker", ["buildx", "build", "--load", "--tag", image, "."], {
+      cwd: context,
+      ...(operation.signal === undefined ? {} : { signal: operation.signal })
+    });
     if (result.exitCode !== 0) throw new UserError(`failed to build shared QEMU scheduler image '${image}': ${(result.stderr || result.stdout).trim()}`);
   } finally {
     await rm(root, { recursive: true, force: true });

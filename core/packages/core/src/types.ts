@@ -35,3 +35,10 @@ export interface RunOptions {
   stderr?: Writable;
   terminal?: boolean | TerminalControl;
 }
+
+export interface LongOperationOptions {
+  readonly signal?: AbortSignal;
+  readonly reportProgress?: (stage: string) => void;
+  readonly stdout?: Writable;
+  readonly stderr?: Writable;
+}

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { UserError } from "./errors.js";
 import type { LifecycleOptions, WorkspaceRuntimeBackendKind } from "./lifecycleTypes.js";
 import { workspaceRuntimePlan } from "./runtimeBackends.js";
-import type { CommandRunner } from "./types.js";
+import type { CommandRunner, LongOperationOptions } from "./types.js";
 import { workspaceImageReference } from "./workspaceImageReference.js";
 
 export type WorkspaceImageReady = {
@@ -26,7 +26,8 @@ export type WorkspaceImageBuild = {
 
 export async function buildWorkspaceImage(
   runner: CommandRunner,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  operation: LongOperationOptions = {}
 ): Promise<WorkspaceImageBuild> {
   const image = workspaceImageReference(env.DIM_WORKSPACE_IMAGE);
   assertBuildDestination(image);
@@ -40,13 +41,17 @@ export async function buildWorkspaceImage(
     const controllerProxy = dirname(createRequire(import.meta.url).resolve("@slop-lab/dim-controller-proxy"));
     await cp(assets, context, { recursive: true });
     await cp(controllerProxy, join(context, "controller-proxy"), { recursive: true });
+    operation.reportProgress?.("Docker image build");
     const result = await runner.run("docker", [
       "buildx", "build", "--load",
       "--build-arg", `DIM_UID=${process.getuid()}`,
       "--build-arg", `DIM_GID=${process.getgid()}`,
       "--tag", image,
       "--file", "Dockerfile", "."
-    ], { cwd: context });
+    ], {
+      cwd: context,
+      ...(operation.signal === undefined ? {} : { signal: operation.signal })
+    });
     if (result.exitCode !== 0) {
       throw new UserError(
         `failed to build workspace image '${image}': ${(result.stderr || result.stdout).trim()}`
