@@ -338,8 +338,14 @@ alternative way to expose Gitea administrator credentials to jobs.
 
 The service accepts authenticated organization `workflow_job` events only
 when the event's organization and repository owner both match the enrolled
-organization. Claims are exclusive per host and named capacity and carry
-renewable leases. An expired claim MUST fence new work on that capacity until
+organization. Each accepted queued job and resulting claim MUST retain a
+non-secret operator-policy admission identity derived from its Project binding,
+job image, and runner label. Webhook and host tokens MUST NOT contribute to
+that identity. After a service restart, a queued job or claim from a different
+admission identity MUST NOT be dispatched, renewed, or requeued as current
+policy demand; a newly authenticated event is recorded under the current
+identity. Claims are exclusive per host and named capacity and carry renewable
+leases. An expired claim MUST fence new work on that capacity until
 the host has inspected and reaped its own container and acknowledged recovery;
 unknown or foreign containers MUST NOT be removed. Loss of renewal MUST stop
 the worker before its claim is released. A completed job MUST stop renewing
@@ -355,6 +361,11 @@ Docker Hub fallback, as required by `CI-CACHE-ROUTING-001`. The
 pool service has no Gitea administrator credential. Operator-managed webhook
 provisioning and queued-job reconciliation are prerequisites for live use;
 neither is silently inferred from a local Project runner.
+
+The SQLite store schema is explicitly versioned. A persisted database without
+the supported schema version, or with another version, MUST be rejected before
+enabling write-ahead logging or applying schema changes. The service does not
+implicitly migrate or discard unsupported ordinary-pool state.
 
 `service run` reads a mode-`0600`, owner-controlled JSON service config, and
 `worker serve` continuously claims one configured host capacity using
