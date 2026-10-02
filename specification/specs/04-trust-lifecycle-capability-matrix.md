@@ -213,6 +213,13 @@ administration MAY approve a pending route or revoke any route after verifying
 that exact tuple. Revocation is terminal; later exposure requires a new route
 request and approval.
 
+The ingress policy revision MUST include the stable external listener address
+and port. It MUST NOT include an ephemeral internal router address or port that
+does not change external exposure. Policy drift returns a surviving route to
+`pending`. Revocation, deletion, and target rebinding MUST disconnect active
+HTTP streaming, upgraded HTTP/WebSocket, and raw TCP flows for the exact route
+claim before the old tuple is released or replaced.
+
 An approved route MAY follow a new runtime generation only when the workspace
 ID and exact logical target descriptor are unchanged; existing flows MUST be
 disconnected before rebinding. Controller restart preserves the recorded
