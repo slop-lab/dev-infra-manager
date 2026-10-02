@@ -3,6 +3,7 @@ import { Buffer } from "node:buffer";
 import { join } from "node:path";
 import type { NativeGitIdentity, NativeGitReviewPolicy, NativeGitServiceConfig } from "./config.js";
 import { inspectGitReview, liveReviewObjects } from "./review-git.js";
+import { refSerializationKey, type RefSerializer } from "./ref-serializer.js";
 import {
   reviewDigest,
   reviewObjectSchema,
@@ -12,12 +13,15 @@ import {
   type ReviewObject
 } from "./review-schema.js";
 import { createReviewStore } from "./review-store.js";
+import { createStatusStore } from "./status-store.js";
+import type { CiStatusRecord } from "./promotion-schema.js";
 
 export type ReviewStatus = ReviewObject & {
   readonly status: "pending" | "approved" | "revoked" | "stale";
   readonly staleReasons: readonly string[];
   readonly approvals: readonly ReviewApproval[];
   readonly revocations: readonly { readonly approvalId: string; readonly revokedBy: string; readonly revokedAt: string }[];
+  readonly statuses: readonly CiStatusRecord[];
 };
 
 type ReviewTarget = {
@@ -37,7 +41,7 @@ export type ReviewService = {
   revoke(identity: NativeGitIdentity, target: ReviewTarget, reviewId: string, approvalId: string): Promise<void>;
 };
 
-export function createReviewService(config: NativeGitServiceConfig): ReviewService {
+export function createReviewService(config: NativeGitServiceConfig, serializer: RefSerializer): ReviewService {
   return {
     async create(identity, input) {
       authorizeInspection(identity, input);
@@ -78,37 +82,42 @@ export function createReviewService(config: NativeGitServiceConfig): ReviewServi
       if (identity.role !== "reviewer") throw new ReviewApiError(403, "human reviewer authority is required");
       const review = await requiredReview(config, target, reviewId);
       if (!review.requiredReviewerIds.includes(identity.reviewerId)) throw new ReviewApiError(403, "reviewer is not required for this candidate");
-      const current = await status(config, review);
-      if (current.status === "stale") throw new ReviewApiError(409, "review tuple is stale");
-      const revoked = new Set(current.revocations.map((revocation) => revocation.approvalId));
-      const existing = current.approvals.find((approval) => approval.reviewerId === identity.reviewerId && !revoked.has(approval.approvalId));
-      if (existing !== undefined) return existing;
-      return store(config, target).saveApproval({
-        reviewId,
-        reviewerId: identity.reviewerId,
-        reviewerUsername: identity.username
+      return serializer.run(refSerializationKey(review.projectId, review.repositoryId, review.protectedRef), async () => {
+        const current = await status(config, review);
+        if (current.status === "stale") throw new ReviewApiError(409, "review tuple is stale");
+        const revoked = new Set(current.revocations.map((revocation) => revocation.approvalId));
+        const existing = current.approvals.find((approval) => approval.reviewerId === identity.reviewerId && !revoked.has(approval.approvalId));
+        if (existing !== undefined) return existing;
+        return store(config, target).saveApproval({
+          reviewId,
+          reviewerId: identity.reviewerId,
+          reviewerUsername: identity.username
+        });
       });
     },
     async revoke(identity, target, reviewId, approvalId) {
       authorizeInspection(identity, target);
       const reviewStore = store(config, target);
-      await requiredReview(config, target, reviewId);
+      const review = await requiredReview(config, target, reviewId);
       const approval = (await reviewStore.readApprovals(reviewId)).find((candidate) => candidate.approvalId === approvalId);
       if (approval === undefined) throw new ReviewApiError(404, "approval was not found");
       if (identity.role !== "administrator" && (identity.role !== "reviewer" || identity.reviewerId !== approval.reviewerId)) {
         throw new ReviewApiError(403, "approval revocation authority is required");
       }
-      await reviewStore.saveRevocation({ approvalId, reviewId, revokedBy: identity.username });
+      await serializer.run(refSerializationKey(review.projectId, review.repositoryId, review.protectedRef), async () => {
+        await reviewStore.saveRevocation({ approvalId, reviewId, revokedBy: identity.username });
+      });
     }
   };
 }
 
-async function status(config: NativeGitServiceConfig, review: ReviewObject): Promise<ReviewStatus> {
+export async function status(config: NativeGitServiceConfig, review: ReviewObject): Promise<ReviewStatus> {
   const target = { projectId: review.projectId, repositoryId: review.repositoryId };
   const reviewStore = store(config, target);
-  const [approvals, revocations, live] = await Promise.all([
+  const [approvals, revocations, statuses, live] = await Promise.all([
     reviewStore.readApprovals(review.reviewId),
     reviewStore.readRevocations(review.reviewId),
+    createStatusStore(join(config.storageRoot, review.projectId, `${review.repositoryId}.git`)).readStatuses(review.reviewId),
     liveReviewObjects(config, review)
   ]);
   const staleReasons: string[] = [];
@@ -137,7 +146,7 @@ async function status(config: NativeGitServiceConfig, review: ReviewObject): Pro
     : complete ? "approved"
       : revocations.length > 0 ? "revoked"
         : "pending";
-  return { ...review, status: reviewStatus, staleReasons, approvals, revocations };
+  return { ...review, status: reviewStatus, staleReasons, approvals, revocations, statuses };
 }
 
 function requiredReviewers(policy: NativeGitReviewPolicy, changes: readonly ChangedPath[]): string[] {
@@ -151,7 +160,7 @@ function requiredReviewers(policy: NativeGitReviewPolicy, changes: readonly Chan
   return [...reviewers].sort();
 }
 
-function policyDigest(policy: NativeGitReviewPolicy): string {
+export function policyDigest(policy: NativeGitReviewPolicy): string {
   return createHash("sha256").update(JSON.stringify(policy), "utf8").digest("hex");
 }
 
@@ -168,12 +177,12 @@ function policyFor(config: NativeGitServiceConfig, target: ReviewTarget, protect
   return policy;
 }
 
-function findPolicy(config: NativeGitServiceConfig, target: ReviewTarget, protectedRef: string): NativeGitReviewPolicy | undefined {
+export function findPolicy(config: NativeGitServiceConfig, target: ReviewTarget, protectedRef: string): NativeGitReviewPolicy | undefined {
   return config.repositories.find((repository) => repository.projectId === target.projectId
     && repository.repositoryId === target.repositoryId)?.reviewPolicies?.find((policy) => policy.protectedRef === protectedRef);
 }
 
-async function requiredReview(config: NativeGitServiceConfig, target: ReviewTarget, reviewId: string): Promise<ReviewObject> {
+export async function requiredReview(config: NativeGitServiceConfig, target: ReviewTarget, reviewId: string): Promise<ReviewObject> {
   const review = await store(config, target).readReview(reviewId);
   if (review === undefined || review.projectId !== target.projectId || review.repositoryId !== target.repositoryId) {
     throw new ReviewApiError(404, "review was not found");
@@ -189,7 +198,7 @@ function authorizeInspection(identity: NativeGitIdentity, target: ReviewTarget):
   if (identity.projectId !== target.projectId || !identity.repositoryIds.includes(target.repositoryId)) {
     throw new ReviewApiError(404, "repository was not found");
   }
-  if (identity.role !== "reviewer" && identity.role !== "administrator") {
+  if (identity.role !== "reviewer" && identity.role !== "administrator" && identity.role !== "promoter") {
     throw new ReviewApiError(403, "review authority is required");
   }
 }

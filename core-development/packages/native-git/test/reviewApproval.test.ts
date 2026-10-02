@@ -55,12 +55,14 @@ describe("DIM native Git immutable human approval", () => {
 
     // When
     const writer = await fixture.request("writer-a", "POST", path, {});
-    const ci = await fixture.request("ci-a", "POST", path, {});
+    const reader = await fixture.request("ci-a", "POST", path, {});
+    const ci = await fixture.request("source-ci", "POST", path, {});
     const administrator = await fixture.request("admin-a", "POST", path, {});
     const foreign = await fixture.request("reviewer-b-user", "POST", path, {});
 
     // Then
     expect(writer.status).toBe(403);
+    expect(reader.status).toBe(403);
     expect(ci.status).toBe(403);
     expect(administrator.status).toBe(403);
     expect(foreign.status).toBe(404);
