@@ -11,10 +11,8 @@ case "$keep_volumes" in
 esac
 
 discard_agent_tmp() {
-  agent_dind_id="$(docker compose --file .dim/docker-compose.yml ps --quiet agent-dind)"
-  test -z "$agent_dind_id" || docker compose \
-    --file .dim/docker-compose.yml exec --no-TTY --user root \
-    agent-dind dim-agent-dind discard-agent-tmp
+  agent_dind_id="$(docker compose --file .dim/docker-compose.yml ps --all --quiet agent-dind)"
+  test -z "$agent_dind_id" || sh .dim/agent-tmp-volume.sh discard "$agent_dind_id"
 }
 discard_agent_tmp
 

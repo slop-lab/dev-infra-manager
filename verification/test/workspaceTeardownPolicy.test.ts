@@ -8,10 +8,11 @@ const workspaceRoot = resolve(import.meta.dirname, "../..");
 
 describe("DIM workspace teardown policy", () => {
   it("preserves Compose volumes only for retained workspace discard", async () => {
-    const teardown = resolve(
+    const projectRoot = resolve(
       workspaceRoot,
-      "examples/projects/full-development-flow/repos/root/.dim/teardown.sh"
+      "examples/projects/full-development-flow/repos/root"
     );
+    const teardown = resolve(projectRoot, ".dim/teardown.sh");
     const temporaryDirectory = await mkdtemp(resolve(tmpdir(), "dim-teardown-policy-"));
     const dockerDirectory = resolve(temporaryDirectory, "bin");
     const retainedArgumentsFile = resolve(temporaryDirectory, "retained-arguments");
@@ -27,7 +28,11 @@ describe("DIM workspace teardown policy", () => {
   printf '\\n'
 } >>"$DIM_TEST_ARGUMENTS"
 case " $* " in
-  *" ps --quiet agent-dind "*) printf 'agent-dind-id\\n' ;;
+  *" ps --all --quiet agent-dind "*) printf 'stopped-agent-dind\\n' ;;
+  *" inspect --format "*"/mnt/agent-tmp"*) printf 'volume|project_agent-tmp\\n' ;;
+  *" inspect --format "*"/mnt/agent-home"*) printf 'volume|project_agent-home\\n' ;;
+  *" inspect --format "*"com.docker.compose.project"*" stopped-agent-dind "*) printf 'project\\n' ;;
+  *" volume inspect --format "*" project_agent-tmp "*) printf 'local|null|project|agent-tmp|agent-tmp\\n' ;;
 esac
 `
     );
@@ -37,28 +42,37 @@ esac
       const environment = {
         ...process.env,
         PATH: `${dockerDirectory}:/usr/bin:/bin`,
-        DIM_TEST_ARGUMENTS: argumentsFile
+        DIM_TEST_ARGUMENTS: argumentsFile,
+        COMPOSE_PROJECT_NAME: "project"
       };
       if (keepVolume) environment.DIM_WORKSPACE_DISCARD_KEEP_VOLUME = "1";
       else delete environment.DIM_WORKSPACE_DISCARD_KEEP_VOLUME;
-      return spawnSync("sh", [teardown], { env: environment, encoding: "utf8" });
+      return spawnSync("sh", [teardown], { cwd: projectRoot, env: environment, encoding: "utf8" });
     };
 
-    const discardCall =
-      "CALL\tcompose\t--file\t.dim/docker-compose.yml\texec\t--no-TTY\t--user\troot\tagent-dind\tdim-agent-dind\tdiscard-agent-tmp";
+    const stoppedLookup =
+      "CALL\tcompose\t--file\t.dim/docker-compose.yml\tps\t--all\t--quiet\tagent-dind";
+    const containerRemoval = "CALL\trm\t--force\tstopped-agent-dind";
+    const temporaryVolumeRemoval = "CALL\tvolume\trm\tproject_agent-tmp";
 
     try {
-      expect(runTeardown(true, retainedArgumentsFile).status).toBe(0);
+      const retainedResult = runTeardown(true, retainedArgumentsFile);
+      expect(retainedResult.status, retainedResult.stderr).toBe(0);
       const retainedCalls = await readFile(retainedArgumentsFile, "utf8");
-      expect(retainedCalls).toContain(discardCall);
+      expect(retainedCalls).toContain(stoppedLookup);
+      expect(retainedCalls).toContain(containerRemoval);
+      expect(retainedCalls).toContain(temporaryVolumeRemoval);
       expect(retainedCalls).toContain(
         "CALL\tcompose\t--file\t.dim/docker-compose.yml\tdown\t--remove-orphans"
       );
       expect(retainedCalls).not.toContain("\tdown\t--volumes");
 
-      expect(runTeardown(false, ordinaryArgumentsFile).status).toBe(0);
+      const ordinaryResult = runTeardown(false, ordinaryArgumentsFile);
+      expect(ordinaryResult.status, ordinaryResult.stderr).toBe(0);
       const ordinaryCalls = await readFile(ordinaryArgumentsFile, "utf8");
-      expect(ordinaryCalls).toContain(discardCall);
+      expect(ordinaryCalls).toContain(stoppedLookup);
+      expect(ordinaryCalls).toContain(containerRemoval);
+      expect(ordinaryCalls).toContain(temporaryVolumeRemoval);
       expect(ordinaryCalls).toContain(
         "CALL\tcompose\t--file\t.dim/docker-compose.yml\tdown\t--volumes\t--remove-orphans"
       );

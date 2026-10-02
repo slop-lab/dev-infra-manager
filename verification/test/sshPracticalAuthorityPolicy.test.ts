@@ -229,7 +229,8 @@ describe("full-development non-root SSH practical authority", () => {
       "utf8"
     );
 
-    expect(setup).toContain("up --detach --force-recreate --wait --wait-timeout 60 agent-dind");
+    expect(setup).toContain("create --force-recreate agent-dind");
+    expect(setup).toContain("up --detach --wait --wait-timeout 60 agent-dind");
     expect(setup).toContain("agent-dind dim-agent-dind setup");
   });
 });

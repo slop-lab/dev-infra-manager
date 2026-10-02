@@ -58,7 +58,15 @@ docker compose \
   build --quiet agent-dind
 docker compose \
   --file .dim/docker-compose.yml --file "$compose_host_aliases" \
-  up --detach --force-recreate --wait --wait-timeout 60 agent-dind
+  create --force-recreate agent-dind
+agent_dind_id="$(docker compose \
+  --file .dim/docker-compose.yml --file "$compose_host_aliases" \
+  ps --all --quiet agent-dind)"
+test -n "$agent_dind_id"
+sh .dim/agent-tmp-volume.sh prepare "$agent_dind_id"
+docker compose \
+  --file .dim/docker-compose.yml --file "$compose_host_aliases" \
+  up --detach --wait --wait-timeout 60 agent-dind
 docker compose \
   --file .dim/docker-compose.yml --file "$compose_host_aliases" \
   exec --no-TTY --user root agent-dind dim-agent-dind setup
