@@ -23,8 +23,10 @@ and non-fast-forward proposal updates. Reviewer and administrator identities
 cannot use Git transport. Reviewers may approve only a complete immutable
 base-to-candidate review for which policy designates them; administrators may
 inspect and revoke but cannot approve. Approval is durable evidence only.
-Dedicated CI identities can report only their configured job, and only a
-dedicated promoter identity can request the checked promotion transaction.
+Dedicated scheduler identities issue and revoke current job attempts but cannot
+report results. Dedicated CI identities can report only their configured job
+and issued attempt, and only a dedicated promoter identity can request the
+checked promotion transaction.
 Administrator credentials cannot approve or promote. No Git transport identity
 can update a protected ref.
 
@@ -130,6 +132,13 @@ Example schema-1 configuration:
       "jobName": "security"
     },
     {
+      "role": "scheduler",
+      "username": "host-scheduler",
+      "password": "replace-with-random-secret",
+      "projectId": "project-a",
+      "repositoryIds": ["root"]
+    },
+    {
       "role": "promoter",
       "username": "host-promoter",
       "password": "replace-with-random-secret",
@@ -180,16 +189,23 @@ inside the owned bare repository and are validated when the service restarts.
 
 ## CI evidence and promotion
 
-CI reports use the native `dim.ci.job.completed` schema-1 event envelope. The
-payload repeats the exact repository, protected ref, expected head, candidate
-commit and tree, policy/review/job-set revisions, configured job name, positive
-attempt, and terminal result. This is a DIM event contract, not an emulation of
+The dedicated scheduler identity first issues the current attempt through
+`POST .../reviews/<review-id>/job-attempts`; it may revoke that attempt through
+`POST .../job-attempt-revocations`. CI reports use the native
+`dim.ci.job.completed` schema-1 event envelope. The payload repeats the
+server-issued attempt ID and exact repository, protected ref, expected head,
+candidate commit and tree, policy/review/job-set revisions, configured job
+name, attempt number, and terminal result. This is a DIM event contract, not an emulation of
 GitHub Actions or another provider API. Records are immutable, restart-checked,
 and conflict when the same job attempt is reported with different evidence.
 
+Only the current, unrevoked issued attempt can be reported or satisfy promotion.
+The service holds a Linux kernel-owned abstract socket keyed by canonical
+storage root, so a second process fails before serving shared evidence.
+
 `POST .../reviews/<review-id>/promotions` is accepted only for the dedicated
 promoter identity. Under the per-repository/ref serializer it rereads policy,
-refs, approvals, and the highest reported attempt for every required job;
+refs, approvals, and the current issued attempt for every required job;
 requires exact successful terminal evidence and descendant ancestry; then uses
 one Git ref transaction to verify the proposal candidate and update exactly the
 expected protected object ID to the reviewed candidate. Mismatch leaves the
