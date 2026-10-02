@@ -54,6 +54,15 @@ dim external-url request \
 dim external-url list --workspace feature-123
 ```
 
+HTTP and HTTPS requests return both a policy-selected `url` and a stable
+`permalink`. The permalink authority has the form
+`WORKSPACE-permalink-ROUTE_ID.DOMAIN`; it keeps the same route ID when a
+same-instance policy change selects a new slug. Both authorities reserve
+atomically, route to the same target, and share approval, rebinding, revocation,
+and deletion. Recreating a discarded workspace creates a new route ID and
+permalink. Raw TCP routes remain `tcp://ADDRESS:PORT` routes and return no
+permalink.
+
 On the host, omit `--workspace` to list routes for every current workspace.
 That inventory includes Project and workspace names plus each route's approval
 state, is capped at 1,000 routes,
