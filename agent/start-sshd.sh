@@ -48,6 +48,7 @@ allowed_environment=(
   GIT_TERMINAL_PROMPT
   DIM_EXTERNAL_URL_SOCKET
   DIM_EXTERNAL_URL_CONTAINERS_JSON
+  DIM_AGENT_CONTROLLER_SOCKET
   DIM_QEMU_VERIFICATION_SOCKET
 )
 for variable in "${allowed_environment[@]}"; do
