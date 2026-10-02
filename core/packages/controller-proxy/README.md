@@ -143,8 +143,12 @@ dim-development-service expose \
 ```
 
 The command prints the policy-selected external URL. It lazily starts one user-owned gateway
-listening on `0.0.0.0:31887` so the trusted ingress can reach it, registers only
-`{ "ingress": "https-ts" }` through the bound socket, and routes both returned
+listening on `0.0.0.0:31887` so the trusted ingress can reach it. The helper
+sends only the ingress and logical service name. A generic target-bound proxy
+strips the logical name and injects the bound target. A narrower dedicated
+socket may add reviewed `--bind-service-subdomain SERVICE=SUBDOMAIN` mappings;
+it injects the exact mapped subdomain and rejects unlisted service names and
+caller-supplied authority fields. The helper then routes both returned
 exact authorities, the selected slug and stable permalink, to the local
 application at `127.0.0.1:5173`. HTTP and WebSocket upgrades use the same
 route. Repeating the
@@ -158,12 +162,13 @@ queried port to the same container port (`G:G`); External URL registration
 stores the bound gateway port when the URL is created. Application ports remain
 internal gateway state and need no Project mapping.
 
-The bound proxy, not the caller, injects the reviewed external target. This
-prevents the agent from selecting another container target, but it is not a
+The bound proxy, not the caller, injects the reviewed external target and any
+configured service subdomain. This prevents the agent from selecting another
+container target or public authority. It is not a
 per-process boundary inside the agent: any code with the socket can expose any
-service reachable through that agent's existing network authority. Keep the
-generic ingress-only External URL socket separate when callers still need to
-select arbitrary targets.
+service allowed by that socket through the agent's existing loopback authority.
+Keep generic and service-specific capabilities on distinct sockets when both
+are needed.
 
 `createControllerProxy` also accepts explicit `sourceSocket`, `token`,
 `maxBodyBytes`, and socket/directory modes. The default request-body limit is
