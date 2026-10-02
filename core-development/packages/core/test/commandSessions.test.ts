@@ -27,6 +27,20 @@ class SessionTestRunner implements StreamingCommandRunner {
 }
 
 describe("command sessions", () => {
+  it("emits fixed lifecycle progress events before the final result", async () => {
+    const sessions = new CommandSessionManager(new SessionTestRunner());
+    const id = sessions.start(async (_runner, reportProgress) => {
+      reportProgress("Project setup");
+      return { ok: true };
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(sessions.snapshot(id)?.events).toEqual([
+      expect.objectContaining({ type: "progress", stage: "Project setup" }),
+      expect.objectContaining({ type: "result", result: { ok: true } })
+    ]);
+  });
+
   it("buffers command output, accepts input, and reports the final result", async () => {
     const runner = new SessionTestRunner();
     const sessions = new CommandSessionManager(runner);

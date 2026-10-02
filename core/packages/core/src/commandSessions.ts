@@ -4,6 +4,7 @@ import type { CommandResult, RunOptions, StreamingCommandRunner, TerminalControl
 
 export type CommandSessionEvent =
   | { sequence: number; type: "command"; command: string }
+  | { sequence: number; type: "progress"; stage: string }
   | { sequence: number; type: "stdout" | "stderr"; data: string; encoding: "base64" }
   | { sequence: number; type: "result"; result: unknown }
   | { sequence: number; type: "exit"; exitCode: number }
@@ -11,6 +12,7 @@ export type CommandSessionEvent =
 
 type UnsequencedCommandSessionEvent =
   | { type: "command"; command: string }
+  | { type: "progress"; stage: string }
   | { type: "stdout" | "stderr"; data: string; encoding: "base64" }
   | { type: "result"; result: unknown }
   | { type: "exit"; exitCode: number }
@@ -34,7 +36,7 @@ export class CommandSessionManager {
   constructor(private readonly runner: StreamingCommandRunner) {}
 
   start(
-    execute: (runner: StreamingCommandRunner) => Promise<unknown>,
+    execute: (runner: StreamingCommandRunner, reportProgress: (stage: string) => void) => Promise<unknown>,
     terminal: TerminalSize = { columns: 80, rows: 24 }
   ): string {
     const session: CommandSession = {
@@ -50,7 +52,7 @@ export class CommandSessionManager {
     };
     this.#sessions.set(session.id, session);
     const runner = new SessionRunner(this.runner, session, (event) => this.#emit(session, event));
-    void execute(runner).then(
+    void execute(runner, (stage) => this.#emit(session, { type: "progress", stage })).then(
       (result) => this.#emit(session, { type: "result", result }),
       (error) => this.#emit(session, {
         type: "error",
