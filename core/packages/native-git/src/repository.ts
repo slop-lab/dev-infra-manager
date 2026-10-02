@@ -7,6 +7,7 @@ import type { NativeGitRepository, NativeGitServiceConfig } from "./config.js";
 import { NativeGitConfigError } from "./config.js";
 import { assertReviewStore, initializeReviewStore } from "./review-store.js";
 import { assertStatusStore, initializeStatusStore } from "./status-store.js";
+import { assertJobAttemptStore, initializeJobAttemptStore } from "./job-attempt-store.js";
 
 const execute = promisify(execFile);
 const hook = `#!/bin/sh
@@ -98,6 +99,7 @@ export async function initializeNativeRepository(
   await chmod(repositoryPath, 0o700);
   await initializeReviewStore(repositoryPath);
   await initializeStatusStore(repositoryPath);
+  await initializeJobAttemptStore(repositoryPath);
   return repositoryPath;
 }
 
@@ -127,6 +129,7 @@ export async function assertRegisteredRepository(
   if (stdout.trim() !== hooksPath) throw new NativeGitConfigError("registered repository hooks path is invalid");
   await assertReviewStore(repositoryPath);
   await assertStatusStore(repositoryPath);
+  await assertJobAttemptStore(repositoryPath);
 }
 
 async function assertOwnedDirectory(path: string, label: string): Promise<void> {
