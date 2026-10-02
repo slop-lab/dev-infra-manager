@@ -1,11 +1,13 @@
 import { spawn } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { join } from "node:path";
 import type { NativeGitIdentity, NativeGitServiceConfig } from "./config.js";
 import type { NativeGitRoute } from "./routing.js";
 
 const MAX_REQUEST_BYTES = 256 * 1024 * 1024;
 const MAX_HEADER_BYTES = 64 * 1024;
 const MAX_ERROR_BYTES = 64 * 1024;
+const BACKEND_TIMEOUT_MILLISECONDS = 30_000;
 
 export function serveGitBackend(
   config: NativeGitServiceConfig,
@@ -13,7 +15,8 @@ export function serveGitBackend(
   route: NativeGitRoute,
   request: IncomingMessage,
   response: ServerResponse
-): void {
+): Promise<void> {
+  return new Promise((resolve) => {
   const child = spawn(config.gitExecutable, ["http-backend"], {
     env: backendEnvironment(config, identity, route, request),
     stdio: ["pipe", "pipe", "pipe"]
@@ -22,32 +25,48 @@ export function serveGitBackend(
   let headerBuffer = Buffer.alloc(0);
   let headersSent = false;
   let errorOutput = "";
+  let settled = false;
+  const finish = (): void => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timeout);
+    request.resume();
+    resolve();
+  };
+  const fail = (status: number): void => {
+    child.kill("SIGKILL");
+    if (!response.headersSent && !response.writableEnded) response.writeHead(status).end();
+  };
+  const timeout = setTimeout(() => fail(504), BACKEND_TIMEOUT_MILLISECONDS);
+  timeout.unref();
 
   request.on("data", (chunk: Buffer) => {
     requestBytes += chunk.length;
     if (requestBytes > MAX_REQUEST_BYTES) {
-      child.kill("SIGKILL");
-      if (!response.headersSent) response.writeHead(413).end();
+      fail(413);
       return;
     }
-    if (!child.stdin.write(chunk)) request.pause();
+    if (!child.stdin.destroyed && !child.stdin.write(chunk)) request.pause();
   });
   child.stdin.on("drain", () => request.resume());
-  request.on("end", () => child.stdin.end());
+  child.stdin.on("error", () => request.resume());
+  request.on("end", () => {
+    if (!child.stdin.destroyed) child.stdin.end();
+  });
   request.on("aborted", () => child.kill("SIGKILL"));
   response.on("close", () => {
     if (!response.writableEnded) child.kill("SIGKILL");
   });
 
   child.stdout.on("data", (chunk: Buffer) => {
+    if (response.writableEnded || response.destroyed) return;
     if (headersSent) {
       if (!response.write(chunk)) child.stdout.pause();
       return;
     }
     headerBuffer = Buffer.concat([headerBuffer, chunk]);
     if (headerBuffer.length > MAX_HEADER_BYTES) {
-      child.kill("SIGKILL");
-      response.writeHead(502).end();
+      fail(502);
       return;
     }
     const separator = headerBuffer.indexOf("\r\n\r\n");
@@ -74,6 +93,8 @@ export function serveGitBackend(
       response.writeHead(code === 0 ? 502 : 500, { "Content-Type": "text/plain; charset=utf-8" });
       response.end(errorOutput.length > 0 ? "Git backend failed\n" : "Git backend produced no response\n");
     }
+    finish();
+  });
   });
 }
 
@@ -86,6 +107,15 @@ function backendEnvironment(
   const protocol = request.headers["git-protocol"];
   return {
     LC_ALL: "C",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_COUNT: "3",
+    GIT_CONFIG_KEY_0: "core.hooksPath",
+    GIT_CONFIG_VALUE_0: join(config.storageRoot, route.projectId, `${route.repositoryId}.git`, "hooks"),
+    GIT_CONFIG_KEY_1: "receive.denyNonFastForwards",
+    GIT_CONFIG_VALUE_1: "true",
+    GIT_CONFIG_KEY_2: "http.receivepack",
+    GIT_CONFIG_VALUE_2: "true",
+    HOME: "/dev/null",
     GIT_HTTP_EXPORT_ALL: "1",
     GIT_PROJECT_ROOT: config.storageRoot,
     PATH_INFO: route.pathInfo,
@@ -97,7 +127,6 @@ function backendEnvironment(
     REMOTE_USER: identity.username,
     DIM_NATIVE_GIT_PROJECT_ID: route.projectId,
     DIM_NATIVE_GIT_REPOSITORY_ID: route.repositoryId,
-    DIM_NATIVE_GIT_EXECUTABLE: config.gitExecutable,
     ...(identity.role === "writer" ? { DIM_NATIVE_GIT_WORKSPACE_ID: identity.workspaceId } : {}),
     ...(protocol === "version=1" || protocol === "version=2" ? { HTTP_GIT_PROTOCOL: protocol } : {})
   };

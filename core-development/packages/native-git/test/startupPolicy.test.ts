@@ -1,6 +1,8 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { access, chmod, copyFile, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createNativeGitServer,
@@ -9,6 +11,7 @@ import {
 } from "../../../../core/packages/native-git/src/index.js";
 
 const roots: string[] = [];
+const run = promisify(execFile);
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -36,6 +39,82 @@ describe("DIM native Git startup policy", () => {
     // When / Then
     await expect(initializeNativeRepository(config, firstRepository(config))).rejects.toThrow(/expected Git 9.9.9/);
   });
+
+  it("refuses to listen when repository config redirects the policy hook", async () => {
+    // Given
+    const root = await temporaryRoot();
+    const config = serviceConfig(root, "2.43.0");
+    const repositoryPath = await initializeNativeRepository(config, firstRepository(config));
+    await run(config.gitExecutable, ["--git-dir", repositoryPath, "config", "core.hooksPath", join(root, "bypass-hooks")]);
+    const service = createNativeGitServer(config);
+
+    // When / Then
+    await expect(service.listen()).rejects.toThrow(/hooks path/);
+    expect(service.server.listening).toBe(false);
+  });
+
+  it("refuses a registered repository reached through a lexical symlink", async () => {
+    // Given
+    const root = await temporaryRoot();
+    const config = serviceConfig(root, "2.43.0");
+    const registeredPath = await initializeNativeRepository(config, firstRepository(config));
+    const foreign = { projectId: "project-b", repositoryId: "source" } as const;
+    const foreignPath = await initializeNativeRepository(config, foreign);
+    await rm(registeredPath, { recursive: true });
+    await symlink(foreignPath, registeredPath);
+    const service = createNativeGitServer(config);
+
+    // When / Then
+    await expect(service.listen()).rejects.toThrow(/symbolic link/);
+    expect(service.server.listening).toBe(false);
+  });
+
+  it("preserves a foreign hook target when pre-receive is a symbolic link", async () => {
+    // Given
+    const root = await temporaryRoot();
+    const config = serviceConfig(root, "2.43.0");
+    const repository = firstRepository(config);
+    const repositoryPath = await initializeNativeRepository(config, repository);
+    const hookPath = join(repositoryPath, "hooks", "pre-receive");
+    const foreignPath = join(root, "foreign-hook");
+    const foreignBytes = "foreign-owned\n";
+    await writeFile(foreignPath, foreignBytes);
+    await rm(hookPath);
+    await symlink(foreignPath, hookPath);
+
+    // When / Then
+    await expect(initializeNativeRepository(config, repository)).rejects.toThrow(/policy hook/);
+    await expect(readFile(foreignPath, "utf8")).resolves.toBe(foreignBytes);
+  });
+
+  it("does not execute a Git path replaced after startup validation", async () => {
+    // Given
+    const root = await temporaryRoot();
+    const executable = join(root, "git");
+    const replacement = join(root, "replacement");
+    const marker = join(root, "replacement-ran");
+    await copyFile("/usr/bin/git", executable);
+    await chmod(executable, 0o700);
+    const config = serviceConfig(root, "2.43.0", executable);
+    await initializeNativeRepository(config, firstRepository(config));
+    const service = createNativeGitServer(config);
+    const baseUrl = await service.listen();
+    await writeFile(replacement, `#!/bin/sh\nprintf '%s\\n' 'git version 2.43.0'\n: > '${marker}'\nprintf 'Content-Type: text/plain\\r\\n\\r\\n'\n`, { mode: 0o700 });
+    await rename(replacement, executable);
+
+    try {
+      // When
+      const response = await fetch(`${baseUrl}/v1/projects/project-a/repositories/source.git/info/refs?service=git-upload-pack`, {
+        headers: { Authorization: `Basic ${Buffer.from("reader-a:reader-a-secret-1").toString("base64")}` }
+      });
+
+      // Then
+      expect(response.status).toBe(503);
+      await expect(access(marker)).rejects.toThrow();
+    } finally {
+      await service.close();
+    }
+  });
 });
 
 async function temporaryRoot(): Promise<string> {
@@ -44,13 +123,13 @@ async function temporaryRoot(): Promise<string> {
   return root;
 }
 
-function serviceConfig(root: string, gitVersion: string): NativeGitServiceConfig {
+function serviceConfig(root: string, gitVersion: string, gitExecutable = "/usr/bin/git"): NativeGitServiceConfig {
   return {
     schemaVersion: 1,
     host: "127.0.0.1",
     port: 0,
     storageRoot: join(root, "storage"),
-    gitExecutable: "/usr/bin/git",
+    gitExecutable,
     gitVersion,
     repositories: [{ projectId: "project-a", repositoryId: "source" }],
     identities: [{

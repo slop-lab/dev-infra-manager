@@ -99,6 +99,26 @@ describe("DIM native Git smart-HTTP transport", () => {
     await expect(fixture.git(fixture.root, ["ls-remote", fixture.url("reader-a", "reader-a-secret-1", "project-a", "missing")]))
       .rejects.toSatisfy((error: unknown) => isExitError(error) && /not found/.test(error.stderr));
   });
+
+  it("survives a malformed upload body after the Git child exits early", async () => {
+    // Given
+    const fixture = await startFixture();
+    const endpoint = `${fixture.baseUrl}/v1/projects/project-a/repositories/source.git/git-upload-pack`;
+    const authorization = `Basic ${Buffer.from("reader-a:reader-a-secret-1").toString("base64")}`;
+
+    // When
+    await fetch(endpoint, {
+      method: "POST",
+      headers: { Authorization: authorization, "Content-Type": "application/x-git-upload-pack-request" },
+      body: Buffer.alloc(8 * 1024 * 1024, 0xff)
+    });
+    const liveness = await fetch(`${fixture.baseUrl}/v1/projects/project-a/repositories/source.git/info/refs?service=git-upload-pack`, {
+      headers: { Authorization: authorization }
+    });
+
+    // Then
+    expect(liveness.status).toBe(200);
+  });
 });
 
 async function startFixture(): Promise<NativeGitFixture> {

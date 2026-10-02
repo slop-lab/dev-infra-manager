@@ -8,7 +8,12 @@ import {
   type NativeGitIdentity,
   type NativeGitServiceConfig
 } from "./config.js";
-import { assertGitVersion, assertRegisteredRepository } from "./repository.js";
+import {
+  assertGitExecutableIdentity,
+  assertGitVersion,
+  assertRegisteredRepository,
+  type GitExecutableIdentity
+} from "./repository.js";
 import { nativeGitRoute } from "./routing.js";
 
 export type NativeGitServer = {
@@ -23,6 +28,8 @@ export function createNativeGitServer(input: NativeGitServiceConfig): NativeGitS
     repositoryKey(repository.projectId, repository.repositoryId), repository
   ]));
   const authenticator = nativeGitAuthenticator(config.identities);
+  let gitIdentity: GitExecutableIdentity | undefined;
+  let activeBackends = 0;
   const server = createServer((request, response) => {
     const route = nativeGitRoute(request);
     if (route === undefined) return send(response, 404);
@@ -31,7 +38,13 @@ export function createNativeGitServer(input: NativeGitServiceConfig): NativeGitS
     const repository = repositories.get(repositoryKey(route.projectId, route.repositoryId));
     if (repository === undefined || !canAccess(identity, route.projectId, route.repositoryId)) return send(response, 404);
     if (route.operation === "write" && identity.role !== "writer") return send(response, 403);
-    serveGitBackend(config, identity, route, request, response);
+    if (gitIdentity === undefined) return send(response, 503);
+    if (activeBackends >= 16) return send(response, 503);
+    activeBackends += 1;
+    void assertGitExecutableIdentity(config.gitExecutable, gitIdentity)
+      .then(() => serveGitBackend(config, identity, route, request, response))
+      .catch(() => send(response, 503))
+      .finally(() => { activeBackends -= 1; });
   });
   server.requestTimeout = 30_000;
   server.headersTimeout = 10_000;
@@ -41,8 +54,8 @@ export function createNativeGitServer(input: NativeGitServiceConfig): NativeGitS
   return {
     server,
     async listen() {
-      await assertGitVersion(config);
-      await Promise.all(config.repositories.map((repository) => assertRegisteredRepository(config.storageRoot, repository)));
+      gitIdentity = await assertGitVersion(config);
+      await Promise.all(config.repositories.map((repository) => assertRegisteredRepository(config, repository)));
       server.listen(config.port, config.host);
       await once(server, "listening");
       const address = server.address();
