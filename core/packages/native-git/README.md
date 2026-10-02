@@ -1,10 +1,11 @@
 # `@slop-lab/dim-native-git`
 
-DIM-owned Git smart-HTTP transport and complete-tree review evidence for
-registered Project repositories. This package supports clone, fetch, workspace
-proposal pushes, and host-side inspection and human approval of immutable
-proposal tuples. It is not an issue tracker, merge service, CI status service,
-or protected-ref promotion service.
+DIM-owned Git smart-HTTP transport, complete-tree review evidence, exact CI
+status evidence, and protected promotion for registered Project repositories.
+This package supports clone, fetch, workspace proposal pushes, host-side
+inspection and human approval of immutable proposal tuples, authenticated
+per-job terminal CI results, and a host promotion API. It is not an issue
+tracker, workflow runner, or GitHub Actions-compatible API.
 
 ## Security boundary
 
@@ -21,8 +22,11 @@ The server-side `pre-receive` policy denies all other refs, proposal deletion,
 and non-fast-forward proposal updates. Reviewer and administrator identities
 cannot use Git transport. Reviewers may approve only a complete immutable
 base-to-candidate review for which policy designates them; administrators may
-inspect and revoke but cannot approve. Approval is durable evidence only. No
-identity or endpoint in this package can merge or update a protected ref.
+inspect and revoke but cannot approve. Approval is durable evidence only.
+Dedicated CI identities can report only their configured job, and only a
+dedicated promoter identity can request the checked promotion transaction.
+Administrator credentials cannot approve or promote. No Git transport identity
+can update a protected ref.
 
 Each review binds the Project and repository, protected and proposal refs,
 expected protected head, candidate commit and tree, policy, review, and job-set
@@ -76,6 +80,7 @@ Example schema-1 configuration:
       "policyRevision": "policy-1",
       "requiredReviewRevision": "reviews-1",
       "requiredJobSetRevision": "jobs-1",
+      "requiredJobNames": ["source", "security"],
       "requiredReviewerIds": ["owner"],
       "pathReviewerRules": [{
         "pathPrefix": ".dim/",
@@ -107,6 +112,29 @@ Example schema-1 configuration:
       "projectId": "project-a",
       "repositoryIds": ["root"],
       "reviewerId": "lifecycle-owner"
+    },
+    {
+      "role": "ci",
+      "username": "source-ci",
+      "password": "replace-with-random-secret",
+      "projectId": "project-a",
+      "repositoryIds": ["root"],
+      "jobName": "source"
+    },
+    {
+      "role": "ci",
+      "username": "security-ci",
+      "password": "replace-with-random-secret",
+      "projectId": "project-a",
+      "repositoryIds": ["root"],
+      "jobName": "security"
+    },
+    {
+      "role": "promoter",
+      "username": "host-promoter",
+      "password": "replace-with-random-secret",
+      "projectId": "project-a",
+      "repositoryIds": ["root"]
     },
     {
       "role": "administrator",
@@ -150,12 +178,32 @@ symbolic-link targets, patch, required reviewers, and current status as JSON.
 Review objects and approval/revocation events are immutable mode-`0600` records
 inside the owned bare repository and are validated when the service restarts.
 
+## CI evidence and promotion
+
+CI reports use the native `dim.ci.job.completed` schema-1 event envelope. The
+payload repeats the exact repository, protected ref, expected head, candidate
+commit and tree, policy/review/job-set revisions, configured job name, positive
+attempt, and terminal result. This is a DIM event contract, not an emulation of
+GitHub Actions or another provider API. Records are immutable, restart-checked,
+and conflict when the same job attempt is reported with different evidence.
+
+`POST .../reviews/<review-id>/promotions` is accepted only for the dedicated
+promoter identity. Under the per-repository/ref serializer it rereads policy,
+refs, approvals, and the highest reported attempt for every required job;
+requires exact successful terminal evidence and descendant ancestry; then uses
+one Git ref transaction to verify the proposal candidate and update exactly the
+expected protected object ID to the reviewed candidate. Mismatch leaves the
+protected ref unchanged. Repeating the request returns `already-current` only
+when that exact reviewed candidate is current and the remaining tuple evidence
+is still valid.
+
 ## Current integration status
 
 This package is additive and is not selected by `@slop-lab/dim-core` yet.
 Existing managed and external Gitea lifecycle behavior remains unchanged. This
-package now supplies the complete-tree proposal and human-review evidence from
-`TRUST-PROMOTION-001`, but that evidence is deliberately non-promotable. A
-later integration must add exact CI evidence and a separate serialized
-compare-and-swap promotion operation satisfying `TRUST-PROMOTION-CAS-001`.
-This package grants no protected-write authority.
+package now supplies the complete-tree proposal, human review, exact CI
+evidence, and serialized compare-and-swap transaction required by
+`TRUST-PROMOTION-001` and `TRUST-PROMOTION-CAS-001`. Protected-write authority
+exists only inside that checked host operation; smart HTTP remains
+proposal-only and has no administrator bypass. Core lifecycle wiring, service
+deployment/restart, UI, and independent-host CI gates remain separate work.
