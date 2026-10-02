@@ -19,6 +19,7 @@ const allUrls = {
       ingress: "public",
       target: { containers: ["dev"], port: 3000, protocol: "http" },
       url: "https://work-a--0.example.test/",
+      permalink: "https://work-a-permalink-11111111-1111-4111-8111-111111111111.example.test/",
       createdAt: "2026-10-01T00:00:00.000Z"
     },
     {
@@ -28,6 +29,7 @@ const allUrls = {
       ingress: "public",
       target: { containers: [], port: 8080, protocol: "http" },
       url: "https://work-b--0.example.test/",
+      permalink: "https://work-b-permalink-22222222-2222-4222-8222-222222222222.example.test/",
       createdAt: "2026-10-01T00:00:01.000Z"
     }
   ]

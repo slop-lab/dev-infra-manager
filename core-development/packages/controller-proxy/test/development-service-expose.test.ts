@@ -41,7 +41,8 @@ describe("development service exposure", () => {
     fixture.setNextUrl({
       id: "url-2",
       ingress: "https-main",
-      url: "https://replacement.example.test"
+      url: "https://replacement.example.test",
+      permalink: "https://demo-permalink-url-2.example.test"
     });
 
     const exposed = await exposeDevelopmentService(fixture.options(4102));
@@ -69,9 +70,14 @@ describe("development service exposure", () => {
     cleanup.push(() => rm(root, { recursive: true, force: true }));
     const developmentUrlSocket = path.join(root, "development.sock");
     const stateDirectory = path.join(root, "state");
-    const urls: Array<{ id: string; ingress: string; url: string }> = [];
+    const urls: Array<{ id: string; ingress: string; url: string; permalink: string }> = [];
     const posts: Array<Record<string, unknown>> = [];
-    let nextUrl = { id: "url-1", ingress: "https-main", url: "https://demo.example.test" };
+    let nextUrl = {
+      id: "url-1",
+      ingress: "https-main",
+      url: "https://demo.example.test",
+      permalink: "https://demo-permalink-url-1.example.test"
+    };
     const controller = http.createServer(async (request, response) => {
       if (request.method === "GET" && request.url === "/api") {
         json(response, 200, { routes: [{ path: "/api/urls", discovery: {
@@ -100,7 +106,7 @@ describe("development service exposure", () => {
     return {
       urls,
       posts,
-      setNextUrl: (value: { id: string; ingress: string; url: string }) => {
+      setNextUrl: (value: { id: string; ingress: string; url: string; permalink: string }) => {
         nextUrl = value;
       },
       gateway,

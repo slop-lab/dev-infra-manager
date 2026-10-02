@@ -23,6 +23,7 @@ type ExternalUrl = {
   readonly id: string;
   readonly ingress: string;
   readonly url: string;
+  readonly permalink: string;
 };
 
 export async function exposeDevelopmentService(options: ExposeDevelopmentServiceOptions): Promise<string> {
@@ -58,11 +59,14 @@ async function exposeLocked(options: ExposeDevelopmentServiceOptions): Promise<s
     throw new DevelopmentServiceExposureError("external URL response used an unexpected ingress");
   }
   const parsed = parseExternalUrl(created.url, options.requiredScheme);
+  const parsedPermalink = parseExternalUrl(created.permalink, options.requiredScheme);
   const route: DevelopmentServiceRoute = {
     name: options.name,
     urlId: created.id,
     url: parsed.url,
     authority: parsed.authority,
+    permalink: parsedPermalink.url,
+    permalinkAuthority: parsedPermalink.authority,
     ingress: created.ingress,
     targetPort: options.targetPort
   };
@@ -162,7 +166,11 @@ function validateOptions(options: ExposeDevelopmentServiceOptions): void {
 function sameExternalUrl(externalUrl: ExternalUrl, route: DevelopmentServiceRoute): boolean {
   try {
     const parsed = parseExternalUrl(externalUrl.url);
-    return parsed.url === route.url && parsed.authority === route.authority;
+    const parsedPermalink = parseExternalUrl(externalUrl.permalink);
+    return parsed.url === route.url
+      && parsed.authority === route.authority
+      && parsedPermalink.url === route.permalink
+      && parsedPermalink.authority === route.permalinkAuthority;
   } catch (error) {
     if (error instanceof DevelopmentServiceExposureError) return false;
     throw error;
@@ -201,7 +209,8 @@ function isExternalUrl(value: unknown): value is ExternalUrl {
     && typeof value.id === "string"
     && value.id.length > 0
     && typeof value.ingress === "string"
-    && typeof value.url === "string";
+    && typeof value.url === "string"
+    && typeof value.permalink === "string";
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
