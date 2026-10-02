@@ -32,6 +32,7 @@ case " $* " in
   *" inspect --format "*"/mnt/agent-tmp"*) printf 'volume|project_agent-tmp\\n' ;;
   *" inspect --format "*"/mnt/agent-home"*) printf 'volume|project_agent-home\\n' ;;
   *" inspect --format "*"com.docker.compose.project"*" stopped-agent-dind "*) printf 'project\\n' ;;
+  *" volume inspect --format "*" project_agent-home "*) printf 'local|null|project|agent-home\\n' ;;
   *" volume inspect --format "*" project_agent-tmp "*) printf 'local|null|project|agent-tmp|agent-tmp\\n' ;;
 esac
 `

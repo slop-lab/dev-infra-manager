@@ -40,8 +40,27 @@ test "$container_project" = "$project" || {
   exit 1
 }
 
-volume_metadata="$(docker volume inspect --format '{{.Driver}}|{{json .Options}}|{{index .Labels "com.docker.compose.project"}}|{{index .Labels "com.docker.compose.volume"}}|{{index .Labels "dev.dim.role"}}' "$tmp_volume")"
+home_metadata="$(docker volume inspect --format '{{.Driver}}|{{json .Options}}|{{index .Labels "com.docker.compose.project"}}|{{index .Labels "com.docker.compose.volume"}}' "$home_volume")"
 old_ifs="$IFS"
+IFS='|' read -r home_driver home_options home_project home_logical_name <<EOF
+$home_metadata
+EOF
+IFS="$old_ifs"
+test "$home_driver" = local || {
+  echo "agent home volume must use the local driver" >&2
+  exit 1
+}
+test "$home_options" = null || {
+  echo "agent home volume must not use driver options" >&2
+  exit 1
+}
+test "$home_project" = "$project" &&
+  test "$home_logical_name" = agent-home || {
+  echo "agent home volume does not have exact Project ownership metadata" >&2
+  exit 1
+}
+
+volume_metadata="$(docker volume inspect --format '{{.Driver}}|{{json .Options}}|{{index .Labels "com.docker.compose.project"}}|{{index .Labels "com.docker.compose.volume"}}|{{index .Labels "dev.dim.role"}}' "$tmp_volume")"
 IFS='|' read -r volume_driver volume_options volume_project volume_logical_name volume_role <<EOF
 $volume_metadata
 EOF

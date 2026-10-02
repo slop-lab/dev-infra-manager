@@ -65,6 +65,10 @@ describe("full-development-flow agent temporary volume policy", () => {
     expect(teardown).not.toContain('test "$keep_volumes" = 1 || discard_agent_tmp');
     expect(lifecycle).toContain('test "$volume_driver" = local');
     expect(lifecycle).toContain('test "$volume_options" = null');
+    expect(lifecycle).toContain('test "$home_driver" = local');
+    expect(lifecycle).toContain('test "$home_options" = null');
+    expect(lifecycle).toContain('test "$home_project" = "$project"');
+    expect(lifecycle).toContain('test "$home_logical_name" = agent-home');
     expect(lifecycle).toContain('test "$tmp_volume" != "$home_volume"');
     expect(lifecycle).toContain('docker rm --force "$agent_dind_id"');
     expect(lifecycle).toContain('docker volume rm "$tmp_volume"');
