@@ -18,6 +18,11 @@ process. A missing, non-numeric, unlimited (`max`), or otherwise unavailable
 CPU assignment is an error; the helper never substitutes the host CPU count as
 the workspace assignment. These helpers do not inspect Docker or cgroup files
 and receive neither a controller grant nor the host-admin socket.
+The resource helper reads the resource-only derived socket named by
+`DIM_AGENT_CONTROLLER_SOCKET`. That proxy uses the agent-audience grant in
+trusted Project lifecycle code. A self-restart capability remains on a
+separate workspace-audience proxy named by `DIM_CONTROLLER_SOCKET`; combining
+the two audiences in one proxy is rejected.
 
 After the nested engine starts, DIM records its cgroup driver and the writable
 cgroup v2 boundary in the read-only Project manifest. DIM exposes safe

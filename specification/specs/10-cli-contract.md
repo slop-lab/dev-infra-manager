@@ -694,7 +694,7 @@ current per-workspace values. Running and stopped containers are supported.
 
 **CLI-WORKSPACE-RESOURCES-READ-001:** The workspace image MUST provide
 `dim-workspace-resources show` and `dim-nproc`. Both commands MUST use only
-`DIM_CONTROLLER_SOCKET` and the bodyless
+`DIM_AGENT_CONTROLLER_SOCKET` and the bodyless
 `GET /api/workspace/resources` route exposed by reviewed proxy policy. The
 resource command MUST print one JSON object containing exactly `cpuCount`,
 `memory`, and `pidsLimit`; it MUST NOT accept a workspace name or other target
@@ -704,6 +704,9 @@ invalid, non-finite, or unlimited (`max`) CPU assignments MUST fail explicitly;
 the command MUST NOT report visible host CPUs as a workspace assignment when
 the assigned quota is unavailable. Neither command may read Docker, cgroup,
 workspace state, or a host-admin socket directly.
+The resource socket MUST be a reviewed, exact-route proxy backed by the
+agent-audience controller grant. It MUST remain separate from any restart proxy
+backed by `DIM_CONTROLLER_SOCKET` and the workspace-audience grant.
 At creation, DIM records the immutable effective KVM policy. When KVM is
 available for the selected backend and neither policy flag is supplied, an
 interactive terminal asks whether to grant it and recommends acceptance.
