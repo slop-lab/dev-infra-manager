@@ -33,7 +33,7 @@ it("keeps an approval-required HTTP route pending until host approval and preser
   cleanup.push(() => closeServer(upstream));
   const ingressPort = await availablePort();
   const targetPort = serverPort(upstream);
-  const first = await startApprovalHttpPlugin(stateRoot, ingressPort, targetPort);
+  const first = await startApprovalHttpPlugin({ stateRoot, ingressPort, targetPort });
   cleanup.push(() => first.close());
 
   // When: the workspace requests the route but neither it nor a foreign workspace has host authority.
@@ -57,7 +57,7 @@ it("keeps an approval-required HTTP route pending until host approval and preser
   expect(await proxyRequest(ingressPort)).toEqual({ status: 404, body: '{"error":"external route not found"}\n' });
 
   await first.close();
-  const pendingRestart = await startApprovalHttpPlugin(stateRoot, ingressPort, targetPort, true);
+  const pendingRestart = await startApprovalHttpPlugin({ stateRoot, ingressPort, targetPort, initialize: true });
   cleanup.push(() => pendingRestart.close());
   expect(await proxyRequest(ingressPort)).toEqual({ status: 404, body: '{"error":"external route not found"}\n' });
 
@@ -71,7 +71,7 @@ it("keeps an approval-required HTTP route pending until host approval and preser
   expect(await storedApproval(stateRoot, workspace.id)).toBe("approved");
 
   await pendingRestart.close();
-  const restarted = await startApprovalHttpPlugin(stateRoot, ingressPort, targetPort, true);
+  const restarted = await startApprovalHttpPlugin({ stateRoot, ingressPort, targetPort, initialize: true });
   cleanup.push(() => restarted.close());
 
   // Then: restart restores approval only for the same workspace instance and exact route tuple.

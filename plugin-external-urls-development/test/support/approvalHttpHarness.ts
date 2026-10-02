@@ -16,20 +16,42 @@ import { createExternalUrlsPlugin } from "../../../plugin-external-urls/src/inde
 export const workspace = { id: "A".repeat(43), name: "work", projectId: "project-id", projectName: "project" };
 export const foreign = { id: "B".repeat(43), name: "foreign", projectId: "project-id", projectName: "project" };
 
-export async function startApprovalHttpPlugin(
-  stateRoot: string,
-  ingressPort: number,
-  targetPort: number,
-  initialize = false,
-  listenHost = "127.0.0.1"
-) {
+interface ApprovalHttpPluginOptions {
+  readonly stateRoot: string;
+  readonly ingressPort: number;
+  readonly targetPort: number;
+  readonly initialize?: boolean;
+  readonly scheme?: "http" | "https";
+  readonly listenHost?: string;
+  readonly publicPort?: number;
+  readonly failInitializationResolution?: boolean;
+  readonly approvalExposure?: {
+    readonly listenHost: string;
+    readonly listenPort: number;
+  };
+}
+
+export async function startApprovalHttpPlugin(options: ApprovalHttpPluginOptions) {
+  const {
+    stateRoot,
+    ingressPort,
+    targetPort,
+    initialize = false,
+    scheme = "http",
+    listenHost = "127.0.0.1",
+    publicPort,
+    failInitializationResolution = false,
+    approvalExposure
+  } = options;
   const registered = await registerPlugins([createExternalUrlsPlugin({
     ingresses: { public: {
       description: "Approval-required HTTP",
-      scheme: "http",
+      scheme,
       domain: "example.test",
       listenHost,
       listenPort: ingressPort,
+      ...(publicPort === undefined ? {} : { port: publicPort }),
+      ...(approvalExposure === undefined ? {} : { approvalExposure }),
       approvalRequired: true
     } }
   })]);
@@ -48,7 +70,10 @@ export async function startApprovalHttpPlugin(
       runner: { run: runner.run.bind(runner), runStreaming: vi.fn(async () => 0) },
       listWorkspaces: async () => [workspace],
       runWorkspaceRequest: async (_workspace, operation) => operation(),
-      resolveTarget: async () => resolveTarget()
+      resolveTarget: async () => {
+        if (failInitializationResolution) throw new Error("injected first target resolution failure");
+        return resolveTarget();
+      }
     });
   }
   const controller = createDimController({
