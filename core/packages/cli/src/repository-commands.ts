@@ -4,7 +4,7 @@ import {
   addRepository, adminCall, approveRepositoryPlan, applyRepositorySet, commaSeparated,
   confirmAction, fetchRepository, offerRootRepositorySet, print, printList,
   publishRepositories, repositorySetPlan, resolveRepositorySet,
-  type JsonFlags, type RepoFlags
+  withLocalProgress, type JsonFlags, type RepoFlags
 } from "./cli-support.js";
 
 export function registerRepositoryCommands(program: Command): void {
@@ -15,7 +15,8 @@ export function registerRepositoryCommands(program: Command): void {
     .description("Build the separately deployed shared Git-host sync service image")
     .argument("<image>", "explicit non-latest image tag")
     .action(async (image: string) => {
-      await buildSharedGitSyncImage(new ProcessRunner(), image);
+      await withLocalProgress("image.git-sync.build", ({ signal, reportProgress }) =>
+        buildSharedGitSyncImage(new ProcessRunner(), image, { signal, reportProgress }));
       console.log(image);
     });
 
@@ -38,7 +39,7 @@ repo.command("add")
     if (!flags.root && flags.applyRepos !== undefined) {
       throw new UserError("repository apply options require --root");
     }
-    const repository = await addRepository(projectName, alias, {
+    const repository = await withLocalProgress("repo.import", (progress) => addRepository(projectName, alias, {
       ...(url === undefined ? {} : { url }),
       fallback: false,
       root: flags.root ?? false,
@@ -48,7 +49,7 @@ repo.command("add")
       importBranches: {},
       publishBranches: {},
       mirror: flags.mirror ?? false
-    });
+    }, undefined, progress));
     print(repository, flags);
     if (flags.root) await offerRootRepositorySet(projectName, flags.applyRepos);
   });
@@ -90,14 +91,19 @@ repo.command("apply")
     if (requestedRebind && plan.actions.some(({ action }) => action !== "unchanged" && action !== "rebind")) {
       throw new UserError("root origin rebind cannot be combined with other repository changes");
     }
-    print(await applyRepositorySet(
-      projectName,
-      set,
-      plan,
-      flags.rebindOrigin === undefined || flags.expectOriginTip === undefined
-        ? undefined
-        : { alias: flags.rebindOrigin, expectedOriginTip: flags.expectOriginTip }
-    ), flags);
+    const result = await withLocalProgress("project.create", (operation) => {
+      operation.reportProgress("repository set apply");
+      return applyRepositorySet(
+        projectName,
+        set,
+        plan,
+        flags.rebindOrigin === undefined || flags.expectOriginTip === undefined
+          ? undefined
+          : { alias: flags.rebindOrigin, expectedOriginTip: flags.expectOriginTip },
+        operation
+      );
+    });
+    print(result, flags);
   });
 
 repo.command("list")
@@ -143,7 +149,8 @@ repo.command("fetch")
   .argument("<alias>")
   .option("--prune", "delete upstream/* branches removed from the external repository")
   .action(async (projectName: string, alias: string, flags: { prune?: boolean }) => {
-    await fetchRepository(projectName, alias, flags.prune ?? false);
+    await withLocalProgress("repo.fetch", (progress) =>
+      fetchRepository(projectName, alias, flags.prune ?? false, progress));
   });
 
 repo.command("publish")
@@ -151,7 +158,8 @@ repo.command("publish")
   .argument("<project>")
   .argument("[alias]")
   .action(async (projectName: string, alias?: string) => {
-    const published = await publishRepositories(projectName, alias);
+    const published = await withLocalProgress("repo.publish", (progress) =>
+      publishRepositories(projectName, alias, progress));
     for (const item of published) console.log(item);
   });
 

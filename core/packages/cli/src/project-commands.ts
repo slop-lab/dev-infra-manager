@@ -11,7 +11,7 @@ import {
   addRepository, adminCall, applyRepositorySet, approveRepositoryPlan, commaSeparated,
   confirmAction, createOrResumeRootProject, offerRootRepositorySet, print, printList,
   readRemoteRepositorySet, readRepositorySetFile, repositorySetPlan,
-  type JsonFlags
+  withLocalProgress, type JsonFlags
 } from "./cli-support.js";
 
 export function registerProjectCommands(program: Command): void {
@@ -65,8 +65,11 @@ project.command("create")
       assertRepositorySetCanCreateProject(set, flags.repos);
       const plan = await repositorySetPlan(name, set, true);
       await approveRepositoryPlan(plan, flags.yes ?? false, !flags.json);
-      await adminCall("project.create", { name });
-      const repositories = await applyRepositorySet(name, set, plan);
+      const repositories = await withLocalProgress("project.create", async (operation) => {
+        await adminCall("project.create", { name }, operation.signal);
+        operation.reportProgress("repository set apply");
+        return applyRepositorySet(name, set, plan, undefined, operation);
+      });
       print({ project: name, repositories }, flags);
       return;
     }
@@ -76,7 +79,10 @@ project.command("create")
     if (rootAlias === undefined) {
       const bootstrapGitUrl = flags.bootstrapGitUrl;
       if (bootstrapGitUrl === undefined) throw new UserError("--bootstrap-git-url is required for manifest bootstrap");
-      rootSet = await readRemoteRepositorySet(bootstrapGitUrl, flags.bootstrapGitRef);
+      rootSet = await withLocalProgress("project.create", (operation) => {
+        operation.reportProgress("manifest discovery");
+        return readRemoteRepositorySet(bootstrapGitUrl, flags.bootstrapGitRef, operation);
+      });
       assertRepositorySetCanCreateProject(rootSet, `${bootstrapGitUrl}:.dim/repos.yml`);
       const root = Object.entries(rootSet.repositories).find(([, entry]) => entry.root);
       if (root === undefined) throw new UserError(`${bootstrapGitUrl}:.dim/repos.yml must contain a root repository`);
@@ -102,19 +108,22 @@ project.command("create")
       );
     }
     const selectedRootRef = rootEntry?.ref ?? flags.bootstrapGitRef;
-    await createOrResumeRootProject(name, rootAlias, flags.bootstrapGitUrl);
-    const repository = await addRepository(name, rootAlias, {
-      ...(flags.bootstrapGitUrl === undefined ? {} : { url: flags.bootstrapGitUrl }),
-      fallback: rootEntry?.fallback ?? false,
-      root: true,
-      ...(selectedRootRef === undefined ? {} : { ref: selectedRootRef }),
-      protectedPatterns: rootEntry?.protectedPatterns
-        ?? (flags.protect === undefined ? [] : commaSeparated(flags.protect)),
-      forcePushBlockedPatterns: rootEntry?.forcePushBlockedPatterns ?? [],
-      importBranches: rootEntry?.importBranches ?? {},
-      publishBranches: rootEntry?.publishBranches ?? {},
-      mirror: flags.mirror ?? false
-    }, rootSet);
+    const repository = await withLocalProgress("project.create", async (operation) => {
+      await createOrResumeRootProject(name, rootAlias, flags.bootstrapGitUrl, operation.signal);
+      operation.reportProgress("root repository import");
+      return addRepository(name, rootAlias, {
+        ...(flags.bootstrapGitUrl === undefined ? {} : { url: flags.bootstrapGitUrl }),
+        fallback: rootEntry?.fallback ?? false,
+        root: true,
+        ...(selectedRootRef === undefined ? {} : { ref: selectedRootRef }),
+        protectedPatterns: rootEntry?.protectedPatterns
+          ?? (flags.protect === undefined ? [] : commaSeparated(flags.protect)),
+        forcePushBlockedPatterns: rootEntry?.forcePushBlockedPatterns ?? [],
+        importBranches: rootEntry?.importBranches ?? {},
+        publishBranches: rootEntry?.publishBranches ?? {},
+        mirror: flags.mirror ?? false
+      }, rootSet, operation);
+    });
     print({ project: name, repository }, flags);
     await offerRootRepositorySet(name, flags.applyRepos);
   });

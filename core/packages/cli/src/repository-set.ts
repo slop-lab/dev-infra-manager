@@ -6,10 +6,12 @@ import {
   parseRepositorySetYaml,
   resolveRepositoryConnection,
   UserError,
+  type LongOperationOptions,
   type RepositorySet
 } from "@slop-lab/dim-core";
 import { adminCall } from "./controller-client.js";
 import { interactive, runner } from "./cli-runtime.js";
+import { withLocalProgress } from "./local-progress.js";
 import { applyRepositorySet } from "./repository-transfer.js";
 import { runGit } from "./repository-sync.js";
 import { type RepositorySetPlan } from "./repository-set-types.js";
@@ -21,20 +23,33 @@ export async function readRepositorySetFile(file: string): Promise<RepositorySet
   return parseRepositorySetYaml(await readFile(absolute, "utf8"), absolute);
 }
 
-export async function readRemoteRepositorySet(url: string, ref?: string): Promise<RepositorySet> {
+export async function readRemoteRepositorySet(
+  url: string,
+  ref?: string,
+  operation: LongOperationOptions = {}
+): Promise<RepositorySet> {
   const temporary = await mkdtemp(path.join(tmpdir(), "dim-root-manifest-"));
   const gitDirectory = path.join(temporary, "source.git");
   try {
-    await runGit(["init", "--bare", gitDirectory], process.env, "initialize root manifest checkout");
+    await runGit(
+      ["init", "--bare", gitDirectory],
+      process.env,
+      "initialize root manifest checkout",
+      operation
+    );
     await runGit(
       ["--git-dir", gitDirectory, "fetch", "--depth=1", "--no-tags", url, ref ?? "HEAD"],
       process.env,
-      `read root manifest from '${url}'`
+      `read root manifest from '${url}'`,
+      operation
     );
     const shown = await runner.run("git", [
       "--git-dir", gitDirectory,
       "show", "FETCH_HEAD:.dim/repos.yml"
-    ], { env: process.env });
+    ], {
+      env: process.env,
+      ...(operation.signal === undefined ? {} : { signal: operation.signal })
+    });
     if (shown.exitCode !== 0) {
       const selected = ref ?? "HEAD";
       throw new UserError(
@@ -47,9 +62,14 @@ export async function readRemoteRepositorySet(url: string, ref?: string): Promis
   }
 }
 
-export async function createOrResumeRootProject(name: string, alias: string, source: string | undefined): Promise<void> {
+export async function createOrResumeRootProject(
+  name: string,
+  alias: string,
+  source: string | undefined,
+  signal?: AbortSignal
+): Promise<void> {
   try {
-    await adminCall("project.create", { name });
+    await adminCall("project.create", { name }, signal);
     return;
   } catch (error) {
     if (!(error instanceof UserError) || !error.message.includes(`project '${name}' already exists`)) throw error;
@@ -61,7 +81,7 @@ export async function createOrResumeRootProject(name: string, alias: string, sou
       phase: string;
       connections: Array<{ name: string; url: string }>;
     }>;
-  }>("project.show", { name });
+  }>("project.show", { name }, signal);
   const root = project.repositories.find((repository) => repository.alias === alias);
   const origin = root?.connections.find((connection) => connection.name === "origin")?.url;
   if (project.rootRepositoryAlias !== alias || root === undefined || root.phase === "ready" || origin !== source) {
@@ -137,7 +157,10 @@ export async function offerRootRepositorySet(projectName: string, apply: boolean
   if (apply || (apply === undefined && sameOriginSet)) {
     const plan = await repositorySetPlan(projectName, repositorySet, false);
     await approveRepositoryPlan(plan, true);
-    await applyRepositorySet(projectName, repositorySet, plan);
+    await withLocalProgress("repo.apply", (operation) => {
+      operation.reportProgress("repository set apply");
+      return applyRepositorySet(projectName, repositorySet, plan, undefined, operation);
+    });
     return;
   }
   if (apply === false) {
@@ -162,5 +185,8 @@ export async function offerRootRepositorySet(projectName: string, apply: boolean
   }
   const plan = await repositorySetPlan(projectName, repositorySet, false);
   await approveRepositoryPlan(plan, true);
-  await applyRepositorySet(projectName, repositorySet, plan);
+  await withLocalProgress("repo.apply", (operation) => {
+    operation.reportProgress("repository set apply");
+    return applyRepositorySet(projectName, repositorySet, plan, undefined, operation);
+  });
 }
