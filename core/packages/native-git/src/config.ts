@@ -41,6 +41,7 @@ export const nativeGitIdentitySchema = z.discriminatedUnion("role", [
   z.object({ ...identityBase, role: z.literal("writer"), workspaceId: identifier }).strict().readonly(),
   z.object({ ...identityBase, role: z.literal("reviewer"), reviewerId: identifier }).strict().readonly(),
   z.object({ ...identityBase, role: z.literal("ci"), jobName: identifier }).strict().readonly(),
+  z.object({ ...identityBase, role: z.literal("scheduler") }).strict().readonly(),
   z.object({ ...identityBase, role: z.literal("promoter") }).strict().readonly(),
   z.object({ ...identityBase, role: z.literal("administrator") }).strict().readonly()
 ]);
@@ -73,6 +74,7 @@ export function parseNativeGitServiceConfig(input: unknown): NativeGitServiceCon
   const workspaces = new Set<string>();
   const reviewers = new Map<string, NativeGitIdentity & { readonly role: "reviewer" }>();
   const ciReporters = new Map<string, NativeGitIdentity & { readonly role: "ci" }>();
+  const schedulers = new Set<string>();
   for (const identity of config.identities) {
     if (usernames.has(identity.username)) throw new NativeGitConfigError(`duplicate identity: ${identity.username}`);
     usernames.add(identity.username);
@@ -96,6 +98,9 @@ export function parseNativeGitServiceConfig(input: unknown): NativeGitServiceCon
         if (ciReporters.has(key)) throw new NativeGitConfigError(`duplicate CI job identity: ${key}`);
         ciReporters.set(key, identity);
       }
+    }
+    if (identity.role === "scheduler") {
+      for (const repositoryId of identity.repositoryIds) schedulers.add(repositoryKey(identity.projectId, repositoryId));
     }
   }
   for (const repository of config.repositories) {
@@ -124,6 +129,9 @@ export function parseNativeGitServiceConfig(input: unknown): NativeGitServiceCon
         if (!ciReporters.has(`${repository.projectId}/${repository.repositoryId}/${jobName}`)) {
           throw new NativeGitConfigError(`review policy references unavailable CI job: ${jobName}`);
         }
+      }
+      if (!schedulers.has(repositoryKey(repository.projectId, repository.repositoryId))) {
+        throw new NativeGitConfigError(`review policy requires an unavailable scheduler: ${policy.protectedRef}`);
       }
     }
   }
