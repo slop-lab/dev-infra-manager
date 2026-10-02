@@ -133,7 +133,7 @@ helper lets the launcher choose its loopback port and routes the resulting URL
 through the lifecycle's fixed gateway along the reviewed
 `agent-dind`/`dim-agent` path. The gateway is reachable without a host port
 publication. Reviewed `.dim` setup binds `opencode-web` to the exact
-workspace-scoped `<workspace>--opencode` subdomain; other logical service
+workspace-scoped label ending in `-<16-hex-workspace-hash>--opencode`; other logical service
 names are denied on this socket. The application port remains gateway-local.
 Configure `https-ts`
 before launching with the executable HTTPS configuration:
@@ -152,7 +152,9 @@ DIM_EXTERNAL_URL_DNS_VALUE=203.0.113.10 \
 The script creates and verifies the Caddy-backed `https-ts` ingress. An
 alternative ingress requires a reviewed change to the scoped proxy's allowlist
 as well as the launcher selection. The launcher consumes only
-`DIM_DEVELOPMENT_URL_SOCKET`, not the generic `DIM_EXTERNAL_URL_*` capability.
+`OPENCODE_WEB_URL_SOCKET`, not the generic `DIM_DEVELOPMENT_URL_SOCKET` or
+`DIM_EXTERNAL_URL_*` capabilities. The configured ingress requires host
+approval before each requested route becomes reachable.
 `OPENCODE_WEB_CORS_ORIGINS` is a JSON array of additional exact HTTP or HTTPS
 origins for browser UIs that connect to the returned URL, and defaults to `[]`.
 Name the source UI origin, not that destination URL. The launcher always

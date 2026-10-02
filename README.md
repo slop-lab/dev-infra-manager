@@ -315,7 +315,8 @@ process. OpenCode binds only to `127.0.0.1` on `OPENCODE_WEB_PORT` (default
 expose the stable `opencode-web` service name and consumes only
 `OPENCODE_WEB_URL_SOCKET`; it uses no container path, gateway target port, raw
 controller grant, or host secret. Reviewed Project setup binds that service
-name to the exact workspace-scoped `<workspace>--opencode` subdomain and the
+name to an exact collision-resistant workspace label ending in
+`-<16-hex-workspace-hash>--opencode` and the
 fixed development gateway target. The proxy rejects other service names and
 caller-supplied subdomains. The default `https-ts`
 ingress must already be allowed by the trusted bound proxy. `OPENCODE_WEB_INGRESS` selects another
