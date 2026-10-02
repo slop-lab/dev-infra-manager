@@ -24,14 +24,15 @@ export class ControllerRequestError extends UserError {
 
 export async function adminCall<T = unknown>(
   operation: string,
-  body: Record<string, unknown> = {}
+  body: Record<string, unknown> = {},
+  signal?: AbortSignal
 ): Promise<T> {
   const options = lifecycleOptions();
   await ensureManagedController(options);
   const response = await unixHttpRequest(
     options.adminControllerSocketPath,
     `/v1/call/${encodeURIComponent(operation)}`,
-    { method: "POST", body: JSON.stringify(body) }
+    { method: "POST", body: JSON.stringify(body), ...(signal === undefined ? {} : { signal }) }
   );
   if (response.status < 200 || response.status >= 300) {
     throw new UserError(adminErrorDetail(response.body) || `admin controller request failed (${response.status})`);
