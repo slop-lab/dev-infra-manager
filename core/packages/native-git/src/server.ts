@@ -14,6 +14,8 @@ import {
   assertRegisteredRepository,
   type GitExecutableIdentity
 } from "./repository.js";
+import { nativeGitReviewRoute, serveReviewApi } from "./review-http.js";
+import { createReviewService } from "./review-service.js";
 import { nativeGitRoute } from "./routing.js";
 
 export type NativeGitServer = {
@@ -28,9 +30,17 @@ export function createNativeGitServer(input: NativeGitServiceConfig): NativeGitS
     repositoryKey(repository.projectId, repository.repositoryId), repository
   ]));
   const authenticator = nativeGitAuthenticator(config.identities);
+  const reviewService = createReviewService(config);
   let gitIdentity: GitExecutableIdentity | undefined;
   let activeBackends = 0;
   const server = createServer((request, response) => {
+    const reviewRoute = nativeGitReviewRoute(request);
+    if (reviewRoute !== undefined) {
+      const identity = authenticator.authenticate(request.headers);
+      if (identity === undefined) return send(response, 401, { "WWW-Authenticate": 'Basic realm="DIM Git Review"' });
+      void serveReviewApi(reviewService, identity, reviewRoute, request, response);
+      return;
+    }
     const route = nativeGitRoute(request);
     if (route === undefined) return send(response, 404);
     const identity = authenticator.authenticate(request.headers);
