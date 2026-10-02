@@ -25,6 +25,7 @@ async function main(arguments_: string[]): Promise<void> {
   let bindPort: number | undefined;
   const bindServiceSubdomains: Record<string, string> = {};
   let allowWorkspaceRestart = false;
+  let allowWorkspaceResources = false;
   for (let index = presetIndex + 1; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
     if (argument === "--listen") listen = requiredValue(arguments_, ++index, argument);
@@ -38,6 +39,7 @@ async function main(arguments_: string[]): Promise<void> {
       bindServiceSubdomains[service] = subdomain;
     }
     else if (argument === "--allow-workspace-restart") allowWorkspaceRestart = true;
+    else if (argument === "--allow-workspace-resources") allowWorkspaceResources = true;
     else if (argument === "--socket-mode") socketMode = mode(requiredValue(arguments_, ++index, argument));
     else if (argument === "--directory-mode") directoryMode = mode(requiredValue(arguments_, ++index, argument));
     else usage();
@@ -46,7 +48,7 @@ async function main(arguments_: string[]): Promise<void> {
   const bindOptions = [bindContainersJson, bindProtocol, bindPort];
   const hasBoundTarget = bindOptions.every((value) => value !== undefined);
   if ((preset === "external-url" && ingresses.length === 0)
-    || (preset === "agent" && !allowWorkspaceRestart)
+    || (preset === "agent" && !allowWorkspaceRestart && !allowWorkspaceResources)
     || (preset === "external-url" && allowWorkspaceRestart)
     || (preset === "agent" && ingresses.length > 0)
     || (bindOptions.some((value) => value !== undefined) && !hasBoundTarget)
@@ -103,9 +105,10 @@ async function main(arguments_: string[]): Promise<void> {
       listen,
       socketMode,
       directoryMode,
-      routes: allowWorkspaceRestart
-        ? [{ method: "POST", path: "/api/workspace/restart" }]
-        : []
+      routes: [
+        ...(allowWorkspaceRestart ? [{ method: "POST", path: "/api/workspace/restart" }] : []),
+        ...(allowWorkspaceResources ? [{ method: "GET", path: "/api/workspace/resources" }] : [])
+      ]
     });
   await proxy.listen();
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -159,7 +162,8 @@ function usage(): never {
     + "       [--bind-containers-json JSON --bind-protocol http|https|tcp --bind-port PORT]\n"
     + "       [--bind-service-subdomain SERVICE=SUBDOMAIN ...]\n"
     + "       [--directory-mode MODE] [--socket-mode MODE]\n"
-    + "   or: dim-controller-proxy agent --listen SOCKET --allow-workspace-restart\n"
+    + "   or: dim-controller-proxy agent --listen SOCKET [--allow-workspace-restart]\n"
+    + "       [--allow-workspace-resources]\n"
     + "       [--directory-mode MODE] [--socket-mode MODE]\n"
     + "   or: dim-controller-proxy --config FILE.mjs"
   );
