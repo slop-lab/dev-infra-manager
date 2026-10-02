@@ -1,4 +1,4 @@
-import type { WorkspaceRecord } from "./lifecycleTypes.js";
+import type { GiteaCredentials, WorkspaceRecord } from "./lifecycleTypes.js";
 import type { ProtectedRootSnapshot } from "./protectedRootSnapshot.js";
 
 export const WORKSPACE_USER = "dim";
@@ -12,6 +12,18 @@ export interface WorkspaceGitEnvironment {
   token: string;
   userName: string;
   userEmail: string;
+}
+
+export function workspaceGitEnvironment(
+  record: WorkspaceRecord,
+  credentials: GiteaCredentials
+): WorkspaceGitEnvironment {
+  return {
+    username: credentials.writerUsername,
+    token: credentials.writerPassword,
+    userName: record.gitUserName,
+    userEmail: record.gitUserEmail
+  };
 }
 
 export interface WorkspaceCommandInput {

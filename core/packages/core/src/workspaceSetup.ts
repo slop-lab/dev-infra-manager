@@ -2,7 +2,6 @@ import { UserError } from "./errors.js";
 import { ensureGitea, giteaNestedBaseUrl } from "./gitea.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type {
-  GiteaCredentials,
   LifecycleOptions,
   ProjectRecord,
   WorkspaceRecord
@@ -11,8 +10,9 @@ import type { StreamingCommandRunner } from "./types.js";
 import { protectedRootSnapshotPath } from "./protectedRootSnapshot.js";
 import { writeProjectManifest } from "./workspaceRepositorySnapshot.js";
 import { assertContainerRunning, reconcileContainer } from "./workspaceContainer.js";
-import type { WorkspaceGitEnvironment } from "./workspaceLifecycleTypes.js";
+import { workspaceGitEnvironment } from "./workspaceLifecycleTypes.js";
 import {
+  combineWorkspaceLifecycleFailures,
   runWorkspaceLifecycle,
   runWorkspaceLifecycleStage,
   type SetWorkspaceLifecycleErrorStage, type SetWorkspaceLifecycleStage
@@ -127,6 +127,7 @@ export async function setupWorkspaceLocked(
   const completedAt = new Date().toISOString();
   if (exitCode !== 0) {
     const setupError = `project setup exited with ${exitCode}`;
+    const setupFailure = new UserError(setupError);
     record = {
       ...record,
       phase: "setup-error",
@@ -134,10 +135,14 @@ export async function setupWorkspaceLocked(
       updatedAt: completedAt,
       error: setupError
     };
-    setStage("setup-error publication");
-    await state.writeWorkspace(record);
     setErrorStage("Project setup");
-    throw new UserError(setupError);
+    setStage("setup-error publication");
+    try {
+      await state.writeWorkspace(record);
+    } catch (publicationError) {
+      throw combineWorkspaceLifecycleFailures(setupFailure, publicationError);
+    }
+    throw setupFailure;
   }
   record = {
     ...record,
@@ -150,14 +155,18 @@ export async function setupWorkspaceLocked(
     setStage("ready-state publication");
     await state.writeWorkspace(record);
   } catch (error) {
-    setStage("setup-error publication");
-    await state.writeWorkspace({
-      ...record,
-      phase: "setup-error",
-      error: error instanceof Error ? error.message : String(error),
-      updatedAt: new Date().toISOString()
-    });
     setErrorStage("ready-state publication");
+    setStage("setup-error publication");
+    try {
+      await state.writeWorkspace({
+        ...record,
+        phase: "setup-error",
+        error: error instanceof Error ? error.message : String(error),
+        updatedAt: new Date().toISOString()
+      });
+    } catch (publicationError) {
+      throw combineWorkspaceLifecycleFailures(error, publicationError);
+    }
     throw error;
   }
   return record;
@@ -223,7 +232,7 @@ export async function reconcileProjectContainer(
       input.runner,
       input.options,
       record,
-      gitEnvironment(record, credentials)
+      workspaceGitEnvironment(record, credentials)
     );
     stage = "host-input helper installation";
     await installHostInputHelper(input.runner, { ...record, containerName: containerId });
@@ -243,13 +252,4 @@ export async function reconcileProjectContainer(
     await release();
     input.setStage("workspace reconciliation");
   }
-}
-
-function gitEnvironment(record: WorkspaceRecord, credentials: GiteaCredentials): WorkspaceGitEnvironment {
-  return {
-    username: credentials.writerUsername,
-    token: credentials.writerPassword,
-    userName: record.gitUserName,
-    userEmail: record.gitUserEmail
-  };
 }
