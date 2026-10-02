@@ -58,6 +58,14 @@ MUST prove that exactly one compare-and-swap succeeds and every loser leaves
 the winning ref unchanged. Live Git-host evidence MUST exercise the actual
 protected policy and atomic old-object-ID update; a mock alone is insufficient.
 
+The native Git review-only gate covers this contract independently of
+promotion: a real bare repository and Git CLI MUST expose the complete
+base-to-candidate diff through the reviewer API and CLI, persist immutable
+approval and revocation across restart, invalidate changed refs, trees, policy,
+or bound identities, deny writer/read-only/administrator/foreign approval, and
+leave the protected ref unchanged. Passing this subset MUST NOT be reported as
+CI evidence or `TRUST-PROMOTION-CAS-001` evidence.
+
 For `TRUST-RUNTIME-001`, each implemented backend MUST run the same
 backend-neutral agent journey. A supported VM backend additionally requires a
 KVM-capable host gate covering create, stop, start, restart, host reboot,
