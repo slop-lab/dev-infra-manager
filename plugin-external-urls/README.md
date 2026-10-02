@@ -32,6 +32,12 @@ dim external-url ingress add http \
   --listen-host 0.0.0.0 --listen-port auto
 ```
 
+Add `--require-approval` when each requested route must remain unreachable
+until a host administrator runs `dim external-url approve URL_ID`. Requests
+still succeed and return `pending`; `dim external-url revoke URL_ID` on the host
+removes reachability terminally. Workspace and agent grants can revoke only
+their own routes and cannot approve them.
+
 Then request a URL from a workspace:
 
 ```bash
@@ -45,7 +51,8 @@ dim external-url list --workspace feature-123
 ```
 
 On the host, omit `--workspace` to list routes for every current workspace.
-That inventory includes Project and workspace names, is capped at 1,000 routes,
+That inventory includes Project and workspace names plus each route's approval
+state, is capped at 1,000 routes,
 and is available only through DIM's host-admin socket. Workspace and agent
 controller grants continue to list only their own workspace and cannot invoke
 the host-wide action. Neither listing returns controller grants, provider
