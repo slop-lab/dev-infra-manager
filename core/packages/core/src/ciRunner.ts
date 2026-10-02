@@ -85,7 +85,7 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       let record = await saveExecutor(state, existing, executor);
       const webhookUrl = ciRunnerQemuWebhookUrl(executor);
       try {
-        await ensureRegistryCache(runner, options.stateRoot);
+        await ensureRegistryCache(runner, options);
         await ensureCiRunnerVolume(runner, { name: executor.volumeName, resource: "ci-qemu-data", project: projectName, projectId: record.projectId });
         if (scheduler === undefined) await ensureCiRunnerVolume(runner, { name: ciRunnerQemuDispatchVolumeName(projectName), resource: "ci-qemu-dispatch", project: projectName, projectId: record.projectId });
         await ensureCiRunnerVolume(runner, { name: ciRunnerQemuCommonCacheVolumeName(), resource: "ci-qemu-common-cache" });
@@ -115,7 +115,7 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       await releaseProject();
       projectLockHeld = false;
       const hostImage = await resolveSysboxRunnerImage(runner, options.stateRoot, options.ciRunnerImage);
-      await ensureRegistryCache(runner, options.stateRoot);
+      await ensureRegistryCache(runner, options);
       const previous = existing?.executor.kind === "sysbox" ? existing.executor : undefined;
       const effective = previous && input.resources === undefined && !previous.inheritsResources ? { resources: previous.resources, inheritsResources: false } : effectiveCiRunnerResources(options, input.resources);
       const labels = [...runnerConfig.config.workloads.ordinary.labels];
@@ -195,7 +195,7 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
     record = await saveExecutor(state, record, executor);
     const webhookUrl = ciRunnerQemuWebhookUrl(executor);
     try {
-      await ensureRegistryCache(runner, options.stateRoot);
+      await ensureRegistryCache(runner, options);
       if (scheduler === undefined) await giteaCiCoordinator.removeWorkflowJobWebhook(runner, options, project, webhookUrl);
       await giteaCiCoordinator.removeRunner(runner, options, project, ciRunnerQemuRunnerName(projectName, name, scheduler?.hostId));
       await ensureCiRunnerVolume(runner, { name: executor.volumeName, resource: "ci-qemu-data", project: projectName, projectId: project.id });

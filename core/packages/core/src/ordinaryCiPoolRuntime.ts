@@ -75,7 +75,7 @@ async function runOrdinaryCiPoolCapacityOnceAdmitted(
   const state = new LifecycleState(options.stateRoot);
   assertOrdinaryPoolCapacityAvailable(await state.listCiRunners(), capacity);
   const runnerImage = await resolveSysboxRunnerImage(runner, options.stateRoot, options.ciRunnerImage);
-  await ensureRegistryCache(runner, options.stateRoot);
+  await ensureRegistryCache(runner, options);
   const claimResult = await claimOrdinaryPoolJob(connection, capacity, signal);
   let claim: OrdinaryPoolClaim;
   switch (claimResult.kind) {
