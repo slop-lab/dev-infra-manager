@@ -159,7 +159,7 @@ async function handle(
   const method = request.method ?? "GET";
   const url = new URL(request.url ?? "/", "http://dim-controller");
   const body = await readBody(request, maxBodyBytes);
-  const input = { method, path: url.pathname, body };
+  const input = { method, path: `${url.pathname}${url.search}`, body };
   const capability = await firstAllowed(capabilities, input, upstream);
   if (!capability) {
     send(response, 403, Buffer.from('{"error":"controller proxy policy denied the request"}\n'), {

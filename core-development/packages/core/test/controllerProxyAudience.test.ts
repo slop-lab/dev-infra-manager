@@ -45,6 +45,7 @@ describe("controller proxy audience integration", () => {
     await state.writeHostLifecycle(hostRecord("ready"));
     const workspaceGrantA = await state.ensureWorkspaceGrant("a");
     const agentGrantA = await state.ensureAgentGrant("a");
+    const agentGrantB = await state.ensureAgentGrant("b");
     const plugins = await registerPlugin({
       name: "proxy-audience-test",
       apiVersion: DIM_PLUGIN_API_VERSION,
@@ -67,11 +68,19 @@ describe("controller proxy audience integration", () => {
     };
     const restartSocket = join(root, "restart-proxy.sock");
     const resourcesSocket = join(root, "resources-proxy.sock");
+    const resourcesSocketB = join(root, "resources-proxy-b.sock");
     proxies.push(await startProxy(restartSocket, "--allow-workspace-restart", environment));
     proxies.push(await startProxy(resourcesSocket, "--allow-workspace-resources", environment));
+    proxies.push(await startProxy(resourcesSocketB, "--allow-workspace-resources", {
+      ...environment,
+      DIM_AGENT_CONTROLLER_TOKEN: agentGrantB
+    }));
 
     // When
     const resources = await request(resourcesSocket, "GET", "/api/workspace/resources");
+    const resourcesB = await request(resourcesSocketB, "GET", "/api/workspace/resources");
+    const helper = await runHelper("workspace-resources-cli.ts", ["show"], resourcesSocket);
+    const nproc = await runHelper("nproc-cli.ts", [], resourcesSocket);
     const restartDiscovery = await request(restartSocket, "GET", "/api");
 
     // Then
@@ -79,11 +88,18 @@ describe("controller proxy audience integration", () => {
       status: 200,
       body: '{"cpuCount":"2.5","memory":"5g","pidsLimit":"500"}\n'
     });
+    expect(resourcesB).toEqual({
+      status: 200,
+      body: '{"cpuCount":"6","memory":"9g","pidsLimit":"900"}\n'
+    });
+    expect(helper).toEqual({ code: 0, stdout: resources.body, stderr: "" });
+    expect(nproc).toEqual({ code: 0, stdout: "2\n", stderr: "" });
     expect(JSON.parse(restartDiscovery.body)).toMatchObject({
       routes: [{ method: "POST", path: "/api/workspace/restart" }],
       hostInputProviders: []
     });
     expect((await request(resourcesSocket, "GET", "/api/workspace/resources/b")).status).toBe(403);
+    expect((await request(resourcesSocket, "GET", "/api/workspace/resources?workspace=b")).status).toBe(403);
     expect((await request(resourcesSocket, "POST", "/api/workspace/restart")).status).toBe(403);
     expect((await request(resourcesSocket, "GET", "/api/admin")).status).toBe(403);
     expect((await request(restartSocket, "POST", "/api/host-inputs/builtin.git-author")).status).toBe(403);
@@ -139,6 +155,27 @@ async function startProxy(
     child.once("error", rejectStart);
   });
   return child;
+}
+
+async function runHelper(
+  sourceName: "workspace-resources-cli.ts" | "nproc-cli.ts",
+  arguments_: readonly string[],
+  socketPath: string
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  const executable = resolve(import.meta.dirname, "../../../node_modules/.bin/tsx");
+  const source = resolve(import.meta.dirname, `../../../../core/packages/controller-proxy/src/${sourceName}`);
+  const child = spawn(executable, [source, ...arguments_], {
+    env: { ...process.env, DIM_AGENT_CONTROLLER_SOCKET: socketPath },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  let stdout = "";
+  let stderr = "";
+  child.stdout?.setEncoding("utf8");
+  child.stderr?.setEncoding("utf8");
+  child.stdout?.on("data", (chunk: string) => { stdout += chunk; });
+  child.stderr?.on("data", (chunk: string) => { stderr += chunk; });
+  const [code] = await once(child, "exit");
+  return { code: typeof code === "number" ? code : null, stdout, stderr };
 }
 
 function request(socketPath: string, method: string, requestPath: string): Promise<{ status: number; body: string }> {
