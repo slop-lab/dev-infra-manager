@@ -1155,10 +1155,13 @@ one-repository shape under `examples/projects/single-repository/`: no
 `.dim/repos.yml`, no protected ref or secret service, a direct agent-style
 push to `main`, explicit workspace resource limits, and an unprivileged
 Project-owned agent serving the application through its private rootless DinD
-sidecar boundary. It must also prove that the agent receives a filtered
-controller proxy with only explicitly selected bodyless self-restart and
-resource-read permissions, cannot reach host inputs, and can request an
-asynchronous restart of its own workspace. Resource verification must use two
+sidecar boundary. It must also prove that the agent receives separate filtered
+workspace-audience and agent-audience proxy sockets with only bodyless
+self-restart and resource-read permissions respectively, cannot reach host
+inputs through either, and can request an asynchronous restart of its own
+workspace. The resource helper must use only the derived agent-audience socket;
+the proxies must receive no host-admin authority and must reject a configuration
+that combines the two audiences. Resource verification must use two
 workspace grants with different assignments, prove that neither grant can name
 or read the other workspace, prove that CPU `2.5` produces `dim-nproc` output
 `2`, and prove that missing or unlimited CPU assignments fail instead of
