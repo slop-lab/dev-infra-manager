@@ -43,6 +43,7 @@ export async function nativeGitReviewFixture(): Promise<ReviewFixture> {
       policyRevision: "policy-1",
       requiredReviewRevision: "review-1",
       requiredJobSetRevision: "jobs-1",
+      requiredJobNames: ["source", "security"],
       requiredReviewerIds: ["reviewer-a"],
       pathReviewerRules: [{ pathPrefix: "docs/", reviewerIds: ["docs-reviewer"] }]
     }]
@@ -57,6 +58,10 @@ export async function nativeGitReviewFixture(): Promise<ReviewFixture> {
     repositories: [repository, { projectId: "project-b", repositoryId: "source" }],
     identities: [
       { role: "reader", username: "ci-a", password: "ci-a-secret-value", projectId: "project-a", repositoryIds: ["source"] },
+      { role: "ci", username: "source-ci", password: "source-ci-secret", projectId: "project-a", repositoryIds: ["source"], jobName: "source" },
+      { role: "ci", username: "security-ci", password: "security-ci-secret", projectId: "project-a", repositoryIds: ["source"], jobName: "security" },
+      { role: "ci", username: "foreign-ci", password: "foreign-ci-secret", projectId: "project-b", repositoryIds: ["source"], jobName: "source" },
+      { role: "promoter", username: "promoter-a", password: "promoter-a-secret", projectId: "project-a", repositoryIds: ["source"] },
       { role: "writer", username: "writer-a", password: "writer-a-secret-1", projectId: "project-a", repositoryIds: ["source"], workspaceId: "workspace-a" },
       { role: "reviewer", username: "reviewer-a-user", password: "reviewer-a-secret", projectId: "project-a", repositoryIds: ["source"], reviewerId: "reviewer-a" },
       { role: "reviewer", username: "docs-reviewer-user", password: "docs-reviewer-secret", projectId: "project-a", repositoryIds: ["source"], reviewerId: "docs-reviewer" },
@@ -199,6 +204,10 @@ async function reviewRequest(baseUrl: string, identity: string, method: string, 
     "docs-reviewer-user": "docs-reviewer-secret",
     "reviewer-a-user": "reviewer-a-secret",
     "reviewer-b-user": "reviewer-b-secret",
+    "source-ci": "source-ci-secret",
+    "security-ci": "security-ci-secret",
+    "foreign-ci": "foreign-ci-secret",
+    "promoter-a": "promoter-a-secret",
     "writer-a": "writer-a-secret-1"
   };
   const password = passwords[identity];

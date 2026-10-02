@@ -15,6 +15,7 @@ export const nativeGitReviewPolicySchema = z.object({
   policyRevision: revision,
   requiredReviewRevision: revision,
   requiredJobSetRevision: revision,
+  requiredJobNames: z.array(identifier).min(1).readonly(),
   requiredReviewerIds: z.array(identifier).min(1).readonly(),
   pathReviewerRules: z.array(z.object({
     pathPrefix,
@@ -39,6 +40,8 @@ export const nativeGitIdentitySchema = z.discriminatedUnion("role", [
   z.object({ ...identityBase, role: z.literal("reader") }).strict().readonly(),
   z.object({ ...identityBase, role: z.literal("writer"), workspaceId: identifier }).strict().readonly(),
   z.object({ ...identityBase, role: z.literal("reviewer"), reviewerId: identifier }).strict().readonly(),
+  z.object({ ...identityBase, role: z.literal("ci"), jobName: identifier }).strict().readonly(),
+  z.object({ ...identityBase, role: z.literal("promoter") }).strict().readonly(),
   z.object({ ...identityBase, role: z.literal("administrator") }).strict().readonly()
 ]);
 
@@ -69,6 +72,7 @@ export function parseNativeGitServiceConfig(input: unknown): NativeGitServiceCon
   const usernames = new Set<string>();
   const workspaces = new Set<string>();
   const reviewers = new Map<string, NativeGitIdentity & { readonly role: "reviewer" }>();
+  const ciReporters = new Map<string, NativeGitIdentity & { readonly role: "ci" }>();
   for (const identity of config.identities) {
     if (usernames.has(identity.username)) throw new NativeGitConfigError(`duplicate identity: ${identity.username}`);
     usernames.add(identity.username);
@@ -86,6 +90,13 @@ export function parseNativeGitServiceConfig(input: unknown): NativeGitServiceCon
       if (reviewers.has(identity.reviewerId)) throw new NativeGitConfigError(`duplicate reviewer ID: ${identity.reviewerId}`);
       reviewers.set(identity.reviewerId, identity);
     }
+    if (identity.role === "ci") {
+      for (const repositoryId of identity.repositoryIds) {
+        const key = `${identity.projectId}/${repositoryId}/${identity.jobName}`;
+        if (ciReporters.has(key)) throw new NativeGitConfigError(`duplicate CI job identity: ${key}`);
+        ciReporters.set(key, identity);
+      }
+    }
   }
   for (const repository of config.repositories) {
     const refs = new Set<string>();
@@ -96,11 +107,22 @@ export function parseNativeGitServiceConfig(input: unknown): NativeGitServiceCon
         ...policy.requiredReviewerIds,
         ...policy.pathReviewerRules.flatMap((rule) => rule.reviewerIds)
       ];
+      if (new Set(policy.requiredReviewerIds).size !== policy.requiredReviewerIds.length) {
+        throw new NativeGitConfigError(`review policy contains duplicate required reviewers: ${policy.protectedRef}`);
+      }
+      if (new Set(policy.requiredJobNames).size !== policy.requiredJobNames.length) {
+        throw new NativeGitConfigError(`review policy contains duplicate required jobs: ${policy.protectedRef}`);
+      }
       for (const reviewerId of reviewerIds) {
         const reviewer = reviewers.get(reviewerId);
         if (reviewer === undefined || reviewer.projectId !== repository.projectId
           || !reviewer.repositoryIds.includes(repository.repositoryId)) {
           throw new NativeGitConfigError(`review policy references unavailable reviewer: ${reviewerId}`);
+        }
+      }
+      for (const jobName of policy.requiredJobNames) {
+        if (!ciReporters.has(`${repository.projectId}/${repository.repositoryId}/${jobName}`)) {
+          throw new NativeGitConfigError(`review policy references unavailable CI job: ${jobName}`);
         }
       }
     }
