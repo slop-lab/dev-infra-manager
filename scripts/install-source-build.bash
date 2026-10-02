@@ -70,9 +70,9 @@ fi
 "${npm_command[@]}" install --prefix "$staged_installer" --no-save --no-fund --no-audit "${installer_tarballs[0]}"
 
 echo "[host] install package bundle"
-"${dim_command[@]}" install-cli --local-packages "$package_root" --no-local-bin
+"${dim_command[@]}" installer install core --local-packages "$package_root" --no-local-bin
 
-"${dim_command[@]}" enable-plugin \
+"${dim_command[@]}" installer enable-plugin \
   @slop-lab/dim-plugin-dns-cloudflare \
   @slop-lab/dim-plugin-external-urls
 

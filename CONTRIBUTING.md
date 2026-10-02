@@ -21,7 +21,7 @@ just build-local-workspace-image # image-only build for the current worktree
 just prepare-local   # matched package/image candidate from one reviewed root commit
 just install-local   # install the prepared candidate without restarting the controller
 just restart-controller # restart the controller with the installed packages
-just install-local-control-plane # install packages, then restart the controller
+just install-local-control-plane # install packages with transactional controller readiness
 just doctor          # host readiness: dev tools, Docker, selected backend, cgroup v2
 just run-cli -- --help # build core, then run dim from source without installing it
 ```
@@ -124,13 +124,13 @@ These are distinct operations with separate readiness domains:
   readiness are promoted only after image identity verification succeeds.
 - `install-local` validates and consumes that prepared candidate before and
   after installation. Mise may provide Node.js and npm but never old installer
-  logic. It does not rebuild the image or restart the controller.
+  logic. It does not rebuild the image; core installation owns controller
+  restart/readiness.
 - `restart-controller` replaces the managed controller process with the
   currently installed DIM package set. It does not rebuild either packages or
   images.
-- `install-local-control-plane` composes `install-local` and
-  `restart-controller` in that order; an installation failure prevents the
-  restart. Keep the separate recipes when the stages require independent review.
+- `install-local-control-plane` aliases `install-local`; a failed target
+  readiness check restores the prior runtime and controller.
 - `doctor` reports host readiness for development tools, Docker, the selected
   backend, and cgroup v2. Run the stronger verification gates separately when
   their image, container, or host behavior is the readiness domain in question.

@@ -7,8 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 const workspaceRoot = resolve(import.meta.dirname, "../..");
 const fixtureRoots: string[] = [];
 const recipes = [
-  { root: workspaceRoot, installCommand: "verification/scripts/install-dim-local.bash" },
-  { root: workspaceRoot, installCommand: "verification/scripts/install-dim-local.bash" }
+  { root: workspaceRoot, installCommand: "scripts/install-source-build.bash" }
 ] as const;
 
 afterEach(async () => {
@@ -17,7 +16,7 @@ afterEach(async () => {
 
 describe("local control-plane installation", () => {
   it.each(recipes.flatMap((recipe) => [0, 47].map((installExit) => ({ ...recipe, installExit }))))(
-    "restarts only after $installCommand exits $installExit",
+    "delegates controller readiness to $installCommand when it exits $installExit",
     async ({ root, installCommand, installExit }) => {
     // Given
     const fixture = await mkdtemp(resolve(tmpdir(), "dim-control-plane-install-"));
@@ -27,7 +26,7 @@ describe("local control-plane installation", () => {
     await writeFile(log, "");
     await mkdir(tools);
     await writeFile(resolve(tools, "bash"), `#!/usr/bin/bash
-if [[ "$2" == *'bash ${installCommand}'* ]]; then
+if [[ "$*" == *'${installCommand}'* ]]; then
   printf 'install\n' >>"$DIM_INVOCATIONS"
   exit "$DIM_INSTALL_EXIT"
 fi
@@ -50,9 +49,7 @@ printf 'restart\n' >>"$DIM_INVOCATIONS"
 
     // Then
     expect(result.status, result.stderr).toBe(installExit);
-    expect(invocations.trim().split("\n")).toEqual(installExit === 0
-      ? ["install", "restart"]
-      : ["install"]);
+    expect(invocations.trim().split("\n")).toEqual(["install"]);
     }
   );
 });
