@@ -7,6 +7,7 @@ fixture="$(mktemp -d "/tmp/$prefix.XXXXXX")"
 keep_project="$prefix-keep"
 ordinary_project="$prefix-ordinary"
 collision_project="$prefix-collision"
+inverse_collision_project="$prefix-inverse-collision"
 foreign_volume="$prefix-foreign"
 filesystem_volume="$prefix-filesystem"
 wrong_owner_volume="$prefix-wrong-owner"
@@ -24,7 +25,7 @@ cleanup() {
     kill "$(cat "$fixture/proxy.pid")" >/dev/null 2>&1 || true
     rm -f /tmp/dim-agent-controller/agent.sock /tmp/dim-agent-controller/agent.log
   fi
-  for project in "$keep_project" "$ordinary_project" "$collision_project"; do
+  for project in "$keep_project" "$ordinary_project" "$collision_project" "$inverse_collision_project"; do
     compose "$project" down --volumes --remove-orphans >/dev/null 2>&1 || true
   done
   docker volume rm \
@@ -33,6 +34,7 @@ cleanup() {
     "${keep_project}_agent-home" "${keep_project}_agent-tmp" \
     "${ordinary_project}_agent-home" "${ordinary_project}_agent-tmp" \
     "${collision_project}_agent-home" "${collision_project}_agent-tmp" \
+    "${inverse_collision_project}_agent-home" "${inverse_collision_project}_agent-tmp" \
     >/dev/null 2>&1 || true
   docker image rm "$prefix-agent-dind" >/dev/null 2>&1 || true
   if [ -r "$fixture/compose-host-aliases.backup" ]; then
@@ -243,6 +245,57 @@ printf 'bind collision metadata: '
 docker volume inspect --format 'name={{.Name}} options={{json .Options}} device={{index .Options "device"}}' \
   "${collision_project}_agent-tmp"
 printf 'bind collision denied before start: container=%s running=false\n' "$collision_container"
+
+docker volume create \
+  --label "com.docker.compose.project=$inverse_collision_project" \
+  --label com.docker.compose.volume=agent-tmp \
+  --label dev.dim.role=agent-tmp \
+  "${inverse_collision_project}_agent-tmp" >/dev/null
+docker run --rm \
+  --mount "type=volume,src=${inverse_collision_project}_agent-tmp,dst=/mnt/agent-tmp" \
+  alpine:3.22 sh -c 'printf inverse-alias-marker >/mnt/agent-tmp/marker'
+inverse_tmp_mountpoint="$(docker volume inspect --format '{{.Mountpoint}}' "${inverse_collision_project}_agent-tmp")"
+docker volume create \
+  --driver local \
+  --opt type=none \
+  --opt o=bind \
+  --opt "device=$inverse_tmp_mountpoint" \
+  --label "com.docker.compose.project=$inverse_collision_project" \
+  --label com.docker.compose.volume=agent-home \
+  "${inverse_collision_project}_agent-home" >/dev/null
+printf 'inverse bind metadata before setup: '
+docker volume inspect --format 'home={{.Name}} options={{json .Options}} device={{index .Options "device"}}' \
+  "${inverse_collision_project}_agent-home"
+if run_setup "$inverse_collision_project" >"$fixture/inverse-collision.out" 2>"$fixture/inverse-collision.err"; then
+  echo "production setup accepted bind-backed agent home storage" >&2
+  exit 1
+fi
+grep -F "agent home volume must not use driver options" "$fixture/inverse-collision.err" >/dev/null
+inverse_collision_container="$(compose "$inverse_collision_project" ps --all --quiet agent-dind)"
+test "$(docker inspect --format '{{.State.Running}}' "$inverse_collision_container")" = false
+docker volume inspect "${inverse_collision_project}_agent-home" >/dev/null
+docker volume inspect "${inverse_collision_project}_agent-tmp" >/dev/null
+inverse_marker="$(docker run --rm \
+  --mount "type=volume,src=${inverse_collision_project}_agent-tmp,dst=/mnt/agent-tmp" \
+  alpine:3.22 cat /mnt/agent-tmp/marker)"
+test "$inverse_marker" = inverse-alias-marker
+printf 'inverse bind denied before start: container=%s running=false home=retained temp=retained marker=%s\n' \
+  "$inverse_collision_container" "$inverse_marker"
+if run_teardown "$inverse_collision_project" 1 \
+  >"$fixture/inverse-collision-teardown.out" 2>"$fixture/inverse-collision-teardown.err"; then
+  echo "production teardown accepted bind-backed agent home storage" >&2
+  exit 1
+fi
+grep -F "agent home volume must not use driver options" "$fixture/inverse-collision-teardown.err" >/dev/null
+docker inspect "$inverse_collision_container" >/dev/null
+docker volume inspect "${inverse_collision_project}_agent-home" >/dev/null
+docker volume inspect "${inverse_collision_project}_agent-tmp" >/dev/null
+inverse_marker_after_teardown="$(docker run --rm \
+  --mount "type=volume,src=${inverse_collision_project}_agent-tmp,dst=/mnt/agent-tmp" \
+  alpine:3.22 cat /mnt/agent-tmp/marker)"
+test "$inverse_marker_after_teardown" = inverse-alias-marker
+printf 'inverse bind denied during discard: container=retained home=retained temp=retained marker=%s\n' \
+  "$inverse_marker_after_teardown"
 
 docker volume create "$filesystem_volume" >/dev/null
 docker run --rm --network none --read-only --user 0:0 \
