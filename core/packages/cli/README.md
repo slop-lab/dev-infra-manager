@@ -69,7 +69,7 @@ npm install --global "@slop-lab/dim-cli@0.9.0"
 Or use the user-local installer:
 
 ```bash
-npx '@slop-lab/dim-installer@0.9.0' install-cli
+npx '@slop-lab/dim-installer@0.9.0' installer install core
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
@@ -85,6 +85,12 @@ Check the host before creating a workspace:
 ```bash
 dim doctor
 ```
+
+`dim install-cp` is reserved for a control-plane-only host running the native
+Git host and CI scheduler/webhook services without a separate web UI. The
+current release rejects the command before making changes because those
+services do not yet have one reviewed deployment, supervision, readiness, and
+rollback contract.
 
 DIM automatically runs one managed controller process with separate local
 Unix sockets: a mode-`0600` host-admin API and a workspace-scoped API. Normal
