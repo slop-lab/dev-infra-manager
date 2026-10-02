@@ -61,10 +61,10 @@ done
 ingress="${OPENCODE_WEB_INGRESS:-$DEFAULT_INGRESS}"
 [[ -n "$ingress" && "$ingress" != *$'\n'* && "$ingress" != *$'\r'* ]] || \
   fail 'OPENCODE_WEB_INGRESS must be non-empty and single-line'
-development_url_socket="${DIM_DEVELOPMENT_URL_SOCKET:-}"
-[[ -n "$development_url_socket" ]] || fail 'DIM_DEVELOPMENT_URL_SOCKET is required'
-[[ -S "$development_url_socket" ]] || \
-  fail "development URL socket not found: $development_url_socket"
+opencode_web_url_socket="${OPENCODE_WEB_URL_SOCKET:-}"
+[[ -n "$opencode_web_url_socket" ]] || fail 'OPENCODE_WEB_URL_SOCKET is required'
+[[ -S "$opencode_web_url_socket" ]] || \
+  fail "OpenCode Web URL socket not found: $opencode_web_url_socket"
 
 installed_version="$(opencode --version)"
 [[ "$installed_version" = "$EXPECTED_OPENCODE_VERSION" ]] || \
@@ -292,7 +292,8 @@ if [[ -z "${server_pid:-}" ]]; then
   chmod 0600 "$pid_file"
 fi
 
-external_url="$(timeout --kill-after=2s "${EXPOSE_TIMEOUT_SECONDS}s" \
+external_url="$(DIM_DEVELOPMENT_URL_SOCKET="$opencode_web_url_socket" \
+  timeout --kill-after=2s "${EXPOSE_TIMEOUT_SECONDS}s" \
   dim-development-service expose --name opencode-web --port "$port" \
     --ingress "$ingress" --require-scheme https)" || fail 'could not expose OpenCode Web'
 [[ "$external_url" =~ ^https://[^[:space:]]+$ ]] || fail 'external URL response did not contain a valid HTTPS URL'

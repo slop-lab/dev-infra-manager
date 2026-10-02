@@ -97,7 +97,9 @@ common_env=(
   PATH="$work_dir/tools:$PATH"
   MOCK_OPENCODE_SERVER="$work_dir/opencode-server.mjs"
   MOCK_HELPER_PID_FILE="$work_dir/helper.pid"
-  DIM_DEVELOPMENT_URL_SOCKET="$socket"
+  DIM_DEVELOPMENT_URL_SOCKET="$work_dir/generic-development.sock"
+  OPENCODE_WEB_URL_SOCKET="$socket"
+  OPENCODE_WEB_CORS_ORIGINS='[]'
 )
 
 orphan_home="$work_dir/orphan-home"

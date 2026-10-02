@@ -121,7 +121,9 @@ base_env=(
   MOCK_EXPOSE_ARGUMENTS="$arguments_file"
   MOCK_EXPOSE_ENVIRONMENT="$environment_file"
   MOCK_EXPOSE_MODE="$mode_file"
-  DIM_DEVELOPMENT_URL_SOCKET="$socket"
+  DIM_DEVELOPMENT_URL_SOCKET="$work_dir/generic-development.sock"
+  OPENCODE_WEB_URL_SOCKET="$socket"
+  OPENCODE_WEB_CORS_ORIGINS='[]'
   OPENCODE_WEB_PORT="$port"
 )
 
@@ -168,21 +170,21 @@ for invalid_port in invalid 0 65536 18446744073709551617; do
   grep -Fq 'port must be an integer from 1 through 65535' "$work_dir/invalid-port"
 done
 
-if env "${base_env[@]}" DIM_DEVELOPMENT_URL_SOCKET="$work_dir/missing.sock" bash "$launcher" \
+if env "${base_env[@]}" OPENCODE_WEB_URL_SOCKET="$work_dir/missing.sock" bash "$launcher" \
   >/dev/null 2>"$work_dir/missing-socket"; then
   printf 'launcher accepted a missing development URL socket\n' >&2
   exit 1
 fi
-grep -Fq 'development URL socket not found' "$work_dir/missing-socket"
+grep -Fq 'OpenCode Web URL socket not found' "$work_dir/missing-socket"
 
-if env -u DIM_DEVELOPMENT_URL_SOCKET -u DIM_EXTERNAL_URL_SOCKET \
+if env -u OPENCODE_WEB_URL_SOCKET -u DIM_EXTERNAL_URL_SOCKET \
   -u DIM_EXTERNAL_URL_CONTAINERS_JSON HOME="$work_dir/home" PATH="$work_dir/tools:$PATH" \
   DIM_WEB_URL_SOCKET="$socket" DIM_WEB_URL_CONTAINERS_JSON='["agent"]' \
   OPENCODE_WEB_PORT="$port" bash "$launcher" >/dev/null 2>"$work_dir/obsolete-only"; then
   printf 'launcher accepted obsolete Web URL capabilities\n' >&2
   exit 1
 fi
-grep -Fq 'DIM_DEVELOPMENT_URL_SOCKET is required' "$work_dir/obsolete-only"
+grep -Fq 'OPENCODE_WEB_URL_SOCKET is required' "$work_dir/obsolete-only"
 
 unowned_password=0123456789abcdef0123456789abcdef
 state_dir="$work_dir/home/.local/state/opencode-web"
@@ -234,7 +236,11 @@ password="$(sed -n '2p' "$credential_file")"
 [[ "$(stat -c %a "$state_dir/server.pid")" = 600 ]]
 [[ "$(stat -c %a "$state_dir/server.log")" = 600 ]]
 ! grep -Fq "$password" "$state_dir/server.log"
-grep -Fqx "127.0.0.1 $port --cors=https://localhost:4096" "$opencode_arguments"
+if ! grep -Fqx "127.0.0.1 $port --cors=https://localhost:4096" "$opencode_arguments"; then
+  printf 'unexpected OpenCode arguments:\n' >&2
+  cat "$opencode_arguments" >&2
+  exit 1
+fi
 grep -Fqx "expose --name opencode-web --port $port --ingress https-ts --require-scheme https" "$arguments_file"
 grep -Fqx "DIM_DEVELOPMENT_URL_SOCKET=$socket" "$environment_file"
 ! grep -Eq 'DIM_(WEB_URL|EXTERNAL_URL)|CONTAINERS_JSON|TARGET' "$environment_file"
