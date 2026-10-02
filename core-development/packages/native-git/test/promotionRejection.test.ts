@@ -2,15 +2,18 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createApprovedReview,
+  issueJob,
   promote,
   protectedHead,
   reportJob,
   reportRequiredJobs,
+  revokeJobAttempt,
   revokeLastApproval
 } from "./nativeGitPromotionHarness.js";
 import {
   nativeGitReviewFixture,
   readJsonObject,
+  reviewPath,
   stringField,
   type ReviewFixture
 } from "./nativeGitReviewHarness.js";
@@ -25,7 +28,7 @@ describe("DIM native Git protected promotion denials", () => {
   it("rejects missing required CI evidence without changing the protected ref", async () => {
     const fixture = await approvedFixture();
     const review = await createApprovedReview(fixture);
-    expect((await reportJob(fixture, review, "source")).status).toBe(201);
+    expect((await reportJob(fixture, review, "source", await issueJob(fixture, review, "source"))).status).toBe(201);
     const before = await protectedHead(fixture);
 
     const response = await promote(fixture, review);
@@ -38,7 +41,8 @@ describe("DIM native Git protected promotion denials", () => {
     const fixture = await approvedFixture();
     const review = await createApprovedReview(fixture);
     await reportRequiredJobs(fixture, review);
-    expect((await reportJob(fixture, review, "source", 2, "failure")).status).toBe(201);
+    const secondAttempt = await issueJob(fixture, review, "source");
+    expect((await reportJob(fixture, review, "source", secondAttempt, "failure")).status).toBe(201);
     const before = await protectedHead(fixture);
 
     const response = await promote(fixture, review);
@@ -47,13 +51,32 @@ describe("DIM native Git protected promotion denials", () => {
     expect(await protectedHead(fixture)).toBe(before);
   });
 
+  it("rejects a fabricated future CI attempt without changing the protected ref", async () => {
+    const fixture = await approvedFixture();
+    const review = await createApprovedReview(fixture);
+    const security = await issueJob(fixture, review, "security");
+    expect((await reportJob(fixture, review, "security", security)).status).toBe(201);
+    const source = await issueJob(fixture, review, "source");
+    const before = await protectedHead(fixture);
+
+    const fabricated = await reportJob(fixture, review, "source", source, "success", "source-ci", { attempt: 999 });
+    const unknown = await reportJob(fixture, review, "source", source, "success", "source-ci", {
+      attemptId: "00000000-0000-4000-8000-000000000001"
+    });
+    const response = await promote(fixture, review);
+
+    expect([fabricated.status, unknown.status, response.status]).toEqual([409, 409, 409]);
+    expect(await protectedHead(fixture)).toBe(before);
+  });
+
   it("rejects conflicting evidence for one job attempt", async () => {
     const fixture = await approvedFixture();
     const review = await createApprovedReview(fixture);
-    expect((await reportJob(fixture, review, "source")).status).toBe(201);
+    const source = await issueJob(fixture, review, "source");
+    expect((await reportJob(fixture, review, "source", source)).status).toBe(201);
     const before = await protectedHead(fixture);
 
-    const conflicting = await reportJob(fixture, review, "source", 1, "failure");
+    const conflicting = await reportJob(fixture, review, "source", source, "failure");
     const response = await promote(fixture, review);
 
     expect(conflicting.status).toBe(409);
@@ -65,9 +88,10 @@ describe("DIM native Git protected promotion denials", () => {
     const fixture = await approvedFixture();
     const review = await createApprovedReview(fixture);
     const before = await protectedHead(fixture);
+    const source = await issueJob(fixture, review, "source");
 
-    const nonterminal = await reportJob(fixture, review, "source", 1, "running");
-    const foreign = await reportJob(fixture, review, "source", 1, "success", "foreign-ci");
+    const nonterminal = await reportJob(fixture, review, "source", source, "running");
+    const foreign = await reportJob(fixture, review, "source", source, "success", "foreign-ci");
     const response = await promote(fixture, review);
 
     expect(nonterminal.status).toBe(400);
@@ -80,14 +104,31 @@ describe("DIM native Git protected promotion denials", () => {
     const fixture = await approvedFixture();
     const review = await createApprovedReview(fixture);
     const before = await protectedHead(fixture);
+    const source = await issueJob(fixture, review, "source");
 
-    const injected = await reportJob(fixture, review, "source", 1, "success", "source-ci", {
+    const injected = await reportJob(fixture, review, "source", source, "success", "source-ci", {
       candidateCommit: before
     });
     const response = await promote(fixture, review);
 
     expect(injected.status).toBe(409);
     expect(response.status).toBe(409);
+    expect(await protectedHead(fixture)).toBe(before);
+  });
+
+  it("rejects late and revoked issued attempts across restart", async () => {
+    const fixture = await approvedFixture();
+    const review = await createApprovedReview(fixture);
+    const oldAttempt = await issueJob(fixture, review, "source");
+    const currentAttempt = await issueJob(fixture, review, "source");
+    expect((await revokeJobAttempt(fixture, review, "source", currentAttempt)).status).toBe(201);
+    await fixture.restart();
+    const before = await protectedHead(fixture);
+
+    const late = await reportJob(fixture, review, "source", oldAttempt);
+    const revoked = await reportJob(fixture, review, "source", currentAttempt);
+
+    expect([late.status, revoked.status]).toEqual([409, 409]);
     expect(await protectedHead(fixture)).toBe(before);
   });
 
@@ -171,6 +212,20 @@ describe("DIM native Git protected promotion denials", () => {
     expect(await protectedHead(fixture)).toBe(before);
   });
 
+  it("fails closed when an issued attempt record does not match its path", async () => {
+    const fixture = await approvedFixture();
+    const review = await createApprovedReview(fixture);
+    const issuance = await issueJob(fixture, review, "source");
+    const before = await protectedHead(fixture);
+    const attemptRoot = `${fixture.repositoryPath}/dim-reviews/job-attempts/${stringField(review, "reviewId")}/source`;
+    await writeFile(`${attemptRoot}/2.json`, `${JSON.stringify(issuance)}\n`, { mode: 0o600 });
+
+    const restart = fixture.restart();
+
+    await expect(restart).rejects.toBeDefined();
+    expect(await protectedHead(fixture)).toBe(before);
+  });
+
   it("denies administrator and CI identities promotion authority", async () => {
     const fixture = await approvedFixture();
     const review = await createApprovedReview(fixture);
@@ -179,9 +234,14 @@ describe("DIM native Git protected promotion denials", () => {
 
     const administrator = await promote(fixture, review, "admin-a");
     const ci = await promote(fixture, review, "source-ci");
+    const administratorIssue = await fixture.request("admin-a", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempts`), {
+      jobName: "source"
+    });
+    const ciIssue = await fixture.request("source-ci", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempts`), {
+      jobName: "source"
+    });
 
-    expect(administrator.status).toBe(403);
-    expect(ci.status).toBe(403);
+    expect([administrator.status, ci.status, administratorIssue.status, ciIssue.status]).toEqual([403, 403, 403, 403]);
     expect(await protectedHead(fixture)).toBe(before);
   });
 });

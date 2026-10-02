@@ -17,6 +17,7 @@ export const ciStatusPayloadSchema = z.object({
   requiredJobSetRevision: z.string().min(1),
   jobName: identifier,
   attempt: z.number().int().positive(),
+  attemptId: z.string().uuid(),
   result: z.enum(["success", "failure", "cancelled"])
 }).strict().readonly();
 

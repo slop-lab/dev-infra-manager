@@ -36,12 +36,14 @@ export async function reportJob(
   fixture: ReviewFixture,
   review: JsonObject,
   jobName: "source" | "security",
-  attempt = 1,
+  issuance: JsonObject,
   result: "success" | "failure" | "cancelled" | "running" = "success",
   identity = `${jobName}-ci`,
   payloadOverrides: JsonObject = {}
 ): Promise<Response> {
   const reviewId = stringField(review, "reviewId");
+  const attempt = issuance["attempt"];
+  if (typeof attempt !== "number") throw new Error("issued job attempt is missing its number");
   return fixture.request(identity, "POST", reviewPath(`/${reviewId}/statuses`), {
     schemaVersion: 1,
     eventId: randomUUID(),
@@ -59,16 +61,41 @@ export async function reportJob(
       requiredJobSetRevision: stringField(review, "requiredJobSetRevision"),
       jobName,
       attempt,
+      attemptId: stringField(issuance, "attemptId"),
       result,
       ...payloadOverrides
     }
   });
 }
 
+export async function issueJob(
+  fixture: ReviewFixture,
+  review: JsonObject,
+  jobName: "source" | "security"
+): Promise<JsonObject> {
+  const response = await fixture.request("scheduler-a", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempts`), {
+    jobName
+  });
+  expect(response.status).toBe(201);
+  return readJsonObject(response);
+}
+
+export async function revokeJobAttempt(
+  fixture: ReviewFixture,
+  review: JsonObject,
+  jobName: "source" | "security",
+  issuance: JsonObject
+): Promise<Response> {
+  return fixture.request("scheduler-a", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempt-revocations`), {
+    jobName,
+    attemptId: stringField(issuance, "attemptId")
+  });
+}
+
 export async function reportRequiredJobs(fixture: ReviewFixture, review: JsonObject): Promise<readonly JsonObject[]> {
   const records: JsonObject[] = [];
   for (const jobName of ["source", "security"] as const) {
-    const response = await reportJob(fixture, review, jobName);
+    const response = await reportJob(fixture, review, jobName, await issueJob(fixture, review, jobName));
     expect(response.status).toBe(201);
     records.push(await readJsonObject(response));
   }

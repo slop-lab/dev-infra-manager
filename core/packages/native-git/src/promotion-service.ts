@@ -21,10 +21,21 @@ import {
   type ReviewStatus
 } from "./review-service.js";
 import { createStatusStore, StatusConflictError } from "./status-store.js";
+import { createJobAttemptStore, JobAttemptStoreError } from "./job-attempt-store.js";
+import type { JobAttempt, JobAttemptRevocation } from "./job-attempt-schema.js";
 
 type ReviewTarget = {
   readonly projectId: string;
   readonly repositoryId: string;
+};
+
+type JobAttemptTarget = ReviewTarget & {
+  readonly reviewId: string;
+  readonly jobName: string;
+};
+
+type JobAttemptRevocationTarget = JobAttemptTarget & {
+  readonly attemptId: string;
 };
 
 export type PromotionResult = {
@@ -37,12 +48,52 @@ export type PromotionResult = {
 };
 
 export type PromotionService = {
+  issue(identity: NativeGitIdentity, target: JobAttemptTarget): Promise<JobAttempt>;
+  revokeAttempt(identity: NativeGitIdentity, target: JobAttemptRevocationTarget): Promise<JobAttemptRevocation>;
   report(identity: NativeGitIdentity, target: ReviewTarget, reviewId: string, envelope: CiStatusEnvelope): Promise<CiStatusRecord>;
   promote(identity: NativeGitIdentity, target: ReviewTarget, reviewId: string): Promise<PromotionResult>;
 };
 
 export function createPromotionService(config: NativeGitServiceConfig, serializer: RefSerializer): PromotionService {
   return {
+    async issue(identity, target) {
+      authorizeTarget(identity, target);
+      if (identity.role !== "scheduler") throw new ReviewApiError(403, "CI scheduler authority is required");
+      const review = await requiredReview(config, target, target.reviewId);
+      const policy = findPolicy(config, target, review.protectedRef);
+      if (policy === undefined || !policy.requiredJobNames.includes(target.jobName)) {
+        throw new ReviewApiError(409, "job is not required by current policy");
+      }
+      return serializer.run(refSerializationKey(review.projectId, review.repositoryId, review.protectedRef), async () => {
+        const current = await status(config, review);
+        if (current.status === "stale") throw new ReviewApiError(409, "review tuple is stale");
+        return attemptStore(config, target).issue({
+          reviewId: target.reviewId,
+          projectId: target.projectId,
+          repositoryId: target.repositoryId,
+          jobName: target.jobName,
+          issuedBy: identity.username
+        });
+      });
+    },
+    async revokeAttempt(identity, target) {
+      authorizeTarget(identity, target);
+      if (identity.role !== "scheduler") throw new ReviewApiError(403, "CI scheduler authority is required");
+      const review = await requiredReview(config, target, target.reviewId);
+      return serializer.run(refSerializationKey(review.projectId, review.repositoryId, review.protectedRef), async () => {
+        try {
+          return await attemptStore(config, target).revoke({
+            reviewId: target.reviewId,
+            jobName: target.jobName,
+            attemptId: target.attemptId,
+            revokedBy: identity.username
+          });
+        } catch (error) {
+          if (error instanceof JobAttemptStoreError) throw new ReviewApiError(404, error.message);
+          throw error;
+        }
+      });
+    },
     async report(identity, target, reviewId, envelope) {
       authorizeTarget(identity, target);
       if (identity.role !== "ci") throw new ReviewApiError(403, "CI job authority is required");
@@ -54,6 +105,12 @@ export function createPromotionService(config: NativeGitServiceConfig, serialize
       }
       if (!matchesReview(envelope, review)) throw new ReviewApiError(409, "CI status tuple does not match the review");
       return serializer.run(refSerializationKey(review.projectId, review.repositoryId, review.protectedRef), async () => {
+        const current = await attemptStore(config, target).current(reviewId, identity.jobName);
+        if (current === undefined || current.revocation !== undefined
+          || current.issuance.attempt !== envelope.payload.attempt
+          || current.issuance.attemptId !== envelope.payload.attemptId) {
+          throw new ReviewApiError(409, "CI status does not match the current issued attempt");
+        }
         const identityRecord = {
           ...envelope,
           reviewId,
@@ -83,7 +140,7 @@ export function createPromotionService(config: NativeGitServiceConfig, serialize
         if (currentHead === undefined) throw new ReviewApiError(409, "protected ref is missing");
         const alreadyCurrent = currentHead === review.candidateCommit;
         const allowedStaleness = current.staleReasons.every((reason) => alreadyCurrent && reason === "protected-head-changed");
-        if (!allowedStaleness || !approvalsComplete(current) || !jobsSuccessful(config, current)) {
+        if (!allowedStaleness || !approvalsComplete(current) || !await jobsSuccessful(config, current)) {
           throw new ReviewApiError(409, "promotion evidence is incomplete or stale");
         }
         if (!await candidateDescendsFrom(config, target, review.expectedProtectedHead, review.candidateCommit)) {
@@ -111,19 +168,23 @@ function approvalsComplete(review: ReviewStatus): boolean {
   return review.requiredReviewerIds.every((reviewerId) => active.has(reviewerId));
 }
 
-function jobsSuccessful(config: NativeGitServiceConfig, review: ReviewStatus): boolean {
+async function jobsSuccessful(config: NativeGitServiceConfig, review: ReviewStatus): Promise<boolean> {
   const policy = findPolicy(config, review, review.protectedRef);
   if (policy === undefined) return false;
-  return policy.requiredJobNames.every((jobName) => {
-    const latest = review.statuses.filter((record) => record.payload.jobName === jobName)
-      .reduce<CiStatusRecord | undefined>((selected, record) => selected === undefined || record.payload.attempt > selected.payload.attempt
-        ? record
-        : selected, undefined);
+  const target = { projectId: review.projectId, repositoryId: review.repositoryId };
+  const store = attemptStore(config, target);
+  const results = await Promise.all(policy.requiredJobNames.map(async (jobName) => {
+    const current = await store.current(review.reviewId, jobName);
+    if (current === undefined || current.revocation !== undefined) return false;
+    const latest = review.statuses.find((record) => record.payload.jobName === jobName
+      && record.payload.attempt === current.issuance.attempt
+      && record.payload.attemptId === current.issuance.attemptId);
     const reporter = config.identities.find((identity) => identity.role === "ci" && identity.jobName === jobName
       && identity.projectId === review.projectId && identity.repositoryIds.includes(review.repositoryId));
     return latest?.payload.result === "success" && latest.reporterUsername === reporter?.username
       && matchesReview(latest, review);
-  });
+  }));
+  return results.every((result) => result);
 }
 
 function matchesReview(envelope: CiStatusEnvelope, review: ReviewStatus | ReviewObject): boolean {
@@ -143,6 +204,10 @@ function authorizeTarget(identity: NativeGitIdentity, target: ReviewTarget): voi
 
 function statusStore(config: NativeGitServiceConfig, target: ReviewTarget) {
   return createStatusStore(join(config.storageRoot, target.projectId, `${target.repositoryId}.git`));
+}
+
+function attemptStore(config: NativeGitServiceConfig, target: ReviewTarget) {
+  return createJobAttemptStore(join(config.storageRoot, target.projectId, `${target.repositoryId}.git`));
 }
 
 function promotionResult(

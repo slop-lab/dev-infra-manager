@@ -8,19 +8,24 @@ import { ReviewApiError, type ReviewService } from "./review-service.js";
 const MAX_BODY_BYTES = 64 * 1024;
 const identifierPattern = "[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?";
 const collectionPattern = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews$`);
-const memberPattern = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews/([0-9a-f]{64})(?:/(approvals|revocations|statuses|promotions))?$`);
+const memberPattern = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews/([0-9a-f]{64})(?:/(approvals|revocations|job-attempts|job-attempt-revocations|statuses|promotions))?$`);
 const createSchema = z.object({
   protectedRef: z.string().min(1).max(1024),
   proposalRef: z.string().min(1).max(1024)
 }).strict().readonly();
 const emptySchema = z.object({}).strict().readonly();
 const revokeSchema = z.object({ approvalId: z.string().uuid() }).strict().readonly();
+const jobNameSchema = z.string().regex(new RegExp(`^${identifierPattern}$`));
+const issueJobSchema = z.object({ jobName: jobNameSchema }).strict().readonly();
+const revokeJobSchema = z.object({ jobName: jobNameSchema, attemptId: z.string().uuid() }).strict().readonly();
 
 export type ReviewHttpRoute =
   | { readonly kind: "create"; readonly projectId: string; readonly repositoryId: string }
   | { readonly kind: "get"; readonly projectId: string; readonly repositoryId: string; readonly reviewId: string }
   | { readonly kind: "approve"; readonly projectId: string; readonly repositoryId: string; readonly reviewId: string }
   | { readonly kind: "revoke"; readonly projectId: string; readonly repositoryId: string; readonly reviewId: string }
+  | { readonly kind: "issue-job"; readonly projectId: string; readonly repositoryId: string; readonly reviewId: string }
+  | { readonly kind: "revoke-job"; readonly projectId: string; readonly repositoryId: string; readonly reviewId: string }
   | { readonly kind: "status"; readonly projectId: string; readonly repositoryId: string; readonly reviewId: string }
   | { readonly kind: "promote"; readonly projectId: string; readonly repositoryId: string; readonly reviewId: string };
 
@@ -48,6 +53,8 @@ export function nativeGitReviewRoute(request: IncomingMessage): ReviewHttpRoute 
   if (request.method === "GET" && action === undefined) return { kind: "get", projectId, repositoryId, reviewId };
   if (request.method === "POST" && action === "approvals") return { kind: "approve", projectId, repositoryId, reviewId };
   if (request.method === "POST" && action === "revocations") return { kind: "revoke", projectId, repositoryId, reviewId };
+  if (request.method === "POST" && action === "job-attempts") return { kind: "issue-job", projectId, repositoryId, reviewId };
+  if (request.method === "POST" && action === "job-attempt-revocations") return { kind: "revoke-job", projectId, repositoryId, reviewId };
   if (request.method === "POST" && action === "statuses") return { kind: "status", projectId, repositoryId, reviewId };
   if (request.method === "POST" && action === "promotions") return { kind: "promote", projectId, repositoryId, reviewId };
   return undefined;
@@ -79,6 +86,22 @@ export async function serveReviewApi(
         const input = revokeSchema.parse(await readBody(request));
         await services.review.revoke(identity, target, route.reviewId, input.approvalId);
         sendJson(response, 201, { approvalId: input.approvalId, reviewId: route.reviewId, revoked: true });
+        return;
+      }
+      case "issue-job": {
+        const input = issueJobSchema.parse(await readBody(request));
+        sendJson(response, 201, await services.promotion.issue(identity, { ...target, reviewId: route.reviewId, jobName: input.jobName }));
+        return;
+      }
+      case "revoke-job": {
+        const input = revokeJobSchema.parse(await readBody(request));
+        const result = await services.promotion.revokeAttempt(identity, {
+          ...target,
+          reviewId: route.reviewId,
+          jobName: input.jobName,
+          attemptId: input.attemptId
+        });
+        sendJson(response, 201, result);
         return;
       }
       case "status": {
