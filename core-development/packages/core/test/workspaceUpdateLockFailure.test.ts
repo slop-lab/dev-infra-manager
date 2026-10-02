@@ -21,6 +21,7 @@ import {
 } from "../../../../core/packages/core/src/workspaceLifecycle.js";
 import { withWorkspaceLifecycleProgress } from "../../../../core/packages/core/src/workspaceLifecycleError.js";
 
+import { claimTestGiteaService } from "./giteaServiceFixture.js";
 import { options, projectFixture, repositorySnapshot, workspaceFixture } from "./workspaceUpdateLockFixture.js";
 import { COMMIT, LockInterleaving, MOVED_HEAD_COMMIT, MOVED_SOURCE_COMMIT, UpdateRunner } from "./workspaceUpdateLockRunner.js";
 
@@ -39,6 +40,7 @@ describe("workspace update setup lock", () => {
     runner = new UpdateRunner();
     runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
     await state.claimProject(project);
+    await claimTestGiteaService(root, 3300);
     await mkdir(runner.containerRootSnapshotPath, { recursive: true });
     await mkdir(join(root, "assets", "project-roots", project.id, COMMIT), { recursive: true });
     await state.claimWorkspace(workspace);

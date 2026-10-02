@@ -6,6 +6,7 @@ import { LifecycleState } from "../../../../core/packages/core/src/lifecycleStat
 import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import { updateWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
 
+import { claimTestGiteaService } from "./giteaServiceFixture.js";
 import { options, projectFixture, workspaceFixture } from "./workspaceUpdateLockFixture.js";
 import { COMMIT, UpdateRunner } from "./workspaceUpdateLockRunner.js";
 
@@ -24,6 +25,7 @@ describe("workspace setup failure authority", () => {
     runner = new UpdateRunner();
     runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
     await state.claimProject(project);
+    await claimTestGiteaService(root, 3300);
     await mkdir(runner.containerRootSnapshotPath, { recursive: true });
     await mkdir(join(root, "assets", "project-roots", project.id, COMMIT), { recursive: true });
     await state.claimWorkspace(workspace);

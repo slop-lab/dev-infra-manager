@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
+import { ownedGiteaContainerInspect, ownedGiteaResourceInspect } from "./giteaServiceFixture.js";
 import { workspaceContainerInspect, workspaceVolumeInspect } from "./workspaceOwnershipFixture.js";
 
 const WORKSPACE_IDENTITY = {
@@ -76,19 +77,22 @@ export class UpdateRunner implements StreamingCommandRunner {
       }
       return result(command, args, `${COMMIT}\trefs/heads/main\n`);
     }
-    if (args[0] === "network" && args[1] === "inspect") return result(command, args, "true\n");
+    if (args[0] === "network" && args[1] === "inspect") {
+      const stdout = args.some((argument) => argument.includes("dim.service-id"))
+        ? ownedGiteaResourceInspect("network")
+        : "true";
+      return result(command, args, `${stdout}\n`);
+    }
     if (args[0] === "volume" && args[1] === "inspect") {
       const stdout = args[2] === WORKSPACE_IDENTITY.dockerVolumeName
         ? `${workspaceVolumeInspect(WORKSPACE_IDENTITY)}\n`
-        : "true\n";
+        : args[2] === "dim-gitea-data"
+          ? `${ownedGiteaResourceInspect("volume")}\n`
+          : "true\n";
       return result(command, args, stdout);
     }
-    if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-gitea"
-      && args.some((argument) => argument.includes("NetworkSettings.Networks"))) {
-      return result(command, args, "172.20.0.2\n");
-    }
     if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-gitea") {
-      return result(command, args, "gitea-container-id|true|true\n");
+      return result(command, args, `${ownedGiteaContainerInspect("gitea-container-id", true)}\n`);
     }
     if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-registry-cache") {
       return result(command, args, "true|true|registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33\n");
