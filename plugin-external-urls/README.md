@@ -36,7 +36,11 @@ Add `--require-approval` when each requested route must remain unreachable
 until a host administrator runs `dim external-url approve URL_ID`. Requests
 still succeed and return `pending`; `dim external-url revoke URL_ID` on the host
 removes reachability terminally. Workspace and agent grants can revoke only
-their own routes and cannot approve them.
+their own routes and cannot approve them. Revocation, route deletion, and
+same-target runtime rebinding close active HTTP streams, WebSocket upgrades,
+and TCP flows before removing or replacing the exact route claim. A change to
+the stable external listener address or port returns approval to `pending`;
+managed Caddy's ephemeral loopback router does not.
 
 Then request a URL from a workspace:
 
