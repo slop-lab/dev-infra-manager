@@ -27,6 +27,7 @@ describe("external URL config", () => {
       driver: "caddy",
       description: "Public HTTPS",
       scheme: "https",
+      approvalRequired: true,
       argument: JSON.stringify({
         domain: "dev.example.com",
         listenHost: "127.0.0.1",
@@ -37,19 +38,19 @@ describe("external URL config", () => {
     await writeExternalUrlConfig(config, env);
     expect(await readExternalUrlConfig(env)).toMatchObject({
       dnsProviders: { cloudflare: { driver: "cloudflare" } },
-      ingresses: { public: { driver: "caddy" } }
+      ingresses: { public: { driver: "caddy", approvalRequired: true } }
     });
     expect(JSON.parse(await readFile(env.DIM_EXTERNAL_URL_CONFIG, "utf8"))).toMatchObject({ schemaVersion: 1 });
   });
 
   it("leaves opaque arguments to the selected driver", () => {
-    expect(() => validateExternalUrlConfig({
+    expect(validateExternalUrlConfig({
       schemaVersion: 1,
       dnsProviders: {},
       ingresses: {
         public: { driver: "caddy", description: "Public", scheme: "https", argument: "{}" }
       }
-    })).not.toThrow();
+    })).toMatchObject({ ingresses: { public: { approvalRequired: false } } });
   });
 
   it("uses the DIM config namespace", async () => {

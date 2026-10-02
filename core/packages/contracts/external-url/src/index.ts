@@ -39,6 +39,7 @@ export interface ExternalUrlIngressConfig {
   description: string;
   scheme: ExternalUrlScheme;
   argument: string;
+  approvalRequired?: boolean;
 }
 
 export interface ExternalUrlConfig {
@@ -120,11 +121,15 @@ export function validateExternalUrlConfig(value: unknown, source = "external URL
     if (typeof ingress.argument !== "string") {
       throw new Error(`external URL ingress '${name}' requires a string argument`);
     }
+    if (ingress.approvalRequired !== undefined && typeof ingress.approvalRequired !== "boolean") {
+      throw new Error(`external URL ingress '${name}' requires boolean approvalRequired`);
+    }
     ingresses[name] = {
       driver: ingress.driver,
       description: ingress.description.trim(),
       scheme: ingress.scheme as ExternalUrlScheme,
-      argument: ingress.argument
+      argument: ingress.argument,
+      approvalRequired: ingress.approvalRequired === true
     };
   }
   return { schemaVersion: 1, dnsProviders, ingresses };
