@@ -27,11 +27,18 @@
       "types": "./src/development-service.ts",
       "import": "./dist/development-service.js",
       "default": "./dist/development-service.js"
+    },
+    "./workspace-resources": {
+      "types": "./src/workspace-resources.ts",
+      "import": "./dist/workspace-resources.js",
+      "default": "./dist/workspace-resources.js"
     }
   },
   "bin": {
     "dim-controller-proxy": "./dist/cli.js",
-    "dim-development-service": "./dist/development-service-cli.js"
+    "dim-development-service": "./dist/development-service-cli.js",
+    "dim-workspace-resources": "./dist/workspace-resources-cli.js",
+    "dim-nproc": "./dist/nproc-cli.js"
   },
   "scripts": {
     "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
