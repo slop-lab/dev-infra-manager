@@ -32,6 +32,7 @@ interface ApprovalHttpPluginOptions {
   };
   readonly routePolicy?: ExternalUrlRoutePolicyConfig;
   readonly workspace?: ControllerWorkspace;
+  readonly foreignWorkspace?: ControllerWorkspace;
 }
 
 export async function startApprovalHttpPlugin(options: ApprovalHttpPluginOptions) {
@@ -46,7 +47,8 @@ export async function startApprovalHttpPlugin(options: ApprovalHttpPluginOptions
     failInitializationResolution = false,
     approvalExposure,
     routePolicy,
-    workspace: selectedWorkspace = workspace
+    workspace: selectedWorkspace = workspace,
+    foreignWorkspace: selectedForeignWorkspace = foreign
   } = options;
   const registered = await registerPlugins([createExternalUrlsPlugin({
     ingresses: { public: {
@@ -87,7 +89,7 @@ export async function startApprovalHttpPlugin(options: ApprovalHttpPluginOptions
     routes: registered.controllerRoutes,
     authenticate: async (token) => token === "workspace-grant"
       ? selectedWorkspace
-      : token === "foreign-grant" ? foreign : undefined,
+      : token === "foreign-grant" ? selectedForeignWorkspace : undefined,
     runWorkspaceRequest: async (_workspace, operation) => operation(),
     resolveTarget
   });

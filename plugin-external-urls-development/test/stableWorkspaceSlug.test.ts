@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, it } from "vitest";
 import { LifecycleState } from "@slop-lab/dim-core";
+import { workspaceServiceSubdomain } from "@slop-lab/dim-contracts-external-url";
 import {
   adminAction,
   availablePort,
@@ -25,9 +26,13 @@ it("keeps the opencode slug stable and workspace scoped", async () => {
   // Given: two workspaces using one approval-required ingress and one bound target.
   const stateRoot = await mkdtemp(path.join(tmpdir(), "dim-stable-workspace-slug-"));
   cleanup.push(() => rm(stateRoot, { recursive: true, force: true }));
+  const firstWorkspace = { ...workspace, name: "work.foo" };
+  const secondWorkspace = { ...foreign, name: "work_foo" };
+  const firstSubdomain = workspaceServiceSubdomain(firstWorkspace.name, "opencode");
+  const secondSubdomain = workspaceServiceSubdomain(secondWorkspace.name, "opencode");
   const state = new LifecycleState(stateRoot);
-  await state.claimWorkspace(workspaceRecord(workspace));
-  await state.claimWorkspace(workspaceRecord(foreign));
+  await state.claimWorkspace(workspaceRecord(firstWorkspace));
+  await state.claimWorkspace(workspaceRecord(secondWorkspace));
   const upstream = http.createServer((_request, response) => response.end("opencode-target"));
   await listen(upstream);
   cleanup.push(() => closeServer(upstream));
@@ -35,33 +40,36 @@ it("keeps the opencode slug stable and workspace scoped", async () => {
   const started = await startApprovalHttpPlugin({
     stateRoot,
     ingressPort,
-    targetPort: serverPort(upstream)
+    targetPort: serverPort(upstream),
+    workspace: firstWorkspace,
+    foreignWorkspace: secondWorkspace
   });
   cleanup.push(() => started.close());
 
   // When: each workspace requests its fixed slug and the first repeats its request.
-  const first = await createRoute(started.controllerBase, "workspace-grant", "work--opencode");
-  const second = await createRoute(started.controllerBase, "foreign-grant", "foreign--opencode");
-  const repeated = await createRoute(started.controllerBase, "workspace-grant", "work--opencode");
+  const first = await createRoute(started.controllerBase, "workspace-grant", firstSubdomain);
+  const second = await createRoute(started.controllerBase, "foreign-grant", secondSubdomain);
+  const repeated = await createRoute(started.controllerBase, "workspace-grant", firstSubdomain);
 
   // Then: repeat setup reuses one pending identity while workspace authorities remain distinct and closed.
   expect(first.responseStatus).toBe(201);
   expect(second.responseStatus).toBe(201);
   expect(repeated.responseStatus).toBe(200);
   expect(repeated.route).toEqual(first.route);
-  expect(first.route.url).toBe("http://work--opencode.example.test/");
-  expect(second.route.url).toBe("http://foreign--opencode.example.test/");
+  expect(firstSubdomain).not.toBe(secondSubdomain);
+  expect(first.route.url).toBe(`http://${firstSubdomain}.example.test/`);
+  expect(second.route.url).toBe(`http://${secondSubdomain}.example.test/`);
   expect(first.route.approval).toBe("pending");
   expect(second.route.approval).toBe("pending");
-  expect(await proxyRequest(ingressPort, "work--opencode.example.test")).toMatchObject({ status: 404 });
-  expect(await proxyRequest(ingressPort, "foreign--opencode.example.test")).toMatchObject({ status: 404 });
+  expect(await proxyRequest(ingressPort, `${firstSubdomain}.example.test`)).toMatchObject({ status: 404 });
+  expect(await proxyRequest(ingressPort, `${secondSubdomain}.example.test`)).toMatchObject({ status: 404 });
 
   expect((await adminAction(started.adminBase, "url-approve", first.route.id)).status).toBe(200);
-  expect(await proxyRequest(ingressPort, "work--opencode.example.test")).toEqual({
+  expect(await proxyRequest(ingressPort, `${firstSubdomain}.example.test`)).toEqual({
     status: 200,
     body: "opencode-target"
   });
-  expect(await proxyRequest(ingressPort, "foreign--opencode.example.test")).toMatchObject({ status: 404 });
+  expect(await proxyRequest(ingressPort, `${secondSubdomain}.example.test`)).toMatchObject({ status: 404 });
 });
 
 async function createRoute(base: string, grant: string, subdomain: string): Promise<{
