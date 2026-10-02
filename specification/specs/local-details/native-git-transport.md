@@ -33,7 +33,8 @@ required-review, and required-job-set revisions; required job names; baseline
 reviewer IDs; and path-prefix rules that add reviewers. Reviewer and administrator credentials
 remain Project/repository scoped. Reviewers have no Git write role.
 Administrators can inspect and revoke evidence but cannot approve.
-CI credentials additionally bind one job name and cannot report another job;
+Scheduler credentials issue and revoke durable current attempts but cannot
+report results or promote. CI credentials additionally bind one job name and cannot report another job;
 promoter credentials have no Git transport role and cannot bypass the checked
 promotion operation.
 
@@ -116,15 +117,17 @@ approval but grants no additional authority.
 The status API accepts only the native schema-1 `dim.ci.job.completed` event
 envelope. Its payload binds the review's Project, repository, protected ref,
 expected head, candidate commit and tree, policy, review, and job-set revisions,
-plus the authenticated job name, positive attempt, and terminal result. The
+plus the authenticated job name, server-issued attempt ID and number, and terminal result. The
 format is a DIM event contract and makes no claim of GitHub Actions or provider
 API compatibility. One immutable mode-`0600` record may exist for each review,
 job, and attempt; an exact replay is idempotent and conflicting evidence for the
 same attempt is rejected. Startup validates record schema, digest, path, mode,
-and ownership. Promotion considers the highest recorded attempt for every
-currently required job and requires each to be `success` from the currently
+and ownership. Promotion considers only the current durable, unrevoked
+scheduler-issued attempt for every currently required job and requires each to be `success` from the currently
 configured identity for that job.
 
+One Linux abstract socket derived from the canonical storage root gives the
+process a kernel-released ownership lease; duplicate service startup fails.
 The promotion API accepts only a Project/repository-scoped promoter identity.
 The service serializes approval, revocation, CI status, and promotion decisions
 per repository/protected ref. While inside that boundary, promotion rereads the
@@ -152,10 +155,11 @@ The review driver creates a real candidate with additions, deletion, rename,
 mode change, and symbolic-link change; inspects exact refs, SHAs, paths, and
 status through the API and CLI; and proves whole-tree path-owner approval,
 revocation, identity/ref/tree/policy staleness, restart durability, Project and
-role denials. The promotion driver records exact per-job terminal evidence,
+role denials. The promotion driver issues exact attempts before recording per-job terminal evidence,
 restarts the service, compares real `rev-parse` values before and after
 promotion, and proves idempotent retry. Competing real candidates prove exactly
-one CAS winner. Missing, failed/latest-attempt, nonterminal, foreign,
+one CAS winner, while a competing process cannot acquire the same storage root.
+Missing, fabricated-future, late, revoked, failed-current, nonterminal, foreign,
 tuple-mismatched, injected, revoked, stale-policy/head, and non-descendant cases
 leave the protected ref unchanged; smart-HTTP force and deletion denials remain
 in the transport gate.
