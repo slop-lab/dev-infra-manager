@@ -8,7 +8,7 @@ export type ExternalUrlUpstreamMode = "container-dns" | "container-ip";
 export const EXTERNAL_URL_DNS_PROVIDER_EXTENSION = "external-url.dns-provider";
 
 export function workspaceServiceSubdomain(workspaceName: string, serviceName: string): string {
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(serviceName)) {
+  if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(serviceName)) {
     throw new RangeError("service name must be a lowercase DNS label");
   }
   const identity = createHash("sha256").update(workspaceName).digest("hex").slice(0, 16);

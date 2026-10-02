@@ -87,4 +87,15 @@ describe("external URL config", () => {
     expect(label).toHaveLength(63);
     expect(label).toMatch(/-[0-9a-f]{16}--opencode$/);
   });
+
+  it("rejects a service name with a trailing hyphen", () => {
+    // Given: a service name that would terminate the generated DNS label with a hyphen.
+    const serviceName = "preview-";
+
+    // When: the shared workspace service label contract parses it.
+    const generateLabel = () => workspaceServiceSubdomain("work", serviceName);
+
+    // Then: the invalid DNS label is rejected before emission.
+    expect(generateLabel).toThrow("service name must be a lowercase DNS label");
+  });
 });
