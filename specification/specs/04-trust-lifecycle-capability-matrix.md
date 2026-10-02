@@ -42,6 +42,11 @@ CI results MUST bind the same repository, protected ref, candidate commit,
 candidate tree, policy revision, required-job-set revision, job name, attempt,
 and terminal result. CI MUST NOT update a protected ref, approve its own
 candidate, or convert unavailable capacity into success.
+Each result MUST be authenticated as the configured identity for that exact
+Project, repository, and job. When several attempts exist, the highest recorded
+attempt is current; an earlier success MUST NOT override a later failure or
+cancellation. Missing, malformed, foreign, nonterminal, or tuple-mismatched
+input is not successful CI evidence.
 
 **TRUST-PROMOTION-CAS-001:** Protected promotion MUST execute as one
 serialized compare-and-swap operation. While holding the repository/ref
