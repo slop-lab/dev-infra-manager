@@ -4,7 +4,7 @@
 [`@slop-lab/dim-cli`](https://www.npmjs.com/package/@slop-lab/dim-cli). Its own
 executable is also named `dim`. It installs the CLI and plugins with exact
 versions via `npm`, requires no `sudo`, and does not duplicate DIM's command
-tree: anything other than its three installer-owned commands is forwarded
+tree: anything outside its installer-owned namespace is forwarded
 as-is to the installed DIM CLI.
 
 DIM installs and runs on Linux hosts only. macOS, Windows, and Docker Desktop
@@ -16,11 +16,11 @@ Two supported ways to run it, both pinned to an exact version:
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-installer@0.9.0'
-dim install-cli
+dim installer install core
 ```
 
 ```bash
-npx '@slop-lab/dim-installer@0.9.0' install-cli
+npx '@slop-lab/dim-installer@0.9.0' installer install core
 ```
 
 With `mise`, plain `dim ...` keeps working afterwards for both installer
@@ -50,14 +50,14 @@ loads executable plugins — always pin an exact, reviewed version.
 If you install the CLI in direct-PATH mode (see below), `~/.local/bin/dim`
 becomes a symlink straight to the real DIM CLI. Once that `dim` is the one
 your shell resolves first, bare `dim` runs the real CLI directly — the
-facade, and with it `dim installer` / `dim install-cli` / `dim install-plugin`,
+facade, and with it the `dim installer` namespace,
 is no longer reachable that way. To run installer-only commands again
 (upgrading, adding a plugin, repairing), go back to an explicit, pinned
 `npx` call:
 
 ```bash
-npx '@slop-lab/dim-installer@0.9.0' install-cli
-npx '@slop-lab/dim-installer@0.9.0' install-plugin '@example/dim-plugin@1.2.3'
+npx '@slop-lab/dim-installer@0.9.0' installer install core
+npx '@slop-lab/dim-installer@0.9.0' installer install plugin '@example/dim-plugin@1.2.3'
 ```
 
 If both a mise-provided facade and a direct-PATH `dim` are on `PATH`, normal
@@ -76,12 +76,13 @@ always a DIM CLI command, never handled here).
 
 ```text
 dim installer                Open the interactive installer (TTY only)
-dim install-cli [options]    Install/upgrade the DIM CLI
-dim install-plugin PACKAGE@EXACT_VERSION...
+dim installer install core [options]
+                              Install/upgrade DIM core and CLI
+dim installer install plugin PACKAGE@EXACT_VERSION...
                               Install and enable one or more plugins
-dim enable-plugin PACKAGE... Enable installed plugins
-dim disable-plugin PACKAGE... Disable installed plugins without uninstalling
-dim remove-plugin PACKAGE... Uninstall plugins
+dim installer enable-plugin PACKAGE...
+dim installer disable-plugin PACKAGE...
+dim installer remove-plugin PACKAGE...
 ```
 
 Bare `dim` (no arguments) is an alias for `dim installer` only while no DIM
@@ -103,10 +104,10 @@ Prompts for what to install (CLI, plugin(s), or both), then — for the CLI —
 whether to expose a `~/.local/bin/dim` symlink, and — for plugins —
 space-separated, exact-version package specifiers.
 
-### `dim install-cli`
+### `dim installer install core`
 
 ```text
-Usage: dim install-cli [options]
+Usage: dim installer install core [options]
 
 Options:
   --no-local-bin  Install privately for facade use without ~/.local/bin/dim
@@ -118,17 +119,17 @@ Options:
 `--local-bin` and `--no-local-bin` are mutually exclusive. See "CLI install
 modes" below for what each one does and which is the default.
 
-### `dim install-plugin`
+### `dim installer install plugin`
 
 ```text
-Usage: dim install-plugin PACKAGE@EXACT_VERSION...
+Usage: dim installer install plugin PACKAGE@EXACT_VERSION...
 
 Options:
   -h, --help  Show this help
 ```
 
 ```bash
-dim install-plugin '@example/dim-plugin@1.2.3'
+dim installer install plugin '@example/dim-plugin@1.2.3'
 ```
 
 Specifiers must be pinned to an exact version (`name@x.y.z`); this command
@@ -142,9 +143,9 @@ so a later CLI replacement does not depend on the original download or build
 directory. Manage an installed plugin without editing runtime files directly:
 
 ```bash
-dim disable-plugin '@example/dim-plugin'
-dim enable-plugin '@example/dim-plugin'
-dim remove-plugin '@example/dim-plugin'
+dim installer disable-plugin '@example/dim-plugin'
+dim installer enable-plugin '@example/dim-plugin'
+dim installer remove-plugin '@example/dim-plugin'
 ```
 
 Disable keeps the package installed but stops loading it. Enable requires an
@@ -167,7 +168,11 @@ workspace, and CI-runner state read-only with its own parsers. Missing state and
 the exact supported schemas proceed. The sole accepted historical case is host
 schema 1, which prints a warning and remains byte-identical until the controller
 performs its documented startup migration. Unknown plugin-private state is not
-part of this check. Temporary and backup directories are removed after success.
+part of this check. After promotion, the installer runs the installed DIM
+`controller restart` subcommand exactly once and accepts the replacement only
+after that command's readiness check succeeds. Failure restores the previous
+runtime and restarts its controller before reporting the error. Temporary and
+backup directories are removed after success.
 
 Malformed, unsafe, or unsupported known state refuses installation before the
 runtime, config, PATH symlink, or plugin activation changes. Keep the currently
@@ -197,7 +202,7 @@ does not touch `PATH` at all. The facade instead records the absolute
 executable path in its config and proxies every non-installer command to it.
 
 ```bash
-dim install-cli --no-local-bin
+dim installer install core --no-local-bin
 ```
 
 For local DIM development, use the repository installation script. It stages
@@ -211,7 +216,7 @@ just install-dim-local
 An already installed standalone or mise-managed facade cannot retroactively
 enforce compatibility checks introduced by a newer candidate. Local install
 scripts therefore use mise only to provide Node.js and npm, invoke the staged
-target facade by absolute path for `install-cli`, and update a direct global
+target facade by absolute path for `installer install core`, and update a direct global
 facade only after target validation and runtime promotion succeed. The
 installed CLI reports the version stored in config; package-manifest versions
 are not used to construct paths. Plugins share the runtime's
@@ -248,10 +253,10 @@ config, not just `PATH`):
   DIM CLI 0.9.0 (via DIM installer 0.9.0)
   ```
   with a warning if the configured version no longer matches what's actually
-  installed (run `dim install-cli` again to repair).
+installed (run `dim installer install core` again to repair).
 
 Any other command with no CLI installed fails fast with exit code 2 and a
-message pointing at `dim install-cli`, instead of guessing at some other
+message pointing at `dim installer install core`, instead of guessing at some other
 `dim` on `PATH`.
 
 ## Configuration file
@@ -266,7 +271,7 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/dim/config.json
 or the path given by `DIM_CONFIG_PATH`. This file is also read by the DIM
 CLI itself (for example to locate the plugin home), so treat it as shared
 state rather than installer-private cache. You normally don't need to edit
-it by hand — re-run `dim install-cli` / `dim install-plugin` to change what
+it by hand — re-run `dim installer install core` / `dim installer install plugin` to change what
 it points at.
 
 ## What this does not do

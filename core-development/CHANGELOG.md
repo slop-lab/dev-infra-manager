@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Replace top-level installer verbs with the `dim installer install
+  core|plugin` namespace, require exact registry plugin versions, stage plugin
+  graph replacement transactionally, and include one controller
+  restart/readiness gate in core installation with restoration of the prior
+  runtime and controller after injected failure. Add the CLI-owned
+  `dim install-cp` command as an explicit fail-closed gate until native Git and
+  CI scheduler/webhook deployment inputs are reviewed; it installs no separate
+  web UI.
+
 - Add a standalone DIM-owned Git smart-HTTP host with exact
   Project/repository registration, identity-scoped reads, and workspace-bound
   proposal pushes. Its server-side receive policy denies protected refs, tags,
