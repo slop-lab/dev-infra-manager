@@ -300,6 +300,7 @@ class LeaseLossRunner implements StreamingCommandRunner {
 function ordinaryClaim(): OrdinaryPoolClaim {
   return {
     claimId: "claim-1234567890",
+    admissionId: "a".repeat(64),
     jobId: 101,
     projectId: "project-a",
     projectName: "alpha",

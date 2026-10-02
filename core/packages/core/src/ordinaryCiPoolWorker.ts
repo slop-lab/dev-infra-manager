@@ -10,6 +10,7 @@ import type { StreamingCommandRunner } from "./types.js";
 
 export type OrdinaryPoolClaim = {
   readonly claimId: string;
+  readonly admissionId: string;
   readonly jobId: number;
   readonly projectId: string;
   readonly projectName: string;

@@ -75,7 +75,11 @@ describe("ordinary CI pool multi-host driver", () => {
     const firstPool = await startPool(root, database, { now: () => now, leaseMilliseconds: 100 });
     await webhook(firstPool, "project-a", "webhook-a", 303);
     const original = await poolClaim(firstPool, "host-a", "host-a-token", "original");
-    const claim = await original.json() as { readonly claimId: string; readonly projectId: string };
+    const claim = await original.json() as {
+      readonly claimId: string;
+      readonly projectId: string;
+      readonly admissionId: string;
+    };
     const firstServer = servers[servers.length - 1];
     if (firstServer === undefined) throw new Error("pool server is missing");
     firstServer.close();
@@ -93,6 +97,7 @@ describe("ordinary CI pool multi-host driver", () => {
 
     // Then
     expect(result.status).toBe("completed");
+    expect(result).toMatchObject({ claim: { admissionId: claim.admissionId } });
     expect(runner.events.indexOf("docker:remove")).toBeLessThan(runner.events.indexOf("docker:run"));
     expect(runner.maximumActive).toBe(1);
   });
