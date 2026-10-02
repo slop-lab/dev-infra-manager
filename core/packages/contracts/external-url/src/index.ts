@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -5,6 +6,19 @@ import path from "node:path";
 export type ExternalUrlScheme = "http" | "https" | "tcp";
 export type ExternalUrlUpstreamMode = "container-dns" | "container-ip";
 export const EXTERNAL_URL_DNS_PROVIDER_EXTENSION = "external-url.dns-provider";
+
+export function workspaceServiceSubdomain(workspaceName: string, serviceName: string): string {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(serviceName)) {
+    throw new RangeError("service name must be a lowercase DNS label");
+  }
+  const identity = createHash("sha256").update(workspaceName).digest("hex").slice(0, 16);
+  const suffix = `-${identity}--${serviceName}`;
+  const maximumWorkspaceLength = 63 - suffix.length;
+  if (maximumWorkspaceLength < 1) throw new RangeError("service name is too long for a workspace subdomain");
+  const normalized = workspaceName.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/^-+|-+$/g, "") || "workspace";
+  const workspace = normalized.slice(0, maximumWorkspaceLength).replace(/-+$/g, "") || "workspace";
+  return `${workspace}${suffix}`;
+}
 
 export interface ExternalUrlDnsOperation {
   providerArgument: string;

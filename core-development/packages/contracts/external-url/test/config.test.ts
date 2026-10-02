@@ -6,6 +6,7 @@ import {
   emptyExternalUrlConfig,
   externalUrlConfigPath,
   readExternalUrlConfig,
+  workspaceServiceSubdomain,
   validateExternalUrlConfig,
   writeExternalUrlConfig
 } from "../../../../../core/packages/contracts/external-url/src/index.js";
@@ -57,5 +58,33 @@ describe("external URL config", () => {
     const root = await mkdtemp(path.join(tmpdir(), "dim-external-path-"));
     roots.push(root);
     expect(externalUrlConfigPath({ XDG_CONFIG_HOME: root })).toBe(path.join(root, "dim", "external-urls.json"));
+  });
+
+  it("builds distinct DNS labels for normalized workspace-name collisions", () => {
+    // Given: valid workspace names that share the legacy normalized spelling.
+    const workspaceNames = ["work.foo", "work_foo", "work-foo"];
+
+    // When: each workspace receives the same logical service name.
+    const labels = workspaceNames.map((workspaceName) => workspaceServiceSubdomain(workspaceName, "opencode"));
+
+    // Then: each stable label remains distinct and DNS-safe.
+    expect(new Set(labels)).toHaveLength(3);
+    for (const label of labels) {
+      expect(label.length).toBeLessThanOrEqual(63);
+      expect(label).toMatch(/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/);
+      expect(label).toMatch(/--opencode$/);
+    }
+  });
+
+  it("bounds a maximum-length workspace service label", () => {
+    // Given: the longest valid lifecycle workspace name.
+    const workspaceName = `work-${"x".repeat(43)}`;
+
+    // When: its service label is generated.
+    const label = workspaceServiceSubdomain(workspaceName, "opencode");
+
+    // Then: the identity hash is retained inside one DNS label.
+    expect(label).toHaveLength(63);
+    expect(label).toMatch(/-[0-9a-f]{16}--opencode$/);
   });
 });
