@@ -87,7 +87,8 @@ not require its binaries, containers, credentials, or network access.
 
 The current core contains one built-in managed Gitea service boundary. The
 separate `dim-native-git` package now provides an unselected proposal-only
-smart-HTTP foundation; it exposes no review, merge, or protected-promotion
+smart-HTTP host with durable complete-tree human-review evidence. Approval is
+non-promotable: the package exposes no CI status, merge, or protected-promotion
 authority and does not replace current Gitea lifecycle behavior.
 External source and destination transport still runs through the host Git CLI
 and is provider-neutral. A future replacement for managed Gitea must preserve
