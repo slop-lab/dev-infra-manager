@@ -44,12 +44,22 @@ fi
 
 DIM_DEVELOPMENT_GATEWAY_PORT="$(dim-development-service gateway-port)"
 export DIM_DEVELOPMENT_GATEWAY_PORT
+opencode_workspace_slug="$(printf '%s' "${DIM_WORKSPACE_NAME:?}" | sed 's/[._]/-/g; s/-*$//')--opencode"
 dim-controller-proxy ensure external-url \
   --listen /tmp/dim-development-url/controller.sock \
   --ingress https-ts \
   --bind-containers-json '["agent-dind","dim-agent"]' \
   --bind-protocol http \
   --bind-port "$DIM_DEVELOPMENT_GATEWAY_PORT" \
+  --directory-mode 0755 \
+  --socket-mode 0666
+dim-controller-proxy ensure external-url \
+  --listen /tmp/dim-development-url/opencode.sock \
+  --ingress https-ts \
+  --bind-containers-json '["agent-dind","dim-agent"]' \
+  --bind-protocol http \
+  --bind-port "$DIM_DEVELOPMENT_GATEWAY_PORT" \
+  --bind-service-subdomain "opencode-web=$opencode_workspace_slug" \
   --directory-mode 0755 \
   --socket-mode 0666
 

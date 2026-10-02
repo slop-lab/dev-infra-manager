@@ -9,6 +9,7 @@ services:
       DOCKER_HOST: "tcp://agent-dind:2375"
       DIM_CONTROLLER_SOCKET: "/run/dim/controller-proxy/agent.sock"
       DIM_DEVELOPMENT_URL_SOCKET: "/run/dim/development-url/controller.sock"
+      OPENCODE_WEB_URL_SOCKET: "/run/dim/development-url/opencode.sock"
       DIM_GIT_USERNAME: "${DIM_GIT_USERNAME:?}"
       DIM_GIT_TOKEN: "${DIM_GIT_TOKEN:?}"
       GIT_AUTHOR_NAME: "${GIT_AUTHOR_NAME:-}"

@@ -35,6 +35,7 @@ case "${1:?private agent action is required}" in
       --env 'DIM_EXTERNAL_URL_CONTAINERS_JSON=["agent-dind","dim-agent"]' \
       --mount type=bind,src=/run/dim/external-url,dst=/run/dim/external-url,readonly \
       --env DIM_DEVELOPMENT_URL_SOCKET=/run/dim/development-url/controller.sock \
+      --env OPENCODE_WEB_URL_SOCKET=/run/dim/development-url/opencode.sock \
       --mount type=bind,src=/run/dim/development-url,dst=/run/dim/development-url,readonly \
       --mount type=bind,src=/usr/local/lib/dim/controller-proxy,dst=/usr/local/lib/dim/controller-proxy,readonly \
       --env "DIM_GIT_USERNAME=$DIM_GIT_USERNAME" \
