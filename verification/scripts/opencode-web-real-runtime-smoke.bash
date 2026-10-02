@@ -8,6 +8,7 @@ fixture_pid=""
 proxy_pid=""
 server_pid=""
 wildcard_pid=""
+gateway_lock=""
 
 process_start_time() {
   node - "$1" <<'NODE'
@@ -52,17 +53,26 @@ cleanup() {
     status=1
   fi
   rm -rf -- "$work_dir"
+  [[ -z "$gateway_lock" ]] || rm -f -- "$gateway_lock"
   return "$status"
 }
 trap cleanup EXIT
 
-exec {gateway_lock_fd}>/tmp/dim-development-service-gateway-31887.lock
+available_port() {
+  node -e 'const s=require("node:net").createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})'
+}
+
+gateway_port="$(available_port)"
+[[ "$gateway_port" != 31887 ]]
+gateway_lock="/tmp/dim-development-service-gateway-${gateway_port}.lock"
+exec {gateway_lock_fd}>"$gateway_lock"
 flock --wait 30 "$gateway_lock_fd"
-node - <<'NODE'
+node - "$gateway_port" <<'NODE'
 import net from "node:net";
+const port = Number.parseInt(process.argv[2], 10);
 const server = net.createServer();
 server.once("error", () => process.exit(1));
-server.listen(31887, "127.0.0.1", () => server.close());
+server.listen(port, "127.0.0.1", () => server.close());
 NODE
 
 find_opencode() {
@@ -76,20 +86,34 @@ find_opencode() {
   printf '%s\n' "$work_dir/install-home/.local/bin/opencode"
 }
 
-available_port() {
-  node -e 'const s=require("node:net").createServer();s.listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})'
-}
-
 pnpm --filter @slop-lab/dim-controller-proxy run build >/dev/null
 chmod 0700 "$repo_root/core/packages/controller-proxy/dist/development-service-cli.js" \
   "$repo_root/core/packages/controller-proxy/dist/cli.js"
+runtime_dir="$work_dir/controller-proxy"
+mkdir -p "$runtime_dir/node_modules/@slop-lab"
+cp -a "$repo_root/core/packages/controller-proxy/dist/." "$runtime_dir/"
+ln -s "$repo_root/core/packages/contracts/external-url" \
+  "$runtime_dir/node_modules/@slop-lab/dim-contracts-external-url"
+node - "$runtime_dir/development-service-state.js" "$gateway_port" <<'NODE'
+import fs from "node:fs";
+const [file, port] = process.argv.slice(2);
+const expected = "export const DEVELOPMENT_SERVICE_GATEWAY_PORT = 31_887;";
+const source = fs.readFileSync(file, "utf8");
+if (source.indexOf(expected) === -1 || source.indexOf(expected) !== source.lastIndexOf(expected)) {
+  throw new Error("expected exactly one generated development gateway port assignment");
+}
+fs.writeFileSync(file, source.replace(expected, `export const DEVELOPMENT_SERVICE_GATEWAY_PORT = ${port};`));
+NODE
+chmod 0700 "$runtime_dir/development-service-cli.js" "$runtime_dir/cli.js"
+[[ "$("$repo_root/core/packages/controller-proxy/dist/development-service-cli.js" gateway-port)" = 31887 ]]
+[[ "$("$runtime_dir/development-service-cli.js" gateway-port)" = "$gateway_port" ]]
 opencode_binary="$(find_opencode)"
 [[ "$($opencode_binary --version)" = 1.18.31 ]]
 mkdir -p "$work_dir/home" "$work_dir/tools"
 ln -s "$opencode_binary" "$work_dir/tools/opencode"
-ln -s "$repo_root/core/packages/controller-proxy/dist/development-service-cli.js" \
+ln -s "$runtime_dir/development-service-cli.js" \
   "$work_dir/tools/dim-development-service"
-ln -s "$repo_root/core/packages/controller-proxy/dist/cli.js" "$work_dir/tools/dim-controller-proxy"
+ln -s "$runtime_dir/cli.js" "$work_dir/tools/dim-controller-proxy"
 
 opencode_port="$(available_port)"
 external_port="$(available_port)"
@@ -103,7 +127,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=service-1.example.test -days
   -keyout "$work_dir/key.pem" -out "$work_dir/cert.pem" >/dev/null 2>&1
 
 node "$script_dir/opencode-web-real-runtime-fixture.mjs" "$source_socket" "$development_socket" "$proxy_socket" \
-  "$external_port" "$before_requests" "$after_requests" "$work_dir/key.pem" "$work_dir/cert.pem" &
+  "$external_port" "$gateway_port" "$before_requests" "$after_requests" "$work_dir/key.pem" "$work_dir/cert.pem" &
 fixture_pid=$!
 for attempt in $(seq 1 100); do
   [[ -S "$source_socket" && -S "$development_socket" ]] && break
@@ -113,7 +137,7 @@ done
 
 DIM_CONTROLLER_SOCKET="$source_socket" DIM_CONTROLLER_TOKEN=fixture-token \
   "$work_dir/tools/dim-controller-proxy" external-url --listen "$proxy_socket" --ingress https-ts \
-  --bind-containers-json '["fixture"]' --bind-protocol http --bind-port 31887 \
+  --bind-containers-json '["fixture"]' --bind-protocol http --bind-port "$gateway_port" \
   --bind-service-subdomain opencode-web=fixture--opencode \
   >"$work_dir/proxy.log" 2>&1 &
 proxy_pid=$!
@@ -307,9 +331,10 @@ if HOME="$work_dir/home" PATH="$work_dir/tools:/usr/local/bin:/usr/bin:/bin" \
 fi
 grep -Fq 'external URL registration failed (403)' "$work_dir/wrong-service.stderr"
 
-node - "$before_requests" "$after_requests" <<'NODE'
+node - "$gateway_port" "$before_requests" "$after_requests" <<'NODE'
 import fs from "node:fs";
-const [beforeFile, afterFile] = process.argv.slice(2);
+const [gatewayPortText, beforeFile, afterFile] = process.argv.slice(2);
+const gatewayPort = Number.parseInt(gatewayPortText, 10);
 const before = fs.readFileSync(beforeFile, "utf8").trim().split("\n").map(JSON.parse);
 const after = fs.readFileSync(afterFile, "utf8").trim().split("\n").map(JSON.parse);
 if (before.length !== 2
@@ -317,7 +342,7 @@ if (before.length !== 2
   || JSON.stringify(before[1]) !== '{"ingress":"https-ts","service":"generic-http"}') {
   throw new Error(`unexpected helper requests: ${JSON.stringify(before)}`);
 }
-const target = { containers: ["fixture"], protocol: "http", port: 31887 };
+const target = { containers: ["fixture"], protocol: "http", port: gatewayPort };
 if (after.length !== 1 || after[0].subdomain !== "fixture--opencode"
   || JSON.stringify(after[0].target) !== JSON.stringify(target)) {
   throw new Error(`unexpected bound requests: ${JSON.stringify(after)}`);
@@ -364,4 +389,5 @@ printf 'cors-evidence default-options=%s default-get=%s remote-options=%s remote
   "$untrusted_status" "$missing_auth_status" "$wrong_auth_status"
 printf '%s\n' 'cors-pid-evidence equivalent=reused changed=restarted removed=restarted wildcard=rejected-owned-process-preserved'
 printf 'cors-wildcard-runtime-evidence pinned=1.18.31 get=%s arbitrary-origin-allow-header=absent\n' "$wildcard_runtime_status"
+printf 'gateway-port-evidence original=31887 isolated=%s\n' "$gateway_port"
 printf '%s\n' opencode-web-real-runtime-smoke-ok

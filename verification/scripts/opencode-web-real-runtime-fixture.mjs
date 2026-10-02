@@ -2,8 +2,9 @@ import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
 
-const [sourceSocket, developmentSocket, proxySocket, externalPortText, beforeFile, afterFile, keyFile, certFile] = process.argv.slice(2);
+const [sourceSocket, developmentSocket, proxySocket, externalPortText, gatewayPortText, beforeFile, afterFile, keyFile, certFile] = process.argv.slice(2);
 const externalPort = Number.parseInt(externalPortText, 10);
+const gatewayPort = Number.parseInt(gatewayPortText, 10);
 const urls = [];
 for (const socket of [sourceSocket, developmentSocket]) {
   try {
@@ -71,7 +72,7 @@ http.createServer(async (request, response) => {
 const tls = https.createServer({ key: fs.readFileSync(keyFile), cert: fs.readFileSync(certFile) }, (request, response) => {
   const upstream = http.request({
     host: "127.0.0.1",
-    port: 31887,
+    port: gatewayPort,
     method: request.method,
     path: request.url,
     headers: request.headers
@@ -86,7 +87,7 @@ const tls = https.createServer({ key: fs.readFileSync(keyFile), cert: fs.readFil
 tls.on("upgrade", (request, socket, head) => {
   const upstream = http.request({
     host: "127.0.0.1",
-    port: 31887,
+    port: gatewayPort,
     method: request.method,
     path: request.url,
     headers: request.headers
