@@ -19,6 +19,7 @@ import { createPromotionService } from "./promotion-service.js";
 import { createRefSerializer } from "./ref-serializer.js";
 import { createReviewService } from "./review-service.js";
 import { nativeGitRoute } from "./routing.js";
+import { acquireStorageOwner, type StorageOwner } from "./storage-owner.js";
 
 export type NativeGitServer = {
   readonly server: Server;
@@ -38,6 +39,7 @@ export function createNativeGitServer(input: NativeGitServiceConfig): NativeGitS
     promotion: createPromotionService(config, serializer)
   };
   let gitIdentity: GitExecutableIdentity | undefined;
+  let storageOwner: StorageOwner | undefined;
   let activeBackends = 0;
   const server = createServer((request, response) => {
     const reviewRoute = nativeGitReviewRoute(request);
@@ -73,18 +75,28 @@ export function createNativeGitServer(input: NativeGitServiceConfig): NativeGitS
   return {
     server,
     async listen() {
-      gitIdentity = await assertGitVersion(config);
-      await Promise.all(config.repositories.map((repository) => assertRegisteredRepository(config, repository)));
-      server.listen(config.port, config.host);
-      await once(server, "listening");
-      const address = server.address();
-      if (address === null || typeof address === "string") throw new NativeGitListenError("expected a TCP listener");
-      return `http://${config.host}:${address.port}`;
+      storageOwner = await acquireStorageOwner(config.storageRoot);
+      try {
+        gitIdentity = await assertGitVersion(config);
+        await Promise.all(config.repositories.map((repository) => assertRegisteredRepository(config, repository)));
+        server.listen(config.port, config.host);
+        await once(server, "listening");
+        const address = server.address();
+        if (address === null || typeof address === "string") throw new NativeGitListenError("expected a TCP listener");
+        return `http://${config.host}:${address.port}`;
+      } catch (error) {
+        await storageOwner.release();
+        storageOwner = undefined;
+        throw error;
+      }
     },
     async close() {
-      if (!server.listening) return;
-      server.close();
-      await once(server, "close");
+      if (server.listening) {
+        server.close();
+        await once(server, "close");
+      }
+      await storageOwner?.release();
+      storageOwner = undefined;
     }
   };
 }

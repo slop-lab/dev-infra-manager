@@ -1,5 +1,6 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { createNativeGitServer } from "../../../../core/packages/native-git/src/index.js";
 import { refValue } from "./nativeGitHarness.js";
 import {
   nativeGitReviewFixture,
@@ -13,6 +14,7 @@ import {
 } from "./nativeGitReviewHarness.js";
 
 const fixtures: ReviewFixture[] = [];
+const run = promisify(execFile);
 
 afterEach(async () => {
   await Promise.all(fixtures.splice(0).map((fixture) => fixture.close()));
@@ -124,25 +126,21 @@ describe("DIM native Git immutable human approval", () => {
     expect(stringArrayField(reviewerDrift, "staleReasons")).toContain("reviewer-identity-changed");
   });
 
-  it("does not let durable review evidence grant a fresh server protected-write authority", async () => {
+  it("rejects a second process before it can race revocation with promotion", async () => {
     // Given
     const fixture = await startFixture();
-    const reviewId = await createAndFullyApprove(fixture);
-    const secondServer = createNativeGitServer({ ...fixture.config, port: 0 });
-    const baseUrl = await secondServer.listen();
+    const script = `import { createNativeGitServer } from "../core/packages/native-git/src/index.ts";
+const server = createNativeGitServer(JSON.parse(process.env.DIM_TEST_CONFIG));
+try { await server.listen(); await server.close(); } catch (error) { console.error(error instanceof Error ? error.message : error); process.exitCode = 23; }`;
 
-    try {
-      // When
-      const endpoint = `${baseUrl.replace("http://", "http://writer-a:writer-a-secret-1@")}/v1/projects/project-a/repositories/source.git`;
-      const attempt = fixture.git(fixture.clone, ["push", endpoint, `HEAD:refs/heads/main`]);
+    // When
+    const attempt = run(process.execPath, ["--import", "tsx", "--input-type=module", "--eval", script], {
+      cwd: process.cwd(),
+      env: { ...process.env, DIM_TEST_CONFIG: JSON.stringify({ ...fixture.config, port: 0 }) }
+    });
 
-      // Then
-      await expect(attempt).rejects.toBeDefined();
-      expect(stringField(await getReview(fixture, reviewId), "status")).toBe("approved");
-      expect(await refValue(fixture.repositoryPath, "refs/heads/main")).toBe(fixture.protectedHead);
-    } finally {
-      await secondServer.close();
-    }
+    // Then
+    await expect(attempt).rejects.toMatchObject({ code: 23, stderr: expect.stringMatching(/storage root.*active server/i) });
   });
 });
 
