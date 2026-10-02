@@ -3,6 +3,7 @@ import net from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ControllerWorkspace, ResolvedWorkspaceTarget, WorkspaceTarget } from "@slop-lab/dim-core";
 import { TcpIngressListener, type TcpExternalRoute } from "../../plugin-external-urls/src/tcpIngress.js";
+import { within } from "./support/within.js";
 
 const workspace: ControllerWorkspace = {
   id: "project:work",
@@ -220,13 +221,4 @@ function address(server: net.Server): net.AddressInfo {
   const value = server.address();
   if (!value || typeof value === "string") throw new Error("missing TCP address");
   return value;
-}
-
-function within<T>(operation: Promise<T>, milliseconds: number): Promise<T> {
-  return Promise.race([
-    operation,
-    new Promise<never>((_resolve, reject) => {
-      setTimeout(() => reject(new Error(`operation exceeded ${milliseconds}ms`)), milliseconds);
-    })
-  ]);
 }
