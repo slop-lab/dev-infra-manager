@@ -52,6 +52,30 @@ describe("development service exposure", () => {
     expect((await fixture.gateway.getRoute("demo"))?.urlId).toBe("url-2");
   });
 
+  it("adopts a listed slug change for the existing route identity", async () => {
+    // Given: the gateway persists one route and the plugin later changes only its policy-selected slug.
+    const fixture = await setup();
+    await exposeDevelopmentService(fixture.options(4101));
+    fixture.urls.splice(0, 1, {
+      id: "url-1",
+      ingress: "https-main",
+      url: "https://changed.example.test",
+      permalink: "https://demo-permalink-url-1.example.test"
+    });
+
+    // When: the same service is exposed again through the same bound ingress.
+    const exposed = await exposeDevelopmentService(fixture.options(4102));
+
+    // Then: the gateway adopts the current slug without registering a duplicate URL.
+    expect(exposed).toBe("https://changed.example.test");
+    expect(fixture.posts).toEqual([{ ingress: "https-main" }]);
+    expect(await fixture.gateway.getRoute("demo")).toMatchObject({
+      urlId: "url-1",
+      authority: "changed.example.test",
+      targetPort: 4102
+    });
+  });
+
   it.each(["http", "tcp"] as const)(
     "rejects a %s ingress whose discovered scheme does not meet the requirement",
     async (scheme) => {

@@ -46,10 +46,10 @@ async function exposeLocked(options: ExposeDevelopmentServiceOptions): Promise<s
   if (currentRoute !== undefined) {
     const urls = await listExternalUrls(options.developmentUrlSocket);
     const currentUrl = urls.find(({ id }) => id === currentRoute.urlId);
-    if (currentUrl !== undefined
-      && currentUrl.ingress === options.ingress
-      && sameExternalUrl(currentUrl, currentRoute)) {
-      const updated = { ...currentRoute, targetPort: options.targetPort };
+    const updated = currentUrl === undefined || currentUrl.ingress !== options.ingress
+      ? undefined
+      : adoptCurrentRoute(currentUrl, currentRoute, options);
+    if (updated !== undefined) {
       await setControlledRoute(options.gatewayControlSocket, updated);
       return updated.url;
     }
@@ -58,18 +58,7 @@ async function exposeLocked(options: ExposeDevelopmentServiceOptions): Promise<s
   if (created.ingress !== options.ingress) {
     throw new DevelopmentServiceExposureError("external URL response used an unexpected ingress");
   }
-  const parsed = parseExternalUrl(created.url, options.requiredScheme);
-  const parsedPermalink = parseExternalUrl(created.permalink, options.requiredScheme);
-  const route: DevelopmentServiceRoute = {
-    name: options.name,
-    urlId: created.id,
-    url: parsed.url,
-    authority: parsed.authority,
-    permalink: parsedPermalink.url,
-    permalinkAuthority: parsedPermalink.authority,
-    ingress: created.ingress,
-    targetPort: options.targetPort
-  };
+  const route = developmentServiceRoute(created, options);
   await setControlledRoute(options.gatewayControlSocket, route);
   return route.url;
 }
@@ -163,18 +152,39 @@ function validateOptions(options: ExposeDevelopmentServiceOptions): void {
   }
 }
 
-function sameExternalUrl(externalUrl: ExternalUrl, route: DevelopmentServiceRoute): boolean {
+function adoptCurrentRoute(
+  externalUrl: ExternalUrl,
+  currentRoute: DevelopmentServiceRoute,
+  options: ExposeDevelopmentServiceOptions
+): DevelopmentServiceRoute | undefined {
   try {
-    const parsed = parseExternalUrl(externalUrl.url);
-    const parsedPermalink = parseExternalUrl(externalUrl.permalink);
-    return parsed.url === route.url
-      && parsed.authority === route.authority
-      && parsedPermalink.url === route.permalink
-      && parsedPermalink.authority === route.permalinkAuthority;
+    const listedRoute = developmentServiceRoute(externalUrl, options);
+    return listedRoute.permalink === currentRoute.permalink
+      && listedRoute.permalinkAuthority === currentRoute.permalinkAuthority
+      ? listedRoute
+      : undefined;
   } catch (error) {
-    if (error instanceof DevelopmentServiceExposureError) return false;
+    if (error instanceof DevelopmentServiceExposureError) return undefined;
     throw error;
   }
+}
+
+function developmentServiceRoute(
+  externalUrl: ExternalUrl,
+  options: ExposeDevelopmentServiceOptions
+): DevelopmentServiceRoute {
+  const parsed = parseExternalUrl(externalUrl.url, options.requiredScheme);
+  const parsedPermalink = parseExternalUrl(externalUrl.permalink, options.requiredScheme);
+  return {
+    name: options.name,
+    urlId: externalUrl.id,
+    url: parsed.url,
+    authority: parsed.authority,
+    permalink: parsedPermalink.url,
+    permalinkAuthority: parsedPermalink.authority,
+    ingress: externalUrl.ingress,
+    targetPort: options.targetPort
+  };
 }
 
 function parseExternalUrl(
