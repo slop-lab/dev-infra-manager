@@ -19,6 +19,7 @@ import {
   updateWorkspace,
   updateWorkspaceResources
 } from "../../../../core/packages/core/src/workspaceLifecycle.js";
+import { withWorkspaceLifecycleProgress } from "../../../../core/packages/core/src/workspaceLifecycleError.js";
 
 import { options, projectFixture, repositorySnapshot, workspaceFixture } from "./workspaceUpdateLockFixture.js";
 import { COMMIT, LockInterleaving, MOVED_HEAD_COMMIT, MOVED_SOURCE_COMMIT, UpdateRunner } from "./workspaceUpdateLockRunner.js";
@@ -258,6 +259,30 @@ it("recovers a failed manifest publication through a later update", async () => 
     })).rejects.toThrow(/not ready \(phase: setup-error\)/);
     expect(runner.streamingCalls).toHaveLength(1);
     expect(persistedPhases).not.toContain("ready");
+  });
+
+  it("does not report Project setup re-entry while publishing its failure", async () => {
+    // Given
+    runner = new UpdateRunner(0, 17);
+    runner.containerRootSnapshotPath = join(root, "assets", "project-roots", workspace.projectId, workspace.rootCommit);
+    const stages: string[] = [];
+
+    // When
+    const updating = withWorkspaceLifecycleProgress(
+      (_operation, stage) => stages.push(stage),
+      () => updateWorkspace(runner, options(root), workspace.name)
+    );
+
+    // Then
+    await expect(updating).rejects.toThrow("workspace update at Project setup: project setup exited with 17");
+    const setupStart = stages.lastIndexOf("setup-state publication");
+    expect(stages.slice(setupStart)).toEqual([
+      "setup-state publication",
+      "Project setup",
+      "setup-error publication",
+      "workspace setup lock release",
+      "Project lock release"
+    ]);
   });
 
   it("replaces the owned outer container before setup when the approved root changes", async () => {

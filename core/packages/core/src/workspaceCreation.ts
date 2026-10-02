@@ -37,7 +37,7 @@ export async function createWorkspace(
   },
   plugins: Pick<RegisteredDimPlugins, "workspaceCapabilityProviders"> = { workspaceCapabilityProviders: new Map() }
 ): Promise<WorkspaceRecord> {
-  return runWorkspaceLifecycle("create", async (setStage) => {
+  return runWorkspaceLifecycle("create", async (setStage, setErrorStage) => {
     const project = validateLifecycleName(input.project, "project");
     const name = validateLifecycleName(input.name, "workspace");
     const profiles = validateWorkspaceProfiles(input.profiles);
@@ -159,7 +159,9 @@ export async function createWorkspace(
         }
         setStage("workspace reconciliation");
         const reconciled = await reconcileProject(runner, options, state, record, projectRecord, repo, setStage);
-        return await setupWorkspaceLocked(runner, options, state, reconciled, false, false, setStage);
+        return await setupWorkspaceLocked(
+          runner, options, state, reconciled, false, false, setStage, setErrorStage
+        );
       } finally {
         await runWorkspaceLifecycleStage("create", "workspace setup lock release", release);
       }

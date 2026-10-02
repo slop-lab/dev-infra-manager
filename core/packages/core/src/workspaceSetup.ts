@@ -15,13 +15,9 @@ import type { WorkspaceGitEnvironment } from "./workspaceLifecycleTypes.js";
 import {
   runWorkspaceLifecycle,
   runWorkspaceLifecycleStage,
-  type SetWorkspaceLifecycleStage
+  type SetWorkspaceLifecycleErrorStage, type SetWorkspaceLifecycleStage
 } from "./workspaceLifecycleError.js";
-import {
-  assertRootSnapshot,
-  installHostInputHelper,
-  runProjectSetup
-} from "./workspaceProjectCommands.js";
+import { assertRootSnapshot, installHostInputHelper, runProjectSetup } from "./workspaceProjectCommands.js";
 import { applySelectedRoot } from "./workspacePublication.js";
 import { inspectWorkspaceContainer } from "./workspaceResourceOwnership.js";
 import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
@@ -42,7 +38,7 @@ export async function setupWorkspace(
   name: string,
   profilesChanged = false
 ): Promise<WorkspaceRecord> {
-  return runWorkspaceLifecycle("setup", async (setStage) => {
+  return runWorkspaceLifecycle("setup", async (setStage, setErrorStage) => {
     const workspaceName = validateLifecycleName(name, "workspace");
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
@@ -85,7 +81,7 @@ export async function setupWorkspace(
             }
           });
         }
-        return await setupWorkspaceLocked(runner, options, state, record, profilesChanged, false, setStage);
+        return await setupWorkspaceLocked(runner, options, state, record, profilesChanged, false, setStage, setErrorStage);
       } finally {
         await runWorkspaceLifecycleStage("setup", "workspace setup lock release", release);
       }
@@ -102,7 +98,8 @@ export async function setupWorkspaceLocked(
   initialRecord: WorkspaceRecord,
   profilesChanged = false,
   forceRecreate = false,
-  setStage: SetWorkspaceLifecycleStage = () => undefined
+  setStage: SetWorkspaceLifecycleStage = () => undefined,
+  setErrorStage: SetWorkspaceLifecycleErrorStage = () => undefined
 ): Promise<WorkspaceRecord> {
   let record = initialRecord;
   setStage("workspace container readiness");
@@ -139,7 +136,7 @@ export async function setupWorkspaceLocked(
     };
     setStage("setup-error publication");
     await state.writeWorkspace(record);
-    setStage("Project setup");
+    setErrorStage("Project setup");
     throw new UserError(setupError);
   }
   record = {
@@ -160,7 +157,7 @@ export async function setupWorkspaceLocked(
       error: error instanceof Error ? error.message : String(error),
       updatedAt: new Date().toISOString()
     });
-    setStage("ready-state publication");
+    setErrorStage("ready-state publication");
     throw error;
   }
   return record;

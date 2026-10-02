@@ -6,6 +6,7 @@ import type { StreamingCommandRunner } from "./types.js";
 import {
   runWorkspaceLifecycle,
   runWorkspaceLifecycleStage,
+  type SetWorkspaceLifecycleErrorStage,
   type SetWorkspaceLifecycleStage
 } from "./workspaceLifecycleError.js";
 import { assertContainerRunning } from "./workspaceContainer.js";
@@ -29,7 +30,7 @@ export async function updateWorkspace(
   name: string,
   profiles?: string[]
 ): Promise<WorkspaceRecord> {
-  return runWorkspaceLifecycle("update", async (setStage) => {
+  return runWorkspaceLifecycle("update", async (setStage, setErrorStage) => {
     const workspaceName = validateLifecycleName(name, "workspace");
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
@@ -82,7 +83,8 @@ export async function updateWorkspace(
           record,
           oldProfiles.join("\0") !== nextProfiles.join("\0"),
           false,
-          setStage
+          setStage,
+          setErrorStage
         );
       } finally {
         await runWorkspaceLifecycleStage("update", "workspace setup lock release", release);
@@ -98,7 +100,7 @@ export async function startWorkspace(
   options: LifecycleOptions,
   name: string
 ): Promise<WorkspaceRecord> {
-  return runWorkspaceLifecycle("start", async (setStage) => {
+  return runWorkspaceLifecycle("start", async (setStage, setErrorStage) => {
     const workspaceName = validateLifecycleName(name, "workspace");
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
@@ -114,7 +116,9 @@ export async function startWorkspace(
       setStage("workspace setup lock acquisition");
       const release = await state.acquireWorkspaceSetupLock(workspaceName);
       try {
-        return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot, setStage);
+        return await startWorkspaceLocked(
+          runner, options, state, workspaceName, selectedRoot, setStage, setErrorStage
+        );
       } finally {
         await runWorkspaceLifecycleStage("start", "workspace setup lock release", release);
       }
@@ -130,7 +134,8 @@ async function startWorkspaceLocked(
   state: LifecycleState,
   workspaceName: string,
   selectedRoot: ProtectedRootSnapshot,
-  setStage: SetWorkspaceLifecycleStage
+  setStage: SetWorkspaceLifecycleStage,
+  setErrorStage: SetWorkspaceLifecycleErrorStage
 ): Promise<WorkspaceRecord> {
   setStage("workspace runtime reconciliation");
   let record = await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(workspaceName));
@@ -155,7 +160,7 @@ async function startWorkspaceLocked(
   const updated = await applySelectedRoot({
     runner, state, record: reconciled.record, target: selectedRoot, containerId: reconciled.containerId
   });
-  return setupWorkspaceLocked(runner, options, state, updated, false, true, setStage);
+  return setupWorkspaceLocked(runner, options, state, updated, false, true, setStage, setErrorStage);
 }
 
 export async function restartWorkspace(
@@ -163,7 +168,7 @@ export async function restartWorkspace(
   options: LifecycleOptions,
   name: string
 ): Promise<WorkspaceRecord> {
-  return runWorkspaceLifecycle("restart", async (setStage) => {
+  return runWorkspaceLifecycle("restart", async (setStage, setErrorStage) => {
     const workspaceName = validateLifecycleName(name, "workspace");
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
@@ -183,14 +188,18 @@ export async function restartWorkspace(
         const record = await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(workspaceName));
         assertWorkspaceLifecycleActive(record);
         if (record.phase === "stopped") {
-          return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot, setStage);
+          return await startWorkspaceLocked(
+            runner, options, state, workspaceName, selectedRoot, setStage, setErrorStage
+          );
         }
         if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
         setStage("workspace container readiness");
         const containerId = await assertContainerRunning(runner, options.stateRoot, record);
         setStage("workspace stop");
         await stopWorkspaceLocked(runner, state, record);
-        return await startWorkspaceLocked(runner, options, state, workspaceName, selectedRoot, setStage);
+        return await startWorkspaceLocked(
+          runner, options, state, workspaceName, selectedRoot, setStage, setErrorStage
+        );
       } finally {
         await runWorkspaceLifecycleStage("restart", "workspace setup lock release", release);
       }
