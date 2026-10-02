@@ -915,12 +915,17 @@ upstream, and denies every request not accepted by an explicitly configured
 capability. The External URL preset additionally validates the requested
 ingress and filters discovery/list/revoke operations to its ingress allowlist. Projects
 mount only the derived proxy socket directory into development containers.
-The standard agent-policy helper accepts exact method/path rules, defaults
-each route to an empty request body, filters discovery to those rules, and
-removes host-input discovery. Its `--allow-workspace-resources` option adds
-only bodyless `GET /api/workspace/resources`; projects pass the derived proxy
-socket, without the upstream grant, to agent containers as
-`DIM_CONTROLLER_SOCKET`.
+The standard agent-policy helper accepts exact method/path rules, defaults each
+route to an empty request body, filters discovery to those rules, and removes
+host-input discovery. Restart and resource reads have different upstream
+audiences and MUST use separate derived sockets. A restart-only proxy reads the
+workspace-audience `DIM_CONTROLLER_SOCKET` and grant. A resource-only proxy's
+`--allow-workspace-resources` option reads the agent-audience
+`DIM_AGENT_CONTROLLER_SOCKET` and grant and permits only bodyless
+`GET /api/workspace/resources`; the two allow flags cannot be combined.
+Projects pass the derived restart and resource sockets, without either
+upstream grant, to agent containers as `DIM_CONTROLLER_SOCKET` and
+`DIM_AGENT_CONTROLLER_SOCKET`, respectively.
 
 Plugins register host administration routes separately from scoped controller
 routes. Administration routes run only on the host-admin socket. Marking a
