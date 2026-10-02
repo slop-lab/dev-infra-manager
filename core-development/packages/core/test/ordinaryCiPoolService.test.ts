@@ -174,6 +174,28 @@ describe("ordinary CI pool control plane", () => {
     expect(replacement.status).toBe(200);
   });
 
+  it("makes expired recovery replay-idempotent without weakening active or ownership fences", async () => {
+    // Given
+    let now = 1_000;
+    const endpoint = await startService(undefined, { now: () => now, leaseMilliseconds: 100 });
+    await webhook(endpoint, "project-a", "webhook-a", 515);
+    const original = await claim(endpoint, "host-a", "host-a-token", "primary", "recovery-matrix");
+    const body = await original.json() as { readonly claimId: string };
+
+    // When
+    const active = await recover(endpoint, "host-a", "host-a-token", "primary", body.claimId);
+    now = 1_101;
+    const wrongHost = await recover(endpoint, "host-b", "host-b-token", "primary", body.claimId);
+    const wrongCapacity = await recover(endpoint, "host-a", "host-a-token", "secondary", body.claimId);
+    const unauthorized = await recover(endpoint, "host-a", "wrong-token", "primary", body.claimId);
+    const first = await recover(endpoint, "host-a", "host-a-token", "primary", body.claimId);
+    const duplicate = await recover(endpoint, "host-a", "host-a-token", "primary", body.claimId);
+
+    // Then
+    expect([active.status, wrongHost.status, wrongCapacity.status, unauthorized.status]).toEqual([409, 409, 409, 404]);
+    expect([first.status, duplicate.status]).toEqual([204, 204]);
+  });
+
   it("extends an active lease through the authenticated renew endpoint", async () => {
     // Given
     let now = 2_000;
@@ -240,7 +262,7 @@ async function startService(
       { projectId: "project-b", projectName: "beta", organization: "dim-beta", organizationId: 42, webhookToken: "webhook-b" }
     ],
     hosts: [
-      { hostId: "host-a", token: "host-a-token", capacities: ["primary"] },
+      { hostId: "host-a", token: "host-a-token", capacities: ["primary", "secondary"] },
       { hostId: "host-b", token: "host-b-token", capacities: ["primary"] }
     ]
   };

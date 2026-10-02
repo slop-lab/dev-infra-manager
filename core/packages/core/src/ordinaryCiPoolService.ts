@@ -1,6 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { UserError } from "./errors.js";
+import {
+  ordinaryCiPoolAdmissions,
+  ordinaryCiPoolClaimResponse
+} from "./ordinaryCiPoolAdmission.js";
 import { OrdinaryCiPoolStore, type OrdinaryCiPoolLease, type StoredOrdinaryPoolClaim } from "./ordinaryCiPoolStore.js";
 
 export type OrdinaryCiPoolProject = {
@@ -35,6 +39,9 @@ export function configuredOrdinaryCiPoolServer(
 ): Server {
   assertOrdinaryCiPoolServiceConfig(config);
   const projects = new Map(config.projects.map((project) => [project.projectId, project]));
+  const admissions = ordinaryCiPoolAdmissions(config);
+  const admissionsById = new Map(admissions.map((admission) => [admission.admissionId, admission]));
+  const admissionIds = admissions.map((admission) => admission.admissionId);
   const hosts = new Map(config.hosts.map((host) => [host.hostId, host]));
   const store = new OrdinaryCiPoolStore(config.database, lease);
   const server = createServer((request, response) => {
@@ -80,7 +87,9 @@ export function configuredOrdinaryCiPoolServer(
       const jobId = positiveInteger(workflowJob.id, "workflow job ID");
       const labels = stringArray(workflowJob.labels, "workflow job labels");
       if (body.action === "queued" && labels.includes(config.runnerLabel)) {
-        store.recordQueued(projectId, jobId);
+        const admission = admissions.find((candidate) => candidate.project.projectId === projectId);
+        if (admission === undefined) throw new UserError("ordinary CI pool Project has no operator admission policy");
+        store.recordQueued(projectId, jobId, admission.admissionId);
       } else if (body.action !== "queued") {
         store.recordTerminal(projectId, jobId, body.action === "completed");
       }
@@ -97,14 +106,18 @@ export function configuredOrdinaryCiPoolServer(
       const capacity = identifier(body.capacity, "capacity");
       const requestId = identifier(body.requestId, "request ID");
       if (!host.capacities.includes(capacity)) return sendJson(response, 404, { error: "not found" });
-      const claim = store.claim(hostId, capacity, requestId);
+      const claim = store.claim(hostId, capacity, requestId, admissionIds);
       if (claim === undefined) {
         const expiredClaim = store.expired(hostId, capacity);
         return expiredClaim === undefined
           ? sendEmpty(response, 204)
           : sendJson(response, 409, { expiredClaim: recoveryClaim(expiredClaim) });
       }
-      return sendClaim(response, { claim, config, leaseMilliseconds: lease.leaseMilliseconds });
+      return sendJson(response, 200, ordinaryCiPoolClaimResponse(
+        claim,
+        admissionsById.get(claim.admissionId),
+        lease.leaseMilliseconds
+      ));
     }
     const renew = /^\/v1\/claims\/([^/]+)\/renew$/.exec(url.pathname);
     if (request.method === "POST" && renew !== null) {
@@ -116,7 +129,7 @@ export function configuredOrdinaryCiPoolServer(
       if (host === undefined || request.headers["x-dim-host"] !== hostId || !authorized(request, host.token)) {
         return sendJson(response, 404, { error: "not found" });
       }
-      const leaseExpiresAt = store.renew(claimId, hostId);
+      const leaseExpiresAt = store.renew(claimId, hostId, admissionIds);
       return leaseExpiresAt === undefined
         ? sendJson(response, 409, { error: "claim lease is not active" })
         : sendJson(response, 200, { leaseMilliseconds: lease.leaseMilliseconds });
@@ -131,9 +144,13 @@ export function configuredOrdinaryCiPoolServer(
       const capacity = identifier(body.capacity, "capacity");
       if (host === undefined || request.headers["x-dim-host"] !== hostId || !authorized(request, host.token)
         || !host.capacities.includes(capacity)) return sendJson(response, 404, { error: "not found" });
-      return store.recover(claimId, hostId, capacity)
-        ? sendEmpty(response, 204)
-        : sendJson(response, 409, { error: "expired claim is not recoverable" });
+      const result = store.recover(claimId, hostId, capacity, admissionIds);
+      switch (result) {
+        case "recovered":
+        case "absent": return sendEmpty(response, 204);
+        case "rejected": return sendJson(response, 409, { error: "expired claim is not recoverable" });
+        default: return assertNever(result);
+      }
     }
     const release = /^\/v1\/claims\/([^/]+)\/release$/.exec(url.pathname);
     if (request.method === "POST" && release !== null) {
@@ -153,31 +170,11 @@ export function configuredOrdinaryCiPoolServer(
 }
 
 function recoveryClaim(claim: StoredOrdinaryPoolClaim): Readonly<Record<string, string>> {
-  return { claimId: claim.claimId, projectId: claim.projectId };
+  return { claimId: claim.claimId, projectId: claim.projectId, admissionId: claim.admissionId };
 }
 
-function sendClaim(
-  response: ServerResponse,
-  value: {
-    readonly claim: StoredOrdinaryPoolClaim;
-    readonly config: OrdinaryCiPoolServiceConfig;
-    readonly leaseMilliseconds: number;
-  }
-): void {
-  const { claim, config } = value;
-  const project = config.projects.find((candidate) => candidate.projectId === claim.projectId);
-  if (project === undefined) throw new UserError("ordinary CI pool claim references an unenrolled Project");
-  sendJson(response, 200, {
-    claimId: claim.claimId,
-    jobId: claim.jobId,
-    projectId: project.projectId,
-    projectName: project.projectName,
-    organization: project.organization,
-    organizationId: project.organizationId,
-    jobImage: config.jobImage,
-    runnerLabel: config.runnerLabel,
-    leaseMilliseconds: value.leaseMilliseconds
-  });
+function assertNever(value: never): never {
+  throw new UserError(`unhandled ordinary CI pool recovery result: ${String(value)}`);
 }
 
 export function assertOrdinaryCiPoolServiceConfig(config: OrdinaryCiPoolServiceConfig): void {
