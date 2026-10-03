@@ -13,6 +13,7 @@ import { assertSelectedProjectUnchanged } from "./workspaceState.js";
 import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
 import {
   resolveWorkspaceCapabilities,
+  readWorkspaceForOperation,
   resolveWorkspaceKvm,
   validateWorkspaceProfiles,
   validateWorkspaceResources
@@ -47,6 +48,12 @@ export async function createWorkspace(
       pidsLimit: input.pidsLimit ?? options.pidsLimit
     });
     const state = new LifecycleState(options.stateRoot);
+    setStage("workspace state loading");
+    try {
+      await readWorkspaceForOperation(state, name, options.giteaConnection);
+    } catch (error) {
+      if (!(error instanceof MissingRecordError)) throw error;
+    }
     setStage("project readiness validation");
     assertProjectRepositoriesReady(await state.readProject(project));
     setStage("managed Git reconciliation");
@@ -67,7 +74,7 @@ export async function createWorkspace(
         let existing: WorkspaceRecord | undefined;
         try {
           setStage("workspace state loading");
-          existing = await state.readWorkspace(name);
+          existing = await readWorkspaceForOperation(state, name, options.giteaConnection);
           assertWorkspaceLifecycleActive(existing);
         } catch (error) {
           if (!(error instanceof MissingRecordError)) throw error;
@@ -138,7 +145,7 @@ export async function createWorkspace(
             capabilities,
             composeProjectName: `dim-${name}`,
             containerName: `dim-ws-${name}`,
-            networkName: credentials.kind === "managed" ? GITEA_NETWORK : "bridge",
+            networkName: GITEA_NETWORK,
             dockerVolumeName: `dim-ws-${name}-docker`,
             runtimeBackend: input.runtimeBackend,
             kvm,
