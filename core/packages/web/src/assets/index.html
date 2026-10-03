@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Review immutable DIM repository evidence in the configured Project scope">
+    <title>DIM Reviewer</title>
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/assets/tokens.css">
+    <link rel="stylesheet" href="/assets/app.css">
+    <script src="/assets/app.js" type="module"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to reviewer workspace</a>
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="identity" aria-label="DIM Reviewer">
+          <span class="wordmark">DIM</span>
+          <span class="identity-divider" aria-hidden="true"></span>
+          <span>Reviewer</span>
+        </div>
+        <div id="session-actions" class="session-actions" hidden>
+          <span id="reviewer-label" class="badge badge-neutral"></span>
+          <button id="logout-button" class="button button-secondary" type="button">Sign out</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main" tabindex="-1">
+      <section id="restore-state" class="centered-stage" aria-labelledby="restore-title">
+        <div class="state-content" role="status">
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="busy-label">Working</span>
+          <p class="eyebrow">Secure session</p>
+          <h1 id="restore-title">Opening reviewer workspace</h1>
+          <p>Checking this browser's local session.</p>
+        </div>
+      </section>
+
+      <section id="login-view" class="centered-stage" aria-labelledby="login-title" hidden>
+        <div class="auth-card">
+          <div class="auth-intro">
+            <p class="eyebrow">Reviewer access</p>
+            <h1 id="login-title">Evidence before authority.</h1>
+            <p>Sign in with a local reviewer account. Credentials stay on this origin and native Git credentials are never sent to the browser.</p>
+          </div>
+          <form id="login-form" class="panel login-form" novalidate>
+            <div class="field">
+              <label for="username">Username</label>
+          <input id="username" name="username" type="text" autocomplete="username" required aria-describedby="username-hint login-error">
+              <p id="username-hint" class="field-hint">Use the local account configured for this reviewer service.</p>
+            </div>
+            <div class="field">
+              <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required aria-describedby="login-error">
+            </div>
+            <button id="login-button" class="button button-primary" type="submit">
+              <span class="button-label">Sign in</span>
+              <span class="spinner" aria-hidden="true"></span>
+              <span class="busy-label">Working</span>
+            </button>
+          <p id="login-error" class="form-error"></p>
+          </form>
+        </div>
+      </section>
+
+      <section id="workspace" class="review-shell" aria-labelledby="workspace-title" hidden>
+        <aside class="context-rail" aria-label="Review context and controls">
+          <div class="rail-heading">
+            <p class="eyebrow">Attested scope</p>
+            <h1 id="workspace-title" tabindex="-1">Review evidence</h1>
+            <p>Create immutable evidence from exact refs, or open an exact review ID.</p>
+          </div>
+          <dl class="scope-list">
+            <div><dt>Project</dt><dd id="scope-project"></dd></div>
+            <div><dt>Reviewer</dt><dd id="scope-reviewer"></dd></div>
+          </dl>
+          <form id="create-form" class="rail-form" aria-labelledby="create-title">
+            <h2 id="create-title">Create evidence</h2>
+            <div class="field">
+              <label for="repository">Repository</label>
+              <select id="repository" name="repository"></select>
+            </div>
+            <div class="field">
+              <label for="protected-ref">Protected ref</label>
+              <input id="protected-ref" name="protectedRef" value="refs/heads/main" required>
+            </div>
+            <div class="field">
+              <label for="proposal-ref">Proposal ref</label>
+              <input id="proposal-ref" name="proposalRef" placeholder="refs/heads/proposals/review" required>
+            </div>
+            <button id="create-button" class="button button-primary" type="submit">Create and open</button>
+          </form>
+          <form id="open-form" class="rail-form" aria-labelledby="open-title">
+            <h2 id="open-title">Open exact review</h2>
+            <div class="field">
+              <label for="review-id">Review ID</label>
+              <input id="review-id" class="mono" name="reviewId" pattern="[0-9a-f]{64}" minlength="64" maxlength="64" autocomplete="off" required>
+            </div>
+            <button id="open-button" class="button button-secondary" type="submit">Open review</button>
+          </form>
+          <p id="request-error" class="form-error"></p>
+        </aside>
+
+      <p id="status-announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
+      <p id="alert-announcer" class="sr-only" role="alert" aria-live="assertive" aria-atomic="true"></p>
+      <section id="evidence-workspace" class="evidence-workspace">
+          <article id="empty-state" class="panel state-panel">
+            <div class="state-content">
+              <span class="state-symbol" aria-hidden="true">0</span>
+              <h2>No review is open</h2>
+              <p>Create evidence from exact refs or enter a 64-character review ID.</p>
+            </div>
+          </article>
+          <article id="loading-state" class="panel state-panel" hidden>
+            <div class="state-content" role="status">
+              <span class="spinner" aria-hidden="true"></span>
+              <span class="busy-label">Working</span>
+              <h2>Loading exact evidence</h2>
+              <div class="skeleton" aria-hidden="true"></div>
+              <div class="skeleton skeleton-short" aria-hidden="true"></div>
+            </div>
+          </article>
+          <article id="error-state" class="panel state-panel" hidden>
+            <div class="state-content">
+              <span class="state-symbol" aria-hidden="true">!</span>
+              <h2 id="error-title" tabindex="-1">Evidence request failed</h2>
+              <p id="error-detail">The entered refs and review ID were preserved. Review the error and retry when ready.</p>
+              <button id="retry-button" class="button button-secondary" type="button" hidden>Retry last request</button>
+            </div>
+          </article>
+          <article id="review-view" class="review-view" hidden>
+            <header class="review-heading">
+              <div>
+                <p class="eyebrow">Immutable review evidence</p>
+                <h2 id="review-title" tabindex="-1">Exact review</h2>
+              </div>
+              <span id="review-status" class="badge badge-neutral"></span>
+            </header>
+            <section id="stale-panel" class="notice notice-info" aria-labelledby="stale-title" hidden>
+              <h3 id="stale-title">This evidence is stale</h3>
+              <ul id="stale-reasons"></ul>
+            </section>
+            <dl id="review-metadata" class="metadata-grid" aria-label="Exact review metadata"></dl>
+            <section class="paths-panel" aria-labelledby="paths-title">
+              <div class="section-heading">
+                <h3 id="paths-title">Changed paths</h3>
+                <span id="path-count" class="badge badge-neutral"></span>
+              </div>
+              <ul id="changed-paths" class="changed-paths"></ul>
+            </section>
+            <section class="patch-panel" aria-labelledby="patch-title">
+              <div class="section-heading">
+                <div>
+                  <h3 id="patch-title">Literal patch</h3>
+                  <p id="patch-cue" class="patch-cue">Patch fits without horizontal scrolling.</p>
+                </div>
+              </div>
+              <p id="patch-error" class="state-message error-message" tabindex="-1" hidden></p>
+              <div class="patch-track" aria-hidden="true"><span id="patch-thumb" class="patch-thumb"></span></div>
+              <div id="patch-region" class="patch-region" tabindex="0" role="region" aria-labelledby="patch-title" aria-describedby="patch-cue">
+                <pre><code id="patch-code"></code></pre>
+              </div>
+            </section>
+          </article>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>
