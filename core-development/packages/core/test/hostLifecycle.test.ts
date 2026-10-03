@@ -30,6 +30,11 @@ vi.mock("../../../../core/packages/core/src/registryCache.js", async (importOrig
   ensureRegistryCache: vi.fn(async () => {})
 }));
 
+vi.mock("../../../../core/packages/core/src/aptCache.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../../core/packages/core/src/aptCache.js")>(),
+  ensureAptCache: vi.fn(async () => {})
+}));
+
 describe("host lifecycle", () => {
   let root: string;
 
@@ -52,7 +57,11 @@ describe("host lifecycle", () => {
           if (args[2] === "dim-gitea") {
             return { command, args, stdout: `${ownedGiteaContainerInspect("owned-gitea-id", true)}\n`, stderr: "", exitCode: 0 };
           }
-          return { command, args, stdout: "owned-infrastructure-id|true|true\n", stderr: "", exitCode: 0 };
+          const apt = args[2] === "dim-apt-cache";
+          const id = apt ? "owned-apt-id" : "owned-registry-id";
+          const resource = apt ? "apt-cache" : "registry-cache";
+          const resourceId = apt ? "A".repeat(43) : "R".repeat(43);
+          return { command, args, stdout: `${id}|true|dim|${"M".repeat(43)}|${resource}|${resourceId}|true\n`, stderr: "", exitCode: 0 };
         }
         if (args[0] === "container" && args[1] === "ls") {
           return { command, args, stdout: "", stderr: "", exitCode: 0 };
@@ -72,7 +81,8 @@ describe("host lifecycle", () => {
 
     expect(result.phase).toBe("stopped");
     expect(calls.filter((call) => call[1] === "stop").map((call) => call[2])).toEqual([
-      "owned-infrastructure-id",
+      "owned-registry-id",
+      "owned-apt-id",
       "owned-gitea-id"
     ]);
     expect(calls.flat().join(" ")).not.toMatch(/\b(?:rm|remove|down|prune)\b/);
@@ -88,7 +98,7 @@ describe("host lifecycle", () => {
         if (args[0] === "container" && args[1] === "ls") {
           return { command, args, stdout: "", stderr: "", exitCode: 0 };
         }
-        if (args.includes("dim-registry-cache")) {
+        if (args.includes("dim-registry-cache") || args.includes("dim-apt-cache")) {
           return { command, args, stdout: "", stderr: "no such container", exitCode: 1 };
         }
         throw new Error(`unexpected command: ${[command, ...args].join(" ")}`);
@@ -123,6 +133,9 @@ describe("host lifecycle", () => {
         if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-registry-cache") {
           return { command, args, stdout: "", stderr: "no such container", exitCode: 1 };
         }
+        if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-apt-cache") {
+          return { command, args, stdout: "", stderr: "no such container", exitCode: 1 };
+        }
         if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-gitea") {
           return { command, args, stdout: `${ownedGiteaContainerInspect("foreign-gitea-id", true, false)}\n`, stderr: "", exitCode: 0 };
         }
@@ -152,7 +165,12 @@ describe("host lifecycle", () => {
         const stdout = args[0] === "container" && args[1] === "ls" ? `${name}\n`
           : args[0] === "container" && args[1] === "inspect" && args[2] === "dim-gitea"
             ? `${ownedGiteaContainerInspect("owned-gitea-id", true)}\n`
-            : args[0] === "container" && args[1] === "inspect" ? "owned-pool-id|true|true\n" : "";
+            : args[0] === "container" && args[1] === "inspect" && args[2] === "dim-registry-cache"
+              ? `owned-registry-id|true|dim|${"M".repeat(43)}|registry-cache|${"R".repeat(43)}|true\n`
+              : args[0] === "container" && args[1] === "inspect" && args[2] === "dim-apt-cache"
+                ? `owned-apt-id|true|dim|${"M".repeat(43)}|apt-cache|${"A".repeat(43)}|true\n`
+            : args[0] === "container" && args[1] === "inspect"
+              ? `${args[2] === name ? "owned-pool-id" : `owned-${args[2] ?? "container"}-id`}|true|dim|infrastructure|infrastructure-v1|true\n` : "";
         return { command, args, stdout, stderr: "", exitCode: 0 };
       },
       async runStreaming() { return 0; }
@@ -181,7 +199,7 @@ describe("host lifecycle", () => {
       async run(command, args) {
         calls.push([command, ...args]);
         if (args.includes("inspect")) {
-          return { command, args, stdout: "owned-service-id|true|false\n", stderr: "", exitCode: 0 };
+          return { command, args, stdout: "owned-service-id|true|dim|service|service-v1|false\n", stderr: "", exitCode: 0 };
         }
         if (args[0] === "start") {
           return { command, args, stdout: `${args[1]}\n`, stderr: "", exitCode: 0 };
@@ -231,6 +249,7 @@ describe("host lifecycle", () => {
       ["recovered", workspaceRecord("recovered", "stopped")],
       ["interrupted", workspaceRecord("interrupted", "setup-error")]
     ]);
+    for (const workspace of phases.values()) await state.claimWorkspace(workspace);
     await state.writeHostLifecycle(hostRecord("stopped", {
       resumeWorkspaces: [...phases.keys()],
       restartCiRunners: []
@@ -320,7 +339,9 @@ describe("host lifecycle", () => {
       resumeWorkspaces: ["creating"],
       restartCiRunners: []
     }));
-    vi.spyOn(workspaceLifecycle, "showWorkspace").mockResolvedValue(workspaceRecord("creating", "creating"));
+    const creating = workspaceRecord("creating", "creating");
+    await state.claimWorkspace(creating);
+    vi.spyOn(workspaceLifecycle, "showWorkspace").mockResolvedValue(creating);
     vi.spyOn(workspaceLifecycle, "startWorkspace");
     vi.spyOn(workspaceLifecycle, "setupWorkspace");
 

@@ -1,11 +1,14 @@
 import { recoverCiRunner } from "./ciRunnerRecovery.js";
 import { MissingRecordError, UserError } from "./errors.js";
 import { ensureGitea } from "./gitea.js";
+import { ensureAptCache } from "./aptCache.js";
+import { requireHostMirrorProvider } from "./hostMirrorProvider.js";
 import { LifecycleState } from "./lifecycleState.js";
 import type { HostLifecycleRecord, LifecycleOptions } from "./lifecycleTypes.js";
 import { ensureRegistryCache } from "./registryCache.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { setupWorkspace, showWorkspace, startWorkspace } from "./workspaceLifecycle.js";
+import { readWorkspaceForOperation } from "./workspaceValidation.js";
 
 export async function reconcileReadyHostManagedGit(
   runner: StreamingCommandRunner,
@@ -33,24 +36,29 @@ export async function startHost(
   runner: StreamingCommandRunner,
   options: LifecycleOptions
 ): Promise<HostLifecycleRecord> {
+  requireHostMirrorProvider(options.hostMirrorProvider);
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireHostLifecycleLock();
   try {
     const current = await state.readHostLifecycle();
     if (!current || current.phase === "ready") {
       const record = current ?? readyRecord();
-      if (options.giteaConnection.kind === "external") return record;
-      await reconcileReadyManagedGit(runner, options, state, record);
+      if (options.giteaConnection.kind === "managed") await reconcileReadyManagedGit(runner, options, state, record);
+      await ensureRegistryCache(runner, options);
+      await ensureAptCache(runner, options);
       return record;
     }
-    if (options.giteaConnection.kind === "external") await ensureGitea(runner, options);
+    for (const workspace of current.resumeWorkspaces) {
+      await readWorkspaceForOperation(state, workspace, options.giteaConnection);
+    }
+    await ensureGitea(runner, options);
+    await ensureRegistryCache(runner, options);
+    await ensureAptCache(runner, options);
     const entryPhase = current.phase;
     let record: HostLifecycleRecord = { ...current, phase: "starting", updatedAt: new Date().toISOString() };
     delete record.error;
     await state.writeHostLifecycle(record);
     try {
-      if (options.giteaConnection.kind === "managed") await ensureGitea(runner, options);
-      await ensureRegistryCache(runner, options);
       for (const container of record.resumeManagedContainers) {
         await startManagedContainer(runner, container);
       }
@@ -144,11 +152,13 @@ async function recoverWorkspace(
 
 async function startManagedContainer(runner: StreamingCommandRunner, name: string): Promise<void> {
   const inspect = await runner.run("docker", [
-    "container", "inspect", name, "--format", "{{.Id}}|{{index .Config.Labels \"dim.managed\"}}|{{.State.Running}}"
+    "container", "inspect", name, "--format", "{{.Id}}|{{index .Config.Labels \"dim.managed\"}}|{{index .Config.Labels \"dim.owner\"}}|{{index .Config.Labels \"dim.resource\"}}|{{index .Config.Labels \"dim.resource-id\"}}|{{.State.Running}}"
   ]);
   if (inspect.exitCode !== 0) throw new UserError(`cannot inspect '${name}': ${inspect.stderr.trim()}`);
-  const [containerId, managed, running] = inspect.stdout.trim().split("|");
-  if (!containerId || managed !== "true") throw new UserError(`Docker resource '${name}' is not managed by DIM`);
+  const [containerId, managed, owner, resource, resourceId, running] = inspect.stdout.trim().split("|");
+  if (!containerId || managed !== "true" || owner !== "dim" || !resource || !resourceId) {
+    throw new UserError(`Docker resource '${name}' is not managed by DIM`);
+  }
   if (running === "true") return;
   const started = await runner.run("docker", ["start", containerId]);
   if (started.exitCode !== 0) throw new UserError(`failed to start '${name}': ${started.stderr.trim()}`);
