@@ -20,6 +20,7 @@ bash verification/scripts/pack-local-packages.bash "$package_root"
 plugins=(
   @slop-lab/dim-plugin-dns-cloudflare
   @slop-lab/dim-plugin-external-urls
+  @slop-lab/dim-plugin-host-mirrors
 )
 
 installer_tarballs=("$package_root"/slop-lab-dim-installer-*.tgz)
@@ -37,10 +38,11 @@ else
 fi
 "${npm_command[@]}" install --prefix "$staged_installer" --no-save --no-fund --no-audit "${installer_tarballs[0]}"
 
-"${dim_command[@]}" installer install core --local-packages "$package_root" --no-local-bin
+"${dim_command[@]}" installer install core --local-packages "$package_root" --no-local-bin --defer-controller-restart
 if [[ "$uses_mise" -eq 0 ]]; then
   npm install --global --prefix "$install_prefix" "${installer_tarballs[0]}"
   dim_command=("$install_prefix/bin/dim")
 fi
-  "${dim_command[@]}" installer enable-plugin "${plugins[@]}"
-echo "Installed the local DIM build and enabled its DNS and External URLs plugins"
+"${dim_command[@]}" installer enable-plugin "${plugins[@]}"
+"${dim_command[@]}" controller restart
+echo "Installed the local DIM build and enabled its DNS, External URLs, and host mirror plugins"

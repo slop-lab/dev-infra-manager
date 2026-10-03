@@ -42,6 +42,7 @@ async function createFixture(): Promise<Fixture> {
   await writeFile(resolve(packageRoot, "slop-lab-dim-installer-local.tgz"), "");
   await writeFile(resolve(packageRoot, "slop-lab-dim-plugin-dns-cloudflare-local.tgz"), "");
   await writeFile(resolve(packageRoot, "slop-lab-dim-plugin-external-urls-local.tgz"), "");
+  await writeFile(resolve(packageRoot, "slop-lab-dim-plugin-host-mirrors-local.tgz"), "");
   await writeFile(resolve(packageRoot, "unrelated-plugin-local.tgz"), "");
   await writeFile(resolve(scripts, "local-preparation-state.bash"), `#!/usr/bin/bash
 expected_ref=${JSON.stringify(imageRef)}
@@ -121,8 +122,11 @@ describe("Project local install facade", () => {
     // Then
     expect(result.status, result.stderr).toBe(0);
     expect(invocations).toMatch(/^npm install --prefix \/tmp\/dim-target-installer\.[^ ]+ --no-save --no-fund --no-audit /m);
-    expect(invocations).toMatch(/^target-dim installer install core --local-packages .* --no-local-bin$/m);
-    expect(invocations).toContain("target-dim installer enable-plugin @slop-lab/dim-plugin-dns-cloudflare @slop-lab/dim-plugin-external-urls");
+    expect(invocations).toMatch(/^target-dim installer install core --local-packages .* --no-local-bin --defer-controller-restart$/m);
+    expect(invocations).toContain("target-dim installer enable-plugin @slop-lab/dim-plugin-dns-cloudflare @slop-lab/dim-plugin-external-urls @slop-lab/dim-plugin-host-mirrors");
+    expect(invocations.indexOf("target-dim controller restart")).toBeGreaterThan(
+      invocations.indexOf("target-dim installer enable-plugin @slop-lab/dim-plugin-dns-cloudflare @slop-lab/dim-plugin-external-urls @slop-lab/dim-plugin-host-mirrors")
+    );
     expect(invocations).not.toContain("old-dim");
     expect(invocations).not.toContain("unrelated-plugin-local.tgz");
     expect(invocations.indexOf(" installer install core ")).toBeLessThan(invocations.indexOf(" installer enable-plugin "));

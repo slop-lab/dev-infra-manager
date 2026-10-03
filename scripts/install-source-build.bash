@@ -70,12 +70,14 @@ fi
 "${npm_command[@]}" install --prefix "$staged_installer" --no-save --no-fund --no-audit "${installer_tarballs[0]}"
 
 echo "[host] install package bundle"
-"${dim_command[@]}" installer install core --local-packages "$package_root" --no-local-bin
+"${dim_command[@]}" installer install core --local-packages "$package_root" --no-local-bin --defer-controller-restart
 
 "${dim_command[@]}" installer enable-plugin \
   @slop-lab/dim-plugin-dns-cloudflare \
-  @slop-lab/dim-plugin-external-urls
+  @slop-lab/dim-plugin-external-urls \
+  @slop-lab/dim-plugin-host-mirrors
+"${dim_command[@]}" controller restart
 
 validate_preparation
-echo "[host] local package bundle installed; restart separately with just restart-controller"
+echo "[host] local package bundle installed and controller restarted with activated plugins"
 "${dim_command[@]}" --version
