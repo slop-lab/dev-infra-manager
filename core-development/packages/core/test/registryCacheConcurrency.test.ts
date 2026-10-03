@@ -3,10 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  ensureRegistryCache,
-  REGISTRY_CACHE_IMAGE
+  ensureRegistryCache
 } from "../../../../core/packages/core/src/registryCache.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
+import { hostMirrorInspection } from "../../../../core/packages/core/src/hostMirrorOwnership.js";
+import { registryCacheInspect, TEST_HOST_MIRROR_OWNERSHIP } from "./hostLifecycleFixture.js";
+import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+
+const REGISTRY_CACHE_IMAGE = `registry.example/docker-cache@sha256:${"a".repeat(64)}`;
 
 class Barrier {
   readonly wait: Promise<void>;
@@ -58,16 +62,16 @@ class ConcurrentRegistryRunner implements StreamingCommandRunner {
     switch (args[0]) {
       case "network":
         return this.state.network
-          ? result(command, args, { exitCode: 0, stdout: "true\n" })
+        ? result(command, args, { exitCode: 0, stdout: `${hostMirrorInspection("control-network", TEST_HOST_MIRROR_OWNERSHIP)}\n` })
           : result(command, args, { exitCode: 1, stderr: "Error response from daemon: network dim-control not found" });
       case "volume":
         return this.state.volume
-          ? result(command, args, { exitCode: 0, stdout: "true\n" })
+          ? result(command, args, { exitCode: 0, stdout: `${hostMirrorInspection("registry-cache-data", TEST_HOST_MIRROR_OWNERSHIP)}\n` })
           : result(command, args, { exitCode: 1, stderr: "Error response from daemon: get dim-registry-cache-data: no such volume" });
       case "container":
         return this.state.containerImage === undefined
           ? result(command, args, { exitCode: 1, stderr: "Error response from daemon: No such container: dim-registry-cache" })
-          : result(command, args, { exitCode: 0, stdout: `true|true|${this.state.containerImage}\n` });
+        : result(command, args, { exitCode: 0, stdout: registryCacheInspect(this.state.containerImage) });
       default:
         throw new Error(`unexpected inspect target '${args[0]}'`);
     }
@@ -118,6 +122,7 @@ describe("registry cache reconciliation concurrency", () => {
 
   beforeEach(async () => {
     stateRoot = await mkdtemp(join(tmpdir(), "dim-registry-cache-"));
+    await new LifecycleState(stateRoot).writeHostMirrorOwnership(TEST_HOST_MIRROR_OWNERSHIP);
   });
 
   afterEach(async () => {
@@ -127,10 +132,10 @@ describe("registry cache reconciliation concurrency", () => {
   it("mutates each resource once during simultaneous empty-state first use", async () => {
     const state: CacheState = { network: false, volume: false, containerImage: undefined };
     const runner = new ConcurrentRegistryRunner(state);
-    const first = ensureRegistryCache(runner, stateRoot);
+    const first = ensureRegistryCache(runner, stateRoot, REGISTRY_CACHE_IMAGE);
     await runner.firstMutationEntered.wait;
 
-    const second = ensureRegistryCache(runner, stateRoot);
+    const second = ensureRegistryCache(runner, stateRoot, REGISTRY_CACHE_IMAGE);
     await nextEventLoopTurn();
     runner.releaseFirstMutation.open();
 
@@ -142,10 +147,10 @@ describe("registry cache reconciliation concurrency", () => {
   it("replaces an obsolete image once during simultaneous reconciliation", async () => {
     const state: CacheState = { network: true, volume: true, containerImage: "registry@sha256:obsolete" };
     const runner = new ConcurrentRegistryRunner(state);
-    const first = ensureRegistryCache(runner, stateRoot);
+    const first = ensureRegistryCache(runner, stateRoot, REGISTRY_CACHE_IMAGE);
     await runner.firstMutationEntered.wait;
 
-    const second = ensureRegistryCache(runner, stateRoot);
+    const second = ensureRegistryCache(runner, stateRoot, REGISTRY_CACHE_IMAGE);
     await nextEventLoopTurn();
     runner.releaseFirstMutation.open();
 
@@ -158,9 +163,9 @@ describe("registry cache reconciliation concurrency", () => {
     const state: CacheState = { network: false, volume: false, containerImage: undefined };
     const runner = new ConcurrentRegistryRunner(state);
     runner.failFirstMutation = true;
-    const first = ensureRegistryCache(runner, stateRoot);
+    const first = ensureRegistryCache(runner, stateRoot, REGISTRY_CACHE_IMAGE);
     await runner.firstMutationEntered.wait;
-    const second = ensureRegistryCache(runner, stateRoot);
+    const second = ensureRegistryCache(runner, stateRoot, REGISTRY_CACHE_IMAGE);
 
     runner.releaseFirstMutation.open();
 

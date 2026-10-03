@@ -4,12 +4,14 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import {
-  ensureRegistryCache,
-  REGISTRY_CACHE_IMAGE
+  ensureRegistryCache
 } from "../../../../core/packages/core/src/registryCache.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { claimTestGiteaService, ownedGiteaResourceInspect } from "./giteaServiceFixture.js";
-import { hostLifecycleOptions } from "./hostLifecycleFixture.js";
+import { hostLifecycleOptions, registryCacheInspect, TEST_HOST_MIRROR_OWNERSHIP, TEST_HOST_MIRROR_PROVIDER } from "./hostLifecycleFixture.js";
+import { hostMirrorInspection } from "../../../../core/packages/core/src/hostMirrorOwnership.js";
+
+const REGISTRY_CACHE_IMAGE = TEST_HOST_MIRROR_PROVIDER.dockerImage;
 
 class ReadyRegistryCacheRunner implements StreamingCommandRunner {
   readonly calls: string[][] = [];
@@ -19,8 +21,8 @@ class ReadyRegistryCacheRunner implements StreamingCommandRunner {
     const stdout = args[0] === "network"
       ? `${ownedGiteaResourceInspect("network")}\n`
       : args[0] === "volume"
-        ? "true\n"
-        : `true|true|${REGISTRY_CACHE_IMAGE}\n`;
+      ? `${hostMirrorInspection("registry-cache-data", TEST_HOST_MIRROR_OWNERSHIP)}\n`
+        : registryCacheInspect(REGISTRY_CACHE_IMAGE);
     return { command, args, stdout, stderr: "", exitCode: 0 };
   }
 

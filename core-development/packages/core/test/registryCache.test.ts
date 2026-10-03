@@ -7,14 +7,17 @@ import {
   ensureRegistryCache,
   REGISTRY_CACHE_CONTAINER,
   REGISTRY_CACHE_ENDPOINT,
-  REGISTRY_CACHE_IMAGE,
   REGISTRY_CACHE_VOLUME,
   registryCacheContainerArgs,
   sysboxRegistryConfigArgs
 } from "../../../../core/packages/core/src/registryCache.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
+import { hostMirrorInspection } from "../../../../core/packages/core/src/hostMirrorOwnership.js";
 import { claimTestGiteaService } from "./giteaServiceFixture.js";
-import { hostLifecycleOptions } from "./hostLifecycleFixture.js";
+import { hostLifecycleOptions, registryCacheInspect, TEST_HOST_MIRROR_OWNERSHIP } from "./hostLifecycleFixture.js";
+import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+
+const REGISTRY_CACHE_IMAGE = `registry.example/docker-cache@sha256:${"a".repeat(64)}`;
 
 type InspectTarget = "network" | "volume" | "container";
 
@@ -33,8 +36,10 @@ class RegistryCacheRunner implements StreamingCommandRunner {
       return { ...this.failingResult, command, args };
     }
     const stdout = args[0] === "container"
-      ? `true|true|${REGISTRY_CACHE_IMAGE}\n`
-      : "true\n";
+      ? registryCacheInspect(REGISTRY_CACHE_IMAGE)
+      : args[0] === "network"
+        ? `${hostMirrorInspection("control-network", TEST_HOST_MIRROR_OWNERSHIP)}\n`
+        : `${hostMirrorInspection("registry-cache-data", TEST_HOST_MIRROR_OWNERSHIP)}\n`;
     return { command, args, stdout, stderr: "", exitCode: 0 };
   }
 
@@ -52,10 +57,24 @@ describe("registry cache", () => {
 
   beforeEach(async () => {
     stateRoot = await mkdtemp(join(tmpdir(), "dim-registry-cache-test-"));
+    await new LifecycleState(stateRoot).writeHostMirrorOwnership(TEST_HOST_MIRROR_OWNERSHIP);
   });
 
   afterEach(async () => {
     await rm(stateRoot, { recursive: true, force: true });
+  });
+
+  it("denies production reconciliation before Docker when no host provider is enabled", async () => {
+    // Given
+    const runner = new RegistryCacheRunner(undefined, undefined);
+
+    // When
+    const { hostMirrorProvider: _provider, ...options } = hostLifecycleOptions(stateRoot);
+    const reconciliation = ensureRegistryCache(runner, options);
+
+    // Then
+    await expect(reconciliation).rejects.toThrow(/requires one enabled host mirror provider/);
+    expect(runner.calls).toEqual([]);
   });
 
   it("replaces the cache without exposing its ephemeral network address", async () => {
@@ -64,10 +83,12 @@ describe("registry cache", () => {
     const runner: StreamingCommandRunner = {
       async run(command, args): Promise<CommandResult> {
         calls.push([command, ...args]);
-        const output = args[0] === "network" || args[0] === "volume"
-          ? "true\n"
-          : args.includes("{{index .Config.Labels \"dim.managed\"}}|{{.State.Running}}|{{.Config.Image}}")
-            ? "true|true|registry@sha256:obsolete\n"
+        const output = args[0] === "network"
+          ? `${hostMirrorInspection("control-network", TEST_HOST_MIRROR_OWNERSHIP)}\n`
+          : args[0] === "volume"
+            ? `${hostMirrorInspection("registry-cache-data", TEST_HOST_MIRROR_OWNERSHIP)}\n`
+            : args[0] === "container" && args[1] === "inspect"
+              ? registryCacheInspect("registry@sha256:obsolete")
             : args.some((argument) => argument.includes(".NetworkSettings.Networks"))
               ? "172.18.0.9\n"
               : "";
@@ -77,12 +98,12 @@ describe("registry cache", () => {
     };
 
     // When
-    const connection = await ensureRegistryCache(runner, stateRoot);
+    const connection = await ensureRegistryCache(runner, stateRoot, REGISTRY_CACHE_IMAGE);
 
     // Then
     expect(connection).toBeUndefined();
-    expect(calls.some((call) => call.some((argument) => argument.includes(".NetworkSettings.Networks")))).toBe(false);
-    expect(calls).toContainEqual(["docker", "container", "rm", "--force", REGISTRY_CACHE_CONTAINER]);
+    expect(calls.some((call) => call.some((argument) => argument.includes(".IPAddress")))).toBe(false);
+    expect(calls).toContainEqual(["docker", "container", "rm", "--force", "registry-id"]);
     expect(calls.some((call) => call.includes("--network-alias") && call.includes(REGISTRY_CACHE_CONTAINER))).toBe(true);
   });
 
@@ -111,7 +132,7 @@ describe("registry cache", () => {
     const runner = new RegistryCacheRunner(target, failedInspect(diagnostic));
 
     // When
-    await ensureRegistryCache(runner, stateRoot);
+    await ensureRegistryCache(runner, stateRoot, REGISTRY_CACHE_IMAGE);
 
     // Then
     expect(runner.calls.some((call) => mutation.every((argument, index) => call[index] === argument))).toBe(true);
@@ -133,7 +154,7 @@ describe("registry cache", () => {
     const runner = new RegistryCacheRunner(target, failedInspect(diagnostic));
 
     // When
-    const ensure = ensureRegistryCache(runner, stateRoot);
+    const ensure = ensureRegistryCache(runner, stateRoot, REGISTRY_CACHE_IMAGE);
 
     // Then
     await expect(ensure).rejects.toThrow(/inspect/);
@@ -141,7 +162,8 @@ describe("registry cache", () => {
   });
 
   it("runs an internal pinned Docker Hub pull-through cache", () => {
-    const args = registryCacheContainerArgs();
+    const providerImage = `registry.example/docker-cache@sha256:${"a".repeat(64)}`;
+    const args = registryCacheContainerArgs(providerImage, TEST_HOST_MIRROR_OWNERSHIP);
     expect(REGISTRY_CACHE_ENDPOINT).toBe("dim-registry-cache:5000");
     expect(args).toEqual(expect.arrayContaining([
       "--name", REGISTRY_CACHE_CONTAINER,
@@ -149,12 +171,12 @@ describe("registry cache", () => {
       "--mount", `type=volume,source=${REGISTRY_CACHE_VOLUME},target=/var/lib/registry`,
       "--env", "REGISTRY_PROXY_REMOTEURL=https://registry-1.docker.io",
       "--env", "REGISTRY_STORAGE_DELETE_ENABLED=true",
-      REGISTRY_CACHE_IMAGE
+      providerImage
     ]));
     expect(args).not.toContain("--publish");
     expect(args).not.toContain("--add-host=registry-1.docker.io:127.0.0.1");
     expect(args).not.toContain("--add-host=auth.docker.io:127.0.0.1");
-    expect(REGISTRY_CACHE_IMAGE).toMatch(/^registry@sha256:[0-9a-f]{64}$/);
+    expect(providerImage).toMatch(/@sha256:[0-9a-f]{64}$/);
   });
 
   it("rejects a foreign shared control network in managed-Gitea mode without mutation", async () => {
@@ -167,22 +189,73 @@ describe("registry cache", () => {
             ? "true|foreign|foreign-service|network|foreign-resource\n"
             : "true\n"
           : args[0] === "volume" && args[1] === "inspect"
-            ? "true\n"
-            : `true|true|${REGISTRY_CACHE_IMAGE}\n`;
+            ? `${hostMirrorInspection("registry-cache-data", TEST_HOST_MIRROR_OWNERSHIP)}\n`
+            : registryCacheInspect(REGISTRY_CACHE_IMAGE);
         return { command, args, stdout, stderr: "", exitCode: 0 };
       },
       async runStreaming() { return 0; }
     };
 
     // When
-    const reconciliation = ensureRegistryCache(runner, hostLifecycleOptions(stateRoot));
+    const reconciliation = ensureRegistryCache(runner, {
+      ...hostLifecycleOptions(stateRoot),
+      hostMirrorProvider: { dockerImage: REGISTRY_CACHE_IMAGE, aptImage: REGISTRY_CACHE_IMAGE }
+    });
 
     // Then
     await expect(reconciliation).rejects.toThrow(/not managed by dim/);
   });
 
+  it("does not replace a same-name cache with only the generic managed label", async () => {
+    // Given
+    const calls: string[][] = [];
+    const runner: StreamingCommandRunner = {
+      async run(command, args) {
+        calls.push([command, ...args]);
+        const stdout = args[0] === "container"
+          ? `foreign-id|true||||true|registry.example/old@sha256:${"c".repeat(64)}\n`
+          : args[0] === "network"
+            ? `${hostMirrorInspection("control-network", TEST_HOST_MIRROR_OWNERSHIP)}\n`
+            : `${hostMirrorInspection("registry-cache-data", TEST_HOST_MIRROR_OWNERSHIP)}\n`;
+        return { command, args, stdout, stderr: "", exitCode: 0 };
+      },
+      async runStreaming() { return 0; }
+    };
+
+    // When
+    const reconciliation = ensureRegistryCache(runner, stateRoot, REGISTRY_CACHE_IMAGE);
+
+    // Then
+    await expect(reconciliation).rejects.toThrow(/not managed by dim/);
+    expect(calls.some((call) => call.includes("rm"))).toBe(false);
+  });
+
+  it("does not adopt or replace an owned cache with mismatched runtime configuration", async () => {
+    // Given
+    const calls: string[][] = [];
+    const runner: StreamingCommandRunner = {
+      async run(command, args) {
+        calls.push([command, ...args]);
+        const stdout = args[0] === "container"
+          ? `registry-id|${hostMirrorInspection("registry-cache", TEST_HOST_MIRROR_OWNERSHIP)}|true|registry.example/old@sha256:${"c".repeat(64)}|bridge|bind:foreign:/var/lib/registry:true|[]|no\n`
+          : args[0] === "network"
+            ? `${hostMirrorInspection("control-network", TEST_HOST_MIRROR_OWNERSHIP)}\n`
+            : `${hostMirrorInspection("registry-cache-data", TEST_HOST_MIRROR_OWNERSHIP)}\n`;
+        return { command, args, stdout, stderr: "", exitCode: 0 };
+      },
+      async runStreaming() { return 0; }
+    };
+
+    // When
+    const reconciliation = ensureRegistryCache(runner, stateRoot, REGISTRY_CACHE_IMAGE);
+
+    // Then
+    await expect(reconciliation).rejects.toThrow(/runtime configuration/);
+    expect(calls.some((call) => call.includes("rm"))).toBe(false);
+  });
+
   it("writes the Sysbox daemon mirror into its existing runner volume", () => {
-    const args = sysboxRegistryConfigArgs("runner-data");
+    const args = sysboxRegistryConfigArgs("runner-data", REGISTRY_CACHE_IMAGE);
     expect(args).toContain("type=volume,source=runner-data,target=/data");
     const encoded = args.find((argument) => argument.startsWith("DIM_REGISTRY_DAEMON_CONFIG="));
     expect(encoded).toBeDefined();
