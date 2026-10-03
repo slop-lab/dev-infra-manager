@@ -312,6 +312,7 @@ dim ci runner defaults show
 dim ci runner defaults set --cpus COUNT --memory SIZE --pids COUNT
 dim ci runner defaults reset
 dim ci ordinary-pool service run CONFIG
+dim ci ordinary-pool project reconcile PROJECT REGISTRAR_CONFIG
 dim ci ordinary-pool worker serve CAPACITY
 dim ci ordinary-pool worker run-once CAPACITY
 ```
@@ -322,29 +323,44 @@ be `stopped`. `delete` is the only command that removes provider registration,
 local data, and lifecycle state.
 
 **CI-ORDINARY-POOL-001:** The optional ordinary CI pool is a separate,
-operator-managed control plane for explicitly enrolled DIM Projects on one
+operator-managed control plane for reviewed DIM Projects on one
 external Gitea service. It MUST NOT register an instance-wide Gitea runner or
 admit other organizations just because they share that instance. Its private
-service configuration MUST identify each Project by shared Project ID, reserved
-`dim-` organization name, and positive Gitea organization ID, and identify each
-host and named capacity independently. A host MUST match its external Gitea
+service configuration MUST contain one explicit service identity, one common
+digest-pinned ordinary job image, one registrar credential, and independently
+identified hosts and named capacities. It MUST NOT contain Project enrollment,
+Gitea administrator credentials, or Project-selected host credentials. The
+registrar credential MUST differ from every worker and webhook credential. A
+trusted host registrar MUST derive each leased admission only from the current
+protected root snapshot and strict `.dim/ci/runner.yml`, verify the current
+external Gitea binding and numeric organization identity, and reject an image
+different from the service's common image before service or provider mutation.
+A worker host MUST match its external Gitea
 host ID and its reviewed Project binding, including organization ID, before
 registering an ephemeral organization runner. A host need not have that
-Project in its local lifecycle state. One configured digest-pinned disposable
-job image and one ordinary runner label are shared across the enrolled
-Projects; the operator MUST review the common image and remove conflicting
+Project in its local lifecycle state. Reviewed ordinary labels may differ by
+Project, but all map to the one common image. The operator MUST remove conflicting
 legacy Sysbox runner capacity before enabling the pool. This path is not an
 alternative way to expose Gitea administrator credentials to jobs.
 
 The service accepts authenticated organization `workflow_job` events only
-when the event's organization and repository owner both match the enrolled
-organization. Each accepted queued job and resulting claim MUST retain a
-non-secret operator-policy admission identity derived from its Project binding,
-job image, and runner label. Webhook and host tokens MUST NOT contribute to
-that identity. After a service restart, a queued job or claim from a different
-admission identity MUST NOT be dispatched, renewed, or requeued as current
+when the event's organization and repository owner both match a live admission.
+The service MUST own a stable random webhook secret per Project and return it
+only on the registrar-authenticated surface used by the trusted host to
+reconcile the organization hook and replay queued jobs. Each accepted queued
+job and resulting claim MUST retain a fresh, random, non-secret admission
+generation identity bound to a reviewed policy digest of the service identity,
+Project and organization binding, protected source ref and commit, exact config
+digest, common image, and reviewed labels. An active identical-policy lease
+refresh MUST retain its generation identity. Revocation, expiry, or a different
+reviewed policy MUST allocate a new generation even when later policy bytes
+equal an older generation. Registrar, webhook, worker, Gitea, and
+runner-registration tokens MUST NOT contribute to or appear in the policy
+digest, generation identity, or a claim response. After a service restart,
+expiry, revocation, or rotation, a queued job or claim from a different
+admission generation MUST NOT be dispatched, renewed, or requeued as current
 policy demand; a newly authenticated event is recorded under the current
-identity. Claims are exclusive per host and named capacity and carry renewable
+generation. Claims are exclusive per host and named capacity and carry renewable
 leases. An expired claim MUST fence new work on that capacity until
 the host has inspected and reaped its own container and acknowledged recovery;
 unknown or foreign containers MUST NOT be removed. Loss of renewal MUST stop
@@ -358,17 +374,23 @@ bounded resources, one ephemeral job, no host Docker socket or `/dev/kvm`,
 and a registration credential confined to a temporary read-only mount. Its
 nested Docker daemon MUST use the managed host registry cache with no direct
 Docker Hub fallback, as required by `CI-CACHE-ROUTING-001`. The
-pool service has no Gitea administrator credential. Operator-managed webhook
-provisioning and queued-job reconciliation are prerequisites for live use;
-neither is silently inferred from a local Project runner.
+pool service has no Gitea administrator credential and does not issue runner
+registration tokens. `project reconcile` is the production host-only registrar:
+it resolves protected state, verifies Gitea, refreshes the admission lease,
+reconciles the stable organization webhook, and replays the bounded queued-job
+listing. Webhook payloads are demand input, never admission authority.
 
 The SQLite store schema is explicitly versioned. A persisted database without
 the supported schema version, or with another version, MUST be rejected before
 enabling write-ahead logging or applying schema changes. The service does not
 implicitly migrate or discard unsupported ordinary-pool state.
 
-`service run` reads a mode-`0600`, owner-controlled JSON service config, and
-`worker serve` continuously claims one configured host capacity using
+`service run` reads a mode-`0600`, owner-controlled JSON service config.
+`project reconcile` reads a separate mode-`0600` registrar config so worker
+processes do not receive registrar authority. It MUST be rerun before lease
+expiry and after protected policy changes; failure leaves the prior admission
+to expire rather than silently extending it. `worker serve` continuously
+claims one configured host capacity using
 `DIM_ORDINARY_CI_POOL_CONNECTION_FILE` alongside the external Gitea connection
 file. `worker run-once` processes at most one claim, printing an idle or
 completed result. These host-operator commands do not grant workspace/agent
