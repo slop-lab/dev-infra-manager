@@ -145,6 +145,22 @@ revoke operations.
 
 `dim-development-service` lets tools expose named loopback services without
 embedding tool names or application ports in reviewed Project configuration.
+It also provides a narrow workspace-root command for ordinary nested HTTP
+services:
+
+```bash
+dim-development-service request-url \
+  --ingress local-http --container dev --container deep --port 5678
+```
+
+`request-url` uses only the current workspace or agent controller socket and
+matching grant from its environment. It always requests HTTP, accepts one or
+two nested container names, and prints the controller's JSON record, including
+its approval state. It has no workspace, socket, host, domain, subdomain,
+path, protocol, approval, or administration selector. Run it in the workspace
+root when the target path begins in the Project runtime; do not pass the
+workspace grant into either target container.
+
 Trusted Project lifecycle code first keeps one ingress-filtered proxy bound to
 the agent container and the helper's fixed gateway port:
 
