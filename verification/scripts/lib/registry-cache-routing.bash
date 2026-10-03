@@ -44,7 +44,7 @@ dim_registry_cache_image() {
   node -e '
     const fs = require("node:fs");
     const source = fs.readFileSync(process.argv[1], "utf8");
-    const match = source.match(/REGISTRY_CACHE_IMAGE\s*=\s*"(registry@sha256:[a-f0-9]{64})"/);
+    const match = source.match(/dockerImage:\s*"(registry@sha256:[a-f0-9]{64})"/);
     if (!match) process.exit(1);
     process.stdout.write(`${match[1]}\n`);
   ' "$source_file"

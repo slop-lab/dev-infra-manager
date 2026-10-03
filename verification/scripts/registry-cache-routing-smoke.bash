@@ -54,7 +54,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-registry_source="$workspace_root/core/packages/core/src/registryCache.ts"
+registry_source="$workspace_root/plugin-host-mirrors/src/index.ts"
 registry_image="$(dim_registry_cache_image "$registry_source")"
 dind_image="docker@sha256:173f284a4299164772a90f52b373e73e087583c0963f1334c9995f190ef6f3f5"
 fixture_address="$(dim_registry_fixture_address)"

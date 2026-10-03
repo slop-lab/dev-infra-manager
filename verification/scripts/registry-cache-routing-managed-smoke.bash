@@ -80,7 +80,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-registry_image="$(dim_registry_cache_image "$workspace_root/core/packages/core/src/registryCache.ts")"
+registry_image="$(dim_registry_cache_image "$workspace_root/plugin-host-mirrors/src/index.ts")"
 docker network create --label dim.managed=true --label dim.resource=network "$network" >/dev/null
 docker volume create --label dim.managed=true --label dim.resource=registry-cache-data "$cache_volume" >/dev/null
 fixture_address="$(dim_registry_fixture_address)"
