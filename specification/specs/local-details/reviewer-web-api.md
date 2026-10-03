@@ -8,9 +8,9 @@
 first reviewer-web slice. It provides local login, memory-backed browser
 sessions, session inspection/logout, Project/repository-scoped native review
 inspection, and review-evidence creation. The service ships a same-origin browser
-frontend for those operations. Host deployment,
-approval/revocation, promotion, CI reporting, host-admin routes, and generic
-proxying remain absent.
+frontend for those operations plus exact-review approval and self-revocation.
+Host deployment, durable rejection, administrator revocation, promotion, CI
+reporting, host-admin routes, and generic proxying remain absent.
 
 ## Trusted startup and identity binding
 
@@ -19,8 +19,10 @@ JSON file. The service accepts only loopback bind addresses and an explicit
 public HTTP(S) origin. Plain HTTP is limited to loopback origins for local
 verification; production origins use HTTPS.
 
-The file contains scrypt hashes for local web accounts and one native Git Basic
-credential. Before opening its listener, the service calls exact native
+The file contains scrypt hashes for local web accounts, one required
+`reviewerAccountId`, and one native Git Basic credential. The reviewer account
+identifier must match exactly one configured account or startup fails. Before
+opening its listener, the service calls exact native
 `GET /v1/identity` without redirects. Startup succeeds only when the response
 is role `reviewer` and its Project ID, ordered repository IDs, and reviewer ID
 exactly match configuration. Native `401`, `503`, malformed output, another
@@ -67,21 +69,44 @@ The service accepts only these native-backed routes:
 
 - `GET /v1/projects/PROJECT/repositories/REPOSITORY/reviews/REVIEW_ID`
 - `POST /v1/projects/PROJECT/repositories/REPOSITORY/reviews`
+- `POST /v1/projects/PROJECT/repositories/REPOSITORY/reviews/REVIEW_ID/approvals`
+- `POST /v1/projects/PROJECT/repositories/REPOSITORY/reviews/REVIEW_ID/revocations`
 
 The path Project and repository must be present in the startup-attested scope.
 Foreign and malformed paths return `404` without native dispatch. Query strings,
-encoded suffixes, review action suffixes, arbitrary URLs, and arbitrary methods
-are absent.
+encoded suffixes, unlisted review action suffixes, arbitrary URLs, and arbitrary
+methods are absent.
 
-The POST body contains only `protectedRef` and `proposalRef`, is size-bounded,
+The collection POST body contains only `protectedRef` and `proposalRef`, is size-bounded,
 and is protected by session, exact Origin, and CSRF checks. This operation
 creates immutable review evidence; it does not approve, promote, merge, or
 update a protected ref.
+
+Both action POSTs accept only an empty JSON object and require the same session,
+exact Origin, CSRF, Project, repository, and exact review-ID checks. Before
+native dispatch, the session account ID must exactly equal the configured
+`reviewerAccountId`; every other authenticated account receives `403`. Approval
+delegates to the native reviewer route, which revalidates required-reviewer and
+stale-evidence authority. Self-revocation first selects only the configured
+reviewer ID's active approval from a freshly read exact-review DTO, then delegates
+that approval ID to the native revocation route, which independently enforces
+ownership. The browser cannot supply an approval ID or select another reviewer.
+Each success returns a freshly read review DTO so visible status is the native
+result, not an optimistic browser state. In-page review navigation and sign-out
+remain locked from mutation dispatch until that DTO is rendered, preventing a
+new browser operation from aborting the authoritative result refresh.
+
+The web service has no administrator credential or administrator route. Native
+administrator revocation may be exposed only by a future separately configured
+and separately attested administrator transport identity; the reviewer credential
+must never be widened or reused as administrator authority.
 
 Native review responses are parsed and projected into an explicit browser DTO.
 The DTO includes immutable IDs/refs/revisions, printable changed paths and
 symlink targets, object IDs and modes, printable patch text, required reviewer
 IDs, safe approval/revocation timestamps, and safe terminal job summaries. It
+also includes the account-specific boolean `canDecide`; read-only authenticated
+accounts receive `false` and the browser exposes no decision control. It
 omits `patchBytes`, raw path bytes, policy digest, writer username, reviewer
 username, revoker username, reporter username, native credentials, and every
 unknown native field. Patch and path strings remain untrusted JSON data and
@@ -110,4 +135,7 @@ and generic proxy denial; safe review creation; and omission of native secret
 and raw-byte fields. They also cover concurrent and sequential derivation
 saturation, one-token refill, recovery, unknown-account equivalent work,
 account session rotation, logout after rotation, expired-orphan pruning, and
-hard session capacity.
+hard session capacity. They additionally cover required reviewer-account
+binding, two-account review DTO and action authorization, read-only control
+omission, and delayed mutation responses that cannot be superseded by in-page
+navigation before the committed native result is rendered.
