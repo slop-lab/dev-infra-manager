@@ -1,58 +1,66 @@
 import { createHash } from "node:crypto";
 import { UserError } from "./errors.js";
-import type { OrdinaryCiPoolProject, OrdinaryCiPoolServiceConfig } from "./ordinaryCiPoolService.js";
 import type { StoredOrdinaryPoolClaim } from "./ordinaryCiPoolStore.js";
 
 export type OrdinaryCiPoolAdmission = {
   readonly admissionId: string;
+  readonly serviceId: string;
+  readonly projectId: string;
+  readonly projectName: string;
+  readonly organization: string;
+  readonly organizationId: number;
+  readonly sourceRef: string;
+  readonly sourceCommit: string;
+  readonly configDigest: string;
   readonly jobImage: string;
-  readonly runnerLabel: string;
-  readonly project: OrdinaryCiPoolProject;
+  readonly runnerLabels: readonly string[];
+  readonly expiresAt: number;
 };
 
-export function ordinaryCiPoolAdmissionId(
-  config: Pick<OrdinaryCiPoolServiceConfig, "jobImage" | "runnerLabel">,
-  project: OrdinaryCiPoolProject
+export type OrdinaryCiPoolAdmissionInput = Omit<OrdinaryCiPoolAdmission, "admissionId" | "serviceId" | "expiresAt">;
+
+export function ordinaryCiPoolPolicyDigest(
+  serviceId: string,
+  input: OrdinaryCiPoolAdmissionInput
 ): string {
   const identity = [
-    "ordinary-ci-pool-admission-v1",
-    project.projectId,
-    project.projectName,
-    project.organization,
-    project.organizationId,
-    config.jobImage,
-    config.runnerLabel
+    "ordinary-ci-pool-policy-v2",
+    serviceId,
+    input.projectId,
+    input.projectName,
+    input.organization,
+    input.organizationId,
+    input.sourceRef,
+    input.sourceCommit,
+    input.configDigest,
+    input.jobImage,
+    [...input.runnerLabels].sort()
   ];
   return createHash("sha256").update(JSON.stringify(identity)).digest("hex");
-}
-
-export function ordinaryCiPoolAdmissions(config: OrdinaryCiPoolServiceConfig): readonly OrdinaryCiPoolAdmission[] {
-  return config.projects.map((project) => ({
-    admissionId: ordinaryCiPoolAdmissionId(config, project),
-    jobImage: config.jobImage,
-    runnerLabel: config.runnerLabel,
-    project
-  }));
 }
 
 export function ordinaryCiPoolClaimResponse(
   claim: StoredOrdinaryPoolClaim,
   admission: OrdinaryCiPoolAdmission | undefined,
   leaseMilliseconds: number
-): Readonly<Record<string, string | number>> {
-  if (admission === undefined || admission.project.projectId !== claim.projectId) {
-    throw new UserError("ordinary CI pool claim references an inactive operator policy");
+): Readonly<Record<string, string | number | readonly string[]>> {
+  if (admission === undefined || admission.projectId !== claim.projectId) {
+    throw new UserError("ordinary CI pool claim references an inactive reviewed admission");
   }
   return {
     claimId: claim.claimId,
     admissionId: admission.admissionId,
+    serviceId: admission.serviceId,
     jobId: claim.jobId,
-    projectId: admission.project.projectId,
-    projectName: admission.project.projectName,
-    organization: admission.project.organization,
-    organizationId: admission.project.organizationId,
+    projectId: admission.projectId,
+    projectName: admission.projectName,
+    organization: admission.organization,
+    organizationId: admission.organizationId,
+    sourceRef: admission.sourceRef,
+    sourceCommit: admission.sourceCommit,
+    configDigest: admission.configDigest,
     jobImage: admission.jobImage,
-    runnerLabel: admission.runnerLabel,
+    runnerLabels: admission.runnerLabels,
     leaseMilliseconds
   };
 }
