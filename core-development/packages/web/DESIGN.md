@@ -309,6 +309,28 @@ Spatial model:
 - **Motion:** opacity crossfade only; no movement required.
 - **Layout:** centered `stack` within a bounded panel, never a blank card.
 
+### Exact Review Decision
+
+- **Structure:** bounded decision panel with a plain-language personal approval
+  state, one primary `Approve review` control, one inverse `Revoke approval`
+  control, and a nearby error slot.
+- **Authority:** approval always names the currently open immutable review. The
+  inverse action revokes only the configured reviewer account's active approval.
+  Other authenticated accounts see the exact evidence and an explicit read-only
+  explanation but no decision controls. It is
+  not a rejection record. No administrator action appears unless a distinct
+  administrator credential and role have been separately attested; the current
+  reviewer service has neither.
+- **States:** eligible, approving, own approval active, revoking, own approval
+  revoked, stale, denied, and request error. Stale evidence disables approval but
+  does not hide the exact evidence or an available self-revocation.
+- **Accessibility:** the visible status names whose decision is represented;
+  asynchronous state is announced once; successful approval or revocation moves
+  focus to the newly enabled inverse control.
+- **Motion:** the standard button press and color transitions only.
+- **Layout:** text and controls form a wrapping cluster on wide screens and one
+  full-width stack at the mobile breakpoint.
+
 ### Authenticated Review Workspace
 
 - **Structure:** persistent product header, context rail, create/open controls,
@@ -316,7 +338,9 @@ Spatial model:
 - **Variants:** signed out; restoring session; authenticated with no open review;
   creating evidence; loading an exact review; ready; stale; and request error.
 - **Authority:** the page can create and read immutable review evidence only. It
-  contains no approval, rejection, revocation, promotion, CI-reporting, generic
+  can approve that exact review through the configured reviewer identity and
+  revoke only that identity's active approval. It contains no Reject action,
+  durable rejection, administrator revocation, promotion, CI-reporting, generic
   proxy, or host-administration control.
 - **Data:** the session fixes Project and repository choices. The current review is
   fetched from the member route by the exact returned or entered 64-hex review ID;
@@ -336,6 +360,10 @@ Spatial model:
   aborts and supersedes the prior action. Every asynchronous continuation checks that
   its generation is still current before changing visible state, focus, credentials,
   or evidence. Logout therefore cannot be followed by revived stale content.
+  Approval and revocation additionally lock create, open, and logout navigation
+  until the action response's freshly read native DTO has rendered. A later
+  in-page operation cannot abort the interval after native persistence and before
+  authoritative browser refresh.
 - **Accessibility:** username/password and ref/review-ID inputs have visible labels;
   successful sign-in moves focus to the workspace heading; logout returns focus to
   the username; exact-review completion moves focus to the evidence heading; errors
@@ -431,4 +459,4 @@ semantic grouping job.
 |---|---|---|---|
 | Automated screen-reader announcement audit is not part of the showcase harness | Primitive showcase only | Browser accessibility tree and keyboard behavior are exercised now; production framework and test runner are not selected | Add automated accessibility and assistive-technology coverage with the product package |
 | Light color scheme is not defined | Design system | The first reviewer console is dark-mode-only by scope; mechanical inversion would be unsafe | Define and contrast-test a full semantic light mapping before offering a theme switch |
-| Approval and rejection decisions are absent | Product workspace | The owner has not resolved whether reject creates durable evidence or revokes an existing approval; exposing either label would invent authority | Add a decision control only after the normative action and API are approved |
+| Administrator revocation is absent | Product workspace | The service attests only one reviewer credential; reusing it or accepting an admin selector would broaden authority | Add only with a separately configured and separately attested administrator transport identity |
