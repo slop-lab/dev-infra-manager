@@ -307,7 +307,11 @@ function ordinaryClaim(): OrdinaryPoolClaim {
     organization: "dim-alpha",
     organizationId: 41,
     jobImage: JOB_IMAGE,
-    runnerLabel: "dim-ordinary",
+    serviceId: "pool-main",
+    sourceRef: "refs/heads/main",
+    sourceCommit: "a".repeat(40),
+    configDigest: "b".repeat(64),
+    runnerLabels: ["dim-ordinary"],
     leaseMilliseconds: 60_000
   };
 }

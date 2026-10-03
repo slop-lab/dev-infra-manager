@@ -11,13 +11,17 @@ import type { StreamingCommandRunner } from "./types.js";
 export type OrdinaryPoolClaim = {
   readonly claimId: string;
   readonly admissionId: string;
+  readonly serviceId: string;
   readonly jobId: number;
   readonly projectId: string;
   readonly projectName: string;
   readonly organization: string;
   readonly organizationId: number;
+  readonly sourceRef: string;
+  readonly sourceCommit: string;
+  readonly configDigest: string;
   readonly jobImage: string;
-  readonly runnerLabel: string;
+  readonly runnerLabels: readonly string[];
   readonly leaseMilliseconds: number;
 };
 
@@ -85,7 +89,7 @@ export function ordinaryPoolContainerArgs(
     "--env", `GITEA_INSTANCE_URL=${credential.instanceUrl}`,
     "--env", "GITEA_RUNNER_REGISTRATION_TOKEN_FILE=/run/secrets/gitea-registration-token",
     "--env", `GITEA_RUNNER_NAME=${name}`,
-    "--env", `GITEA_RUNNER_LABELS=${plan.claim.runnerLabel}:docker://${plan.claim.jobImage}`,
+    "--env", `GITEA_RUNNER_LABELS=${plan.claim.runnerLabels.map((label) => `${label}:docker://${plan.claim.jobImage}`).join(",")}`,
     "--env", "GITEA_RUNNER_EPHEMERAL=1",
     "--env", "GITEA_RUNNER_ONCE=1",
     "--env", "CONFIG_FILE=/etc/dim-act-runner.yml",
@@ -224,12 +228,15 @@ function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
 
 function assertPlan(plan: OrdinaryPoolWorkerPlan): void {
   if (plan.runnerRuntime !== "sysbox-runc") throw new UserError("ordinary CI pool requires the Sysbox runtime");
-  for (const [label, value] of [["host ID", plan.hostId], ["capacity", plan.capacity], ["claim ID", plan.claim.claimId], ["Project ID", plan.claim.projectId], ["runner label", plan.claim.runnerLabel]] as const) {
+  for (const [label, value] of [["host ID", plan.hostId], ["capacity", plan.capacity], ["claim ID", plan.claim.claimId], ["Project ID", plan.claim.projectId], ["service ID", plan.claim.serviceId]] as const) {
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value)) throw new UserError(`ordinary CI pool ${label} is invalid`);
   }
   if (!/^sha256:[0-9a-f]{64}$/.test(plan.runnerImage)) throw new UserError("ordinary CI pool runner image must be a Docker image ID");
   if (!/^(?:[a-z0-9]+(?:[._-][a-z0-9]+)*(?::[0-9]+)?\/)*[a-z0-9]+(?:[._-][a-z0-9]+)*@sha256:[0-9a-f]{64}$/.test(plan.claim.jobImage)) {
     throw new UserError("ordinary CI pool job image must be digest-pinned without a tag");
+  }
+  if (plan.claim.runnerLabels.length === 0 || plan.claim.runnerLabels.some((label) => !/^[a-z0-9][a-z0-9._-]*$/.test(label))) {
+    throw new UserError("ordinary CI pool runner labels are invalid");
   }
 }
 
