@@ -136,8 +136,9 @@ any unverifiable data volume or other resource, and don't recreate the service
 under a conflicting name. DIM rejects other incompatible pre-stable state
 except for the single
 lossless host lifecycle transition from schema 1 to schema 2. At controller
-startup, `migrateHostLifecycleState` runs under the host lifecycle lock before
-plugins or listeners, renames only `resumeCiRunners` to `restartCiRunners`, and
+startup, DIM resolves the required host-mirror provider before
+`migrateHostLifecycleState` runs under the host lifecycle lock and before any
+managed service reconciliation or listeners. Migration renames only `resumeCiRunners` to `restartCiRunners`, and
 retains the original bytes permanently in mode-`0600`
 `host.json.schema-1.bak`. Normal lifecycle reads remain schema-2-only. A
 malformed record, extra field, conflicting backup, symlink, or non-regular

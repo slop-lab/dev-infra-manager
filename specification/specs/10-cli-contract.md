@@ -434,6 +434,27 @@ NOT depend on the managed cache. Cache use MUST
 NOT expose a host container-engine socket or make disposable runner state
 persistent. Cache misses remain ordinary anonymous upstream pulls.
 
+**HOST-MIRROR-PROVIDER-001:** Docker and APT cache implementation selection
+MUST come from exactly one explicitly enabled, host-installed DIM plugin. The
+plugin package MUST be installed at an exact version and MUST register one
+complete Docker cache image and one complete APT cache image, each pinned by a
+`sha256` digest. A missing provider, a second provider, or a mutable image
+reference MUST fail before workspace or managed CI reconciliation. Project
+configuration, workspace creation input, lifecycle hooks, and workspace
+capability providers MUST NOT select, replace, disable, or override either
+image or the fixed mirror endpoints.
+
+Core MUST reconcile both plugin-selected images as DIM-owned containers on the
+host control network, with persistent cache volumes, stable internal aliases,
+no published host ports, and no upstream credential. It MUST NOT install the
+cache packages into the host operating system. Before creating, setting up,
+updating, starting, or restarting a workspace, core MUST reconcile both caches.
+Every newly created or replaced workspace container MUST configure its Docker
+daemon through `dim-registry-cache:5000` and APT HTTP and HTTPS acquisition
+through `dim-apt-cache:3142`. Cache outage MUST fail package retrieval without
+direct upstream fallback. Changing the workspace runtime configuration MUST
+replace an older workspace container so the host-owned routing is applied.
+
 **CI-CACHE-ROUTING-001:** A DIM-owned workspace engine, Sysbox runner engine,
 QEMU guest engine, or nested verification engine configured for this cache
 MUST fail its managed operation when the required cache or relay route is
@@ -601,9 +622,11 @@ runner configuration, provenance, image identity, or persisted runner state.
 CI runner state schema `8` records complete runner-configuration provenance for
 both executors and hook provenance for each QEMU executor.
 
-An APT mirror was considered for common package reuse but is not required. The
-managed Docker registry pull-through cache is a distinct image-pull service and
-does not replace either QEMU image layer.
+The host plugin-selected APT cache is required for workspace package reuse.
+It is distinct from the Docker registry pull-through cache and neither cache
+replaces the immutable QEMU common or Project image layers. QEMU common-image
+identity continues to cover the immutable upstream snapshot and exact package
+versions; cache storage is transport reuse, not source identity.
 
 **CI-JOB-IMAGE-001:** Runner admission MUST require the protected Project root
 to provide `.dim/ci/runner.yml`. Schema version `1` has exactly `ordinary` and

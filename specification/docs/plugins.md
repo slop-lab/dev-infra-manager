@@ -36,6 +36,29 @@ names. Registration remains explicit and instance-scoped: installing a package
 does not activate it unless it is also listed in `plugins.json`. The External
 URL system uses this mechanism for DNS provider drivers.
 
+## Host mirror provider
+
+DIM workspaces require exactly one enabled host mirror provider. The supported
+provider is `@slop-lab/dim-plugin-host-mirrors`, installed at the same exact
+version as DIM:
+
+```bash
+dim installer install plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
+```
+
+The reviewed plugin source selects one digest-pinned Docker Hub cache image and
+one digest-pinned APT cache image. Core runs those images as DIM-owned
+containers without publishing host ports, configures every workspace Docker
+daemon and APT client through their stable control-network aliases, and fails
+workspace reconciliation if the provider is absent or conflicting. The plugin
+does not install packages into the host operating system.
+
+Projects and workspaces have no mirror-provider, image, package, version, or
+endpoint setting. Named workspace capabilities cannot override the reserved
+`DIM_REGISTRY_CACHE_ENDPOINT` or `DIM_APT_CACHE_ENDPOINT` environment entries.
+Changing provider bytes or image pins therefore requires host installation and
+review, not a Project commit or agent request.
+
 Plugin discovery does not depend on a naming convention. Scoped, unscoped, and
 private-registry package names are accepted. For example:
 

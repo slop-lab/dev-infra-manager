@@ -367,8 +367,12 @@ repositories. The hook runs inside the disposable Packer guest, receives no
 host socket or coordinator credential, and cannot access another Project's
 cache volume.
 
-An APT mirror was considered but is not required. The existing Docker registry
-pull-through cache remains separate from QEMU base-image caching.
+The enabled host mirror plugin owns the exact digest-pinned APT cache image used
+for workspace package reuse. This cache does not change QEMU source identity:
+QEMU cache reuse continues to come from the common base and Project-specific
+image layers, whose keys cover the immutable Ubuntu snapshot and exact package
+versions. Project runner configuration cannot select host mirror packages or
+versions.
 
 Creating a QEMU runner adds only its managed supervisor hostname to Gitea's
 webhook allowlist and restarts the managed Gitea service to apply that setting.
