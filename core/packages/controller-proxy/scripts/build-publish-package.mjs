@@ -12,6 +12,7 @@ const output = minifyPackageJson(source, {
   includeFields: ["exports", "types", "publishConfig"]
 });
 output.version = publishPackageVersion(source.version);
+output.dependencies["@slop-lab/dim-contracts-external-url"] = output.version;
 output.types = "./index.d.ts";
 output.exports = {
   ".": { types: "./index.d.ts", import: "./index.js", default: "./index.js" },

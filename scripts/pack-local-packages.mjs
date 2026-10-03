@@ -14,6 +14,7 @@ const packageDirectories = [
   "core/packages/controller-proxy/dist",
   "plugin-dns-cloudflare/dist",
   "plugin-external-urls/dist",
+  "plugin-host-mirrors/dist",
   "core/packages/cli/dist",
   "core/packages/installer/dist",
 ];
