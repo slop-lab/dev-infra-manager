@@ -2,16 +2,28 @@
 
 ## Purpose
 
-`dev-infra-manager` provides a host-side execution and trust layer for
-persistent AI-assisted development workspaces, separate verification, and
-review-gated promotion into protected or secret-bearing state.
+`dev-infra-manager` provides persistent, comfortable development workspaces
+for coding agents on Linux. A workspace keeps its checkout and installed tools
+across sessions, supports services and nested container workloads, and lets an
+agent resume work without rebuilding the development environment for every
+session.
+
+Developer convenience and review-gated isolation are co-equal goals. DIM must
+support fast iteration and reproducible development while keeping host control
+sockets, raw Project secrets, protected refs, and trusted operations outside
+the agent's authority.
 
 The system must let an untrusted agent:
 
 - Execute commands in a persistent workspace that is removed only when
   explicitly discarded.
 - Read and write files in that workspace.
+- Retain Project-approved development tools and configuration across workspace
+  stop and start cycles.
 - Run nested container workloads through an approved runtime backend.
+- Repeat Project-defined development tasks from reviewed repository code.
+- Request reproducible verification in a separate checkout outside mutable
+  workspace state.
 - Push proposed changes to a managed Git host.
 - Request reviewed changes to be promoted through a managed pull request flow.
 - Keep code that can affect secret-bearing environments in separate,
@@ -60,6 +72,14 @@ The project does not own:
 - Automatic provider-specific GitHub synchronization.
 - Model request audit logs.
 - Project-specific product code.
+
+## Future Direction
+
+General development tool setup and configuration that works independently of a
+Project is a future plugin direction. The current product requires each
+reviewed Project to define its development container, tasks, agent process, and
+tool setup. Existing plugin APIs provide named extensions and constrained host
+capabilities, but they do not yet provide this general tool-management layer.
 
 ## Compatibility Goals
 

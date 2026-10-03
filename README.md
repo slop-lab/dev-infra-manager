@@ -1,14 +1,16 @@
 # dev-infra-manager
 
-**Persistent workspaces. Clean verification. Reviewed promotion.**
+**Persistent workspaces. Fast iteration. Reviewed promotion.**
 
-`dev-infra-manager` (DIM) is a self-hosted execution and trust layer for
-coding-agent development on Linux.
+`dev-infra-manager` (DIM) gives coding agents persistent, Project-scoped Linux
+workspaces where they can keep their checkout and installed tools, run
+services and nested Docker workloads, and resume work without rebuilding the
+development environment for every session.
 
-DIM turns a Linux host into Project-scoped development infrastructure where
-coding agents can install tools, run services, and build or run nested
-containers without receiving direct control of the host container runtime.
-Each Project can combine:
+The same infrastructure keeps verification reproducible and promotion
+review-gated. Agents can iterate freely inside their workspaces without direct
+control of the host container runtime or access to raw Project secrets. Each
+Project can combine:
 
 - Workspaces that persist across agent turns and retries and are removed only
   through an explicit discard lifecycle.
@@ -21,6 +23,11 @@ Each Project can combine:
 - Separation between agent-controlled code and operations that receive
   secrets.
 - Per-workspace CPU, memory, and process limits.
+
+Today, each reviewed Project defines its repositories, development container,
+tasks, and agent tool setup. A future direction is to let plugins provide
+general, Project-independent development tool setup and configuration. DIM
+does not ship that general plugin capability yet.
 
 DIM sits below interactive coding agents and autonomous orchestrators. OpenCode,
 Claude Code, or another agent can run in a DIM workspace. An orchestrator such
