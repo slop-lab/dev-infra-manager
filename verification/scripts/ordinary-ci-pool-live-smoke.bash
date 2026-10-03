@@ -119,8 +119,7 @@ admin_password="$(openssl rand -hex 24)"
 writer_password="$(openssl rand -hex 24)"
 host_a_token="$(openssl rand -hex 24)"
 host_b_token="$(openssl rand -hex 24)"
-alpha_webhook_token="$(openssl rand -hex 24)"
-beta_webhook_token="$(openssl rand -hex 24)"
+registrar_token="$(openssl rand -hex 24)"
 
 docker run --detach --name "$gitea_container" \
   --label dim.verification=ordinary-ci-pool-live \
@@ -179,11 +178,11 @@ pool_endpoint="http://127.0.0.1:$pool_port"
 pool_webhook_base="http://host.docker.internal:$pool_port"
 pool_config="$work_dir/pool-service.json"
 jq -n \
-  --arg database "$work_dir/pool.sqlite3" --arg image "$job_image" \
-  --arg alpha_token "$alpha_webhook_token" --arg beta_token "$beta_webhook_token" \
+  --arg database "$work_dir/pool.sqlite3" --arg image "$job_image" --arg webhook_base "$pool_webhook_base" \
+  --arg registrar_token "$registrar_token" \
   --arg host_a_token "$host_a_token" --arg host_b_token "$host_b_token" \
   --argjson port "$pool_port" --argjson alpha_id "$alpha_org_id" --argjson beta_id "$beta_org_id" \
-  '{schemaVersion:1,listen:{host:"0.0.0.0",port:$port},database:$database,jobImage:$image,runnerLabel:"dim-ordinary",projects:[{projectId:"project-alpha",projectName:"alpha",organization:"dim-alpha",organizationId:$alpha_id,webhookToken:$alpha_token},{projectId:"project-beta",projectName:"beta",organization:"dim-beta",organizationId:$beta_id,webhookToken:$beta_token}],hosts:[{hostId:"host-a",token:$host_a_token,capacities:["primary"]},{hostId:"host-b",token:$host_b_token,capacities:["primary"]}]}' \
+  '{schemaVersion:2,listen:{host:"0.0.0.0",port:$port},serviceId:"ordinary-live",database:$database,jobImage:$image,webhookBaseUrl:$webhook_base,registrarToken:$registrar_token,admissionLeaseMilliseconds:3600000,hosts:[{hostId:"host-a",token:$host_a_token,capacities:["primary"]},{hostId:"host-b",token:$host_b_token,capacities:["primary"]}]}' \
   >"$pool_config"
 chmod 0600 "$pool_config"
 dim ci ordinary-pool service run "$pool_config" >"$work_dir/pool.log" 2>&1 &
@@ -196,6 +195,21 @@ for attempt in $(seq 1 60); do
   fi
   sleep 0.5
 done
+
+admit_project() {
+  local project_id="$1" project_name="$2" organization_id="$3"
+  jq -n --arg project_id "$project_id" --arg project_name "$project_name" \
+    --arg organization "dim-$project_name" --arg image "$job_image" \
+    --arg source_commit "$(printf 'a%.0s' {1..40})" --arg config_digest "$(printf 'b%.0s' {1..64})" \
+    --argjson organization_id "$organization_id" \
+    '{projectId:$project_id,projectName:$project_name,organization:$organization,organizationId:$organization_id,sourceRef:"refs/heads/main",sourceCommit:$source_commit,configDigest:$config_digest,jobImage:$image,runnerLabels:["dim-ordinary"]}' \
+    | curl --fail --silent --show-error --header "Authorization: Bearer $registrar_token" \
+      --header 'content-type: application/json' --data-binary @- "$pool_endpoint/v1/admissions"
+}
+alpha_admission="$(admit_project project-alpha alpha "$alpha_org_id")"
+beta_admission="$(admit_project project-beta beta "$beta_org_id")"
+alpha_webhook_token="$(jq -er '.webhookToken' <<<"$alpha_admission")"
+beta_webhook_token="$(jq -er '.webhookToken' <<<"$beta_admission")"
 
 create_hook() {
   local organization="$1" project_id="$2" token="$3" response
@@ -226,7 +240,7 @@ write_host_files() {
     '{schemaVersion:1,transport:"isolated-http",hostId:$host,apiBaseUrl:$api,hostBaseUrl:$base,workspaceBaseUrl:$base,runnerBaseUrl:$runner,credentials:{adminUsername:"dim-operator",adminPassword:$admin,writerUsername:"dim-workspace",writerPassword:$writer,maintainerUsername:"dim-operator",maintainerPassword:$admin},projects:{alpha:{id:"project-alpha",gitNamespace:"dim-alpha",giteaOrganizationId:$alpha_id},beta:{id:"project-beta",gitNamespace:"dim-beta",giteaOrganizationId:$beta_id}}}' \
     >"$host_root/gitea.json"
   jq -n --arg endpoint "$pool_endpoint" --arg host "$host" --arg token "$token" --arg image "$job_image" \
-    '{schemaVersion:1,transport:"loopback-http",endpoint:$endpoint,hostId:$host,token:$token,expectedJobImage:$image}' \
+    '{schemaVersion:2,transport:"loopback-http",endpoint:$endpoint,hostId:$host,token:$token,expectedServiceId:"ordinary-live",expectedJobImage:$image}' \
     >"$host_root/pool.json"
   chmod 0600 "$host_root/config/dim/config.json" "$host_root/gitea.json" "$host_root/pool.json"
 }
