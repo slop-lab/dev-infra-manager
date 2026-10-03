@@ -12,6 +12,23 @@ export type OrdinaryPoolClaimResult =
   | { readonly kind: "claimed"; readonly claim: OrdinaryPoolClaim }
   | { readonly kind: "recovery"; readonly claimId: string; readonly projectId: string; readonly admissionId: string };
 
+export async function assertOrdinaryPoolServiceIdentity(
+  connection: OrdinaryCiPoolConnection,
+  signal?: AbortSignal
+): Promise<void> {
+  const timeout = AbortSignal.timeout(10_000);
+  const response = await fetch(`${connection.endpoint}/healthz`, {
+    redirect: "manual",
+    signal: signal === undefined ? timeout : AbortSignal.any([signal, timeout])
+  });
+  if (!response.ok) throw new UserError(`ordinary CI pool identity check failed: ${response.status}`);
+  const value: unknown = await response.json();
+  if (!isRecord(value) || Object.keys(value).length !== 3 || value.ok !== true
+    || value.serviceId !== connection.expectedServiceId || value.jobImage !== connection.expectedJobImage) {
+    throw new UserError("ordinary CI pool service identity does not match the reviewed host connection");
+  }
+}
+
 export async function prepareOrdinaryPoolGiteaRunner(
   runner: CommandRunner,
   options: LifecycleOptions,
@@ -124,20 +141,23 @@ function poolRequest(
 
 function parseClaim(value: unknown): OrdinaryPoolClaim {
   if (!isRecord(value)) throw new UserError("ordinary CI pool returned an invalid claim");
-  const fields = ["claimId", "admissionId", "jobId", "projectId", "projectName", "organization", "organizationId", "jobImage", "runnerLabel", "leaseMilliseconds"] as const;
+  const fields = ["claimId", "admissionId", "serviceId", "jobId", "projectId", "projectName", "organization", "organizationId", "sourceRef", "sourceCommit", "configDigest", "jobImage", "runnerLabels", "leaseMilliseconds"] as const;
   if (Object.keys(value).length !== fields.length || fields.some((field) => value[field] === undefined)
-    || fields.filter((field) => field !== "jobId" && field !== "organizationId" && field !== "leaseMilliseconds")
+    || fields.filter((field) => field !== "jobId" && field !== "organizationId" && field !== "leaseMilliseconds" && field !== "runnerLabels")
       .some((field) => typeof value[field] !== "string")
+    || !Array.isArray(value.runnerLabels) || value.runnerLabels.length === 0
+    || !value.runnerLabels.every((label) => typeof label === "string")
     || !Number.isSafeInteger(value.jobId) || Number(value.jobId) <= 0
     || !Number.isSafeInteger(value.organizationId) || Number(value.organizationId) <= 0
     || !Number.isSafeInteger(value.leaseMilliseconds) || Number(value.leaseMilliseconds) <= 0) {
     throw new UserError("ordinary CI pool returned an invalid claim");
   }
   return {
-    claimId: String(value.claimId), admissionId: String(value.admissionId),
+    claimId: String(value.claimId), admissionId: String(value.admissionId), serviceId: String(value.serviceId),
     jobId: Number(value.jobId), projectId: String(value.projectId),
     projectName: String(value.projectName), organization: String(value.organization),
-    organizationId: Number(value.organizationId), jobImage: String(value.jobImage), runnerLabel: String(value.runnerLabel),
+    organizationId: Number(value.organizationId), sourceRef: String(value.sourceRef), sourceCommit: String(value.sourceCommit),
+    configDigest: String(value.configDigest), jobImage: String(value.jobImage), runnerLabels: value.runnerLabels,
     leaseMilliseconds: Number(value.leaseMilliseconds)
   };
 }

@@ -37,12 +37,18 @@ describe("ordinary CI pool external Project binding", () => {
     let registrations = 0;
     const endpoint = await listen(createServer((request, response) => {
       const path = new URL(request.url ?? "/", "http://control").pathname;
+      if (path === "/healthz") {
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ ok: true, serviceId: "pool-main", jobImage: JOB_IMAGE }));
+        return;
+      }
       if (path === "/v1/claims") {
         response.writeHead(200, { "content-type": "application/json" });
         response.end(JSON.stringify({
-          claimId: "claim-beta", admissionId: "a".repeat(64), jobId: 203, projectId: "project-b", projectName: "beta",
+          claimId: "claim-beta", admissionId: "a".repeat(64), serviceId: "pool-main", jobId: 203, projectId: "project-b", projectName: "beta",
           organization: "dim-beta", organizationId: 42, jobImage: JOB_IMAGE,
-          runnerLabel: "dim-ordinary", leaseMilliseconds: 60_000
+          sourceRef: "refs/heads/main", sourceCommit: "a".repeat(40), configDigest: "b".repeat(64),
+          runnerLabels: ["dim-ordinary"], leaseMilliseconds: 60_000
         }));
         return;
       }
@@ -93,8 +99,8 @@ async function hostOptions(
     projects
   }), { mode: 0o600 });
   await writeFile(poolFile, JSON.stringify({
-    schemaVersion: 1, transport: "loopback-http", endpoint, hostId: "host-a",
-    token: "host-token", expectedJobImage: JOB_IMAGE
+    schemaVersion: 2, transport: "loopback-http", endpoint, hostId: "host-a",
+    token: "host-token", expectedServiceId: "pool-main", expectedJobImage: JOB_IMAGE
   }), { mode: 0o600 });
   return lifecycleOptionsForBackend("sysbox", {
     HOME: root, DIM_STATE_ROOT: join(root, "state"), DIM_GITEA_CONNECTION_FILE: giteaFile,

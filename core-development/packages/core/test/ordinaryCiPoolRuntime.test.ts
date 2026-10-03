@@ -20,6 +20,7 @@ const JOB_IMAGE = `registry.example/dim/job@sha256:${"a".repeat(64)}`;
 const RUNNER_IMAGE = `sha256:${"b".repeat(64)}`;
 const roots: string[] = [];
 const servers: Server[] = [];
+const webhookTokens = new Map<string, string>();
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map(async (server) => {
@@ -27,6 +28,7 @@ afterEach(async () => {
     await once(server, "close");
   }));
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  webhookTokens.clear();
 });
 
 describe("ordinary CI pool multi-host driver", () => {
@@ -139,6 +141,27 @@ describe("ordinary CI pool multi-host driver", () => {
     expect(registrations).toEqual([]);
   });
 
+  it("rejects a mismatched pool service identity before Docker or registration", async () => {
+    // Given
+    const root = await mkdtemp(join(tmpdir(), "dim-ordinary-runtime-service-"));
+    roots.push(root);
+    const registrations: string[] = [];
+    const gitea = await startGitea(registrations);
+    const pool = await startPool(root);
+    const options = await hostOptions(root, {
+      gitea, pool, hostId: "host-a", token: "host-a-token", expectedServiceId: "foreign-pool"
+    });
+    const runner = new RuntimeRunner();
+
+    // When
+    const run = runOrdinaryCiPoolCapacityOnce(runner, options, "primary");
+
+    // Then
+    await expect(run).rejects.toThrow(/service identity/);
+    expect(registrations).toEqual([]);
+    expect(runner.calls).toEqual([]);
+  });
+
   it("rejects host work while host lifecycle maintenance is stopped", async () => {
     // Given
     const root = await mkdtemp(join(tmpdir(), "dim-ordinary-runtime-maintenance-"));
@@ -214,17 +237,28 @@ async function startPool(
   lease?: { readonly now: () => number; readonly leaseMilliseconds: number }
 ): Promise<string> {
   const server = configuredOrdinaryCiPoolServer({
-    schemaVersion: 1, database, jobImage: JOB_IMAGE, runnerLabel: "dim-ordinary",
-    projects: [
-      { projectId: "project-a", projectName: "alpha", organization: "dim-alpha", organizationId: 41, webhookToken: "webhook-a" },
-      { projectId: "project-b", projectName: "beta", organization: "dim-beta", organizationId: 42, webhookToken: "webhook-b" }
-    ],
+    schemaVersion: 2, serviceId: "pool-main", database, jobImage: JOB_IMAGE,
+    webhookBaseUrl: "http://127.0.0.1:7410", registrarToken: "registrar-token", admissionLeaseMilliseconds: 60_000,
     hosts: [
       { hostId: "host-a", token: "host-a-token", capacities: ["primary"] },
       { hostId: "host-b", token: "host-b-token", capacities: ["primary"] }
     ]
   }, lease);
-  return listen(server);
+  const endpoint = await listen(server);
+  await register(endpoint, "project-a", "alpha", 41);
+  await register(endpoint, "project-b", "beta", 42);
+  return endpoint;
+}
+
+async function register(endpoint: string, projectId: string, projectName: string, organizationId: number): Promise<void> {
+  const response = await fetch(`${endpoint}/v1/admissions`, {
+    method: "POST", headers: { Authorization: "Bearer registrar-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ projectId, projectName, organization: `dim-${projectName}`, organizationId,
+      sourceRef: "refs/heads/main", sourceCommit: "a".repeat(40), configDigest: "b".repeat(64),
+      jobImage: JOB_IMAGE, runnerLabels: ["dim-ordinary"] })
+  });
+  const body = await response.json() as { readonly webhookToken: string };
+  webhookTokens.set(`${endpoint}:${projectId}`, body.webhookToken);
 }
 
 function poolClaim(endpoint: string, hostId: string, token: string, requestId: string): Promise<Response> {
@@ -267,10 +301,11 @@ async function hostOptions(
     readonly hostId: string;
     readonly token: string;
     readonly runnerImage?: string;
+    readonly expectedServiceId?: string;
     readonly localProjects?: readonly ("alpha" | "beta")[];
   }
 ) {
-  const { gitea, pool, hostId, token, runnerImage = RUNNER_IMAGE } = fixture;
+  const { gitea, pool, hostId, token, runnerImage = RUNNER_IMAGE, expectedServiceId = "pool-main" } = fixture;
   const hostRoot = join(root, hostId);
   const stateRoot = join(hostRoot, "state");
   await writeFile(join(root, `${hostId}-gitea.json`), JSON.stringify({
@@ -287,7 +322,8 @@ async function hostOptions(
     }
   }), { mode: 0o600 });
   await writeFile(join(root, `${hostId}-pool.json`), JSON.stringify({
-    schemaVersion: 1, transport: "loopback-http", endpoint: pool, hostId, token, expectedJobImage: JOB_IMAGE
+    schemaVersion: 2, transport: "loopback-http", endpoint: pool, hostId, token,
+    expectedServiceId, expectedJobImage: JOB_IMAGE
   }), { mode: 0o600 });
   const options = lifecycleOptionsForBackend("sysbox", {
     HOME: hostRoot, DIM_STATE_ROOT: stateRoot,
@@ -314,11 +350,11 @@ async function listen(server: Server): Promise<string> {
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 
-function webhook(endpoint: string, projectId: string, token: string, jobId: number): Promise<Response> {
+function webhook(endpoint: string, projectId: string, _token: string, jobId: number): Promise<Response> {
   const organization = projectId === "project-b" ? { id: 42, name: "dim-beta" } : { id: 41, name: "dim-alpha" };
   return fetch(`${endpoint}/v1/webhooks/${projectId}/workflow-job`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-Gitea-Event": "workflow_job", "X-Gitea-Hook-Installation-Target-Type": "organization" },
+    headers: { Authorization: `Bearer ${webhookTokens.get(`${endpoint}:${projectId}`) ?? "missing"}`, "Content-Type": "application/json", "X-Gitea-Event": "workflow_job", "X-Gitea-Hook-Installation-Target-Type": "organization" },
     body: JSON.stringify({
       action: "queued",
       workflow_job: { id: jobId, run_id: 700, name: "verify", labels: ["dim-ordinary"], run_attempt: 1 },

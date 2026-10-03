@@ -6,6 +6,7 @@ import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type { GiteaProjectBinding, LifecycleOptions } from "./lifecycleTypes.js";
 import {
   acknowledgeOrdinaryPoolRecovery,
+  assertOrdinaryPoolServiceIdentity,
   claimOrdinaryPoolJob,
   prepareOrdinaryPoolGiteaRunner,
   releaseOrdinaryPoolClaim,
@@ -72,6 +73,7 @@ async function runOrdinaryCiPoolCapacityOnceAdmitted(
   if (connection.hostId !== gitea.hostId) {
     throw new UserError("ordinary CI pool host identity must match the external Gitea host identity");
   }
+  await assertOrdinaryPoolServiceIdentity(connection, signal);
   const state = new LifecycleState(options.stateRoot);
   assertOrdinaryPoolCapacityAvailable(await state.listCiRunners(), capacity);
   const runnerImage = await resolveSysboxRunnerImage(runner, options.stateRoot, options.ciRunnerImage);
@@ -102,6 +104,9 @@ async function runOrdinaryCiPoolCapacityOnceAdmitted(
   }
   try {
     enrolledBinding(gitea.projectBindings, claim);
+    if (claim.serviceId !== connection.expectedServiceId) {
+      throw new UserError("ordinary CI pool claim service identity does not match the reviewed host connection");
+    }
     if (claim.jobImage !== connection.expectedJobImage) {
       throw new UserError("ordinary CI pool claim job image does not match the reviewed host connection");
     }
