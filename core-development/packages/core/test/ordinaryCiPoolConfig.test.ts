@@ -15,15 +15,17 @@ afterEach(async () => {
 });
 
 describe("ordinary CI pool private configuration", () => {
-  it("parses explicit DIM organization enrollment and host capacities", async () => {
+  it("parses the dynamic registrar service and host capacities", async () => {
     // Given
     const file = await privateFile("service.json", {
-      schemaVersion: 1,
+      schemaVersion: 2,
       listen: { host: "127.0.0.1", port: 9081 },
+      serviceId: "pool-main",
       database: "/var/lib/dim-ordinary-pool/pool.sqlite3",
       jobImage: IMAGE,
-      runnerLabel: "dim-ordinary",
-      projects: [{ projectId: "project-a", projectName: "alpha", organization: "dim-alpha", organizationId: 41, webhookToken: "webhook-secret" }],
+      webhookBaseUrl: "https://pool.example",
+      registrarToken: "registrar-secret",
+      admissionLeaseMilliseconds: 60_000,
       hosts: [{ hostId: "host-a", token: "host-secret", capacities: ["primary"] }]
     });
 
@@ -32,17 +34,18 @@ describe("ordinary CI pool private configuration", () => {
 
     // Then
     expect(parsed.listen).toEqual({ host: "127.0.0.1", port: 9081 });
-    expect(parsed.pool.projects[0]?.organization).toBe("dim-alpha");
+    expect(parsed.pool.serviceId).toBe("pool-main");
   });
 
   it("rejects public connection files and mutable expected job images", async () => {
     // Given
     const file = await privateFile("connection.json", {
-      schemaVersion: 1,
+      schemaVersion: 2,
       transport: "loopback-http",
       endpoint: "http://127.0.0.1:9081",
       hostId: "host-a",
       token: "host-secret",
+      expectedServiceId: "pool-main",
       expectedJobImage: "registry.example/dim/job:latest"
     });
 

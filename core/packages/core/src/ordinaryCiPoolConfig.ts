@@ -4,7 +4,6 @@ import { UserError } from "./errors.js";
 import {
   assertOrdinaryCiPoolServiceConfig,
   type OrdinaryCiPoolHost,
-  type OrdinaryCiPoolProject,
   type OrdinaryCiPoolServiceConfig
 } from "./ordinaryCiPoolService.js";
 
@@ -12,6 +11,14 @@ export type OrdinaryCiPoolConnection = {
   readonly endpoint: string;
   readonly hostId: string;
   readonly token: string;
+  readonly expectedServiceId: string;
+  readonly expectedJobImage: string;
+};
+
+export type OrdinaryCiPoolRegistrarConnection = {
+  readonly endpoint: string;
+  readonly token: string;
+  readonly expectedServiceId: string;
   readonly expectedJobImage: string;
 };
 
@@ -25,20 +32,23 @@ type Transport = (typeof TRANSPORTS)[number];
 
 export async function readOrdinaryCiPoolServiceConfig(file: string): Promise<OrdinaryCiPoolServiceFile> {
   const root = exactRecord(await readPrivateJson(file), [
-    "schemaVersion", "listen", "database", "jobImage", "runnerLabel", "projects", "hosts"
+    "schemaVersion", "listen", "serviceId", "database", "jobImage", "webhookBaseUrl",
+    "registrarToken", "admissionLeaseMilliseconds", "hosts"
   ], "ordinary CI pool service");
-  if (root.schemaVersion !== 1) throw new UserError("ordinary CI pool service schemaVersion must be 1");
+  if (root.schemaVersion !== 2) throw new UserError("ordinary CI pool service schemaVersion must be 2");
   const listen = exactRecord(root.listen, ["host", "port"], "ordinary CI pool listen");
   const host = text(listen.host, "listen.host");
   if (host !== "127.0.0.1" && host !== "::1" && host !== "0.0.0.0") {
     throw new UserError("ordinary CI pool listen.host must be an explicit local bind address");
   }
   const pool: OrdinaryCiPoolServiceConfig = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    serviceId: identifier(root.serviceId, "serviceId"),
     database: text(root.database, "database"),
     jobImage: text(root.jobImage, "jobImage"),
-    runnerLabel: text(root.runnerLabel, "runnerLabel"),
-    projects: array(root.projects, "projects").map(parseProject),
+    webhookBaseUrl: text(root.webhookBaseUrl, "webhookBaseUrl"),
+    registrarToken: text(root.registrarToken, "registrarToken"),
+    admissionLeaseMilliseconds: positiveInteger(root.admissionLeaseMilliseconds, "admissionLeaseMilliseconds"),
     hosts: array(root.hosts, "hosts").map(parseHost)
   };
   assertOrdinaryCiPoolServiceConfig(pool);
@@ -47,9 +57,9 @@ export async function readOrdinaryCiPoolServiceConfig(file: string): Promise<Ord
 
 export async function readOrdinaryCiPoolConnection(file: string): Promise<OrdinaryCiPoolConnection> {
   const root = exactRecord(await readPrivateJson(file), [
-    "schemaVersion", "transport", "endpoint", "hostId", "token", "expectedJobImage"
+    "schemaVersion", "transport", "endpoint", "hostId", "token", "expectedServiceId", "expectedJobImage"
   ], "ordinary CI pool connection");
-  if (root.schemaVersion !== 1) throw new UserError("ordinary CI pool connection schemaVersion must be 1");
+  if (root.schemaVersion !== 2) throw new UserError("ordinary CI pool connection schemaVersion must be 2");
   const transport = parseTransport(root.transport);
   const expectedJobImage = text(root.expectedJobImage, "expectedJobImage");
   if (!digestImage(expectedJobImage)) {
@@ -59,6 +69,22 @@ export async function readOrdinaryCiPoolConnection(file: string): Promise<Ordina
     endpoint: endpoint(root.endpoint, transport),
     hostId: identifier(root.hostId, "hostId"),
     token: text(root.token, "token"),
+    expectedServiceId: identifier(root.expectedServiceId, "expectedServiceId"),
+    expectedJobImage
+  };
+}
+
+export async function readOrdinaryCiPoolRegistrarConnection(file: string): Promise<OrdinaryCiPoolRegistrarConnection> {
+  const root = exactRecord(await readPrivateJson(file), [
+    "schemaVersion", "transport", "endpoint", "token", "expectedServiceId", "expectedJobImage"
+  ], "ordinary CI pool registrar connection");
+  if (root.schemaVersion !== 1) throw new UserError("ordinary CI pool registrar connection schemaVersion must be 1");
+  const expectedJobImage = text(root.expectedJobImage, "expectedJobImage");
+  if (!digestImage(expectedJobImage)) throw new UserError("ordinary CI pool expectedJobImage must be digest-pinned without a tag");
+  return {
+    endpoint: endpoint(root.endpoint, parseTransport(root.transport)),
+    token: text(root.token, "token"),
+    expectedServiceId: identifier(root.expectedServiceId, "expectedServiceId"),
     expectedJobImage
   };
 }
@@ -81,19 +107,6 @@ async function readPrivateJson(file: string): Promise<unknown> {
     try { return JSON.parse(await handle.readFile("utf8")); }
     catch (error) { if (error instanceof SyntaxError) throw new UserError("ordinary CI pool config must contain valid JSON"); throw error; }
   } finally { await handle.close(); }
-}
-
-function parseProject(value: unknown): OrdinaryCiPoolProject {
-  const input = exactRecord(value, [
-    "projectId", "projectName", "organization", "organizationId", "webhookToken"
-  ], "ordinary CI pool Project");
-  return {
-    projectId: identifier(input.projectId, "projectId"),
-    projectName: identifier(input.projectName, "projectName"),
-    organization: identifier(input.organization, "organization"),
-    organizationId: positiveInteger(input.organizationId, "organizationId"),
-    webhookToken: text(input.webhookToken, "webhookToken")
-  };
 }
 
 function parseHost(value: unknown): OrdinaryCiPoolHost {
