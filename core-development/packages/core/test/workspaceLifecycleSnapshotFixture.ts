@@ -2,6 +2,8 @@ import type { ProjectRecord } from "../../../../core/packages/core/src/lifecycle
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import { ownedGiteaContainerInspect, ownedGiteaResourceInspect } from "./giteaServiceFixture.js";
 import { workspaceContainerInspect, workspaceVolumeInspect } from "./workspaceOwnershipFixture.js";
+import { hostMirrorInspection } from "../../../../core/packages/core/src/hostMirrorOwnership.js";
+import { registryCacheInspect, TEST_HOST_MIRROR_OWNERSHIP } from "./hostLifecycleFixture.js";
 
 
 export const COMMIT = "a".repeat(40);
@@ -36,7 +38,7 @@ export class LifecycleRunner implements StreamingCommandRunner {
     if (args[0] === "network" && args[1] === "inspect") {
       const stdout = args.some((argument) => argument.includes("dim.service-id"))
         ? ownedGiteaResourceInspect("network")
-        : "true";
+      : hostMirrorInspection("control-network", TEST_HOST_MIRROR_OWNERSHIP);
       return { command, args, stdout: `${stdout}\n`, stderr: "", exitCode: 0 };
     }
     if (args[0] === "volume" && args[1] === "inspect") {
@@ -44,7 +46,7 @@ export class LifecycleRunner implements StreamingCommandRunner {
         ? `${workspaceVolumeInspect(WORKSPACE_IDENTITY)}\n`
         : args[2] === "dim-gitea-data"
           ? `${ownedGiteaResourceInspect("volume")}\n`
-          : "true\n";
+      : `${hostMirrorInspection("registry-cache-data", TEST_HOST_MIRROR_OWNERSHIP)}\n`;
       return { command, args, stdout, stderr: "", exitCode: 0 };
     }
     if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-gitea") {
@@ -60,7 +62,7 @@ export class LifecycleRunner implements StreamingCommandRunner {
       return {
         command,
         args,
-        stdout: "true|true|registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33\n",
+        stdout: registryCacheInspect("registry@sha256:1be55279f18a2fe1a74edf2664cac61c1bea305b7b4642dab412e7affdcb3e33"),
         stderr: "",
         exitCode: 0
       };

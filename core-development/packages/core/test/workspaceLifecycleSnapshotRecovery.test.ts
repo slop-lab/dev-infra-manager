@@ -9,6 +9,7 @@ import type { CommandResult, StreamingCommandRunner } from "../../../../core/pac
 import { setupWorkspace } from "../../../../core/packages/core/src/workspaceLifecycle.js";
 
 import { claimTestGiteaService } from "./giteaServiceFixture.js";
+import { seedTestHostMirrorOwnership, TEST_HOST_MIRROR_PROVIDER } from "./hostLifecycleFixture.js";
 import { COMMIT, LifecycleRunner, projectFixture } from "./workspaceLifecycleSnapshotFixture.js";
 import { workspaceContainerInspect } from "./workspaceOwnershipFixture.js";
 
@@ -72,7 +73,7 @@ it("publishes a setup-error manifest solely from the recorded root contract", as
     const failed = { ...record, phase: "setup-error" } as const;
     await state.writeWorkspace(failed);
 
-    await setupWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
+    await setupWorkspace(runner, options(root), record.name);
 
     expect(runner.runCalls.some((call) => call.includes("ls-remote"))).toBe(false);
     expect(runner.publishedManifests[0]).toMatchObject({
@@ -91,7 +92,7 @@ it("publishes a setup-error manifest solely from the recorded root contract", as
     const failed = { ...record, phase: "error" } as const;
     await state.writeWorkspace(failed);
 
-    await setupWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
+    await setupWorkspace(runner, options(root), record.name);
 
     expect(runner.runCalls.some((call) => call.includes("ls-remote"))).toBe(false);
     expect(runner.publishedManifests[0]).not.toHaveProperty("repositories");
@@ -108,7 +109,7 @@ it("publishes a setup-error manifest solely from the recorded root contract", as
 
     await expect(setupWorkspace(
       runner,
-      lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }),
+      options(root),
       record.name
     )).rejects.toThrow(/conflicts with DIM ownership/);
     await expect(state.readWorkspace(record.name)).resolves.toMatchObject({
@@ -129,7 +130,7 @@ it("publishes a setup-error manifest solely from the recorded root contract", as
     // When
     const recovered = await setupWorkspace(
       runner,
-      lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }),
+      options(root),
       record.name
     );
 
@@ -151,9 +152,17 @@ it("publishes a setup-error manifest solely from the recorded root contract", as
     await state.writeProject(headProject);
     await state.writeWorkspace({ ...record, phase: "setup-error" });
 
-    await setupWorkspace(runner, lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: root }), record.name);
+    await setupWorkspace(runner, options(root), record.name);
 
     expect(runner.runCalls.some((call) => call.includes("ls-remote"))).toBe(false);
     expect(runner.publishedManifests[0]?.root).toMatchObject({ ref: record.rootRef, commit: record.rootCommit });
   });
 });
+
+function options(stateRoot: string) {
+  seedTestHostMirrorOwnership(stateRoot);
+  return {
+    ...lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: stateRoot }),
+    hostMirrorProvider: TEST_HOST_MIRROR_PROVIDER
+  };
+}

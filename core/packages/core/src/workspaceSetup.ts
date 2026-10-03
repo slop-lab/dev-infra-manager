@@ -21,6 +21,7 @@ import { assertRootSnapshot, installHostInputHelper, runProjectSetup } from "./w
 import { applySelectedRoot } from "./workspacePublication.js";
 import { inspectWorkspaceContainer } from "./workspaceResourceOwnership.js";
 import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
+import { readWorkspaceForOperation } from "./workspaceValidation.js";
 
 type ReconcileProjectContainerInput = {
   readonly runner: StreamingCommandRunner;
@@ -42,7 +43,7 @@ export async function setupWorkspace(
     const workspaceName = validateLifecycleName(name, "workspace");
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
-    const initialRecord = await state.readWorkspace(workspaceName);
+    const initialRecord = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
     assertWorkspaceLifecycleActive(initialRecord);
     setStage("Project lock acquisition");
     const releaseProject = await state.acquireProjectLock(initialRecord.projectName);
@@ -51,7 +52,7 @@ export async function setupWorkspace(
       const release = await state.acquireWorkspaceSetupLock(workspaceName);
       try {
         setStage("workspace state loading");
-        let record = await state.readWorkspace(workspaceName);
+        let record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
         assertWorkspaceLifecycleActive(record);
         if (record.projectName !== initialRecord.projectName || record.projectId !== initialRecord.projectId) {
           throw new UserError(`project '${record.projectName}' identity changed`);
@@ -208,7 +209,7 @@ export async function reconcileProjectContainer(
   input: ReconcileProjectContainerInput
 ): Promise<{ readonly record: WorkspaceRecord; readonly containerId: string }> {
   const release = await input.state.acquireWorkspaceLock(input.record.name);
-  let record = await input.state.readWorkspace(input.record.name);
+  let record = await readWorkspaceForOperation(input.state, input.record.name, input.options.giteaConnection);
   let stage = "container inspection";
   try {
     await inspectWorkspaceContainer(input.runner, record);
