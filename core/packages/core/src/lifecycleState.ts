@@ -6,9 +6,19 @@ import { parseHostLifecycleRecord } from "./hostLifecycleRecord.js";
 import { parseGiteaServiceRecord } from "./giteaServiceRecord.js";
 import { acquireLifecycleLock, type LifecycleLockOptions } from "./lifecycleLock.js";
 import { atomicWrite, listRecords, readJson, validateLifecycleName } from "./lifecycleRecord.js";
-import type { CiRunnerRecord, GiteaServiceRecord, HostLifecycleRecord, ProjectRecord, WorkspaceRecord } from "./lifecycleTypes.js";
+import type {
+  CiRunnerRecord,
+  GiteaServiceRecord,
+  HostLifecycleRecord,
+  ProjectRecord,
+  WorkspaceRecord
+} from "./lifecycleTypes.js";
 import { parseProjectRecord } from "./projectRecord.js";
 import { assertWorkspaceRecord } from "./workspaceRecord.js";
+import {
+  parseHostMirrorOwnership,
+  type HostMirrorOwnership
+} from "./hostMirrorOwnership.js";
 import { WorkspaceGrantStore } from "./workspaceGrantStore.js";
 
 export { validateLifecycleName } from "./lifecycleRecord.js";
@@ -62,6 +72,26 @@ export class LifecycleState {
 
   hostLifecyclePath(): string {
     return path.join(this.root, "host.json");
+  }
+
+  hostMirrorOwnershipPath(): string {
+    return path.join(this.root, "services", "host-mirrors.json");
+  }
+
+  async readHostMirrorOwnership(): Promise<HostMirrorOwnership | undefined> {
+    try {
+      return parseHostMirrorOwnership(await readJson<unknown>(
+        this.hostMirrorOwnershipPath(),
+        "host mirror ownership state not found"
+      ));
+    } catch (error) {
+      if (error instanceof MissingRecordError) return undefined;
+      throw error;
+    }
+  }
+
+  async writeHostMirrorOwnership(record: HostMirrorOwnership): Promise<void> {
+    await atomicWrite(this.hostMirrorOwnershipPath(), record);
   }
 
   async readHostLifecycle(): Promise<HostLifecycleRecord | undefined> {
