@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 import path from "node:path";
 import { UserError } from "./errors.js";
+import { APT_CACHE_ENDPOINT } from "./aptCache.js";
 import { LifecycleState } from "./lifecycleState.js";
 import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
 import {
@@ -161,7 +162,8 @@ export function workspaceContainerArgs(
     "--env", `GIT_CONFIG_VALUE_0=${git.userName}`,
     "--env", "GIT_CONFIG_KEY_1=user.email",
     "--env", `GIT_CONFIG_VALUE_1=${git.userEmail}`,
-    "--env", `DIM_REGISTRY_CACHE_ENDPOINT=${REGISTRY_CACHE_ENDPOINT}`
+    "--env", `DIM_REGISTRY_CACHE_ENDPOINT=${REGISTRY_CACHE_ENDPOINT}`,
+    "--env", `DIM_APT_CACHE_ENDPOINT=${APT_CACHE_ENDPOINT}`
   ];
   for (const [hostname, addresses] of Object.entries(record.hostAliases)) {
     for (const address of addresses) args.push("--add-host", `${hostname}:${address}`);

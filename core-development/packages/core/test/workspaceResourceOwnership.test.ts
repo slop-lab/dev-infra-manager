@@ -90,7 +90,7 @@ describe("workspace resource ownership", () => {
       RW: false
     }];
     const runner = new InspectRunner([
-      "container-id", "true", ...CONTAINER_LABELS.map(labelValue), "8", JSON.stringify(mounts)
+    "container-id", "true", ...CONTAINER_LABELS.map(labelValue), "9", JSON.stringify(mounts)
     ].join("|"));
 
     // When
@@ -100,7 +100,7 @@ describe("workspace resource ownership", () => {
     expect(inspected).toEqual({
       id: "container-id",
       running: true,
-      runtimeConfig: "8",
+      runtimeConfig: "9",
       rootSnapshotPath: RECORD.rootSnapshotPath
     });
   });
@@ -116,7 +116,7 @@ describe("workspace resource ownership", () => {
   ])("rejects a %s immutable Project-root mount", async (_case, mounts) => {
     // Given
     const runner = new InspectRunner([
-      "container-id", "true", ...CONTAINER_LABELS.map(labelValue), "8", JSON.stringify(mounts)
+    "container-id", "true", ...CONTAINER_LABELS.map(labelValue), "9", JSON.stringify(mounts)
     ].join("|"));
 
     // When / Then

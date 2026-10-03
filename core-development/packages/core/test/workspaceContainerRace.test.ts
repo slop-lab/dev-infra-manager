@@ -267,7 +267,7 @@ function container(
     name: record.containerName,
     labels: input.foreign ? foreignLabels(labels) : labels,
     running: input.running,
-    runtimeConfig: input.runtimeConfig ?? "8",
+    runtimeConfig: input.runtimeConfig ?? "9",
     rootSnapshotPath: input.rootSnapshotPath ?? join(root, "assets", "project-roots", record.projectId, record.rootCommit)
   };
 }
