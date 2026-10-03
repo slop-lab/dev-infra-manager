@@ -50,6 +50,9 @@ describe("registry cache routing shell contracts", () => {
     expect(nestedSmoke).toContain("dim-registry-cache:5000");
     expect(nestedSmoke).toContain("host.docker.internal:host-gateway");
     expect(nestedSmoke).toContain("--registry-mirror=http://host.docker.internal:5000");
+    expect(nestedSmoke).toContain('docker image tag "$dind_image" "$agent_image"');
+    expect(nestedSmoke).toContain('docker image rm "$agent_image"');
+    expect(nestedSmoke).toContain('--entrypoint dockerd "$agent_image"');
     expect(nestedSmoke).toContain("registry-1.docker.io:127.0.0.1");
     expect(nestedSmoke).toContain("auth.docker.io:127.0.0.1");
     expect(nestedSmoke).toContain('[[ "$replacement_cache_address" != "$previous_cache_address" ]]');
@@ -57,6 +60,17 @@ describe("registry cache routing shell contracts", () => {
     expect(nestedSmoke).not.toContain("--publish");
     expect(nestedSmoke).not.toMatch(/docker (?:run|create)[^\n]* -p(?:[ =]|$)/);
     expect(nestedSmoke).not.toContain("/var/run/docker.sock:");
+  });
+
+  it("initializes fixture routes before deriving paths under nounset", async () => {
+    // Given
+    const scripts = await Promise.all([nestedSmokeScript, managedSmokeScript].map((script) => readFile(script, "utf8")));
+
+    // When
+    const sameDeclarationReferences = scripts.map((script) => script.match(/local route="\$1"[^\n]*\$route/));
+
+    // Then
+    expect(sameDeclarationReferences).toEqual([null, null]);
   });
 
   it("wires managed Sysbox and KVM routes through production journeys", async () => {

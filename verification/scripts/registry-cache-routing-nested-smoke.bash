@@ -33,6 +33,7 @@ cache_volume="dim-registry-cache-data"
 workspace="dim-cache-routing-workspace-$run_id"
 reservation="$cache-address-reservation"
 agent=agent-dind
+agent_image="dim-cache-routing-agent-dind:$run_id"
 cold_fixture_pid=""
 outage_fixture_pid=""
 preserve_evidence="${DIM_CACHE_ROUTING_PRESERVE_EVIDENCE:-0}"
@@ -47,6 +48,7 @@ cleanup() {
     docker exec "$workspace" docker logs "$agent" >"$root/agent-failure.log" 2>&1
   fi
   docker rm --force "$workspace" >/dev/null 2>&1
+  docker image rm "$agent_image" >/dev/null 2>&1
   if [[ "$cleanup_exact_resources" -eq 1 ]]; then
     docker rm --force "$cache" "$reservation" >/dev/null 2>&1
     docker network rm "$network" >/dev/null 2>&1
@@ -76,9 +78,11 @@ node -e 'if (!require("node:net").isIPv4(process.argv[1])) process.exit(1)' "$fi
 }
 docker image pull "$registry_image" >/dev/null
 docker image pull "$dind_image" >/dev/null
+docker image tag "$dind_image" "$agent_image"
 
 start_fixture() {
-  local route="$1" ready="$root/$route-ready.json" evidence="$root/$route-upstream.jsonl"
+  local route="$1"
+  local ready="$root/$route-ready.json" evidence="$root/$route-upstream.jsonl"
   node "$script_dir/registry-cache-evidence.mjs" --run-id "$run_id" --route "$route" \
     --bind-address "$fixture_address" --evidence-file "$evidence" --ready-file "$ready" \
     >"$root/$route-fixture.stdout" 2>"$root/$route-fixture.stderr" &
@@ -143,11 +147,11 @@ docker exec "$workspace" wget -qO- http://127.0.0.1:5000/v2/ >/dev/null 2>&1 || 
   exit 1
 }
 
-docker image save "$dind_image" | docker exec -i "$workspace" docker image load >/dev/null
+docker image save "$agent_image" | docker exec -i "$workspace" docker image load >/dev/null
 docker exec "$workspace" docker run --detach --name "$agent" --privileged \
   --add-host host.docker.internal:host-gateway \
   --add-host registry-1.docker.io:127.0.0.1 --add-host auth.docker.io:127.0.0.1 \
-  --entrypoint dockerd "$dind_image" \
+  --entrypoint dockerd "$agent_image" \
   --host=unix:///var/run/docker.sock --storage-driver=vfs \
   --iptables=false --ip6tables=false --bridge=none --ip-forward=false --ip-masq=false \
   --registry-mirror=http://host.docker.internal:5000 \
