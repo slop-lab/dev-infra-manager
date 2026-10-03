@@ -1,8 +1,9 @@
 # dev-infra-manager Documentation
 
-`dev-infra-manager` is a self-hosted execution and trust layer for coding-agent
-development: persistent workspaces, separate verification, and reviewed
-promotion into protected or secret-bearing state.
+`dev-infra-manager` gives coding agents persistent Linux workspaces for quick,
+reproducible development with installed tools, services, and nested containers.
+It pairs that convenience with separate verification and reviewed promotion
+into protected or secret-bearing state.
 
 ## Glossary
 
@@ -89,4 +90,4 @@ The documentation is split by concern:
 Implementation-oriented normative specifications live in [../specs/README.md](../specs/README.md).
 
 Building or contributing to DIM itself, rather than using it, is
-[../CONTRIBUTING.md](../CONTRIBUTING.md).
+[CONTRIBUTING.md](../../CONTRIBUTING.md).

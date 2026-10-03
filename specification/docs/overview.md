@@ -2,14 +2,24 @@
 
 ## Goal
 
-`dev-infra-manager` is a self-hosted execution and trust layer for coding-agent
-development. It combines persistent development workspaces with separate
-verification and a reviewed promotion path into protected refs and trusted
-operations.
+`dev-infra-manager` gives coding agents persistent, Project-scoped Linux
+workspaces. Agents can keep a checkout and installed tools across sessions,
+run services and nested container workloads, and resume work without rebuilding
+the development environment each time.
+
+DIM treats developer convenience and review-gated isolation as co-equal goals.
+It supports fast iteration and reproducible Project-defined tasks while
+keeping host control sockets, raw Project secrets, protected refs, and trusted
+operations outside the agent's authority.
 
 DIM does not choose or schedule agent work. Interactive agents and external
 orchestrators own that control-plane policy; DIM owns the execution,
 repository, verification, and trust boundaries in which they operate.
+
+Reviewed Project code currently defines the development container, tasks,
+agent process, and tool setup. General Project-independent tool setup and
+configuration through plugins is a future direction, not a shipped DIM
+capability.
 
 The infrastructure separates agent-controlled execution from secret-bearing
 interfaces. Projects may run an agent as a nested service with its own private
