@@ -1,3 +1,5 @@
+import type { HostMirrorProvider } from "./hostMirrorProvider.js";
+
 export interface LifecycleOptions {
   stateRoot: string;
   giteaConnection: GiteaConnectionConfiguration;
@@ -26,6 +28,7 @@ export interface LifecycleOptions {
   ciRunnerDefaultCpus: string;
   ciRunnerDefaultMemory: string;
   ciRunnerDefaultPidsLimit: string;
+  hostMirrorProvider?: HostMirrorProvider;
 }
 
 export type GiteaConnectionConfiguration =

@@ -1,4 +1,5 @@
 export * from "./doctor.js";
+export * from "./aptCache.js";
 export * from "./adminController.js";
 export * from "./controller.js";
 export * from "./ciCoordinator.js";
@@ -18,6 +19,7 @@ export * from "./ordinaryCiPoolRegistrar.js";
 export * from "./ordinaryCiPoolWorker.js";
 export * from "./plugin.js";
 export * from "./hostInputs.js";
+export * from "./hostMirrorProvider.js";
 export * from "./hostLifecycle.js";
 export * from "./hostStateMigration.js";
 export * from "./pluginLoader.js";
