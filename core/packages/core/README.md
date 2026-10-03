@@ -215,13 +215,19 @@ and configuration digest, probes both workloads before registration, and never
 runs Project workflow commands in the runner host container.
 
 The optional ordinary pool is a separate, operator-managed service for
-explicitly enrolled DIM Projects using external Gitea. It claims named
-capacities across hosts and registers one ephemeral organization runner per
-job using a common digest-pinned disposable job image. Its control plane
-stores demand and renewable leases in SQLite, while each host independently
-checks its trusted organization binding and uses a mode-`0600` connection
-file. It does not register an instance-wide runner, automatically configure
-Gitea organization webhooks, or replace the Project-scoped QEMU path.
+reviewed DIM Projects using external Gitea. A trusted host reconciler derives
+leased admissions from each Project's exact protected root snapshot, validates
+the live external Gitea organization binding, and configures the organization
+webhook. The service uses one common digest-pinned disposable job image,
+stores admissions, demand, and renewable claims in SQLite, and owns stable
+per-Project webhook secrets without receiving Gitea credentials. Worker and
+registrar connections are separate mode-`0600` files. Remote hosts may claim a
+Project without a local Project record only when their external Gitea binding,
+expected service identity, and expected common image match the claim. The pool
+retains a random admission generation only for an active identical-policy
+refresh; revocation, expiry, or policy rotation creates a fresh generation so
+preserved old demand cannot reactivate. It does not register an instance-wide
+runner or replace the Project-scoped QEMU path.
 
 For QEMU CI capacity, a Project may provide `.dim/ci/qemu-cache.bash`. DIM
 requires applied root protection, resolves the configured root or symbolic
