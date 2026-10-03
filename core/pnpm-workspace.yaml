@@ -3,4 +3,5 @@ packages:
   - packages/cli
   - packages/installer
   - packages/controller-proxy
+  - packages/web
   - packages/contracts/*

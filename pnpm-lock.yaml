@@ -117,6 +117,22 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
+  core/packages/web:
+    dependencies:
+      zod:
+        specifier: 4.1.11
+        version: 4.1.11
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      package.json-minifier:
+        specifier: 0.0.6
+        version: 0.0.6
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
   plugin-dns-cloudflare:
     dependencies:
       '@slop-lab/dim-contracts-external-url':
