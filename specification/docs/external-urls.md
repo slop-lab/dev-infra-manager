@@ -49,8 +49,11 @@ named ingress and denies all other controller routes. Advanced reviewed policies
 [package documentation](../../core/packages/controller-proxy/README.md#external-url-preset)
 provides runnable proxy commands. The
 [External URL example](../../examples/features/external-urls/README.md) instead
-invokes `dim external-url request --workspace external-dev` from the host. It
-mounts no controller socket or grant into either nested service.
+dispatches `dim-development-service request-url` in the trusted workspace root.
+The helper derives that workspace's existing controller socket and grant from
+its environment, accepts only a named ingress, one or two nested container
+names, and an HTTP port, and mounts no controller socket or grant into either
+nested service.
 
 A caller-specific capability may pin its target at the trusted Project
 lifecycle boundary:
@@ -205,6 +208,19 @@ Create a URL:
 ```bash
 dim external-url request --ingress public-https --container dev --port 3000
 ```
+
+The workspace-image helper provides the narrower HTTP-only form used by the
+nested-service example:
+
+```bash
+dim-development-service request-url \
+  --ingress public-https --container dev --port 3000
+```
+
+It emits the same JSON response as the controller route but has no workspace,
+authority, protocol, path, approval, or controller-endpoint selector. Run it
+inside the current workspace; a host uses `dim workspace exec WORKSPACE --`
+to dispatch it rather than loading a workspace grant into the host-side helper.
 
 Targets are scoped to the authenticated workspace:
 
