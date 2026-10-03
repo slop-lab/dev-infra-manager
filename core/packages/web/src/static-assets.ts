@@ -19,6 +19,8 @@ const assets = new Map<string, StaticAsset>([
   ["/assets/app.js", asset("app.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/review-data.js", asset("review-data.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/review-renderer.js", asset("review-renderer.js", "text/javascript; charset=utf-8", ASSET_CSP)],
+  ["/assets/review-actions.js", asset("review-actions.js", "text/javascript; charset=utf-8", ASSET_CSP)],
+  ["/assets/reviewer-elements.js", asset("reviewer-elements.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/operation-coordinator.js", asset("operation-coordinator.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/patch-position.js", asset("patch-position.js", "text/javascript; charset=utf-8", ASSET_CSP)],
   ["/assets/favicon.svg", asset("favicon.svg", "image/svg+xml", ASSET_CSP)],

@@ -142,6 +142,18 @@
               <ul id="stale-reasons"></ul>
             </section>
             <dl id="review-metadata" class="metadata-grid" aria-label="Exact review metadata"></dl>
+            <section id="decision-panel" class="decision-panel" aria-labelledby="decision-title">
+              <div class="decision-copy">
+                <p class="eyebrow">Your decision</p>
+                <h3 id="decision-title">Approve this exact review</h3>
+                <p id="decision-status"></p>
+                <p id="decision-error" class="form-error"></p>
+              </div>
+              <div class="decision-actions">
+                <button id="approve-button" class="button button-primary" type="button">Approve review</button>
+                <button id="revoke-button" class="button button-danger" type="button" hidden>Revoke approval</button>
+              </div>
+            </section>
             <section class="paths-panel" aria-labelledby="paths-title">
               <div class="section-heading">
                 <h3 id="paths-title">Changed paths</h3>
