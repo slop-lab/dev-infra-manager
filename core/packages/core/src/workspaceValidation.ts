@@ -1,6 +1,9 @@
 import { stat } from "node:fs/promises";
 import { UserError } from "./errors.js";
+import { GITEA_NETWORK } from "./gitea.js";
+import type { LifecycleState } from "./lifecycleState.js";
 import type {
+  GiteaConnectionConfiguration,
   WorkspaceCapabilityRecord,
   WorkspaceRecord
 } from "./lifecycleTypes.js";
@@ -32,6 +35,27 @@ export function validateWorkspaceProfiles(values: string[]): string[] {
     seen.add(value);
   }
   return [...seen];
+}
+
+export function assertWorkspaceNetworkContract(
+  record: WorkspaceRecord,
+  connection: GiteaConnectionConfiguration
+): void {
+  if (connection.kind === "external" && record.networkName !== GITEA_NETWORK) {
+    throw new UserError(
+      `workspace '${record.name}' uses obsolete external-Git bridge '${record.networkName}'; discard and recreate it`
+    );
+  }
+}
+
+export async function readWorkspaceForOperation(
+  state: LifecycleState,
+  name: string,
+  connection: GiteaConnectionConfiguration
+): Promise<WorkspaceRecord> {
+  const record = await state.readWorkspace(name);
+  assertWorkspaceNetworkContract(record, connection);
+  return record;
 }
 
 export async function resolveWorkspaceCapabilities(
@@ -75,6 +99,9 @@ export async function resolveWorkspaceCapabilities(
       if (Object.entries(environment).some(([key, value]) =>
         !/^[A-Z_][A-Z0-9_]*$/.test(key) || value.includes("\0"))) {
         throw new UserError("provider returned an invalid environment entry");
+      }
+      if ("DIM_REGISTRY_CACHE_ENDPOINT" in environment || "DIM_APT_CACHE_ENDPOINT" in environment) {
+        throw new UserError("provider returned a reserved host mirror environment entry");
       }
       resolved.push({ ...request, status: "provided", plugin: registered.plugin,
         ...(provision.detail ? { detail: provision.detail } : {}),
