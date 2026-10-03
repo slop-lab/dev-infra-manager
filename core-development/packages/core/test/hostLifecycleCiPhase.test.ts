@@ -20,6 +20,11 @@ vi.mock("../../../../core/packages/core/src/registryCache.js", async (importOrig
   ensureRegistryCache: vi.fn(async () => {})
 }));
 
+vi.mock("../../../../core/packages/core/src/aptCache.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../../core/packages/core/src/aptCache.js")>(),
+  ensureAptCache: vi.fn(async () => {})
+}));
+
 describe("host lifecycle CI phase recovery", () => {
   let root: string;
 

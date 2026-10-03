@@ -24,6 +24,11 @@ vi.mock("../../../../core/packages/core/src/registryCache.js", async (importOrig
   ensureRegistryCache: vi.fn(async () => {})
 }));
 
+vi.mock("../../../../core/packages/core/src/aptCache.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../../core/packages/core/src/aptCache.js")>(),
+  ensureAptCache: vi.fn(async () => {})
+}));
+
 describe("host recovery controller admission", () => {
   const servers: ReturnType<typeof createDimController>[] = [];
   const stateRoots: string[] = [];

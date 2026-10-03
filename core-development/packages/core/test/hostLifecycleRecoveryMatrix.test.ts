@@ -7,6 +7,7 @@ import * as gitea from "../../../../core/packages/core/src/gitea.js";
 import { hostLifecycleStatus, startHost } from "../../../../core/packages/core/src/hostLifecycle.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import * as registryCache from "../../../../core/packages/core/src/registryCache.js";
+import * as aptCache from "../../../../core/packages/core/src/aptCache.js";
 import * as workspaceLifecycle from "../../../../core/packages/core/src/workspaceLifecycle.js";
 import { StatefulContainerRunner } from "./ciRunnerContainerRunner.js";
 import { hostLifecycleOptions, hostRecord, workspaceRecord } from "./hostLifecycleFixture.js";
@@ -19,6 +20,11 @@ vi.mock("../../../../core/packages/core/src/gitea.js", async (importOriginal) =>
 vi.mock("../../../../core/packages/core/src/registryCache.js", async (importOriginal) => ({
   ...await importOriginal<typeof import("../../../../core/packages/core/src/registryCache.js")>(),
   ensureRegistryCache: vi.fn(async () => {})
+}));
+
+vi.mock("../../../../core/packages/core/src/aptCache.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../../core/packages/core/src/aptCache.js")>(),
+  ensureAptCache: vi.fn(async () => {})
 }));
 
 const WORKSPACE_CASES = [
@@ -55,7 +61,9 @@ describe("host lifecycle recovery matrix", () => {
             resumeWorkspaces: ["workspace"],
             restartCiRunners: []
           }));
-          vi.spyOn(workspaceLifecycle, "showWorkspace").mockResolvedValue(workspaceRecord("workspace", phase));
+          const workspace = workspaceRecord("workspace", phase);
+          await state.claimWorkspace(workspace);
+          vi.spyOn(workspaceLifecycle, "showWorkspace").mockResolvedValue(workspace);
           vi.spyOn(workspaceLifecycle, "startWorkspace").mockResolvedValue(workspaceRecord("workspace", "ready"));
           vi.spyOn(workspaceLifecycle, "setupWorkspace").mockResolvedValue(workspaceRecord("workspace", "ready"));
 
@@ -95,7 +103,8 @@ describe("host lifecycle recovery matrix", () => {
     expect(result).toEqual(ready);
     expect(runner.calls).toEqual([]);
     expect(gitea.ensureGitea).toHaveBeenCalledOnce();
-    expect(registryCache.ensureRegistryCache).not.toHaveBeenCalled();
+    expect(registryCache.ensureRegistryCache).toHaveBeenCalledOnce();
+    expect(aptCache.ensureAptCache).toHaveBeenCalledOnce();
     expect(workspaceLifecycle.showWorkspace).not.toHaveBeenCalled();
     expect(ciRunner.startCiRunner).not.toHaveBeenCalled();
     expect(ciRunner.stopCiRunner).not.toHaveBeenCalled();
@@ -180,6 +189,22 @@ describe("host lifecycle recovery matrix", () => {
 
     // Then
     expect(result.phase).toBe("ready");
+    expect(gitea.ensureGitea).not.toHaveBeenCalled();
+  });
+
+  it("rejects recovery without a mirror provider before changing stopped state", async () => {
+    // Given
+    const state = new LifecycleState(root);
+    const stopped = hostRecord("stopped");
+    await state.writeHostLifecycle(stopped);
+    const { hostMirrorProvider: _provider, ...options } = hostLifecycleOptions(root);
+
+    // When
+    const recovery = startHost(new StatefulContainerRunner(), options);
+
+    // Then
+    await expect(recovery).rejects.toThrow(/requires one enabled host mirror provider/);
+    await expect(state.readHostLifecycle()).resolves.toEqual(stopped);
     expect(gitea.ensureGitea).not.toHaveBeenCalled();
   });
 

@@ -18,6 +18,11 @@ vi.mock("../../../../core/packages/core/src/registryCache.js", async (importOrig
   ensureRegistryCache: vi.fn(async () => {})
 }));
 
+vi.mock("../../../../core/packages/core/src/aptCache.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../../core/packages/core/src/aptCache.js")>(),
+  ensureAptCache: vi.fn(async () => {})
+}));
+
 describe("host lifecycle repeated failure recovery", () => {
   let root: string;
 
@@ -39,6 +44,7 @@ describe("host lifecycle repeated failure recovery", () => {
     };
     await state.writeHostLifecycle({ ...hostRecord("stopped", expectedLists), ...expectedLists });
     let workspace = workspaceRecord("later-workspace", "error");
+    await state.claimWorkspace(workspace);
     vi.spyOn(workspaceLifecycle, "showWorkspace").mockImplementation(async () => workspace);
     vi.spyOn(workspaceLifecycle, "setupWorkspace").mockImplementation(async () => {
       workspace = workspaceRecord("later-workspace", "ready");
