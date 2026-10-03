@@ -30,6 +30,7 @@ const configSchema = z.object({
   host: z.enum(["127.0.0.1", "::1"]),
   port: z.number().int().min(0).max(65_535),
   publicOrigin: exactOrigin,
+  reviewerAccountId: z.string().min(1).max(256),
   nativeGit: z.object({
     baseUrl: exactOrigin,
     username: z.string().min(1).max(256),
@@ -52,6 +53,9 @@ const configSchema = z.object({
   }
   if (new Set(config.accounts.map(({ username }) => username)).size !== config.accounts.length) {
     context.addIssue({ code: "custom", path: ["accounts"], message: "contains duplicate usernames" });
+  }
+  if (config.accounts.filter(({ username }) => username === config.reviewerAccountId).length !== 1) {
+    context.addIssue({ code: "custom", path: ["reviewerAccountId"], message: "must match exactly one configured account" });
   }
   if (new Set(config.nativeGit.repositoryIds).size !== config.nativeGit.repositoryIds.length) {
     context.addIssue({ code: "custom", path: ["nativeGit", "repositoryIds"], message: "contains duplicates" });
