@@ -307,7 +307,7 @@ for a multi-repository Project, open a pull request in a non-root repository,
 and wait for that repository's real workflow to succeed.
 
 For `CI-ORDINARY-POOL-001`, deterministic service and worker tests MUST
-exercise two independently identified hosts and two enrolled organizations:
+exercise two independently identified hosts and two reviewed organizations:
 each host must be able to run an ordinary job for the other host's Project
 without adopting its local Project record. Tests MUST reject a foreign
 organization or mismatched organization ID, a mismatched host binding, an
@@ -325,6 +325,23 @@ organization replaced with a different ID MUST fail before token request.
 renewal. Normal completion with an in-flight renewal MUST NOT report lease
 loss. Host maintenance MUST exclude disposable pool containers from restart
 state, stop them, and block new claims until the host is ready again.
+
+Source integration tests MUST run the production registrar against disposable
+protected Git roots and a real loopback HTTP Gitea API fixture. They MUST prove
+that two Projects are automatically admitted from exact protected commits and
+config digests, that the service receives no Gitea credential and issues no
+runner-registration token, and that a foreign organization, mutable or
+different common image, stale config admission, service/host mismatch,
+revocation, expiry, and lease loss all reject before Docker launch or runner
+registration. Restart tests MUST inspect durable admission, queue, and claim
+rows and prove that old work remains preserved but inactive rather than being
+migrated, deleted, or rebound. Live HTTP and SQLite tests MUST prove that an
+active identical-policy refresh retains its admission generation and webhook
+secret, while identical-policy re-admission after revocation or expiry creates
+a fresh random generation across restart. They MUST also prove recovery of an
+expired claim from the old generation removes that claim without requeueing it
+under the replacement generation. The obsolete static-enrollment SQLite schema
+MUST be rejected byte-for-byte unchanged.
 
 The disposable-QEMU Sysbox gate runs `just verify ordinary-ci-pool-live`
 before other guest work. It MUST use a real Gitea service, organization
