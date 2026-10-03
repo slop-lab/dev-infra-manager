@@ -41,6 +41,23 @@ export class NativeGitClient {
     }));
   }
 
+  async approveReview(projectId: string, repositoryId: string, reviewId: string): Promise<ReviewDto> {
+    const path = `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}`;
+    await this.request({ method: "POST", path: `${path}/approvals`, body: {} });
+    return reviewDto(await this.request({ method: "GET", path }));
+  }
+
+  async revokeApproval(
+    projectId: string,
+    repositoryId: string,
+    reviewId: string,
+    approvalId: string
+  ): Promise<ReviewDto> {
+    const path = `/v1/projects/${projectId}/repositories/${repositoryId}/reviews/${reviewId}`;
+    await this.request({ method: "POST", path: `${path}/revocations`, body: { approvalId } });
+    return reviewDto(await this.request({ method: "GET", path }));
+  }
+
   private async request(input: NativeRequest): Promise<unknown> {
     const url = new URL(input.path, this.config.baseUrl);
     const body = input.body === undefined ? undefined : Buffer.from(JSON.stringify(input.body), "utf8");

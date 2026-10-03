@@ -40,6 +40,11 @@ const nativeReview = z.object({
 }).passthrough();
 
 export type ReviewDto = ReturnType<typeof reviewDto>;
+export type AccountReviewDto = ReviewDto & { readonly canDecide: boolean };
+
+export function accountReviewDto(review: ReviewDto, canDecide: boolean): AccountReviewDto {
+  return { ...review, canDecide };
+}
 
 export function reviewDto(input: unknown) {
   const review = nativeReview.parse(input);
