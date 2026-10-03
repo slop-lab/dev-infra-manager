@@ -12,12 +12,17 @@ workspace_name="external-$suffix"
 workspace_id="$(printf 'A%.0s' {1..43})"
 grant="$(node -e 'process.stdout.write(Buffer.from(process.argv[1]).toString("base64url"))' "$workspace_name").$workspace_id.$(printf 'B%.0s' {1..43})"
 state_root="$(mktemp -d /tmp/dim-external-state.XXXXXX)"
+project_id="external-example-project-id"
+root_commit="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+protected_root="$state_root/assets/project-roots/$project_id/$root_commit"
 plugin_home="$(mktemp -d /tmp/dim-external-plugins.XXXXXX)"
 cli_home="$(mktemp -d /tmp/dim-external-cli.XXXXXX)"
 pack_root="$(mktemp -d /tmp/dim-external-packs.XXXXXX)"
 repository_root="$(mktemp -d /tmp/dim-external-repositories.XXXXXX)"
 controller_pid=""
+controller_runtime_directory=""
 cloudflare_mock_pid=""
+workspace_image=""
 
 available_port() {
   node -e '
@@ -37,8 +42,8 @@ admin_socket="$state_root/controller/admin.sock"
 
 cleanup() {
   local managed_controller_pid=""
-  if [[ -f "$state_root/controller/controller.pid" ]]; then
-    managed_controller_pid="$(cat "$state_root/controller/controller.pid")"
+  if [[ -n "$controller_runtime_directory" && -f "$controller_runtime_directory/controller.pid" ]]; then
+    managed_controller_pid="$(cat "$controller_runtime_directory/controller.pid")"
   fi
   if [[ -n "$managed_controller_pid" && "$managed_controller_pid" != "$controller_pid" ]]; then
     kill "$managed_controller_pid" >/dev/null 2>&1 || true
@@ -55,23 +60,30 @@ cleanup() {
   docker container rm --force "$coredns_container" >/dev/null 2>&1 || true
   docker container rm --force dim-caddy-local-https >/dev/null 2>&1 || true
   docker container rm --force "$root_container" >/dev/null 2>&1 || true
+  if [[ -n "$workspace_image" ]]; then
+    docker run --rm --entrypoint rm \
+      --mount type=bind,src=/tmp,dst=/host \
+      "$workspace_image" -rf "/host/${protected_root#/tmp/}" >/dev/null 2>&1 || true
+  fi
   docker network rm "$network" >/dev/null 2>&1 || true
   docker network rm "$client_network" >/dev/null 2>&1 || true
   find "$state_root" "$plugin_home" "$cli_home" "$pack_root" "$repository_root" \
     -depth -delete 2>/dev/null || true
 }
 report_error() {
-  if [[ -d "$state_root/controller" ]]; then
-    find "$state_root/controller" -maxdepth 1 -printf '%f\n' >&2
-    [[ ! -f "$state_root/controller/controller.pid" ]] || {
+  if [[ -n "$controller_runtime_directory" && -d "$controller_runtime_directory" ]]; then
+    find "$controller_runtime_directory" -maxdepth 1 -printf '%f\n' >&2
+    [[ ! -f "$controller_runtime_directory/controller.pid" ]] || {
       printf 'controller pid: ' >&2
-      cat "$state_root/controller/controller.pid" >&2
+      cat "$controller_runtime_directory/controller.pid" >&2
     }
-    [[ ! -f "$state_root/controller/controller.log" ]] || tail -n 80 "$state_root/controller/controller.log" >&2
+    [[ ! -f "$controller_runtime_directory/controller.log" ]] || tail -n 80 "$controller_runtime_directory/controller.log" >&2
   fi
 }
 trap report_error ERR
 trap cleanup EXIT
+
+bash "$script_dir/container-integration-preflight.bash"
 
 echo "[external-url-example] build local packages and workspace image"
 local_version="$(bash "$script_dir/local-build-version.bash")"
@@ -86,6 +98,11 @@ docker build \
   --tag "$workspace_image" \
   --file core/images/project-workspace/Dockerfile \
   . >/dev/null
+tar -C "$repository_root/materialized/root" -cf - . | \
+  docker run --rm --interactive --entrypoint sh \
+    --mount type=bind,src=/tmp,dst=/host \
+    "$workspace_image" -c 'mkdir -p "$1" && tar -xf - -C "$1"' \
+    sh "/host/${protected_root#/tmp/}"
 
 package_archive() {
   local package_name="$1"
@@ -101,17 +118,21 @@ package_archive() {
 }
 
 npm install --prefix "$cli_home" --silent \
+  "$(package_archive @slop-lab/dim-controller-proxy)" \
   "$(package_archive @slop-lab/dim-core)" \
   "$(package_archive @slop-lab/dim-contracts-external-url)" \
   "$(package_archive @slop-lab/dim-plugin-dns-cloudflare)" \
   "$(package_archive @slop-lab/dim-cli)"
 npm install --prefix "$plugin_home" --silent \
+  "$(package_archive @slop-lab/dim-controller-proxy)" \
   "$(package_archive @slop-lab/dim-core)" \
   "$(package_archive @slop-lab/dim-contracts-external-url)" \
   "$(package_archive @slop-lab/dim-plugin-dns-cloudflare)" \
+  "$(package_archive @slop-lab/dim-plugin-host-mirrors)" \
   "$(package_archive @slop-lab/dim-plugin-external-urls)"
 jq -n '{schemaVersion:1,plugins:[
   "@slop-lab/dim-plugin-dns-cloudflare",
+  "@slop-lab/dim-plugin-host-mirrors",
   "@slop-lab/dim-plugin-external-urls"
 ]}' \
   > "$plugin_home/plugins.json"
@@ -119,6 +140,15 @@ dim_bin="$cli_home/node_modules/.bin/dim"
 
 echo "[external-url-example] load the freshly installed plugin before any ingress exists"
 printf '%s\n' '{"schemaVersion":1,"workspaceBackend":"sysbox"}' > "$state_root/dim.json"
+controller_runtime_directory="$(
+  DIM_STATE_ROOT="$state_root" \
+  DIM_CONFIG_PATH="$state_root/dim.json" \
+    node --input-type=module -e '
+      import { pathToFileURL } from "node:url";
+      const { lifecycleOptions } = await import(pathToFileURL(process.argv[1]).href);
+      process.stdout.write(lifecycleOptions().controllerRuntimeDirectory);
+    ' "$cli_home/node_modules/@slop-lab/dim-core/index.js"
+)"
 DIM_STATE_ROOT="$state_root" \
 DIM_PLUGIN_HOME="$plugin_home" \
 DIM_CONFIG_PATH="$state_root/dim.json" \
@@ -131,6 +161,29 @@ DIM_ADMIN_CONTROLLER_SOCKET="$admin_socket" \
 jq -e '.plugins | index("@slop-lab/dim-plugin-external-urls") != null' "$state_root/plugin-list.json" >/dev/null
 jq -e '.plugins | index("@slop-lab/dim-plugin-dns-cloudflare") != null' "$state_root/plugin-list.json" >/dev/null
 test ! -e "$state_root/external-urls.json"
+
+workspace_label_module="$cli_home/node_modules/@slop-lab/dim-core/workspaceResourceOwnership.js"
+workspace_labels_output="$(node --input-type=module -e '
+  import { pathToFileURL } from "node:url";
+  const [modulePath, containerName, name, workspaceId, projectId] = process.argv.slice(1);
+  const { workspaceContainerLabels } = await import(pathToFileURL(modulePath).href);
+  const labels = workspaceContainerLabels({
+    containerName,
+    name,
+    workspaceId,
+    projectName: "external-example",
+    projectId,
+    rootRepositoryAlias: "root",
+    runtimeBackend: "sysbox",
+    dockerVolumeName: "unused-in-smoke"
+  });
+  process.stdout.write(labels.join("\n"));
+' "$workspace_label_module" "$root_container" "$workspace_name" "$workspace_id" "$project_id")"
+mapfile -t workspace_labels <<<"$workspace_labels_output"
+workspace_label_arguments=()
+for label in "${workspace_labels[@]}"; do
+  workspace_label_arguments+=(--label "$label")
+done
 
 echo "[external-url-example] start project-root, dev, and deep containers"
 docker network create "$network" >/dev/null
@@ -165,11 +218,16 @@ docker run --detach \
 docker run --detach --privileged \
   --name "$root_container" \
   --network "$network" \
+  "${workspace_label_arguments[@]}" \
+  --label dim.runtime-config=9 \
+  --mount "type=bind,src=$protected_root,dst=/run/dim/project-root,readonly" \
   --volume "$state_root/controller:/run/dim/controller" \
   --env DIM_CONTROLLER_SOCKET=/run/dim/controller/controller.sock \
   --env "DIM_CONTROLLER_TOKEN=$grant" \
   --env COMPOSE_PROJECT_NAME=dim-external-example \
   "$workspace_image" sleep infinity >/dev/null
+test "$(docker inspect --format '{{range .Mounts}}{{if eq .Destination "/run/dim/project-root"}}{{.Source}}|{{.RW}}{{end}}{{end}}' \
+  "$root_container")" = "$protected_root|false"
 
 for attempt in $(seq 1 60); do
   docker exec "$root_container" docker info >/dev/null 2>&1 && break
@@ -190,15 +248,17 @@ jq -n \
   --arg network "$network" \
   --arg now "$now" \
   --arg workspaceId "$workspace_id" \
+  --arg projectId "$project_id" \
+  --arg rootCommit "$root_commit" \
   '{
     schemaVersion: 8,
     workspaceId: $workspaceId,
     name: $name,
-    projectId: "external-example-project-id",
+    projectId: $projectId,
     projectName: "external-example",
     rootRepositoryAlias: "root",
     rootRef: "refs/heads/main",
-    rootCommit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    rootCommit: $rootCommit,
     workspaceDataPath: "/var/lib/dim/workspace-data",
     phase: "ready",
     profiles: ["development"],
@@ -248,7 +308,7 @@ DIM_ADMIN_CONTROLLER_SOCKET="$admin_socket" \
     --listen-host 127.0.0.1 \
     --listen-port "$loopback_port" \
     >/dev/null
-controller_pid="$(cat "$(dirname -- "$controller_socket")/controller.pid")"
+controller_pid="$(cat "$controller_runtime_directory/controller.pid")"
 
 for attempt in $(seq 1 30); do
   if curl --fail --silent --unix-socket "$controller_socket" \

@@ -163,7 +163,7 @@ dim_publish_example_packages "$2"
     expect(await readFile(calls, "utf8")).toContain("--require-approval");
   });
 
-  it("requests the example routes through a workspace-scoped DIM grant", async () => {
+  it("requests the example routes through the workspace development helper", async () => {
     // Given: a recording DIM executable standing in for the pinned host CLI.
     const root = await mkdtemp(resolve(tmpdir(), "dim-external-url-request-test-"));
     fixtureRoots.push(root);
@@ -172,7 +172,7 @@ dim_publish_example_packages "$2"
     await writeFile(dim, "#!/usr/bin/env sh\nprintf '%s\\n' \"$*\" >>\"$DIM_TEST_CALLS\"\n");
     await chmod(dim, 0o755);
 
-    // When: the checked-in host helper requests routes for one workspace.
+    // When: the checked-in host script dispatches URL requests into one workspace.
     const result = spawnSync(
       "/usr/bin/bash",
       [resolve(workspaceRoot, "examples/features/external-urls/request-urls.bash"), "external-dev"],
@@ -186,12 +186,64 @@ dim_publish_example_packages "$2"
       }
     );
 
-    // Then: discovery and both nested targets use the supported CLI surface.
+    // Then: both nested targets use the workspace helper without a foreign workspace selector.
     expect(result.status, result.stderr).toBe(0);
     expect((await readFile(calls, "utf8")).trim().split("\n")).toEqual([
-      "external-url discover --workspace external-dev --json",
-      "external-url request --workspace external-dev --ingress local-http --container dev --port 8080 --json",
-      "external-url request --workspace external-dev --ingress local-http --container dev --container deep --port 5678 --json"
+      "workspace exec external-dev -- dim-development-service request-url --ingress local-http --container dev --port 8080",
+      "workspace exec external-dev -- dim-development-service request-url --ingress local-http --container dev --container deep --port 5678"
     ]);
+  });
+
+  it("installs the external URL smoke runtime package closure", async () => {
+    // Given: the executable external URL smoke fixture.
+    const smoke = await readFile(
+      resolve(workspaceRoot, "verification/scripts/external-url-example-smoke.bash"),
+      "utf8"
+    );
+
+    // When: its exact-local package references are inspected.
+    const controllerProxyArchives = smoke.match(/package_archive @slop-lab\/dim-controller-proxy/g);
+    const hostMirrorArchives = smoke.match(/package_archive @slop-lab\/dim-plugin-host-mirrors/g);
+    const hostMirrorPluginEntries = smoke.match(/"@slop-lab\/dim-plugin-host-mirrors"/g);
+
+    // Then: both package roots receive controller-proxy and the controller loads its host-mirror provider.
+    expect(controllerProxyArchives).toHaveLength(2);
+    expect(hostMirrorArchives).toHaveLength(1);
+    expect(hostMirrorPluginEntries).toHaveLength(1);
+  });
+
+  it("runs the container integration preflight before the external URL smoke", async () => {
+    // Given: the executable external URL smoke fixture.
+    const smoke = await readFile(
+      resolve(workspaceRoot, "verification/scripts/external-url-example-smoke.bash"),
+      "utf8"
+    );
+
+    // When: the first verification phase is located.
+    const preflight = smoke.indexOf('bash "$script_dir/container-integration-preflight.bash"');
+    const packageBuild = smoke.indexOf('echo "[external-url-example] build local packages and workspace image"');
+
+    // Then: unsupported nested-container hosts fail explicitly before expensive setup.
+    expect(preflight).toBeGreaterThan(-1);
+    expect(preflight).toBeLessThan(packageBuild);
+  });
+
+  it("mounts the external URL workspace from its canonical protected root", async () => {
+    // Given: the executable external URL smoke fixture.
+    const smoke = await readFile(
+      resolve(workspaceRoot, "verification/scripts/external-url-example-smoke.bash"),
+      "utf8"
+    );
+
+    // When: its protected-root fixture and mount proof are inspected.
+    const canonicalRoot = 'protected_root="$state_root/assets/project-roots/$project_id/$root_commit"';
+    const immutableMount = '--mount "type=bind,src=$protected_root,dst=/run/dim/project-root,readonly"';
+    const inspectedMount = '= "$protected_root|false"';
+
+    // Then: lifecycle ownership sees the same canonical read-only source recorded by the workspace.
+    expect(smoke).toContain(canonicalRoot);
+    expect(smoke).toContain(immutableMount);
+    expect(smoke).toContain(inspectedMount);
+    expect(smoke).not.toContain("host_project_root");
   });
 });

@@ -30,12 +30,15 @@ dim workspace create external external-dev --profile development
 bash request-urls.bash external-dev
 ```
 
-DIM starts its managed host controller automatically. The last command uses the
-host CLI's `--workspace external-dev` option, which loads only that workspace's
-grant, and prints pending URLs for `dev` and `deep`. The request supplies no URL
-names; the controller assigns the first available workspace-qualified names
-(`0`, then `1`). Neither nested service receives a DIM controller socket,
-workspace grant, host Docker socket, or host runtime secret.
+DIM starts its managed host controller automatically. The last command uses
+`dim workspace exec` to run the image-provided `dim-development-service
+request-url` helper in `external-dev`, and prints pending JSON records for
+`dev` and `deep`. The helper derives only that workspace's controller socket
+and grant from its environment and accepts no workspace or public-authority
+selector. The request supplies no URL names; the controller assigns the first
+available workspace-qualified names (`0`, then `1`). Neither nested service
+receives a DIM controller socket, workspace grant, host Docker socket, or host
+runtime secret.
 
 Before the first ingress is configured, the plugin starts normally and
 `dim plugin list` succeeds. Inspecting it does not create an empty
