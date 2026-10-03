@@ -94,6 +94,17 @@ describe("workspace image asset parity", () => {
     expect(entrypoint).toContain('initialize_root /var/lib/dim/workspace-data "workspace data"');
   });
 
+  it("configures APT through the host-owned cache without a direct fallback", async () => {
+    // Given / When
+    const entrypoint = await readFile(path.join(canonicalWorkspaceImageAssets, "entrypoint.bash"), "utf8");
+
+    // Then
+    expect(entrypoint).toContain('"httpProxy":"http://" + endpoint');
+    expect(entrypoint).toContain('"httpsProxy":"http://" + endpoint');
+    expect(entrypoint).toContain('path.join(home, ".docker", "config.json")');
+    expect(entrypoint).not.toContain("/etc/apt/apt.conf.d");
+  });
+
   it("includes Python for repository checks that exercise shipped Python services", async () => {
     const dockerfile = await readFile(path.join(canonicalWorkspaceImageAssets, "Dockerfile"), "utf8");
 

@@ -31,6 +31,40 @@ mkdir -p /var/lib/dim/workspace-data/docker /var/run
 rm -rf -- /var/run/docker/containerd
 rm -f -- /var/run/docker.pid /var/run/docker.sock
 
+if [[ -n "${DIM_APT_CACHE_ENDPOINT:-}" ]]; then
+  [[ "$DIM_APT_CACHE_ENDPOINT" =~ ^[A-Za-z0-9.-]+:[1-9][0-9]*$ ]] || {
+    echo "invalid DIM_APT_CACHE_ENDPOINT: $DIM_APT_CACHE_ENDPOINT" >&2
+    exit 2
+  }
+  sudo -H -u dim node --input-type=module - "$DIM_APT_CACHE_ENDPOINT" <<'NODE'
+import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import path from "node:path";
+
+const endpoint = process.argv[2];
+const home = "/home/dim";
+const configPath = path.join(home, ".docker", "config.json");
+await mkdir(path.dirname(configPath), { recursive: true, mode: 0o700 });
+let config = {};
+try {
+  config = JSON.parse(await readFile(configPath, "utf8"));
+} catch (error) {
+  if (!error || typeof error !== "object" || !("code" in error) || error.code !== "ENOENT") throw error;
+}
+if (!config || typeof config !== "object" || Array.isArray(config)) throw new TypeError("Docker client config must be an object");
+const proxies = config.proxies && typeof config.proxies === "object" && !Array.isArray(config.proxies) ? config.proxies : {};
+const defaults = proxies.default && typeof proxies.default === "object" && !Array.isArray(proxies.default) ? proxies.default : {};
+const next = { ...config, proxies: { ...proxies, default: {
+  ...defaults,
+  "httpProxy":"http://" + endpoint,
+  "httpsProxy":"http://" + endpoint
+} } };
+const temporary = configPath + ".tmp-" + process.pid;
+await writeFile(temporary, JSON.stringify(next) + "\n", { mode: 0o600 });
+await rename(temporary, configPath);
+await chmod(configPath, 0o600);
+NODE
+fi
+
 dockerd_args=(
   --host=unix:///var/run/docker.sock
   --data-root=/var/lib/dim/workspace-data/docker
