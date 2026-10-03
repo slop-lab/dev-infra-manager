@@ -45,6 +45,23 @@ for another Project receives no repository access. Missing or invalid
 credentials receive an authentication challenge; authenticated foreign or
 unknown repository requests return not found.
 
+## Own-identity endpoint (Contract)
+
+The service exposes exact `GET /v1/identity`, without query parameters, for a
+client to verify its authenticated native Git identity. A successful response
+is `200` JSON containing only `role`, `projectId`, and `repositoryIds`, plus
+`reviewerId` if and only if the authenticated role is `reviewer`. It does not
+return the username, password, role-specific writer or CI bindings, Git paths,
+executable metadata, other configuration, or any other identity. The endpoint
+does not accept an identity selector and cannot enumerate accounts or cross a
+Project boundary.
+
+Missing or invalid Basic credentials receive `401` with an authentication
+challenge. The endpoint returns `503` without identity data until service
+startup has established the pinned Git executable identity and whenever that
+identity no longer validates. Every endpoint response uses
+`Cache-Control: no-store`.
+
 ## Smart-HTTP operations
 
 The service permits these exact protocol operations:

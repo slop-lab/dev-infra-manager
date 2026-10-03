@@ -42,6 +42,33 @@ export function createNativeGitServer(input: NativeGitServiceConfig): NativeGitS
   let storageOwner: StorageOwner | undefined;
   let activeBackends = 0;
   const server = createServer((request, response) => {
+    if (request.method === "GET" && request.url === "/v1/identity") {
+      const identity = authenticator.authenticate(request.headers);
+      if (identity === undefined) return send(response, 401, { "WWW-Authenticate": 'Basic realm="DIM Git"' });
+      if (gitIdentity === undefined) return send(response, 503);
+      const body = identity.role === "reviewer"
+        ? {
+            role: identity.role,
+            projectId: identity.projectId,
+            repositoryIds: identity.repositoryIds,
+            reviewerId: identity.reviewerId
+          }
+        : {
+            role: identity.role,
+            projectId: identity.projectId,
+            repositoryIds: identity.repositoryIds
+          };
+      void assertGitExecutableIdentity(config.gitExecutable, gitIdentity)
+        .then(() => {
+          response.writeHead(200, {
+            "Cache-Control": "no-store",
+            "Content-Type": "application/json; charset=utf-8"
+          });
+          response.end(`${JSON.stringify(body)}\n`);
+        })
+        .catch(() => send(response, 503));
+      return;
+    }
     const reviewRoute = nativeGitReviewRoute(request);
     if (reviewRoute !== undefined) {
       const identity = authenticator.authenticate(request.headers);
