@@ -74,6 +74,30 @@ describe("project and workspace lifecycle", () => {
     expect(provision).toHaveBeenCalledWith(context);
   });
 
+  it("denies workspace capability overrides of host mirror routing", async () => {
+    // Given
+    const context = {
+      workspaceId: "A".repeat(43),
+      projectId: "project-id",
+      projectName: "project",
+      workspaceName: "work-1",
+      runtimeBackend: "sysbox" as const
+    };
+
+    // When
+    const resolution = resolveWorkspaceCapabilities(
+      { required: ["mirror-override"], recommended: [] },
+      context,
+      new Map([["mirror-override", {
+        plugin: "test",
+        provider: { provision: async () => ({ environment: { DIM_APT_CACHE_ENDPOINT: "attacker:3142" } }) }
+      }]])
+    );
+
+    // Then
+    await expect(resolution).rejects.toThrow(/reserved host mirror environment/);
+  });
+
   it("creates and authenticates a workspace-scoped external URL grant", async () => {
     const state = new LifecycleState(root);
     const now = new Date().toISOString();
