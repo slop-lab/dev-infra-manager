@@ -35,14 +35,13 @@ describe("ordinary CI pool database schema", () => {
     let failure: unknown;
     try {
       configuredOrdinaryCiPoolServer({
-        schemaVersion: 1,
+        schemaVersion: 2,
+        serviceId: "pool-main",
         database,
         jobImage: IMAGE,
-        runnerLabel: "dim-ordinary",
-        projects: [{
-          projectId: "project-a", projectName: "alpha", organization: "dim-alpha",
-          organizationId: 41, webhookToken: "webhook-token"
-        }],
+        webhookBaseUrl: "http://127.0.0.1:7410",
+        registrarToken: "registrar-token",
+        admissionLeaseMilliseconds: 60_000,
         hosts: [{ hostId: "host-a", token: "host-token", capacities: ["primary"] }]
       }).close();
     } catch (error) {
@@ -61,13 +60,13 @@ describe("ordinary CI pool database schema", () => {
     preserved.close();
   });
 
-  it("rejects an unsupported nonzero schema version without changing database bytes", async () => {
+  it("rejects the obsolete static-enrollment schema without changing database bytes", async () => {
     // Given
     const root = await mkdtemp(join(tmpdir(), "dim-ordinary-schema-"));
     roots.push(root);
     const database = join(root, "pool.sqlite3");
     const unsupported = new DatabaseSync(database);
-    unsupported.exec("PRAGMA user_version = 2");
+    unsupported.exec("PRAGMA user_version = 1");
     unsupported.close();
     const before = await readFile(database);
 
@@ -75,14 +74,13 @@ describe("ordinary CI pool database schema", () => {
     let failure: unknown;
     try {
       configuredOrdinaryCiPoolServer({
-        schemaVersion: 1,
+        schemaVersion: 2,
+        serviceId: "pool-main",
         database,
         jobImage: IMAGE,
-        runnerLabel: "dim-ordinary",
-        projects: [{
-          projectId: "project-a", projectName: "alpha", organization: "dim-alpha",
-          organizationId: 41, webhookToken: "webhook-token"
-        }],
+        webhookBaseUrl: "http://127.0.0.1:7410",
+        registrarToken: "registrar-token",
+        admissionLeaseMilliseconds: 60_000,
         hosts: [{ hostId: "host-a", token: "host-token", capacities: ["primary"] }]
       }).close();
     } catch (error) {

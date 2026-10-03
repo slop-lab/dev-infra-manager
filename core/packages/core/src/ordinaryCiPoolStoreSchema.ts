@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { UserError } from "./errors.js";
 
-const ORDINARY_CI_POOL_DATABASE_SCHEMA_VERSION = 1;
+const ORDINARY_CI_POOL_DATABASE_SCHEMA_VERSION = 2;
 
 export function openOrdinaryCiPoolDatabase(file: string): DatabaseSync {
   const existing = existsSync(file);
@@ -11,6 +11,24 @@ export function openOrdinaryCiPoolDatabase(file: string): DatabaseSync {
   try {
     if (!existing) {
       database.exec(`
+        CREATE TABLE project_webhook_secrets (
+          project_id TEXT PRIMARY KEY,
+          webhook_token TEXT NOT NULL
+        );
+        CREATE TABLE admissions (
+          admission_id TEXT PRIMARY KEY,
+          service_id TEXT NOT NULL,
+          project_id TEXT NOT NULL UNIQUE,
+          project_name TEXT NOT NULL,
+          organization TEXT NOT NULL,
+          organization_id INTEGER NOT NULL,
+          source_ref TEXT NOT NULL,
+          source_commit TEXT NOT NULL,
+          config_digest TEXT NOT NULL,
+          job_image TEXT NOT NULL,
+          runner_labels TEXT NOT NULL,
+          expires_at INTEGER NOT NULL
+        );
         CREATE TABLE queued_jobs (
           sequence INTEGER PRIMARY KEY AUTOINCREMENT,
           project_id TEXT NOT NULL,
