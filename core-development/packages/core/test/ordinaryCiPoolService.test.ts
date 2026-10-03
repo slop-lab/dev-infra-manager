@@ -12,6 +12,7 @@ import {
 const IMAGE = `registry.example/dim/job@sha256:${"a".repeat(64)}`;
 const services: ReturnType<typeof configuredOrdinaryCiPoolServer>[] = [];
 const roots: string[] = [];
+const webhookTokens = new Map<string, string>();
 
 afterEach(async () => {
   await Promise.all(services.splice(0).map(async (service) => {
@@ -19,6 +20,7 @@ afterEach(async () => {
     await once(service, "close");
   }));
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+  webhookTokens.clear();
 });
 
 describe("ordinary CI pool control plane", () => {
@@ -44,7 +46,7 @@ describe("ordinary CI pool control plane", () => {
     const rejected = await fetch(`${endpoint}/v1/webhooks/project-a/workflow-job`, {
       method: "POST",
       headers: {
-        Authorization: "Bearer webhook-a", "Content-Type": "application/json",
+        Authorization: `Bearer ${requiredWebhookToken(endpoint, "project-a")}`, "Content-Type": "application/json",
         "X-Gitea-Event": "workflow_job", "X-Gitea-Hook-Installation-Target-Type": "organization"
       },
       body: JSON.stringify(payload)
@@ -65,7 +67,7 @@ describe("ordinary CI pool control plane", () => {
     const rejected = await fetch(`${endpoint}/v1/webhooks/project-a/workflow-job`, {
       method: "POST",
       headers: {
-        Authorization: "Bearer webhook-a", "Content-Type": "application/json",
+        Authorization: `Bearer ${requiredWebhookToken(endpoint, "project-a")}`, "Content-Type": "application/json",
         "X-Gitea-Event": "workflow_job", "X-Gitea-Hook-Installation-Target-Type": "organization"
       },
       body: JSON.stringify(payload)
@@ -253,14 +255,13 @@ async function startService(
   const root = databaseInput === undefined ? await mkdtemp(join(tmpdir(), "dim-ordinary-pool-service-")) : undefined;
   if (root !== undefined) roots.push(root);
   const config: OrdinaryCiPoolServiceConfig = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    serviceId: "pool-main",
     database: databaseInput ?? join(root ?? "", "pool.sqlite3"),
     jobImage: IMAGE,
-    runnerLabel: "dim-ordinary",
-    projects: [
-      { projectId: "project-a", projectName: "alpha", organization: "dim-alpha", organizationId: 41, webhookToken: "webhook-a" },
-      { projectId: "project-b", projectName: "beta", organization: "dim-beta", organizationId: 42, webhookToken: "webhook-b" }
-    ],
+    webhookBaseUrl: "http://127.0.0.1:7410",
+    registrarToken: "registrar-token",
+    admissionLeaseMilliseconds: 60_000,
     hosts: [
       { hostId: "host-a", token: "host-a-token", capacities: ["primary", "secondary"] },
       { hostId: "host-b", token: "host-b-token", capacities: ["primary"] }
@@ -271,7 +272,30 @@ async function startService(
   service.listen(0, "127.0.0.1");
   await once(service, "listening");
   const address = service.address() as AddressInfo;
-  return `http://127.0.0.1:${address.port}`;
+  const endpoint = `http://127.0.0.1:${address.port}`;
+  await register(endpoint, "project-a", "alpha", 41);
+  await register(endpoint, "project-b", "beta", 42);
+  return endpoint;
+}
+
+async function register(endpoint: string, projectId: string, projectName: string, organizationId: number): Promise<void> {
+  const response = await fetch(`${endpoint}/v1/admissions`, {
+    method: "POST",
+    headers: { Authorization: "Bearer registrar-token", "Content-Type": "application/json" },
+    body: JSON.stringify({
+      projectId, projectName, organization: `dim-${projectName}`, organizationId,
+      sourceRef: "refs/heads/main", sourceCommit: "a".repeat(40), configDigest: "b".repeat(64),
+      jobImage: IMAGE, runnerLabels: ["dim-ordinary"]
+    })
+  });
+  const body = await response.json() as { readonly webhookToken: string };
+  webhookTokens.set(`${endpoint}:${projectId}`, body.webhookToken);
+}
+
+function requiredWebhookToken(endpoint: string, projectId: string): string {
+  const token = webhookTokens.get(`${endpoint}:${projectId}`);
+  if (token === undefined) throw new Error("webhook token is missing");
+  return token;
 }
 
 function renew(endpoint: string, hostId: string, token: string, claimId: string): Promise<Response> {
@@ -316,7 +340,7 @@ function webhook(
   return fetch(`${endpoint}/v1/webhooks/${projectId}/workflow-job`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${webhookTokens.get(`${endpoint}:${projectId}`) ?? token}`,
       "Content-Type": "application/json",
       "X-Gitea-Event": "workflow_job",
       "X-Gitea-Hook-Installation-Target-Type": "organization"
