@@ -61,7 +61,10 @@
   policy slug changes retain the permalink while requiring fresh approval, and
   workspace recreation receives a new one. Development-service gateways adopt
   a changed slug for their existing listed route ID instead of registering a
-  duplicate. Raw TCP routes remain address-and-port URLs without DNS permalinks.
+  duplicate. The workspace-image development-service helper can also request
+  one- or two-level nested HTTP targets without accepting a workspace, public
+  authority, controller endpoint, protocol, or approval selector. Raw TCP
+  routes remain address-and-port URLs without DNS permalinks.
 
 - Let trusted hosts share ordinary Sysbox CI capacity across explicitly
   enrolled DIM Projects on one external Gitea control plane. Each host
