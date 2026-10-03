@@ -8,13 +8,24 @@ import { configuredDimAdminController } from "../../../../core/packages/core/src
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 import type { RegisteredDimPlugins } from "../../../../core/packages/core/src/plugin.js";
 import { DIM_PLUGIN_API_VERSION, registerPlugin, registerPlugins } from "../../../../core/packages/core/src/plugin.js";
+import { registerHostMirrorProvider } from "../../../../core/packages/core/src/hostMirrorProvider.js";
 import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
 import {
   claimTestGiteaService,
   ownedGiteaContainerInspect,
   ownedGiteaResourceInspect
 } from "./giteaServiceFixture.js";
-import { hostLifecycleOptions, hostRecord } from "./hostLifecycleFixture.js";
+import { hostLifecycleOptions, hostRecord, TEST_HOST_MIRROR_PROVIDER } from "./hostLifecycleFixture.js";
+
+vi.mock("../../../../core/packages/core/src/registryCache.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../../core/packages/core/src/registryCache.js")>(),
+  ensureRegistryCache: vi.fn(async () => {})
+}));
+
+vi.mock("../../../../core/packages/core/src/aptCache.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../../../core/packages/core/src/aptCache.js")>(),
+  ensureAptCache: vi.fn(async () => {})
+}));
 
 class Barrier {
   readonly wait: Promise<void>;
@@ -246,7 +257,11 @@ describe("admin host admission", () => {
       String(input).startsWith("http://gitea:3000/")
         ? Promise.resolve(new Response(null, { status: 200 }))
         : fetchImplementation(input, init));
-    const plugins = await registerPlugins([]);
+    const plugins = await registerPlugin({
+      name: "test.host-mirrors",
+      apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) { registerHostMirrorProvider(host, TEST_HOST_MIRROR_PROVIDER); }
+    });
     pluginSets.push(plugins);
     const base = await startServer(root, plugins, new AdminRunner());
 

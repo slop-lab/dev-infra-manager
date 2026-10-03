@@ -1,14 +1,17 @@
 import * as ciRunner from "./ciRunner.js";
+import { ensureAptCache } from "./aptCache.js";
 import { runDoctor } from "./doctor.js";
 import { UserError } from "./errors.js";
 import { ensureGitea } from "./gitea.js";
 import { HostNotReadyError, withHostAdminAdmission, withHostRuntimeAdmission } from "./hostAdminAdmission.js";
 import { hostLifecycleStatus, shutdownHost, startHost } from "./hostLifecycle.js";
+import { requireHostMirrorProvider, resolveHostMirrorProvider } from "./hostMirrorProvider.js";
 import type { LifecycleOptions } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
 import * as projectRegistry from "./projectRegistry.js";
 import { assertRepositorySetUrlsArePortable, parseRepositorySetYaml, validateRepositoryRefNamespace, validateRepositorySet } from "./repositorySet.js";
 import type { StreamingCommandRunner } from "./types.js";
+import { ensureRegistryCache } from "./registryCache.js";
 import * as workspaceLifecycle from "./workspaceLifecycle.js";
 import { booleanValue, ciExecutor, ciResources, stringArray, stringValue, workspaceRuntimeBackend } from "./adminInput.js";
 
@@ -20,17 +23,21 @@ type BuiltinContext = {
 };
 
 export async function adminBuiltinCall(operation: string, context: BuiltinContext): Promise<unknown> {
+  const hostMirrorProvider = resolveHostMirrorProvider(context.plugins.host);
+  const lifecycle = hostMirrorProvider === undefined
+    ? context.lifecycle
+    : { ...context.lifecycle, hostMirrorProvider };
   switch (operation) {
     case "host.status":
-      return hostLifecycleStatus(context.lifecycle);
+      return hostLifecycleStatus(lifecycle);
     case "host.shutdown":
-      return shutdownHost(context.runner, context.lifecycle);
+      return shutdownHost(context.runner, lifecycle);
     case "host.start":
-      return startHost(context.runner, context.lifecycle);
+      return startHost(context.runner, lifecycle);
     default:
       try {
         const admit = RUNTIME_OPERATIONS.has(operation) ? withHostRuntimeAdmission : withHostAdminAdmission;
-        return await admit(context.lifecycle, () => dispatchBuiltin(operation, context));
+        return await admit(lifecycle, () => dispatchBuiltin(operation, { ...context, lifecycle }));
       } catch (error) {
         if (error instanceof HostNotReadyError) {
           throw new UserError(`DIM host is ${error.phase}; run dim host start before '${operation}'`);
@@ -43,7 +50,16 @@ export async function adminBuiltinCall(operation: string, context: BuiltinContex
 const RUNTIME_OPERATIONS = new Set(["ci.runner.logs", "workspace.exec", "workspace.run"]);
 
 async function dispatchBuiltin(operation: string, context: BuiltinContext): Promise<unknown> {
-  const { input, lifecycle, runner, plugins } = context;
+  const { input, runner, plugins } = context;
+  const hostMirrorProvider = resolveHostMirrorProvider(plugins.host);
+  const lifecycle = hostMirrorProvider === undefined
+    ? context.lifecycle
+    : { ...context.lifecycle, hostMirrorProvider };
+  if (MIRROR_REQUIRED_OPERATIONS.has(operation)) {
+    requireHostMirrorProvider(hostMirrorProvider);
+    await ensureRegistryCache(runner, lifecycle);
+    await ensureAptCache(runner, lifecycle);
+  }
   const text = (name: string) => stringValue(input[name], name);
   switch (operation) {
     case "project.create": return projectRegistry.createProject(runner, lifecycle, text("name"));
@@ -244,6 +260,11 @@ async function dispatchBuiltin(operation: string, context: BuiltinContext): Prom
     default: throw new UserError(`unknown admin operation '${operation}'`);
   }
 }
+
+const MIRROR_REQUIRED_OPERATIONS = new Set([
+  "ci.runner.create", "ci.runner.start", "ci.runner.restart",
+  "workspace.create", "workspace.setup", "workspace.update", "workspace.start", "workspace.restart"
+]);
 
 export const STREAMABLE_OPERATIONS = new Set([
   "project.create", "project.purge", "repo.protect", "ci.runner.create", "ci.runner.logs",

@@ -195,7 +195,11 @@ it("resolves registered host inputs with authenticated workspace context", async
     });
 
     // When
-    await initializeControllerRoutes({ stateRoot: root, defaultWorkspaceBackend: "sysbox" } as LifecycleOptions, plugin, {
+    await initializeControllerRoutes({
+      stateRoot: root,
+      defaultWorkspaceBackend: "sysbox",
+      giteaConnection: { kind: "managed" }
+    } as LifecycleOptions, plugin, {
       run: async (command, args) => ({ command, args, stdout: "", stderr: "", exitCode: 0 }),
       runStreaming: async () => 0
     });
