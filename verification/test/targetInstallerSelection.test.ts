@@ -130,7 +130,7 @@ describe("target installer selection", () => {
       .some((entry) => entry.startsWith("dim-target-installer."))).toBe(false);
   }, 120_000);
 
-  it("accepts strict host schema 1 through the packed target without installation-time migration", async () => {
+  it("migrates strict host schema 1 only after local plugin activation", async () => {
     // Given
     const fixture = await createFixture();
     const hostPath = resolve(fixture.root, "state/host.json");
@@ -142,6 +142,7 @@ describe("target installer selection", () => {
       resumeManagedContainers: [],
       updatedAt: "before-install"
     }, null, 2)}\n`;
+    await writeFile(fixture.environment.DIM_CONFIG_PATH ?? "", '{"schemaVersion":1,"workspaceBackend":"sysbox"}\n');
     await writeFile(hostPath, hostBytes);
     const bundleBefore = await bundleBytes(fixture.bundle);
 
@@ -152,7 +153,8 @@ describe("target installer selection", () => {
     // Then
     expect(installation.status, installation.stderr).toBe(0);
     expect(installation.stderr).toContain("will be migrated with a permanent backup at controller startup");
-    expect(await readFile(hostPath, "utf8")).toBe(hostBytes);
+    expect(JSON.parse(await readFile(hostPath, "utf8"))).toMatchObject({ schemaVersion: 2, phase: "stopped" });
+    expect(await readFile(`${hostPath}.schema-1.bak`, "utf8")).toBe(hostBytes);
     expect(await bundleBytes(fixture.bundle)).toEqual(bundleBefore);
     expect(invocations.match(/^state$/gm)).toHaveLength(2);
     expect(invocations).not.toContain("mise exec -- dim");

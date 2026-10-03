@@ -739,7 +739,7 @@ describe("local source build policy", () => {
     expect(invocations).not.toContain("docker build");
   });
 
-  it("installs a prepared bundle without restarting the controller", async () => {
+  it("installs a prepared bundle and restarts after plugin activation", async () => {
     // Given
     const fixture = await createFixture();
     expect(runScript(fixture, "prepare-source-build.bash").status).toBe(0);
@@ -754,7 +754,9 @@ describe("local source build policy", () => {
     expect(result.status).toBe(0);
     expect(invocations).toContain("dim installer install core");
     expect(invocations).toContain("dim --version");
-    expect(invocations).not.toContain("dim controller restart");
+    expect(invocations).toContain("dim controller restart");
+    expect(invocations.indexOf("dim installer enable-plugin"))
+      .toBeLessThan(invocations.indexOf("dim controller restart"));
     expect(invocations).toContain(
       `state dev-infra-project-workspace:0.9.0-local-${"a".repeat(64)} dev-infra-project-workspace:0.9.0-local-${"a".repeat(64)}`
     );
@@ -782,7 +784,9 @@ describe("local source build policy", () => {
     expect(invocations.match(new RegExp(`lock ${lockPath}`, "g"))).toHaveLength(1);
     expect(invocations.match(/^state /gm)).toHaveLength(2);
     expect(invocations).toContain("dim installer install core");
-    expect(invocations).not.toContain("dim controller restart");
+    expect(invocations).toContain("dim controller restart");
+    expect(invocations.indexOf("dim installer enable-plugin"))
+      .toBeLessThan(invocations.indexOf("dim controller restart"));
     expect(invocations).not.toMatch(/^pack /m);
     expect(invocations).not.toContain("docker build");
   });
