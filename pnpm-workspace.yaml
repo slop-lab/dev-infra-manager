@@ -11,6 +11,8 @@ packages:
   - plugin-dns-cloudflare-development
   - plugin-external-urls
   - plugin-external-urls-development
+  - plugin-host-mirrors
+  - plugin-host-mirrors-development
   - verification
 
 linkWorkspacePackages: true
