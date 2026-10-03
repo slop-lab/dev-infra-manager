@@ -10,7 +10,7 @@ import {
   inspectWorkspaceContainer,
   isMissingContainer
 } from "./workspaceResourceOwnership.js";
-import { validateWorkspaceResources } from "./workspaceValidation.js";
+import { readWorkspaceForOperation, validateWorkspaceResources } from "./workspaceValidation.js";
 import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
 
 export async function assertSelectedProjectUnchanged(
@@ -69,7 +69,12 @@ export async function showWorkspace(
   const workspaceName = validateLifecycleName(name, "workspace");
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
-    return await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(workspaceName));
+    return await reconcileWorkspaceRuntimeState(
+      runner,
+      state,
+      options.stateRoot,
+      await readWorkspaceForOperation(state, workspaceName, options.giteaConnection)
+    );
   } finally {
     await release();
   }
@@ -85,7 +90,12 @@ export async function listWorkspaces(
   for (const record of records) {
     const release = await state.acquireWorkspaceSetupLock(record.name);
     try {
-      reconciled.push(await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(record.name)));
+      reconciled.push(await reconcileWorkspaceRuntimeState(
+        runner,
+        state,
+        options.stateRoot,
+        await readWorkspaceForOperation(state, record.name, options.giteaConnection)
+      ));
     } finally {
       await release();
     }
@@ -106,7 +116,7 @@ export async function updateWorkspaceResources(
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
-    const record = await state.readWorkspace(workspaceName);
+    const record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
     assertWorkspaceLifecycleActive(record);
     const resources = {
       cpuCount: input.cpuCount ?? record.cpuCount,
@@ -146,7 +156,11 @@ export async function stopWorkspace(
   const workspaceName = validateLifecycleName(name, "workspace");
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
-    await stopWorkspaceLocked(runner, state, await state.readWorkspace(workspaceName));
+    await stopWorkspaceLocked(
+      runner,
+      state,
+      await readWorkspaceForOperation(state, workspaceName, options.giteaConnection)
+    );
   } finally {
     await release();
   }
@@ -161,7 +175,7 @@ export async function stopWorkspaceForHostShutdown(
   const workspaceName = validateLifecycleName(name, "workspace");
   const release = await state.acquireWorkspaceSetupLock(workspaceName);
   try {
-    const record = await state.readWorkspace(workspaceName);
+    const record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
     if (record.phase !== "discarding") {
       await stopWorkspaceLocked(runner, state, record);
       return;

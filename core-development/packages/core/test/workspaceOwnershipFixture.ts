@@ -21,7 +21,7 @@ export function workspaceContainerInspect(
     input.id ?? "workspace-container-id",
     String(input.running ?? true),
     ...workspaceContainerLabels(record).map(labelValue),
-    input.runtimeConfig ?? "8",
+    input.runtimeConfig ?? "9",
     JSON.stringify([{
       Type: "bind",
       Source: input.rootSnapshotPath ?? record.rootSnapshotPath ?? "/var/lib/dim/project-roots/default",

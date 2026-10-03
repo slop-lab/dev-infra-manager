@@ -12,6 +12,7 @@ import {
   isMissingContainer,
   isMissingVolume
 } from "./workspaceResourceOwnership.js";
+import { readWorkspaceForOperation } from "./workspaceValidation.js";
 
 export async function discardWorkspace(
   runner: StreamingCommandRunner,
@@ -27,7 +28,7 @@ export async function discardWorkspace(
     const releaseAuthority = await state.acquireWorkspaceAuthorityLock(workspaceName);
     let record: WorkspaceRecord;
     try {
-      record = await state.readWorkspace(workspaceName);
+      record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
       const discarding = { ...record, phase: "discarding" as const, updatedAt: new Date().toISOString() };
       await state.writeWorkspace(discarding);
       await state.removeWorkspaceGrant(record);
