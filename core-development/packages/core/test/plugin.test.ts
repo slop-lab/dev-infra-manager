@@ -5,6 +5,10 @@ import {
   registerPlugin,
   registerPlugins
 } from "../../../../core/packages/core/src/plugin.js";
+import {
+  registerHostMirrorProvider,
+  resolveHostMirrorProvider
+} from "../../../../core/packages/core/src/hostMirrorProvider.js";
 
 describe("plugin contract", () => {
   it("loads plugins through a versioned contract", async () => {
@@ -196,6 +200,89 @@ describe("plugin contract", () => {
       plugin: "capability-plugin", provider
     });
     await registered.dispose();
+  });
+
+  it("registers one host-owned mirror provider with immutable service images", async () => {
+    // Given
+    const provider = {
+      dockerImage: `registry.example/cache@sha256:${"a".repeat(64)}`,
+      aptImage: `registry.example/apt-cache@sha256:${"b".repeat(64)}`
+    };
+
+    // When
+    const registered = await registerPlugin({
+      name: "host-mirrors",
+      apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) { registerHostMirrorProvider(host, provider); }
+    });
+
+    // Then
+    expect(resolveHostMirrorProvider(registered.host)).toEqual(provider);
+    await registered.dispose();
+  });
+
+  it("rejects mutable and duplicate host mirror providers", async () => {
+    // Given
+    const immutable = {
+      dockerImage: `registry.example/cache@sha256:${"a".repeat(64)}`,
+      aptImage: `registry.example/apt-cache@sha256:${"b".repeat(64)}`
+    };
+
+    // When / Then
+    await expect(registerPlugin({
+      name: "mutable-mirrors",
+      apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) {
+        registerHostMirrorProvider(host, { ...immutable, aptImage: "registry.example/apt-cache:latest" });
+      }
+    })).rejects.toThrow(/immutable digest/);
+    await expect(registerPlugins([
+      {
+        name: "first-mirrors",
+        apiVersion: DIM_PLUGIN_API_VERSION,
+        register(host) { registerHostMirrorProvider(host, immutable); }
+      },
+      {
+        name: "second-mirrors",
+        apiVersion: DIM_PLUGIN_API_VERSION,
+        register(host) { registerHostMirrorProvider(host, immutable); }
+      }
+    ])).rejects.toThrow(/already registered/);
+  });
+
+  it("rejects a second host mirror provider registered under another name", async () => {
+    // Given
+    const provider = {
+      dockerImage: `registry.example/cache@sha256:${"a".repeat(64)}`,
+      aptImage: `registry.example/apt-cache@sha256:${"b".repeat(64)}`
+    };
+
+    // When
+    const registration = registerPlugin({
+      name: "ambiguous-mirrors",
+      apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) {
+        host.registerExtension("dim.host-mirror-provider", "primary", provider);
+        host.registerExtension("dim.host-mirror-provider", "secondary", provider);
+      }
+    });
+
+    // Then
+    await expect(registration).rejects.toThrow(/host mirror provider.*already registered/);
+  });
+
+  it("rejects a malformed host mirror provider registered through the generic extension API", async () => {
+    // Given / When
+    const registration = registerPlugin({
+      name: "malformed-mirrors",
+      apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) {
+        host.registerExtension("dim.host-mirror-provider", "host", {});
+      }
+    });
+
+    // Then
+    await expect(registration).rejects.toThrow(/host mirror provider images must use an immutable digest/);
   });
 
   it("shares named extensions between plugins and rejects duplicates", async () => {
