@@ -91,7 +91,8 @@ node -e 'if (!require("node:net").isIPv4(process.argv[1])) process.exit(1)' "$fi
 docker image pull "$registry_image" >/dev/null
 
 start_fixture() {
-  local route="$1" ready="$root/$route-ready.json" evidence="$root/$route-upstream.jsonl"
+  local route="$1"
+  local ready="$root/$route-ready.json" evidence="$root/$route-upstream.jsonl"
   node "$script_dir/registry-cache-evidence.mjs" --run-id "$run_id" --route "$route" \
     --bind-address "$fixture_address" --evidence-file "$evidence" --ready-file "$ready" \
     >"$root/$route-fixture.stdout" 2>"$root/$route-fixture.stderr" &
