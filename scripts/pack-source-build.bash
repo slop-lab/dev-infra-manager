@@ -93,7 +93,8 @@ GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" archive --format=tar --output "$sou
   pnpm-lock.yaml \
   core \
   plugin-dns-cloudflare \
-  plugin-external-urls
+  plugin-external-urls \
+  plugin-host-mirrors
 tar -xf "$source_archive" -C "$source_root"
 
 cat >"$source_root/package.json" <<'EOF'
@@ -108,6 +109,7 @@ packages:
   - core/packages/contracts/*
   - plugin-dns-cloudflare
   - plugin-external-urls
+  - plugin-host-mirrors
 linkWorkspacePackages: true
 EOF
 
@@ -134,6 +136,7 @@ echo "[source] build production packages"
 pnpm --dir "$source_root/core" run build
 pnpm --dir "$source_root/plugin-dns-cloudflare" run build
 pnpm --dir "$source_root/plugin-external-urls" run build
+pnpm --dir "$source_root/plugin-host-mirrors" run build
 
 echo "[source] create install bundle"
 node "$repo_root/scripts/pack-local-packages.mjs" "$source_root" "$output_stage"

@@ -32,7 +32,8 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
     "core/packages/controller-proxy",
     "core/packages/contracts/external-url",
     "plugin-dns-cloudflare",
-    "plugin-external-urls"
+    "plugin-external-urls",
+    "plugin-host-mirrors"
   ] as const;
   await Promise.all(
     productionPackageDirectories.map(async (directory) => {
@@ -75,7 +76,7 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
       "    'status --porcelain ') ;;",
       "    'archive --format=tar --output')",
       "      output=\"$4\"",
-      "      /usr/bin/tar -C \"$directory\" -cf \"$output\" pnpm-lock.yaml core plugin-dns-cloudflare plugin-external-urls",
+      "      /usr/bin/tar -C \"$directory\" -cf \"$output\" pnpm-lock.yaml core plugin-dns-cloudflare plugin-external-urls plugin-host-mirrors",
       "      ;;",
       "    *) exit 91 ;;",
       "  esac",
@@ -84,6 +85,7 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
       "    */core.git) printf '%040d\\tHEAD\\n' 1 ;;",
       "    */plugin-dns-cloudflare.git) printf '%040d\\tHEAD\\n' 2 ;;",
       "    */plugin-external-urls.git) printf '%040d\\tHEAD\\n' 3 ;;",
+      "    */plugin-host-mirrors.git) printf '%040d\\tHEAD\\n' 4 ;;",
       "    *) exit 93 ;;",
       "  esac",
       "elif [[ \"$1\" == 'clone' ]]; then",
@@ -107,9 +109,11 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
       "  output_root=\"$3\"",
       "  [[ -f \"$source_root/plugin-dns-cloudflare/.built\" ]] || exit 45",
       "  [[ -f \"$source_root/plugin-external-urls/.built\" ]] || exit 46",
+      "  [[ -f \"$source_root/plugin-host-mirrors/.built\" ]] || exit 47",
       "  cp \"$source_root/pnpm-lock.yaml\" \"$output_root/.packed-lock\"",
       "  cp \"$source_root/plugin-dns-cloudflare/package.json\" \"$output_root/plugin-dns-cloudflare.package.json\"",
       "  cp \"$source_root/plugin-external-urls/package.json\" \"$output_root/plugin-external-urls.package.json\"",
+      "  cp \"$source_root/plugin-host-mirrors/package.json\" \"$output_root/plugin-host-mirrors.package.json\"",
       "  printf 'node %s version=%s\\n' \"$*\" \"${DIM_LOCAL_BUILD_VERSION:-unset}\" >>\"$DIM_INVOCATIONS\"",
       "fi",
       ""
@@ -125,7 +129,7 @@ export async function createSourceBuildFixture(): Promise<SourceBuildFixture> {
       "  cmp \"$directory/pnpm-lock.yaml\" \"$DIM_EXPECTED_AGGREGATE_LOCK\" || exit 83",
       "  [[ \"${DIM_AGGREGATE_LOCK_STALE:-0}\" == 0 ]] || exit 43",
       "  [[ \"${DIM_WORKSPACE_INSTALL_FAILURE:-0}\" == 0 ]] || exit 42",
-      "  for plugin in plugin-dns-cloudflare plugin-external-urls; do",
+      "  for plugin in plugin-dns-cloudflare plugin-external-urls plugin-host-mirrors; do",
       "    mkdir -p \"$directory/$plugin/node_modules/@slop-lab\"",
       "    ln -s \"$directory/core/packages/core\" \"$directory/$plugin/node_modules/@slop-lab/dim-core\"",
       "    ln -s \"$directory/core/packages/contracts/external-url\" \"$directory/$plugin/node_modules/@slop-lab/dim-contracts-external-url\"",
