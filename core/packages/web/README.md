@@ -2,15 +2,17 @@
 
 `@slop-lab/dim-web` is the authenticated service for the first bounded DIM
 reviewer-web slice. It serves a same-origin reviewer page and exposes one
-configured native Git reviewer identity to trusted local web accounts without
-returning the native Basic credential or a raw native review response to the
-browser.
+configured native Git reviewer identity to one explicitly bound local reviewer
+account without returning the native Basic credential or a raw native review
+response to the browser. Other configured accounts can inspect evidence but
+cannot mutate reviewer decisions.
 
 The browser page signs in, creates immutable review evidence from exact refs,
 opens an exact review ID, displays allowlisted metadata, changed paths, and
-literal patch text, and signs out. It keeps the CSRF token in memory and the
-session cookie remains HttpOnly. The service does not expose host
-administration, approval, rejection, revocation, promotion, CI reporting,
+literal patch text, approves that exact review, revokes only the configured
+reviewer's active approval, and signs out. It keeps the CSRF token in memory and
+the session cookie remains HttpOnly. The service does not expose rejection,
+administrator revocation, host administration, promotion, CI reporting,
 arbitrary native operations, or a generic proxy. Deployment integration remains
 outside this slice.
 
@@ -49,6 +51,19 @@ accepted only for local development and verification; other origins must use
 HTTPS. The server follows no redirects and bounds request bodies, native
 responses, native request time, headers, and HTTP request lifetime.
 
+Approval and revocation use only the startup-attested reviewer credential.
+The required `reviewerAccountId` must match exactly one configured local
+account. Decision routes compare that identifier with the authenticated
+session before native dispatch; authorized and read-only review DTOs expose
+`canDecide: true` and `false`, respectively.
+Native Git remains the authority for required-reviewer membership, stale tuple
+denial, approval ownership, serialization, and persistence. The browser sends
+an empty action body and cannot select an approval ID. Self-revocation derives
+the configured reviewer's active approval from a fresh exact-review response,
+then native Git independently verifies ownership. Successful actions return a
+fresh allowlisted review DTO. Administrator revocation remains absent because
+the service has no separately configured and attested administrator identity.
+
 Review responses are constructed field by field. Printable `patch` and path
 strings remain untrusted JSON data. Raw `patchBytes`, raw path-byte fields,
 writer/reviewer/reporter Basic usernames, passwords, and unrecognized native
@@ -78,6 +93,7 @@ Schema 1 has this shape:
   "host": "127.0.0.1",
   "port": 9081,
   "publicOrigin": "https://review.example.internal",
+  "reviewerAccountId": "local-reviewer",
   "nativeGit": {
     "baseUrl": "http://127.0.0.1:9080",
     "username": "reviewer-a-user",
@@ -110,8 +126,16 @@ The supported password-hash parameters are exactly scrypt `N=16384`, `r=8`,
 | `DELETE` | `/v1/session` | Invalidate the current session |
 | `GET` | `/v1/projects/:project/repositories/:repository/reviews/:review` | Return a scoped review DTO |
 | `POST` | `/v1/projects/:project/repositories/:repository/reviews` | Create review evidence for exact refs |
+| `POST` | `/v1/projects/:project/repositories/:repository/reviews/:review/approvals` | Approve the exact review as the attested reviewer |
+| `POST` | `/v1/projects/:project/repositories/:repository/reviews/:review/revocations` | Revoke only the attested reviewer's active approval |
 
 All other paths, methods, query strings, encoded path extensions, foreign
 Projects, and foreign repositories are rejected. `/healthz` contains no
 identity or dependency detail; every `/v1` operation either establishes or
 requires authenticated reviewer state.
+
+Only the session whose account ID equals `reviewerAccountId` may call the two
+decision routes. Other authenticated accounts receive `403` and receive review
+DTOs with `canDecide: false`; the browser therefore renders evidence without
+approval or revocation controls. While a decision is in flight, in-page review
+navigation and sign-out remain locked until the fresh native result is rendered.
