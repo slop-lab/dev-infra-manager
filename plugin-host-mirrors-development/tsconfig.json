@@ -1,0 +1,5 @@
+{
+  "extends": "../plugin-host-mirrors/tsconfig.base.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["test/**/*.ts", "vitest.config.ts"]
+}
