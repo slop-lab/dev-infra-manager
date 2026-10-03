@@ -102,9 +102,10 @@ interactive terminal. Controller bootstrap and local Git process adapters stay
 local. Neither the admin socket nor host credentials are mounted into
 workspaces.
 
-After claiming the managed controller PID and before loading plugins or opening
-listeners, startup performs the one supported pre-stable state migration: a
-strict host-only `host.json` schema 1 record becomes schema 2 by renaming
+After claiming the managed controller PID, startup loads plugins and resolves
+exactly one host-mirror provider before performing the one supported pre-stable
+state migration or any managed-service reconciliation. Before opening
+listeners, a strict host-only `host.json` schema 1 record becomes schema 2 by renaming
 `resumeCiRunners` to `restartCiRunners`. The original bytes remain permanently
 in mode-`0600` `host.json.schema-1.bak`. Startup reports only a completed
 migration or backup recovery; an unsafe, malformed, or conflicting artifact is

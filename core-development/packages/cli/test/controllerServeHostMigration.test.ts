@@ -21,7 +21,7 @@ before(() => {
 
 test("built controller denies startup when an absent host managed-Git lease cannot be reconciled", async () => {
   const fixture = await createFixture(undefined, []);
-  await installPlugin(fixture, "reconciliation-failure-plugin");
+  await installPlugin(fixture, "reconciliation-failure-plugin", true);
   await installDocker(fixture, `printf '%s\n' "$*" >> "$DIM_DOCKER_CALLS"
 printf 'lease endpoint refused\n' >&2
 exit 1`);
@@ -34,7 +34,7 @@ exit 1`);
       result.stderr,
       "controller startup failed while reconciling managed Git service: Failed to inspect Gitea container: lease endpoint refused\n"
     );
-    await assertMissing(fixture.pluginMarker);
+    await access(fixture.pluginMarker);
     await assertRuntimeMissing(fixture);
     assert.equal(JSON.parse(await readFile(fixture.hostPath, "utf8")).phase, "error");
   } finally {
@@ -63,7 +63,7 @@ exit 1`);
   }
 });
 
-test("built controller reconciles an existing managed-Git lease before loading plugins on a ready host", async () => {
+test("built controller resolves the host mirror provider before reconciling an existing managed-Git lease", async () => {
   const fixture = await createFixture("ready", []);
   await installPlugin(fixture, "reconciliation-success-plugin", true);
   await installDocker(fixture, `printf '%s\n' "$*" >> "$DIM_DOCKER_CALLS"
@@ -210,17 +210,22 @@ function networkInspect(): string { return ["b".repeat(64), "true", "dim", "S".r
 
 function volumeInspect(): string { return ["true", "dim", "S".repeat(43), "gitea-data", "V".repeat(43)].join("|"); }
 
-async function installPlugin(fixture: Fixture, name: string, requireDockerCall = false): Promise<void> {
+async function installPlugin(fixture: Fixture, name: string, registerProvider = false): Promise<void> {
   const directory = path.join(fixture.pluginHome, "node_modules", name);
   await mkdir(directory, { recursive: true });
   await writeFile(path.join(fixture.pluginHome, "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: [name] }));
   await writeFile(path.join(fixture.pluginHome, "package.json"), JSON.stringify({ type: "module" }));
   await writeFile(path.join(directory, "package.json"), JSON.stringify({ name, type: "module", exports: "./index.js" }));
-  await writeFile(path.join(directory, "index.js"), requireDockerCall
+  await writeFile(path.join(directory, "index.js"), registerProvider
     ? `import { existsSync, writeFileSync } from "node:fs";
-if (!existsSync(${JSON.stringify(fixture.dockerCalls)})) throw new Error("plugin loaded before reconciliation");
+if (existsSync(${JSON.stringify(fixture.dockerCalls)})) throw new Error("plugin loaded after reconciliation");
 writeFileSync(${JSON.stringify(fixture.pluginMarker)}, "loaded");
-export const plugin = { name: ${JSON.stringify(name)}, apiVersion: 4, register() {} };\n`
+export const plugin = { name: ${JSON.stringify(name)}, apiVersion: 4, register(host) {
+  host.registerExtension("dim.host-mirror-provider", "host", {
+    dockerImage: "registry.example/cache@sha256:${"a".repeat(64)}",
+    aptImage: "registry.example/apt@sha256:${"b".repeat(64)}"
+  });
+} };\n`
     : `throw new Error("fixture plugin reached");\n`);
 }
 

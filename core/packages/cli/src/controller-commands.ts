@@ -5,7 +5,8 @@ import { type Command } from "commander";
 import {
   configuredDimAdminController, configuredDimAgentController, configuredDimController,
   initializeControllerRoutes, LifecycleState, lifecycleOptions, loadInstalledPlugins,
-  migrateHostLifecycleState, reconcileReadyHostManagedGit, resolvePluginHome, UserError
+  migrateHostLifecycleState, reconcileReadyHostManagedGit, requireHostMirrorProvider, resolveHostMirrorProvider,
+  resolvePluginHome, UserError
 } from "@slop-lab/dim-core";
 import {
   claimControllerPid, closeControllerServer, pidFileOwnedByCurrentProcess,
@@ -58,6 +59,16 @@ controller.command("serve")
         await claimControllerPid(pidPath);
         ownsPid = true;
       }
+      const loadedPlugins = await controllerStartupStage(
+        "loading plugins",
+        async () => await loadInstalledPlugins(await resolvePluginHome())
+      );
+      loaded = loadedPlugins;
+      const hostMirrorProvider = await controllerStartupStage(
+        "resolving host mirror provider",
+        async () => requireHostMirrorProvider(resolveHostMirrorProvider(loadedPlugins.registered.host))
+      );
+      const runtimeOptions = { ...options, hostMirrorProvider };
       const migration = await controllerStartupStage(
         "migrating host lifecycle state",
         async () => await migrateHostLifecycleState(new LifecycleState(options.stateRoot))
@@ -70,18 +81,13 @@ controller.command("serve")
       await controllerStartupStage("reconciling managed Git service", async () => {
         await reconcileReadyHostManagedGit(runner, options);
       });
-      const loadedPlugins = await controllerStartupStage(
-        "loading plugins",
-        async () => await loadInstalledPlugins(await resolvePluginHome())
-      );
-      loaded = loadedPlugins;
       await controllerStartupStage(
         "initializing plugin routes",
-        async () => await initializeControllerRoutes(options, loadedPlugins.registered)
+        async () => await initializeControllerRoutes(runtimeOptions, loadedPlugins.registered)
       );
-      server = configuredDimController(options, loaded.registered);
-      adminServer = configuredDimAdminController(options, loaded.registered);
-      agentServer = configuredDimAgentController(options, loaded.registered);
+      server = configuredDimController(runtimeOptions, loaded.registered);
+      adminServer = configuredDimAdminController(runtimeOptions, loaded.registered);
+      agentServer = configuredDimAgentController(runtimeOptions, loaded.registered);
       if (flags.socket && adminSocket && agentSocket) {
         await prepareControllerSocket(flags.socket);
         const workspaceListening = once(server, "listening");

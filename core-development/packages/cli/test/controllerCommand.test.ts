@@ -18,11 +18,13 @@ test("controller serve preserves the active owner and cleans up its runtime file
   const agentSocket = path.join(root, "agent.sock");
   const pidPath = path.join(root, "controller.pid");
   const configHome = path.join(root, "config");
+  const pluginHome = path.join(root, "plugins");
   await mkdir(path.join(configHome, "dim"), { recursive: true });
   await writeFile(
     path.join(configHome, "dim", "config.json"),
     `${JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" })}\n`
   );
+  await installProviderPlugin(pluginHome);
   const args = [
     "--import", tsxImport, cli, "controller", "serve", "--socket", socket,
     "--admin-socket", adminSocket, "--agent-socket", agentSocket
@@ -32,7 +34,7 @@ test("controller serve preserves the active owner and cleans up its runtime file
     DIM_ADMIN_CONTROLLER_SOCKET: adminSocket,
     DIM_AGENT_CONTROLLER_SOCKET: agentSocket,
     DIM_CONTROLLER_SOCKET: socket,
-    DIM_PLUGIN_HOME: path.join(root, "plugins"),
+    DIM_PLUGIN_HOME: pluginHome,
     DIM_STATE_ROOT: path.join(root, "state"),
     XDG_CONFIG_HOME: configHome
   };
@@ -97,6 +99,10 @@ test("controller serve identifies plugin route initialization as the failing sta
   name: "test-ingress-plugin",
   apiVersion: 4,
   register(host) {
+    host.registerExtension("dim.host-mirror-provider", "host", {
+      dockerImage: "registry.example/cache@sha256:${"a".repeat(64)}",
+      aptImage: "registry.example/apt@sha256:${"b".repeat(64)}"
+    });
     host.registerControllerRoute({
       method: "GET",
       path: "/test-ingress",
@@ -136,7 +142,7 @@ test("controller serve identifies plugin route initialization as the failing sta
   }
 });
 
-test("controller serve migrates host state after claiming its PID and before loading plugins", async () => {
+test("controller serve resolves the host mirror provider before migrating host state", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "dim-controller-host-migration-"));
   const stateRoot = path.join(root, "state");
   const pluginHome = path.join(root, "plugins");
@@ -167,9 +173,14 @@ test("controller serve migrates host state after claiming its PID and before loa
   await writeFile(path.join(pluginDirectory, "index.js"), `
 import { readFileSync, writeFileSync } from "node:fs";
 const state = JSON.parse(readFileSync(${JSON.stringify(path.join(stateRoot, "host.json"))}, "utf8"));
-if (state.schemaVersion !== 2) throw new Error("plugin loaded before migration");
+if (state.schemaVersion !== 1) throw new Error("plugin loaded after migration");
 writeFileSync(${JSON.stringify(marker)}, "loaded");
-export const plugin = { name: "migration-order-plugin", apiVersion: 4, register() {} };
+export const plugin = { name: "migration-order-plugin", apiVersion: 4, register(host) {
+  host.registerExtension("dim.host-mirror-provider", "host", {
+    dockerImage: "registry.example/cache@sha256:${"a".repeat(64)}",
+    aptImage: "registry.example/apt@sha256:${"b".repeat(64)}"
+  });
+} };
 `);
   const controller = spawn(process.execPath, [
     "--import", tsxImport, cli, "controller", "serve",
@@ -213,7 +224,7 @@ export const plugin = { name: "migration-order-plugin", apiVersion: 4, register(
   }
 });
 
-test("controller serve fails at host-state migration before plugin loading or listeners", async () => {
+test("controller serve resolves plugins before a host-state migration failure", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "dim-controller-host-migration-failure-"));
   const stateRoot = path.join(root, "state");
   const pluginHome = path.join(root, "plugins");
@@ -235,7 +246,12 @@ test("controller serve fails at host-state migration before plugin loading or li
   await writeFile(path.join(pluginDirectory, "index.js"), `
 import { writeFileSync } from "node:fs";
 writeFileSync(${JSON.stringify(marker)}, "loaded");
-export const plugin = { name: "migration-failure-plugin", apiVersion: 4, register() {} };
+export const plugin = { name: "migration-failure-plugin", apiVersion: 4, register(host) {
+  host.registerExtension("dim.host-mirror-provider", "host", {
+    dockerImage: "registry.example/cache@sha256:${"a".repeat(64)}",
+    aptImage: "registry.example/apt@sha256:${"b".repeat(64)}"
+  });
+} };
 `);
   try {
     const socket = path.join(root, "controller.sock");
@@ -261,7 +277,7 @@ export const plugin = { name: "migration-failure-plugin", apiVersion: 4, registe
 
     assert.equal(result.status, 2);
     assert.match(result.stderr, /^controller startup failed while migrating host lifecycle state:/);
-    await assert.rejects(access(marker), { code: "ENOENT" });
+    await access(marker);
     await assert.rejects(access(socket), { code: "ENOENT" });
     await assert.rejects(access(adminSocket), { code: "ENOENT" });
     await assert.rejects(access(agentSocket), { code: "ENOENT" });
@@ -276,9 +292,11 @@ test("controller serve reports recovery from the permanent schema 1 backup", asy
   const stateRoot = path.join(root, "state");
   const configHome = path.join(root, "config");
   const socket = path.join(root, "controller.sock");
+  const pluginHome = path.join(root, "plugins");
   await mkdir(stateRoot, { recursive: true });
   await mkdir(path.join(configHome, "dim"), { recursive: true });
   await writeFile(path.join(configHome, "dim", "config.json"), `${JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" })}\n`);
+  await installProviderPlugin(pluginHome);
   await writeFile(path.join(stateRoot, "host.json.schema-1.bak"), `${JSON.stringify({
     schemaVersion: 1,
     phase: "ready",
@@ -298,7 +316,7 @@ test("controller serve reports recovery from the permanent schema 1 backup", asy
     env: {
       ...process.env,
       DIM_CONFIG_PATH: path.join(configHome, "dim", "config.json"),
-      DIM_PLUGIN_HOME: path.join(root, "plugins"),
+      DIM_PLUGIN_HOME: pluginHome,
       DIM_STATE_ROOT: stateRoot,
       XDG_CONFIG_HOME: configHome
     },
@@ -319,6 +337,23 @@ test("controller serve reports recovery from the permanent schema 1 backup", asy
     await rm(root, { recursive: true, force: true });
   }
 });
+
+async function installProviderPlugin(pluginHome: string): Promise<void> {
+  const name = "test-host-mirror-provider";
+  const directory = path.join(pluginHome, "node_modules", name);
+  await mkdir(directory, { recursive: true });
+  await writeFile(path.join(pluginHome, "plugins.json"), JSON.stringify({ schemaVersion: 1, plugins: [name] }));
+  await writeFile(path.join(pluginHome, "package.json"), JSON.stringify({ type: "module" }));
+  await writeFile(path.join(directory, "package.json"), JSON.stringify({ name, type: "module", exports: "./index.js" }));
+  await writeFile(path.join(directory, "index.js"), `export const plugin = {
+  name: ${JSON.stringify(name)}, apiVersion: 4, register(host) {
+    host.registerExtension("dim.host-mirror-provider", "host", {
+      dockerImage: "registry.example/cache@sha256:${"a".repeat(64)}",
+      aptImage: "registry.example/apt@sha256:${"b".repeat(64)}"
+    });
+  }
+};\n`);
+}
 
 async function waitForPath(target: string): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
