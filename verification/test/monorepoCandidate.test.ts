@@ -36,7 +36,7 @@ describe("monorepo candidate builder", () => {
   it("assembles exact feature tips with preserved ancestry and trees", async () => {
     // Given
     const sources = await createFixture();
-    expect(sources).toHaveLength(12);
+    expect(sources).toHaveLength(14);
     const githubDevelopment = sources.find(({ name }) => name === "github-development");
     const development = sources.find(({ name }) => name === "development");
     expect(githubDevelopment).toBeDefined();
@@ -77,7 +77,7 @@ describe("monorepo candidate builder", () => {
       if (source.name === "github-development") continue;
       expect(evidence).toContain(`${source.name}\t${source.destination || "."}\t${source.sha}\t${source.tree}\t`);
     }
-    expect(evidence.trim().split("\n")).toHaveLength(12);
+    expect(evidence.trim().split("\n")).toHaveLength(14);
     expect(await readFile(resolve(output, ".monorepo-candidate/github-development.tsv"), "utf8"))
       .toBe(`repository\tsource_commit\tsource_tree\tancestry_policy\n` +
         `github-development\t${githubDevelopment?.sha}\t${githubDevelopment?.tree}\thistory-only-merge-parent\n`);

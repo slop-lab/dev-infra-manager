@@ -17,6 +17,8 @@ const repositories = [
   ["plugin-dns-cloudflare-development", "plugin-dns-cloudflare-development"],
   ["plugin-external-urls", "plugin-external-urls"],
   ["plugin-external-urls-development", "plugin-external-urls-development"],
+  ["plugin-host-mirrors", "plugin-host-mirrors"],
+  ["plugin-host-mirrors-development", "plugin-host-mirrors-development"],
   ["verification", "verification"],
   ["examples", "examples"],
   ["specification", "specification"],

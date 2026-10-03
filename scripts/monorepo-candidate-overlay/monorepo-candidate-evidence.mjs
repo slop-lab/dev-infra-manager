@@ -55,6 +55,7 @@ const sources = rows("sources.tsv", "repository\tdestination\tsource_commit\tsou
 const expectedSources = new Set([
   "development", "root", "core", "core-development", "plugin-dns-cloudflare",
   "plugin-dns-cloudflare-development", "plugin-external-urls", "plugin-external-urls-development",
+  "plugin-host-mirrors", "plugin-host-mirrors-development",
   "verification", "examples", "specification"
 ]);
 if (sources.length !== expectedSources.size) throw new Error("candidate source inventory changed");
