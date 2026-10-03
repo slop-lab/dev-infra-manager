@@ -14,6 +14,7 @@ export * from "./ordinaryCiPoolService.js";
 export * from "./ordinaryCiPoolStore.js";
 export * from "./ordinaryCiPoolConfig.js";
 export * from "./ordinaryCiPoolRuntime.js";
+export * from "./ordinaryCiPoolRegistrar.js";
 export * from "./ordinaryCiPoolWorker.js";
 export * from "./plugin.js";
 export * from "./hostInputs.js";

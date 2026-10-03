@@ -5,6 +5,7 @@ import {
   configuredCiRunnerDefaults,
   lifecycleOptions,
   ProcessRunner,
+  reconcileOrdinaryCiPoolProject,
   runOrdinaryCiPoolCapacity,
   runOrdinaryCiPoolCapacityOnce,
   runOrdinaryCiPoolService,
@@ -30,6 +31,18 @@ schedulerImage.command("build")
   });
 const ciRunner = ci.command("runner").description("Manage project CI runners");
 const ordinaryPool = ci.command("ordinary-pool").description("Manage host-scoped ordinary CI capacity");
+const ordinaryProject = ordinaryPool.command("project").description("Reconcile reviewed Project admission");
+ordinaryProject.command("reconcile")
+  .description("Admit one Project from its protected root and reconcile its Gitea webhook")
+  .argument("<project>")
+  .argument("<registrar-config>")
+  .action(async (projectName: string, registrarFile: string) => {
+    const result = await reconcileOrdinaryCiPoolProject(new ProcessRunner(), lifecycleOptions(), {
+      projectName,
+      registrarFile
+    });
+    console.log(JSON.stringify(result));
+  });
 const ordinaryService = ordinaryPool.command("service").description("Run the ordinary CI control plane");
 ordinaryService.command("run")
   .description("Run the ordinary CI control plane from a private reviewed config")

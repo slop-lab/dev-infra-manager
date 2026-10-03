@@ -186,8 +186,8 @@ test("CI runner commands expose lifecycle and configurable defaults", () => {
 test("ordinary CI pool commands separate control-plane service and host capacity", () => {
   const help = run(["ci", "ordinary-pool", "--help"]);
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /service[\s\S]*worker|worker[\s\S]*service/);
-  for (const [args, expected] of [[["service", "run"], /<config>/], [["worker", "run-once"], /<capacity>/], [["worker", "serve"], /<capacity>/]] as const) {
+  assert.match(help.stdout, /project[\s\S]*service[\s\S]*worker|worker[\s\S]*service[\s\S]*project/);
+  for (const [args, expected] of [[["project", "reconcile"], /<project>[\s\S]*<registrar-config>/], [["service", "run"], /<config>/], [["worker", "run-once"], /<capacity>/], [["worker", "serve"], /<capacity>/]] as const) {
     const result = run(["ci", "ordinary-pool", ...args, "--help"]);
     assert.equal(result.status, 0);
     assert.match(result.stdout, expected);
