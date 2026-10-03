@@ -23,6 +23,7 @@ export const WEB_PASSWORD = "local-reviewer-password";
 
 export type WebFixtureOptions = {
   readonly accounts?: readonly string[];
+  readonly reviewerAccountId?: string;
   readonly defaultClock?: boolean;
   readonly secureOrigin?: boolean;
   readonly server?: ReviewerWebServerOptions;
@@ -61,7 +62,8 @@ export async function reviewerWebFixture(options: WebFixtureOptions = {}): Promi
     accounts: options.accounts ?? [WEB_USERNAME],
     nativeBaseUrl: native.baseUrl(),
     publicOrigin: origin,
-    port
+    port,
+    reviewerAccountId: options.reviewerAccountId ?? options.accounts?.[0] ?? WEB_USERNAME
   });
   await writeFile(configPath, `${JSON.stringify(config)}\n`, { mode: 0o600 });
   await chmod(configPath, 0o600);
@@ -105,6 +107,7 @@ export function webConfig(input: {
   readonly nativeBaseUrl: string;
   readonly publicOrigin: string;
   readonly port: number;
+  readonly reviewerAccountId?: string;
 }): JsonObject {
   const salt = Buffer.from("0123456789abcdef", "utf8");
   const hash = scryptSync(WEB_PASSWORD, salt, 32, { N: 16_384, r: 8, p: 1 });
@@ -113,6 +116,7 @@ export function webConfig(input: {
     host: "127.0.0.1",
     port: input.port,
     publicOrigin: input.publicOrigin,
+    reviewerAccountId: input.reviewerAccountId ?? WEB_USERNAME,
     nativeGit: {
       baseUrl: input.nativeBaseUrl,
       username: "reviewer-a-user",

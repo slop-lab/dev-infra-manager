@@ -3,21 +3,23 @@ import { once } from "node:events";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { z } from "zod";
 import { loadReviewerWebConfig, type ReviewerWebConfig } from "./config.js";
+import { accountReviewDto, type ReviewDto } from "./dto.js";
+import { BodyError, HttpResponseError, readJson, sendEmpty, sendJson } from "./http-response.js";
 import { NativeGitClient, NativeGitHttpError } from "./native-client.js";
 import { AccountAuthenticator, SessionStore, type AuthenticationState, type ReviewerSession } from "./session.js";
 import { serveStaticAsset } from "./static-assets.js";
 import { printableText } from "./text-schema.js";
 
-const MAX_BODY_BYTES = 16 * 1024;
 const DEFAULT_AUTHENTICATION_DERIVATIONS = 2;
 const DEFAULT_SESSIONS = 256;
 const RETRY_AFTER_SECONDS = "1";
-const CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 const identifierPattern = "[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?";
 const collectionPattern = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews$`);
 const memberPattern = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews/([0-9a-f]{64})$`);
+const actionPattern = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews/([0-9a-f]{64})/(approvals|revocations)$`);
 const loginSchema = z.object({ username: z.string().min(1).max(256), password: z.string().min(1).max(1024) }).strict().readonly();
 const createSchema = z.object({ protectedRef: printableText(1024).min(1), proposalRef: printableText(1024).min(1) }).strict().readonly();
+const emptySchema = z.object({}).strict().readonly();
 
 export type ReviewerWebServerOptions = {
   readonly limits?: {
@@ -42,11 +44,6 @@ type RequestContext = {
   readonly native: NativeGitClient;
   readonly sessions: SessionStore;
   readonly secureCookie: boolean;
-};
-type JsonResponse = {
-  readonly status: number;
-  readonly body: unknown;
-  readonly headers?: Readonly<Record<string, string>>;
 };
 
 export async function createReviewerWebServerFromConfigFile(
@@ -79,8 +76,10 @@ function createReviewerWebServer(config: ReviewerWebConfig, native: NativeGitCli
         return sendJson(response, { status: 400, body: { error: "invalid request" } });
       }
       if (error instanceof NativeGitHttpError) {
-        const missing = error.status === 404;
-        return sendJson(response, { status: missing ? 404 : 503, body: { error: missing ? "review not found" : "review service unavailable" } });
+        if (error.status === 404) return sendJson(response, { status: 404, body: { error: "review not found" } });
+        if (error.status === 409) return sendJson(response, { status: 409, body: { error: "review is stale" } });
+        if (error.status === 403) return sendJson(response, { status: 403, body: { error: "review action denied" } });
+        return sendJson(response, { status: 503, body: { error: "review service unavailable" } });
       }
       return sendJson(response, { status: 500, body: { error: "request failed" } });
     });
@@ -122,6 +121,34 @@ async function handleRequest(context: RequestContext, request: IncomingMessage, 
     context.sessions.delete(session.id);
     return sendEmpty(response, 204, { "Set-Cookie": expiredCookie(context.secureCookie) });
   }
+  const action = actionPattern.exec(url.pathname);
+  if (request.method === "POST" && action !== null) {
+    const projectId = action[1];
+    const repositoryId = action[2];
+    const reviewId = action[3];
+    const actionName = action[4];
+    if (projectId === undefined || repositoryId === undefined || reviewId === undefined || actionName === undefined) {
+      throw new HttpResponseError(404, "not found");
+    }
+    requireScope(context.config, projectId, repositoryId);
+    requireMutation(context.config, request, session);
+    requireDecisionAuthority(context.config, session);
+    emptySchema.parse(await readJson(request));
+    if (actionName === "approvals") {
+      const review = await context.native.approveReview(projectId, repositoryId, reviewId);
+      return sendJson(response, { status: 200, body: reviewBody(context.config, session, review) });
+    }
+    const review = await context.native.getReview(projectId, repositoryId, reviewId);
+    const revokedIds = new Set(review.revocations.map(({ approvalId }) => approvalId));
+    const approval = review.approvals.find(({ approvalId, reviewerId }) => (
+      reviewerId === context.config.nativeGit.reviewerId && !revokedIds.has(approvalId)
+    ));
+    if (approval === undefined) throw new HttpResponseError(409, "no active approval to revoke");
+    return sendJson(response, {
+      status: 200,
+      body: reviewBody(context.config, session, await context.native.revokeApproval(projectId, repositoryId, reviewId, approval.approvalId))
+    });
+  }
   const member = memberPattern.exec(url.pathname);
   if (request.method === "GET" && member !== null) {
     const projectId = member[1];
@@ -129,7 +156,7 @@ async function handleRequest(context: RequestContext, request: IncomingMessage, 
     const reviewId = member[3];
     if (projectId === undefined || repositoryId === undefined || reviewId === undefined) throw new HttpResponseError(404, "not found");
     requireScope(context.config, projectId, repositoryId);
-    return sendJson(response, { status: 200, body: await context.native.getReview(projectId, repositoryId, reviewId) });
+    return sendJson(response, { status: 200, body: reviewBody(context.config, session, await context.native.getReview(projectId, repositoryId, reviewId)) });
   }
   const collection = collectionPattern.exec(url.pathname);
   if (request.method === "POST" && collection !== null) {
@@ -139,7 +166,7 @@ async function handleRequest(context: RequestContext, request: IncomingMessage, 
     requireScope(context.config, projectId, repositoryId);
     requireMutation(context.config, request, session);
     const body = createSchema.parse(await readJson(request));
-    return sendJson(response, { status: 201, body: await context.native.createReview(projectId, repositoryId, body) });
+    return sendJson(response, { status: 201, body: reviewBody(context.config, session, await context.native.createReview(projectId, repositoryId, body)) });
   }
   throw new HttpResponseError(404, "not found");
 }
@@ -188,6 +215,10 @@ function requireMutation(config: ReviewerWebConfig, request: IncomingMessage, se
   if (typeof supplied !== "string" || !constantEqual(supplied, session.csrfToken)) throw new HttpResponseError(403, "request rejected");
 }
 
+function requireDecisionAuthority(config: ReviewerWebConfig, session: ReviewerSession): void {
+  if (session.accountId !== config.reviewerAccountId) throw new HttpResponseError(403, "review action denied");
+}
+
 function requireOrigin(config: ReviewerWebConfig, request: IncomingMessage): void {
   if (request.headers.origin !== config.publicOrigin) throw new HttpResponseError(403, "request rejected");
 }
@@ -196,26 +227,15 @@ function requireScope(config: ReviewerWebConfig, projectId: string, repositoryId
   if (projectId !== config.nativeGit.projectId || !config.nativeGit.repositoryIds.includes(repositoryId)) throw new HttpResponseError(404, "not found");
 }
 
-async function readJson(request: IncomingMessage): Promise<unknown> {
-  if (request.headers["content-type"] !== "application/json") throw new BodyError("JSON required");
-  const declared = Number(request.headers["content-length"] ?? "0");
-  if (!Number.isSafeInteger(declared) || declared > MAX_BODY_BYTES) throw new BodyError("body too large");
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of request) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    size += buffer.length;
-    if (size > MAX_BODY_BYTES) throw new BodyError("body too large");
-    chunks.push(buffer);
-  }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
-}
-
 function sessionBody(config: ReviewerWebConfig, session: ReviewerSession) {
   return {
     authenticated: true, projectId: config.nativeGit.projectId, repositoryIds: config.nativeGit.repositoryIds,
     reviewerId: config.nativeGit.reviewerId, csrfToken: session.csrfToken
   };
+}
+
+function reviewBody(config: ReviewerWebConfig, session: ReviewerSession, review: ReviewDto) {
+  return accountReviewDto(review, session.accountId === config.reviewerAccountId);
 }
 
 function constantEqual(left: string, right: string): boolean {
@@ -232,25 +252,6 @@ function expiredCookie(secure: boolean): string {
   return `dim_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0${secure ? "; Secure" : ""}`;
 }
 
-function securityHeaders(extra: Readonly<Record<string, string>> = {}): Readonly<Record<string, string>> {
-  return {
-    "Cache-Control": "no-store", "Content-Security-Policy": CSP, "Referrer-Policy": "no-referrer",
-    "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", ...extra
-  };
-}
-
-function sendJson(response: ServerResponse, output: JsonResponse): void {
-  if (response.writableEnded) return;
-  response.writeHead(output.status, securityHeaders({ "Content-Type": "application/json; charset=utf-8", ...output.headers }));
-  response.end(`${JSON.stringify(output.body)}\n`);
-}
-
-function sendEmpty(response: ServerResponse, status: number, headers: Readonly<Record<string, string>> = {}): void {
-  if (response.writableEnded) return;
-  response.writeHead(status, securityHeaders(headers));
-  response.end();
-}
-
 function sendBusy(response: ServerResponse): void {
   sendJson(response, {
     status: 429,
@@ -263,9 +264,4 @@ function assertNever(value: never): never {
   throw new TypeError(`unexpected authentication result: ${String(value)}`);
 }
 
-class HttpResponseError extends Error {
-  readonly name = "HttpResponseError";
-  constructor(readonly status: number, readonly publicMessage: string) { super(publicMessage); }
-}
-class BodyError extends Error { readonly name = "BodyError"; }
 export class ReviewerWebStartupError extends Error { readonly name = "ReviewerWebStartupError"; }
