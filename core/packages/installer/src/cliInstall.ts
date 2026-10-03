@@ -25,6 +25,7 @@ export interface CliInstallOptions {
   readonly dataHome?: string;
   readonly npmCommand?: string;
   readonly operation?: InstallerOperation;
+  readonly restartController?: boolean;
 }
 
 export interface LocalPackageBundle {
@@ -95,12 +96,14 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
     promoted = true;
     const executable = cliExecutable(dataHome);
     await access(executable, constants.X_OK);
-    controllerRestartAttempted = true;
-    options.operation?.reportProgress("controller readiness");
-    try {
-      await run(executable, ["controller", "restart"], currentDirectory, options.operation);
-    } catch (error) {
-      throw new Error("target controller restart/readiness failed", { cause: error });
+    if (options.restartController !== false) {
+      controllerRestartAttempted = true;
+      options.operation?.reportProgress("controller readiness");
+      try {
+        await run(executable, ["controller", "restart"], currentDirectory, options.operation);
+      } catch (error) {
+        throw new Error("target controller restart/readiness failed", { cause: error });
+      }
     }
     const mode = options.exposeOnPath ? "direct" : "proxied";
     if (options.exposeOnPath) {

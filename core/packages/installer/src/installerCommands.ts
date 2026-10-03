@@ -83,6 +83,7 @@ async function installCoreCommand(commandArgs: readonly string[]): Promise<void>
       "no-local-bin": { type: "boolean" },
       "local-bin": { type: "boolean" },
       "local-packages": { type: "string" },
+      "defer-controller-restart": { type: "boolean" },
       prefix: { type: "string" }
     }
   });
@@ -97,12 +98,16 @@ async function installCoreCommand(commandArgs: readonly string[]): Promise<void>
   const bundle = parsed.values["local-packages"]
     ? await readLocalPackageBundle(parsed.values["local-packages"])
     : undefined;
+  if (parsed.values["defer-controller-restart"] && bundle === undefined) {
+    throw new Error("--defer-controller-restart requires --local-packages");
+  }
   const installed = bundle === undefined
     ? await withInstallerProgress("core", async (operation) => installDimCli({
       version: await installerVersion(), exposeOnPath, binDirectory, operation
     }))
     : await withInstallerProgress("core", (operation) => installDimCli({
-      ...bundle, exposeOnPath, binDirectory, operation
+      ...bundle, exposeOnPath, binDirectory, operation,
+      restartController: parsed.values["defer-controller-restart"] !== true
     }));
   console.log(`${bundle ? "Installed local" : "Installed"} DIM CLI ${installed.version} at ${installed.executable}`);
   if (installed.symlink) console.log(`Linked ${installed.symlink} -> ${installed.executable}`);

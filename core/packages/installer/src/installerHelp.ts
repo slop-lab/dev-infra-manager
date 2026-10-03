@@ -19,7 +19,7 @@ Source: https://github.com/slop-lab/dev-infra-manager`);
 export function printInstallerHelp(): void {
   console.log(`Usage:
   dim installer
-  dim installer install core [--no-local-bin | --local-bin] [--prefix PATH] [--local-packages PATH]
+  dim installer install core [--no-local-bin | --local-bin] [--prefix PATH] [--local-packages PATH] [--defer-controller-restart]
   dim installer install plugin PACKAGE@EXACT_VERSION...
   dim installer enable-plugin PACKAGE...
   dim installer disable-plugin PACKAGE...
@@ -38,6 +38,8 @@ Options:
   --prefix PATH   Use PATH/bin for the managed symlink (default: ~/.local)
   --local-packages PATH
                    Install a packages.json bundle produced by this repository
+  --defer-controller-restart
+                   Defer restart until local plugins are activated
   -h, --help      Show this help
 
 Under mise, --no-local-bin is the default. Elsewhere, --local-bin is the default.

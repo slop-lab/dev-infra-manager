@@ -55,6 +55,8 @@ describe("local source installation", () => {
       DIM_DATA_HOME: dataHome,
       DIM_INSTALL_PREFIX: installPrefix
     };
+    await mkdir(resolve(environment.DIM_CONFIG_PATH, ".."), { recursive: true });
+    await writeFile(environment.DIM_CONFIG_PATH, '{"schemaVersion":1,"workspaceBackend":"sysbox"}\n');
     const packed = run("/usr/bin/bash", [
       resolve(workspaceRoot, "verification/scripts/pack-local-packages.bash"),
       bundle
@@ -76,8 +78,11 @@ describe("local source installation", () => {
     const facade = resolve(installPrefix, "bin", "dim");
 
     // When
-  const firstInstall = run(facade, ["installer", "install", "core", "--local-packages", bundle, "--no-local-bin"], environment);
-  const replacementInstall = run(facade, ["installer", "install", "core", "--local-packages", bundle, "--no-local-bin"], environment);
+    const installArguments = [
+      "installer", "install", "core", "--local-packages", bundle, "--no-local-bin", "--defer-controller-restart"
+    ];
+    const firstInstall = run(facade, installArguments, environment);
+    const replacementInstall = run(facade, installArguments, environment);
     const version = run(facade, ["--version"], environment);
 
     // Then
