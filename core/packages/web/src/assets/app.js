@@ -4,57 +4,14 @@ import { parseReview, parseSession, text } from "./review-data.js";
 import { clearReview, renderReview } from "./review-renderer.js";
 import { createOperationCoordinator } from "./operation-coordinator.js";
 import { updatePatchPosition } from "./patch-position.js";
+import { createReviewActions } from "./review-actions.js";
+import { reviewerElements } from "./reviewer-elements.js";
 
-const elements = {
-  restore: document.querySelector("#restore-state"),
-  loginView: document.querySelector("#login-view"),
-  loginForm: document.querySelector("#login-form"),
-  loginButton: document.querySelector("#login-button"),
-  loginError: document.querySelector("#login-error"),
-  statusAnnouncer: document.querySelector("#status-announcer"),
-  alertAnnouncer: document.querySelector("#alert-announcer"),
-  username: document.querySelector("#username"),
-  password: document.querySelector("#password"),
-  sessionActions: document.querySelector("#session-actions"),
-  reviewerLabel: document.querySelector("#reviewer-label"),
-  logoutButton: document.querySelector("#logout-button"),
-  workspace: document.querySelector("#workspace"),
-  workspaceTitle: document.querySelector("#workspace-title"),
-  scopeProject: document.querySelector("#scope-project"),
-  scopeReviewer: document.querySelector("#scope-reviewer"),
-  repository: document.querySelector("#repository"),
-  createForm: document.querySelector("#create-form"),
-  createButton: document.querySelector("#create-button"),
-  protectedRef: document.querySelector("#protected-ref"),
-  proposalRef: document.querySelector("#proposal-ref"),
-  openForm: document.querySelector("#open-form"),
-  openButton: document.querySelector("#open-button"),
-  reviewId: document.querySelector("#review-id"),
-  requestError: document.querySelector("#request-error"),
-  retryButton: document.querySelector("#retry-button"),
-  emptyState: document.querySelector("#empty-state"),
-  loadingState: document.querySelector("#loading-state"),
-  errorState: document.querySelector("#error-state"),
-  errorTitle: document.querySelector("#error-title"),
-  errorDetail: document.querySelector("#error-detail"),
-  reviewView: document.querySelector("#review-view"),
-  reviewTitle: document.querySelector("#review-title"),
-  reviewStatus: document.querySelector("#review-status"),
-  stalePanel: document.querySelector("#stale-panel"),
-  staleReasons: document.querySelector("#stale-reasons"),
-  metadata: document.querySelector("#review-metadata"),
-  pathCount: document.querySelector("#path-count"),
-  changedPaths: document.querySelector("#changed-paths"),
-  patchCode: document.querySelector("#patch-code"),
-  patchError: document.querySelector("#patch-error"),
-  patchRegion: document.querySelector("#patch-region"),
-  patchCue: document.querySelector("#patch-cue"),
-  patchTrack: document.querySelector(".patch-track"),
-  patchThumb: document.querySelector("#patch-thumb")
-};
+const elements = reviewerElements();
 
 let session = null;
 let retryAction = null;
+let decisionPending = false;
 const pendingControls = new Set();
 const operations = createOperationCoordinator();
 
@@ -134,6 +91,18 @@ function startOperation(button = null) {
   return operation;
 }
 
+function lockDecisionNavigation() {
+  decisionPending = true;
+  for (const control of [elements.repository, elements.protectedRef, elements.proposalRef, elements.reviewId,
+    elements.createButton, elements.openButton, elements.logoutButton]) control.disabled = true;
+}
+
+function unlockDecisionNavigation() {
+  decisionPending = false;
+  for (const control of [elements.repository, elements.protectedRef, elements.proposalRef, elements.reviewId,
+    elements.createButton, elements.openButton, elements.logoutButton]) control.disabled = false;
+}
+
 function showRequestError(message, retry, title = "Evidence request failed") {
   elements.requestError.textContent = message;
   elements.alertAnnouncer.textContent = message;
@@ -169,7 +138,7 @@ async function openReview(reviewId, operation) {
     elements.errorTitle.focus();
     return;
   }
-  const rendered = renderReview(elements, review);
+  const rendered = renderReview(elements, review, session.reviewerId);
   showEvidenceState("ready");
   updatePatchPosition(elements);
   if (!rendered.complete) elements.statusAnnouncer.textContent = "Full patch evidence is unavailable in this browser view.";
@@ -204,7 +173,7 @@ elements.loginForm.addEventListener("submit", async (event) => {
 
 elements.createForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (session === null || !elements.createForm.reportValidity()) return;
+  if (session === null || decisionPending || !elements.createForm.reportValidity()) return;
   if (pendingControls.has(elements.createButton)) return;
   const operation = startOperation(elements.createButton);
   showEvidenceState("loading");
@@ -229,7 +198,7 @@ elements.createForm.addEventListener("submit", async (event) => {
 
 elements.openForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (!elements.openForm.reportValidity()) return;
+  if (decisionPending || !elements.openForm.reportValidity()) return;
   if (pendingControls.has(elements.openButton)) return;
   const operation = startOperation(elements.openButton);
   try { await openReview(elements.reviewId.value, operation); } finally {
@@ -237,8 +206,23 @@ elements.openForm.addEventListener("submit", async (event) => {
   }
 });
 
+const reviewActions = createReviewActions(elements, {
+  session: () => session,
+  isPending: (button) => pendingControls.has(button),
+  startOperation,
+  isCurrent: (operation) => operations.isCurrent(operation),
+  request,
+  openReview,
+  showSignedOut,
+  endBusy,
+  lockNavigation: lockDecisionNavigation,
+  unlockNavigation: unlockDecisionNavigation
+});
+elements.approveButton.addEventListener("click", () => void reviewActions.approve());
+elements.revokeButton.addEventListener("click", () => void reviewActions.revoke());
+
 elements.logoutButton.addEventListener("click", async () => {
-  if (session === null) return;
+  if (session === null || decisionPending) return;
   if (pendingControls.has(elements.logoutButton)) return;
   const operation = startOperation(elements.logoutButton);
   try {
