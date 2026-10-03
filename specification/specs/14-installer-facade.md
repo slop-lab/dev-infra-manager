@@ -153,7 +153,11 @@ mode positively and use `Y` as their displayed default, so repeatedly answering
 bundle produced by the repository package script. It installs every tarball
 except `@slop-lab/dim-installer` in one npm transaction and records the version
 reported by the installed CLI. The normal direct/proxied selection still
-applies; manifest versions do not select filesystem paths.
+applies; manifest versions do not select filesystem paths. The local-bundle-only
+`--defer-controller-restart` option suppresses the core promotion restart so a
+reviewed source installer can activate required plugins first. Other install
+sources must reject that option. The source installer must perform exactly one
+explicit controller restart after plugin activation before reporting success.
 
 Plugins install into a temporary sibling copy of the same `runtime/current`
 npm project and replace `current` only after npm and activation-manifest

@@ -148,6 +148,11 @@ must therefore precede facade, config, runtime, plugin, or image mutation and
 must preserve prepared bundle bytes and readiness. The existing preparation-
 image readiness checks and their ordering remain unchanged.
 
+The staged facade invokes local core installation with controller restart
+deferred, activates the exact bundled plugin set including the required host
+mirror provider, and then performs one explicit controller restart. It must not
+start the promoted controller between core promotion and plugin activation.
+
 `build-local-workspace-image` remains an image-only convenience path for the
 current working tree and does not create prepared package readiness.
 `prepare-local` is the required path for a matched package/image candidate;

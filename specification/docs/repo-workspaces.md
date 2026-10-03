@@ -261,7 +261,8 @@ state. Push all work before upgrading, explicitly clean old resources with the
 old CLI, then create the Project and workspace again. Unknown state is rejected
 without mutation. The sole exception is the lossless host lifecycle schema 1
 to 2 transition: managed-controller startup renames `resumeCiRunners` to
-`restartCiRunners` before loading plugins or opening listeners and preserves the
+`restartCiRunners` after resolving exactly one host-mirror provider and before
+managed-service reconciliation or opening listeners. It preserves the
 original bytes permanently in mode-`0600` `host.json.schema-1.bak`.
 That backup is immutable historical recovery material, not a live mirror;
 after migration, valid schema `2` `host.json` is authoritative and may evolve
