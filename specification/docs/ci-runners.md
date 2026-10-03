@@ -134,6 +134,35 @@ once for each existing Sysbox runner. QEMU supervisor image-version changes are
 reconciled automatically, but an explicit restart is also safe when immediate
 replacement is preferred.
 
+Hosts may instead provide ordinary Sysbox capacity through one shared pool.
+The pool service has one stable service identity and one digest-pinned job
+image, but no static Project list and no Gitea administrator credential. A
+trusted host periodically runs `dim ci ordinary-pool project reconcile` for
+each local ready Project. That command resolves the current protected root to
+an exact branch and commit, loads the strict runner configuration from the
+immutable snapshot, verifies the configured external Gitea binding and live
+numeric organization identity, and sends only the resulting attestation to the
+pool over a separately authenticated registrar surface. It then reconciles the
+organization webhook with a stable secret generated and retained by the
+service and replays the bounded queued-job listing. The service never receives
+the Gitea credential and never requests a runner-registration token.
+
+Admissions are renewable leases. A reviewed policy digest binds service,
+Project, organization, protected ref and commit, config digest, common image,
+and reviewed ordinary labels. Each admission also has a fresh random public
+generation identity. An active identical-policy refresh retains that generation;
+rotation, revocation, or expiry requires a new generation, even if the later
+policy bytes are identical. Old queued jobs and claims become ineligible for
+dispatch, renewal, or recovery requeue; durable rows remain intact and never
+rebound under a later admission. Worker
+connections carry only their own host token plus expected service/image
+identity. A remote worker may execute a claim without a local Project record,
+but only while its external Gitea connection still contains the exact Project
+binding and organization ID from the claim. It verifies that binding again
+before requesting the ephemeral organization runner token. The registrar
+credential, webhook secret, worker token, Gitea credentials, and registration
+token remain separate and are absent from claim responses.
+
 As described in the
 [development repository model](development-repositories.md), DIM develops
 itself through 11 GitLab development upstreams and its DIM-managed internal
