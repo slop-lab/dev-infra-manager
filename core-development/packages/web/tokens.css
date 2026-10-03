@@ -1,0 +1,141 @@
+@font-face {
+  font-family: "Geist Sans";
+  src: url("fonts/geist-sans-latin.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 100 900;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("fonts/geist-mono-latin.woff2") format("woff2");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 100 900;
+}
+
+:root {
+  color-scheme: dark;
+  --color-canvas: #0b0d0f;
+  --color-shell: #101317;
+  --color-panel: #15191e;
+  --color-elevated: #1c2128;
+  --color-recessed: #0e1115;
+  --color-text: #f3f5f7;
+  --color-text-secondary: #b5bdc7;
+  --color-text-muted: #89939f;
+  --color-border: #626b78;
+  --color-border-subtle: #252a31;
+  --color-action: #dce8ff;
+  --color-action-text: #0b1a33;
+  --color-action-hover: #edf3ff;
+  --color-focus: #9fc1ff;
+  --color-scroll-track: #343a43;
+  --color-scroll-thumb: #9fc1ff;
+  --color-approved-bg: #123923;
+  --color-approved-text: #9de5b8;
+  --color-approved-border: #2d7548;
+  --color-pending-bg: #3a2b0c;
+  --color-pending-text: #ffd37a;
+  --color-pending-border: #80611b;
+  --color-error-bg: #3b171c;
+  --color-error-text: #ffb9c0;
+  --color-error-border: #8c3542;
+  --color-info-bg: #142e45;
+  --color-info-text: #a8d5ff;
+  --color-info-border: #356487;
+  --color-diff-add-bg: #102d20;
+  --color-diff-add-text: #c3ebd0;
+  --color-diff-del-bg: #35191e;
+  --color-diff-del-text: #ffd0d4;
+  --color-diff-hunk-bg: #17253c;
+  --color-diff-hunk-text: #c3d5ff;
+  --font-page: 1.75rem;
+  --font-section: 1.125rem;
+  --font-component: 1rem;
+  --font-body: 0.9375rem;
+  --font-control: 0.875rem;
+  --font-meta: 0.8125rem;
+  --font-label: 0.75rem;
+  --font-code: 0.8125rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --content-max: 76rem;
+  --reading-max: 42rem;
+  --control-height: 2.75rem;
+  --radius-control: 0.375rem;
+  --radius-panel: 0.625rem;
+  --radius-pill: 999px;
+  --line: 1px;
+  --focus-width: 0.125rem;
+  --focus-offset: 0.125rem;
+  --focus-inset: -0.1875rem;
+  --state-panel-min: 13rem;
+  --patch-scrollbar-size: 0.75rem;
+  --patch-scroll-track-size: 0.375rem;
+  --patch-scroll-thumb-min: 2.5rem;
+  --motion-immediate: 80ms;
+  --motion-micro: 120ms;
+  --motion-state: 180ms;
+  --motion-spinner: 700ms;
+  --motion-skeleton: 1.2s;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { background: var(--color-canvas); }
+
+body {
+  margin: 0;
+  min-inline-size: 20rem;
+  min-block-size: 100dvb;
+  background: var(--color-canvas);
+  color: var(--color-text);
+  font-family: "Geist Sans", ui-sans-serif, system-ui, sans-serif;
+  font-size: var(--font-body);
+  line-height: 1.6;
+}
+
+button, input { font: inherit; }
+button { touch-action: manipulation; }
+
+h1, h2, h3, p, dl, dd, pre { margin: 0; }
+h1 { font-size: var(--font-page); font-weight: 600; letter-spacing: -0.025em; line-height: 1.2; }
+h2 { font-size: var(--font-section); font-weight: 600; letter-spacing: -0.012em; line-height: 1.35; }
+h3 { font-size: var(--font-component); font-weight: 560; letter-spacing: -0.006em; line-height: 1.4; }
+
+:focus-visible {
+  outline: var(--focus-width) solid var(--color-focus);
+  outline-offset: var(--focus-offset);
+}
+
+::selection { background: var(--color-info-border); color: var(--color-text); }
+
+.mono, code {
+  font-family: "Geist Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  .spinner { animation: none !important; border-inline-end-color: currentColor; }
+  .skeleton { animation: none !important; opacity: 1; }
+}
+
+@media (forced-colors: active) {
+  :root { color-scheme: light dark; }
+  :focus-visible { outline-color: Highlight; }
+}
