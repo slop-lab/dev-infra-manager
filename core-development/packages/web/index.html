@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="DIM reviewer design-system primitive showcase">
+    <title>DIM Reviewer Primitive Showcase</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="tokens.css">
+    <link rel="stylesheet" href="showcase.css">
+    <script src="showcase.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to primitive showcase</a>
+    <header class="site-header">
+      <div class="header-inner">
+        <div class="identity" aria-label="DIM Reviewer design system">
+          <span class="wordmark">DIM</span>
+          <span class="identity-divider" aria-hidden="true"></span>
+          <span>Reviewer primitives</span>
+        </div>
+        <span class="badge badge-neutral">Development artifact</span>
+      </div>
+    </header>
+
+    <main id="main" class="showcase" tabindex="-1">
+      <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow">Task-local showcase</p>
+        <h1 id="page-title">Evidence before authority.</h1>
+        <p>
+          Primitive states for a future authenticated review console. These local
+          interactions make no network requests and grant no review authority.
+        </p>
+      </section>
+
+      <section class="showcase-section" aria-labelledby="auth-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Identity boundary</p>
+            <h2 id="auth-title">Login form</h2>
+          </div>
+          <p>Visible labels, stable error space, and an explicit local-demo scope.</p>
+        </div>
+        <div class="auth-layout">
+          <form id="login-form" class="panel login-form" novalidate>
+            <div class="panel-heading">
+              <span class="section-index" aria-hidden="true">01</span>
+              <div>
+                <h3>Sign in to review</h3>
+                <p>Authenticate before viewing repository evidence.</p>
+              </div>
+            </div>
+            <div class="field">
+              <label for="email">Email address</label>
+              <input id="email" name="email" type="email" autocomplete="username" aria-describedby="email-help email-error">
+              <p id="email-help" class="field-hint">Use a syntactically valid address for this local demo.</p>
+              <p id="email-error" class="field-error" role="alert"></p>
+            </div>
+            <div class="field">
+              <label for="password">Password</label>
+              <input id="password" name="password" type="password" autocomplete="current-password" aria-describedby="password-help password-error">
+              <p id="password-help" class="field-hint">Eight or more characters; the value never leaves this page.</p>
+              <p id="password-error" class="field-error" role="alert"></p>
+            </div>
+            <button id="login-submit" class="button button-primary" type="submit">
+              <span class="button-label">Sign in</span>
+              <span class="spinner" aria-hidden="true"></span>
+            </button>
+            <p id="login-status" class="form-status" aria-live="polite"></p>
+          </form>
+
+          <aside class="panel trust-note" aria-labelledby="scope-title">
+            <p class="eyebrow">Scope</p>
+            <h3 id="scope-title">Authentication is separate from approval.</h3>
+            <p>
+              Signing in identifies the reviewer. A production approval must still
+              revalidate the exact ref, head, tree, policy, and reviewer identity.
+            </p>
+            <dl class="mini-metadata">
+              <div><dt>Surface</dt><dd>Host-scoped reviewer</dd></div>
+              <div><dt>Authority</dt><dd>Review only</dd></div>
+              <div><dt>Credentials</dt><dd>Never rendered</dd></div>
+            </dl>
+          </aside>
+        </div>
+      </section>
+
+      <section class="showcase-section" aria-labelledby="actions-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Decision language</p>
+            <h2 id="actions-title">Buttons and status</h2>
+          </div>
+          <p>One primary action, explicit destructive language, no color-only state.</p>
+        </div>
+        <div class="primitive-grid">
+          <article class="panel stack">
+            <h3>Action variants</h3>
+            <div class="button-cluster">
+              <button class="button button-primary" type="button">Approve review</button>
+              <button class="button button-secondary" type="button">Return to queue</button>
+              <button class="button button-danger" type="button">Revoke approval</button>
+              <button class="button button-secondary" type="button" disabled>Unavailable</button>
+              <button class="button button-secondary is-loading" type="button" aria-busy="true" disabled>
+                <span class="button-label">Revalidating</span>
+                <span class="spinner" aria-hidden="true"></span>
+              </button>
+            </div>
+          </article>
+          <article class="panel stack">
+            <h3>Status and approval badges</h3>
+            <div class="badge-cluster" aria-label="Review badge variants">
+              <span class="badge badge-pending"><span class="status-marker" aria-hidden="true"></span>Pending</span>
+              <span class="badge badge-approved"><span class="status-marker" aria-hidden="true"></span>Approved</span>
+              <span class="badge badge-error"><span class="status-marker" aria-hidden="true"></span>Revoked</span>
+              <span class="badge badge-info"><span class="status-marker" aria-hidden="true"></span>Stale</span>
+              <span class="badge badge-neutral"><span class="status-marker" aria-hidden="true"></span>Review only</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="showcase-section" aria-labelledby="evidence-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Immutable evidence</p>
+            <h2 id="evidence-title">Review metadata and safe patch text</h2>
+          </div>
+          <div class="button-cluster">
+            <button id="stress-toggle" class="button button-secondary" type="button" aria-pressed="false">Use long content</button>
+            <button id="cjk-toggle" class="button button-secondary" type="button" aria-pressed="false">Use CJK content</button>
+          </div>
+        </div>
+        <article class="evidence-panel">
+          <div class="evidence-toolbar">
+            <div>
+              <p class="path" id="patch-path">packages/controller/src/policy.ts</p>
+              <p id="file-summary" class="file-summary">12 additions, 4 deletions</p>
+            </div>
+            <span class="badge badge-info">Modified</span>
+          </div>
+          <dl class="metadata-grid" aria-label="Exact review metadata">
+            <div><dt>Project</dt><dd id="project-value">dim-dev</dd></div>
+            <div><dt>Repository</dt><dd>core</dd></div>
+            <div><dt>Protected ref</dt><dd class="mono">refs/heads/main</dd></div>
+            <div><dt>Expected head</dt><dd id="expected-head" class="mono">7c21a93</dd></div>
+            <div><dt>Candidate tree</dt><dd class="mono">a8bf2de4a17c</dd></div>
+            <div><dt>Policy revision</dt><dd class="mono">policy-12</dd></div>
+            <div><dt>Review revision</dt><dd class="mono">review-04</dd></div>
+            <div><dt>Reviewer</dt><dd id="reviewer-value">host-reviewer</dd></div>
+          </dl>
+          <p id="patch-scroll-cue" class="patch-scroll-cue" aria-live="polite" hidden></p>
+          <div class="patch-region" tabindex="0" role="region" aria-label="Escaped patch text; scroll horizontally for long lines" aria-describedby="patch-scroll-cue">
+            <pre><code id="patch-code"></code></pre>
+          </div>
+          <div class="patch-scroll-indicator" aria-hidden="true" hidden>
+            <span class="patch-scroll-thumb"></span>
+          </div>
+          <div class="decision-row">
+            <div>
+              <span id="decision-badge" class="badge badge-pending"><span class="status-marker" aria-hidden="true"></span>Pending</span>
+              <p id="decision-status" class="decision-copy" aria-live="polite">No local showcase decision recorded.</p>
+            </div>
+            <div class="button-cluster">
+              <button id="approve-button" class="button button-primary" type="button">Approve review</button>
+              <button id="revoke-button" class="button button-danger" type="button" disabled>Revoke approval</button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="showcase-section" aria-labelledby="states-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">System feedback</p>
+            <h2 id="states-title">Loading, empty, and error states</h2>
+          </div>
+          <div class="state-switcher" role="group" aria-label="Choose state to preview">
+            <button class="button button-secondary state-choice" type="button" data-state="loading" aria-pressed="false">Loading</button>
+            <button class="button button-secondary state-choice" type="button" data-state="empty" aria-pressed="true">Empty</button>
+            <button class="button button-secondary state-choice" type="button" data-state="error" aria-pressed="false">Error</button>
+          </div>
+        </div>
+        <article id="state-panel" class="panel state-panel" aria-live="polite"></article>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>Primitive showcase only. Production UI, authentication, and review mutations are intentionally out of scope.</p>
+    </footer>
+  </body>
+</html>
