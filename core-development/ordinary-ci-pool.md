@@ -1,6 +1,6 @@
 # Ordinary CI pool (staged operator path)
 
-This path pools **ordinary Sysbox** capacity across explicitly enrolled DIM
+This path pools **ordinary Sysbox** capacity across dynamically admitted, reviewed DIM
 Projects and hosts attached to the same external Gitea control plane. It does
 not pool QEMU integration runners or create a Gitea instance runner. It is not
 an automatic migration of Project-scoped runners. Do not enable it on a live
@@ -14,9 +14,9 @@ host until the live two-host Gitea/Sysbox gate in
    `giteaOrganizationId` must match the central enrollment, even if that host
    has no local Project record. Do not enroll an unrelated organization or
    grant a job the Gitea administrator credential.
-2. Select one reviewed, digest-pinned disposable job image and one ordinary
-   label shared by the enrolled Projects. Verify every Project workflow using
-   that label can run with this image before switching. The existing
+2. Select one reviewed, digest-pinned disposable job image shared by every
+   Project. Each Project's protected `.dim/ci/runner.yml` supplies its ordinary
+   labels and must select exactly that image. The existing
    Project-specific runner configuration and QEMU hook/cache remain separate;
    pooled jobs do not select the old Project-specific ordinary image.
 3. Stop and delete conflicting legacy Project-scoped Sysbox runners on all
@@ -29,13 +29,12 @@ host until the live two-host Gitea/Sysbox gate in
    databases are rejected unchanged without implicit migration. Run the service
    behind an operator-controlled HTTPS endpoint (or an explicitly isolated
    network); do not publish its tokens to workspaces.
-5. Configure one organization `workflow_job` webhook per enrolled Project,
-   pointing at `/v1/webhooks/PROJECT_ID/workflow-job` on the pool service and
-   sending `Authorization: Bearer WEBHOOK_TOKEN`. Gitea must permit only that
-   reviewed webhook destination. The CLI currently does **not** create or
-   reconcile these hooks or replay already-queued Gitea jobs. Provision the
-   hooks before submitting work and reconcile any queued backlog separately;
-   no webhook means no pool demand.
+5. Run `dim ci ordinary-pool project reconcile PROJECT REGISTRAR_CONFIG` on a
+   trusted host before the admission lease expires and after protected policy
+   changes. It resolves the exact protected root commit, validates the external
+   Gitea binding and live organization ID, admits the reviewed config, installs
+   the service-owned stable organization webhook secret, and replays queued
+   jobs. Never run this command in a workspace or worker process.
 
 ## Private configuration
 
@@ -44,15 +43,14 @@ The service config is a JSON file owned by its DIM operator user with mode
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "listen": { "host": "127.0.0.1", "port": 7410 },
+  "serviceId": "ordinary-main",
   "database": "/var/lib/dim/ordinary-pool.sqlite3",
   "jobImage": "registry.example/dim/ordinary@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "runnerLabel": "dim-ordinary",
-  "projects": [
-    { "projectId": "project-a", "projectName": "alpha", "organization": "dim-alpha", "organizationId": 41, "webhookToken": "replace-with-private-token-a" },
-    { "projectId": "project-b", "projectName": "beta", "organization": "dim-beta", "organizationId": 42, "webhookToken": "replace-with-private-token-b" }
-  ],
+  "webhookBaseUrl": "https://pool.example",
+  "registrarToken": "replace-with-private-registrar-token",
+  "admissionLeaseMilliseconds": 300000,
   "hosts": [
     { "hostId": "host-a", "token": "replace-with-private-host-token-a", "capacities": ["primary"] },
     { "hostId": "host-b", "token": "replace-with-private-host-token-b", "capacities": ["primary"] }
@@ -68,11 +66,26 @@ mode-`0600`, DIM-user-owned JSON file:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "transport": "https",
   "endpoint": "https://pool.example",
   "hostId": "host-a",
   "token": "replace-with-private-host-token-a",
+  "expectedServiceId": "ordinary-main",
+  "expectedJobImage": "registry.example/dim/ordinary@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}
+```
+
+The trusted registrar uses a different mode-`0600` file. Do not mount it into
+the service or worker:
+
+```json
+{
+  "schemaVersion": 1,
+  "transport": "https",
+  "endpoint": "https://pool.example",
+  "token": "replace-with-private-registrar-token",
+  "expectedServiceId": "ordinary-main",
   "expectedJobImage": "registry.example/dim/ordinary@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 }
 ```
@@ -100,12 +113,16 @@ results at the coordinator, not solely from the pool's `completed` claim
 output. The service's `/healthz` endpoint is process health, not evidence of
 webhook installation or available workers.
 
-Queued jobs and claims retain a public admission ID for the operator Project
-binding, common job image, and runner label in effect when the webhook was
-accepted. Tokens are excluded. Changing any bound identity leaves old queued
-demand inactive; an expired old claim still requires host cleanup, but its
-recovery acknowledgement does not requeue it under the new policy. Submit a
-fresh authenticated webhook event to create demand for the new admission ID.
+Queued jobs and claims retain a fresh random public admission generation ID
+bound to the reviewed service, Project, protected ref/commit/config digest,
+common image, and labels in effect when the webhook was accepted. Tokens are
+excluded. An active identical-policy reconcile refreshes the lease without
+changing that generation. Expiry, revocation, or changing any bound identity
+requires a new generation, even if a later reconcile restores identical policy
+bytes, so old queued demand remains inactive. An expired old claim still
+requires host cleanup, but its recovery acknowledgement does not requeue it
+under the replacement generation. Submit a fresh authenticated webhook event
+to create demand for the new admission ID.
 
 ## Disposable-QEMU verification
 
