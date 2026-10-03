@@ -21,7 +21,7 @@ import {
   reconcileWorkspaceRuntimeState,
   stopWorkspaceLocked
 } from "./workspaceState.js";
-import { validateWorkspaceProfiles } from "./workspaceValidation.js";
+import { readWorkspaceForOperation, validateWorkspaceProfiles } from "./workspaceValidation.js";
 import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
 
 export async function updateWorkspace(
@@ -34,7 +34,7 @@ export async function updateWorkspace(
     const workspaceName = validateLifecycleName(name, "workspace");
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
-    const initialRecord = await state.readWorkspace(workspaceName);
+    const initialRecord = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
     assertWorkspaceLifecycleActive(initialRecord);
     setStage("protected root selection");
     const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: initialRecord.projectName });
@@ -47,7 +47,7 @@ export async function updateWorkspace(
       const release = await state.acquireWorkspaceSetupLock(workspaceName);
       try {
         setStage("workspace state loading");
-        let record = await state.readWorkspace(workspaceName);
+        let record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
         assertWorkspaceLifecycleActive(record);
         if (selectedRoot.project.id !== record.projectId) throw new UserError(`project '${record.projectName}' identity changed`);
         const oldProfiles = record.profiles;
@@ -104,7 +104,7 @@ export async function startWorkspace(
     const workspaceName = validateLifecycleName(name, "workspace");
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
-    const record = await state.readWorkspace(workspaceName);
+    const record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
     assertWorkspaceLifecycleActive(record);
     setStage("protected root selection");
     const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: record.projectName });
@@ -138,7 +138,12 @@ async function startWorkspaceLocked(
   setErrorStage: SetWorkspaceLifecycleErrorStage
 ): Promise<WorkspaceRecord> {
   setStage("workspace runtime reconciliation");
-  let record = await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(workspaceName));
+  let record = await reconcileWorkspaceRuntimeState(
+    runner,
+    state,
+    options.stateRoot,
+    await readWorkspaceForOperation(state, workspaceName, options.giteaConnection)
+  );
   assertWorkspaceLifecycleActive(record);
   if (record.phase !== "stopped") {
     throw new UserError(`workspace '${workspaceName}' is not stopped; use restart to apply project changes`);
@@ -172,7 +177,7 @@ export async function restartWorkspace(
     const workspaceName = validateLifecycleName(name, "workspace");
     const state = new LifecycleState(options.stateRoot);
     setStage("workspace state loading");
-    const initialRecord = await state.readWorkspace(workspaceName);
+    const initialRecord = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
     assertWorkspaceLifecycleActive(initialRecord);
     setStage("protected root selection");
     const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: initialRecord.projectName });
@@ -185,7 +190,12 @@ export async function restartWorkspace(
       const release = await state.acquireWorkspaceSetupLock(workspaceName);
       try {
         setStage("workspace runtime reconciliation");
-        const record = await reconcileWorkspaceRuntimeState(runner, state, options.stateRoot, await state.readWorkspace(workspaceName));
+        const record = await reconcileWorkspaceRuntimeState(
+          runner,
+          state,
+          options.stateRoot,
+          await readWorkspaceForOperation(state, workspaceName, options.giteaConnection)
+        );
         assertWorkspaceLifecycleActive(record);
         if (record.phase === "stopped") {
           return await startWorkspaceLocked(

@@ -1,10 +1,15 @@
 import { join } from "node:path";
 import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import type { ProjectRecord, WorkspaceRecord } from "../../../../core/packages/core/src/lifecycleTypes.js";
+import { seedTestHostMirrorOwnership, TEST_HOST_MIRROR_PROVIDER } from "./hostLifecycleFixture.js";
 import { COMMIT, HEAD_COMMIT, INITIAL_COMMIT, SOURCE_COMMIT } from "./workspaceUpdateLockRunner.js";
 
 export function options(stateRoot: string) {
-  return lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: stateRoot });
+  seedTestHostMirrorOwnership(stateRoot);
+  return {
+    ...lifecycleOptionsForBackend("sysbox", { DIM_STATE_ROOT: stateRoot }),
+    hostMirrorProvider: TEST_HOST_MIRROR_PROVIDER
+  };
 }
 
 export function projectFixture(): ProjectRecord {
