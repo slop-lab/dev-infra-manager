@@ -7,6 +7,7 @@ class FakeElement {
   readonly classList = { add: () => undefined, remove: () => undefined };
   readonly dataset: Record<string, string> = {};
   className = "";
+  disabled = false;
   hidden = false;
   textContent = "";
   title = "";
@@ -38,7 +39,7 @@ describe("review patch rendering", () => {
     const patch = "+first\n\n-second\n";
 
     // When
-    renderReview(elements, review(patch));
+    renderReview(elements, review(patch), "reviewer-a");
 
     // Then
     expect(elements.patchCode.children.map((child) => child.textContent).join("")).toBe(patch);
@@ -52,7 +53,7 @@ describe("review patch rendering", () => {
     const patch = Array.from({ length: 6_000 }, (_, index) => `+line-${index}\n`).join("");
 
     // When
-    renderReview(elements, review(patch));
+    renderReview(elements, review(patch), "reviewer-a");
 
     // Then
     expect(elements.patchCode.children.length).toBeLessThanOrEqual(5_000);
@@ -69,7 +70,7 @@ describe("review patch rendering", () => {
     fixture.changes.splice(0, 1, { status: "modified", oldPath: path, newPath: path });
 
     // When
-    renderReview(elements, fixture);
+    renderReview(elements, fixture, "reviewer-a");
 
     // Then
     const pathElement = elements.changedPaths.children.at(0)?.children.at(1);
@@ -89,7 +90,7 @@ describe("review patch rendering", () => {
     const patch = "\n".repeat(250_001);
 
     // When
-    const result = renderReview(elements, review(patch));
+    const result = renderReview(elements, review(patch), "reviewer-a");
 
     // Then
     expect(result).toEqual({ complete: false });
@@ -111,7 +112,7 @@ describe("review patch rendering", () => {
     elements.scopeProject.textContent = "project-a";
     elements.scopeReviewer.textContent = "reviewer-a";
     elements.reviewerLabel.textContent = "reviewer-a";
-    renderReview(elements, review("+secret evidence\n"));
+    renderReview(elements, review("+secret evidence\n"), "reviewer-a");
     elements.reviewView.hidden = false;
     elements.emptyState.hidden = true;
     elements.retryButton.hidden = false;
@@ -132,6 +133,47 @@ describe("review patch rendering", () => {
       elements.patchCue, elements.requestError, elements.errorTitle, elements.errorDetail,
       elements.scopeProject, elements.scopeReviewer, elements.reviewerLabel]
       .map((element) => element.textContent.length)).toEqual(Array.from({ length: 11 }, () => 0));
+  });
+
+  it("offers only the inverse action for the authenticated reviewer's active approval", async () => {
+    // Given
+    Object.defineProperty(globalThis, "document", { configurable: true, value: fakeDocument() });
+    const { renderReview } = await import(rendererUrl);
+    const elements = reviewElements();
+    const base = review("+text\n");
+    const fixture = {
+      ...base,
+      input: { ...base.input, status: "approved" },
+      approvals: [
+        { approvalId: "11111111-1111-4111-8111-111111111111", reviewerId: "reviewer-a", approvedAt: "2026-10-03T00:00:00Z" },
+        { approvalId: "22222222-2222-4222-8222-222222222222", reviewerId: "docs-reviewer", approvedAt: "2026-10-03T00:00:00Z" }
+      ]
+    };
+
+    // When
+    renderReview(elements, fixture, "reviewer-a");
+
+    // Then
+    expect(elements.approveButton.hidden).toBe(true);
+    expect(elements.revokeButton.hidden).toBe(false);
+    expect(elements.decisionStatus.textContent).toBe("Your approval is recorded for this exact review.");
+  });
+
+  it("renders review evidence without decision controls for a read-only account", async () => {
+    // Given
+    Object.defineProperty(globalThis, "document", { configurable: true, value: fakeDocument() });
+    const { renderReview } = await import(rendererUrl);
+    const elements = reviewElements();
+    const fixture = review("+text\n");
+    fixture.canDecide = false;
+
+    // When
+    renderReview(elements, fixture, "reviewer-a");
+
+    // Then
+    expect(elements.approveButton.hidden).toBe(true);
+    expect(elements.revokeButton.hidden).toBe(true);
+    expect(elements.decisionStatus.textContent).toBe("This account can inspect evidence but cannot record a review decision.");
   });
 });
 
@@ -159,6 +201,11 @@ function reviewElements() {
     stalePanel: new FakeElement(),
     staleReasons: new FakeElement(),
     metadata: new FakeElement(),
+    decisionPanel: new FakeElement(),
+    decisionStatus: new FakeElement(),
+    decisionError: new FakeElement(),
+    approveButton: new FakeElement(),
+    revokeButton: new FakeElement(),
     pathCount: new FakeElement(),
     changedPaths: new FakeElement(),
     patchCode: new FakeElement(),
@@ -204,6 +251,9 @@ function review(patch: string) {
     },
     changes: [{ status: "modified", oldPath: "file.txt", newPath: "file.txt" }],
     staleReasons: [],
-    requiredReviewerIds: ["reviewer-a"]
+    requiredReviewerIds: ["reviewer-a"],
+    approvals: [],
+    revocations: [],
+    canDecide: true
   };
 }

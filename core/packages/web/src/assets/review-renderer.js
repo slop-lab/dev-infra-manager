@@ -23,8 +23,8 @@ function appendMetadata(container, label, value, mono = false) {
   container.append(row);
 }
 
-export function renderReview(elements, review) {
-  const { input, changes, requiredReviewerIds, staleReasons } = review;
+export function renderReview(elements, review, reviewerId) {
+  const { input, changes, requiredReviewerIds, staleReasons, approvals, revocations, canDecide } = review;
   elements.reviewId.value = input.reviewId;
   elements.reviewTitle.textContent = `Review ${input.reviewId.slice(0, 12)}`;
   elements.reviewStatus.className = statusClass(input.status);
@@ -45,6 +45,7 @@ export function renderReview(elements, review) {
     ["Required reviewers", requiredReviewerIds.join(", ")], ["Created", input.createdAt]
   ];
   for (const value of values) appendMetadata(elements.metadata, value[0], value[1], value[2] === true);
+  renderDecision(elements, input.status, reviewerId, approvals, revocations, canDecide);
   elements.pathCount.textContent = `${changes.length} ${changes.length === 1 ? "path" : "paths"}`;
   elements.changedPaths.replaceChildren(...changes.map((change) => {
     const item = document.createElement("li");
@@ -76,18 +77,45 @@ export function clearReview(elements) {
   for (const input of [elements.password, elements.protectedRef, elements.proposalRef, elements.reviewId]) input.value = "";
   for (const output of [elements.reviewerLabel, elements.scopeProject, elements.scopeReviewer, elements.requestError,
     elements.errorTitle, elements.errorDetail, elements.reviewTitle, elements.reviewStatus, elements.pathCount,
-    elements.patchError, elements.patchCue]) output.textContent = "";
+    elements.patchError, elements.patchCue, elements.decisionStatus, elements.decisionError]) output.textContent = "";
   elements.reviewStatus.className = "";
   elements.stalePanel.hidden = true;
   elements.loadingState.hidden = true;
   elements.errorState.hidden = true;
   elements.reviewView.hidden = true;
+  elements.decisionPanel.hidden = true;
   elements.patchRegion.hidden = true;
   elements.patchError.hidden = true;
   elements.retryButton.hidden = true;
   elements.emptyState.hidden = false;
   elements.statusAnnouncer.textContent = "No review is open.";
   elements.loginButton.classList.remove("is-loading");
+}
+
+function renderDecision(elements, status, reviewerId, approvals, revocations, canDecide) {
+  const revokedIds = new Set(revocations.map(({ approvalId }) => approvalId));
+  const ownApprovals = approvals.filter((approval) => approval.reviewerId === reviewerId);
+  const active = ownApprovals.find(({ approvalId }) => !revokedIds.has(approvalId));
+  const hadRevoked = ownApprovals.some(({ approvalId }) => revokedIds.has(approvalId));
+  elements.decisionPanel.hidden = false;
+  if (!canDecide) {
+    elements.approveButton.hidden = true;
+    elements.revokeButton.hidden = true;
+    elements.decisionError.textContent = "";
+    elements.decisionStatus.textContent = "This account can inspect evidence but cannot record a review decision.";
+    return;
+  }
+  elements.approveButton.hidden = active !== undefined;
+  elements.approveButton.disabled = status === "stale";
+  elements.revokeButton.hidden = active === undefined;
+  elements.decisionError.textContent = "";
+  elements.decisionStatus.textContent = active !== undefined
+    ? "Your approval is recorded for this exact review."
+    : status === "stale"
+      ? "This evidence is stale and cannot be approved."
+      : hadRevoked
+        ? "Your approval has been revoked."
+        : "You have not approved this exact review.";
 }
 
 function renderPatch(elements, patch) {
