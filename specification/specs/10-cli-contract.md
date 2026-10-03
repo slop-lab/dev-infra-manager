@@ -906,6 +906,20 @@ dim external-url approve URL_ID
 dim host-input get PROVIDER KEY [--parameters STRING]
 ```
 
+**CLI-DEVELOPMENT-URL-REQUEST-001:** The workspace image MUST provide
+`dim-development-service request-url --ingress NAME --container NAME
+[--container NAME] --port PORT` for nested HTTP development services. The
+command MUST derive one complete `DIM_CONTROLLER_SOCKET`/`DIM_CONTROLLER_TOKEN`
+pair, or one complete agent pair when the workspace pair is absent, and MUST
+NOT accept a workspace, socket, API, token, host, domain, subdomain, path,
+protocol, approval, or host-administration selector. It MUST send only the
+selected ingress and an HTTP target containing one or two non-empty nested
+container names plus a valid port. It MUST print the controller's JSON response
+so a caller can observe `pending`, `approved`, or `not-required` state. It MUST
+NOT print the controller grant. The authenticated controller remains
+authoritative for workspace identity, ingress policy, target resolution, and
+approval; the helper MUST expose no approval operation.
+
 **CLI-EXTERNAL-URL-APPROVAL-001:** `dim external-url ingress add
 --require-approval` MUST configure per-route host approval independently of
 driver-private arguments. A valid request on that ingress MUST succeed with a

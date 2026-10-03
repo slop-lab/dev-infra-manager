@@ -1159,7 +1159,8 @@ Node.js 24 or 26, its `mise exec node@24` fallback when the available Node.js
 is absent or unsupported, npm `.bin` symlink resolution, argv preservation,
 and its actionable failure when neither runtime path is available.
 
-`just verify example BACKEND DIRTY external-urls` requires Docker. It proves
+`just verify example BACKEND DIRTY external-urls` requires Docker with the
+cgroup delegation needed by the nested workspace runtime. It proves
 `examples/features/external-urls/README.md` end to end: a host DIM controller,
 plugin loading before any external URL config exists, the example's checked-in
 ingress and URL scripts, dnsmasq wildcard DNS, a project-root workspace,
@@ -1173,8 +1174,13 @@ configuration.
 It also reconciles an ingress through a local Cloudflare-compatible API,
 resolves the resulting wildcard through authoritative CoreDNS, and verifies
 provider cleanup without external credentials.
-Ingress discovery, creation, and revocation must run through the public
-`dim external-url` CLI rather than project-specific curl wrappers.
+Host-side ingress configuration and inventory, route approval, and revocation
+must run through the public `dim external-url` CLI rather than project-specific
+curl wrappers. URL creation must run the checked-in host wrapper, which
+dispatches `dim workspace exec WORKSPACE -- dim-development-service
+request-url` into the workspace. The helper invocation receives only an
+ingress, one or two container names, and a port; it must not receive workspace,
+socket, token, domain, hostname, approval, or protocol selectors.
 
 `just verify example BACKEND DIRTY multi-repository` requires Docker and managed Gitea. It
 materializes the repositories under `examples/projects/multi-repository/repos/` in a temporary
