@@ -5,13 +5,15 @@ import {
   WEB_PASSWORD,
   WEB_USERNAME
 } from "./webHarness.js";
+import { objectArrayField, readJsonObject, reviewPath } from "../../native-git/test/nativeGitReviewHarness.js";
 
 const playwrightPath = process.env.DIM_PLAYWRIGHT_CORE;
 if (playwrightPath === undefined) {
   throw new Error("DIM_PLAYWRIGHT_CORE must name playwright-core/index.mjs");
 }
 const { chromium } = await import(pathToFileURL(playwrightPath).href);
-const fixture = await reviewerWebFixture();
+const READ_ONLY_USERNAME = "read-only-reviewer";
+const fixture = await reviewerWebFixture({ accounts: [WEB_USERNAME, READ_ONLY_USERNAME], reviewerAccountId: WEB_USERNAME });
 const browser = await chromium.launch({
   executablePath: process.env.DIM_CHROMIUM ?? "/usr/bin/google-chrome",
   headless: true
@@ -20,8 +22,8 @@ const page = await browser.newPage();
 
 try {
   // Given
-  const login = async () => {
-    await page.getByLabel("Username").fill(WEB_USERNAME);
+  const login = async (username = WEB_USERNAME) => {
+    await page.getByLabel("Username").fill(username);
     await page.getByLabel("Password").fill(WEB_PASSWORD);
     await page.getByRole("button", { name: "Sign in" }).click();
     await page.locator("#workspace").waitFor({ state: "visible" });
@@ -49,6 +51,71 @@ try {
   await page.locator("#login-view").waitFor({ state: "visible" });
   await login();
   await openReview();
+
+  let releaseApproval;
+  let markApprovalCommitted;
+  const approvalReleased = new Promise((resolve) => { releaseApproval = resolve; });
+  const approvalCommitted = new Promise((resolve) => { markApprovalCommitted = resolve; });
+  const approvalPath = `/v1/projects/project-a/repositories/source/reviews/${fixture.reviewId}/approvals`;
+  await page.route(`**${approvalPath}`, async (route) => {
+    const response = await route.fetch();
+    markApprovalCommitted();
+    await approvalReleased;
+    await route.fulfill({ response });
+  });
+
+  // When
+  await page.getByRole("button", { name: "Approve review" }).click();
+  await approvalCommitted;
+  const authoritative = await fixture.native.request("reviewer-a-user", "GET", reviewPath(`/${fixture.reviewId}`));
+  await page.locator("#open-form").evaluate((form) => form.requestSubmit());
+
+  // Then
+  assert.equal(objectArrayField(await readJsonObject(authoritative), "approvals").length, 1);
+  assert.equal(await page.locator("#open-button").isDisabled(), true);
+  assert.equal(await page.locator("#logout-button").isDisabled(), true);
+  assert.equal(await page.locator("#repository").isDisabled(), true);
+  assert.equal(await page.locator("#review-id").isDisabled(), true);
+  assert.equal(await page.locator("#decision-status").textContent(), "You have not approved this exact review.");
+  releaseApproval();
+  await page.getByRole("button", { name: "Revoke approval" }).waitFor({ state: "visible" });
+  await page.unroute(`**${approvalPath}`);
+  assert.equal(await page.locator("#review-status").textContent(), "Pending");
+  assert.equal(await page.locator("#decision-status").textContent(), "Your approval is recorded for this exact review.");
+
+  // When
+  await page.getByRole("button", { name: "Revoke approval" }).click();
+
+  // Then
+  await page.getByRole("button", { name: "Approve review" }).waitFor({ state: "visible" });
+  assert.equal(await page.locator("#review-status").textContent(), "Revoked");
+  assert.equal(await page.locator("#decision-status").textContent(), "Your approval has been revoked.");
+
+  // When
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.locator("#login-view").waitFor({ state: "visible" });
+  await login(READ_ONLY_USERNAME);
+  await openReview();
+  const bobStatuses = await page.evaluate(async (path) => {
+    const activeSession = await fetch("/v1/session").then((response) => response.json());
+    return Promise.all(["approvals", "revocations"].map(async (action) => (await fetch(`${path}/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-DIM-CSRF": activeSession.csrfToken },
+      body: "{}"
+    })).status));
+  }, `/v1/projects/project-a/repositories/source/reviews/${fixture.reviewId}`);
+
+  // Then
+  assert.deepEqual(bobStatuses, [403, 403]);
+  assert.equal(await page.getByRole("button", { name: "Approve review" }).count(), 0);
+  assert.equal(await page.getByRole("button", { name: "Revoke approval" }).count(), 0);
+  assert.equal(await page.locator("#decision-status").textContent(), "This account can inspect evidence but cannot record a review decision.");
+
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.locator("#login-view").waitFor({ state: "visible" });
+  await login();
+  await expectEmptyReview();
+
   await page.getByLabel("Protected ref").fill("refs/heads/retained-only-while-authenticated");
   await page.getByLabel("Proposal ref").fill("refs/heads/private-proposal");
 
@@ -71,15 +138,15 @@ try {
   await login();
   await expectEmptyReview();
 
-  const reviewPath = `/v1/projects/project-a/repositories/source/reviews/${fixture.reviewId}`;
-  const reviewBody = await page.evaluate(async (path) => (await fetch(path)).text(), reviewPath);
+  const reviewMemberPath = `/v1/projects/project-a/repositories/source/reviews/${fixture.reviewId}`;
+  const reviewBody = await page.evaluate(async (path) => (await fetch(path)).text(), reviewMemberPath);
   let releaseReview;
   let markRouteStarted;
   let markRouteFinished;
   const reviewReleased = new Promise((resolve) => { releaseReview = resolve; });
   const routeStarted = new Promise((resolve) => { markRouteStarted = resolve; });
   const routeFinished = new Promise((resolve) => { markRouteFinished = resolve; });
-  await page.route(`**${reviewPath}`, async (route) => {
+  await page.route(`**${reviewMemberPath}`, async (route) => {
     markRouteStarted();
     await reviewReleased;
     await route.fulfill({ status: 200, contentType: "application/json", body: reviewBody }).catch(() => undefined);
