@@ -6,6 +6,7 @@ import {
   ensureDevelopmentServiceGateway,
   runDevelopmentServiceGateway
 } from "./development-service-lifecycle.js";
+import { requestDevelopmentUrl } from "./development-service-request.js";
 import {
   DEVELOPMENT_SERVICE_GATEWAY_PORT,
   developmentServiceStateDirectory,
@@ -16,6 +17,7 @@ const HELP = `Usage:
   dim-development-service gateway-port
   dim-development-service workspace-subdomain --workspace NAME --service NAME
   dim-development-service expose --name NAME --port PORT --ingress NAME [--require-scheme https]
+  dim-development-service request-url --ingress NAME --container NAME [--container NAME] --port PORT
   dim-development-service --help
 `;
 
@@ -24,6 +26,12 @@ type ExposeArguments = {
   readonly targetPort: number;
   readonly ingress: string;
   readonly requiredScheme?: "http" | "https";
+};
+
+type RequestUrlArguments = {
+  readonly ingress: string;
+  readonly containers: readonly string[];
+  readonly targetPort: number;
 };
 
 export async function runDevelopmentServiceCli(arguments_: readonly string[]): Promise<void> {
@@ -50,6 +58,13 @@ export async function runDevelopmentServiceCli(arguments_: readonly string[]): P
     await runDevelopmentServiceGateway(stateDirectory);
     return;
   }
+  if (command === "request-url") {
+    const options = parseRequestUrlArguments(arguments_.slice(1));
+    const controller = workspaceController();
+    const result = await requestDevelopmentUrl({ ...options, ...controller });
+    process.stdout.write(`${JSON.stringify(result)}\n`);
+    return;
+  }
   if (command !== "expose") throw new DevelopmentServiceCliError(HELP.trimEnd());
   const options = parseExposeArguments(arguments_.slice(1));
   const developmentUrlSocket = process.env.DIM_DEVELOPMENT_URL_SOCKET;
@@ -67,6 +82,56 @@ export async function runDevelopmentServiceCli(arguments_: readonly string[]): P
     gatewayControlSocket: controlSocket
   });
   process.stdout.write(`${url}\n`);
+}
+
+function workspaceController(): { readonly controllerSocket: string; readonly controllerToken: string } {
+  const controllerSocket = process.env.DIM_CONTROLLER_SOCKET;
+  const controllerToken = process.env.DIM_CONTROLLER_TOKEN;
+  if (controllerSocket && controllerToken) return { controllerSocket, controllerToken };
+  if (controllerSocket || controllerToken) {
+    throw new DevelopmentServiceCliError(
+      "DIM_CONTROLLER_SOCKET and DIM_CONTROLLER_TOKEN must be set together"
+    );
+  }
+  const agentSocket = process.env.DIM_AGENT_CONTROLLER_SOCKET;
+  const agentToken = process.env.DIM_AGENT_CONTROLLER_TOKEN;
+  if (agentSocket && agentToken) return { controllerSocket: agentSocket, controllerToken: agentToken };
+  if (agentSocket || agentToken) {
+    throw new DevelopmentServiceCliError(
+      "DIM_AGENT_CONTROLLER_SOCKET and DIM_AGENT_CONTROLLER_TOKEN must be set together"
+    );
+  }
+  throw new DevelopmentServiceCliError("workspace controller socket and token are required");
+}
+
+function parseRequestUrlArguments(arguments_: readonly string[]): RequestUrlArguments {
+  let ingress: string | undefined;
+  let targetPort: number | undefined;
+  const containers: string[] = [];
+  const seen = new Set<string>();
+  for (let index = 0; index < arguments_.length; index += 1) {
+    const argument = arguments_[index];
+    const value = arguments_[index + 1];
+    if (value === undefined || value.startsWith("--")) {
+      throw new DevelopmentServiceCliError(`${argument ?? "option"} requires a value`);
+    }
+    if (argument !== "--container" && argument !== undefined && seen.has(argument)) {
+      throw new DevelopmentServiceCliError(`duplicate option '${argument}'`);
+    }
+    if (argument !== undefined) seen.add(argument);
+    if (argument === "--ingress") ingress = value;
+    else if (argument === "--container") containers.push(value);
+    else if (argument === "--port") targetPort = parsePort(value);
+    else throw new DevelopmentServiceCliError(`unknown option '${argument ?? ""}'`);
+    index += 1;
+  }
+  if (ingress === undefined || targetPort === undefined || containers.length === 0) {
+    throw new DevelopmentServiceCliError("request-url requires --ingress, --container, and --port");
+  }
+  if (containers.length > 2) {
+    throw new DevelopmentServiceCliError("request-url accepts at most two --container options");
+  }
+  return { ingress, containers, targetPort };
 }
 
 function parseExposeArguments(arguments_: readonly string[]): ExposeArguments {
