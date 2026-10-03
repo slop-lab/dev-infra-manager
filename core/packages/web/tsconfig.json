@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "noEmit": true, "noFallthroughCasesInSwitch": true, "verbatimModuleSyntax": true },
+  "include": ["src/**/*.ts"]
+}
