@@ -5,6 +5,12 @@ import { inspectGiteaContainer } from "./giteaContainer.js";
 import { LifecycleState } from "./lifecycleState.js";
 import type { HostLifecycleRecord, LifecycleOptions } from "./lifecycleTypes.js";
 import { REGISTRY_CACHE_CONTAINER } from "./registryCache.js";
+import { APT_CACHE_CONTAINER } from "./aptCache.js";
+import {
+  hostMirrorInspection,
+  type HostMirrorOwnership,
+  type HostMirrorResource
+} from "./hostMirrorOwnership.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { listWorkspaces, stopWorkspaceForHostShutdown } from "./workspaceLifecycle.js";
 
@@ -19,6 +25,10 @@ export async function shutdownHost(
     if (current && current.phase !== "ready") {
       throw new UserError(`DIM host is already ${current.phase}; run dim host start to recover it`);
     }
+    const mirrorOwnership = await state.readHostMirrorOwnership();
+    if (mirrorOwnership === undefined) throw new UserError("host mirror ownership state not found");
+    const registryCache = await inspectHostMirrorContainer(runner, mirrorOwnership, "registry-cache");
+    const aptCache = await inspectHostMirrorContainer(runner, mirrorOwnership, "apt-cache");
     const workspaces = await listWorkspaces(runner, options);
     const resumeWorkspaces = workspaces
       .filter((workspace) => workspace.phase === "ready")
@@ -39,6 +49,7 @@ export async function shutdownHost(
     const resumeManagedContainers = (await listRunningManagedContainers(runner)).filter((name) =>
       name !== GITEA_CONTAINER
       && name !== REGISTRY_CACHE_CONTAINER
+      && name !== APT_CACHE_CONTAINER
       && !workspaceContainers.has(name)
       && !runnerContainers.has(name)
       && !ordinaryNames.has(name));
@@ -65,7 +76,12 @@ export async function shutdownHost(
     for (const container of resumeManagedContainers) {
       await attempt(errors, `stop managed container '${container}'`, () => stopManagedContainer(runner, container));
     }
-    await attempt(errors, "stop registry cache", () => stopManagedContainer(runner, REGISTRY_CACHE_CONTAINER));
+    if (registryCache?.running) {
+      await attempt(errors, "stop registry cache", () => stopContainerById(runner, REGISTRY_CACHE_CONTAINER, registryCache.id));
+    }
+    if (aptCache?.running) {
+      await attempt(errors, "stop APT cache", () => stopContainerById(runner, APT_CACHE_CONTAINER, aptCache.id));
+    }
     if (options.giteaConnection.kind === "managed") {
       await attempt(errors, "stop Gitea", async () => {
         const service = await state.readGiteaService();
@@ -89,16 +105,54 @@ export async function shutdownHost(
   }
 }
 
+type HostMirrorContainerResource = Extract<HostMirrorResource, "registry-cache" | "apt-cache">;
+
+const HOST_MIRROR_CONTAINER_NAMES = {
+  "registry-cache": REGISTRY_CACHE_CONTAINER,
+  "apt-cache": APT_CACHE_CONTAINER
+} as const satisfies Readonly<Record<HostMirrorContainerResource, string>>;
+
+async function inspectHostMirrorContainer(
+  runner: StreamingCommandRunner,
+  ownership: HostMirrorOwnership,
+  resource: HostMirrorContainerResource
+): Promise<{ readonly id: string; readonly running: boolean } | undefined> {
+  const name = HOST_MIRROR_CONTAINER_NAMES[resource];
+  const inspect = await runner.run("docker", [
+    "container", "inspect", name, "--format", "{{.Id}}|{{index .Config.Labels \"dim.managed\"}}|{{index .Config.Labels \"dim.owner\"}}|{{index .Config.Labels \"dim.service-id\"}}|{{index .Config.Labels \"dim.resource\"}}|{{index .Config.Labels \"dim.resource-id\"}}|{{.State.Running}}"
+  ]);
+  if (inspect.exitCode !== 0) {
+    if (/no such (?:container|object)/i.test(inspect.stderr)) return undefined;
+    throw new UserError(`cannot inspect '${name}': ${inspect.stderr.trim()}`);
+  }
+  const [containerId, managed, owner, serviceId, actualResource, resourceId, running] = inspect.stdout.trim().split("|");
+  if (!containerId || [managed, owner, serviceId, actualResource, resourceId].join("|") !== hostMirrorInspection(resource, ownership)) {
+    throw new UserError(`Docker resource '${name}' conflicts with persisted host mirror ownership`);
+  }
+  return { id: containerId, running: running === "true" };
+}
+
+async function stopContainerById(
+  runner: StreamingCommandRunner,
+  name: string,
+  containerId: string
+): Promise<void> {
+  const stopped = await runner.run("docker", ["stop", containerId]);
+  if (stopped.exitCode !== 0) throw new UserError(`failed to stop '${name}': ${stopped.stderr.trim()}`);
+}
+
 async function stopManagedContainer(runner: StreamingCommandRunner, name: string): Promise<void> {
   const inspect = await runner.run("docker", [
-    "container", "inspect", name, "--format", "{{.Id}}|{{index .Config.Labels \"dim.managed\"}}|{{.State.Running}}"
+    "container", "inspect", name, "--format", "{{.Id}}|{{index .Config.Labels \"dim.managed\"}}|{{index .Config.Labels \"dim.owner\"}}|{{index .Config.Labels \"dim.resource\"}}|{{index .Config.Labels \"dim.resource-id\"}}|{{.State.Running}}"
   ]);
   if (inspect.exitCode !== 0) {
     if (/no such (?:container|object)/i.test(inspect.stderr)) return;
     throw new UserError(`cannot inspect '${name}': ${inspect.stderr.trim()}`);
   }
-  const [containerId, managed, running] = inspect.stdout.trim().split("|");
-  if (!containerId || managed !== "true") throw new UserError(`Docker resource '${name}' is not managed by DIM`);
+  const [containerId, managed, owner, resource, resourceId, running] = inspect.stdout.trim().split("|");
+  if (!containerId || managed !== "true" || owner !== "dim" || !resource || !resourceId) {
+    throw new UserError(`Docker resource '${name}' is not managed by DIM`);
+  }
   if (running !== "true") return;
   const stopped = await runner.run("docker", ["stop", containerId]);
   if (stopped.exitCode !== 0) throw new UserError(`failed to stop '${name}': ${stopped.stderr.trim()}`);
