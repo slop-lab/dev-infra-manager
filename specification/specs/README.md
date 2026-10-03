@@ -57,6 +57,7 @@ instead be split.
 | [Image Entrypoints](local-details/image-entrypoints.md) | Implementation profile | Image-local compatibility details |
 | [Installation Scripts](local-details/installation-scripts.md) | Implementation profile | Script and packaging details |
 | [Native Git Transport and Review Evidence](local-details/native-git-transport.md) | Implementation profile | Proposal-only smart HTTP plus complete-tree review, exact CI evidence, and checked host-only CAS promotion |
+| [Reviewer Web API](local-details/reviewer-web-api.md) | Implementation profile | Authenticated loopback backend for scoped review inspection and evidence creation; browser UI and deployment remain separate |
 
 ## Requirement Traceability
 
