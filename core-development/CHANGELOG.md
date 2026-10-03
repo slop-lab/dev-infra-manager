@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Let one explicitly configured reviewer-web account approve the exact immutable
+  review and revoke only its own active approval through fixed, Origin- and CSRF-guarded
+  routes backed by the existing native Git reviewer authority. The responsive
+  evidence view keeps other authenticated accounts read-only and shows the
+  freshly reread review status before mutation-time navigation resumes;
+  stale approval remains denied, while rejection, administrator revocation,
+  promotion, CI reporting, host administration, and generic proxying remain
+  absent.
+
 - Replace top-level installer verbs with the `dim installer install
   core|plugin` namespace, require exact registry plugin versions, stage plugin
   graph replacement transactionally, and include one controller
