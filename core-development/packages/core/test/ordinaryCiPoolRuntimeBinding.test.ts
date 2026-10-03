@@ -8,11 +8,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import type { GiteaProjectBinding } from "../../../../core/packages/core/src/lifecycleTypes.js";
 import { runOrdinaryCiPoolCapacityOnce } from "../../../../core/packages/core/src/ordinaryCiPoolRuntime.js";
-import { REGISTRY_CACHE_IMAGE } from "../../../../core/packages/core/src/registryCache.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
+import { hostMirrorInspection } from "../../../../core/packages/core/src/hostMirrorOwnership.js";
+import { registryCacheInspect, TEST_HOST_MIRROR_OWNERSHIP } from "./hostLifecycleFixture.js";
+import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
 
 const JOB_IMAGE = `registry.example/dim/job@sha256:${"a".repeat(64)}`;
 const RUNNER_IMAGE = `sha256:${"b".repeat(64)}`;
+const REGISTRY_CACHE_IMAGE = `registry.example/docker-cache@sha256:${"c".repeat(64)}`;
 const roots: string[] = [];
 const servers: Server[] = [];
 
@@ -69,8 +72,10 @@ describe("ordinary CI pool external Project binding", () => {
 
 class NoopRunner implements StreamingCommandRunner {
   async run(command: string, args: string[]): Promise<CommandResult> {
-    const stdout = args[0] === "network" || args[0] === "volume" ? "true\n"
-      : args[0] === "container" && args[2] === "dim-registry-cache" ? `true|true|${REGISTRY_CACHE_IMAGE}\n` : "";
+      const stdout = args[0] === "network" ? `${hostMirrorInspection("control-network", TEST_HOST_MIRROR_OWNERSHIP)}\n`
+        : args[0] === "volume" ? `${hostMirrorInspection("registry-cache-data", TEST_HOST_MIRROR_OWNERSHIP)}\n`
+        : args[0] === "container" && args[2] === "dim-registry-cache"
+          ? registryCacheInspect(REGISTRY_CACHE_IMAGE) : "";
     return { command, args, stdout, stderr: "", exitCode: 0 };
   }
 
@@ -102,10 +107,18 @@ async function hostOptions(
     schemaVersion: 2, transport: "loopback-http", endpoint, hostId: "host-a",
     token: "host-token", expectedServiceId: "pool-main", expectedJobImage: JOB_IMAGE
   }), { mode: 0o600 });
-  return lifecycleOptionsForBackend("sysbox", {
-    HOME: root, DIM_STATE_ROOT: join(root, "state"), DIM_GITEA_CONNECTION_FILE: giteaFile,
+  const stateRoot = join(root, "state");
+  await new LifecycleState(stateRoot).writeHostMirrorOwnership(TEST_HOST_MIRROR_OWNERSHIP);
+  return {
+    ...lifecycleOptionsForBackend("sysbox", {
+    HOME: root, DIM_STATE_ROOT: stateRoot, DIM_GITEA_CONNECTION_FILE: giteaFile,
     DIM_ORDINARY_CI_POOL_CONNECTION_FILE: poolFile, DIM_CI_RUNNER_IMAGE: RUNNER_IMAGE
-  });
+    }),
+    hostMirrorProvider: {
+      dockerImage: REGISTRY_CACHE_IMAGE,
+      aptImage: `registry.example/apt-cache@sha256:${"d".repeat(64)}`
+    }
+  };
 }
 
 async function listen(server: Server): Promise<string> {

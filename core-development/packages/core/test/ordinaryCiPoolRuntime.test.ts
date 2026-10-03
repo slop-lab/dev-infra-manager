@@ -13,11 +13,13 @@ import {
   runOrdinaryCiPoolCapacityOnce
 } from "../../../../core/packages/core/src/ordinaryCiPoolRuntime.js";
 import { configuredOrdinaryCiPoolServer } from "../../../../core/packages/core/src/ordinaryCiPoolService.js";
-import { REGISTRY_CACHE_IMAGE } from "../../../../core/packages/core/src/registryCache.js";
 import type { CommandResult, StreamingCommandRunner } from "../../../../core/packages/core/src/types.js";
+import { hostMirrorInspection } from "../../../../core/packages/core/src/hostMirrorOwnership.js";
+import { registryCacheInspect, TEST_HOST_MIRROR_OWNERSHIP } from "./hostLifecycleFixture.js";
 
 const JOB_IMAGE = `registry.example/dim/job@sha256:${"a".repeat(64)}`;
 const RUNNER_IMAGE = `sha256:${"b".repeat(64)}`;
+const REGISTRY_CACHE_IMAGE = `registry.example/docker-cache@sha256:${"c".repeat(64)}`;
 const roots: string[] = [];
 const servers: Server[] = [];
 const webhookTokens = new Map<string, string>();
@@ -198,11 +200,14 @@ class RuntimeRunner implements StreamingCommandRunner {
 
   async run(command: string, args: string[]): Promise<CommandResult> {
     this.calls.push({ command, args });
-    if (args[0] === "network" || args[0] === "volume") {
-      return { command, args, stdout: "true\n", stderr: "", exitCode: 0 };
+    if (args[0] === "network") {
+      return { command, args, stdout: `${hostMirrorInspection("control-network", TEST_HOST_MIRROR_OWNERSHIP)}\n`, stderr: "", exitCode: 0 };
+    }
+    if (args[0] === "volume") {
+      return { command, args, stdout: `${hostMirrorInspection("registry-cache-data", TEST_HOST_MIRROR_OWNERSHIP)}\n`, stderr: "", exitCode: 0 };
     }
     if (args[0] === "container" && args[1] === "inspect" && args[2] === "dim-registry-cache") {
-      return { command, args, stdout: `true|true|${REGISTRY_CACHE_IMAGE}\n`, stderr: "", exitCode: 0 };
+        return { command, args, stdout: registryCacheInspect(REGISTRY_CACHE_IMAGE), stderr: "", exitCode: 0 };
     }
     let stdout = "";
     if (args[0] === "run") {
@@ -331,11 +336,18 @@ async function hostOptions(
     DIM_ORDINARY_CI_POOL_CONNECTION_FILE: join(root, `${hostId}-pool.json`), DIM_CI_RUNNER_IMAGE: runnerImage
   });
   const state = new LifecycleState(stateRoot);
+  await state.writeHostMirrorOwnership(TEST_HOST_MIRROR_OWNERSHIP);
   for (const name of fixture.localProjects ?? ["alpha", "beta"]) {
     if (name === "alpha") await state.claimProject(project("alpha", "project-a", "dim-alpha", 41));
     else await state.claimProject(project("beta", "project-b", "dim-beta", 42));
   }
-  return options;
+  return {
+    ...options,
+    hostMirrorProvider: {
+      dockerImage: REGISTRY_CACHE_IMAGE,
+      aptImage: `registry.example/apt-cache@sha256:${"d".repeat(64)}`
+    }
+  };
 }
 
 function project(name: string, id: string, gitNamespace: string, giteaOrganizationId: number): ProjectRecord {

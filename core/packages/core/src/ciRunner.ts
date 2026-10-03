@@ -127,7 +127,7 @@ async function reconcileCiRunner(runner: StreamingCommandRunner, options: Lifecy
       try {
         await removeCiRunnerContainer(runner, ciRunnerContainerPlan(record, executor));
         await ensureCiRunnerVolume(runner, { name: executor.volumeName, resource: "ci-runner-data", project: projectName, projectId: project.id });
-        await configureSysboxRegistryMirror(runner, executor.volumeName);
+    await configureSysboxRegistryMirror(runner, executor.volumeName, options);
         await probeCiRunnerWorkloads(runner, {
           config: runnerConfig.config,
           hostImage: executor.image,
