@@ -16,6 +16,7 @@ import {
 } from "./repository.js";
 import { nativeGitReviewRoute, serveReviewApi } from "./review-http.js";
 import { createPromotionService } from "./promotion-service.js";
+import { createOrdinaryExecutionService } from "./ordinary-execution-service.js";
 import { createRefSerializer } from "./ref-serializer.js";
 import { createReviewService } from "./review-service.js";
 import { nativeGitRoute } from "./routing.js";
@@ -36,7 +37,8 @@ export function createNativeGitServer(input: NativeGitServiceConfig): NativeGitS
   const serializer = createRefSerializer();
   const services = {
     review: createReviewService(config, serializer),
-    promotion: createPromotionService(config, serializer)
+    promotion: createPromotionService(config, serializer),
+    ordinaryExecution: createOrdinaryExecutionService(config, serializer)
   };
   let gitIdentity: GitExecutableIdentity | undefined;
   let storageOwner: StorageOwner | undefined;
@@ -85,6 +87,7 @@ export function createNativeGitServer(input: NativeGitServiceConfig): NativeGitS
     if (identity === undefined) return send(response, 401, { "WWW-Authenticate": 'Basic realm="DIM Git"' });
     const repository = repositories.get(repositoryKey(route.projectId, route.repositoryId));
     if (repository === undefined || !canAccess(identity, route.projectId, route.repositoryId)) return send(response, 404);
+    if (route.operation === "read" && identity.role !== "reader" && identity.role !== "writer") return send(response, 403);
     if (route.operation === "write" && identity.role !== "writer") return send(response, 403);
     if (gitIdentity === undefined) return send(response, 503);
     if (activeBackends >= 16) return send(response, 503);

@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 import type { NativeGitIdentity } from "./config.js";
+import { ordinaryExecutionDescriptorRequestSchema } from "./candidate-execution-schema.js";
+import type { OrdinaryExecutionService } from "./ordinary-execution-service.js";
 import { ciStatusEnvelopeSchema } from "./promotion-schema.js";
 import type { PromotionService } from "./promotion-service.js";
 import { ReviewApiError, type ReviewService } from "./review-service.js";
@@ -8,7 +10,7 @@ import { ReviewApiError, type ReviewService } from "./review-service.js";
 const MAX_BODY_BYTES = 64 * 1024;
 const identifierPattern = "[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?";
 const collectionPattern = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews$`);
-const memberPattern = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews/([0-9a-f]{64})(?:/(approvals|revocations|job-attempts|job-attempt-revocations|statuses|promotions))?$`);
+const memberPattern = new RegExp(`^/v1/projects/(${identifierPattern})/repositories/(${identifierPattern})/reviews/([0-9a-f]{64})(?:/(approvals|revocations|job-attempts|job-attempt-revocations|statuses|promotions|ordinary-execution-descriptors))?$`);
 const createSchema = z.object({
   protectedRef: z.string().min(1).max(1024),
   proposalRef: z.string().min(1).max(1024)
@@ -27,11 +29,13 @@ export type ReviewHttpRoute =
   | { readonly kind: "issue-job"; readonly projectId: string; readonly repositoryId: string; readonly reviewId: string }
   | { readonly kind: "revoke-job"; readonly projectId: string; readonly repositoryId: string; readonly reviewId: string }
   | { readonly kind: "status"; readonly projectId: string; readonly repositoryId: string; readonly reviewId: string }
+  | { readonly kind: "ordinary-execution-descriptor"; readonly projectId: string; readonly repositoryId: string; readonly reviewId: string }
   | { readonly kind: "promote"; readonly projectId: string; readonly repositoryId: string; readonly reviewId: string };
 
 export type ReviewApiServices = {
   readonly review: ReviewService;
   readonly promotion: PromotionService;
+  readonly ordinaryExecution: OrdinaryExecutionService;
 };
 
 export function nativeGitReviewRoute(request: IncomingMessage): ReviewHttpRoute | undefined {
@@ -56,6 +60,9 @@ export function nativeGitReviewRoute(request: IncomingMessage): ReviewHttpRoute 
   if (request.method === "POST" && action === "job-attempts") return { kind: "issue-job", projectId, repositoryId, reviewId };
   if (request.method === "POST" && action === "job-attempt-revocations") return { kind: "revoke-job", projectId, repositoryId, reviewId };
   if (request.method === "POST" && action === "statuses") return { kind: "status", projectId, repositoryId, reviewId };
+  if (request.method === "POST" && action === "ordinary-execution-descriptors") {
+    return { kind: "ordinary-execution-descriptor", projectId, repositoryId, reviewId };
+  }
   if (request.method === "POST" && action === "promotions") return { kind: "promote", projectId, repositoryId, reviewId };
   return undefined;
 }
@@ -107,6 +114,14 @@ export async function serveReviewApi(
       case "status": {
         const envelope = ciStatusEnvelopeSchema.parse(await readBody(request));
         sendJson(response, 201, await services.promotion.report(identity, target, route.reviewId, envelope));
+        return;
+      }
+      case "ordinary-execution-descriptor": {
+        const descriptorTarget = { ...target, reviewId: route.reviewId };
+        services.ordinaryExecution.authorize(identity, descriptorTarget);
+        const input = ordinaryExecutionDescriptorRequestSchema.parse(await readBody(request));
+        const result = await services.ordinaryExecution.load(descriptorTarget, input);
+        sendJson(response, 200, result);
         return;
       }
       case "promote": {

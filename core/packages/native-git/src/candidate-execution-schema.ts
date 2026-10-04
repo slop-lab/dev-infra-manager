@@ -33,16 +33,7 @@ const candidateConfigSchema = z.object({
   }).strict().readonly()
 }).strict().readonly();
 
-export const candidateOrdinaryExecutionRequestSchema = z.object({
-  projectId: identifier,
-  repositoryId: identifier,
-  protectedRef,
-  expectedProtectedHead: objectId,
-  candidateCommit: objectId,
-  candidateTree: objectId,
-  policyRevision: revision,
-  requiredReviewRevision: revision,
-  requiredJobSetRevision: revision,
+const ordinaryExecutionDescriptorRequestFields = {
   admissionGeneration: generation,
   jobName: identifier,
   runnerBaseImage: image,
@@ -53,8 +44,24 @@ export const candidateOrdinaryExecutionRequestSchema = z.object({
     wallClockSeconds: positiveInteger,
     outputBytes: positiveInteger
   }).strict().readonly()
+} as const;
+
+export const ordinaryExecutionDescriptorRequestSchema = z.object(ordinaryExecutionDescriptorRequestFields).strict().readonly();
+
+export const candidateOrdinaryExecutionRequestSchema = z.object({
+  ...ordinaryExecutionDescriptorRequestFields,
+  projectId: identifier,
+  repositoryId: identifier,
+  protectedRef,
+  expectedProtectedHead: objectId,
+  candidateCommit: objectId,
+  candidateTree: objectId,
+  policyRevision: revision,
+  requiredReviewRevision: revision,
+  requiredJobSetRevision: revision
 }).strict().readonly();
 
+export type OrdinaryExecutionDescriptorRequest = z.infer<typeof ordinaryExecutionDescriptorRequestSchema>;
 export type CandidateOrdinaryExecutionRequest = z.infer<typeof candidateOrdinaryExecutionRequestSchema>;
 export type CandidateJob = z.infer<typeof candidateJobSchema>;
 
