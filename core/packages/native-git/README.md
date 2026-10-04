@@ -208,8 +208,20 @@ candidate-controlled tests executed within the recorded sandbox and exited
 zero. Protected policy may require that evidence, but it is not independent
 verification, does not establish that the tests are correct or complete, and
 does not replace product/QA review or complete-tree human approval. This
-descriptor extension and adapter are specified but not implemented by this
-package revision.
+package exports `loadCandidateOrdinaryExecution` as the narrow candidate-tree
+reader for that future adapter. It accepts a registered native Git configuration
+and the exact review/admission tuple, reads only `.dim/ci/runner.yml` and its
+selected script from the named candidate tree, and returns the normalized
+descriptor and digest. It does not schedule or launch work.
+
+The reader represents config and script SHA-256 fields as
+`sha256:<64 lowercase hexadecimal digits>`. Its CPU, memory-byte, PID,
+wall-clock-second, and output-byte bounds are positive canonical decimal
+strings. The descriptor hash starts with the unframed ASCII domain
+`dim-native-ordinary-execution-v1`; each of the 28 following fields is encoded
+as its ASCII decimal UTF-8 byte length, one colon, and its UTF-8 bytes. These
+choices are part of the exported library contract so scheduler and host
+reverification cannot choose different normalized encodings.
 The service holds an exclusive rollback-journal SQLite transaction in
 `.dim-native-git-owner.sqlite3` below the canonical storage root. The database
 is bound to that root's filesystem identity, and a second process sharing the
