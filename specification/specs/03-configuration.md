@@ -106,9 +106,11 @@ The Gitea port binding, readiness checks, management API requests, and host
 clone URLs must all use that endpoint; Docker-network clone URLs remain on
 the isolated `dim-control` network.
 
-**CONFIG-GIT-001:** With no external connection configured, DIM MUST retain
-the host-local managed Gitea lifecycle above. `DIM_GITEA_CONNECTION_FILE`
-instead selects one operator-managed external Gitea service. The file MUST be
+**CONFIG-GIT-001:** This predecessor profile applies only when
+`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` is absent. With no predecessor
+external connection configured, DIM MUST retain the host-local managed Gitea
+lifecycle above. `DIM_GITEA_CONNECTION_FILE` instead selects one
+operator-managed external Gitea service. The file MUST be
 a regular, DIM-user-owned mode-`0600` JSON file with an exact supported schema.
 It MUST provide distinct management API, host clone, workspace clone, and CI
 runner base URLs; administrator, constrained workspace-writer, and host
@@ -157,7 +159,71 @@ service account. HTTP credentials MAY cross the authenticated request only for
 that operation and MUST NOT enter URLs, logs, service configuration, or
 persistent Git configuration.
 
-**CONFIG-QEMU-SCHEDULER-001:** `DIM_QEMU_SCHEDULER_CONNECTION_FILE` MAY select
+## Native control-plane host connection
+
+**CONFIG-NATIVE-CONTROL-PLANE-001:** This is the unimplemented target host
+connection shape for a future native Project/repository adapter. After that
+adapter is separately specified, a participating host MUST set
+`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` to a regular,
+non-symbolic-link, DIM-user-owned mode-`0600` JSON file with this exact schema:
+
+```json
+{
+  "schemaVersion": 1,
+  "hostId": "host-a",
+  "nativeGit": {
+    "transport": "https",
+    "endpoint": "https://git-control.example",
+    "serviceId": "native-main",
+    "username": "host-a",
+    "password": "replace-with-native-host-credential"
+  },
+  "ordinaryCi": {
+    "transport": "https",
+    "endpoint": "https://ci-control.example",
+    "serviceId": "ordinary-main",
+    "hostToken": "replace-with-host-token",
+    "admissionToken": "replace-with-admission-token",
+    "resultToken": "replace-with-result-token"
+  },
+  "capacities": {
+    "primary": { "cpus": 4, "memoryBytes": 8589934592, "pids": 2048 }
+  }
+}
+```
+
+The schema has no Project list or job image. `hostId`, service identities, and
+capacity names are safe non-empty identifiers. Each resource bound is a
+positive integer. URLs are credential-free origins without path, query, or
+fragment. Each transport is exactly `https` or, only for a loopback HTTP
+origin, `loopback-http`. Unknown keys, duplicate
+capacity names after normalization, shared tokens, redirects, service-identity
+mismatch, and mutable or unassigned endpoints fail before controller capacity
+registration or runtime mutation.
+
+The native Git credential is host-scoped read/attestation authority, not a
+reviewer, promoter, or storage-administrator identity. Ordinary admission,
+claim, and result authorities are distinct; `hostToken` may claim and renew
+only this host's named capacities, `admissionToken` may attest reviewed policy
+but cannot claim or report, and `resultToken` may report only attempts assigned
+to this host. None may enter a workspace, job, image, Compose bundle, log, or
+Project state. Controller startup validates both authenticated service
+identities before advertising capacity. Failure closes ordinary admission and
+claiming but does not fall back to a local or Project-scoped runner.
+
+No current controller reads or consumes this target variable. Setting
+`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` in the shipped release is ignored:
+it neither selects native lifecycle nor rejects otherwise valid predecessor
+Gitea operations. That is an implementation absence, not target behavior. Once
+target parsing exists, and until the adapter contract is also approved and
+implemented, a requested native Project, repository, admission, or capacity
+operation MUST reject before service-state or runtime mutation. The future
+native connection and `DIM_GITEA_CONNECTION_FILE` are mutually exclusive for
+one host. `DIM_ORDINARY_CI_POOL_CONNECTION_FILE` is obsolete in the target and
+MUST be rejected, not ignored, when that target is implemented.
+
+**CONFIG-QEMU-SCHEDULER-001:** This is a predecessor Gitea-only contract.
+`DIM_QEMU_SCHEDULER_CONNECTION_FILE` MAY select
 an operator-managed shared QEMU demand scheduler. The file MUST be a regular,
 DIM-user-owned mode-`0600` JSON file with exact schema version `1`, a stable
 host ID, one explicit transport policy, and per-Project bindings. Each binding
@@ -171,6 +237,10 @@ the external Gitea connection host ID. Every host attached to one Project MUST
 use the same Project API token and a distinct stable host ID. When the variable
 is absent, existing host-local scheduling MUST remain unchanged.
 
+It MUST be rejected when native control-plane selection is requested. QEMU is
+not part of the native installer bundle, has no native Project-state adapter,
+and cannot satisfy native ordinary CI evidence.
+
 The service-side Project binding MUST separately identify its webhook token,
 Project API token, and non-empty label set. The stable host ID is a
 concurrency identity, not an authorization principal. Its configured lease MUST be
@@ -182,6 +252,8 @@ profiles, and the trusted host's effective backend choice belong to
 Project/workspace records. Raw credentials and provider-selection input must
 not be written to those records.
 
-There is no legacy bare-Git PR store, separate controller config, or job
-storage. DIM is pre-stable and rejects incompatible configuration or state
-unless an explicit migration is part of the current contract.
+The implemented Gitea Project profile has no legacy bare-Git PR store, separate
+controller config, or separate job storage. The unimplemented ordinary service
+would own its explicitly versioned private database without changing Project
+state. DIM is pre-stable and rejects incompatible configuration or state unless
+an explicit migration is part of the current contract.

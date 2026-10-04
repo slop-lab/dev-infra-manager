@@ -17,6 +17,64 @@ The package is additive and not yet selected by core Project lifecycle code.
 Managed and external Gitea remain the current lifecycle implementation while
 the native path is independently reviewed and completed.
 
+The unimplemented control-plane bundle target runs the service as the `native-git`
+member defined by `INSTALLER-CONTROL-PLANE-001`. It runs as `10001:10001`,
+listens at `0.0.0.0:8080`, stores all repository and evidence bytes below
+`/var/lib/dim-native-git`, and receives only that service's private volume and
+read-only config, readiness-token, and activation-token files. Its strict
+schema-1 startup configuration adds exactly this required dependency object:
+
+```json
+{
+  "ordinaryCi": {
+    "endpoint": "http://ordinary-ci:8080",
+    "serviceId": "ordinary-main",
+    "query": {
+      "username": "native-main",
+      "password": "replace-with-query-only-dependency-credential"
+    },
+    "identity": {
+      "username": "ordinary-identity",
+      "password": "replace-with-identity-credential"
+    },
+    "attemptIssuer": {
+      "username": "ordinary-attempts",
+      "password": "replace-with-attempt-issuer-credential"
+    },
+    "resultReporter": {
+      "username": "ordinary-results",
+      "password": "replace-with-result-reporter-credential"
+    }
+  }
+}
+```
+
+The endpoint is fixed to the Compose-network origin, follows no redirect, and
+must attest the exact service identity before native Git reports ready. The
+query credential is scoped only to admission and current-attempt/result queries
+for the repository tuple being evaluated. It cannot admit policy, claim
+capacity, report a result, enumerate hosts, or mutate scheduler state. It is
+distinct from every Git, reviewer, administrator, promoter, scheduler,
+CI-result, readiness, and host credential.
+
+The ordinary identity credential can attest only the exact configured native
+service and repository tuple. The attempt-issuer credential is a native
+scheduler role constrained to one exact live ordinary admission generation,
+repository/protected tuple, required job, and newly issued current attempt; it
+cannot report. The result-reporter credential is a separate native CI role that
+can report only the terminal result for that exact issuer-created current
+attempt and job; it cannot issue or revoke. Neither role can read Git, approve,
+promote, administer, enumerate unrelated Projects, or act when the ordinary
+admission or native identity check is absent, stale, or mismatched.
+
+These credentials and endpoints do not select native Git for Project lifecycle.
+Until a separate native Project/repository state adapter is specified and
+implemented, the native service starts with no admitted Project and rejects
+Project, repository, ordinary admission, attempt, and result mutation.
+The four service credentials are not Git transport identities and are not
+accepted by generic reviewer, administrator, CI, scheduler, or promotion
+routes; each is accepted only by its fixed role-specific endpoint.
+
 ## Inputs and identity
 
 Startup consumes a strict schema-1 configuration. It pins a trusted regular

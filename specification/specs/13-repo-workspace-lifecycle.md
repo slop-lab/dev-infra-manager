@@ -105,9 +105,14 @@ left unchanged.
 
 ## Project namespace
 
-The built-in managed Git service is one DIM-owned Gitea instance. An explicitly
-configured external Gitea service is operator-owned and shared independently
-of each host's unchanged DIM controller. In both modes each Project owns the
+This section specifies the only implemented Project lifecycle, using Gitea.
+Installing the unimplemented target native bundle does not select a Project
+adapter, and native Project operations remain denied until a separate contract
+exists. Gitea organization, runner, and credential shapes do not constrain the
+idle native services. In the implemented profile, the built-in managed Git
+service is one DIM-owned Gitea instance. An explicitly configured external
+Gitea service is operator-owned and shared independently of each host's
+unchanged DIM controller. In both predecessor modes each Project owns the
 reserved organization `dim-<project>` and repository aliases are scoped below
 it:
 
