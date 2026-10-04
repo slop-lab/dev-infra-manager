@@ -1,9 +1,13 @@
 import type { Server } from "node:http";
-import { UserError, type RegisteredDimPlugins } from "@slop-lab/dim-core";
+import {
+  UserError,
+  type RegisteredDimPlugins
+} from "@slop-lab/dim-core";
 
 const connectionGraceMilliseconds = 500;
 const forcedCloseMilliseconds = 1_000;
 const pluginDisposeMilliseconds = 1_000;
+const runtimeDisposeMilliseconds = 75_000;
 
 export async function closeControllerServers(
   servers: readonly (Server | undefined)[]
@@ -28,6 +32,17 @@ export async function disposeControllerPlugins(
   const disposal = plugins.dispose();
   if (await completesWithin(disposal, pluginDisposeMilliseconds)) return true;
   void disposal.catch((error) => console.error("DIM plugin disposal failed after shutdown deadline", error));
+  return false;
+}
+
+export async function disposeHostRuntime(
+  runtime: { readonly dispose: () => Promise<void> } | undefined,
+  timeoutMilliseconds = runtimeDisposeMilliseconds
+): Promise<boolean> {
+  if (runtime === undefined) return true;
+  const disposal = runtime.dispose();
+  if (await completesWithin(disposal, timeoutMilliseconds)) return true;
+  void disposal.catch((error) => console.error("DIM host runtime disposal failed after shutdown deadline", error));
   return false;
 }
 

@@ -12,7 +12,7 @@ import { startSystemdManagedController, usesSystemdManagedController } from "./s
 import { adminErrorDetail, unixHttpRequest } from "./controller-transport.js";
 
 const managedControllerStartAttempts = 2400;
-const managedControllerStopAttempts = 200;
+const managedControllerStopAttempts = 1_600;
 
 export async function ensureManagedController(options: LifecycleOptions): Promise<void> {
   if (await managedControllerReady(options)) return;
