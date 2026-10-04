@@ -437,13 +437,18 @@ native Project or repository admission request and every controller attempt to
 advertise ordinary capacity MUST fail before service-state or runtime mutation.
 The installed services therefore remain an idle, empty control-plane bundle.
 
-The later adapter MUST bind ordinary admission to one native Git
-Project/repository, protected ref and exact commit/tree, policy and
-required-job-set revisions, required job names, labels, digest-pinned disposable
-image, and admission generation. It must not create a persistent per-Project
-runner, worker container, image copy, or capacity record. These tuple fields
-constrain the service interfaces but do not authorize admission before that
-adapter exists.
+The later adapter MUST separate operator Project admission from candidate job
+selection. Admission binds one native Git Project/repository, protected ref,
+policy and required-review/required-job-set revisions, required job names and
+their `candidate-controlled` evidence class, eligible operator capacity, and
+admission generation. The exact candidate commit/tree then selects schema-2
+`.dim/ci/runner.yml`, script blob, normalized fixed argv, and digest-pinned
+disposable image under `CI-NATIVE-CANDIDATE-JOB-001`. Those candidate bytes are
+unreviewed execution input, not admission authority or independent
+verification. The adapter must not create a persistent per-Project runner,
+worker container, image copy, or capacity record. These tuple fields constrain
+the service interfaces but do not authorize admission before that adapter
+exists.
 
 Native Git MUST fail closed for a protected ref that requires CI unless the
 ordinary service reports the exact current admission and current
@@ -455,6 +460,18 @@ available host capacity, an earlier successful attempt, or a Project-scoped
 runner record as CI evidence. Repository read and proposal-only write transport
 may remain available during an ordinary scheduler outage; protected promotion
 may not.
+
+For a candidate-controlled required job, native Git MUST also require the
+current terminal record to match the exact execution-descriptor digest issued
+for that attempt. The reviewer and promotion DTOs MUST label it
+`candidate-controlled` and expose the candidate config, script, image, and argv
+provenance. A successful exit MAY satisfy that explicitly configured required
+condition, but MUST NOT be described as an independent check, proof that its
+tests are correct or complete, or blanket product correctness. Product
+maintainers still review changed requirements, implementation, test definitions,
+and relevant results. Infrastructure security review separately follows secret
+exposure and trusted capability changes. Current complete-tree human approval
+and the final checked compare-and-swap remain mandatory.
 
 The optional shared QEMU scheduler is a predecessor Gitea-only service and
 configuration. It is never added to this Compose project, cannot be configured

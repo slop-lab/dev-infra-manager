@@ -74,6 +74,29 @@ idempotence, one concurrent winner, cross-process single-owner enforcement,
 role separation, and unchanged protected
 refs for every denial. Smart HTTP MUST remain proposal-only.
 
+Native ordinary-CI tests MUST label their result
+`candidate-controlled`, not independent. They MUST prove that one exact
+candidate tree supplies schema-2 `.dim/ci/runner.yml` and the regular script
+blob; that the strict parser rejects schema 1, unknown/duplicate YAML fields,
+aliases/tags, oversized or non-UTF-8 input, unsafe paths, symlinks, gitlinks,
+mutable/tagged images, extra or missing required jobs, and any argv other than
+the fixed Bash vector; and that webhook fields cannot select an image, command,
+script, environment, mount, network, URL, resource, or credential. A successful
+fixture MUST observe that the selected candidate-controlled tests execute in
+the bounded sandbox and exit zero. Reviewer output MUST distinguish that result
+from an independently selected check and MUST NOT present it as proof that the
+tests are correct or complete.
+
+The gate MUST also demonstrate the product/QA interpretation presented to a
+reviewer: green means the selected candidate-controlled tests ran and exited
+successfully under the recorded descriptor, not that their definitions were
+correct or complete and not that the product is regression-free. Promotion
+evidence MUST retain the reviewed test definition and result provenance so
+product maintainers can assess changed requirements, implementation, tests, and
+results. This product review is distinct from infrastructure security review of
+secret exposure, protected-ref authority, host/runtime privilege, and trusted
+capability elevation.
+
 ## Control-plane bundle gate
 
 For `INSTALLER-CONTROL-PLANE-001`,
@@ -168,6 +191,20 @@ There is no successful native ordinary job or two-host execution acceptance in
 this installer-only gate; that evidence belongs to the future adapter contract.
 Schema-less, schema-1, and predecessor schema-2 ordinary databases and
 persisted Project-scoped Sysbox runner state MUST be rejected unchanged.
+
+The future adapter gate MUST additionally prove descriptor equality across
+native Git, scheduler, and host parsing; direct argv execution without shell
+construction; exact candidate checkout and config/script blob identities;
+digest-pinned candidate job and operator runner-base images; effective
+CPU/memory/PID/time/output bounds; absence of every host socket, `/dev/kvm`,
+secret, and reusable credential; and owned cleanup after success, failure,
+timeout, signal, lease loss, and result-submission failure. It MUST reject an
+old generation, revoked/old/future attempt, changed descriptor, conflicting
+replay, different host assignment, earlier success after retry, and any result
+whose candidate/config/script/image/argv/base/bounds identity differs. It MUST
+prove that exact replay is idempotent and that a current zero-exit result may
+satisfy only a policy job explicitly classified `candidate-controlled`, while
+human approval and CAS remain independently required.
 
 The existing Gitea `ordinary-ci-pool-live` fixture is predecessor evidence and
 MUST NOT satisfy this gate. Shared-QEMU scheduler gates remain Gitea-only,
