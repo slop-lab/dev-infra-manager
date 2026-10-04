@@ -1,139 +1,237 @@
-# Ordinary CI pool (staged operator path)
+# Native ordinary CI control plane
 
-This path pools **ordinary Sysbox** capacity across dynamically admitted, reviewed DIM
-Projects and hosts attached to the same external Gitea control plane. It does
-not pool QEMU integration runners or create a Gitea instance runner. It is not
-an automatic migration of Project-scoped runners. Do not enable it on a live
-host until the live two-host Gitea/Sysbox gate in
-`specification/specs/12-verification.md` has been run and reviewed.
+This is the unimplemented target implementation and operator design for the ordinary CI
+scheduler/webhook service installed with native Git. The normative authority,
+admission, and installer transaction are in
+`specification/specs/10-cli-contract.md` and
+`specification/specs/14-installer-facade.md`.
 
-## Trust and migration preflight
+This design is not implemented at the documentation revision that introduced
+it. The shipped Gitea predecessor still provides `dim ci ordinary-pool service
+run CONFIG` and `dim ci ordinary-pool project reconcile PROJECT
+REGISTRAR_CONFIG`; its standalone `worker` commands have been removed in favor
+of managed-controller supervision. Those commands, schema-2 databases, and
+persistent Project-scoped Sysbox runners are not the native target and are
+rejected only after that target replaces the predecessor. Do not deploy this
+topology or claim its acceptance gates until the service and host controller
+implementation pass the referenced verification.
 
-1. Use one reviewed external Gitea service and explicit Project bindings on
-   **each** participating host. The binding ID, `gitNamespace`, and
-   `giteaOrganizationId` must match the central enrollment, even if that host
-   has no local Project record. Do not enroll an unrelated organization or
-   grant a job the Gitea administrator credential.
-2. Select one reviewed, digest-pinned disposable job image shared by every
-   Project. Each Project's protected `.dim/ci/runner.yml` supplies its ordinary
-   labels and must select exactly that image. The existing
-   Project-specific runner configuration and QEMU hook/cache remain separate;
-   pooled jobs do not select the old Project-specific ordinary image.
-3. Stop and delete conflicting legacy Project-scoped Sysbox runners on all
-   hosts before enabling the pool. Do not run both modes as a way to add
-   capacity. Keep existing QEMU runners in place.
-4. Supply a private, persistent SQLite database on the control-plane host.
-   Retain it across service restarts. Back up the database together with its
-   write-ahead-log files using SQLite-safe backup procedures, not a live file
-   copy. The database has a strict schema version; schema-less and unsupported
-   databases are rejected unchanged without implicit migration. Run the service
-   behind an operator-controlled HTTPS endpoint (or an explicitly isolated
-   network); do not publish its tokens to workspaces.
-5. Run `dim ci ordinary-pool project reconcile PROJECT REGISTRAR_CONFIG` on a
-   trusted host before the admission lease expires and after protected policy
-   changes. It resolves the exact protected root commit, validates the external
-   Gitea binding and live organization ID, admits the reviewed config, installs
-   the service-owned stable organization webhook secret, and replays queued
-   jobs. Never run this command in a workspace or worker process.
+## Ownership matrix
 
-## Private configuration
+| Concern | Owner | Explicitly not owner |
+| --- | --- | --- |
+| Compose deployment, image digests, fixed mounts, ports, readiness, rollback | installer facade | operational CLI |
+| Bare repositories, proposal transport, review and exact CI evidence, protected promotion | native Git service | ordinary scheduler, host controller |
+| Project admission, webhook demand, attempts, queue, claim leases | ordinary CI service | native Git storage, host runtime |
+| Shared capacity, Sysbox execution, cleanup, result submission | each DIM host controller | Compose services, Project lifecycle |
+| Ordinary image and labels | immutable Project admission for one disposable job | persistent runner/image state |
+| QEMU integration demand and execution | optional QEMU scheduler and host QEMU supervisors | ordinary CI service |
 
-The service config is a JSON file owned by its DIM operator user with mode
-`0600`, without symlinks. Example values are placeholders, not credentials:
+Neither control-plane service receives a host Docker socket, controller socket,
+`/dev/kvm`, or generic remote-execution capability. A scheduler lease is
+permission for one authenticated host controller to attempt one admitted job;
+it is not a runtime control channel.
+
+## Service-private state
+
+The Compose project is exactly `dim-control-plane`. The `native-git` service
+runs as `10001:10001`, mounts only
+`dim-control-plane-native-git-data:/var/lib/dim-native-git`, and listens on
+container port `8080`. The `ordinary-ci` service runs as `10002:10002`, mounts
+only `dim-control-plane-ordinary-ci-data:/var/lib/dim-ordinary-ci`, and also
+listens on its own container port `8080`. Compose publishes each to the distinct
+host address and port in the installer config. The only shared resource is the
+fixed `dim-control-plane` bridge network.
+
+The native volume contains bare repositories and immutable review, attempt,
+result, and promotion evidence. The ordinary volume contains
+`ordinary-ci.sqlite3` plus SQLite-owned `-wal` and `-shm` files. It contains no
+repository bytes, image layer, runner work directory, registration data, or
+Project checkout. This contract grants the installer no backup, export, restore,
+or data-conversion authority over either volume.
+
+Compose resources carry these exact labels in addition to Compose's own labels:
+
+```text
+org.dim.managed=true
+org.dim.bundle=control-plane
+org.dim.deployment=<deploymentId>
+org.dim.resource=network|volume|service
+org.dim.service=native-git|ordinary-ci
+```
+
+The network omits `org.dim.service`. A service volume and container include the
+matching service value. Missing, malformed, partial, foreign, or mismatched
+labels are conflicts. Installation, update, rollback, and removal act only on
+the immutable container ID or exact volume/network name returned by a
+successful complete-label inspection. The installer never adopts, relabels, or
+deletes a conflict.
+
+## Private service configuration
+
+The operator supplies DIM-user-owned mode-`0600` service JSON and readiness
+token source files. The installer descriptor-validates and copies them into one
+immutable generation directory, then mounts the mode-`0444` snapshots at
+`/run/secrets/service.json` and `/run/secrets/readiness.token`. It separately
+generates and snapshots one service-specific activation token at
+`/run/secrets/activation.token`. Mutable operator paths are never mounted. The
+mode-`0700` DIM-owned generation directory prevents host traversal while the
+individual bind mounts remain readable by the fixed service UID. The generated
+Compose file contains snapshot paths but no secret bytes.
+
+The ordinary service JSON is strict schema `3`:
 
 ```json
 {
-  "schemaVersion": 2,
-  "listen": { "host": "127.0.0.1", "port": 7410 },
+  "schemaVersion": 3,
   "serviceId": "ordinary-main",
-  "database": "/var/lib/dim/ordinary-pool.sqlite3",
-  "jobImage": "registry.example/dim/ordinary@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "webhookBaseUrl": "https://pool.example",
-  "registrarToken": "replace-with-private-registrar-token",
-  "admissionLeaseMilliseconds": 300000,
-  "hosts": [
-    { "hostId": "host-a", "token": "replace-with-private-host-token-a", "capacities": ["primary"] },
-    { "hostId": "host-b", "token": "replace-with-private-host-token-b", "capacities": ["primary"] }
-  ]
+  "listen": { "host": "0.0.0.0", "port": 8080 },
+  "database": "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
+  "nativeGit": {
+    "endpoint": "http://native-git:8080",
+    "serviceId": "native-main",
+    "query": {
+      "username": "native-main",
+      "password": "replace-with-query-only-dependency-credential"
+    },
+    "identity": {
+      "username": "ordinary-identity",
+      "password": "replace-with-identity-credential"
+    },
+    "attemptIssuer": {
+      "username": "ordinary-attempts",
+      "password": "replace-with-attempt-issuer-credential"
+    },
+    "resultReporter": {
+      "username": "ordinary-results",
+      "password": "replace-with-result-reporter-credential"
+    }
+  },
+  "leaseSeconds": 60,
+  "admissionLeaseSeconds": 300,
+  "hosts": {
+    "host-a": {
+      "hostToken": "replace-with-host-token",
+      "admissionToken": "replace-with-admission-token",
+      "resultToken": "replace-with-result-token",
+      "capacities": ["primary"]
+    }
+  }
 }
 ```
 
-Start the trusted service as `dim ci ordinary-pool service run FILE` under a
-service manager with restricted access and normal restart supervision. Each
-host needs `DIM_GITEA_CONNECTION_FILE` pointing at its reviewed external Gitea
-connection and `DIM_ORDINARY_CI_POOL_CONNECTION_FILE` pointing at its own
-mode-`0600`, DIM-user-owned JSON file:
+`listen` and `database` must equal the fixed deployment values. The native Git
+endpoint is exactly the Compose-network origin above and follows no redirect.
+Ordinary `/readyz` validates only its immutable config snapshot, local database
+readability and durability, and local listener; it neither contacts native Git
+nor requires Project state. Every token and native-facing password is distinct,
+base64url, and at least 32 random bytes.
+The host map contains installation capacity identities only; it contains no
+Project, repository, image, label, or Git credential. Adding or removing a host
+is a reviewed operator-source update that creates a new immutable bundle
+generation, not a service API.
 
-```json
-{
-  "schemaVersion": 2,
-  "transport": "https",
-  "endpoint": "https://pool.example",
-  "hostId": "host-a",
-  "token": "replace-with-private-host-token-a",
-  "expectedServiceId": "ordinary-main",
-  "expectedJobImage": "registry.example/dim/ordinary@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-}
-```
+The native Git service config remains strict schema `1` as specified by the
+native Git transport profile. For this deployment its listener and storage root
+must be `0.0.0.0:8080` and `/var/lib/dim-native-git`; it must name the exact
+ordinary service origin `http://ordinary-ci:8080`, service identity, and a
+distinct query-only service-to-service dependency credential. Its Git
+transport, reviewer, administrator, and promoter credentials do not appear in
+the ordinary config. The installer invokes each image's `dim-service
+check-config` before mutation, so cross-service identity, fixed path, token
+distinctness, and schema failures are preflight failures.
 
-The trusted registrar uses a different mode-`0600` file. Do not mount it into
-the service or worker:
+The native query credential may read only the exact current admission and
+attempt status needed by native promotion checks. The ordinary identity
+credential may verify only exact configured native service and repository
+identities. The attempt-issuer credential may issue or revoke only a current
+attempt for an exact live ordinary admission tuple and required job; it cannot
+report a result. The result-reporter credential may report only the terminal
+result for that exact current attempt and job; it cannot issue or revoke.
+Neither credential can read Git, approve, promote, administer storage,
+enumerate unrelated Projects, or act before the native identity check for that
+operation succeeds.
 
-```json
-{
-  "schemaVersion": 1,
-  "transport": "https",
-  "endpoint": "https://pool.example",
-  "token": "replace-with-private-registrar-token",
-  "expectedServiceId": "ordinary-main",
-  "expectedJobImage": "registry.example/dim/ordinary@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-}
-```
+## Admission and execution flow after a Project adapter
 
-Use `transport: "loopback-http"` only for loopback HTTP, or
-`transport: "isolated-http"` only on a genuinely isolated, reviewed network.
-The external Gitea connection `hostId` must equal this file's `hostId` and
-its `projects` bindings must include every Project the host may claim.
-Provision the reviewed Sysbox runner host image and `dim-control` network on
-each host. Start one supervised `dim ci ordinary-pool worker serve CAPACITY`
-per listed capacity; `worker run-once CAPACITY` processes at most one claim
-for a controlled verification run. Neither command should run in an agent
-container. Inspect actual Docker runtime, limits, mounts and Gitea workflow
-results before calling the migration complete. The worker reconciles the
-host-scoped registry cache before taking a claim and passes a read-only nested
-Docker mirror configuration to each ephemeral runner. An unavailable cache
-must fail the job without a direct Docker Hub bypass.
+This flow is constrained but unavailable. Bundle installation leaves both
+services empty and idle. Until a separate native Project/repository state
+adapter is specified and implemented, admission, native webhook demand,
+capacity advertisement, claim, and result operations fail before mutation.
 
-An expired lease fences that host capacity until its next worker run has
-inspected and reaped the exact DIM-owned container and acknowledged recovery.
-Do not delete the database or reuse a host ID to bypass this fence. A foreign
-container name or failed cleanup is an operator incident, not permission to
-force a new claim. A job completed by Gitea may be delivered again; verify
-results at the coordinator, not solely from the pool's `completed` claim
-output. The service's `/healthz` endpoint is process health, not evidence of
-webhook installation or available workers.
+1. A trusted host controller resolves the protected native root ref once and
+   reads `.dim/ci/runner.yml`, policy revision, job-set revision, commit, and
+   tree from that immutable selection.
+2. Using only its admission credential, it submits the normalized ordinary
+   policy. The service verifies native Git identity for that operation with its
+   identity credential and verifies the immutable tuple before publishing or
+   refreshing one leased admission generation.
+3. Native Git sends an authenticated candidate/job webhook. The ordinary
+   service re-verifies native identity, accepts the event only against that
+   exact live generation, and uses only its attempt-issuer credential to
+   durably issue the current native attempt before acknowledging demand.
+4. A host controller claims through its host credential for one configured
+   capacity. The claim contains the immutable execution tuple and no reusable
+   authority.
+5. The controller ownership-checks its local capacity, force-pulls the admitted
+   digest, probes declared tools, launches one bounded ephemeral Sysbox runner,
+   renews the lease, and submits terminal evidence with its result credential.
+6. The ordinary service authenticates the controller result and uses only its
+   result-reporter credential to submit the exact terminal attempt result to
+   native Git. The controller stops and removes its owned runtime and temporary
+   credentials before releasing capacity.
 
-Queued jobs and claims retain a fresh random public admission generation ID
-bound to the reviewed service, Project, protected ref/commit/config digest,
-common image, and labels in effect when the webhook was accepted. Tokens are
-excluded. An active identical-policy reconcile refreshes the lease without
-changing that generation. Expiry, revocation, or changing any bound identity
-requires a new generation, even if a later reconcile restores identical policy
-bytes, so old queued demand remains inactive. An expired old claim still
-requires host cleanup, but its recovery acknowledgement does not requeue it
-under the replacement generation. Submit a fresh authenticated webhook event
-to create demand for the new admission ID.
+An unavailable native service, invalid protected tuple, missing admission,
+wrong service or host identity, unknown capacity, expired generation, changed
+image, failed tool probe, uncertain lease, or failed result submission fails
+closed. No condition falls back to a persistent runner, local scheduler, direct
+protected write, or unpinned image.
 
-## Disposable-QEMU verification
+## Updates and recovery
 
-After the reviewed Project enables its trusted QEMU verification socket,
-`node project/.dim/qemu-client.mjs run` snapshots the current assembled tree,
-installs DIM and Sysbox in a disposable Ubuntu guest, then runs
-`just verify ordinary-ci-pool-live` before the other guest checks. Inside an
-already provisioned Sysbox guest, run that recipe directly. It creates an
-isolated Gitea service and real organization webhooks, then verifies that
-`host-b` runs `dim-alpha`'s workflow and `host-a` runs `dim-beta`'s workflow,
-each with no local Project record. It inspects the runtime, cgroup limits,
-mounts, devices and pull-through cache and removes only its disposable fixture
-resources. The two host identities use the **same guest Docker daemon**:
-success is not the required independent two-physical-host failover gate.
+The facade updates `ordinary-ci` first and `native-git` second. Each image is
+digest-pinned and each replacement must pass authenticated `/readyz`; ordinary
+readiness is local-only, while native readiness additionally proves the exact
+ordinary dependency. Candidates reject mutating operations until the installer
+publishes and activates their exact immutable generation. The prior Compose
+bytes, image digests, and input snapshots remain available through rollback.
+Rollback restores those inputs and images in the same order but never rolls
+back a data volume.
+
+Before replacement, candidate and prior images must report the same current
+state format. For each service, the current persisted state format must be in
+both images' `readableFormats`, the candidate `writeFormat` must be in the prior
+image's `readableFormats`, and the prior `writeFormat` must be in the candidate
+image's `readableFormats`. Missing, disagreeing, one-way, or non-overlapping
+compatibility metadata rejects the update before mutation. These three checks
+permit both forward startup and rollback after activation without copying or
+reverting data.
+
+Schema-less, schema-1, and predecessor schema-2 ordinary databases are rejected
+before opening WAL or writing bytes. A missing established volume, changed
+deployment ID, service UID, mount path, volume name, or container port is an
+operator incident. There is no migration, volume copy, dual-write, or adoption
+path. Use the old pinned release to stop legacy services and remove
+Project-scoped Sysbox capacity before a fresh schema-3 deployment. No export or
+conversion procedure is defined here.
+
+After the separate Project adapter exists, an expired claim fences only that
+host capacity. On restart, the host controller inspects and reaps the exact
+locally owned container before acknowledging recovery; a foreign same-name
+resource remains untouched and keeps the capacity fenced. Other hosts continue.
+Restarting either control-plane service preserves admission generations, queued
+demand, attempts, claims, and terminal evidence, but never converts an old
+generation to current.
+
+## Operator acceptance
+
+Acceptance requires the control-plane bundle gate in
+`specification/specs/12-verification.md`. The previous
+`just verify ordinary-ci-pool-live` Gitea fixture is predecessor evidence only;
+it is not acceptance for this native schema-3 topology. The replacement gate
+must exercise bundle isolation, local ordinary readiness, native dependency
+readiness, credential-role denials, immutable input snapshots, compatibility
+refusal, and update rollback. Successful Project admission, two-host execution,
+and real Sysbox job evidence remain blocked on the missing native Project
+adapter and MUST NOT be claimed by this installer-only gate. QEMU scheduler
+checks remain separate Gitea-only predecessor evidence.
