@@ -54,6 +54,7 @@ describe("DIM admin controller", () => {
     expect(await discovery.json()).toMatchObject({
       routes: [{ method: "POST", path: "/v1/test/:name", plugin: "test.admin" }]
     });
+    expect((await fetch(`${base}/v1/controller/stop`, { method: "POST" })).status).toBe(404);
     const response = await fetch(`${base}/v1/test/item`, {
       method: "POST",
       headers: { "content-type": "application/json" },

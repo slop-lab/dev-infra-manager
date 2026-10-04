@@ -11,6 +11,8 @@ import { ProcessRunner } from "./runner.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { withWorkspaceLifecycleProgress } from "./workspaceLifecycleError.js";
 
+export const ADMIN_CONTROLLER_STOP_EVENT = "dim-admin-controller-stop";
+
 export interface AdminRouteContext {
   readonly params: Readonly<Record<string, string>>;
   readonly request: IncomingMessage;
@@ -28,6 +30,7 @@ export interface DimAdminRoute {
 }
 
 type AdminRequest = {
+  readonly server: Server;
   readonly lifecycle: LifecycleOptions;
   readonly plugins: RegisteredDimPlugins;
   readonly runner: StreamingCommandRunner;
@@ -42,17 +45,19 @@ export function configuredDimAdminController(
   runner: StreamingCommandRunner = new ProcessRunner()
 ): Server {
   const sessions = new CommandSessionManager(runner);
-  return createServer((request, response) => {
-    void handleAdminRequest({ lifecycle, plugins, runner, sessions, request, response }).catch((error) => {
+  const server = createServer((request, response) => {
+    void handleAdminRequest({ server, lifecycle, plugins, runner, sessions, request, response }).catch((error) => {
       sendJson(response, isUserError(error) ? 400 : 500, {
         error: error instanceof Error ? error.message : String(error)
       });
     });
   });
+  server.once("close", () => sessions.cancelAll());
+  return server;
 }
 
 async function handleAdminRequest(context: AdminRequest): Promise<void> {
-  const { lifecycle, plugins, runner, sessions, request, response } = context;
+  const { server, lifecycle, plugins, runner, sessions, request, response } = context;
   const url = new URL(request.url ?? "/", "http://dim-admin");
   if (request.method === "GET" && url.pathname === "/healthz") {
     const host = await hostLifecycleStatus(lifecycle);
@@ -66,6 +71,11 @@ async function handleAdminRequest(context: AdminRequest): Promise<void> {
       ...(host.error === undefined ? {} : { error: host.error }),
       apiVersion: 1
     });
+  }
+  if (request.method === "POST" && url.pathname === "/v1/controller/stop"
+    && request.socket.remoteAddress === undefined) {
+    response.once("finish", () => setImmediate(() => server.emit(ADMIN_CONTROLLER_STOP_EVENT)));
+    return sendJson(response, 202, { accepted: true });
   }
   if (request.method === "GET" && url.pathname === "/v1") {
     return sendJson(response, 200, {
