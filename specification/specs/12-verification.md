@@ -74,6 +74,107 @@ idempotence, one concurrent winner, cross-process single-owner enforcement,
 role separation, and unchanged protected
 refs for every denial. Smart HTTP MUST remain proposal-only.
 
+## Control-plane bundle gate
+
+For `INSTALLER-CONTROL-PLANE-001`,
+`INSTALLER-CONTROL-PLANE-ADMISSION-001`, and
+`INSTALLER-CONTROL-PLANE-TRANSACTION-001`, one disposable clean-host gate MUST
+invoke the packaged facade as:
+
+```bash
+dim installer install control-plane --config FILE
+```
+
+The gate MUST use two built digest-pinned images and the exact schema-1
+installer config after implementation exists. It MUST inspect the effective
+Compose model and running containers, not only source templates, and prove:
+
+1. the project contains exactly `native-git` and `ordinary-ci`, the fixed
+   network and two fixed volumes, distinct `10001:10001` and `10002:10002`
+   identities, fixed internal listeners, exact configured host publications,
+   read-only root filesystems, dropped capabilities, `no-new-privileges`,
+   DIM-user-owned mode-`0600` operator sources, immutable mode-`0444`
+   generation snapshots below a mode-`0700` directory, and service-private
+   mounts that name snapshots rather than operator paths;
+2. neither container has a host Docker/containerd/controller/workspace/admin
+   socket, `/dev/kvm`, host device, host namespace, privileged mode, another
+   service's volume, or secret bytes in its environment or rendered Compose;
+3. unauthenticated, wrong-token, redirecting, malformed, overlong, and
+   wrong-service readiness requests fail; ordinary readiness succeeds from
+   local durable state while native Git is stopped, native readiness fails
+   without ordinary identity, and then succeeds with the exact ordinary
+   service;
+4. installation creates no Project, repository, runner, image copy, capacity,
+   webhook, or browser UI and publishes no undeclared port; and
+5. changing a mutable operator source after snapshot creation does not alter
+   either running service, and rerunning identical input is byte- and
+   identity-stable and does not recreate containers or volumes.
+
+Pre-mutation denial cases MUST include a symlink, wrong owner or mode, unknown
+field, schema mismatch, mutable/tagged image, digest mismatch, duplicate or
+wildcard port, occupied port, foreign/partial resource labels, missing
+established volume, changed deployment identity, invalid service config,
+cross-service credential mismatch, duplicate credential, and
+absence of Compose v2. Each case MUST leave control-plane containers, networks,
+volumes, installed Compose bytes, private files, and running service IDs
+byte-for-byte or identity-equivalent unchanged. A digest pulled for image
+config validation may remain only in the image cache and must be reported.
+`dim install-cp` MUST exit `2`, identify the supported facade command, and make
+no Docker or state call. In the shipped Gitea predecessor, `dim ci
+ordinary-pool service run` and `dim ci ordinary-pool project reconcile` remain
+available while `dim ci ordinary-pool worker ...` is rejected. Once the target
+native bundle replaces that predecessor, its acceptance gate MUST prove that
+all three obsolete ordinary-pool command families exit `2` without Docker or
+state calls.
+
+Update evidence MUST inject a unique version marker into each digest-pinned
+test image and observe ordinary local readiness before native replacement.
+Native readiness MUST remain false until it verifies the new ordinary service
+identity. Candidate and prior compatibility and read-only state probes MUST
+agree on the current format. For each service they MUST prove all three checks:
+the current persisted state format is readable by both images, the candidate
+`writeFormat` is in the prior image's `readableFormats`, and the prior
+`writeFormat` is in the candidate image's `readableFormats`. Missing, malformed,
+disagreeing, one-way, or non-overlapping metadata MUST refuse without resource
+mutation. Both candidates MUST reject every mutating request before
+exact-generation publication and activation.
+Success atomically publishes the new Compose bytes, complete input snapshot
+digests, and generation ID before activation, and removes obsolete exact-owned
+containers without changing volume identity.
+
+Rollback evidence MUST inject failures at ordinary startup, ordinary
+readiness, native startup, native dependency readiness, and installed-state
+publication. In every case it MUST stop only complete-label-matching
+replacement container IDs, restore exact prior image digests and Compose bytes,
+restore the exact prior generation and all of its config, readiness, and
+activation snapshots, start ordinary before native, and observe both prior
+authenticated readiness responses before reactivation. Repository, evidence,
+queue, attempt, claim, and admission sentinels in both volumes MUST survive
+without volume copying or byte rollback. A failed first installation retains
+created volumes but removes exact-owned containers/network and reports those volumes.
+A replacement-shutdown failure and a prior-readiness failure MUST each halt
+automatic rollback, preserve both Compose files, both generations' input
+snapshots, and all volumes, report the original plus rollback error, and never
+report success.
+
+Until the native Project/repository state adapter has its own approved contract,
+the gate MUST prove that Project/repository admission, native webhook demand,
+host-capacity advertisement, claims, attempts, and result reports all fail
+before service-state, runtime, or protected-ref mutation. Credential tests MUST
+separately prove that identity cannot issue or report, attempt issuer cannot
+report, result reporter cannot issue or revoke, native query cannot mutate, and
+none can read Git, approve, promote, administer, or cross a configured tuple.
+There is no successful native ordinary job or two-host execution acceptance in
+this installer-only gate; that evidence belongs to the future adapter contract.
+Schema-less, schema-1, and predecessor schema-2 ordinary databases and
+persisted Project-scoped Sysbox runner state MUST be rejected unchanged.
+
+The existing Gitea `ordinary-ci-pool-live` fixture is predecessor evidence and
+MUST NOT satisfy this gate. Shared-QEMU scheduler gates remain Gitea-only,
+report missing KVM as unavailable rather than passing, and MUST NOT run with
+native selection, create native ordinary evidence, or join the control-plane
+Compose project.
+
 For `TRUST-RUNTIME-001`, each implemented backend MUST run the same
 backend-neutral agent journey. A supported VM backend additionally requires a
 KVM-capable host gate covering create, stop, start, restart, host reboot,
@@ -306,8 +407,8 @@ organization-scoped runner
 for a multi-repository Project, open a pull request in a non-root repository,
 and wait for that repository's real workflow to succeed.
 
-For `CI-ORDINARY-POOL-001`, deterministic service and worker tests MUST
-exercise two independently identified hosts and two reviewed organizations:
+Predecessor Gitea ordinary-pool regression tests exercise two independently
+identified hosts and two reviewed organizations:
 each host must be able to run an ordinary job for the other host's Project
 without adopting its local Project record. Tests MUST reject a foreign
 organization or mismatched organization ID, a mismatched host binding, an
@@ -325,6 +426,12 @@ organization replaced with a different ID MUST fail before token request.
 renewal. Normal completion with an in-flight renewal MUST NOT report lease
 loss. Host maintenance MUST exclude disposable pool containers from restart
 state, stop them, and block new claims until the host is ready again.
+
+This Gitea organization/registration fixture is retained only as predecessor
+regression evidence. It does not satisfy `CI-ORDINARY-POOL-001` after native
+control-plane selection and MUST NOT be reported as the control-plane bundle
+gate. The target evidence is the native Project/repository and exact-attempt
+journey in [Control-plane bundle gate](#control-plane-bundle-gate).
 
 Source integration tests MUST run the production registrar against disposable
 protected Git roots and a real loopback HTTP Gitea API fixture. They MUST prove

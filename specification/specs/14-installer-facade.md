@@ -3,7 +3,8 @@
 ## Scope
 
 `@slop-lab/dim-installer` exposes an executable also named `dim`. It is a thin
-facade: it owns only the `installer` namespace and proxies everything else to a
+facade: it owns the `installer` namespace plus the one explicit obsolete
+`install-cp` rejection and proxies everything else to a
 separately installed `@slop-lab/dim-cli`. `@slop-lab/dim-cli` must not
 implement `installer`, and the facade
 must not duplicate `@slop-lab/dim-cli`'s command tree or reimplement its
@@ -19,11 +20,12 @@ a supported Node.js on `PATH`.
 
 ## Command ownership
 
-The facade owns:
+The target facade owns:
 
 ```bash
 dim installer                         # interactive installer (TTY only), always
 dim installer install core [--host-mirror-plugin PACKAGE@EXACT_VERSION] [options]
+dim installer install control-plane --config FILE
 dim installer install plugin PACKAGE@EXACT_VERSION...
 dim installer enable-plugin PACKAGE...
 dim installer disable-plugin PACKAGE...
@@ -38,9 +40,11 @@ and an already-set-up one, without requiring an already-set-up user to type
 `dim installer` explicitly just to avoid the wizard.
 
 Repeated leading `installer` namespace tokens are accepted before the
-installer command. Every other invocation, including `dim plugin ...` and
-`dim install-cp` (`dim-cli` commands),
-is forwarded unchanged.
+installer command. Every other invocation, including `dim plugin ...`, is
+forwarded unchanged. `dim install-cp` is obsolete input, not a forwarded CLI
+command or compatibility alias. The facade MUST reject it with exit code `2`,
+name `dim installer install control-plane --config FILE`, and make no host
+change.
 
 ## Dispatch
 
@@ -58,9 +62,18 @@ no args, CLI set          -> proxied to the configured executable (empty argv;
                             with a non-fatal warning when the configured
                             version does not match the version the resolved
                             executable actually reports
+install-cp                 -> exit 2 with a message pointing at
+                              `installer install control-plane --config FILE`;
+                              never proxy and make no host change
 anything else, no CLI     -> exit 2 with a message pointing at `installer install core`
 anything else, CLI set    -> proxied to the configured executable
 ```
+
+The `install-cp` row is the sole legacy-token exception to the facade's
+otherwise namespace-only dispatch. It is matched before configured-CLI proxy
+dispatch. The current published facade does not yet implement this exception or
+the control-plane command; current behavior is recorded under
+[Current availability](#current-availability).
 
 ## Configuration
 
@@ -255,9 +268,324 @@ Required tests cover:
   first readiness, the mise-detected `--no-local-bin` default, and an explicit
   `--local-bin` override.
 
-`dim install-cp` belongs to `@slop-lab/dim-cli`, not the facade. It is reserved
-for control-plane-only host installation of the native Git host and CI
-scheduler/webhook services, never a separate web UI. Until reviewed deployment
-inputs define service configuration, storage ownership, supervision,
-readiness, and rollback for both service families, the command must fail closed
-with an actionable missing-dependency error and must make no host change.
+## Control-plane bundle
+
+This section is a target contract and is not implemented by the current
+installer release.
+
+**INSTALLER-CONTROL-PLANE-001:** The facade exclusively owns:
+
+```bash
+dim installer install control-plane --config FILE
+```
+
+The command installs or updates one Docker Compose v2 project named
+`dim-control-plane`. It contains exactly two long-running services:
+`native-git`, which owns native Git transport and review evidence, and
+`ordinary-ci`, which owns ordinary CI admission, webhook demand, queueing, and
+leases. It MUST NOT install Gitea, a browser UI, a reverse proxy, a runner
+daemon, or a Project-specific service or image. `@slop-lab/dim-cli` MUST NOT
+implement, proxy, or alias this operation.
+
+The installer config is a regular, non-symbolic-link, DIM-user-owned mode-`0600`
+JSON file with this exact schema. All paths are absolute. Unknown or missing
+keys are errors.
+
+```json
+{
+  "schemaVersion": 1,
+  "deploymentId": "main",
+  "nativeGit": {
+    "image": "registry.example/dim/native-git@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "configFile": "/etc/dim-control-plane/native-git.json",
+    "readinessTokenFile": "/etc/dim-control-plane/native-git-readiness.token",
+    "publish": { "host": "127.0.0.1", "port": 7443 }
+  },
+  "ordinaryCi": {
+    "image": "registry.example/dim/ordinary-ci@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "configFile": "/etc/dim-control-plane/ordinary-ci.json",
+    "readinessTokenFile": "/etc/dim-control-plane/ordinary-ci-readiness.token",
+    "publish": { "host": "127.0.0.1", "port": 7410 }
+  }
+}
+```
+
+`deploymentId` is a safe lower-case identifier and is durable identity, not a
+Compose project-name selector. Both images MUST be registry references pinned
+by a complete `sha256` digest, without a tag. Both service config and readiness
+token source files MUST be regular, non-symbolic-link, DIM-user-owned mode-`0600`
+files. A readiness-token source contains
+exactly one base64url token of at least 32 random bytes followed by one newline,
+and MUST differ from every service, registrar, host, webhook, Git, reviewer,
+scheduler, and CI-result credential. Mutable operator source paths are installer
+input only and MUST NOT be mounted into a service. Secret bytes MUST NOT enter a
+data volume, Compose environment, image, log, or generated Compose file.
+
+The bundle has these fixed runtime properties:
+
+| Property | `native-git` | `ordinary-ci` |
+| --- | --- | --- |
+| Numeric user/group | `10001:10001` | `10002:10002` |
+| Container listener | `0.0.0.0:8080` | `0.0.0.0:8080` |
+| Published listener | exact configured `publish.host:publish.port` | exact configured `publish.host:publish.port` |
+| Config mount | generation snapshot at `/run/secrets/service.json`, read-only | generation snapshot at `/run/secrets/service.json`, read-only |
+| Readiness token | generation snapshot at `/run/secrets/readiness.token`, read-only | generation snapshot at `/run/secrets/readiness.token`, read-only |
+| Activation token | generated snapshot at `/run/secrets/activation.token`, read-only | generated snapshot at `/run/secrets/activation.token`, read-only |
+| Persistent volume | `dim-control-plane-native-git-data` at `/var/lib/dim-native-git` | `dim-control-plane-ordinary-ci-data` at `/var/lib/dim-ordinary-ci` |
+
+The fixed bridge network is `dim-control-plane`. Only these two services attach
+to it. Each volume is service-private: the other service MUST NOT mount it, and
+no host path, Project, workspace, worker, or additional container may share it.
+The native Git service stores bare repositories and review/CI evidence only in
+its volume. The ordinary CI service stores its versioned SQLite database and
+WAL files only in its volume. The installer MUST create a new empty volume only
+when it is absent; an absent volume after a prior successful installation is a
+fatal data-loss condition, not permission to recreate it.
+
+Every bundle resource carries `org.dim.managed=true`,
+`org.dim.bundle=control-plane`, `org.dim.deployment=<deploymentId>`, and
+`org.dim.resource=network|volume|service`. A service container or volume also
+carries `org.dim.service=native-git|ordinary-ci`; the network MUST omit that
+label. Inspection requires this complete exact set in addition to Compose's
+own labels. A partial, malformed, foreign, or mismatched set is a conflict and
+MUST NOT be adopted, relabelled, started, stopped, or removed.
+
+Installed deployment state lives in the DIM-user-owned mode-`0700` directory
+`${XDG_STATE_HOME:-~/.local/state}/dim/control-plane`. Before image or Compose
+mutation, the installer copies all four private operator source files without
+following links into a newly created
+`generations/<64-lowercase-hex-generation-id>` mode-`0700` directory. It opens
+each source once, verifies the already-open descriptor's owner, mode, regular
+file identity, and stable bytes, then writes an fsync-published snapshot. Config
+and readiness snapshots are mode `0444` so the fixed nonroot service identity
+can read the individually mounted file; the mode-`0700` generation directory
+prevents host users from traversing to them. The generated Compose file mounts
+only those exact snapshot paths. The installer also generates distinct native
+and ordinary activation tokens of at least 32 random bytes, stores each as a
+mode-`0444` snapshot mounted only into its service, and retains the installer-
+readable bytes for activation and rollback. Activation tokens are not operator
+input and differ from every other credential. The installer never rewrites a
+published generation.
+
+`compose.yml` contains the exact last successful rendered Compose bytes and is
+mode `0600`. `install.json` is mode `0600` with this exact schema:
+
+```json
+{
+  "schemaVersion": 1,
+  "deploymentId": "main",
+  "generationId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "composeSha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "nativeGitImage": "registry.example/dim/native-git@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "ordinaryCiImage": "registry.example/dim/ordinary-ci@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "nativeGitConfigSha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "nativeGitReadinessTokenSha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+  "ordinaryCiConfigSha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+  "ordinaryCiReadinessTokenSha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "nativeGitActivationTokenSha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "ordinaryCiActivationTokenSha256": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+  "volumesEstablished": true
+}
+```
+
+The generation ID is the SHA-256 digest of a domain separator plus the
+length-framed image references, four exact operator-input snapshot byte
+strings, and two generated activation-token byte strings. The six recorded
+digests permit independent verification without recording a secret.
+The Compose digest covers the exact `compose.yml` bytes. `volumesEstablished` is
+published only after both exact labelled volumes have been created or
+inspected and is thereafter always `true`; a true record with either volume
+absent is the fatal data-loss condition above. The installer accepts no
+schema-less, extra-field, symbolic-link, wrong-owner, wrong-mode, digest-
+mismatched, or temporary installed-state artifact. It holds one exclusive
+owner-recorded lock in this directory across inspection, update, readiness,
+publication, and rollback. A concurrent invocation fails before Docker
+mutation rather than sharing the transaction.
+
+The current generation and its immediate predecessor are retained until a
+later successful transaction makes the predecessor unnecessary. A failed
+transaction retains its candidate snapshot and the prior snapshot as recovery
+evidence. Garbage collection may remove only a non-current, non-predecessor
+generation after validating its ID, every recorded digest, and that no
+installed or recovery Compose file references it.
+
+Both services run with `read_only: true`, `no-new-privileges:true`, all Linux
+capabilities dropped, no privileged mode, no device, no host namespace, and
+only a service-private `tmpfs` at `/tmp` with `nosuid,nodev,noexec`. Neither
+service receives a Docker, containerd, controller, workspace, hypervisor, or
+host-admin socket. The Compose bundle therefore cannot execute jobs. Every
+ordinary job is executed by an independently authenticated DIM host controller
+using that host's already configured runtime and capacity; the scheduler may
+grant or fence a lease but may not address a host runtime directly.
+
+The configured published addresses are the only host ports. Duplicate ports,
+wildcard hosts (`0.0.0.0`, `::`, or empty), multicast, and non-local addresses
+are rejected unless the address is assigned to a local interface. TLS and any
+public reverse proxy are operator-owned prerequisites outside this bundle. An
+operator exposing either listener beyond loopback MUST configure authenticated
+TLS before using it; the installer does not create certificates or report a
+plain-HTTP endpoint as production-ready.
+
+## Admission and native-CI dependency
+
+**INSTALLER-CONTROL-PLANE-ADMISSION-001:** Bundle readiness is not Project
+admission. Installing the bundle creates no Project, repository, runner,
+capacity, workflow, webhook, or job image. This installer contract does not
+select native Git for core Project lifecycle. Until a separate native
+Project/repository state adapter contract is approved and implemented, every
+native Project or repository admission request and every controller attempt to
+advertise ordinary capacity MUST fail before service-state or runtime mutation.
+The installed services therefore remain an idle, empty control-plane bundle.
+
+The later adapter MUST bind ordinary admission to one native Git
+Project/repository, protected ref and exact commit/tree, policy and
+required-job-set revisions, required job names, labels, digest-pinned disposable
+image, and admission generation. It must not create a persistent per-Project
+runner, worker container, image copy, or capacity record. These tuple fields
+constrain the service interfaces but do not authorize admission before that
+adapter exists.
+
+Native Git MUST fail closed for a protected ref that requires CI unless the
+ordinary service reports the exact current admission and current
+scheduler-issued attempts for every required job. Missing, unreachable,
+expired, revoked, stale, foreign, or tuple-mismatched ordinary admission makes
+the native service not ready for promotion and leaves the protected ref
+unchanged. It MUST NOT reinterpret service process health, a webhook delivery,
+available host capacity, an earlier successful attempt, or a Project-scoped
+runner record as CI evidence. Repository read and proposal-only write transport
+may remain available during an ordinary scheduler outage; protected promotion
+may not.
+
+The optional shared QEMU scheduler is a predecessor Gitea-only service and
+configuration. It is never added to this Compose project, cannot be configured
+with native selection, is not an ordinary-job fallback, and does not satisfy
+the native ordinary-CI prerequisite. Absence of QEMU capacity is reported as
+unavailable, never as successful ordinary CI.
+
+## Validation, update, readiness, and rollback
+
+**INSTALLER-CONTROL-PLANE-TRANSACTION-001:** Before persistent control-plane
+resource mutation, the facade MUST validate the install config, ownership and
+mode of all four private files, digest syntax, local non-conflicting published
+addresses, Compose v2 availability, and the absence or exact ownership of the
+project, network, containers, and volumes. It then pulls both digest references,
+verifies the resolved digests, and runs each image's `/usr/local/bin/dim-service
+check-config /run/secrets/service.json` in a read-only, network-disabled,
+socket-free one-shot container with the same user and config mount that service
+will receive, but no data volume. `check-config` parses and cross-checks config
+only and performs no state I/O. Validation failure makes no Compose, network,
+volume, config, or service mutation. A pulled digest may remain in the Docker
+image cache and MUST be reported; image-cache presence is not installed bundle
+state.
+
+The installer then runs the native image's `/usr/local/bin/dim-service
+check-bundle-config /run/native.json /run/ordinary.json` in the same restricted
+one-shot shape with both config snapshots mounted read-only. It requires exact
+reciprocal service IDs, fixed Compose-network endpoints, byte-identical paired
+query/identity/attempt-issuer/result-reporter credentials, and global
+credential distinctness. Until the native Project adapter exists, it also
+requires an empty native repository registry, no Project-scoped native
+identity, and no ordinary Project admission in config. This command performs
+no network or state I/O. Any mismatch is a pre-mutation refusal.
+
+Before allocating activation tokens or a generation, the installer compares
+the descriptor-verified image references and four operator-input byte digests
+with the valid installed record. If they are identical, it verifies the
+recorded generation, Compose bytes, complete resource ownership, running image
+digests, and both authenticated readiness responses and returns success without
+rendering, replacing, activating, or creating anything. Any mismatch proceeds
+as an update; missing or inconsistent installed resources are errors rather
+than reasons to regenerate an otherwise identical deployment.
+
+For an update, each candidate image MUST also expose
+`/usr/local/bin/dim-service compatibility --json`. The installer runs it for
+both candidate and prior services before container replacement and requires
+exact JSON shaped as `{"schemaVersion":1,"writeFormat":3,"readableFormats":[3]}`.
+`writeFormat` is one positive integer; `readableFormats` is a non-empty sorted
+array of unique positive integers. The installer also runs both candidate and
+prior images' `dim-service check-state --read-only /var/lib/dim-native-git
+--json` for native Git and `dim-service check-state --read-only
+/var/lib/dim-ordinary-ci --json` for ordinary CI, with only that service's data
+volume mounted read-only. Each returns exact JSON
+`{"schemaVersion":1,"stateFormat":3}` and performs no write. The candidate and
+prior probes must report the same state format. The update is admitted only
+when that current state format is in both images'
+`readableFormats`, the candidate write format is in the prior image's
+`readableFormats`, and the prior write format is in the candidate image's
+`readableFormats`. Missing, malformed, asymmetric, or non-overlapping metadata
+is a pre-mutation failure. First installation requires empty volumes and does
+not infer compatibility from absent metadata. These are format admission, not
+data migration; all compatibility probes are network-disabled and read-only.
+
+The installer renders Compose bytes into an owner-only temporary directory,
+runs `docker compose config --quiet`, and records the exact prior rendered
+Compose bytes and image digests before replacement. The only supported order is:
+
+1. create or inspect the network and both volumes without adopting foreign or
+   partially labelled resources;
+2. replace `ordinary-ci` in standby mode and wait for its authenticated
+   `GET /readyz` to return `200` and exact JSON
+   `{"status":"ready","schemaVersion":1}` based only on its parsed immutable
+   snapshot, local database readability/durability, and local listener state;
+3. replace `native-git`, wait for the same response shape from its `/readyz`;
+4. require native Git readiness to include a successful authenticated
+   dependency probe to the installed ordinary service identity; and
+5. atomically publish the new rendered Compose bytes, install record, and
+   generation ID as installed state, then activate that exact generation.
+
+Ordinary readiness MUST NOT contact native Git, require a Project, or validate
+admission/webhook state. Ordinary CI instead verifies the configured native
+identity, repository tuple, and credential role on each later admission,
+webhook, attempt, and result operation. Native readiness may depend on ordinary
+identity and read-only current-attempt queries. Before exact-generation
+activation, both candidate services return `503` for every state-mutating
+endpoint and create no admission, webhook, attempt, claim, result, repository,
+review, or promotion state. Activation accepts only the installer-held
+generation credential over the private Compose network and is idempotent for
+the published generation; a service rejects any other or unpublished
+generation.
+
+Each readiness request uses `Authorization: Bearer <readiness token>`, follows
+no redirect, has a two-second connect/request timeout, and is retried for at
+most 60 seconds. `/healthz`, container running state, an open TCP port, and
+Compose exit success are not readiness. Readiness responses MUST disclose no
+credential, Project, repository, job, path, or host inventory.
+
+On any failure after mutation, the installer stops and removes only replacement
+containers whose complete bundle/deployment/service labels match, restores the
+prior rendered Compose bytes, exact prior image digests, prior generation ID,
+and all four prior input snapshots, starts `ordinary-ci` before `native-git`,
+and repeats both authenticated readiness checks before reactivating that exact
+prior generation. Operator source files are never rewritten. Data volumes are
+never rolled back, deleted, copied, or replaced; prior-image readability of
+candidate writes is the mandatory precondition that makes service rollback
+valid. A failed first installation removes exact owned
+containers and network but retains any created volume and reports it for
+operator inspection. If replacement shutdown or prior-version readiness
+fails, the installer stops automatic rollback, retains both rendered Compose
+files, both generations' input snapshots, and all volumes, and reports the
+original and rollback errors. It MUST NOT report success, delete recovery
+evidence, select another image, or start a second bundle.
+
+Changing `deploymentId`, either numeric identity, fixed container port, fixed
+mount path, fixed volume name, or Compose project name in place is unsupported.
+An existing schema-less or non-schema-1 installer record, legacy ordinary-pool
+schema-2 database, Project-scoped Sysbox runner state, `dim install-cp`
+invocation, or separately launched `dim ci ordinary-pool service|worker`
+process MUST be rejected before mutation. There is no compatibility alias,
+implicit migration, dual-service period, volume adoption, or automatic cleanup.
+Operators must use the old pinned release to stop legacy services and perform
+an explicitly reviewed fresh installation; this contract defines no backup,
+export, or data-conversion authority.
+
+Required acceptance evidence is specified by
+[Verification](12-verification.md#control-plane-bundle-gate).
+
+## Current availability
+
+The current published implementation has neither `dim installer install
+control-plane` nor the facade's legacy-token interception. Its CLI-owned `dim
+install-cp` placeholder fails closed without host changes. The target facade
+command, bundle, snapshots, service credentials, host-controller supervision,
+and native Project adapter MUST NOT be presented as shipped until their
+implementation and the complete control-plane bundle gate pass.
