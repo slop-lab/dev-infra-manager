@@ -15,7 +15,15 @@ Specified but not implemented:
   dependency readiness, and rollback.
 - Native ordinary CI admission and host-controller-owned shared Sysbox
   capacity. The target has no persistent Project-scoped ordinary runner or
-  image. Existing Gitea ordinary-pool commands, schema-2 state, and persistent
+  image. Its accepted design reads strict schema-2 job config, script, and a
+  digest-pinned image from the exact candidate tree and labels a zero exit as
+  candidate-controlled self-test evidence, not independent verification.
+  Green records bounded execution of the selected tests, not correctness or
+  completeness of those tests and not blanket product correctness. Product
+  maintainers still review changed requirements, implementation, tests, and
+  results; the sandbox narrows infrastructure security review only.
+  Operator policy still controls Project eligibility, required job names,
+  capacity, and bounds. Existing Gitea ordinary-pool commands, schema-2 state, and persistent
   Sysbox runners are predecessor behavior and are rejected by the target rather
   than migrated.
 - A native Project/repository state adapter. Bundle installation does not select
@@ -26,6 +34,10 @@ Specified but not implemented:
 No current command or passing predecessor Gitea/QEMU gate is evidence that this
 target deployment is available. The implementation becomes supported only
 after the control-plane bundle acceptance gate passes on a clean host.
+The candidate schema parser, scheduler/attempt descriptor binding, host
+executor, reviewer provenance display, and transition away from protected-root
+schema 1 remain unimplemented. This pre-stable target defines no compatibility
+parser or source/state migration.
 
 Implemented:
 

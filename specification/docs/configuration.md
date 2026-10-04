@@ -249,9 +249,12 @@ dim ci runner defaults reset
 
 They do not configure target native ordinary capacity. After a native Project
 adapter exists, the target requires
-explicit positive `cpus`, `memoryBytes`, and `pids` for every host-owned
-capacity in `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE`; there is no Project
-runner override or fallback.
+one operator-selected digest-pinned `runnerBaseImage` and explicit positive
+`cpus`, `memoryBytes`, `pids`, `timeoutSeconds`, and `outputBytes` for every
+host-owned capacity in `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE`. Candidate
+schema-2 job config selects only its digest-pinned disposable job image and
+fixed-shape script command; it cannot widen capacity bounds or replace the
+runner base. There is no Project runner override or fallback.
 
 DIM is pre-stable. Incompatible configuration and state are rejected rather
 than migrated implicitly; compatibility behavior is added only when a release

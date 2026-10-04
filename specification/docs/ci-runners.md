@@ -154,12 +154,15 @@ and results before mutation.
 After that separate adapter is approved, the installer-owned ordinary service
 has one stable service identity but no Project list, common image, Gitea
 credential, runner-registration authority, or runtime socket in its private
-deployment config. A trusted host controller derives admission from one exact
-protected native Git snapshot. Admission binds the Project/repository,
-protected ref, commit/tree, policy and job-set revisions, required jobs, config
-digest, ordinary labels, and complete image digest. The admitted image is
-pulled for a claim and discarded with job state; it is not a persistent Project
-image.
+deployment config. Operator/native policy admits an eligible
+Project/repository, protected ref, required candidate-controlled job names, and
+host capacity; that admission does not review or trust candidate job bytes.
+For each exact candidate commit/tree, schema-2 `.dim/ci/runner.yml` selects a
+digest-pinned disposable job image and one regular `.dim/ci/jobs/*.bash` blob.
+The only argv is `[/bin/bash, --noprofile, --norc,
+/run/dim/job/script]`. The runner base and CPU, memory, PID, time, and output
+bounds remain operator capacity input. Both images are discarded with job
+state; neither becomes a persistent Project image.
 
 Admissions are renewable leases with fresh public generations. An active
 identical-policy refresh retains its generation. Expiry, revocation, or changed
@@ -168,7 +171,8 @@ Old queued jobs and claims remain durable but cannot dispatch, renew, or requeue
 under the replacement. Authenticated native Git webhooks create demand only
 when their complete candidate/job tuple matches a live admission. Before
 dispatch the scheduler durably issues the exact current attempt identity used
-as native promotion evidence.
+as native promotion evidence, including the candidate config/script/image/argv
+descriptor digest. Webhooks carry no executable or resource input.
 
 Each host controller authenticates separately, advertises only operator-owned
 capacity names and bounds, and may execute a claim without a local Project
@@ -178,6 +182,19 @@ memory, and PID limits, mounts no host Docker socket or `/dev/kvm`, and removes
 the ephemeral runner and credential material after exact terminal evidence is
 recorded. Lease uncertainty stops and reaps the job before release; expired
 claims fence only that host capacity until ownership-safe cleanup.
+
+This target is autonomous candidate self-test execution, not independent CI.
+A zero exit records that the selected candidate-controlled tests completed
+successfully in the recorded sandbox. Protected policy may require that
+evidence, but the reviewer must see its `candidate-controlled` class and exact
+provenance. Product maintainers still review changed requirements,
+implementation, test definitions, and relevant results for regression risk;
+green does not establish test completeness or blanket product correctness.
+Infrastructure security review separately focuses on secrets, protected refs,
+host/runtime privilege, and trusted capability elevation. Human approval of the
+complete tree and checked CAS promotion are unchanged. A Project needing
+independent CI must use a separate lane whose command definition the candidate
+cannot modify.
 
 The target facade will deploy this service beside native Git through `dim
 installer install control-plane --config FILE`. In that target, old `dim ci
@@ -447,9 +464,10 @@ uses its reviewed Sysbox runtime; there is no Project runtime override.
 
 ## Resources
 
-Future native ordinary capacity bounds are explicit positive CPU, memory-byte,
-and PID values in each host's target connection file. Projects and claims
-cannot widen them after the adapter exists. Current named Gitea runners retain
+Future native ordinary capacity fixes one operator-selected digest-pinned
+runner base plus explicit positive CPU, memory-byte, PID, wall-clock, and
+output-byte bounds in each host's target connection file. Candidate config and
+claims cannot replace or widen them after the adapter exists. Current named Gitea runners retain
 their documented resource defaults and overrides; a named QEMU capacity may
 set its own CPU and memory:
 
