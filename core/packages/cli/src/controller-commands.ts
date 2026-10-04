@@ -4,15 +4,19 @@ import path from "node:path";
 import { type Command } from "commander";
 import {
   ADMIN_CONTROLLER_STOP_EVENT, configuredDimAdminController, configuredDimAgentController, configuredDimController,
-  initializeControllerRoutes, LifecycleState, lifecycleOptions, loadInstalledPlugins,
-  migrateHostLifecycleState, reconcileReadyHostManagedGit, requireHostMirrorProvider, resolveHostMirrorProvider,
+  configuredOrdinaryCiPoolSupervisor, initializeControllerRoutes, LifecycleState, lifecycleOptions, loadInstalledPlugins,
+  hostLifecycleStatus, HostRuntimeTransitions, migrateHostLifecycleState, reconcileReadyHostManagedGit, requireHostMirrorProvider, resolveHostMirrorProvider,
   resolvePluginHome, UserError
 } from "@slop-lab/dim-core";
 import {
   claimControllerPid, pidFileOwnedByCurrentProcess,
   prepareControllerSocket, restartManagedController, runner, stopManagedController
 } from "./cli-support.js";
-import { closeControllerServers, disposeControllerPlugins } from "./controller-teardown.js";
+import {
+  closeControllerServers,
+  disposeControllerPlugins,
+  disposeHostRuntime
+} from "./controller-teardown.js";
 
 export function registerControllerCommands(program: Command): void {
   const controller = program.command("controller").description("Run trusted DIM controller services");
@@ -60,6 +64,8 @@ controller.command("serve")
     let server: ReturnType<typeof configuredDimController> | undefined;
     let adminServer: ReturnType<typeof configuredDimAdminController> | undefined;
     let agentServer: ReturnType<typeof configuredDimAgentController> | undefined;
+    let hostRuntime: Awaited<ReturnType<typeof configuredOrdinaryCiPoolSupervisor>>;
+    let hostTransitions: HostRuntimeTransitions | undefined;
     let shutdownReached = false;
     try {
       if (pidPath) {
@@ -93,8 +99,16 @@ controller.command("serve")
         "initializing plugin routes",
         async () => await initializeControllerRoutes(runtimeOptions, loadedPlugins.registered)
       );
+      hostRuntime = await controllerStartupStage(
+        "configuring ordinary CI capacity",
+        async () => await configuredOrdinaryCiPoolSupervisor(runner, runtimeOptions, (capacity, error, delay) => {
+          const detail = error instanceof Error ? error.message : String(error);
+          console.error(`ordinary CI capacity '${capacity}' failed; retrying in ${delay}ms: ${detail}`);
+        })
+      );
+      hostTransitions = new HostRuntimeTransitions(hostRuntime);
       server = configuredDimController(runtimeOptions, loaded.registered);
-      adminServer = configuredDimAdminController(runtimeOptions, loaded.registered);
+      adminServer = configuredDimAdminController(runtimeOptions, loaded.registered, runner, hostTransitions);
       agentServer = configuredDimAgentController(runtimeOptions, loaded.registered);
       const stopRequested = once(adminServer, ADMIN_CONTROLLER_STOP_EVENT);
       if (flags.socket && adminSocket && agentSocket) {
@@ -126,14 +140,20 @@ controller.command("serve")
         await listening;
         console.log(`DIM controller listening on http://${flags.host}:${flags.port}`);
       }
+      if ((await hostLifecycleStatus(runtimeOptions)).phase === "ready") {
+        await controllerStartupStage("starting ordinary CI capacity", async () => await hostRuntime?.resume());
+      }
       await Promise.race([once(process, "SIGINT"), once(process, "SIGTERM"), stopRequested]);
       shutdownReached = true;
     } finally {
       let cleanupError: unknown;
       try {
+        if (!await disposeHostRuntime(hostTransitions)) {
+          cleanupError = new UserError("ordinary CI capacity did not quiesce within the shutdown deadline");
+        }
         await closeControllerServers([server, agentServer, adminServer]);
         if (!await disposeControllerPlugins(loaded?.registered)) {
-          cleanupError = new UserError("controller plugins did not dispose within the shutdown deadline");
+          cleanupError ??= new UserError("controller plugins did not dispose within the shutdown deadline");
         }
       } catch (error) {
         cleanupError = error;
