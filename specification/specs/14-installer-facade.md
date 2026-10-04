@@ -23,7 +23,7 @@ The facade owns:
 
 ```bash
 dim installer                         # interactive installer (TTY only), always
-dim installer install core [options]
+dim installer install core [--host-mirror-plugin PACKAGE@EXACT_VERSION] [options]
 dim installer install plugin PACKAGE@EXACT_VERSION...
 dim installer enable-plugin PACKAGE...
 dim installer disable-plugin PACKAGE...
@@ -119,12 +119,35 @@ migration; installation itself must not migrate it. No workspace, Project,
 runner, or other state receives an automatic conversion, deletion, or
 delete-and-recreate path.
 
-After a successful preflight, the installer promotes the staged runtime and
+For a registry installation on a host where the required host mirror plugin is
+not already enabled, non-interactive `installer install core` must require
+`--host-mirror-plugin @slop-lab/dim-plugin-host-mirrors@<installer-version>` and
+reject every other package or version before npm or installed-state mutation.
+With a TTY, omission must offer that same exact coordinate as a positive,
+default-yes host-operator choice; declining must leave installed state
+unchanged. This is installer facade host policy, not a Project, workspace,
+capability-provider, or agent prompt. The installer must not select another
+provider or silently install an unreviewed plugin.
+
+The selected plugin must join the core and CLI in the same staged npm graph and
+be recorded in staged `plugins.json` before promotion. After a successful
+preflight, the installer promotes the staged runtime and
 invokes the promoted CLI's `controller restart` subcommand exactly once. That
 subcommand's controller readiness check is part of the installation
 transaction. If restart/readiness or later configuration fails, the installer
-must restore the previous `current` directory and restart the prior controller.
-It must remove
+must stop a target that already reached readiness before removing its runtime,
+then restore the previous `current` directory and restart the prior controller
+when one existed. Non-systemd shutdown must be a self-termination request over
+the mode-`0600` host-admin Unix socket, followed by a bounded wait for socket
+and PID-file cleanup. The controller must stop accepting on all listeners
+immediately after flushing the stop response, give active requests a bounded
+grace period, close all remaining HTTP connections including incomplete
+requests, cancel active command sessions, and bound plugin disposal. If target
+shutdown fails, rollback must retain the promoted runtime and prior backup
+without restoring one over the other, report the original installation error,
+and retain the shutdown error as causal detail. The installer and CLI must not
+signal a PID obtained from the filesystem, and the shutdown request must not be
+exposed on TCP, workspace, or agent listeners. It must remove
 temporary and backup directories after success. DIM
 exposes no CLI version-selection or rollback contract.
 
@@ -207,7 +230,9 @@ Required tests cover:
 - bare `dim` opens the interactive installer only when no CLI is
   configured, and proxies through like any other command once one is;
 - installation and plugin-lifecycle argument parsing, including conflicting
-  `--local-bin`/`--no-local-bin`, and local package bundle validation;
+  `--local-bin`/`--no-local-bin`, exact required-host-plugin selection, TTY
+  acceptance and refusal, non-TTY fail-closed behavior, and local package bundle
+  validation;
 - managed-symlink create, idempotent replace, and rejection of an
   unmanaged/foreign path at the same location;
 - successful CLI replacement prunes old managed installation directories;
@@ -226,7 +251,8 @@ Required tests cover:
   peer dependency failure leaves the existing runtime usable;
 - `mise use --raw --global 'npm:@slop-lab/dim-installer@<version>'` end to end against a
   disposable local npm registry (`just verify mise-install-smoke`), covering
-  the mise-detected `--no-local-bin` default and an explicit
+  non-TTY refusal before mutation, same-version host-mirror activation before
+  first readiness, the mise-detected `--no-local-bin` default, and an explicit
   `--local-bin` override.
 
 `dim install-cp` belongs to `@slop-lab/dim-cli`, not the facade. It is reserved

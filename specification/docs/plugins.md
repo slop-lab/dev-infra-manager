@@ -43,7 +43,8 @@ provider is `@slop-lab/dim-plugin-host-mirrors`, installed at the same exact
 version as DIM:
 
 ```bash
-dim installer install plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
+dim installer install core \
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
 ```
 
 The reviewed plugin source selects one digest-pinned Docker Hub cache image and
@@ -58,6 +59,12 @@ endpoint setting. Named workspace capabilities cannot override the reserved
 `DIM_REGISTRY_CACHE_ENDPOINT` or `DIM_APT_CACHE_ENDPOINT` environment entries.
 Changing provider bytes or image pins therefore requires host installation and
 review, not a Project commit or agent request.
+
+On a clean host, the installer activates this exact same-version plugin in the
+core installation transaction before the controller's first readiness check.
+An interactive host operator may accept the displayed exact coordinate; a
+non-interactive install must supply it explicitly. Declining or omitting that
+selection does not weaken controller startup and does not install a runtime.
 
 Plugin discovery does not depend on a naming convention. Scoped, unscoped, and
 private-registry package names are accepted. For example:
