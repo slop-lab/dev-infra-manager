@@ -4,8 +4,15 @@ import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { configuredDimAdminController } from "../../../../core/packages/core/src/adminController.js";
+import {
+  configuredDimAdminController
+} from "../../../../core/packages/core/src/adminController.js";
 import { LifecycleState } from "../../../../core/packages/core/src/lifecycleState.js";
+import {
+  HostRuntimeTransitions,
+  type HostRuntimeSupervisor
+} from "../../../../core/packages/core/src/hostRuntimeTransitions.js";
+import { OrdinaryCiPoolSupervisor } from "../../../../core/packages/core/src/ordinaryCiPoolSupervisor.js";
 import type { RegisteredDimPlugins } from "../../../../core/packages/core/src/plugin.js";
 import { DIM_PLUGIN_API_VERSION, registerPlugin, registerPlugins } from "../../../../core/packages/core/src/plugin.js";
 import { registerHostMirrorProvider } from "../../../../core/packages/core/src/hostMirrorProvider.js";
@@ -275,6 +282,90 @@ describe("admin host admission", () => {
     expect(acquisitions).toBe(2);
   });
 
+  it("serializes shutdown through quiescence before a concurrent host start", async () => {
+    // Given
+    const root = await stateRoot();
+    const events: string[] = [];
+    const quiescing = new Barrier();
+    const allowQuiesce = new Barrier();
+    const supervisor: HostRuntimeSupervisor = {
+      async dispose() { events.push("dispose"); },
+      async quiesce() {
+        events.push("quiesce");
+        quiescing.open();
+        await allowQuiesce.wait;
+      },
+      async resume() { events.push("resume"); }
+    };
+    const fetchImplementation = globalThis.fetch;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
+      String(input).startsWith("http://gitea:3000/")
+        ? Promise.resolve(new Response(null, { status: 200 }))
+        : fetchImplementation(input, init));
+    const plugins = await registerPlugin({
+      name: "test.host-mirrors",
+      apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) { registerHostMirrorProvider(host, TEST_HOST_MIRROR_PROVIDER); }
+    });
+    pluginSets.push(plugins);
+    const base = await startServer(root, plugins, new AdminRunner(), new HostRuntimeTransitions(supervisor));
+
+    // When
+    const stopping = fetch(`${base}/v1/call/host.shutdown`, { method: "POST", body: "{}" });
+    await quiescing.wait;
+    const starting = fetch(`${base}/v1/call/host.start`, { method: "POST", body: "{}" });
+    await Promise.resolve();
+    expect(events).toEqual(["quiesce"]);
+    allowQuiesce.open();
+
+    // Then
+    const stopped = await stopping;
+    const started = await starting;
+    expect(stopped.status).toBe(200);
+    expect(started.status).toBe(200);
+    expect(events).toEqual(["quiesce", "resume"]);
+  });
+
+  it("does not start capacity after teardown fences an accepted host start", async () => {
+    // Given
+    const root = await stateRoot();
+    const startEntered = new Barrier();
+    const allowStart = new Barrier();
+    vi.spyOn(LifecycleState.prototype, "acquireHostLifecycleLock").mockImplementation(async () => {
+      startEntered.open();
+      await allowStart.wait;
+      return async () => undefined;
+    });
+    const fetchImplementation = globalThis.fetch;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) =>
+      String(input).startsWith("http://gitea:3000/")
+        ? Promise.resolve(new Response(null, { status: 200 }))
+        : fetchImplementation(input, init));
+    const plugins = await registerPlugin({
+      name: "test.host-mirrors",
+      apiVersion: DIM_PLUGIN_API_VERSION,
+      register(host) { registerHostMirrorProvider(host, TEST_HOST_MIRROR_PROVIDER); }
+    });
+    pluginSets.push(plugins);
+    const capacityStarts: string[] = [];
+    const supervisor = new OrdinaryCiPoolSupervisor(["primary"], async (capacity) => {
+      capacityStarts.push(capacity);
+    });
+    const hostTransitions = new HostRuntimeTransitions(supervisor);
+    const base = await startServer(root, plugins, new AdminRunner(), hostTransitions);
+
+    // When
+    const starting = fetch(`${base}/v1/call/host.start`, { method: "POST", body: "{}" });
+    await startEntered.wait;
+    const disposal = hostTransitions.dispose();
+    allowStart.open();
+
+    // Then
+    await expect(disposal).resolves.toBeUndefined();
+    expect((await starting).status).toBe(400);
+    expect(capacityStarts).toEqual([]);
+  });
+
   async function stateRoot(): Promise<string> {
     const root = await mkdtemp(join(tmpdir(), "dim-admin-admission-"));
     roots.push(root);
@@ -293,9 +384,14 @@ describe("admin host admission", () => {
     return plugins;
   }
 
-  async function startServer(root: string, plugins: RegisteredDimPlugins, runner: StreamingCommandRunner): Promise<string> {
+  async function startServer(
+    root: string,
+    plugins: RegisteredDimPlugins,
+    runner: StreamingCommandRunner,
+    hostTransitions?: HostRuntimeTransitions
+  ): Promise<string> {
     await claimTestGiteaService(root);
-    const server = configuredDimAdminController(hostLifecycleOptions(root), plugins, runner);
+    const server = configuredDimAdminController(hostLifecycleOptions(root), plugins, runner, hostTransitions);
     servers.push(server);
     server.listen(0, "127.0.0.1");
     await once(server, "listening");

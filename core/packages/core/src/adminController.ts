@@ -5,6 +5,7 @@ import { CommandSessionManager, type CommandSessionEvent } from "./commandSessio
 import { isUserError, UserError } from "./errors.js";
 import { HostNotReadyError, withHostAdminAdmission } from "./hostAdminAdmission.js";
 import { hostLifecycleStatus } from "./hostLifecycle.js";
+import { HostRuntimeTransitions } from "./hostRuntimeTransitions.js";
 import type { LifecycleOptions } from "./lifecycleTypes.js";
 import type { RegisteredDimPlugins } from "./plugin.js";
 import { ProcessRunner } from "./runner.js";
@@ -35,6 +36,7 @@ type AdminRequest = {
   readonly plugins: RegisteredDimPlugins;
   readonly runner: StreamingCommandRunner;
   readonly sessions: CommandSessionManager;
+  readonly hostTransitions: HostRuntimeTransitions;
   readonly request: IncomingMessage;
   readonly response: ServerResponse;
 };
@@ -42,11 +44,14 @@ type AdminRequest = {
 export function configuredDimAdminController(
   lifecycle: LifecycleOptions,
   plugins: RegisteredDimPlugins,
-  runner: StreamingCommandRunner = new ProcessRunner()
+  runner: StreamingCommandRunner = new ProcessRunner(),
+  hostTransitions = new HostRuntimeTransitions()
 ): Server {
   const sessions = new CommandSessionManager(runner);
   const server = createServer((request, response) => {
-    void handleAdminRequest({ server, lifecycle, plugins, runner, sessions, request, response }).catch((error) => {
+    void handleAdminRequest({
+      server, lifecycle, plugins, runner, sessions, hostTransitions, request, response
+    }).catch((error) => {
       sendJson(response, isUserError(error) ? 400 : 500, {
         error: error instanceof Error ? error.message : String(error)
       });
@@ -57,7 +62,7 @@ export function configuredDimAdminController(
 }
 
 async function handleAdminRequest(context: AdminRequest): Promise<void> {
-  const { server, lifecycle, plugins, runner, sessions, request, response } = context;
+  const { server, lifecycle, plugins, runner, sessions, hostTransitions, request, response } = context;
   const url = new URL(request.url ?? "/", "http://dim-admin");
   if (request.method === "GET" && url.pathname === "/healthz") {
     const host = await hostLifecycleStatus(lifecycle);
@@ -98,7 +103,10 @@ async function handleAdminRequest(context: AdminRequest): Promise<void> {
         (lifecycleOperation, stage) => {
           if (`workspace.${lifecycleOperation}` === operation) reportProgress(stage);
         },
-        () => adminBuiltinCall(operation, { input: body, lifecycle, runner: sessionRunner, plugins })
+        () => hostTransitions.run(
+          operation,
+          () => adminBuiltinCall(operation, { input: body, lifecycle, runner: sessionRunner, plugins })
+        )
       ),
       terminalSize(body.terminal)
     );
@@ -136,9 +144,10 @@ async function handleAdminRequest(context: AdminRequest): Promise<void> {
   if (request.method === "POST" && url.pathname.startsWith("/v1/call/")) {
     const operation = decodeURIComponent(url.pathname.slice("/v1/call/".length));
     const body = await readJson(request, 65_536);
-    return sendJson(response, 200, await adminBuiltinCall(operation, {
-      input: record(body), lifecycle, runner, plugins
-    }));
+    return sendJson(response, 200, await hostTransitions.run(
+      operation,
+      () => adminBuiltinCall(operation, { input: record(body), lifecycle, runner, plugins })
+    ));
   }
   for (const route of plugins.adminRoutes) {
     if (route.method !== request.method) continue;
