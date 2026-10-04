@@ -54,6 +54,7 @@ instead be split.
 | [Verification](12-verification.md) | Verification | Repository-wide gates and evidence |
 | [Project, Repository, and Workspace Lifecycle](13-repo-workspace-lifecycle.md) | Contract | Mixed with state paths and runtime wiring |
 | [Installer Facade](14-installer-facade.md) | Contract | Mixed with installation implementation choices |
+| [Candidate-Controlled Native Ordinary CI](decisions/0001-candidate-controlled-native-ordinary-ci.md) | Decision record | Accepted weaker evidence semantics for candidate-selected native jobs; no implementation or migration yet |
 | [Image Entrypoints](local-details/image-entrypoints.md) | Implementation profile | Image-local compatibility details |
 | [Installation Scripts](local-details/installation-scripts.md) | Implementation profile | Script and packaging details |
 | [Native Git Transport and Review Evidence](local-details/native-git-transport.md) | Implementation profile | Proposal-only smart HTTP plus complete-tree review, exact CI evidence, and checked host-only CAS promotion |
