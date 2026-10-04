@@ -200,8 +200,14 @@ GitHub Actions or another provider API. Records are immutable, restart-checked,
 and conflict when the same job attempt is reported with different evidence.
 
 Only the current, unrevoked issued attempt can be reported or satisfy promotion.
-The service holds a Linux kernel-owned abstract socket keyed by canonical
-storage root, so a second process fails before serving shared evidence.
+The service holds an exclusive rollback-journal SQLite transaction in
+`.dim-native-git-owner.sqlite3` below the canonical storage root. The database
+is bound to that root's filesystem identity, and a second process sharing the
+volume fails before repository validation or TCP listen even when it runs in a
+different network namespace. The kernel releases the transaction after a
+crash, so a replacement process can recover without PID liveness checks or
+stale-owner cleanup. Startup rejects symbolic-link or malformed owner state and
+storage on filesystems outside the supported local Linux filesystem allowlist.
 
 `POST .../reviews/<review-id>/promotions` is accepted only for the dedicated
 promoter identity. Under the per-repository/ref serializer it rereads policy,
