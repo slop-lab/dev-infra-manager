@@ -201,8 +201,17 @@ and ownership. Promotion considers only the current durable, unrevoked
 scheduler-issued attempt for every currently required job and requires each to be `success` from the currently
 configured identity for that job.
 
-One Linux abstract socket derived from the canonical storage root gives the
-process a kernel-released ownership lease; duplicate service startup fails.
+One mode-`0600` rollback-journal SQLite database below the canonical storage
+root gives the process a kernel-released ownership lease through a continuously
+held exclusive transaction. The database records the storage root filesystem
+identity, and startup rejects a non-canonical or symbolic-link root, a
+symbolic-link, linked, malformed, wrong-mode, wrong-owner, or wrong-root owner
+database, and filesystems outside the explicit supported local Linux
+allowlist. Duplicate service startup therefore fails across separate network
+namespaces that mount the same volume, without PID liveness checks. Process
+death releases the transaction while retaining validated owner metadata, so a
+legitimate replacement can acquire the same database without stale-lock
+cleanup or migration.
 The promotion API accepts only a Project/repository-scoped promoter identity.
 The service serializes approval, revocation, CI status, and promotion decisions
 per repository/protected ref. While inside that boundary, promotion rereads the
@@ -233,7 +242,10 @@ revocation, identity/ref/tree/policy staleness, restart durability, Project and
 role denials. The promotion driver issues exact attempts before recording per-job terminal evidence,
 restarts the service, compares real `rev-parse` values before and after
 promotion, and proves idempotent retry. Competing real candidates prove exactly
-one CAS winner, while a competing process cannot acquire the same storage root.
+one CAS winner, while real processes in separate Docker network namespaces
+cannot acquire the same shared-volume storage root. That isolation test also
+proves rejection occurs before the contender's listen/mutation marker and that
+a replacement acquires ownership after the first process is killed.
 Missing, fabricated-future, late, revoked, failed-current, nonterminal, foreign,
 tuple-mismatched, injected, revoked, stale-policy/head, and non-descendant cases
 leave the protected ref unchanged; smart-HTTP force and deletion denials remain
