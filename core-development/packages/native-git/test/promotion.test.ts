@@ -1,14 +1,18 @@
-import { writeFile } from "node:fs/promises";
+import { readdir, writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   createApprovedReview,
+  issueJob,
   promote,
   protectedHead,
+  reportJob,
   reportRequiredJobs
 } from "./nativeGitPromotionHarness.js";
 import {
   nativeGitReviewFixture,
+  objectField,
   readJsonObject,
+  reviewPath,
   stringField,
   type ReviewFixture
 } from "./nativeGitReviewHarness.js";
@@ -20,6 +24,58 @@ afterEach(async () => {
 });
 
 describe("DIM native Git protected promotion", () => {
+  it("replays one exact descriptor-bound issuance without creating another attempt", async () => {
+    // Given
+    const fixture = await startFixture();
+    const review = await createApprovedReview(fixture);
+    const reviewId = stringField(review, "reviewId");
+    const descriptorResponse = await fixture.request(
+      "scheduler-a",
+      "POST",
+      reviewPath(`/${reviewId}/ordinary-execution-descriptors`),
+      {
+        jobName: "source",
+        admissionGeneration: "generation-7",
+        runnerBaseImage: `registry.example/runner@sha256:${"3".repeat(64)}`,
+        bounds: {
+          cpu: "2",
+          memoryBytes: "2147483648",
+          pids: "512",
+          wallClockSeconds: "900",
+          outputBytes: "10485760"
+        }
+      }
+    );
+    const descriptorResult = await readJsonObject(descriptorResponse);
+    const request = {
+      issuanceRequestId: "00000000-0000-4000-8000-000000000101",
+      jobName: "source",
+      descriptorDigest: stringField(descriptorResult, "digest"),
+      admissionGeneration: "generation-7",
+      runnerBaseImage: `registry.example/runner@sha256:${"3".repeat(64)}`,
+      bounds: objectField(objectField(descriptorResult, "descriptor"), "bounds"),
+      hostId: "host-a",
+      capacity: "primary"
+    };
+
+    // When
+    const first = await fixture.request("scheduler-a", "POST", reviewPath(`/${reviewId}/job-attempts`), request);
+    const replay = await fixture.request("scheduler-a", "POST", reviewPath(`/${reviewId}/job-attempts`), request);
+    const replacement = await fixture.request("scheduler-a", "POST", reviewPath(`/${reviewId}/job-attempts`), {
+      ...request,
+      issuanceRequestId: "00000000-0000-4000-8000-000000000102"
+    });
+    const supersededReplay = await fixture.request(
+      "scheduler-a", "POST", reviewPath(`/${reviewId}/job-attempts`), request
+    );
+
+    // Then
+    expect([first.status, replay.status, replacement.status, supersededReplay.status]).toEqual([201, 200, 201, 409]);
+    expect(await readJsonObject(replay)).toEqual(await readJsonObject(first));
+    expect(await readdir(`${fixture.repositoryPath}/dim-reviews/job-attempts/${reviewId}/source`))
+      .toEqual(["1.json", "2.json"]);
+  });
+
   it("promotes one fully reviewed candidate with exact successful job evidence and retries idempotently", async () => {
     // Given
     const fixture = await startFixture();
@@ -44,6 +100,35 @@ describe("DIM native Git protected promotion", () => {
     expect(after).toBe(stringField(review, "candidateCommit"));
     expect(repeated.status).toBe(200);
     expect(stringField(await readJsonObject(repeated), "outcome")).toBe("already-current");
+  });
+
+  it("replays one byte-identical terminal envelope without changing its status identity", async () => {
+    // Given
+    const fixture = await startFixture();
+    const review = await createApprovedReview(fixture);
+    const issuance = await issueJob(fixture, review, "source");
+    const first = await reportJob(fixture, review, "source", issuance);
+    const record = await readJsonObject(first);
+    const {
+      statusId: _statusId,
+      reviewId: _reviewId,
+      reporterUsername: _reporterUsername,
+      reportedAt: _reportedAt,
+      ...envelope
+    } = record;
+    await fixture.restart();
+
+    // When
+    const replay = await fixture.request(
+      "source-ci",
+      "POST",
+      reviewPath(`/${stringField(review, "reviewId")}/statuses`),
+      envelope
+    );
+
+    // Then
+    expect(replay.status).toBe(201);
+    expect(stringField(await readJsonObject(replay), "statusId")).toBe(stringField(record, "statusId"));
   });
 
   it("allows exactly one concurrent promotion from the same expected head", async () => {
