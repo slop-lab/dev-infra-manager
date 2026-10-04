@@ -7,6 +7,26 @@ without backward-compatibility shims or implicit migration.
 The supported host platform is Linux with a systemd user manager. macOS,
 Windows, and Docker Desktop are outside the supported runtime model.
 
+Specified but not implemented:
+
+- The installer-facade-owned `dim installer install control-plane --config
+  FILE` transaction, with one two-service Compose bundle for native Git and
+  ordinary CI, distinct nonroot identities and private volumes, authenticated
+  dependency readiness, and rollback.
+- Native ordinary CI admission and host-controller-owned shared Sysbox
+  capacity. The target has no persistent Project-scoped ordinary runner or
+  image. Existing Gitea ordinary-pool commands, schema-2 state, and persistent
+  Sysbox runners are predecessor behavior and are rejected by the target rather
+  than migrated.
+- A native Project/repository state adapter. Bundle installation does not select
+  native Git for Projects; until a separate adapter is reviewed and implemented,
+  native Project admission, capacity advertisement, claims, attempts, and
+  results remain denied. Existing QEMU scheduling remains Gitea-only.
+
+No current command or passing predecessor Gitea/QEMU gate is evidence that this
+target deployment is available. The implementation becomes supported only
+after the control-plane bundle acceptance gate passes on a clean host.
+
 Implemented:
 
 - Project metadata with exactly one root repository per runnable Project.

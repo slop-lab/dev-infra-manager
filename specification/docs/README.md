@@ -51,9 +51,16 @@ Docker/Git terms aren't repeated here.
   lifecycle code builds and deploys it from a human-reviewed ref. It may
   receive raw secrets; the agent container receives neither those secrets nor
   its runtime control socket.
-- **Verification runner** — a Project-scoped CI resource outside workspace
-  state. It checks a separate repository checkout in disposable job containers
-  without the host Docker socket or DIM workspace credentials.
+- **Target ordinary CI capacity** — a specified but unimplemented named,
+  host-controller-owned share of Sysbox execution. After a native Project
+  adapter exists, the ordinary scheduler leases it for one admitted job at a
+  time; each claim creates an ephemeral runner and disposable job container
+  without the host Docker socket or DIM workspace credentials. It is not a
+  persistent Project runner or image. Current ordinary CI instead uses the
+  Gitea Project-scoped runner profile.
+- **QEMU integration capacity** — a current Gitea-only optional Project-scoped trusted supervisor
+  that boots a fresh VM for an integration job. Its scheduler, hook, cache, and
+  `/dev/kvm` boundary remain separate from ordinary CI.
 - **Promotion** — the reviewed transition from an agent-authored proposal to a
   protected ref or trusted operation. DIM review-gates this transition, not
   ordinary mutation inside an agent workspace.

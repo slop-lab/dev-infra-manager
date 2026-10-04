@@ -111,7 +111,8 @@ DIM separates three roles with different lifecycle and trust properties:
 | Domain | Lifecycle | Trust and credentials | Purpose |
 | --- | --- | --- | --- |
 | Agent workspace | Persistent until explicit discard | Untrusted agent execution; no raw project/runtime secrets | Implementation, builds, services, and nested containers |
-| Verification runner | Project-scoped runner with separate checkouts and disposable job containers | Runs untrusted proposed input; no host Docker socket or DIM workspace credentials | Tests, lint, builds, and review evidence |
+| Target ordinary verification (not implemented) | Shared host-controller capacity with one ephemeral runner and disposable job container per claim | Runs admitted untrusted input; no host Docker socket or DIM workspace credentials; no persistent Project runner/image | Future tests, lint, builds, and exact CI evidence after a native Project adapter exists |
+| Current QEMU integration verification (Gitea only) | Optional Project-scoped capacity with a fresh VM per job | Trusted supervisor owns `/dev/kvm`; guest receives neither host socket nor reusable credential | Host/backend integration evidence |
 | Trusted Project runtime | Project-defined lifecycle; services may persist | Reviewed lifecycle code; scoped secrets may be supplied to separate services | Protected updates and other secret-bearing operations |
 
 These are roles, not a claim that every current boundary is a VM-strength
@@ -120,16 +121,32 @@ workspace are operationally separated but depend on reviewed Project policy.
 The review gate applies when output is promoted into protected or
 secret-bearing state; the mutable agent workspace itself is not review-gated.
 
-## Managed Git Host
+## Native control plane
 
-The built-in managed Git host is a DIM-owned Gitea service. Each Project owns
-a reserved `dim-<project>` organization and repository aliases below it.
-Gitea branch protection rejects direct workspace pushes to configured refs;
-review and merge happen through the Git host. DIM gives the trusted host CLI a
-separate maintainer capability whose credential is available only through the
-host-admin socket. A protected-ref push allowlist contains that identity, not
-the untrusted workspace writer. This host capability is part of DIM's managed
-Git boundary rather than its current Gitea account representation.
+The specified but unimplemented managed control plane is one installer-owned Compose bundle with a
+native Git service and a separate ordinary CI scheduler/webhook service. Native
+Git owns repositories, proposal-only workspace writes, complete-tree review,
+exact CI evidence, and checked protected-ref promotion. Ordinary CI owns policy
+admission, webhook demand, attempt issuance, queueing, and fenced leases. No
+browser UI is part of the bundle.
+
+Neither service receives a host container-runtime or controller socket. Each
+future participating DIM host controller owns its configured shared Sysbox capacities and executes
+one ephemeral ordinary runner per admitted claim. Projects contribute reviewed
+labels and a digest-pinned disposable job image to admission, not a persistent
+runner, image installation, or capacity. Native Git denies protected promotion
+when exact current ordinary evidence is unavailable. Optional QEMU integration
+capacity and its scheduler remain a separate, predecessor Gitea-only boundary.
+
+Bundle installation alone selects no native Project or repository lifecycle.
+No native Project-state adapter is specified yet, so the target bundle starts
+empty and denies Project admission, capacity advertisement, claims, and results.
+Current Projects, persistent Sysbox runners, and QEMU capacities remain on the
+implemented Gitea adapter until an independently reviewed transition contract
+exists.
+
+The currently implemented managed and external Gitea lifecycle remains the only
+Project topology. It is not replaced or modified by this installer-only target.
 
 ## Workspace Lifecycle
 
