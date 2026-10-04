@@ -37,8 +37,9 @@ test("managed controller restarts preserve the workspace-mounted runtime directo
   assert.match(source, /^RuntimeDirectory=dim$/m);
   assert.match(source, /^RuntimeDirectoryPreserve=restart$/m);
   assert.doesNotMatch(source, /^RuntimeDirectoryPreserve=yes$/m);
+  const restartSource = source.slice(source.indexOf("export async function restartManagedController"));
   assert.doesNotMatch(
-    source,
+    restartSource,
     /if \(usesSystemdManagedController\(options\)\) \{\s+await stopManagedController/
   );
   assert.doesNotMatch(entryAndBarrel, /Static source-contract inventory/);

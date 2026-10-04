@@ -1,17 +1,18 @@
-import { link, mkdir, mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import {
-  configuredDimController,
   UserError,
   type LifecycleOptions
 } from "@slop-lab/dim-core";
 import { runner } from "./cli-runtime.js";
 import { managedControllerReady, processExists } from "./controller-health.js";
 import { startSystemdManagedController, usesSystemdManagedController } from "./systemd-controller.js";
+import { adminErrorDetail, unixHttpRequest } from "./controller-transport.js";
 
 const managedControllerStartAttempts = 2400;
+const managedControllerStopAttempts = 200;
 
 export async function ensureManagedController(options: LifecycleOptions): Promise<void> {
   if (await managedControllerReady(options)) return;
@@ -141,15 +142,6 @@ export async function unixSocketAcceptingConnections(socketPath: string): Promis
   });
 }
 
-export async function closeControllerServer(
-  server: ReturnType<typeof configuredDimController> | undefined
-): Promise<void> {
-  if (!server?.listening) return;
-  server.closeIdleConnections();
-  await new Promise<void>((resolve, reject) =>
-    server.close((error) => error ? reject(error) : resolve()));
-}
-
 export async function stopManagedController(options: LifecycleOptions): Promise<void> {
   if (usesSystemdManagedController(options)) {
     const result = await runner.run("systemctl", ["--user", "stop", "dim-controller.service"]);
@@ -158,14 +150,63 @@ export async function stopManagedController(options: LifecycleOptions): Promise<
     }
     return;
   }
+  const pidPath = path.join(options.controllerRuntimeDirectory, "controller.pid");
   try {
-    const value = await readFile(path.join(options.controllerRuntimeDirectory, "controller.pid"), "utf8");
-    const pid = Number(value.trim());
-    if (Number.isSafeInteger(pid) && pid > 1) process.kill(pid, "SIGTERM");
+    const pidFile = await lstat(pidPath);
+    const uid = process.getuid?.();
+    if (uid === undefined || !pidFile.isFile() || pidFile.isSymbolicLink()
+      || pidFile.uid !== uid || (pidFile.mode & 0o777) !== 0o600) {
+      throw new UserError(`managed controller PID file at ${pidPath} is not owned safely`);
+    }
   } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code !== "ENOENT" && code !== "ESRCH") throw error;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
   }
+  let adminSocket: Awaited<ReturnType<typeof lstat>>;
+  try {
+    adminSocket = await lstat(options.adminControllerSocketPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new UserError("managed controller PID file exists without an admin socket");
+    }
+    throw error;
+  }
+  const uid = process.getuid?.();
+  if (uid === undefined || !adminSocket.isSocket() || adminSocket.isSymbolicLink()
+    || adminSocket.uid !== uid || (adminSocket.mode & 0o777) !== 0o600) {
+    throw new UserError(`managed controller admin socket at ${options.adminControllerSocketPath} is not owned safely`);
+  }
+  let response: Awaited<ReturnType<typeof unixHttpRequest>>;
+  try {
+    response = await unixHttpRequest(
+      options.adminControllerSocketPath,
+      "/v1/controller/stop",
+      { method: "POST", signal: AbortSignal.timeout(5_000) }
+    );
+  } catch (error) {
+    throw new UserError("could not request managed controller self-termination", { cause: error });
+  }
+  if (response.status !== 202) {
+    const detail = adminErrorDetail(response.body);
+    throw new UserError(
+      `managed controller refused self-termination (${response.status})${detail ? `: ${detail}` : ""}`
+    );
+  }
+  for (let attempt = 0; attempt < managedControllerStopAttempts; attempt += 1) {
+    let pidFileRemoved = false;
+    try {
+      await readFile(pidPath, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      pidFileRemoved = true;
+    }
+    if (pidFileRemoved
+      && !await unixSocketAcceptingConnections(options.controllerSocketPath)
+      && !await unixSocketAcceptingConnections(options.agentControllerSocketPath)
+      && !await unixSocketAcceptingConnections(options.adminControllerSocketPath)) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new UserError("managed controller did not complete self-termination");
 }
 
 export async function restartManagedController(options: LifecycleOptions): Promise<void> {
@@ -173,36 +214,7 @@ export async function restartManagedController(options: LifecycleOptions): Promi
     await startSystemdManagedController(options);
     return;
   }
-  let pid: number | undefined;
-  try {
-    const value = await readFile(path.join(options.controllerRuntimeDirectory, "controller.pid"), "utf8");
-    const parsed = Number(value.trim());
-    if (Number.isSafeInteger(parsed) && parsed > 1) pid = parsed;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
   await stopManagedController(options);
-  for (let attempt = 0; attempt < managedControllerStartAttempts; attempt += 1) {
-    if (pid === undefined || !processExists(pid)) {
-      await rm(options.controllerSocketPath, { force: true });
-      await rm(options.agentControllerSocketPath, { force: true });
-      await rm(options.adminControllerSocketPath, { force: true });
-      await ensureManagedController(options);
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  try {
-    if (pid !== undefined) process.kill(pid, "SIGKILL");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-  }
-  if (pid !== undefined) {
-    for (let attempt = 0; attempt < 100 && processExists(pid); attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    if (processExists(pid)) throw new UserError(`managed controller process ${pid} did not stop`);
-  }
   await rm(options.controllerSocketPath, { force: true });
   await rm(options.agentControllerSocketPath, { force: true });
   await rm(options.adminControllerSocketPath, { force: true });
