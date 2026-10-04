@@ -56,8 +56,13 @@ Docker/Git terms aren't repeated here.
   adapter exists, the ordinary scheduler leases it for one admitted job at a
   time; each claim creates an ephemeral runner and disposable job container
   without the host Docker socket or DIM workspace credentials. It is not a
-  persistent Project runner or image. Current ordinary CI instead uses the
-  Gitea Project-scoped runner profile.
+  persistent Project runner or image. Its schema-2 command, script, and job
+  image come from the exact candidate tree, so success is candidate-controlled
+  self-test evidence rather than independent verification. Protected policy may
+  require it, but product maintainers still review changed requirements,
+  implementation, tests, and results, and human approval and checked promotion
+  remain separate. Current
+  ordinary CI instead uses the Gitea Project-scoped runner profile.
 - **QEMU integration capacity** — a current Gitea-only optional Project-scoped trusted supervisor
   that boots a fresh VM for an integration job. Its scheduler, hook, cache, and
   `/dev/kvm` boundary remain separate from ordinary CI.
@@ -82,7 +87,7 @@ The documentation is split by concern:
 - [Runtime Images](runtime-images.md): workspace-root runtime images and their nested workloads.
 - [External workspace URLs](external-urls.md): controller discovery, named ingresses, exact-target application proxies, nested targets, and Caddy/Cloudflare HTTPS.
 - [Repository-backed Workspaces](repo-workspaces.md): managed Git registration, persistent workspaces, reconciliation, and Git environment.
-- [Managed CI Runners](ci-runners.md): independent pull-request verification, resource defaults, and runner lifecycle.
+- [Managed CI Runners](ci-runners.md): current Gitea verification, candidate-controlled native ordinary CI, resource defaults, and runner lifecycle.
 - [Project Workspaces](project-workspaces.md): `.dim` project contract, capability profiles, task dispatch, lifecycle, and scaffold flow.
 - [Single-repository Project](../../examples/projects/single-repository/README.md): default no-secret shape with no protected ref, resource limits, and an optional external URL.
 - [Multi-repository Project](../../examples/projects/multi-repository/README.md): Project-owned agent, host Git identity, independent repositories, and a reviewed secret service.

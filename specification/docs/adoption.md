@@ -21,16 +21,31 @@ Agent output, automated checks, and a review limited to the changed lines do
 not replace this full human trust review. Repeat the review whenever any of
 these inputs or their pinned versions change.
 
+This trust review has a specific infrastructure-security purpose: establish
+the code that can expose secrets, mutate protected refs, control host/runtime
+privileges, or elevate another trusted capability. Keeping that authority
+closure small reduces security-review burden only. It does not reduce the
+separate product/QA review needed for a change. Product maintainers must still
+review changed requirements, implementation, test definitions, and relevant
+results sufficiently to judge behavior and regression risk.
+
 The review gate protects promotion into a protected ref or secret-bearing
 runtime. It does not make the mutable agent workspace trusted. Verification
 jobs also execute untrusted proposed input and must not be treated as a place
 for long-lived project secrets.
 
+Candidate-controlled native ordinary CI may run before infrastructure trust
+review because its fixed sandbox supplies no such secrets or trusted
+capabilities. Before promotion, its config and tests remain part of the exact
+candidate subject to product/QA review. A green result records successful
+bounded execution of the selected tests. It does not independently establish
+that the tests are correct or complete, or that the product has no regression.
+
 ### What actually keeps secrets safe
 
-The full review above establishes overall trust in DIM — correctness,
-availability, and everything else a project depends on it for, not only
-secret safety. Secret safety specifically rests on a narrower guarantee: an
+The full review above is the basis on which a project accepts DIM's correctness,
+availability, and other behavior; review and green CI do not prove those
+properties. Secret safety specifically rests on a narrower guarantee: an
 agent container never receives raw secret material, because reviewed Project
 configuration and task dispatch do not pass it there, and secret-bearing
 containers are built and deployed by trusted Project lifecycle authority
@@ -45,6 +60,11 @@ environment variables a workspace container receives could. Reviewing (3)
 well is what keeps secrets specifically safe even under time pressure; the
 full review in (1)-(2) is what a project needs before trusting DIM more
 broadly.
+
+This narrower secret-safety dependency closure is not a shortcut for product
+maintenance. Requirements, ordinary implementation, tests, and observed
+results can be product-critical without being secret-bearing, and maintainers
+must review them on that basis.
 
 ## Pin every version
 
