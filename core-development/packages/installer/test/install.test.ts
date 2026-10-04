@@ -142,6 +142,46 @@ describe("@slop-lab/dim-installer", () => {
       expect(JSON.parse(await readFile(controllerArgsFile, "utf8"))).toEqual([["controller", "restart"]]);
     });
 
+    it("installs and activates selected plugins in the promoted graph before controller readiness", async () => {
+      // Given
+      const root = await tempDir("dim-install-cli-selected-plugin-");
+      const npm = join(root, "npm.mjs");
+      const argumentsFile = join(root, "arguments.json");
+      const controllerStateFile = join(root, "controller-state.json");
+      await writeFakeCliNpm(npm, {
+        argsFile: argumentsFile,
+        versionOutput: "9.9.9",
+        controllerManifestFile: controllerStateFile
+      });
+      const dataHome = join(root, "data-home");
+
+      // When
+      await installDimCli({
+        version: "9.9.9",
+        plugins: [{
+          name: "@slop-lab/dim-plugin-host-mirrors",
+          specifier: "@slop-lab/dim-plugin-host-mirrors@9.9.9"
+        }],
+        exposeOnPath: false,
+        npmCommand: npm,
+        dataHome,
+        configPath: join(root, "config.json")
+      });
+
+      // Then
+      expect(JSON.parse(await readFile(argumentsFile, "utf8"))).toContain(
+        "@slop-lab/dim-plugin-host-mirrors@9.9.9"
+      );
+      expect(JSON.parse(await readFile(controllerStateFile, "utf8"))).toEqual({
+        schemaVersion: 1,
+        plugins: ["@slop-lab/dim-plugin-host-mirrors"]
+      });
+      expect(JSON.parse(await readFile(join(dataHome, "runtime", "current", "plugins.json"), "utf8"))).toEqual({
+        schemaVersion: 1,
+        plugins: ["@slop-lab/dim-plugin-host-mirrors"]
+      });
+    });
+
     it("creates a managed ~/.local/bin symlink in direct mode", async () => {
       const root = await tempDir("dim-install-direct-");
       const npm = join(root, "npm.mjs");
@@ -210,6 +250,10 @@ describe("@slop-lab/dim-installer", () => {
 
       await expect(installDimCli({
         version: "2.0.0",
+        plugins: [{
+          name: "@slop-lab/dim-plugin-host-mirrors",
+          specifier: "@slop-lab/dim-plugin-host-mirrors@2.0.0"
+        }],
         exposeOnPath: false,
         npmCommand: npm,
         dataHome,
@@ -274,6 +318,10 @@ describe("@slop-lab/dim-installer", () => {
 
       await expect(installDimCli({
         version: "2.0.0",
+        plugins: [{
+          name: "@slop-lab/dim-plugin-host-mirrors",
+          specifier: "@slop-lab/dim-plugin-host-mirrors@2.0.0"
+        }],
         exposeOnPath: false,
         npmCommand: npm,
         dataHome,
@@ -351,14 +399,23 @@ describe("@slop-lab/dim-installer", () => {
       // Given
       const root = await tempDir("dim-install-foreign-bin-");
       const npm = join(root, "npm.mjs");
-      await writeFakeCliNpm(npm, { argsFile: join(root, "arguments.json"), versionOutput: "2.0.0" });
+      const targetControllerArgs = join(root, "target-controller-arguments.json");
+      const controllerRunning = join(root, "controller-running");
+      await writeFakeCliNpm(npm, {
+        argsFile: join(root, "arguments.json"),
+        versionOutput: "2.0.0",
+        controllerArgsFile: targetControllerArgs,
+        controllerRunningFile: controllerRunning
+      });
       const dataHome = join(root, "data-home");
       const previousExecutable = join(dataHome, "runtime", "current", "node_modules", ".bin", "dim");
+      const previousControllerArgs = join(root, "previous-controller-arguments.json");
       const binDirectory = join(root, "bin");
       const linkPath = join(binDirectory, "dim");
       await mkdir(dirname(previousExecutable), { recursive: true });
       await mkdir(binDirectory, { recursive: true });
-      await writeStubCli(previousExecutable, { versionOutput: "1.0.0" });
+      await writeStubCli(previousExecutable, { versionOutput: "1.0.0", echoFile: previousControllerArgs });
+      await writeFile(join(dataHome, "runtime", "current", "sentinel"), "previous install");
       await writeFile(linkPath, "user-owned dim");
 
       // When
@@ -373,6 +430,146 @@ describe("@slop-lab/dim-installer", () => {
 
       // Then
       await expect(installation).rejects.toThrow(/not managed by DIM installer/);
+      expect(JSON.parse(await readFile(targetControllerArgs, "utf8"))).toEqual([
+        ["controller", "restart"],
+        ["controller", "stop"]
+      ]);
+      await expect(access(controllerRunning)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await readFile(join(dataHome, "runtime", "current", "sentinel"), "utf8"))
+        .toBe("previous install");
+      expect(JSON.parse(await readFile(previousControllerArgs, "utf8"))).toMatchObject({
+        argv: ["controller", "restart"]
+      });
+      expect(await readFile(linkPath, "utf8")).toBe("user-owned dim");
+    });
+
+    it("stops a clean-install target before rolling back a foreign-bin failure", async () => {
+      // Given
+      const root = await tempDir("dim-install-clean-foreign-bin-rollback-");
+      const npm = join(root, "npm.mjs");
+      const controllerCalls = join(root, "controller-calls.json");
+      const controllerRunning = join(root, "controller-running");
+      await writeFakeCliNpm(npm, {
+        argsFile: join(root, "npm-arguments.json"),
+        versionOutput: "2.0.0",
+        controllerArgsFile: controllerCalls,
+        controllerRunningFile: controllerRunning
+      });
+      const dataHome = join(root, "data-home");
+      const binDirectory = join(root, "bin");
+      const linkPath = join(binDirectory, "dim");
+      const configPath = join(root, "dim.json");
+      await mkdir(binDirectory, { recursive: true });
+      await writeFile(linkPath, "user-owned dim");
+
+      // When
+      const installation = installDimCli({
+        version: "2.0.0",
+        exposeOnPath: true,
+        npmCommand: npm,
+        dataHome,
+        binDirectory,
+        configPath
+      });
+
+      // Then
+      await expect(installation).rejects.toThrow(/not managed by DIM installer/);
+      expect(JSON.parse(await readFile(controllerCalls, "utf8"))).toEqual([
+        ["controller", "restart"],
+        ["controller", "stop"]
+      ]);
+      await expect(access(controllerRunning)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(join(dataHome, "runtime", "current"))).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(configPath)).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await readFile(linkPath, "utf8")).toBe("user-owned dim");
+    });
+
+    it("stops a clean-install target before restoring malformed config bytes", async () => {
+      // Given
+      const root = await tempDir("dim-install-clean-config-rollback-");
+      const npm = join(root, "npm.mjs");
+      const controllerCalls = join(root, "controller-calls.json");
+      const controllerRunning = join(root, "controller-running");
+      await writeFakeCliNpm(npm, {
+        argsFile: join(root, "npm-arguments.json"),
+        versionOutput: "2.0.0",
+        controllerArgsFile: controllerCalls,
+        controllerRunningFile: controllerRunning
+      });
+      const dataHome = join(root, "data-home");
+      const configPath = join(root, "dim.json");
+      const malformedConfig = "not json\n";
+      await writeFile(configPath, malformedConfig);
+
+      // When
+      const installation = installDimCli({
+        version: "2.0.0",
+        exposeOnPath: false,
+        npmCommand: npm,
+        dataHome,
+        configPath
+      });
+
+      // Then
+      await expect(installation).rejects.toThrow();
+      expect(JSON.parse(await readFile(controllerCalls, "utf8"))).toEqual([
+        ["controller", "restart"],
+        ["controller", "stop"]
+      ]);
+      await expect(access(controllerRunning)).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(access(join(dataHome, "runtime", "current"))).rejects.toMatchObject({ code: "ENOENT" });
+      expect(await readFile(configPath, "utf8")).toBe(malformedConfig);
+    });
+
+    it("preserves the running target and original install error when target stop fails", async () => {
+      // Given
+      const root = await tempDir("dim-install-stop-failure-");
+      const npm = join(root, "npm.mjs");
+      const controllerCalls = join(root, "controller-calls.json");
+      const controllerRunning = join(root, "controller-running");
+      await writeFakeCliNpm(npm, {
+        argsFile: join(root, "npm-arguments.json"),
+        versionOutput: "2.0.0",
+        controllerArgsFile: controllerCalls,
+        controllerRunningFile: controllerRunning,
+        controllerStopExitCode: 9
+      });
+      const dataHome = join(root, "data-home");
+      const current = join(dataHome, "runtime", "current");
+      const previousExecutable = join(current, "node_modules", ".bin", "dim");
+      const binDirectory = join(root, "bin");
+      const linkPath = join(binDirectory, "dim");
+      const configPath = join(root, "dim.json");
+      await mkdir(dirname(previousExecutable), { recursive: true });
+      await mkdir(binDirectory, { recursive: true });
+      await writeStubCli(previousExecutable, { versionOutput: "1.0.0" });
+      await writeFile(join(current, "sentinel"), "previous install");
+      await writeFile(linkPath, "user-owned dim");
+
+      // When
+      const installation = installDimCli({
+        version: "2.0.0",
+        exposeOnPath: true,
+        npmCommand: npm,
+        dataHome,
+        binDirectory,
+        configPath
+      });
+
+      // Then
+      await expect(installation).rejects.toThrow(/not managed by DIM installer/);
+      expect(JSON.parse(await readFile(controllerCalls, "utf8"))).toEqual([
+        ["controller", "restart"],
+        ["controller", "stop"]
+      ]);
+      await access(controllerRunning);
+      await access(join(current, "node_modules", ".bin", "dim"));
+      await expect(access(join(current, "sentinel"))).rejects.toMatchObject({ code: "ENOENT" });
+      const backups = (await readdir(join(dataHome, "runtime"))).filter((entry) => entry.startsWith(".previous-"));
+      expect(backups).toHaveLength(1);
+      expect(await readFile(join(dataHome, "runtime", backups[0] ?? "", "sentinel"), "utf8"))
+        .toBe("previous install");
+      await expect(access(configPath)).rejects.toMatchObject({ code: "ENOENT" });
       expect(await readFile(linkPath, "utf8")).toBe("user-owned dim");
     });
 
@@ -396,6 +593,10 @@ describe("@slop-lab/dim-installer", () => {
 
       await expect(installDimCli({
         version: "2.0.0",
+        plugins: [{
+          name: "@slop-lab/dim-plugin-host-mirrors",
+          specifier: "@slop-lab/dim-plugin-host-mirrors@2.0.0"
+        }],
         exposeOnPath: false,
         npmCommand: npm,
         dataHome,

@@ -36,11 +36,14 @@ export async function writeFakeCliNpm(
     versionOutput: string;
     preflightSource?: string;
     controllerArgsFile?: string;
+    controllerManifestFile?: string;
     controllerExitCode?: number;
+    controllerStopExitCode?: number;
+    controllerRunningFile?: string;
   }
 ): Promise<void> {
   const content = `#!/usr/bin/env node
-import { writeFileSync, mkdirSync, chmodSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from "node:fs";
 import path from "node:path";
 
 const args = process.argv.slice(2);
@@ -52,6 +55,16 @@ if (prefixIndex === -1) {
   process.exit(1);
 }
 const versionDirectory = args[prefixIndex + 1];
+const packagePath = path.join(versionDirectory, "package.json");
+const packageJson = existsSync(packagePath) ? JSON.parse(readFileSync(packagePath, "utf8")) : { private: true };
+packageJson.dependencies = packageJson.dependencies ?? {};
+for (const specifier of args.slice(prefixIndex + 2).filter((value) => !value.startsWith("-"))) {
+  if (specifier.startsWith("@")) {
+    const separator = specifier.indexOf("@", 1);
+    if (separator !== -1) packageJson.dependencies[specifier.slice(0, separator)] = specifier.slice(separator + 1);
+  }
+}
+writeFileSync(packagePath, JSON.stringify(packageJson));
 const binDirectory = path.join(versionDirectory, "node_modules", ".bin");
 mkdirSync(binDirectory, { recursive: true });
 const coreDirectory = path.join(versionDirectory, "node_modules", "@slop-lab", "dim-core");
@@ -118,21 +131,39 @@ process.exit(${options.exitCode ?? 0});
   await writeExecutable(scriptPath, content);
 }
 
-function stubDimSource(options: { controllerArgsFile?: string; controllerExitCode?: number }): string {
+function stubDimSource(options: {
+  controllerArgsFile?: string;
+  controllerManifestFile?: string;
+  controllerExitCode?: number;
+  controllerStopExitCode?: number;
+  controllerRunningFile?: string;
+}): string {
   return `#!/usr/bin/env node
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 const args = process.argv.slice(2);
 if (args[0] === "--version") {
   console.log("__VERSION__");
   process.exit(0);
 }
-${options.controllerArgsFile ? `if (args[0] === "controller" && args[1] === "restart") {
+${options.controllerArgsFile ? `if (args[0] === "controller") {
   const target = ${JSON.stringify(options.controllerArgsFile)};
   const calls = existsSync(target) ? JSON.parse(readFileSync(target, "utf8")) : [];
   calls.push(args);
   writeFileSync(target, JSON.stringify(calls));
-  process.exit(${options.controllerExitCode ?? 0});
 }` : ""}
+${options.controllerRunningFile ? `if (args[0] === "controller" && args[1] === "restart") {
+  writeFileSync(${JSON.stringify(options.controllerRunningFile)}, "running");
+}
+if (args[0] === "controller" && args[1] === "stop") {
+  if (${options.controllerStopExitCode ?? 0} === 0) {
+    rmSync(${JSON.stringify(options.controllerRunningFile)}, { force: true });
+  }
+}` : ""}
+${options.controllerManifestFile ? `if (args[0] === "controller" && args[1] === "restart") {
+  writeFileSync(${JSON.stringify(options.controllerManifestFile)}, readFileSync(new URL("../../plugins.json", import.meta.url)));
+}` : ""}
+if (args[0] === "controller" && args[1] === "restart") process.exit(${options.controllerExitCode ?? 0});
+if (args[0] === "controller" && args[1] === "stop") process.exit(${options.controllerStopExitCode ?? 0});
 console.log("dim", args.join(" "));
 process.exit(0);
 `;

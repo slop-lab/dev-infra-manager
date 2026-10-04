@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
-import { access, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, symlink, unlink } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   cliExecutable,
@@ -11,9 +11,19 @@ import {
   writeUserConfig,
   type DimCliConfig
 } from "./installConfig.js";
-import { atomicWrite, readManifest, readPackageJson, run } from "./runtimeFiles.js";
+import { prepareCliPluginGraph, verifySelectedPlugins, type CliPluginSelection } from "./cliPluginGraph.js";
+import {
+  installManagedSymlink,
+  restoreManagedSymlink,
+  snapshotManagedSymlink,
+  type ManagedSymlinkSnapshot
+} from "./managedSymlink.js";
+import { atomicWrite, run } from "./runtimeFiles.js";
 import { runStagedStatePreflight } from "./statePreflight.js";
 import type { InstallerOperation } from "./installProgress.js";
+
+export type { CliPluginSelection } from "./cliPluginGraph.js";
+export { installManagedSymlink } from "./managedSymlink.js";
 
 export interface CliInstallOptions {
   readonly version?: string;
@@ -26,6 +36,7 @@ export interface CliInstallOptions {
   readonly npmCommand?: string;
   readonly operation?: InstallerOperation;
   readonly restartController?: boolean;
+  readonly plugins?: readonly CliPluginSelection[];
 }
 
 export interface LocalPackageBundle {
@@ -40,10 +51,6 @@ export interface InstalledCli {
   readonly symlink?: string;
 }
 
-type ManagedSymlinkSnapshot =
-  | { readonly kind: "absent" }
-  | { readonly kind: "present"; readonly target: string };
-
 export async function installDimCli(options: CliInstallOptions): Promise<InstalledCli> {
   const dataHome = path.resolve(options.dataHome ?? defaultDataHome());
   const managedRoot = path.join(dataHome, "runtime");
@@ -53,21 +60,16 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
   const requestedPackages = options.packageSpecifiers
     ?? (options.version ? [`@slop-lab/dim-cli@${options.version}`] : undefined);
   if (!requestedPackages) throw new Error("a CLI version or local package bundle is required");
-  const previousManifest = await readManifest(path.join(currentDirectory, "plugins.json"));
-  const previousPackage = await readPackageJson(path.join(currentDirectory, "package.json"));
-  const providedNames = new Set(options.packageNames ?? []);
-  const pluginSpecifiers = previousManifest.plugins.filter((name) => !providedNames.has(name)).map((name) => {
-    const version = previousPackage?.dependencies?.[name];
-    if (!version) throw new Error(`enabled plugin '${name}' is not installed in the DIM runtime`);
-    return `${name}@${version}`;
-  });
-  const packageSpecifiers = [...requestedPackages, ...pluginSpecifiers];
+  const selectedPlugins = options.plugins ?? [];
+  const pluginGraph = await prepareCliPluginGraph(currentDirectory, selectedPlugins, options.packageNames ?? []);
+  const packageSpecifiers = [...requestedPackages, ...pluginGraph.specifiers];
   const configPath = options.configPath ?? defaultUserConfigPath();
   const backupDirectory = path.join(managedRoot, `.previous-${process.pid}-${Date.now()}`);
   let previousMoved = false;
   let promoted = false;
   let committed = false;
   let controllerRestartAttempted = false;
+  let targetControllerReady = false;
   let installedSymlink: string | undefined;
   let symlinkSnapshot: ManagedSymlinkSnapshot | undefined;
   try {
@@ -82,9 +84,10 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
     if (options.version && installedVersion !== options.version) {
       throw new Error(`installed DIM CLI reports ${installedVersion}, expected ${options.version}`);
     }
+    await verifySelectedPlugins(stagingDirectory, selectedPlugins);
     options.operation?.reportProgress("state preflight");
     await runStagedStatePreflight(stagingDirectory);
-    await atomicWrite(path.join(stagingDirectory, "plugins.json"), previousManifest);
+    await atomicWrite(path.join(stagingDirectory, "plugins.json"), pluginGraph.manifest);
     options.operation?.reportProgress("runtime promotion");
     try {
       await rename(currentDirectory, backupDirectory);
@@ -101,6 +104,7 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
       options.operation?.reportProgress("controller readiness");
       try {
         await run(executable, ["controller", "restart"], currentDirectory, options.operation);
+        targetControllerReady = true;
       } catch (error) {
         throw new Error("target controller restart/readiness failed", { cause: error });
       }
@@ -120,6 +124,17 @@ export async function installDimCli(options: CliInstallOptions): Promise<Install
     return { executable, mode, version: installedVersion, ...(installedSymlink ? { symlink: installedSymlink } : {}) };
   } catch (error) {
     if (!committed) {
+      if (promoted && targetControllerReady) {
+        options.operation?.activity();
+        try {
+          await run(cliExecutable(dataHome), ["controller", "stop"], currentDirectory);
+        } catch (stopError) {
+          const detail = error instanceof Error ? error.message : String(error);
+          throw new Error(detail, {
+            cause: new AggregateError([error, stopError], "target controller stop failed; rollback was not applied")
+          });
+        }
+      }
       if (promoted) await rm(currentDirectory, { recursive: true, force: true });
       if (previousMoved) {
         await rename(backupDirectory, currentDirectory);
@@ -166,52 +181,6 @@ export async function readLocalPackageBundle(directory: string): Promise<LocalPa
   return { packageSpecifiers, packageNames: [...names] };
 }
 
-export async function installManagedSymlink(linkPath: string, target: string, managedRoot: string): Promise<void> {
-  const absoluteLink = path.resolve(linkPath);
-  const absoluteTarget = path.resolve(target);
-  await mkdir(path.dirname(absoluteLink), { recursive: true, mode: 0o700 });
-  await snapshotManagedSymlink(absoluteLink, managedRoot);
-  await replaceSymlink(absoluteLink, absoluteTarget);
-}
-
-async function snapshotManagedSymlink(linkPath: string, managedRoot: string): Promise<ManagedSymlinkSnapshot> {
-  const absoluteLink = path.resolve(linkPath);
-  const absoluteManagedRoot = path.resolve(managedRoot);
-  try {
-    const existing = await lstat(absoluteLink);
-    if (!existing.isSymbolicLink()) throw new Error(`${absoluteLink} already exists and is not managed by DIM installer`);
-    const target = await readlink(absoluteLink);
-    const resolvedTarget = path.resolve(path.dirname(absoluteLink), target);
-    if (!isWithin(resolvedTarget, absoluteManagedRoot)) {
-      throw new Error(`${absoluteLink} already exists and is not managed by DIM installer`);
-    }
-    return { kind: "present", target };
-  } catch (error) {
-    if (errorCode(error) === "ENOENT") return { kind: "absent" };
-    throw error;
-  }
-}
-
-async function restoreManagedSymlink(linkPath: string, snapshot: ManagedSymlinkSnapshot): Promise<void> {
-  if (snapshot.kind === "absent") {
-    await unlink(linkPath);
-    return;
-  }
-  await replaceSymlink(linkPath, snapshot.target);
-}
-
-async function replaceSymlink(linkPath: string, target: string): Promise<void> {
-  const absoluteLink = path.resolve(linkPath);
-  const temporary = `${absoluteLink}.tmp-${process.pid}-${Date.now()}`;
-  await symlink(target, temporary);
-  try {
-    await rename(temporary, absoluteLink);
-  } catch (error) {
-    await unlink(temporary).catch(() => undefined);
-    throw error;
-  }
-}
-
 export async function validateConfiguredCli(cli: DimCliConfig, facadePath: string | undefined): Promise<string> {
   const executable = path.resolve(cli.executable);
   try {
@@ -249,11 +218,6 @@ async function cleanupRuntimeSiblings(managedRoot: string): Promise<void> {
   await Promise.all(entries
     .filter((entry) => entry.isDirectory() && entry.name !== "current" && entry.name !== "sources")
     .map((entry) => rm(path.join(managedRoot, entry.name), { recursive: true, force: true })));
-}
-
-function isWithin(candidate: string, root: string): boolean {
-  const relative = path.relative(root, candidate);
-  return relative !== "" && !relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative);
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
