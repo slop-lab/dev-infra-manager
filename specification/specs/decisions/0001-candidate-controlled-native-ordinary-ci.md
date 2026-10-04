@@ -81,9 +81,11 @@ candidate that product maintainers review before promotion.
 - The earlier target contract that admitted a protected-head runner definition
   is intentionally superseded. DIM is pre-stable, so no compatibility parser,
   dual format, or state migration is defined.
-- This decision changes the target specification only. The native Project
-  adapter, scheduler path, host executor, schema transition, and source
-  migration remain unimplemented.
+- Native Git implements the strict schema-2 descriptor-bound attempt, terminal
+  evidence, verifier gate, and promotion checks. The native Project adapter,
+  authenticated ordinary-service verifier client, scheduler path, and host
+  executor remain unimplemented; without that client the production gate fails
+  closed.
 
 ## Supersedes
 
