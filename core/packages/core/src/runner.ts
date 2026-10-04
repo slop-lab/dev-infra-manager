@@ -2,6 +2,9 @@ import { spawn } from "node:child_process";
 import { readdir, readFile, readlink } from "node:fs/promises";
 import type { CommandResult, CommandRunner, RunOptions, StreamingCommandRunner, TerminalControl, TerminalSize } from "./types.js";
 
+const TERMINATE_GRACE_MILLISECONDS = 1_000;
+const KILL_GRACE_MILLISECONDS = 1_000;
+
 export class ProcessRunner implements StreamingCommandRunner {
   async run(command: string, args: string[], options: RunOptions = {}): Promise<CommandResult> {
     const actualCommand = options.sudo ? "sudo" : command;
@@ -13,12 +16,28 @@ export class ProcessRunner implements StreamingCommandRunner {
         env: options.env,
         stdio: ["ignore", "pipe", "pipe"]
       });
-      const abort = () => child.kill("SIGTERM");
-      if (options.signal?.aborted) abort();
-      else options.signal?.addEventListener("abort", abort, { once: true });
-
       let stdout = "";
       let stderr = "";
+      let terminateTimer: NodeJS.Timeout | undefined;
+      let killTimer: NodeJS.Timeout | undefined;
+      let settled = false;
+      const finish = (exitCode: number, diagnostic = stderr) => {
+        if (settled) return;
+        settled = true;
+        if (terminateTimer !== undefined) clearTimeout(terminateTimer);
+        if (killTimer !== undefined) clearTimeout(killTimer);
+        options.signal?.removeEventListener("abort", abort);
+        resolve({ command: actualCommand, args: actualArgs, stdout, stderr: diagnostic, exitCode });
+      };
+      const abort = () => {
+        child.kill("SIGTERM");
+        terminateTimer = setTimeout(() => {
+          child.kill("SIGKILL");
+          killTimer = setTimeout(() => {
+            finish(137, `${stderr}${stderr.length === 0 ? "" : "\n"}command did not exit after SIGKILL`);
+          }, KILL_GRACE_MILLISECONDS);
+        }, TERMINATE_GRACE_MILLISECONDS);
+      };
       child.stdout.setEncoding("utf8");
       child.stderr.setEncoding("utf8");
       child.stdout.on("data", (chunk: string) => {
@@ -28,24 +47,14 @@ export class ProcessRunner implements StreamingCommandRunner {
         stderr += chunk;
       });
       child.on("error", (error) => {
-        resolve({
-          command: actualCommand,
-          args: actualArgs,
-          stdout,
-          stderr: error.message,
-          exitCode: 127
-        });
+        finish(127, error.message);
       });
-      child.on("close", (exitCode) => {
-        options.signal?.removeEventListener("abort", abort);
-        resolve({
-          command: actualCommand,
-          args: actualArgs,
-          stdout,
-          stderr,
-          exitCode: exitCode ?? 1
-        });
+      child.on("close", (exitCode, signal) => {
+        const signalExitCode = signal === "SIGKILL" ? 137 : signal === "SIGTERM" ? 143 : 1;
+        finish(exitCode ?? signalExitCode);
       });
+      if (options.signal?.aborted) abort();
+      else options.signal?.addEventListener("abort", abort, { once: true });
     });
   }
 
