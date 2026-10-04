@@ -70,7 +70,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `installer install core|plugin` replaces the old top-level install verbs,
   registry plugins require exact versions, plugin graph changes stage before
   promotion, and core promotion restarts and verifies the controller exactly
-  once. Failed readiness restores the prior runtime and controller. The
+  once. A clean public core install now requires an explicit same-version
+  host-mirror plugin selection in non-interactive use, or offers that exact
+  reviewed coordinate to the host operator on a TTY, and activates it in the
+  core transaction before first readiness. Upgrades carry the matching current
+  plugin version forward without another prompt. Rollback stops a target that
+  already reached readiness through its owner-only host-admin Unix socket and
+  waits for bounded listener draining, forced closure of incomplete clients,
+  bounded plugin disposal, and self-termination before removing it, without
+  signaling a filesystem-supplied PID, then restores the prior runtime and
+  controller when present. A shutdown failure leaves both target and backup in
+  place and preserves the original installation error. The
   CLI-owned `install-cp` command fails closed without host changes until the
   native Git and CI scheduler/webhook services have reviewed deployment
   inputs; no separate web UI is installed.

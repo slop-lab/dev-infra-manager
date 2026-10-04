@@ -201,7 +201,8 @@ Pin an exact, reviewed version — never `latest`:
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-installer@0.8.0'
-dim installer install core
+dim installer install core \
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.8.0'
 ```
 
 The mise-installed facade provisions Node.js 24 on demand when no supported
@@ -212,7 +213,8 @@ or, without mise:
 
 ```bash
 npx '@slop-lab/dim-installer@0.8.0'
-npx '@slop-lab/dim-installer@0.8.0' installer install core
+npx '@slop-lab/dim-installer@0.8.0' installer install core \
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.8.0'
 npx '@slop-lab/dim-installer@0.8.0' installer install plugin '@example/dim-plugin@1.2.3'
 ```
 
