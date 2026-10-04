@@ -72,6 +72,23 @@ Project contract.
 Workspaces persist. Verification runs separately in disposable job containers.
 Secret-bearing Project services must be built and deployed from reviewed refs.
 
+Separation of execution is not automatically independence of evidence. The
+specified, unimplemented native ordinary-CI target lets the exact candidate tree
+select its job config, script, and digest-pinned image. Its success is therefore
+candidate-controlled self-test evidence, even though it runs in a separate
+bounded Sysbox job. Protected policy may require that result, but a human must
+still approve the exact complete tree and the host must still perform checked
+compare-and-swap promotion. Projects needing independent CI require a separate
+lane whose command definition the candidate cannot change.
+
+That evidence classification does not make test review optional. DIM narrows
+infrastructure security review to changes that can expose secrets, alter
+protected refs, reach host/runtime privileges, or elevate trusted capabilities.
+Product maintainers separately review changed requirements, implementation,
+test definitions, and relevant results for correctness and regressions. Green
+CI means the selected checks ran successfully in their recorded environment;
+it does not prove complete coverage or blanket product correctness.
+
 ## Typical uses
 
 ### Interactive coding-agent workspaces

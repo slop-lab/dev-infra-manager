@@ -7,6 +7,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Change the specified native ordinary-CI target so each exact candidate tree
+  selects its own strict job config, Bash script, and digest-pinned disposable
+  image. Results are explicitly candidate-controlled self-test evidence: a zero
+  exit may satisfy a protected required-job condition but is not independent
+  verification or blanket proof of correctness. Product maintainers still
+  review changed requirements, implementation, tests, and relevant results;
+  DIM narrows only infrastructure security review around secrets, protected
+  refs, host privileges, and trusted capability elevation. Operator-owned admission, bounded
+  ephemeral Sysbox execution, human approval of the exact tree, and checked CAS
+  promotion remain required. This intentional pre-stable contract change is
+  not implemented yet and defines no compatibility parser or automatic source
+  or state migration.
+
 - Pin the self-Project CI job image with the complete source-verification
   toolchain, including GNU sed for pnpm's generated shims, findutils, jq,
   grep, awk, util-linux and tini. Runner admission probes the declared tools;
