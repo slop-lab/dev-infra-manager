@@ -3,15 +3,16 @@ import { chmod, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { type Command } from "commander";
 import {
-  configuredDimAdminController, configuredDimAgentController, configuredDimController,
+  ADMIN_CONTROLLER_STOP_EVENT, configuredDimAdminController, configuredDimAgentController, configuredDimController,
   initializeControllerRoutes, LifecycleState, lifecycleOptions, loadInstalledPlugins,
   migrateHostLifecycleState, reconcileReadyHostManagedGit, requireHostMirrorProvider, resolveHostMirrorProvider,
   resolvePluginHome, UserError
 } from "@slop-lab/dim-core";
 import {
-  claimControllerPid, closeControllerServer, pidFileOwnedByCurrentProcess,
-  prepareControllerSocket, restartManagedController, runner
+  claimControllerPid, pidFileOwnedByCurrentProcess,
+  prepareControllerSocket, restartManagedController, runner, stopManagedController
 } from "./cli-support.js";
+import { closeControllerServers, disposeControllerPlugins } from "./controller-teardown.js";
 
 export function registerControllerCommands(program: Command): void {
   const controller = program.command("controller").description("Run trusted DIM controller services");
@@ -21,6 +22,12 @@ controller.command("restart")
     const options = lifecycleOptions();
     await restartManagedController(options);
     console.log(`Restarted managed DIM controller at ${options.controllerSocketPath}`);
+  });
+
+controller.command("stop")
+  .description("Stop the owned managed controller")
+  .action(async () => {
+    await stopManagedController(lifecycleOptions());
   });
 
 controller.command("serve")
@@ -53,6 +60,7 @@ controller.command("serve")
     let server: ReturnType<typeof configuredDimController> | undefined;
     let adminServer: ReturnType<typeof configuredDimAdminController> | undefined;
     let agentServer: ReturnType<typeof configuredDimAgentController> | undefined;
+    let shutdownReached = false;
     try {
       if (pidPath) {
         await mkdir(path.dirname(pidPath), { recursive: true });
@@ -88,6 +96,7 @@ controller.command("serve")
       server = configuredDimController(runtimeOptions, loaded.registered);
       adminServer = configuredDimAdminController(runtimeOptions, loaded.registered);
       agentServer = configuredDimAgentController(runtimeOptions, loaded.registered);
+      const stopRequested = once(adminServer, ADMIN_CONTROLLER_STOP_EVENT);
       if (flags.socket && adminSocket && agentSocket) {
         await prepareControllerSocket(flags.socket);
         const workspaceListening = once(server, "listening");
@@ -117,26 +126,30 @@ controller.command("serve")
         await listening;
         console.log(`DIM controller listening on http://${flags.host}:${flags.port}`);
       }
-      await Promise.race([once(process, "SIGINT"), once(process, "SIGTERM")]);
+      await Promise.race([once(process, "SIGINT"), once(process, "SIGTERM"), stopRequested]);
+      shutdownReached = true;
     } finally {
+      let cleanupError: unknown;
       try {
-        await loaded?.registered.dispose();
+        await closeControllerServers([server, agentServer, adminServer]);
+        if (!await disposeControllerPlugins(loaded?.registered)) {
+          cleanupError = new UserError("controller plugins did not dispose within the shutdown deadline");
+        }
+      } catch (error) {
+        cleanupError = error;
       } finally {
-        try {
-          await Promise.all([
-            closeControllerServer(server),
-            closeControllerServer(agentServer),
-            closeControllerServer(adminServer)
-          ]);
-        } finally {
-          if (ownsPid && pidPath && await pidFileOwnedByCurrentProcess(pidPath)) {
-            if (flags.socket) await rm(flags.socket, { force: true });
-            if (agentSocket) await rm(agentSocket, { force: true });
-            if (adminSocket) await rm(adminSocket, { force: true });
-            await rm(pidPath, { force: true });
-          }
+        if (ownsPid && pidPath && await pidFileOwnedByCurrentProcess(pidPath)) {
+          if (flags.socket) await rm(flags.socket, { force: true });
+          if (agentSocket) await rm(agentSocket, { force: true });
+          if (adminSocket) await rm(adminSocket, { force: true });
+          await rm(pidPath, { force: true });
         }
       }
+      if (shutdownReached) {
+        if (cleanupError !== undefined) console.error(cleanupError);
+        process.exit(cleanupError === undefined ? 0 : 1);
+      }
+      if (cleanupError !== undefined) throw cleanupError;
     }
   });
 }
