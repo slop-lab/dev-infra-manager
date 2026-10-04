@@ -1,6 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  candidateOrdinaryExecutionDescriptorSchema,
+  descriptorDigest
+} from "../../../../core/packages/native-git/src/index.js";
+import {
   createApprovedReview,
   issueJob,
   promote,
@@ -12,6 +16,7 @@ import {
 } from "./nativeGitPromotionHarness.js";
 import {
   nativeGitReviewFixture,
+  objectField,
   readJsonObject,
   reviewPath,
   stringField,
@@ -106,8 +111,13 @@ describe("DIM native Git protected promotion denials", () => {
     const before = await protectedHead(fixture);
     const source = await issueJob(fixture, review, "source");
 
-    const injected = await reportJob(fixture, review, "source", source, "success", "source-ci", {
+    const changedDescriptor = candidateOrdinaryExecutionDescriptorSchema.parse({
+      ...objectField(source, "descriptor"),
       candidateCommit: before
+    });
+    const injected = await reportJob(fixture, review, "source", source, "success", "source-ci", {
+      descriptor: changedDescriptor,
+      descriptorDigest: descriptorDigest(changedDescriptor)
     });
     const response = await promote(fixture, review);
 
@@ -188,12 +198,11 @@ describe("DIM native Git protected promotion denials", () => {
     const unrelatedRef = "refs/heads/proposals/workspace-a/unrelated";
     await fixture.git(fixture.clone, ["push", "origin", `HEAD:${unrelatedRef}`]);
     const review = await createApprovedReview(fixture, unrelatedRef);
-    await reportRequiredJobs(fixture, review);
     const before = await protectedHead(fixture);
 
-    const response = await promote(fixture, review);
+    const issuance = issueJob(fixture, review, "source");
 
-    expect(response.status).toBe(409);
+    await expect(issuance).rejects.toBeDefined();
     expect(await protectedHead(fixture)).toBe(before);
   });
 
@@ -234,12 +243,23 @@ describe("DIM native Git protected promotion denials", () => {
 
     const administrator = await promote(fixture, review, "admin-a");
     const ci = await promote(fixture, review, "source-ci");
-    const administratorIssue = await fixture.request("admin-a", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempts`), {
-      jobName: "source"
-    });
-    const ciIssue = await fixture.request("source-ci", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempts`), {
-      jobName: "source"
-    });
+    const validIssuance = await issueJob(fixture, review, "source");
+    const issueBody = {
+      issuanceRequestId: "00000000-0000-4000-8000-000000000201",
+      jobName: "source",
+      descriptorDigest: stringField(validIssuance, "descriptorDigest"),
+      admissionGeneration: "generation-7",
+      runnerBaseImage: `registry.example/runner@sha256:${"3".repeat(64)}`,
+      bounds: objectField(objectField(validIssuance, "descriptor"), "bounds"),
+      hostId: "host-a",
+      capacity: "primary"
+    };
+    const administratorIssue = await fixture.request(
+      "admin-a", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempts`), issueBody
+    );
+    const ciIssue = await fixture.request(
+      "source-ci", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempts`), issueBody
+    );
 
     expect([administrator.status, ci.status, administratorIssue.status, ciIssue.status]).toEqual([403, 403, 403, 403]);
     expect(await protectedHead(fixture)).toBe(before);
