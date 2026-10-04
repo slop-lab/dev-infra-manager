@@ -34,7 +34,10 @@
   lifecycle code and exposes no issue tracker, CI status, merge, or
   protected-promotion authority; existing managed and external Gitea behavior
   remains unchanged while exact-evidence CI and compare-and-swap promotion
-  remain future gates.
+  remain future gates. Storage ownership now uses a validated file-backed
+  SQLite exclusive transaction on the shared repository volume, preventing
+  duplicate owners across container network namespaces while allowing a clean
+  replacement after process death.
 
 - Let an agent with an explicitly filtered resource-read proxy query only its
   own accepted workspace CPU, memory, and PID assignments. The packaged
