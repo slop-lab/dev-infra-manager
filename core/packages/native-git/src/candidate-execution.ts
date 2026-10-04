@@ -3,28 +3,17 @@ import type { NativeGitReviewPolicy, NativeGitServiceConfig } from "./config.js"
 import { assertCandidateObjects, openCandidateGitReader, readCandidateBlob } from "./candidate-execution-git.js";
 import {
   candidateArgv,
+  candidateOrdinaryExecutionDescriptorSchema,
   candidateOrdinaryExecutionRequestSchema,
   CandidateExecutionError,
   parseCandidateConfig,
+  type CandidateOrdinaryExecutionDescriptor,
   type CandidateOrdinaryExecutionRequest
 } from "./candidate-execution-schema.js";
 
 const configPath = ".dim/ci/runner.yml";
 const evidenceClass = "candidate-controlled" as const;
 const descriptorDomain = "dim-native-ordinary-execution-v1";
-
-type BlobIdentity = {
-  readonly objectId: string;
-  readonly sha256: string;
-};
-
-export type CandidateOrdinaryExecutionDescriptor = CandidateOrdinaryExecutionRequest & {
-  readonly evidenceClass: typeof evidenceClass;
-  readonly configBlob: BlobIdentity;
-  readonly script: BlobIdentity & { readonly path: string };
-  readonly argv: typeof candidateArgv;
-  readonly jobImage: string;
-};
 
 export type CandidateOrdinaryExecution = {
   readonly descriptor: CandidateOrdinaryExecutionDescriptor;
@@ -46,14 +35,14 @@ export async function loadCandidateOrdinaryExecution(
   const job = jobs[request.data.jobName];
   if (job === undefined) throw new CandidateExecutionError("candidate runner config does not define the requested job");
   const scriptBlob = await readCandidateBlob(reader, request.data.candidateTree, job.script, 1024 * 1024);
-  const descriptor: CandidateOrdinaryExecutionDescriptor = {
+  const descriptor = candidateOrdinaryExecutionDescriptorSchema.parse({
     ...request.data,
     evidenceClass,
     configBlob: { objectId: configBlob.objectId, sha256: sha256(configBlob.bytes) },
     script: { path: job.script, objectId: scriptBlob.objectId, sha256: sha256(scriptBlob.bytes) },
     argv: candidateArgv,
     jobImage: job.image
-  };
+  });
   return { descriptor, digest: descriptorDigest(descriptor) };
 }
 
@@ -82,7 +71,7 @@ function assertExactJobs(jobs: Readonly<Record<string, unknown>>, requiredJobs: 
   }
 }
 
-function descriptorDigest(descriptor: CandidateOrdinaryExecutionDescriptor): string {
+export function descriptorDigest(descriptor: CandidateOrdinaryExecutionDescriptor): string {
   const fields = [
     descriptor.projectId,
     descriptor.repositoryId,

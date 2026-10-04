@@ -33,7 +33,7 @@ const candidateConfigSchema = z.object({
   }).strict().readonly()
 }).strict().readonly();
 
-const ordinaryExecutionDescriptorRequestFields = {
+export const ordinaryExecutionDescriptorRequestFields = {
   admissionGeneration: generation,
   jobName: identifier,
   runnerBaseImage: image,
@@ -48,7 +48,7 @@ const ordinaryExecutionDescriptorRequestFields = {
 
 export const ordinaryExecutionDescriptorRequestSchema = z.object(ordinaryExecutionDescriptorRequestFields).strict().readonly();
 
-export const candidateOrdinaryExecutionRequestSchema = z.object({
+const candidateOrdinaryExecutionRequestFields = {
   ...ordinaryExecutionDescriptorRequestFields,
   projectId: identifier,
   repositoryId: identifier,
@@ -59,10 +59,34 @@ export const candidateOrdinaryExecutionRequestSchema = z.object({
   policyRevision: revision,
   requiredReviewRevision: revision,
   requiredJobSetRevision: revision
+} as const;
+
+export const candidateOrdinaryExecutionRequestSchema = z.object(candidateOrdinaryExecutionRequestFields).strict().readonly();
+
+const blobIdentityFields = {
+  objectId,
+  sha256: z.string().regex(/^sha256:[0-9a-f]{64}$/)
+} as const;
+
+const blobIdentitySchema = z.object(blobIdentityFields).strict().readonly();
+
+export const candidateOrdinaryExecutionDescriptorSchema = z.object({
+  ...candidateOrdinaryExecutionRequestFields,
+  evidenceClass: z.literal("candidate-controlled"),
+  configBlob: blobIdentitySchema,
+  script: z.object({ ...blobIdentityFields, path: scriptPath }).strict().readonly(),
+  argv: z.tuple([
+    z.literal(candidateArgv[0]),
+    z.literal(candidateArgv[1]),
+    z.literal(candidateArgv[2]),
+    z.literal(candidateArgv[3])
+  ]).readonly(),
+  jobImage: image
 }).strict().readonly();
 
 export type OrdinaryExecutionDescriptorRequest = z.infer<typeof ordinaryExecutionDescriptorRequestSchema>;
 export type CandidateOrdinaryExecutionRequest = z.infer<typeof candidateOrdinaryExecutionRequestSchema>;
+export type CandidateOrdinaryExecutionDescriptor = z.infer<typeof candidateOrdinaryExecutionDescriptorSchema>;
 export type CandidateJob = z.infer<typeof candidateJobSchema>;
 
 export function parseCandidateConfig(bytes: Buffer): Readonly<Record<string, CandidateJob>> {
