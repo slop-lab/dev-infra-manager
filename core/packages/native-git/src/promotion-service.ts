@@ -1,4 +1,6 @@
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
+import type { BoundedAdmissionVerifier } from "./admission-verifier.js";
 import type { NativeGitIdentity, NativeGitServiceConfig } from "./config.js";
 import type { ReviewObject } from "./review-schema.js";
 import {
@@ -23,6 +25,14 @@ import {
 import { createStatusStore, StatusConflictError } from "./status-store.js";
 import { createJobAttemptStore, JobAttemptStoreError } from "./job-attempt-store.js";
 import type { JobAttempt, JobAttemptRevocation } from "./job-attempt-schema.js";
+import type { IssueJobRequest } from "./job-attempt-schema.js";
+import { deriveOrdinaryExecution } from "./ordinary-execution-service.js";
+import {
+  approvalsComplete,
+  currentAttemptEvidence,
+  jobsSuccessful,
+  matchesReview
+} from "./promotion-evidence.js";
 
 type ReviewTarget = {
   readonly projectId: string;
@@ -31,10 +41,10 @@ type ReviewTarget = {
 
 type JobAttemptTarget = ReviewTarget & {
   readonly reviewId: string;
-  readonly jobName: string;
 };
 
 type JobAttemptRevocationTarget = JobAttemptTarget & {
+  readonly jobName: string;
   readonly attemptId: string;
 };
 
@@ -48,32 +58,60 @@ export type PromotionResult = {
 };
 
 export type PromotionService = {
-  issue(identity: NativeGitIdentity, target: JobAttemptTarget): Promise<JobAttempt>;
+  issue(
+    identity: NativeGitIdentity,
+    target: JobAttemptTarget,
+    input: IssueJobRequest
+  ): Promise<{ readonly issuance: JobAttempt; readonly replayed: boolean }>;
   revokeAttempt(identity: NativeGitIdentity, target: JobAttemptRevocationTarget): Promise<JobAttemptRevocation>;
   report(identity: NativeGitIdentity, target: ReviewTarget, reviewId: string, envelope: CiStatusEnvelope): Promise<CiStatusRecord>;
   promote(identity: NativeGitIdentity, target: ReviewTarget, reviewId: string): Promise<PromotionResult>;
 };
 
-export function createPromotionService(config: NativeGitServiceConfig, serializer: RefSerializer): PromotionService {
+export function createPromotionService(
+  config: NativeGitServiceConfig,
+  serializer: RefSerializer,
+  admissionVerifier: BoundedAdmissionVerifier
+): PromotionService {
   return {
-    async issue(identity, target) {
+    async issue(identity, target, input) {
       authorizeTarget(identity, target);
       if (identity.role !== "scheduler") throw new ReviewApiError(403, "CI scheduler authority is required");
       const review = await requiredReview(config, target, target.reviewId);
       const policy = findPolicy(config, target, review.protectedRef);
-      if (policy === undefined || !policy.requiredJobNames.includes(target.jobName)) {
+      if (policy === undefined || !policy.requiredJobNames.includes(input.jobName)) {
         throw new ReviewApiError(409, "job is not required by current policy");
       }
       return serializer.run(refSerializationKey(review.projectId, review.repositoryId, review.protectedRef), async () => {
-        const current = await status(config, review);
-        if (current.status === "stale") throw new ReviewApiError(409, "review tuple is stale");
-        return attemptStore(config, target).issue({
-          reviewId: target.reviewId,
-          projectId: target.projectId,
-          repositoryId: target.repositoryId,
-          jobName: target.jobName,
-          issuedBy: identity.username
+        const execution = await deriveOrdinaryExecution(config, target, {
+          jobName: input.jobName,
+          admissionGeneration: input.admissionGeneration,
+          runnerBaseImage: input.runnerBaseImage,
+          bounds: input.bounds
         });
+        if (execution.digest !== input.descriptorDigest) {
+          throw new ReviewApiError(409, "candidate execution descriptor digest changed");
+        }
+        await admissionVerifier.assertAdmitted({
+          descriptor: execution.descriptor,
+          descriptorDigest: execution.digest,
+          hostId: input.hostId,
+          capacity: input.capacity
+        });
+        try {
+          return await attemptStore(config, target).issue({
+            issuanceRequestId: input.issuanceRequestId,
+            reviewId: target.reviewId,
+            descriptor: execution.descriptor,
+            descriptorDigest: execution.digest,
+            hostId: input.hostId,
+            capacity: input.capacity,
+            issuedBy: identity.username
+          });
+        } catch (error) {
+          if (error instanceof JobAttemptStoreError) throw new ReviewApiError(409, error.message);
+          throw error;
+        }
       });
     },
     async revokeAttempt(identity, target) {
@@ -98,19 +136,27 @@ export function createPromotionService(config: NativeGitServiceConfig, serialize
       authorizeTarget(identity, target);
       if (identity.role !== "ci") throw new ReviewApiError(403, "CI job authority is required");
       const review = await requiredReview(config, target, reviewId);
-      if (identity.jobName !== envelope.payload.jobName) throw new ReviewApiError(403, "CI identity cannot report this job");
+      if (identity.jobName !== envelope.payload.descriptor.jobName) throw new ReviewApiError(403, "CI identity cannot report this job");
       const policy = findPolicy(config, target, review.protectedRef);
       if (policy === undefined || !policy.requiredJobNames.includes(identity.jobName)) {
         throw new ReviewApiError(403, "CI job is not required by current policy");
       }
-      if (!matchesReview(envelope, review)) throw new ReviewApiError(409, "CI status tuple does not match the review");
       return serializer.run(refSerializationKey(review.projectId, review.repositoryId, review.protectedRef), async () => {
+        const reviewStatus = await status(config, review);
+        if (reviewStatus.status === "stale" || !matchesReview(envelope, review)) {
+          throw new ReviewApiError(409, "CI status tuple does not match the current review");
+        }
         const current = await attemptStore(config, target).current(reviewId, identity.jobName);
         if (current === undefined || current.revocation !== undefined
           || current.issuance.attempt !== envelope.payload.attempt
-          || current.issuance.attemptId !== envelope.payload.attemptId) {
+          || current.issuance.attemptId !== envelope.payload.attemptId
+          || current.issuance.descriptorDigest !== envelope.payload.descriptorDigest
+          || current.issuance.hostId !== envelope.payload.hostId
+          || current.issuance.capacity !== envelope.payload.capacity
+          || !isDeepStrictEqual(current.issuance.descriptor, envelope.payload.descriptor)) {
           throw new ReviewApiError(409, "CI status does not match the current issued attempt");
         }
+        await admissionVerifier.assertCurrentAttempt(currentAttemptEvidence(current.issuance));
         const identityRecord = {
           ...envelope,
           reviewId,
@@ -140,7 +186,8 @@ export function createPromotionService(config: NativeGitServiceConfig, serialize
         if (currentHead === undefined) throw new ReviewApiError(409, "protected ref is missing");
         const alreadyCurrent = currentHead === review.candidateCommit;
         const allowedStaleness = current.staleReasons.every((reason) => alreadyCurrent && reason === "protected-head-changed");
-        if (!allowedStaleness || !approvalsComplete(current) || !await jobsSuccessful(config, current)) {
+        if (!allowedStaleness || !approvalsComplete(current)
+          || !await jobsSuccessful(config, current, admissionVerifier)) {
           throw new ReviewApiError(409, "promotion evidence is incomplete or stale");
         }
         if (!await candidateDescendsFrom(config, target, review.expectedProtectedHead, review.candidateCommit)) {
@@ -160,40 +207,6 @@ export function createPromotionService(config: NativeGitServiceConfig, serialize
       });
     }
   };
-}
-
-function approvalsComplete(review: ReviewStatus): boolean {
-  const revoked = new Set(review.revocations.map((revocation) => revocation.approvalId));
-  const active = new Set(review.approvals.filter((approval) => !revoked.has(approval.approvalId)).map((approval) => approval.reviewerId));
-  return review.requiredReviewerIds.every((reviewerId) => active.has(reviewerId));
-}
-
-async function jobsSuccessful(config: NativeGitServiceConfig, review: ReviewStatus): Promise<boolean> {
-  const policy = findPolicy(config, review, review.protectedRef);
-  if (policy === undefined) return false;
-  const target = { projectId: review.projectId, repositoryId: review.repositoryId };
-  const store = attemptStore(config, target);
-  const results = await Promise.all(policy.requiredJobNames.map(async (jobName) => {
-    const current = await store.current(review.reviewId, jobName);
-    if (current === undefined || current.revocation !== undefined) return false;
-    const latest = review.statuses.find((record) => record.payload.jobName === jobName
-      && record.payload.attempt === current.issuance.attempt
-      && record.payload.attemptId === current.issuance.attemptId);
-    const reporter = config.identities.find((identity) => identity.role === "ci" && identity.jobName === jobName
-      && identity.projectId === review.projectId && identity.repositoryIds.includes(review.repositoryId));
-    return latest?.payload.result === "success" && latest.reporterUsername === reporter?.username
-      && matchesReview(latest, review);
-  }));
-  return results.every((result) => result);
-}
-
-function matchesReview(envelope: CiStatusEnvelope, review: ReviewStatus | ReviewObject): boolean {
-  const payload = envelope.payload;
-  return payload.projectId === review.projectId && payload.repositoryId === review.repositoryId
-    && payload.protectedRef === review.protectedRef && payload.expectedProtectedHead === review.expectedProtectedHead
-    && payload.candidateCommit === review.candidateCommit && payload.candidateTree === review.candidateTree
-    && payload.policyRevision === review.policyRevision && payload.requiredReviewRevision === review.requiredReviewRevision
-    && payload.requiredJobSetRevision === review.requiredJobSetRevision;
 }
 
 function authorizeTarget(identity: NativeGitIdentity, target: ReviewTarget): void {

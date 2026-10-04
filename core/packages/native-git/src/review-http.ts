@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 import type { NativeGitIdentity } from "./config.js";
 import { ordinaryExecutionDescriptorRequestSchema } from "./candidate-execution-schema.js";
+import { issueJobRequestSchema } from "./job-attempt-schema.js";
 import type { OrdinaryExecutionService } from "./ordinary-execution-service.js";
 import { ciStatusEnvelopeSchema } from "./promotion-schema.js";
 import type { PromotionService } from "./promotion-service.js";
@@ -18,7 +19,6 @@ const createSchema = z.object({
 const emptySchema = z.object({}).strict().readonly();
 const revokeSchema = z.object({ approvalId: z.string().uuid() }).strict().readonly();
 const jobNameSchema = z.string().regex(new RegExp(`^${identifierPattern}$`));
-const issueJobSchema = z.object({ jobName: jobNameSchema }).strict().readonly();
 const revokeJobSchema = z.object({ jobName: jobNameSchema, attemptId: z.string().uuid() }).strict().readonly();
 
 export type ReviewHttpRoute =
@@ -96,8 +96,9 @@ export async function serveReviewApi(
         return;
       }
       case "issue-job": {
-        const input = issueJobSchema.parse(await readBody(request));
-        sendJson(response, 201, await services.promotion.issue(identity, { ...target, reviewId: route.reviewId, jobName: input.jobName }));
+        const input = issueJobRequestSchema.parse(await readBody(request));
+        const result = await services.promotion.issue(identity, { ...target, reviewId: route.reviewId }, input);
+        sendJson(response, result.replayed ? 200 : 201, result.issuance);
         return;
       }
       case "revoke-job": {
