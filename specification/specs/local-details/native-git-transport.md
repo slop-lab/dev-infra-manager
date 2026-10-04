@@ -201,6 +201,28 @@ and ownership. Promotion considers only the current durable, unrevoked
 scheduler-issued attempt for every currently required job and requires each to be `success` from the currently
 configured identity for that job.
 
+For native ordinary CI, the issued attempt and completed event additionally
+bind evidence class `candidate-controlled` and the canonical execution
+descriptor required by `CI-NATIVE-CANDIDATE-JOB-001`: candidate config and
+script object/digests, normalized fixed argv, candidate job image digest,
+operator runner-base digest, effective bounds, host, and capacity. Native Git
+derives the descriptor from blobs in the exact candidate tree; no webhook or CI
+reporter may supply or replace those fields. A stale, revoked, superseded,
+partial, or descriptor-mismatched report cannot satisfy promotion. Exact replay
+is idempotent only when the entire terminal record is identical.
+
+Native ordinary success is evidence that the selected candidate-controlled
+tests executed within the recorded sandbox and exited zero. It may satisfy a
+protected policy condition that explicitly requires a `candidate-controlled`
+job, but is not independent verification or blanket proof of correctness.
+Status and promotion responses expose that class and provenance without calling
+it independent. Product maintainers use the test definition and result together
+with changed requirements and implementation to assess regressions.
+Infrastructure security review separately follows secret exposure,
+protected-ref authority, host/runtime privilege, and trusted capability
+elevation. Human approval of the exact complete tree and checked
+compare-and-swap remain separate mandatory conditions.
+
 One mode-`0600` rollback-journal SQLite database below the canonical storage
 root gives the process a kernel-released ownership lease through a continuously
 held exclusive transaction. The database records the storage root filesystem

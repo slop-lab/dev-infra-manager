@@ -112,6 +112,18 @@ username, revoker username, reporter username, native credentials, and every
 unknown native field. Patch and path strings remain untrusted JSON data and
 must be rendered as text, never HTML.
 
+Once native ordinary CI is integrated, each terminal job summary must include
+its evidence class. A `candidate-controlled` summary must show the candidate
+config, script, normalized argv, and job-image digests bound to the current
+attempt and must state that success records bounded execution of the selected
+tests, not independent verification, correctness of the tests, complete
+coverage, or blanket product correctness. The view must retain enough test and
+result provenance for product maintainers to review changed requirements,
+implementation, tests, and regression risk. The browser must not collapse that
+class into a generic verified/pass badge. This target DTO addition is
+unimplemented with the native adapter and does not change the current
+reviewer-web routes.
+
 ## Bounds and verification
 
 Configuration, browser request bodies, native responses, native request time,
