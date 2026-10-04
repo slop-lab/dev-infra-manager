@@ -90,6 +90,19 @@ implementation, tests, examples, specifications, and documentation together.
 
 ## Review Scope
 
+DIM distinguishes two human-review dimensions. Infrastructure security review
+asks whether a change can expose secrets, update protected refs, reach host or
+runtime control planes, or elevate a trusted capability. DIM's goal of keeping
+that review surface small applies only to this security-sensitive authority
+closure. It does not reduce product review.
+
+Product and QA review asks whether changed requirements, implementation, test
+definitions, and observed results preserve the behavior maintainers intend.
+Product maintainers remain responsible for that review for every promoted
+candidate, including candidate-controlled CI definitions and scripts. A green
+job is evidence that the selected tests ran successfully in the recorded
+environment; it is not blanket proof of product correctness.
+
 Changes that affect these topics are global changes:
 
 - Secret access.

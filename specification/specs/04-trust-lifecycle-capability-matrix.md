@@ -49,6 +49,35 @@ revoked attempts MUST fail. An earlier success MUST NOT override a later failure
 cancellation. Missing, malformed, foreign, nonterminal, or tuple-mismatched
 input is not successful CI evidence.
 
+CI evidence has two trust classes:
+
+- **Independent CI** executes a command and image definition selected from an
+  authority the candidate cannot change. It may support a claim about the
+  candidate that its independently selected check is designed to test.
+- **Candidate-controlled self-test** executes a command, script, and job image
+  selected by the exact candidate tree. A successful result proves only that
+  the recorded candidate-selected tests executed and exited successfully in the
+  recorded sandbox. It does not independently establish coverage, correctness
+  of the test definitions, product correctness, security, policy compliance, or
+  fitness for promotion.
+
+The required-job policy MUST identify which trust class satisfies each job.
+Evidence from one class MUST NOT be displayed or exported as the other. The
+native ordinary CI target uses candidate-controlled self-tests. Such a result
+MAY satisfy a required CI condition when the protected policy explicitly names
+that job and class, but it never replaces complete-tree human review. The
+reviewer surface MUST show the class and the candidate-selected config, image,
+argv, and script digests before approval and again when showing promotion
+readiness.
+
+This evidence limitation does not make test review optional. Product
+maintainers MUST review changed requirements, implementation, test definitions,
+and relevant results sufficiently to assess regressions before approving the
+candidate. Infrastructure security review is a separate dimension focused on
+secret exposure, protected-ref authority, host/runtime privilege, and trusted
+capability elevation. Minimizing that security review surface MUST NOT be
+reported as minimizing product or test review.
+
 **TRUST-PROMOTION-CAS-001:** Protected promotion MUST execute as one
 serialized compare-and-swap operation. While holding the repository/ref
 serialization boundary, the promoter MUST reread the protected ref and current
@@ -79,7 +108,7 @@ review or promotion, and MUST NOT be reported as one.
 | --- | --- | --- |
 | Workspace writer | Create and update proposal refs | Update, delete, or force a protected ref |
 | Human reviewer | Approve or reject one immutable complete-tree proposal | Self-approve, approve only selected paths, or reuse approval after tuple drift |
-| CI identity | Report one job attempt for the exact candidate tuple | Approve, merge, deploy, or report a different head/tree as the candidate |
+| CI identity | Report one job attempt and its trust class for the exact candidate tuple | Approve, merge, deploy, report a different head/tree as the candidate, or label candidate-controlled evidence independent |
 | Host scheduler | Issue or revoke the current job attempt | Report a result, approve, promote, or write refs |
 | Host promoter | Perform the checked atomic old-ID to candidate-ID update | Bypass review/jobs, ignore policy drift, or overwrite a concurrently moved ref |
 | Repository owner or provider administrator | Configure policy through host administration | Routine direct push or provider review bypass |

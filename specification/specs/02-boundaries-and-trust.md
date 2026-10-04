@@ -68,6 +68,25 @@ The agent's actual influence over anything outside its container and inner
 runtime is limited to explicit constrained interfaces and pushing proposals for
 review (see Git Boundary).
 
+Native ordinary CI is another untrusted execution boundary. Its schema-2 job
+definition, script, and disposable image come from the exact unreviewed
+candidate tree. Operator Project admission controls eligibility and bounded
+capacity, not trust in those bytes. A successful job is candidate-controlled
+self-test evidence and MUST NOT be represented as independent verification.
+It receives no host runtime socket, DIM or Git credential, secret, `/dev/kvm`,
+review authority, or promotion authority. The human complete-tree approval and
+checked protected-ref compare-and-swap remain outside this boundary.
+
+“Unreviewed” here describes infrastructure admission at execution time: DIM may
+run those bytes safely before a human has approved them because the sandbox
+withholds secrets and trusted capabilities. It does not exempt test definitions
+or scripts from product review before promotion. Product maintainers must review
+changed requirements, implementation, tests, and relevant results sufficiently
+to judge regression risk. Separately, infrastructure security reviewers focus
+on changes that can alter secret exposure, protected-ref authority, host
+privilege, or another trusted capability. One human approval may record both
+judgments, but the judgments and evidence are distinct.
+
 ## Secret-Bearing Runtime Boundary
 
 Secret-bearing containers:
@@ -136,6 +155,12 @@ Protected refs must be updated through the complete-tree review and atomic
 promotion operation in `TRUST-PROMOTION-001` and
 `TRUST-PROMOTION-CAS-001`. A host administrative credential does not create a
 routine review-bypass path.
+
+Complete-tree approval does not mean every path has the same security
+sensitivity. Security review follows the authority and secret-bearing
+dependency closure. Product/QA review follows changed requirements and behavior,
+including implementation and tests. Neither dimension may be inferred solely
+from a green CI status.
 
 For a Project that combines trusted lifecycle and agent-changeable sources in
 one repository, every ordinary update to its selected root ref MUST enter
