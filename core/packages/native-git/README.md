@@ -193,16 +193,26 @@ inside the owned bare repository and are validated when the service restarts.
 The dedicated scheduler identity first issues the current attempt through
 `POST .../reviews/<review-id>/job-attempts`; it may revoke that attempt through
 `POST .../job-attempt-revocations`. CI reports use the native
-`dim.ci.job.completed` schema-1 event envelope. The payload repeats the
-server-issued attempt ID and exact repository, protected ref, expected head,
-candidate commit and tree, policy/review/job-set revisions, configured job
-name, attempt number, and terminal result. This is a DIM event contract, not an emulation of
-GitHub Actions or another provider API. Records are immutable, restart-checked,
-and conflict when the same job attempt is reported with different evidence.
+`dim.ci.job.completed` schema-2 event envelope. Issuance requires a UUID
+`issuanceRequestId`, the expected canonical descriptor digest and all operator
+descriptor inputs, plus the assigned `hostId` and `capacity`. Native Git derives
+the full descriptor again under the protected-ref serializer, verifies current
+ordinary admission, and durably stores the full descriptor and assignment.
+Exact current replay returns the same attempt; changed or superseded request-ID
+reuse conflicts. The payload repeats the full descriptor, digest, assignment,
+server-issued attempt identity, start and finish times, terminal completion,
+result, and bounded stdout/stderr byte counts and digests. This is a DIM event
+contract, not an emulation of GitHub Actions or another provider API. Records
+are immutable, restart-checked, and conflict when the same job attempt is
+reported with different evidence.
 
 Only the current, unrevoked issued attempt can be reported or satisfy promotion.
-The target native ordinary-CI adapter additionally binds the attempt to evidence
-class `candidate-controlled` and the exact candidate config/script blobs,
+Issuance, report, and promotion each require an injected ordinary-admission
+verifier to confirm the exact current generation, descriptor digest, host, and
+capacity. The executable uses a rejecting verifier by default; protected CI
+mutation therefore fails closed until the authenticated ordinary-service client
+is configured. The native attempt binds evidence class `candidate-controlled`
+and the exact candidate config/script blobs,
 normalized fixed argv, job-image digest, operator runner-base digest, effective
 bounds, host, and capacity. A successful result records that the selected
 candidate-controlled tests executed within the recorded sandbox and exited
@@ -254,6 +264,9 @@ strings. The descriptor hash starts with the unframed ASCII domain
 as its ASCII decimal UTF-8 byte length, one colon, and its UTF-8 bytes. These
 choices are part of the exported library contract so scheduler and host
 reverification cannot choose different normalized encodings.
+Attempt, revocation, status-envelope, and status-record state accepts only
+schema version 2. Existing version-1 CI evidence is rejected at startup without
+rewriting it; reviews and human approvals remain immutable and unaffected.
 The service holds an exclusive rollback-journal SQLite transaction in
 `.dim-native-git-owner.sqlite3` below the canonical storage root. The database
 is bound to that root's filesystem identity, and a second process sharing the
@@ -266,7 +279,8 @@ storage on filesystems outside the supported local Linux filesystem allowlist.
 `POST .../reviews/<review-id>/promotions` is accepted only for the dedicated
 promoter identity. Under the per-repository/ref serializer it rereads policy,
 refs, approvals, and the current issued attempt for every required job;
-requires exact successful terminal evidence and descendant ancestry; then uses
+requires current verifier admission, exact exited-zero terminal evidence and
+descriptor/assignment identity, and descendant ancestry; then uses
 one Git ref transaction to verify the proposal candidate and update exactly the
 expected protected object ID to the reviewed candidate. Mismatch leaves the
 protected ref unchanged. Repeating the request returns `already-current` only
