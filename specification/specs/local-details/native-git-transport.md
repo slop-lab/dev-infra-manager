@@ -91,8 +91,9 @@ required-review, and required-job-set revisions; required job names; baseline
 reviewer IDs; and path-prefix rules that add reviewers. Reviewer and administrator credentials
 remain Project/repository scoped. Reviewers have no Git write role.
 Administrators can inspect and revoke evidence but cannot approve.
-Scheduler credentials issue and revoke durable current attempts but cannot
-report results or promote. CI credentials additionally bind one job name and cannot report another job;
+Scheduler credentials derive ordinary candidate execution descriptors and issue
+and revoke durable current attempts, but cannot use smart Git transport, report
+results, or promote. CI credentials additionally bind one job name and cannot report another job;
 promoter credentials have no Git transport role and cannot bypass the checked
 promotion operation.
 
@@ -211,6 +212,26 @@ reporter may supply or replace those fields. A stale, revoked, superseded,
 partial, or descriptor-mismatched report cannot satisfy promotion. Exact replay
 is idempotent only when the entire terminal record is identical.
 
+The scheduler-only descriptor endpoint is exact
+`POST /v1/projects/{project}/repositories/{repository}/reviews/{review-id}/ordinary-execution-descriptors`
+with no query parameters. Its exact JSON body contains only `jobName`,
+`admissionGeneration`, digest-pinned `runnerBaseImage`, and `bounds` containing
+positive canonical decimal strings for `cpu`, `memoryBytes`, `pids`,
+`wallClockSeconds`, and `outputBytes`. The body is limited to 64 KiB and unknown
+fields are rejected. Project, repository, ref, candidate object IDs, and policy
+revisions come only from the immutable review. The response contains only
+`reviewId`, the canonical `descriptor`, and its `digest`; obtaining it creates
+no attempt, status, or other durable state and grants no Git transport read.
+
+The named job must remain required by current policy. Pending, approved, and
+revoked reviews are eligible because ordinary CI may inform human approval;
+stale reviews conflict. Under the protected-ref serializer, the service checks
+status before loading the bounded candidate config and script blobs and checks
+status again afterward. The second check detects a concurrent proposal
+fast-forward, because smart Git receive does not participate in that serializer.
+Unchanged review and scheduler inputs deterministically return the same
+`{reviewId, descriptor, digest}` tuple.
+
 Native ordinary success is evidence that the selected candidate-controlled
 tests executed within the recorded sandbox and exited zero. It may satisfy a
 protected policy condition that explicitly requires a `candidate-controlled`
@@ -272,3 +293,9 @@ Missing, fabricated-future, late, revoked, failed-current, nonterminal, foreign,
 tuple-mismatched, injected, revoked, stale-policy/head, and non-descendant cases
 leave the protected ref unchanged; smart-HTTP force and deletion denials remain
 in the transport gate.
+
+The ordinary descriptor driver additionally proves exact pending-review replay,
+strict body rejection, foreign-scope concealment, wrong-role denial, no attempt
+or status writes, stale proposal rejection, and a deterministic proposal move
+during candidate blob loading. Scheduler credentials are also denied both
+upload-pack discovery and RPC while reader and writer fetch remain allowed.

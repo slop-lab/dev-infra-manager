@@ -23,7 +23,8 @@ and non-fast-forward proposal updates. Reviewer and administrator identities
 cannot use Git transport. Reviewers may approve only a complete immutable
 base-to-candidate review for which policy designates them; administrators may
 inspect and revoke but cannot approve. Approval is durable evidence only.
-Dedicated scheduler identities issue and revoke current job attempts but cannot
+Dedicated scheduler identities derive candidate ordinary-execution descriptors
+and issue and revoke current job attempts, but cannot use Git transport or
 report results. Dedicated CI identities can report only their configured job
 and issued attempt, and only a dedicated promoter identity can request the
 checked promotion transaction.
@@ -213,6 +214,37 @@ reader for that future adapter. It accepts a registered native Git configuration
 and the exact review/admission tuple, reads only `.dim/ci/runner.yml` and its
 selected script from the named candidate tree, and returns the normalized
 descriptor and digest. It does not schedule or launch work.
+
+Before issuing an attempt, the scheduler obtains that descriptor through exact
+`POST /v1/projects/<project>/repositories/<repository>/reviews/<review-id>/ordinary-execution-descriptors`.
+The request has no query parameters, is bounded to 64 KiB, requires exact
+`application/json`, and accepts only:
+
+```json
+{
+  "jobName": "source",
+  "admissionGeneration": "generation-7",
+  "runnerBaseImage": "registry.example/runner@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "bounds": {
+    "cpu": "2",
+    "memoryBytes": "2147483648",
+    "pids": "512",
+    "wallClockSeconds": "900",
+    "outputBytes": "10485760"
+  }
+}
+```
+
+Unknown fields and noncanonical values are rejected. The service derives the
+Project, repository, protected ref, expected head, candidate commit and tree,
+and policy revisions from the named immutable review. It returns only
+`{reviewId, descriptor, digest}` and creates no attempt, result, or other state.
+Pending, approved, and revoked current reviews may produce descriptors so CI
+can inform review; stale reviews and invalid candidate execution trees return
+conflict. The service checks review status both before and after its bounded
+local Git object reads, closing proposal fast-forward races that bypass the
+in-process ref serializer. Exact replay with unchanged review and operator
+inputs returns the same descriptor and digest.
 
 The reader represents config and script SHA-256 fields as
 `sha256:<64 lowercase hexadecimal digits>`. Its CPU, memory-byte, PID,
