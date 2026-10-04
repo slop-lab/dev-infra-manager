@@ -102,6 +102,14 @@ export class CommandSessionManager {
     return true;
   }
 
+  cancelAll(): void {
+    for (const session of this.#sessions.values()) {
+      if (session.complete) continue;
+      session.abort.abort();
+      session.input.end();
+    }
+  }
+
   #emit(session: CommandSession, event: UnsequencedCommandSessionEvent): void {
     const sequenced = { ...event, sequence: session.nextSequence++ } as CommandSessionEvent;
     session.events.push(sequenced);

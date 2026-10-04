@@ -96,6 +96,35 @@ describe("command sessions", () => {
     ]));
   });
 
+  it("cancels every active command when the admin server shuts down", async () => {
+    // Given
+    const runner: StreamingCommandRunner = {
+      async run(command, args) {
+        return { command, args, stdout: "", stderr: "", exitCode: 0 };
+      },
+      async runStreaming(_command, _args, options = {}) {
+        return await new Promise((resolve) => {
+          options.signal?.addEventListener("abort", () => resolve(143), { once: true });
+        });
+      }
+    };
+    const sessions = new CommandSessionManager(runner);
+    const first = sessions.start(async (sessionRunner) => sessionRunner.runStreaming("first", []));
+    const second = sessions.start(async (sessionRunner) => sessionRunner.runStreaming("second", []));
+
+    // When
+    sessions.cancelAll();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Then
+    expect(sessions.snapshot(first)?.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "result", result: 143 })
+    ]));
+    expect(sessions.snapshot(second)?.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "result", result: 143 })
+    ]));
+  });
+
   it("runs interactive commands in a real resizable Linux PTY", async () => {
     const input = new PassThrough();
     const output = new PassThrough();
