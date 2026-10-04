@@ -10,6 +10,7 @@ import {
   type NativeGitServer,
   type NativeGitServiceConfig
 } from "../../../../core/packages/native-git/src/index.js";
+import { createGitReadGate, type GitReadGate } from "./gitReadGate.js";
 
 const run = promisify(execFile);
 const gitExecutable = "/usr/bin/git";
@@ -26,6 +27,7 @@ export type ReviewFixture = {
   readonly request: (identity: string, method: string, path: string, body?: unknown) => Promise<Response>;
   readonly git: (cwd: string, args: readonly string[]) => Promise<{ readonly stdout: string; readonly stderr: string }>;
   readonly clone: string;
+  readonly candidateReadGate: GitReadGate;
   restart(config?: NativeGitServiceConfig): Promise<void>;
   close(): Promise<void>;
 };
@@ -35,6 +37,7 @@ export type JsonObject = Readonly<Record<string, unknown>>;
 export async function nativeGitReviewFixture(): Promise<ReviewFixture> {
   const root = await mkdtemp(join(tmpdir(), "dim-native-git-review-"));
   const storageRoot = join(root, "storage");
+  const candidateReadGate = await createGitReadGate(root, gitExecutable);
   const repository = {
     projectId: "project-a",
     repositoryId: "source",
@@ -53,7 +56,7 @@ export async function nativeGitReviewFixture(): Promise<ReviewFixture> {
     host: "127.0.0.1",
     port: 0,
     storageRoot,
-    gitExecutable,
+    gitExecutable: candidateReadGate.executable,
     gitVersion: "2.43.0",
     repositories: [repository, { projectId: "project-b", repositoryId: "source" }],
     identities: [
@@ -88,6 +91,21 @@ export async function nativeGitReviewFixture(): Promise<ReviewFixture> {
   await writeFile(join(source, "README.md"), "initial\n");
   await writeFile(join(source, "obsolete.txt"), "remove me\n");
   await writeFile(join(source, "mode.sh"), "#!/bin/sh\nexit 0\n");
+  await mkdir(join(source, ".dim/ci/jobs"), { recursive: true });
+  await writeFile(join(source, ".dim/ci/runner.yml"), `schemaVersion: 2
+ordinary:
+  jobs:
+    source:
+      image: registry.example/source@sha256:${"1".repeat(64)}
+      script: .dim/ci/jobs/source.bash
+      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
+    security:
+      image: registry.example/security@sha256:${"2".repeat(64)}
+      script: .dim/ci/jobs/security.bash
+      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
+`);
+  await writeFile(join(source, ".dim/ci/jobs/source.bash"), "set -euo pipefail\nprintf 'source verified\\n'\n");
+  await writeFile(join(source, ".dim/ci/jobs/security.bash"), "set -euo pipefail\nprintf 'security verified\\n'\n");
   await symlink("README.md", join(source, "documentation"));
   await run(gitExecutable, ["-C", source, "add", "."]);
   await run(gitExecutable, ["-C", source, "commit", "-m", "initial"]);
@@ -133,6 +151,7 @@ export async function nativeGitReviewFixture(): Promise<ReviewFixture> {
         : identity)
     }),
     clone,
+    candidateReadGate,
     git,
     request: (identity, method, path, body) => reviewRequest(endpoint, identity, method, path, body),
     async restart(nextConfig = config) {
@@ -180,6 +199,12 @@ export function objectArrayField(value: JsonObject, field: string): readonly Jso
   if (!Array.isArray(candidate) || !candidate.every(isJsonObject)) {
     throw new Error(`expected object array field: ${field}`);
   }
+  return candidate;
+}
+
+export function objectField(value: JsonObject, field: string): JsonObject {
+  const candidate = value[field];
+  if (!isJsonObject(candidate)) throw new Error(`expected object field: ${field}`);
   return candidate;
 }
 
