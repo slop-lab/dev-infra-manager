@@ -6,8 +6,6 @@ import {
   lifecycleOptions,
   ProcessRunner,
   reconcileOrdinaryCiPoolProject,
-  runOrdinaryCiPoolCapacity,
-  runOrdinaryCiPoolCapacityOnce,
   runOrdinaryCiPoolService,
   setConfiguredCiRunnerDefaults,
   UserError
@@ -58,41 +56,6 @@ ordinaryService.command("run")
       process.off("SIGTERM", stop);
     }
   });
-const ordinaryWorker = ordinaryPool.command("worker").description("Run one host capacity claim");
-ordinaryWorker.command("serve")
-  .description("Continuously serve one ordinary CI host capacity")
-  .argument("<capacity>")
-  .action(async (capacity: string) => {
-    const abort = new AbortController();
-    const stop = () => abort.abort();
-    process.once("SIGINT", stop);
-    process.once("SIGTERM", stop);
-    try {
-      await runOrdinaryCiPoolCapacity(new ProcessRunner(), lifecycleOptions(), capacity, abort.signal);
-    } finally {
-      process.off("SIGINT", stop);
-      process.off("SIGTERM", stop);
-    }
-  });
-ordinaryWorker.command("run-once")
-  .description("Claim and execute at most one ordinary CI job")
-  .argument("<capacity>")
-  .action(async (capacity: string) => {
-    const abort = new AbortController();
-    const stop = () => abort.abort();
-    process.once("SIGINT", stop);
-    process.once("SIGTERM", stop);
-    try {
-      const result = await runOrdinaryCiPoolCapacityOnce(
-        new ProcessRunner(), lifecycleOptions(), capacity, abort.signal
-      );
-      console.log(JSON.stringify(result));
-    } finally {
-      process.off("SIGINT", stop);
-      process.off("SIGTERM", stop);
-    }
-  });
-
 ciRunner.command("create")
   .description("Create a named CI runner")
   .argument("<project>")
