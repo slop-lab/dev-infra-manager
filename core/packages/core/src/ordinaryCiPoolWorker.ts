@@ -147,7 +147,7 @@ export async function runOrdinaryPoolClaim(
   }
   await dependencies.releaseClaim(plan.claim);
   if (renewalError !== undefined) throw renewalError;
-  if (workError !== undefined) throw workError;
+  if (workError !== undefined && !plan.signal?.aborted) throw workError;
 }
 
 export async function recoverOrdinaryPoolClaim(

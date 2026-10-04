@@ -1,7 +1,7 @@
 import type { Server } from "node:http";
 import { UserError } from "./errors.js";
 import { configuredExternalGiteaConnection } from "./giteaExternalConnection.js";
-import { withHostAdminAdmission } from "./hostAdminAdmission.js";
+import { withHostRuntimeAdmission } from "./hostAdminAdmission.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type { GiteaProjectBinding, LifecycleOptions } from "./lifecycleTypes.js";
 import {
@@ -51,7 +51,10 @@ export async function runOrdinaryCiPoolCapacityOnce(
   capacityInput: string,
   signal?: AbortSignal
 ): Promise<OrdinaryPoolCapacityResult> {
-  return withHostAdminAdmission(options, () => runOrdinaryCiPoolCapacityOnceAdmitted(runner, options, capacityInput, signal));
+  return withHostRuntimeAdmission(
+    options,
+    () => runOrdinaryCiPoolCapacityOnceAdmitted(runner, options, capacityInput, signal)
+  );
 }
 
 async function runOrdinaryCiPoolCapacityOnceAdmitted(
@@ -147,7 +150,7 @@ export async function runOrdinaryCiPoolCapacity(
       if (signal.aborted) return;
       if (result.status === "idle") await waitForNextPoll(signal);
     } catch (error) {
-      if (signal.aborted) return;
+      if (signal.aborted && error === signal.reason) return;
       throw error;
     }
   }
