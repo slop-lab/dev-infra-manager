@@ -16,11 +16,13 @@ Two supported ways to run it, both pinned to an exact version:
 
 ```bash
 mise use --raw --global 'npm:@slop-lab/dim-installer@0.9.0'
-dim installer install core
+dim installer install core \
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
 ```
 
 ```bash
-npx '@slop-lab/dim-installer@0.9.0' installer install core
+npx '@slop-lab/dim-installer@0.9.0' installer install core \
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
 ```
 
 With `mise`, plain `dim ...` keeps working afterwards for both installer
@@ -56,7 +58,8 @@ is no longer reachable that way. To run installer-only commands again
 `npx` call:
 
 ```bash
-npx '@slop-lab/dim-installer@0.9.0' installer install core
+npx '@slop-lab/dim-installer@0.9.0' installer install core \
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
 npx '@slop-lab/dim-installer@0.9.0' installer install plugin '@example/dim-plugin@1.2.3'
 ```
 
@@ -113,11 +116,27 @@ Options:
   --no-local-bin  Install privately for facade use without ~/.local/bin/dim
   --local-bin     Create a managed dim symlink in the user bin directory
   --prefix PATH   Use PATH/bin for the managed symlink (default: ~/.local)
+  --host-mirror-plugin PACKAGE@EXACT_VERSION
+                  Install and enable the reviewed required host mirror plugin
   -h, --help      Show this help
 ```
 
 `--local-bin` and `--no-local-bin` are mutually exclusive. See "CLI install
 modes" below for what each one does and which is the default.
+
+On a clean host, core installation also requires the reviewed host mirror
+provider at the installer's exact version:
+
+```bash
+dim installer install core --no-local-bin \
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
+```
+
+When stdin and stdout are TTYs, omitting this option offers that exact
+coordinate as a default-yes host-operator choice. Declining leaves the runtime
+uninstalled. Without a TTY, omission fails before npm runs and prints the exact
+option required. No Project, workspace, or agent input can make this choice or
+select the plugin's digest-pinned images.
 
 ### `dim installer install plugin`
 
@@ -168,11 +187,23 @@ workspace, and CI-runner state read-only with its own parsers. Missing state and
 the exact supported schemas proceed. The sole accepted historical case is host
 schema 1, which prints a warning and remains byte-identical until the controller
 performs its documented startup migration. Unknown plugin-private state is not
-part of this check. After promotion, the installer runs the installed DIM
+part of this check. The selected required host plugin joins the staged core/CLI
+npm graph and is enabled in staged `plugins.json` before promotion. After
+promotion, the installer runs the installed DIM
 `controller restart` subcommand exactly once and accepts the replacement only
 after that command's readiness check succeeds. Failure restores the previous
-runtime and restarts its controller before reporting the error. Temporary and
-backup directories are removed after success.
+runtime and restarts its controller before reporting the error. If a later
+install step fails after target readiness, the installer first stops the owned
+target controller through its owner-only host-admin Unix socket and waits for
+the controller to close its sockets and remove its PID file before removing the
+runtime. Listener draining and plugin disposal are bounded, so a workspace or
+agent holding an incomplete request cannot block restoration. If the target
+cannot stop, rollback halts without deleting that running runtime or restoring
+the previous runtime over it, and installation still reports the original
+failure with the stop failure attached as cause. It never signals a PID supplied
+by the filesystem; a clean-host failure therefore cannot leave that detached
+target running or terminate an unrelated process. Temporary and backup
+directories are removed after success.
 
 Malformed, unsafe, or unsupported known state refuses installation before the
 runtime, config, PATH symlink, or plugin activation changes. Keep the currently

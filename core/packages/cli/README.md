@@ -69,7 +69,8 @@ npm install --global "@slop-lab/dim-cli@0.9.0"
 Or use the user-local installer:
 
 ```bash
-npx '@slop-lab/dim-installer@0.9.0' installer install core
+npx '@slop-lab/dim-installer@0.9.0' installer install core \
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
@@ -101,6 +102,16 @@ and EOF. They allocate a PTY only when `exec` or `run` is attached to an
 interactive terminal. Controller bootstrap and local Git process adapters stay
 local. Neither the admin socket nor host credentials are mounted into
 workspaces.
+
+Managed shutdown is available only through the owner-only host-admin Unix
+socket. The controller acknowledges the request and then terminates itself,
+then immediately stops accepting on every listener. Existing HTTP requests get
+a bounded grace period before the controller closes all remaining connections,
+including clients that never finished sending headers. Active command sessions
+are cancelled when the admin listener closes, plugin disposal is bounded, and
+the controller removes its own PID file. The CLI does not signal a PID read from
+the filesystem, and this shutdown endpoint is not available on a TCP listener
+or either workspace-facing socket.
 
 After claiming the managed controller PID, startup loads plugins and resolves
 exactly one host-mirror provider before performing the one supported pre-stable
