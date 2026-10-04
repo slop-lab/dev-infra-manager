@@ -37,7 +37,7 @@ export async function assertStatusStore(repositoryPath: string): Promise<void> {
           throw new StatusStoreError("CI status store contains an invalid attempt entry");
         }
         const status = parseCiStatusRecord(await readJson(join(jobRoot, attemptEntry.name)));
-        if (status.reviewId !== reviewEntry.name || status.payload.jobName !== jobEntry.name
+        if (status.reviewId !== reviewEntry.name || status.payload.descriptor.jobName !== jobEntry.name
           || `${status.payload.attempt}.json` !== attemptEntry.name) {
           throw new StatusStoreError("CI status path does not match its identity");
         }
@@ -50,7 +50,7 @@ export function createStatusStore(repositoryPath: string): StatusStore {
   const root = join(repositoryPath, "dim-reviews", "statuses");
   return {
     async saveStatus(status) {
-      const directory = join(root, status.reviewId, status.payload.jobName);
+      const directory = join(root, status.reviewId, status.payload.descriptor.jobName);
       await ownedDirectory(directory);
       const path = join(directory, `${status.payload.attempt}.json`);
       try {
