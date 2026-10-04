@@ -10,6 +10,7 @@ import { assertStatusStore, initializeStatusStore } from "./status-store.js";
 import { assertJobAttemptStore, initializeJobAttemptStore } from "./job-attempt-store.js";
 
 const execute = promisify(execFile);
+const gitMetadataProcessOptions = { maxBuffer: 4096, timeout: 10_000 } as const;
 const hook = `#!/bin/sh
 set -eu
 workspace="\${DIM_NATIVE_GIT_WORKSPACE_ID-}"
@@ -40,7 +41,10 @@ type GitConfig = Pick<NativeGitServiceConfig, "gitExecutable" | "gitVersion">;
 
 export async function assertGitVersion(config: GitConfig): Promise<GitExecutableIdentity> {
   const identity = await inspectGitExecutable(config.gitExecutable);
-  const { stdout } = await execute(config.gitExecutable, ["--version"], { env: { LC_ALL: "C" } });
+  const { stdout } = await execute(config.gitExecutable, ["--version"], {
+    env: { GIT_CONFIG_NOSYSTEM: "1", HOME: "/dev/null", LC_ALL: "C" },
+    ...gitMetadataProcessOptions
+  });
   if (stdout.trim() !== `git version ${config.gitVersion}`) {
     throw new NativeGitConfigError(`expected Git ${config.gitVersion}, received ${stdout.trim()}`);
   }
@@ -79,6 +83,8 @@ export async function initializeNativeRepository(
   }
   await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "http.receivepack", "true"], { env: { LC_ALL: "C" } });
   await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "receive.denyNonFastForwards", "true"], { env: { LC_ALL: "C" } });
+  await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "receive.fsckObjects", "true"], { env: { LC_ALL: "C" } });
+  await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "receive.fsck.fullPathname", "error"], { env: { LC_ALL: "C" } });
   const hooksPath = join(repositoryPath, "hooks");
   await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "core.hooksPath", hooksPath], { env: { LC_ALL: "C" } });
   await assertOwnedDirectory(hooksPath, "repository hooks directory");
@@ -127,6 +133,16 @@ export async function assertRegisteredRepository(
     env: { GIT_CONFIG_NOSYSTEM: "1", HOME: "/dev/null", LC_ALL: "C" }
   });
   if (stdout.trim() !== hooksPath) throw new NativeGitConfigError("registered repository hooks path is invalid");
+  const fsck = await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "--bool", "--get", "receive.fsckObjects"], {
+    env: { GIT_CONFIG_NOSYSTEM: "1", HOME: "/dev/null", LC_ALL: "C" },
+    ...gitMetadataProcessOptions
+  });
+  if (fsck.stdout.trim() !== "true") throw new NativeGitConfigError("registered repository receive fsck policy is invalid");
+  const fullPathname = await execute(config.gitExecutable, ["--git-dir", repositoryPath, "config", "--get", "receive.fsck.fullPathname"], {
+    env: { GIT_CONFIG_NOSYSTEM: "1", HOME: "/dev/null", LC_ALL: "C" },
+    ...gitMetadataProcessOptions
+  });
+  if (fullPathname.stdout.trim() !== "error") throw new NativeGitConfigError("registered repository pathname fsck policy is invalid");
   await assertReviewStore(repositoryPath);
   await assertStatusStore(repositoryPath);
   await assertJobAttemptStore(repositoryPath);
