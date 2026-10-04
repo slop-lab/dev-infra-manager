@@ -190,17 +190,18 @@ approval but grants no additional authority.
 
 ## Exact CI evidence and protected promotion
 
-The status API accepts only the native schema-1 `dim.ci.job.completed` event
-envelope. Its payload binds the review's Project, repository, protected ref,
-expected head, candidate commit and tree, policy, review, and job-set revisions,
-plus the authenticated job name, server-issued attempt ID and number, and terminal result. The
+The status API accepts only the native schema-2 `dim.ci.job.completed` event
+envelope. Its payload binds the review ID, full canonical candidate execution
+descriptor and digest, authenticated job, server-issued attempt ID and number,
+immutable host/capacity assignment, start and finish times, terminal completion,
+result, and bounded stdout/stderr byte counts and digests. The
 format is a DIM event contract and makes no claim of GitHub Actions or provider
 API compatibility. One immutable mode-`0600` record may exist for each review,
 job, and attempt; an exact replay is idempotent and conflicting evidence for the
 same attempt is rejected. Startup validates record schema, digest, path, mode,
 and ownership. Promotion considers only the current durable, unrevoked
-scheduler-issued attempt for every currently required job and requires each to be `success` from the currently
-configured identity for that job.
+scheduler-issued attempt for every currently required job and requires each to
+be `success` with `exited/0` from the currently configured identity for that job.
 
 For native ordinary CI, the issued attempt and completed event additionally
 bind evidence class `candidate-controlled` and the canonical execution
@@ -211,6 +212,36 @@ derives the descriptor from blobs in the exact candidate tree; no webhook or CI
 reporter may supply or replace those fields. A stale, revoked, superseded,
 partial, or descriptor-mismatched report cannot satisfy promotion. Exact replay
 is idempotent only when the entire terminal record is identical.
+
+Attempt issuance accepts only `issuanceRequestId`, `jobName`, the expected
+descriptor digest, admission generation, runner-base image, bounds, `hostId`,
+and `capacity`. Under the protected-ref serializer, native Git derives the full
+descriptor through a non-locking helper, compares its digest, asks the ordinary
+admission verifier to confirm the exact descriptor and assignment, then writes
+one immutable schema-2 attempt. Exact replay of a still-current request ID
+returns the existing attempt. Changed reuse or replay after replacement or
+revocation conflicts and creates no record. Revocations repeat the descriptor
+digest and assignment and must match their issuance.
+
+The ordinary-admission verifier is mandatory at issuance, reporting, and final
+promotion evaluation. It confirms the current admission generation and exact
+current attempt tuple, including descriptor digest, host, and capacity. Timeout,
+outage, rejection, or malformed verifier behavior fails closed before evidence
+or protected-ref mutation. The package exposes the narrow verifier interface for
+the authenticated ordinary-service client; the executable's unconfigured
+default always rejects.
+
+Terminal completion is exactly one of exited with code 0 through 255, signaled
+with signal 1 through 64, timed out, output-limit exceeded, lease lost,
+cancelled, or executor failure with a safe code. Success requires exited zero;
+cancelled requires cancelled completion; every other completion is failure.
+Finish cannot precede start, and combined stdout/stderr captured bytes cannot
+exceed the descriptor output bound.
+
+Attempt, revocation, envelope, and status-record parsers accept only schema
+version 2. Startup rejects version-1 evidence unchanged. It does not migrate,
+rewrite, delete, alias, or union obsolete state; immutable reviews and human
+approvals are preserved so an operator can explicitly issue fresh evidence.
 
 The scheduler-only descriptor endpoint is exact
 `POST /v1/projects/{project}/repositories/{repository}/reviews/{review-id}/ordinary-execution-descriptors`
@@ -260,7 +291,9 @@ The service serializes approval, revocation, CI status, and promotion decisions
 per repository/protected ref. While inside that boundary, promotion rereads the
 review, current policy, live protected and proposal refs, candidate tree,
 current complete human approvals, exact current CI evidence, and descendant
-ancestry. It then executes one Git `update-ref --stdin` transaction that locks
+ancestry. After human approval, it revalidates every current ordinary admission,
+attempt descriptor, and assignment before ancestry and CAS. It then executes
+one Git `update-ref --stdin` transaction that locks
 and verifies the proposal ref at the reviewed candidate while comparing and
 swapping the protected ref from the expected head to that candidate. Every
 mismatch leaves the protected ref unchanged, and concurrent candidates from
@@ -282,17 +315,20 @@ The review driver creates a real candidate with additions, deletion, rename,
 mode change, and symbolic-link change; inspects exact refs, SHAs, paths, and
 status through the API and CLI; and proves whole-tree path-owner approval,
 revocation, identity/ref/tree/policy staleness, restart durability, Project and
-role denials. The promotion driver issues exact attempts before recording per-job terminal evidence,
-restarts the service, compares real `rev-parse` values before and after
-promotion, and proves idempotent retry. Competing real candidates prove exactly
+role denials. The promotion driver issues and replays exact descriptor-bound
+attempts before recording per-job exited-zero terminal evidence, restarts the
+service, compares real `rev-parse` values before and after promotion, and proves
+idempotent retry. Competing real candidates prove exactly
 one CAS winner, while real processes in separate Docker network namespaces
 cannot acquire the same shared-volume storage root. That isolation test also
 proves rejection occurs before the contender's listen/mutation marker and that
 a replacement acquires ownership after the first process is killed.
-Missing, fabricated-future, late, revoked, failed-current, nonterminal, foreign,
-tuple-mismatched, injected, revoked, stale-policy/head, and non-descendant cases
-leave the protected ref unchanged; smart-HTTP force and deletion denials remain
-in the transport gate.
+Missing, fabricated-future, late, revoked, replaced, failed-current,
+nonterminal, foreign, descriptor/host mismatched, generation-rotated,
+verifier-outage, malformed terminal/output, injected, stale-policy/head, and
+non-descendant cases leave the protected ref unchanged. Startup rejects each
+version-1 evidence record without rewriting it; smart-HTTP force and deletion
+denials remain in the transport gate.
 
 The ordinary descriptor driver additionally proves exact pending-review replay,
 strict body rejection, foreign-scope concealment, wrong-role denial, no attempt
