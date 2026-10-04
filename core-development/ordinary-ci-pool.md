@@ -22,9 +22,10 @@ implementation pass the referenced verification.
 | --- | --- | --- |
 | Compose deployment, image digests, fixed mounts, ports, readiness, rollback | installer facade | operational CLI |
 | Bare repositories, proposal transport, review and exact CI evidence, protected promotion | native Git service | ordinary scheduler, host controller |
-| Project admission, webhook demand, attempts, queue, claim leases | ordinary CI service | native Git storage, host runtime |
+| Operator-authorized Project admission, webhook demand, attempts, queue, claim leases | ordinary CI service | trust in candidate job bytes, native Git storage, host runtime |
 | Shared capacity, Sysbox execution, cleanup, result submission | each DIM host controller | Compose services, Project lifecycle |
-| Ordinary image and labels | immutable Project admission for one disposable job | persistent runner/image state |
+| Candidate ordinary image, fixed argv, and script | exact candidate Git tree for one disposable job | admission authority, persistent runner/image state |
+| Runner base and resource/time/output ceilings | operator-owned host capacity | candidate config or webhook |
 | QEMU integration demand and execution | optional QEMU scheduler and host QEMU supervisors | ordinary CI service |
 
 Neither control-plane service receives a host Docker socket, controller socket,
@@ -127,7 +128,10 @@ readability and durability, and local listener; it neither contacts native Git
 nor requires Project state. Every token and native-facing password is distinct,
 base64url, and at least 32 random bytes.
 The host map contains installation capacity identities only; it contains no
-Project, repository, image, label, or Git credential. Adding or removing a host
+Project, repository, candidate job image, label, or Git credential. Each named
+capacity separately selects one digest-pinned runner base and positive CPU,
+memory, PID, wall-clock, and output ceilings through the host connection
+contract. Adding or removing a host
 is a reviewed operator-source update that creates a new immutable bundle
 generation, not a service API.
 
@@ -159,33 +163,53 @@ services empty and idle. Until a separate native Project/repository state
 adapter is specified and implemented, admission, native webhook demand,
 capacity advertisement, claim, and result operations fail before mutation.
 
-1. A trusted host controller resolves the protected native root ref once and
-   reads `.dim/ci/runner.yml`, policy revision, job-set revision, commit, and
-   tree from that immutable selection.
-2. Using only its admission credential, it submits the normalized ordinary
-   policy. The service verifies native Git identity for that operation with its
-   identity credential and verifies the immutable tuple before publishing or
-   refreshing one leased admission generation.
+1. A trusted host controller uses only its admission credential to submit the
+   operator-authorized native Project/repository, protected ref, policy and
+   review/job-set revisions, required candidate-controlled job names, and
+   eligible capacities. The service verifies native Git identity and protected
+   policy before publishing or refreshing one leased admission generation.
+   Admission does not read or trust candidate job bytes.
+2. A review binds the exact expected protected head and candidate commit/tree.
+   For each required job, native Git reads schema-2 `.dim/ci/runner.yml` and the
+   named regular script blob directly from that candidate tree and produces the
+   strict normalized descriptor from `CI-NATIVE-CANDIDATE-JOB-001`.
 3. Native Git sends an authenticated candidate/job webhook. The ordinary
-   service re-verifies native identity, accepts the event only against that
-   exact live generation, and uses only its attempt-issuer credential to
-   durably issue the current native attempt before acknowledging demand.
+   service rejects executable fields in the event, re-verifies native identity,
+   accepts the event only against that exact live generation and descriptor,
+   and uses only its attempt-issuer credential to durably issue the current
+   native attempt before acknowledging demand.
 4. A host controller claims through its host credential for one configured
-   capacity. The claim contains the immutable execution tuple and no reusable
-   authority.
-5. The controller ownership-checks its local capacity, force-pulls the admitted
-   digest, probes declared tools, launches one bounded ephemeral Sysbox runner,
-   renews the lease, and submits terminal evidence with its result credential.
+   capacity. The claim contains the immutable candidate execution descriptor,
+   attempt, generation, bounds, and lease, and no reusable authority.
+5. The controller ownership-checks its local capacity; force-pulls the operator
+   runner base and candidate job image by digest; fetches the exact candidate
+   commit through its existing native read authority; independently verifies
+   the commit/tree, config and script blobs, strict parse, and descriptor
+   digest; then launches one bounded ephemeral Sysbox runner. The direct argv is
+   exactly `[/bin/bash, --noprofile, --norc, /run/dim/job/script]`; no webhook
+   string enters a shell, and the host replaces the candidate image's configured
+   entrypoint and command with that array. It renews the lease and submits
+   terminal evidence with its result credential.
 6. The ordinary service authenticates the controller result and uses only its
-   result-reporter credential to submit the exact terminal attempt result to
-   native Git. The controller stops and removes its owned runtime and temporary
-   credentials before releasing capacity.
+   result-reporter credential to submit the exact terminal attempt and
+   descriptor result to native Git. The controller stops and removes its owned
+   runtime and temporary material before releasing capacity.
+
+A zero exit is candidate-controlled self-test evidence. It may satisfy the
+protected policy's required condition and records successful bounded execution
+of the selected tests. It is not independent verification, does not establish
+that the tests are correct or complete, and is not blanket proof of product
+correctness. Product maintainers still review changed requirements,
+implementation, tests, and relevant results for regressions. Infrastructure
+security review separately focuses on secret exposure, protected-ref authority,
+host/runtime privilege, and trusted capability elevation. Human review of the
+complete exact tree and native Git's final CAS remain unchanged.
 
 An unavailable native service, invalid protected tuple, missing admission,
 wrong service or host identity, unknown capacity, expired generation, changed
-image, failed tool probe, uncertain lease, or failed result submission fails
-closed. No condition falls back to a persistent runner, local scheduler, direct
-protected write, or unpinned image.
+descriptor, config/script mismatch, changed image or runner base, uncertain
+lease, or failed result submission fails closed. No condition falls back to a
+persistent runner, local scheduler, direct protected write, or unpinned image.
 
 ## Updates and recovery
 
@@ -235,3 +259,9 @@ refusal, and update rollback. Successful Project admission, two-host execution,
 and real Sysbox job evidence remain blocked on the missing native Project
 adapter and MUST NOT be claimed by this installer-only gate. QEMU scheduler
 checks remain separate Gitea-only predecessor evidence.
+
+The source parser, schema-2 state transition, candidate checkout/materializer,
+scheduler descriptor binding, and host executor described above are also
+unimplemented. Existing schema-1 protected-root runner config and predecessor
+ordinary state are rejected by the target rather than migrated or accepted as a
+second format.

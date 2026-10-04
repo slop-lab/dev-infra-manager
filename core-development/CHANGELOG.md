@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Define the unimplemented native ordinary-CI target as candidate-controlled
+  self-test execution: strict schema-2 `.dim/ci/runner.yml`, its Bash script,
+  and the digest-pinned job image come from the exact candidate tree, while the
+  operator retains Project admission, required-job policy, a digest-pinned
+  runner base, host capacity, and resource/time/output ceilings. Webhooks carry
+  no executable fields; attempts and results bind complete config, script,
+  argv, image, base, bounds, host, and candidate provenance, and stale replay
+  cannot satisfy promotion. A zero exit may satisfy an explicitly classified
+  required condition and records bounded execution of the selected tests, but
+  is not independent verification or blanket correctness proof. Product
+  maintainers still review changed requirements, implementation, tests, and
+  relevant results; only infrastructure security review is narrowed around
+  secrets and trusted capabilities. Human exact-tree approval and CAS promotion remain mandatory. The
+  parser, scheduler, executor, reviewer display, and migration from the old
+  protected-root schema remain unimplemented with no compatibility form.
+
 - Let one explicitly configured reviewer-web account approve the exact immutable
   review and revoke only its own active approval through fixed, Origin- and CSRF-guarded
   routes backed by the existing native Git reviewer authority. The responsive
