@@ -21,6 +21,11 @@ import { createRefSerializer } from "./ref-serializer.js";
 import { createReviewService } from "./review-service.js";
 import { nativeGitRoute } from "./routing.js";
 import { acquireStorageOwner, type StorageOwner } from "./storage-owner.js";
+import {
+  boundedAdmissionVerifier,
+  rejectingAdmissionVerifier,
+  type AdmissionVerifier
+} from "./admission-verifier.js";
 
 export type NativeGitServer = {
   readonly server: Server;
@@ -28,7 +33,11 @@ export type NativeGitServer = {
   close(): Promise<void>;
 };
 
-export function createNativeGitServer(input: NativeGitServiceConfig): NativeGitServer {
+export function createNativeGitServer(
+  input: NativeGitServiceConfig,
+  admissionVerifier: AdmissionVerifier = rejectingAdmissionVerifier(),
+  admissionVerifierTimeoutMilliseconds?: number
+): NativeGitServer {
   const config = parseNativeGitServiceConfig(input);
   const repositories = new Map(config.repositories.map((repository) => [
     repositoryKey(repository.projectId, repository.repositoryId), repository
@@ -37,7 +46,11 @@ export function createNativeGitServer(input: NativeGitServiceConfig): NativeGitS
   const serializer = createRefSerializer();
   const services = {
     review: createReviewService(config, serializer),
-    promotion: createPromotionService(config, serializer),
+    promotion: createPromotionService(
+      config,
+      serializer,
+      boundedAdmissionVerifier(admissionVerifier, admissionVerifierTimeoutMilliseconds)
+    ),
     ordinaryExecution: createOrdinaryExecutionService(config, serializer)
   };
   let gitIdentity: GitExecutableIdentity | undefined;

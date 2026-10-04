@@ -13,14 +13,18 @@ export type {
 } from "./config.js";
 export {
   CandidateExecutionError,
+  candidateOrdinaryExecutionDescriptorSchema,
   candidateOrdinaryExecutionRequestSchema
 } from "./candidate-execution-schema.js";
-export type { CandidateOrdinaryExecutionRequest } from "./candidate-execution-schema.js";
-export { loadCandidateOrdinaryExecution } from "./candidate-execution.js";
 export type {
-  CandidateOrdinaryExecution,
-  CandidateOrdinaryExecutionDescriptor
+  CandidateOrdinaryExecutionDescriptor,
+  CandidateOrdinaryExecutionRequest
+} from "./candidate-execution-schema.js";
+export { descriptorDigest, loadCandidateOrdinaryExecution } from "./candidate-execution.js";
+export type {
+  CandidateOrdinaryExecution
 } from "./candidate-execution.js";
+export type { AdmissionVerifier } from "./admission-verifier.js";
 export { initializeNativeRepository } from "./repository.js";
 export { createNativeGitServer } from "./server.js";
 export type { NativeGitServer } from "./server.js";
