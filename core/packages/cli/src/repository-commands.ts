@@ -91,7 +91,7 @@ repo.command("apply")
     if (requestedRebind && plan.actions.some(({ action }) => action !== "unchanged" && action !== "rebind")) {
       throw new UserError("root origin rebind cannot be combined with other repository changes");
     }
-    const result = await withLocalProgress("project.create", (operation) => {
+    const result = await withLocalProgress("repo.apply", (operation) => {
       operation.reportProgress("repository set apply");
       return applyRepositorySet(
         projectName,

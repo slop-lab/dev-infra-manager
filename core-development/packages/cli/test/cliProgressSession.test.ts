@@ -129,6 +129,15 @@ test("top-level and nested exec/run calls retain raw stream options and SIGINT c
   assert.match(support, /process\.once\("SIGINT", cancel\)/);
 });
 
+test("explicit repository apply uses the repo.apply local operation", async () => {
+  const source = await readCliSource("repository-commands");
+
+  assert.match(
+    source,
+    /repo\.command\("apply"\)[\s\S]*withLocalProgress\("repo\.apply",[\s\S]*applyRepositorySet\([\s\S]*operation/
+  );
+});
+
 test("local operation SIGINT aborts work and removes its signal listener", async () => {
   const listeners = process.listeners("SIGINT");
   const operation = withLocalProgress("repo.fetch", async ({ signal }) => new Promise<never>((_resolve, reject) => {
