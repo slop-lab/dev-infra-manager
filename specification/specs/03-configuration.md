@@ -187,15 +187,24 @@ non-symbolic-link, DIM-user-owned mode-`0600` JSON file with this exact schema:
     "resultToken": "replace-with-result-token"
   },
   "capacities": {
-    "primary": { "cpus": 4, "memoryBytes": 8589934592, "pids": 2048 }
+    "primary": {
+      "runnerBaseImage": "registry.example/dim/ordinary-runner@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "cpus": 4,
+      "memoryBytes": 8589934592,
+      "pids": 2048,
+      "timeoutSeconds": 3600,
+      "outputBytes": 16777216
+    }
   }
 }
 ```
 
-The schema has no Project list or job image. `hostId`, service identities, and
-capacity names are safe non-empty identifiers. Each resource bound is a
-positive integer. URLs are credential-free origins without path, query, or
-fragment. Each transport is exactly `https` or, only for a loopback HTTP
+The schema has no Project list or candidate job image. `hostId`, service
+identities, and capacity names are safe non-empty identifiers. Each capacity's
+runner base is an operator-selected registry reference pinned by one complete
+lowercase `sha256` digest with no tag. Each resource, timeout, and output bound
+is a positive integer. Candidate config and claims cannot widen them. URLs are
+credential-free origins without path, query, or fragment. Each transport is exactly `https` or, only for a loopback HTTP
 origin, `loopback-http`. Unknown keys, duplicate
 capacity names after normalization, shared tokens, redirects, service-identity
 mismatch, and mutable or unassigned endpoints fail before controller capacity
@@ -204,7 +213,9 @@ registration or runtime mutation.
 The native Git credential is host-scoped read/attestation authority, not a
 reviewer, promoter, or storage-administrator identity. Ordinary admission,
 claim, and result authorities are distinct; `hostToken` may claim and renew
-only this host's named capacities, `admissionToken` may attest reviewed policy
+only this host's named capacities, `admissionToken` may attest operator-approved
+Project membership and protected required-job policy, not review of
+candidate-selected job bytes,
 but cannot claim or report, and `resultToken` may report only attempts assigned
 to this host. None may enter a workspace, job, image, Compose bundle, log, or
 Project state. Controller startup validates both authenticated service

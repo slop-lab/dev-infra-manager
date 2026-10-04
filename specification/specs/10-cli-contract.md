@@ -341,29 +341,94 @@ ordinary scheduler/webhook service owns admission, demand, queueing, and fenced
 leases. Each participating DIM host controller owns named shared capacities
 and executes claims through its local Sysbox runtime. The service receives no
 host runtime socket or generic controller capability and cannot execute a job.
+Project admission means that an operator has authorized a Project/repository,
+protected ref, required job names and evidence classes, and bounded host
+capacity. It does not mean that candidate CI bytes were reviewed.
+Specifically, it does not pre-approve those bytes as trusted infrastructure;
+product maintainers still review the candidate's test definitions and scripts
+with its requirements and implementation before protected promotion.
 
-One ordinary admission is derived only from the exact protected native Git
-snapshot and strict `.dim/ci/runner.yml`. It binds the native Project and
-repository IDs, protected ref, commit and tree, policy and required-job-set
-revisions, exact config digest, required job names, ordinary labels, one
-complete digest-pinned disposable job image, and a fresh random public
-generation. A Project-selected image is admission input for disposable jobs;
-it is not installed or persisted as a Project runner image. An active
-byte-identical policy refresh retains its generation. Expiry, revocation, or
-any changed binding creates a new generation, even if a later policy is
-byte-identical. Old demand and claims remain durable but inactive and MUST NOT
-be rebound, renewed, or requeued under the replacement generation.
+One ordinary admission is derived from operator/native Project membership and
+the protected policy. It binds the native Project and repository IDs,
+protected ref, policy and required-review/required-job-set revisions, required
+job names and their `candidate-controlled` evidence class, eligible capacities,
+and a fresh random public generation. It does not bind a protected-head job
+image, argv, script, or `.dim/ci/runner.yml` digest. An active byte-identical
+policy refresh retains its generation. Expiry, revocation, or any changed
+binding creates a new generation, even if a later policy is byte-identical. Old
+demand and claims remain durable but inactive and MUST NOT be rebound, renewed,
+or requeued under the replacement generation.
 
 Authenticated native Git webhook events are demand input, never admission
 authority. The event's Project, repository, protected tuple, job name, and
 candidate commit/tree MUST match a live admission before demand is queued.
 Missing, foreign, expired, revoked, stale, or tuple-mismatched events are
-rejected without queue or attempt mutation. Before dispatch, the scheduler
-durably issues the current unguessable attempt identity required by
-`TRUST-PROMOTION-001`. A claim contains only the admitted execution tuple,
-attempt identity, image digest, labels, resource bounds, generation, and lease
-identity. It contains no Git, reviewer, registrar, webhook, scheduler, host,
-or CI-result credential.
+rejected without queue or attempt mutation. A webhook may carry only the native
+event ID and exact tuple above; image, argv, script, path, environment, network,
+mount, resource, URL, and credential fields are invalid. The scheduler reads
+the execution definition only from `.dim/ci/runner.yml` in the exact candidate
+tree through the fixed native service interface. Before dispatch it durably
+issues the current unguessable attempt identity required by
+`TRUST-PROMOTION-001`, bound to the normalized execution descriptor below. A
+claim contains only that descriptor, attempt identity, resource bounds,
+generation, and lease identity. It contains no Git, reviewer, registrar,
+webhook, scheduler, host, or CI-result credential.
+
+**CI-NATIVE-CANDIDATE-JOB-001:** The native target accepts only this strict
+candidate-tree file shape; it does not accept schema `1` as a compatibility
+form:
+
+```yaml
+schemaVersion: 2
+ordinary:
+  jobs:
+    source:
+      image: registry.example/ci@sha256:<64 lowercase hexadecimal digits>
+      script: .dim/ci/jobs/source.bash
+      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
+```
+
+The root has exactly `schemaVersion` and `ordinary`; `ordinary` has exactly
+`jobs`; and each job has exactly `image`, `script`, and `argv`. Unknown keys,
+aliases, anchors, merge keys, duplicate mapping keys, duplicate normalized job
+names, non-string scalars where strings or arrays are required, and explicit
+YAML tags are errors. The UTF-8 file is
+at most 64 KiB, contains no NUL, and defines between 1 and 64 jobs. Job names
+match `[a-z][a-z0-9-]{0,62}` byte-for-byte with no case folding, and the job-key
+set MUST equal the protected policy's required candidate-controlled job set,
+with no missing or extra job.
+
+`image` is a registry reference with no tag and one complete lowercase
+`sha256` digest. `script` is a normalized repository-relative path below
+`.dim/ci/jobs/`, has no empty, `.`, or `..` segment, no backslash, and ends in
+`.bash`. It MUST resolve directly in the candidate tree to one regular Git blob
+of at most 1 MiB; a missing path, tree, symbolic link, submodule/gitlink, or
+other mode is rejected. Script identity is both the complete Git blob object ID
+and SHA-256 of its exact bytes. `argv` MUST be exactly the four strings shown
+above. The executor invokes that array directly and replaces the job image's
+configured entrypoint and command with this array. There is no shell
+construction, interpolation, command substitution, candidate-selected
+entrypoint, or webhook value. Candidate behavior belongs in the image and
+script bytes, not in a command string.
+
+The normalized execution descriptor binds the exact Project/repository,
+protected ref, expected protected head, candidate commit and tree, all three
+policy revisions, admission generation, job name and evidence class, config
+blob object ID and SHA-256, script path/blob object ID/SHA-256, normalized argv,
+job image digest, operator-selected runner-base image digest, and effective CPU,
+memory-byte, PID, wall-clock, and output bounds. Native Git returns this
+descriptor only after reading the named blobs by object ID from the candidate
+tree. The descriptor digest is `sha256:` plus lowercase SHA-256 of the ASCII
+domain `dim-native-ordinary-execution-v1` followed by each field above in that
+stated order. Each field is encoded as its canonical UTF-8 string, preceded by
+its ASCII decimal byte length with no leading zero and one `:` byte. Integer
+bounds use base-10 with no sign or leading zero; the four argv strings are four
+successive fields. No JSON, YAML spelling, map order, platform path, or locale
+enters this encoding. The scheduler binds that digest to demand, issued
+attempt, claim, renewal, and terminal result. The host independently fetches the exact candidate commit
+through its configured read authority, verifies its commit/tree and both blob
+identities, reparses the strict file, and requires the same descriptor digest
+before launch.
 
 Each host controller authenticates with one host-scoped credential and
 advertises operator-configured capacity names and bounds. Capacity is
@@ -377,14 +442,46 @@ remain untouched. Uncertain renewal stops and reaps the job before release.
 Host maintenance holds lifecycle admission across execution and cleanup and
 does not add disposable jobs to restart state.
 
-Every claim launches one ephemeral Sysbox runner and one disposable job image
-with bounded CPU, memory, and process limits, no host Docker socket, no
-`/dev/kvm`, no workspace/controller credential, and no runner host mode. Its
+Every claim launches one ephemeral Sysbox runner from the operator-selected,
+digest-pinned runner base and one candidate-selected digest-pinned disposable
+job image. The candidate tree is materialized as a fresh checkout at
+`/workspace`, the verified script blob is separately mounted read-only at
+`/run/dim/job/script`, and the direct argv runs with `/workspace` as its working
+directory. Both images are force-pulled and verified by digest. Execution has
+bounded CPU, memory, process, time, and output limits, no host Docker socket,
+no `/dev/kvm`, no workspace/controller credential, and no runner host mode. Its
 nested daemon uses the host registry cache and fails without direct Docker Hub
-bypass. Completion records exact terminal evidence against the issued attempt,
-then removes the runner container and temporary credential material. No
-persistent Project-scoped ordinary runner, runner registration, worker
-container, image copy, or ordinary runner lifecycle record exists.
+bypass. It receives no Git, DIM, scheduler, result, reviewer, promoter,
+registry, or Project secret. Completion records exact terminal evidence against
+the issued attempt, including the descriptor digest, host and capacity IDs,
+runner-base and job-image digests, effective bounds, start/finish times, exit
+code or signal/timeout reason, terminal result, and bounded stdout/stderr
+digests. `success` records that the selected candidate-controlled tests executed
+within those bounds and direct argv exited `0`. It is useful product/QA evidence
+only in the scope of the reviewed test definition and observed result; it is not
+independent verification or blanket proof of product correctness. The
+controller then removes the runner container and temporary material. No
+persistent Project-scoped ordinary runner, runner
+registration, worker container, image copy, or ordinary runner lifecycle
+record exists.
+
+Native Git accepts a terminal report only for the exact current, unrevoked
+attempt when every candidate tuple and descriptor field matches. Exact replay
+of the same immutable report is idempotent. A changed descriptor, conflicting
+result, old generation, old or future attempt, revoked attempt, earlier
+success, different host assignment, or report after a replacement attempt is
+stale and cannot satisfy promotion. Logs and artifacts are diagnostic data and
+never substitute for the terminal record. The reviewer and promotion surfaces
+label this evidence `candidate-controlled`, show its config/script/image/argv
+provenance, and MUST NOT call it independent verification.
+
+Protected approval remains a substantive human review, not a mechanical check
+for a green status. Product maintainers review changed requirements,
+implementation, test definitions, and relevant results for regression risk.
+Infrastructure security review separately follows changes that can affect
+secrets, protected refs, host/runtime privilege, or trusted capabilities. The
+candidate-controlled execution model narrows only that security-sensitive
+review surface; it does not reduce product or test maintenance review.
 
 Every ordinary runner, probe container, and temporary socket volume carries
 the exact `dim.managed=true`, `dim.owner=dim`, `dim.host`, `dim.capacity`,
@@ -636,7 +733,7 @@ replaces the immutable QEMU common or Project image layers. QEMU common-image
 identity continues to cover the immutable upstream snapshot and exact package
 versions; cache storage is transport reuse, not source identity.
 
-**CI-JOB-IMAGE-001:** Runner admission MUST require the protected Project root
+**CI-JOB-IMAGE-001:** Predecessor Gitea runner and QEMU admission MUST require the protected Project root
 to provide `.dim/ci/runner.yml`. Schema version `1` has exactly `ordinary` and
 `integration` workloads. Each workload has required `labels`, `image`, `tools`,
 and `capabilities`; unknown keys, duplicate labels or tools, unsafe names, and
@@ -644,11 +741,12 @@ mutable image tags MUST be rejected. Images MUST be pinned by a complete
 `sha256` digest. The finite capability vocabulary currently contains only
 `nested-docker`, and the integration workload MUST request it.
 
-DIM MUST resolve one protected branch and exact commit and read the runner
-config and optional QEMU cache hook from that one immutable snapshot. Ordinary
-CI binds `{sourceRef, sourceCommit, configDigest}` to its admission without a
-Project runner record; QEMU persists that provenance in its runner state. The
-ordinary scheduler maps ordinary labels to the admitted disposable image. A
+DIM MUST resolve one protected branch and exact commit and read the predecessor
+runner config and optional QEMU cache hook from that one immutable snapshot.
+Ordinary Gitea CI binds `{sourceRef, sourceCommit, configDigest}` to runner
+admission; QEMU persists that provenance in its runner state. This schema does
+not define native ordinary CI; `CI-NATIVE-CANDIDATE-JOB-001` intentionally reads
+schema 2 from the exact candidate tree. A
 QEMU executor MUST advertise integration labels plus `dim-qemu`; each maps to
 the integration image and receives only the guest-private Docker socket. No Project workload
 may use runner host mode.
