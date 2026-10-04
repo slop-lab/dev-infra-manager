@@ -327,7 +327,7 @@ async function hostOptions(
     }
   }), { mode: 0o600 });
   await writeFile(join(root, `${hostId}-pool.json`), JSON.stringify({
-    schemaVersion: 2, transport: "loopback-http", endpoint: pool, hostId, token,
+    schemaVersion: 3, transport: "loopback-http", endpoint: pool, hostId, token, capacities: ["primary"],
     expectedServiceId, expectedJobImage: JOB_IMAGE
   }), { mode: 0o600 });
   const options = lifecycleOptionsForBackend("sysbox", {

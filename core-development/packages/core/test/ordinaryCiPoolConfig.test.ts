@@ -40,11 +40,12 @@ describe("ordinary CI pool private configuration", () => {
   it("rejects public connection files and mutable expected job images", async () => {
     // Given
     const file = await privateFile("connection.json", {
-      schemaVersion: 2,
+      schemaVersion: 3,
       transport: "loopback-http",
       endpoint: "http://127.0.0.1:9081",
       hostId: "host-a",
       token: "host-secret",
+      capacities: ["primary"],
       expectedServiceId: "pool-main",
       expectedJobImage: "registry.example/dim/job:latest"
     });
@@ -53,6 +54,46 @@ describe("ordinary CI pool private configuration", () => {
     await expect(readOrdinaryCiPoolConnection(file)).rejects.toThrow(/digest-pinned/);
     await chmod(file, 0o644);
     await expect(readOrdinaryCiPoolConnection(file)).rejects.toThrow(/mode 0600/);
+  });
+
+  it("parses a unique non-empty host capacity set", async () => {
+    // Given
+    const file = await privateFile("connection.json", {
+      schemaVersion: 3,
+      transport: "loopback-http",
+      endpoint: "http://127.0.0.1:9081",
+      hostId: "host-a",
+      token: "host-secret",
+      capacities: ["primary", "secondary"],
+      expectedServiceId: "pool-main",
+      expectedJobImage: IMAGE
+    });
+
+    // When
+    const parsed = await readOrdinaryCiPoolConnection(file);
+
+    // Then
+    expect(parsed.capacities).toEqual(["primary", "secondary"]);
+  });
+
+  it.each([
+    { label: "empty", capacities: [] as readonly string[] },
+    { label: "duplicate", capacities: ["primary", "primary"] }
+  ])("rejects a $label host capacity set", async ({ capacities }) => {
+    // Given
+    const file = await privateFile("connection.json", {
+      schemaVersion: 3,
+      transport: "loopback-http",
+      endpoint: "http://127.0.0.1:9081",
+      hostId: "host-a",
+      token: "host-secret",
+      capacities,
+      expectedServiceId: "pool-main",
+      expectedJobImage: IMAGE
+    });
+
+    // When / Then
+    await expect(readOrdinaryCiPoolConnection(file)).rejects.toThrow(/capacities/);
   });
 
   it("reports a missing operator config as an input error", async () => {

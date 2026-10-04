@@ -11,6 +11,7 @@ export type OrdinaryCiPoolConnection = {
   readonly endpoint: string;
   readonly hostId: string;
   readonly token: string;
+  readonly capacities: readonly string[];
   readonly expectedServiceId: string;
   readonly expectedJobImage: string;
 };
@@ -57,18 +58,23 @@ export async function readOrdinaryCiPoolServiceConfig(file: string): Promise<Ord
 
 export async function readOrdinaryCiPoolConnection(file: string): Promise<OrdinaryCiPoolConnection> {
   const root = exactRecord(await readPrivateJson(file), [
-    "schemaVersion", "transport", "endpoint", "hostId", "token", "expectedServiceId", "expectedJobImage"
+    "schemaVersion", "transport", "endpoint", "hostId", "token", "capacities", "expectedServiceId", "expectedJobImage"
   ], "ordinary CI pool connection");
-  if (root.schemaVersion !== 2) throw new UserError("ordinary CI pool connection schemaVersion must be 2");
+  if (root.schemaVersion !== 3) throw new UserError("ordinary CI pool connection schemaVersion must be 3");
   const transport = parseTransport(root.transport);
   const expectedJobImage = text(root.expectedJobImage, "expectedJobImage");
   if (!digestImage(expectedJobImage)) {
     throw new UserError("ordinary CI pool expectedJobImage must be digest-pinned without a tag");
   }
+  const capacities = array(root.capacities, "capacities").map((capacity) => identifier(capacity, "capacity"));
+  if (capacities.length === 0 || new Set(capacities).size !== capacities.length) {
+    throw new UserError("ordinary CI pool capacities must be unique and non-empty");
+  }
   return {
     endpoint: endpoint(root.endpoint, transport),
     hostId: identifier(root.hostId, "hostId"),
     token: text(root.token, "token"),
+    capacities,
     expectedServiceId: identifier(root.expectedServiceId, "expectedServiceId"),
     expectedJobImage
   };

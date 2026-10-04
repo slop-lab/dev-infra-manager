@@ -104,7 +104,7 @@ async function hostOptions(
     projects
   }), { mode: 0o600 });
   await writeFile(poolFile, JSON.stringify({
-    schemaVersion: 2, transport: "loopback-http", endpoint, hostId: "host-a",
+    schemaVersion: 3, transport: "loopback-http", endpoint, hostId: "host-a", capacities: ["primary"],
     token: "host-token", expectedServiceId: "pool-main", expectedJobImage: JOB_IMAGE
   }), { mode: 0o600 });
   const stateRoot = join(root, "state");
