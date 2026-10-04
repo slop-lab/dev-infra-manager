@@ -6,8 +6,9 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { configuredDimAdminController, createDimController, registerPlugins } from "@slop-lab/dim-core";
 import { LifecycleState } from "../../core/packages/core/src/lifecycleState.js";
-import type { LifecycleOptions, WorkspaceRecord } from "../../core/packages/core/src/lifecycleTypes.js";
+import type { WorkspaceRecord } from "../../core/packages/core/src/lifecycleTypes.js";
 import type { CommandResult, StreamingCommandRunner } from "../../core/packages/core/src/types.js";
+import { hostLifecycleOptions } from "../../core-development/packages/core/test/hostLifecycleFixture.js";
 import { createExternalUrlsPlugin } from "../../plugin-external-urls/src/index.js";
 
 describe("authoritative workspace discard", () => {
@@ -69,7 +70,7 @@ describe("authoritative workspace discard", () => {
     expect(await exchange(listenPort, "before-discard")).toBe("before-discard");
 
     // When: the authoritative admin API discards the workspace directly.
-    const lifecycle = { stateRoot, defaultWorkspaceBackend: "sysbox" } as LifecycleOptions;
+    const lifecycle = hostLifecycleOptions(stateRoot);
     const admin = configuredDimAdminController(lifecycle, plugins, new MissingResourceRunner(record));
     await listen(admin);
     cleanup.push(() => close(admin));
