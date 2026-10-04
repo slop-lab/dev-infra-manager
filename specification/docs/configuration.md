@@ -46,6 +46,65 @@ DIM_CI_RUNNER_PIDS
 DIM_QEMU_SCHEDULER_CONNECTION_FILE
 ```
 
+The following native control-plane host connection is a specified but
+unimplemented target for a future Project/repository adapter. Current
+controllers do not read or consume this variable, so setting it is ignored and
+does not select native lifecycle or reject otherwise valid Gitea operations.
+Do not rely on it in the current release. The target shape is one owner-only
+file, not a set of command-line tokens:
+
+```json
+{
+  "schemaVersion": 1,
+  "hostId": "host-a",
+  "nativeGit": {
+    "transport": "https",
+    "endpoint": "https://git-control.example",
+    "serviceId": "native-main",
+    "username": "host-a",
+    "password": "replace-with-native-host-credential"
+  },
+  "ordinaryCi": {
+    "transport": "https",
+    "endpoint": "https://ci-control.example",
+    "serviceId": "ordinary-main",
+    "hostToken": "replace-with-host-token",
+    "admissionToken": "replace-with-admission-token",
+    "resultToken": "replace-with-result-token"
+  },
+  "capacities": {
+    "primary": { "cpus": 4, "memoryBytes": 8589934592, "pids": 2048 }
+  }
+}
+```
+
+Create it as a regular, non-symlink, DIM-user-owned mode-`0600` file. HTTPS
+origins contain no path or credentials. `loopback-http` is accepted only for a
+loopback origin. All credentials are distinct and remain in the host
+controller. Capacity names and limits are host installation policy; Projects
+are not listed here and do not acquire persistent runner or image state.
+After the future adapter exists, controller startup authenticates both service
+identities before advertising capacity and never falls back to a local or
+Project-scoped ordinary runner.
+
+When target parsing is implemented before the adapter is available, a request
+for native Project, repository, admission, or capacity behavior rejects before
+mutation. This future fail-closed rule must not be read as current support for
+or validation of the variable.
+
+The future target file is mutually exclusive with `DIM_GITEA_CONNECTION_FILE`.
+`DIM_ORDINARY_CI_POOL_CONNECTION_FILE` and the old schema-2 Gitea pool are
+obsolete and rejected by the target. The optional QEMU scheduler file below is
+Gitea-only; it neither supplies native ordinary CI, coexists with native
+selection, nor joins the installer-owned Compose bundle.
+The exact normative schema and authorities are in
+[Configuration](../specs/03-configuration.md#native-control-plane-host-connection).
+
+The Gitea settings below describe the currently implemented profile. The
+unimplemented target native connection cannot select Project lifecycle, and a
+future native adapter must define an explicit transition rather than treating
+Gitea as an implicit fallback.
+
 `DIM_GIT_USERNAME` and `DIM_GIT_TOKEN` identify the constrained writer exposed
 to untrusted workspaces. `DIM_GIT_MAINTAINER_USERNAME` and
 `DIM_GIT_MAINTAINER_TOKEN` identify the separate host-only credential used by
@@ -179,8 +238,8 @@ Omitted flags keep their recorded values. DIM updates the live or stopped
 container first and persists the new effective limits only after Docker
 accepts them.
 
-CI runner resource defaults use the built-in `4 CPU`, `8g` memory, and `2048`
-PID fallback unless changed in user configuration:
+The currently implemented predecessor Gitea runner profile retains these
+legacy resource-default commands:
 
 ```bash
 dim ci runner defaults set --cpus 6 --memory 12GiB --pids 4096
@@ -188,7 +247,11 @@ dim ci runner defaults show
 dim ci runner defaults reset
 ```
 
-Runner-specific flags on `dim ci runner create PROJECT RUNNER sysbox` override these defaults.
+They do not configure target native ordinary capacity. After a native Project
+adapter exists, the target requires
+explicit positive `cpus`, `memoryBytes`, and `pids` for every host-owned
+capacity in `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE`; there is no Project
+runner override or fallback.
 
 DIM is pre-stable. Incompatible configuration and state are rejected rather
 than migrated implicitly; compatibility behavior is added only when a release

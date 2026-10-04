@@ -1,20 +1,30 @@
 # Managed CI runners
 
-DIM workspaces are the persistent development environment. Managed CI runners
-repeat pull-request checks in separate checkouts and isolated execution
-environments so their result can be used as independent review evidence. Each
-named Project-scoped runner remains managed until it is deleted. On capable
-hosts, release gates may instead use a fresh outer QEMU VM for every job.
+The current release uses the Gitea Project-scoped runner profile documented
+below. Both ordinary Sysbox and QEMU integration runners are persistent
+Project-scoped lifecycle records, while each job runs in a disposable job
+container or VM. The specified native ordinary-CI replacement is a separate,
+unimplemented target later in this page.
 
-Enable only the named runners that a Project needs. Names are stable local
-identities; multiple Sysbox runners provide parallel capacity:
+Current commands include both executors:
 
 ```bash
 dim ci runner create example primary sysbox
-dim ci runner create example secondary sysbox
 dim ci runner create example release qemu
 dim ci runner status example primary
+dim ci runner status example release
 ```
+
+The target will reject `dim ci runner create ... sysbox` after its native
+Project adapter and host-controller capacity path are implemented. That
+rejection is not current behavior.
+
+## Predecessor Gitea runner profile
+
+The following Gitea runner details describe the currently implemented
+predecessor release and its migration evidence. They are not the target native
+control-plane contract, do not become a fallback after future native selection, and
+must not be used to infer persistent ordinary runner support in the target.
 
 The initial Gitea coordinator registers it at the Project's managed
 organization. Every root or non-root repository registered to that Project can
@@ -134,34 +144,48 @@ once for each existing Sysbox runner. QEMU supervisor image-version changes are
 reconciled automatically, but an explicit restart is also safe when immediate
 replacement is preferred.
 
-Hosts may instead provide ordinary Sysbox capacity through one shared pool.
-The pool service has one stable service identity and one digest-pinned job
-image, but no static Project list and no Gitea administrator credential. A
-trusted host periodically runs `dim ci ordinary-pool project reconcile` for
-each local ready Project. That command resolves the current protected root to
-an exact branch and commit, loads the strict runner configuration from the
-immutable snapshot, verifies the configured external Gitea binding and live
-numeric organization identity, and sends only the resulting attestation to the
-pool over a separately authenticated registrar surface. It then reconciles the
-organization webhook with a stable secret generated and retained by the
-service and replays the bounded queued-job listing. The service never receives
-the Gitea credential and never requests a runner-registration token.
+## Native ordinary CI target
 
-Admissions are renewable leases. A reviewed policy digest binds service,
-Project, organization, protected ref and commit, config digest, common image,
-and reviewed ordinary labels. Each admission also has a fresh random public
-generation identity. An active identical-policy refresh retains that generation;
-rotation, revocation, or expiry requires a new generation, even if the later
-policy bytes are identical. Old queued jobs and claims become ineligible for
-dispatch, renewal, or recovery requeue; durable rows remain intact and never
-rebound under a later admission. Worker
-connections carry only their own host token plus expected service/image
-identity. A remote worker may execute a claim without a local Project record,
-but only while its external Gitea connection still contains the exact Project
-binding and organization ID from the claim. It verifies that binding again
-before requesting the ephemeral organization runner token. The registrar
-credential, webhook secret, worker token, Gitea credentials, and registration
-token remain separate and are absent from claim responses.
+This target is specified but not implemented. The installer bundle alone has
+no native Project/repository state adapter, so it starts empty and denies
+Project admission, capacity advertisement, webhook demand, claims, attempts,
+and results before mutation.
+
+After that separate adapter is approved, the installer-owned ordinary service
+has one stable service identity but no Project list, common image, Gitea
+credential, runner-registration authority, or runtime socket in its private
+deployment config. A trusted host controller derives admission from one exact
+protected native Git snapshot. Admission binds the Project/repository,
+protected ref, commit/tree, policy and job-set revisions, required jobs, config
+digest, ordinary labels, and complete image digest. The admitted image is
+pulled for a claim and discarded with job state; it is not a persistent Project
+image.
+
+Admissions are renewable leases with fresh public generations. An active
+identical-policy refresh retains its generation. Expiry, revocation, or changed
+policy creates a new generation, even if a later policy has identical bytes.
+Old queued jobs and claims remain durable but cannot dispatch, renew, or requeue
+under the replacement. Authenticated native Git webhooks create demand only
+when their complete candidate/job tuple matches a live admission. Before
+dispatch the scheduler durably issues the exact current attempt identity used
+as native promotion evidence.
+
+Each host controller authenticates separately, advertises only operator-owned
+capacity names and bounds, and may execute a claim without a local Project
+record. The claim has no reusable Git, webhook, admission, host, scheduler, or
+result credential. The host uses Sysbox and its managed cache, applies CPU,
+memory, and PID limits, mounts no host Docker socket or `/dev/kvm`, and removes
+the ephemeral runner and credential material after exact terminal evidence is
+recorded. Lease uncertainty stops and reaps the job before release; expired
+claims fence only that host capacity until ownership-safe cleanup.
+
+The target facade will deploy this service beside native Git through `dim
+installer install control-plane --config FILE`. In that target, old `dim ci
+ordinary-pool ...` commands, `DIM_ORDINARY_CI_POOL_CONNECTION_FILE`, schema-2
+databases, and persistent Project Sysbox runner records are rejected, not
+migrated. See the exact
+[installer contract](../specs/14-installer-facade.md#control-plane-bundle) and
+[paired operations design](../../core-development/ordinary-ci-pool.md).
 
 As described in the
 [development repository model](development-repositories.md), DIM develops
@@ -177,7 +201,7 @@ or Docker setup. GitHub-only manual Sysbox and KVM release workflows remain
 under `.github/workflows` and are not copied into the managed development Gitea
 instance.
 
-When explicitly created on a host with KVM, DIM starts a small persistent,
+In the current Gitea-only profile, when explicitly created on a host with KVM, DIM starts a small persistent,
 trusted runc supervisor with `/dev/kvm`. A Gitea `workflow_job` webhook asks it
 to boot a QEMU VM only after a queued job selects an integration label or
 `dim-qemu`. Workflow code
@@ -333,8 +357,8 @@ cache while they remain available. Retaining DIM's common qcow2 alone preserves
 the built output, not all source provenance needed to rebuild it.
 
 DIM inspects the complete owner, scope, resource kind, and identity digest
-labels before reusing or deleting any CI volume. Each Sysbox runner and QEMU
-supervisor container also carries the complete DIM owner, Project name and ID,
+labels before reusing or deleting any QEMU CI volume. Each QEMU supervisor
+container also carries the complete DIM owner, Project name and ID,
 capacity, executor, resource kind, Docker kind, and identity digest labels. A
 same-name foreign, malformed, or partially labeled resource is a conflict,
 never an adoption target. Every generated CI resource name includes a digest
@@ -343,8 +367,7 @@ short, and remains within the 63-character bound. Start, stop, removal, QEMU
 reconstruction, and host resume inspect all nine container labels and act only
 on the inspected container ID, never the name. Foreign, malformed, and
 partially labeled resources remain untouched. Stopping an already absent
-container succeeds; starting an absent Sysbox runner fails because ordinary
-`start` does not reconstruct it. QEMU reconstruction checks ownership before
+container succeeds. QEMU reconstruction checks ownership before
 changing coordinator registration, authorization, or webhook state. Container
 cleanup removes the inspected container ID rather than trusting the name after
 inspection.
@@ -402,9 +425,8 @@ integration labels, `dim-qemu`, and a distinct supervisor name. Workflows may
 select an integration label or `runs-on: dim-qemu`; capacity names are host
 lifecycle configuration and do not belong in tracked Project code. Creation
 detects host KVM, while successful VM readiness also
-requires nested virtualization from the host KVM module. `dim ci runner logs
-dim primary` follows the normal Sysbox runner;
-use `dim ci runner logs dim release` when diagnosing VM boot,
+requires nested virtualization from the host KVM module. Use `dim ci runner
+logs dim release` when diagnosing VM boot,
 registration, or replacement.
 
 An individual VM boot, provisioning, registration, or job failure is scoped
@@ -417,37 +439,31 @@ without a corresponding
 select `dim-qemu`; a previous supervisor failure must not disable demand
 processing.
 
-The Sysbox runner has concurrency one. Its nested daemon, disposable job
-containers, registration data, and resource limits live outside workspace
-state. It does not mount the host Docker socket or receive DIM workspace
-credentials. The default outer isolation runtime is `sysbox-runc`; the inner
-daemon is rootful but cannot escape that system-container boundary. Override
-`DIM_CI_RUNNER_RUNTIME` only with another runtime that can safely support the
-nested daemon.
+Each ordinary claim has concurrency one. Its ephemeral Sysbox runner, nested
+daemon, disposable job container, temporary registration data, and resource
+limits live outside workspace and Project runner state. It does not mount the
+host Docker socket or receive DIM workspace credentials. The host controller
+uses its reviewed Sysbox runtime; there is no Project runtime override.
 
 ## Resources
 
-The runner fallback is 4 CPUs and 8 GiB of memory. Sysbox runners additionally
-default to 2048 processes. Installation defaults can be changed:
+Future native ordinary capacity bounds are explicit positive CPU, memory-byte,
+and PID values in each host's target connection file. Projects and claims
+cannot widen them after the adapter exists. Current named Gitea runners retain
+their documented resource defaults and overrides; a named QEMU capacity may
+set its own CPU and memory:
 
 ```bash
-dim ci runner defaults set --cpus 6 --memory 12GiB --pids 4096
-```
-
-A named runner can override them:
-
-```bash
-dim ci runner create example primary sysbox --cpus 8 --memory 16GiB --pids 4096
 dim ci runner create example release qemu --cpus 6 --memory 12GiB
 ```
 
-`restart` preserves an existing runner override. Delete and create the runner
-again without flags to return to inherited defaults.
+`restart` preserves an existing QEMU runner override. Delete and create the
+QEMU runner again without flags to return to inherited defaults.
 
 For QEMU, `--cpus` must be an integer and maps to guest vCPUs; `--memory` maps
 to guest memory. The supervisor container receives the same CPU limit, the
 guest memory plus 2 GiB of overhead, and a fixed 1024-process boundary. A
-process override applies only to Sysbox because the supervisor's host cgroup
+QEMU does not accept a process override because the supervisor's host cgroup
 does not define the guest's process policy. These are limits, not
 reservations; while idle there is no VM or guest memory. Each job uses a
 disposable 64 GiB overlay.
@@ -460,15 +476,19 @@ cgroup hierarchy.
 
 ```bash
 dim ci runner list
-dim ci runner logs example primary
-dim ci runner start example primary
-dim ci runner stop example primary
-dim ci runner restart example primary
-dim ci runner delete example primary --yes
+dim ci runner logs example release
+dim ci runner start example release
+dim ci runner stop example release
+dim ci runner restart example release
+dim ci runner delete example release --yes
 ```
 
-`create` requires a new Project/runner identity. `start` requires a stopped
-runner and preserves its state. For QEMU, it keeps the schema-8 config and hook
+In the target native topology these commands address Gitea-only QEMU integration
+runners and cannot be used while native selection is requested. In the current
+release the same lifecycle also addresses Project-scoped Sysbox runners.
+`create` requires a new
+Project/runner identity. `start` requires a stopped runner and preserves its
+schema-8 config and hook
 artifact and provenance, supervisor image, job image, labels, effective
 resources, and inheritance choice. It restores runtime volumes and cache, then
 replaces only the provider registration, webhook authorization, webhook, and
@@ -491,14 +511,15 @@ initial adapter. `dim-qemu` is an executor capability that any Project workflow
 may select; the disposable VM boundary and label do not encode DIM's particular
 release policy or depend on Gitea-specific execution behavior.
 
-The executor is selected when a runner is created. Later lifecycle
-operations address the stable Project/runner identity, so managing one runner
-never starts, replaces, or deletes another. Multiple Sysbox and QEMU runners
-provide parallel capacity while retaining concurrency one per runner. QEMU
+Later lifecycle operations address the stable Project/QEMU-runner identity, so
+managing one runner never starts, replaces, or deletes another. Multiple QEMU
+runners provide parallel integration capacity while retaining concurrency one.
+QEMU
 supervisors share provider-neutral demand and claim state; the Gitea webhook is
 only the current adapter that translates coordinator events into that demand.
-Replacing the managed Git host therefore does not change workflow labels or
-expose capacity ownership in Project code.
+The current QEMU coordinator remains Gitea-only. A future native adapter cannot
+reuse this scheduler implicitly; its own reviewed transition contract must
+decide any label or capacity behavior.
 
 As a pre-stable state contract, earlier CI runner state is not migrated
 automatically. Schema 8 records effective resources, protected-root runner
