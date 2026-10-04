@@ -227,10 +227,12 @@ choices persist under `${XDG_CONFIG_HOME:-~/.config}/dim/config.json`. See
 the [installer README](https://www.npmjs.com/package/@slop-lab/dim-installer)
 for the full command reference.
 
-`dim install-cp` is the CLI command reserved for a control-plane-only host.
-It currently fails closed with the missing reviewed native Git and CI
-scheduler/webhook deployment contracts; it does not claim success or install a
-separate web UI.
+The current CLI-owned `dim install-cp` placeholder fails closed without host
+changes because the specified native Git/ordinary-CI bundle, service
+integration, and native Project adapter are not implemented. The future
+installer-facade command is `dim installer install control-plane --config
+FILE`; once implemented, the facade will reject `dim install-cp` as obsolete
+instead of proxying it. Neither path installs a separate web UI.
 
 Check the installed backend before creating a workspace:
 

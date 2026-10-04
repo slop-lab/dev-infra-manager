@@ -81,9 +81,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   signaling a filesystem-supplied PID, then restores the prior runtime and
   controller when present. A shutdown failure leaves both target and backup in
   place and preserves the original installation error. The
-  CLI-owned `install-cp` command fails closed without host changes until the
-  native Git and CI scheduler/webhook services have reviewed deployment
-  inputs; no separate web UI is installed.
+  current CLI-owned `install-cp` placeholder fails closed without host changes
+  because the specified native Git/ordinary-CI bundle, service integration, and
+  native Project adapter are not implemented; no separate web UI is installed.
   Published CLI installations can now explicitly run `dim workspace image
   build` from any directory. The core package ships the complete trusted build
   context and references the exact-version controller-proxy package, so the
