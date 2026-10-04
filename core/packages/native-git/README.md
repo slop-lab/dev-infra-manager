@@ -200,6 +200,16 @@ GitHub Actions or another provider API. Records are immutable, restart-checked,
 and conflict when the same job attempt is reported with different evidence.
 
 Only the current, unrevoked issued attempt can be reported or satisfy promotion.
+The target native ordinary-CI adapter additionally binds the attempt to evidence
+class `candidate-controlled` and the exact candidate config/script blobs,
+normalized fixed argv, job-image digest, operator runner-base digest, effective
+bounds, host, and capacity. A successful result records that the selected
+candidate-controlled tests executed within the recorded sandbox and exited
+zero. Protected policy may require that evidence, but it is not independent
+verification, does not establish that the tests are correct or complete, and
+does not replace product/QA review or complete-tree human approval. This
+descriptor extension and adapter are specified but not implemented by this
+package revision.
 The service holds an exclusive rollback-journal SQLite transaction in
 `.dim-native-git-owner.sqlite3` below the canonical storage root. The database
 is bound to that root's filesystem identity, and a second process sharing the
@@ -229,3 +239,6 @@ evidence, and serialized compare-and-swap transaction required by
 exists only inside that checked host operation; smart HTTP remains
 proposal-only and has no administrator bypass. Core lifecycle wiring, service
 deployment/restart, UI, and independent-host CI gates remain separate work.
+Independent CI, when a Project requires it, must use a separately selected
+command definition and evidence class; native ordinary candidate self-tests do
+not acquire that label by running on another host.
