@@ -71,7 +71,7 @@ export async function shutdownHost(
       await attempt(errors, `stop workspace '${workspace}'`, () => stopWorkspaceForHostShutdown(runner, options, workspace));
     }
     for (const container of ordinaryContainers) {
-      await attempt(errors, `stop disposable CI container '${container}'`, () => stopManagedContainer(runner, container));
+      await attempt(errors, `remove disposable CI container '${container}'`, () => removeOrdinaryPoolContainer(runner, container));
     }
     for (const container of resumeManagedContainers) {
       await attempt(errors, `stop managed container '${container}'`, () => stopManagedContainer(runner, container));
@@ -156,6 +156,27 @@ async function stopManagedContainer(runner: StreamingCommandRunner, name: string
   if (running !== "true") return;
   const stopped = await runner.run("docker", ["stop", containerId]);
   if (stopped.exitCode !== 0) throw new UserError(`failed to stop '${name}': ${stopped.stderr.trim()}`);
+}
+
+async function removeOrdinaryPoolContainer(runner: StreamingCommandRunner, name: string): Promise<void> {
+  const inspect = await runner.run("docker", [
+    "container", "inspect", name, "--format",
+    "{{.Id}}|{{index .Config.Labels \"dim.managed\"}}|{{index .Config.Labels \"dim.owner\"}}|{{index .Config.Labels \"dim.host\"}}|{{index .Config.Labels \"dim.capacity\"}}|{{index .Config.Labels \"dim.claim\"}}|{{index .Config.Labels \"dim.project-id\"}}|{{index .Config.Labels \"dim.resource\"}}"
+  ]);
+  if (inspect.exitCode !== 0) {
+    if (/no such (?:container|object)/i.test(inspect.stderr)) return;
+    throw new UserError(`cannot inspect '${name}': ${inspect.stderr.trim()}`);
+  }
+  const [containerId, managed, owner, host, capacity, claim, projectId, resource] = inspect.stdout.trim().split("|");
+  const ownershipValues = [host, capacity, claim, projectId];
+  if (!containerId || managed !== "true" || owner !== "dim" || resource !== "ci-ordinary-job"
+    || ownershipValues.some((value) => value === undefined || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value))) {
+    throw new UserError(`Docker resource '${name}' is not an owned ordinary CI container`);
+  }
+  const removed = await runner.run("docker", ["container", "rm", "--force", containerId]);
+  if (removed.exitCode !== 0 && !/no such (?:container|object)/i.test(removed.stderr)) {
+    throw new UserError(`failed to remove '${name}': ${removed.stderr.trim()}`);
+  }
 }
 
 async function listRunningManagedContainers(runner: StreamingCommandRunner, resourceFilter?: string): Promise<string[]> {

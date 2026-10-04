@@ -170,7 +170,10 @@ describe("host lifecycle", () => {
               : args[0] === "container" && args[1] === "inspect" && args[2] === "dim-apt-cache"
                 ? `owned-apt-id|true|dim|${"M".repeat(43)}|apt-cache|${"A".repeat(43)}|true\n`
             : args[0] === "container" && args[1] === "inspect"
-              ? `${args[2] === name ? "owned-pool-id" : `owned-${args[2] ?? "container"}-id`}|true|dim|infrastructure|infrastructure-v1|true\n` : "";
+              ? args[2] === name
+                ? "owned-pool-id|true|dim|host-a|primary|claim-123|project-a|ci-ordinary-job\n"
+                : `owned-${args[2] ?? "container"}-id|true|dim|infrastructure|infrastructure-v1|true\n`
+              : "";
         return { command, args, stdout, stderr: "", exitCode: 0 };
       },
       async runStreaming() { return 0; }
@@ -185,7 +188,7 @@ describe("host lifecycle", () => {
       "docker", "container", "ls", "--filter", "label=dim.managed=true",
       "--filter", "label=dim.resource=ci-ordinary-job", "--format", "{{.Names}}"
     ]);
-    expect(calls).toContainEqual(["docker", "stop", "owned-pool-id"]);
+    expect(calls).toContainEqual(["docker", "container", "rm", "--force", "owned-pool-id"]);
   });
 
   it("starts managed infrastructure by its inspected immutable ID", async () => {
