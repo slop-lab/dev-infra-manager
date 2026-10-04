@@ -28,6 +28,7 @@ async function createRealGitFixture(): Promise<RealGitFixture> {
   await Promise.all([mkdir(scripts), mkdir(tools)]);
   await copyFile(resolve(workspaceRoot, "scripts/pack-source-build.bash"), resolve(scripts, "pack-source-build.bash"));
   await writeFile(resolve(scripts, "pack-local-packages.mjs"), "");
+  await writeFile(resolve(root, "LICENSE"), "fixture license\n");
   await writeFile(resolve(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
 
   const packageDirectories = [
@@ -35,6 +36,7 @@ async function createRealGitFixture(): Promise<RealGitFixture> {
     "core/packages/cli",
     "core/packages/installer",
     "core/packages/controller-proxy",
+    "core/packages/web",
     "core/packages/contracts/external-url",
     "plugin-dns-cloudflare",
     "plugin-external-urls",

@@ -90,6 +90,7 @@ cleanup() {
 trap cleanup EXIT
 
 GIT_NO_REPLACE_OBJECTS=1 git -C "$repo_root" archive --format=tar --output "$source_archive" "$commit" -- \
+  LICENSE \
   pnpm-lock.yaml \
   core \
   plugin-dns-cloudflare \
@@ -106,6 +107,7 @@ packages:
   - core/packages/cli
   - core/packages/installer
   - core/packages/controller-proxy
+  - core/packages/web
   - core/packages/contracts/*
   - plugin-dns-cloudflare
   - plugin-external-urls
