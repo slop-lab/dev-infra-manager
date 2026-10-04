@@ -3,6 +3,7 @@ import { expect } from "vitest";
 import { refValue } from "./nativeGitHarness.js";
 import {
   objectArrayField,
+  objectField,
   readJsonObject,
   reviewPath,
   stringArrayField,
@@ -44,25 +45,32 @@ export async function reportJob(
   const reviewId = stringField(review, "reviewId");
   const attempt = issuance["attempt"];
   if (typeof attempt !== "number") throw new Error("issued job attempt is missing its number");
+  const descriptor = objectField(issuance, "descriptor");
+  const now = new Date().toISOString();
+  const completion = result === "success"
+    ? { kind: "exited", exitCode: 0 }
+    : result === "cancelled"
+      ? { kind: "cancelled" }
+      : { kind: "exited", exitCode: 1 };
   return fixture.request(identity, "POST", reviewPath(`/${reviewId}/statuses`), {
-    schemaVersion: 1,
+    schemaVersion: 2,
     eventId: randomUUID(),
-    occurredAt: new Date().toISOString(),
+    occurredAt: now,
     eventType: "dim.ci.job.completed",
     payload: {
-      projectId: stringField(review, "projectId"),
-      repositoryId: stringField(review, "repositoryId"),
-      protectedRef: stringField(review, "protectedRef"),
-      expectedProtectedHead: stringField(review, "expectedProtectedHead"),
-      candidateCommit: stringField(review, "candidateCommit"),
-      candidateTree: stringField(review, "candidateTree"),
-      policyRevision: stringField(review, "policyRevision"),
-      requiredReviewRevision: stringField(review, "requiredReviewRevision"),
-      requiredJobSetRevision: stringField(review, "requiredJobSetRevision"),
-      jobName,
+      reviewId,
       attempt,
       attemptId: stringField(issuance, "attemptId"),
+      descriptor,
+      descriptorDigest: stringField(issuance, "descriptorDigest"),
+      hostId: stringField(issuance, "hostId"),
+      capacity: stringField(issuance, "capacity"),
+      startedAt: now,
+      finishedAt: now,
       result,
+      completion,
+      stdout: { bytes: "0", sha256: `sha256:${"0".repeat(64)}`, truncated: false },
+      stderr: { bytes: "0", sha256: `sha256:${"0".repeat(64)}`, truncated: false },
       ...payloadOverrides
     }
   });
@@ -73,11 +81,46 @@ export async function issueJob(
   review: JsonObject,
   jobName: "source" | "security"
 ): Promise<JsonObject> {
-  const response = await fixture.request("scheduler-a", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempts`), {
-    jobName
-  });
+  const response = await requestJob(fixture, review, jobName);
   expect(response.status).toBe(201);
   return readJsonObject(response);
+}
+
+export async function requestJob(
+  fixture: ReviewFixture,
+  review: JsonObject,
+  jobName: "source" | "security"
+): Promise<Response> {
+  const reviewId = stringField(review, "reviewId");
+  const descriptorResponse = await fixture.request(
+    "scheduler-a",
+    "POST",
+    reviewPath(`/${reviewId}/ordinary-execution-descriptors`),
+    {
+      jobName,
+      admissionGeneration: "generation-7",
+      runnerBaseImage: `registry.example/runner@sha256:${"3".repeat(64)}`,
+      bounds: {
+        cpu: "2",
+        memoryBytes: "2147483648",
+        pids: "512",
+        wallClockSeconds: "900",
+        outputBytes: "10485760"
+      }
+    }
+  );
+  expect(descriptorResponse.status).toBe(200);
+  const descriptorResult = await readJsonObject(descriptorResponse);
+  return fixture.request("scheduler-a", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempts`), {
+    issuanceRequestId: randomUUID(),
+    jobName,
+    descriptorDigest: stringField(descriptorResult, "digest"),
+    admissionGeneration: "generation-7",
+    runnerBaseImage: `registry.example/runner@sha256:${"3".repeat(64)}`,
+    bounds: objectField(objectField(descriptorResult, "descriptor"), "bounds"),
+    hostId: "host-a",
+    capacity: "primary"
+  });
 }
 
 export async function revokeJobAttempt(

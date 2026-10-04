@@ -11,6 +11,7 @@ import {
   type NativeGitServiceConfig
 } from "../../../../core/packages/native-git/src/index.js";
 import { createGitReadGate, type GitReadGate } from "./gitReadGate.js";
+import { createTestAdmissionVerifier } from "./testAdmissionVerifier.js";
 
 const run = promisify(execFile);
 const gitExecutable = "/usr/bin/git";
@@ -28,7 +29,12 @@ export type ReviewFixture = {
   readonly git: (cwd: string, args: readonly string[]) => Promise<{ readonly stdout: string; readonly stderr: string }>;
   readonly clone: string;
   readonly candidateReadGate: GitReadGate;
+  readonly setAdmissionGeneration: (generation: string) => void;
+  readonly setAdmissionVerifierAvailable: (available: boolean) => void;
+  readonly hangAdmissionVerifier: (method: "admitted" | "current") => void;
+  readonly releaseAdmissionVerifier: () => void;
   restart(config?: NativeGitServiceConfig): Promise<void>;
+  restartWithoutAdmissionVerifier(): Promise<void>;
   close(): Promise<void>;
 };
 
@@ -113,7 +119,8 @@ ordinary:
   await run(gitExecutable, ["--git-dir", repositoryPath, "symbolic-ref", "HEAD", "refs/heads/main"]);
   const protectedHead = (await run(gitExecutable, ["--git-dir", repositoryPath, "rev-parse", "refs/heads/main"])).stdout.trim();
 
-  let service: NativeGitServer = createNativeGitServer(config);
+  const admission = createTestAdmissionVerifier();
+  let service: NativeGitServer = createNativeGitServer(config, admission.verifier, 50);
   let endpoint = await service.listen();
   const clone = join(root, "writer-clone");
   await git(root, ["clone", authenticatedGitUrl(endpoint), clone]);
@@ -152,11 +159,20 @@ ordinary:
     }),
     clone,
     candidateReadGate,
+    setAdmissionGeneration: admission.setGeneration,
+    setAdmissionVerifierAvailable: admission.setAvailable,
+    hangAdmissionVerifier: admission.hang,
+    releaseAdmissionVerifier: admission.release,
     git,
     request: (identity, method, path, body) => reviewRequest(endpoint, identity, method, path, body),
     async restart(nextConfig = config) {
       await service.close();
-      service = createNativeGitServer(nextConfig);
+      service = createNativeGitServer(nextConfig, admission.verifier, 50);
+      endpoint = await service.listen();
+    },
+    async restartWithoutAdmissionVerifier() {
+      await service.close();
+      service = createNativeGitServer(config);
       endpoint = await service.listen();
     },
     async close() {
