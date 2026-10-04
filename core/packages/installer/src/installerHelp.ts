@@ -19,7 +19,7 @@ Source: https://github.com/slop-lab/dev-infra-manager`);
 export function printInstallerHelp(): void {
   console.log(`Usage:
   dim installer
-  dim installer install core [--no-local-bin | --local-bin] [--prefix PATH] [--local-packages PATH] [--defer-controller-restart]
+  dim installer install core [--no-local-bin | --local-bin] [--prefix PATH] [--host-mirror-plugin PACKAGE@EXACT_VERSION] [--local-packages PATH] [--defer-controller-restart]
   dim installer install plugin PACKAGE@EXACT_VERSION...
   dim installer enable-plugin PACKAGE...
   dim installer disable-plugin PACKAGE...
@@ -36,6 +36,8 @@ Options:
   --no-local-bin  Install privately for facade use without ~/.local/bin/dim
   --local-bin     Create a managed dim symlink in the user bin directory
   --prefix PATH   Use PATH/bin for the managed symlink (default: ~/.local)
+  --host-mirror-plugin PACKAGE@EXACT_VERSION
+                   Install and enable the reviewed required host mirror plugin
   --local-packages PATH
                    Install a packages.json bundle produced by this repository
   --defer-controller-restart

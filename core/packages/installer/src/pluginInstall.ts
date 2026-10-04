@@ -11,6 +11,10 @@ export interface InstallOptions {
   readonly operation?: InstallerOperation;
 }
 
+export async function isPluginEnabled(name: string, pluginHome: string): Promise<boolean> {
+  return (await readManifest(path.join(pluginHome, "plugins.json"))).plugins.includes(name);
+}
+
 export async function installPlugins(specifiers: readonly string[], options: InstallOptions): Promise<string[]> {
   if (specifiers.length === 0) throw new Error("at least one plugin package is required");
   for (const specifier of specifiers) assertExactPluginSpecifier(specifier);

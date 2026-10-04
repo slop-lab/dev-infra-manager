@@ -8,6 +8,7 @@ import {
   defaultPluginHome,
   installDimCli,
   installPlugins,
+  isPluginEnabled,
   queryCliVersion,
   readLocalPackageBundle,
   removePlugins,
@@ -18,6 +19,8 @@ import { localBinPrompt } from "./installMode.js";
 import { printFacadeHelp, printInstallCoreHelp, printInstallerHelp, printInstallPluginHelp } from "./installerHelp.js";
 import { installerVersion } from "./installerVersion.js";
 import { withInstallerProgress } from "./installProgress.js";
+
+const HOST_MIRROR_PLUGIN = "@slop-lab/dim-plugin-host-mirrors";
 
 export async function installerCommand(input: readonly string[]): Promise<void> {
   let commandArgs = input;
@@ -60,7 +63,11 @@ The symlink runs the CLI directly, bypassing the installer facade and mise versi
 Installer commands may then require an explicit pinned npx invocation. Keeping DIM managed by mise is recommended.`);
       }
       const localBin = localBinPrompt(noLocalBin);
-      await installCore(localBin.exposeOnPath(await prompt.question(localBin.question)), defaultBinDirectory());
+      await installCore(
+        localBin.exposeOnPath(await prompt.question(localBin.question)),
+        defaultBinDirectory(),
+        (question) => prompt.question(question)
+      );
     }
     if (choice === "2" || choice === "3") {
       const input = (await prompt.question("Plugin package(s), space-separated and pinned to exact versions: ")).trim();
@@ -84,6 +91,7 @@ async function installCoreCommand(commandArgs: readonly string[]): Promise<void>
       "local-bin": { type: "boolean" },
       "local-packages": { type: "string" },
       "defer-controller-restart": { type: "boolean" },
+      "host-mirror-plugin": { type: "string" },
       prefix: { type: "string" }
     }
   });
@@ -101,9 +109,20 @@ async function installCoreCommand(commandArgs: readonly string[]): Promise<void>
   if (parsed.values["defer-controller-restart"] && bundle === undefined) {
     throw new Error("--defer-controller-restart requires --local-packages");
   }
+  if (bundle !== undefined && parsed.values["host-mirror-plugin"] !== undefined) {
+    throw new Error("--host-mirror-plugin cannot be used with --local-packages");
+  }
+  const version = await installerVersion();
+  const plugins = bundle === undefined
+    ? await selectHostMirrorPlugin(
+      version,
+      parsed.values["host-mirror-plugin"],
+      stdin.isTTY && stdout.isTTY ? promptHostMirrorPlugin : undefined
+    )
+    : [];
   const installed = bundle === undefined
     ? await withInstallerProgress("core", async (operation) => installDimCli({
-      version: await installerVersion(), exposeOnPath, binDirectory, operation
+      version, exposeOnPath, binDirectory, operation, plugins
     }))
     : await withInstallerProgress("core", (operation) => installDimCli({
       ...bundle, exposeOnPath, binDirectory, operation,
@@ -114,10 +133,15 @@ async function installCoreCommand(commandArgs: readonly string[]): Promise<void>
   else console.log("DIM CLI will be invoked through the installer facade; no local bin symlink was created");
 }
 
-async function installCore(exposeOnPath: boolean, binDirectory: string): Promise<void> {
+async function installCore(
+  exposeOnPath: boolean,
+  binDirectory: string,
+  question: (text: string) => Promise<string>
+): Promise<void> {
   const version = await installerVersion();
+  const plugins = await selectHostMirrorPlugin(version, undefined, question);
   const installed = await withInstallerProgress("core", (operation) =>
-    installDimCli({ version, exposeOnPath, binDirectory, operation }));
+    installDimCli({ version, exposeOnPath, binDirectory, operation, plugins }));
   console.log(`Installed DIM CLI ${version} at ${installed.executable}`);
   if (!installed.symlink) {
     console.log("DIM CLI will be invoked through the installer facade; no local bin symlink was created");
@@ -128,6 +152,41 @@ async function installCore(exposeOnPath: boolean, binDirectory: string): Promise
   const symlinkDirectory = path.dirname(installed.symlink);
   if (!pathEntries.includes(path.resolve(symlinkDirectory))) {
     console.warn(`Warning: ${symlinkDirectory} is not in PATH; add it, e.g. export PATH="${symlinkDirectory}:$PATH"`);
+  }
+}
+
+async function selectHostMirrorPlugin(
+  version: string,
+  supplied: string | undefined,
+  question: ((text: string) => Promise<string>) | undefined
+): Promise<readonly { readonly name: string; readonly specifier: string }[]> {
+  const expected = `${HOST_MIRROR_PLUGIN}@${version}`;
+  if (supplied !== undefined && supplied !== expected) {
+    throw new Error(`--host-mirror-plugin must be the reviewed package '${expected}'`);
+  }
+  const enabled = await isPluginEnabled(HOST_MIRROR_PLUGIN, defaultPluginHome());
+  if (supplied === undefined && !enabled) {
+    if (question === undefined) {
+      throw new Error(
+        `the required host mirror provider is not enabled; retry with --host-mirror-plugin '${expected}'`
+      );
+    }
+    const answer = (await question(
+      `Install and enable the required reviewed host plugin ${expected}? [Y/n] `
+    )).trim().toLowerCase();
+    if (answer !== "" && answer !== "y" && answer !== "yes") {
+      throw new Error(`the required host mirror provider was declined; no DIM runtime was installed`);
+    }
+  }
+  return [{ name: HOST_MIRROR_PLUGIN, specifier: expected }];
+}
+
+async function promptHostMirrorPlugin(question: string): Promise<string> {
+  const prompt = createInterface({ input: stdin, output: stdout });
+  try {
+    return await prompt.question(question);
+  } finally {
+    prompt.close();
   }
 }
 

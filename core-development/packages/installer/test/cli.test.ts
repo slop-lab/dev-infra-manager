@@ -67,6 +67,30 @@ function runCli(args: string[], tsxPath: string, env: NodeJS.ProcessEnv, cwd: st
   });
 }
 
+function runCliInPty(
+  args: readonly string[],
+  input: string,
+  tsxPath: string,
+  env: NodeJS.ProcessEnv,
+  cwd: string
+): Promise<CliResult> {
+  return new Promise((resolve, reject) => {
+    const command = [tsxPath, cliEntry, ...args].map((value) => `'${value.replaceAll("'", "'\\''")}'`).join(" ");
+    const child = spawn("script", ["--quiet", "--return", "--command", command, "/dev/null"], {
+      cwd,
+      env,
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => { stdout += chunk.toString(); });
+    child.stderr.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+    child.once("error", reject);
+    child.once("close", (code) => resolve({ stdout, stderr, code }));
+    child.stdin.end(input);
+  });
+}
+
 const tsxPath = await locateTsx();
 const sourceRepositoryUrl = "https://github.com/slop-lab/dev-infra-manager";
 
@@ -177,6 +201,142 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     const result = await runCli(["installer", "install", "core", "--bogus-flag"], tsxPath!, env, root);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("dim:");
+  });
+
+  it("non-TTY registry core install fails before npm unless the exact host mirror plugin is selected", async () => {
+    // Given
+    const root = await tempDir("dim-cli-required-plugin-non-tty-");
+    const { env } = await baseEnv(root);
+    const bin = join(root, "bin");
+    const npmArgs = join(root, "npm-args.json");
+    await mkdir(bin, { recursive: true });
+    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "0.9.0" });
+
+    // When
+    const result = await runCli(
+      ["installer", "install", "core", "--no-local-bin"],
+      tsxPath!,
+      { ...env, PATH: `${bin}:${env.PATH}` },
+      root
+    );
+
+    // Then
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("--host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'");
+    await expect(access(npmArgs)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("installs and activates the explicitly selected exact-version host mirror plugin before readiness", async () => {
+    // Given
+    const root = await tempDir("dim-cli-required-plugin-explicit-");
+    const { env, dataHome } = await baseEnv(root);
+    const bin = join(root, "bin");
+    const npmArgs = join(root, "npm-args.json");
+    await mkdir(bin, { recursive: true });
+    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "0.9.0" });
+
+    // When
+    const result = await runCli(
+      [
+        "installer", "install", "core", "--no-local-bin",
+        "--host-mirror-plugin", "@slop-lab/dim-plugin-host-mirrors@0.9.0"
+      ],
+      tsxPath!,
+      { ...env, PATH: `${bin}:${env.PATH}` },
+      root
+    );
+
+    // Then
+    expect(result.code, result.stderr).toBe(0);
+    expect(JSON.parse(await readFile(npmArgs, "utf8"))).toContain("@slop-lab/dim-plugin-host-mirrors@0.9.0");
+    expect(JSON.parse(await readFile(join(dataHome, "runtime", "current", "plugins.json"), "utf8"))).toEqual({
+      schemaVersion: 1,
+      plugins: ["@slop-lab/dim-plugin-host-mirrors"]
+    });
+  });
+
+  it("upgrades an enabled host mirror plugin to the installer version without prompting", async () => {
+    // Given
+    const root = await tempDir("dim-cli-required-plugin-upgrade-");
+    const { env, dataHome } = await baseEnv(root);
+    const current = join(dataHome, "runtime", "current");
+    const bin = join(root, "bin");
+    const npmArgs = join(root, "npm-args.json");
+    await mkdir(current, { recursive: true });
+    await mkdir(bin, { recursive: true });
+    await writeFile(join(current, "package.json"), JSON.stringify({
+      dependencies: { "@slop-lab/dim-plugin-host-mirrors": "0.8.0" }
+    }));
+    await writeFile(join(current, "plugins.json"), JSON.stringify({
+      schemaVersion: 1,
+      plugins: ["@slop-lab/dim-plugin-host-mirrors"]
+    }));
+    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "0.9.0" });
+
+    // When
+    const result = await runCli(
+      ["installer", "install", "core", "--no-local-bin"],
+      tsxPath!,
+      { ...env, PATH: `${bin}:${env.PATH}` },
+      root
+    );
+
+    // Then
+    expect(result.code, result.stderr).toBe(0);
+    const args = JSON.parse(await readFile(npmArgs, "utf8"));
+    expect(args).toContain("@slop-lab/dim-plugin-host-mirrors@0.9.0");
+    expect(args).not.toContain("@slop-lab/dim-plugin-host-mirrors@0.8.0");
+  });
+
+  it("TTY registry core install offers and accepts the exact-version host mirror plugin", async () => {
+    // Given
+    const root = await tempDir("dim-cli-required-plugin-tty-accept-");
+    const { env, dataHome } = await baseEnv(root);
+    const bin = join(root, "bin");
+    await mkdir(bin, { recursive: true });
+    await writeFakeCliNpm(join(bin, "npm"), { argsFile: join(root, "npm-args.json"), versionOutput: "0.9.0" });
+
+    // When
+    const result = await runCliInPty(
+      ["installer", "install", "core", "--no-local-bin"],
+      "y\n",
+      tsxPath!,
+      { ...env, PATH: `${bin}:${env.PATH}` },
+      root
+    );
+
+    // Then
+    expect(result.code, `${result.stdout}\n${result.stderr}`).toBe(0);
+    expect(result.stdout).toContain("@slop-lab/dim-plugin-host-mirrors@0.9.0");
+    expect(JSON.parse(await readFile(join(dataHome, "runtime", "current", "plugins.json"), "utf8"))).toEqual({
+      schemaVersion: 1,
+      plugins: ["@slop-lab/dim-plugin-host-mirrors"]
+    });
+  });
+
+  it("TTY registry core install leaves the host unchanged when the host mirror plugin is declined", async () => {
+    // Given
+    const root = await tempDir("dim-cli-required-plugin-tty-decline-");
+    const { env, dataHome } = await baseEnv(root);
+    const bin = join(root, "bin");
+    const npmArgs = join(root, "npm-args.json");
+    await mkdir(bin, { recursive: true });
+    await writeFakeCliNpm(join(bin, "npm"), { argsFile: npmArgs, versionOutput: "0.9.0" });
+
+    // When
+    const result = await runCliInPty(
+      ["installer", "install", "core", "--no-local-bin"],
+      "n\n",
+      tsxPath!,
+      { ...env, PATH: `${bin}:${env.PATH}` },
+      root
+    );
+
+    // Then
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain("@slop-lab/dim-plugin-host-mirrors@0.9.0");
+    await expect(access(npmArgs)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(access(join(dataHome, "runtime"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("dim installer install plugin requires the shared CLI runtime first", async () => {

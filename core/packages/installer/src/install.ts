@@ -21,6 +21,7 @@ export {
   type LocalPackageBundle
 } from "./cliInstall.js";
 export {
+  isPluginEnabled,
   installPlugins,
   packageNameFromSpecifier,
   removePlugins,
