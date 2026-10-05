@@ -132,10 +132,11 @@ response.
 
 ### Ordinary-authority proof HTTP contract
 
-The distinct `ordinaryCi.identity` credential authenticates only three
+The distinct `ordinaryCi.identity` credential authenticates only four
 read-only native endpoints. Exact `GET /v1/ordinary-authority/identity` returns
 only schema version `1`, service ID `native-main`, role
-`ordinary-authority-reader`, and ordered scope `policy:read`, `attempt:read`.
+`ordinary-authority-reader`, and ordered scope `policy:read`,
+`review-event:read`, `attempt:read`.
 It is not accepted as a native Git identity.
 
 Exact `POST
@@ -149,6 +150,19 @@ derives the complete sorted assignment set from its global operator-owned
 `hosts[].capacities[]` configuration.
 
 Exact `POST
+/v1/projects/<project>/repositories/<repository>/ordinary-authority/review-event`
+accepts only schema version `1`, a fresh UUID `requestId`, and the `eventId`,
+`reviewId`, and `jobName` selector. The server derives Project, repository,
+protected ref, expected head, candidate commit/tree, and policy revisions from
+the immutable stored review envelope. Under the protected-ref serializer it
+rereads that envelope and the live review status, then returns only the echoed
+request ID and the exact canonical stored non-executable event. It does not
+enumerate the outbox or accept an image, script, command, descriptor, ref,
+candidate object, policy revision, or administrator selector. Missing,
+fabricated, foreign, review/job-mismatched events are concealed as `404`;
+policy, protected-head, or proposal movement after review storage returns `409`.
+
+Exact `POST
 /v1/projects/<project>/repositories/<repository>/ordinary-authority/current-attempt`
 accepts only schema version `1`, a fresh UUID `requestId`, `reviewId`, `jobName`,
 and `attemptId`. Under the same protected-ref serializer used for issuance and
@@ -158,10 +172,10 @@ generation, review and attempt IDs, host, and capacity. It rejects missing,
 foreign, unissued, revoked, replaced, stale-review, or current-policy-drifted
 tuples. It never reads or returns candidate blob bytes.
 
-All three routes reject alternate methods, paths, and query parameters. Proof
+All four routes reject alternate methods, paths, and query parameters. Proof
 POST bodies require exact `application/json`, reject additional fields, and are
-limited to 64 KiB. Successful responses are exact JSON with `Cache-Control:
-no-store`; all failures contain no proof tuple. The proof credential cannot use
+limited to 64 KiB. Successful responses are exact JSON, limited to 64 KiB, and
+set `Cache-Control: no-store`; all failures contain no proof tuple. The proof credential cannot use
 Git upload/receive, review inspection or approval, descriptor derivation,
 attempt issuance/revocation, status reporting, promotion, or administration.
 
@@ -487,3 +501,7 @@ upload-pack discovery and RPC while reader and writer fetch remain allowed. The
 target role matrix proves `attemptIssuer` can derive a descriptor and issue or
 revoke only its exact attempt, while identity, webhook, reporter, query, host,
 reviewer, administrator, and promoter credentials cannot derive one.
+The ordinary-authority review-event driver compares the real HTTP proof bytes
+with the canonical event retained by the immutable review envelope, compares
+review bytes and protected/proposal refs before and after, and proves fabricated,
+foreign, stale, moved-proposal, and review/job selector mismatches fail closed.
