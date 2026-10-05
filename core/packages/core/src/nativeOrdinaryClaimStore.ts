@@ -6,8 +6,9 @@ import { descriptorMatchesPolicy } from "./nativeOrdinaryAuthorityModel.js";
 import type { NativeJobAttemptIssuance } from "./nativeGitAttemptIssuerModel.js";
 import type { NativeReviewJobEvent } from "./nativeOrdinaryEvent.js";
 import type { NativeHostClaim, NativeHostClaimRequest } from "./nativeOrdinaryClaimProtocol.js";
-import { parseStoredDescriptor, parseStoredEvent, parseStoredPolicy } from "./nativeOrdinaryClaimProtocol.js";
-import { requiredClaimNumber, requiredClaimString, stringField } from "./nativeOrdinaryAuthorityRows.js";
+import { parseStoredEvent, parseStoredPolicy } from "./nativeOrdinaryClaimProtocol.js";
+import { loadActiveNativeHostClaim } from "./nativeOrdinaryClaimRecord.js";
+import { requiredClaimString, stringField } from "./nativeOrdinaryAuthorityRows.js";
 
 export type NativeClaimReservation =
   | { readonly kind: "empty" }
@@ -220,25 +221,12 @@ export class NativeOrdinaryClaimStore {
   }
 
   #loadActive(request: NativeHostClaimRequest, claimId: string): NativeHostClaim {
-    const row = this.#database.prepare(`
-      SELECT event_id, review_id, attempt_id, admission_generation, host_id, capacity,
-        lease_expires_at, descriptor_json, descriptor_digest FROM claims WHERE claim_id = ? AND state = 'active'
-    `).get(claimId);
-    return {
-      schemaVersion: 1,
+    return loadActiveNativeHostClaim({
+      database: this.#database,
       serviceId: this.#options.serviceId,
-      requestId: request.requestId,
+      request,
       claimId,
-      eventId: requiredClaimString(row, "event_id"),
-      reviewId: requiredClaimString(row, "review_id"),
-      attemptId: requiredClaimString(row, "attempt_id"),
-      admissionGeneration: requiredClaimString(row, "admission_generation"),
-      hostId: requiredClaimString(row, "host_id"),
-      capacity: requiredClaimString(row, "capacity"),
-      leaseExpiresAt: requiredClaimNumber(row, "lease_expires_at"),
-      descriptor: parseStoredDescriptor(requiredClaimString(row, "descriptor_json")),
-      descriptorDigest: requiredClaimString(row, "descriptor_digest")
-    };
+    });
   }
 
   #assignmentMatches(assignment: NativeAttemptAssignment, reservation: Extract<NativeClaimReservation, { readonly kind: "preparing" }>): boolean {

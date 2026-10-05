@@ -1,13 +1,14 @@
 import { isDeepStrictEqual } from "node:util";
 import type { DatabaseSync } from "node:sqlite";
 import type { NativeJobAttemptIssuance, NativeJobAttemptRevocation } from "./nativeGitAttemptIssuerModel.js";
-import { parseNativeJobAttemptIssuance, parseNativeJobAttemptRevocation } from "./nativeGitAttemptIssuerModel.js";
+import { parseNativeJobAttemptRevocation } from "./nativeGitAttemptIssuerModel.js";
 import { requiredClaimNumber, requiredClaimString, stringField } from "./nativeOrdinaryAuthorityRows.js";
 import type {
   NativeHostClaimRenewal,
   NativeHostClaimRenewalRequest,
   NativeHostRecoveryRequest
 } from "./nativeOrdinaryClaimProtocol.js";
+import { parseStoredIssuance } from "./nativeOrdinaryClaimProtocol.js";
 import { NativeOrdinaryStaleAuthorityError } from "./nativeOrdinaryClaimStore.js";
 
 type LeaseStoreOptions = {
@@ -70,6 +71,32 @@ export class NativeOrdinaryLeaseStore {
       if (state === "released") {
         return this.#finish(recoveryRequestId === request.requestId && recoveryResourceId === request.resourceId
           && stringField(row, "native_revocation_json") !== undefined ? { kind: "released" } : { kind: "conflict" });
+      }
+      if (state === "active") {
+        if (stringField(row, "service_epoch_id") !== this.#options.ownedEpochId
+          || recoveryRequestId !== undefined || recoveryResourceId !== undefined
+          || this.#database.prepare(`
+            SELECT 1 FROM native_attempt_assignments
+            WHERE claim_id = ? AND host_id = ? AND capacity = ? AND attempt_id = ? AND descriptor_digest = ?
+          `).get(request.claimId, request.hostId, request.capacity, request.attemptId, request.descriptorDigest) === undefined) {
+          return this.#finish({ kind: "conflict" });
+        }
+        this.#database.prepare(`
+          INSERT INTO capacity_fences(host_id, capacity, claim_id, reason, created_at)
+          VALUES (?, ?, ?, 'lease-lost', ?)
+        `).run(request.hostId, request.capacity, request.claimId, now);
+        this.#database.prepare("DELETE FROM native_attempt_assignments WHERE claim_id = ?").run(request.claimId);
+        this.#database.prepare(`
+          UPDATE claims SET state = 'recovering', recovery_request_id = ?, recovery_resource_id = ?,
+            cleanup_acknowledged_at = ? WHERE claim_id = ? AND state = 'active' AND service_epoch_id = ?
+        `).run(request.requestId, request.resourceId, now, request.claimId, this.#options.ownedEpochId);
+        this.#database.prepare(`
+          UPDATE claim_receipts SET state = 'recovering', updated_at = ? WHERE claim_id = ? AND state = 'active'
+        `).run(now, request.claimId);
+        return this.#finish({
+          kind: "pending",
+          issuance: parseStoredIssuance(requiredClaimString(row, "issuance_json"))
+        });
       }
       if (state !== "recovering" || (recoveryRequestId !== undefined && recoveryRequestId !== request.requestId)
         || (recoveryResourceId !== undefined && recoveryResourceId !== request.resourceId)
@@ -160,10 +187,6 @@ export class NativeOrdinaryLeaseStore {
     this.#database.exec("COMMIT");
     return value;
   }
-}
-
-function parseStoredIssuance(value: string): NativeJobAttemptIssuance {
-  return parseNativeJobAttemptIssuance(JSON.parse(value));
 }
 
 function revocationMatches(issuance: NativeJobAttemptIssuance, revocation: NativeJobAttemptRevocation): boolean {

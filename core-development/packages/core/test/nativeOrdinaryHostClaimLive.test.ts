@@ -112,7 +112,13 @@ describe("native ordinary host claim live integration", () => {
       join(native.repositoryPath, "dim-reviews", "job-attempts", reviewId, "source", "1.json"),
       "utf8"
     ));
+    expect(Object.keys(firstClaim).sort()).toEqual([
+      "admissionGeneration", "attempt", "attemptId", "capacity", "claimId", "descriptor",
+      "descriptorDigest", "eventId", "hostId", "leaseExpiresAt", "requestId", "reviewId",
+      "schemaVersion", "serviceId"
+    ]);
     expect(attempt.issuanceRequestId).toBe(firstClaim.claimId);
+    expect(firstClaim.attempt).toBe(attempt.attempt);
     expect(firstClaim.admissionGeneration).toBe(generation);
     expect(JSON.stringify(firstClaim)).not.toMatch(/secret|password|token|credential/i);
     expect(await attemptFiles(native, reviewId)).toEqual(["1.json"]);

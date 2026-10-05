@@ -24,6 +24,29 @@ afterEach(async () => {
 });
 
 describe("native ordinary host recovery HTTP", () => {
+  it("fences, revokes, and releases an exact active claim after host cleanup", async () => {
+    // Given
+    const issuer = leaseIssuer();
+    const { fixture, claim } = await preparedLeaseFixture(issuer);
+    fixtures.push(fixture);
+    const request = recoveryRequest(claim, "30000000-0000-4000-8000-000000000040");
+
+    // When
+    const recovered = await post(fixture.endpoint, "/v1/host-recoveries", "host-a", request);
+
+    // Then
+    expect(recovered.status).toBe(204);
+    expect(issuer.revocations()).toBe(1);
+    expect(recoveryState(fixture.database)).toEqual({
+      receipt: "released",
+      claim: "released",
+      demand: "superseded",
+      cleanupRequestId: request.requestId,
+      revoked: true,
+      fenced: false
+    });
+  });
+
   it("keeps the fence through uncertain revocation and releases only after exact same-host retry", async () => {
     // Given
     let now = 1_000;
