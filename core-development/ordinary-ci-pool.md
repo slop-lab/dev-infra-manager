@@ -2,8 +2,8 @@
 
 This is the target implementation and operator design for the ordinary CI
 scheduler/webhook service installed with native Git. Core now includes the
-bounded native authority library described below; webhook demand, queue/claim
-leases, controller execution, and installer deployment remain unimplemented.
+bounded native authority and standalone webhook-intake library described below;
+claim leases, controller execution, and installer deployment remain unimplemented.
 The normative authority,
 admission, and installer transaction are in
 `specification/specs/10-cli-contract.md` and
@@ -209,14 +209,14 @@ authentication boundary. It does not claim cryptographic server identity on
 plain HTTP outside that private network. A deployment that cannot preserve this
 exclusive network assumption requires authenticated transport before use.
 
-## Implemented authority library
+## Implemented authority and webhook-intake library
 
 `@slop-lab/dim-core` exports `configuredNativeOrdinaryAuthorityServer` as a
 native-only HTTP and SQLite library. It is not wired to the CLI, installer,
-webhook adapter, or host controller. Its normalized configuration is strict
+native Git sender, or host controller. Its normalized configuration is strict
 schema `3` and contains one service ID, a dedicated database path and admission
-lease, separate Basic credentials for `registrar`, `scheduler`, and `query`,
-and the operator-owned host capacities. Each capacity fixes its host and
+lease, separate Basic credentials for `webhook`, `registrar`, `scheduler`, and
+`query`, and the operator-owned host capacities. Each capacity fixes its host and
 capacity IDs, digest-pinned runner base, and maximum CPU, memory, PID,
 wall-clock, and output bounds. Credential passwords are distinct base64url
 values of at least 32 characters. The library receives no Git, Docker,
@@ -227,30 +227,45 @@ Both mutation routes are additionally gated by the configured native Git HTTP
 Project, or runtime configuration selects another source. The adapter lazily
 authenticates and attests the configured native Git service on the first
 mutation, bounded to five seconds, so central listener startup does not wait for
-native Git. The interface returns canonical native values from `assertRegisteredPolicy` and
-`assertIssuedAttempt`; the service parses those returned values again and
+native Git. The interface returns canonical native values from
+`assertRegisteredPolicy`, `assertReviewEvent`, and `assertIssuedAttempt`; the
+service parses those returned values again and
 persists them instead of the registrar or scheduler assertions. The production
-adapter uses the dedicated read-only policy and issued-attempt proof endpoints,
+adapter uses the dedicated read-only policy, stored review-event, and
+issued-attempt proof endpoints,
 requires the exact role, ordered scope, service ID, fresh nonce, and complete
 tuple, follows no redirect, and performs no retry. A source rejection is
 concealed as not found, while an unavailable or malformed peer is service
 unavailable. Both outcomes precede SQLite mutation.
 
 The database uses SQLite `user_version = 3`, WAL, full synchronous durability,
-and tables dedicated to native admissions and current attempt assignments.
+and the compiled final manifest for admissions, service epochs, current attempt
+assignments, permanent event and review/job replay fences, event inbox, demand,
+claim receipts, claims, capacity fences, host results, report outbox, and
+terminal details.
 Schema-less, schema-1, and predecessor schema-2 files are inspected read-only
 and rejected without mutation. There is no compatibility shim or migration
 through the Gitea ordinary-pool schema-2 store.
 
-This is an unreleased partial schema-3 shape, not the final scheduler database.
-It has no event inbox, demand, claim receipt, claim/fence, host result, report
-outbox, or restart-epoch table. The final service MUST NOT infer compatibility
-from `PRAGMA user_version = 3`. Before reusing version 3, startup must compare
+The service MUST NOT infer compatibility from `PRAGMA user_version = 3`.
+Startup compares
 the complete table, index, column, foreign-key, unique, and check-constraint
-shape against the compiled final schema while opened read-only, then run SQLite
-integrity and foreign-key checks. This authority-only two-table shape must be
-rejected byte-for-byte unchanged. Because it has not shipped, there is no
-migration or dual reader.
+shape against the compiled final schema while opened read-only, then runs SQLite
+integrity and foreign-key checks. It rejects both the former authority-only
+two-table shape and the unreleased six-table intake shape byte-for-byte before
+WAL. Because neither partial shape shipped, there is no migration or dual reader.
+
+The webhook credential has only exact `POST /v1/native-events`. The route
+strictly parses the schema-1 non-executable event, rereads the exact canonical
+stored event from native Git, requires a matching live admission, and commits the inbox row,
+queued demand, and both permanent replay fences in one `BEGIN IMMEDIATE`
+transaction before returning `202`. Exact event replay and a new-ID alias for
+the same tuple return `202` without reopening demand, including after restart
+or detailed-row retention time. Changed reuse conflicts. Each fence table is
+capped at 100,000 rows; known replay bypasses saturation while unseen input is
+rejected before mutation. Admission rotation or revocation supersedes queued
+old-generation demand under G1. Webhook handling performs no
+descriptor derivation, attempt issuance, claim, Docker operation, or execution.
 
 The registrar credential has only these mutation surfaces:
 
