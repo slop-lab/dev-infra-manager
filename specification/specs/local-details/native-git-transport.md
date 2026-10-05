@@ -45,26 +45,34 @@ exactly this required dependency object:
     "resultReporter": {
       "username": "ordinary-results",
       "password": "replace-with-result-reporter-credential"
+    },
+    "webhook": {
+      "endpoint": "http://ordinary-ci:8080/v1/native-events",
+      "username": "native-events",
+      "password": "replace-with-webhook-only-credential"
     }
   }
 }
 ```
 
-The endpoint is fixed to the Compose-network origin, follows no redirect, and
+The dependency endpoint and webhook endpoint are fixed to the Compose-network
+origin and path, follow no redirect, and
 must attest the exact service identity before native Git reports ready. The
 query credential is scoped only to admission and current-attempt/result queries
 for the repository tuple being evaluated. It cannot admit policy, claim
 capacity, report a result, enumerate hosts, or mutate scheduler state. It is
 distinct from every Git, reviewer, administrator, promoter, scheduler,
-CI-result, readiness, and host credential.
+CI-result, readiness, webhook, and host credential.
 
 The ordinary identity credential can attest only the exact configured native
 service and read the exact registered repository/protected-policy or current
 issued-attempt tuple. It receives no Git, review, candidate-blob, mutation,
-host-inventory, or per-Project capacity authority. The attempt-issuer credential is a native
-scheduler role constrained to one exact live ordinary admission generation,
-repository/protected tuple, required job, and newly issued current attempt; it
-cannot report. The result-reporter credential is a separate native CI role that
+host-inventory, or per-Project capacity authority. The attempt-issuer credential
+is the narrow native scheduler role constrained to derive one descriptor and
+issue or revoke one current attempt for an exact live ordinary admission
+generation, repository/protected tuple, required job, receipt, host, and
+capacity. It cannot report, read Git, approve, promote, or administer. The
+result-reporter credential is a separate native CI role that
 can report only the terminal result for that exact issuer-created current
 attempt and job; it cannot issue or revoke. Neither role can read Git, approve,
 promote, administer, enumerate unrelated Projects, or act when the ordinary
@@ -74,9 +82,15 @@ These credentials and endpoints do not select native Git for Project lifecycle.
 Until a separate native Project/repository state adapter is specified and
 implemented, the native service starts with no admitted Project and rejects
 Project, repository, ordinary admission, attempt, and result mutation.
-The four service credentials are not Git transport identities and are not
+The five service credentials are not Git transport identities and are not
 accepted by generic reviewer, administrator, CI, scheduler, or promotion
 routes; each is accepted only by its fixed role-specific endpoint.
+
+The webhook credential is outbound-only. Native Git uses it only to submit the
+exact durable review-job event in `CI-NATIVE-DELIVERY-001`. Ordinary CI cannot
+use it against native Git, and possession grants no review, descriptor,
+attempt, result, Git, or promotion authority. The webhook never carries an
+executable selector.
 
 ### Ordinary verifier HTTP contract
 
@@ -151,6 +165,61 @@ no-store`; all failures contain no proof tuple. The proof credential cannot use
 Git upload/receive, review inspection or approval, descriptor derivation,
 attempt issuance/revocation, status reporting, promotion, or administration.
 
+### Native review-event outbox
+
+Creating an immutable review writes one strict immutable envelope containing
+exactly `{review, events}` to that repository's owned proposal directory. The
+review identity binds the sorted complete required-job-name set, and `events`
+contains exactly one event in that order for every bound job. The service writes
+the complete mode-`0600` envelope to a uniquely named staging file, fsyncs it,
+publishes it without replacement by hard-linking it to the review path, and
+fsyncs the proposal directory before returning success. It then removes the
+staging link and fsyncs the staging directory. Startup removes only a strictly
+named, caller-owned mode-`0600` staging link whose device and inode exactly
+match its expected published review; foreign, unpublished, or mismatched state
+is rejected unchanged. A partial event set or repository-wide duplicate event
+ID is invalid startup state, and review creation fails before publication if
+the bounded outbox cannot accept the whole set. Event bytes are the exact
+`dim.native.review-job.available` JSON defined by `CI-NATIVE-DELIVERY-001`;
+they contain review and policy provenance but no descriptor or executable
+field.
+
+One service-owned dispatcher sends the oldest undelivered event to the fixed
+ordinary webhook endpoint. It records acknowledgement durably before marking
+the event delivered, uses the same event ID and bytes after timeout or crash,
+and never treats delivery as job success. Startup validates event schema,
+digest, path, owner, mode, review linkage, and the all-required-jobs set before
+dispatch. Delivered records compact to `(eventId, eventDigest)` tombstones that
+are never age-pruned. The per-repository tombstone cap is 100,000. Exact known
+replay remains idempotent at the cap; creating a review whose full event set
+would require another tombstone fails with `429` before review or event
+publication. Undelivered events are never pruned. The dispatcher has no native scheduler, CI reporter, reviewer,
+promoter, Git transport, or ordinary query credential.
+
+### Ordinary issuer and reporter endpoints
+
+The target ordinary attempt-issuer credential is accepted only on the exact
+review-scoped descriptor, attempt issuance, and attempt revocation paths. The
+currently additive package calls this its scheduler role; binding the bundle's
+configured `ordinaryCi.attemptIssuer` credential to that same narrow role is
+unimplemented target wiring, not shipped integration. Descriptor derivation
+requires the strict bounded request described below. Issuance requires the
+strict request already described below, and `issuanceRequestId` is the ordinary
+claim receipt UUID. Exact replay while that attempt remains current returns the
+same immutable attempt. Reuse with changed input, after revocation, or after a
+replacement attempt conflicts without writing state. Revocation names the same
+review, job, attempt, descriptor digest, generation, host, and capacity.
+The credential cannot report a result, use upload-pack or receive-pack, inspect
+or approve a review, promote, administer, or enumerate unrelated repositories.
+
+The ordinary result-reporter credential is accepted only on the existing exact
+review-scoped CI completion path. It submits the native schema-2
+`dim.ci.job.completed` event without translation. Native Git writes the
+immutable status before acknowledging and returns the same success for an exact
+replay. The reporter cannot derive a descriptor, issue or revoke an attempt,
+read Git, or promote. Neither service credential can enumerate repositories or
+select another Project through request data.
+
 ## Inputs and identity
 
 Startup consumes a strict schema-2 configuration with fixed service identity
@@ -167,10 +236,13 @@ Repositories may declare protected-ref review policies with exact policy,
 required-review, and required-job-set revisions; required job names; baseline
 reviewer IDs; and path-prefix rules that add reviewers. Reviewer and administrator credentials
 remain Project/repository scoped. Reviewers have no Git write role.
-Administrators can inspect and revoke evidence but cannot approve.
-Scheduler credentials derive ordinary candidate execution descriptors and issue
-and revoke durable current attempts, but cannot use smart Git transport, report
-results, or promote. CI credentials additionally bind one job name and cannot report another job;
+Administrators can inspect and revoke evidence but cannot approve. The current
+additive package calls its narrow descriptor/issue/revoke identity `scheduler`.
+In the unimplemented control-plane target, only the configured
+`ordinaryCi.attemptIssuer` credential occupies that role; no separately
+configured repository scheduler identity is accepted for those routes. The role
+cannot use smart Git transport, report results, approve, promote, or administer.
+CI credentials additionally bind one job name and cannot report another job;
 promoter credentials have no Git transport role and cannot bypass the checked
 promotion operation.
 
@@ -320,7 +392,7 @@ version 2. Startup rejects version-1 evidence unchanged. It does not migrate,
 rewrite, delete, alias, or union obsolete state; immutable reviews and human
 approvals are preserved so an operator can explicitly issue fresh evidence.
 
-The scheduler-only descriptor endpoint is exact
+The attempt-issuer-only descriptor endpoint is exact
 `POST /v1/projects/{project}/repositories/{repository}/reviews/{review-id}/ordinary-execution-descriptors`
 with no query parameters. Its exact JSON body contains only `jobName`,
 `admissionGeneration`, digest-pinned `runnerBaseImage`, and `bounds` containing
@@ -411,4 +483,7 @@ The ordinary descriptor driver additionally proves exact pending-review replay,
 strict body rejection, foreign-scope concealment, wrong-role denial, no attempt
 or status writes, stale proposal rejection, and a deterministic proposal move
 during candidate blob loading. Scheduler credentials are also denied both
-upload-pack discovery and RPC while reader and writer fetch remain allowed.
+upload-pack discovery and RPC while reader and writer fetch remain allowed. The
+target role matrix proves `attemptIssuer` can derive a descriptor and issue or
+revoke only its exact attempt, while identity, webhook, reporter, query, host,
+reviewer, administrator, and promoter credentials cannot derive one.
