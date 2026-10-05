@@ -94,6 +94,11 @@ Example schema-2 configuration:
     "resultReporter": {
       "username": "ordinary-results",
       "password": "replace-with-result-reporter-credential"
+    },
+    "webhook": {
+      "endpoint": "http://ordinary-ci:8080/v1/native-events",
+      "username": "native-events",
+      "password": "replace-with-webhook-only-credential"
     }
   },
   "repositories": [{
@@ -178,8 +183,9 @@ Example schema-2 configuration:
 }
 ```
 
-`ordinaryCi.endpoint` is exactly the private Compose origin shown above. All
-four ordinary-service usernames and passwords must be pairwise distinct and
+`ordinaryCi.endpoint` and `ordinaryCi.webhook.endpoint` are exactly the private
+Compose origin and native-event path shown above. All five ordinary-service
+usernames and passwords must be pairwise distinct and
 must not equal any native Git identity username or password. At startup the
 executable uses only `query` to authenticate `GET /v1/identity`; the response
 must attest schema 1, service ID `ordinary-main`, role `native-query`, and the
@@ -187,6 +193,25 @@ exact ordered scope `admission:read`, `attempt:read`. The verifier is injected
 only after that attestation succeeds. An absent `ordinaryCi` object preserves
 the rejecting verifier, so CI attempt, result, and promotion operations remain
 fail closed.
+
+The webhook credential is outbound-only and is sent only in the Authorization
+header. After repository validation, one service-owned dispatcher submits the
+oldest undelivered canonical review-job event to the fixed webhook. Review
+creation does not wait for ordinary CI: outage, timeout, rejection, malformed
+JSON, a wrong event ID, a cacheable response, or a redirect leaves the event
+pending and retries the identical bytes with bounded exponential backoff up to
+30 seconds. Only exact `202 application/json`, `Cache-Control: no-store`, and
+`{schemaVersion:1,eventId,accepted:true}` acknowledgement creates a durable
+mode-`0600` `dim-reviews/delivered/<event-id>.json` marker containing the exact
+event digest. Startup validates every marker against its immutable envelope;
+enumeration excludes only valid markers. Shutdown aborts in-flight delivery and
+clears retry waits before releasing storage ownership.
+
+Each repository admits at most 10,000 pending events and reserves at most
+100,000 permanent delivery markers. Reviews reserve marker capacity for their
+complete required-job event set before publication. Pending events and delivery
+markers are never age-pruned; at capacity, exact existing review replay remains
+idempotent while a new review fails with `429`.
 
 Verification uses exact `POST /v1/admission-verifications` and
 `POST /v1/current-attempt-verifications` requests. Each request carries a fresh
