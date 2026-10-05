@@ -477,7 +477,9 @@ label this evidence `candidate-controlled`, show its config/script/image/argv
 provenance, and MUST NOT call it independent verification.
 
 **CI-NATIVE-DELIVERY-001:** The native ordinary delivery path is a bounded,
-durable protocol. It is a target and is not implemented. Native Git is the
+durable protocol. Native event intake and receipt-bound host claim activation
+are implemented as a core library; host execution, renewal, recovery, results,
+and deployment remain targets. Native Git is the
 only review-event emitter, ordinary CI is the only inbox and scheduler, and a
 claiming host controller is the only executor. No Project has a persistent
 runner, worker, scheduler, or `eligibleAssignments` record. Every active
