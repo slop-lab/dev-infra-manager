@@ -67,9 +67,14 @@
   digest-bound mode-`0600` delivery markers under the registered repository.
   Startup replays only undelivered events, validates every marker, reserves the
   100,000-marker and 10,000-pending caps before review publication, and aborts
-   requests and backoff timers on shutdown. The claim scheduler, host executor,
-   reporter client, reviewer display, installer wiring, and native Project
-   adapter remain unimplemented with no compatibility form. Native Git now
+   requests and backoff timers on shutdown. Receipt-bound host claims now renew
+   only their exact live host/capacity, attempt, descriptor, generation, and
+   service epoch. Expiry, generation rotation, and restart durably withdraw
+   verifier visibility and fence only that capacity. The same host can record
+   exact cleanup and drive idempotent native revocation; a failed or lost revoke
+   response retains the fence until retry proves the bound revocation. The host
+   executor, result/report path, reviewer display, installer wiring, and native
+   Project adapter remain unimplemented with no compatibility form. Native Git now
    authenticates the configured attempt issuer and result reporter as distinct
    service principals: only the issuer may derive descriptors or issue and
    revoke current attempts, and only the reporter may submit the exact current

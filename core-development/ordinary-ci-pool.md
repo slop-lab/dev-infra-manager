@@ -391,7 +391,14 @@ and recovery requests repeat the host, capacity,
 claim, attempt, and descriptor identities so the service can compare the full
 tuple before mutation. Result bodies add only the native terminal event and
 `cleanupComplete: true`. Recovery bodies add only the inspected immutable local
-resource ID and `cleanupComplete: true`; they cannot report success evidence.
+`resourceId` and `cleanupComplete: true`; they cannot report success evidence.
+The receipt-bound claim UUID is also the planned local `resourceId`; recovery
+rejects any other identity, while actual provider inspection remains host
+executor work rather than a claim made by this central-only slice.
+Renewal returns the absolute `leaseExpiresAt` plus the safe
+`leaseDurationMilliseconds` that the host applies to its request-start
+monotonic clock. Replaying a renewal request returns the remaining duration,
+never a fresh lease from the old response.
 
 The role matrix is closed:
 
