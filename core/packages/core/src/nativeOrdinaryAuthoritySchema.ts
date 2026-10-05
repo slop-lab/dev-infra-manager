@@ -122,9 +122,20 @@ const schemaSql = `
     attempt_id TEXT NOT NULL UNIQUE,
     descriptor_json TEXT NOT NULL,
     descriptor_digest TEXT NOT NULL,
+    issuance_json TEXT NOT NULL,
     lease_expires_at INTEGER NOT NULL CHECK(lease_expires_at > 0),
+    renewal_request_id TEXT,
+    recovery_request_id TEXT,
+    recovery_resource_id TEXT,
+    cleanup_acknowledged_at INTEGER,
+    native_revocation_json TEXT,
+    released_at INTEGER,
     service_epoch_id TEXT NOT NULL REFERENCES service_epochs(epoch_id) ON DELETE RESTRICT,
-    state TEXT NOT NULL CHECK(state IN ('active','reported','recovering','released'))
+    state TEXT NOT NULL CHECK(state IN ('active','reported','recovering','released')),
+    CHECK((recovery_request_id IS NULL AND recovery_resource_id IS NULL AND cleanup_acknowledged_at IS NULL)
+      OR (recovery_request_id IS NOT NULL AND recovery_resource_id IS NOT NULL AND cleanup_acknowledged_at > 0)),
+    CHECK((state = 'released' AND released_at > 0) OR (state <> 'released' AND released_at IS NULL)),
+    CHECK(native_revocation_json IS NULL OR state = 'released')
   ) STRICT;
   CREATE TABLE capacity_fences (
     host_id TEXT NOT NULL,

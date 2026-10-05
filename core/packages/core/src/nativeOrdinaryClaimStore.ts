@@ -3,6 +3,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { UserError } from "./errors.js";
 import type { NativeAttemptAssignment, NativeCapacityPolicy } from "./nativeOrdinaryAuthorityModel.js";
 import { descriptorMatchesPolicy } from "./nativeOrdinaryAuthorityModel.js";
+import type { NativeJobAttemptIssuance } from "./nativeGitAttemptIssuerModel.js";
 import type { NativeReviewJobEvent } from "./nativeOrdinaryEvent.js";
 import type { NativeHostClaim, NativeHostClaimRequest } from "./nativeOrdinaryClaimProtocol.js";
 import { parseStoredDescriptor, parseStoredEvent, parseStoredPolicy } from "./nativeOrdinaryClaimProtocol.js";
@@ -23,6 +24,10 @@ export type NativeClaimReservation =
 export type NativeClaimActivation =
   | { readonly kind: "active"; readonly claim: NativeHostClaim }
   | { readonly kind: "conflict" };
+export type NativeClaimActivationProof = {
+  readonly assignment: NativeAttemptAssignment;
+  readonly issuance: NativeJobAttemptIssuance;
+};
 
 type ClaimStoreOptions = {
   readonly serviceId: string;
@@ -114,11 +119,12 @@ export class NativeOrdinaryClaimStore {
   activate(
     request: NativeHostClaimRequest,
     reservation: Extract<NativeClaimReservation, { readonly kind: "preparing" }>,
-    assignment: NativeAttemptAssignment
+    proof: NativeClaimActivationProof
   ): NativeClaimActivation {
     const now = this.#options.now();
     this.#database.exec("BEGIN IMMEDIATE");
     try {
+      this.#assertOwnedEpoch();
       const receipt = this.#database.prepare(`
         SELECT state, demand_id, admission_generation FROM claim_receipts
         WHERE claim_id = ? AND host_id = ? AND capacity = ? AND request_id = ?
@@ -127,7 +133,8 @@ export class NativeOrdinaryClaimStore {
       if (state === "active") return this.#finish({ kind: "active", claim: this.#loadActive(request, reservation.claimId) });
       if (state !== "preparing" || stringField(receipt, "admission_generation") !== reservation.admissionGeneration
         || reservation.epochId !== this.#options.ownedEpochId || !this.#ownsActiveEpoch()
-        || !this.#assignmentMatches(assignment, reservation)) {
+        || !this.#assignmentMatches(proof.assignment, reservation)
+        || proof.issuance.issuanceRequestId !== reservation.claimId) {
         return this.#finish({ kind: "conflict" });
       }
       const policyRow = this.#database.prepare(`
@@ -137,25 +144,27 @@ export class NativeOrdinaryClaimStore {
       const policyJson = stringField(policyRow, "policy_json");
       const demandId = stringField(receipt, "demand_id");
       if (policyJson === undefined || demandId === undefined
-        || !descriptorMatchesPolicy(assignment.descriptor, parseStoredPolicy(policyJson), reservation.capacity)
+        || !descriptorMatchesPolicy(proof.assignment.descriptor, parseStoredPolicy(policyJson), reservation.capacity)
         || this.#database.prepare("SELECT 1 FROM demands WHERE demand_id = ? AND state = 'preparing'").get(demandId) === undefined) {
         return this.#finish({ kind: "conflict" });
       }
       const leaseExpiresAt = now + this.#options.claimLeaseMilliseconds;
       this.#database.prepare(`
         INSERT INTO claims(claim_id, demand_id, host_id, capacity, event_id, review_id, job_name,
-          admission_generation, attempt_id, descriptor_json, descriptor_digest, lease_expires_at,
+          admission_generation, attempt_id, descriptor_json, descriptor_digest, issuance_json, lease_expires_at,
           service_epoch_id, state)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
       `).run(reservation.claimId, demandId, request.hostId, request.capacity, reservation.event.eventId,
-        assignment.reviewId, reservation.event.jobName, reservation.admissionGeneration, assignment.attemptId,
-        JSON.stringify(assignment.descriptor), assignment.descriptorDigest, leaseExpiresAt, reservation.epochId);
+        proof.assignment.reviewId, reservation.event.jobName, reservation.admissionGeneration, proof.assignment.attemptId,
+        JSON.stringify(proof.assignment.descriptor), proof.assignment.descriptorDigest,
+        JSON.stringify(proof.issuance), leaseExpiresAt,
+        reservation.epochId);
       this.#database.prepare(`
         INSERT INTO native_attempt_assignments(
           review_id, job_name, claim_id, attempt_id, descriptor_digest, admission_generation, host_id, capacity
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(assignment.reviewId, reservation.event.jobName, reservation.claimId, assignment.attemptId,
-        assignment.descriptorDigest, reservation.admissionGeneration, request.hostId, request.capacity);
+      `).run(proof.assignment.reviewId, reservation.event.jobName, reservation.claimId, proof.assignment.attemptId,
+        proof.assignment.descriptorDigest, reservation.admissionGeneration, request.hostId, request.capacity);
       this.#database.prepare("UPDATE claim_receipts SET state = 'active', updated_at = ? WHERE claim_id = ?")
         .run(now, reservation.claimId);
       this.#database.prepare("UPDATE demands SET state = 'claimed', updated_at = ? WHERE demand_id = ?")

@@ -94,7 +94,10 @@ export class NativeOrdinaryClaimService {
       this.#store.releaseStaleClaim(request, reservation.claimId);
       return { kind: "conflict" };
     }
-    const activated = this.#store.activateClaim(request, reservation, provenAssignment);
+    const activated = this.#store.activateClaim(request, reservation, {
+      assignment: provenAssignment,
+      issuance: issued.issuance
+    });
     switch (activated.kind) {
       case "active":
         return activated;
