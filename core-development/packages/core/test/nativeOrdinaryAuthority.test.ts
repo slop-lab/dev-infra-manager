@@ -178,6 +178,7 @@ describe("native ordinary authority", () => {
         identity: { username: "ordinary-identity", password: "identity-secret-00000000000000000000" }
       },
       credentials: {
+        webhook: { username: "native-events", password: "webhook-secret-000000000000000000000" },
         registrar: { username: "operator-registrar", password: "registrar-secret-00000000000000000000" },
         query: { username: "native-query", password: "query-secret-0000000000000000000000" },
         scheduler: { username: "ordinary-scheduler", password: "scheduler-secret-0000000000000000" }
@@ -193,7 +194,7 @@ describe("native ordinary authority", () => {
     });
 
     // Then
-    expect(start).toThrow(/expected 3/);
+    expect(start).toThrow(/schema manifest is unsupported/);
     expect(await readFile(databasePath)).toEqual(before);
     await rm(root, { recursive: true, force: true });
   });
