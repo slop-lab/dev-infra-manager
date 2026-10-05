@@ -18,9 +18,9 @@ import {
   type NativeClaimActivationProof,
   type NativeClaimReservation
 } from "./nativeOrdinaryClaimStore.js";
-import type { NativeHostClaimRequest } from "./nativeOrdinaryClaimProtocol.js";
 import type { NativeJobAttemptRevocation } from "./nativeGitAttemptIssuerModel.js";
 import type {
+  NativeHostClaimRequest,
   NativeHostClaimRenewal,
   NativeHostClaimRenewalRequest,
   NativeHostRecoveryRequest
@@ -29,6 +29,8 @@ import { admissionRow, numberField, stringField } from "./nativeOrdinaryAuthorit
 import { fenceExpiredClaims, fenceGenerationClaims, fenceRestartedClaims } from "./nativeOrdinaryFencing.js";
 import { NativeOrdinaryLeaseStore, type NativeRecoveryPreparation } from "./nativeOrdinaryLeaseStore.js";
 import { NativeOrdinaryVerificationStore } from "./nativeOrdinaryVerificationStore.js";
+import { NativeOrdinaryResultStore, type NativeHostResultIntake } from "./nativeOrdinaryResultStore.js";
+import type { NativeHostResultRequest } from "./nativeOrdinaryResultProtocol.js";
 
 export type NativeOrdinaryAuthorityClock = {
   readonly now: () => number;
@@ -52,6 +54,7 @@ export class NativeOrdinaryAuthorityStore {
   readonly #claimStore: NativeOrdinaryClaimStore;
   readonly #leaseStore: NativeOrdinaryLeaseStore;
   readonly #verificationStore: NativeOrdinaryVerificationStore;
+  readonly results: NativeOrdinaryResultStore;
 
   constructor(file: string, options: NativeOrdinaryAuthorityStoreOptions) {
     this.#database = openNativeOrdinaryDatabase(file);
@@ -60,6 +63,11 @@ export class NativeOrdinaryAuthorityStore {
     this.#capacityConfigDigest = nativeCapacityConfigDigest([...options.capacities.values()]);
     this.#clock = options.clock;
     this.#eventStore = new NativeOrdinaryEventStore(this.#database, {
+      serviceId: options.serviceId,
+      capacityConfigDigest: this.#capacityConfigDigest,
+      now: options.clock.now
+    });
+    this.results = new NativeOrdinaryResultStore(this.#database, {
       serviceId: options.serviceId,
       capacityConfigDigest: this.#capacityConfigDigest,
       now: options.clock.now
@@ -195,6 +203,11 @@ export class NativeOrdinaryAuthorityStore {
     return this.#leaseStore.completeRecovery(request, proof);
   }
 
+  acceptResult(authenticatedHost: string, request: NativeHostResultRequest): NativeHostResultIntake {
+    this.#expire();
+    return this.results.accept(authenticatedHost, request);
+  }
+
   admitted(input: NativeAdmissionVerification): boolean {
     this.#expire();
     return this.#verificationStore.admitted(input);
@@ -202,7 +215,7 @@ export class NativeOrdinaryAuthorityStore {
 
   current(input: NativeAttemptVerification): boolean {
     this.#expire();
-    return this.#verificationStore.current(input);
+    return this.#verificationStore.current(input) || this.results.currentResult(input);
   }
 
   #invalidateGeneration(generation: string, state: "expired" | "revoked" | "replaced", now: number): void {
@@ -212,6 +225,7 @@ export class NativeOrdinaryAuthorityStore {
       UPDATE demands SET state = 'superseded', updated_at = ?, terminal_at = ?
       WHERE admission_generation = ? AND state = 'queued'
     `).run(now, now, generation);
+    this.results.denyGeneration(generation, now);
     fenceGenerationClaims(this.#database, generation, now);
   }
 
