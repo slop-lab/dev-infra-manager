@@ -30,17 +30,17 @@ describe("DIM native Git descriptor evidence denials", () => {
     const source = await issueJob(fixture, review, "source");
     const before = await protectedHead(fixture);
 
-    const wrongHost = await reportJob(fixture, review, "source", source, "success", "source-ci", {
+    const wrongHost = await reportJob(fixture, review, "source", source, "success", "ordinary-results", {
       hostId: "host-b"
     });
-    const nonzeroSuccess = await reportJob(fixture, review, "source", source, "success", "source-ci", {
+    const nonzeroSuccess = await reportJob(fixture, review, "source", source, "success", "ordinary-results", {
       completion: { kind: "exited", exitCode: 7 }
     });
-    const reversedTime = await reportJob(fixture, review, "source", source, "success", "source-ci", {
+    const reversedTime = await reportJob(fixture, review, "source", source, "success", "ordinary-results", {
       startedAt: "2026-10-04T22:00:01.000Z",
       finishedAt: "2026-10-04T22:00:00.000Z"
     });
-    const excessiveOutput = await reportJob(fixture, review, "source", source, "success", "source-ci", {
+    const excessiveOutput = await reportJob(fixture, review, "source", source, "success", "ordinary-results", {
       stdout: { bytes: "10485761", sha256: `sha256:${"0".repeat(64)}`, truncated: true }
     });
 
@@ -128,7 +128,7 @@ describe("DIM native Git descriptor evidence denials", () => {
     const review = await createApprovedReview(fixture);
     const issuance = await issueJob(fixture, review, "source");
 
-    const response = await reportJob(fixture, review, "source", issuance, "success", "source-ci", {
+    const response = await reportJob(fixture, review, "source", issuance, "success", "ordinary-results", {
       descriptorDigest: `sha256:${"f".repeat(64)}`
     });
 

@@ -34,11 +34,10 @@ export async function jobsSuccessful(
     const latest = review.statuses.find((record) => record.payload.descriptor.jobName === jobName
       && record.payload.attempt === current.issuance.attempt
       && record.payload.attemptId === current.issuance.attemptId);
-    const reporter = config.identities.find((identity) => identity.role === "ci" && identity.jobName === jobName
-      && identity.projectId === review.projectId && identity.repositoryIds.includes(review.repositoryId));
+    const reporterUsername = config.ordinaryCi?.resultReporter.username;
     if (latest === undefined || latest.payload.result !== "success"
       || latest.payload.completion.kind !== "exited" || latest.payload.completion.exitCode !== 0
-      || latest.reporterUsername !== reporter?.username || !matchesReview(latest, review)
+      || latest.reporterUsername !== reporterUsername || !matchesReview(latest, review)
       || latest.payload.descriptorDigest !== current.issuance.descriptorDigest
       || latest.payload.hostId !== current.issuance.hostId
       || latest.payload.capacity !== current.issuance.capacity
