@@ -33,6 +33,7 @@ const schemaSql = `
   CREATE TABLE native_attempt_assignments (
     review_id TEXT NOT NULL,
     job_name TEXT NOT NULL,
+    claim_id TEXT NOT NULL UNIQUE REFERENCES claims(claim_id) ON DELETE RESTRICT,
     attempt_id TEXT NOT NULL UNIQUE,
     descriptor_digest TEXT NOT NULL,
     admission_generation TEXT NOT NULL REFERENCES native_admissions(admission_generation) ON DELETE RESTRICT,
