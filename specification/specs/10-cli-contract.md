@@ -478,8 +478,8 @@ provenance, and MUST NOT call it independent verification.
 
 **CI-NATIVE-DELIVERY-001:** The native ordinary delivery path is a bounded,
 durable protocol. Native event intake and receipt-bound host claim activation
-are implemented as a core library; host execution, renewal, recovery, results,
-and deployment remain targets. Native Git is the
+are implemented as a core library, including lease renewal and same-host
+recovery; host execution, results, and deployment remain targets. Native Git is the
 only review-event emitter, ordinary CI is the only inbox and scheduler, and a
 claiming host controller is the only executor. No Project has a persistent
 runner, worker, scheduler, or `eligibleAssignments` record. Every active
@@ -593,7 +593,9 @@ Hosts renew through exact `POST /v1/host-claim-renewals` with schema version,
 request ID, host, capacity, claim ID, attempt ID, and descriptor digest. Renewal
 is accepted only for the exact active claim and extends a finite lease by the
 configured lease duration. The host derives its local monotonic deadline from
-the request start and returned duration. Uncertain or denied renewal stops the
+the request start and returned `leaseDurationMilliseconds`; an idempotent replay
+returns only the remaining duration through the unchanged absolute expiry.
+Uncertain or denied renewal stops the
 job, ownership-inspects and reaps its exact resources, and enters recovery. It
 MUST NOT run or claim another job on that capacity first.
 
@@ -620,8 +622,10 @@ receipt. Every active old-generation or restart-observed claim changes to
 `recovering`, and its `(hostId, capacity)` is fenced. Only the same authenticated
 host may acknowledge exact ownership inspection and cleanup through `POST
 /v1/host-recoveries`, naming claim, attempt, descriptor digest, inspected
-resource identity, and `cleanupComplete: true`. Ordinary CI releases that fence
+resource identity as `resourceId`, and `cleanupComplete: true`. Ordinary CI releases that fence
 only after matching the stored claim and durably recording the acknowledgement.
+The planned local `resourceId` for this protocol is the receipt-bound `claimId`;
+future host execution MUST publish that identity on every resource it creates.
 An absent exact owned resource is successful recovery. A foreign, partial,
 malformed, or ambiguous resource remains untouched and fenced. Recovery never
 requeues the old demand or revives its attempt. Other capacities remain usable.
