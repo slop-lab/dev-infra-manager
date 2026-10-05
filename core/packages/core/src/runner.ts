@@ -70,21 +70,52 @@ export class ProcessRunner implements StreamingCommandRunner {
       const child = spawn(actualCommand, actualArgs, {
         cwd: options.cwd,
         env: options.env,
+        detached: true,
         stdio: [options.stdin ? "pipe" : "inherit", options.stdout ? "pipe" : "inherit", options.stderr ? "pipe" : "inherit"]
       });
       if (options.stdin && child.stdin) options.stdin.pipe(child.stdin);
       if (options.stdout && child.stdout) child.stdout.pipe(options.stdout);
       if (options.stderr && child.stderr) child.stderr.pipe(options.stderr);
-      const abort = () => child.kill("SIGTERM");
+      let terminateTimer: NodeJS.Timeout | undefined;
+      let killTimer: NodeJS.Timeout | undefined;
+      let aborting = false;
+      let settled = false;
+      const finish = (exitCode: number) => {
+        if (settled) return;
+        settled = true;
+        if (terminateTimer !== undefined) clearTimeout(terminateTimer);
+        if (killTimer !== undefined) clearTimeout(killTimer);
+        options.signal?.removeEventListener("abort", abort);
+        resolve(exitCode);
+      };
+      const signalGroup = (signal: NodeJS.Signals) => {
+        if (child.pid === undefined) return;
+        try {
+          process.kill(-child.pid, signal);
+        } catch (error) {
+          if (!(error instanceof Error && "code" in error && error.code === "ESRCH")) child.kill(signal);
+        }
+      };
+      const abort = () => {
+        if (settled || aborting) return;
+        aborting = true;
+        signalGroup("SIGTERM");
+        terminateTimer = setTimeout(() => {
+          if (settled) return;
+          signalGroup("SIGKILL");
+          killTimer = setTimeout(() => finish(137), KILL_GRACE_MILLISECONDS);
+        }, TERMINATE_GRACE_MILLISECONDS);
+      };
+      child.on("error", () => {
+        finish(127);
+      });
+      child.on("close", (exitCode, signal) => {
+        const signalExitCode = signal === "SIGKILL" ? 137 : signal === "SIGTERM" ? 143 : 1;
+        if (aborting) signalGroup("SIGKILL");
+        finish(exitCode ?? signalExitCode);
+      });
       if (options.signal?.aborted) abort();
       else options.signal?.addEventListener("abort", abort, { once: true });
-      child.on("error", () => {
-        resolve(127);
-      });
-      child.on("close", (exitCode) => {
-        options.signal?.removeEventListener("abort", abort);
-        resolve(exitCode ?? 1);
-      });
     });
   }
 }
