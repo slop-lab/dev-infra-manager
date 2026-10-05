@@ -39,10 +39,23 @@
   is not independent verification or blanket correctness proof. Product
   maintainers still review changed requirements, implementation, tests, and
   relevant results; only infrastructure security review is narrowed around
-  secrets and trusted capabilities. Human exact-tree approval and CAS promotion remain mandatory. The
-  webhook-demand adapter, queue/claim lease scheduler, host executor, reviewer
-  display, installer wiring, and migration from the old protected-root schema
-  remain unimplemented with no compatibility form.
+  secrets and trusted capabilities. Human exact-tree approval and CAS promotion
+  remain mandatory. Specify the remaining target as a durable native review
+  event, bounded ordinary inbox, host-capacity claim, descriptor derivation,
+  receipt-bound native issuance, transactional assignment, cleaned host result,
+  durable native report retry, and fenced release. Webhooks cannot select
+  executable input. One claim UUID is reused as the native issuance request so
+  crash recovery converges on one attempt, while generation rotation, lease
+  uncertainty, and scheduler restart fence only the affected capacity until the
+  same host proves ownership-safe cleanup. Webhook, query, native identity,
+  issuer, reporter, admission, and host roles remain separate. The final target
+  keeps capacities global and operator-owned, stores no per-Project assignment
+  list, and requires complete SQLite table-shape validation before accepting an
+  unreleased schema-3 database. The existing authority-only two-table schema-3
+  shape is rejected rather than migrated. The event emitter, inbox,
+  queue/claim scheduler, host executor, reporter, reviewer display, installer
+  wiring, and native Project adapter remain unimplemented with no compatibility
+  form.
 
 - Let one explicitly configured reviewer-web account approve the exact immutable
   review and revoke only its own active approval through fixed, Origin- and CSRF-guarded
