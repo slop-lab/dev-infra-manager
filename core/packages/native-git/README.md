@@ -204,21 +204,31 @@ status reporting, promotion, or administration. The service exposes exactly:
 
 - `GET /v1/ordinary-authority/identity`, attesting schema 1, service ID
   `native-main`, role `ordinary-authority-reader`, and ordered scope
-  `policy:read`, `attempt:read`.
+  `policy:read`, `review-event:read`, `attempt:read`.
 - `POST /v1/projects/<project>/repositories/<repository>/ordinary-authority/policy`,
   accepting only a fresh request UUID and exact protected ref. It returns the
   registered Project/repository/ref, current policy revisions, and sorted
   required job names. It does not accept or return host/capacity eligibility.
+- `POST /v1/projects/<project>/repositories/<repository>/ordinary-authority/review-event`,
+  accepting only a fresh request UUID plus exact event, review, and job IDs. It
+  derives every repository, ref, candidate, and policy field from the immutable
+  stored envelope, rechecks the live review under the protected-ref serializer,
+  and returns the echoed nonce with the exact canonical non-executable event.
+  Missing or selector-mismatched events return `404`; policy or live-ref
+  staleness returns `409`.
 - `POST /v1/projects/<project>/repositories/<repository>/ordinary-authority/current-attempt`,
   accepting only a fresh request UUID plus exact review, job, and attempt IDs.
   It returns the complete canonical current unrevoked assignment projected from
   the immutable schema-2 attempt record.
 
-Both proof requests require exact JSON, reject query parameters and bodies over
-64 KiB, and return `Cache-Control: no-store`. Missing, foreign, unissued,
+All three proof requests require exact JSON, reject query parameters, and cap
+both request and successful response bodies at 64 KiB. They return
+`Cache-Control: no-store`. Missing, foreign, unissued,
 revoked, replaced, stale-review, or current-policy-drifted tuples return no
-proof. Responses contain no credentials, reviewer rules, patches, or candidate
-blob bytes.
+proof. The review-event request cannot supply an image, script, command,
+descriptor, ref, candidate object, policy revision, or administrator selector.
+Responses contain no credentials, reviewer rules, patches, or candidate blob
+bytes.
 
 Trusted host setup calls `initializeNativeRepository` before starting the
 service. Registration derives storage only from validated Project and
