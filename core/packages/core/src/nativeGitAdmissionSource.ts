@@ -60,7 +60,12 @@ export type NativeGitAdmissionSourceOptions = {
 };
 
 export function createNativeGitAdmissionSource(options: NativeGitAdmissionSourceOptions): NativeAdmissionSource {
-  const authorization = basicAuthorization(options.config.identity.username, options.config.identity.password);
+  const endpoint = options.config.endpoint;
+  const serviceId = options.config.serviceId;
+  const identityUsername = options.config.identity.username;
+  const identityPassword = options.config.identity.password;
+  const authorization = basicAuthorization(identityUsername, identityPassword);
+  const httpClient = options.httpClient;
   let attestation: Promise<void> | undefined;
 
   return {
@@ -75,8 +80,8 @@ export function createNativeGitAdmissionSource(options: NativeGitAdmissionSource
       const signal = AbortSignal.timeout(requestTimeoutMilliseconds);
       await attest(signal);
       const requestId = randomUUID();
-      const response = await requestJson(options.httpClient, {
-        endpoint: options.config.endpoint,
+      const response = await requestJson(httpClient, {
+        endpoint,
         method: "POST",
         path: proofPath(input.projectId, input.repositoryId, "review-event"),
         authorization,
@@ -90,7 +95,7 @@ export function createNativeGitAdmissionSource(options: NativeGitAdmissionSource
         signal
       }, proofRejectionStatuses);
       const outer = exactRecord(response, ["schemaVersion", "serviceId", "requestId", "event"]);
-      if (outer.schemaVersion !== 1 || outer.serviceId !== options.config.serviceId || outer.requestId !== requestId) {
+      if (outer.schemaVersion !== 1 || outer.serviceId !== serviceId || outer.requestId !== requestId) {
         throw new NativeAdmissionSourceUnavailableError();
       }
       const canonical = parseProof(() => parseNativeReviewJobEvent(outer.event));
@@ -101,8 +106,8 @@ export function createNativeGitAdmissionSource(options: NativeGitAdmissionSource
       const signal = AbortSignal.timeout(requestTimeoutMilliseconds);
       await attest(signal);
       const requestId = randomUUID();
-      const response = await requestJson(options.httpClient, {
-        endpoint: options.config.endpoint,
+      const response = await requestJson(httpClient, {
+        endpoint,
         method: "POST",
         path: proofPath(input.descriptor.projectId, input.descriptor.repositoryId, "current-attempt"),
         authorization,
@@ -116,7 +121,7 @@ export function createNativeGitAdmissionSource(options: NativeGitAdmissionSource
         signal
       }, proofRejectionStatuses);
       const outer = exactRecord(response, ["schemaVersion", "serviceId", "requestId", "assignment"]);
-      if (outer.schemaVersion !== 1 || outer.serviceId !== options.config.serviceId || outer.requestId !== requestId) {
+      if (outer.schemaVersion !== 1 || outer.serviceId !== serviceId || outer.requestId !== requestId) {
         throw new NativeAdmissionSourceUnavailableError();
       }
       const canonical = parseProof(() => parseNativeAttemptAssignment(outer.assignment));
@@ -141,8 +146,8 @@ export function createNativeGitAdmissionSource(options: NativeGitAdmissionSource
     signal: AbortSignal
   ): Promise<NativeAdmissionPolicy> {
     const requestId = randomUUID();
-    const response = await requestJson(options.httpClient, {
-      endpoint: options.config.endpoint,
+    const response = await requestJson(httpClient, {
+      endpoint,
       method: "POST",
       path: proofPath(identity.projectId, identity.repositoryId, "policy"),
       authorization,
@@ -150,7 +155,7 @@ export function createNativeGitAdmissionSource(options: NativeGitAdmissionSource
       signal
     }, proofRejectionStatuses);
     const outer = exactRecord(response, ["schemaVersion", "serviceId", "requestId", "policy"]);
-    if (outer.schemaVersion !== 1 || outer.serviceId !== options.config.serviceId || outer.requestId !== requestId) {
+    if (outer.schemaVersion !== 1 || outer.serviceId !== serviceId || outer.requestId !== requestId) {
       throw new NativeAdmissionSourceUnavailableError();
     }
     const policy = exactRecord(outer.policy, [
@@ -161,15 +166,15 @@ export function createNativeGitAdmissionSource(options: NativeGitAdmissionSource
   }
 
   async function attestOnce(signal: AbortSignal): Promise<void> {
-    const response = await requestJson(options.httpClient, {
-      endpoint: options.config.endpoint,
+    const response = await requestJson(httpClient, {
+      endpoint,
       method: "GET",
       path: "/v1/ordinary-authority/identity",
       authorization,
       signal
     }, []);
     const identity = exactRecord(response, ["schemaVersion", "serviceId", "role", "scope"]);
-    if (identity.schemaVersion !== 1 || identity.serviceId !== options.config.serviceId
+    if (identity.schemaVersion !== 1 || identity.serviceId !== serviceId
       || identity.role !== "ordinary-authority-reader" || !isDeepStrictEqual(identity.scope, authorityScope)) {
       throw new NativeAdmissionSourceUnavailableError();
     }
