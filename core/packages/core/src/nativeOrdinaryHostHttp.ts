@@ -12,6 +12,8 @@ import {
   parseNativeHostClaimRequest,
   parseNativeHostRecoveryRequest
 } from "./nativeOrdinaryClaimProtocol.js";
+import { parseNativeHostResultRequest } from "./nativeOrdinaryResultProtocol.js";
+import type { NativeOrdinaryAuthorityStore } from "./nativeOrdinaryAuthorityStore.js";
 
 type HostHttpContext = {
   readonly request: IncomingMessage;
@@ -21,6 +23,7 @@ type HostHttpContext = {
   readonly capacities: ReadonlyMap<string, NativeCapacityPolicy>;
   readonly claimService: NativeOrdinaryClaimService;
   readonly leaseService: NativeOrdinaryLeaseService;
+  readonly store: NativeOrdinaryAuthorityStore;
   readonly readJson: () => Promise<unknown>;
 };
 
@@ -60,6 +63,16 @@ export async function handleNativeOrdinaryHostHttp(context: HostHttpContext): Pr
     else sendJson(context.response, 200, renewal);
     return true;
   }
+  if (context.pathname === "/v1/host-results") {
+    const resultRequest = parseNativeHostResultRequest(await context.readJson());
+    if (!inScope(context, hostId, resultRequest.terminalEvent.payload.hostId,
+      resultRequest.terminalEvent.payload.capacity)) return notFound(context.response);
+    const result = context.store.acceptResult(hostId, resultRequest);
+    if (result === "not-found") return notFound(context.response);
+    if (result === "conflict") sendJson(context.response, 409, { error: "host result conflicts" });
+    else sendJson(context.response, 202, { schemaVersion: 1, claimId: resultRequest.claimId, accepted: true });
+    return true;
+  }
   const recoveryRequest = parseNativeHostRecoveryRequest(await context.readJson());
   if (!inScope(context, hostId, recoveryRequest.hostId, recoveryRequest.capacity)) return notFound(context.response);
   const recovery = await context.leaseService.recover(recoveryRequest);
@@ -71,6 +84,7 @@ export async function handleNativeOrdinaryHostHttp(context: HostHttpContext): Pr
 const hostPaths = new Set([
   "/v1/host-claims",
   "/v1/host-claim-renewals",
+  "/v1/host-results",
   "/v1/host-recoveries"
 ]);
 
@@ -87,6 +101,7 @@ function knownCredential(request: IncomingMessage, config: NativeOrdinaryAuthori
     ...Object.values(config.credentials),
     config.nativeGit.identity,
     config.nativeGit.attemptIssuer,
+    config.nativeGit.resultReporter,
     ...config.hosts.map((host) => ({ username: host.hostId, password: host.hostToken }))
   ].some((credential) => authorized(request, credential));
 }

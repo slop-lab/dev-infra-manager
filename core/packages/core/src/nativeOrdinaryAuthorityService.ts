@@ -34,6 +34,11 @@ import {
   type NativeOrdinaryAuthorityConfig,
   type NativeOrdinaryCredential
 } from "./nativeOrdinaryAuthorityConfig.js";
+import {
+  createNativeGitResultReporterClient,
+  NativeGitResultReporter,
+  type NativeGitResultReporterClient
+} from "./nativeGitResultReporter.js";
 
 const maximumBodyBytes = 64 * 1024;
 
@@ -41,6 +46,7 @@ export type NativeOrdinaryAuthorityDependencies = {
   readonly clock?: NativeOrdinaryAuthorityClock;
   readonly nativeGitHttpClient?: NativeGitAdmissionHttpClient;
   readonly nativeGitAttemptIssuerClient?: NativeGitAttemptIssuerClient;
+  readonly nativeGitResultReporterClient?: NativeGitResultReporterClient;
 };
 
 export type { NativeOrdinaryAuthorityConfig, NativeOrdinaryCredential } from "./nativeOrdinaryAuthorityConfig.js";
@@ -70,6 +76,11 @@ export function configuredNativeOrdinaryAuthorityServer(
     });
   const claimService = new NativeOrdinaryClaimService(store, attemptIssuer, admissionSource);
   const leaseService = new NativeOrdinaryLeaseService(store, attemptIssuer);
+  const reporterClient = dependencies.nativeGitResultReporterClient ?? createNativeGitResultReporterClient(
+    config.nativeGit,
+    dependencies.nativeGitHttpClient ?? createNodeNativeGitAdmissionHttpClient()
+  );
+  const reporter = new NativeGitResultReporter(store.results, reporterClient);
   const server = createServer((request, response) => {
     void handle(request, response).catch((error) => {
       if (error instanceof NativeAdmissionSourceUnavailableError) sendJson(response, 503, { error: error.message });
@@ -86,7 +97,9 @@ export function configuredNativeOrdinaryAuthorityServer(
   server.headersTimeout = 10_000;
   server.keepAliveTimeout = 1_000;
   server.maxRequestsPerSocket = 100;
-  server.once("close", () => store.close());
+  server.once("close", () => {
+    void reporter.close().then(() => store.close());
+  });
   return server;
 
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -145,6 +158,7 @@ export function configuredNativeOrdinaryAuthorityServer(
       capacities,
       claimService,
       leaseService,
+      store,
       readJson: () => readJson(request)
     })) return;
     if (request.method === "POST" && url.pathname === "/v1/admission-verifications") {
@@ -199,6 +213,7 @@ function webhookAuthentication(
     config.credentials.query,
     config.nativeGit.identity,
     config.nativeGit.attemptIssuer,
+    config.nativeGit.resultReporter,
     ...config.hosts.map((host) => ({ username: host.hostId, password: host.hostToken }))
   ];
   return knownCredentials.some((credential) => authorized(request, credential)) ? "wrong-role" : "invalid";

@@ -1,5 +1,6 @@
 import { UserError } from "./errors.js";
 import type { NativeGitAdmissionConfig } from "./nativeGitAdmissionSource.js";
+import type { NativeGitResultReporterConfig } from "./nativeGitResultReporter.js";
 import { resourceBounds, type NativeCapacityPolicy } from "./nativeOrdinaryAuthorityModel.js";
 
 export type NativeOrdinaryCredential = {
@@ -13,7 +14,7 @@ export type NativeOrdinaryAuthorityConfig = {
   readonly database: string;
   readonly admissionLeaseMilliseconds: number;
   readonly claimLeaseMilliseconds: number;
-  readonly nativeGit: NativeGitAdmissionConfig;
+  readonly nativeGit: NativeGitAdmissionConfig & NativeGitResultReporterConfig;
   readonly credentials: {
     readonly webhook: NativeOrdinaryCredential;
     readonly registrar: NativeOrdinaryCredential;
@@ -48,7 +49,8 @@ export function validateNativeOrdinaryAuthorityConfig(
   const credentials = [
     ...Object.values(config.credentials),
     config.nativeGit.identity,
-    config.nativeGit.attemptIssuer
+    config.nativeGit.attemptIssuer,
+    config.nativeGit.resultReporter
   ];
   for (const credential of credentials) {
     authorityIdentifier(credential.username, "credential username");
