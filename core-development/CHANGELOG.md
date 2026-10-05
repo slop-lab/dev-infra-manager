@@ -67,9 +67,15 @@
   digest-bound mode-`0600` delivery markers under the registered repository.
   Startup replays only undelivered events, validates every marker, reserves the
   100,000-marker and 10,000-pending caps before review publication, and aborts
-  requests and backoff timers on shutdown. The claim scheduler, host executor,
-  reporter, reviewer display, installer wiring, and native Project adapter
-  remain unimplemented with no compatibility form.
+   requests and backoff timers on shutdown. The claim scheduler, host executor,
+   reporter client, reviewer display, installer wiring, and native Project
+   adapter remain unimplemented with no compatibility form. Native Git now
+   authenticates the configured attempt issuer and result reporter as distinct
+   service principals: only the issuer may derive descriptors or issue and
+   revoke current attempts, and only the reporter may submit the exact current
+   schema-2 terminal tuple. The service rejects obsolete generic scheduler and
+   CI identity configuration rather than letting either satisfy protected
+   promotion evidence.
 
 - Let one explicitly configured reviewer-web account approve the exact immutable
   review and revoke only its own active approval through fixed, Origin- and CSRF-guarded
