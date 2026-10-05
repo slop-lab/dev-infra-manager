@@ -41,7 +41,8 @@ export async function candidateExecutionFixture(): Promise<CandidateExecutionFix
   await git(root, ["clone", "--bare", source, repositoryPath]);
   const gitVersion = (await git(root, ["--version"])).stdout.trim().replace("git version ", "");
   const config = parseNativeGitServiceConfig({
-    schemaVersion: 1,
+    schemaVersion: 2,
+    serviceId: "native-main",
     host: "127.0.0.1",
     port: 0,
     storageRoot,

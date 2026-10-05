@@ -58,7 +58,8 @@ export const ordinaryCiDependencyConfigSchema = z.object({
 }).strict().readonly();
 
 export const nativeGitServiceConfigSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
+  serviceId: z.literal("native-main"),
   host: z.string().min(1),
   port: z.number().int().min(0).max(65_535),
   storageRoot: z.string().startsWith("/"),

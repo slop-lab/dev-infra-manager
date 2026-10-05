@@ -39,7 +39,8 @@ export async function nativeGitFixture(): Promise<NativeGitFixture> {
     writer("writer-a-other", "writer-a-other-secret-1", "project-a", "workspace-other")
   ] as const satisfies readonly NativeGitIdentity[];
   const config = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    serviceId: "native-main",
     host: "127.0.0.1",
     port: 0,
     storageRoot,

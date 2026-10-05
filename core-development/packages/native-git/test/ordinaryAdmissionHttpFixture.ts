@@ -110,7 +110,8 @@ export function ordinaryConfig(): OrdinaryCiDependencyConfig {
 
 export function nativeConfigInput(): Record<string, unknown> {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    serviceId: "native-main",
     host: "127.0.0.1",
     port: 0,
     storageRoot: "/tmp/native-git-config-test",

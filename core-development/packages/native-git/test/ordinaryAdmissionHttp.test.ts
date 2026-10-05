@@ -154,6 +154,8 @@ describe("ordinary admission verifier HTTP client", () => {
   it("validates the fixed endpoint and globally distinct service credentials", () => {
     const base = nativeConfigInput();
 
+    expect(() => parseNativeGitServiceConfig({ ...base, schemaVersion: 1 })).toThrow();
+    expect(() => parseNativeGitServiceConfig({ ...base, serviceId: "native-secondary" })).toThrow();
     expect(() => parseNativeGitServiceConfig({
       ...base,
       ordinaryCi: { ...ordinaryConfig(), endpoint: "http://127.0.0.1:8080" }

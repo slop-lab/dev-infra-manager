@@ -182,7 +182,8 @@ async function temporaryRoot(): Promise<string> {
 
 function serviceConfig(root: string, gitVersion: string, gitExecutable = "/usr/bin/git"): NativeGitServiceConfig {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    serviceId: "native-main",
     host: "127.0.0.1",
     port: 0,
     storageRoot: join(root, "storage"),
