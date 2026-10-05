@@ -65,11 +65,12 @@ dim-native-git serve /etc/dim/native-git.json
 The configuration must be a caller-owned, non-symlink, mode-`0600` regular
 file because it contains transport credentials.
 
-Example schema-1 configuration:
+Example schema-2 configuration:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
+  "serviceId": "native-main",
   "host": "127.0.0.1",
   "port": 9080,
   "storageRoot": "/var/lib/dim/native-git",
@@ -195,6 +196,29 @@ identify the pinned service, authorize the request, and echo the nonce and
 entire tuple exactly. Responses are limited to 64 KiB. Redirects, malformed or
 extra JSON fields, replayed nonces, non-200 statuses, tuple differences,
 timeouts, and transport errors reject. The client performs no retry.
+
+The `ordinaryCi.identity` credential is accepted only by the native Git
+ordinary-authority proof API. It is not a native Git identity and cannot use
+Git transport, reviews, descriptor derivation, attempt issuance or revocation,
+status reporting, promotion, or administration. The service exposes exactly:
+
+- `GET /v1/ordinary-authority/identity`, attesting schema 1, service ID
+  `native-main`, role `ordinary-authority-reader`, and ordered scope
+  `policy:read`, `attempt:read`.
+- `POST /v1/projects/<project>/repositories/<repository>/ordinary-authority/policy`,
+  accepting only a fresh request UUID and exact protected ref. It returns the
+  registered Project/repository/ref, current policy revisions, and sorted
+  required job names. It does not accept or return host/capacity eligibility.
+- `POST /v1/projects/<project>/repositories/<repository>/ordinary-authority/current-attempt`,
+  accepting only a fresh request UUID plus exact review, job, and attempt IDs.
+  It returns the complete canonical current unrevoked assignment projected from
+  the immutable schema-2 attempt record.
+
+Both proof requests require exact JSON, reject query parameters and bodies over
+64 KiB, and return `Cache-Control: no-store`. Missing, foreign, unissued,
+revoked, replaced, stale-review, or current-policy-drifted tuples return no
+proof. Responses contain no credentials, reviewer rules, patches, or candidate
+blob bytes.
 
 Trusted host setup calls `initializeNativeRepository` before starting the
 service. Registration derives storage only from validated Project and
