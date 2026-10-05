@@ -172,6 +172,11 @@ describe("native ordinary authority", () => {
       serviceId: "ordinary-main",
       database: databasePath,
       admissionLeaseMilliseconds: 300_000,
+      nativeGit: {
+        endpoint: "http://native-git:8080",
+        serviceId: "native-main",
+        identity: { username: "ordinary-identity", password: "identity-secret-00000000000000000000" }
+      },
       credentials: {
         registrar: { username: "operator-registrar", password: "registrar-secret-00000000000000000000" },
         query: { username: "native-query", password: "query-secret-0000000000000000000000" },

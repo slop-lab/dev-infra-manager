@@ -4,21 +4,20 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Server } from "node:http";
-import { isDeepStrictEqual } from "node:util";
 import {
   configuredNativeOrdinaryAuthorityServer,
-  NativeAdmissionSourceRejectedError,
-  type NativeAdmissionSource,
+  type NativeOrdinaryCredential,
   type NativeOrdinaryAuthorityConfig
 } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityService.js";
-import type {
-  NativeAdmissionPolicy,
-  NativeAttemptAssignment
-} from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
 import { createNodeAdmissionVerifierHttpClient } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import { createOrdinaryAdmissionVerifier } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import { descriptorDigest } from "../../../../core/packages/native-git/src/candidate-execution.js";
 import type { CandidateOrdinaryExecutionDescriptor } from "../../../../core/packages/native-git/src/candidate-execution-schema.js";
+import {
+  nativeGitIdentityCredential,
+  startNativeGitAdmissionFixture,
+  type NativeGitAdmissionFixture
+} from "./nativeGitAdmissionFixture.js";
 
 const runnerBaseImage = `registry.example/runner@sha256:${"3".repeat(64)}`;
 const bounds = {
@@ -38,7 +37,7 @@ export const authorityCredentials = {
 export type AuthorityFixture = {
   readonly database: string;
   readonly endpoint: string;
-  readonly source: NativeAdmissionProofFixture;
+  readonly source: NativeGitAdmissionFixture;
   readonly close: () => Promise<void>;
   readonly remove: () => Promise<void>;
 };
@@ -46,60 +45,45 @@ export type AuthorityFixture = {
 export type StartAuthorityOptions = {
   readonly database?: string;
   readonly now?: () => number;
-  readonly source?: NativeAdmissionProofFixture;
-  readonly useDefaultSource?: boolean;
+  readonly source?: NativeGitAdmissionFixture;
+  readonly hosts?: NativeOrdinaryAuthorityConfig["hosts"];
+  readonly nativeGitIdentity?: NativeOrdinaryCredential;
 };
 
 export async function startAuthority(options: StartAuthorityOptions = {}): Promise<AuthorityFixture> {
   const root = options.database === undefined ? await mkdtemp(join(tmpdir(), "dim-native-authority-")) : undefined;
   const database = options.database ?? join(root ?? "", "ordinary.sqlite3");
-  const source = options.source ?? new NativeAdmissionProofFixture();
+  const source = options.source ?? await startNativeGitAdmissionFixture();
   const config = {
     schemaVersion: 3,
     serviceId: "ordinary-main",
     database,
     admissionLeaseMilliseconds: 300_000,
+    nativeGit: {
+      endpoint: "http://native-git:8080",
+      serviceId: "native-main",
+      identity: options.nativeGitIdentity ?? nativeGitIdentityCredential
+    },
     credentials: authorityCredentials,
-    hosts: [{ hostId: "host-a", capacities: [{ capacity: "primary", runnerBaseImage, bounds }] }]
-  } satisfies NativeOrdinaryAuthorityConfig;
-  const dependencies = { clock: { now: options.now ?? Date.now } };
-  const server = options.useDefaultSource === true
-    ? configuredNativeOrdinaryAuthorityServer(config, dependencies)
-    : configuredNativeOrdinaryAuthorityServer(config, { ...dependencies, admissionSource: source });
+    hosts: options.hosts ?? [{ hostId: "host-a", capacities: [{ capacity: "primary", runnerBaseImage, bounds }] }]
+  } as const;
+  const dependencies = {
+    clock: { now: options.now ?? Date.now },
+    nativeGitHttpClient: source.httpClient
+  };
+  const server = configuredNativeOrdinaryAuthorityServer(config, dependencies);
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   return {
     database,
     endpoint: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
     source,
-    close: () => closeServer(server),
+    close: async () => {
+      await closeServer(server);
+      await source.close();
+    },
     remove: () => root === undefined ? Promise.resolve() : rm(root, { recursive: true, force: true })
   };
-}
-
-export class NativeAdmissionProofFixture implements NativeAdmissionSource {
-  readonly #policies = new Map<string, { readonly requested: NativeAdmissionPolicy; readonly canonical: NativeAdmissionPolicy }>();
-  readonly #attempts = new Map<string, { readonly requested: NativeAttemptAssignment; readonly canonical: NativeAttemptAssignment }>();
-
-  authorizePolicy(requested: NativeAdmissionPolicy, canonical: NativeAdmissionPolicy = requested): void {
-    this.#policies.set(`${requested.projectId}\0${requested.repositoryId}`, { requested, canonical });
-  }
-
-  authorizeAttempt(requested: NativeAttemptAssignment, canonical: NativeAttemptAssignment = requested): void {
-    this.#attempts.set(requested.attemptId, { requested, canonical });
-  }
-
-  async assertRegisteredPolicy(input: NativeAdmissionPolicy): Promise<NativeAdmissionPolicy> {
-    const proof = this.#policies.get(`${input.projectId}\0${input.repositoryId}`);
-    if (proof === undefined || !isDeepStrictEqual(proof.requested, input)) throw new NativeAdmissionSourceRejectedError();
-    return proof.canonical;
-  }
-
-  async assertIssuedAttempt(input: NativeAttemptAssignment): Promise<NativeAttemptAssignment> {
-    const proof = this.#attempts.get(input.attemptId);
-    if (proof === undefined || !isDeepStrictEqual(proof.requested, input)) throw new NativeAdmissionSourceRejectedError();
-    return proof.canonical;
-  }
 }
 
 export async function verifier(endpoint: string) {

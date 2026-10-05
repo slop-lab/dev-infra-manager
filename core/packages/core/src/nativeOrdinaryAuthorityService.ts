@@ -2,14 +2,20 @@ import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { UserError } from "./errors.js";
 import {
+  createNativeGitAdmissionSource,
+  createNodeNativeGitAdmissionHttpClient,
+  NativeAdmissionSourceRejectedError,
+  NativeAdmissionSourceUnavailableError,
+  type NativeGitAdmissionConfig,
+  type NativeGitAdmissionHttpClient
+} from "./nativeGitAdmissionSource.js";
+import {
   parseNativeAdmissionPolicy,
   parseNativeAdmissionRevocation,
   parseNativeAdmissionVerification,
   parseNativeAttemptAssignment,
   parseNativeAttemptVerification,
   resourceBounds,
-  type NativeAdmissionPolicy,
-  type NativeAttemptAssignment,
   type NativeCapacityPolicy
 } from "./nativeOrdinaryAuthorityModel.js";
 import {
@@ -24,14 +30,9 @@ export type NativeOrdinaryCredential = {
   readonly password: string;
 };
 
-export interface NativeAdmissionSource {
-  assertRegisteredPolicy(input: NativeAdmissionPolicy): Promise<NativeAdmissionPolicy>;
-  assertIssuedAttempt(input: NativeAttemptAssignment): Promise<NativeAttemptAssignment>;
-}
-
 export type NativeOrdinaryAuthorityDependencies = {
   readonly clock?: NativeOrdinaryAuthorityClock;
-  readonly admissionSource?: NativeAdmissionSource;
+  readonly nativeGitHttpClient?: NativeGitAdmissionHttpClient;
 };
 
 export type NativeOrdinaryAuthorityConfig = {
@@ -39,6 +40,7 @@ export type NativeOrdinaryAuthorityConfig = {
   readonly serviceId: string;
   readonly database: string;
   readonly admissionLeaseMilliseconds: number;
+  readonly nativeGit: NativeGitAdmissionConfig;
   readonly credentials: {
     readonly registrar: NativeOrdinaryCredential;
     readonly query: NativeOrdinaryCredential;
@@ -59,7 +61,14 @@ export function configuredNativeOrdinaryAuthorityServer(
   dependencies: NativeOrdinaryAuthorityDependencies = {}
 ): Server {
   const capacities = validateConfig(config);
-  const admissionSource = dependencies.admissionSource ?? rejectingNativeAdmissionSource;
+  const eligibleAssignments = [...capacities.values()]
+    .map(({ hostId, capacity }) => ({ hostId, capacity }))
+    .sort((left, right) => `${left.hostId}\0${left.capacity}` < `${right.hostId}\0${right.capacity}` ? -1 : 1);
+  const admissionSource = createNativeGitAdmissionSource({
+    config: config.nativeGit,
+    eligibleAssignments,
+    httpClient: dependencies.nativeGitHttpClient ?? createNodeNativeGitAdmissionHttpClient()
+  });
   const store = new NativeOrdinaryAuthorityStore(
     config.database,
     config.serviceId,
@@ -142,31 +151,6 @@ export function configuredNativeOrdinaryAuthorityServer(
   }
 }
 
-const rejectingNativeAdmissionSource: NativeAdmissionSource = {
-  async assertRegisteredPolicy() {
-    throw new NativeAdmissionSourceUnavailableError();
-  },
-  async assertIssuedAttempt() {
-    throw new NativeAdmissionSourceUnavailableError();
-  }
-};
-
-export class NativeAdmissionSourceUnavailableError extends Error {
-  readonly name = "NativeAdmissionSourceUnavailableError";
-
-  constructor() {
-    super("native admission source is unavailable");
-  }
-}
-
-export class NativeAdmissionSourceRejectedError extends Error {
-  readonly name = "NativeAdmissionSourceRejectedError";
-
-  constructor() {
-    super("native admission source rejected the tuple");
-  }
-}
-
 function validateConfig(config: NativeOrdinaryAuthorityConfig): ReadonlyMap<string, NativeCapacityPolicy> {
   if (config.schemaVersion !== 3) throw new UserError("native ordinary authority schemaVersion must be 3");
   authorityIdentifier(config.serviceId, "service ID");
@@ -174,7 +158,10 @@ function validateConfig(config: NativeOrdinaryAuthorityConfig): ReadonlyMap<stri
   if (!Number.isSafeInteger(config.admissionLeaseMilliseconds) || config.admissionLeaseMilliseconds < 1) {
     throw new UserError("native ordinary authority admission lease must be positive");
   }
-  const credentials = Object.values(config.credentials);
+  if (config.nativeGit.endpoint !== "http://native-git:8080" || config.nativeGit.serviceId !== "native-main") {
+    throw new UserError("native ordinary authority native Git identity is invalid");
+  }
+  const credentials = [...Object.values(config.credentials), config.nativeGit.identity];
   for (const credential of credentials) {
     authorityIdentifier(credential.username, "credential username");
     if (!/^[A-Za-z0-9_-]{32,}$/.test(credential.password)) throw new UserError("native ordinary authority passwords must be base64url and at least 32 characters");
