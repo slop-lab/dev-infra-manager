@@ -51,9 +51,10 @@ describe("ordinary admission verifier HTTP client", () => {
       authorization: queryAuthorization,
       body: ""
     }]);
-    expect(JSON.stringify(ordinary.requests)).not.toContain("identity-credential-secret");
+    expect(JSON.stringify(ordinary.requests)).not.toContain("identity-secret-00000000000000000000");
     expect(JSON.stringify(ordinary.requests)).not.toContain("attempt-credential-secret");
     expect(JSON.stringify(ordinary.requests)).not.toContain("reporter-credential-secret");
+    expect(JSON.stringify(ordinary.requests)).not.toContain("webhook-secret-000000000000000000000");
   });
 
   it.each([
@@ -169,6 +170,13 @@ describe("ordinary admission verifier HTTP client", () => {
       ordinaryCi: {
         ...ordinaryConfig(),
         identity: { username: "ordinary-identity", password: "query-credential-secret" }
+      }
+    })).toThrow(/distinct/);
+    expect(() => parseNativeGitServiceConfig({
+      ...base,
+      ordinaryCi: {
+        ...ordinaryConfig(),
+        webhook: { ...ordinaryConfig().webhook, password: "reporter-credential-secret" }
       }
     })).toThrow(/distinct/);
     expect(() => parseNativeGitServiceConfig({

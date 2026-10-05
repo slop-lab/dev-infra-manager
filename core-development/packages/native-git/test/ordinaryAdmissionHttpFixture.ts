@@ -102,9 +102,14 @@ export function ordinaryConfig(): OrdinaryCiDependencyConfig {
     endpoint: "http://ordinary-ci:8080",
     serviceId: "ordinary-main",
     query: { username: "native-main", password: "query-credential-secret" },
-    identity: { username: "ordinary-identity", password: "identity-credential-secret" },
+    identity: { username: "ordinary-identity", password: "identity-secret-00000000000000000000" },
     attemptIssuer: { username: "ordinary-attempts", password: "attempt-credential-secret" },
-    resultReporter: { username: "ordinary-results", password: "reporter-credential-secret" }
+    resultReporter: { username: "ordinary-results", password: "reporter-credential-secret" },
+    webhook: {
+      endpoint: "http://ordinary-ci:8080/v1/native-events",
+      username: "native-events",
+      password: "webhook-secret-000000000000000000000"
+    }
   };
 }
 

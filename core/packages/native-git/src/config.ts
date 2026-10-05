@@ -48,6 +48,11 @@ export const nativeGitIdentitySchema = z.discriminatedUnion("role", [
 ]);
 
 const ordinaryServiceCredentialSchema = z.object({ username, password }).strict().readonly();
+const ordinaryWebhookCredentialSchema = z.object({
+  endpoint: z.literal("http://ordinary-ci:8080/v1/native-events"),
+  username,
+  password
+}).strict().readonly();
 
 export const ordinaryCiDependencyConfigSchema = z.object({
   endpoint: z.literal("http://ordinary-ci:8080"),
@@ -55,7 +60,8 @@ export const ordinaryCiDependencyConfigSchema = z.object({
   query: ordinaryServiceCredentialSchema,
   identity: ordinaryServiceCredentialSchema,
   attemptIssuer: ordinaryServiceCredentialSchema,
-  resultReporter: ordinaryServiceCredentialSchema
+  resultReporter: ordinaryServiceCredentialSchema,
+  webhook: ordinaryWebhookCredentialSchema
 }).strict().readonly();
 
 export const nativeGitServiceConfigSchema = z.object({
@@ -123,7 +129,8 @@ export function parseNativeGitServiceConfig(input: unknown): NativeGitServiceCon
       config.ordinaryCi.query,
       config.ordinaryCi.identity,
       config.ordinaryCi.attemptIssuer,
-      config.ordinaryCi.resultReporter
+      config.ordinaryCi.resultReporter,
+      config.ordinaryCi.webhook
     ];
     const serviceUsernames = new Set(serviceCredentials.map((credential) => credential.username));
     const servicePasswords = new Set(serviceCredentials.map((credential) => credential.password));
