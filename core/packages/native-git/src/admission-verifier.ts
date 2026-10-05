@@ -33,15 +33,21 @@ export function boundedAdmissionVerifier(
   timeoutMilliseconds = admissionVerificationTimeoutMilliseconds
 ): BoundedAdmissionVerifier {
   return {
-    assertAdmitted: (input) => withinDeadline((signal) => verifier.assertAdmitted(input, signal), timeoutMilliseconds),
-    assertCurrentAttempt: (input) => withinDeadline(
+    assertAdmitted: (input) => withinAdmissionVerificationDeadline(
+      (signal) => verifier.assertAdmitted(input, signal),
+      timeoutMilliseconds
+    ),
+    assertCurrentAttempt: (input) => withinAdmissionVerificationDeadline(
       (signal) => verifier.assertCurrentAttempt(input, signal),
       timeoutMilliseconds
     )
   };
 }
 
-async function withinDeadline(operation: (signal: AbortSignal) => Promise<void>, timeoutMilliseconds: number): Promise<void> {
+export async function withinAdmissionVerificationDeadline(
+  operation: (signal: AbortSignal) => Promise<void>,
+  timeoutMilliseconds = admissionVerificationTimeoutMilliseconds
+): Promise<void> {
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {

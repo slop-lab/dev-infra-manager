@@ -46,6 +46,17 @@ export const nativeGitIdentitySchema = z.discriminatedUnion("role", [
   z.object({ ...identityBase, role: z.literal("administrator") }).strict().readonly()
 ]);
 
+const ordinaryServiceCredentialSchema = z.object({ username, password }).strict().readonly();
+
+export const ordinaryCiDependencyConfigSchema = z.object({
+  endpoint: z.literal("http://ordinary-ci:8080"),
+  serviceId: z.literal("ordinary-main"),
+  query: ordinaryServiceCredentialSchema,
+  identity: ordinaryServiceCredentialSchema,
+  attemptIssuer: ordinaryServiceCredentialSchema,
+  resultReporter: ordinaryServiceCredentialSchema
+}).strict().readonly();
+
 export const nativeGitServiceConfigSchema = z.object({
   schemaVersion: z.literal(1),
   host: z.string().min(1),
@@ -54,13 +65,15 @@ export const nativeGitServiceConfigSchema = z.object({
   gitExecutable: z.string().startsWith("/"),
   gitVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
   repositories: z.array(nativeGitRepositorySchema).min(1).readonly(),
-  identities: z.array(nativeGitIdentitySchema).min(1).readonly()
+  identities: z.array(nativeGitIdentitySchema).min(1).readonly(),
+  ordinaryCi: ordinaryCiDependencyConfigSchema.optional()
 }).strict().readonly();
 
 export type NativeGitRepository = z.infer<typeof nativeGitRepositorySchema>;
 export type NativeGitIdentity = z.infer<typeof nativeGitIdentitySchema>;
 export type NativeGitServiceConfig = z.infer<typeof nativeGitServiceConfigSchema>;
 export type NativeGitReviewPolicy = z.infer<typeof nativeGitReviewPolicySchema>;
+export type OrdinaryCiDependencyConfig = z.infer<typeof ordinaryCiDependencyConfigSchema>;
 
 export function parseNativeGitServiceConfig(input: unknown): NativeGitServiceConfig {
   const config = nativeGitServiceConfigSchema.parse(input);
@@ -101,6 +114,25 @@ export function parseNativeGitServiceConfig(input: unknown): NativeGitServiceCon
     }
     if (identity.role === "scheduler") {
       for (const repositoryId of identity.repositoryIds) schedulers.add(repositoryKey(identity.projectId, repositoryId));
+    }
+  }
+  if (config.ordinaryCi !== undefined) {
+    const serviceCredentials = [
+      config.ordinaryCi.query,
+      config.ordinaryCi.identity,
+      config.ordinaryCi.attemptIssuer,
+      config.ordinaryCi.resultReporter
+    ];
+    const serviceUsernames = new Set(serviceCredentials.map((credential) => credential.username));
+    const servicePasswords = new Set(serviceCredentials.map((credential) => credential.password));
+    if (serviceUsernames.size !== serviceCredentials.length || servicePasswords.size !== serviceCredentials.length) {
+      throw new NativeGitConfigError("ordinary CI service credentials must be distinct");
+    }
+    for (const credential of serviceCredentials) {
+      if (usernames.has(credential.username)
+        || config.identities.some((identity) => identity.password === credential.password)) {
+        throw new NativeGitConfigError("ordinary CI and native Git credentials must be distinct");
+      }
     }
   }
   for (const repository of config.repositories) {
