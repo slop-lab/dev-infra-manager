@@ -67,14 +67,25 @@
   digest-bound mode-`0600` delivery markers under the registered repository.
   Startup replays only undelivered events, validates every marker, reserves the
   100,000-marker and 10,000-pending caps before review publication, and aborts
-   requests and backoff timers on shutdown. Receipt-bound host claims now renew
-   only their exact live host/capacity, attempt, descriptor, generation, and
-   service epoch. Expiry, generation rotation, and restart durably withdraw
-   verifier visibility and fence only that capacity. The same host can record
-   exact cleanup and drive idempotent native revocation; a failed or lost revoke
-   response retains the fence until retry proves the bound revocation. The host
-   executor, result/report path, reviewer display, installer wiring, and native
-   Project adapter remain unimplemented with no compatibility form. Native Git now
+  requests and backoff timers on shutdown. Receipt-bound host claims now renew
+  only their exact live host/capacity, attempt, descriptor, generation, and
+  service epoch. Expiry, generation rotation, and restart durably withdraw
+  verifier visibility and fence only that capacity. The same host can record
+  exact cleanup and drive idempotent native revocation; a failed or lost revoke
+  response retains the fence until retry proves the bound revocation. Cleaned
+  host results now strictly mirror the native schema-2 terminal envelope and
+  atomically commit immutable result and outbox rows before `202`. The central
+  reporter uses its distinct fixed-peer credential for one bounded send at a
+  time, retries the same stored bytes with capped backoff across response loss
+  and restart, and releases the claim only after exact native acknowledgement
+  or cleanup-gated terminal denial. Durable cleaned results remain valid current-
+  attempt proof only for the current active admission and a non-denied outbox.
+  Rotation, expiry, and revocation terminally deny and release pending old-
+  generation delivery without another native request; a denial after native
+  committed a status also prevents that stored status from satisfying
+  promotion. Claims expose no reporter credential. The host executor, reviewer display, installer wiring,
+  and native Project adapter remain unimplemented with no compatibility form.
+  Native Git now
    authenticates the configured attempt issuer and result reporter as distinct
    service principals: only the issuer may derive descriptors or issue and
    revoke current attempts, and only the reporter may submit the exact current
