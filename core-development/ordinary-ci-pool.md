@@ -96,6 +96,24 @@ The ordinary service JSON is strict schema `3`:
     "identity": {
       "username": "ordinary-identity",
       "password": "replace-with-identity-credential"
+    },
+    "attemptIssuer": {
+      "username": "ordinary-attempts",
+      "password": "replace-with-attempt-issuer-credential"
+    },
+    "resultReporter": {
+      "username": "ordinary-results",
+      "password": "replace-with-result-reporter-credential"
+    }
+  },
+  "credentials": {
+    "webhook": {
+      "username": "native-events",
+      "password": "replace-with-webhook-only-credential"
+    },
+    "query": {
+      "username": "native-main",
+      "password": "replace-with-query-only-credential"
     }
   },
   "leaseSeconds": 60,
@@ -104,8 +122,18 @@ The ordinary service JSON is strict schema `3`:
     "host-a": {
       "hostToken": "replace-with-host-token",
       "admissionToken": "replace-with-admission-token",
-      "resultToken": "replace-with-result-token",
-      "capacities": ["primary"]
+      "capacities": {
+        "primary": {
+          "runnerBaseImage": "registry.example/dim/ordinary-runner@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "bounds": {
+            "cpu": "4",
+            "memoryBytes": "8589934592",
+            "pids": "2048",
+            "wallClockSeconds": "3600",
+            "outputBytes": "16777216"
+          }
+        }
+      }
     }
   }
 }
@@ -121,11 +149,12 @@ Ordinary `/readyz` validates only its immutable config snapshot, local database
 readability and durability, and local listener; it neither contacts native Git
 nor requires Project state. Every token and native-facing password is distinct,
 base64url, and at least 32 random bytes.
-The host map contains installation capacity identities only; it contains no
-Project, repository, candidate job image, label, or Git credential. Each named
-capacity separately selects one digest-pinned runner base and positive CPU,
-memory, PID, wall-clock, and output ceilings through the host connection
-contract. Adding or removing a host
+The host map contains installation capacity identities and bounds only; it
+contains no Project, repository, candidate job image, label, or Git credential.
+Each named capacity selects one digest-pinned runner base and positive canonical
+decimal CPU, memory, PID, wall-clock, and output ceilings. The host connection
+must repeat the same values exactly, but it cannot create or widen capacity.
+Adding or removing a host
 is a reviewed operator-source update that creates a new immutable bundle
 generation, not a service API.
 
@@ -134,27 +163,36 @@ The native Git service config is strict schema `2`, pins `serviceId` to
 deployment its listener and storage root
 must be `0.0.0.0:8080` and `/var/lib/dim-native-git`; it must name the exact
 ordinary service origin `http://ordinary-ci:8080`, service identity, and a
-distinct query-only service-to-service dependency credential. Its Git
+distinct query-only dependency credential plus the fixed native-event webhook
+endpoint and credential. Its Git
 transport, reviewer, administrator, and promoter credentials do not appear in
 the ordinary config. The installer invokes each image's `dim-service
 check-config` before mutation, so cross-service identity, fixed path, token
 distinctness, and schema failures are preflight failures.
 
 The native query credential may read only the exact current admission and
-attempt status needed by native promotion checks. The ordinary identity
+attempt status needed by native promotion checks. The webhook credential may
+only create the exact non-executable inbox event. The ordinary identity
 credential may read only exact configured native service,
 repository/protected-policy, and current issued-attempt proofs. Native policy
-proof contains no host or capacity selector: all admitted Projects share every
-capacity in the ordinary service's operator-owned global `hosts` configuration,
-and the future production source adapter must derive the complete sorted
-`eligibleAssignments` array from that configuration before exact comparison.
-The attempt-issuer credential may issue or revoke only a current
-attempt for an exact live ordinary admission tuple and required job; it cannot
-report a result. The result-reporter credential may report only the terminal
+proof contains no host or capacity selector. All admitted Projects share every
+capacity in the ordinary service's operator-owned global `hosts` configuration.
+No Project policy, admission row, native proof, webhook, or request stores or
+selects a per-Project eligible-assignment list.
+The attempt-issuer credential may derive the strict descriptor and issue or
+revoke only a current receipt-bound attempt for an exact live ordinary
+admission tuple, required job, host, and capacity; it cannot report a result,
+read Git, approve, promote, or administer. The result-reporter credential may report only the terminal
 result for that exact current attempt and job; it cannot issue or revoke.
 Neither credential can read Git, approve, promote, administer storage,
 enumerate unrelated Projects, or act before the native identity check for that
 operation succeeds.
+
+Webhook, query, native identity, attempt issuer, result reporter, and each host
+credential are pairwise distinct. Admission credentials are also distinct from
+all six roles. Role crossover is denied even when a request body names a tuple
+that the other role could use. None of these credentials enters a claim, job,
+image, checkout, log, Project record, or native event.
 
 The paired native client contract is documented under "Ordinary verifier HTTP
 contract" in the native Git transport profile. In particular, ordinary returns
@@ -204,6 +242,16 @@ Schema-less, schema-1, and predecessor schema-2 files are inspected read-only
 and rejected without mutation. There is no compatibility shim or migration
 through the Gitea ordinary-pool schema-2 store.
 
+This is an unreleased partial schema-3 shape, not the final scheduler database.
+It has no event inbox, demand, claim receipt, claim/fence, host result, report
+outbox, or restart-epoch table. The final service MUST NOT infer compatibility
+from `PRAGMA user_version = 3`. Before reusing version 3, startup must compare
+the complete table, index, column, foreign-key, unique, and check-constraint
+shape against the compiled final schema while opened read-only, then run SQLite
+integrity and foreign-key checks. This authority-only two-table shape must be
+rejected byte-for-byte unchanged. Because it has not shipped, there is no
+migration or dual reader.
+
 The registrar credential has only these mutation surfaces:
 
 - `POST /v1/operator-admissions` parses a strict schema `1` policy request:
@@ -248,6 +296,136 @@ limits. Rotation, revocation, expiry, assignment replacement, restart, wrong
 role, foreign host/capacity, descriptor drift, and stale generation all fail
 closed.
 
+## Final schema-3 scheduler target
+
+`CI-NATIVE-DELIVERY-001` replaces the authority-only database shape above with
+the final schema-3 scheduler shape. This is specification for future source,
+not a claim about current code. IDs are lowercase UUID text, digests use the
+named `sha256:` form, JSON columns contain validated canonical compact JSON,
+and all times are positive Unix milliseconds. The compiled schema contains
+exactly these application tables and indexes:
+
+| Table | Primary and unique identity | Required payload |
+| --- | --- | --- |
+| `service_epochs` | `epoch_id` primary key; one partial-unique `active = 1` row | `started_at`, `active` constrained to `0|1` |
+| `native_admissions` | `admission_generation` primary key; one partial-unique active row per Project/repository | service, Project, repository, protected ref, three policy revisions, policy and capacity-config digests, canonical policy JSON without a host/capacity array, expiry, `active|expired|revoked|replaced` state, created/updated times |
+| `native_event_replay_fences` | `event_id` primary key | `event_digest`; never age-pruned |
+| `review_job_replay_fences` | `(review_id, job_name)` primary key | domain-separated `tuple_digest`; never age-pruned |
+| `native_event_inbox` | `event_id` primary key; `event_digest` unique | canonical event JSON, complete event tuple, optional `demand_id`, `accepted|terminal` state, received and terminal times |
+| `demands` | `demand_id` primary key; one partial-unique nonterminal row per review/job | event ID, review tuple, admission generation, `queued|preparing|claimed|reported|completed|superseded|cancelled|failed` state, created/updated/terminal times |
+| `claim_receipts` | `claim_id` primary key; `(host_id, capacity, request_id)` unique | optional demand ID unique, optional admission generation, `empty|preparing|active|reported|recovering|released` state, created/updated/released times |
+| `claims` | `claim_id` primary key; `demand_id` and `attempt_id` unique | host, capacity, event/review/job, generation, native attempt, descriptor JSON/digest, lease expiry, issuing service epoch, `active|reported|recovering|released` state |
+| `capacity_fences` | `(host_id, capacity)` primary key | claim ID unique, `lease-lost|generation-rotated|service-restart|foreign-resource` reason, created time |
+| `native_attempt_assignments` | `(review_id, job_name)` primary key; `attempt_id` unique | claim ID unique, descriptor digest, generation, host, capacity |
+| `host_results` | `claim_id` primary key; `(host_id, request_id)` unique | attempt and descriptor identities, canonical terminal event JSON/digest, cleanup acknowledgement, created time |
+| `report_outbox` | `claim_id` primary key | terminal event JSON/digest, `pending|delivering|delivered|denied` state, attempt count, next-attempt time, optional fixed safe denial code, created/updated times |
+| `terminal_details` | `(kind, object_id)` primary key | digest, terminal state, created time; age-prunable only while both replay fences survive |
+
+Event acceptance inserts the inbox/demand and both replay fences in one
+transaction. Each replay-fence table is capped at 100,000 rows. A known exact
+event or tuple replay bypasses the cap and returns the original acceptance; an
+unseen value requiring a new row returns `429` before any mutation. There is no
+age-based, pressure-based, or last-seen-based fence deletion.
+
+Every relationship above is a non-null foreign key except an accepted inbox
+event's initially null `demand_id` during the same event-acceptance transaction.
+That transaction must fill it before commit. State names are exact `CHECK`
+values. Cleanup is exact integer `1`; no false value is persisted. Partial
+indexes select oldest `queued` demand by `(created_at, demand_id)`, due report
+rows by `(next_attempt_at, claim_id)`, and one active admission and nonterminal
+review/job as stated above. Foreign keys use `ON DELETE RESTRICT`. Terminal
+pruning deletes only detailed rows whose complete dependency closure is terminal
+and at least seven days old and whose event and review-job replay fences already
+exist and survive the transaction. Replay fences have no age or last-seen field
+and are never pruning candidates. The service uses `BEGIN IMMEDIATE` for event acceptance,
+claim selection/receipt publication, assignment plus claim activation, result
+plus outbox publication, report completion/release, generation rotation, and
+recovery release.
+
+Startup reads `sqlite_schema`, every `PRAGMA table_info`, `index_list`,
+`index_info`, and `foreign_key_list` result, plus the exact normalized `CREATE
+TABLE` and `CREATE INDEX` SQL. Name, order, type, nullability, default, primary
+key position, index uniqueness/partial flag, foreign-key action, and `CHECK`
+text must equal the compiled manifest. Extra application tables or indexes are
+also an error. This validation occurs on a read-only descriptor before any WAL,
+SHM, pragma, repair, or schema write. `integrity_check` must return only `ok` and
+`foreign_key_check` must return no row. A version-3 file with the old
+`native_admissions` and `native_attempt_assignments` pair therefore fails
+without a migration attempt.
+
+## Native event, claim, and report API
+
+All routes use exact `application/json`, no query, a 64 KiB body and response
+cap, two-second client operations, `Cache-Control: no-store`, and no redirect.
+The accepted native event is the exact shape in `CI-NATIVE-DELIVERY-001`. The
+host claim request is:
+
+```json
+{
+  "schemaVersion": 1,
+  "requestId": "10000000-0000-4000-8000-000000000000",
+  "hostId": "host-a",
+  "capacity": "primary"
+}
+```
+
+An available claim returns `200` and the exact claim fields required by that
+contract. No work commits an `empty` request receipt and returns `204`; its
+internal claim ID is not returned. A repeated request returns the original
+`200`, `204`, or terminal denial. It never selects new work. Renewal, result,
+and recovery requests repeat the host, capacity,
+claim, attempt, and descriptor identities so the service can compare the full
+tuple before mutation. Result bodies add only the native terminal event and
+`cleanupComplete: true`. Recovery bodies add only the inspected immutable local
+resource ID and `cleanupComplete: true`; they cannot report success evidence.
+
+The role matrix is closed:
+
+| Credential | Allowed | Always denied |
+| --- | --- | --- |
+| native webhook | submit and replay one native review-job event | query, admission, claim, renew, recover, result |
+| native query | read exact admission/current-attempt verification | every mutation and inventory listing |
+| ordinary native identity | read exact policy and issued-attempt proof | Git, descriptor derivation, native mutation |
+| ordinary attempt issuer | derive the strict descriptor and issue or revoke its exact receipt-bound current attempt | report, approve, promote, Git, administration |
+| ordinary result reporter | replay exact accepted terminal event | issue, revoke, approve, promote, Git |
+| host admission | refresh or revoke canonical operator membership | event, claim, execution result, native evidence |
+| host execution | claim, renew, submit cleaned-up result, recover its configured capacity | admission, cross-host/capacity use, native service calls |
+
+Invalid authentication is `401`; valid wrong-role credentials are `403`.
+Foreign scoped identities are concealed as `404`. A stale generation, tuple or
+state conflict, changed idempotency-key reuse, live fence, or lost lease is
+`409`. Capacity limits are `429`. Native dependency, durability, or activation
+failure is `503`. Syntax is `400`, exact content type is `415`, and body size is
+`413`. Each denial is checked before transaction mutation. In particular, an
+authenticated webhook with a valid event ID but any executable field receives
+`400`, and no parser drops that field before validation.
+
+### Crash sequence
+
+For claim request `R`, ordinary CI selects demand `D` for `host-a/primary` and
+commits preparing receipt `C`. It derives descriptor `X`, then native Git issues
+attempt `A` with `issuanceRequestId = C`. Suppose the ordinary process dies
+before storing the assignment. On restart, the new service epoch fences every
+previously active claim but leaves this preparing receipt owned by `R`. Retrying
+`R` resumes `C`, replays issuance ID `C`, receives the same `A`, rereads native
+issued-attempt proof, and commits assignment plus active claim atomically. It
+does not issue `A2`, return `D` to the queue, or let another host claim `D`.
+
+If the generation changed while the process was down, restart instead revokes
+`A`, marks `D` superseded and `C` released, and returns conflict for `R`. If an
+active claim had existed, the capacity would stay fenced until that same host
+reported ownership-safe cleanup. A foreign same-name container cannot clear the
+fence. This is invariant G1.
+
+If native Git loses every webhook acknowledgement, it may replay event `E`
+after all seven-day detailed rows for completed attempt `A1` have been pruned.
+Ordinary CI first finds permanent `(eventId, eventDigest)` fence `E`. If a
+different event ID names the same review/job tuple, it finds the permanent
+`(reviewId, jobName, tupleDigest)` fence instead. An exact digest match returns
+the original `202` without creating demand `D2`, claim `C2`, or attempt `A2`;
+a digest mismatch returns conflict. Fence-table saturation returns `429` only
+for unseen input requiring a new fence and never prevents a known replay.
+
 ## Admission and execution flow after a Project adapter
 
 This flow is constrained but unavailable. Bundle installation leaves both
@@ -257,24 +435,28 @@ capacity advertisement, claim, and result operations fail before mutation.
 
 1. A trusted host controller uses only its admission credential to submit the
    operator-authorized native Project/repository, protected ref, policy and
-   review/job-set revisions, required candidate-controlled job names, and the
-   complete globally configured capacity set. The source verifies native Git
-   identity and protected policy, derives eligible assignments from central
-   `hosts[].capacities[]`, and requires exact canonical equality before the
-   service publishes or refreshes one leased admission generation.
+   review/job-set revisions, and required candidate-controlled job names. The
+   source verifies native Git identity and protected policy, and the service
+   binds its own central
+   `hosts[].capacities[]` set without storing a per-Project assignment list
+   before it publishes or refreshes one leased admission generation.
    Admission does not read or trust candidate job bytes.
 2. A review binds the exact expected protected head and candidate commit/tree.
    For each required job, native Git reads schema-2 `.dim/ci/runner.yml` and the
    named regular script blob directly from that candidate tree and produces the
    strict normalized descriptor from `CI-NATIVE-CANDIDATE-JOB-001`.
-3. Native Git sends an authenticated candidate/job webhook. The ordinary
-   service rejects executable fields in the event, re-verifies native identity,
-   accepts the event only against that exact live generation and descriptor,
-   and uses only its attempt-issuer credential to durably issue the current
-   native attempt before acknowledging demand.
+3. Native Git durably creates and retries one authenticated, non-executable
+   review-job event. Ordinary CI rereads native identity and policy proof and
+   commits the inbox event plus queued demand against the current admission
+   before acknowledging delivery. It does not derive a descriptor or issue an
+   attempt during webhook handling.
 4. A host controller claims through its host credential for one configured
-   capacity. The claim contains the immutable candidate execution descriptor,
-   attempt, generation, bounds, and lease, and no reusable authority.
+   capacity. Ordinary CI first commits the durable claim receipt, uses its UUID
+   as the native issuance request ID, then uses only `attemptIssuer` to derive
+   the strict descriptor for the selected capacity and issue or replay the native attempt, verifies native
+   proof, then commits assignment and active claim together. The returned claim
+   contains the immutable descriptor, attempt, generation, bounds, and lease,
+   and no reusable authority.
 5. The controller ownership-checks its local capacity; force-pulls the operator
    runner base and candidate job image by digest; fetches the exact candidate
    commit through its existing native read authority; independently verifies
@@ -282,12 +464,14 @@ capacity advertisement, claim, and result operations fail before mutation.
    digest; then launches one bounded ephemeral Sysbox runner. The direct argv is
    exactly `[/bin/bash, --noprofile, --norc, /run/dim/job/script]`; no webhook
    string enters a shell, and the host replaces the candidate image's configured
-   entrypoint and command with that array. It renews the lease and submits
-   terminal evidence with its result credential.
-6. The ordinary service authenticates the controller result and uses only its
-   result-reporter credential to submit the exact terminal attempt and
-   descriptor result to native Git. The controller stops and removes its owned
-   runtime and temporary material before releasing capacity.
+   entrypoint and command with that array. It renews the lease, stops and
+   removes its exact owned runtime, then submits terminal evidence with the same
+   host-scoped execution credential.
+6. Ordinary CI commits the immutable host result and report outbox before
+   acknowledging it. The reporter retries the exact terminal event with only
+   its native result-reporter credential. Native acknowledgement completes the
+   demand and releases the cleaned capacity. Generation rotation, lease loss,
+   or service restart instead applies G1 fencing until exact host recovery.
 
 A zero exit is candidate-controlled self-test evidence. It may satisfy the
 protected policy's required condition and records successful bounded execution
@@ -334,12 +518,17 @@ Project-scoped Sysbox capacity before a fresh schema-3 deployment. No export or
 conversion procedure is defined here.
 
 After the separate Project adapter exists, an expired claim fences only that
-host capacity. On restart, the host controller inspects and reaps the exact
-locally owned container before acknowledging recovery; a foreign same-name
-resource remains untouched and keeps the capacity fenced. Other hosts continue.
-Restarting either control-plane service preserves admission generations, queued
-demand, attempts, claims, and terminal evidence, but never converts an old
-generation to current.
+host capacity. Ordinary-service restart creates a new service epoch and changes
+every previous active claim to recovering before accepting another claim on
+that capacity. The same host controller inspects and reaps the exact locally
+owned container before acknowledging recovery; a foreign same-name resource
+remains untouched and keeps the capacity fenced. Other capacities continue.
+Restart preserves admission generations, queued demand, receipts, attempts,
+claims, results, and report outbox rows, but never converts an old generation to
+current. Preparing receipts resume with the same claim/issuance UUID only while
+their generation remains current. Native-service restart preserves its event
+outbox, issued attempts, and immutable results and therefore accepts exact
+delivery, issuance, and report replay.
 
 ## Operator acceptance
 
@@ -353,6 +542,28 @@ refusal, and update rollback. Successful Project admission, two-host execution,
 and real Sysbox job evidence remain blocked on the missing native Project
 adapter and MUST NOT be claimed by this installer-only gate. QEMU scheduler
 checks remain separate Gitea-only predecessor evidence.
+
+Source acceptance for the future emitter, inbox, scheduler, host client, and
+reporter is separate from that installer-only gate. It must cover exact event,
+claim, renewal, result, and recovery JSON; all role crossovers and status-code
+classes; inbox replay and conflicting event-ID reuse; oldest-demand selection;
+one claim per capacity; the claim-receipt crash sequence above at every remote
+call and transaction boundary; exact reuse of `claimId` as
+`issuanceRequestId`; descriptor equality after host reparsing; report retry
+across both service restarts; and G1 fencing after expiry, rotation, restart,
+foreign residue, and uncertain renewal. Tests must lose every native webhook
+acknowledgement, complete `A1`, advance beyond seven days, prune all eligible
+detailed rows, replay the same and a new-ID equivalent event, and prove neither
+creates `D2`, `C2`, or `A2`. Tests must fill each 100,000-row replay-fence table,
+observe `429` only for unseen input without eviction, and prove known exact
+replay still returns its original acceptance. Only dependent detailed records
+whose replay fences survive may prune.
+
+Database tests must create the final schema from empty state, reopen it, and
+then independently alter each table, index, column property, foreign key,
+unique constraint, and state check to prove startup rejects before WAL or any
+byte change. The unreleased two-table version-3 authority database is a required
+rejection fixture. There is no migration-success test.
 
 The source parser, schema-2 state transition, candidate checkout/materializer,
 scheduler descriptor binding, and host executor described above are also
