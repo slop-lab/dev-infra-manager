@@ -61,9 +61,15 @@
   authority-only two-table and unreleased six-table schema-3 shapes are rejected
   rather than migrated. The final dormant claim, result, report, fence, terminal-detail,
   and service-epoch tables are present in the compiled manifest. The
-  event emitter, claim scheduler, host executor, reporter, reviewer display, installer
-  wiring, and native Project adapter remain unimplemented with no compatibility
-  form.
+  native Git event emitter now uses a fifth outbound-only webhook credential to
+  retry the exact immutable event bytes without blocking review creation, accepts
+  only the exact non-cacheable `202` acknowledgement, and stores permanent
+  digest-bound mode-`0600` delivery markers under the registered repository.
+  Startup replays only undelivered events, validates every marker, reserves the
+  100,000-marker and 10,000-pending caps before review publication, and aborts
+  requests and backoff timers on shutdown. The claim scheduler, host executor,
+  reporter, reviewer display, installer wiring, and native Project adapter
+  remain unimplemented with no compatibility form.
 
 - Let one explicitly configured reviewer-web account approve the exact immutable
   review and revoke only its own active approval through fixed, Origin- and CSRF-guarded
