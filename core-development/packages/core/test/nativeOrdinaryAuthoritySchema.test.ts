@@ -45,6 +45,22 @@ describe("native ordinary authority schema manifest", () => {
     expect(start).toThrow(/credentials must be distinct/);
   });
 
+  it("rejects a host token reused from a non-host role", async () => {
+    // Given
+    const root = await mkdtemp(join(tmpdir(), "dim-native-host-credential-"));
+    roots.push(root);
+    const value = config(join(root, "ordinary.sqlite3"));
+
+    // When
+    const start = () => configuredNativeOrdinaryAuthorityServer({
+      ...value,
+      hosts: [{ ...value.hosts[0], hostToken: value.credentials.query.password }]
+    });
+
+    // Then
+    expect(start).toThrow(/credentials must be distinct/);
+  });
+
   it("rejects a native Git service identity other than the fixed Compose service", async () => {
     // Given
     const root = await mkdtemp(join(tmpdir(), "dim-native-service-identity-"));
@@ -134,6 +150,7 @@ function config(database: string) {
     serviceId: "ordinary-main",
     database,
     admissionLeaseMilliseconds: 300_000,
+    claimLeaseMilliseconds: 60_000,
     nativeGit: {
       endpoint: "http://native-git:8080",
       serviceId: "native-main",
@@ -143,11 +160,11 @@ function config(database: string) {
     credentials: {
       webhook: { username: "native-events", password: "webhook-secret-000000000000000000000" },
       registrar: { username: "operator-registrar", password: "registrar-secret-00000000000000000000" },
-      query: { username: "native-query", password: "query-secret-0000000000000000000000" },
-      scheduler: { username: "ordinary-scheduler", password: "scheduler-secret-0000000000000000" }
+      query: { username: "native-query", password: "query-secret-0000000000000000000000" }
     },
     hosts: [{
       hostId: "host-a",
+      hostToken: "host-a-token-000000000000000000000000",
       capacities: [{
         capacity: "primary",
         runnerBaseImage: `registry.example/runner@sha256:${"3".repeat(64)}`,

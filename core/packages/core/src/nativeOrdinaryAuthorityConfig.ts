@@ -12,15 +12,16 @@ export type NativeOrdinaryAuthorityConfig = {
   readonly serviceId: string;
   readonly database: string;
   readonly admissionLeaseMilliseconds: number;
+  readonly claimLeaseMilliseconds: number;
   readonly nativeGit: NativeGitAdmissionConfig;
   readonly credentials: {
     readonly webhook: NativeOrdinaryCredential;
     readonly registrar: NativeOrdinaryCredential;
     readonly query: NativeOrdinaryCredential;
-    readonly scheduler: NativeOrdinaryCredential;
   };
   readonly hosts: readonly {
     readonly hostId: string;
+    readonly hostToken: string;
     readonly capacities: readonly {
       readonly capacity: string;
       readonly runnerBaseImage: string;
@@ -37,6 +38,9 @@ export function validateNativeOrdinaryAuthorityConfig(
   if (config.database.length === 0) throw new UserError("native ordinary authority database path must not be empty");
   if (!Number.isSafeInteger(config.admissionLeaseMilliseconds) || config.admissionLeaseMilliseconds < 1) {
     throw new UserError("native ordinary authority admission lease must be positive");
+  }
+  if (!Number.isSafeInteger(config.claimLeaseMilliseconds) || config.claimLeaseMilliseconds < 1) {
+    throw new UserError("native ordinary authority claim lease must be positive");
   }
   if (config.nativeGit.endpoint !== "http://native-git:8080" || config.nativeGit.serviceId !== "native-main") {
     throw new UserError("native ordinary authority native Git identity is invalid");
@@ -56,8 +60,16 @@ export function validateNativeOrdinaryAuthorityConfig(
     throw new UserError("native ordinary authority credentials must be distinct");
   }
   const capacities = new Map<string, NativeCapacityPolicy>();
+  const hostTokens = new Set<string>();
   for (const host of config.hosts) {
     authorityIdentifier(host.hostId, "host ID");
+    if (!/^[A-Za-z0-9_-]{32,}$/.test(host.hostToken)) {
+      throw new UserError("native ordinary authority host tokens must be base64url and at least 32 characters");
+    }
+    if (hostTokens.has(host.hostToken) || credentials.some((credential) => credential.password === host.hostToken)) {
+      throw new UserError("native ordinary authority credentials must be distinct");
+    }
+    hostTokens.add(host.hostToken);
     for (const capacity of host.capacities) {
       authorityIdentifier(capacity.capacity, "capacity");
       const key = `${host.hostId}\0${capacity.capacity}`;
