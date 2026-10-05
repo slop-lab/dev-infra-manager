@@ -2,13 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { UserError } from "./errors.js";
 import {
-  descriptorMatchesPolicy,
   nativeCapacityConfigDigest,
   nativePolicyDigest,
-  parseNativeAdmissionPolicy,
   type NativeAdmissionPolicy,
   type NativeAdmissionVerification,
-  type NativeAttemptAssignment,
   type NativeAttemptVerification,
   type NativeCapacityPolicy
 } from "./nativeOrdinaryAuthorityModel.js";
@@ -18,11 +15,20 @@ import type { NativeReviewJobEvent } from "./nativeOrdinaryEvent.js";
 import {
   NativeOrdinaryClaimStore,
   type NativeClaimActivation,
+  type NativeClaimActivationProof,
   type NativeClaimReservation
 } from "./nativeOrdinaryClaimStore.js";
 import type { NativeHostClaimRequest } from "./nativeOrdinaryClaimProtocol.js";
+import type { NativeJobAttemptRevocation } from "./nativeGitAttemptIssuerModel.js";
+import type {
+  NativeHostClaimRenewal,
+  NativeHostClaimRenewalRequest,
+  NativeHostRecoveryRequest
+} from "./nativeOrdinaryClaimProtocol.js";
 import { admissionRow, numberField, stringField } from "./nativeOrdinaryAuthorityRows.js";
 import { fenceExpiredClaims, fenceGenerationClaims, fenceRestartedClaims } from "./nativeOrdinaryFencing.js";
+import { NativeOrdinaryLeaseStore, type NativeRecoveryPreparation } from "./nativeOrdinaryLeaseStore.js";
+import { NativeOrdinaryVerificationStore } from "./nativeOrdinaryVerificationStore.js";
 
 export type NativeOrdinaryAuthorityClock = {
   readonly now: () => number;
@@ -41,16 +47,16 @@ export class NativeOrdinaryAuthorityStore {
   readonly #serviceId: string;
   readonly #leaseMilliseconds: number;
   readonly #clock: NativeOrdinaryAuthorityClock;
-  readonly #capacities: ReadonlyMap<string, NativeCapacityPolicy>;
   readonly #capacityConfigDigest: string;
   readonly #eventStore: NativeOrdinaryEventStore;
   readonly #claimStore: NativeOrdinaryClaimStore;
+  readonly #leaseStore: NativeOrdinaryLeaseStore;
+  readonly #verificationStore: NativeOrdinaryVerificationStore;
 
   constructor(file: string, options: NativeOrdinaryAuthorityStoreOptions) {
     this.#database = openNativeOrdinaryDatabase(file);
     this.#serviceId = options.serviceId;
     this.#leaseMilliseconds = options.leaseMilliseconds;
-    this.#capacities = options.capacities;
     this.#capacityConfigDigest = nativeCapacityConfigDigest([...options.capacities.values()]);
     this.#clock = options.clock;
     this.#eventStore = new NativeOrdinaryEventStore(this.#database, {
@@ -64,6 +70,18 @@ export class NativeOrdinaryAuthorityStore {
       ownedEpochId,
       capacityConfigDigest: this.#capacityConfigDigest,
       claimLeaseMilliseconds: options.claimLeaseMilliseconds,
+      capacities: options.capacities,
+      now: options.clock.now
+    });
+    this.#leaseStore = new NativeOrdinaryLeaseStore(this.#database, {
+      serviceId: options.serviceId,
+      ownedEpochId,
+      claimLeaseMilliseconds: options.claimLeaseMilliseconds,
+      now: options.clock.now
+    });
+    this.#verificationStore = new NativeOrdinaryVerificationStore(this.#database, {
+      serviceId: options.serviceId,
+      capacityConfigDigest: this.#capacityConfigDigest,
       capacities: options.capacities,
       now: options.clock.now
     });
@@ -154,35 +172,37 @@ export class NativeOrdinaryAuthorityStore {
   activateClaim(
     request: NativeHostClaimRequest,
     reservation: Extract<NativeClaimReservation, { readonly kind: "preparing" }>,
-    assignment: NativeAttemptAssignment
+    proof: NativeClaimActivationProof
   ): NativeClaimActivation {
-    return this.#claimStore.activate(request, reservation, assignment);
+    return this.#claimStore.activate(request, reservation, proof);
   }
 
   releaseStaleClaim(request: NativeHostClaimRequest, claimId: string): void {
     this.#claimStore.releaseStale(request, claimId);
   }
 
+  renewClaim(request: NativeHostClaimRenewalRequest): NativeHostClaimRenewal | undefined {
+    this.#expire();
+    return this.#leaseStore.renew(request);
+  }
+
+  prepareRecovery(request: NativeHostRecoveryRequest): NativeRecoveryPreparation {
+    this.#expire();
+    return this.#leaseStore.prepareRecovery(request);
+  }
+
+  completeRecovery(request: NativeHostRecoveryRequest, proof: NativeJobAttemptRevocation): boolean {
+    return this.#leaseStore.completeRecovery(request, proof);
+  }
+
   admitted(input: NativeAdmissionVerification): boolean {
     this.#expire();
-    const policy = this.#activePolicy(input.descriptor.admissionGeneration);
-    const capacity = this.#capacity(input.hostId, input.capacity);
-    return policy !== undefined && capacity !== undefined
-      && descriptorMatchesPolicy(input.descriptor, policy, capacity);
+    return this.#verificationStore.admitted(input);
   }
 
   current(input: NativeAttemptVerification): boolean {
     this.#expire();
-    return this.#database.prepare(`
-      SELECT 1 FROM native_attempt_assignments attempts
-      JOIN native_admissions admissions ON admissions.admission_generation = attempts.admission_generation
-      JOIN claims ON claims.claim_id = attempts.claim_id
-      WHERE attempts.review_id = ? AND attempts.attempt_id = ? AND attempts.descriptor_digest = ?
-        AND attempts.admission_generation = ? AND attempts.host_id = ? AND attempts.capacity = ?
-        AND admissions.service_id = ? AND admissions.capacity_config_digest = ?
-        AND admissions.state = 'active' AND admissions.expires_at > ? AND claims.state = 'active'
-    `).get(input.reviewId, input.attemptId, input.descriptorDigest, input.admissionGeneration,
-      input.hostId, input.capacity, this.#serviceId, this.#capacityConfigDigest, this.#clock.now()) !== undefined;
+    return this.#verificationStore.current(input);
   }
 
   #invalidateGeneration(generation: string, state: "expired" | "revoked" | "replaced", now: number): void {
@@ -239,26 +259,6 @@ export class NativeOrdinaryAuthorityStore {
       ).get(generation), "expires_at");
       this.#invalidateGeneration(generation, expiresAt !== undefined && expiresAt <= now ? "expired" : "replaced", now);
     }
-  }
-
-  #activePolicy(admissionGeneration: string): NativeAdmissionPolicy | undefined {
-    const row = this.#database.prepare(`
-      SELECT policy_json FROM native_admissions
-      WHERE service_id = ? AND admission_generation = ? AND capacity_config_digest = ?
-        AND state = 'active' AND expires_at > ?
-    `).get(this.#serviceId, admissionGeneration, this.#capacityConfigDigest, this.#clock.now());
-    const policyJson = stringField(row, "policy_json");
-    if (policyJson === undefined) return undefined;
-    try {
-      return parseNativeAdmissionPolicy(JSON.parse(policyJson));
-    } catch (error) {
-      if (error instanceof SyntaxError) throw new UserError("native ordinary database contains malformed admission JSON", { cause: error });
-      throw error;
-    }
-  }
-
-  #capacity(hostId: string, capacity: string): NativeCapacityPolicy | undefined {
-    return this.#capacities.get(`${hostId}\0${capacity}`);
   }
 
 }

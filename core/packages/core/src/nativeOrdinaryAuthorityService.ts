@@ -21,8 +21,9 @@ import {
   parseNativeAttemptVerification
 } from "./nativeOrdinaryAuthorityModel.js";
 import { NativeOrdinaryClaimService } from "./nativeOrdinaryClaimService.js";
-import { parseNativeHostClaimRequest } from "./nativeOrdinaryClaimProtocol.js";
 import { NativeOrdinaryStaleAuthorityError } from "./nativeOrdinaryClaimStore.js";
+import { NativeOrdinaryLeaseService } from "./nativeOrdinaryLeaseService.js";
+import { handleNativeOrdinaryHostHttp } from "./nativeOrdinaryHostHttp.js";
 import {
   NativeOrdinaryAuthorityStore,
   type NativeOrdinaryAuthorityClock
@@ -63,14 +64,12 @@ export function configuredNativeOrdinaryAuthorityServer(
       clock: dependencies.clock ?? { now: Date.now }
     }
   );
-  const claimService = new NativeOrdinaryClaimService(
-    store,
-    dependencies.nativeGitAttemptIssuerClient ?? createNativeGitAttemptIssuerClient({
+  const attemptIssuer = dependencies.nativeGitAttemptIssuerClient ?? createNativeGitAttemptIssuerClient({
       config: config.nativeGit,
       httpClient: dependencies.nativeGitHttpClient ?? createNodeNativeGitAdmissionHttpClient()
-    }),
-    admissionSource
-  );
+    });
+  const claimService = new NativeOrdinaryClaimService(store, attemptIssuer, admissionSource);
+  const leaseService = new NativeOrdinaryLeaseService(store, attemptIssuer);
   const server = createServer((request, response) => {
     void handle(request, response).catch((error) => {
       if (error instanceof NativeAdmissionSourceUnavailableError) sendJson(response, 503, { error: error.message });
@@ -138,28 +137,16 @@ export function configuredNativeOrdinaryAuthorityServer(
       response.writeHead(204, { "cache-control": "no-store" }).end();
       return;
     }
-    if (request.method === "POST" && url.pathname === "/v1/host-claims") {
-      const hostId = authenticatedHost(request, config);
-      if (hostId === undefined) {
-        return knownCredential(request, config)
-          ? sendJson(response, 403, { error: "forbidden" })
-          : sendJson(response, 401, { error: "unauthorized" });
-      }
-      const claimRequest = parseNativeHostClaimRequest(await readJson(request));
-      if (claimRequest.hostId !== hostId || !capacities.has(`${hostId}\0${claimRequest.capacity}`)) return notFound(response);
-      const result = await claimService.claim(claimRequest);
-      switch (result.kind) {
-        case "active":
-          return sendJson(response, 200, result.claim);
-        case "conflict":
-          return sendJson(response, 409, { error: "host claim conflicts" });
-        case "empty":
-          response.writeHead(204, { "cache-control": "no-store" }).end();
-          return;
-        default:
-          return assertNever(result);
-      }
-    }
+    if (await handleNativeOrdinaryHostHttp({
+      request,
+      response,
+      pathname: url.pathname,
+      config,
+      capacities,
+      claimService,
+      leaseService,
+      readJson: () => readJson(request)
+    })) return;
     if (request.method === "POST" && url.pathname === "/v1/admission-verifications") {
       if (!authorized(request, config.credentials.query)) return notFound(response);
       const verification = parseNativeAdmissionVerification(await readJson(request));
@@ -215,19 +202,6 @@ function webhookAuthentication(
     ...config.hosts.map((host) => ({ username: host.hostId, password: host.hostToken }))
   ];
   return knownCredentials.some((credential) => authorized(request, credential)) ? "wrong-role" : "invalid";
-}
-
-function authenticatedHost(request: IncomingMessage, config: NativeOrdinaryAuthorityConfig): string | undefined {
-  return config.hosts.find((host) => authorized(request, { username: host.hostId, password: host.hostToken }))?.hostId;
-}
-
-function knownCredential(request: IncomingMessage, config: NativeOrdinaryAuthorityConfig): boolean {
-  return [
-    ...Object.values(config.credentials),
-    config.nativeGit.identity,
-    config.nativeGit.attemptIssuer,
-    ...config.hosts.map((host) => ({ username: host.hostId, password: host.hostToken }))
-  ].some((credential) => authorized(request, credential));
 }
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {
