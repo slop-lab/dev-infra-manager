@@ -164,7 +164,7 @@ describe("native ordinary host claim recovery", () => {
     expect(states(stale.database)).toEqual({ receipt: "active", demand: "claimed", claims: 1, assignments: 1 });
   });
 
-  it("revokes an in-flight native attempt when the service epoch rotates before activation", async () => {
+  it("revokes an in-flight native attempt when its generation rotates before activation", async () => {
     // Given
     const attemptStarted = deferred();
     const continueAttempt = deferred();
@@ -184,8 +184,9 @@ describe("native ordinary host claim recovery", () => {
     const request = claimRequest("20000000-0000-4000-8000-000000000016");
     const pendingResponse = post(stale.endpoint, "/v1/host-claims", "host-a", request);
     await attemptStarted.promise;
-    const current = await startAuthority({ database: stale.database });
-    fixtures.push(current);
+    const rotated = admission("project-a", "source", "2");
+    stale.source.authorizePolicy(rotated);
+    expect((await post(stale.endpoint, "/v1/operator-admissions", "registrar", rotated)).status).toBe(200);
 
     // When
     continueAttempt.resolve();
