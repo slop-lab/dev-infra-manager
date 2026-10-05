@@ -10,6 +10,7 @@ import {
   type NativeOrdinaryAuthorityConfig
 } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityService.js";
 import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
+import type { NativeGitAttemptIssuerClient } from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
 import { createNodeAdmissionVerifierHttpClient } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import { createOrdinaryAdmissionVerifier } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import { descriptorDigest } from "../../../../core/packages/native-git/src/candidate-execution.js";
@@ -32,8 +33,12 @@ const bounds = {
 export const authorityCredentials = {
   webhook: { username: "native-events", password: "webhook-secret-000000000000000000000" },
   registrar: { username: "operator-registrar", password: "registrar-secret-00000000000000000000" },
-  query: { username: "native-query", password: "query-secret-0000000000000000000000" },
-  scheduler: { username: "ordinary-scheduler", password: "scheduler-secret-0000000000000000" }
+  query: { username: "native-query", password: "query-secret-0000000000000000000000" }
+} as const;
+
+export const authorityHostCredentials = {
+  "host-a": { username: "host-a", password: "host-a-token-000000000000000000000000" },
+  "host-b": { username: "host-b", password: "host-b-token-000000000000000000000000" }
 } as const;
 
 export const nativeGitAttemptIssuerCredential = {
@@ -55,7 +60,9 @@ export type StartAuthorityOptions = {
   readonly source?: NativeGitAdmissionFixture;
   readonly hosts?: NativeOrdinaryAuthorityConfig["hosts"];
   readonly nativeGitIdentity?: NativeOrdinaryCredential;
+  readonly nativeGitAttemptIssuer?: NativeOrdinaryCredential;
   readonly nativeGitHttpClient?: NativeGitAdmissionHttpClient;
+  readonly attemptIssuerClient?: NativeGitAttemptIssuerClient;
 };
 
 export async function startAuthority(options: StartAuthorityOptions = {}): Promise<AuthorityFixture> {
@@ -67,18 +74,25 @@ export async function startAuthority(options: StartAuthorityOptions = {}): Promi
     serviceId: "ordinary-main",
     database,
     admissionLeaseMilliseconds: 300_000,
+    claimLeaseMilliseconds: 60_000,
     nativeGit: {
       endpoint: "http://native-git:8080",
       serviceId: "native-main",
       identity: options.nativeGitIdentity ?? nativeGitIdentityCredential,
-      attemptIssuer: nativeGitAttemptIssuerCredential
+      attemptIssuer: options.nativeGitAttemptIssuer ?? nativeGitAttemptIssuerCredential
     },
     credentials: authorityCredentials,
-    hosts: options.hosts ?? [{ hostId: "host-a", capacities: [{ capacity: "primary", runnerBaseImage, bounds }] }]
+    hosts: options.hosts ?? [
+      { hostId: "host-a", hostToken: authorityHostCredentials["host-a"].password,
+        capacities: [{ capacity: "primary", runnerBaseImage, bounds }] },
+      { hostId: "host-b", hostToken: authorityHostCredentials["host-b"].password,
+        capacities: [{ capacity: "backup", runnerBaseImage, bounds }] }
+    ]
   } as const;
   const dependencies = {
     clock: { now: options.now ?? Date.now },
-    nativeGitHttpClient: options.nativeGitHttpClient ?? source.httpClient
+    nativeGitHttpClient: options.nativeGitHttpClient ?? source.httpClient,
+    ...(options.attemptIssuerClient === undefined ? {} : { nativeGitAttemptIssuerClient: options.attemptIssuerClient })
   };
   const server = configuredNativeOrdinaryAuthorityServer(config, dependencies);
   server.listen(0, "127.0.0.1");
@@ -123,8 +137,7 @@ export function admission(projectId: string, repositoryId: string, revision: str
     policyRevision: `policy-${revision}`,
     requiredReviewRevision: `review-${revision}`,
     requiredJobSetRevision: `jobs-${revision}`,
-    requiredJobs: ["source"],
-    eligibleAssignments: [{ hostId: "host-a", capacity: "primary" }]
+    requiredJobs: ["source"]
   } as const;
 }
 
@@ -184,8 +197,15 @@ export function assignment(descriptorValue: CandidateOrdinaryExecutionDescriptor
   } as const;
 }
 
-export function post(endpoint: string, path: string, role: keyof typeof authorityCredentials, body: object): Promise<Response> {
-  const credential = authorityCredentials[role];
+export function post(
+  endpoint: string,
+  path: string,
+  role: keyof typeof authorityCredentials | keyof typeof authorityHostCredentials,
+  body: object
+): Promise<Response> {
+  const credential = role in authorityCredentials
+    ? authorityCredentials[role as keyof typeof authorityCredentials]
+    : authorityHostCredentials[role as keyof typeof authorityHostCredentials];
   return fetch(`${endpoint}${path}`, {
     method: "POST",
     headers: {

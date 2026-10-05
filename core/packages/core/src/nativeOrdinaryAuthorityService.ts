@@ -2,6 +2,12 @@ import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { UserError } from "./errors.js";
 import {
+  createNativeGitAttemptIssuerClient,
+  NativeGitAttemptIssuerRejectedError,
+  NativeGitAttemptIssuerUnavailableError,
+  type NativeGitAttemptIssuerClient
+} from "./nativeGitAttemptIssuerClient.js";
+import {
   createNativeGitAdmissionSource,
   createNodeNativeGitAdmissionHttpClient,
   NativeAdmissionSourceRejectedError,
@@ -12,9 +18,11 @@ import {
   parseNativeAdmissionPolicy,
   parseNativeAdmissionRevocation,
   parseNativeAdmissionVerification,
-  parseNativeAttemptAssignment,
   parseNativeAttemptVerification
 } from "./nativeOrdinaryAuthorityModel.js";
+import { NativeOrdinaryClaimService } from "./nativeOrdinaryClaimService.js";
+import { parseNativeHostClaimRequest } from "./nativeOrdinaryClaimProtocol.js";
+import { NativeOrdinaryStaleAuthorityError } from "./nativeOrdinaryClaimStore.js";
 import {
   NativeOrdinaryAuthorityStore,
   type NativeOrdinaryAuthorityClock
@@ -31,6 +39,7 @@ const maximumBodyBytes = 64 * 1024;
 export type NativeOrdinaryAuthorityDependencies = {
   readonly clock?: NativeOrdinaryAuthorityClock;
   readonly nativeGitHttpClient?: NativeGitAdmissionHttpClient;
+  readonly nativeGitAttemptIssuerClient?: NativeGitAttemptIssuerClient;
 };
 
 export type { NativeOrdinaryAuthorityConfig, NativeOrdinaryCredential } from "./nativeOrdinaryAuthorityConfig.js";
@@ -40,12 +49,8 @@ export function configuredNativeOrdinaryAuthorityServer(
   dependencies: NativeOrdinaryAuthorityDependencies = {}
 ): Server {
   const capacities = validateNativeOrdinaryAuthorityConfig(config);
-  const eligibleAssignments = [...capacities.values()]
-    .map(({ hostId, capacity }) => ({ hostId, capacity }))
-    .sort((left, right) => `${left.hostId}\0${left.capacity}` < `${right.hostId}\0${right.capacity}` ? -1 : 1);
   const admissionSource = createNativeGitAdmissionSource({
     config: config.nativeGit,
-    eligibleAssignments,
     httpClient: dependencies.nativeGitHttpClient ?? createNodeNativeGitAdmissionHttpClient()
   });
   const store = new NativeOrdinaryAuthorityStore(
@@ -53,14 +58,26 @@ export function configuredNativeOrdinaryAuthorityServer(
     {
       serviceId: config.serviceId,
       leaseMilliseconds: config.admissionLeaseMilliseconds,
+      claimLeaseMilliseconds: config.claimLeaseMilliseconds,
       capacities,
       clock: dependencies.clock ?? { now: Date.now }
     }
+  );
+  const claimService = new NativeOrdinaryClaimService(
+    store,
+    dependencies.nativeGitAttemptIssuerClient ?? createNativeGitAttemptIssuerClient({
+      config: config.nativeGit,
+      httpClient: dependencies.nativeGitHttpClient ?? createNodeNativeGitAdmissionHttpClient()
+    }),
+    admissionSource
   );
   const server = createServer((request, response) => {
     void handle(request, response).catch((error) => {
       if (error instanceof NativeAdmissionSourceUnavailableError) sendJson(response, 503, { error: error.message });
       else if (error instanceof NativeAdmissionSourceRejectedError) notFound(response);
+      else if (error instanceof NativeGitAttemptIssuerUnavailableError) sendJson(response, 503, { error: error.message });
+      else if (error instanceof NativeGitAttemptIssuerRejectedError) sendJson(response, 409, { error: error.message });
+      else if (error instanceof NativeOrdinaryStaleAuthorityError) sendJson(response, 503, { error: error.message });
       else if (error instanceof NativeOrdinaryRequestError) sendJson(response, error.status, { error: error.message });
       else if (error instanceof UserError) sendJson(response, 400, { error: error.message });
       else sendJson(response, 500, { error: "internal server error" });
@@ -104,9 +121,6 @@ export function configuredNativeOrdinaryAuthorityServer(
       if (!authorized(request, config.credentials.registrar)) return notFound(response);
       const requestedPolicy = parseNativeAdmissionPolicy(await readJson(request));
       const policy = parseNativeAdmissionPolicy(await admissionSource.assertRegisteredPolicy(requestedPolicy));
-      if (!policy.eligibleAssignments.every((assignment) => capacities.has(`${assignment.hostId}\0${assignment.capacity}`))) {
-        return notFound(response);
-      }
       const admission = store.admit(policy);
       return sendJson(response, 200, {
         schemaVersion: 1,
@@ -124,13 +138,27 @@ export function configuredNativeOrdinaryAuthorityServer(
       response.writeHead(204, { "cache-control": "no-store" }).end();
       return;
     }
-    if (request.method === "POST" && url.pathname === "/v1/current-attempt-assignments") {
-      if (!authorized(request, config.credentials.scheduler)) return notFound(response);
-      const requestedAssignment = parseNativeAttemptAssignment(await readJson(request));
-      const assignment = parseNativeAttemptAssignment(await admissionSource.assertIssuedAttempt(requestedAssignment));
-      if (!store.assign(assignment)) return notFound(response);
-      response.writeHead(204, { "cache-control": "no-store" }).end();
-      return;
+    if (request.method === "POST" && url.pathname === "/v1/host-claims") {
+      const hostId = authenticatedHost(request, config);
+      if (hostId === undefined) {
+        return knownCredential(request, config)
+          ? sendJson(response, 403, { error: "forbidden" })
+          : sendJson(response, 401, { error: "unauthorized" });
+      }
+      const claimRequest = parseNativeHostClaimRequest(await readJson(request));
+      if (claimRequest.hostId !== hostId || !capacities.has(`${hostId}\0${claimRequest.capacity}`)) return notFound(response);
+      const result = await claimService.claim(claimRequest);
+      switch (result.kind) {
+        case "active":
+          return sendJson(response, 200, result.claim);
+        case "conflict":
+          return sendJson(response, 409, { error: "host claim conflicts" });
+        case "empty":
+          response.writeHead(204, { "cache-control": "no-store" }).end();
+          return;
+        default:
+          return assertNever(result);
+      }
     }
     if (request.method === "POST" && url.pathname === "/v1/admission-verifications") {
       if (!authorized(request, config.credentials.query)) return notFound(response);
@@ -182,11 +210,24 @@ function webhookAuthentication(
   const knownCredentials = [
     config.credentials.registrar,
     config.credentials.query,
-    config.credentials.scheduler,
     config.nativeGit.identity,
-    config.nativeGit.attemptIssuer
+    config.nativeGit.attemptIssuer,
+    ...config.hosts.map((host) => ({ username: host.hostId, password: host.hostToken }))
   ];
   return knownCredentials.some((credential) => authorized(request, credential)) ? "wrong-role" : "invalid";
+}
+
+function authenticatedHost(request: IncomingMessage, config: NativeOrdinaryAuthorityConfig): string | undefined {
+  return config.hosts.find((host) => authorized(request, { username: host.hostId, password: host.hostToken }))?.hostId;
+}
+
+function knownCredential(request: IncomingMessage, config: NativeOrdinaryAuthorityConfig): boolean {
+  return [
+    ...Object.values(config.credentials),
+    config.nativeGit.identity,
+    config.nativeGit.attemptIssuer,
+    ...config.hosts.map((host) => ({ username: host.hostId, password: host.hostToken }))
+  ].some((credential) => authorized(request, credential));
 }
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {
@@ -204,4 +245,8 @@ class NativeOrdinaryRequestError extends Error {
   constructor(readonly status: 413 | 415, message: string) {
     super(message);
   }
+}
+
+function assertNever(value: never): never {
+  throw new TypeError(`unexpected native authority result: ${JSON.stringify(value)}`);
 }
