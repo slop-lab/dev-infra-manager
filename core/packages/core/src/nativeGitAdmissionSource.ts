@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { request as httpRequest } from "node:http";
 import { isDeepStrictEqual } from "node:util";
 import { UserError } from "./errors.js";
 import {
@@ -8,10 +7,12 @@ import {
   type NativeAdmissionPolicy,
   type NativeAttemptAssignment
 } from "./nativeOrdinaryAuthorityModel.js";
+import { parseNativeReviewJobEvent, type NativeReviewJobEvent } from "./nativeOrdinaryEvent.js";
+export { createNodeNativeGitAdmissionHttpClient } from "./nativeGitAdmissionHttpClient.js";
 
 const maximumResponseBytes = 64 * 1024;
 const requestTimeoutMilliseconds = 5_000;
-const authorityScope = ["policy:read", "attempt:read"] as const;
+const authorityScope = ["policy:read", "review-event:read", "attempt:read"] as const;
 const proofRejectionStatuses = [404] as const;
 
 export type NativeGitAdmissionConfig = {
@@ -25,6 +26,7 @@ export type NativeGitAdmissionConfig = {
 
 export interface NativeAdmissionSource {
   assertRegisteredPolicy(input: NativeAdmissionPolicy): Promise<NativeAdmissionPolicy>;
+  assertReviewEvent(input: NativeReviewJobEvent): Promise<NativeReviewJobEvent>;
   assertIssuedAttempt(input: NativeAttemptAssignment): Promise<NativeAttemptAssignment>;
 }
 
@@ -62,27 +64,33 @@ export function createNativeGitAdmissionSource(options: NativeGitAdmissionSource
     async assertRegisteredPolicy(input) {
       const signal = AbortSignal.timeout(requestTimeoutMilliseconds);
       await attest(signal);
+      const canonical = await readPolicy(input, signal);
+      if (!isDeepStrictEqual(canonical, input)) throw new NativeAdmissionSourceRejectedError();
+      return canonical;
+    },
+    async assertReviewEvent(input) {
+      const signal = AbortSignal.timeout(requestTimeoutMilliseconds);
+      await attest(signal);
       const requestId = randomUUID();
       const response = await requestJson(options.httpClient, {
         endpoint: options.config.endpoint,
         method: "POST",
-        path: proofPath(input.projectId, input.repositoryId, "policy"),
+        path: proofPath(input.projectId, input.repositoryId, "review-event"),
         authorization,
-        body: JSON.stringify({ schemaVersion: 1, requestId, protectedRef: input.protectedRef }),
+        body: JSON.stringify({
+          schemaVersion: 1,
+          requestId,
+          eventId: input.eventId,
+          reviewId: input.reviewId,
+          jobName: input.jobName
+        }),
         signal
       }, proofRejectionStatuses);
-      const outer = exactRecord(response, ["schemaVersion", "serviceId", "requestId", "policy"]);
+      const outer = exactRecord(response, ["schemaVersion", "serviceId", "requestId", "event"]);
       if (outer.schemaVersion !== 1 || outer.serviceId !== options.config.serviceId || outer.requestId !== requestId) {
         throw new NativeAdmissionSourceUnavailableError();
       }
-      const policy = exactRecord(outer.policy, [
-        "schemaVersion", "projectId", "repositoryId", "protectedRef", "policyRevision",
-        "requiredReviewRevision", "requiredJobSetRevision", "requiredJobs"
-      ]);
-      const canonical = parseProof(() => parseNativeAdmissionPolicy({
-        ...policy,
-        eligibleAssignments: options.eligibleAssignments
-      }));
+      const canonical = parseProof(() => parseNativeReviewJobEvent(outer.event));
       if (!isDeepStrictEqual(canonical, input)) throw new NativeAdmissionSourceRejectedError();
       return canonical;
     },
@@ -125,6 +133,30 @@ export function createNativeGitAdmissionSource(options: NativeGitAdmissionSource
     }
   }
 
+  async function readPolicy(
+    identity: Pick<NativeAdmissionPolicy, "projectId" | "repositoryId" | "protectedRef">,
+    signal: AbortSignal
+  ): Promise<NativeAdmissionPolicy> {
+    const requestId = randomUUID();
+    const response = await requestJson(options.httpClient, {
+      endpoint: options.config.endpoint,
+      method: "POST",
+      path: proofPath(identity.projectId, identity.repositoryId, "policy"),
+      authorization,
+      body: JSON.stringify({ schemaVersion: 1, requestId, protectedRef: identity.protectedRef }),
+      signal
+    }, proofRejectionStatuses);
+    const outer = exactRecord(response, ["schemaVersion", "serviceId", "requestId", "policy"]);
+    if (outer.schemaVersion !== 1 || outer.serviceId !== options.config.serviceId || outer.requestId !== requestId) {
+      throw new NativeAdmissionSourceUnavailableError();
+    }
+    const policy = exactRecord(outer.policy, [
+      "schemaVersion", "projectId", "repositoryId", "protectedRef", "policyRevision",
+      "requiredReviewRevision", "requiredJobSetRevision", "requiredJobs"
+    ]);
+    return parseProof(() => parseNativeAdmissionPolicy({ ...policy, eligibleAssignments: options.eligibleAssignments }));
+  }
+
   async function attestOnce(signal: AbortSignal): Promise<void> {
     const response = await requestJson(options.httpClient, {
       endpoint: options.config.endpoint,
@@ -139,14 +171,6 @@ export function createNativeGitAdmissionSource(options: NativeGitAdmissionSource
       throw new NativeAdmissionSourceUnavailableError();
     }
   }
-}
-
-export function createNodeNativeGitAdmissionHttpClient(): NativeGitAdmissionHttpClient {
-  return {
-    request(input) {
-      return nodeRequest(new URL(input.path, input.endpoint), input);
-    }
-  };
 }
 
 async function requestJson(
@@ -173,42 +197,6 @@ async function requestJson(
   }
 }
 
-function nodeRequest(url: URL, input: NativeGitAdmissionHttpRequest): Promise<NativeGitAdmissionHttpResponse> {
-  return new Promise((resolve, reject) => {
-    const body = input.body === undefined ? undefined : Buffer.from(input.body, "utf8");
-    const request = httpRequest(url, {
-      method: input.method,
-      signal: input.signal,
-      headers: {
-        Authorization: input.authorization,
-        Accept: "application/json",
-        ...(body === undefined ? {} : { "Content-Type": "application/json", "Content-Length": String(body.length) })
-      }
-    }, (response) => {
-      const chunks: Buffer[] = [];
-      let bytes = 0;
-      response.on("data", (chunk: Buffer) => {
-        bytes += chunk.length;
-        if (bytes > maximumResponseBytes) {
-          response.destroy(new NativeAdmissionSourceUnavailableError());
-          return;
-        }
-        chunks.push(chunk);
-      });
-      response.on("end", () => resolve({
-        statusCode: response.statusCode ?? 0,
-        contentType: response.headers["content-type"],
-        cacheControl: response.headers["cache-control"],
-        body: Buffer.concat(chunks)
-      }));
-      response.on("error", reject);
-    });
-    request.on("error", reject);
-    if (body !== undefined) request.write(body);
-    request.end();
-  });
-}
-
 function exactRecord(value: unknown, keys: readonly string[]): Readonly<Record<string, unknown>> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new NativeAdmissionSourceUnavailableError();
@@ -228,7 +216,7 @@ function parseProof<T>(parser: () => T): T {
   }
 }
 
-function proofPath(projectId: string, repositoryId: string, proof: "policy" | "current-attempt"): string {
+function proofPath(projectId: string, repositoryId: string, proof: "policy" | "review-event" | "current-attempt"): string {
   return `/v1/projects/${projectId}/repositories/${repositoryId}/ordinary-authority/${proof}`;
 }
 

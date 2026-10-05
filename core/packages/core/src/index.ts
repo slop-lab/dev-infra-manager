@@ -21,6 +21,7 @@ export * from "./ordinaryCiPoolWorker.js";
 export * from "./nativeOrdinaryAuthorityService.js";
 export * from "./nativeOrdinaryAuthorityStore.js";
 export * from "./nativeOrdinaryAuthorityModel.js";
+export * from "./nativeOrdinaryEvent.js";
 export * from "./plugin.js";
 export * from "./hostInputs.js";
 export * from "./hostMirrorProvider.js";

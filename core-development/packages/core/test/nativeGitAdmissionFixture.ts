@@ -5,6 +5,7 @@ import type {
   NativeAdmissionPolicy,
   NativeAttemptAssignment
 } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
+import type { NativeReviewJobEvent } from "../../../../core/packages/core/src/nativeOrdinaryEvent.js";
 
 export type ProofMode = "available" | "redirect" | "replay" | "timeout" | "wrong-role" | "wrong-service" | "wrong-scope";
 
@@ -33,6 +34,7 @@ export type NativeGitAdmissionFixture = {
   readonly endpoint: string;
   readonly httpClient: { request(input: ProofRequest): Promise<ProofResponse> };
   authorizePolicy(requested: NativeAdmissionPolicy, canonical?: NativeAdmissionPolicy): void;
+  authorizeEvent(requested: NativeReviewJobEvent, canonical?: NativeReviewJobEvent): void;
   authorizeAttempt(requested: NativeAttemptAssignment, canonical?: NativeAttemptAssignment): void;
   requestCount(): number;
   setMode(mode: ProofMode): void;
@@ -41,6 +43,7 @@ export type NativeGitAdmissionFixture = {
 
 export async function startNativeGitAdmissionFixture(): Promise<NativeGitAdmissionFixture> {
   const policies = new Map<string, { readonly requested: NativeAdmissionPolicy; readonly canonical: NativeAdmissionPolicy }>();
+  const events = new Map<string, { readonly requested: NativeReviewJobEvent; readonly canonical: NativeReviewJobEvent }>();
   const attempts = new Map<string, { readonly requested: NativeAttemptAssignment; readonly canonical: NativeAttemptAssignment }>();
   let mode: ProofMode = "available";
   let requests = 0;
@@ -62,6 +65,9 @@ export async function startNativeGitAdmissionFixture(): Promise<NativeGitAdmissi
     },
     authorizePolicy(requested, canonical = requested) {
       policies.set(`${requested.projectId}\0${requested.repositoryId}`, { requested, canonical });
+    },
+    authorizeEvent(requested, canonical = requested) {
+      events.set(requested.eventId, { requested, canonical });
     },
     authorizeAttempt(requested, canonical = requested) {
       attempts.set(requested.attemptId, { requested, canonical });
@@ -98,11 +104,11 @@ export async function startNativeGitAdmissionFixture(): Promise<NativeGitAdmissi
         schemaVersion: 1,
         serviceId: mode === "wrong-service" ? "foreign-native" : "native-main",
         role: mode === "wrong-role" ? "native-query" : "ordinary-authority-reader",
-        scope: mode === "wrong-scope" ? ["policy:read"] : ["policy:read", "attempt:read"]
+        scope: mode === "wrong-scope" ? ["policy:read"] : ["policy:read", "review-event:read", "attempt:read"]
       });
       return;
     }
-    const match = /^\/v1\/projects\/([^/]+)\/repositories\/([^/]+)\/ordinary-authority\/(policy|current-attempt)$/.exec(request.url ?? "");
+    const match = /^\/v1\/projects\/([^/]+)\/repositories\/([^/]+)\/ordinary-authority\/(policy|review-event|current-attempt)$/.exec(request.url ?? "");
     if (request.method !== "POST" || match === null) {
       send(response, 404);
       return;
@@ -132,6 +138,28 @@ export async function startNativeGitAdmissionFixture(): Promise<NativeGitAdmissi
         serviceId: "native-main",
         requestId: mode === "replay" ? "00000000-0000-4000-8000-000000000099" : requestId,
         policy
+      });
+      return;
+    }
+    if (kind === "review-event") {
+      const eventId = body.eventId;
+      const proof = typeof eventId === "string" ? events.get(eventId) : undefined;
+      if (proof === undefined || projectId !== proof.requested.projectId || repositoryId !== proof.requested.repositoryId
+        || !isDeepStrictEqual(body, {
+          schemaVersion: 1,
+          requestId,
+          eventId: proof.requested.eventId,
+          reviewId: proof.requested.reviewId,
+          jobName: proof.requested.jobName
+        })) {
+        send(response, 404);
+        return;
+      }
+      send(response, 200, {
+        schemaVersion: 1,
+        serviceId: "native-main",
+        requestId: mode === "replay" ? "00000000-0000-4000-8000-000000000099" : requestId,
+        event: proof.canonical
       });
       return;
     }
