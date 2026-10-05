@@ -6,6 +6,8 @@ import { basename, dirname, join } from "node:path";
 export type ReviewPublicationFaults = {
   readonly beforeFileSync?: () => void | Promise<void>;
   readonly beforePublish?: () => void | Promise<void>;
+  readonly beforeDirectorySync?: () => void | Promise<void>;
+  readonly afterPublish?: () => void | Promise<void>;
 };
 
 export type ReviewPublication = {
