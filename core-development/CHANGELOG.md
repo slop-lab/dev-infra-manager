@@ -2,8 +2,25 @@
 
 ## Unreleased
 
-- Define the unimplemented native ordinary-CI target as candidate-controlled
-  self-test execution: strict schema-2 `.dim/ci/runner.yml`, its Bash script,
+- Add the native ordinary authority library as the first bounded slice of the
+  native ordinary-CI target. Its separate schema-3 SQLite state admits exact
+  canonical operator Project/repository policy returned by an authenticated
+  `NativeAdmissionSource`, rotates and revokes admission generations, and
+  records only exact native-issued attempt tuples returned by that source.
+  Missing source adapters reject mutation with service unavailable, and rejected
+  source tuples are concealed without changing SQLite. No production source
+  adapter is implemented yet, so the default cannot admit or assign work. Once
+  source-gated state exists, the library answers the Native Git query client
+  only for exact live admission and current-attempt tuples. Registrar,
+  scheduler, and query credentials are disjoint; stale generations, expired or
+  revoked policy, foreign tuples, credential crossover, and predecessor
+  schema-2 databases fail closed across restart without exposing secrets. The
+  service has no Docker or host-administration socket, and a query never creates
+  admission or attempt state. The query nonce is correlation and offline-replay
+  protection rather than server authentication; the target currently assumes
+  authenticated peers on its fixed private Compose network. Continue defining
+  the complete native target as candidate-controlled self-test execution:
+  strict schema-2 `.dim/ci/runner.yml`, its Bash script,
   and the digest-pinned job image come from the exact candidate tree, while the
   operator retains Project admission, required-job policy, a digest-pinned
   runner base, host capacity, and resource/time/output ceilings. Webhooks carry
@@ -15,8 +32,9 @@
   maintainers still review changed requirements, implementation, tests, and
   relevant results; only infrastructure security review is narrowed around
   secrets and trusted capabilities. Human exact-tree approval and CAS promotion remain mandatory. The
-  parser, scheduler, executor, reviewer display, and migration from the old
-  protected-root schema remain unimplemented with no compatibility form.
+  webhook-demand adapter, queue/claim lease scheduler, host executor, reviewer
+  display, installer wiring, and migration from the old protected-root schema
+  remain unimplemented with no compatibility form.
 
 - Let one explicitly configured reviewer-web account approve the exact immutable
   review and revoke only its own active approval through fixed, Origin- and CSRF-guarded
