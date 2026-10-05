@@ -22,7 +22,8 @@ member defined by `INSTALLER-CONTROL-PLANE-001`. It runs as `10001:10001`,
 listens at `0.0.0.0:8080`, stores all repository and evidence bytes below
 `/var/lib/dim-native-git`, and receives only that service's private volume and
 read-only config, readiness-token, and activation-token files. Its strict
-schema-1 startup configuration adds exactly this required dependency object:
+schema-2 startup configuration pins `serviceId` to `native-main` and adds
+exactly this required dependency object:
 
 ```json
 {
@@ -58,7 +59,9 @@ distinct from every Git, reviewer, administrator, promoter, scheduler,
 CI-result, readiness, and host credential.
 
 The ordinary identity credential can attest only the exact configured native
-service and repository tuple. The attempt-issuer credential is a native
+service and read the exact registered repository/protected-policy or current
+issued-attempt tuple. It receives no Git, review, candidate-blob, mutation,
+host-inventory, or per-Project capacity authority. The attempt-issuer credential is a native
 scheduler role constrained to one exact live ordinary admission generation,
 repository/protected tuple, required job, and newly issued current attempt; it
 cannot report. The result-reporter credential is a separate native CI role that
@@ -113,9 +116,45 @@ redirect, retries nothing, and accepts no malformed, partial, additional-field,
 wrong-service, wrong-scope, oversized, cacheable, timed-out, or transport-failed
 response.
 
+### Ordinary-authority proof HTTP contract
+
+The distinct `ordinaryCi.identity` credential authenticates only three
+read-only native endpoints. Exact `GET /v1/ordinary-authority/identity` returns
+only schema version `1`, service ID `native-main`, role
+`ordinary-authority-reader`, and ordered scope `policy:read`, `attempt:read`.
+It is not accepted as a native Git identity.
+
+Exact `POST
+/v1/projects/<project>/repositories/<repository>/ordinary-authority/policy`
+accepts only schema version `1`, a fresh UUID `requestId`, and `protectedRef`.
+It returns the echoed request ID and canonical registered Project, repository,
+ref, policy/review/job-set revisions, and lexically sorted required job names.
+The request cannot select revisions, jobs, hosts, or capacities. Native Git
+stores and returns no per-Project `eligibleAssignments`; ordinary authority
+derives the complete sorted assignment set from its global operator-owned
+`hosts[].capacities[]` configuration.
+
+Exact `POST
+/v1/projects/<project>/repositories/<repository>/ordinary-authority/current-attempt`
+accepts only schema version `1`, a fresh UUID `requestId`, `reviewId`, `jobName`,
+and `attemptId`. Under the same protected-ref serializer used for issuance and
+revocation, it returns the current unrevoked schema-2 issuance projected to
+schema version `1`: complete descriptor and descriptor digest, admission
+generation, review and attempt IDs, host, and capacity. It rejects missing,
+foreign, unissued, revoked, replaced, stale-review, or current-policy-drifted
+tuples. It never reads or returns candidate blob bytes.
+
+All three routes reject alternate methods, paths, and query parameters. Proof
+POST bodies require exact `application/json`, reject additional fields, and are
+limited to 64 KiB. Successful responses are exact JSON with `Cache-Control:
+no-store`; all failures contain no proof tuple. The proof credential cannot use
+Git upload/receive, review inspection or approval, descriptor derivation,
+attempt issuance/revocation, status reporting, promotion, or administration.
+
 ## Inputs and identity
 
-Startup consumes a strict schema-1 configuration. It pins a trusted regular
+Startup consumes a strict schema-2 configuration with fixed service identity
+`native-main`. It pins a trusted regular
 Git executable, its filesystem identity, and its exact `git version` output,
 one absolute storage root,
 registered `(Project ID, repository ID)` tuples, and credentials bound to one
