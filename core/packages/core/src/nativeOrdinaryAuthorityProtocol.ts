@@ -92,6 +92,23 @@ export function nativePolicyDigest(policy: NativeAdmissionPolicy): string {
   return createHash("sha256").update(JSON.stringify(canonicalValue(policy)), "utf8").digest("hex");
 }
 
+export function nativeCapacityConfigDigest(capacities: readonly NativeCapacityPolicy[]): string {
+  const ordered = [...capacities].sort((left, right) => {
+    const leftKey = `${left.hostId}\0${left.capacity}`;
+    const rightKey = `${right.hostId}\0${right.capacity}`;
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+  });
+  const hash = createHash("sha256").update("dim-native-ordinary-capacities-v1", "ascii");
+  for (const item of ordered) {
+    const fields = [
+      item.hostId, item.capacity, item.runnerBaseImage, item.bounds.cpu, item.bounds.memoryBytes,
+      item.bounds.pids, item.bounds.wallClockSeconds, item.bounds.outputBytes
+    ];
+    for (const field of fields) hash.update(`${Buffer.byteLength(field, "utf8")}:`, "ascii").update(field, "utf8");
+  }
+  return hash.digest("hex");
+}
+
 export function descriptorMatchesPolicy(
   descriptor: NativeOrdinaryDescriptor,
   policy: NativeAdmissionPolicy,

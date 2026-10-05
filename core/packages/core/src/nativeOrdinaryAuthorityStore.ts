@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { UserError } from "./errors.js";
 import {
   descriptorMatchesPolicy,
+  nativeCapacityConfigDigest,
   nativePolicyDigest,
   parseNativeAdmissionPolicy,
   type NativeAdmissionPolicy,
@@ -25,6 +26,7 @@ export class NativeOrdinaryAuthorityStore {
   readonly #leaseMilliseconds: number;
   readonly #clock: NativeOrdinaryAuthorityClock;
   readonly #capacities: ReadonlyMap<string, NativeCapacityPolicy>;
+  readonly #capacityConfigDigest: string;
 
   constructor(
     file: string,
@@ -37,6 +39,7 @@ export class NativeOrdinaryAuthorityStore {
     this.#serviceId = serviceId;
     this.#leaseMilliseconds = leaseMilliseconds;
     this.#capacities = capacities;
+    this.#capacityConfigDigest = nativeCapacityConfigDigest([...capacities.values()]);
     this.#clock = clock;
   }
 
@@ -51,19 +54,22 @@ export class NativeOrdinaryAuthorityStore {
     this.#database.exec("BEGIN IMMEDIATE");
     try {
       const existing = admissionRow(this.#database.prepare(`
-        SELECT admission_generation, policy_digest, expires_at
+        SELECT admission_generation, policy_digest, capacity_config_digest, expires_at
         FROM native_admissions WHERE project_id = ? AND repository_id = ?
       `).get(policy.projectId, policy.repositoryId));
       const admissionGeneration = existing !== undefined && existing.expiresAt > now && existing.policyDigest === digest
+        && existing.capacityConfigDigest === this.#capacityConfigDigest
         ? existing.admissionGeneration : randomUUID();
       this.#database.prepare(`
         INSERT INTO native_admissions(
-          project_id, repository_id, service_id, admission_generation, policy_digest, policy_json, expires_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          project_id, repository_id, service_id, admission_generation, policy_digest,
+          capacity_config_digest, policy_json, expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(project_id, repository_id) DO UPDATE SET
           service_id = excluded.service_id,
           admission_generation = excluded.admission_generation,
           policy_digest = excluded.policy_digest,
+          capacity_config_digest = excluded.capacity_config_digest,
           policy_json = excluded.policy_json,
           expires_at = excluded.expires_at
       `).run(
@@ -72,6 +78,7 @@ export class NativeOrdinaryAuthorityStore {
         this.#serviceId,
         admissionGeneration,
         digest,
+        this.#capacityConfigDigest,
         JSON.stringify(policy),
         expiresAt
       );
@@ -140,7 +147,7 @@ export class NativeOrdinaryAuthorityStore {
         ON admissions.admission_generation = attempts.admission_generation
       WHERE attempts.review_id = ? AND attempts.attempt_id = ? AND attempts.descriptor_digest = ?
         AND attempts.admission_generation = ? AND attempts.host_id = ? AND attempts.capacity = ?
-        AND admissions.service_id = ? AND admissions.expires_at > ?
+        AND admissions.service_id = ? AND admissions.capacity_config_digest = ? AND admissions.expires_at > ?
     `).get(
       input.reviewId,
       input.attemptId,
@@ -149,6 +156,7 @@ export class NativeOrdinaryAuthorityStore {
       input.hostId,
       input.capacity,
       this.#serviceId,
+      this.#capacityConfigDigest,
       this.#clock.now()
     );
     return row !== undefined;
@@ -157,8 +165,8 @@ export class NativeOrdinaryAuthorityStore {
   #activePolicy(admissionGeneration: string): NativeAdmissionPolicy | undefined {
     const row = this.#database.prepare(`
       SELECT policy_json FROM native_admissions
-      WHERE service_id = ? AND admission_generation = ? AND expires_at > ?
-    `).get(this.#serviceId, admissionGeneration, this.#clock.now());
+      WHERE service_id = ? AND admission_generation = ? AND capacity_config_digest = ? AND expires_at > ?
+    `).get(this.#serviceId, admissionGeneration, this.#capacityConfigDigest, this.#clock.now());
     if (row === undefined) return undefined;
     if (!isRecord(row) || typeof row.policy_json !== "string") throw new UserError("native ordinary database contains an invalid admission");
     let value: unknown;
@@ -188,6 +196,7 @@ function openDatabase(file: string): DatabaseSync {
         service_id TEXT NOT NULL,
         admission_generation TEXT NOT NULL UNIQUE,
         policy_digest TEXT NOT NULL,
+        capacity_config_digest TEXT NOT NULL,
         policy_json TEXT NOT NULL,
         expires_at INTEGER NOT NULL,
         PRIMARY KEY(project_id, repository_id)
@@ -227,14 +236,17 @@ function assertSchema(file: string): void {
 function admissionRow(value: unknown): {
   readonly admissionGeneration: string;
   readonly policyDigest: string;
+  readonly capacityConfigDigest: string;
   readonly expiresAt: number;
 } | undefined {
   if (value === undefined) return undefined;
   if (!isRecord(value) || typeof value.admission_generation !== "string" || typeof value.policy_digest !== "string"
+    || typeof value.capacity_config_digest !== "string"
     || !Number.isSafeInteger(value.expires_at)) throw new UserError("native ordinary database contains an invalid admission row");
   return {
     admissionGeneration: value.admission_generation,
     policyDigest: value.policy_digest,
+    capacityConfigDigest: value.capacity_config_digest,
     expiresAt: Number(value.expires_at)
   };
 }
