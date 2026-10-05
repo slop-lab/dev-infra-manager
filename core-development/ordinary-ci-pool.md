@@ -313,8 +313,10 @@ closed.
 ## Final schema-3 scheduler target
 
 `CI-NATIVE-DELIVERY-001` replaces the authority-only database shape above with
-the final schema-3 scheduler shape. This is specification for future source,
-not a claim about current code. IDs are lowercase UUID text, digests use the
+the final schema-3 scheduler shape. Central event intake, receipt-bound claim
+and lease handling, cleanup-gated result intake, and durable native report
+delivery use this shape; the host executor and deployment adapter remain future
+source. IDs are lowercase UUID text, digests use the
 named `sha256:` form, JSON columns contain validated canonical compact JSON,
 and all times are positive Unix milliseconds. The compiled schema contains
 exactly these application tables and indexes:
@@ -447,6 +449,21 @@ the original `202` without creating demand `D2`, claim `C2`, or attempt `A2`;
 a digest mismatch returns conflict. Fence-table saturation returns `429` only
 for unseen input requiring a new fence and never prevents a known replay.
 
+If ordinary CI commits a cleaned terminal result and then loses native Git's
+status response, the accepted host request still has an immutable result and
+pending outbox row. Restart leaves that reported claim unfenced, replays the
+same stored schema-2 event bytes with only `resultReporter`, and accepts only a
+strict native status acknowledgement for that event and reporter. During this
+window, current-attempt verification accepts either the exact live active claim
+or its matching durable cleaned terminal result only while the admission remains
+active and unexpired and the outbox has not been denied. Acknowledgement marks
+the outbox delivered, demand completed, and claim receipt released in one
+transaction. A terminal native denial instead records failed evidence, makes
+any status already committed by native Git non-promotable, and may release only
+because cleanup was already durable. Generation replacement, expiry, or
+revocation terminally denies a pending old-generation outbox before any further
+native request; it is not retried or revoked from the lost generation.
+
 ## Admission and execution flow after a Project adapter
 
 This flow is constrained but unavailable. Bundle installation leaves both
@@ -492,7 +509,10 @@ capacity advertisement, claim, and result operations fail before mutation.
    acknowledging it. The reporter retries the exact terminal event with only
    its native result-reporter credential. Native acknowledgement completes the
    demand and releases the cleaned capacity. Generation rotation, lease loss,
-   or service restart instead applies G1 fencing until exact host recovery.
+   or service restart applies G1 fencing to an active, uncleaned claim. A
+   service restart resumes a cleaned result only while its exact admission is
+   still current; generation replacement, expiry, or revocation denies and
+   releases it without another native request.
 
 A zero exit is candidate-controlled self-test evidence. It may satisfy the
 protected policy's required condition and records successful bounded execution
