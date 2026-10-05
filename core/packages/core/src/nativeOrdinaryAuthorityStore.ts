@@ -15,6 +15,14 @@ import {
 import { openNativeOrdinaryDatabase } from "./nativeOrdinaryAuthoritySchema.js";
 import { NativeOrdinaryEventStore, type NativeEventIntakeResult } from "./nativeOrdinaryEventStore.js";
 import type { NativeReviewJobEvent } from "./nativeOrdinaryEvent.js";
+import {
+  NativeOrdinaryClaimStore,
+  type NativeClaimActivation,
+  type NativeClaimReservation
+} from "./nativeOrdinaryClaimStore.js";
+import type { NativeHostClaimRequest } from "./nativeOrdinaryClaimProtocol.js";
+import { admissionRow, numberField, stringField } from "./nativeOrdinaryAuthorityRows.js";
+import { fenceExpiredClaims, fenceGenerationClaims, fenceRestartedClaims } from "./nativeOrdinaryFencing.js";
 
 export type NativeOrdinaryAuthorityClock = {
   readonly now: () => number;
@@ -23,6 +31,7 @@ export type NativeOrdinaryAuthorityClock = {
 type NativeOrdinaryAuthorityStoreOptions = {
   readonly serviceId: string;
   readonly leaseMilliseconds: number;
+  readonly claimLeaseMilliseconds: number;
   readonly capacities: ReadonlyMap<string, NativeCapacityPolicy>;
   readonly clock: NativeOrdinaryAuthorityClock;
 };
@@ -35,6 +44,7 @@ export class NativeOrdinaryAuthorityStore {
   readonly #capacities: ReadonlyMap<string, NativeCapacityPolicy>;
   readonly #capacityConfigDigest: string;
   readonly #eventStore: NativeOrdinaryEventStore;
+  readonly #claimStore: NativeOrdinaryClaimStore;
 
   constructor(file: string, options: NativeOrdinaryAuthorityStoreOptions) {
     this.#database = openNativeOrdinaryDatabase(file);
@@ -48,7 +58,15 @@ export class NativeOrdinaryAuthorityStore {
       capacityConfigDigest: this.#capacityConfigDigest,
       now: options.clock.now
     });
-    this.#beginEpochAndExpire();
+    const ownedEpochId = this.#beginEpochAndExpire();
+    this.#claimStore = new NativeOrdinaryClaimStore(this.#database, {
+      serviceId: options.serviceId,
+      ownedEpochId,
+      capacityConfigDigest: this.#capacityConfigDigest,
+      claimLeaseMilliseconds: options.claimLeaseMilliseconds,
+      capacities: options.capacities,
+      now: options.clock.now
+    });
   }
 
   close(): void {
@@ -128,35 +146,29 @@ export class NativeOrdinaryAuthorityStore {
     return this.#eventStore.accept(event);
   }
 
+  reserveClaim(request: NativeHostClaimRequest): NativeClaimReservation {
+    this.#expire();
+    return this.#claimStore.reserve(request);
+  }
+
+  activateClaim(
+    request: NativeHostClaimRequest,
+    reservation: Extract<NativeClaimReservation, { readonly kind: "preparing" }>,
+    assignment: NativeAttemptAssignment
+  ): NativeClaimActivation {
+    return this.#claimStore.activate(request, reservation, assignment);
+  }
+
+  releaseStaleClaim(request: NativeHostClaimRequest, claimId: string): void {
+    this.#claimStore.releaseStale(request, claimId);
+  }
+
   admitted(input: NativeAdmissionVerification): boolean {
     this.#expire();
     const policy = this.#activePolicy(input.descriptor.admissionGeneration);
     const capacity = this.#capacity(input.hostId, input.capacity);
-    return policy !== undefined && capacity !== undefined && eligible(policy, input.hostId, input.capacity)
+    return policy !== undefined && capacity !== undefined
       && descriptorMatchesPolicy(input.descriptor, policy, capacity);
-  }
-
-  assign(input: NativeAttemptAssignment): boolean {
-    this.#expire();
-    this.#database.exec("BEGIN IMMEDIATE");
-    try {
-      const policy = this.#activePolicy(input.admissionGeneration);
-      const capacity = this.#capacity(input.hostId, input.capacity);
-      if (policy === undefined || capacity === undefined || !eligible(policy, input.hostId, input.capacity)
-        || !descriptorMatchesPolicy(input.descriptor, policy, capacity)) return this.#finish(false);
-      this.#database.prepare("DELETE FROM native_attempt_assignments WHERE review_id = ? AND job_name = ?")
-        .run(input.reviewId, input.descriptor.jobName);
-      this.#database.prepare(`
-        INSERT INTO native_attempt_assignments(
-          review_id, job_name, attempt_id, descriptor_digest, admission_generation, host_id, capacity
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(input.reviewId, input.descriptor.jobName, input.attemptId, input.descriptorDigest,
-        input.admissionGeneration, input.hostId, input.capacity);
-      return this.#finish(true);
-    } catch (error) {
-      this.#database.exec("ROLLBACK");
-      throw error;
-    }
   }
 
   current(input: NativeAttemptVerification): boolean {
@@ -164,10 +176,11 @@ export class NativeOrdinaryAuthorityStore {
     return this.#database.prepare(`
       SELECT 1 FROM native_attempt_assignments attempts
       JOIN native_admissions admissions ON admissions.admission_generation = attempts.admission_generation
+      JOIN claims ON claims.claim_id = attempts.claim_id
       WHERE attempts.review_id = ? AND attempts.attempt_id = ? AND attempts.descriptor_digest = ?
         AND attempts.admission_generation = ? AND attempts.host_id = ? AND attempts.capacity = ?
         AND admissions.service_id = ? AND admissions.capacity_config_digest = ?
-        AND admissions.state = 'active' AND admissions.expires_at > ?
+        AND admissions.state = 'active' AND admissions.expires_at > ? AND claims.state = 'active'
     `).get(input.reviewId, input.attemptId, input.descriptorDigest, input.admissionGeneration,
       input.hostId, input.capacity, this.#serviceId, this.#capacityConfigDigest, this.#clock.now()) !== undefined;
   }
@@ -179,17 +192,21 @@ export class NativeOrdinaryAuthorityStore {
       UPDATE demands SET state = 'superseded', updated_at = ?, terminal_at = ?
       WHERE admission_generation = ? AND state = 'queued'
     `).run(now, now, generation);
+    fenceGenerationClaims(this.#database, generation, now);
   }
 
-  #beginEpochAndExpire(): void {
+  #beginEpochAndExpire(): string {
     const now = this.#clock.now();
+    const epochId = randomUUID();
     this.#database.exec("BEGIN IMMEDIATE");
     try {
       this.#database.prepare("UPDATE service_epochs SET active = 0 WHERE active = 1").run();
+      fenceRestartedClaims(this.#database, now);
       this.#database.prepare("INSERT INTO service_epochs(epoch_id, started_at, active) VALUES (?, ?, 1)")
-        .run(randomUUID(), now);
+        .run(epochId, now);
       this.#expireInTransaction(now);
       this.#database.exec("COMMIT");
+      return epochId;
     } catch (error) {
       this.#database.exec("ROLLBACK");
       throw error;
@@ -209,13 +226,18 @@ export class NativeOrdinaryAuthorityStore {
   }
 
   #expireInTransaction(now: number): void {
+    fenceExpiredClaims(this.#database, now);
     const expired = this.#database.prepare(`
-      SELECT admission_generation FROM native_admissions WHERE state = 'active' AND expires_at <= ?
-    `).all(now);
+      SELECT admission_generation FROM native_admissions
+      WHERE state = 'active' AND (expires_at <= ? OR capacity_config_digest <> ?)
+    `).all(now, this.#capacityConfigDigest);
     for (const row of expired) {
       const generation = stringField(row, "admission_generation");
       if (generation === undefined) throw new UserError("native ordinary database contains an invalid admission row");
-      this.#invalidateGeneration(generation, "expired", now);
+      const expiresAt = numberField(this.#database.prepare(
+        "SELECT expires_at FROM native_admissions WHERE admission_generation = ?"
+      ).get(generation), "expires_at");
+      this.#invalidateGeneration(generation, expiresAt !== undefined && expiresAt <= now ? "expired" : "replaced", now);
     }
   }
 
@@ -239,40 +261,4 @@ export class NativeOrdinaryAuthorityStore {
     return this.#capacities.get(`${hostId}\0${capacity}`);
   }
 
-  #finish<T>(result: T): T {
-    this.#database.exec("COMMIT");
-    return result;
-  }
-}
-
-function admissionRow(value: unknown): {
-  readonly admissionGeneration: string;
-  readonly policyDigest: string;
-  readonly capacityConfigDigest: string;
-  readonly expiresAt: number;
-} | undefined {
-  if (value === undefined) return undefined;
-  const admissionGeneration = stringField(value, "admission_generation");
-  const policyDigest = stringField(value, "policy_digest");
-  const capacityConfigDigest = stringField(value, "capacity_config_digest");
-  const expiresAt = numberField(value, "expires_at");
-  if (admissionGeneration === undefined || policyDigest === undefined || capacityConfigDigest === undefined
-    || expiresAt === undefined) throw new UserError("native ordinary database contains an invalid admission row");
-  return { admissionGeneration, policyDigest, capacityConfigDigest, expiresAt };
-}
-
-function stringField(value: unknown, field: string): string | undefined {
-  if (typeof value !== "object" || value === null) return undefined;
-  const result = Reflect.get(value, field);
-  return typeof result === "string" ? result : undefined;
-}
-
-function numberField(value: unknown, field: string): number | undefined {
-  if (typeof value !== "object" || value === null) return undefined;
-  const result = Reflect.get(value, field);
-  return typeof result === "number" && Number.isSafeInteger(result) ? result : undefined;
-}
-
-function eligible(policy: NativeAdmissionPolicy, hostId: string, capacity: string): boolean {
-  return policy.eligibleAssignments.some((assignment) => assignment.hostId === hostId && assignment.capacity === capacity);
 }
