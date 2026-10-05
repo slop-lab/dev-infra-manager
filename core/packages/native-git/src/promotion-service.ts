@@ -1,6 +1,10 @@
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import type { BoundedAdmissionVerifier } from "./admission-verifier.js";
+import type {
+  OrdinaryCiAttemptIssuerPrincipal,
+  OrdinaryCiResultReporterPrincipal
+} from "./auth.js";
 import type { NativeGitIdentity, NativeGitServiceConfig } from "./config.js";
 import type { ReviewObject } from "./review-schema.js";
 import {
@@ -59,12 +63,12 @@ export type PromotionResult = {
 
 export type PromotionService = {
   issue(
-    identity: NativeGitIdentity,
+    identity: OrdinaryCiAttemptIssuerPrincipal,
     target: JobAttemptTarget,
     input: IssueJobRequest
   ): Promise<{ readonly issuance: JobAttempt; readonly replayed: boolean }>;
-  revokeAttempt(identity: NativeGitIdentity, target: JobAttemptRevocationTarget): Promise<JobAttemptRevocation>;
-  report(identity: NativeGitIdentity, target: ReviewTarget, reviewId: string, envelope: CiStatusEnvelope): Promise<CiStatusRecord>;
+  revokeAttempt(identity: OrdinaryCiAttemptIssuerPrincipal, target: JobAttemptRevocationTarget): Promise<JobAttemptRevocation>;
+  report(identity: OrdinaryCiResultReporterPrincipal, target: ReviewTarget, reviewId: string, envelope: CiStatusEnvelope): Promise<CiStatusRecord>;
   promote(identity: NativeGitIdentity, target: ReviewTarget, reviewId: string): Promise<PromotionResult>;
 };
 
@@ -75,8 +79,6 @@ export function createPromotionService(
 ): PromotionService {
   return {
     async issue(identity, target, input) {
-      authorizeTarget(identity, target);
-      if (identity.role !== "scheduler") throw new ReviewApiError(403, "CI scheduler authority is required");
       const review = await requiredReview(config, target, target.reviewId);
       const policy = findPolicy(config, target, review.protectedRef);
       if (policy === undefined || !policy.requiredJobNames.includes(input.jobName)) {
@@ -115,8 +117,6 @@ export function createPromotionService(
       });
     },
     async revokeAttempt(identity, target) {
-      authorizeTarget(identity, target);
-      if (identity.role !== "scheduler") throw new ReviewApiError(403, "CI scheduler authority is required");
       const review = await requiredReview(config, target, target.reviewId);
       return serializer.run(refSerializationKey(review.projectId, review.repositoryId, review.protectedRef), async () => {
         try {
@@ -133,12 +133,10 @@ export function createPromotionService(
       });
     },
     async report(identity, target, reviewId, envelope) {
-      authorizeTarget(identity, target);
-      if (identity.role !== "ci") throw new ReviewApiError(403, "CI job authority is required");
       const review = await requiredReview(config, target, reviewId);
-      if (identity.jobName !== envelope.payload.descriptor.jobName) throw new ReviewApiError(403, "CI identity cannot report this job");
       const policy = findPolicy(config, target, review.protectedRef);
-      if (policy === undefined || !policy.requiredJobNames.includes(identity.jobName)) {
+      const jobName = envelope.payload.descriptor.jobName;
+      if (policy === undefined || !policy.requiredJobNames.includes(jobName)) {
         throw new ReviewApiError(403, "CI job is not required by current policy");
       }
       return serializer.run(refSerializationKey(review.projectId, review.repositoryId, review.protectedRef), async () => {
@@ -146,7 +144,7 @@ export function createPromotionService(
         if (reviewStatus.status === "stale" || !matchesReview(envelope, review)) {
           throw new ReviewApiError(409, "CI status tuple does not match the current review");
         }
-        const current = await attemptStore(config, target).current(reviewId, identity.jobName);
+        const current = await attemptStore(config, target).current(reviewId, jobName);
         if (current === undefined || current.revocation !== undefined
           || current.issuance.attempt !== envelope.payload.attempt
           || current.issuance.attemptId !== envelope.payload.attemptId

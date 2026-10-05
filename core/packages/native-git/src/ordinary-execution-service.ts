@@ -6,7 +6,7 @@ import {
   CandidateExecutionError,
   type OrdinaryExecutionDescriptorRequest
 } from "./candidate-execution-schema.js";
-import type { NativeGitIdentity, NativeGitServiceConfig } from "./config.js";
+import type { NativeGitServiceConfig } from "./config.js";
 import { refSerializationKey, type RefSerializer } from "./ref-serializer.js";
 import {
   findPolicy,
@@ -26,7 +26,6 @@ export type OrdinaryExecutionDescriptorResponse = CandidateOrdinaryExecution & {
 };
 
 export type OrdinaryExecutionService = {
-  authorize(identity: NativeGitIdentity, target: DescriptorTarget): void;
   load(target: DescriptorTarget, input: OrdinaryExecutionDescriptorRequest): Promise<OrdinaryExecutionDescriptorResponse>;
 };
 
@@ -35,7 +34,6 @@ export function createOrdinaryExecutionService(
   serializer: RefSerializer
 ): OrdinaryExecutionService {
   return {
-    authorize: authorizeScheduler,
     async load(target, input) {
       const review = await requiredReview(config, target, target.reviewId);
       return serializer.run(
@@ -79,11 +77,4 @@ export async function deriveOrdinaryExecution(
   const after = await status(config, review);
   if (after.status === "stale") throw new ReviewApiError(409, "review tuple became stale");
   return { reviewId: review.reviewId, ...execution };
-}
-
-function authorizeScheduler(identity: NativeGitIdentity, target: DescriptorTarget): void {
-  if (identity.projectId !== target.projectId || !identity.repositoryIds.includes(target.repositoryId)) {
-    throw new ReviewApiError(404, "repository was not found");
-  }
-  if (identity.role !== "scheduler") throw new ReviewApiError(403, "CI scheduler authority is required");
 }

@@ -1,5 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
+import type {
+  OrdinaryCiAttemptIssuerPrincipal,
+  OrdinaryCiResultReporterPrincipal,
+  OrdinaryCiServicePrincipal
+} from "./auth.js";
 import type { NativeGitIdentity } from "./config.js";
 import { ordinaryExecutionDescriptorRequestSchema } from "./candidate-execution-schema.js";
 import { issueJobRequestSchema } from "./job-attempt-schema.js";
@@ -38,6 +43,8 @@ export type ReviewApiServices = {
   readonly ordinaryExecution: OrdinaryExecutionService;
 };
 
+export type ReviewPrincipal = NativeGitIdentity | OrdinaryCiServicePrincipal;
+
 export function nativeGitReviewRoute(request: IncomingMessage): ReviewHttpRoute | undefined {
   const url = new URL(request.url ?? "/", "http://dim-native-git");
   if (url.search.length > 0) return undefined;
@@ -69,7 +76,7 @@ export function nativeGitReviewRoute(request: IncomingMessage): ReviewHttpRoute 
 
 export async function serveReviewApi(
   services: ReviewApiServices,
-  identity: NativeGitIdentity,
+  identity: ReviewPrincipal,
   route: ReviewHttpRoute,
   request: IncomingMessage,
   response: ServerResponse
@@ -79,31 +86,33 @@ export async function serveReviewApi(
     switch (route.kind) {
       case "create": {
         const input = createSchema.parse(await readBody(request));
-        sendJson(response, 201, await services.review.create(identity, { ...target, ...input }));
+        sendJson(response, 201, await services.review.create(nativeIdentity(identity), { ...target, ...input }));
         return;
       }
       case "get":
-        sendJson(response, 200, await services.review.get(identity, target, route.reviewId));
+        sendJson(response, 200, await services.review.get(nativeIdentity(identity), target, route.reviewId));
         return;
       case "approve":
         emptySchema.parse(await readBody(request));
-        sendJson(response, 201, await services.review.approve(identity, target, route.reviewId));
+        sendJson(response, 201, await services.review.approve(nativeIdentity(identity), target, route.reviewId));
         return;
       case "revoke": {
         const input = revokeSchema.parse(await readBody(request));
-        await services.review.revoke(identity, target, route.reviewId, input.approvalId);
+        await services.review.revoke(nativeIdentity(identity), target, route.reviewId, input.approvalId);
         sendJson(response, 201, { approvalId: input.approvalId, reviewId: route.reviewId, revoked: true });
         return;
       }
       case "issue-job": {
+        const issuer = attemptIssuer(identity);
         const input = issueJobRequestSchema.parse(await readBody(request));
-        const result = await services.promotion.issue(identity, { ...target, reviewId: route.reviewId }, input);
+        const result = await services.promotion.issue(issuer, { ...target, reviewId: route.reviewId }, input);
         sendJson(response, result.replayed ? 200 : 201, result.issuance);
         return;
       }
       case "revoke-job": {
+        const issuer = attemptIssuer(identity);
         const input = revokeJobSchema.parse(await readBody(request));
-        const result = await services.promotion.revokeAttempt(identity, {
+        const result = await services.promotion.revokeAttempt(issuer, {
           ...target,
           reviewId: route.reviewId,
           jobName: input.jobName,
@@ -113,13 +122,14 @@ export async function serveReviewApi(
         return;
       }
       case "status": {
+        const reporter = resultReporter(identity);
         const envelope = ciStatusEnvelopeSchema.parse(await readBody(request));
-        sendJson(response, 201, await services.promotion.report(identity, target, route.reviewId, envelope));
+        sendJson(response, 201, await services.promotion.report(reporter, target, route.reviewId, envelope));
         return;
       }
       case "ordinary-execution-descriptor": {
         const descriptorTarget = { ...target, reviewId: route.reviewId };
-        services.ordinaryExecution.authorize(identity, descriptorTarget);
+        attemptIssuer(identity);
         const input = ordinaryExecutionDescriptorRequestSchema.parse(await readBody(request));
         const result = await services.ordinaryExecution.load(descriptorTarget, input);
         sendJson(response, 200, result);
@@ -127,7 +137,7 @@ export async function serveReviewApi(
       }
       case "promote": {
         emptySchema.parse(await readBody(request));
-        const result = await services.promotion.promote(identity, target, route.reviewId);
+        const result = await services.promotion.promote(nativeIdentity(identity), target, route.reviewId);
         sendJson(response, result.outcome === "promoted" ? 201 : 200, result);
         return;
       }
@@ -145,6 +155,28 @@ export async function serveReviewApi(
     }
     sendJson(response, 500, { error: "review operation failed" });
   }
+}
+
+function nativeIdentity(principal: ReviewPrincipal): NativeGitIdentity {
+  if ("kind" in principal) throw new ReviewApiError(403, "native Git identity authority is required");
+  return principal;
+}
+
+function servicePrincipal(principal: ReviewPrincipal): OrdinaryCiServicePrincipal {
+  if (!("kind" in principal)) throw new ReviewApiError(403, "ordinary CI service authority is required");
+  return principal;
+}
+
+function attemptIssuer(principal: ReviewPrincipal): OrdinaryCiAttemptIssuerPrincipal {
+  const service = servicePrincipal(principal);
+  if (service.role !== "attempt-issuer") throw new ReviewApiError(403, "ordinary CI attempt issuer authority is required");
+  return service;
+}
+
+function resultReporter(principal: ReviewPrincipal): OrdinaryCiResultReporterPrincipal {
+  const service = servicePrincipal(principal);
+  if (service.role !== "result-reporter") throw new ReviewApiError(403, "ordinary CI result reporter authority is required");
+  return service;
 }
 
 async function readBody(request: IncomingMessage): Promise<unknown> {
