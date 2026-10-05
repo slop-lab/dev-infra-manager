@@ -156,6 +156,27 @@ describe("DIM native Git review outbox integrity", () => {
     // When / Then
     expect(() => parseNativeGitServiceConfig({ ...config, repositories, identities })).toThrow();
   });
+
+  it("rejects a digest-mismatched delivery marker without rewriting it", async () => {
+    // Given
+    const fixture = await startFixture();
+    await createReview(fixture);
+    const store = createReviewStore(fixture.repositoryPath);
+    const event = (await store.readOutbox(1))[0];
+    if (event === undefined) throw new Error("expected pending event");
+    await store.acknowledgeOutboxEvent(event);
+    const marker = join(fixture.repositoryPath, "dim-reviews", "delivered", `${event.event.eventId}.json`);
+    const corrupted = `${JSON.stringify({
+      schemaVersion: 1,
+      eventId: event.event.eventId,
+      eventDigest: `sha256:${"0".repeat(64)}`
+    })}\n`;
+    await writeFile(marker, corrupted, "utf8");
+
+    // When / Then
+    await expect(fixture.restart()).rejects.toThrow(/acknowledgement/i);
+    await expect(readFile(marker, "utf8")).resolves.toBe(corrupted);
+  });
 });
 
 async function startFixture(): Promise<ReviewFixture> {

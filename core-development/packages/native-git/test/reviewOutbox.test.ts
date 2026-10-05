@@ -2,7 +2,10 @@ import { access, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseReviewEnvelope } from "../../../../core/packages/native-git/src/review-event-schema.js";
-import { createReviewStore, ReviewOutboxFullError } from "../../../../core/packages/native-git/src/review-store.js";
+import {
+  createReviewStore,
+  ReviewOutboxFullError
+} from "../../../../core/packages/native-git/src/review-store.js";
 import {
   reviewDigest,
   reviewObjectSchema,
@@ -110,6 +113,44 @@ describe("DIM native Git review outbox", () => {
     // When / Then
     await expect(store.readOutbox(1)).resolves.toHaveLength(1);
     await expect(store.readOutbox(101)).rejects.toThrow(/enumeration bound/i);
+  });
+
+  it("stores a digest-bound immutable acknowledgement and excludes only that event after restart", async () => {
+    // Given
+    const fixture = await startFixture();
+    await createReview(fixture);
+    const store = createReviewStore(fixture.repositoryPath);
+    const pending = await store.readOutbox(2);
+    const delivered = pending[0];
+    if (delivered === undefined) throw new Error("expected a pending event");
+
+    // When
+    const acknowledgement = await store.acknowledgeOutboxEvent(delivered);
+    await fixture.restart();
+
+    // Then
+    expect(acknowledgement).toEqual({
+      schemaVersion: 1,
+      eventId: delivered.event.eventId,
+      eventDigest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/)
+    });
+    await expect(createReviewStore(fixture.repositoryPath).readOutbox(2)).resolves.toEqual([pending[1]]);
+    const marker = join(fixture.repositoryPath, "dim-reviews", "delivered", `${delivered.event.eventId}.json`);
+    expect((await stat(marker)).mode & 0o777).toBe(0o600);
+  });
+
+  it("reserves permanent-marker capacity before publishing a new review", async () => {
+    // Given
+    const fixture = await startFixture();
+    const stored = await persistedReview(fixture);
+    const store = createReviewStore(fixture.repositoryPath, { maximumDeliveredEvents: 2 });
+    const candidate = anotherReview(stored, "marker-cap");
+    for (const event of await store.readOutbox(2)) await store.acknowledgeOutboxEvent(event);
+
+    // When / Then
+    await expect(store.saveReview(stored)).resolves.toEqual(stored);
+    await expect(store.saveReview(candidate)).rejects.toBeInstanceOf(ReviewOutboxFullError);
+    await expect(access(proposalPath(fixture, candidate.reviewId))).rejects.toThrow();
   });
 
   it.each(["legacy", "foreign-field"] as const)("rejects %s proposal state on restart", async (kind) => {
