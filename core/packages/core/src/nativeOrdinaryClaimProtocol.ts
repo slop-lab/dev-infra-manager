@@ -26,6 +26,30 @@ export type NativeHostClaim = {
   readonly descriptorDigest: string;
 };
 
+export type NativeHostClaimRenewalRequest = {
+  readonly schemaVersion: 1;
+  readonly requestId: string;
+  readonly hostId: string;
+  readonly capacity: string;
+  readonly claimId: string;
+  readonly attemptId: string;
+  readonly descriptorDigest: string;
+};
+
+export type NativeHostClaimRenewal = {
+  readonly schemaVersion: 1;
+  readonly serviceId: string;
+  readonly requestId: string;
+  readonly claimId: string;
+  readonly leaseExpiresAt: number;
+  readonly leaseDurationMilliseconds: number;
+};
+
+export type NativeHostRecoveryRequest = NativeHostClaimRenewalRequest & {
+  readonly resourceId: string;
+  readonly cleanupComplete: true;
+};
+
 export function parseNativeHostClaimRequest(value: unknown): NativeHostClaimRequest {
   const input = exactRecord(value, ["schemaVersion", "requestId", "hostId", "capacity"]);
   if (input.schemaVersion !== 1) throw new UserError("native host claim schemaVersion must be 1");
@@ -35,6 +59,24 @@ export function parseNativeHostClaimRequest(value: unknown): NativeHostClaimRequ
     hostId: identifier(input.hostId, "host ID"),
     capacity: identifier(input.capacity, "capacity")
   };
+}
+
+export function parseNativeHostClaimRenewalRequest(value: unknown): NativeHostClaimRenewalRequest {
+  const input = exactRecord(value, [
+    "schemaVersion", "requestId", "hostId", "capacity", "claimId", "attemptId", "descriptorDigest"
+  ]);
+  if (input.schemaVersion !== 1) throw new UserError("native host claim renewal schemaVersion must be 1");
+  return parseClaimIdentity(input);
+}
+
+export function parseNativeHostRecoveryRequest(value: unknown): NativeHostRecoveryRequest {
+  const input = exactRecord(value, [
+    "schemaVersion", "requestId", "hostId", "capacity", "claimId", "attemptId", "descriptorDigest",
+    "resourceId", "cleanupComplete"
+  ]);
+  if (input.schemaVersion !== 1) throw new UserError("native host recovery schemaVersion must be 1");
+  if (input.cleanupComplete !== true) throw new UserError("native host recovery requires completed cleanup");
+  return { ...parseClaimIdentity(input), resourceId: uuid(input.resourceId, "resource ID"), cleanupComplete: true };
 }
 
 export function parseStoredDescriptor(value: string): NativeOrdinaryDescriptor {
@@ -71,9 +113,22 @@ function text(value: unknown, pattern: RegExp, label: string): string {
   return value;
 }
 
+function parseClaimIdentity(input: Readonly<Record<string, unknown>>): NativeHostClaimRenewalRequest {
+  return {
+    schemaVersion: 1,
+    requestId: uuid(input.requestId, "request ID"),
+    hostId: identifier(input.hostId, "host ID"),
+    capacity: identifier(input.capacity, "capacity"),
+    claimId: uuid(input.claimId, "claim ID"),
+    attemptId: uuid(input.attemptId, "attempt ID"),
+    descriptorDigest: digest(input.descriptorDigest)
+  };
+}
+
 const uuid = (value: unknown, label: string) => text(
   value,
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
   label
 );
 const identifier = (value: unknown, label: string) => text(value, /^[a-z0-9][a-z0-9._-]{0,127}$/, label);
+const digest = (value: unknown) => text(value, /^sha256:[0-9a-f]{64}$/, "descriptor digest");
