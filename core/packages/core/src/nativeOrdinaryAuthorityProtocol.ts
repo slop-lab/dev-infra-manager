@@ -24,7 +24,6 @@ export type NativeAdmissionPolicy = {
   readonly requiredReviewRevision: string;
   readonly requiredJobSetRevision: string;
   readonly requiredJobs: readonly string[];
-  readonly eligibleAssignments: readonly { readonly hostId: string; readonly capacity: string }[];
 };
 
 export type NativeOrdinaryDescriptor = {

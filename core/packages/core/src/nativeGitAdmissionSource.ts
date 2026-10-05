@@ -56,7 +56,6 @@ export interface NativeGitAdmissionHttpClient {
 
 export type NativeGitAdmissionSourceOptions = {
   readonly config: NativeGitAdmissionConfig;
-  readonly eligibleAssignments: NativeAdmissionPolicy["eligibleAssignments"];
   readonly httpClient: NativeGitAdmissionHttpClient;
 };
 
@@ -158,7 +157,7 @@ export function createNativeGitAdmissionSource(options: NativeGitAdmissionSource
       "schemaVersion", "projectId", "repositoryId", "protectedRef", "policyRevision",
       "requiredReviewRevision", "requiredJobSetRevision", "requiredJobs"
     ]);
-    return parseProof(() => parseNativeAdmissionPolicy({ ...policy, eligibleAssignments: options.eligibleAssignments }));
+    return parseProof(() => parseNativeAdmissionPolicy(policy));
   }
 
   async function attestOnce(signal: AbortSignal): Promise<void> {

@@ -132,12 +132,11 @@ export async function startNativeGitAdmissionFixture(): Promise<NativeGitAdmissi
         send(response, 404);
         return;
       }
-      const { eligibleAssignments: _eligibleAssignments, ...policy } = proof.canonical;
       send(response, 200, {
         schemaVersion: 1,
         serviceId: "native-main",
         requestId: mode === "replay" ? "00000000-0000-4000-8000-000000000099" : requestId,
-        policy
+        policy: proof.canonical
       });
       return;
     }

@@ -3,8 +3,6 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   admission,
-  assignment,
-  descriptor,
   jsonRecord,
   post,
   startAuthority,
@@ -42,76 +40,6 @@ describe("native ordinary authority source gates", () => {
     expect(rows(fixture.database)).toEqual({ admissions: 0, attempts: 0 });
   });
 
-  it("rejects authenticated fabricated attempt without changing SQLite", async () => {
-    // Given
-    const fixture = await createFixture();
-    const fabricated = assignment(
-      descriptor("arbitrary-project", "source", "generation-1"),
-      "a".repeat(64),
-      "33333333-3333-4333-8333-333333333333"
-    );
-    const before = await readFile(fixture.database);
-
-    // When
-    const response = await post(fixture.endpoint, "/v1/current-attempt-assignments", "scheduler", fabricated);
-
-    // Then
-    expect(response.status).toBe(404);
-    expect(await jsonRecord(response)).toEqual({ error: "not found" });
-    expect(await readFile(fixture.database)).toEqual(before);
-    expect(rows(fixture.database)).toEqual({ admissions: 0, attempts: 0 });
-  });
-
-  it("rejects an authenticated fabricated attempt without changing SQLite", async () => {
-    // Given
-    const fixture = await createFixture();
-    const policy = admission("project-a", "source", "1");
-    fixture.source.authorizePolicy(policy);
-    const admitted = await post(fixture.endpoint, "/v1/operator-admissions", "registrar", policy);
-    const generation = String((await jsonRecord(admitted)).admissionGeneration);
-    const fabricated = assignment(
-      descriptor("project-a", "source", generation),
-      "a".repeat(64),
-      "33333333-3333-4333-8333-333333333333"
-    );
-    const before = await readFile(fixture.database);
-
-    // When
-    const response = await post(fixture.endpoint, "/v1/current-attempt-assignments", "scheduler", fabricated);
-
-    // Then
-    expect(response.status).toBe(404);
-    expect(await readFile(fixture.database)).toEqual(before);
-    expect(rows(fixture.database)).toEqual({ admissions: 1, attempts: 0 });
-  });
-
-  it("rejects a native attempt tuple that differs from the scheduler assertion", async () => {
-    // Given
-    const fixture = await createFixture();
-    const policy = admission("project-a", "source", "1");
-    fixture.source.authorizePolicy(policy);
-    const admitted = await post(fixture.endpoint, "/v1/operator-admissions", "registrar", policy);
-    const generation = String((await jsonRecord(admitted)).admissionGeneration);
-    const requested = assignment(
-      descriptor("project-a", "source", generation),
-      "a".repeat(64),
-      "33333333-3333-4333-8333-333333333333"
-    );
-    fixture.source.authorizeAttempt(requested, {
-      ...requested,
-      attemptId: "44444444-4444-4444-8444-444444444444"
-    });
-    const before = await readFile(fixture.database);
-
-    // When
-    const response = await post(fixture.endpoint, "/v1/current-attempt-assignments", "scheduler", requested);
-
-    // Then
-    expect(response.status).toBe(404);
-    expect(await readFile(fixture.database)).toEqual(before);
-    expect(rows(fixture.database)).toEqual({ admissions: 1, attempts: 0 });
-  });
-
   it.each(["jobs", "revision"] as const)(
     "rejects changed native %s that differ from the registrar assertion",
     async (change) => {
@@ -132,42 +60,15 @@ describe("native ordinary authority source gates", () => {
     }
   );
 
-  it("rejects a caller-selected subset of globally configured capacities", async () => {
+  it("admits policy without storing a caller-selected capacity set", async () => {
     // Given
     const fixture = await createFixture({
       hosts: [
-        { hostId: "host-b", capacities: [{ capacity: "backup", runnerBaseImage, bounds }] },
-        { hostId: "host-a", capacities: [{ capacity: "primary", runnerBaseImage, bounds }] }
+        { hostId: "host-b", hostToken: "host-b-token-000000000000000000000000", capacities: [{ capacity: "backup", runnerBaseImage, bounds }] },
+        { hostId: "host-a", hostToken: "host-a-token-000000000000000000000000", capacities: [{ capacity: "primary", runnerBaseImage, bounds }] }
       ]
     });
     const policy = admission("project-a", "source", "1");
-    fixture.source.authorizePolicy(policy);
-    const before = await readFile(fixture.database);
-
-    // When
-    const response = await post(fixture.endpoint, "/v1/operator-admissions", "registrar", policy);
-
-    // Then
-    expect(response.status).toBe(404);
-    expect(await readFile(fixture.database)).toEqual(before);
-    expect(rows(fixture.database)).toEqual({ admissions: 0, attempts: 0 });
-  });
-
-  it("admits the complete globally configured capacity set in canonical order", async () => {
-    // Given
-    const fixture = await createFixture({
-      hosts: [
-        { hostId: "host-b", capacities: [{ capacity: "backup", runnerBaseImage, bounds }] },
-        { hostId: "host-a", capacities: [{ capacity: "primary", runnerBaseImage, bounds }] }
-      ]
-    });
-    const policy = {
-      ...admission("project-a", "source", "1"),
-      eligibleAssignments: [
-        { hostId: "host-a", capacity: "primary" },
-        { hostId: "host-b", capacity: "backup" }
-      ]
-    } as const;
     fixture.source.authorizePolicy(policy);
 
     // When

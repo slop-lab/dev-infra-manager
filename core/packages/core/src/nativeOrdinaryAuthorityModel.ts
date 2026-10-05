@@ -20,16 +20,11 @@ const descriptorKeys = [
 export function parseNativeAdmissionPolicy(value: unknown): NativeAdmissionPolicy {
   const input = exactRecord(value, [
     "schemaVersion", "projectId", "repositoryId", "protectedRef", "policyRevision", "requiredReviewRevision",
-    "requiredJobSetRevision", "requiredJobs", "eligibleAssignments"
+    "requiredJobSetRevision", "requiredJobs"
   ]);
   if (input.schemaVersion !== 1) throw new UserError("native ordinary admission schemaVersion must be 1");
   const requiredJobs = stringArray(input.requiredJobs, "required jobs").map((job) => identifier(job, "job name"));
-  const assignments = array(input.eligibleAssignments, "eligible assignments").map((value) => {
-    const item = exactRecord(value, ["hostId", "capacity"]);
-    return { hostId: assignmentIdentifier(item.hostId, "host ID"), capacity: assignmentIdentifier(item.capacity, "capacity") };
-  });
   assertUnique(requiredJobs, "required jobs");
-  assertUnique(assignments.map(({ hostId, capacity }) => `${hostId}\0${capacity}`), "eligible assignments");
   return {
     schemaVersion: 1,
     projectId: identifier(input.projectId, "Project ID"),
@@ -38,8 +33,7 @@ export function parseNativeAdmissionPolicy(value: unknown): NativeAdmissionPolic
     policyRevision: revision(input.policyRevision, "policy revision"),
     requiredReviewRevision: revision(input.requiredReviewRevision, "review revision"),
     requiredJobSetRevision: revision(input.requiredJobSetRevision, "job-set revision"),
-    requiredJobs,
-    eligibleAssignments: assignments
+    requiredJobs
   };
 }
 
