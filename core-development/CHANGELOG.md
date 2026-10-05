@@ -83,8 +83,16 @@
   Rotation, expiry, and revocation terminally deny and release pending old-
   generation delivery without another native request; a denial after native
   committed a status also prevents that stored status from satisfying
-  promotion. Claims expose no reporter credential. The host executor, reviewer display, installer wiring,
-  and native Project adapter remain unimplemented with no compatibility form.
+  promotion. Claims expose no reporter credential. A callable, independently
+  authenticated host capacity worker now journals exact claim, result, and
+  recovery requests across response loss and restart. It reads the exact
+  candidate tree through Project-scoped native Git reader transport, verifies
+  SHA-1 or SHA-256 objects and bounded inputs, runs one digest-pinned nested
+  Sysbox job with no host authority in the candidate, renews against a
+  request-start monotonic deadline, and submits terminal evidence only after
+  ownership-checked cleanup. The worker is not connected to controller startup:
+  the native Project adapter and installer wiring remain unimplemented, and
+  actual Sysbox execution still requires the unavailable runtime gate.
   Native Git now
    authenticates the configured attempt issuer and result reporter as distinct
    service principals: only the issuer may derive descriptors or issue and

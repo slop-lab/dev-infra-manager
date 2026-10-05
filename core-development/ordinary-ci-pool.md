@@ -315,8 +315,10 @@ closed.
 `CI-NATIVE-DELIVERY-001` replaces the authority-only database shape above with
 the final schema-3 scheduler shape. Central event intake, receipt-bound claim
 and lease handling, cleanup-gated result intake, and durable native report
-delivery use this shape; the host executor and deployment adapter remain future
-source. IDs are lowercase UUID text, digests use the
+  delivery use this shape. A callable host executor and capacity worker exercise
+  this contract, but controller lifecycle wiring, native Project admission, and
+  the deployment adapter remain future work; no native capacity is advertised
+  in production. IDs are lowercase UUID text, digests use the
 named `sha256:` form, JSON columns contain validated canonical compact JSON,
 and all times are positive Unix milliseconds. The compiled schema contains
 exactly these application tables and indexes:
@@ -395,8 +397,9 @@ tuple before mutation. Result bodies add only the native terminal event and
 `cleanupComplete: true`. Recovery bodies add only the inspected immutable local
 `resourceId` and `cleanupComplete: true`; they cannot report success evidence.
 The receipt-bound claim UUID is also the planned local `resourceId`; recovery
-rejects any other identity, while actual provider inspection remains host
-executor work rather than a claim made by this central-only slice.
+  rejects any other identity. The callable host executor ownership-checks local
+  Docker resources before acknowledging cleanup; the central service trusts only
+  the authenticated host assertion, not a direct inspection of host resources.
 Renewal returns the absolute `leaseExpiresAt` plus the safe
 `leaseDurationMilliseconds` that the host applies to its request-start
 monotonic clock. Replaying a renewal request returns the remaining duration,
