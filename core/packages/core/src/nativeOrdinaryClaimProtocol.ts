@@ -1,4 +1,5 @@
 import { UserError } from "./errors.js";
+import { parseNativeJobAttemptIssuance, type NativeJobAttemptIssuance } from "./nativeGitAttemptIssuerModel.js";
 import { parseNativeAdmissionPolicy, parseNativeDescriptor, record } from "./nativeOrdinaryAuthorityModel.js";
 import type { NativeAdmissionPolicy, NativeOrdinaryDescriptor } from "./nativeOrdinaryAuthorityProtocol.js";
 import { parseNativeReviewJobEvent, type NativeReviewJobEvent } from "./nativeOrdinaryEvent.js";
@@ -18,6 +19,7 @@ export type NativeHostClaim = {
   readonly eventId: string;
   readonly reviewId: string;
   readonly attemptId: string;
+  readonly attempt: number;
   readonly admissionGeneration: string;
   readonly hostId: string;
   readonly capacity: string;
@@ -89,6 +91,10 @@ export function parseStoredEvent(value: string): NativeReviewJobEvent {
 
 export function parseStoredPolicy(value: string): NativeAdmissionPolicy {
   return parseStored(value, parseNativeAdmissionPolicy, "admission");
+}
+
+export function parseStoredIssuance(value: string): NativeJobAttemptIssuance {
+  return parseStored(value, parseNativeJobAttemptIssuance, "issuance");
 }
 
 function parseStored<T>(value: string, parser: (input: unknown) => T, label: string): T {

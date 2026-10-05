@@ -169,6 +169,7 @@ const hex = (value: unknown, length: number, label: string) => resourceString(va
 function headRef(value: unknown): string {
   const ref = resourceString(value, /^refs\/heads\/.+$/, "protected ref");
   if (ref.endsWith("/") || ref.endsWith(".") || ref.endsWith(".lock") || ref.includes("..") || ref.includes("@{") || /[\\\x00-\x20\x7f~^:?*[\]]/.test(ref)) throw new UserError("protected ref is invalid");
+  if (ref.slice("refs/heads/".length).split("/").some((component) => component.length === 0 || component.startsWith("."))) throw new UserError("protected ref is invalid");
   return ref;
 }
 

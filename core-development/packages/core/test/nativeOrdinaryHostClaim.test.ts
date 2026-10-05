@@ -108,6 +108,7 @@ describe("native ordinary host claims", () => {
     const claim = firstClaim;
     expect(await jsonRecord(replay)).toEqual(claim);
     expect(claim.claimId).toBe(issuanceRequestId);
+    expect(claim.attempt).toBe(1);
     expect(claim.admissionGeneration).toBe(generation);
     expect(JSON.stringify(claim)).not.toMatch(/secret|password|token|credential/i);
     expect(issued).toBe(1);
