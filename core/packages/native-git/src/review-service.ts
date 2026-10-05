@@ -12,11 +12,11 @@ import {
   type ReviewIdentity,
   type ReviewObject
 } from "./review-schema.js";
-import { createReviewStore } from "./review-store.js";
+import { createReviewStore, ReviewOutboxFullError } from "./review-store.js";
 import { createStatusStore } from "./status-store.js";
 import type { CiStatusRecord } from "./promotion-schema.js";
 
-export type ReviewStatus = ReviewObject & {
+export type ReviewStatus = Omit<ReviewObject, "requiredJobNames"> & {
   readonly status: "pending" | "approved" | "revoked" | "stale";
   readonly staleReasons: readonly string[];
   readonly approvals: readonly ReviewApproval[];
@@ -60,6 +60,7 @@ export function createReviewService(config: NativeGitServiceConfig, serializer: 
         policyRevision: policy.policyRevision,
         requiredReviewRevision: policy.requiredReviewRevision,
         requiredJobSetRevision: policy.requiredJobSetRevision,
+        requiredJobNames: [...policy.requiredJobNames].sort(),
         policyDigest: policyDigest(policy),
         writerUsername: writer.username,
         workspaceId,
@@ -70,7 +71,15 @@ export function createReviewService(config: NativeGitServiceConfig, serializer: 
         reviewId: reviewDigest(reviewIdentity),
         createdAt: new Date().toISOString()
       });
-      const stored = await store(config, input).saveReview(review);
+      let stored: ReviewObject;
+      try {
+        stored = await serializer.run(`review-outbox:${input.projectId}/${input.repositoryId}`, () => (
+          store(config, input).saveReview(review)
+        ));
+      } catch (error) {
+        if (error instanceof ReviewOutboxFullError) throw new ReviewApiError(429, error.message);
+        throw error;
+      }
       return status(config, stored);
     },
     async get(identity, target, reviewId) {
@@ -146,7 +155,8 @@ export async function status(config: NativeGitServiceConfig, review: ReviewObjec
     : complete ? "approved"
       : revocations.length > 0 ? "revoked"
         : "pending";
-  return { ...review, status: reviewStatus, staleReasons, approvals, revocations, statuses };
+  const { requiredJobNames: _requiredJobNames, ...publicReview } = review;
+  return { ...publicReview, status: reviewStatus, staleReasons, approvals, revocations, statuses };
 }
 
 function requiredReviewers(policy: NativeGitReviewPolicy, changes: readonly ChangedPath[]): string[] {

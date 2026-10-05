@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
+const jobName = z.string().regex(/^[a-z][a-z0-9-]{0,62}$/);
 const username = z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,62}[A-Za-z0-9])?$/);
 const password = z.string().min(16).max(1024).refine((value) => !/[\0\r\n]/.test(value));
 const revision = z.string().regex(/^[A-Za-z0-9](?:[A-Za-z0-9._-]{0,126}[A-Za-z0-9])?$/);
@@ -15,7 +16,7 @@ export const nativeGitReviewPolicySchema = z.object({
   policyRevision: revision,
   requiredReviewRevision: revision,
   requiredJobSetRevision: revision,
-  requiredJobNames: z.array(identifier).min(1).readonly(),
+  requiredJobNames: z.array(jobName).min(1).max(64).readonly(),
   requiredReviewerIds: z.array(identifier).min(1).readonly(),
   pathReviewerRules: z.array(z.object({
     pathPrefix,
@@ -40,7 +41,7 @@ export const nativeGitIdentitySchema = z.discriminatedUnion("role", [
   z.object({ ...identityBase, role: z.literal("reader") }).strict().readonly(),
   z.object({ ...identityBase, role: z.literal("writer"), workspaceId: identifier }).strict().readonly(),
   z.object({ ...identityBase, role: z.literal("reviewer"), reviewerId: identifier }).strict().readonly(),
-  z.object({ ...identityBase, role: z.literal("ci"), jobName: identifier }).strict().readonly(),
+  z.object({ ...identityBase, role: z.literal("ci"), jobName }).strict().readonly(),
   z.object({ ...identityBase, role: z.literal("scheduler") }).strict().readonly(),
   z.object({ ...identityBase, role: z.literal("promoter") }).strict().readonly(),
   z.object({ ...identityBase, role: z.literal("administrator") }).strict().readonly()

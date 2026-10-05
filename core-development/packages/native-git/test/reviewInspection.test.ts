@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { refValue } from "./nativeGitHarness.js";
 import {
@@ -50,6 +52,34 @@ describe("DIM native Git complete-tree review inspection", () => {
     expect(stringField(review, "patch")).toContain("diff --git a/README.md b/docs/README.md");
     expect(stringField(review, "patch")).toContain("deleted file mode 100644");
     expect(await refValue(fixture.repositoryPath, "refs/heads/main")).toBe(fixture.protectedHead);
+  });
+
+  it("atomically persists one strict native event per required job without exposing events in the response", async () => {
+    // Given
+    const fixture = await startFixture();
+
+    // When
+    const response = await fixture.request("reviewer-a-user", "POST", reviewPath(), {
+      protectedRef: "refs/heads/main",
+      proposalRef: fixture.proposalRef
+    });
+
+    // Then
+    expect(response.status).toBe(201);
+    const review = await readJsonObject(response);
+    expect(review).not.toHaveProperty("events");
+    const reviewId = stringField(review, "reviewId");
+    const stored: unknown = JSON.parse(await readFile(
+      join(fixture.repositoryPath, "dim-reviews", "proposals", `${reviewId}.json`),
+      "utf8"
+    ));
+    expect(stored).toMatchObject({
+      review: { reviewId },
+      events: [
+        { type: "dim.native.review-job.available", jobName: "security" },
+        { type: "dim.native.review-job.available", jobName: "source" }
+      ]
+    });
   });
 
   it("denies workspace, read-only CI, and foreign-Project identities", async () => {

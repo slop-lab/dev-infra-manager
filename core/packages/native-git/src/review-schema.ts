@@ -5,6 +5,7 @@ const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
 const mode = z.string().regex(/^[0-7]{6}$/);
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
+const jobName = z.string().regex(/^[a-z][a-z0-9-]{0,62}$/);
 
 export const changedPathSchema = z.object({
   status: z.enum(["added", "modified", "deleted", "renamed", "copied", "type-changed"]),
@@ -33,6 +34,7 @@ const reviewIdentityObjectSchema = z.object({
   policyRevision: z.string(),
   requiredReviewRevision: z.string(),
   requiredJobSetRevision: z.string(),
+  requiredJobNames: z.array(jobName).min(1).max(64).readonly(),
   policyDigest: digest,
   writerUsername: z.string(),
   workspaceId: identifier,
@@ -78,6 +80,11 @@ export function reviewDigest(identity: ReviewIdentity): string {
 
 export function parseReviewObject(input: unknown): ReviewObject {
   const review = reviewObjectSchema.parse(input);
+  const sortedJobNames = [...review.requiredJobNames].sort();
+  if (new Set(review.requiredJobNames).size !== review.requiredJobNames.length
+    || review.requiredJobNames.some((job, index) => job !== sortedJobNames[index])) {
+    throw new ReviewRecordError("stored review required jobs are not a unique sorted set");
+  }
   const { reviewId, createdAt: _createdAt, ...identity } = review;
   if (reviewDigest(identity) !== reviewId) throw new ReviewRecordError("stored review identity digest is invalid");
   return review;
