@@ -9,8 +9,8 @@
   records only exact native-issued attempt tuples returned by that source.
   Its production source lazily authenticates the fixed private-Compose native
   Git peer on first mutation, attests the exact service role and ordered scope,
-  and accepts only strict nonce-bound canonical policy and current-attempt
-  proofs. Rejected source tuples are concealed and unavailable or malformed
+  and accepts only strict nonce-bound canonical policy, stored review-event, and
+  current-attempt proofs. Rejected source tuples are concealed and unavailable or malformed
   peers return service unavailable, always before changing SQLite. Native Git's strict
   schema-2 config pins the proof service identity to `native-main` and provides
   a dedicated read-only proof identity plus exact canonical protected-policy
@@ -40,9 +40,9 @@
   maintainers still review changed requirements, implementation, tests, and
   relevant results; only infrastructure security review is narrowed around
   secrets and trusted capabilities. Human exact-tree approval and CAS promotion
-  remain mandatory. Specify the remaining target as a durable native review
-  event, bounded ordinary inbox, host-capacity claim, descriptor derivation,
-  receipt-bound native issuance, transactional assignment, cleaned host result,
+  remain mandatory. Specify the remaining target as native review-event
+  delivery, host-capacity claim, descriptor derivation, receipt-bound native
+  issuance, transactional assignment, cleaned host result,
   durable native report retry, and fenced release. Webhooks cannot select
   executable input. One claim UUID is reused as the native issuance request so
   crash recovery converges on one attempt, while generation rotation, lease
@@ -51,9 +51,17 @@
   issuer, reporter, admission, and host roles remain separate. The final target
   keeps capacities global and operator-owned, stores no per-Project assignment
   list, and requires complete SQLite table-shape validation before accepting an
-  unreleased schema-3 database. The existing authority-only two-table schema-3
-  shape is rejected rather than migrated. The event emitter, inbox,
-  queue/claim scheduler, host executor, reporter, reviewer display, installer
+  unreleased schema-3 database. The standalone webhook intake now accepts only
+  the exact non-executable review/job event after exact stored-event proof
+  and a live admission, atomically records its inbox row, queued demand, and two
+  permanent compact replay fences, and acknowledges exact or equivalent-ID
+  replay without reopening work across restart or retention time. Changed reuse
+  conflicts, each fence table is capped at 100,000 without evicting known
+  replay, and G1 rotation supersedes queued old-generation demand. The former
+  authority-only two-table and unreleased six-table schema-3 shapes are rejected
+  rather than migrated. The final dormant claim, result, report, fence, terminal-detail,
+  and service-epoch tables are present in the compiled manifest. The
+  event emitter, claim scheduler, host executor, reporter, reviewer display, installer
   wiring, and native Project adapter remain unimplemented with no compatibility
   form.
 
