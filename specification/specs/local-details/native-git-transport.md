@@ -75,6 +75,44 @@ The four service credentials are not Git transport identities and are not
 accepted by generic reviewer, administrator, CI, scheduler, or promotion
 routes; each is accepted only by its fixed role-specific endpoint.
 
+### Ordinary verifier HTTP contract
+
+Native startup authenticates the query credential to exact `GET /v1/identity`
+without query parameters. The only successful body is:
+
+```json
+{
+  "schemaVersion": 1,
+  "serviceId": "ordinary-main",
+  "role": "native-query",
+  "scope": ["admission:read", "attempt:read"]
+}
+```
+
+Only after that exact attestation succeeds may startup inject the HTTP verifier.
+The verifier uses exact `POST /v1/admission-verifications` for descriptor
+admission and exact `POST /v1/current-attempt-verifications` for current
+attempts, with no query parameters. Both requests contain `schemaVersion: 1`, a
+fresh UUID `requestId`, and only the complete input tuple of the corresponding
+`AdmissionVerifier` method. The admission request contains `descriptor`,
+`descriptorDigest`, `hostId`, and `capacity`. The current-attempt request
+contains `reviewId`, `attemptId`, `descriptorDigest`, `admissionGeneration`,
+`hostId`, and `capacity`.
+
+A successful response is `200 application/json`, sets `Cache-Control: no-store`,
+and contains only the complete request plus `serviceId: "ordinary-main"` and
+`authorized: true`. Native Git requires exact deep equality with its request,
+including the nonce and every descriptor field. Responses are limited to 64
+KiB. This makes a response replay for another request or tuple invalid. Missing
+or invalid authentication returns `401`; authenticated wrong-role or wrong-scope
+access returns `403`; a foreign Project or repository returns `404`; missing,
+expired, revoked, stale, superseded, or tuple-mismatched admission returns `409`;
+and an unavailable or inactive ordinary service returns `503`. Native Git treats
+every non-`200` status identically as failed verification. It follows no
+redirect, retries nothing, and accepts no malformed, partial, additional-field,
+wrong-service, wrong-scope, oversized, cacheable, timed-out, or transport-failed
+response.
+
 ## Inputs and identity
 
 Startup consumes a strict schema-1 configuration. It pins a trusted regular
