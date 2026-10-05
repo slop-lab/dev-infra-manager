@@ -54,6 +54,9 @@ export const ciStatusPayloadSchema = z.object({
   if (outputBytes > BigInt(payload.descriptor.bounds.outputBytes)) {
     context.addIssue({ code: "custom", message: "CI output exceeds descriptor bound", path: ["stdout"] });
   }
+  if (payload.result === "success" && (payload.stdout.truncated || payload.stderr.truncated)) {
+    context.addIssue({ code: "custom", message: "CI success requires complete output evidence", path: ["stdout"] });
+  }
   if (payload.result !== completionResult(payload.completion)) {
     context.addIssue({ code: "custom", message: "CI result has inconsistent completion", path: ["result"] });
   }

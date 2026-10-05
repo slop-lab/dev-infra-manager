@@ -43,9 +43,17 @@ describe("DIM native Git descriptor evidence denials", () => {
     const excessiveOutput = await reportJob(fixture, review, "source", source, "success", "ordinary-results", {
       stdout: { bytes: "10485761", sha256: `sha256:${"0".repeat(64)}`, truncated: true }
     });
+    const truncatedStdout = await reportJob(fixture, review, "source", source, "success", "ordinary-results", {
+      stdout: { bytes: "0", sha256: `sha256:${"0".repeat(64)}`, truncated: true }
+    });
+    const truncatedStderr = await reportJob(fixture, review, "source", source, "success", "ordinary-results", {
+      stderr: { bytes: "0", sha256: `sha256:${"0".repeat(64)}`, truncated: true }
+    });
 
-    expect([wrongHost.status, nonzeroSuccess.status, reversedTime.status, excessiveOutput.status])
-      .toEqual([409, 400, 400, 400]);
+    expect([
+      wrongHost.status, nonzeroSuccess.status, reversedTime.status, excessiveOutput.status,
+      truncatedStdout.status, truncatedStderr.status
+    ]).toEqual([409, 400, 400, 400, 400, 400]);
     expect(await protectedHead(fixture)).toBe(before);
   });
 

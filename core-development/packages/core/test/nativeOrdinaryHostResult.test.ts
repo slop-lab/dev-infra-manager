@@ -101,6 +101,16 @@ describe("native ordinary host results", () => {
         }
       }
     });
+    const truncatedSuccess = await post(fixture.endpoint, "/v1/host-results", "host-a", {
+      ...request,
+      terminalEvent: {
+        ...request.terminalEvent,
+        payload: {
+          ...request.terminalEvent.payload,
+          stdout: { ...request.terminalEvent.payload.stdout, truncated: true }
+        }
+      }
+    });
     const unclean = await post(fixture.endpoint, "/v1/host-results", "host-a", { ...request, cleanupComplete: false });
     now = 61_001;
     const expired = await post(fixture.endpoint, "/v1/host-results", "host-a", request);
@@ -108,8 +118,8 @@ describe("native ordinary host results", () => {
     // Then
     expect([
       foreign.status, wrongAttempt.status, inconsistent.status, wrongGeneration.status,
-      wrongDescriptor.status, unclean.status, expired.status
-    ]).toEqual([404, 409, 400, 400, 400, 400, 409]);
+      wrongDescriptor.status, truncatedSuccess.status, unclean.status, expired.status
+    ]).toEqual([404, 409, 400, 400, 400, 400, 400, 409]);
     expect(resultState(fixture.database).results).toBe(0);
   });
 

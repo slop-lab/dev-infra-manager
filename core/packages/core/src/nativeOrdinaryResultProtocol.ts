@@ -85,6 +85,9 @@ export function parseNativeTerminalEvent(value: unknown): NativeTerminalEvent {
   if (Date.parse(startedAt) > Date.parse(finishedAt)) throw new UserError("native terminal completion precedes start");
   const stdout = parseOutput(payload.stdout);
   const stderr = parseOutput(payload.stderr);
+  if (result === "success" && (stdout.truncated || stderr.truncated)) {
+    throw new UserError("native terminal success requires complete output evidence");
+  }
   if (BigInt(stdout.bytes) + BigInt(stderr.bytes) > BigInt(descriptor.bounds.outputBytes)) {
     throw new UserError("native terminal output exceeds descriptor bound");
   }
