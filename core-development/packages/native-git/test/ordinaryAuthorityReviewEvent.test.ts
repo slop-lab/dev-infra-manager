@@ -127,7 +127,9 @@ describe("native Git ordinary authority review-event proof", () => {
     });
 
     // Then
-    expect(deniedRoles.map((response) => response.status)).toEqual(roles.map(() => 401));
+    expect(deniedRoles.map((response) => response.status)).toEqual(roles.map((role) =>
+      role === "ordinary-attempts" || role === "ordinary-results" ? 403 : 401
+    ));
     expect(wrongMethod.status).toBe(404);
     expect(query.status).toBe(404);
     expect(contentType.status).toBe(400);

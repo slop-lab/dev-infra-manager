@@ -1,6 +1,10 @@
 import { once } from "node:events";
 import { createServer, type Server, type ServerResponse } from "node:http";
-import { nativeGitAuthenticator, ordinaryAuthorityAuthenticator } from "./auth.js";
+import {
+  nativeGitAuthenticator,
+  ordinaryAuthorityAuthenticator,
+  ordinaryCiServiceAuthenticator
+} from "./auth.js";
 import { serveGitBackend } from "./backend.js";
 import {
   parseNativeGitServiceConfig,
@@ -71,6 +75,9 @@ export function createNativeGitServerWithDependencies(
     repositoryKey(repository.projectId, repository.repositoryId), repository
   ]));
   const authenticator = nativeGitAuthenticator(config.identities);
+  const serviceAuthenticator = config.ordinaryCi === undefined
+    ? undefined
+    : ordinaryCiServiceAuthenticator(config.ordinaryCi);
   const serializer = createRefSerializer();
   const eventDispatcher = config.ordinaryCi === undefined ? undefined : createNativeEventDispatcher({
     config,
@@ -96,6 +103,7 @@ export function createNativeGitServerWithDependencies(
   const server = createServer((request, response) => {
     const authorityRoute = ordinaryAuthorityRoute(request);
     if (authorityRoute !== undefined && ordinaryAuthority !== undefined) {
+      if (serviceAuthenticator?.authenticate(request.headers) !== undefined) return send(response, 403);
       if (gitIdentity === undefined) return send(response, 503);
       void assertGitExecutableIdentity(config.gitExecutable, gitIdentity)
         .then(() => ordinaryAuthority.serve(authorityRoute, request, response))
@@ -103,6 +111,7 @@ export function createNativeGitServerWithDependencies(
       return;
     }
     if (request.method === "GET" && request.url === "/v1/identity") {
+      if (serviceAuthenticator?.authenticate(request.headers) !== undefined) return send(response, 403);
       const identity = authenticator.authenticate(request.headers);
       if (identity === undefined) return send(response, 401, { "WWW-Authenticate": 'Basic realm="DIM Git"' });
       if (gitIdentity === undefined) return send(response, 503);
@@ -131,7 +140,7 @@ export function createNativeGitServerWithDependencies(
     }
     const reviewRoute = nativeGitReviewRoute(request);
     if (reviewRoute !== undefined) {
-      const identity = authenticator.authenticate(request.headers);
+      const identity = serviceAuthenticator?.authenticate(request.headers) ?? authenticator.authenticate(request.headers);
       if (identity === undefined) return send(response, 401, { "WWW-Authenticate": 'Basic realm="DIM Git Review"' });
       if (gitIdentity === undefined) return send(response, 503);
       void assertGitExecutableIdentity(config.gitExecutable, gitIdentity)
@@ -141,6 +150,7 @@ export function createNativeGitServerWithDependencies(
     }
     const route = nativeGitRoute(request);
     if (route === undefined) return send(response, 404);
+    if (serviceAuthenticator?.authenticate(request.headers) !== undefined) return send(response, 403);
     const identity = authenticator.authenticate(request.headers);
     if (identity === undefined) return send(response, 401, { "WWW-Authenticate": 'Basic realm="DIM Git"' });
     const repository = repositories.get(repositoryKey(route.projectId, route.repositoryId));
