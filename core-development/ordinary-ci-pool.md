@@ -2,8 +2,9 @@
 
 This is the target implementation and operator design for the ordinary CI
 scheduler/webhook service installed with native Git. Core now includes the
-bounded native authority and standalone webhook-intake library described below;
-claim leases, controller execution, and installer deployment remain unimplemented.
+bounded native authority, standalone webhook intake, and receipt-bound host
+claim activation described below; renewal, recovery, result delivery,
+controller execution, and installer deployment remain unimplemented.
 The normative authority,
 admission, and installer transaction are in
 `specification/specs/10-cli-contract.md` and
@@ -214,23 +215,24 @@ exclusive network assumption requires authenticated transport before use.
 `@slop-lab/dim-core` exports `configuredNativeOrdinaryAuthorityServer` as a
 native-only HTTP and SQLite library. It is not wired to the CLI, installer,
 native Git sender, or host controller. Its normalized configuration is strict
-schema `3` and contains one service ID, a dedicated database path and admission
-lease, separate Basic credentials for `webhook`, `registrar`, `scheduler`, and
-`query`, and the operator-owned host capacities. Each capacity fixes its host and
+schema `3` and contains one service ID, a dedicated database path, admission and
+claim leases, separate Basic credentials for `webhook`, `registrar`, and
+`query`, one distinct token per host, and the operator-owned host capacities.
+Each capacity fixes its host and
 capacity IDs, digest-pinned runner base, and maximum CPU, memory, PID,
 wall-clock, and output bounds. Credential passwords are distinct base64url
 values of at least 32 characters. The library receives no Git, Docker,
 controller, or host-administration socket.
 
-Both mutation routes are additionally gated by the configured native Git HTTP
-`NativeAdmissionSource`. Tests may replace only its HTTP transport; no request,
+Native-backed mutation routes are additionally gated by the configured native
+Git HTTP `NativeAdmissionSource`. Tests may replace only its HTTP transport; no request,
 Project, or runtime configuration selects another source. The adapter lazily
 authenticates and attests the configured native Git service on the first
 mutation, bounded to five seconds, so central listener startup does not wait for
 native Git. The interface returns canonical native values from
 `assertRegisteredPolicy`, `assertReviewEvent`, and `assertIssuedAttempt`; the
 service parses those returned values again and
-persists them instead of the registrar or scheduler assertions. The production
+persists them instead of registrar or host assertions. The production
 adapter uses the dedicated read-only policy, stored review-event, and
 issued-attempt proof endpoints,
 requires the exact role, ordered scope, service ID, fresh nonce, and complete
@@ -271,7 +273,7 @@ The registrar credential has only these mutation surfaces:
 
 - `POST /v1/operator-admissions` parses a strict schema `1` policy request:
   Project and repository IDs, protected ref, policy/review/job-set revisions,
-  the exact required job set, and eligible configured host/capacity pairs. It
+  the exact required job set. It
   persists only the canonical policy returned by
   `NativeAdmissionSource.assertRegisteredPolicy`. For that canonical policy, an
   identical active refresh retains its generation; expiry or any policy change
@@ -281,18 +283,15 @@ The registrar credential has only these mutation surfaces:
   Project, repository, and generation tuple. A stale or foreign tuple is
   concealed as not found.
 
-The scheduler credential has only
-`POST /v1/current-attempt-assignments`. The caller supplies the complete strict
-native descriptor, matching domain-separated descriptor digest, review and
-attempt IDs, generation, host, and capacity, but those fields are assertions,
-not proof. The service first requires
-`NativeAdmissionSource.assertIssuedAttempt` to return the exact canonical
-native-issued tuple and persists only that return. It then rechecks the active
-operator policy, required job, configured runner base, eligible assignment,
-and every requested bound before
-the durable write. This endpoint does not issue an attempt. Until the native
-issued-attempt adapter exists, it records none. A verification request alone
-never creates an admission or assignment.
+Each host token has only exact `POST /v1/host-claims` for its configured
+capacities. The service first commits a durable preparing receipt and reserves
+the oldest current-generation demand. With no SQLite transaction open, it uses
+that receipt UUID as the native issuance request ID to derive and issue the
+attempt, then obtains strict native issued-attempt proof. A second immediate
+transaction revalidates the receipt, demand, admission, capacity digest,
+service epoch, descriptor, and proof before publishing the active claim and
+current assignment together. The former public
+`POST /v1/current-attempt-assignments` scheduler route does not exist.
 
 The query credential has only `GET /v1/identity`,
 `POST /v1/admission-verifications`, and
