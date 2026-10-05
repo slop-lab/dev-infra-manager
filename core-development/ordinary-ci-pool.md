@@ -93,21 +93,9 @@ The ordinary service JSON is strict schema `3`:
   "nativeGit": {
     "endpoint": "http://native-git:8080",
     "serviceId": "native-main",
-    "query": {
-      "username": "native-main",
-      "password": "replace-with-query-only-dependency-credential"
-    },
     "identity": {
       "username": "ordinary-identity",
       "password": "replace-with-identity-credential"
-    },
-    "attemptIssuer": {
-      "username": "ordinary-attempts",
-      "password": "replace-with-attempt-issuer-credential"
-    },
-    "resultReporter": {
-      "username": "ordinary-results",
-      "password": "replace-with-result-reporter-credential"
     }
   },
   "leaseSeconds": 60,
@@ -125,6 +113,10 @@ The ordinary service JSON is strict schema `3`:
 
 `listen` and `database` must equal the fixed deployment values. The native Git
 endpoint is exactly the Compose-network origin above and follows no redirect.
+It is not operator-selectable or derived from a request. Plaintext peer
+authentication is valid only while both services remain the sole members of
+the exclusive `dim-control-plane` bridge; the peer endpoint is not published as
+a shared-host trust claim.
 Ordinary `/readyz` validates only its immutable config snapshot, local database
 readability and durability, and local listener; it neither contacts native Git
 nor requires Project state. Every token and native-facing password is distinct,
@@ -192,17 +184,19 @@ wall-clock, and output bounds. Credential passwords are distinct base64url
 values of at least 32 characters. The library receives no Git, Docker,
 controller, or host-administration socket.
 
-Both mutation routes are additionally gated by an injected
-`NativeAdmissionSource`. A source is eligible for injection only after its
-adapter has authenticated and attested the configured native Git service. The
-interface returns canonical native values from `assertRegisteredPolicy` and
+Both mutation routes are additionally gated by the configured native Git HTTP
+`NativeAdmissionSource`. Tests may replace only its HTTP transport; no request,
+Project, or runtime configuration selects another source. The adapter lazily
+authenticates and attests the configured native Git service on the first
+mutation, bounded to five seconds, so central listener startup does not wait for
+native Git. The interface returns canonical native values from `assertRegisteredPolicy` and
 `assertIssuedAttempt`; the service parses those returned values again and
 persists them instead of the registrar or scheduler assertions. The production
-default source rejects both methods. Native Git now exposes the dedicated
-read-only policy and issued-attempt proof endpoints, but the central HTTP
-adapter is not implemented, so a standalone production server
-returns service unavailable before SQLite mutation. A source rejection is
-concealed as not found.
+adapter uses the dedicated read-only policy and issued-attempt proof endpoints,
+requires the exact role, ordered scope, service ID, fresh nonce, and complete
+tuple, follows no redirect, and performs no retry. A source rejection is
+concealed as not found, while an unavailable or malformed peer is service
+unavailable. Both outcomes precede SQLite mutation.
 
 The database uses SQLite `user_version = 3`, WAL, full synchronous durability,
 and tables dedicated to native admissions and current attempt assignments.
