@@ -206,6 +206,85 @@ prove that exact replay is idempotent and that a current zero-exit result may
 satisfy only a policy job explicitly classified `candidate-controlled`, while
 human approval and CAS remain independently required.
 
+For `CI-NATIVE-DELIVERY-001`, the future adapter gate MUST use the real native
+outbox, ordinary SQLite inbox/scheduler, two controller identities, native
+attempt API, ordinary reporter, and native terminal-status API. It MUST prove
+the exact event has no executable or authority-bearing field and that adding
+any image, argv, command, script, path, environment, mount, network, URL,
+resource, host, capacity, credential, or unknown field rejects before inbox
+mutation. Policy membership MUST admit bounded use of the global configured
+capacities without storing or accepting a per-Project eligible-assignment list.
+Candidate config, script, and image remain candidate-controlled provenance and
+MUST NOT be reported as trusted because the Project is admitted.
+
+Idempotency tests MUST crash or kill the responsible process after each of
+these durable boundaries: native event publication, ordinary inbox commit,
+claim-receipt commit, descriptor response, native attempt issuance, assignment
+plus claim commit, host-result plus report-outbox commit, native status commit,
+and ordinary release commit. Recovery MUST reuse the same event ID, host request
+ID, claim ID, issuance request ID, attempt ID, descriptor digest, and terminal
+event where applicable. The mandatory claim case kills ordinary CI after native
+issuance but before assignment commit; retry must reuse `claimId` as
+`issuanceRequestId`, obtain the same attempt, and create exactly one assignment
+and claim. No crash may execute one demand twice, replace an earlier result,
+lose an accepted report, or release capacity before durable cleanup evidence.
+The webhook replay case MUST withhold every native delivery acknowledgement,
+complete attempt `A1`, advance beyond seven days, prune all eligible detailed
+inbox/demand/claim/result rows, and replay both the original event ID and a new
+event ID with the same review/job tuple. Permanent `(eventId, eventDigest)` and
+`(reviewId, jobName, tupleDigest)` fences MUST return the original acceptance
+without creating demand `D2`, claim `C2`, or attempt `A2`. A changed digest
+MUST conflict.
+
+G1 tests MUST rotate admission after policy, expiry, revocation, and global
+capacity changes, and MUST restart ordinary CI with queued, preparing, active,
+and reported work. Old queued demand becomes terminal without requeue; a
+preparing receipt either resumes under the unchanged generation or revokes its
+issued attempt; every old or restart-observed active claim fences only its exact
+host/capacity. The same host may clear that fence only after exact owned-resource
+inspection and cleanup. Absent owned residue succeeds, while partial,
+mismatched, ambiguous, and foreign residue remains untouched and fenced. Other
+capacities continue to claim work.
+
+The API matrix MUST test missing/invalid authentication as `401`, every
+webhook/query/identity/issuer/reporter/admission/host role crossover as `403`,
+foreign scope as concealed `404`, stale or conflicting state as `409`, bounded
+store saturation as `429`, and unavailable native proof or database durability
+as `503`. Syntax, media type, and size denials are `400`, `415`, and `413`.
+Every case must prove no forbidden row, native evidence, runtime, or protected
+ref mutation. Exact event, claim, renewal, result, recovery, descriptor,
+issuance, proof, and report responses reject extra fields and redirects and
+remain within 64 KiB.
+`attemptIssuer` MUST be the only service credential accepted for descriptor
+derivation and for exact attempt issuance/revocation. It MUST be denied report,
+Git read/write, review inspection/approval, promotion, and administration.
+Identity, webhook, reporter, query, admission, host, reviewer, administrator,
+promoter, and unrelated scheduler credentials MUST be denied descriptor
+derivation.
+
+Schema tests MUST compare an empty-created final schema-3 database with its
+compiled manifest, then vary each table/index name, column order/type/
+nullability/default/primary-key position, foreign key, unique/partial index,
+and state check independently. Every variation, failed integrity check, failed
+foreign-key check, schema-less file, schema 1, schema 2, and the unreleased
+authority-only two-table schema 3 MUST be rejected from a read-only open before
+WAL, SHM, pragma, repair, or byte mutation. There is no migration acceptance
+case. Bound tests fill 10,000 nonterminal demands, each 100,000-row compact
+replay-fence table, 100,000 age-prunable terminal-detail rows, and 100,000 claim
+receipts. An unseen event requiring a new fence MUST receive `429` without
+eviction, while every known exact replay still receives its original acceptance
+at the cap. After seven days, pruning may remove only terminal dependent rows
+whose event and review-job fences exist and remain byte-for-byte unchanged.
+
+One end-to-end success MUST observe native event acknowledgement, one host
+claim, strict host reparse and exact descriptor equality, direct fixed argv,
+owned cleanup, durable report retry through an injected native outage, native
+terminal acknowledgement, and capacity release. Reviewer and promotion output
+must show `candidate-controlled` config/script/image/argv provenance. Human
+product/test review and exact final CAS remain separate required evidence. The
+same fixture must show that optional QEMU state never enters the native inbox,
+claim, report, or promotion path.
+
 The existing Gitea `ordinary-ci-pool-live` fixture is predecessor evidence and
 MUST NOT satisfy this gate. Shared-QEMU scheduler gates remain Gitea-only,
 report missing KVM as unavailable rather than passing, and MUST NOT run with

@@ -351,9 +351,10 @@ with its requirements and implementation before protected promotion.
 One ordinary admission is derived from operator/native Project membership and
 the protected policy. It binds the native Project and repository IDs,
 protected ref, policy and required-review/required-job-set revisions, required
-job names and their `candidate-controlled` evidence class, eligible capacities,
-and a fresh random public generation. It does not bind a protected-head job
-image, argv, script, or `.dim/ci/runner.yml` digest. An active byte-identical
+job names and their `candidate-controlled` evidence class, the digest of the
+ordinary service's complete global capacity configuration, and a fresh random
+public generation. It does not carry a per-Project assignment list or bind a
+protected-head job image, argv, script, or `.dim/ci/runner.yml` digest. An active byte-identical
 policy refresh retains its generation. Expiry, revocation, or any changed
 binding creates a new generation, even if a later policy is byte-identical. Old
 demand and claims remain durable but inactive and MUST NOT be rebound, renewed,
@@ -474,6 +475,192 @@ stale and cannot satisfy promotion. Logs and artifacts are diagnostic data and
 never substitute for the terminal record. The reviewer and promotion surfaces
 label this evidence `candidate-controlled`, show its config/script/image/argv
 provenance, and MUST NOT call it independent verification.
+
+**CI-NATIVE-DELIVERY-001:** The native ordinary delivery path is a bounded,
+durable protocol. It is a target and is not implemented. Native Git is the
+only review-event emitter, ordinary CI is the only inbox and scheduler, and a
+claiming host controller is the only executor. No Project has a persistent
+runner, worker, scheduler, or `eligibleAssignments` record. Every active
+admission uses the complete lexically sorted set of capacities from the
+ordinary service's operator-owned global configuration.
+
+Native Git MUST create one immutable outbox event for each currently required
+job when it creates an immutable review. It MUST persist the review and all of
+its events before returning success. Each event has this exact JSON shape:
+
+```json
+{
+  "schemaVersion": 1,
+  "type": "dim.native.review-job.available",
+  "eventId": "00000000-0000-4000-8000-000000000000",
+  "projectId": "project-a",
+  "repositoryId": "root",
+  "protectedRef": "refs/heads/main",
+  "reviewId": "review-id",
+  "expectedProtectedHead": "<complete Git object ID>",
+  "candidateCommit": "<complete Git object ID>",
+  "candidateTree": "<complete Git object ID>",
+  "policyRevision": "policy-1",
+  "requiredReviewRevision": "reviews-1",
+  "requiredJobSetRevision": "jobs-1",
+  "jobName": "source",
+  "evidenceClass": "candidate-controlled"
+}
+```
+
+The event contains no admission generation, descriptor, image, argv, script,
+path, environment, mount, network, URL, resource bound, host, capacity,
+credential, or arbitrary extension field. Its UUID is random and stable across
+delivery retries. Native Git sends it only to exact `POST /v1/native-events`
+with its webhook-only credential. It follows no redirect and retries a timeout,
+transport failure, or `5xx` with the same bytes and bounded exponential delay
+capped at 30 seconds. Exact replay receives the original acceptance result;
+changed reuse of an event ID conflicts. A `2xx` response is delivery
+acknowledgement only, not CI success. Native Git retains an undelivered event
+until acknowledgement and thereafter retains a compact `(eventId,
+eventDigest)` delivery tombstone without age-based pruning. It caps each
+repository at 10,000 undelivered events and 100,000 delivered tombstones. A
+known exact replay remains acknowledged when the tombstone store is full; a new
+review whose complete event set would exceed either cap fails with `429` before
+publishing the review or events.
+Review creation fails atomically before publishing either the review or any
+event if all required events cannot fit. Pruning never removes an undelivered
+event or a delivery tombstone.
+
+Ordinary CI authenticates the webhook role, attests the configured native
+service identity, and rereads current protected policy through native read-only
+proof before accepting the event. The authenticated event's Project,
+repository, protected ref, three policy revisions, required job, and evidence
+class MUST equal that proof and one live admission. The later descriptor request
+is the independent native check that the review and candidate tuple remain
+current; webhook handling has no descriptor authority.
+Acceptance writes the immutable event and one queued demand in the same SQLite
+transaction before returning `202`. It stores the matched admission generation
+with the demand. It never reads executable input from the event. An exact
+duplicate is idempotent even after completion; an event ID reused with different
+bytes conflicts. That transaction also writes two compact replay fences:
+`(eventId, eventDigest)` and `(reviewId, jobName, tupleDigest)`. `eventDigest`
+covers the exact canonical event bytes. `tupleDigest` is lowercase SHA-256 over
+the unframed ASCII domain `dim-native-review-job-tuple-v1` followed by the
+length-framed Project, repository, protected ref, review ID, expected head,
+candidate commit/tree, three policy revisions, job name, and evidence class in
+event order. Neither fence is age-prunable. A second event ID for the same
+review and job receives the original `202` only when `tupleDigest` matches; it
+creates no demand, claim, or attempt. A different tuple conflicts. An exact
+known replay remains idempotent even when either fence table is full. An unseen
+event requiring either new fence receives `429` before inbox mutation when that
+table is full. It cannot replace, reopen, or reprioritize demand.
+
+A host calls exact `POST /v1/host-claims` with only schema version `1`, a fresh
+UUID `requestId`, its configured `hostId`, and one configured `capacity`. The
+host credential is bound to that host and its configured capacities. Under one
+capacity serializer, ordinary CI selects the oldest queued demand for the
+current admission generation and first commits a durable claim receipt with a
+new random UUID `claimId`. The tuple `(hostId, capacity, requestId)` uniquely
+identifies that receipt. The service then obtains the strict descriptor from
+native Git using only the receipt's review/job tuple, current admission
+generation, and the selected capacity's runner base and bounds, authenticated
+only with `attemptIssuer`. That credential may derive this descriptor and issue
+or revoke its exact receipt-bound attempt; it cannot report results, read Git,
+approve, promote, or administer. Webhook, query, identity, reporter, admission,
+host, reviewer, administrator, promoter, and unrelated scheduler credentials
+cannot derive a descriptor. The service reuses the same `claimId`
+byte-for-byte as native Git's `issuanceRequestId` and asks native Git to issue
+the attempt. After obtaining the issued-attempt proof, ordinary CI
+commits the exact assignment and active claim together in one transaction. A
+claim response contains only schema version, service ID, request ID, claim ID,
+event ID, review ID, attempt ID, admission generation, host, capacity, lease
+expiry, complete descriptor, and descriptor digest.
+
+The receipt state machine is `preparing -> active -> reported -> released` or
+`preparing|active -> recovering -> released`; a no-work request has terminal
+receipt state `empty`. Demand is
+`queued -> preparing -> claimed -> reported -> completed`; it may instead end
+as `superseded`, `cancelled`, or `failed`. An attempt assignment becomes visible
+to verifier queries only in the transaction that changes `preparing` to
+`active`. A crash before the receipt commit creates nothing. A crash after that
+commit and before native issuance resumes the same receipt. A crash after
+issuance replays the same issuance request ID and receives the same native
+attempt. A crash after the assignment transaction returns that same claim to a
+retry with the same host request ID. A different request cannot take a demand
+that has a nonterminal receipt.
+
+Hosts renew through exact `POST /v1/host-claim-renewals` with schema version,
+request ID, host, capacity, claim ID, attempt ID, and descriptor digest. Renewal
+is accepted only for the exact active claim and extends a finite lease by the
+configured lease duration. The host derives its local monotonic deadline from
+the request start and returned duration. Uncertain or denied renewal stops the
+job, ownership-inspects and reaps its exact resources, and enters recovery. It
+MUST NOT run or claim another job on that capacity first.
+
+After execution and ownership-safe cleanup, the host sends exact `POST
+/v1/host-results` using its host credential. The strict body contains schema
+version, a fresh UUID request ID, claim ID, complete native schema-2 terminal
+event, and `cleanupComplete: true`. Ordinary CI requires the authenticated host,
+capacity, attempt, generation, descriptor, and terminal tuple to equal the
+active claim. It commits the immutable terminal report and report-outbox row in
+one transaction before returning `202`. Exact replay is idempotent; changed
+reuse conflicts. The ordinary reporter retries the same native terminal event
+with only its result-reporter credential. Native Git exact replay is
+idempotent. Only native acknowledgement changes `reported` to `completed` and
+releases the claim. A terminal native denial records `failed` evidence and may
+release only after the stored cleanup acknowledgement; it never becomes
+successful evidence. Logs and artifacts remain outside this protocol.
+
+**Generation and recovery invariant G1:** expiry, revocation, policy change,
+capacity-config change, or ordinary-service restart MUST NOT make an old claim
+eligible for reuse. Queued old-generation demand becomes `superseded` and is
+never rebound. A preparing receipt resumes only while its exact generation is
+current; otherwise the scheduler revokes any issued native attempt and ends the
+receipt. Every active old-generation or restart-observed claim changes to
+`recovering`, and its `(hostId, capacity)` is fenced. Only the same authenticated
+host may acknowledge exact ownership inspection and cleanup through `POST
+/v1/host-recoveries`, naming claim, attempt, descriptor digest, inspected
+resource identity, and `cleanupComplete: true`. Ordinary CI releases that fence
+only after matching the stored claim and durably recording the acknowledgement.
+An absent exact owned resource is successful recovery. A foreign, partial,
+malformed, or ambiguous resource remains untouched and fenced. Recovery never
+requeues the old demand or revives its attempt. Other capacities remain usable.
+
+The schema-3 SQLite database is the sole ordinary scheduling authority. The
+final schema has exact tables for admissions, native event inbox and
+permanent event and review-job replay fences, demand, claim request receipts,
+claims and capacity fences, current attempt assignments, immutable host results,
+report outbox, and service restart epochs. Foreign keys, unique tuple constraints, state `CHECK` constraints, and
+indexes needed by oldest-demand selection are part of the schema. Startup MUST
+open an existing database read-only first and compare `user_version`, every
+table and index name, column name/order/type/nullability/default/primary-key
+position, foreign key, unique constraint, and `CHECK` SQL against the compiled
+schema. It MUST also run `PRAGMA integrity_check` and `PRAGMA foreign_key_check`.
+Only an exact schema-3 match may then be opened read/write and switched to WAL
+with `synchronous=FULL`. The currently unreleased partial schema-3 database,
+including its two-table authority-only shape, is incompatible and MUST be
+rejected byte-for-byte unchanged. It MUST NOT be altered, inferred, migrated,
+or accepted by version number alone.
+
+Persistent state is bounded to 10,000 combined queued, preparing, claimed, and
+reported demands, 100,000 event replay fences, 100,000 review-job replay
+fences, 100,000 age-prunable terminal detail records, and 100,000 claim request
+receipts. Saturation rejects new events or claim requests without
+evicting nonterminal demand, claims, fences, assignments, results, or report
+outbox rows. Event and review-job replay fences are never age-pruned. Detailed
+inbox, demand, claim, assignment, result, report-outbox, terminal-detail, and
+receipt rows with no live dependency may be pruned after seven days only after
+both compact replay fences exist and survive the pruning transaction. The
+service never evicts a replay fence or live work to admit newer work.
+
+All protocol routes reject query parameters, bodies over 64 KiB, content types
+other than exact `application/json`, unknown or missing fields, noncanonical
+identifiers, and alternate methods or paths. Missing or invalid authentication
+returns `401`; authenticated role crossover returns `403`; foreign Project,
+repository, host, capacity, review, event, receipt, claim, or attempt returns
+`404` without tuple disclosure; stale generation, changed event/request reuse,
+wrong state, tuple drift, lease loss, or live fence returns `409`; a full bounded
+store returns `429`; and inactive service state, database durability failure,
+or unavailable required native proof returns `503`. No denial creates or
+changes an inbox, demand, receipt, attempt, assignment, claim, result, outbox,
+or protected ref. Native proof rejection is concealed as `404`; dependency
+failure is `503`.
 
 Protected approval remains a substantive human review, not a mechanical check
 for a green status. Product maintainers review changed requirements,
