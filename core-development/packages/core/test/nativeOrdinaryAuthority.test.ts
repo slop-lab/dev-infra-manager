@@ -175,7 +175,8 @@ describe("native ordinary authority", () => {
       nativeGit: {
         endpoint: "http://native-git:8080",
         serviceId: "native-main",
-        identity: { username: "ordinary-identity", password: "identity-secret-00000000000000000000" }
+        identity: { username: "ordinary-identity", password: "identity-secret-00000000000000000000" },
+        attemptIssuer: { username: "ordinary-attempts", password: "attempt-secret-000000000000000000000" }
       },
       credentials: {
         webhook: { username: "native-events", password: "webhook-secret-000000000000000000000" },

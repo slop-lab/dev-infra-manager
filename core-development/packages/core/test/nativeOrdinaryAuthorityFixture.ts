@@ -36,6 +36,11 @@ export const authorityCredentials = {
   scheduler: { username: "ordinary-scheduler", password: "scheduler-secret-0000000000000000" }
 } as const;
 
+export const nativeGitAttemptIssuerCredential = {
+  username: "ordinary-attempts",
+  password: "attempt-secret-000000000000000000000"
+} as const;
+
 export type AuthorityFixture = {
   readonly database: string;
   readonly endpoint: string;
@@ -65,7 +70,8 @@ export async function startAuthority(options: StartAuthorityOptions = {}): Promi
     nativeGit: {
       endpoint: "http://native-git:8080",
       serviceId: "native-main",
-      identity: options.nativeGitIdentity ?? nativeGitIdentityCredential
+      identity: options.nativeGitIdentity ?? nativeGitIdentityCredential,
+      attemptIssuer: nativeGitAttemptIssuerCredential
     },
     credentials: authorityCredentials,
     hosts: options.hosts ?? [{ hostId: "host-a", capacities: [{ capacity: "primary", runnerBaseImage, bounds }] }]

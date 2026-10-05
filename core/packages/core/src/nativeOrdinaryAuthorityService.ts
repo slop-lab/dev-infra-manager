@@ -183,7 +183,8 @@ function webhookAuthentication(
     config.credentials.registrar,
     config.credentials.query,
     config.credentials.scheduler,
-    config.nativeGit.identity
+    config.nativeGit.identity,
+    config.nativeGit.attemptIssuer
   ];
   return knownCredentials.some((credential) => authorized(request, credential)) ? "wrong-role" : "invalid";
 }
