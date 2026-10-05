@@ -281,9 +281,10 @@ dim installer install control-plane --config FILE
 
 The command installs or updates one Docker Compose v2 project named
 `dim-control-plane`. It contains exactly two long-running services:
-`native-git`, which owns native Git transport and review evidence, and
-`ordinary-ci`, which owns ordinary CI admission, webhook demand, queueing, and
-leases. It MUST NOT install Gitea, a browser UI, a reverse proxy, a runner
+`native-git`, which owns native Git transport, review evidence, and the durable
+review-event outbox, and `ordinary-ci`, which owns ordinary CI admission,
+webhook inbox, demand, queueing, claim receipts, leases, and report retry. It
+MUST NOT install Gitea, a browser UI, a reverse proxy, a runner
 daemon, or a Project-specific service or image. `@slop-lab/dim-cli` MUST NOT
 implement, proxy, or alias this operation.
 
@@ -440,8 +441,9 @@ The installed services therefore remain an idle, empty control-plane bundle.
 The later adapter MUST separate operator Project admission from candidate job
 selection. Admission binds one native Git Project/repository, protected ref,
 policy and required-review/required-job-set revisions, required job names and
-their `candidate-controlled` evidence class, eligible operator capacity, and
-admission generation. The exact candidate commit/tree then selects schema-2
+their `candidate-controlled` evidence class, the ordinary service's global
+operator capacity-config digest, and admission generation. It carries no
+per-Project capacity list. The exact candidate commit/tree then selects schema-2
 `.dim/ci/runner.yml`, script blob, normalized fixed argv, and digest-pinned
 disposable image under `CI-NATIVE-CANDIDATE-JOB-001`. Those candidate bytes are
 unreviewed execution input, not admission authority or independent
@@ -499,7 +501,7 @@ The installer then runs the native image's `/usr/local/bin/dim-service
 check-bundle-config /run/native.json /run/ordinary.json` in the same restricted
 one-shot shape with both config snapshots mounted read-only. It requires exact
 reciprocal service IDs, fixed Compose-network endpoints, byte-identical paired
-query/identity/attempt-issuer/result-reporter credentials, and global
+webhook/query/identity/attempt-issuer/result-reporter credentials, and global
 credential distinctness. Until the native Project adapter exists, it also
 requires an empty native repository registry, no Project-scoped native
 identity, and no ordinary Project admission in config. This command performs

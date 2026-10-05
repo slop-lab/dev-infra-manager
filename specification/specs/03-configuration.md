@@ -183,8 +183,7 @@ non-symbolic-link, DIM-user-owned mode-`0600` JSON file with this exact schema:
     "endpoint": "https://ci-control.example",
     "serviceId": "ordinary-main",
     "hostToken": "replace-with-host-token",
-    "admissionToken": "replace-with-admission-token",
-    "resultToken": "replace-with-result-token"
+    "admissionToken": "replace-with-admission-token"
   },
   "capacities": {
     "primary": {
@@ -211,14 +210,14 @@ mismatch, and mutable or unassigned endpoints fail before controller capacity
 registration or runtime mutation.
 
 The native Git credential is host-scoped read/attestation authority, not a
-reviewer, promoter, or storage-administrator identity. Ordinary admission,
-claim, and result authorities are distinct; `hostToken` may claim and renew
-only this host's named capacities, `admissionToken` may attest operator-approved
-Project membership and protected required-job policy, not review of
-candidate-selected job bytes,
-but cannot claim or report, and `resultToken` may report only attempts assigned
-to this host. None may enter a workspace, job, image, Compose bundle, log, or
-Project state. Controller startup validates both authenticated service
+reviewer, promoter, or storage-administrator identity. Ordinary admission and
+host authorities are distinct. `hostToken` may claim, renew, recover, and
+submit a result only for this host's named capacities. `admissionToken` may
+attest operator-approved Project membership and protected required-job policy,
+not review of candidate-selected job bytes, but cannot claim or report. The
+central service's separate native reporter credential, not a host credential,
+submits accepted durable evidence to native Git. None may enter a workspace,
+job, image, Compose bundle, log, or Project state. Controller startup validates both authenticated service
 identities before advertising capacity. Failure closes ordinary admission and
 claiming but does not fall back to a local or Project-scoped runner.
 
