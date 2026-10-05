@@ -149,12 +149,8 @@ describe("DIM native Git review outbox integrity", () => {
           reviewPolicies: repository.reviewPolicies?.map((policy) => ({ ...policy, requiredJobNames: ["1source"] }))
         }
       : repository);
-    const identities = config.identities.map((identity) => identity.role === "ci" && identity.jobName === "source"
-      ? { ...identity, jobName: "1source" }
-      : identity);
-
     // When / Then
-    expect(() => parseNativeGitServiceConfig({ ...config, repositories, identities })).toThrow();
+    expect(() => parseNativeGitServiceConfig({ ...config, repositories })).toThrow();
   });
 
   it("rejects a digest-mismatched delivery marker without rewriting it", async () => {

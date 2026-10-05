@@ -87,10 +87,6 @@ export async function nativeGitReviewFixture(
     repositories: [repository, { projectId: "project-b", repositoryId: "source" }],
     identities: [
       { role: "reader", username: "ci-a", password: "ci-a-secret-value", projectId: "project-a", repositoryIds: ["source"] },
-      { role: "ci", username: "source-ci", password: "source-ci-secret", projectId: "project-a", repositoryIds: ["source"], jobName: "source" },
-      { role: "ci", username: "security-ci", password: "security-ci-secret", projectId: "project-a", repositoryIds: ["source"], jobName: "security" },
-      { role: "ci", username: "foreign-ci", password: "foreign-ci-secret", projectId: "project-b", repositoryIds: ["source"], jobName: "source" },
-      { role: "scheduler", username: "scheduler-a", password: "scheduler-a-secret", projectId: "project-a", repositoryIds: ["source"] },
       { role: "promoter", username: "promoter-a", password: "promoter-a-secret", projectId: "project-a", repositoryIds: ["source"] },
       { role: "writer", username: "writer-a", password: "writer-a-secret-1", projectId: "project-a", repositoryIds: ["source"], workspaceId: "workspace-a" },
       { role: "reviewer", username: "reviewer-a-user", password: "reviewer-a-secret", projectId: "project-a", repositoryIds: ["source"], reviewerId: "reviewer-a" },

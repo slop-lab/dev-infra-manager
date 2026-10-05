@@ -61,9 +61,7 @@ export async function candidateExecutionFixture(): Promise<CandidateExecutionFix
       }]
     }],
     identities: [
-      { role: "reviewer", username: "owner", password: "owner-secret-value", projectId: "project-a", repositoryIds: ["source"], reviewerId: "owner" },
-      { role: "ci", username: "source-ci", password: "source-secret-value", projectId: "project-a", repositoryIds: ["source"], jobName: "source" },
-      { role: "scheduler", username: "scheduler", password: "scheduler-secret", projectId: "project-a", repositoryIds: ["source"] }
+      { role: "reviewer", username: "owner", password: "owner-secret-value", projectId: "project-a", repositoryIds: ["source"], reviewerId: "owner" }
     ]
   });
   const request = await requestFor(source);

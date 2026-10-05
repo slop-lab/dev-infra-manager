@@ -189,5 +189,26 @@ describe("ordinary admission verifier HTTP client", () => {
         repositoryIds: ["source"]
       }]
     })).toThrow(/distinct/);
+    expect(() => parseNativeGitServiceConfig({
+      ...base,
+      identities: [{
+        role: "scheduler",
+        username: "old-scheduler",
+        password: "old-scheduler-secret",
+        projectId: "project-a",
+        repositoryIds: ["source"]
+      }]
+    })).toThrow();
+    expect(() => parseNativeGitServiceConfig({
+      ...base,
+      identities: [{
+        role: "ci",
+        username: "old-reporter",
+        password: "old-reporter-secret",
+        projectId: "project-a",
+        repositoryIds: ["source"],
+        jobName: "source"
+      }]
+    })).toThrow();
   });
 });

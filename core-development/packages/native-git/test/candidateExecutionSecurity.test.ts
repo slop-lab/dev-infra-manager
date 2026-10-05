@@ -52,10 +52,7 @@ describe("native candidate execution boundary hardening", () => {
       repositories: fixture.config.repositories.map((repository) => ({
         ...repository,
         reviewPolicies: repository.reviewPolicies?.map((policy) => ({ ...policy, requiredJobNames: ["true"] }))
-      })),
-      identities: fixture.config.identities.map((identity) => identity.role === "ci"
-        ? { ...identity, jobName: "true" }
-        : identity)
+      }))
     };
 
     // When / Then
