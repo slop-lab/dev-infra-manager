@@ -75,6 +75,26 @@ Example schema-1 configuration:
   "storageRoot": "/var/lib/dim/native-git",
   "gitExecutable": "/usr/bin/git",
   "gitVersion": "2.43.0",
+  "ordinaryCi": {
+    "endpoint": "http://ordinary-ci:8080",
+    "serviceId": "ordinary-main",
+    "query": {
+      "username": "native-main",
+      "password": "replace-with-query-only-dependency-credential"
+    },
+    "identity": {
+      "username": "ordinary-identity",
+      "password": "replace-with-identity-credential"
+    },
+    "attemptIssuer": {
+      "username": "ordinary-attempts",
+      "password": "replace-with-attempt-issuer-credential"
+    },
+    "resultReporter": {
+      "username": "ordinary-results",
+      "password": "replace-with-result-reporter-credential"
+    }
+  },
   "repositories": [{
     "projectId": "project-a",
     "repositoryId": "root",
@@ -156,6 +176,25 @@ Example schema-1 configuration:
   ]
 }
 ```
+
+`ordinaryCi.endpoint` is exactly the private Compose origin shown above. All
+four ordinary-service usernames and passwords must be pairwise distinct and
+must not equal any native Git identity username or password. At startup the
+executable uses only `query` to authenticate `GET /v1/identity`; the response
+must attest schema 1, service ID `ordinary-main`, role `native-query`, and the
+exact ordered scope `admission:read`, `attempt:read`. The verifier is injected
+only after that attestation succeeds. An absent `ordinaryCi` object preserves
+the rejecting verifier, so CI attempt, result, and promotion operations remain
+fail closed.
+
+Verification uses exact `POST /v1/admission-verifications` and
+`POST /v1/current-attempt-verifications` requests. Each request carries a fresh
+UUID nonce and the complete descriptor admission or current-attempt tuple. A
+successful `200 application/json` response must set `Cache-Control: no-store`,
+identify the pinned service, authorize the request, and echo the nonce and
+entire tuple exactly. Responses are limited to 64 KiB. Redirects, malformed or
+extra JSON fields, replayed nonces, non-200 statuses, tuple differences,
+timeouts, and transport errors reject. The client performs no retry.
 
 Trusted host setup calls `initializeNativeRepository` before starting the
 service. Registration derives storage only from validated Project and
