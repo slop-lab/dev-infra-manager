@@ -22,6 +22,10 @@ export type NativeGitAdmissionConfig = {
     readonly username: string;
     readonly password: string;
   };
+  readonly attemptIssuer: {
+    readonly username: string;
+    readonly password: string;
+  };
 };
 
 export interface NativeAdmissionSource {

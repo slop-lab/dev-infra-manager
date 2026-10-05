@@ -41,7 +41,11 @@ export function validateNativeOrdinaryAuthorityConfig(
   if (config.nativeGit.endpoint !== "http://native-git:8080" || config.nativeGit.serviceId !== "native-main") {
     throw new UserError("native ordinary authority native Git identity is invalid");
   }
-  const credentials = [...Object.values(config.credentials), config.nativeGit.identity];
+  const credentials = [
+    ...Object.values(config.credentials),
+    config.nativeGit.identity,
+    config.nativeGit.attemptIssuer
+  ];
   for (const credential of credentials) {
     authorityIdentifier(credential.username, "credential username");
     if (!/^[A-Za-z0-9_-]{32,}$/.test(credential.password)) {

@@ -29,6 +29,36 @@ describe("native ordinary authority schema manifest", () => {
     expect(start).toThrow(/credentials must be distinct/);
   });
 
+  it("rejects an attempt issuer credential reused from native identity", async () => {
+    // Given
+    const root = await mkdtemp(join(tmpdir(), "dim-native-issuer-credential-"));
+    roots.push(root);
+    const value = config(join(root, "ordinary.sqlite3"));
+
+    // When
+    const start = () => configuredNativeOrdinaryAuthorityServer({
+      ...value,
+      nativeGit: { ...value.nativeGit, attemptIssuer: value.nativeGit.identity }
+    });
+
+    // Then
+    expect(start).toThrow(/credentials must be distinct/);
+  });
+
+  it("rejects a native Git service identity other than the fixed Compose service", async () => {
+    // Given
+    const root = await mkdtemp(join(tmpdir(), "dim-native-service-identity-"));
+    roots.push(root);
+    const value = config(join(root, "ordinary.sqlite3"));
+    Reflect.set(value.nativeGit, "serviceId", "foreign-native");
+
+    // When
+    const start = () => configuredNativeOrdinaryAuthorityServer(value);
+
+    // Then
+    expect(start).toThrow(/native Git identity is invalid/);
+  });
+
   it("rejects the prior two-table schema-3 database byte-for-byte before WAL", async () => {
     // Given
     const root = await mkdtemp(join(tmpdir(), "dim-native-old-schema3-"));
@@ -107,7 +137,8 @@ function config(database: string) {
     nativeGit: {
       endpoint: "http://native-git:8080",
       serviceId: "native-main",
-      identity: { username: "ordinary-identity", password: "identity-secret-00000000000000000000" }
+      identity: { username: "ordinary-identity", password: "identity-secret-00000000000000000000" },
+      attemptIssuer: { username: "ordinary-attempts", password: "attempt-secret-000000000000000000000" }
     },
     credentials: {
       webhook: { username: "native-events", password: "webhook-secret-000000000000000000000" },
