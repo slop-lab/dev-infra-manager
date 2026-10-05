@@ -214,9 +214,9 @@ promoter, Git transport, or ordinary query credential.
 
 The target ordinary attempt-issuer credential is accepted only on the exact
 review-scoped descriptor, attempt issuance, and attempt revocation paths. The
-currently additive package calls this its scheduler role; binding the bundle's
-configured `ordinaryCi.attemptIssuer` credential to that same narrow role is
-unimplemented target wiring, not shipped integration. Descriptor derivation
+additive package authenticates the bundle's configured
+`ordinaryCi.attemptIssuer` as a distinct internal service principal rather than
+a native Git scheduler, reviewer, or administrator identity. Descriptor derivation
 requires the strict bounded request described below. Issuance requires the
 strict request already described below, and `issuanceRequestId` is the ordinary
 claim receipt UUID. Exact replay while that attempt remains current returns the
@@ -250,15 +250,15 @@ Repositories may declare protected-ref review policies with exact policy,
 required-review, and required-job-set revisions; required job names; baseline
 reviewer IDs; and path-prefix rules that add reviewers. Reviewer and administrator credentials
 remain Project/repository scoped. Reviewers have no Git write role.
-Administrators can inspect and revoke evidence but cannot approve. The current
-additive package calls its narrow descriptor/issue/revoke identity `scheduler`.
-In the unimplemented control-plane target, only the configured
-`ordinaryCi.attemptIssuer` credential occupies that role; no separately
-configured repository scheduler identity is accepted for those routes. The role
+Administrators can inspect and revoke evidence but cannot approve. Only the
+configured `ordinaryCi.attemptIssuer` credential occupies the narrow
+descriptor/issue/revoke role; separately configured repository scheduler and CI
+identity variants are rejected as obsolete schema-2 input. The role
 cannot use smart Git transport, report results, approve, promote, or administer.
-CI credentials additionally bind one job name and cannot report another job;
-promoter credentials have no Git transport role and cannot bypass the checked
-promotion operation.
+The result reporter has no client-selected Project, repository, or job scope;
+it can report only a live required job's exact current issued descriptor and
+host assignment. Promoter credentials have no Git transport role and cannot
+bypass the checked promotion operation.
 
 HTTP repository paths contain only validated Project and repository IDs. The
 service resolves them through the startup registry and constructs
@@ -363,8 +363,9 @@ API compatibility. One immutable mode-`0600` record may exist for each review,
 job, and attempt; an exact replay is idempotent and conflicting evidence for the
 same attempt is rejected. Startup validates record schema, digest, path, mode,
 and ownership. Promotion considers only the current durable, unrevoked
-scheduler-issued attempt for every currently required job and requires each to
-be `success` with `exited/0` from the currently configured identity for that job.
+attempt-issuer-created attempt for every currently required job and requires
+each to be `success` with `exited/0` from the configured
+`ordinaryCi.resultReporter` credential.
 
 For native ordinary CI, the issued attempt and completed event additionally
 bind evidence class `candidate-controlled` and the canonical execution
@@ -423,7 +424,7 @@ stale reviews conflict. Under the protected-ref serializer, the service checks
 status before loading the bounded candidate config and script blobs and checks
 status again afterward. The second check detects a concurrent proposal
 fast-forward, because smart Git receive does not participate in that serializer.
-Unchanged review and scheduler inputs deterministically return the same
+Unchanged review and attempt-issuer inputs deterministically return the same
 `{reviewId, descriptor, digest}` tuple.
 
 Native ordinary success is evidence that the selected candidate-controlled
@@ -496,11 +497,12 @@ denials remain in the transport gate.
 The ordinary descriptor driver additionally proves exact pending-review replay,
 strict body rejection, foreign-scope concealment, wrong-role denial, no attempt
 or status writes, stale proposal rejection, and a deterministic proposal move
-during candidate blob loading. Scheduler credentials are also denied both
-upload-pack discovery and RPC while reader and writer fetch remain allowed. The
-target role matrix proves `attemptIssuer` can derive a descriptor and issue or
+during candidate blob loading. The attempt-issuer credential is also denied
+both upload-pack discovery and RPC while reader and writer fetch remain allowed.
+The role matrix proves `attemptIssuer` can derive a descriptor and issue or
 revoke only its exact attempt, while identity, webhook, reporter, query, host,
-reviewer, administrator, and promoter credentials cannot derive one.
+reviewer, administrator, promoter, and obsolete generic scheduler/CI
+credentials cannot derive one.
 The ordinary-authority review-event driver compares the real HTTP proof bytes
 with the canonical event retained by the immutable review envelope, compares
 review bytes and protected/proposal refs before and after, and proves fabricated,
