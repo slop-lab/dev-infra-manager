@@ -11,6 +11,10 @@ import {
 } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityService.js";
 import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
 import type { NativeGitAttemptIssuerClient } from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
+import {
+  NativeGitResultReporterUnavailableError,
+  type NativeGitResultReporterClient
+} from "../../../../core/packages/core/src/nativeGitResultReporter.js";
 import { createNodeAdmissionVerifierHttpClient } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import { createOrdinaryAdmissionVerifier } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import { descriptorDigest } from "../../../../core/packages/native-git/src/candidate-execution.js";
@@ -46,6 +50,11 @@ export const nativeGitAttemptIssuerCredential = {
   password: "attempt-secret-000000000000000000000"
 } as const;
 
+export const nativeGitResultReporterCredential = {
+  username: "ordinary-results",
+  password: "result-secret-0000000000000000000000"
+} as const;
+
 export type AuthorityFixture = {
   readonly database: string;
   readonly endpoint: string;
@@ -61,8 +70,11 @@ export type StartAuthorityOptions = {
   readonly hosts?: NativeOrdinaryAuthorityConfig["hosts"];
   readonly nativeGitIdentity?: NativeOrdinaryCredential;
   readonly nativeGitAttemptIssuer?: NativeOrdinaryCredential;
+  readonly nativeGitResultReporter?: NativeOrdinaryCredential;
   readonly nativeGitHttpClient?: NativeGitAdmissionHttpClient;
   readonly attemptIssuerClient?: NativeGitAttemptIssuerClient;
+  readonly resultReporterClient?: NativeGitResultReporterClient;
+  readonly useConfiguredResultReporter?: boolean;
 };
 
 export async function startAuthority(options: StartAuthorityOptions = {}): Promise<AuthorityFixture> {
@@ -79,7 +91,8 @@ export async function startAuthority(options: StartAuthorityOptions = {}): Promi
       endpoint: "http://native-git:8080",
       serviceId: "native-main",
       identity: options.nativeGitIdentity ?? nativeGitIdentityCredential,
-      attemptIssuer: options.nativeGitAttemptIssuer ?? nativeGitAttemptIssuerCredential
+      attemptIssuer: options.nativeGitAttemptIssuer ?? nativeGitAttemptIssuerCredential,
+      resultReporter: options.nativeGitResultReporter ?? nativeGitResultReporterCredential
     },
     credentials: authorityCredentials,
     hosts: options.hosts ?? [
@@ -92,7 +105,16 @@ export async function startAuthority(options: StartAuthorityOptions = {}): Promi
   const dependencies = {
     clock: { now: options.now ?? Date.now },
     nativeGitHttpClient: options.nativeGitHttpClient ?? source.httpClient,
-    ...(options.attemptIssuerClient === undefined ? {} : { nativeGitAttemptIssuerClient: options.attemptIssuerClient })
+    ...(options.attemptIssuerClient === undefined ? {} : { nativeGitAttemptIssuerClient: options.attemptIssuerClient }),
+    ...(options.useConfiguredResultReporter === true
+      ? {}
+      : {
+          nativeGitResultReporterClient: options.resultReporterClient ?? {
+            async send() {
+              throw new NativeGitResultReporterUnavailableError();
+            }
+          }
+        })
   };
   const server = configuredNativeOrdinaryAuthorityServer(config, dependencies);
   server.listen(0, "127.0.0.1");

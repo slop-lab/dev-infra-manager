@@ -45,6 +45,22 @@ describe("native ordinary authority schema manifest", () => {
     expect(start).toThrow(/credentials must be distinct/);
   });
 
+  it("rejects a result reporter credential reused from the attempt issuer", async () => {
+    // Given
+    const root = await mkdtemp(join(tmpdir(), "dim-native-reporter-credential-"));
+    roots.push(root);
+    const value = config(join(root, "ordinary.sqlite3"));
+
+    // When
+    const start = () => configuredNativeOrdinaryAuthorityServer({
+      ...value,
+      nativeGit: { ...value.nativeGit, resultReporter: value.nativeGit.attemptIssuer }
+    });
+
+    // Then
+    expect(start).toThrow(/credentials must be distinct/);
+  });
+
   it("rejects a host token reused from a non-host role", async () => {
     // Given
     const root = await mkdtemp(join(tmpdir(), "dim-native-host-credential-"));
@@ -155,7 +171,8 @@ function config(database: string) {
       endpoint: "http://native-git:8080",
       serviceId: "native-main",
       identity: { username: "ordinary-identity", password: "identity-secret-00000000000000000000" },
-      attemptIssuer: { username: "ordinary-attempts", password: "attempt-secret-000000000000000000000" }
+      attemptIssuer: { username: "ordinary-attempts", password: "attempt-secret-000000000000000000000" },
+      resultReporter: { username: "ordinary-results", password: "result-secret-0000000000000000000000" }
     },
     credentials: {
       webhook: { username: "native-events", password: "webhook-secret-000000000000000000000" },
