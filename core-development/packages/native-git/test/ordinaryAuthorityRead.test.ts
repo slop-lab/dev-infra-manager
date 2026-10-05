@@ -38,7 +38,7 @@ describe("native Git ordinary authority reads", () => {
       schemaVersion: 1,
       serviceId: "native-main",
       role: "ordinary-authority-reader",
-      scope: ["policy:read", "attempt:read"]
+      scope: ["policy:read", "review-event:read", "attempt:read"]
     });
     expect(policy.status).toBe(200);
     expect(policy.headers.get("cache-control")).toBe("no-store");

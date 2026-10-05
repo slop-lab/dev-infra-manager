@@ -34,6 +34,12 @@ export type ReviewOutboxEntry = {
   readonly bytes: string;
 };
 
+export type ReviewOutboxSelector = {
+  readonly reviewId: string;
+  readonly eventId: string;
+  readonly jobName: string;
+};
+
 export type ReviewStoreOptions = {
   readonly faults?: ReviewPublicationFaults;
   readonly maximumUndeliveredEvents?: number;
@@ -42,6 +48,7 @@ export type ReviewStoreOptions = {
 export type ReviewStore = {
   saveReview(review: ReviewObject): Promise<ReviewObject>;
   readReview(reviewId: string): Promise<ReviewObject | undefined>;
+  readOutboxEvent(selector: ReviewOutboxSelector): Promise<ReviewOutboxEntry | undefined>;
   readOutbox(maximumEntries: number): Promise<readonly ReviewOutboxEntry[]>;
   saveApproval(input: Omit<ReviewApproval, "approvalId" | "approvedAt" | "schemaVersion">): Promise<ReviewApproval>;
   readApprovals(reviewId: string): Promise<readonly ReviewApproval[]>;
@@ -136,6 +143,18 @@ export function createReviewStore(repositoryPath: string, options: ReviewStoreOp
         if (isCode(error, "ENOENT")) return undefined;
         throw error;
       }
+    },
+    async readOutboxEvent(selector) {
+      let envelope: ReviewEnvelope;
+      try {
+        envelope = await readEnvelope(join(proposalRoot, `${selector.reviewId}.json`));
+      } catch (error) {
+        if (isCode(error, "ENOENT")) return undefined;
+        throw error;
+      }
+      const event = envelope.events.find((candidate) => candidate.eventId === selector.eventId
+        && candidate.reviewId === selector.reviewId && candidate.jobName === selector.jobName);
+      return event === undefined ? undefined : { event, bytes: `${JSON.stringify(event)}\n` };
     },
     async readOutbox(maximumEntries) {
       if (!Number.isInteger(maximumEntries) || maximumEntries < 1 || maximumEntries > MAX_OUTBOX_ENUMERATION) {

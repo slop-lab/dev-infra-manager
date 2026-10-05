@@ -5,6 +5,7 @@ import type { OrdinaryAuthorityAuthenticator } from "./auth.js";
 import type { NativeGitServiceConfig } from "./config.js";
 import { createJobAttemptStore } from "./job-attempt-store.js";
 import { refSerializationKey, type RefSerializer } from "./ref-serializer.js";
+import { createReviewStore } from "./review-store.js";
 import {
   findPolicy,
   policyDigest,
@@ -16,7 +17,7 @@ import {
 const MAX_BODY_BYTES = 64 * 1024;
 const identifier = "[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?";
 const routePattern = new RegExp(
-  `^/v1/projects/(${identifier})/repositories/(${identifier})/ordinary-authority/(policy|current-attempt)$`
+  `^/v1/projects/(${identifier})/repositories/(${identifier})/ordinary-authority/(policy|review-event|current-attempt)$`
 );
 const requestId = z.string().uuid();
 const policyRequestSchema = z.object({
@@ -31,10 +32,18 @@ const currentAttemptRequestSchema = z.object({
   jobName: z.string().regex(new RegExp(`^${identifier}$`)),
   attemptId: z.string().uuid()
 }).strict().readonly();
+const reviewEventRequestSchema = z.object({
+  schemaVersion: z.literal(1),
+  requestId,
+  eventId: z.string().uuid(),
+  reviewId: z.string().regex(/^[0-9a-f]{64}$/),
+  jobName: z.string().regex(/^[a-z][a-z0-9-]{0,62}$/)
+}).strict().readonly();
 
 export type OrdinaryAuthorityRoute =
   | { readonly kind: "identity" }
   | { readonly kind: "policy"; readonly projectId: string; readonly repositoryId: string }
+  | { readonly kind: "review-event"; readonly projectId: string; readonly repositoryId: string }
   | { readonly kind: "current-attempt"; readonly projectId: string; readonly repositoryId: string };
 
 export type OrdinaryAuthorityService = {
@@ -51,7 +60,7 @@ export function ordinaryAuthorityRoute(request: IncomingMessage): OrdinaryAuthor
   const repositoryId = match?.[2];
   const kind = match?.[3];
   if (projectId === undefined || repositoryId === undefined) return undefined;
-  if (kind === "policy" || kind === "current-attempt") return { kind, projectId, repositoryId };
+  if (kind === "policy" || kind === "review-event" || kind === "current-attempt") return { kind, projectId, repositoryId };
   return undefined;
 }
 
@@ -72,7 +81,7 @@ export function createOrdinaryAuthorityService(
             schemaVersion: 1,
             serviceId: config.serviceId,
             role: "ordinary-authority-reader",
-            scope: ["policy:read", "attempt:read"]
+            scope: ["policy:read", "review-event:read", "attempt:read"]
           });
           return;
         }
@@ -94,6 +103,36 @@ export function createOrdinaryAuthorityService(
               requiredJobSetRevision: policy.requiredJobSetRevision,
               requiredJobs: [...policy.requiredJobNames].sort()
             }
+          });
+          return;
+        }
+        if (route.kind === "review-event") {
+          const input = reviewEventRequestSchema.parse(await readBody(request));
+          const review = await requiredReview(config, route, input.reviewId);
+          const event = await serializer.run(
+            refSerializationKey(route.projectId, route.repositoryId, review.protectedRef),
+            async () => {
+              const stored = await createReviewStore(join(
+                config.storageRoot,
+                route.projectId,
+                `${route.repositoryId}.git`
+              )).readOutboxEvent({
+                eventId: input.eventId,
+                reviewId: input.reviewId,
+                jobName: input.jobName
+              });
+              if (stored === undefined) throw new ReviewApiError(404, "review event was not found");
+              const currentReview = await requiredReview(config, route, input.reviewId);
+              const currentStatus = await status(config, currentReview);
+              if (currentStatus.status === "stale") throw new ReviewApiError(409, "review tuple is stale");
+              return stored;
+            }
+          );
+          send(response, 200, {
+            schemaVersion: 1,
+            serviceId: config.serviceId,
+            requestId: input.requestId,
+            event: event.event
           });
           return;
         }
