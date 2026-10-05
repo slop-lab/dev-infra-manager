@@ -31,6 +31,11 @@ import {
   type AdmissionVerifierHttpClient
 } from "./ordinary-admission-http.js";
 import { createOrdinaryAuthorityService, ordinaryAuthorityRoute } from "./ordinary-authority-http.js";
+import {
+  createNativeEventDispatcher,
+  createNodeNativeEventHttpClient,
+  type NativeEventHttpClient
+} from "./native-event-dispatcher.js";
 
 export type NativeGitServer = {
   readonly server: Server;
@@ -43,23 +48,45 @@ export function createNativeGitServer(
   admissionVerifier: AdmissionVerifier = rejectingAdmissionVerifier(),
   admissionVerifierTimeoutMilliseconds?: number
 ): NativeGitServer {
+  return createNativeGitServerWithDependencies(input, {
+    admissionVerifier,
+    eventHttpClient: createNodeNativeEventHttpClient(),
+    ...(admissionVerifierTimeoutMilliseconds === undefined ? {} : { admissionVerifierTimeoutMilliseconds })
+  });
+}
+
+export type NativeGitServerDependencies = {
+  readonly admissionVerifier?: AdmissionVerifier;
+  readonly admissionVerifierTimeoutMilliseconds?: number;
+  readonly eventHttpClient?: NativeEventHttpClient;
+};
+
+export function createNativeGitServerWithDependencies(
+  input: NativeGitServiceConfig,
+  dependencies: NativeGitServerDependencies = {}
+): NativeGitServer {
   const config = parseNativeGitServiceConfig(input);
+  const admissionVerifier = dependencies.admissionVerifier ?? rejectingAdmissionVerifier();
   const repositories = new Map(config.repositories.map((repository) => [
     repositoryKey(repository.projectId, repository.repositoryId), repository
   ]));
   const authenticator = nativeGitAuthenticator(config.identities);
   const serializer = createRefSerializer();
+  const eventDispatcher = config.ordinaryCi === undefined ? undefined : createNativeEventDispatcher({
+    config,
+    httpClient: dependencies.eventHttpClient ?? createNodeNativeEventHttpClient()
+  });
   const ordinaryAuthority = config.ordinaryCi === undefined ? undefined : createOrdinaryAuthorityService(
     config,
     serializer,
     ordinaryAuthorityAuthenticator(config.ordinaryCi.identity)
   );
   const services = {
-    review: createReviewService(config, serializer),
+    review: createReviewService(config, serializer, () => eventDispatcher?.wake()),
     promotion: createPromotionService(
       config,
       serializer,
-      boundedAdmissionVerifier(admissionVerifier, admissionVerifierTimeoutMilliseconds)
+      boundedAdmissionVerifier(admissionVerifier, dependencies.admissionVerifierTimeoutMilliseconds)
     ),
     ordinaryExecution: createOrdinaryExecutionService(config, serializer)
   };
@@ -142,6 +169,7 @@ export function createNativeGitServer(
         await Promise.all(config.repositories.map((repository) => assertRegisteredRepository(config, repository)));
         server.listen(config.port, config.host);
         await once(server, "listening");
+        eventDispatcher?.start();
         const address = server.address();
         if (address === null || typeof address === "string") throw new NativeGitListenError("expected a TCP listener");
         return `http://${config.host}:${address.port}`;
@@ -152,6 +180,7 @@ export function createNativeGitServer(
       }
     },
     async close() {
+      await eventDispatcher?.close();
       if (server.listening) {
         server.close();
         await once(server, "close");
@@ -169,7 +198,23 @@ export async function createConfiguredNativeGitServer(
   const config = parseNativeGitServiceConfig(input);
   if (config.ordinaryCi === undefined) return createNativeGitServer(config);
   const admissionVerifier = await createOrdinaryAdmissionVerifier({ config: config.ordinaryCi, httpClient });
-  return createNativeGitServer(config, admissionVerifier);
+  const eventHttpClient: NativeEventHttpClient = {
+    request(request) {
+      const endpoint = new URL(request.endpoint);
+      return httpClient.request({
+        endpoint: endpoint.origin,
+        method: "POST",
+        path: endpoint.pathname,
+        authorization: request.authorization,
+        body: request.body,
+        signal: request.signal
+      });
+    }
+  };
+  return createNativeGitServerWithDependencies(config, {
+    admissionVerifier,
+    eventHttpClient
+  });
 }
 
 function canAccess(identity: NativeGitIdentity, projectId: string, repositoryId: string): boolean {

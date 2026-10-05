@@ -32,6 +32,18 @@ export {
   createOrdinaryAdmissionVerifier,
   OrdinaryAdmissionVerifierError
 } from "./ordinary-admission-http.js";
+export {
+  createNativeEventDispatcher,
+  createNodeNativeEventHttpClient,
+  NativeEventDeliveryError
+} from "./native-event-dispatcher.js";
+export type {
+  NativeEventDispatcher,
+  NativeEventDispatcherOptions,
+  NativeEventHttpClient,
+  NativeEventHttpRequest,
+  NativeEventHttpResponse
+} from "./native-event-dispatcher.js";
 export type {
   AdmissionVerifierHttpClient,
   AdmissionVerifierHttpRequest,
@@ -39,5 +51,9 @@ export type {
   OrdinaryAdmissionVerifierOptions
 } from "./ordinary-admission-http.js";
 export { initializeNativeRepository } from "./repository.js";
-export { createConfiguredNativeGitServer, createNativeGitServer } from "./server.js";
-export type { NativeGitServer } from "./server.js";
+export {
+  createConfiguredNativeGitServer,
+  createNativeGitServer,
+  createNativeGitServerWithDependencies
+} from "./server.js";
+export type { NativeGitServer, NativeGitServerDependencies } from "./server.js";

@@ -41,7 +41,11 @@ export type ReviewService = {
   revoke(identity: NativeGitIdentity, target: ReviewTarget, reviewId: string, approvalId: string): Promise<void>;
 };
 
-export function createReviewService(config: NativeGitServiceConfig, serializer: RefSerializer): ReviewService {
+export function createReviewService(
+  config: NativeGitServiceConfig,
+  serializer: RefSerializer,
+  onOutboxChanged: () => void = () => undefined
+): ReviewService {
   return {
     async create(identity, input) {
       authorizeInspection(identity, input);
@@ -80,6 +84,7 @@ export function createReviewService(config: NativeGitServiceConfig, serializer: 
         if (error instanceof ReviewOutboxFullError) throw new ReviewApiError(429, error.message);
         throw error;
       }
+      onOutboxChanged();
       return status(config, stored);
     },
     async get(identity, target, reviewId) {

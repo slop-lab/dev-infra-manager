@@ -5,9 +5,11 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import {
   createNativeGitServer,
+  createNativeGitServerWithDependencies,
   initializeNativeRepository,
   parseNativeGitServiceConfig,
   type AdmissionVerifier,
+  type NativeEventHttpClient,
   type NativeGitServer,
   type NativeGitServiceConfig
 } from "../../../../core/packages/native-git/src/index.js";
@@ -41,7 +43,10 @@ export type ReviewFixture = {
 
 export type JsonObject = Readonly<Record<string, unknown>>;
 
-export async function nativeGitReviewFixture(injectedAdmissionVerifier?: AdmissionVerifier): Promise<ReviewFixture> {
+export async function nativeGitReviewFixture(
+  injectedAdmissionVerifier?: AdmissionVerifier,
+  eventHttpClient?: NativeEventHttpClient
+): Promise<ReviewFixture> {
   const root = await mkdtemp(join(tmpdir(), "dim-native-git-review-"));
   const storageRoot = join(root, "storage");
   const candidateReadGate = await createGitReadGate(root, gitExecutable);
@@ -70,9 +75,14 @@ export async function nativeGitReviewFixture(injectedAdmissionVerifier?: Admissi
       endpoint: "http://ordinary-ci:8080",
       serviceId: "ordinary-main",
       query: { username: "native-main", password: "query-credential-secret" },
-      identity: { username: "ordinary-identity", password: "identity-credential-secret" },
+      identity: { username: "ordinary-identity", password: "identity-secret-00000000000000000000" },
       attemptIssuer: { username: "ordinary-attempts", password: "attempt-credential-secret" },
-      resultReporter: { username: "ordinary-results", password: "reporter-credential-secret" }
+      resultReporter: { username: "ordinary-results", password: "reporter-credential-secret" },
+      webhook: {
+        endpoint: "http://ordinary-ci:8080/v1/native-events",
+        username: "native-events",
+        password: "webhook-secret-000000000000000000000"
+      }
     },
     repositories: [repository, { projectId: "project-b", repositoryId: "source" }],
     identities: [
@@ -130,7 +140,13 @@ ordinary:
   const protectedHead = (await run(gitExecutable, ["--git-dir", repositoryPath, "rev-parse", "refs/heads/main"])).stdout.trim();
 
   const admission = createTestAdmissionVerifier();
-  let service: NativeGitServer = createNativeGitServer(config, injectedAdmissionVerifier ?? admission.verifier, 50);
+  let service: NativeGitServer = eventHttpClient === undefined
+    ? createNativeGitServer(config, injectedAdmissionVerifier ?? admission.verifier, 50)
+    : createNativeGitServerWithDependencies(config, {
+        admissionVerifier: injectedAdmissionVerifier ?? admission.verifier,
+        admissionVerifierTimeoutMilliseconds: 50,
+        eventHttpClient
+      });
   let endpoint = await service.listen();
   const clone = join(root, "writer-clone");
   await git(root, ["clone", authenticatedGitUrl(endpoint), clone]);
@@ -177,7 +193,13 @@ ordinary:
     request: (identity, method, path, body) => reviewRequest(endpoint, identity, method, path, body),
     async restart(nextConfig = config) {
       await service.close();
-      service = createNativeGitServer(nextConfig, injectedAdmissionVerifier ?? admission.verifier, 50);
+      service = eventHttpClient === undefined
+        ? createNativeGitServer(nextConfig, injectedAdmissionVerifier ?? admission.verifier, 50)
+        : createNativeGitServerWithDependencies(nextConfig, {
+            admissionVerifier: injectedAdmissionVerifier ?? admission.verifier,
+            admissionVerifierTimeoutMilliseconds: 50,
+            eventHttpClient
+          });
       endpoint = await service.listen();
     },
     async restartWithoutAdmissionVerifier() {
@@ -263,8 +285,9 @@ async function reviewRequest(baseUrl: string, identity: string, method: string, 
     "promoter-a": "promoter-a-secret",
     "native-main": "query-credential-secret",
     "ordinary-attempts": "attempt-credential-secret",
-    "ordinary-identity": "identity-credential-secret",
+    "ordinary-identity": "identity-secret-00000000000000000000",
     "ordinary-results": "reporter-credential-secret",
+    "native-events": "webhook-secret-000000000000000000000",
     "writer-a": "writer-a-secret-1"
   };
   const password = passwords[identity];
