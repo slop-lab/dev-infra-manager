@@ -64,8 +64,8 @@ describe("DIM native Git protected promotion denials", () => {
     const source = await issueJob(fixture, review, "source");
     const before = await protectedHead(fixture);
 
-    const fabricated = await reportJob(fixture, review, "source", source, "success", "source-ci", { attempt: 999 });
-    const unknown = await reportJob(fixture, review, "source", source, "success", "source-ci", {
+    const fabricated = await reportJob(fixture, review, "source", source, "success", "ordinary-results", { attempt: 999 });
+    const unknown = await reportJob(fixture, review, "source", source, "success", "ordinary-results", {
       attemptId: "00000000-0000-4000-8000-000000000001"
     });
     const response = await promote(fixture, review);
@@ -96,7 +96,20 @@ describe("DIM native Git protected promotion denials", () => {
     const source = await issueJob(fixture, review, "source");
 
     const nonterminal = await reportJob(fixture, review, "source", source, "running");
-    const foreign = await reportJob(fixture, review, "source", source, "success", "foreign-ci");
+    const accepted = await readJsonObject(await reportJob(fixture, review, "source", source));
+    const {
+      statusId: _statusId,
+      reviewId: _reviewId,
+      reporterUsername: _reporterUsername,
+      reportedAt: _reportedAt,
+      ...envelope
+    } = accepted;
+    const foreign = await fixture.request(
+      "ordinary-results",
+      "POST",
+      `/v1/projects/project-b/repositories/source/reviews/${stringField(review, "reviewId")}/statuses`,
+      envelope
+    );
     const response = await promote(fixture, review);
 
     expect(nonterminal.status).toBe(400);
@@ -115,7 +128,7 @@ describe("DIM native Git protected promotion denials", () => {
       ...objectField(source, "descriptor"),
       candidateCommit: before
     });
-    const injected = await reportJob(fixture, review, "source", source, "success", "source-ci", {
+    const injected = await reportJob(fixture, review, "source", source, "success", "ordinary-results", {
       descriptor: changedDescriptor,
       descriptorDigest: descriptorDigest(changedDescriptor)
     });
@@ -235,14 +248,14 @@ describe("DIM native Git protected promotion denials", () => {
     expect(await protectedHead(fixture)).toBe(before);
   });
 
-  it("denies administrator and CI identities promotion authority", async () => {
+  it("denies administrator and result-reporter promotion authority", async () => {
     const fixture = await approvedFixture();
     const review = await createApprovedReview(fixture);
     await reportRequiredJobs(fixture, review);
     const before = await protectedHead(fixture);
 
     const administrator = await promote(fixture, review, "admin-a");
-    const ci = await promote(fixture, review, "source-ci");
+    const ci = await promote(fixture, review, "ordinary-results");
     const validIssuance = await issueJob(fixture, review, "source");
     const issueBody = {
       issuanceRequestId: "00000000-0000-4000-8000-000000000201",
@@ -258,7 +271,7 @@ describe("DIM native Git protected promotion denials", () => {
       "admin-a", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempts`), issueBody
     );
     const ciIssue = await fixture.request(
-      "source-ci", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempts`), issueBody
+      "ordinary-results", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempts`), issueBody
     );
 
     expect([administrator.status, ci.status, administratorIssue.status, ciIssue.status]).toEqual([403, 403, 403, 403]);

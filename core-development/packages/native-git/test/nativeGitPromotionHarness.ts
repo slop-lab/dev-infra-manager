@@ -39,7 +39,7 @@ export async function reportJob(
   jobName: "source" | "security",
   issuance: JsonObject,
   result: "success" | "failure" | "cancelled" | "running" = "success",
-  identity = `${jobName}-ci`,
+  identity = "ordinary-results",
   payloadOverrides: JsonObject = {}
 ): Promise<Response> {
   const reviewId = stringField(review, "reviewId");
@@ -93,7 +93,7 @@ export async function requestJob(
 ): Promise<Response> {
   const reviewId = stringField(review, "reviewId");
   const descriptorResponse = await fixture.request(
-    "scheduler-a",
+    "ordinary-attempts",
     "POST",
     reviewPath(`/${reviewId}/ordinary-execution-descriptors`),
     {
@@ -111,7 +111,7 @@ export async function requestJob(
   );
   expect(descriptorResponse.status).toBe(200);
   const descriptorResult = await readJsonObject(descriptorResponse);
-  return fixture.request("scheduler-a", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempts`), {
+  return fixture.request("ordinary-attempts", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempts`), {
     issuanceRequestId: randomUUID(),
     jobName,
     descriptorDigest: stringField(descriptorResult, "digest"),
@@ -129,7 +129,7 @@ export async function revokeJobAttempt(
   jobName: "source" | "security",
   issuance: JsonObject
 ): Promise<Response> {
-  return fixture.request("scheduler-a", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempt-revocations`), {
+  return fixture.request("ordinary-attempts", "POST", reviewPath(`/${stringField(review, "reviewId")}/job-attempt-revocations`), {
     jobName,
     attemptId: stringField(issuance, "attemptId")
   });

@@ -30,7 +30,7 @@ describe("DIM native Git protected promotion", () => {
     const review = await createApprovedReview(fixture);
     const reviewId = stringField(review, "reviewId");
     const descriptorResponse = await fixture.request(
-      "scheduler-a",
+      "ordinary-attempts",
       "POST",
       reviewPath(`/${reviewId}/ordinary-execution-descriptors`),
       {
@@ -59,14 +59,14 @@ describe("DIM native Git protected promotion", () => {
     };
 
     // When
-    const first = await fixture.request("scheduler-a", "POST", reviewPath(`/${reviewId}/job-attempts`), request);
-    const replay = await fixture.request("scheduler-a", "POST", reviewPath(`/${reviewId}/job-attempts`), request);
-    const replacement = await fixture.request("scheduler-a", "POST", reviewPath(`/${reviewId}/job-attempts`), {
+    const first = await fixture.request("ordinary-attempts", "POST", reviewPath(`/${reviewId}/job-attempts`), request);
+    const replay = await fixture.request("ordinary-attempts", "POST", reviewPath(`/${reviewId}/job-attempts`), request);
+    const replacement = await fixture.request("ordinary-attempts", "POST", reviewPath(`/${reviewId}/job-attempts`), {
       ...request,
       issuanceRequestId: "00000000-0000-4000-8000-000000000102"
     });
     const supersededReplay = await fixture.request(
-      "scheduler-a", "POST", reviewPath(`/${reviewId}/job-attempts`), request
+      "ordinary-attempts", "POST", reviewPath(`/${reviewId}/job-attempts`), request
     );
 
     // Then
@@ -120,7 +120,7 @@ describe("DIM native Git protected promotion", () => {
 
     // When
     const replay = await fixture.request(
-      "source-ci",
+      "ordinary-results",
       "POST",
       reviewPath(`/${stringField(review, "reviewId")}/statuses`),
       envelope
