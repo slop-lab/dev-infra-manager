@@ -119,6 +119,99 @@ describe("native ordinary host claim live integration", () => {
     expect((await native.git(native.repositoryPath, ["rev-parse", "refs/heads/main"])).stdout.trim()).toBe(native.protectedHead);
     expect(authorityHostCredentials[winningRole].username).toBe(firstClaim.hostId);
   });
+
+  it("retries same-host recovery after a real native revocation response is lost", async () => {
+    // Given
+    let now = 1_000;
+    let loseRevocationResponse = true;
+    const native = await nativeGitReviewFixture();
+    nativeFixtures.push(native);
+    const attemptIssuerPassword = "attempt-credential-secret-000000000000";
+    const ordinaryCi = native.config.ordinaryCi;
+    if (ordinaryCi === undefined) throw new Error("ordinary CI config is missing");
+    await native.restart({
+      ...native.config,
+      ordinaryCi: {
+        ...ordinaryCi,
+        attemptIssuer: { username: "ordinary-attempts", password: attemptIssuerPassword }
+      }
+    });
+    const reviewResponse = await native.request("reviewer-a-user", "POST", reviewPath(), {
+      protectedRef: "refs/heads/main",
+      proposalRef: native.proposalRef
+    });
+    const reviewId = stringField(await readJsonObject(reviewResponse), "reviewId");
+    const envelope = parseReviewEnvelope(JSON.parse(await readFile(
+      join(native.repositoryPath, "dim-reviews", "proposals", `${reviewId}.json`),
+      "utf8"
+    )));
+    const event = envelope.events.find((candidate) => candidate.jobName === "source");
+    if (event === undefined) throw new Error("source event is missing");
+    const transport = createNodeNativeGitAdmissionHttpClient();
+    const nativeHttpClient = {
+      async request(input: Parameters<typeof transport.request>[0]) {
+        const response = await transport.request({ ...input, endpoint: native.baseUrl() });
+        if (input.path.endsWith("/job-attempt-revocations") && loseRevocationResponse) {
+          loseRevocationResponse = false;
+          throw new Error("simulated response loss after native persistence");
+        }
+        return response;
+      }
+    };
+    const authority = await startAuthority({
+      now: () => now,
+      nativeGitHttpClient: nativeHttpClient,
+      nativeGitAttemptIssuer: { username: "ordinary-attempts", password: attemptIssuerPassword }
+    });
+    authorities.push(authority);
+    const policy = {
+      schemaVersion: 1,
+      projectId: "project-a",
+      repositoryId: "source",
+      protectedRef: "refs/heads/main",
+      policyRevision: "policy-1",
+      requiredReviewRevision: "review-1",
+      requiredJobSetRevision: "jobs-1",
+      requiredJobs: ["security", "source"]
+    } as const;
+    const admissionResponse = await post(authority.endpoint, "/v1/operator-admissions", "registrar", policy);
+    const generation = (await jsonRecord(admissionResponse)).admissionGeneration;
+    if (typeof generation !== "string") throw new Error("admission generation is missing");
+    native.setAdmissionGeneration(generation);
+    await post(authority.endpoint, "/v1/native-events", "webhook", event);
+    const claimed = await post(authority.endpoint, "/v1/host-claims", "host-a", {
+      schemaVersion: 1,
+      requestId: "20000000-0000-4000-8000-000000000023",
+      hostId: "host-a",
+      capacity: "primary"
+    });
+    const claim = await jsonRecord(claimed);
+    now = 61_001;
+    const recovery = {
+      schemaVersion: 1,
+      requestId: "30000000-0000-4000-8000-000000000023",
+      hostId: claim.hostId,
+      capacity: claim.capacity,
+      claimId: claim.claimId,
+      attemptId: claim.attemptId,
+      descriptorDigest: claim.descriptorDigest,
+      resourceId: claim.claimId,
+      cleanupComplete: true
+    };
+
+    // When
+    const uncertain = await post(authority.endpoint, "/v1/host-recoveries", "host-a", recovery);
+    const retried = await post(authority.endpoint, "/v1/host-recoveries", "host-a", recovery);
+
+    // Then
+    expect([uncertain.status, retried.status]).toEqual([503, 204]);
+    expect(await attemptFiles(native, reviewId)).toEqual(["1.json"]);
+    expect(JSON.parse(await readFile(
+      join(native.repositoryPath, "dim-reviews", "job-attempt-revocations", reviewId, "source", "1.json"),
+      "utf8"
+    ))).toMatchObject({ attemptId: claim.attemptId, descriptorDigest: claim.descriptorDigest });
+    expect((await native.git(native.repositoryPath, ["rev-parse", "refs/heads/main"])).stdout.trim()).toBe(native.protectedHead);
+  });
 });
 
 async function attemptFiles(fixture: ReviewFixture, reviewId: string): Promise<readonly string[]> {
