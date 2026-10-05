@@ -58,7 +58,7 @@ describe("DIM native Git immutable human approval", () => {
     // When
     const writer = await fixture.request("writer-a", "POST", path, {});
     const reader = await fixture.request("ci-a", "POST", path, {});
-    const ci = await fixture.request("source-ci", "POST", path, {});
+    const ci = await fixture.request("ordinary-results", "POST", path, {});
     const administrator = await fixture.request("admin-a", "POST", path, {});
     const foreign = await fixture.request("reviewer-b-user", "POST", path, {});
 

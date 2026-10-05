@@ -38,8 +38,8 @@ describe("DIM native Git ordinary execution descriptor API", () => {
     const path = descriptorPath(review);
 
     // When
-    const first = await fixture.request("scheduler-a", "POST", path, descriptorBody);
-    const second = await fixture.request("scheduler-a", "POST", path, descriptorBody);
+    const first = await fixture.request("ordinary-attempts", "POST", path, descriptorBody);
+    const second = await fixture.request("ordinary-attempts", "POST", path, descriptorBody);
 
     // Then
     expect([first.status, second.status]).toEqual([200, 200]);
@@ -86,10 +86,10 @@ describe("DIM native Git ordinary execution descriptor API", () => {
 
     // When
     const foreign = await fixture.request(
-      "scheduler-a",
+      "ordinary-attempts",
       "POST",
       `/v1/projects/project-b/repositories/source/reviews/${reviewId}/ordinary-execution-descriptors`,
-      { ...descriptorBody, candidateCommit: "0".repeat(40) }
+      descriptorBody
     );
     const reviewer = await fixture.request(
       "reviewer-a-user",
@@ -113,7 +113,7 @@ describe("DIM native Git ordinary execution descriptor API", () => {
     const review = await createPendingReview(fixture);
 
     // When
-    const response = await fixture.request("scheduler-a", "POST", descriptorPath(review), body);
+    const response = await fixture.request("ordinary-attempts", "POST", descriptorPath(review), body);
 
     // Then
     expect(response.status).toBe(400);
@@ -124,7 +124,7 @@ describe("DIM native Git ordinary execution descriptor API", () => {
     // Given
     const fixture = await startFixture();
     const review = await createPendingReview(fixture);
-    const authorization = `Basic ${Buffer.from("scheduler-a:scheduler-a-secret").toString("base64")}`;
+    const authorization = `Basic ${Buffer.from("ordinary-attempts:attempt-credential-secret").toString("base64")}`;
     const endpoint = `${fixture.baseUrl()}${descriptorPath(review)}`;
 
     // When
@@ -143,9 +143,9 @@ describe("DIM native Git ordinary execution descriptor API", () => {
       headers: { Authorization: authorization, "Content-Type": "application/json" },
       body: JSON.stringify({ ...descriptorBody, padding: "x".repeat(64 * 1024) })
     });
-    const query = await fixture.request("scheduler-a", "POST", `${descriptorPath(review)}?job=source`, descriptorBody);
+    const query = await fixture.request("ordinary-attempts", "POST", `${descriptorPath(review)}?job=source`, descriptorBody);
     const missing = await fixture.request(
-      "scheduler-a",
+      "ordinary-attempts",
       "POST",
       reviewPath(`/${"0".repeat(64)}/ordinary-execution-descriptors`),
       descriptorBody
@@ -164,7 +164,7 @@ describe("DIM native Git ordinary execution descriptor API", () => {
     await moveProposal(fixture, "stale-after-review.txt");
 
     // When
-    const response = await fixture.request("scheduler-a", "POST", descriptorPath(review), descriptorBody);
+    const response = await fixture.request("ordinary-attempts", "POST", descriptorPath(review), descriptorBody);
 
     // Then
     expect(response.status).toBe(409);
@@ -178,7 +178,7 @@ describe("DIM native Git ordinary execution descriptor API", () => {
     await fixture.candidateReadGate.arm();
 
     // When
-    const pending = fixture.request("scheduler-a", "POST", descriptorPath(review), descriptorBody);
+    const pending = fixture.request("ordinary-attempts", "POST", descriptorPath(review), descriptorBody);
     await vi.waitFor(() => expect(access(join(fixture.root, "candidate-read-entered"))).resolves.toBeUndefined());
     await moveProposal(fixture, "raced-after-status.txt");
     await fixture.candidateReadGate.release();
@@ -189,19 +189,19 @@ describe("DIM native Git ordinary execution descriptor API", () => {
     await expectNoExecutionWrites(fixture);
   });
 
-  it("denies scheduler smart Git upload-pack discovery and RPC", async () => {
+  it("denies the attempt issuer smart Git upload-pack discovery and RPC", async () => {
     // Given
     const fixture = await startFixture();
 
     // When
     const response = await fetch(
       `${fixture.baseUrl()}/v1/projects/project-a/repositories/source.git/info/refs?service=git-upload-pack`,
-      { headers: { Authorization: `Basic ${Buffer.from("scheduler-a:scheduler-a-secret").toString("base64")}` } }
+      { headers: { Authorization: `Basic ${Buffer.from("ordinary-attempts:attempt-credential-secret").toString("base64")}` } }
     );
     const rpc = await fetch(`${fixture.baseUrl()}/v1/projects/project-a/repositories/source.git/git-upload-pack`, {
       method: "POST",
       headers: {
-        Authorization: `Basic ${Buffer.from("scheduler-a:scheduler-a-secret").toString("base64")}`,
+        Authorization: `Basic ${Buffer.from("ordinary-attempts:attempt-credential-secret").toString("base64")}`,
         "Content-Type": "application/x-git-upload-pack-request"
       },
       body: "0000"
