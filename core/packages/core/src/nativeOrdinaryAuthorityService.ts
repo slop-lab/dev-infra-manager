@@ -6,7 +6,6 @@ import {
   createNodeNativeGitAdmissionHttpClient,
   NativeAdmissionSourceRejectedError,
   NativeAdmissionSourceUnavailableError,
-  type NativeGitAdmissionConfig,
   type NativeGitAdmissionHttpClient
 } from "./nativeGitAdmissionSource.js";
 import {
@@ -14,53 +13,33 @@ import {
   parseNativeAdmissionRevocation,
   parseNativeAdmissionVerification,
   parseNativeAttemptAssignment,
-  parseNativeAttemptVerification,
-  resourceBounds,
-  type NativeCapacityPolicy
+  parseNativeAttemptVerification
 } from "./nativeOrdinaryAuthorityModel.js";
 import {
   NativeOrdinaryAuthorityStore,
   type NativeOrdinaryAuthorityClock
 } from "./nativeOrdinaryAuthorityStore.js";
+import { parseNativeReviewJobEvent } from "./nativeOrdinaryEvent.js";
+import {
+  validateNativeOrdinaryAuthorityConfig,
+  type NativeOrdinaryAuthorityConfig,
+  type NativeOrdinaryCredential
+} from "./nativeOrdinaryAuthorityConfig.js";
 
 const maximumBodyBytes = 64 * 1024;
-
-export type NativeOrdinaryCredential = {
-  readonly username: string;
-  readonly password: string;
-};
 
 export type NativeOrdinaryAuthorityDependencies = {
   readonly clock?: NativeOrdinaryAuthorityClock;
   readonly nativeGitHttpClient?: NativeGitAdmissionHttpClient;
 };
 
-export type NativeOrdinaryAuthorityConfig = {
-  readonly schemaVersion: 3;
-  readonly serviceId: string;
-  readonly database: string;
-  readonly admissionLeaseMilliseconds: number;
-  readonly nativeGit: NativeGitAdmissionConfig;
-  readonly credentials: {
-    readonly registrar: NativeOrdinaryCredential;
-    readonly query: NativeOrdinaryCredential;
-    readonly scheduler: NativeOrdinaryCredential;
-  };
-  readonly hosts: readonly {
-    readonly hostId: string;
-    readonly capacities: readonly {
-      readonly capacity: string;
-      readonly runnerBaseImage: string;
-      readonly bounds: NativeCapacityPolicy["bounds"];
-    }[];
-  }[];
-};
+export type { NativeOrdinaryAuthorityConfig, NativeOrdinaryCredential } from "./nativeOrdinaryAuthorityConfig.js";
 
 export function configuredNativeOrdinaryAuthorityServer(
   config: NativeOrdinaryAuthorityConfig,
   dependencies: NativeOrdinaryAuthorityDependencies = {}
 ): Server {
-  const capacities = validateConfig(config);
+  const capacities = validateNativeOrdinaryAuthorityConfig(config);
   const eligibleAssignments = [...capacities.values()]
     .map(({ hostId, capacity }) => ({ hostId, capacity }))
     .sort((left, right) => `${left.hostId}\0${left.capacity}` < `${right.hostId}\0${right.capacity}` ? -1 : 1);
@@ -71,15 +50,18 @@ export function configuredNativeOrdinaryAuthorityServer(
   });
   const store = new NativeOrdinaryAuthorityStore(
     config.database,
-    config.serviceId,
-    config.admissionLeaseMilliseconds,
-    capacities,
-    dependencies.clock ?? { now: Date.now }
+    {
+      serviceId: config.serviceId,
+      leaseMilliseconds: config.admissionLeaseMilliseconds,
+      capacities,
+      clock: dependencies.clock ?? { now: Date.now }
+    }
   );
   const server = createServer((request, response) => {
     void handle(request, response).catch((error) => {
       if (error instanceof NativeAdmissionSourceUnavailableError) sendJson(response, 503, { error: error.message });
       else if (error instanceof NativeAdmissionSourceRejectedError) notFound(response);
+      else if (error instanceof NativeOrdinaryRequestError) sendJson(response, error.status, { error: error.message });
       else if (error instanceof UserError) sendJson(response, 400, { error: error.message });
       else sendJson(response, 500, { error: "internal server error" });
     });
@@ -102,6 +84,21 @@ export function configuredNativeOrdinaryAuthorityServer(
         role: "native-query",
         scope: ["admission:read", "attempt:read"]
       });
+    }
+    if (request.method === "POST" && url.pathname === "/v1/native-events") {
+      const authentication = webhookAuthentication(request, config);
+      if (authentication === "invalid") return sendJson(response, 401, { error: "unauthorized" });
+      if (authentication === "wrong-role") return sendJson(response, 403, { error: "forbidden" });
+      const event = parseNativeReviewJobEvent(await readJson(request));
+      const replay = store.checkEventReplay(event);
+      if (replay === "accepted") return sendJson(response, 202, { schemaVersion: 1, eventId: event.eventId, accepted: true });
+      if (replay === "full") return sendJson(response, 429, { error: "native event intake capacity is full" });
+      const canonical = parseNativeReviewJobEvent(await admissionSource.assertReviewEvent(event));
+      const result = store.acceptEvent(canonical);
+      if (result === "accepted") return sendJson(response, 202, { schemaVersion: 1, eventId: event.eventId, accepted: true });
+      if (result === "conflict") return sendJson(response, 409, { error: "event replay conflicts" });
+      if (result === "full") return sendJson(response, 429, { error: "native event intake capacity is full" });
+      return notFound(response);
     }
     if (request.method === "POST" && url.pathname === "/v1/operator-admissions") {
       if (!authorized(request, config.credentials.registrar)) return notFound(response);
@@ -151,54 +148,16 @@ export function configuredNativeOrdinaryAuthorityServer(
   }
 }
 
-function validateConfig(config: NativeOrdinaryAuthorityConfig): ReadonlyMap<string, NativeCapacityPolicy> {
-  if (config.schemaVersion !== 3) throw new UserError("native ordinary authority schemaVersion must be 3");
-  authorityIdentifier(config.serviceId, "service ID");
-  if (config.database.length === 0) throw new UserError("native ordinary authority database path must not be empty");
-  if (!Number.isSafeInteger(config.admissionLeaseMilliseconds) || config.admissionLeaseMilliseconds < 1) {
-    throw new UserError("native ordinary authority admission lease must be positive");
-  }
-  if (config.nativeGit.endpoint !== "http://native-git:8080" || config.nativeGit.serviceId !== "native-main") {
-    throw new UserError("native ordinary authority native Git identity is invalid");
-  }
-  const credentials = [...Object.values(config.credentials), config.nativeGit.identity];
-  for (const credential of credentials) {
-    authorityIdentifier(credential.username, "credential username");
-    if (!/^[A-Za-z0-9_-]{32,}$/.test(credential.password)) throw new UserError("native ordinary authority passwords must be base64url and at least 32 characters");
-  }
-  if (new Set(credentials.flatMap((credential) => [credential.username, credential.password])).size !== credentials.length * 2) {
-    throw new UserError("native ordinary authority credentials must be distinct");
-  }
-  const capacities = new Map<string, NativeCapacityPolicy>();
-  for (const host of config.hosts) {
-    authorityIdentifier(host.hostId, "host ID");
-    for (const capacity of host.capacities) {
-      authorityIdentifier(capacity.capacity, "capacity");
-      const key = `${host.hostId}\0${capacity.capacity}`;
-      if (capacities.has(key)) throw new UserError("native ordinary authority capacities must be unique");
-      if (!/^(?:(?:[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/.test(capacity.runnerBaseImage)) {
-        throw new UserError("native ordinary authority runner base image is invalid");
-      }
-      capacities.set(key, {
-        hostId: host.hostId,
-        capacity: capacity.capacity,
-        runnerBaseImage: capacity.runnerBaseImage,
-        bounds: resourceBounds(capacity.bounds)
-      });
-    }
-  }
-  if (capacities.size === 0) throw new UserError("native ordinary authority requires at least one capacity");
-  return capacities;
-}
-
 async function readJson(request: IncomingMessage): Promise<unknown> {
-  if (request.headers["content-type"] !== "application/json") throw new UserError("content type must be application/json");
+  if (request.headers["content-type"] !== "application/json") {
+    throw new NativeOrdinaryRequestError(415, "content type must be application/json");
+  }
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buffer.length;
-    if (size > maximumBodyBytes) throw new UserError("request body is too large");
+    if (size > maximumBodyBytes) throw new NativeOrdinaryRequestError(413, "request body is too large");
     chunks.push(buffer);
   }
   try {
@@ -215,8 +174,18 @@ function authorized(request: IncomingMessage, credential: NativeOrdinaryCredenti
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
-function authorityIdentifier(value: string, label: string): void {
-  if (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(value)) throw new UserError(`${label} is invalid`);
+function webhookAuthentication(
+  request: IncomingMessage,
+  config: NativeOrdinaryAuthorityConfig
+): "authorized" | "invalid" | "wrong-role" {
+  if (authorized(request, config.credentials.webhook)) return "authorized";
+  const knownCredentials = [
+    config.credentials.registrar,
+    config.credentials.query,
+    config.credentials.scheduler,
+    config.nativeGit.identity
+  ];
+  return knownCredentials.some((credential) => authorized(request, credential)) ? "wrong-role" : "invalid";
 }
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {
@@ -226,4 +195,12 @@ function sendJson(response: ServerResponse, status: number, body: unknown): void
 
 function notFound(response: ServerResponse): void {
   sendJson(response, 404, { error: "not found" });
+}
+
+class NativeOrdinaryRequestError extends Error {
+  readonly name = "NativeOrdinaryRequestError";
+
+  constructor(readonly status: 413 | 415, message: string) {
+    super(message);
+  }
 }

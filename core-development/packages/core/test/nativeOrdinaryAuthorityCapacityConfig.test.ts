@@ -131,7 +131,7 @@ describe("native ordinary authority capacity configuration", () => {
     expect(await currentStatus(restarted, firstAttempt)).toBe(404);
     expect(await currentStatus(restarted, secondAttempt)).toBe(200);
     expect(storedRows(first.database)).toEqual({
-      admissions: 1,
+      admissions: 2,
       attempts: 1,
       admissionGeneration: secondGeneration,
       attemptGeneration: secondGeneration,
@@ -227,10 +227,8 @@ function generation(value: Readonly<Record<string, unknown>>): string {
 }
 
 function storedRows(file: string): {
-  readonly admissions: number;
-  readonly attempts: number;
-  readonly admissionGeneration: string;
-  readonly attemptGeneration: string;
+  readonly admissions: number; readonly attempts: number;
+  readonly admissionGeneration: string; readonly attemptGeneration: string;
   readonly attemptId: string;
   readonly hostId: string;
   readonly capacity: string;
@@ -246,6 +244,7 @@ function storedRows(file: string): {
       attempts.host_id,
       attempts.capacity
     FROM native_admissions admissions JOIN native_attempt_assignments attempts
+      ON attempts.admission_generation = admissions.admission_generation
   `).get();
   database.close();
   if (row === undefined || typeof row.admissions !== "number" || typeof row.attempts !== "number"

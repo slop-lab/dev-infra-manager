@@ -9,6 +9,7 @@ import {
   type NativeOrdinaryCredential,
   type NativeOrdinaryAuthorityConfig
 } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityService.js";
+import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
 import { createNodeAdmissionVerifierHttpClient } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import { createOrdinaryAdmissionVerifier } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import { descriptorDigest } from "../../../../core/packages/native-git/src/candidate-execution.js";
@@ -29,6 +30,7 @@ const bounds = {
 } as const;
 
 export const authorityCredentials = {
+  webhook: { username: "native-events", password: "webhook-secret-000000000000000000000" },
   registrar: { username: "operator-registrar", password: "registrar-secret-00000000000000000000" },
   query: { username: "native-query", password: "query-secret-0000000000000000000000" },
   scheduler: { username: "ordinary-scheduler", password: "scheduler-secret-0000000000000000" }
@@ -48,6 +50,7 @@ export type StartAuthorityOptions = {
   readonly source?: NativeGitAdmissionFixture;
   readonly hosts?: NativeOrdinaryAuthorityConfig["hosts"];
   readonly nativeGitIdentity?: NativeOrdinaryCredential;
+  readonly nativeGitHttpClient?: NativeGitAdmissionHttpClient;
 };
 
 export async function startAuthority(options: StartAuthorityOptions = {}): Promise<AuthorityFixture> {
@@ -69,7 +72,7 @@ export async function startAuthority(options: StartAuthorityOptions = {}): Promi
   } as const;
   const dependencies = {
     clock: { now: options.now ?? Date.now },
-    nativeGitHttpClient: source.httpClient
+    nativeGitHttpClient: options.nativeGitHttpClient ?? source.httpClient
   };
   const server = configuredNativeOrdinaryAuthorityServer(config, dependencies);
   server.listen(0, "127.0.0.1");
@@ -111,6 +114,26 @@ export function admission(projectId: string, repositoryId: string, revision: str
     requiredJobSetRevision: `jobs-${revision}`,
     requiredJobs: ["source"],
     eligibleAssignments: [{ hostId: "host-a", capacity: "primary" }]
+  } as const;
+}
+
+export function nativeEvent(eventId = "00000000-0000-4000-8000-000000000001") {
+  return {
+    schemaVersion: 1,
+    type: "dim.native.review-job.available",
+    eventId,
+    projectId: "project-a",
+    repositoryId: "source",
+    protectedRef: "refs/heads/main",
+    reviewId: "a".repeat(64),
+    expectedProtectedHead: "1".repeat(40),
+    candidateCommit: "2".repeat(40),
+    candidateTree: "3".repeat(40),
+    policyRevision: "policy-1",
+    requiredReviewRevision: "review-1",
+    requiredJobSetRevision: "jobs-1",
+    jobName: "source",
+    evidenceClass: "candidate-controlled"
   } as const;
 }
 
