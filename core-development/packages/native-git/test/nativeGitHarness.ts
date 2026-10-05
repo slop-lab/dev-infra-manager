@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -25,7 +25,9 @@ export type NativeGitFixture = {
   readonly close: () => Promise<void>;
 };
 
-export async function nativeGitFixture(): Promise<NativeGitFixture> {
+export type NativeGitObjectFormat = "sha1" | "sha256";
+
+export async function nativeGitFixture(objectFormat: NativeGitObjectFormat = "sha1"): Promise<NativeGitFixture> {
   const root = await mkdtemp(join(tmpdir(), "dim-native-git-"));
   const storageRoot = join(root, "storage");
   const repositories = [
@@ -51,8 +53,13 @@ export async function nativeGitFixture(): Promise<NativeGitFixture> {
   } as const satisfies NativeGitServiceConfig;
 
   for (const repository of repositories) {
+    if (objectFormat === "sha256") {
+      const repositoryPath = join(storageRoot, repository.projectId, `${repository.repositoryId}.git`);
+      await mkdir(join(storageRoot, repository.projectId), { recursive: true, mode: 0o700 });
+      await run(gitExecutable, ["init", "--bare", "--initial-branch=main", "--object-format=sha256", repositoryPath]);
+    }
     const bare = await initializeNativeRepository(config, repository);
-    await seedRepository(root, bare, `${repository.projectId}-initial`);
+    await seedRepository(root, bare, `${repository.projectId}-initial`, objectFormat);
   }
   const service = createNativeGitServer(config);
   const baseUrl = await service.listen();
@@ -89,9 +96,9 @@ export function isExitError(error: unknown): error is Error & { readonly stderr:
   return error instanceof Error && "stderr" in error && typeof error.stderr === "string";
 }
 
-async function seedRepository(root: string, bare: string, content: string): Promise<void> {
+async function seedRepository(root: string, bare: string, content: string, objectFormat: NativeGitObjectFormat): Promise<void> {
   const source = join(root, `${content}-source`);
-  await run(gitExecutable, ["init", "--initial-branch=main", source]);
+  await run(gitExecutable, ["init", "--initial-branch=main", `--object-format=${objectFormat}`, source]);
   await run(gitExecutable, ["-C", source, "config", "user.name", "DIM test"]);
   await run(gitExecutable, ["-C", source, "config", "user.email", "dim-test@example.invalid"]);
   await import("node:fs/promises").then(({ writeFile }) => writeFile(join(source, "README.md"), `${content}\n`));

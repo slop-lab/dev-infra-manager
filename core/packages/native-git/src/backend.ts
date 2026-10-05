@@ -5,6 +5,7 @@ import type { NativeGitIdentity, NativeGitServiceConfig } from "./config.js";
 import type { NativeGitRoute } from "./routing.js";
 
 const MAX_REQUEST_BYTES = 256 * 1024 * 1024;
+const MAX_RESPONSE_BYTES = 256 * 1024 * 1024;
 const MAX_HEADER_BYTES = 64 * 1024;
 const MAX_ERROR_BYTES = 64 * 1024;
 const BACKEND_TIMEOUT_MILLISECONDS = 30_000;
@@ -22,6 +23,7 @@ export function serveGitBackend(
     stdio: ["pipe", "pipe", "pipe"]
   });
   let requestBytes = 0;
+  let responseBytes = 0;
   let headerBuffer = Buffer.alloc(0);
   let headersSent = false;
   let errorOutput = "";
@@ -60,6 +62,12 @@ export function serveGitBackend(
 
   child.stdout.on("data", (chunk: Buffer) => {
     if (response.writableEnded || response.destroyed) return;
+    responseBytes += chunk.length;
+    if (responseBytes > MAX_RESPONSE_BYTES) {
+      fail(502);
+      if (response.headersSent) response.destroy();
+      return;
+    }
     if (headersSent) {
       if (!response.write(chunk)) child.stdout.pause();
       return;
@@ -108,7 +116,7 @@ function backendEnvironment(
   return {
     LC_ALL: "C",
     GIT_CONFIG_NOSYSTEM: "1",
-    GIT_CONFIG_COUNT: "5",
+    GIT_CONFIG_COUNT: "6",
     GIT_CONFIG_KEY_0: "core.hooksPath",
     GIT_CONFIG_VALUE_0: join(config.storageRoot, route.projectId, `${route.repositoryId}.git`, "hooks"),
     GIT_CONFIG_KEY_1: "receive.denyNonFastForwards",
@@ -119,6 +127,8 @@ function backendEnvironment(
     GIT_CONFIG_VALUE_3: "true",
     GIT_CONFIG_KEY_4: "receive.fsck.fullPathname",
     GIT_CONFIG_VALUE_4: "error",
+    GIT_CONFIG_KEY_5: "uploadpack.allowReachableSHA1InWant",
+    GIT_CONFIG_VALUE_5: "true",
     HOME: "/dev/null",
     GIT_HTTP_EXPORT_ALL: "1",
     GIT_PROJECT_ROOT: config.storageRoot,
