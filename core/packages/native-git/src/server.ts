@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { createServer, type Server, type ServerResponse } from "node:http";
-import { nativeGitAuthenticator } from "./auth.js";
+import { nativeGitAuthenticator, ordinaryAuthorityAuthenticator } from "./auth.js";
 import { serveGitBackend } from "./backend.js";
 import {
   parseNativeGitServiceConfig,
@@ -30,6 +30,7 @@ import {
   createOrdinaryAdmissionVerifier,
   type AdmissionVerifierHttpClient
 } from "./ordinary-admission-http.js";
+import { createOrdinaryAuthorityService, ordinaryAuthorityRoute } from "./ordinary-authority-http.js";
 
 export type NativeGitServer = {
   readonly server: Server;
@@ -48,6 +49,11 @@ export function createNativeGitServer(
   ]));
   const authenticator = nativeGitAuthenticator(config.identities);
   const serializer = createRefSerializer();
+  const ordinaryAuthority = config.ordinaryCi === undefined ? undefined : createOrdinaryAuthorityService(
+    config,
+    serializer,
+    ordinaryAuthorityAuthenticator(config.ordinaryCi.identity)
+  );
   const services = {
     review: createReviewService(config, serializer),
     promotion: createPromotionService(
@@ -61,6 +67,14 @@ export function createNativeGitServer(
   let storageOwner: StorageOwner | undefined;
   let activeBackends = 0;
   const server = createServer((request, response) => {
+    const authorityRoute = ordinaryAuthorityRoute(request);
+    if (authorityRoute !== undefined && ordinaryAuthority !== undefined) {
+      if (gitIdentity === undefined) return send(response, 503);
+      void assertGitExecutableIdentity(config.gitExecutable, gitIdentity)
+        .then(() => ordinaryAuthority.serve(authorityRoute, request, response))
+        .catch(() => send(response, 503));
+      return;
+    }
     if (request.method === "GET" && request.url === "/v1/identity") {
       const identity = authenticator.authenticate(request.headers);
       if (identity === undefined) return send(response, 401, { "WWW-Authenticate": 'Basic realm="DIM Git"' });

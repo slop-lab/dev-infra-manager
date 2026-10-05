@@ -59,12 +59,21 @@ export async function nativeGitReviewFixture(injectedAdmissionVerifier?: Admissi
     }]
   };
   const configInput = {
-    schemaVersion: 1,
+    schemaVersion: 2,
+    serviceId: "native-main",
     host: "127.0.0.1",
     port: 0,
     storageRoot,
     gitExecutable: candidateReadGate.executable,
     gitVersion: "2.43.0",
+    ordinaryCi: {
+      endpoint: "http://ordinary-ci:8080",
+      serviceId: "ordinary-main",
+      query: { username: "native-main", password: "query-credential-secret" },
+      identity: { username: "ordinary-identity", password: "identity-credential-secret" },
+      attemptIssuer: { username: "ordinary-attempts", password: "attempt-credential-secret" },
+      resultReporter: { username: "ordinary-results", password: "reporter-credential-secret" }
+    },
     repositories: [repository, { projectId: "project-b", repositoryId: "source" }],
     identities: [
       { role: "reader", username: "ci-a", password: "ci-a-secret-value", projectId: "project-a", repositoryIds: ["source"] },
@@ -252,6 +261,10 @@ async function reviewRequest(baseUrl: string, identity: string, method: string, 
     "scheduler-a": "scheduler-a-secret",
     "foreign-ci": "foreign-ci-secret",
     "promoter-a": "promoter-a-secret",
+    "native-main": "query-credential-secret",
+    "ordinary-attempts": "attempt-credential-secret",
+    "ordinary-identity": "identity-credential-secret",
+    "ordinary-results": "reporter-credential-secret",
     "writer-a": "writer-a-secret-1"
   };
   const password = passwords[identity];

@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
-import type { NativeGitIdentity } from "./config.js";
+import type { NativeGitIdentity, OrdinaryCiDependencyConfig } from "./config.js";
 
 type CredentialDigest = {
   readonly identity: NativeGitIdentity;
@@ -10,6 +10,10 @@ type CredentialDigest = {
 
 export type NativeGitAuthenticator = {
   authenticate(headers: IncomingHttpHeaders): NativeGitIdentity | undefined;
+};
+
+export type OrdinaryAuthorityAuthenticator = {
+  authenticate(headers: IncomingHttpHeaders): boolean;
 };
 
 export function nativeGitAuthenticator(identities: readonly NativeGitIdentity[]): NativeGitAuthenticator {
@@ -25,6 +29,24 @@ export function nativeGitAuthenticator(identities: readonly NativeGitIdentity[])
       const usernameDigest = digest(parsed.username);
       const passwordDigest = digest(parsed.password);
       return credentials.find((candidate) => matches(candidate, usernameDigest, passwordDigest))?.identity;
+    }
+  };
+}
+
+export function ordinaryAuthorityAuthenticator(
+  credential: OrdinaryCiDependencyConfig["identity"]
+): OrdinaryAuthorityAuthenticator {
+  const expected = {
+    username: digest(credential.username),
+    password: digest(credential.password)
+  };
+  return {
+    authenticate(headers) {
+      const parsed = basicCredential(headers.authorization);
+      if (parsed === undefined) return false;
+      const usernameMatches = timingSafeEqual(expected.username, digest(parsed.username));
+      const passwordMatches = timingSafeEqual(expected.password, digest(parsed.password));
+      return usernameMatches && passwordMatches;
     }
   };
 }
