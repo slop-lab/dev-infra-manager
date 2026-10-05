@@ -8,8 +8,14 @@
   `NativeAdmissionSource`, rotates and revokes admission generations, and
   records only exact native-issued attempt tuples returned by that source.
   Missing source adapters reject mutation with service unavailable, and rejected
-  source tuples are concealed without changing SQLite. No production source
-  adapter is implemented yet, so the default cannot admit or assign work. Once
+  source tuples are concealed without changing SQLite. Native Git's strict
+  schema-2 config pins the proof service identity to `native-main` and provides
+  a dedicated read-only proof identity plus exact canonical protected-policy
+  and current unrevoked schema-2 attempt endpoints. Policy proof returns sorted
+  required jobs but no per-Project capacity mapping; the future central adapter
+  derives every eligible assignment from its global operator-owned host
+  capacities. No production source adapter is implemented yet, so the default
+  cannot admit or assign work. Once
   source-gated state exists, the library answers the Native Git query client
   only for exact live admission and current-attempt tuples. Registrar,
   scheduler, and query credentials are disjoint; stale generations, expired or

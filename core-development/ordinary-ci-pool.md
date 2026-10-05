@@ -137,8 +137,9 @@ contract. Adding or removing a host
 is a reviewed operator-source update that creates a new immutable bundle
 generation, not a service API.
 
-The native Git service config remains strict schema `1` as specified by the
-native Git transport profile. For this deployment its listener and storage root
+The native Git service config is strict schema `2`, pins `serviceId` to
+`native-main`, and otherwise follows the native Git transport profile. For this
+deployment its listener and storage root
 must be `0.0.0.0:8080` and `/var/lib/dim-native-git`; it must name the exact
 ordinary service origin `http://ordinary-ci:8080`, service identity, and a
 distinct query-only service-to-service dependency credential. Its Git
@@ -149,8 +150,13 @@ distinctness, and schema failures are preflight failures.
 
 The native query credential may read only the exact current admission and
 attempt status needed by native promotion checks. The ordinary identity
-credential may verify only exact configured native service and repository
-identities. The attempt-issuer credential may issue or revoke only a current
+credential may read only exact configured native service,
+repository/protected-policy, and current issued-attempt proofs. Native policy
+proof contains no host or capacity selector: all admitted Projects share every
+capacity in the ordinary service's operator-owned global `hosts` configuration,
+and the future production source adapter must derive the complete sorted
+`eligibleAssignments` array from that configuration before exact comparison.
+The attempt-issuer credential may issue or revoke only a current
 attempt for an exact live ordinary admission tuple and required job; it cannot
 report a result. The result-reporter credential may report only the terminal
 result for that exact current attempt and job; it cannot issue or revoke.
@@ -192,8 +198,9 @@ adapter has authenticated and attested the configured native Git service. The
 interface returns canonical native values from `assertRegisteredPolicy` and
 `assertIssuedAttempt`; the service parses those returned values again and
 persists them instead of the registrar or scheduler assertions. The production
-default source rejects both methods. The native Project/policy and issued-
-attempt adapters are not implemented, so a standalone production server
+default source rejects both methods. Native Git now exposes the dedicated
+read-only policy and issued-attempt proof endpoints, but the central HTTP
+adapter is not implemented, so a standalone production server
 returns service unavailable before SQLite mutation. A source rejection is
 concealed as not found.
 
@@ -256,9 +263,11 @@ capacity advertisement, claim, and result operations fail before mutation.
 
 1. A trusted host controller uses only its admission credential to submit the
    operator-authorized native Project/repository, protected ref, policy and
-   review/job-set revisions, required candidate-controlled job names, and
-   eligible capacities. The service verifies native Git identity and protected
-   policy before publishing or refreshing one leased admission generation.
+   review/job-set revisions, required candidate-controlled job names, and the
+   complete globally configured capacity set. The source verifies native Git
+   identity and protected policy, derives eligible assignments from central
+   `hosts[].capacities[]`, and requires exact canonical equality before the
+   service publishes or refreshes one leased admission generation.
    Admission does not read or trust candidate job bytes.
 2. A review binds the exact expected protected head and candidate commit/tree.
    For each required job, native Git reads schema-2 `.dim/ci/runner.yml` and the
