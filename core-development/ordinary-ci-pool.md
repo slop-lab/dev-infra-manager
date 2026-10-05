@@ -1,20 +1,22 @@
 # Native ordinary CI control plane
 
-This is the unimplemented target implementation and operator design for the ordinary CI
-scheduler/webhook service installed with native Git. The normative authority,
+This is the target implementation and operator design for the ordinary CI
+scheduler/webhook service installed with native Git. Core now includes the
+bounded native authority library described below; webhook demand, queue/claim
+leases, controller execution, and installer deployment remain unimplemented.
+The normative authority,
 admission, and installer transaction are in
 `specification/specs/10-cli-contract.md` and
 `specification/specs/14-installer-facade.md`.
 
-This design is not implemented at the documentation revision that introduced
-it. The shipped Gitea predecessor still provides `dim ci ordinary-pool service
+The shipped Gitea predecessor still provides `dim ci ordinary-pool service
 run CONFIG` and `dim ci ordinary-pool project reconcile PROJECT
 REGISTRAR_CONFIG`; its standalone `worker` commands have been removed in favor
 of managed-controller supervision. Those commands, schema-2 databases, and
 persistent Project-scoped Sysbox runners are not the native target and are
 rejected only after that target replaces the predecessor. Do not deploy this
-topology or claim its acceptance gates until the service and host controller
-implementation pass the referenced verification.
+topology or claim its acceptance gates until the remaining service and host
+controller implementation passes the referenced verification.
 
 ## Ownership matrix
 
@@ -155,6 +157,95 @@ result for that exact current attempt and job; it cannot issue or revoke.
 Neither credential can read Git, approve, promote, administer storage,
 enumerate unrelated Projects, or act before the native identity check for that
 operation succeeds.
+
+The paired native client contract is documented under "Ordinary verifier HTTP
+contract" in the native Git transport profile. In particular, ordinary returns
+the exact query role and ordered scope at identity attestation, and echoes the
+fresh request nonce plus the complete verified tuple on successful admission or
+current-attempt queries. It returns no credentials or unrelated Project, host,
+capacity, attempt, or repository inventory.
+
+The nonce correlates one response to one request and rejects an offline replay;
+it does not authenticate an active endpoint that can reflect the request. The
+target deployment therefore treats the fixed private Compose bridge, fixed
+service origin, and service-to-service Basic credential as the peer-
+authentication boundary. It does not claim cryptographic server identity on
+plain HTTP outside that private network. A deployment that cannot preserve this
+exclusive network assumption requires authenticated transport before use.
+
+## Implemented authority library
+
+`@slop-lab/dim-core` exports `configuredNativeOrdinaryAuthorityServer` as a
+native-only HTTP and SQLite library. It is not wired to the CLI, installer,
+webhook adapter, or host controller. Its normalized configuration is strict
+schema `3` and contains one service ID, a dedicated database path and admission
+lease, separate Basic credentials for `registrar`, `scheduler`, and `query`,
+and the operator-owned host capacities. Each capacity fixes its host and
+capacity IDs, digest-pinned runner base, and maximum CPU, memory, PID,
+wall-clock, and output bounds. Credential passwords are distinct base64url
+values of at least 32 characters. The library receives no Git, Docker,
+controller, or host-administration socket.
+
+Both mutation routes are additionally gated by an injected
+`NativeAdmissionSource`. A source is eligible for injection only after its
+adapter has authenticated and attested the configured native Git service. The
+interface returns canonical native values from `assertRegisteredPolicy` and
+`assertIssuedAttempt`; the service parses those returned values again and
+persists them instead of the registrar or scheduler assertions. The production
+default source rejects both methods. The native Project/policy and issued-
+attempt adapters are not implemented, so a standalone production server
+returns service unavailable before SQLite mutation. A source rejection is
+concealed as not found.
+
+The database uses SQLite `user_version = 3`, WAL, full synchronous durability,
+and tables dedicated to native admissions and current attempt assignments.
+Schema-less, schema-1, and predecessor schema-2 files are inspected read-only
+and rejected without mutation. There is no compatibility shim or migration
+through the Gitea ordinary-pool schema-2 store.
+
+The registrar credential has only these mutation surfaces:
+
+- `POST /v1/operator-admissions` parses a strict schema `1` policy request:
+  Project and repository IDs, protected ref, policy/review/job-set revisions,
+  the exact required job set, and eligible configured host/capacity pairs. It
+  persists only the canonical policy returned by
+  `NativeAdmissionSource.assertRegisteredPolicy`. For that canonical policy, an
+  identical active refresh retains its generation; expiry or any policy change
+  produces a new UUID generation. The response contains the canonical service
+  and policy identity, generation, and expiry, but no credential.
+- `POST /v1/operator-admission-revocations` removes only the exact current
+  Project, repository, and generation tuple. A stale or foreign tuple is
+  concealed as not found.
+
+The scheduler credential has only
+`POST /v1/current-attempt-assignments`. The caller supplies the complete strict
+native descriptor, matching domain-separated descriptor digest, review and
+attempt IDs, generation, host, and capacity, but those fields are assertions,
+not proof. The service first requires
+`NativeAdmissionSource.assertIssuedAttempt` to return the exact canonical
+native-issued tuple and persists only that return. It then rechecks the active
+operator policy, required job, configured runner base, eligible assignment,
+and every requested bound before
+the durable write. This endpoint does not issue an attempt. Until the native
+issued-attempt adapter exists, it records none. A verification request alone
+never creates an admission or assignment.
+
+The query credential has only `GET /v1/identity`,
+`POST /v1/admission-verifications`, and
+`POST /v1/current-attempt-verifications`. Identity returns the exact
+`native-query` role and ordered `admission:read`, `attempt:read` scope expected
+by the Native Git client. Successful verification returns exact HTTP 200
+`application/json`, `Cache-Control: no-store`, the configured service ID,
+`authorized: true`, and the fresh request nonce plus complete request tuple.
+The nonce is echoed only after the durable state check. It is correlation, not
+peer authentication. Denial is a non-200 not-found response containing no
+verified tuple, inventory, or secret.
+
+Bodies are capped at 64 KiB and must use exact JSON content type and fields.
+The listener has bounded request, header, keep-alive, and per-socket request
+limits. Rotation, revocation, expiry, assignment replacement, restart, wrong
+role, foreign host/capacity, descriptor drift, and stale generation all fail
+closed.
 
 ## Admission and execution flow after a Project adapter
 
