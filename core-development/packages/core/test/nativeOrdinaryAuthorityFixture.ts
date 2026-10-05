@@ -97,7 +97,12 @@ export async function verifier(endpoint: string) {
       query: authorityCredentials.query,
       identity: { username: "ordinary-identity", password: "identity-secret-00000000000000000000" },
       attemptIssuer: { username: "ordinary-attempts", password: "attempt-secret-000000000000000000000" },
-      resultReporter: { username: "ordinary-results", password: "result-secret-0000000000000000000000" }
+      resultReporter: { username: "ordinary-results", password: "result-secret-0000000000000000000000" },
+      webhook: {
+        endpoint: "http://ordinary-ci:8080/v1/native-events",
+        username: authorityCredentials.webhook.username,
+        password: authorityCredentials.webhook.password
+      }
     },
     httpClient: createNodeAdmissionVerifierHttpClient(endpoint)
   });

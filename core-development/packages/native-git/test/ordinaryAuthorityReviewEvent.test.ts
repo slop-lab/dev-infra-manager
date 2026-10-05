@@ -107,7 +107,10 @@ describe("native Git ordinary authority review-event proof", () => {
     const contentType = await fetch(`${fixture.baseUrl()}${route}`, {
       method: "POST",
       headers: {
-        Authorization: `Basic ${Buffer.from("ordinary-identity:identity-credential-secret", "utf8").toString("base64")}`,
+    Authorization: `Basic ${Buffer.from(
+      "ordinary-identity:identity-secret-00000000000000000000",
+      "utf8"
+    ).toString("base64")}`,
         "Content-Type": "application/json; charset=utf-8"
       },
       body: JSON.stringify(proofBody(event))
