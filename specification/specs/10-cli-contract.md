@@ -528,12 +528,14 @@ event if all required events cannot fit. Pruning never removes an undelivered
 event or a delivery tombstone.
 
 Ordinary CI authenticates the webhook role, attests the configured native
-service identity, and rereads current protected policy through native read-only
-proof before accepting the event. The authenticated event's Project,
-repository, protected ref, three policy revisions, required job, and evidence
-class MUST equal that proof and one live admission. The later descriptor request
-is the independent native check that the review and candidate tuple remain
-current; webhook handling has no descriptor authority.
+service identity, and rereads the exact stored review-job event through native
+read-only proof before accepting an unseen event or tuple. The proof request
+binds a fresh request nonce, event ID, review ID, and job name; the response
+echoes that nonce and the complete canonical event. Every event field MUST equal
+the submitted event and one live admission. Known exact event and same-tuple
+replays remain locally acknowledgeable when native Git is unavailable. The
+later descriptor request independently rechecks the candidate tuple and derives
+execution input; webhook handling has no descriptor authority.
 Acceptance writes the immutable event and one queued demand in the same SQLite
 transaction before returning `202`. It stores the matched admission generation
 with the demand. It never reads executable input from the event. An exact
