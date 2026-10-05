@@ -7,16 +7,18 @@
   canonical operator Project/repository policy returned by an authenticated
   `NativeAdmissionSource`, rotates and revokes admission generations, and
   records only exact native-issued attempt tuples returned by that source.
-  Missing source adapters reject mutation with service unavailable, and rejected
-  source tuples are concealed without changing SQLite. Native Git's strict
+  Its production source lazily authenticates the fixed private-Compose native
+  Git peer on first mutation, attests the exact service role and ordered scope,
+  and accepts only strict nonce-bound canonical policy and current-attempt
+  proofs. Rejected source tuples are concealed and unavailable or malformed
+  peers return service unavailable, always before changing SQLite. Native Git's strict
   schema-2 config pins the proof service identity to `native-main` and provides
   a dedicated read-only proof identity plus exact canonical protected-policy
   and current unrevoked schema-2 attempt endpoints. Policy proof returns sorted
-  required jobs but no per-Project capacity mapping; the future central adapter
-  derives every eligible assignment from its global operator-owned host
-  capacities. No production source adapter is implemented yet, so the default
-  cannot admit or assign work. Once
-  source-gated state exists, the library answers the Native Git query client
+  required jobs but no per-Project capacity mapping; the central adapter derives
+  and sorts every eligible assignment from its global operator-owned host
+  capacities and requires exact equality with registrar and scheduler
+  assertions. Once source-gated state exists, the library answers the Native Git query client
   only for exact live admission and current-attempt tuples. Registrar,
   scheduler, and query credentials are disjoint; stale generations, expired or
   revoked policy, foreign tuples, credential crossover, and predecessor
