@@ -555,7 +555,11 @@ known replay remains idempotent even when either fence table is full. An unseen
 event requiring either new fence receives `429` before inbox mutation when that
 table is full. It cannot replace, reopen, or reprioritize demand.
 
-A host calls exact `POST /v1/host-claims` with only schema version `1`, a fresh
+Before claiming, a host MUST call exact `GET /v1/host-identity` with its host
+credential and require the exact response `{schemaVersion: 1, serviceId,
+role: "native-host", hostId}` to match its immutable service and host
+configuration. The response exposes no host or capacity inventory. A host then
+calls exact `POST /v1/host-claims` with only schema version `1`, a fresh
 UUID `requestId`, its configured `hostId`, and one configured `capacity`. The
 host credential is bound to that host and its configured capacities. Under one
 capacity serializer, ordinary CI selects the oldest queued demand for the
