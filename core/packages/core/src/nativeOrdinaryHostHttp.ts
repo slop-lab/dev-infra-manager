@@ -28,12 +28,22 @@ type HostHttpContext = {
 };
 
 export async function handleNativeOrdinaryHostHttp(context: HostHttpContext): Promise<boolean> {
-  if (context.request.method !== "POST" || !hostPaths.has(context.pathname)) return false;
+  const identityRequest = context.request.method === "GET" && context.pathname === "/v1/host-identity";
+  if (!identityRequest && (context.request.method !== "POST" || !hostPaths.has(context.pathname))) return false;
   const hostId = authenticatedHost(context.request, context.config);
   if (hostId === undefined) {
     const recognized = knownCredential(context.request, context.config);
     sendJson(context.response, recognized ? 403 : 401, {
       error: recognized ? "forbidden" : "unauthorized"
+    });
+    return true;
+  }
+  if (identityRequest) {
+    sendJson(context.response, 200, {
+      schemaVersion: 1,
+      serviceId: context.config.serviceId,
+      role: "native-host",
+      hostId
     });
     return true;
   }
