@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 import { lstat, readFile } from "node:fs/promises";
-import { createNativeGitServer, parseNativeGitServiceConfig } from "./index.js";
+import {
+  createConfiguredNativeGitServer,
+  createNodeAdmissionVerifierHttpClient,
+  parseNativeGitServiceConfig
+} from "./index.js";
 import { requestReviewApi, type ReviewClientCredentials } from "./review-client.js";
 
 async function main(): Promise<void> {
@@ -24,7 +28,7 @@ async function serve(configPath: string | undefined): Promise<void> {
     throw new NativeGitConfigFileError("native Git configuration must be a caller-owned mode-0600 regular file");
   }
   const config = parseNativeGitServiceConfig(JSON.parse(await readFile(configPath, "utf8")));
-  const service = createNativeGitServer(config);
+  const service = await createConfiguredNativeGitServer(config, createNodeAdmissionVerifierHttpClient());
   const baseUrl = await service.listen();
   process.stdout.write(`${baseUrl}\n`);
   const stop = async (): Promise<void> => {

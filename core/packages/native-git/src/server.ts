@@ -26,6 +26,10 @@ import {
   rejectingAdmissionVerifier,
   type AdmissionVerifier
 } from "./admission-verifier.js";
+import {
+  createOrdinaryAdmissionVerifier,
+  type AdmissionVerifierHttpClient
+} from "./ordinary-admission-http.js";
 
 export type NativeGitServer = {
   readonly server: Server;
@@ -142,6 +146,16 @@ export function createNativeGitServer(
       storageOwner = undefined;
     }
   };
+}
+
+export async function createConfiguredNativeGitServer(
+  input: NativeGitServiceConfig,
+  httpClient: AdmissionVerifierHttpClient
+): Promise<NativeGitServer> {
+  const config = parseNativeGitServiceConfig(input);
+  if (config.ordinaryCi === undefined) return createNativeGitServer(config);
+  const admissionVerifier = await createOrdinaryAdmissionVerifier({ config: config.ordinaryCi, httpClient });
+  return createNativeGitServer(config, admissionVerifier);
 }
 
 function canAccess(identity: NativeGitIdentity, projectId: string, repositoryId: string): boolean {

@@ -7,6 +7,7 @@ import {
   createNativeGitServer,
   initializeNativeRepository,
   parseNativeGitServiceConfig,
+  type AdmissionVerifier,
   type NativeGitServer,
   type NativeGitServiceConfig
 } from "../../../../core/packages/native-git/src/index.js";
@@ -40,7 +41,7 @@ export type ReviewFixture = {
 
 export type JsonObject = Readonly<Record<string, unknown>>;
 
-export async function nativeGitReviewFixture(): Promise<ReviewFixture> {
+export async function nativeGitReviewFixture(injectedAdmissionVerifier?: AdmissionVerifier): Promise<ReviewFixture> {
   const root = await mkdtemp(join(tmpdir(), "dim-native-git-review-"));
   const storageRoot = join(root, "storage");
   const candidateReadGate = await createGitReadGate(root, gitExecutable);
@@ -120,7 +121,7 @@ ordinary:
   const protectedHead = (await run(gitExecutable, ["--git-dir", repositoryPath, "rev-parse", "refs/heads/main"])).stdout.trim();
 
   const admission = createTestAdmissionVerifier();
-  let service: NativeGitServer = createNativeGitServer(config, admission.verifier, 50);
+  let service: NativeGitServer = createNativeGitServer(config, injectedAdmissionVerifier ?? admission.verifier, 50);
   let endpoint = await service.listen();
   const clone = join(root, "writer-clone");
   await git(root, ["clone", authenticatedGitUrl(endpoint), clone]);
@@ -167,7 +168,7 @@ ordinary:
     request: (identity, method, path, body) => reviewRequest(endpoint, identity, method, path, body),
     async restart(nextConfig = config) {
       await service.close();
-      service = createNativeGitServer(nextConfig, admission.verifier, 50);
+      service = createNativeGitServer(nextConfig, injectedAdmissionVerifier ?? admission.verifier, 50);
       endpoint = await service.listen();
     },
     async restartWithoutAdmissionVerifier() {
