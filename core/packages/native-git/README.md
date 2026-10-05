@@ -23,11 +23,12 @@ and non-fast-forward proposal updates. Reviewer and administrator identities
 cannot use Git transport. Reviewers may approve only a complete immutable
 base-to-candidate review for which policy designates them; administrators may
 inspect and revoke but cannot approve. Approval is durable evidence only.
-Dedicated scheduler identities derive candidate ordinary-execution descriptors
-and issue and revoke current job attempts, but cannot use Git transport or
-report results. Dedicated CI identities can report only their configured job
-and issued attempt, and only a dedicated promoter identity can request the
-checked promotion transaction.
+The configured `ordinaryCi.attemptIssuer` credential derives candidate
+ordinary-execution descriptors and issues and revokes current job attempts,
+but cannot use Git transport or report results. The configured
+`ordinaryCi.resultReporter` credential can report only an exact current issued
+attempt, and only a dedicated promoter identity can request the checked
+promotion transaction. Neither ordinary-CI credential is a native Git identity.
 Administrator credentials cannot approve or promote. No Git transport identity
 can update a protected ref.
 
@@ -143,29 +144,6 @@ Example schema-2 configuration:
       "reviewerId": "lifecycle-owner"
     },
     {
-      "role": "ci",
-      "username": "source-ci",
-      "password": "replace-with-random-secret",
-      "projectId": "project-a",
-      "repositoryIds": ["root"],
-      "jobName": "source"
-    },
-    {
-      "role": "ci",
-      "username": "security-ci",
-      "password": "replace-with-random-secret",
-      "projectId": "project-a",
-      "repositoryIds": ["root"],
-      "jobName": "security"
-    },
-    {
-      "role": "scheduler",
-      "username": "host-scheduler",
-      "password": "replace-with-random-secret",
-      "projectId": "project-a",
-      "repositoryIds": ["root"]
-    },
-    {
       "role": "promoter",
       "username": "host-promoter",
       "password": "replace-with-random-secret",
@@ -193,6 +171,11 @@ exact ordered scope `admission:read`, `attempt:read`. The verifier is injected
 only after that attestation succeeds. An absent `ordinaryCi` object preserves
 the rejecting verifier, so CI attempt, result, and promotion operations remain
 fail closed.
+
+Native Git identities are limited to reader, writer, reviewer, promoter, and
+administrator roles. Schema-2 configuration rejects the obsolete generic
+`scheduler` and `ci` identity variants; ordinary protected-promotion evidence
+must use `ordinaryCi.attemptIssuer` and `ordinaryCi.resultReporter`.
 
 The webhook credential is outbound-only and is sent only in the Authorization
 header. After repository validation, one service-owned dispatcher submits the
@@ -288,9 +271,10 @@ inside the owned bare repository and are validated when the service restarts.
 
 ## CI evidence and promotion
 
-The dedicated scheduler identity first issues the current attempt through
+The dedicated `ordinaryCi.attemptIssuer` service credential first issues the current attempt through
 `POST .../reviews/<review-id>/job-attempts`; it may revoke that attempt through
-`POST .../job-attempt-revocations`. CI reports use the native
+`POST .../job-attempt-revocations`. Only `ordinaryCi.resultReporter` submits
+CI reports, using the native
 `dim.ci.job.completed` schema-2 event envelope. Issuance requires a UUID
 `issuanceRequestId`, the expected canonical descriptor digest and all operator
 descriptor inputs, plus the assigned `hostId` and `capacity`. Native Git derives
@@ -323,7 +307,7 @@ and the exact review/admission tuple, reads only `.dim/ci/runner.yml` and its
 selected script from the named candidate tree, and returns the normalized
 descriptor and digest. It does not schedule or launch work.
 
-Before issuing an attempt, the scheduler obtains that descriptor through exact
+Before issuing an attempt, the attempt issuer obtains that descriptor through exact
 `POST /v1/projects/<project>/repositories/<repository>/reviews/<review-id>/ordinary-execution-descriptors`.
 The request has no query parameters, is bounded to 64 KiB, requires exact
 `application/json`, and accepts only:
