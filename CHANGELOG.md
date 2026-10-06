@@ -79,7 +79,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   Verdaccio binary on a random loopback port, with
   signup closed and mutation authenticated. Image preparation remains
   separate.
-  The published installer now owns only the nested `installer` namespace:
+  The published installer now owns the nested `installer` namespace and the
+  explicit obsolete `install-cp` rejection:
   `installer install core|plugin` replaces the old top-level install verbs,
   registry plugins require exact versions, plugin graph changes stage before
   promotion, and core promotion restarts and verifies the controller exactly
@@ -94,9 +95,11 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   signaling a filesystem-supplied PID, then restores the prior runtime and
   controller when present. A shutdown failure leaves both target and backup in
   place and preserves the original installation error. The
-  current CLI-owned `install-cp` placeholder fails closed without host changes
-  because the specified native Git/ordinary-CI bundle, service integration, and
-  native Project adapter are not implemented; no separate web UI is installed.
+  installer facade now installs and transactionally updates the empty, idle
+  native Git/ordinary-CI bundle through `installer install control-plane
+  --config FILE`; it rejects obsolete `install-cp` before CLI forwarding. The
+  native Project adapter, capacity, Sysbox job execution, and reviewer UI remain
+  unavailable.
   Published CLI installations can now explicitly run `dim workspace image
   build` from any directory. The core package ships the complete trusted build
   context and references the exact-version controller-proxy package, so the

@@ -24,7 +24,15 @@
   revoked policy, foreign tuples, credential crossover, and predecessor
   schema-2 databases fail closed across restart without exposing secrets. The
   service has no Docker or host-administration socket, and a query never creates
-  admission or attempt state. The query nonce is correlation and offline-replay
+  admission or attempt state. The ordinary bundle image now exposes exact
+  compatibility and read-only state probes plus a distinct idle runtime with
+  authenticated readiness, query-only identity, and restart-bound generation
+  activation. The native Git and ordinary CI idle services now ship separate
+  source Dockerfiles pinned to Node 24.19.0 by digest, fixed non-root identities,
+  and only their audited runtime file and package closures. It creates schema-3 state only in an empty volume, binds a durable
+  non-secret marker to the complete SQLite manifest, and keeps every Project and
+  job mutation unavailable until a separate native Project adapter exists. The
+  query nonce is correlation and offline-replay
   protection rather than server authentication; the target currently assumes
   authenticated peers on its fixed private Compose network. Continue defining
   the complete native target as candidate-controlled self-test execution:
@@ -90,9 +98,17 @@
   SHA-1 or SHA-256 objects and bounded inputs, runs one digest-pinned nested
   Sysbox job with no host authority in the candidate, renews against a
   request-start monotonic deadline, and submits terminal evidence only after
-  ownership-checked cleanup. The worker is not connected to controller startup:
-  the native Project adapter and installer wiring remain unimplemented, and
-  actual Sysbox execution still requires the unavailable runtime gate.
+  ownership-checked cleanup. The worker is not connected to controller startup;
+  the native Project adapter and job-running integration remain unavailable.
+  The separate installer can deploy two idle services but does not admit a
+  Project or advertise host capacity, and actual Sysbox execution still
+  requires the unavailable runtime gate. Before installation it now rejects an
+  obsolete ordinary-pool selector and canonical Project-scoped Sysbox or unsafe
+  runner records without mutation, preserves valid schema-8 QEMU records, and
+  refuses to adopt pre-existing fixed-volume or old database state. Arbitrary
+  external predecessor config/database paths remain operator-owned and must be
+  stopped with the pinned predecessor release because they are not globally
+  discoverable installer state.
   Native Git now
    authenticates the configured attempt issuer and result reporter as distinct
    service principals: only the issuer may derive descriptors or issue and
@@ -114,11 +130,11 @@
   core|plugin` namespace, require exact registry plugin versions, stage plugin
   graph replacement transactionally, and include one controller
   restart/readiness gate in core installation with restoration of the prior
-  runtime and controller after injected failure. The current CLI-owned
-  `dim install-cp` placeholder remains an explicit fail-closed gate because the
-  specified native Git/ordinary-CI bundle, service integration, and native
-  Project adapter are not implemented; it changes no host state and installs no
-  separate web UI.
+  runtime and controller after injected failure. The facade now exclusively
+  owns `dim installer install control-plane --config FILE`, installs and updates
+  the empty idle native Git/ordinary-CI bundle transactionally, and rejects
+  obsolete `dim install-cp` before forwarding. Native Project integration,
+  capacity, Sysbox job execution, and the reviewer UI remain unavailable.
 
 - Add a standalone DIM-owned Git smart-HTTP host with exact
   Project/repository registration, identity-scoped reads, and workspace-bound
