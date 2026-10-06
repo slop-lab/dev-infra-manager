@@ -14,6 +14,21 @@ export type {
   OrdinaryCiDependencyConfig
 } from "./config.js";
 export {
+  NativeGitBundleConfigError,
+  parseNativeGitBundle,
+  parseNativeGitBundleConfig,
+  parseOrdinaryBundleConfig
+} from "./bundle-config.js";
+export type { NativeGitBundleConfig, OrdinaryBundleConfig } from "./bundle-config.js";
+export {
+  initializeNativeGitBundleState,
+  inspectNativeGitBundleState,
+  NativeGitBundleStateError
+} from "./native-bundle-state.js";
+export type { NativeGitBundleState } from "./native-bundle-state.js";
+export { configuredNativeGitIdleServer, NativeGitIdleServiceError } from "./native-idle-service.js";
+export type { NativeGitIdleServiceOptions } from "./native-idle-service.js";
+export {
   CandidateExecutionError,
   candidateOrdinaryExecutionDescriptorSchema,
   candidateOrdinaryExecutionRequestSchema

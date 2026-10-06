@@ -20,7 +20,8 @@
     }
   },
   "bin": {
-    "dim-native-git": "./dist/cli.js"
+    "dim-native-git": "./dist/cli.js",
+    "dim-service": "./dist/serviceCli.js"
   },
   "scripts": {
     "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
