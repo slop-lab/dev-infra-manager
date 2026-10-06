@@ -21,6 +21,9 @@
       "import": "./dist/index.js"
     }
   },
+  "bin": {
+    "dim-service": "./dist/nativeOrdinaryServiceCli.js"
+  },
   "scripts": {
     "build": "node ../../scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
     "pack:dry-run": "pnpm run build && bash ../../scripts/pnpm-pack-dry-run.bash ./dist",

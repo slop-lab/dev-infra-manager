@@ -28,6 +28,7 @@ output.exports = {
     import: "./index.js"
   }
 };
+output.bin = { "dim-service": "nativeOrdinaryServiceCli.js" };
 
 if ("private" in output) {
   throw new Error("The publish package.json must not contain private");
