@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { UserError } from "./errors.js";
+import { assertSqliteSchema, sqliteSchemaManifestSha256 } from "./sqliteSchemaManifest.js";
 
 const schemaVersion = 3;
 
@@ -11,6 +11,11 @@ const schemaSql = `
     active INTEGER NOT NULL CHECK(active IN (0,1))
   ) STRICT;
   CREATE UNIQUE INDEX service_epochs_one_active ON service_epochs(active) WHERE active = 1;
+  CREATE TABLE bundle_activation (
+    generation_id TEXT PRIMARY KEY CHECK(length(generation_id) = 64 AND generation_id NOT GLOB '*[^0-9a-f]*'),
+    activation_token_sha256 TEXT NOT NULL UNIQUE
+      CHECK(length(activation_token_sha256) = 64 AND activation_token_sha256 NOT GLOB '*[^0-9a-f]*')
+  ) STRICT;
   CREATE TABLE native_admissions (
     admission_generation TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,
@@ -195,60 +200,10 @@ export function openNativeOrdinaryDatabase(file: string): DatabaseSync {
   }
 }
 
-function assertNativeOrdinarySchema(file: string): void {
-  const actual = new DatabaseSync(file, { readOnly: true });
-  const expected = new DatabaseSync(":memory:");
-  try {
-    expected.exec(schemaSql);
-    if (pragmaNumber(actual, "user_version") !== schemaVersion || schemaSignature(actual) !== schemaSignature(expected)) {
-      throw new UserError("native ordinary database schema manifest is unsupported");
-    }
-    const integrity = actual.prepare("PRAGMA integrity_check").all();
-    if (integrity.length !== 1 || field(integrity[0], "integrity_check") !== "ok"
-      || actual.prepare("PRAGMA foreign_key_check").all().length !== 0) {
-      throw new UserError("native ordinary database integrity check failed");
-    }
-  } finally {
-    actual.close();
-    expected.close();
-  }
+export function assertNativeOrdinarySchema(file: string): string {
+  return assertSqliteSchema(file, { schemaSql, schemaVersion });
 }
 
-function schemaSignature(database: DatabaseSync): string {
-  const objects = database.prepare(`
-    SELECT type, name, tbl_name, sql FROM sqlite_schema
-    WHERE name NOT LIKE 'sqlite_%' AND type IN ('table','index') ORDER BY type, name
-  `).all();
-  const tableNames = objects
-    .filter((row) => field(row, "type") === "table")
-    .map((row) => field(row, "name"))
-    .filter((name): name is string => typeof name === "string");
-  const metadata = tableNames.map((table) => ({
-    table,
-    columns: database.prepare(`PRAGMA table_info(${quoted(table)})`).all(),
-    indexes: database.prepare(`PRAGMA index_list(${quoted(table)})`).all().map((index) => {
-      const name = field(index, "name");
-      return { index, columns: typeof name === "string" ? database.prepare(`PRAGMA index_info(${quoted(name)})`).all() : [] };
-    }),
-    foreignKeys: database.prepare(`PRAGMA foreign_key_list(${quoted(table)})`).all()
-  }));
-  return JSON.stringify({ objects, metadata }, bigintJson);
-}
-
-function pragmaNumber(database: DatabaseSync, name: string): number | undefined {
-  const row = database.prepare(`PRAGMA ${name}`).get();
-  const value = field(row, name);
-  return typeof value === "number" ? value : undefined;
-}
-
-function field(row: unknown, name: string): unknown {
-  return typeof row === "object" && row !== null ? Reflect.get(row, name) : undefined;
-}
-
-function quoted(identifier: string): string {
-  return `'${identifier.replaceAll("'", "''")}'`;
-}
-
-function bigintJson(_key: string, value: unknown): unknown {
-  return typeof value === "bigint" ? value.toString() : value;
+export function nativeOrdinarySchemaManifestSha256(): string {
+  return sqliteSchemaManifestSha256({ schemaSql, schemaVersion });
 }
