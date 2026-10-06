@@ -5,7 +5,8 @@
 executable is also named `dim`. It installs the CLI and plugins with exact
 versions via `npm`, requires no `sudo`, and does not duplicate DIM's command
 tree: anything outside its installer-owned namespace is forwarded
-as-is to the installed DIM CLI.
+as-is to the installed DIM CLI, except the obsolete `install-cp` token, which
+the facade rejects rather than forwarding.
 
 DIM installs and runs on Linux hosts only. macOS, Windows, and Docker Desktop
 hosts are not supported.
@@ -81,6 +82,8 @@ always a DIM CLI command, never handled here).
 dim installer                Open the interactive installer (TTY only)
 dim installer install core [options]
                               Install/upgrade DIM core and CLI
+dim installer install control-plane --config FILE
+                              Install/update the idle native control-plane bundle
 dim installer install plugin PACKAGE@EXACT_VERSION...
                               Install and enable one or more plugins
 dim installer enable-plugin PACKAGE...
@@ -137,6 +140,58 @@ coordinate as a default-yes host-operator choice. Declining leaves the runtime
 uninstalled. Without a TTY, omission fails before npm runs and prints the exact
 option required. No Project, workspace, or agent input can make this choice or
 select the plugin's digest-pinned images.
+
+### `dim installer install control-plane`
+
+```text
+Usage: dim installer install control-plane --config FILE
+
+Options:
+  --config FILE  Read the control-plane installation configuration from FILE
+  -h, --help     Show this help
+```
+
+`FILE` must be an absolute path to the strict, operator-owned control-plane
+configuration. The command accepts exactly one `--config` and no positional,
+unknown, or state-root options. Installed state is kept under
+`${XDG_STATE_HOME:-$HOME/.local/state}/dim/control-plane`.
+
+This pre-stable command installs or updates only the digest-pinned native Git
+and ordinary-CI service bundle. The services start empty and idle. The command
+does not create a Project or repository, admit a Project, advertise capacity,
+run a Sysbox job, install a host controller, or install a reviewer browser UI.
+Those capabilities require separate future contracts and acceptance gates.
+`dim install-cp` is obsolete, is not a CLI alias, and is rejected by the facade
+before configured-CLI forwarding.
+
+Before it reads `FILE` or creates installer state, the command rejects presence
+of the obsolete `DIM_ORDINARY_CI_POOL_CONNECTION_FILE` selector and scans only
+canonical lifecycle records under
+`${DIM_STATE_ROOT:-$HOME/.local/state/dim}/ci-runners/<project>/*.json`.
+Project-scoped Sysbox records and unsafe or unclassifiable records fail closed
+without modification. Valid schema-8 QEMU records are allowed and untouched.
+The command does not search arbitrary filesystem paths or process tables for
+old `dim ci ordinary-pool service run <config>` instances because that command
+accepted arbitrary private config and database paths. Stop such external old
+services with their pinned predecessor release. The new bundle never adopts an
+old database or a pre-existing fixed ordinary-CI volume.
+
+Before creating or replacing bundle resources, the installer uses disposable
+containers in the selected Docker daemon to verify each newly selected
+published address. This remains authoritative when a rootless daemon's
+published ports are unreachable from the installer process namespace. An
+occupied or indeterminate address fails closed without stopping, adopting, or
+relabeling its owner. Exact unchanged bindings of a completely verified owned
+installation are reused without a conflicting disposable probe.
+
+The production installer invokes Docker only through a verified
+`/usr/local/bin/docker` or `/usr/bin/docker`. The selected CLI and every parent
+directory must be root-owned, non-symlinked, and not group- or world-writable;
+the CLI must also be a regular executable file. Caller `PATH` and the current
+working directory never select the Docker program. Docker subprocesses receive
+a system-only `PATH` so credential helpers cannot be selected from a Project
+checkout, while settings such as `DOCKER_HOST` remain available for rootless
+daemons.
 
 ### `dim installer install plugin`
 
@@ -307,8 +362,10 @@ it points at.
 
 ## What this does not do
 
-The installer only installs the DIM CLI and DIM plugins. It does not install
-Docker, a workspace runtime backend, or the DIM workspace image; see the
+The installer does not install Docker, a workspace runtime backend, or the DIM
+workspace image. Its control-plane command installs only the idle service
+bundle described above, not a Project adapter, CI execution capacity, Sysbox
+job gate, or reviewer UI. See the
 repository's
 [host setup guide](https://github.com/slop-lab/dev-infra-manager/blob/main/docs/usage.md)
 for those prerequisites.
