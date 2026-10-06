@@ -46,6 +46,20 @@ command or compatibility alias. The facade MUST reject it with exit code `2`,
 name `dim installer install control-plane --config FILE`, and make no host
 change.
 
+The control-plane installer MUST execute Docker through the first present
+trusted CLI in the fixed order `/usr/local/bin/docker`, `/usr/bin/docker`. It
+MUST open the candidate without following a final symbolic link, verify the
+opened file is a root-owned, non-group/world-writable executable regular file,
+and verify `/` plus every lexical parent directory is a root-owned,
+non-group/world-writable directory rather than a symbolic link. A present but
+unsafe candidate MUST fail closed rather than fall through. If neither fixed
+candidate is present, installation MUST fail before acquiring installer state
+or mutating Docker resources. Caller `PATH`, the current working directory,
+Project files, and user configuration MUST NOT select another executable.
+Docker children MUST receive a `PATH` containing only fixed system directories
+while retaining daemon-selection settings such as `DOCKER_HOST`; diagnostics
+MUST NOT print the child environment or credential values.
+
 ## Dispatch
 
 ```text
@@ -71,9 +85,7 @@ anything else, CLI set    -> proxied to the configured executable
 
 The `install-cp` row is the sole legacy-token exception to the facade's
 otherwise namespace-only dispatch. It is matched before configured-CLI proxy
-dispatch. The current published facade does not yet implement this exception or
-the control-plane command; current behavior is recorded under
-[Current availability](#current-availability).
+dispatch.
 
 ## Configuration
 
@@ -334,6 +346,11 @@ The bundle has these fixed runtime properties:
 | Activation token | generated snapshot at `/run/secrets/activation.token`, read-only | generated snapshot at `/run/secrets/activation.token`, read-only |
 | Persistent volume | `dim-control-plane-native-git-data` at `/var/lib/dim-native-git` | `dim-control-plane-ordinary-ci-data` at `/var/lib/dim-ordinary-ci` |
 
+Each container's exact startup argv is `dim-service serve
+/run/secrets/service.json <generationId>`. The non-secret generation ID is a
+computed command argument, not a seventh snapshot, mount, environment value, or
+input to its own digest.
+
 The fixed bridge network is `dim-control-plane`. Only these two services attach
 to it. Each volume is service-private: the other service MUST NOT mount it, and
 no host path, Project, workspace, worker, or additional container may share it.
@@ -366,7 +383,8 @@ and ordinary activation tokens of at least 32 random bytes, stores each as a
 mode-`0444` snapshot mounted only into its service, and retains the installer-
 readable bytes for activation and rollback. Activation tokens are not operator
 input and differ from every other credential. The installer never rewrites a
-published generation.
+published generation. A generation contains exactly these six snapshot files;
+no derived generation marker is written or mounted.
 
 `compose.yml` contains the exact last successful rendered Compose bytes and is
 mode `0600`. `install.json` is mode `0600` with this exact schema:
@@ -379,6 +397,8 @@ mode `0600`. `install.json` is mode `0600` with this exact schema:
   "composeSha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
   "nativeGitImage": "registry.example/dim/native-git@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "ordinaryCiImage": "registry.example/dim/ordinary-ci@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "nativeGitPublish": { "host": "127.0.0.1", "port": 7443 },
+  "ordinaryCiPublish": { "host": "127.0.0.1", "port": 7410 },
   "nativeGitConfigSha256": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
   "nativeGitReadinessTokenSha256": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
   "ordinaryCiConfigSha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
@@ -389,19 +409,49 @@ mode `0600`. `install.json` is mode `0600` with this exact schema:
 }
 ```
 
-The generation ID is the SHA-256 digest of a domain separator plus the
-length-framed image references, four exact operator-input snapshot byte
-strings, and two generated activation-token byte strings. The six recorded
+The generation ID is the lowercase hexadecimal SHA-256 digest of the ASCII
+domain separator `dim-control-plane-generation-v1` followed, in this exact
+order, by the native Git image reference, ordinary CI image reference, native
+Git config bytes, native Git readiness-token bytes, ordinary CI config bytes,
+ordinary CI readiness-token bytes, native Git activation-token bytes, and
+ordinary CI activation-token bytes. Each of those eight fields is encoded as
+its unsigned 8-byte big-endian byte length followed by its exact bytes; the
+domain separator itself is not length-framed. The six recorded
 digests permit independent verification without recording a secret.
-The Compose digest covers the exact `compose.yml` bytes. `volumesEstablished` is
-published only after both exact labelled volumes have been created or
-inspected and is thereafter always `true`; a true record with either volume
-absent is the fatal data-loss condition above. The installer accepts no
-schema-less, extra-field, symbolic-link, wrong-owner, wrong-mode, digest-
-mismatched, or temporary installed-state artifact. It holds one exclusive
-owner-recorded lock in this directory across inspection, update, readiness,
-publication, and rollback. A concurrent invocation fails before Docker
-mutation rather than sharing the transaction.
+The Compose digest covers the exact `compose.yml` bytes. Each recorded publish
+object contains the exact normalized local IP address and positive TCP port
+rendered for that service. On every read, the installer reconstructs the
+deterministic Compose bytes from the recorded deployment, images, publish
+objects, and canonical generation snapshot paths and requires a byte-for-byte
+match; neither the record nor arbitrary Compose text may independently redefine
+the installed topology. `volumesEstablished` is published only after both exact
+labelled volumes have been created or inspected and is thereafter always
+`true`; a true record with either volume absent is the fatal data-loss condition
+above. The installer accepts no schema-less, extra-field, symbolic-link,
+wrong-owner, wrong-mode, digest-mismatched, endpoint-less draft schema-1, or
+temporary installed-state artifact. It holds one exclusive owner-recorded lock
+in this directory across inspection, update, readiness, publication, and
+rollback. A concurrent invocation fails before Docker mutation rather than
+sharing the transaction.
+
+POSIX rename cannot atomically publish `compose.yml` and `install.json` as one
+multi-file operation. Before staging candidate bytes, the installer therefore
+fsync-publishes a mode-`0600` `transaction.json` crash marker containing schema
+version 1, a random transaction ID, phase (`staging`, `generation`,
+`publishing`, or `failed-first-install`), the staging-directory basename, the
+candidate generation ID or `null`, and either `null` or the prior generation ID
+plus base64 encodings of the exact prior installed-record and Compose bytes.
+It fsync-replaces the marker at phase changes, replaces and fsyncs
+`compose.yml` and `install.json`
+while the marker remains, and removes and directory-fsyncs the marker only
+after both replacements are durable. Any new invocation that finds the marker,
+a marker temporary file, or a staging directory fails closed before Docker
+mutation; it never adopts, completes, removes, or rewrites that crashed
+transaction. This marker provides fail-closed crash visibility and retained
+rollback bytes, not atomic multi-file replacement. After a failed first
+installation, `failed-first-install` identifies the retained candidate
+generation and data volumes with no prior generation to restore; a later
+invocation refuses to adopt or silently remove them.
 
 The current generation and its immediate predecessor are retained until a
 later successful transaction makes the predecessor unnecessary. A failed
@@ -426,6 +476,24 @@ public reverse proxy are operator-owned prerequisites outside this bundle. An
 operator exposing either listener beyond loopback MUST configure authenticated
 TLS before using it; the installer does not create certificates or report a
 plain-HTTP endpoint as production-ready.
+
+After candidate image digest and config validation, the installer MUST ask the
+same Docker daemon that will run Compose to acquire every newly selected
+published host/port through a disposable `--rm` container using the checked
+candidate image. The probe has no bundle labels, state volume, socket, config
+mount, token, secret argument, or persistent name. A host-process bind or
+connect is not evidence because the installer and a rootless daemon may occupy
+different network namespaces. Nonzero, noisy, timed-out, or otherwise
+indeterminate probe execution is a pre-mutation refusal. An update may skip a
+probe only when that service's candidate tuple exactly equals its recorded
+tuple and complete current-owned Docker resources and runtime topology have
+already been verified. An identical-input no-op verifies those owned bindings
+without a disposable probe. A changed tuple is always probed, including when it
+matches the other service's prior tuple.
+The probe cannot reserve a port through the later Compose start. If another
+host process acquires it after the probe, installation MUST fail closed and
+retain the candidate generation and any created data volumes for inspection;
+it MUST NOT report success or adopt that process.
 
 ## Admission and native-CI dependency
 
@@ -497,6 +565,13 @@ volume, config, or service mutation. A pulled digest may remain in the Docker
 image cache and MUST be reported; image-cache presence is not installed bundle
 state.
 
+After all candidate/prior image, config, compatibility, and state probes pass,
+but before activation-token allocation, generation finalization, Compose
+validation, network or volume creation, or service replacement, the installer
+performs the daemon publication probes defined above. Refusal leaves fixed
+bundle resources and installed state unchanged; the disposable probe is not a
+Compose or bundle resource and MUST be removed by `--rm`.
+
 The installer then runs the native image's `/usr/local/bin/dim-service
 check-bundle-config /run/native.json /run/ordinary.json` in the same restricted
 one-shot shape with both config snapshots mounted read-only. It requires exact
@@ -508,13 +583,17 @@ identity, and no ordinary Project admission in config. This command performs
 no network or state I/O. Any mismatch is a pre-mutation refusal.
 
 Before allocating activation tokens or a generation, the installer compares
-the descriptor-verified image references and four operator-input byte digests
-with the valid installed record. If they are identical, it verifies the
-recorded generation, Compose bytes, complete resource ownership, running image
-digests, and both authenticated readiness responses and returns success without
-rendering, replacing, activating, or creating anything. Any mismatch proceeds
-as an update; missing or inconsistent installed resources are errors rather
-than reasons to regenerate an otherwise identical deployment.
+the descriptor-verified image references, both exact publish host/port tuples,
+and four operator-input byte digests with the valid installed record. If they
+are identical, it verifies the recorded generation, deterministically rendered
+Compose bytes, complete resource ownership, running image digests and publish
+bindings, and both authenticated service-local readiness responses through the
+exact owned containers,
+then returns success without pulling, probing, rendering, replacing, activating,
+or creating anything. Any mismatch, including a publish-only change, proceeds
+as a checked update and publishes a new generation; missing or inconsistent
+installed resources are errors rather than reasons to regenerate an otherwise
+identical deployment.
 
 For an update, each candidate image MUST also expose
 `/usr/local/bin/dim-service compatibility --json`. The installer runs it for
@@ -542,11 +621,13 @@ Compose bytes and image digests before replacement. The only supported order is:
 
 1. create or inspect the network and both volumes without adopting foreign or
    partially labelled resources;
-2. replace `ordinary-ci` in standby mode and wait for its authenticated
-   `GET /readyz` to return `200` and exact JSON
+2. replace `ordinary-ci` in standby mode and use its image-local `dim-service
+   ready` command to require authenticated service-local `GET /readyz` to
+   return `200` and exact JSON
    `{"status":"ready","schemaVersion":1}` based only on its parsed immutable
    snapshot, local database readability/durability, and local listener state;
-3. replace `native-git`, wait for the same response shape from its `/readyz`;
+3. replace `native-git`, use its image-local `dim-service ready` command to
+   require the same response shape from its service-local `/readyz`;
 4. require native Git readiness to include a successful authenticated
    dependency probe to the installed ordinary service identity; and
 5. atomically publish the new rendered Compose bytes, install record, and
@@ -559,52 +640,135 @@ webhook, attempt, and result operation. Native readiness may depend on ordinary
 identity and read-only current-attempt queries. Before exact-generation
 activation, both candidate services return `503` for every state-mutating
 endpoint and create no admission, webhook, attempt, claim, result, repository,
-review, or promotion state. Activation accepts only the installer-held
-generation credential over the private Compose network and is idempotent for
-the published generation; a service rejects any other or unpublished
-generation.
+review, or promotion state. `POST /v1/activation` first requires the TCP peer
+address to be exactly IPv4 `127.0.0.1`; non-loopback requests, including requests
+through a host-published listener with the correct bearer, receive `404` before
+authorization or body parsing. It then requires that service's mounted
+activation token, a strict body containing the startup-bound generation ID, and
+an exact generation match. A syntactically valid different generation receives
+generic `409` and causes no database write. Exact activation is idempotent.
 
-Each readiness request uses `Authorization: Bearer <readiness token>`, follows
-no redirect, has a two-second connect/request timeout, and is retried for at
-most 60 seconds. `/healthz`, container running state, an open TCP port, and
-Compose exit success are not readiness. Readiness responses MUST disclose no
-credential, Project, repository, job, path, or host inventory.
+After `compose.yml` and `install.json` are durably published while
+`transaction.json` remains, the installer re-inspects complete resource
+ownership and exact runtime topology before each activation. It targets the
+returned immutable container ID and runs, without a shell, stdin, environment,
+or token argument, ordinary CI first and native Git second:
+
+```text
+docker container exec --user 10002:10002 ORDINARY_ID /usr/local/bin/dim-service activate GENERATION_ID
+docker container exec --user 10001:10001 NATIVE_ID /usr/local/bin/dim-service activate GENERATION_ID
+```
+
+The image-local activation command reads only `/run/secrets/activation.token`, sends one
+bounded request to `http://127.0.0.1:8080/v1/activation`, requires the exact
+success status, headers, and body, and exits zero with empty standard output and
+standard error. No
+activation token appears in Docker argv, environment, stdin, logs, or generated
+Compose.
+
+Before every readiness attempt, the installer re-inspects the fixed service
+container name and requires its exact owned labels, immutable container ID,
+image, user, startup generation, mounts, published-port binding, sole private
+network, and security settings. It then targets that immutable ID without a
+shell, stdin, environment, or token argument, ordinary CI first and native Git
+second:
+
+```text
+docker container exec --user 10002:10002 ORDINARY_ID /usr/local/bin/dim-service ready
+docker container exec --user 10001:10001 NATIVE_ID /usr/local/bin/dim-service ready
+```
+
+Each image-local `ready` command reads only
+`/run/secrets/readiness.token`, sends `GET
+http://127.0.0.1:8080/readyz` with `Authorization: Bearer <readiness token>`,
+follows no redirect, and enforces one absolute two-second request-and-body
+deadline. It requires exact status `200`, `Content-Type: application/json`,
+`Cache-Control: no-store`, and body
+`{"status":"ready","schemaVersion":1}`; success exits zero with empty standard
+output and standard error. The installer retries this inspected exec operation
+for at most 60 seconds. If Docker-command termination cannot be established, it
+halts automatic cleanup or rollback. No readiness token enters host HTTP,
+Docker argv, environment, stdin, logs, or generated Compose. The published
+authenticated `GET /readyz` remains available to operators but is not the
+installer readiness transport. `/healthz`, container running state, an open TCP
+port, and Compose exit success are not readiness. Readiness responses MUST
+disclose no credential, Project, repository, job, path, or host inventory.
 
 On any failure after mutation, the installer stops and removes only replacement
 containers whose complete bundle/deployment/service labels match, restores the
 prior rendered Compose bytes, exact prior image digests, prior generation ID,
-and all four prior input snapshots, starts `ordinary-ci` before `native-git`,
-and repeats both authenticated readiness checks before reactivating that exact
-prior generation. Operator source files are never rewritten. Data volumes are
+and all six prior snapshots, starts `ordinary-ci` before `native-git`,
+and uses exact-ID service-local readiness execs followed by reactivation of
+that exact prior generation. Operator source files are
+never rewritten. Data volumes are
 never rolled back, deleted, copied, or replaced; prior-image readability of
 candidate writes is the mandatory precondition that makes service rollback
 valid. A failed first installation removes exact owned
 containers and network but retains any created volume and reports it for
 operator inspection. If replacement shutdown or prior-version readiness
 fails, the installer stops automatic rollback, retains both rendered Compose
-files, both generations' input snapshots, and all volumes, and reports the
+ files, both generations' six snapshots, and all volumes, and reports the
 original and rollback errors. It MUST NOT report success, delete recovery
 evidence, select another image, or start a second bundle.
 
 Changing `deploymentId`, either numeric identity, fixed container port, fixed
 mount path, fixed volume name, or Compose project name in place is unsupported.
-An existing schema-less or non-schema-1 installer record, legacy ordinary-pool
-schema-2 database, Project-scoped Sysbox runner state, `dim install-cp`
-invocation, or separately launched `dim ci ordinary-pool service|worker`
-process MUST be rejected before mutation. There is no compatibility alias,
-implicit migration, dual-service period, volume adoption, or automatic cleanup.
-Operators must use the old pinned release to stop legacy services and perform
-an explicitly reviewed fresh installation; this contract defines no backup,
-export, or data-conversion authority.
+Before reading the installer config, opening the control-plane state lock,
+staging input, constructing a Docker runner, invoking Docker, or mutating
+installer state, the command MUST perform a bounded predecessor-state preflight
+over these explicit DIM-owned selectors:
+
+1. Presence of `DIM_ORDINARY_CI_POOL_CONNECTION_FILE`, including an empty
+   value, is rejected because it explicitly selects the obsolete host
+   ordinary-pool integration. The referenced path MUST NOT be opened or
+   modified.
+2. The command scans only canonical Project-scoped CI-runner records at
+   `${DIM_STATE_ROOT:-$HOME/.local/state/dim}/ci-runners/<project>/<name>.json`.
+   Existing runner directories MUST be caller-owned mode `0700`. Each JSON
+   record is opened read-only with `O_NOFOLLOW`, is bounded to 64 KiB, and MUST
+   be a caller-owned mode-`0600`, single-link regular file. A schema-8 record
+   whose executor kind is `sysbox` is rejected unchanged in every phase,
+   including `stopped`. A fully classifiable schema-8 `qemu` record does not
+   block installation and remains byte-for-byte unchanged. A malformed,
+   symbolically linked, foreign-owned, wrong-mode, unsupported-schema,
+   unknown-executor, or otherwise unclassifiable canonical runner record fails
+   closed unchanged.
+3. First installation requires all fixed `dim-control-plane` Docker resources
+   to be absent and MUST NOT adopt a pre-existing
+   `dim-control-plane-ordinary-ci-data` volume. An update requires a valid
+   schema-1 installed record and complete exact-owned resources. The image-local
+   read-only state probe accepts only the current marked state format and exact
+   schema. Schema-less, schema-1, predecessor schema-2, missing-marker,
+   malformed-marker, or schema-mismatched ordinary state is rejected without
+   changing database, WAL, SHM, marker, or volume bytes.
+
+There is no compatibility alias, implicit migration, dual-service period,
+volume adoption, automatic cleanup, data conversion, or conversion of Sysbox
+capacity into QEMU or native ordinary capacity. The predecessor `dim ci
+ordinary-pool service run <config>` command accepted an arbitrary
+operator-supplied config path whose `database` path was also arbitrary. Those
+external configs, databases, and service processes are not registered
+installer state and are not discoverable from the new exact schema-1 installer
+input. The installer MUST NOT traverse the host filesystem or enumerate
+processes to find them. Their unrelated existence does not block installation,
+but they are never adopted. Operators remain responsible for stopping them
+with the old pinned release; a configured publication collision is separately
+rejected by the normal daemon publication probe. This contract defines no
+backup, export, or data-conversion authority.
 
 Required acceptance evidence is specified by
 [Verification](12-verification.md#control-plane-bundle-gate).
 
 ## Current availability
 
-The current published implementation has neither `dim installer install
-control-plane` nor the facade's legacy-token interception. Its CLI-owned `dim
-install-cp` placeholder fails closed without host changes. The target facade
-command, bundle, snapshots, service credentials, host-controller supervision,
-and native Project adapter MUST NOT be presented as shipped until their
-implementation and the complete control-plane bundle gate pass.
+The pre-stable facade implements `dim installer install control-plane --config
+FILE`, including first installation, identical-input no-op, checked update,
+rollback, and pre-forward rejection of obsolete `dim install-cp`. The command
+installs only the two-service native Git/ordinary-CI bundle. Both services start
+empty and idle.
+
+The native Project/repository adapter, Project admission, native webhook
+demand, capacity advertisement, host-controller execution, real Sysbox job
+gate, and reviewer browser UI remain unavailable. They are not installed or
+enabled by this command, and the idle bundle MUST NOT be presented as complete
+native Project integration or completion of the broader Project #45 work.
