@@ -9,10 +9,6 @@ Windows, and Docker Desktop are outside the supported runtime model.
 
 Specified but not implemented:
 
-- The installer-facade-owned `dim installer install control-plane --config
-  FILE` transaction, with one two-service Compose bundle for native Git and
-  ordinary CI, distinct nonroot identities and private volumes, authenticated
-  dependency readiness, and rollback.
 - Native ordinary CI admission and host-controller-owned shared Sysbox
   capacity. The target has no persistent Project-scoped ordinary runner or
   image. Its accepted design reads strict schema-2 job config, script, and a
@@ -31,16 +27,23 @@ Specified but not implemented:
   native Project admission, capacity advertisement, claims, attempts, and
   results remain denied. Existing QEMU scheduling remains Gitea-only.
 
-No current command or passing predecessor Gitea/QEMU gate is evidence that this
-target deployment is available. The implementation becomes supported only
-after the control-plane bundle acceptance gate passes on a clean host.
-The candidate schema parser, scheduler/attempt descriptor binding, host
-executor, reviewer provenance display, and transition away from protected-root
-schema 1 remain unimplemented. This pre-stable target defines no compatibility
-parser or source/state migration.
+The idle installer command and passing predecessor Gitea/QEMU gates are not
+evidence that native Project integration is available. Bundle support remains
+gated on the control-plane acceptance run on a clean host. The reviewer browser
+UI and transition away from protected-root schema 1 remain unimplemented.
+This pre-stable target defines no compatibility parser or source/state migration.
 
 Implemented:
 
+- The installer-facade-owned `dim installer install control-plane --config
+  FILE` transaction for the idle two-service native Git and ordinary CI Compose
+  bundle, including distinct nonroot identities and private volumes,
+  authenticated readiness, bounded predecessor-state refusal, and rollback.
+  It neither selects native Git for Projects nor admits native ordinary CI jobs
+  or capacity. Support remains gated on the clean-host acceptance run above.
+- Service-level candidate job parsing and descriptor binding, central ordinary
+  claim/lease/result state, and a callable host executor. The host worker is
+  not connected to controller startup and no native Project adapter is active.
 - Project metadata with exactly one root repository per runnable Project.
 - Schema 4 Project state with a trusted Gitea organization ID persisted before
   ready publication, and Project creation serialized through identity
