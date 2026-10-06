@@ -182,8 +182,7 @@ non-symbolic-link, DIM-user-owned mode-`0600` JSON file with this exact schema:
     "transport": "https",
     "endpoint": "https://ci-control.example",
     "serviceId": "ordinary-main",
-    "hostToken": "replace-with-host-token",
-    "admissionToken": "replace-with-admission-token"
+    "hostToken": "replace-with-host-token"
   },
   "capacities": {
     "primary": {
@@ -212,9 +211,10 @@ registration or runtime mutation.
 The native Git credential is host-scoped read/attestation authority, not a
 reviewer, promoter, or storage-administrator identity. Ordinary admission and
 host authorities are distinct. `hostToken` may claim, renew, recover, and
-submit a result only for this host's named capacities. `admissionToken` may
-attest operator-approved Project membership and protected required-job policy,
-not review of candidate-selected job bytes, but cannot claim or report. The
+submit a result only for this host's named capacities. The separate global
+operator registrar credential may attest approved Project membership and
+protected required-job policy, not review of candidate-selected job bytes, but
+cannot claim or report. The
 central service's separate native reporter credential, not a host credential,
 submits accepted durable evidence to native Git. None may enter a workspace,
 job, image, Compose bundle, log, or Project state. Controller startup validates both authenticated service
