@@ -122,26 +122,42 @@ Compose model and running containers, not only source templates, and prove:
 2. neither container has a host Docker/containerd/controller/workspace/admin
    socket, `/dev/kvm`, host device, host namespace, privileged mode, another
    service's volume, or secret bytes in its environment or rendered Compose;
-3. unauthenticated, wrong-token, redirecting, malformed, overlong, and
-   wrong-service readiness requests fail; ordinary readiness succeeds from
-   local durable state while native Git is stopped, native readiness fails
-   without ordinary identity, and then succeeds with the exact ordinary
-   service;
+3. both built images' fixed `/usr/local/bin/dim-service ready` commands run as
+   their service UIDs, read only the mounted readiness token, and fail bounded
+   for unauthenticated, wrong-token, redirecting, malformed, overlong,
+   wrong-service, absent-server, and dripping responses; ordinary readiness
+   succeeds from local durable state while native Git is stopped, native
+   readiness fails without ordinary identity, and then succeeds with the exact
+   ordinary service;
 4. installation creates no Project, repository, runner, image copy, capacity,
    webhook, or browser UI and publishes no undeclared port; and
-5. changing a mutable operator source after snapshot creation does not alter
+5. installer readiness succeeds through exact owned-container IDs when the
+   installer namespace cannot connect to the daemon host's published service
+   ports, Docker argv contains no readiness token, and no third container joins
+   the private network; and
+6. changing a mutable operator source after snapshot creation does not alter
    either running service, and rerunning identical input is byte- and
-   identity-stable and does not recreate containers or volumes.
+   identity-stable and does not recreate containers or volumes. A publish-only
+   change must instead run the complete checked update and publish a new
+   generation without changing either volume identity.
 
 Pre-mutation denial cases MUST include a symlink, wrong owner or mode, unknown
 field, schema mismatch, mutable/tagged image, digest mismatch, duplicate or
 wildcard port, occupied port, foreign/partial resource labels, missing
 established volume, changed deployment identity, invalid service config,
 cross-service credential mismatch, duplicate credential, and
-absence of Compose v2. Each case MUST leave control-plane containers, networks,
+absence of Compose v2. The occupied-port case MUST use a uniquely named
+daemon-published blocker, not a host-process listener, and observe refusal
+before `network create`, `volume create`, or Compose `up`. It MUST also prove a
+free candidate passes, exact current-owned tuples are not spuriously rejected,
+and a publish-only update probes only changed tuples before replacing either
+service. Each case MUST leave control-plane containers, networks,
 volumes, installed Compose bytes, private files, and running service IDs
 byte-for-byte or identity-equivalent unchanged. A digest pulled for image
 config validation may remain only in the image cache and must be reported.
+Disposable publication probes MUST carry no state volume, socket, config mount,
+token, source secret, or bundle/Compose ownership label and MUST leave no
+container after either success or refusal.
 `dim install-cp` MUST exit `2`, identify the supported facade command, and make
 no Docker or state call. In the shipped Gitea predecessor, `dim ci
 ordinary-pool service run` and `dim ci ordinary-pool project reconcile` remain
@@ -171,7 +187,9 @@ publication. In every case it MUST stop only complete-label-matching
 replacement container IDs, restore exact prior image digests and Compose bytes,
 restore the exact prior generation and all of its config, readiness, and
 activation snapshots, start ordinary before native, and observe both prior
-authenticated readiness responses before reactivation. Repository, evidence,
+authenticated readiness responses through exact-ID service-local execs before
+reactivating that generation. Candidate publish endpoints MUST not be used for
+installer readiness after prior Compose restoration. Repository, evidence,
 queue, attempt, claim, and admission sentinels in both volumes MUST survive
 without volume copying or byte rollback. A failed first installation retains
 created volumes but removes exact-owned containers/network and reports those volumes.
@@ -189,8 +207,23 @@ report, result reporter cannot issue or revoke, native query cannot mutate, and
 none can read Git, approve, promote, administer, or cross a configured tuple.
 There is no successful native ordinary job or two-host execution acceptance in
 this installer-only gate; that evidence belongs to the future adapter contract.
-Schema-less, schema-1, and predecessor schema-2 ordinary databases and
-persisted Project-scoped Sysbox runner state MUST be rejected unchanged.
+The gate MUST prove the bounded predecessor-state preflight runs before config
+reading, Docker, lock creation, staging, or installer-state mutation. Presence
+of `DIM_ORDINARY_CI_POOL_CONNECTION_FILE`, including an empty value, MUST refuse
+without opening the referenced path. One canonical Project-scoped schema-8
+Sysbox runner record, including a stopped runner, MUST refuse byte-for-byte
+unchanged and without a Docker call. One valid schema-8 QEMU runner record MUST
+permit normal idle installation and remain byte-for-byte unchanged. Symlinked,
+malformed, foreign-owned, wrong-mode, unsupported-schema, unknown-executor, and
+otherwise unclassifiable canonical runner records MUST fail closed unchanged.
+First installation MUST refuse a pre-existing fixed ordinary-CI volume rather
+than adopt it. Image-level read-only state probes MUST separately prove that
+schema-less, schema-1, predecessor schema-2, missing-marker, malformed-marker,
+and schema-mismatched ordinary database fixtures are rejected without database,
+WAL, SHM, marker, or volume mutation, while the exact current marked format is
+accepted. No acceptance case is required to discover an arbitrary predecessor
+config, database, or process outside the explicit environment selector,
+canonical DIM lifecycle state root, and fixed control-plane Docker resources.
 
 The future adapter gate MUST additionally prove descriptor equality across
 native Git, scheduler, and host parsing; direct argv execution without shell
