@@ -18,17 +18,13 @@ test("root help identifies the canonical source repository", () => {
   assert.match(help.stdout, new RegExp(sourceRepositoryUrl.replaceAll("/", "\\/")));
 });
 
-test("install-cp fails closed until reviewed control-plane deployment inputs exist", () => {
-  const help = run(["install-cp", "--help"]);
-  assert.equal(help.status, 0);
-  assert.match(help.stdout, /control-plane-only host/);
-  assert.doesNotMatch(help.stdout, /web UI/i);
+test("install-cp is not implemented by the DIM CLI", () => {
+  const help = run(["--help"]);
+  assert.doesNotMatch(help.stdout, /install-cp/);
 
   const result = run(["install-cp"]);
-  assert.equal(result.status, 2);
-  assert.match(result.stderr, /native Git service configuration/);
-  assert.match(result.stderr, /CI scheduler\/webhook deployment/);
-  assert.doesNotMatch(result.stderr, /token|password|secret/i);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /unknown command ['"]install-cp['"]/);
 });
 
 test("managed controller restarts preserve the workspace-mounted runtime directory", async () => {

@@ -87,12 +87,12 @@ Check the host before creating a workspace:
 dim doctor
 ```
 
-The current CLI-owned `dim install-cp` placeholder rejects before host changes
-because the specified native Git/ordinary-CI bundle, service integration, and
-native Project adapter are not implemented. The target command belongs to the
-installer facade as `dim installer install control-plane --config FILE`; once
-implemented, the facade rejects `dim install-cp` as obsolete instead of
-proxying it. Neither path installs a separate web UI.
+Control-plane installation belongs exclusively to the installer facade as
+`dim installer install control-plane --config FILE`; this CLI does not
+implement or alias it. The facade rejects obsolete `dim install-cp` input
+before forwarding. The installed native Git and ordinary-CI services remain
+empty and idle without the separate native Project adapter, capacity
+advertisement, host execution, Sysbox job gate, or reviewer browser UI.
 
 DIM automatically runs one managed controller process with separate local
 Unix sockets: a mode-`0600` host-admin API and a workspace-scoped API. Normal
