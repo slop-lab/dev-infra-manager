@@ -1,10 +1,11 @@
 # Native ordinary CI control plane
 
-This is the target implementation and operator design for the ordinary CI
-scheduler/webhook service installed with native Git. Core now includes the
-bounded native authority, standalone webhook intake, and receipt-bound host
-claim activation described below; renewal, recovery, result delivery,
-controller execution, and installer deployment remain unimplemented.
+This is the partially implemented target and operator design for the ordinary
+CI scheduler/webhook service installed with native Git. Core includes the
+bounded native authority, standalone webhook intake, receipt-bound host claim
+activation, idle service images, and transactional installer deployment
+described below. Renewal, recovery, result delivery, native Project integration,
+capacity advertisement, and controller execution remain unimplemented.
 The normative authority,
 admission, and installer transaction are in
 `specification/specs/10-cli-contract.md` and
@@ -14,10 +15,23 @@ The shipped Gitea predecessor still provides `dim ci ordinary-pool service
 run CONFIG` and `dim ci ordinary-pool project reconcile PROJECT
 REGISTRAR_CONFIG`; its standalone `worker` commands have been removed in favor
 of managed-controller supervision. Those commands, schema-2 databases, and
-persistent Project-scoped Sysbox runners are not the native target and are
-rejected only after that target replaces the predecessor. Do not deploy this
-topology or claim its acceptance gates until the remaining service and host
-controller implementation passes the referenced verification.
+persistent Project-scoped Sysbox runners are not the native target. The shipped
+pre-stable facade can deploy only the empty, idle native bundle; it advertises
+no capacity and admits or executes no Sysbox job. Do not claim the native
+Project adapter, real job gate, reviewer UI, or complete Project #45 integration
+until their separate implementations pass the referenced verification.
+
+The facade's predecessor check is intentionally bounded to explicit DIM-owned
+selectors. It rejects presence of `DIM_ORDINARY_CI_POOL_CONNECTION_FILE` and
+canonical lifecycle records under
+`${DIM_STATE_ROOT:-$HOME/.local/state/dim}/ci-runners/<project>/*.json` when
+they are Sysbox, unsafe, malformed, unsupported, or unclassifiable. Valid
+schema-8 QEMU records remain untouched because that Gitea integration is
+separate predecessor capacity. The old service command accepted arbitrary
+operator config and database paths, so the facade cannot discover every
+external database or process and does not scan globally for them. Operators
+must stop those services with the pinned predecessor release; the native bundle
+never adopts their data or a pre-existing fixed ordinary-CI volume.
 
 ## Ownership matrix
 
@@ -81,7 +95,22 @@ generates and snapshots one service-specific activation token at
 `/run/secrets/activation.token`. Mutable operator paths are never mounted. The
 mode-`0700` DIM-owned generation directory prevents host traversal while the
 individual bind mounts remain readable by the fixed service UID. The generated
-Compose file contains snapshot paths but no secret bytes.
+Compose file contains snapshot paths but no secret bytes. These two activation
+tokens plus the two config and two readiness snapshots are the complete six-file
+generation; there is no generation marker or seventh snapshot. Each service
+starts with exact argv `dim-service serve /run/secrets/service.json
+<generationId>` so the computed, non-secret generation ID is bound without a
+digest cycle.
+
+Activation is service-local rather than bridge-network or host HTTP traffic.
+The route accepts only IPv4 peer `127.0.0.1`, checks that boundary before bearer
+authorization or body parsing, and accepts only the startup generation. The
+installer durably publishes `compose.yml` and `install.json`, re-inspects exact
+ownership and runtime topology, then executes `/usr/local/bin/dim-service
+activate <generationId>` by immutable ordinary container ID as `10002:10002`
+and native container ID as `10001:10001`. The command reads the fixed mounted
+token path and makes one bounded loopback request with no token in argv,
+environment, stdin, or output. Published HTTP is readiness-only.
 
 The ordinary service JSON is strict schema `3`:
 
@@ -89,8 +118,9 @@ The ordinary service JSON is strict schema `3`:
 {
   "schemaVersion": 3,
   "serviceId": "ordinary-main",
-  "listen": { "host": "0.0.0.0", "port": 8080 },
   "database": "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
+  "admissionLeaseMilliseconds": 300000,
+  "claimLeaseMilliseconds": 60000,
   "nativeGit": {
     "endpoint": "http://native-git:8080",
     "serviceId": "native-main",
@@ -112,19 +142,20 @@ The ordinary service JSON is strict schema `3`:
       "username": "native-events",
       "password": "replace-with-webhook-only-credential"
     },
+    "registrar": {
+      "username": "ordinary-registrar",
+      "password": "replace-with-operator-admission-credential"
+    },
     "query": {
       "username": "native-main",
       "password": "replace-with-query-only-credential"
     }
   },
-  "leaseSeconds": 60,
-  "admissionLeaseSeconds": 300,
-  "hosts": {
-    "host-a": {
+  "hosts": [{
+      "hostId": "host-a",
       "hostToken": "replace-with-host-token",
-      "admissionToken": "replace-with-admission-token",
-      "capacities": {
-        "primary": {
+      "capacities": [{
+          "capacity": "primary",
           "runnerBaseImage": "registry.example/dim/ordinary-runner@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
           "bounds": {
             "cpu": "4",
@@ -133,14 +164,13 @@ The ordinary service JSON is strict schema `3`:
             "wallClockSeconds": "3600",
             "outputBytes": "16777216"
           }
-        }
-      }
-    }
-  }
+        }]
+    }]
 }
 ```
 
-`listen` and `database` must equal the fixed deployment values. The native Git
+The image binds `0.0.0.0:8080`; the operator cannot select a listener.
+`database` must equal the fixed deployment path. The native Git
 endpoint is exactly the Compose-network origin above and follows no redirect.
 It is not operator-selectable or derived from a request. Plaintext peer
 authentication is valid only while both services remain the sole members of
@@ -150,12 +180,13 @@ Ordinary `/readyz` validates only its immutable config snapshot, local database
 readability and durability, and local listener; it neither contacts native Git
 nor requires Project state. Every token and native-facing password is distinct,
 base64url, and at least 32 random bytes.
-The host map contains installation capacity identities and bounds only; it
+The host list contains installation capacity identities and bounds only; it
 contains no Project, repository, candidate job image, label, or Git credential.
 Each named capacity selects one digest-pinned runner base and positive canonical
 decimal CPU, memory, PID, wall-clock, and output ceilings. The host connection
 must repeat the same values exactly, but it cannot create or widen capacity.
-Adding or removing a host
+The separate registrar credential is global operator admission authority, not
+a capacity or host credential. Adding or removing a host
 is a reviewed operator-source update that creates a new immutable bundle
 generation, not a service API.
 
@@ -256,6 +287,17 @@ shape against the compiled final schema while opened read-only, then runs SQLite
 integrity and foreign-key checks. It rejects both the former authority-only
 two-table shape and the unreleased six-table intake shape byte-for-byte before
 WAL. Because neither partial shape shipped, there is no migration or dual reader.
+
+The bundle-only idle runtime creates `ordinary-ci.sqlite3` only when the volume
+is empty, then fsync-publishes mode-`0444` `state-format.json`. The strict marker
+records state format `3`, the fixed database basename, and a SHA-256 digest of
+the complete compiled SQLite manifest. A database without that marker is never
+adopted. `check-state --read-only` rejects unknown entries and state not owned by
+the service with exact directory/file modes and single-link regular files. It
+uses SQLite online backup from a read-only source when an active WAL has SHM;
+when SHM is absent, it copies the opened database and WAL into disposable state
+only if the complete source set remains unchanged. Validation and any reader
+SHM stay outside the mounted volume, so target bytes and mtimes remain unchanged.
 
 The webhook credential has only exact `POST /v1/native-events`. The route
 strictly parses the schema-1 non-executable event, rereads the exact canonical
@@ -540,9 +582,10 @@ digest-pinned and each replacement must pass authenticated `/readyz`; ordinary
 readiness is local-only, while native readiness additionally proves the exact
 ordinary dependency. Candidates reject mutating operations until the installer
 publishes and activates their exact immutable generation. The prior Compose
-bytes, image digests, and input snapshots remain available through rollback.
-Rollback restores those inputs and images in the same order but never rolls
-back a data volume.
+bytes, image digests, and all six snapshots remain available through rollback.
+Rollback restores those snapshots and images in the same order, publishes the
+prior record, and runs both immutable-ID activation commands with the prior
+generation ID, but never rolls back a data volume.
 
 Before replacement, candidate and prior images must report the same current
 state format. For each service, the current persisted state format must be in
