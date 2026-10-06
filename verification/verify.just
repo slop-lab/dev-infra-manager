@@ -112,6 +112,14 @@ cache-routing-kvm:
 sysbox-ci-runner-image:
     cd .. && bash verification/scripts/sysbox-ci-runner-image-smoke.bash
 
+# Build and probe the two native control-plane idle service images without runtime authority.
+native-idle-service-images:
+	cd .. && bash verification/scripts/native-idle-service-images-smoke.bash
+
+# Exercise the packaged installer facade and exported API across the idle bundle lifecycle; clean-host acceptance remains separate.
+control-plane-install-live:
+	cd .. && bash verification/scripts/control-plane-install-live-smoke.bash
+
 # Verify the systemd, cgroupfs, and unsupported Project runtime cgroup contracts.
 project-runtime-cgroups:
     cd .. && bash verification/scripts/project-runtime-cgroups-example-smoke.bash
