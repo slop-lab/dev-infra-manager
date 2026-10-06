@@ -1,0 +1,5 @@
+{
+  "name": "dim-ordinary-ci-service-image",
+  "private": true,
+  "type": "module"
+}
