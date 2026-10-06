@@ -4,13 +4,18 @@ import { configuredCli, queryCliVersion, validateConfiguredCli } from "./install
 import { interactiveInstall, installerCommand } from "./installerCommands.js";
 import { printFacadeHelp } from "./installerHelp.js";
 import { installerVersion } from "./installerVersion.js";
+import { ControlPlaneInstallError, formatControlPlaneInstallError } from "./controlPlaneInstallError.js";
 
 const args = process.argv.slice(2);
 
 try {
   process.exitCode = await dispatch(args);
 } catch (error) {
-  console.error(`dim: ${error instanceof Error ? error.message : String(error)}`);
+  if (error instanceof ControlPlaneInstallError) {
+    for (const line of formatControlPlaneInstallError(error)) console.error(`dim: ${line}`);
+  } else {
+    console.error(`dim: ${error instanceof Error ? error.message : String(error)}`);
+  }
   process.exitCode = 1;
 }
 
@@ -19,6 +24,10 @@ async function dispatch(commandArgs: string[]): Promise<number> {
     throw new Error(`DIM requires a Linux host; unsupported platform '${process.platform}'`);
   }
   const first = commandArgs[0];
+  if (first === "install-cp") {
+    console.error("dim: 'install-cp' is obsolete; use 'dim installer install control-plane --config FILE'");
+    return 2;
+  }
   if (first === "installer") {
     await installerCommand(commandArgs.slice(1));
     return 0;
