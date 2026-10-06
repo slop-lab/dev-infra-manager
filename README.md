@@ -73,7 +73,7 @@ Workspaces persist. Verification runs separately in disposable job containers.
 Secret-bearing Project services must be built and deployed from reviewed refs.
 
 Separation of execution is not automatically independence of evidence. The
-specified, unimplemented native ordinary-CI target lets the exact candidate tree
+specified native ordinary-CI path is not yet active for Projects; its candidate tree can
 select its job config, script, and digest-pinned image. Its success is therefore
 candidate-controlled self-test evidence, even though it runs in a separate
 bounded Sysbox job. Protected policy may require that result, but a human must
@@ -217,9 +217,9 @@ disposable KVM guest instead of your own host.
 Pin an exact, reviewed version — never `latest`:
 
 ```bash
-mise use --raw --global 'npm:@slop-lab/dim-installer@0.8.0'
+mise use --raw --global 'npm:@slop-lab/dim-installer@0.9.0'
 dim installer install core \
-  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.8.0'
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
 ```
 
 The mise-installed facade provisions Node.js 24 on demand when no supported
@@ -229,27 +229,43 @@ configuration. The first `dim` invocation may therefore download Node.js.
 or, without mise:
 
 ```bash
-npx '@slop-lab/dim-installer@0.8.0'
-npx '@slop-lab/dim-installer@0.8.0' installer install core \
-  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.8.0'
-npx '@slop-lab/dim-installer@0.8.0' installer install plugin '@example/dim-plugin@1.2.3'
+npx '@slop-lab/dim-installer@0.9.0'
+npx '@slop-lab/dim-installer@0.9.0' installer install core \
+  --host-mirror-plugin '@slop-lab/dim-plugin-host-mirrors@0.9.0'
+npx '@slop-lab/dim-installer@0.9.0' installer install plugin '@example/dim-plugin@1.2.3'
 ```
 
-`@slop-lab/dim-installer` is a thin facade: it owns only the `installer`
-namespace and proxies every other command to a
-separately installed `@slop-lab/dim-cli`. Bare `dim` opens an interactive
+`@slop-lab/dim-installer` is a thin facade: it owns the `installer` namespace,
+rejects the one obsolete `install-cp` token, and proxies every other command to
+a separately installed `@slop-lab/dim-cli`. Bare `dim` opens an interactive
 installer only until a CLI is configured; after that it behaves like `dim
 --help`, and `dim installer` is what reopens the prompt. Installation
 choices persist under `${XDG_CONFIG_HOME:-~/.config}/dim/config.json`. See
 the [installer README](https://www.npmjs.com/package/@slop-lab/dim-installer)
 for the full command reference.
 
-The current CLI-owned `dim install-cp` placeholder fails closed without host
-changes because the specified native Git/ordinary-CI bundle, service
-integration, and native Project adapter are not implemented. The future
-installer-facade command is `dim installer install control-plane --config
-FILE`; once implemented, the facade will reject `dim install-cp` as obsolete
-instead of proxying it. Neither path installs a separate web UI.
+The pre-stable installer facade can install or update the native Git and
+ordinary-CI service bundle from an operator-owned absolute config path:
+
+```bash
+dim installer install control-plane --config /absolute/path/install.json
+```
+
+The bundle starts both services empty and idle. It does not provide the native
+Project/repository adapter, Project admission, capacity advertisement, host
+controller execution, the real Sysbox job gate, or a reviewer browser UI.
+Those remain separate future work; this idle installer is not completion of
+the broader native control-plane project. The obsolete `dim install-cp` token
+is owned and rejected by the facade with exit code 2 and is never forwarded to
+the separately installed DIM CLI.
+
+The installer also rejects the obsolete ordinary-pool connection selector and
+canonical Project-scoped Sysbox runner records before reading its config or
+using Docker. Existing schema-8 QEMU runner records are left untouched. Old
+ordinary-pool services could use arbitrary private config and database paths,
+so the new installer neither scans the host for them nor adopts their data;
+operators must stop those external services with the pinned predecessor
+release before installing the idle native bundle.
 
 Check the installed backend before creating a workspace:
 
