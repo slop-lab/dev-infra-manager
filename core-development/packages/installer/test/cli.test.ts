@@ -177,6 +177,111 @@ describe.skipIf(!tsxPath)("cli.ts dispatch (integration, via tsx subprocess)", (
     expect(result.stdout).toContain("Usage: dim installer install core");
   });
 
+  it("shows the exact control-plane installer usage", async () => {
+    // Given
+    const root = await tempDir("dim-control-plane-help-");
+    const { env } = await baseEnv(root);
+
+    // When
+    const result = await runCli(["installer", "install", "control-plane", "--help"], tsxPath!, env, root);
+
+    // Then
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Usage: dim installer install control-plane --config FILE");
+  });
+
+  it.each([
+    ["missing --config", []],
+    ["repeated --config", ["--config", "/tmp/one.json", "--config", "/tmp/two.json"]],
+    ["unknown option", ["--config", "/tmp/install.json", "--state-root", "/tmp/state"]],
+    ["relative --config", ["--config", "install.json"]]
+  ])("rejects %s before Docker or state mutation", async (_case, commandArgs) => {
+    // Given
+    const root = await tempDir("dim-control-plane-invalid-cli-");
+    const { env } = await baseEnv(root);
+    const bin = join(root, "bin");
+    const dockerInvoked = join(root, "docker-invoked");
+    const stateHome = join(root, "state-home");
+    await mkdir(bin, { recursive: true });
+    await writeFile(join(bin, "docker"), `#!/bin/sh\ntouch '${dockerInvoked}'\nexit 99\n`, { mode: 0o755 });
+
+    // When
+    const result = await runCli(
+      ["installer", "install", "control-plane", ...commandArgs],
+      tsxPath!,
+      { ...env, PATH: `${bin}:${env.PATH}`, XDG_STATE_HOME: stateHome },
+      root
+    );
+
+    // Then
+    expect(result.code).toBe(1);
+    await expect(access(dockerInvoked)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(access(join(stateHome, "dim", "control-plane"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("delegates an absolute --config path to the control-plane installer", async () => {
+    // Given
+    const root = await tempDir("dim-control-plane-delegation-");
+    const { env } = await baseEnv(root);
+    const configPath = join(root, "missing-install.json");
+
+    // When
+    const result = await runCli(
+      ["installer", "install", "control-plane", "--config", configPath],
+      tsxPath!,
+      { ...env, XDG_STATE_HOME: join(root, "state-home") },
+      root
+    );
+
+    // Then
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("control-plane installer config must be a non-symbolic-link mode-0600 regular file");
+  });
+
+  it("rejects an empty obsolete ordinary-pool selector before reading control-plane config", async () => {
+    // Given: the obsolete environment key is present but empty and the config path does not exist.
+    const root = await tempDir("dim-control-plane-predecessor-selector-");
+    const { env } = await baseEnv(root);
+    const stateHome = join(root, "state-home");
+    if (tsxPath === undefined) throw new TypeError("tsx executable is required for this suite");
+
+    // When: the real facade starts control-plane installation.
+    const result = await runCli(
+      ["installer", "install", "control-plane", "--config", join(root, "missing.json")],
+      tsxPath,
+      { ...env, DIM_ORDINARY_CI_POOL_CONNECTION_FILE: "", XDG_STATE_HOME: stateHome },
+      root
+    );
+
+    // Then: key presence is rejected before config reading or installer-state creation.
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("DIM_ORDINARY_CI_POOL_CONNECTION_FILE");
+    expect(result.stderr).not.toContain("config must be");
+    await expect(access(join(stateHome, "dim", "control-plane"))).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("rejects obsolete install-cp before configured CLI forwarding", async () => {
+    // Given
+    const root = await tempDir("dim-control-plane-obsolete-");
+    const { env, configPath } = await baseEnv(root);
+    const stub = join(root, "dim-stub.mjs");
+    const echoFile = join(root, "echo.json");
+    await writeStubCli(stub, { versionOutput: "5.5.5", echoFile });
+    await mkdir(dirname(configPath), { recursive: true });
+    await writeFile(configPath, JSON.stringify({
+      schemaVersion: 1,
+      cli: { mode: "proxied", version: "5.5.5", executable: stub }
+    }));
+
+    // When
+    const result = await runCli(["install-cp"], tsxPath!, env, root);
+
+    // Then
+    expect(result.code).toBe(2);
+    expect(result.stderr).toContain("dim installer install control-plane --config FILE");
+    await expect(access(echoFile)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("rejects removed top-level installer commands", async () => {
     const root = await tempDir("dim-cli-legacy-install-");
     const { env } = await baseEnv(root);

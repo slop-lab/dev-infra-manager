@@ -19,6 +19,7 @@ import { localBinPrompt } from "./installMode.js";
 import { printFacadeHelp, printInstallCoreHelp, printInstallerHelp, printInstallPluginHelp } from "./installerHelp.js";
 import { installerVersion } from "./installerVersion.js";
 import { withInstallerProgress } from "./installProgress.js";
+import { installControlPlaneCommand } from "./controlPlaneCommand.js";
 
 const HOST_MIRROR_PLUGIN = "@slop-lab/dim-plugin-host-mirrors";
 
@@ -31,6 +32,7 @@ export async function installerCommand(input: readonly string[]): Promise<void> 
   if (command === "install") {
     const target = commandArgs[1];
     if (target === "core") return installCoreCommand(commandArgs.slice(2));
+    if (target === "control-plane") return installControlPlaneCommand(commandArgs.slice(2));
     if (target === "plugin") return installPluginCommand(commandArgs.slice(2));
     throw new Error(`unknown installer install target: ${target ?? "missing"}`);
   }

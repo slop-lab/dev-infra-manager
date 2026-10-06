@@ -7,6 +7,7 @@ Usage:
   dim                         Open the interactive installer
   dim installer               Open the interactive installer
   dim installer install core [options]
+  dim installer install control-plane --config FILE
   dim installer install plugin PACKAGE@EXACT_VERSION...
   dim installer enable-plugin PACKAGE...
   dim installer disable-plugin PACKAGE...
@@ -20,6 +21,7 @@ export function printInstallerHelp(): void {
   console.log(`Usage:
   dim installer
   dim installer install core [--no-local-bin | --local-bin] [--prefix PATH] [--host-mirror-plugin PACKAGE@EXACT_VERSION] [--local-packages PATH] [--defer-controller-restart]
+  dim installer install control-plane --config FILE
   dim installer install plugin PACKAGE@EXACT_VERSION...
   dim installer enable-plugin PACKAGE...
   dim installer disable-plugin PACKAGE...
@@ -54,4 +56,12 @@ export function printInstallPluginHelp(): void {
 
 Options:
   -h, --help  Show this help`);
+}
+
+export function printInstallControlPlaneHelp(): void {
+  console.log(`Usage: dim installer install control-plane --config FILE
+
+Options:
+  --config FILE  Read the control-plane installation configuration from FILE
+  -h, --help     Show this help`);
 }
