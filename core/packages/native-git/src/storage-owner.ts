@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import { lstat, open, realpath, statfs, type FileHandle } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const OWNER_DATABASE = ".dim-native-git-owner.sqlite3";
 const OWNER_SCHEMA_VERSION = 1n;
@@ -56,6 +57,22 @@ export async function acquireStorageOwner(storageRoot: string): Promise<StorageO
       }
     }
   };
+}
+
+export async function inspectStorageOwner(storageRoot: string): Promise<void> {
+  const root = resolve(storageRoot);
+  const rootIdentity = await inspectStorageRoot(storageRoot, root);
+  const databasePath = join(root, OWNER_DATABASE);
+  const fileIdentity = await inspectExistingOwnerFile(databasePath);
+  const databaseUrl = pathToFileURL(databasePath);
+  databaseUrl.searchParams.set("immutable", "1");
+  const database = new DatabaseSync(databaseUrl, { readOnly: true, readBigInts: true });
+  try {
+    await assertUnchangedOwnerFile(databasePath, fileIdentity);
+    validateOwnerDatabase(database, rootIdentity);
+  } finally {
+    database.close();
+  }
 }
 
 type RootIdentity = {
@@ -114,6 +131,23 @@ async function inspectOwnerFileAtPath(path: string): Promise<RootIdentity> {
   }
 }
 
+async function inspectExistingOwnerFile(path: string): Promise<RootIdentity> {
+  let file: FileHandle;
+  try {
+    file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    if (isCode(error, "ELOOP")) {
+      throw new StorageOwnershipError("storage owner database must not be a symbolic link");
+    }
+    throw error;
+  }
+  try {
+    return await inspectOwnerFile(file, path);
+  } finally {
+    await file.close();
+  }
+}
+
 async function inspectOwnerFile(file: FileHandle, path: string): Promise<RootIdentity> {
   const identity = await file.stat({ bigint: true });
   if (!identity.isFile() || identity.nlink !== 1n || identity.uid !== BigInt(process.getuid?.() ?? -1)
@@ -164,6 +198,19 @@ function initializeOrValidate(database: DatabaseSync, root: RootIdentity): void 
     throw new StorageOwnershipError("storage owner database schema is unsupported");
   }
 
+  validateOwnerDatabase(database, root);
+}
+
+function validateOwnerDatabase(database: DatabaseSync, root: RootIdentity): void {
+  const version = integerField(database.prepare("PRAGMA user_version").get(), "user_version");
+  if (version !== OWNER_SCHEMA_VERSION) {
+    throw new StorageOwnershipError("storage owner database schema is unsupported");
+  }
+  const entries = integerField(
+    database.prepare("SELECT count(*) AS count FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%'").get(),
+    "count"
+  );
+  if (entries !== 1n) throw new StorageOwnershipError("storage owner database schema is unsupported");
   const identity = database.prepare(
     "SELECT root_device, root_inode FROM storage_owner_identity WHERE singleton = 1"
   ).get();

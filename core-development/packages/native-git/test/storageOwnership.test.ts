@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { acquireStorageOwner } from "../../../../core/packages/native-git/src/storage-owner.js";
+import { acquireStorageOwner, inspectStorageOwner } from "../../../../core/packages/native-git/src/storage-owner.js";
 
 const run = promisify(execFile);
 const roots: string[] = [];
@@ -85,6 +85,16 @@ describe("DIM native Git storage ownership state", () => {
 
     // Then
     await expect(owner.release()).resolves.toBeUndefined();
+  });
+
+  it("inspects owner identity while the service holds its exclusive ownership lock", async () => {
+    // Given: a live service holds the storage owner's cross-process SQLite lock.
+    const root = await temporaryRoot();
+    const owner = await acquireStorageOwner(root);
+
+    // When / Then: read-only state inspection validates identity without competing for that lock.
+    await expect(inspectStorageOwner(root)).resolves.toBeUndefined();
+    await owner.release();
   });
 });
 
