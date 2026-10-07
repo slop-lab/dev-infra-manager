@@ -17,7 +17,8 @@ qemu-ci-image-layers-kvm:
 
 # Run the backend-independent end-to-end contract after a backend is installed.
 full-development:
-    just verify ordinary-ci-pool-live
+    just verify native-idle-service-images
+    just verify control-plane-install-live
     just verify workspace-user-setup
     cd .. && DIM_EXAMPLE_WORKSPACE_BACKEND=sysbox JUST_UNSTABLE=1 bash verification/scripts/stateful-development-flow-smoke.bash
     cd .. && DIM_SELF_WORKSPACE_BACKEND=sysbox DIM_SELF_EXPECT_AGENT_UID=1001 DIM_SELF_VERIFY_AGENT=1 JUST_UNSTABLE=1 just verify self-development

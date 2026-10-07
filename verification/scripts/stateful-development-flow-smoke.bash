@@ -37,6 +37,7 @@ ssh_host_fingerprint=""
 dim_cli="$repo_root/core/packages/cli/dist/cli.js"
 dim_bin="$work_dir/dim"
 controller_pid=""
+plugin_home="$work_dir/plugins"
 
 export DIM_STATE_ROOT="$state_root"
 export DIM_CONFIG_PATH="$work_dir/config/dim.json"
@@ -44,6 +45,7 @@ export DIM_DATA_HOME="$work_dir/data"
 export DIM_CONTROLLER_SOCKET="$controller_socket"
 export DIM_AGENT_CONTROLLER_SOCKET="$agent_controller_socket"
 export DIM_ADMIN_CONTROLLER_SOCKET="$admin_socket"
+export DIM_PLUGIN_HOME="$plugin_home"
 export XDG_RUNTIME_DIR="$controller_runtime_dir"
 export GIT_CONFIG_GLOBAL="$work_dir/host.gitconfig"
 git config --file "$GIT_CONFIG_GLOBAL" user.name "Full Flow Host"
@@ -163,6 +165,11 @@ cd "$repo_root"
 echo "[full-development-flow] prepare reviewed repositories and controller"
 just build-packages
 just build-workspace-image
+mkdir -p "$plugin_home/node_modules/@slop-lab"
+ln -s "$repo_root/plugin-host-mirrors" \
+  "$plugin_home/node_modules/@slop-lab/dim-plugin-host-mirrors"
+printf '%s\n' '{"schemaVersion":1,"plugins":["@slop-lab/dim-plugin-host-mirrors"]}' \
+  >"$plugin_home/plugins.json"
 printf '#!/usr/bin/env bash\nexec node %q "$@"\n' "$dim_cli" >"$dim_bin"
 chmod 0700 "$dim_bin"
 export PATH="$work_dir:$PATH"
@@ -204,6 +211,7 @@ git -C "$repositories/root" add .dim reviewed-version.txt
 git -C "$repositories/root" commit -m "add stateful journey hooks" >/dev/null
 
 start_controller
+dim admin service ensure >/dev/null
 DIM_BIN="$dim_bin" bash examples/projects/full-development-flow/register-project.bash \
   "$project_name" "$repositories" >/dev/null
 

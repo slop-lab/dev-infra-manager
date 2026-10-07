@@ -76,6 +76,9 @@ describe("DIM development forge policy", () => {
     );
     expect(recipes).toContain("DIM_EXAMPLE_WORKSPACE_BACKEND=sysbox");
     expect(recipes).toContain("DIM_SELF_WORKSPACE_BACKEND=sysbox");
+    expect(recipes).toContain("just verify native-idle-service-images");
+    expect(recipes).toContain("just verify control-plane-install-live");
+    expect(recipes).not.toContain("just verify ordinary-ci-pool-live");
     expect(workflow.match(/with-ci-registry-cache\.bash --qemu-relay/g)).toHaveLength(2);
     const verificationSteps: readonly {
       readonly name?: string;
@@ -103,6 +106,16 @@ describe("DIM development forge policy", () => {
     expect(workflow).not.toContain("dim-ci-runner-health");
     expect(workflow).not.toContain("actions/setup-node");
     expect(workflow).not.toContain("Bootstrap Node.js");
+  });
+
+  it("runs the clean-host control-plane gate through the packed installer facade", async () => {
+    const smoke = await readFile(
+      resolve(workspaceRoot, "verification/scripts/control-plane-install-live-smoke.bash"),
+      "utf8"
+    );
+    expect(smoke).toContain("npm pack --silent --pack-destination");
+    expect(smoke).toContain("npm install --prefix /payload/packaged-installer");
+    expect(smoke).toContain("/node_modules/@slop-lab/dim-installer");
   });
 
   it("owns CI job images and required tools in the protected Project contract", async () => {

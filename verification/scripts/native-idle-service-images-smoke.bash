@@ -253,7 +253,7 @@ set +e
 curl --fail --silent --max-time 1 "http://127.0.0.1:$published_port/readyz" >/dev/null 2>&1
 curl_status=$?
 set -e
-[[ "$curl_status" -eq 7 ]]
+[[ "$curl_status" -eq 22 ]]
 
 docker run "${common[@]}" --user 10001:10001 --entrypoint sh "$native_image" -ec '
   test ! -e /run/secrets/service.json
