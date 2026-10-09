@@ -11,7 +11,7 @@ const reviewRoot = `/v1/projects/live-smoke/repositories/root/reviews/${reviewId
 
 export const roleDenialCases = [
   mutation("admission", "ordinaryCi", "/v1/operator-admissions"),
-  mutation("event", "ordinaryCi", "/v1/native-events"),
+  mutation("event", "ordinaryCi", "/v1/native-root-ci-events"),
   mutation("capacity-advertisement", "ordinaryCi", "/v1/operator-admissions"),
   mutation("claim", "ordinaryCi", "/v1/host-claims"),
   mutation("claim-result", "ordinaryCi", "/v1/host-results"),

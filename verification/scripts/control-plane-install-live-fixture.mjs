@@ -28,7 +28,7 @@ export async function createOperatorFixture(input) {
       identity: { username: "ordinary-identity", password: credentials.identity },
       attemptIssuer: { username: "ordinary-attempts", password: credentials.attemptIssuer },
       resultReporter: { username: "ordinary-results", password: credentials.resultReporter },
-      webhook: { endpoint: "http://ordinary-ci:8080/v1/native-events", username: "native-events", password: credentials.webhook }
+    webhook: { endpoint: "http://ordinary-ci:8080/v1/native-root-ci-events", username: "native-events", password: credentials.webhook }
     }
   }));
   await privateFile(sources.ordinaryCi, JSON.stringify({
