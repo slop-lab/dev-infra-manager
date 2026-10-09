@@ -46,7 +46,7 @@ export function nativeServiceConfig(): Readonly<Record<string, unknown>> {
       attemptIssuer: { username: "ordinary-attempts", password: controlPlaneSecrets.attemptIssuer },
       resultReporter: { username: "ordinary-results", password: controlPlaneSecrets.resultReporter },
       webhook: {
-        endpoint: "http://ordinary-ci:8080/v1/native-events",
+        endpoint: "http://ordinary-ci:8080/v1/native-root-ci-events",
         username: "native-events",
         password: controlPlaneSecrets.webhook
       }
