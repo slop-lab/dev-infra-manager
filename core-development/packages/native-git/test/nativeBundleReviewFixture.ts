@@ -5,7 +5,8 @@ import type {
   AuthoritativeNativeReviewEnvelope,
   AuthoritativeNativeReviewHooks
 } from "../../../../core/packages/native-git/src/index.js";
-import { authoritativePolicy } from "./authoritativeNativeCandidateFixture.js";
+import type { NativeHumanReviewerHooks } from "../../../../core/packages/native-git/src/native-human-reviewer-http.js";
+import { authoritativePolicy, matchingRunner } from "./authoritativeNativeCandidateFixture.js";
 import {
   activateFinalizeService,
   createFinalizeRoot,
@@ -34,17 +35,26 @@ export type NativeBundleReviewFixture = {
 
 export async function nativeBundleReviewFixture(
   label: string,
-  reviewHooks?: AuthoritativeNativeReviewHooks
+  reviewHooks?: AuthoritativeNativeReviewHooks,
+  policy: object = authoritativePolicy(),
+  reviewerHooks?: NativeHumanReviewerHooks
 ): Promise<NativeBundleReviewFixture> {
   const root = await createFinalizeRoot(label);
-  const bundle = await createRootBundle({ "README.md": "root bundle\n" });
-  const service = await startFinalizeService(root, undefined, undefined, undefined, undefined, undefined, reviewHooks);
+  const bundle = await createRootBundle({
+    "README.md": "root bundle\n",
+    ".dim/ci/runner.yml": matchingRunner(),
+    ".dim/ci/jobs/source.bash": "set -euo pipefail\nprintf 'source\\n'\n",
+    ".dim/ci/jobs/integration.bash": "set -euo pipefail\nprintf 'integration\\n'\n"
+  });
+  const service = await startFinalizeService(
+    root, undefined, undefined, undefined, undefined, undefined, reviewHooks, reviewerHooks
+  );
   await activateFinalizeService(service.origin);
   await service.prepareProject(generationId, importer.hostId, projectInput("project-a"));
   const receipt = parseImportReceipt(await (await uploadRootBundle(
     service.origin,
     bundle,
-    authoritativePolicy()
+    policy
   )).json());
   expect((await finalizeRootImport(service.origin, {
     schemaVersion: 1,

@@ -5,6 +5,9 @@ import type { NativeProjectRootReadHooks } from "./native-project-root-read-http
 import type { NativeProjectWorkspaceWriteHooks } from "./native-project-workspace-write-http.js";
 import type { AuthoritativeNativeReviewHooks } from "./authoritative-native-review.js";
 import type { AuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-schema.js";
+import type { NativeHumanReviewerHooks } from "./native-human-reviewer-http.js";
+import type { AuthoritativeOrdinaryExecutionDescriptor } from "./authoritative-ordinary-execution-descriptor.js";
+import type { AuthoritativeQemuExecutionDescriptor } from "./authoritative-qemu-execution-descriptor.js";
 
 export type NativeGitBundleServerOptions = {
   readonly config: NativeGitBundleConfig;
@@ -18,6 +21,7 @@ export type NativeGitBundleServerOptions = {
   readonly workspaceWriteLeaseClock?: () => number;
   readonly workspaceWriteLeaseHooks?: NativeProjectWorkspaceWriteHooks;
   readonly authoritativeReviewHooks?: AuthoritativeNativeReviewHooks;
+  readonly nativeHumanReviewerHooks?: NativeHumanReviewerHooks;
 };
 
 export type AuthoritativeNativeReviewSelector = {
@@ -38,6 +42,8 @@ export type NativeGitBundleServer = {
   listen(host?: string, port?: number): Promise<string>;
   prepareProject(generationId: string, ownerHostId: string, input: unknown): Promise<NativeGitPreparedProject>;
   createReview(input: AuthoritativeNativeReviewSelector): Promise<AuthoritativeNativeReviewEnvelope>;
+  deriveOrdinaryExecutionDescriptor(input: unknown): Promise<AuthoritativeOrdinaryExecutionDescriptor>;
+  deriveQemuExecutionDescriptor(input: unknown): Promise<AuthoritativeQemuExecutionDescriptor>;
   close(): Promise<void>;
 };
 

@@ -44,6 +44,7 @@ export type {
   AuthoritativeNativeReview,
   AuthoritativeNativeReviewEnvelope
 } from "./authoritative-native-review-schema.js";
+export type { AuthoritativeNativeApproval } from "./authoritative-native-approval-schema.js";
 export { NativeGitProjectRegistrarError } from "./native-project-registrar-http.js";
 export type { NativeGitProjectRegistrar } from "./native-project-registrar-http.js";
 export {
@@ -79,6 +80,11 @@ export { descriptorDigest, loadCandidateOrdinaryExecution } from "./candidate-ex
 export type {
   CandidateOrdinaryExecution
 } from "./candidate-execution.js";
+export {
+  qemuExecutionDescriptorDigest,
+  qemuExecutionDescriptorSchema
+} from "./qemu-execution-descriptor.js";
+export type { QemuExecutionDescriptor } from "./qemu-execution-descriptor.js";
 export type { AdmissionVerifier } from "./admission-verifier.js";
 export {
   createNodeAdmissionVerifierHttpClient,

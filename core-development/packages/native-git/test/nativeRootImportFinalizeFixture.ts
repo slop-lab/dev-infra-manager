@@ -12,7 +12,19 @@ import {
 import type {
   AuthoritativeNativeReviewHooks
 } from "../../../../core/packages/native-git/src/authoritative-native-review.js";
+import type { NativeHumanReviewerHooks } from "../../../../core/packages/native-git/src/native-human-reviewer-http.js";
 import { bundleSecrets, idleNativeConfig } from "./bundleConfigFixture.js";
+import type {
+  GitBundle,
+  ImportReceipt,
+  RootReadLeaseHooks,
+  RunningService,
+  RuntimeGit,
+  WorkspaceWriteLeaseHooks
+} from "./nativeRootImportFinalizeTypes.js";
+
+export type { GitBundle, ImportReceipt, RootReadLeaseHooks, RunningService, RuntimeGit,
+  WorkspaceWriteLeaseHooks } from "./nativeRootImportFinalizeTypes.js";
 
 export const runGit = promisify(execFile);
 export const generationId = "a".repeat(64);
@@ -74,11 +86,12 @@ export async function startFinalizeService(
   workspaceWriteLeaseClock?: () => number,
   workspaceWriteLeaseHooks?: WorkspaceWriteLeaseHooks,
   runtimeGit?: RuntimeGit,
-  authoritativeReviewHooks?: AuthoritativeNativeReviewHooks
+  authoritativeReviewHooks?: AuthoritativeNativeReviewHooks,
+  nativeHumanReviewerHooks?: NativeHumanReviewerHooks
 ): Promise<RunningService> {
   return startFinalizeServiceForGeneration(
     root, generationId, activationToken, rootReadLeaseClock, rootReadLeaseHooks, workspaceWriteLeaseClock,
-    workspaceWriteLeaseHooks, runtimeGit, authoritativeReviewHooks
+    workspaceWriteLeaseHooks, runtimeGit, authoritativeReviewHooks, nativeHumanReviewerHooks
   );
 }
 
@@ -91,7 +104,8 @@ export async function startFinalizeServiceForGeneration(
   workspaceWriteLeaseClock?: () => number,
   workspaceWriteLeaseHooks?: WorkspaceWriteLeaseHooks,
   runtimeGit?: RuntimeGit,
-  authoritativeReviewHooks?: AuthoritativeNativeReviewHooks
+  authoritativeReviewHooks?: AuthoritativeNativeReviewHooks,
+  nativeHumanReviewerHooks?: NativeHumanReviewerHooks
 ): Promise<RunningService> {
   const options = {
     config: parseNativeGitBundleConfig({
@@ -111,7 +125,8 @@ export async function startFinalizeServiceForGeneration(
     ...(rootReadLeaseHooks === undefined ? {} : { rootReadLeaseHooks }),
     ...(workspaceWriteLeaseClock === undefined ? {} : { workspaceWriteLeaseClock }),
     ...(workspaceWriteLeaseHooks === undefined ? {} : { workspaceWriteLeaseHooks }),
-    ...(authoritativeReviewHooks === undefined ? {} : { authoritativeReviewHooks })
+    ...(authoritativeReviewHooks === undefined ? {} : { authoritativeReviewHooks }),
+    ...(nativeHumanReviewerHooks === undefined ? {} : { nativeHumanReviewerHooks })
   };
   const service = await configuredNativeGitBundleServer(options);
   services.push(service);
@@ -240,33 +255,8 @@ function importPolicy() {
   } as const;
 }
 
-export type GitBundle = { readonly bytes: Buffer; readonly commit: string; readonly tree: string };
 function stringField(value: object, field: string): string {
   const selected = Reflect.get(value, field);
   if (typeof selected !== "string") throw new Error("invalid root import receipt fixture");
   return selected;
 }
-
-export type ImportReceipt = {
-  readonly schemaVersion: 1;
-  readonly serviceId: "native-main";
-  readonly projectId: string;
-  readonly rootRepositoryId: "root";
-  readonly generationId: string;
-  readonly importNonce: string;
-  readonly protectedRef: string;
-  readonly expectedCommit: string;
-  readonly policyDigest: string;
-  readonly bundleDigest: string;
-  readonly bundleSize: number;
-  readonly phase: "bundle-durable";
-};
-export type RunningService = NativeGitBundleServer & { readonly origin: string };
-export type RootReadLeaseHooks = {
-  readonly beforeVerification?: () => Promise<void>;
-  readonly backendStarted?: () => void;
-};
-export type WorkspaceWriteLeaseHooks = {
-  readonly beforeVerification?: () => Promise<void>;
-};
-export type RuntimeGit = { readonly gitExecutable: string; readonly gitVersion: string };

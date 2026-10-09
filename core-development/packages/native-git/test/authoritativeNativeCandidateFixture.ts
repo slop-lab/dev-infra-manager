@@ -118,12 +118,15 @@ qemu:
 `;
 }
 
-export function authoritativePolicy(requiredReviewerIds: readonly string[] = ["owner"]) {
+export function authoritativePolicy(
+  requiredReviewerIds: readonly string[] = ["owner"],
+  pathReviewerRules: readonly { readonly pathPrefix: string; readonly reviewerIds: readonly string[] }[] = []
+) {
   const requiredJobs = [
     { name: "integration", kind: "qemu", evidenceClass: "candidate-controlled" },
     { name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }
   ] as const;
-  const reviewers = { requiredReviewerIds, pathReviewerRules: [] } as const;
+  const reviewers = { requiredReviewerIds, pathReviewerRules } as const;
   const revision = (domain: string, version: number, value: unknown) => createHash("sha256")
     .update(`dim-native-${domain}-v${version}\0`).update(JSON.stringify(value)).digest("hex");
   return {

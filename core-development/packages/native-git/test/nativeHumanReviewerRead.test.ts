@@ -132,7 +132,7 @@ describe("installed imported-root human reviewer", () => {
     expect(current.status).toBe(200);
     expect(await current.json()).toMatchObject({
       schemaVersion: 1,
-      status: "current",
+      status: "pending",
       staleReasons: [],
       review: { reviewId: created.review.reviewId, requiredReviewerIds: ["owner"] },
       events: created.events

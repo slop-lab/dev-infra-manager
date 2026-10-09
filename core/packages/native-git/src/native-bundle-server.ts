@@ -27,6 +27,9 @@ import {
   type NativeGitPreparedProject
 } from "./native-bundle-server-types.js";
 import { createNativeHumanReviewerService } from "./native-human-reviewer-http.js";
+import { deriveAuthoritativeOrdinaryExecutionDescriptor } from "./authoritative-ordinary-execution-descriptor.js";
+import { deriveAuthoritativeQemuExecutionDescriptor } from "./authoritative-qemu-execution-descriptor.js";
+import { createNativeRootCiProofService } from "./native-root-ci-proof-http.js";
 
 export { NativeGitBundleServerError } from "./native-bundle-server-types.js";
 export type {
@@ -82,17 +85,18 @@ export async function configuredNativeGitBundleServer(
     gitIdentity
   });
   const transportOperations = createRootReadOperationGate(16);
+  const authoritativeRuntime = {
+    activated: () => activated,
+    activationTokenDigest,
+    expectedGenerationId: options.expectedGenerationId,
+    gitExecutable: config.gitExecutable,
+    gitIdentity,
+    state
+  };
   const reviewController = createAuthoritativeNativeReviewController({
     available: () => !closed,
     operations: transportOperations,
-    runtime: {
-      activated: () => activated,
-      activationTokenDigest,
-      expectedGenerationId: options.expectedGenerationId,
-      gitExecutable: config.gitExecutable,
-      gitIdentity,
-      state
-    },
+    runtime: authoritativeRuntime,
     ...(options.authoritativeReviewHooks === undefined ? {} : { hooks: options.authoritativeReviewHooks })
   });
   const rootReadService = createNativeProjectRootReadService({
@@ -148,6 +152,7 @@ export async function configuredNativeGitBundleServer(
     ...config.projectRootImporters,
     ...config.projectRootReadIssuers,
     ...config.workspaceWriteIssuers,
+    ...config.humanReviewers,
     config.ordinaryCi.query,
     config.ordinaryCi.identity,
     config.ordinaryCi.attemptIssuer,
@@ -157,14 +162,15 @@ export async function configuredNativeGitBundleServer(
   const humanReviewerService = createNativeHumanReviewerService({
     config,
     knownCredentials,
-    runtime: {
-      activated: () => activated,
-      activationTokenDigest,
-      expectedGenerationId: options.expectedGenerationId,
-      gitExecutable: config.gitExecutable,
-      gitIdentity,
-      state
-    }
+    serialize: reviewController.run,
+    ...(options.nativeHumanReviewerHooks === undefined ? {} : { hooks: options.nativeHumanReviewerHooks }),
+    runtime: authoritativeRuntime
+  });
+  const rootCiProofService = createNativeRootCiProofService({
+    credential: config.ordinaryCi.identity,
+    knownCredentials,
+    runtime: authoritativeRuntime,
+    serialize: reviewController.run
   });
   const prepareProject = (generationId: string, ownerHostId: string, input: unknown): Promise<NativeGitPreparedProject> => {
     if (closed) return Promise.reject(new NativeGitBundleServerError("native Git bundle server is closed"));
@@ -195,6 +201,7 @@ export async function configuredNativeGitBundleServer(
     state,
     workspaceWriteService,
     humanReviewerService,
+    rootCiProofService,
     activated: () => activated,
     activate: () => { activated = true; },
     prepareProject
@@ -221,6 +228,12 @@ export async function configuredNativeGitBundleServer(
     },
     prepareProject,
     createReview: reviewController.create,
+    deriveOrdinaryExecutionDescriptor(input) {
+      return reviewController.run(() => deriveAuthoritativeOrdinaryExecutionDescriptor(authoritativeRuntime, input));
+    },
+    deriveQemuExecutionDescriptor(input) {
+      return reviewController.run(() => deriveAuthoritativeQemuExecutionDescriptor(authoritativeRuntime, input));
+    },
     async close() {
       if (closed) return;
       closed = true;

@@ -20,12 +20,13 @@ import type { NativeProjectRootImportService } from "./native-project-root-impor
 import type { NativeProjectRootReadService } from "./native-project-root-read-http.js";
 import type { NativeProjectWorkspaceWriteService } from "./native-project-workspace-write-http.js";
 import {
-  createOrdinaryAdmissionVerifier,
+  attestNativeRootAdmissionReader,
   OrdinaryAdmissionVerifierError,
   type AdmissionVerifierHttpClient
 } from "./ordinary-admission-http.js";
 import { nativeGitRoute } from "./routing.js";
 import type { NativeHumanReviewerService } from "./native-human-reviewer-http.js";
+import type { NativeRootCiProofService } from "./native-root-ci-proof-http.js";
 
 type RequestHandlerInput = {
   readonly activationTokenDigest: string;
@@ -39,6 +40,7 @@ type RequestHandlerInput = {
   readonly state: NativeGitBundleState;
   readonly workspaceWriteService: NativeProjectWorkspaceWriteService;
   readonly humanReviewerService: NativeHumanReviewerService;
+  readonly rootCiProofService: NativeRootCiProofService;
   readonly activated: () => boolean;
   readonly activate: () => void;
   readonly prepareProject: (
@@ -54,11 +56,11 @@ export function createNativeBundleRequestHandler(input: RequestHandlerInput) {
     if (request.method === "GET" && url.pathname === "/readyz" && url.search === "") {
       if (!bearerAuthorized(request, input.options.readinessToken)) return sendNotFound(response);
       try {
-        await createOrdinaryAdmissionVerifier({
+        await attestNativeRootAdmissionReader({
           config: input.config.ordinaryCi,
           httpClient: input.identityHttpClient,
           timeoutMilliseconds: 2_000
-        });
+        }, input.options.expectedGenerationId);
       } catch (error) {
         if (error instanceof OrdinaryAdmissionVerifierError || error instanceof AdmissionVerifierTimeoutError) {
           return sendJson(response, 503, { error: "ordinary CI identity is unavailable" });
@@ -83,6 +85,7 @@ export function createNativeBundleRequestHandler(input: RequestHandlerInput) {
     if (await input.rootReadService.handleLeaseRequest(request, response, url)) return;
     if (await input.workspaceWriteService.handleLeaseRequest(request, response, url)) return;
     if (await input.humanReviewerService.handle(request, response, url)) return;
+    if (await input.rootCiProofService.handle(request, response, url)) return;
     if (/^\/v1\/projects\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\/root-import\/proof$/.test(url.pathname)
       && (request.method !== "GET" || url.search !== "")) return sendNotFound(response);
     if (url.search === "" && (url.pathname === "/v1/operator-root-importer-identity"

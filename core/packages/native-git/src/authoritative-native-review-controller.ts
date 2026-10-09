@@ -15,6 +15,7 @@ type ReviewControllerInput = {
 
 export type AuthoritativeNativeReviewController = {
   readonly create: (input: unknown) => Promise<AuthoritativeNativeReviewEnvelope>;
+  readonly run: <Result>(operation: () => Promise<Result>) => Promise<Result>;
   readonly waitForIdle: () => Promise<void>;
 };
 
@@ -22,25 +23,29 @@ export function createAuthoritativeNativeReviewController(
   input: ReviewControllerInput
 ): AuthoritativeNativeReviewController {
   let queue = Promise.resolve();
+  const run = <Result>(operation: () => Promise<Result>): Promise<Result> => {
+    if (!input.available()) {
+      return Promise.reject(new AuthoritativeNativeReviewControllerError("native Git bundle server is closed"));
+    }
+    const admitted = queue.then(async () => {
+      const release = input.operations.acquire();
+      if (release === undefined) {
+        throw new AuthoritativeNativeReviewControllerError("native Git bundle review admission is unavailable");
+      }
+      try {
+        return await operation();
+      } finally {
+        release();
+      }
+    });
+    queue = admitted.then(() => undefined, () => undefined);
+    return admitted;
+  };
   return {
     create(selector) {
-      if (!input.available()) {
-        return Promise.reject(new AuthoritativeNativeReviewControllerError("native Git bundle server is closed"));
-      }
-      const operation = queue.then(async () => {
-        const release = input.operations.acquire();
-        if (release === undefined) {
-          throw new AuthoritativeNativeReviewControllerError("native Git bundle review admission is unavailable");
-        }
-        try {
-          return await createAuthoritativeNativeReview(input.runtime, selector, input.hooks);
-        } finally {
-          release();
-        }
-      });
-      queue = operation.then(() => undefined, () => undefined);
-      return operation;
+      return run(() => createAuthoritativeNativeReview(input.runtime, selector, input.hooks));
     },
+    run,
     waitForIdle() {
       return queue;
     }
