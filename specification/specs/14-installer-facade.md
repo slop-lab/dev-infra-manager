@@ -679,14 +679,18 @@ identical deployment.
 For an update, each candidate image MUST also expose
 `/usr/local/bin/dim-service compatibility --json`. The installer runs it for
 both candidate and prior services before container replacement and requires
-exact JSON shaped as `{"schemaVersion":1,"writeFormat":3,"readableFormats":[3]}`.
+exact JSON shaped as `{"schemaVersion":1,"writeFormat":8,"readableFormats":[8]}`
+for current native Git and `{"schemaVersion":1,"writeFormat":4,"readableFormats":[4]}`
+for current ordinary CI.
 `writeFormat` is one positive integer; `readableFormats` is a non-empty sorted
 array of unique positive integers. The installer also runs both candidate and
 prior images' `dim-service check-state --read-only /var/lib/dim-native-git
 --json` for native Git and `dim-service check-state --read-only
 /var/lib/dim-ordinary-ci --json` for ordinary CI, with only that service's data
 volume mounted read-only. Each returns exact JSON
-`{"schemaVersion":1,"stateFormat":3}` and performs no write. The candidate and
+`{"schemaVersion":1,"stateFormat":8}` for current native Git or
+`{"schemaVersion":1,"stateFormat":4}` for current ordinary CI and performs no
+write. Earlier ordinary format 3 is rejected unchanged, not migrated. The candidate and
 prior probes must report the same state format. The update is admitted only
 when that current state format is in both images'
 `readableFormats`, the candidate write format is in the prior image's
@@ -718,9 +722,11 @@ Ordinary readiness MUST NOT contact native Git, require a Project, or validate
 admission/webhook state. Ordinary CI instead verifies the configured native
 identity, repository tuple, and credential role on each later admission,
 webhook, attempt, and result operation. Native readiness may depend on ordinary
-identity and read-only current-attempt queries. Before exact-generation
-activation, both candidate services return `503` for every state-mutating
-endpoint and create no admission, webhook, attempt, claim, result, repository,
+identity; the installed profile attests only the exact generation-bound
+`native-root-admission-reader`, not legacy attempt-query authority. Before exact-generation
+activation, implemented authenticated business mutation endpoints return `503`;
+absent legacy mutation endpoints return `404`. Neither service creates admission,
+webhook, attempt, claim, result, repository,
 review, or promotion state. `POST /v1/activation` first requires the TCP peer
 address to be exactly IPv4 `127.0.0.1`; non-loopback requests, including requests
 through a host-published listener with the correct bearer, receive `404` before
@@ -899,7 +905,8 @@ FILE`, including first installation, identical-input no-op, checked update,
 pre-activation rollback, explicit exact roll-forward recovery after uncertain
 activation, and pre-forward rejection of obsolete `dim install-cp`. The command
 installs only the two-service native Git/ordinary-CI bundle. Ordinary CI remains
-idle; native Git starts idle with no Project role credentials and empty state.
+admission-only and starts without admissions; native Git starts idle with no
+Project role credentials and empty state.
 Configured registrars may prepare owned roots, and distinct configured importers
 may submit and finalize a verified initial protected head through the service's
 checked CAS. An owner-host issuer may obtain only a short-lived read lease for
@@ -909,8 +916,21 @@ generations, while an incomplete old-generation import blocks candidate startup.
 The native image accepts only strict marked format-8 state and pins
 Git `2.39.5` in its runtime image. The installer itself does not create a Project.
 
-The native Project/repository adapter, Project admission, native webhook
-demand, capacity advertisement, host-controller execution, real Sysbox job
+After exact activation, a distinct ordinary registrar can explicitly register
+or revoke full imported-root kind-labelled policy eligibility. Its format-5
+state binds the import nonce, installer generation, and global operator capacity
+digest. Exact replays are historical receipts; readers MUST use a new UUIDv4
+request ID for each current-validity check. This does not publish a runnable
+Project, advertise capacity, or enable any job execution.
+
+The same service may durably acknowledge only a current canonical schema-2
+ordinary review event after exact native proof under
+`POST /v1/native-root-ci-events`. This is an inert historical receipt boundary:
+it creates no demand, claim, attempt, result, dispatch, approval, execution, or
+promotion authority, and no installed dispatcher invokes it yet.
+
+The native Project/repository adapter, runnable Project admission, native event
+dispatch adapter and demand, capacity advertisement, host-controller execution, real Sysbox job
 gate, and reviewer browser UI remain unavailable. They are not installed or
 enabled by this command, and the installed bundle MUST NOT be presented as
 complete native Project integration or completion of the broader Project #45 work.
