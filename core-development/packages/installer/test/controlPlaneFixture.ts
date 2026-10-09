@@ -14,20 +14,30 @@ export const controlPlaneSecrets = {
   nativeReadiness: token(8),
   ordinaryReadiness: token(9),
   nativeActivation: token(10),
-  ordinaryActivation: token(11)
+  ordinaryActivation: token(11),
+  projectRegistrar: token(12),
+  projectRootImporter: token(13),
+  projectRootReadIssuer: token(14),
+  workspaceWriteIssuer: token(15),
+  humanReviewer: token(16)
 } as const;
 
 export function nativeServiceConfig(): Readonly<Record<string, unknown>> {
   return {
-    schemaVersion: 2,
+    schemaVersion: 7,
     serviceId: "native-main",
     host: "0.0.0.0",
     port: 8080,
     storageRoot: "/var/lib/dim-native-git",
     gitExecutable: "/usr/bin/git",
-    gitVersion: "2.43.0",
+    gitVersion: "2.39.5",
     repositories: [],
     identities: [],
+    projectRegistrars: [],
+    projectRootImporters: [],
+    projectRootReadIssuers: [],
+    workspaceWriteIssuers: [],
+    humanReviewers: [],
     ordinaryCi: {
       endpoint: "http://ordinary-ci:8080",
       serviceId: "ordinary-main",
@@ -46,7 +56,7 @@ export function nativeServiceConfig(): Readonly<Record<string, unknown>> {
 
 export function ordinaryServiceConfig(registrarPassword = controlPlaneSecrets.registrar): Readonly<Record<string, unknown>> {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     serviceId: "ordinary-main",
     database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
     admissionLeaseMilliseconds: 300_000,

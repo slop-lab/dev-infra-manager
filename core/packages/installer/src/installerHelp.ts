@@ -8,6 +8,7 @@ Usage:
   dim installer               Open the interactive installer
   dim installer install core [options]
   dim installer install control-plane --config FILE
+  dim installer recover control-plane --roll-forward --generation GENERATION
   dim installer install plugin PACKAGE@EXACT_VERSION...
   dim installer enable-plugin PACKAGE...
   dim installer disable-plugin PACKAGE...
@@ -22,6 +23,7 @@ export function printInstallerHelp(): void {
   dim installer
   dim installer install core [--no-local-bin | --local-bin] [--prefix PATH] [--host-mirror-plugin PACKAGE@EXACT_VERSION] [--local-packages PATH] [--defer-controller-restart]
   dim installer install control-plane --config FILE
+  dim installer recover control-plane --roll-forward --generation GENERATION
   dim installer install plugin PACKAGE@EXACT_VERSION...
   dim installer enable-plugin PACKAGE...
   dim installer disable-plugin PACKAGE...
@@ -64,4 +66,13 @@ export function printInstallControlPlaneHelp(): void {
 Options:
   --config FILE  Read the control-plane installation configuration from FILE
   -h, --help     Show this help`);
+}
+
+export function printRecoverControlPlaneHelp(): void {
+  console.log(`Usage: dim installer recover control-plane --roll-forward --generation GENERATION
+
+Options:
+  --roll-forward           Complete the exact retained published generation
+  --generation GENERATION  Require this canonical 64-character generation ID
+  -h, --help               Show this help`);
 }

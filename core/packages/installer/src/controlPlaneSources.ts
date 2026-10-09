@@ -3,6 +3,10 @@ import { constants } from "node:fs";
 import type { BigIntStats } from "node:fs";
 import { open } from "node:fs/promises";
 import type { ControlPlaneConfig } from "./controlPlaneConfig.js";
+import { ControlPlaneSourceError } from "./controlPlaneSourceError.js";
+import { serviceCredentialValues } from "./controlPlaneServiceCredentials.js";
+
+export { ControlPlaneSourceError } from "./controlPlaneSourceError.js";
 
 const maximumServiceConfigBytes = 1024 * 1024;
 const tokenPattern = /^[A-Za-z0-9_-]+$/;
@@ -18,6 +22,7 @@ export type ControlPlaneSources = {
   readonly nativeGit: { readonly config: PrivateControlPlaneFile; readonly readinessToken: ControlPlaneToken };
   readonly ordinaryCi: { readonly config: PrivateControlPlaneFile; readonly readinessToken: ControlPlaneToken };
   readonly credentialValues: readonly string[];
+  readonly roleValues: readonly string[];
   readonly serviceConfigPreflight: {
     readonly kind: "requires-image-validation";
     readonly reason: string;
@@ -64,14 +69,15 @@ export async function readControlPlaneSources(config: ControlPlaneConfig): Promi
   ]);
   const nativeConfigValue = parseJson(nativeConfig.bytes, "native Git service config");
   const ordinaryConfigValue = parseJson(ordinaryConfig.bytes, "ordinary CI service config");
-  const credentialValues = serviceCredentialValues(nativeConfigValue, ordinaryConfigValue);
+  const { credentialValues, roleValues } = serviceCredentialValues(nativeConfigValue, ordinaryConfigValue);
   const nativeReadiness = parseTokenFile(nativeReadinessFile, "native Git readiness token");
   const ordinaryReadiness = parseTokenFile(ordinaryReadinessFile, "ordinary CI readiness token");
-  assertDistinct([...credentialValues, nativeReadiness.value, ordinaryReadiness.value]);
+  assertDistinct([...roleValues, nativeReadiness.value, ordinaryReadiness.value]);
   return {
     nativeGit: { config: nativeConfig, readinessToken: nativeReadiness },
     ordinaryCi: { config: ordinaryConfig, readinessToken: ordinaryReadiness },
     credentialValues,
+    roleValues,
     serviceConfigPreflight: {
       kind: "requires-image-validation",
       reason: "candidate images must run check-config and native check-bundle-config before Docker mutation"
@@ -92,12 +98,14 @@ export function completeControlPlaneSourcePreflight(
     nativeGit.value,
     ordinaryCi.value
   ];
-  assertDistinct(allSecretValues);
+  assertDistinct([
+    ...sources.roleValues,
+    sources.nativeGit.readinessToken.value,
+    sources.ordinaryCi.readinessToken.value,
+    nativeGit.value,
+    ordinaryCi.value
+  ]);
   return { ...sources, activationTokens: { nativeGit, ordinaryCi }, allSecretValues };
-}
-
-export class ControlPlaneSourceError extends Error {
-  readonly name = "ControlPlaneSourceError";
 }
 
 function assertPrivateMetadata(metadata: BigIntStats, label: string, maximumBytes: number): void {
@@ -124,78 +132,6 @@ function parseJson(bytes: Buffer, label: string): unknown {
   }
 }
 
-function serviceCredentialValues(nativeValue: unknown, ordinaryValue: unknown): readonly string[] {
-  const native = exactRecord(nativeValue, [
-    "schemaVersion", "serviceId", "host", "port", "storageRoot", "gitExecutable", "gitVersion",
-    "repositories", "identities", "ordinaryCi"
-  ], "native Git service config");
-  if (native.schemaVersion !== 2 || native.serviceId !== "native-main" || native.host !== "0.0.0.0"
-    || native.port !== 8080 || native.storageRoot !== "/var/lib/dim-native-git"
-    || !Array.isArray(native.repositories) || native.repositories.length !== 0
-    || !Array.isArray(native.identities) || native.identities.length !== 0) {
-    throw new ControlPlaneSourceError("native Git service config is not an idle bundle schema-2 config");
-  }
-  const nativeOrdinary = exactRecord(native.ordinaryCi, [
-    "endpoint", "serviceId", "query", "identity", "attemptIssuer", "resultReporter", "webhook"
-  ], "native Git ordinary CI config");
-  const nativeRoles = ["query", "identity", "attemptIssuer", "resultReporter", "webhook"] as const;
-  const nativeCredentials = nativeRoles.map((role) => credential(nativeOrdinary[role], `native Git ${role}`));
-
-  const ordinary = exactRecord(ordinaryValue, [
-    "schemaVersion", "serviceId", "database", "admissionLeaseMilliseconds", "claimLeaseMilliseconds",
-    "nativeGit", "credentials", "hosts"
-  ], "ordinary CI service config");
-  if (ordinary.schemaVersion !== 3 || ordinary.serviceId !== "ordinary-main"
-    || ordinary.database !== "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3") {
-    throw new ControlPlaneSourceError("ordinary CI service config is not a bundle schema-3 config");
-  }
-  const ordinaryNative = exactRecord(ordinary.nativeGit,
-    ["endpoint", "serviceId", "identity", "attemptIssuer", "resultReporter"], "ordinary CI native Git config");
-  const roles = exactRecord(ordinary.credentials, ["webhook", "registrar", "query"], "ordinary CI credentials");
-  const ordinaryCredentials = [
-    credential(roles.webhook, "ordinary CI webhook"), credential(roles.registrar, "ordinary CI registrar"),
-    credential(roles.query, "ordinary CI query"), credential(ordinaryNative.identity, "ordinary CI identity"),
-    credential(ordinaryNative.attemptIssuer, "ordinary CI attempt issuer"),
-    credential(ordinaryNative.resultReporter, "ordinary CI result reporter")
-  ];
-  assertPaired(nativeCredentials, ordinaryCredentials);
-  if (!Array.isArray(ordinary.hosts) || ordinary.hosts.length === 0) {
-    throw new ControlPlaneSourceError("ordinary CI service config must contain host credentials");
-  }
-  const hostTokens = ordinary.hosts.map((host, index) => {
-    const value = exactRecord(host, ["hostId", "hostToken", "capacities"], `ordinary CI host ${index}`);
-    if (!isToken(value.hostToken)) throw new ControlPlaneSourceError(`ordinary CI host ${index} token is invalid`);
-    return value.hostToken;
-  });
-  const registrar = ordinaryCredentials[1];
-  if (registrar === undefined) throw new ControlPlaneSourceError("ordinary CI registrar credential is missing");
-  const values = [...nativeCredentials.map((entry) => entry.password), registrar.password, ...hostTokens];
-  assertDistinct(values);
-  return values;
-}
-
-type Credential = { readonly username: string; readonly password: string };
-
-function credential(value: unknown, label: string): Credential {
-  const input = exactRecord(value, value !== null && typeof value === "object" && Object.hasOwn(value, "endpoint")
-    ? ["endpoint", "username", "password"] : ["username", "password"], label);
-  if (typeof input.username !== "string" || !isToken(input.password)) {
-    throw new ControlPlaneSourceError(`${label} credential is invalid`);
-  }
-  return { username: input.username, password: input.password };
-}
-
-function assertPaired(native: readonly Credential[], ordinary: readonly Credential[]): void {
-  const pairs = [[0, 2], [1, 3], [2, 4], [3, 5], [4, 0]] as const;
-  for (const [nativeIndex, ordinaryIndex] of pairs) {
-    const left = native[nativeIndex];
-    const right = ordinary[ordinaryIndex];
-    if (left === undefined || right === undefined || left.username !== right.username || left.password !== right.password) {
-      throw new ControlPlaneSourceError("native Git and ordinary CI paired credentials must match");
-    }
-  }
-}
-
 function parseTokenFile(file: PrivateControlPlaneFile, label: string): ControlPlaneToken {
   return tokenFromBytes(file.bytes, label, file.sha256);
 }
@@ -214,18 +150,6 @@ function isToken(value: unknown): value is string {
   if (typeof value !== "string" || !tokenPattern.test(value)) return false;
   const decoded = Buffer.from(value, "base64url");
   return decoded.length >= 32 && decoded.toString("base64url") === value;
-}
-
-function exactRecord(value: unknown, keys: readonly string[], label: string): Readonly<Record<string, unknown>> {
-  if (!isRecord(value)
-    || Object.keys(value).length !== keys.length || keys.some((key) => !Object.hasOwn(value, key))) {
-    throw new ControlPlaneSourceError(`${label} has missing or unknown fields`);
-  }
-  return value;
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function assertDistinct(values: readonly string[]): void {

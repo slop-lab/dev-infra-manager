@@ -1,9 +1,10 @@
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { readControlPlaneConfig } from "../../../../core/packages/installer/src/controlPlaneConfig.js";
 import { installFirstControlPlane } from "../../../../core/packages/installer/src/controlPlaneInstall.js";
 import { ControlPlaneInstallError } from "../../../../core/packages/installer/src/controlPlaneInstallError.js";
-import { controlPlaneSecrets } from "./controlPlaneFixture.js";
+import { controlPlaneSecrets, nativeServiceConfig, writePrivate } from "./controlPlaneFixture.js";
 import { ProbeFailureRunner } from "./controlPlaneFailureRunner.js";
 import {
   FirstInstallRunner,
@@ -67,6 +68,28 @@ describe("first control-plane installation", () => {
     expect(await exists(join(input.stateRoot, "install.json"))).toBe(false);
     expect(await exists(join(input.stateRoot, "transaction.json"))).toBe(false);
     expect(await readdir(join(input.stateRoot, "generations"))).toEqual([]);
+  });
+
+  it("rejects an importer credential collision before Docker access or state creation", async () => {
+    // Given
+    const input = await installFixture();
+    const config = await readControlPlaneConfig(input.configPath, ["127.0.0.1"]);
+    await writePrivate(config.nativeGit.configFile, `${JSON.stringify({
+      ...nativeServiceConfig(), projectRootImporters: [{
+        hostId: "controller-a", username: "project-root-importer-a", password: controlPlaneSecrets.host
+      }]
+    })}\n`);
+    const runner = new FirstInstallRunner();
+
+    // When
+    const action = installFirstControlPlane({
+      configPath: input.configPath, stateRoot: input.stateRoot, runner, randomBytes: deterministicRandom()
+    });
+
+    // Then
+    await expect(action).rejects.toThrow(/distinct/);
+    expect(runner.calls).toEqual([]);
+    expect(await exists(input.stateRoot)).toBe(false);
   });
 
   it.each([

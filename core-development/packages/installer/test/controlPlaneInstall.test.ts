@@ -207,14 +207,7 @@ describe("unified control-plane installation", () => {
     expect(rollbackExec.slice(-2)).toEqual([prior.record.generationId, prior.record.generationId]);
   });
 
-  it.each([
-    ["native readiness", "ready:native", undefined, [
-      "ready:ordinary", "ready:native", "ready:ordinary", "ready:native"
-    ]],
-    ["native activation after ordinary activation", undefined, "native-git", [
-      "ready:ordinary", "ready:native", "ready:ordinary", "ready:native"
-    ]]
-  ] as const)("restores exact prior services and root bytes after candidate %s failure", async (_label, failure, activationFailure, events) => {
+  it("restores exact prior services and root bytes after candidate native readiness failure", async () => {
     // Given: a healthy prior generation, changed images, and one injected post-mutation failure.
     const input = await installFixture();
     const runner = new FirstInstallRunner();
@@ -226,8 +219,7 @@ describe("unified control-plane installation", () => {
     const priorCompose = await readFile(join(input.stateRoot, "compose.yml"));
     await writeChangedImages(input.configPath);
     readiness.events.splice(0);
-    runner.failReadinessEvent = failure;
-    runner.failActivationService = activationFailure;
+    runner.failReadinessEvent = "ready:native";
     readiness.expectInstalled = true;
 
     // When: the injected failure occurs after candidate replacement.
@@ -246,7 +238,7 @@ describe("unified control-plane installation", () => {
     expect(runner.ordinaryRuntime?.image).toBe(prior.record.ordinaryCiImage);
     expect(runner.nativeVolume && runner.ordinaryVolume).toBe(true);
     expect(runner.calls.some(({ args }) => args[0] === "volume" && args[1] === "rm")).toBe(false);
-    expect(readiness.events).toEqual(events);
+    expect(readiness.events).toEqual(["ready:ordinary", "ready:native", "ready:ordinary", "ready:native"]);
     const execGenerations = runner.calls.filter(({ args }) => args[1] === "exec").map(({ args }) => args.at(-1));
     expect(execGenerations.slice(-2)).toEqual([prior.record.generationId, prior.record.generationId]);
   });

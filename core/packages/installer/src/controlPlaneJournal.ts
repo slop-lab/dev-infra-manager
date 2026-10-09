@@ -32,8 +32,16 @@ export async function completeControlPlanePublication(candidate: ControlPlaneCan
   const journalPath = join(candidate.staging.root, "transaction.json");
   const journal = await readStateFile(journalPath, 0o600, 4 * 1024 * 1024);
   const expected: unknown = JSON.parse(journal.toString("utf8"));
-  if (!isRecord(expected) || expected.transactionId !== candidate.staging.transactionId
-    || expected.phase !== "publishing" || expected.candidateGenerationId !== candidate.generationId) {
+  const prior = isRecord(expected) && isRecord(expected.prior) ? expected.prior : undefined;
+  const expectedPrior = candidate.staging.prior;
+  if (!isRecord(expected) || Object.keys(expected).length !== 6 || expected.schemaVersion !== 1
+    || expected.transactionId !== candidate.staging.transactionId
+    || expected.phase !== "publishing" || expected.stagingDirectory !== basename(candidate.staging.path)
+    || expected.candidateGenerationId !== candidate.generationId
+    || (expectedPrior === undefined ? expected.prior !== null : prior === undefined
+      || Object.keys(prior).length !== 3 || prior.generationId !== expectedPrior.record.generationId
+      || prior.installBase64 !== expectedPrior.installBytes.toString("base64")
+      || prior.composeBase64 !== expectedPrior.composeBytes.toString("base64"))) {
     throw new ControlPlaneJournalError("control-plane publication journal does not match the activated generation");
   }
   await removeStateFile(journalPath);

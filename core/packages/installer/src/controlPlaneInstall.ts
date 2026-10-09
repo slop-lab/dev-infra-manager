@@ -109,6 +109,7 @@ async function install(options: ControlPlaneInstallOptions, firstOnly: boolean):
     const candidate = await finalizeControlPlaneGeneration({ lock, staging, config, sources: completed });
     const compose = await createControlPlaneComposeFile(candidate.composeBytes);
     let updateMutationStarted = false;
+    let activationStarted = false;
     try {
       await validateControlPlaneCompose(runner, compose.path);
       if (prior === undefined) {
@@ -124,10 +125,17 @@ async function install(options: ControlPlaneInstallOptions, firstOnly: boolean):
         });
       }
       await publishControlPlaneInstalledState(lock, candidate, { volumesEstablished: true });
+      activationStarted = true;
       await activateControlPlaneCandidate(runner, candidate);
       await completeControlPlaneInstalledState(lock, candidate);
     } catch (error) {
       if (error instanceof ControlPlaneDockerUncertainError) throw error;
+      if (activationStarted) {
+        throw new ControlPlaneInstallError(
+          "control-plane candidate activation started but installation did not complete; activation outcome is uncertain; automatic rollback and cleanup were skipped; transaction journal, installed candidate state, available generation artifacts, and owned data volumes were retained for manual exact roll-forward",
+          { cause: error }
+        );
+      }
       if (prior === undefined) return await failFirstControlPlaneInstall({ lock, runner, candidate, error });
       if (!updateMutationStarted) {
         throw new ControlPlaneInstallError("control-plane update failed before resource mutation; candidate evidence was retained", { cause: error });
@@ -157,3 +165,4 @@ function assertResourceState(prior: ControlPlaneInstalledState | undefined, dock
 }
 
 export { ControlPlaneInstallError };
+export { rollForwardControlPlane, type RollForwardControlPlaneOptions } from "./controlPlaneRecovery.js";

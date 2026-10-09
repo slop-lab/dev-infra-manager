@@ -84,6 +84,8 @@ dim installer install core [options]
                               Install/upgrade DIM core and CLI
 dim installer install control-plane --config FILE
                               Install/update the idle native control-plane bundle
+dim installer recover control-plane --roll-forward --generation GENERATION
+                              Complete one exact retained published generation
 dim installer install plugin PACKAGE@EXACT_VERSION...
                               Install and enable one or more plugins
 dim installer enable-plugin PACKAGE...
@@ -192,6 +194,36 @@ working directory never select the Docker program. Docker subprocesses receive
 a system-only `PATH` so credential helpers cannot be selected from a Project
 checkout, while settings such as `DOCKER_HOST` remain available for rootless
 daemons.
+
+### `dim installer recover control-plane`
+
+```text
+Usage: dim installer recover control-plane --roll-forward --generation GENERATION
+
+Options:
+  --roll-forward           Complete the exact retained published generation
+  --generation GENERATION  Require this canonical 64-character generation ID
+  -h, --help               Show this help
+```
+
+Use this operator-invoked command only after installation reports that
+candidate activation started but completion is uncertain. `GENERATION` must be
+the exact retained candidate generation in `install.json`. Recovery does not
+read mutable installer config and has no rollback, repair, cleanup, or
+alternate-generation mode.
+
+Recovery locks the existing state and requires the exact schema-1 `publishing`
+journal, canonical transaction identity, published candidate record and Compose
+bytes, and the journaled prior generation when present. Other retained
+generation directories are validated as inert history, never selected for
+activation; first-install recovery permits only its candidate. Before activation it verifies complete owned Docker
+resources, exact candidate runtime topology, and both service readiness checks.
+It then replays the candidate's mounted activation ordinary CI first and native
+Git second, repeats state, topology, and readiness verification, and removes
+only the byte-identical journal with directory durability. A wrong generation,
+malformed or mixed state, missing or foreign resource, failed readiness, or
+failed activation leaves the journal and retained resources untouched. Normal
+`installer install control-plane` continues to refuse while the journal exists.
 
 ### `dim installer install plugin`
 

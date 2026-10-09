@@ -90,7 +90,7 @@ export async function activateControlPlaneCandidate(
   runner: ControlPlaneDockerRunner,
   candidate: ControlPlaneCandidateGeneration
 ): Promise<void> {
-  await activateServices(runner, {
+  await activateControlPlaneTarget(runner, {
     config: candidate.config,
     generationPath: candidate.generationPath,
     generationId: candidate.generationId
@@ -127,7 +127,7 @@ export async function rollbackControlPlaneUpdate(input: {
       await replace(replacement, "native-git");
        await ready(input.runner, replacement.target, "native-git", input.readinessPolicy);
       await restorePriorControlPlaneInstalledState(input.lock, input.candidate, input.prior);
-      await activateServices(input.runner, {
+      await activateControlPlaneTarget(input.runner, {
         config: priorConfig(input.candidate.config, input.prior),
         generationPath: input.prior.generationPath,
         generationId: input.prior.record.generationId
@@ -199,7 +199,7 @@ type ActivationTarget = {
   readonly generationId: string;
 };
 
-async function activateServices(runner: ControlPlaneDockerRunner, target: ActivationTarget): Promise<void> {
+export async function activateControlPlaneTarget(runner: ControlPlaneDockerRunner, target: ActivationTarget): Promise<void> {
   await activateService(runner, target, "ordinary-ci", "10002:10002");
   await activateService(runner, target, "native-git", "10001:10001");
 }

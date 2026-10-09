@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, readFile, readdir } from "node:fs/promises";
+import { chmod, lstat, readFile, readdir } from "node:fs/promises";
 import type {
   ControlPlaneDockerCommand,
   ControlPlaneDockerCommandResult,
@@ -38,6 +38,7 @@ export class FirstInstallRunner implements ControlPlaneDockerRunner {
   ordinaryRuntime: RuntimeService | undefined;
   failReplacementNumber: number | undefined;
   failActivationService: "native-git" | "ordinary-ci" | undefined;
+  failCompletionAfterActivation = false;
   failReadinessEvent: "ready:native" | "ready:ordinary" | undefined;
   failEveryReadiness = false;
   uncertainReadinessEvent: "ready:native" | "ready:ordinary" | undefined;
@@ -127,6 +128,9 @@ export class FirstInstallRunner implements ControlPlaneDockerRunner {
         this.failActivationService = undefined;
         return failed("activation failed");
       }
+      if (service === "native-git" && this.failCompletionAfterActivation) {
+        await chmod(`${stateRoot}/transaction.json`, 0o400);
+      }
       return ok("");
     }
     if (args[1] === "ls") return this.list(args);
@@ -138,8 +142,11 @@ export class FirstInstallRunner implements ControlPlaneDockerRunner {
     }
     if (args[0] === "run") {
       if (this.failImageProbe) return failed("probe failed");
-      if (args.includes("compatibility")) return ok(`${JSON.stringify({ schemaVersion: 1, writeFormat: 3, readableFormats: [3] })}\n`);
-      if (args.includes("check-state")) return ok(`${JSON.stringify({ schemaVersion: 1, stateFormat: 3 })}\n`);
+      const stateFormat = args.some((argument) => argument.includes("native-git")) ? 4 : 3;
+      if (args.includes("compatibility")) {
+        return ok(`${JSON.stringify({ schemaVersion: 1, writeFormat: stateFormat, readableFormats: [stateFormat] })}\n`);
+      }
+      if (args.includes("check-state")) return ok(`${JSON.stringify({ schemaVersion: 1, stateFormat })}\n`);
       return ok("");
     }
     if (args[0] === "network" && args[1] === "create") {
