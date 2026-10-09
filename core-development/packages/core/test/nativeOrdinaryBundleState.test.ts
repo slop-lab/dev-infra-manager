@@ -9,6 +9,10 @@ import {
   initializeNativeOrdinaryBundleState,
   nativeOrdinaryBundleMarkerPath
 } from "../../../../core/packages/core/src/nativeOrdinaryBundleState.js";
+import {
+  nativeOrdinarySchemaManifestSha256,
+  openNativeOrdinaryDatabase
+} from "../../../../core/packages/core/src/nativeOrdinaryAuthoritySchema.js";
 
 const roots: string[] = [];
 
@@ -17,7 +21,7 @@ afterEach(async () => {
 });
 
 describe("native ordinary bundle state", () => {
-  it("creates a durable schema-3 database bound to its exact schema manifest", async () => {
+  it("creates a durable schema-5 receipt database bound to its exact schema manifest", async () => {
     // Given
     const root = await temporaryStateRoot();
 
@@ -25,16 +29,16 @@ describe("native ordinary bundle state", () => {
     const initialized = await initializeNativeOrdinaryBundleState(root);
 
     // Then
-    expect(initialized).toEqual({ database: join(root, "ordinary-ci.sqlite3"), stateFormat: 3 });
+    expect(initialized).toEqual({ database: join(root, "ordinary-ci.sqlite3"), stateFormat: 5 });
     const marker: unknown = JSON.parse(await readFile(nativeOrdinaryBundleMarkerPath(root), "utf8"));
     expect(marker).toEqual({
       schemaVersion: 1,
-      stateFormat: 3,
+      stateFormat: 5,
       database: "ordinary-ci.sqlite3",
       schemaManifestSha256: expect.stringMatching(/^sha256:[0-9a-f]{64}$/)
     });
     const database = new DatabaseSync(initialized.database, { readOnly: true });
-    expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 3 });
+    expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 5 });
     expect(database.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'bundle_activation'").get())
       .toEqual({ name: "bundle_activation" });
     database.close();
@@ -48,7 +52,7 @@ describe("native ordinary bundle state", () => {
     const root = await temporaryStateRoot();
     const databasePath = join(root, "ordinary-ci.sqlite3");
     const database = new DatabaseSync(databasePath);
-    database.exec("PRAGMA user_version = 3");
+    database.exec("PRAGMA user_version = 5");
     database.close();
     const before = await treeSnapshot(root);
 
@@ -57,6 +61,27 @@ describe("native ordinary bundle state", () => {
 
     // Then
     await expect(initialize).rejects.toThrow(/marker.*missing/i);
+    expect(await treeSnapshot(root)).toEqual(before);
+  });
+
+  it("rejects a complete format-4 predecessor byte-for-byte", async () => {
+    // Given
+    const root = await temporaryStateRoot();
+    const databasePath = join(root, "ordinary-ci.sqlite3");
+    openNativeOrdinaryDatabase(databasePath).close();
+    await chmod(databasePath, 0o600);
+    const markerPath = nativeOrdinaryBundleMarkerPath(root);
+    await writeFile(markerPath, `${JSON.stringify({ schemaVersion: 1,
+      stateFormat: 4, database: "ordinary-ci.sqlite3",
+      schemaManifestSha256: nativeOrdinarySchemaManifestSha256() })}\n`, { mode: 0o444 });
+    await chmod(markerPath, 0o444);
+    const before = await treeSnapshot(root);
+
+    // When
+    const inspect = inspectNativeOrdinaryBundleState(root);
+
+    // Then
+    await expect(inspect).rejects.toThrow(/state marker is invalid/i);
     expect(await treeSnapshot(root)).toEqual(before);
   });
 
@@ -147,7 +172,7 @@ describe("native ordinary bundle state", () => {
     const result = await inspectNativeOrdinaryBundleState(root);
 
     // Then
-    expect(result).toEqual({ stateFormat: 3 });
+    expect(result).toEqual({ stateFormat: 5 });
     expect(await treeSnapshot(root)).toEqual(before);
     expect(await readdir(root)).not.toContain("ordinary-ci.sqlite3-shm");
   });

@@ -27,12 +27,11 @@ describe("native ordinary bundle state live WAL inspection", () => {
     const state = await initializeNativeOrdinaryBundleState(root);
     const setup = new DatabaseSync(state.database);
     setup.prepare("INSERT INTO bundle_activation VALUES (?, ?)").run("a".repeat(64), "b".repeat(64));
-    setup.prepare("INSERT INTO service_epochs VALUES (?, ?, ?)").run("business-state", 1, 1);
     setup.close();
     const writer = spawn(process.execPath, [writerFixture, state.database], { stdio: ["ignore", "pipe", "pipe"] });
     children.push(writer);
     await writerReady(writer);
-    const businessState = serviceEpochs(state.database);
+    const businessState = activationRows(state.database);
 
     // When
     const outcomes: ProbeOutcome[] = [];
@@ -50,7 +49,7 @@ describe("native ordinary bundle state live WAL inspection", () => {
     expect(outcomes.every((outcome) => {
       switch (outcome.kind) {
         case "accepted":
-          return outcome.stateFormat === 3;
+          return outcome.stateFormat === 5;
         case "rejected":
           return outcome.error instanceof Error
             && /state changed while it was inspected/i.test(outcome.error.message);
@@ -61,12 +60,12 @@ describe("native ordinary bundle state live WAL inspection", () => {
       }
     })).toBe(true);
     expect(transactions).toBeGreaterThan(100);
-    expect(serviceEpochs(state.database)).toEqual(businessState);
+    expect(activationRows(state.database)).toEqual(businessState);
   }, 30_000);
 });
 
 type ProbeOutcome =
-  | { readonly kind: "accepted"; readonly stateFormat: 3 }
+  | { readonly kind: "accepted"; readonly stateFormat: 5 }
   | { readonly kind: "rejected"; readonly error: unknown };
 
 async function writerReady(child: ChildProcess): Promise<void> {
@@ -106,10 +105,10 @@ async function stopWriter(child: ChildProcess): Promise<number> {
   return transactions;
 }
 
-function serviceEpochs(databasePath: string): readonly unknown[] {
+function activationRows(databasePath: string): readonly unknown[] {
   const database = new DatabaseSync(databasePath, { readOnly: true });
   try {
-    return database.prepare("SELECT * FROM service_epochs ORDER BY epoch_id").all();
+    return database.prepare("SELECT generation_id FROM bundle_activation ORDER BY generation_id").all();
   } finally {
     database.close();
   }
