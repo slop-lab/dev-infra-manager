@@ -50,7 +50,7 @@ describe("activated native Git bundle transport", () => {
     const service = await start(root, {
       async request(input) {
         expect([input.endpoint, input.method, input.path]).toEqual([
-          "http://ordinary-ci:8080", "GET", "/v1/identity"
+          "http://ordinary-ci:8080", "GET", "/v1/native-root-admission/identity"
         ]);
         return {
           statusCode: 200,
@@ -59,8 +59,9 @@ describe("activated native Git bundle transport", () => {
           body: Buffer.from(JSON.stringify({
             schemaVersion: 1,
             serviceId,
-            role: "native-query",
-            scope: ["admission:read", "attempt:read"]
+            servingGenerationId: generationId,
+            role: "native-root-admission-reader",
+            scope: ["imported-root-admission:read"]
           }))
         };
       }

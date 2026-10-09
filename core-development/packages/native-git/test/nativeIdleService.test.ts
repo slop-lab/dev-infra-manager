@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseNativeOrdinaryBundleConfig } from "../../../../core/packages/core/src/nativeOrdinaryBundleConfig.js";
-import { configuredNativeOrdinaryIdleServer } from "../../../../core/packages/core/src/nativeOrdinaryIdleService.js";
+import { configuredNativeRootAdmissionServer } from "../../../../core/packages/core/src/nativeRootAdmissionService.js";
 import { parseNativeGitBundleConfig } from "../../../../core/packages/native-git/src/bundle-config.js";
 import { configuredNativeGitIdleServer } from "../../../../core/packages/native-git/src/native-idle-service.js";
 import { createNodeAdmissionVerifierHttpClient } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
@@ -55,7 +55,9 @@ describe("native Git idle bundle service", () => {
   it.each([
     ["peer outage", async () => "http://127.0.0.1:1"],
     ["wrong service ID", async () => startIdentityPeer({ serviceId: "ordinary-other" })],
-    ["wrong scope", async () => startIdentityPeer({ scope: ["admission:read"] })],
+    ["wrong role", async () => startIdentityPeer({ role: "native-root-admission-registrar" })],
+    ["wrong scope", async () => startIdentityPeer({ scope: ["imported-root-admission:write"] })],
+    ["wrong generation", async () => startIdentityPeer({ servingGenerationId: nextGeneration })],
     ["redirect", async () => startIdentityPeer({}, 302)]
   ])("returns 503 readiness for %s", async (_label, peerOrigin) => {
     // Given
@@ -147,7 +149,7 @@ describe("native Git idle bundle service", () => {
 
 async function startOrdinary(): Promise<{ readonly port: number; readonly origin: string }> {
   const root = await temporaryRoot();
-  const server = await configuredNativeOrdinaryIdleServer({
+  const server = await configuredNativeRootAdmissionServer({
     config: parseNativeOrdinaryBundleConfig(idleOrdinaryConfig()),
     stateDirectory: join(root, "ordinary"),
     readinessToken: ordinaryReadiness,
@@ -174,12 +176,14 @@ async function startNative(existingRoot: string | undefined, peerOrigin: string,
 
 async function startIdentityPeer(overrides: Readonly<Record<string, unknown>> = {}, status = 200): Promise<string> {
   const server = (await import("node:http")).createServer((request_, response) => {
-    response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store", location: "/v1/identity" });
+    response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store",
+      location: "/v1/native-root-admission/identity" });
     response.end(JSON.stringify({
       schemaVersion: 1,
       serviceId: "ordinary-main",
-      role: "native-query",
-      scope: ["admission:read", "attempt:read"],
+      servingGenerationId: generation,
+      role: "native-root-admission-reader",
+      scope: ["imported-root-admission:read"],
       ...overrides
     }));
   });

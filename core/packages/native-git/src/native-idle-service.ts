@@ -6,7 +6,7 @@ import { initializeNativeGitBundleState } from "./native-bundle-state.js";
 import { readNativeProjectRegistrationsFromDatabase } from "./native-project-registry-state.js";
 import {
   createNodeAdmissionVerifierHttpClient,
-  createOrdinaryAdmissionVerifier,
+  attestNativeRootAdmissionReader,
   type AdmissionVerifierHttpClient
 } from "./ordinary-admission-http.js";
 
@@ -91,11 +91,11 @@ export async function configuredNativeGitIdleServer(options: NativeGitIdleServic
       if (!bearerAuthorized(request, options.readinessToken)) return notFound(response);
       database.prepare("SELECT 1").get();
       try {
-        await createOrdinaryAdmissionVerifier({
+        await attestNativeRootAdmissionReader({
           config: config.ordinaryCi,
           httpClient: identityHttpClient,
           timeoutMilliseconds: identityTimeoutMilliseconds
-        });
+        }, options.expectedGenerationId);
       } catch (error) {
         if (error instanceof Error) {
           return sendJson(response, 503, { error: "ordinary CI identity is unavailable" });

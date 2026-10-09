@@ -41,7 +41,7 @@ export function idleNativeConfig() {
       attemptIssuer: { username: "ordinary-attempts", password: bundleSecrets.attemptIssuer },
       resultReporter: { username: "ordinary-results", password: bundleSecrets.resultReporter },
       webhook: {
-        endpoint: "http://ordinary-ci:8080/v1/native-events",
+    endpoint: "http://ordinary-ci:8080/v1/native-root-ci-events",
         username: "native-events",
         password: bundleSecrets.webhook
       }
