@@ -278,10 +278,14 @@ for service in nativeGit ordinaryCi; do
     base_image="$g2_native"
     image_repository="$registry/native-git-compatibility"
     service_user="10001:10001"
+    format_version=7
+    incompatible_format=8
   else
     base_image="$g2_ordinary"
     image_repository="$registry/ordinary-ci-compatibility"
     service_user="10002:10002"
+    format_version=3
+    incompatible_format=4
   fi
   for profile in "${variant_profiles[@]}"; do
     context="$work_dir/variant-$service-$profile"
@@ -299,21 +303,21 @@ if [ "$#" -eq 4 ] && [ "$1" = check-state ] && [ "$2" = --read-only ] && [ "$4" 
 fi
 exec /usr/local/bin/dim-service-original "$@"
 EOF
-    compatibility='{"schemaVersion":1,"writeFormat":3,"readableFormats":[3]}'
-    state='{"schemaVersion":1,"stateFormat":3}'
+    compatibility="{\"schemaVersion\":1,\"writeFormat\":$format_version,\"readableFormats\":[$format_version]}"
+    state="{\"schemaVersion\":1,\"stateFormat\":$format_version}"
     case "$profile" in
-      compatibility-missing-field) compatibility='{"schemaVersion":1,"readableFormats":[3]}' ;;
+      compatibility-missing-field) compatibility="{\"schemaVersion\":1,\"readableFormats\":[$format_version]}" ;;
       compatibility-malformed-json) compatibility='{"schemaVersion":1,"writeFormat":' ;;
-      candidate-write-unreadable-by-prior) compatibility='{"schemaVersion":1,"writeFormat":4,"readableFormats":[3,4]}' ;;
+      candidate-write-unreadable-by-prior) compatibility="{\"schemaVersion\":1,\"writeFormat\":$incompatible_format,\"readableFormats\":[$format_version,$incompatible_format]}" ;;
       non-overlapping-formats)
-        compatibility='{"schemaVersion":1,"writeFormat":4,"readableFormats":[4]}'
-        state='{"schemaVersion":1,"stateFormat":4}'
+        compatibility="{\"schemaVersion\":1,\"writeFormat\":$incompatible_format,\"readableFormats\":[$incompatible_format]}"
+        state="{\"schemaVersion\":1,\"stateFormat\":$incompatible_format}"
         ;;
-      candidate-state-format-mismatch) state='{"schemaVersion":1,"stateFormat":4}' ;;
-      prior-write-unreadable-by-candidate) compatibility='{"schemaVersion":1,"writeFormat":4,"readableFormats":[3,4]}' ;;
+      candidate-state-format-mismatch) state="{\"schemaVersion\":1,\"stateFormat\":$incompatible_format}" ;;
+      prior-write-unreadable-by-candidate) compatibility="{\"schemaVersion\":1,\"writeFormat\":$incompatible_format,\"readableFormats\":[$format_version,$incompatible_format]}" ;;
       prior-state-format-mismatch)
-        compatibility='{"schemaVersion":1,"writeFormat":3,"readableFormats":[3,4]}'
-        state='{"schemaVersion":1,"stateFormat":4}'
+        compatibility="{\"schemaVersion\":1,\"writeFormat\":$format_version,\"readableFormats\":[$format_version,$incompatible_format]}"
+        state="{\"schemaVersion\":1,\"stateFormat\":$incompatible_format}"
         ;;
     esac
     printf '%s\n' "$compatibility" >"$context/compatibility.json"
@@ -372,7 +376,7 @@ tar -C "$repo_root/verification/scripts" -cf - \
   control-plane-install-live-integrity.mjs \
   control-plane-install-live-denials.mjs control-plane-install-live-evidence.mjs \
   control-plane-install-live-rollback.mjs control-plane-install-live-roles.mjs \
-  control-plane-install-live-prepublication.mjs \
+  control-plane-install-live-prepublication.mjs control-plane-install-live-recovery.mjs \
   control-plane-install-live-missing-volume.mjs | docker container run --rm --interactive \
   --name "$copy_name" --label "org.dim.verification=$run_id" \
   --mount "type=volume,src=$harness_volume,dst=/payload" --entrypoint sh "$harness_image" \

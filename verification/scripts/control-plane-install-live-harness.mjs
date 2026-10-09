@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runChangedDeploymentDenial, runOccupiedPortDenial, runPreInstallDenials } from "./control-plane-install-live-denials.mjs";
 import { captureRollbackState, runLiveRollbackMatrix } from "./control-plane-install-live-rollback.mjs";
+import { runLiveActivationRecovery } from "./control-plane-install-live-recovery.mjs";
 import { runMissingEstablishedVolume } from "./control-plane-install-live-missing-volume.mjs";
 import { runLivePrepublicationGate } from "./control-plane-install-live-prepublication.mjs";
 import { inspectEffectiveCompose, runMissingComposeHarness, runWrongDigestDenial } from "./control-plane-install-live-integrity.mjs";
@@ -245,6 +246,13 @@ await runLiveRollbackMatrix({
     await installControlPlane({ configPath, stateRoot, runner });
     console.log("rollback-halt-repair prior-generation-restored=true journal-cleared=true volumes-preserved=true");
   }
+});
+await runLiveActivationRecovery({
+  stateRoot, runner, facadeInput: facadeInstall,
+  priorGenerationId: priorRollbackState.generationId, priorVolumes: firstVolumes,
+  selectCandidate: async () => writeConfig(images.g1),
+  install: async (failureRunner) => installControlPlane({ configPath, stateRoot, runner: failureRunner }),
+  captureRuntime: runtimeSnapshot, captureVolumes: volumeSnapshot, assertSentinels
 });
 await runMissingEstablishedVolume({
   stateRoot,

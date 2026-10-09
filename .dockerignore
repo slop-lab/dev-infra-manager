@@ -32,16 +32,7 @@ core/packages/core/dist/*
 core/packages/native-git/*
 !core/packages/native-git/dist/
 core/packages/native-git/dist/*
-!core/packages/native-git/dist/admission-verifier.js
-!core/packages/native-git/dist/bundle-config.js
-!core/packages/native-git/dist/candidate-execution-schema.js
-!core/packages/native-git/dist/config.js
-!core/packages/native-git/dist/native-bundle-state.js
-!core/packages/native-git/dist/native-idle-service.js
-!core/packages/native-git/dist/ordinary-admission-http.js
-!core/packages/native-git/dist/serviceCli.js
-!core/packages/native-git/dist/serviceReadiness.js
-!core/packages/native-git/dist/storage-owner.js
+!core/packages/native-git/dist/*.js
 !core/packages/controller-proxy/
 core/packages/controller-proxy/*
 !core/packages/controller-proxy/dist/

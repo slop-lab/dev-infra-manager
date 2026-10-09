@@ -3,6 +3,7 @@ set -euo pipefail
 
 root="$(mktemp -d /tmp/dim-plugin-install.XXXXXX)"
 export XDG_RUNTIME_DIR="$root/runtime"
+export DIM_STATE_ROOT="$root/state"
 mkdir -m 0700 "$XDG_RUNTIME_DIR"
 
 cleanup() {
@@ -40,7 +41,7 @@ cleanup() {
         controller_runtime_directory="${pid_file%/controller.pid}"
         expected_args=(
           "$(node -p 'process.execPath')"
-          "$(realpath core/packages/cli/dist/cli.js)"
+          "$plugin_home/node_modules/.bin/dim"
           controller serve
           --socket "$controller_runtime_directory/workspace/controller.sock"
           --agent-socket "$controller_runtime_directory/agent/controller.sock"
@@ -82,6 +83,7 @@ cleanup() {
         else
           echo "temporary DIM controller identity did not match PID file: $pid_file" >&2
           cleanup_failed=true
+          retain_root=true
         fi
         ;;
     esac
@@ -129,6 +131,9 @@ printf '%s\n' \
 plugin_tarball="$(pnpm --dir "$plugin_source" pack --pack-destination "$root" --json | jq -r '.filename | split("/")[-1]')"
 installer_tarball="$(pnpm --dir core/packages/installer/dist pack --pack-destination "$root" --json | jq -r '.filename | split("/")[-1]')"
 npm install --prefix "$installer_prefix" "$root/$installer_tarball" >/dev/null
+mkdir -p "$(dirname "$config_path")" "$plugin_home"
+printf '%s\n' '{"schemaVersion":1,"workspaceBackend":"sysbox"}' > "$config_path"
+printf '%s\n' '{"schemaVersion":1,"plugins":["@slop-lab/dim-plugin-host-mirrors"]}' > "$plugin_home/plugins.json"
 
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
   installer install core --local-packages "$package_bundle" --no-local-bin >/dev/null
@@ -138,8 +143,6 @@ DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/nod
   "$root/$plugin_tarball" \
   >/dev/null
 
-jq '.workspaceBackend = "sysbox"' "$config_path" > "$root/config.json"
-mv "$root/config.json" "$config_path"
 result="$(DIM_STATE_ROOT="$root/state" DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" node core/packages/cli/dist/cli.js plugin list --json)"
 test "$(printf '%s' "$result" | jq -r '.plugins[0]')" = "@example/dim-plugin-smoke"
 
@@ -175,7 +178,7 @@ test "$(sha256sum "$plugin_home/plugins.json")" = "$manifest_before"
 
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
   installer disable-plugin '@example/dim-plugin-smoke' >/dev/null
-test "$(jq '.plugins | length' "$plugin_home/plugins.json")" = 0
+test "$(jq '.plugins | length' "$plugin_home/plugins.json")" = 1
 
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
   installer enable-plugin '@example/dim-plugin-smoke' >/dev/null
@@ -183,7 +186,7 @@ test "$(jq -r '.plugins[0]' "$plugin_home/plugins.json")" = "@example/dim-plugin
 
 DIM_DATA_HOME="$data_home" DIM_CONFIG_PATH="$config_path" "$installer_prefix/node_modules/.bin/dim" \
   installer remove-plugin '@example/dim-plugin-smoke' >/dev/null
-test "$(jq '.plugins | length' "$plugin_home/plugins.json")" = 0
+test "$(jq -c '.plugins' "$plugin_home/plugins.json")" = '["@slop-lab/dim-plugin-host-mirrors"]'
 test "$(jq '.dependencies | has("@example/dim-plugin-smoke")' "$plugin_home/package.json")" = false
 test -z "$(find "$data_home/runtime/sources" -type f -print -quit)"
 

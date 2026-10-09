@@ -19,9 +19,10 @@ export async function createOperatorFixture(input) {
     ordinaryReadiness: join(input.operatorRoot, "ordinary-readiness.token")
   };
   await privateFile(sources.nativeGit, JSON.stringify({
-    schemaVersion: 2, serviceId: "native-main", host: "0.0.0.0", port: 8080,
-    storageRoot: "/var/lib/dim-native-git", gitExecutable: "/usr/bin/git", gitVersion: "2.43.0",
-    repositories: [], identities: [], ordinaryCi: {
+    schemaVersion: 7, serviceId: "native-main", host: "0.0.0.0", port: 8080,
+    storageRoot: "/var/lib/dim-native-git", gitExecutable: "/usr/bin/git", gitVersion: "2.39.5",
+    repositories: [], identities: [], projectRegistrars: [], projectRootImporters: [],
+    projectRootReadIssuers: [], workspaceWriteIssuers: [], humanReviewers: [], ordinaryCi: {
       endpoint: "http://ordinary-ci:8080", serviceId: "ordinary-main",
       query: { username: "native-query", password: credentials.query },
       identity: { username: "ordinary-identity", password: credentials.identity },
@@ -31,7 +32,7 @@ export async function createOperatorFixture(input) {
     }
   }));
   await privateFile(sources.ordinaryCi, JSON.stringify({
-    schemaVersion: 3, serviceId: "ordinary-main", database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
+    schemaVersion: 4, serviceId: "ordinary-main", database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
     admissionLeaseMilliseconds: 300000, claimLeaseMilliseconds: 60000,
     nativeGit: {
       endpoint: "http://native-git:8080", serviceId: "native-main",
@@ -44,7 +45,7 @@ export async function createOperatorFixture(input) {
       registrar: { username: "ordinary-registrar", password: credentials.registrar },
       query: { username: "native-query", password: credentials.query }
     },
-    hosts: [{ hostId: "host-a", hostToken: credentials.host, capacities: [{ capacity: "primary", runnerBaseImage: `registry.example/runner@sha256:${"c".repeat(64)}`, bounds: { cpu: "4", memoryBytes: "8589934592", pids: "2048", wallClockSeconds: "3600", outputBytes: "16777216" } }] }]
+    hosts: [{ hostId: "host-a", hostToken: credentials.host, capacities: [{ capacity: "primary", runnerBaseImage: `registry.example/runner@sha256:${"c".repeat(64)}`, jobBaseImage: `registry.example/job@sha256:${"d".repeat(64)}`, bounds: { cpu: "4", memoryBytes: "8589934592", pids: "2048", wallClockSeconds: "3600", outputBytes: "16777216" } }] }]
   }));
   await privateFile(sources.nativeReadiness, readinessTokens.nativeGit);
   await privateFile(sources.ordinaryReadiness, readinessTokens.ordinaryCi);

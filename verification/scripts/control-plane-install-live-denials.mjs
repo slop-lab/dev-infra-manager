@@ -24,7 +24,7 @@ export async function runPreInstallDenials(context) {
   }
   await withJsonMutation(context, context.sources.nativeGit, "invalid-service-config", (value) => {
     value.schemaVersion = 1;
-  }, /not an idle bundle schema-2 config/);
+  }, /not a bundle schema-6 config/);
   await withJsonMutation(context, context.sources.ordinaryCi, "paired-credential-mismatch", (value) => {
     value.nativeGit.identity.password = Buffer.alloc(32, 41).toString("base64url");
   }, /paired credentials must match/);
