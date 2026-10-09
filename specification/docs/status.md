@@ -11,23 +11,28 @@ Specified but not implemented:
 
 - Native ordinary CI admission and host-controller-owned shared Sysbox
   capacity. The target has no persistent Project-scoped ordinary runner or
-  image. Its accepted design reads strict schema-2 job config, script, and a
-  digest-pinned image from the exact candidate tree and labels a zero exit as
+  image. Its accepted design reads strict schema-3 job config and script from
+  the exact candidate tree, uses an operator-owned digest-pinned common job
+  base image, and labels a zero exit as
   candidate-controlled self-test evidence, not independent verification.
   Green records bounded execution of the selected tests, not correctness or
   completeness of those tests and not blanket product correctness. Product
   maintainers still review changed requirements, implementation, tests, and
   results; the sandbox narrows infrastructure security review only.
-  Operator policy still controls Project eligibility, required job names,
-  capacity, and bounds. Existing Gitea ordinary-pool commands, schema-2 state, and persistent
+  Trusted native Project registration will establish CI eligibility without a
+  separate per-Project approval; operator policy controls required jobs and
+  global capacity, pinned images, and bounds. Existing Gitea ordinary-pool commands, schema-2 state, and persistent
   Sysbox runners are predecessor behavior and are rejected by the target rather
   than migrated.
-- A native Project/repository state adapter. Bundle installation does not select
-  native Git for Projects; until a separate adapter is reviewed and implemented,
+- A runnable native Project/repository state adapter. Host-only drafts and
+  exact root import exist, but bundle installation does not select native Git
+  for Projects; until a separate adapter is reviewed and implemented,
   native Project admission, capacity advertisement, claims, attempts, and
-  results remain denied. Existing QEMU scheduling remains Gitea-only.
+  results remain denied. A separate native QEMU host-file parser provides
+  preflight only: there is no native QEMU scheduler, executor, or VM result,
+  and existing QEMU scheduling remains Gitea-only.
 
-The idle installer command and passing predecessor Gitea/QEMU gates are not
+The installed bundle and passing predecessor Gitea/QEMU gates are not
 evidence that native Project integration is available. Bundle support remains
 gated on the control-plane acceptance run on a clean host. The reviewer browser
 UI and transition away from protected-root schema 1 remain unimplemented.
@@ -36,11 +41,59 @@ This pre-stable target defines no compatibility parser or source/state migration
 Implemented:
 
 - The installer-facade-owned `dim installer install control-plane --config
-  FILE` transaction for the idle two-service native Git and ordinary CI Compose
+  FILE` transaction for the two-service native Git and ordinary CI Compose
   bundle, including distinct nonroot identities and private volumes,
-  authenticated readiness, bounded predecessor-state refusal, and rollback.
+  authenticated readiness, bounded predecessor-state refusal, pre-activation
+  rollback, and explicit `dim installer recover control-plane --roll-forward
+  --generation GENERATION` after uncertain candidate activation. Recovery
+  checks the retained journal, snapshots, runtime topology, and readiness,
+  replays only the exact candidate activation, and preserves volumes and
+  imported roots. A wrong or incomplete candidate remains refused.
   It neither selects native Git for Projects nor admits native ordinary CI jobs
-  or capacity. Support remains gated on the clean-host acceptance run above.
+  or capacity. Native Git's strict format-7 volume can record multiple exact
+  Project/root identities and one immutable import intent per prepared root.
+  A strict schema-7 native config with empty registrar, importer, root
+  read-issuer, workspace-write-issuer, and human-reviewer lists retains the idle
+  HTTP service on empty state. A host-bound registrar can
+  prepare an inaccessible root; a distinct importer can upload one bounded,
+  self-contained Git bundle, bind the exact policy and commit, and finalize
+  the initially unborn protected ref through the service's checked CAS.
+  Separate host-only clients load owner-only mode-`0600` registrar/importer
+  connections, attest the exact service/role/host/generation, and match durable
+  and final receipts.
+  A separate host-bound root read issuer is isolated from every other role.
+  After live imported-root proof it can request a 30-second, Project/root-scoped
+  upload-pack lease; the issuer credential itself has no Git authority, and
+  receive-pack remains denied. Host-only clients load separate owner-only
+  importer and issuer connections, check the exact non-runnable draft against
+  a fresh proof, and withhold the lease when the bound receipt or owner drifts.
+  A native bootstrap planner pins one commit in an already-local repository,
+  reads its exact reviewed manifest or explicit manifest-free policy, and
+  creates a private self-contained one-ref bundle. A host-only bootstrap
+  durably claims a separate credential-free native draft, imports that same
+  commit and policy, and binds the final receipt; a lost host receipt can be
+  recovered by exact replay. A read-only importer-scoped schema-2 proof checks
+  the current serving activation and the original import receipt against the
+  owner marker, private repository, bundle, protected ref, tree, and host draft.
+  A fully imported root survives a later service generation after read-only
+  verification without changing its receipt or draft; incomplete earlier-
+  generation imports reject startup before mutating recovery. Stale proof leaves
+  the draft non-ready and unchanged. A host-only snapshot operation uses the
+  same proof and read lease to hash-check and publish the exact imported commit
+  and tree under a separate private native asset namespace. It preserves safe
+  contained relative symlinks, rejects unsafe lifecycle links and gitlinks,
+  and publishes no lease or workspace authority. This does not attest an
+  external origin or publish a runnable Project. A separate owner-host issuer
+  can mint a 30-second memory-only workspace lease after live authoritative
+  imported-policy proof; its checked Git backend permits only that workspace's
+  proposal namespace. Configured policy-required human reviewers may inspect
+  only one exact immutable Project/root/review ID after a fresh live proof;
+  moved proposal or head evidence is returned as stale. This surface has no
+  list or decision mutation. The installed bundle still issues no durable
+  workspace or promoter identity and exposes no protected writes, approval,
+  native CI admission, or runnable Project. The host-only root fetch is not
+  workspace admission. Gitea-free adoption
+  remains gated on the clean-host Sysbox and KVM journey above.
 - Service-level candidate job parsing and descriptor binding, central ordinary
   claim/lease/result state, and a callable host executor. The host worker is
   not connected to controller startup and no native Project adapter is active.

@@ -68,10 +68,11 @@ The agent's actual influence over anything outside its container and inner
 runtime is limited to explicit constrained interfaces and pushing proposals for
 review (see Git Boundary).
 
-Native ordinary CI is another untrusted execution boundary. Its schema-2 job
-definition, script, and disposable image come from the exact unreviewed
-candidate tree. Operator Project admission controls eligibility and bounded
-capacity, not trust in those bytes. A successful job is candidate-controlled
+Native ordinary CI is another untrusted execution boundary. Its schema-3 job
+definition and script come from the exact unreviewed candidate tree. The
+operator fixes the digest-pinned runner and common job base images, host
+capacity, and bounds; trusted Project registration needs no separate CI
+approval. A successful job is candidate-controlled
 self-test evidence and MUST NOT be represented as independent verification.
 It receives no host runtime socket, DIM or Git credential, secret, `/dev/kvm`,
 review authority, or promotion authority. The human complete-tree approval and

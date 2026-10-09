@@ -55,9 +55,11 @@ instead be split.
 | [Project, Repository, and Workspace Lifecycle](13-repo-workspace-lifecycle.md) | Contract | Mixed with state paths and runtime wiring |
 | [Installer Facade](14-installer-facade.md) | Contract | Mixed with installation implementation choices |
 | [Candidate-Controlled Native Ordinary CI](decisions/0001-candidate-controlled-native-ordinary-ci.md) | Decision record | Accepted weaker evidence semantics for candidate-selected native jobs; no implementation or migration yet |
+| [Native Project and QEMU CI Without Gitea](decisions/0002-native-project-qemu-without-gitea.md) | Decision record | Accepted Gitea-free Project and common-base CI direction; not yet enabled |
 | [Image Entrypoints](local-details/image-entrypoints.md) | Implementation profile | Image-local compatibility details |
 | [Installation Scripts](local-details/installation-scripts.md) | Implementation profile | Script and packaging details |
 | [Native Git Transport and Review Evidence](local-details/native-git-transport.md) | Implementation profile | Proposal-only smart HTTP plus complete-tree review, exact CI evidence, and checked host-only CAS promotion |
+| [Native QEMU Scheduler and Evidence](local-details/native-qemu.md) | Implementation profile | Separate Gitea-free target host/scheduler roles, kind-bound evidence and owned VM cleanup; not yet active |
 | [Reviewer Web API](local-details/reviewer-web-api.md) | Implementation profile | Authenticated loopback backend for scoped review inspection and evidence creation; browser UI and deployment remain separate |
 
 ## Requirement Traceability

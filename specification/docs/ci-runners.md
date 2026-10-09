@@ -151,17 +151,18 @@ no native Project/repository state adapter, so it starts empty and denies
 Project admission, capacity advertisement, webhook demand, claims, attempts,
 and results before mutation.
 
-After that separate adapter is approved, the installer-owned ordinary service
-has one stable service identity but no Project list, common image, Gitea
+After that separate adapter is implemented, the installer-owned ordinary service
+has one stable service identity but no Project list, per-Project image, Gitea
 credential, runner-registration authority, or runtime socket in its private
 deployment config. Operator/native policy admits an eligible
 Project/repository, protected ref, required candidate-controlled job names, and
 host capacity; that admission does not review or trust candidate job bytes.
-For each exact candidate commit/tree, schema-2 `.dim/ci/runner.yml` selects a
-digest-pinned disposable job image and one regular `.dim/ci/jobs/*.bash` blob.
+For each exact candidate commit/tree, schema-3 `.dim/ci/runner.yml` selects
+one regular `.dim/ci/jobs/*.bash` blob, not a job image.
 The only argv is `[/bin/bash, --noprofile, --norc,
-/run/dim/job/script]`. The runner base and CPU, memory, PID, time, and output
-bounds remain operator capacity input. Both images are discarded with job
+/run/dim/job/script]`. The digest-pinned runner and common job base images and
+CPU, memory, PID, time, and output bounds remain operator capacity input. Both
+images are discarded with job
 state; neither becomes a persistent Project image.
 
 Admissions are renewable leases with fresh public generations. An active
@@ -171,8 +172,9 @@ Old queued jobs and claims remain durable but cannot dispatch, renew, or requeue
 under the replacement. Authenticated native Git webhooks create demand only
 when their complete candidate/job tuple matches a live admission. Before
 dispatch the scheduler durably issues the exact current attempt identity used
-as native promotion evidence, including the candidate config/script/image/argv
-descriptor digest. Webhooks carry no executable or resource input.
+as native promotion evidence, including the candidate config/script, fixed
+argv, and operator job/runner image descriptor digest. Webhooks carry no
+executable or resource input.
 
 Each host controller authenticates separately, advertises only operator-owned
 capacity names and bounds, and may execute a claim without a local Project

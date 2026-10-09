@@ -26,6 +26,7 @@ The target facade owns:
 dim installer                         # interactive installer (TTY only), always
 dim installer install core [--host-mirror-plugin PACKAGE@EXACT_VERSION] [options]
 dim installer install control-plane --config FILE
+dim installer recover control-plane --roll-forward --generation GENERATION
 dim installer install plugin PACKAGE@EXACT_VERSION...
 dim installer enable-plugin PACKAGE...
 dim installer disable-plugin PACKAGE...
@@ -444,7 +445,8 @@ plus base64 encodings of the exact prior installed-record and Compose bytes.
 It fsync-replaces the marker at phase changes, replaces and fsyncs
 `compose.yml` and `install.json`
 while the marker remains, and removes and directory-fsyncs the marker only
-after both replacements are durable. Any new invocation that finds the marker,
+after both replacements are durable and both candidate activations complete.
+Any new invocation that finds the marker,
 a marker temporary file, or a staging directory fails closed before Docker
 mutation; it never adopts, completes, removes, or rewrites that crashed
 transaction. This marker provides fail-closed crash visibility and retained
@@ -500,29 +502,73 @@ it MUST NOT report success or adopt that process.
 **INSTALLER-CONTROL-PLANE-ADMISSION-001:** Bundle readiness is not Project
 admission. Installing the bundle creates no Project, repository, runner,
 capacity, workflow, webhook, or job image. This installer contract does not
-select native Git for core Project lifecycle. Until a separate native
-Project/repository state adapter contract is approved and implemented, every
-native Project or repository admission request and every controller attempt to
-advertise ordinary capacity MUST fail before service-state or runtime mutation.
-The installed services therefore remain an idle, empty control-plane bundle.
+select native Git for core Project lifecycle. The strict native schema-7 config
+may supply independent host-bound Project registrar, root-importer, root
+read-issuer, workspace-write-issuer, and read-only human-reviewer credentials
+through the existing generation-snapshotted private service file.
+Only the authenticated registrar's configured host ID may prepare an
+inaccessible, empty Project root after exact activation; it cannot issue
+workspace credentials, read Git, import objects, or change protected policy.
+A separate authenticated importer for that owning host may submit one bounded,
+self-contained bundle and normalized initial policy, then request service-only
+compare-and-swap publication of the initially unborn protected ref after
+complete Git verification. The importer cannot directly push, replace an
+existing protected ref, review, promote, or admit CI. Neither request may
+select its own host. The owning host's separate read issuer may mint only a
+30-second Project/root-scoped upload-pack lease after exact activation and
+live imported-root verification. The issuer is not a Git identity, the lease
+is not durable, receive-pack remains denied, and neither capability makes the
+Project runnable. The owner host's separate write issuer may mint only a
+30-second Project/root/workspace-scoped transport lease after the same live
+authoritative imported-policy proof. That lease may create or fast-forward only
+its own proposal refs through the checked installed hook; it cannot write a
+protected ref, tag, foreign workspace ref, deletion, or non-fast-forward update
+and grants no reviewer, CI, promotion, readiness, or runnable-Project authority.
+Empty registrar, importer, and issuer lists start
+the idle service only with empty Project state; an importer or issuer without a
+registrar does not create an implicit active service. Until a separate
+Project/repository adapter is
+verified, requests to mark a Project runnable or advertise ordinary capacity
+MUST fail before admission or runtime mutation. Root preparation or import
+alone grants no workspace, review, CI, or promotion authority.
 
-The later adapter MUST separate operator Project admission from candidate job
-selection. Admission binds one native Git Project/repository, protected ref,
-policy and required-review/required-job-set revisions, required job names and
-their `candidate-controlled` evidence class, the ordinary service's global
-operator capacity-config digest, and admission generation. It carries no
-per-Project capacity list. The exact candidate commit/tree then selects schema-2
-`.dim/ci/runner.yml`, script blob, normalized fixed argv, and digest-pinned
-disposable image under `CI-NATIVE-CANDIDATE-JOB-001`. Those candidate bytes are
-unreviewed execution input, not admission authority or independent
-verification. The adapter must not create a persistent per-Project runner,
+The trusted host may retain a separate non-runnable native bootstrap draft
+and its exact private bundle as `PROJECT-NATIVE-DRAFT-001`, use the separate
+registrar/importer roles to import one protected root, and persist its exact
+final receipt. Neither this
+host state nor a service-side `root-imported` receipt is installer readiness,
+ordinary/QEMU admission, a workspace credential, or native Project selection.
+Bundle updates MUST retain that draft and the native service volume; missing
+or ambiguous binding is a refusal, not an invitation to recreate a Project
+or switch to Gitea. Native `ready` and Gitea removal remain gated on the
+packaged real Sysbox/KVM journey in `VERIFICATION-NATIVE-CUTOVER-001`.
+
+**INSTALLER-NATIVE-PROJECT-CI-001 (accepted target, not implemented):** The
+later adapter MUST separate trusted native Project registration from candidate
+job selection. Every Project registered through the trusted host lifecycle is
+CI-eligible without a separate Project-specific CI approval, runner
+registration or capacity list. Admission binds one native Git
+Project/repository, protected ref, policy and required-review/required-job-set
+revisions, required job names and their `candidate-controlled` evidence class,
+the ordinary service's global operator capacity-config digest, and admission
+generation. It carries no
+per-Project capacity list. In the accepted Gitea-free target, the operator
+fixes digest-pinned runner and job base images globally for each executor;
+neither Project nor candidate config may select or override an image. This
+supersedes the candidate-image field of the earlier schema-2
+`CI-NATIVE-CANDIDATE-JOB-001` draft. Its strict schema-3 file rejects
+candidate image fields and schema 2 rather than accepting both shapes. The
+exact candidate commit/tree selects only strict job names and
+script blobs, executed through runtime-fixed argv. Those candidate bytes are
+unreviewed execution input, not admission authority or independent evidence.
+The adapter must not create a persistent per-Project runner,
 worker container, image copy, or capacity record. These tuple fields constrain
 the service interfaces but do not authorize admission before that adapter
 exists.
 
-Native Git MUST fail closed for a protected ref that requires CI unless the
-ordinary service reports the exact current admission and current
-scheduler-issued attempts for every required job. Missing, unreachable,
+Native Git MUST fail closed for a protected ref that requires ordinary CI
+unless the ordinary service reports the exact current admission and current
+scheduler-issued attempts for every required ordinary job. Missing, unreachable,
 expired, revoked, stale, foreign, or tuple-mismatched ordinary admission makes
 the native service not ready for promotion and leaves the protected ref
 unchanged. It MUST NOT reinterpret service process health, a webhook delivery,
@@ -534,9 +580,10 @@ may not.
 For a candidate-controlled required job, native Git MUST also require the
 current terminal record to match the exact execution-descriptor digest issued
 for that attempt. The reviewer and promotion DTOs MUST label it
-`candidate-controlled` and expose the candidate config, script, image, and argv
-provenance. A successful exit MAY satisfy that explicitly configured required
-condition, but MUST NOT be described as an independent check, proof that its
+`candidate-controlled` and expose the candidate config/script, selected
+operator-owned image, fixed argv, and resource-bound provenance. A successful
+exit MAY satisfy that explicitly configured required condition, but MUST NOT be
+described as an independent check, proof that its
 tests are correct or complete, or blanket product correctness. Product
 maintainers still review changed requirements, implementation, test definitions,
 and relevant results. Infrastructure security review separately follows secret
@@ -548,6 +595,40 @@ configuration. It is never added to this Compose project, cannot be configured
 with native selection, is not an ordinary-job fallback, and does not satisfy
 the native ordinary-CI prerequisite. Absence of QEMU capacity is reported as
 unavailable, never as successful ordinary CI.
+
+**INSTALLER-NATIVE-QEMU-EVIDENCE-001 (accepted target, not implemented):**
+Once a separate authenticated native QEMU scheduler and host-capacity adapter
+have passed their own acceptance gate, a native Project MAY require named QEMU
+jobs independently of ordinary Sysbox jobs. QEMU is not a third Compose
+service and its claims/results MUST NOT enter the ordinary inbox, claim, or
+report tables. The operator fixes the digest-pinned common guest/runner and
+job base images and resource ceilings for all Projects using that capacity;
+candidate bytes can select only the strict script executed by fixed argv in
+the disposable guest. Native Git MUST derive `executionKind=qemu` and
+`evidenceClass=candidate-controlled` from current protected policy and the
+authenticated QEMU attempt, never from a webhook, candidate claim, or the
+presence of `/dev/kvm`. Reviewer and promotion output MUST expose candidate
+script and fixed image/argv/bounds provenance. A current zero-exit result may
+satisfy only the exact QEMU job with the matching review, commit/tree, policy
+revisions, admission generation, attempt and execution descriptor. Missing
+KVM, unavailable scheduler, lost/uncleaned lease, failed job, wrong-kind
+result, stale generation, or replayed earlier success MUST leave a required
+QEMU condition unsatisfied and the protected ref unchanged. It cannot be
+substituted by ordinary success or downgraded to optional; optional QEMU
+results remain visible without changing ordinary or human approval rules.
+The current Gitea-only QEMU scheduler stays rejected with native selection
+until this distinct path is implemented and verified.
+`CONFIG-NATIVE-QEMU-001` supplies only host-scoped QEMU service authority and
+operator-owned named capacities, not per-Project runner/webhook tokens. The
+separate scheduler must authenticate native Git's QEMU-only event and policy
+proof, issue one kind-bound current attempt and exact descriptor per claim,
+and retain a separate durable QEMU inbox, claims, results and report outbox.
+It cannot reuse an ordinary credential, result table, descriptor digest, or
+success. The host supervisor may report only after exact owned VM cleanup;
+unavailable KVM fences required QEMU evidence. The exact target service
+roles, routes, and proof tuple are in
+[Native QEMU Scheduler and Evidence](local-details/native-qemu.md); none are
+provided by the current installed bundle.
 
 ## Validation, update, readiness, and rollback
 
@@ -694,22 +775,74 @@ installer readiness transport. `/healthz`, container running state, an open TCP
 port, and Compose exit success are not readiness. Readiness responses MUST
 disclose no credential, Project, repository, job, path, or host inventory.
 
-On any failure after mutation, the installer stops and removes only replacement
-containers whose complete bundle/deployment/service labels match, restores the
-prior rendered Compose bytes, exact prior image digests, prior generation ID,
-and all six prior snapshots, starts `ordinary-ci` before `native-git`,
-and uses exact-ID service-local readiness execs followed by reactivation of
-that exact prior generation. Operator source files are
-never rewritten. Data volumes are
-never rolled back, deleted, copied, or replaced; prior-image readability of
-candidate writes is the mandatory precondition that makes service rollback
-valid. A failed first installation removes exact owned
-containers and network but retains any created volume and reports it for
-operator inspection. If replacement shutdown or prior-version readiness
-fails, the installer stops automatic rollback, retains both rendered Compose
- files, both generations' six snapshots, and all volumes, and reports the
-original and rollback errors. It MUST NOT report success, delete recovery
-evidence, select another image, or start a second bundle.
+On a failure after resource mutation but before candidate activation starts,
+the installer stops and removes only replacement containers whose complete
+bundle/deployment/service labels match, restores the prior rendered Compose
+bytes, exact prior image digests, prior generation ID, and all six prior
+snapshots, starts `ordinary-ci` before `native-git`, and uses exact-ID
+service-local readiness execs followed by reactivation of that exact prior
+generation. Operator source files are never rewritten. Data volumes are never
+rolled back, deleted, copied, or replaced; prior-image readability of candidate
+writes is the mandatory precondition that makes service rollback valid. A
+failed first installation before candidate activation starts removes exact
+owned containers and network but retains any created volume and reports it for
+operator inspection.
+
+Candidate activation begins immediately before the first ordinary-CI
+activation command. From that point, including an ordinary or native
+activation failure and any later installed-state completion failure, activation
+outcome is uncertain even when a command reported failure or one activation
+reported success. The installer MUST NOT automatically replace either service,
+restore the prior installed state, reactivate the prior generation, remove
+first-install containers or network, delete a data volume, or remove recovery
+evidence. It MUST fail with an explicit uncertain-activation diagnostic and
+retain the transaction journal, published candidate state, available candidate
+and prior generation snapshots, current service artifacts, and both owned data
+volumes for operator-directed exact roll-forward. A later invocation continues
+to refuse automatic adoption while the journal remains.
+
+The sole supported completion procedure is the explicit operator command:
+
+```text
+dim installer recover control-plane --roll-forward --generation GENERATION
+```
+
+It accepts exactly one `--roll-forward`, exactly one canonical 64-lowercase-hex
+`--generation`, and no config, state-root, positional, or unknown option. It
+MUST NOT read mutable operator install config. Before state mutation or any
+activation command it acquires the normal state lock and requires all of the
+following: the requested generation is the published candidate; the journal is
+schema 1 with exactly six keys, phase `publishing`, a canonical UUID transaction
+ID and matching `.staging-<transactionId>` basename; the prior is either null or
+contains exactly the canonical installed-record and Compose bytes for one
+distinct predecessor generation in the same deployment; root state has no
+staging or unknown node; the retained generation set includes the candidate
+and that predecessor when present. Earlier successful generation directories
+may remain as structurally validated, inert history, but are neither adopted
+nor selected as an activation target. First-install recovery permits only its
+candidate directory. Both candidate and predecessor IDs, snapshot sets,
+digests, records, and deterministically rendered Compose bytes validate; and the
+candidate has complete exactly owned resources, exact candidate runtime
+topology, and successful ordinary then native readiness.
+
+Recovery then replays only the mounted candidate activation, ordinary CI first
+and native Git second, through the existing image-local service command. It
+MUST NOT create, replace, stop, remove, relabel, or adopt a container, network,
+volume, generation, imported root, or draft, and MUST NOT rewrite `install.json`,
+`compose.yml`, a snapshot, or prior bytes. After both idempotent activations it
+revalidates exact state, ownership, topology, readiness, and the original
+journal byte-for-byte. Only then may it unlink `transaction.json` and fsync the
+state directory. Wrong phase or ID, malformed or mixed A/B state, an unknown
+artifact, missing or foreign resource, failed readiness, failed activation, or
+changed evidence MUST fail with the journal intact and without fallback,
+rollback, repair, cleanup, or another activation target.
+
+If replacement shutdown or prior-version readiness fails during an otherwise
+permitted pre-activation rollback, the installer stops automatic rollback,
+retains both rendered Compose files, both generations' six snapshots, and all
+volumes, and reports the original and rollback errors. It MUST NOT report
+success, delete recovery evidence, select another image, or start a second
+bundle.
 
 Changing `deploymentId`, either numeric identity, fixed container port, fixed
 mount path, fixed volume name, or Compose project name in place is unsupported.
@@ -763,12 +896,21 @@ Required acceptance evidence is specified by
 
 The pre-stable facade implements `dim installer install control-plane --config
 FILE`, including first installation, identical-input no-op, checked update,
-rollback, and pre-forward rejection of obsolete `dim install-cp`. The command
-installs only the two-service native Git/ordinary-CI bundle. Both services start
-empty and idle.
+pre-activation rollback, explicit exact roll-forward recovery after uncertain
+activation, and pre-forward rejection of obsolete `dim install-cp`. The command
+installs only the two-service native Git/ordinary-CI bundle. Ordinary CI remains
+idle; native Git starts idle with no Project role credentials and empty state.
+Configured registrars may prepare owned roots, and distinct configured importers
+may submit and finalize a verified initial protected head through the service's
+checked CAS. An owner-host issuer may obtain only a short-lived read lease for
+that imported root after full live proof; it cannot write a ref or mark a Project
+runnable. A completed import retains its original receipt across serving
+generations, while an incomplete old-generation import blocks candidate startup.
+The native image accepts only strict marked format-8 state and pins
+Git `2.39.5` in its runtime image. The installer itself does not create a Project.
 
 The native Project/repository adapter, Project admission, native webhook
 demand, capacity advertisement, host-controller execution, real Sysbox job
 gate, and reviewer browser UI remain unavailable. They are not installed or
-enabled by this command, and the idle bundle MUST NOT be presented as complete
-native Project integration or completion of the broader Project #45 work.
+enabled by this command, and the installed bundle MUST NOT be presented as
+complete native Project integration or completion of the broader Project #45 work.

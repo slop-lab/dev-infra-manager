@@ -17,13 +17,16 @@ The package is additive and not yet selected by core Project lifecycle code.
 Managed and external Gitea remain the current lifecycle implementation while
 the native path is independently reviewed and completed.
 
-The unimplemented control-plane bundle target runs the service as the `native-git`
+The installed control-plane bundle runs the service as the `native-git`
 member defined by `INSTALLER-CONTROL-PLANE-001`. It runs as `10001:10001`,
 listens at `0.0.0.0:8080`, stores all repository and evidence bytes below
 `/var/lib/dim-native-git`, and receives only that service's private volume and
 read-only config, readiness-token, and activation-token files. Its strict
-schema-2 startup configuration pins `serviceId` to `native-main` and adds
-exactly this required dependency object:
+schema-7 startup configuration pins `serviceId` to `native-main`, requires
+`projectRegistrars`, `projectRootImporters`, `projectRootReadIssuers`, and
+`workspaceWriteIssuers`, and `humanReviewers`
+arrays (all empty for the idle mode), and adds exactly this required dependency
+object:
 
 ```json
 {
@@ -79,9 +82,98 @@ promote, administer, enumerate unrelated Projects, or act when the ordinary
 admission or native identity check is absent, stale, or mismatched.
 
 These credentials and endpoints do not select native Git for Project lifecycle.
-Until a separate native Project/repository state adapter is specified and
-implemented, the native service starts with no admitted Project and rejects
-Project, repository, ordinary admission, attempt, and result mutation.
+The installed schema-7 bundle may accept exact
+`POST /v1/operator-project-preparations` only from an authenticated
+host-bound Project registrar after generation activation. It derives the
+owner host from that credential, prepares one empty owned root, and responds
+with `root-prepared`, not Project admission. A distinct host-bound importer
+may upload and finalize the initial protected head as specified below;
+neither path issues Git transport or workspace authority. Ordinary admission,
+attempt, and result mutation remain unavailable in this bundle. The obsolete
+combined writer-registration path is not accepted, and marked format-5 and
+format-6 draft state is rejected unchanged.
+The separately configured host-bound root read issuer is distinct from every
+registrar, importer, service, host, readiness, and activation credential. It is
+not a Git identity and its credential cannot authenticate smart HTTP. After
+exact activation and a successful live imported-root verification, only that
+Project's owner-host issuer may call exact
+`POST /v1/projects/{projectId}/root-read-leases` without a query string. The
+strict JSON body contains only `schemaVersion: 1` and the exact active
+`generationId`. The non-cacheable `201` response contains only schema and
+service identity, the Project and fixed `root` repository, generation, a newly
+random transport username and password, and an absolute millisecond
+`expiresAt` set 30 seconds by the service. The issuer credential is never
+copied into or accepted as the transport credential.
+
+Lease authority exists only in the issuing process. The service retains only
+digests of the random transport username and password plus the owner host,
+Project, fixed repository, generation, and expiry. It writes no lease to
+durable state, so process restart invalidates every lease. Expiry is
+server-selected and cannot be extended by a caller. At most 16 unexpired leases
+may be live; issuance first removes every expired record and fails with `503`
+when the remaining set is full. Unknown credentials return `401`, another
+known role returns `403`, a foreign or unknown Project returns `404`, a
+generation conflict returns `409`, and an inactive service returns `503`.
+Issuance returns no lease for an incomplete or non-live import.
+The separately configured host-bound workspace write issuer is distinct from
+every registrar, importer, read issuer, service, host, readiness, and activation
+credential. It is not a Git identity and cannot authenticate smart HTTP.
+After exact activation, only the imported Project's owner-host issuer may call
+exact `POST /v1/projects/{projectId}/workspace-write-leases` without a query
+string. The strict JSON body contains exactly `schemaVersion: 1`, the active
+`generationId`, `repositoryId: root`, and a canonical 43-character base64url
+workspace ID encoding exactly 32 bytes. Issuance performs one live proof of the
+owner-bound imported root and requires its stored policy to be
+`authoritative-v1`; a completed legacy import cannot authorize workspace writes.
+
+The non-cacheable `201` response identifies that exact Project, root repository,
+generation, and workspace and returns a service-selected random Basic transport
+credential expiring after 30 seconds. Only credential digests and scope are held
+in process memory. Expiry and restart invalidate the lease, and no issuer or
+lease secret enters durable Project, repository, workspace, review, or CI state.
+At most 16 unexpired write leases exist. Read issuance, write issuance, live
+verification, and Git backends share one 16-operation gate; shutdown synchronously
+stops both admissions, clears both lease registries, drains admitted proofs and
+backends, and only then releases storage ownership.
+
+Before each upload-pack or receive-pack discovery or RPC, the service performs
+one fresh active-generation, owner, imported-policy, durable bundle, protected
+ref, commit, tree, and complete-graph proof, then re-authenticates the lease.
+It also rechecks the configured Git executable identity and the exact installed
+proposal-only pre-receive hook before spawning `git http-backend`. The writer
+environment binds the exact workspace ID. Receive-pack can therefore create or
+fast-forward only `refs/heads/proposals/{workspaceId}/...`; protected refs,
+tags, another workspace namespace, deletion, and non-fast-forward updates fail.
+No reviewer, promoter, administrator, CI, Project-ready, or runnable-workspace
+authority follows from issuance or transport.
+
+The `humanReviewers` array contains only strict
+`{reviewerId, username, password}` entries. Reviewer IDs are globally unique;
+passwords are canonical base64url encodings of exactly 32 bytes; and every ID,
+username, and password is distinct from every other configured role, service,
+host, readiness, and activation credential value. The config grants no Project
+or repository scope. Fresh imported policy is accepted only when the union of
+its baseline and path-rule reviewer IDs has configured human credentials, and
+startup applies the same check to every persisted authoritative policy before
+listening.
+
+Exact `GET /v1/human-reviewer-identity` authenticates one reviewer and returns
+only schema and service identity, role `human-reviewer`, reviewer ID, and the
+serving generation. Exact `GET
+/v1/projects/{projectId}/repositories/root/reviews/{reviewId}` requires that
+generation in `x-dim-generation-id`, loads only the named immutable review, and
+authorizes only when the reviewer is required by both that stored review and
+the live imported policy. It repeats live imported-root proof and checks the
+current policy, protected head, proposal commit, and proposal tree before
+reporting `current`; ref or head drift returns the unchanged historical review
+as `stale`, without creating authority. Unknown credentials return `401`, known
+other roles and unrequired reviewers return `403`, foreign or unknown exact
+paths return `404`, generation conflict returns `409`, and inactive or
+unprovable live state returns `503`. Query strings, collection paths, alternate
+repository IDs, and approval or other action suffixes are `404`. Responses are
+non-cacheable and expose no configured username, password, other account,
+review list, decision mutation, Git transport, CI, promotion, or Project-ready
+authority.
 The five service credentials are not Git transport identities and are not
 accepted by generic reviewer, administrator, CI, scheduler, or promotion
 routes; each is accepted only by its fixed role-specific endpoint.
@@ -91,6 +183,148 @@ exact durable review-job event in `CI-NATIVE-DELIVERY-001`. Ordinary CI cannot
 use it against native Git, and possession grants no review, descriptor,
 attempt, result, Git, or promotion authority. The webhook never carries an
 executable selector.
+
+### Initial root bundle import (installed service; host adapter pending)
+
+`PROJECT-NATIVE-IMPORT-001` uses a separately configured, generation-snapshotted
+bootstrap credential. It cannot be a Project registrar, Git reader/writer,
+reviewer, promoter, readiness/activation token, or ordinary-CI credential.
+Only the authenticated bootstrap role may call exact
+`POST /v1/projects/{projectId}/root-import` for its owned, `root-prepared`
+Project. The service derives its host from the credential, never from the body.
+The future trusted host adapter must construct the self-contained Git bundle
+from the selected bootstrap ref and normalize policy from `.dim/repos.yml` or
+explicit manifest-free protection input. The installed service validates and
+binds the submitted policy to the exact requested commit; it does not parse
+the imported manifest, fetch a client URL, or accept the caller's Git credentials.
+
+The `application/octet-stream` import request has a strict newline-terminated
+JSON prelude of at most 64 KiB followed by raw bundle bytes. Its exact framing
+binds schema, active generation, service and Project/root IDs, protected ref,
+expected commit, and policy. A known exact
+`Content-Length`, a 256 MiB total limit, and the service request deadline are
+mandatory; missing, extra, truncated, or ambiguous framing fails closed. Only
+one advertised ref equal to the requested protected ref and commit is valid;
+tags, prerequisite bundles, symbolic `HEAD`, unrelated refs, non-commit targets,
+or incomplete/corrupt object graphs are rejected by the pinned Git executable
+in private staging before canonical object installation.
+
+The service records one immutable import intent with its own nonce and policy
+digest. It fsyncs and atomically publishes the bounded bundle before advancing
+the intent to `bundle-durable`, returning its exact hash and size without
+creating a Git ref. The same authenticated importer may send exact
+upload bytes again after `root-imported`: the service rechecks the identical
+nonce, policy, bundle digest and size and returns the actual `root-imported`
+phase without rolling state back or rewriting the protected ref. The client
+then repeats the exact finalize request to obtain the complete tree-bound
+receipt; changed intent or bundle bytes remain conflicts. The importer sends
+`POST /v1/projects/{projectId}/root-import/finalize` with schema version,
+generation, import nonce, and bundle digest. The service rechecks the stored
+bundle and complete private Git object graph under the pinned executable before
+recording `installing`. It installs objects without refs into the owned root,
+verifies and syncs the pack/index and resolved commit/tree, then records
+`objects-installed`. Only a service-internal all-zero-old-object `update-ref`
+CAS may create the initially unborn protected head; the ref and its parent
+directories are synced before the final durable `root-imported` transition.
+No Project readiness or workspace credential is issued by either operation.
+
+For every fresh import, `policy` is a strict schema-1 object containing the
+protected ref, policy/reviewer/job-set revisions, reviewers and path rules, and
+sorted `requiredJobs`. Each job contains exactly `name`, `kind` (`ordinary-sysbox`
+or `qemu`), and `evidenceClass: candidate-controlled`. The policy and job-set
+revisions use `dim-native-policy-v2\0` and `dim-native-jobs-v2\0`; the reviewer
+revision retains `dim-native-reviewers-v1\0`. Native Git canonicalizes and
+validates those revisions before mutation, stores the complete policy JSON in
+the format-8 import row's `policy_json`, and hashes those exact canonical bytes for
+the receipt. A fresh flat `requiredJobNames` policy is invalid. A completed
+import row containing the earlier flat policy remains proof/read-only and
+cannot be replayed as new kind authority; an incomplete flat row refuses
+startup/recovery without migration or rewrite.
+After `root-imported`, the same authenticated importer may call exact
+`GET /v1/projects/{projectId}/root-import/proof` without a query string. A
+successful response is `200 application/json` with `Cache-Control: no-store`
+and contains only `schemaVersion: 3`, `servingGenerationId`, `ownerHostId`,
+`importReceipt`, and `currentHead`. The nested receipt contains exactly the original
+schema-1 `serviceId`, `projectId`, `rootRepositoryId`, `generationId`,
+`importNonce`, `protectedRef`, `expectedCommit`, `resolvedTree`,
+`policyDigest`, `bundleDigest`, `bundleSize`, and `phase: root-imported`.
+The receipt generation is immutable import provenance; the serving generation
+is the currently activated process and may differ after a bundle update. The
+separate current head contains exactly `projectId`, the nonnegative finalized
+promotion `sequence`, `protectedRef`, `commit`, `tree`, and `policyDigest`.
+Sequence zero is exactly the imported commit and tree. A future later sequence
+would require a contiguous finalized format-8 transition for the same import
+nonce and policy plus independent review, approval, and kind-bound CI evidence;
+the installed service currently refuses every nonempty intent or finalized
+ledger at startup and during proof. A self-consistent row or moved ref alone
+never establishes promotion authority.
+The service returns
+that proof only when the process's active generation still matches its durable
+activation-token digest before and after inspection, and the host-owned
+registration, exact Project owner marker, private non-symlink repository path,
+canonical persisted policy and bundle bindings, durable owned bundle bytes,
+canonical finalized transition evidence, absence of an unresolved intent, sole live
+protected ref at the folded current commit, current tree, imported ancestry, and
+complete reachable object graph
+all still match. Git inspection pins the configured executable identity and
+disables replacement refs and optional locks. Database, bundle, ref, and object
+inspection is read-only: this endpoint does not finalize or resume an import,
+sync storage, update a ref, or issue any Git, review, CI, or promotion authority.
+Unknown credentials return `401`, authenticated non-importer roles return
+`403`, and unknown or foreign Projects return `404`. An inactive service
+returns `503` for the exact request. Query-bearing and alternate-method forms
+return `404`, including while inactive. An incomplete import, changed durable
+bundle, unrecorded or foreign ref, wrong current tree, non-descendant head,
+unresolved promotion intent, incomplete graph, or changed persisted binding
+returns no proof. A completed legacy-policy import can produce only its
+sequence-zero proof and cannot authorize promotion, review, or candidate reads.
+The host importer parses the exact bounded proof, requires the serving
+generation to match its current connection, and compares the owner and every
+nested original receipt field with the durable non-runnable draft before storing
+or returning an imported result. It parses the current head strictly and requires
+its Project, ref, policy digest, object format, and sequence-zero identity to
+agree with the receipt, but it never rewrites that receipt or the host draft.
+A stale, foreign, missing, or malformed proof
+leaves the draft unchanged; proof is not Project readiness.
+The trusted host root-read operation first loads the separate owner-only
+importer and issuer connections and rejects a different endpoint, owner host,
+generation, or overlapping username or password before either client sends a
+request. It reads only an exact retained `root-imported` draft and bundle,
+requires its owner, service, current serving generation, Project, and complete
+immutable original import receipt to match a fresh importer-authenticated proof,
+and only then requests the
+Project/root lease. After minting, it rereads and compares the complete draft;
+changed host state withholds the lease. It returns only the ephemeral lease and
+persists neither role credential nor lease. It does not mutate the draft,
+Gitea Project state, or native Project readiness.
+When a candidate service starts with a completed import from an earlier
+generation, it verifies that owned root read-only and denies business requests
+until its own generation and token are activated. It does not rewrite the
+import row, bundle, protected ref, or host draft. An earlier-generation
+incomplete import rejects startup before mutating reconciliation.
+Before canonical installation, safe exact-owned incomplete uploads may be
+discarded. Once installation begins, startup resumes only the identical
+hash-bound bundle and policy; an already-written head is accepted only in the
+post-CAS recovery phase when it exactly matches that intent. A foreign/moved
+head, changed policy or host, missing proof, or unknown staging artifact
+requires administrator reconciliation, not adoption or overwrite. The
+installed service exposes only the short-lived root-read and workspace-write
+transports described above. A valid read lease is accepted solely for exact upload-pack discovery and RPC
+on its bound `root` repository. Before every discovery and RPC spawn, the
+service repeats the active-generation, owner marker, private path, durable
+bundle, sole protected-ref, commit, tree, and complete-graph verification used
+by the proof endpoint. Moved refs, changed state, incomplete graphs, expiry,
+wrong generation, wrong Project or repository, and restart fail closed.
+Receive-pack discovery and RPC return `403` for a valid read lease and the backend
+forces receive-pack disabled for every non-writer identity. Only a valid write
+lease can invoke receive-pack, and its checked hook limits updates to that
+lease's proposal namespace; no installed transport identity can write a protected ref. Lease issuance
+and transport share a 16-operation limit reserved before body reads or live
+verification. Transport re-authenticates the lease after verification and
+immediately before spawning Git. Shutdown stops admission synchronously,
+invalidates all leases, drains every admitted verification or backend, and only
+then releases storage ownership; a read whose proof was blocked at shutdown
+cannot spawn Git or send a later response.
 
 ### Ordinary verifier HTTP contract
 
@@ -236,7 +470,7 @@ select another Project through request data.
 
 ## Inputs and identity
 
-Startup consumes a strict schema-2 configuration with fixed service identity
+The standalone non-bundle daemon consumes a strict schema-2 configuration with fixed service identity
 `native-main`. It pins a trusted regular
 Git executable, its filesystem identity, and its exact `git version` output,
 one absolute storage root,
@@ -370,15 +604,17 @@ each to be `success` with `exited/0` from the configured
 For native ordinary CI, the issued attempt and completed event additionally
 bind evidence class `candidate-controlled` and the canonical execution
 descriptor required by `CI-NATIVE-CANDIDATE-JOB-001`: candidate config and
-script object/digests, normalized fixed argv, candidate job image digest,
-operator runner-base digest, effective bounds, host, and capacity. Native Git
-derives the descriptor from blobs in the exact candidate tree; no webhook or CI
-reporter may supply or replace those fields. A stale, revoked, superseded,
+script object/digests, normalized fixed argv, operator job-base and runner-base
+digests, effective bounds, host, and capacity. Native Git derives the candidate
+blobs from the exact tree and uses the operator capacity's requested job base
+only after authenticated ordinary admission verifies the exact image/assignment;
+no webhook or CI reporter may supply or replace those fields. A stale, revoked, superseded,
 partial, or descriptor-mismatched report cannot satisfy promotion. Exact replay
 is idempotent only when the entire terminal record is identical.
 
 Attempt issuance accepts only `issuanceRequestId`, `jobName`, the expected
-descriptor digest, admission generation, runner-base image, bounds, `hostId`,
+descriptor digest, admission generation, operator job-base and runner-base
+images, bounds, `hostId`,
 and `capacity`. Under the protected-ref serializer, native Git derives the full
 descriptor through a non-locking helper, compares its digest, asks the ordinary
 admission verifier to confirm the exact descriptor and assignment, then writes

@@ -76,10 +76,10 @@ refs for every denial. Smart HTTP MUST remain proposal-only.
 
 Native ordinary-CI tests MUST label their result
 `candidate-controlled`, not independent. They MUST prove that one exact
-candidate tree supplies schema-2 `.dim/ci/runner.yml` and the regular script
-blob; that the strict parser rejects schema 1, unknown/duplicate YAML fields,
+candidate tree supplies schema-3 `.dim/ci/runner.yml` and the regular script
+blob; that the strict parser rejects schemas 1 and 2, unknown/duplicate YAML fields,
 aliases/tags, oversized or non-UTF-8 input, unsafe paths, symlinks, gitlinks,
-mutable/tagged images, extra or missing required jobs, and any argv other than
+any candidate image field, extra or missing required jobs, and any argv other than
 the fixed Bash vector; and that webhook fields cannot select an image, command,
 script, environment, mount, network, URL, resource, or credential. A successful
 fixture MUST observe that the selected candidate-controlled tests execute in
@@ -198,6 +198,62 @@ automatic rollback, preserve both Compose files, both generations' input
 snapshots, and all volumes, report the original plus rollback error, and never
 report success.
 
+The installed native-Git image gate MUST import one protected root under
+generation A, restart on the same volume under B, deny proof and read leases
+before B activation, then return schema-3 proof naming serving B, the
+unchanged A import receipt, and the separately verified sequence-zero current
+head. A B-scoped lease MUST fetch the original protected
+commit through real Git upload-pack while receive-pack, cross-Project reads,
+and protected-ref changes remain denied. An earlier-generation incomplete
+import, foreign ref, or corrupt graph MUST refuse B startup before altering
+the retained root. Host tests MUST keep the imported draft and bundle bytes
+unchanged while replaying its exact proof and read lease under B. Fresh import
+tests MUST prove the strict versioned policy stores each required job's name,
+execution kind, and candidate-controlled evidence class; changing only a kind
+MUST conflict without changing the draft, database, bundle, or ref. They MUST
+reject a fresh flat legacy policy before state mutation. Completed legacy
+imports and drafts MUST restart and retain exact read/proof receipts without
+becoming required-job-kind authority, while pending legacy state MUST remain
+non-runnable and refuse rollover. Real-Git proof tests MUST seed a finalized
+sequence-one descendant and prove it across generation rollover while retaining
+the byte-identical original receipt. They MUST deny an unrecorded ref, foreign
+ref, wrong recorded tree, non-descendant head, and unresolved transition intent.
+Host draft tests MUST read the finalized descendant while leaving the original
+receipt and draft bytes unchanged. Authoritative candidate and review readers
+MUST pin their expected protected head to that verified current head.
+Installed workspace-write tests MUST issue through a distinct owner-host
+credential only after a live authoritative import, use a canonical 43-character
+base64url workspace ID, and push through real Git smart HTTP to that workspace's
+proposal namespace. The same lease MUST fail direct protected-ref, tag,
+foreign-workspace, deletion, and non-fast-forward force updates without changing
+those refs. Tests MUST prove exact route/body parsing, known-role denial, expiry,
+restart invalidation, shared read/write operation capacity, shutdown drain, Git
+executable identity and hook enforcement, and continued absence of Project-ready,
+reviewer, CI, or promotion authority.
+Host-only native root snapshot tests MUST fetch the exact imported commit
+through real Git HTTP, verify its commit/tree/blob object identities and
+regular/executable modes, and publish a private read-only tree with safe
+contained relative symlinks but no `.git` directory or persisted credential.
+They MUST reject reserved lifecycle-path, absolute, dangling, and escaping
+links, gitlinks, oversized objects, unsafe existing targets, and a protected
+ref moved during lease-backed verification without publishing a snapshot or
+leaving a staging artifact. Cache reuse MUST validate the existing tree
+without minting another lease. Neither a successful fetch nor a snapshot
+creates a runnable native Project, writer, reviewer, promoter, or CI admission.
+
+The installed control-plane gate MUST also inject a lost candidate activation
+acknowledgement after both exact service activations, observe retention of the
+published candidate and transaction journal without automatic prior rollback,
+and use the packaged facade's explicit `installer recover control-plane
+--roll-forward --generation GENERATION` command to replay only that candidate.
+A wrong generation MUST leave the journal, containers, snapshots, and volumes
+untouched. Exact recovery MUST remove only the journal after rechecking both
+owned runtime identities and readiness, preserving volume identities and
+sentinels. Fixture tests additionally cover first installation, partial
+activation, multiple retained historical generations, and malformed journal,
+snapshot, Compose, or runtime evidence. These Docker and Git checks are not
+the clean-host real Sysbox and accessible-KVM native Project cutover gate.
+
 Until the native Project/repository state adapter has its own approved contract,
 the gate MUST prove that Project/repository admission, native webhook demand,
 host-capacity advertisement, claims, attempts, and result reports all fail
@@ -228,13 +284,13 @@ canonical DIM lifecycle state root, and fixed control-plane Docker resources.
 The future adapter gate MUST additionally prove descriptor equality across
 native Git, scheduler, and host parsing; direct argv execution without shell
 construction; exact candidate checkout and config/script blob identities;
-digest-pinned candidate job and operator runner-base images; effective
+digest-pinned operator job and runner-base images; effective
 CPU/memory/PID/time/output bounds; absence of every host socket, `/dev/kvm`,
 secret, and reusable credential; and owned cleanup after success, failure,
 timeout, signal, lease loss, and result-submission failure. It MUST reject an
 old generation, revoked/old/future attempt, changed descriptor, conflicting
 replay, different host assignment, earlier success after retry, and any result
-whose candidate/config/script/image/argv/base/bounds identity differs. It MUST
+whose candidate/config/script/operator-image/argv/base/bounds identity differs. It MUST
 prove that exact replay is idempotent and that a current zero-exit result may
 satisfy only a policy job explicitly classified `candidate-controlled`, while
 human approval and CAS remain independently required.
@@ -247,8 +303,9 @@ any image, argv, command, script, path, environment, mount, network, URL,
 resource, host, capacity, credential, or unknown field rejects before inbox
 mutation. Policy membership MUST admit bounded use of the global configured
 capacities without storing or accepting a per-Project eligible-assignment list.
-Candidate config, script, and image remain candidate-controlled provenance and
-MUST NOT be reported as trusted because the Project is admitted.
+Candidate config and script remain candidate-controlled provenance and MUST
+NOT be reported as trusted because the Project is admitted. The job and
+runner images must match the operator-owned capacity, not a candidate field.
 
 Idempotency tests MUST crash or kill the responsible process after each of
 these durable boundaries: native event publication, ordinary inbox commit,
@@ -313,7 +370,7 @@ One end-to-end success MUST observe native event acknowledgement, one host
 claim, strict host reparse and exact descriptor equality, direct fixed argv,
 owned cleanup, durable report retry through an injected native outage, native
 terminal acknowledgement, and capacity release. Reviewer and promotion output
-must show `candidate-controlled` config/script/image/argv provenance. Human
+must show `candidate-controlled` config/script and operator-image/argv provenance. Human
 product/test review and exact final CAS remain separate required evidence. The
 same fixture must show that optional QEMU state never enters the native inbox,
 claim, report, or promotion path.
@@ -323,6 +380,80 @@ MUST NOT satisfy this gate. Shared-QEMU scheduler gates remain Gitea-only,
 report missing KVM as unavailable rather than passing, and MUST NOT run with
 native selection, create native ordinary evidence, or join the control-plane
 Compose project.
+
+## Gitea-free native Project and QEMU cutover gate
+
+**VERIFICATION-NATIVE-CUTOVER-001 (target, not implemented):** This gate is
+separate from the installer-only bundle gate and the predecessor Gitea
+ordinary/QEMU gates. It MUST run the packaged facade and the real activated
+native services on a disposable clean Linux host with Sysbox and accessible
+KVM, without importing or adopting any existing Gitea data. A source-only
+unit suite, simulated Docker runner, two logical hosts on one daemon, or idle
+service readiness MUST NOT count as acceptance. The gate MUST record the exact
+source/package/image digests, host runtime capabilities, effective container
+configuration, and complete cleanup outcome.
+
+The successful journey MUST create a fresh native Project and root repository
+through trusted host administration, import or seed one reviewed protected
+head, create a workspace, read its exact protected snapshot, and push a
+proposal from the agent without a registrar, reviewer, promoter, host, or
+service credential in that workspace. The same writer MUST fail to update or
+delete the protected ref, force a proposal, write another workspace's
+namespace, or read a foreign Project. A human must inspect the complete exact
+candidate tree and CI provenance through the supported CLI or scoped reviewer
+page, approve the exact review, and perform a separate checked promotion.
+After promotion, a new protected-root read MUST return the promoted tree;
+changing the protected head or policy between approval and promotion MUST
+leave the ref unchanged.
+
+The gate MUST observe automatic CI eligibility for a trusted native Project
+without Project-specific CI approval, Gitea registration, webhook, or runner
+token. It MUST run one ordinary Sysbox job and one QEMU VM job from separate
+named capacities using operator-owned digest-pinned common runner and job base
+images. A different Project with candidate-supplied image or resource fields
+MUST NOT widen these global choices. Both executions MUST verify the exact
+candidate commit/tree and script blobs, use runtime-fixed argv, enforce
+CPU/memory/PID/time/output ceilings, and record the selected test definition,
+actual base digests, execution kind, bounds, exit status, and attempt/generation
+identities. Their results MUST be labeled `candidate-controlled`, including
+the QEMU result. The VM MUST receive no host Docker or hypervisor socket,
+`/dev/kvm`, raw DIM or Git credential, reviewer identity, or promotion
+authority; the host-owned trusted
+supervisor alone receives `/dev/kvm`. Ordinary jobs MUST have no `/dev/kvm`
+or QEMU capacity authority.
+
+When protected policy requires both named jobs, promotion MUST fail before
+ref mutation for each independently injected missing, failed, wrong-kind,
+foreign, stale-generation, old-attempt, mismatched-descriptor, and replayed
+success result. The ordinary result MUST NOT satisfy the QEMU slot or vice
+versa. A missing or inaccessible `/dev/kvm` is an unavailable QEMU gate, not a
+passing one; when QEMU is policy-required, it MUST leave promotion blocked.
+Optional QEMU failure remains visible without changing the ordinary requirement
+or exact human approval. Reviewer and promotion output MUST distinguish
+candidate-controlled evidence from independent verification and must not
+present a common base image as proof that candidate-selected tests are correct.
+
+Restart/crash injection MUST cover native Project registration, review/job
+event delivery, both schedulers' claims and renewals, attempt issuance, VM and
+Sysbox cleanup, terminal-result publication, and final promotion. Exact replay
+converges on one current result; uncertain ownership fences only its capacity
+until the same host inspects and reaps the exact owned resource. Foreign or
+ambiguous same-name container, network, volume, or state remains untouched and
+blocks only the affected action. No partial failure may convert an old QEMU
+result into ordinary evidence, release uncleaned capacity, or skip checked
+promotion. The effective runtime and traffic inspection MUST find no
+`dim-gitea`, Gitea database, Gitea credential, Actions registration, Gitea
+webhook, provider fallback, or predecessor QEMU selector in the native
+journey. Existing Gitea resources on another installation MUST never be
+removed merely because this native gate passed.
+
+Parser-only native QEMU checks MUST reject wrong-host or duplicate capacities,
+unsafe/linked/overpermissive connection files, noncanonical host tokens,
+untrusted endpoints, mutable base images, candidate resource overrides,
+Gitea Project/webhook/registration fields, and native lifecycle selection
+without an implemented adapter. Those checks and simulated claim/recovery
+tests are preparation for `VERIFICATION-NATIVE-CUTOVER-001`, never real Sysbox
+or KVM acceptance evidence.
 
 For `TRUST-RUNTIME-001`, each implemented backend MUST run the same
 backend-neutral agent journey. A supported VM backend additionally requires a

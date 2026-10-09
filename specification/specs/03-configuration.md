@@ -187,6 +187,7 @@ non-symbolic-link, DIM-user-owned mode-`0600` JSON file with this exact schema:
   "capacities": {
     "primary": {
       "runnerBaseImage": "registry.example/dim/ordinary-runner@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "jobBaseImage": "registry.example/dim/ordinary-job@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
       "cpus": 4,
       "memoryBytes": 8589934592,
       "pids": 2048,
@@ -197,10 +198,11 @@ non-symbolic-link, DIM-user-owned mode-`0600` JSON file with this exact schema:
 }
 ```
 
-The schema has no Project list or candidate job image. `hostId`, service
+The schema has no Project list or candidate-selected image. `hostId`, service
 identities, and capacity names are safe non-empty identifiers. Each capacity's
-runner base is an operator-selected registry reference pinned by one complete
-lowercase `sha256` digest with no tag. Each resource, timeout, and output bound
+runner and job base images are operator-selected registry references pinned by
+complete lowercase `sha256` digests with no tags and shared across eligible
+Projects on that capacity. Each resource, timeout, and output bound
 is a positive integer. Candidate config and claims cannot widen them. URLs are
 credential-free origins without path, query, or fragment. Each transport is exactly `https` or, only for a loopback HTTP
 origin, `loopback-http`. Unknown keys, duplicate
@@ -212,25 +214,34 @@ The native Git credential is host-scoped read/attestation authority, not a
 reviewer, promoter, or storage-administrator identity. Ordinary admission and
 host authorities are distinct. `hostToken` may claim, renew, recover, and
 submit a result only for this host's named capacities. The separate global
-operator registrar credential may attest approved Project membership and
-protected required-job policy, not review of candidate-selected job bytes, but
-cannot claim or report. The
+operator registrar credential may attest a Project created through the trusted
+native lifecycle and its protected required-job policy without a separate
+Project-specific CI approval, but cannot review candidate-selected job bytes,
+claim, or report. The
 central service's separate native reporter credential, not a host credential,
 submits accepted durable evidence to native Git. None may enter a workspace,
 job, image, Compose bundle, log, or Project state. Controller startup validates both authenticated service
 identities before advertising capacity. Failure closes ordinary admission and
 claiming but does not fall back to a local or Project-scoped runner.
 
-No current controller reads or consumes this target variable. Setting
-`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` in the shipped release is ignored:
-it neither selects native lifecycle nor rejects otherwise valid predecessor
-Gitea operations. That is an implementation absence, not target behavior. Once
-target parsing exists, and until the adapter contract is also approved and
-implemented, a requested native Project, repository, admission, or capacity
+No current controller reads or consumes this target connection as native
+authority. Setting `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE`, including an
+empty value, rejects lifecycle option construction before Gitea selection;
+it never silently runs predecessor Gitea operations. Until the native adapter
+is implemented, a requested native Project, repository, admission, or capacity
 operation MUST reject before service-state or runtime mutation. The future
 native connection and `DIM_GITEA_CONNECTION_FILE` are mutually exclusive for
 one host. `DIM_ORDINARY_CI_POOL_CONNECTION_FILE` is obsolete in the target and
 MUST be rejected, not ignored, when that target is implemented.
+
+**CONFIG-NATIVE-PROJECT-DRAFT-001:** The separate trusted-host bootstrap draft
+is not selected by this environment variable or a Gitea connection. Its
+schema-`1` record and private artifact bind the host, active native generation,
+exact root commit/tree and policy, and bundle digest as
+`PROJECT-NATIVE-DRAFT-001` requires. Registrar and importer credentials remain
+in their distinct owner-only connection files, never in Project state.
+Creating a draft does not load this target connection, advertise capacity,
+grant Git transport, or let a native lifecycle request fall back to Gitea.
 
 **CONFIG-QEMU-SCHEDULER-001:** This is a predecessor Gitea-only contract.
 `DIM_QEMU_SCHEDULER_CONNECTION_FILE` MAY select
@@ -251,11 +262,76 @@ It MUST be rejected when native control-plane selection is requested. QEMU is
 not part of the native installer bundle, has no native Project-state adapter,
 and cannot satisfy native ordinary CI evidence.
 
-The service-side Project binding MUST separately identify its webhook token,
-Project API token, and non-empty label set. The stable host ID is a
-concurrency identity, not an authorization principal. Its configured lease MUST be
-at least 60 seconds. API-authenticated queued events outside that Project label
-set MUST be acknowledged without creating demand.
+The predecessor service-side Project binding uses separate webhook and API
+tokens, an explicit label set, and a lease of at least 60 seconds. Those
+Project-scoped credentials and `workflow-job` events belong **only** to
+`CONFIG-QEMU-SCHEDULER-001`; they MUST NOT authorize native QEMU admission.
+
+**CONFIG-NATIVE-QEMU-001 (host-file parser implemented; native adapter not implemented):** Native Project QEMU
+capacity MUST use a separate operator-owned connection from the predecessor
+`DIM_QEMU_SCHEDULER_CONNECTION_FILE`. A participating host supplies
+`DIM_NATIVE_QEMU_CONNECTION_FILE` as a regular, non-symlink, DIM-user-owned
+mode-`0600`, single-link JSON file of at most 64 KiB. Its exact schema is:
+
+```json
+{
+  "schemaVersion": 1,
+  "hostId": "host-a",
+  "scheduler": {
+    "transport": "https",
+    "endpoint": "https://qemu-ci.example",
+    "serviceId": "qemu-main",
+    "hostToken": "replace-with-canonical-32-byte-base64url-secret"
+  },
+  "capacities": [{
+    "capacity": "primary",
+    "runnerBaseImage": "registry.example/dim/qemu-runner@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "jobBaseImage": "registry.example/dim/qemu-job@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "cpus": 4,
+    "memoryBytes": 8589934592,
+    "pids": 2048,
+    "timeoutSeconds": 3600,
+    "outputBytes": 16777216
+  }]
+}
+```
+
+The credential example is a placeholder, not a valid token. The host token
+MUST be canonical base64url decoding to exactly 32 bytes; it is separate from
+native Git, ordinary CI, registrar, reporter, and predecessor QEMU secrets.
+The scheduler endpoint is an exact credential-free HTTP origin with no path,
+query, or fragment. `transport` is exactly `https` for an HTTPS origin or
+`loopback-http` for an HTTP origin on `127.0.0.1` or `[::1]` only. The stable
+safe `hostId` MUST match the eventual native control-plane host ID. Capacities
+are nonempty with unique safe names, immutable operator-selected registry
+references pinned by complete lowercase SHA-256 digests, and positive safe
+integer bounds. Extra, missing, duplicate, credential-bearing, or mutable
+fields fail before registration or runtime mutation; the file is opened with
+no-follow semantics and its owner, mode, link count, size, and stable metadata
+are checked around parsing. There is no Project list, label, webhook URL,
+per-Project token, Gitea URL, runner registration, or candidate-selected image.
+All eligible native Projects use the operator-owned capacities without a
+second Project-specific CI approval. QEMU remains a separate scheduler and
+executor from ordinary Sysbox capacity, outside the installed two-service
+Compose bundle. Native selection rejects the predecessor QEMU variable even
+when this file is absent.
+
+The host token may claim, renew, recover, and report only its own QEMU
+capacity. Scheduler intake accepts authenticated events bound to the current
+native Project, review, exact candidate commit/tree and required-job policy.
+Neither candidate content nor a webhook may choose the base image, resource
+ceilings, host command, mount, network or reusable credential. The candidate
+may supply only a strict job definition and script executed with fixed argv
+inside the VM. All such results are `candidate-controlled`, including on
+KVM-capable hosts. Missing KVM reports unavailable; it never changes a
+required QEMU job into an ordinary job or a success. No shipped controller
+reads this target native QEMU connection as authority; its presence, including
+an empty value, rejects lifecycle option construction before the adapter and
+scheduler exist, without runtime mutation.
+
+The future scheduler owns a distinct private configuration and database with
+host-scoped tokens and global capacities, not Project-bound credentials or
+ordinary-CI state; see [Native QEMU Scheduler and Evidence](local-details/native-qemu.md).
 
 Project-specific Git namespaces, repository aliases, root repository/ref,
 profiles, and the trusted host's effective backend choice belong to

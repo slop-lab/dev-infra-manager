@@ -27,19 +27,111 @@
   admission or attempt state. The ordinary bundle image now exposes exact
   compatibility and read-only state probes plus a distinct idle runtime with
   authenticated readiness, query-only identity, and restart-bound generation
-  activation. The native Git and ordinary CI idle services now ship separate
+  activation. The native Git and ordinary CI services now ship separate
   source Dockerfiles pinned to Node 24.19.0 by digest, fixed non-root identities,
-  and only their audited runtime file and package closures. It creates schema-3 state only in an empty volume, binds a durable
-  non-secret marker to the complete SQLite manifest, and keeps every Project and
-  job mutation unavailable until a separate native Project adapter exists. The
-  query nonce is correlation and offline-replay
+  and only their audited runtime file and package closures. The ordinary volume
+  keeps schema-3 state; the native Git volume creates strict format-8 state with
+  a host-bound multi-Project/root registry and a durable non-secret manifest
+  marker. The native Git image pins Git `2.39.5`; an operator-supplied strict
+  schema-7 config separates host-bound registrars, root importers, root read
+  issuers, workspace write issuers, and globally unique 32-byte human reviewer
+  credentials. Imported policy reviewer unions must have configured credentials
+  before import mutation and again at startup. A
+  registrar prepares an inaccessible root; a distinct importer submits one
+  bounded self-contained Git bundle and a strict versioned operator policy for
+  that root. The policy stores canonical name, execution-kind, and
+  candidate-controlled evidence-class jobs in format-8 state, with v2 policy
+  and job revision domains and the unchanged v1 reviewer domain. Fresh flat
+  policy is rejected before mutation; completed earlier flat-policy rows remain
+  proof/read-only while incomplete rows cannot resume. The service verifies its complete object graph, durably binds the
+  import, and uses an exact service-owned CAS to create only the initially
+  unborn protected ref. Pack/ref sync and strict restart recovery preserve the
+  bound commit and tree; import itself grants no workspace writer. The separate
+  owner-host issuer can mint only a short-lived, Project/root-scoped
+  upload-pack lease after live imported-root verification. Its own credential
+  cannot read Git, and no read lease can use receive-pack or write a ref. A
+  distinct owner-host write issuer can mint a 30-second memory-only lease only
+  after the same active authoritative imported-root proof. Real smart HTTP can
+  then create or fast-forward only that exact 32-byte workspace ID's proposal
+  refs; the service rechecks Git identity and its installed proposal-only hook,
+  and rejects protected refs, tags, foreign workspaces, deletion, and force
+  rewrites. A policy-required human reviewer can authenticate only to an exact
+  identity endpoint and exact Project/root/review-ID GET, with scope derived
+  from the immutable review and live imported policy rather than config grants.
+  Fresh proof reports current evidence; proposal or head drift preserves the
+  historical complete-tree review as stale. The surface lists nothing, returns
+  no credential, and adds no approval, revocation, CI, promotion, or
+  Project-ready authority.
+  The host-side core importer uses its own owner-only connection file,
+  attests the exact importer role, host and generation before each mutation,
+  and verifies bounded bundle upload and finalization receipts. The native
+  bootstrap planner resolves one commit in an already-local repository,
+  compiles reviewed-manifest or explicit manifest-free reviewer and execution-kind
+  requirements, and stages a private one-ref bundle bound to that commit. A
+  host-only bootstrap binds the exact bundle and policy to a non-runnable
+  credential-free schema-2 native draft without duplicated top-level jobs
+  before service mutation, then persists the
+  final import receipt and recovers a lost host receipt by exact replay. A
+  read-only, importer-scoped schema-3 live-root proof separates the currently
+  activated serving generation and verified format-8 current head from the
+  unchanged original import receipt. Format-8 defines a strict promotion
+  ledger, but the service refuses any nonempty intent or finalized row until
+  independent human-approval and ordinary/QEMU evidence checks exist. Sequence
+  zero verifies the exact live ref, tree, and complete graph. The trusted host
+  loads separate issuer/importer connections,
+  compares the live proof and complete draft before returning a read lease,
+  and never persists either credential. It can materialize the exact imported
+  commit and tree into a private, read-only, native-only host snapshot, checking
+  Git object identities and allowing only safe contained relative symlinks.
+  Unsafe lifecycle links, gitlinks, oversized objects, stale refs, and foreign
+  cache nodes cannot publish a snapshot. Fully imported roots, including
+  byte-preserved completed schema-1 host drafts from the earlier unreleased path,
+  remain readable
+  through later serving generations without rewriting the import row, receipt,
+  bundle, ref or draft; incomplete earlier-generation imports fail closed.
+  Stale or missing proof cannot make the Project runnable.
+  External source-origin attestation remains a separate prerequisite.
+  Obsolete format-5 and format-6 state is rejected unchanged. Empty role lists
+  retain idle behavior only for empty Project state. Project readiness, review integration and native
+  CI admission remain unavailable. A separate owner-only QEMU host connection
+  parser validates the proposed globally pinned capacities but cannot admit
+  QEMU work or select native lifecycle; QEMU execution and the core lifecycle
+  adapter remain unavailable.
+  The query nonce is correlation and offline-replay
   protection rather than server authentication; the target currently assumes
-  authenticated peers on its fixed private Compose network. Continue defining
-  the complete native target as candidate-controlled self-test execution:
-  strict schema-2 `.dim/ci/runner.yml`, its Bash script,
-  and the digest-pinned job image come from the exact candidate tree, while the
-  operator retains Project admission, required-job policy, a digest-pinned
-  runner base, host capacity, and resource/time/output ceilings. Webhooks carry
+  authenticated peers on its fixed private Compose network. The native Git
+  library now exports validation for the target strict schema-4
+  `.dim/ci/runner.yml`: separate ordinary-Sysbox and QEMU job maps must exactly
+  match a trusted kind-labelled required-job policy, use globally distinct job
+  names, safe candidate Bash script paths, and fixed argv, while candidate
+  images, bounds, environment, mounts, network, URLs, host commands, credentials,
+  and other fields are rejected. The parse-only API returns canonical maps and a
+  deterministic kind-labelled plan. A separate real-Git reader supports SHA-1
+  and SHA-256 repositories, requires the supplied job names to equal the
+  registered protected policy's flat required-name set, pins the repository,
+  protected head, candidate commit and tree, reads the schema-4 config and all ordinary/QEMU
+  scripts as bounded regular blobs, rechecks the protected head after all reads,
+  and returns only their object IDs and SHA-256 digests with safe paths,
+  kind-labelled job names, and fixed argv. A distinct internal imported-root
+  reader accepts trusted active bundle runtime state plus only Project and
+  candidate commit/tree selectors. It derives owner, protected ref/head, and
+  required execution kinds from the exact durable authoritative policy, proves
+  activation and the complete owner/bundle/ref/graph before and after candidate
+  reads, supports unchanged imports under a later serving generation, and
+  refuses completed legacy flat-policy rows without rewriting their proof/read
+  data. The standalone registered review policy remains flat and its existing
+  caller-trusted API is unchanged. Neither reader returns executable bytes,
+  images, bounds, host choices, credentials, admission, attempt, result,
+  scheduling, or VM authority. The authoritative reader has no HTTP or installed
+  service wiring; lifecycle admission and ordinary/QEMU adapters remain
+  unavailable. The active
+  ordinary-only schema-3 parser, loader, and installed service behavior remain
+  unchanged. The complete
+  native target remains candidate-controlled self-test execution: config and
+  Bash script identities come from the exact candidate tree. The operator retains
+  Project admission, required-job policy, digest-pinned common runner and job
+  base images, host capacity, and resource/time/output ceilings. Changing a
+  job base image rotates the capacity digest and admission generation. Webhooks carry
   no executable fields; attempts and results bind complete config, script,
   argv, image, base, bounds, host, and candidate provenance, and stale replay
   cannot satisfy promotion. A zero exit may satisfy an explicitly classified
@@ -100,8 +192,10 @@
   request-start monotonic deadline, and submits terminal evidence only after
   ownership-checked cleanup. The worker is not connected to controller startup;
   the native Project adapter and job-running integration remain unavailable.
-  The separate installer can deploy two idle services but does not admit a
-  Project or advertise host capacity, and actual Sysbox execution still
+   The separate installer can deploy the bundle and explicitly roll forward an
+   exact candidate after uncertain activation without automatic rollback,
+   resource replacement, or volume deletion. It does not admit a runnable
+   Project or advertise host capacity, and actual Sysbox execution still
   requires the unavailable runtime gate. Before installation it now rejects an
   obsolete ordinary-pool selector and canonical Project-scoped Sysbox or unsafe
   runner records without mutation, preserves valid schema-8 QEMU records, and

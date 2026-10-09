@@ -111,7 +111,7 @@ DIM separates three roles with different lifecycle and trust properties:
 | Domain | Lifecycle | Trust and credentials | Purpose |
 | --- | --- | --- | --- |
 | Agent workspace | Persistent until explicit discard | Untrusted agent execution; no raw project/runtime secrets | Implementation, builds, services, and nested containers |
-| Target native ordinary self-test (not implemented) | Shared host-controller capacity with one ephemeral runner and disposable job container per claim | Runs candidate-selected config, script, and digest-pinned image as untrusted input; no host Docker socket or DIM workspace credentials; no persistent Project runner/image | Bounded execution evidence for candidate-selected tests after a native Project adapter exists; useful to product review but not independent or blanket correctness proof |
+| Target native ordinary self-test (not implemented) | Shared host-controller capacity with one ephemeral runner and disposable job container per claim | Runs candidate-selected config and script inside an operator-pinned common job image; no host Docker socket or DIM workspace credentials; no persistent Project runner/image | Bounded execution evidence for candidate-selected tests after a native Project adapter exists; useful to product review but not independent or blanket correctness proof |
 | Current QEMU integration verification (Gitea only) | Optional Project-scoped capacity with a fresh VM per job | Trusted supervisor owns `/dev/kvm`; guest receives neither host socket nor reusable credential | Host/backend integration evidence |
 | Trusted Project runtime | Project-defined lifecycle; services may persist | Reviewed lifecycle code; scoped secrets may be supplied to separate services | Protected updates and other secret-bearing operations |
 
@@ -134,8 +134,8 @@ Neither service receives a host container-runtime or controller socket. Each
 future participating DIM host controller owns its configured shared Sysbox capacities and executes
 one ephemeral ordinary runner per admitted claim. Projects contribute reviewed
 labels to protected policy, while each exact candidate tree contributes its
-strict job config, script, and digest-pinned disposable job image. Operator
-capacity contributes the digest-pinned runner base and resource ceilings.
+strict job config and script. Operator capacity contributes digest-pinned
+runner and common job base images and resource ceilings.
 Candidate job bytes are not trusted by admission and do not create a persistent
 runner, image installation, or capacity. Native Git denies protected promotion
 when exact current ordinary evidence is unavailable. Optional QEMU integration

@@ -107,6 +107,20 @@ implemented, requesting native selection MUST reject every Project,
 repository, workspace, ordinary-admission, and CI-runner operation before
 state or runtime mutation.
 
+A trusted-host library may stage a separate `PROJECT-NATIVE-DRAFT-001`
+bootstrap record and its exact private bundle under the per-name Project lock,
+then use distinct attested registrar/importer credentials to import the root
+and bind an exact final receipt. Before accepting or replaying an imported
+draft the host checks the importer's exact read-only live-root proof; stale
+storage leaves it non-runnable and unchanged. Identical retries converge, but
+the draft never becomes runnable.
+That record is not a `dim project create` result, does not appear in predecessor
+Gitea `project list/show`, and cannot be used for workspace, repository,
+CI, removal, or promotion commands. A same-name draft makes predecessor Gitea
+`project create` refuse before connecting to Gitea or claiming schema-4
+state. Native CLI selection remains unavailable and does not reinterpret
+such a draft as a Gitea Project.
+
 ```bash
 dim project create PROJECT [--repos FILE] [--yes]
 dim project create PROJECT --bootstrap-git-url URL [--bootstrap-git-ref REF]
@@ -219,6 +233,26 @@ local checkout, its Git URLs must be network/scp-style URLs or absolute
 filesystem paths; relative filesystem paths are rejected as ambiguous. An
 explicit local `--repos`/`--file` manifest is only an input to reconciliation
 and is never written over the root repository's tracked `.dim/repos.yml`.
+
+For the accepted but not yet selectable native lifecycle, a separate pure
+bootstrap parser recognizes a top-level `nativeReview` extension in the
+selected root's reviewed `.dim/repos.yml`. It requires `requiredReviewerIds`,
+`requiredJobs` as distinct `{name, kind}` pairs with `kind` exactly
+`ordinary-sysbox` or `qemu`, and optional `pathReviewerRules` containing
+`pathPrefix` and `reviewerIds`. It requires one root, an exact concrete
+protected branch selected from that root, portable origins, and a matching
+`protect` pattern; malformed or unknown input rejects before mutation. The
+explicit manifest-free library input carries the same reviewer and job fields.
+The parser sorts canonical reviewer, job, and path-rule bytes, labels every
+imported job as candidate-controlled evidence, and derives v2 policy/job-set
+revisions plus the unchanged v1 reviewer revision from those bytes. A separate host-side Git
+planner can take an already-local repository, resolve the selected branch
+once, read the manifest from that exact commit, and stage a self-contained
+one-ref bundle and matching policy in private scratch storage. This does not
+select a native CLI command, attest a remote origin, create Project state, or
+change the implemented Gitea `repos.yml` contract, whose parser rejects
+`nativeReview`. The future native adapter must verify origin provenance and
+the service import receipt before Project admission.
 
 `repo delete --yes` deletes an unused non-root repository from managed Gitea
 and Project metadata. It rejects the Project root, the selected target while
@@ -375,32 +409,33 @@ claim contains only that descriptor, attempt identity, resource bounds,
 generation, and lease identity. It contains no Git, reviewer, registrar,
 webhook, scheduler, host, or CI-result credential.
 
-**CI-NATIVE-CANDIDATE-JOB-001:** The native target accepts only this strict
-candidate-tree file shape; it does not accept schema `1` as a compatibility
-form:
+**CI-NATIVE-CANDIDATE-JOB-001 (ordinary-only library; no native Project admission):**
+The implemented ordinary-candidate reader accepts only this strict
+candidate-tree file shape; it does not accept schema `1` or `2` as a
+compatibility form:
 
 ```yaml
-schemaVersion: 2
+schemaVersion: 3
 ordinary:
   jobs:
     source:
-      image: registry.example/ci@sha256:<64 lowercase hexadecimal digits>
       script: .dim/ci/jobs/source.bash
       argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
 ```
 
 The root has exactly `schemaVersion` and `ordinary`; `ordinary` has exactly
-`jobs`; and each job has exactly `image`, `script`, and `argv`. Unknown keys,
+`jobs`; and each job has exactly `script` and `argv`. An `image` key is
+rejected even when digest-pinned. Unknown keys,
 aliases, anchors, merge keys, duplicate mapping keys, duplicate normalized job
 names, non-string scalars where strings or arrays are required, and explicit
 YAML tags are errors. The UTF-8 file is
 at most 64 KiB, contains no NUL, and defines between 1 and 64 jobs. Job names
 match `[a-z][a-z0-9-]{0,62}` byte-for-byte with no case folding, and the job-key
-set MUST equal the protected policy's required candidate-controlled job set,
+set MUST equal the protected policy's required `ordinary-sysbox`
+candidate-controlled job set,
 with no missing or extra job.
 
-`image` is a registry reference with no tag and one complete lowercase
-`sha256` digest. `script` is a normalized repository-relative path below
+`script` is a normalized repository-relative path below
 `.dim/ci/jobs/`, has no empty, `.`, or `..` segment, no backslash, and ends in
 `.bash`. It MUST resolve directly in the candidate tree to one regular Git blob
 of at most 1 MiB; a missing path, tree, symbolic link, submodule/gitlink, or
@@ -409,14 +444,14 @@ and SHA-256 of its exact bytes. `argv` MUST be exactly the four strings shown
 above. The executor invokes that array directly and replaces the job image's
 configured entrypoint and command with this array. There is no shell
 construction, interpolation, command substitution, candidate-selected
-entrypoint, or webhook value. Candidate behavior belongs in the image and
-script bytes, not in a command string.
+entrypoint, or webhook value. Candidate behavior belongs in the script and
+checkout bytes, not in an image or command string.
 
 The normalized execution descriptor binds the exact Project/repository,
 protected ref, expected protected head, candidate commit and tree, all three
 policy revisions, admission generation, job name and evidence class, config
 blob object ID and SHA-256, script path/blob object ID/SHA-256, normalized argv,
-job image digest, operator-selected runner-base image digest, and effective CPU,
+operator-selected job-base and runner-base image digests, and effective CPU,
 memory-byte, PID, wall-clock, and output bounds. Native Git returns this
 descriptor only after reading the named blobs by object ID from the candidate
 tree. The descriptor digest is `sha256:` plus lowercase SHA-256 of the ASCII
@@ -432,7 +467,8 @@ identities, reparses the strict file, and requires the same descriptor digest
 before launch.
 
 Each host controller authenticates with one host-scoped credential and
-advertises operator-configured capacity names and bounds. Capacity is
+advertises operator-configured capacity names, job and runner base images,
+and bounds. Capacity is
 installation state, not Project state: a host may execute an admitted Project
 without a local Project record, but it MUST verify the signed admission tuple
 and exact native service identity before launch. Claims are exclusive per host
@@ -444,8 +480,8 @@ Host maintenance holds lifecycle admission across execution and cleanup and
 does not add disposable jobs to restart state.
 
 Every claim launches one ephemeral Sysbox runner from the operator-selected,
-digest-pinned runner base and one candidate-selected digest-pinned disposable
-job image. The candidate tree is materialized as a fresh checkout at
+digest-pinned runner base and one operator-selected, digest-pinned common
+disposable job base image. The candidate tree is materialized as a fresh checkout at
 `/workspace`, the verified script blob is separately mounted read-only at
 `/run/dim/job/script`, and the direct argv runs with `/workspace` as its working
 directory. Both images are force-pulled and verified by digest. Execution has
@@ -473,14 +509,56 @@ result, old generation, old or future attempt, revoked attempt, earlier
 success, different host assignment, or report after a replacement attempt is
 stale and cannot satisfy promotion. Logs and artifacts are diagnostic data and
 never substitute for the terminal record. The reviewer and promotion surfaces
-label this evidence `candidate-controlled`, show its config/script/image/argv
+label this evidence `candidate-controlled`, show its candidate config/script
+and operator-selected job/runner image/argv
 provenance, and MUST NOT call it independent verification.
+
+**CI-NATIVE-QEMU-CANDIDATE-JOB-001 (Gitea-free target, not implemented):**
+Once native QEMU is available, one strict schema-`4` `.dim/ci/runner.yml` in
+the exact candidate tree replaces the ordinary-only schema-`3` shape:
+
+```yaml
+schemaVersion: 4
+ordinary:
+  jobs:
+    source:
+      script: .dim/ci/jobs/source.bash
+      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
+qemu:
+  jobs:
+    integration:
+      script: .dim/ci/jobs/integration.bash
+      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
+```
+
+The root has exactly `schemaVersion`, `ordinary`, and `qemu`; each workload
+has exactly `jobs`, and every job has only the strict script and fixed argv
+defined above. Neither workload nor candidate can name an image, bound,
+host command, environment, mount, network, URL, or credential. The maps' job
+names are globally distinct and equal the protected policy's corresponding
+required `(executionKind, jobName)` sets; QEMU and ordinary jobs cannot be
+swapped even if their script bytes match. The current ordinary-only schema-3
+parser is not a QEMU parser. Enabling schema 4 rejects schema 3 rather than
+silently accepting both; no Project becomes native-ready because this target
+format is documented.
+
+The QEMU descriptor binds `executionKind=qemu` and
+`evidenceClass=candidate-controlled` to the same complete review/ref,
+candidate commit/tree, current policy revisions, exact candidate config and
+script blob IDs and SHA-256 digests, fixed argv, admission generation, and
+operator-owned runner/job base digests and effective resource/time/output
+bounds. Its length-framed digest uses the separate ASCII domain
+`dim-native-qemu-execution-v1`; an ordinary descriptor, attempt, or success
+cannot satisfy a QEMU slot. The authenticated native QEMU issuer, reporter,
+host token, claim identity, durable cleanup and service wire contract are
+separate from ordinary CI as specified in
+[Native QEMU Scheduler and Evidence](local-details/native-qemu.md).
 
 **CI-NATIVE-DELIVERY-001:** The native ordinary delivery path is a bounded,
 durable protocol. Native event intake and receipt-bound host claim activation
 are implemented as a core library, including lease renewal and same-host
 recovery; host execution, results, and deployment remain targets. Native Git is the
-only review-event emitter, ordinary CI is the only inbox and scheduler, and a
+only ordinary review-event emitter, ordinary CI is the only ordinary inbox and scheduler, and a
 claiming host controller is the only executor. No Project has a persistent
 runner, worker, scheduler, or `eligibleAssignments` record. Every active
 admission uses the complete lexically sorted set of capacities from the
@@ -567,7 +645,8 @@ current admission generation and first commits a durable claim receipt with a
 new random UUID `claimId`. The tuple `(hostId, capacity, requestId)` uniquely
 identifies that receipt. The service then obtains the strict descriptor from
 native Git using only the receipt's review/job tuple, current admission
-generation, and the selected capacity's runner base and bounds, authenticated
+  generation, and the selected capacity's operator job and runner bases and
+  bounds, authenticated
 only with `attemptIssuer`. That credential may derive this descriptor and issue
 or revoke its exact receipt-bound attempt; it cannot report results, read Git,
 approve, promote, or administer. Webhook, query, identity, reporter, admission,

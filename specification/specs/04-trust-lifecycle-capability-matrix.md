@@ -54,8 +54,8 @@ CI evidence has two trust classes:
 - **Independent CI** executes a command and image definition selected from an
   authority the candidate cannot change. It may support a claim about the
   candidate that its independently selected check is designed to test.
-- **Candidate-controlled self-test** executes a command, script, and job image
-  selected by the exact candidate tree. A successful result proves only that
+- **Candidate-controlled self-test** executes a candidate-selected test
+  definition and script inside an operator-pinned common job base image. A successful result proves only that
   the recorded candidate-selected tests executed and exited successfully in the
   recorded sandbox. It does not independently establish coverage, correctness
   of the test definitions, product correctness, security, policy compliance, or
@@ -66,8 +66,8 @@ Evidence from one class MUST NOT be displayed or exported as the other. The
 native ordinary CI target uses candidate-controlled self-tests. Such a result
 MAY satisfy a required CI condition when the protected policy explicitly names
 that job and class, but it never replaces complete-tree human review. The
-reviewer surface MUST show the class and the candidate-selected config, image,
-argv, and script digests before approval and again when showing promotion
+reviewer surface MUST show the class, candidate-selected config and script
+digests, fixed argv, and operator job/runner image digests before approval and again when showing promotion
 readiness.
 
 This evidence limitation does not make test review optional. Product

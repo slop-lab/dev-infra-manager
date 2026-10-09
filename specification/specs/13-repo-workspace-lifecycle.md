@@ -7,6 +7,8 @@ DIM stores schema-versioned Project and workspace records below
 
 ```text
 <stateRoot>/projects/<project>.json
+<stateRoot>/native-project-drafts/<project>.json
+<stateRoot>/native-project-drafts/artifacts/<project-id>/<bundle-digest>.bundle
 <stateRoot>/workspaces/<workspace>.json
 <stateRoot>/assets/project-roots/<project-id>/<root-commit>/
 <stateRoot>/services/gitea.json
@@ -41,7 +43,7 @@ reconciliation lock identities remain distinct. Their required acquisition
 order and release boundaries are unchanged by owner reclamation.
 
 Project and workspace records use persistent IDs distinct from display names.
-Project records use schema version `4` and require `giteaOrganizationId`. The
+Implemented Gitea Project records use schema version `4` and require `giteaOrganizationId`. The
 field is `null` before organization identity has been established and otherwise
 MUST be a positive integer. A `ready` Project MUST have a non-null
 `giteaOrganizationId`. Incompatible pre-stable schemas are rejected without
@@ -107,9 +109,9 @@ left unchanged.
 
 This section specifies the only implemented Project lifecycle, using Gitea.
 Installing the unimplemented target native bundle does not select a Project
-adapter, and native Project operations remain denied until a separate contract
-exists. Gitea organization, runner, and credential shapes do not constrain the
-idle native services. In the implemented profile, the built-in managed Git
+adapter, and native Project operations remain denied until the accepted native
+contract is implemented and verified. Gitea organization, runner, and credential
+shapes do not constrain the idle native services. In the implemented profile, the built-in managed Git
 service is one DIM-owned Gitea instance. An explicitly configured external
 Gitea service is operator-owned and shared independently of each host's
 unchanged DIM controller. In both predecessor modes each Project owns the
@@ -122,7 +124,190 @@ dim-acme/product
 dim-acme/environment
 ```
 
-Project metadata contains its name/ID, namespace, trusted Gitea organization
+**PROJECT-NATIVE-001 (accepted target, not implemented):** A fresh native
+Project has a distinct strict Project record containing its immutable native
+service and Project identities and registered repository IDs, not a Gitea
+organization ID or provider URL. The trusted host creates the Project once;
+eligible Projects acquire globally configured ordinary and QEMU CI admission
+without a second Project-specific CI approval. Registration must bind the
+native service identity, Project, root repository, protected ref and policy
+revision before publishing Project readiness. A candidate, workspace writer,
+webhook or CI worker cannot create or change that binding. Project state must
+not contain credentials, host Docker authority or CI service tokens. A native
+Project never falls back to Gitea if admission or native Git is unavailable.
+
+The trusted host imports or initializes exactly one root repository before
+publishing it as runnable. Initial import has narrowly scoped, temporary
+write authority which is revoked before proposal writer credentials are
+issued; import failure leaves the repository non-ready. Reconciliation checks
+the immutable registered IDs and exact storage owner, rather than adopting a
+same-name repository. A workspace writer can read only its Project's
+registered repositories and update only its own proposal namespace; direct
+protected-ref mutation, force, delete and foreign Project access are denied.
+Trusted protected-root setup resolves one exact native protected commit and
+snapshots its complete tree read-only, with no writer or promoter credential
+in the workspace. Repository fetch/publish must remain selective and nonforced
+and cannot grant proposal writers protected-ref authority.
+
+**PROJECT-NATIVE-IMPORT-001 (service and non-runnable host bootstrap implemented; runnable adapter pending):** After the
+host-bound registrar prepares an inaccessible root, a distinct trusted
+bootstrap authority submits a bounded, self-contained Git bundle and the exact
+expected protected ref and commit. The trusted host derives the complete
+normalized initial policy from the selected reviewed manifest, or from the
+explicit manifest-free protection input, and binds it to that commit. The
+native service must authenticate the bootstrap role and generation, match the
+stored Project/root/owner, verify the bundle's one allowed ref and full object
+graph privately, and durably bind its digest and policy before installing
+objects into the owned root. Only the service may create the initially unborn
+protected ref through an all-zero-old-object compare-and-swap; neither an
+importer, registrar, nor Git transport identity may write protected refs.
+Failure or restart before that checked publication leaves the Project
+non-ready and issues no reader or writer credential. Once canonical object
+installation begins, a retry may resume only the identical stored bundle and
+policy; a changed import, ref, commit, policy, host, or generation must not
+replace that intent. A protected ref or policy that differs from the stored
+intent requires explicit administrator reconciliation, never adoption by name.
+
+The installed schema-7 native Git bundle implements host-bound root preparation,
+a distinct importer role, and a separate owner-host root read issuer for a
+30-second Project/root-scoped upload-pack lease after live imported-root
+verification. The issuer credential is not a Git identity, the lease is held
+only in service-process memory, and neither credential grants receive-pack or
+protected-ref mutation. A distinct owner-host write issuer may mint a memory-only
+30-second lease for one canonical 32-byte workspace ID only after the same live
+authoritative imported-policy proof. Its Git backend rechecks executable identity
+and the installed proposal-only hook; only that workspace's proposal refs may be
+created or fast-forwarded. The lease grants no Project-ready, reviewer, CI, or
+promotion authority. The bundle implements bounded Git bundle upload,
+private object verification, durable import intent, initial unborn-ref
+compare-and-swap, and exact restart recovery in strict format-8 state. It binds normalized policy supplied by the
+trusted operator to the imported commit. Core now has a pure native-only
+policy compiler for supplied reviewed-manifest bytes or explicit manifest-free
+review input. A host-side planner pins a branch in an already-local repository,
+reads that exact commit's regular manifest blob, and builds a self-contained
+one-ref bundle in private scratch storage. A host-only bootstrap path now
+attests separate registrar/importer credentials bound to one endpoint, host,
+and generation, durably claims the bundle and policy in a non-ready native
+draft before service mutation, then prepares/imports the root and stores the
+exact final receipt. A lost host receipt can be recovered by replaying the
+identical import and finalize; changed intent cannot replace it. Before
+storing that receipt or returning an imported draft, the host requires an
+importer-authenticated schema-3 read-only proof that matches every bound receipt
+field and live owner, current serving generation, original import generation,
+bundle, and separately folded current protected Git head. The original nested
+receipt and host draft remain immutable. Format-8 records cannot yet advance
+the current head: the installed service rejects any intent or finalized row
+until separate review, approval, and both CI evidence stores are verified.
+An unresolved intent or unrecorded ref drift yields no proof. A missing owner
+marker, replaced repository path, or moved ref leaves the draft non-ready
+without host-state mutation. A trusted host root-read operation loads separate
+owner-only importer and issuer connections, rejects endpoint, owner,
+generation, or credential overlap before a client request, and accepts only an
+exact imported draft bound to a fresh importer-authenticated proof. It may mint
+the scoped lease only after that proof and MUST reread the exact draft before
+returning only the lease; a changed, missing, foreign, pending, or corrupt draft
+withholds it. The operation persists neither role credentials nor lease and
+does not change draft or Gitea Project state. A completed import's original
+generation and host receipt remain unchanged through a new serving generation;
+the host compares that original receipt against the nested proof while the
+separate current connection matches the proof's serving generation. An
+earlier-generation incomplete import cannot roll over. This path
+does not attest an external source origin or enable Project lifecycle
+selection. No Project-ready
+record, workspace reader/writer, reviewer, promoter, or native ordinary/QEMU
+CI admission is issued by this service-level import. The trusted host may use
+the same proof and a freshly minted lease to materialize the exact imported
+commit and tree as a private read-only host snapshot under the distinct
+`assets/native-project-roots/<project-id>/<commit>` namespace. It MUST hold the
+Project lifecycle lock through cache inspection and publication, validate a
+cached tree recursively without minting a new lease, and otherwise stage the
+complete tree privately and make it read-only before atomic publication. It
+MUST hash-check commit, tree, regular, executable, and symbolic-link blobs;
+reject gitlinks, oversized objects, absolute, dangling, escaping, and reserved
+lifecycle-path links; and create accepted relative links only after all regular
+files and directories exist. Existing unsafe targets are conflicts and MUST
+NOT be adopted, removed, or rewritten. The resulting descriptor contains no
+credential or runtime authority and does not create Project readiness. The
+remaining trusted host adapter, review/promotion integration, and both CI kinds
+are still required before `PROJECT-NATIVE-001` becomes operational.
+
+An exact-tree human approval is required before native protected promotion.
+Product maintainers review changed requirements, implementation, tests and
+results; deeper infrastructure security review covers only authority-bearing
+changes and their dependency closure. The native host performs a serialized
+compare-and-swap against the reviewed expected protected head after rechecking
+the current policy, approval, and required exact ordinary/QEMU evidence. A
+stale head, policy or evidence leaves the ref unchanged. Native Project purge
+may remove only the exact registered Project's resources after workspace and
+CI claims are closed; it never removes a foreign same-name resource.
+
+**PROJECT-NATIVE-DRAFT-001 (non-runnable host state):** A native bootstrap draft
+uses a distinct strict schema-`2` record under
+`native-project-drafts/<project>.json`. It MUST NOT be written below `projects/`,
+parsed as Gitea schema `4`, returned by predecessor Gitea list/show, or
+selected by a predecessor repository, workspace, CI, remove, or purge path.
+The draft contains exactly `schemaVersion: 2`,
+`recordType: "native-project-draft"`, `phase`, validated Project name and ID,
+service ID `native-main`, owning host ID, activated generation ID, root
+repository ID `root`, root alias, concrete protected branch, exact commit and
+tree object IDs, one canonical versioned native import policy, and the SHA-256
+digest and byte size of one bounded private bundle. The policy contains sorted
+`requiredJobs` entries with exact `name`, `kind`, and
+`evidenceClass: candidate-controlled`; the draft MUST NOT duplicate those jobs
+at top level. Policy and job-set revisions use their v2 domains, while the
+reviewer revision remains in its v1 domain.
+It contains no URL, Gitea organization, credential, host-runtime authority,
+CI token, caller-controlled error text, or readiness flag. The only phases
+are `import-pending` and `root-imported`; **neither is runnable** and this
+schema has no `ready` variant. `root-imported` additionally requires the
+exact authenticated final import receipt, matched to every immutable field,
+the canonical policy digest, and the pinned tree. A changed replay conflicts;
+no caller can replace the bound policy, source commit, host, generation,
+bundle, or receipt.
+
+A completed schema-`1` draft produced by the earlier unreleased import path MAY
+remain readable and provable without byte rewriting. It is legacy import proof,
+not authoritative required-job-kind policy. A pending schema-`1` draft MUST be
+rejected and MUST NOT roll to a new generation, resume import, or become
+runnable.
+
+The trusted host MUST hold the existing `project-<name>` kernel lock while
+reserving either namespace. A native claim MUST refuse any canonical
+`projects/<name>.json` node; a Gitea create MUST refuse any
+`native-project-drafts/<name>.json` node **before** reading Gitea credentials
+or mutating Gitea or state. An unsafe, symbolic-link, malformed, or unknown
+same-name node is a conflict, never an absence to adopt. Legacy Gitea
+`listProjects` scans only `projects/`, so draft creation cannot poison it.
+Before service mutation the host MUST retain the exact bundle under a private
+mode-`0700` artifact directory at mode `0600`, sync the file and directories,
+then publish the complete pending record with a file sync and no-replace
+namespace publication followed by directory sync. A final receipt changes
+only phase and receipt through an atomic synced replacement. Recovery and
+exact replay recheck the stored artifact, receipt, and live service owner;
+uncertain or missing proof leaves the draft non-ready and requires explicit
+reconciliation, never a fresh import of different bytes.
+
+A later, separately specified **native** Project record/transition may become
+runnable only after authenticated scoped Git transport and automatic ordinary
+and QEMU capacity admission are operational and the real-host gates in
+`VERIFICATION-NATIVE-CUTOVER-001` pass. Project readiness is not a successful
+candidate test result: candidate jobs require a runnable Project and proposal.
+Protected **promotion** separately requires the exact current ordinary and
+QEMU terminal results for every job required by policy, correct execution
+kinds, current approval, and the checked ref compare-and-swap. Missing KVM
+is unavailable, never a successful or ordinary-substituted QEMU result.
+The native QEMU scheduler and host connection are distinct from the
+predecessor Gitea QEMU topology and from ordinary Sysbox claims and results.
+Every native Project uses operator-owned digest-pinned common capacity images
+without a Project-specific approval or runner token. Candidate job bytes are
+execution inputs, never Project admission; exact kind, attempt, lease cleanup
+and candidate-controlled provenance bind each result as specified in
+[Native QEMU Scheduler and Evidence](local-details/native-qemu.md).
+Until that full adapter exists, schema-4/Gitea remains the only runnable
+Project profile. No previous Project data is migrated or silently deleted.
+
+In the implemented Gitea profile, Project metadata contains its name/ID,
+namespace, trusted Gitea organization
 ID, repository catalog, and exactly one root repository/ref when runnable.
 Infrastructure implementation belongs to the root repository, not the Project
 state.

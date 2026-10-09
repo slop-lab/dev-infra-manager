@@ -41,7 +41,7 @@ never adopts their data or a pre-existing fixed ordinary-CI volume.
 | Bare repositories, proposal transport, review and exact CI evidence, protected promotion | native Git service | ordinary scheduler, host controller |
 | Operator-authorized Project admission, webhook demand, attempts, queue, claim leases | ordinary CI service | trust in candidate job bytes, native Git storage, host runtime |
 | Shared capacity, Sysbox execution, cleanup, result submission | each DIM host controller | Compose services, Project lifecycle |
-| Candidate ordinary image, fixed argv, and script | exact candidate Git tree for one disposable job | admission authority, persistent runner/image state |
+| Candidate ordinary script and job name | exact candidate Git tree for one disposable job | image selection, admission authority, persistent runner/image state |
 | Runner base and resource/time/output ceilings | operator-owned host capacity | candidate config or webhook |
 | QEMU integration demand and execution | optional QEMU scheduler and host QEMU supervisors | ordinary CI service |
 
@@ -61,7 +61,10 @@ listens on its own container port `8080`. Compose publishes each to the distinct
 host address and port in the installer config. The only shared resource is the
 fixed `dim-control-plane` bridge network.
 
-The native volume contains bare repositories and immutable review, attempt,
+The native volume's strict format-4 state includes an activation table and a
+durable multi-Project/root identity registry; the installed HTTP service does
+not expose registration or create a repository. Once a native Project adapter
+exists, that volume also owns bare repositories and immutable review, attempt,
 result, and promotion evidence. The ordinary volume contains
 `ordinary-ci.sqlite3` plus SQLite-owned `-wal` and `-shm` files. It contains no
 repository bytes, image layer, runner work directory, registration data, or
@@ -112,11 +115,11 @@ and native container ID as `10001:10001`. The command reads the fixed mounted
 token path and makes one bounded loopback request with no token in argv,
 environment, stdin, or output. Published HTTP is readiness-only.
 
-The ordinary service JSON is strict schema `3`:
+The ordinary service JSON is strict schema `4`:
 
 ```json
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "serviceId": "ordinary-main",
   "database": "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
   "admissionLeaseMilliseconds": 300000,
@@ -157,6 +160,7 @@ The ordinary service JSON is strict schema `3`:
       "capacities": [{
           "capacity": "primary",
           "runnerBaseImage": "registry.example/dim/ordinary-runner@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "jobBaseImage": "registry.example/dim/ordinary-job@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
           "bounds": {
             "cpu": "4",
             "memoryBytes": "8589934592",
@@ -182,8 +186,9 @@ nor requires Project state. Every token and native-facing password is distinct,
 base64url, and at least 32 random bytes.
 The host list contains installation capacity identities and bounds only; it
 contains no Project, repository, candidate job image, label, or Git credential.
-Each named capacity selects one digest-pinned runner base and positive canonical
-decimal CPU, memory, PID, wall-clock, and output ceilings. The host connection
+Each named capacity selects digest-pinned runner and job base images and
+positive canonical decimal CPU, memory, PID, wall-clock, and output ceilings.
+The host connection
 must repeat the same values exactly, but it cannot create or widen capacity.
 The separate registrar credential is global operator admission authority, not
 a capacity or host credential. Adding or removing a host
@@ -246,11 +251,12 @@ exclusive network assumption requires authenticated transport before use.
 `@slop-lab/dim-core` exports `configuredNativeOrdinaryAuthorityServer` as a
 native-only HTTP and SQLite library. It is not wired to the CLI, installer,
 native Git sender, or host controller. Its normalized configuration is strict
-schema `3` and contains one service ID, a dedicated database path, admission and
+schema `4` (the private SQLite state remains schema `3`) and contains one
+service ID, a dedicated database path, admission and
 claim leases, separate Basic credentials for `webhook`, `registrar`, and
 `query`, one distinct token per host, and the operator-owned host capacities.
 Each capacity fixes its host and
-capacity IDs, digest-pinned runner base, and maximum CPU, memory, PID,
+capacity IDs, digest-pinned runner and common job bases, and maximum CPU, memory, PID,
 wall-clock, and output bounds. Credential passwords are distinct base64url
 values of at least 32 characters. The library receives no Git, Docker,
 controller, or host-administration socket.
@@ -525,7 +531,7 @@ capacity advertisement, claim, and result operations fail before mutation.
    before it publishes or refreshes one leased admission generation.
    Admission does not read or trust candidate job bytes.
 2. A review binds the exact expected protected head and candidate commit/tree.
-   For each required job, native Git reads schema-2 `.dim/ci/runner.yml` and the
+   For each required job, native Git reads schema-3 `.dim/ci/runner.yml` and the
    named regular script blob directly from that candidate tree and produces the
    strict normalized descriptor from `CI-NATIVE-CANDIDATE-JOB-001`.
 3. Native Git durably creates and retries one authenticated, non-executable
@@ -540,13 +546,13 @@ capacity advertisement, claim, and result operations fail before mutation.
    proof, then commits assignment and active claim together. The returned claim
    contains the immutable descriptor, attempt, generation, bounds, and lease,
    and no reusable authority.
-5. The controller ownership-checks its local capacity; force-pulls the operator
-   runner base and candidate job image by digest; fetches the exact candidate
+ 5. The controller ownership-checks its local capacity; force-pulls the operator
+    runner and job base images by digest from operator capacity; fetches the exact candidate
    commit through its existing native read authority; independently verifies
    the commit/tree, config and script blobs, strict parse, and descriptor
    digest; then launches one bounded ephemeral Sysbox runner. The direct argv is
    exactly `[/bin/bash, --noprofile, --norc, /run/dim/job/script]`; no webhook
-   string enters a shell, and the host replaces the candidate image's configured
+   string enters a shell, and the host replaces the operator job image's configured
    entrypoint and command with that array. It renews the lease, stops and
    removes its exact owned runtime, then submits terminal evidence with the same
    host-scoped execution credential.
@@ -629,6 +635,70 @@ refusal, and update rollback. Successful Project admission, two-host execution,
 and real Sysbox job evidence remain blocked on the missing native Project
 adapter and MUST NOT be claimed by this installer-only gate. QEMU scheduler
 checks remain separate Gitea-only predecessor evidence.
+
+### Host verification handoff for the idle bundle
+
+Use a disposable, clean Linux host and a checkout of the exact reviewed root
+commit. Do not run these checks against an existing installation: the live
+smoke uses the fixed `dim-control-plane` Docker network, containers, and two
+data-volume names, deliberately injects failures, and removes only the
+resources it can prove it created. Check that the working tree is clean and
+record `git rev-parse HEAD` alongside the test results. Run commands as the
+dedicated DIM host user, not inside an agent container.
+
+On Ubuntu, review `verification/scripts/install-host-ubuntu.bash` before
+running it: this development convenience changes APT packages, Docker,
+Sysbox, AppArmor, and group membership, and prompts for `yes`. Enable user
+linger separately, then start a fresh login session so Docker group membership
+and the systemd user manager are available:
+
+```bash
+bash verification/scripts/install-host-ubuntu.bash sysbox
+sudo loginctl enable-linger "$USER"
+# Log out and back in before continuing.
+pnpm install --frozen-lockfile
+just doctor
+just check-source
+just verify plugin-install
+just verify native-idle-service-images
+```
+
+Do not interpret a failing `just check-source` as a pass because the failure
+is in an unrelated package. Capture the failing test and rerun only after
+investigation. The plugin-install smoke uses an isolated temporary backend
+selection, state root, and controller; it does not depend on the host's
+systemd controller. None of these commands installs the idle control-plane
+bundle into the host user's persistent state.
+
+The disposable live installer smoke has **narrower** prerequisites: Docker
+server `29.1.3`, Compose `5.0.0`, a container with `/run/docker.sock`
+bind-mounted from `/run/user/<uid>/docker.sock` on the rootless daemon host,
+and no pre-existing fixed-name bundle resources. A direct host-shell run
+without that bind mount fails even if the host uses rootless Docker. It
+refuses other environments rather than providing a rootful fallback. In a
+suitable disposable test container with the checkout and toolchain, run:
+
+```bash
+docker info --format '{{.ServerVersion}}'
+docker compose version --short
+just verify control-plane-install-live
+```
+
+Record the `control-plane-install-live-smoke-ok` line and the final `cleanup`
+line with `fixed-resources=absent` and `status=0`. If the host is rootful or
+has different Docker/Compose versions, do not change those checks merely to
+obtain a green result: run the host-side image/build checks above and
+report the live smoke as unavailable until a suitable disposable rootless
+test container exists. If KVM and Sysbox are available, the separate
+`just verify environments-kvm` gate tests the host backend; report missing
+`/dev/kvm` or `sysbox-runc` as unavailable, not successful.
+
+This handoff is reproducible development evidence, **not** the independent
+packaged-facade clean-host acceptance required by
+`specification/specs/12-verification.md`. That acceptance must still inspect
+the effective installed Compose model and all refusal/update/rollback cases
+on a disposable clean host. No idle-bundle test proves native Project
+admission, a real Sysbox job, or two-physical-host execution.
 
 Source acceptance for the future emitter, inbox, scheduler, host client, and
 reporter is separate from that installer-only gate. It must cover exact event,

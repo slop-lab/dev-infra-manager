@@ -56,8 +56,9 @@ Docker/Git terms aren't repeated here.
   adapter exists, the ordinary scheduler leases it for one admitted job at a
   time; each claim creates an ephemeral runner and disposable job container
   without the host Docker socket or DIM workspace credentials. It is not a
-  persistent Project runner or image. Its schema-2 command, script, and job
-  image come from the exact candidate tree, so success is candidate-controlled
+  persistent Project runner or image. Its schema-3 command and script come
+  from the exact candidate tree while the job base image is operator-owned;
+  success is candidate-controlled
   self-test evidence rather than independent verification. Protected policy may
   require it, but product maintainers still review changed requirements,
   implementation, tests, and results, and human approval and checked promotion
