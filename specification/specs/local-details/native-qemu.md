@@ -2,7 +2,7 @@
 
 **Kind: Implementation profile**
 
-**Status: Host-file preflight, schema-4 candidate parsing, and native-Git standalone plus authoritative imported-root identity-only candidate readers are implemented; Gitea-free scheduler, lifecycle/policy admission adapter, host adapter and runtime are not implemented.**
+**Status: Host-file preflight, schema-4 candidate parsing, native-Git standalone and authoritative imported-root candidate readers, and an internal read-only authoritative QEMU descriptor prerequisite are implemented; Gitea-free scheduler, lifecycle/policy admission adapter, host adapter and runtime are not implemented.**
 
 ## Boundary and authority
 
@@ -79,6 +79,19 @@ blob reads, and rejects quarantined `legacy-import-only` rows. It is not an
 installed route or lifecycle/policy admission adapter and creates no state.
 The separately active ordinary-only schema-3 parser and loader remain unchanged
 and are not a native-QEMU compatibility path after schema 4 is enabled.
+
+The installed native-Git bundle also exposes a trusted in-process, read-only
+QEMU descriptor method. It accepts only a Project, immutable review, required
+job name, and explicitly operator-trusted admission generation, digest-pinned
+job and runner images, and positive bounds. It reconstructs the exact current
+review before and after the authoritative schema-4 candidate reads, requires
+both imported policy/review evidence and the candidate plan to label the job
+`qemu`, and returns a strict schema-1 descriptor with `executionKind: qemu`,
+`evidenceClass: candidate-controlled`, exact config/script identities, fixed
+argv, and the QEMU-only `dim-native-qemu-execution-v1` digest. It has no HTTP
+route, QEMU credential, admission, scheduler, attempt, result, VM, promotion,
+ref-write, or Project-readiness authority. An ordinary descriptor or result is
+not accepted as QEMU evidence.
 
 The imported-root native review event uses schema version `2`, separate from
 the standalone ordinary-only event contract. An event from native Git carries exactly schema/version, event ID, kind
