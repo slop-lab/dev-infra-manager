@@ -268,9 +268,7 @@ function tokenSha256(token: string): string {
 function businessRowCount(stateDirectory: string): number {
   const database = new DatabaseSync(join(stateDirectory, "ordinary-ci.sqlite3"), { readOnly: true });
   const tables = [
-    "native_admissions", "native_attempt_assignments", "native_event_replay_fences", "review_job_replay_fences",
-    "native_event_inbox", "demands", "claim_receipts", "claims", "capacity_fences", "host_results",
-    "report_outbox", "terminal_details"
+    "native_root_admissions", "native_root_admission_requests", "native_root_ci_event_receipts"
   ] as const;
   const count = tables.reduce((total, table) => {
     const row = database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get();
