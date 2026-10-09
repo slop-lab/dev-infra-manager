@@ -66,7 +66,7 @@ const native = {
     attemptIssuer: { username: "ordinary-attempts", password: credentials.attemptIssuer },
     resultReporter: { username: "ordinary-results", password: credentials.resultReporter },
     webhook: {
-      endpoint: "http://ordinary-ci:8080/v1/native-events",
+      endpoint: "http://ordinary-ci:8080/v1/native-root-ci-events",
       username: "native-events",
       password: credentials.webhook
     }
@@ -137,7 +137,8 @@ await chmod(askpassPath, 0o555);
 for (const [name, value] of [
   ["native-readiness.token", token()], ["native-activation.token", token()],
   ["native-activation-b.token", token()],
-  ["ordinary-readiness.token", token()], ["ordinary-activation.token", token()]
+  ["ordinary-readiness.token", token()], ["ordinary-activation.token", token()],
+  ["ordinary-activation-b.token", token()]
 ]) {
   const path = join(root, name);
   await writeFile(path, `${value}\n`, { mode: 0o444 });
@@ -197,7 +198,7 @@ docker run "${common[@]}" --user 10001:10001 --entrypoint node "$native_image" \
 [[ "$(docker run "${common[@]}" --user 10001:10001 "$native_image" compatibility --json)" == \
   '{"schemaVersion":1,"writeFormat":8,"readableFormats":[8]}' ]]
 [[ "$(docker run "${common[@]}" --user 10002:10002 "$ordinary_image" compatibility --json)" == \
-  '{"schemaVersion":1,"writeFormat":3,"readableFormats":[3]}' ]]
+  '{"schemaVersion":1,"writeFormat":5,"readableFormats":[5]}' ]]
 
 config_mount="type=volume,src=$config_volume,dst=/run/fixtures,readonly"
 docker run "${common[@]}" --user 10001:10001 --mount "$config_mount" \
@@ -254,7 +255,7 @@ ordinary_state_mount="type=volume,src=$ordinary_state_volume,dst=/var/lib/dim-or
   '{"schemaVersion":1,"stateFormat":8}' ]]
 [[ "$(docker run "${common[@]}" --user 10002:10002 --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m \
   --mount "$ordinary_state_mount" "$ordinary_image" check-state --read-only /var/lib/dim-ordinary-ci --json)" == \
-  '{"schemaVersion":1,"stateFormat":3}' ]]
+  '{"schemaVersion":1,"stateFormat":5}' ]]
 [[ "$(state_digest "$native_image" "$native_state_volume")" == "$native_before" ]]
 [[ "$(state_digest "$ordinary_image" "$ordinary_state_volume")" == "$ordinary_before" ]]
 
@@ -273,8 +274,8 @@ copy_secrets() {
 copy_secrets native "$native_secrets_volume" "$native_image"
 copy_secrets ordinary "$ordinary_secrets_volume" "$ordinary_image"
 docker network create "$service_network" >/dev/null
-ordinary_generation="$(printf ordinary-ready-smoke | sha256sum | cut -d ' ' -f 1)"
 native_generation="$(printf native-ready-smoke | sha256sum | cut -d ' ' -f 1)"
+ordinary_generation="$native_generation"
 docker run --detach --name "$ordinary_service" --network "$service_network" --network-alias ordinary-ci \
   --publish 127.0.0.1::8080 --read-only --cap-drop ALL --security-opt no-new-privileges \
   --tmpfs /tmp:rw,noexec,nosuid,nodev,mode=1777 \
@@ -305,6 +306,27 @@ for member in "${raw_network_members[@]}"; do
   [[ -z "$member" ]] || network_members+=("$member")
 done
 [[ "${network_members[*]}" == "$native_service $ordinary_service" ]]
+docker run --rm --interactive --read-only --network "$service_network" --user 10002:10002 \
+  --cap-drop ALL --security-opt no-new-privileges --entrypoint node --mount "$config_mount" \
+  "$ordinary_image" --input-type=module <<'EOF'
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+
+const ordinary = JSON.parse(readFileSync("/run/fixtures/ordinary.json", "utf8"));
+const auth = ({ username, password }) => `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+const endpoint = "http://ordinary-ci:8080/v1/projects/project-a/repositories/root/native-root-admission/register";
+const body = { schemaVersion: 1, requestId: "00000000-0000-4000-8000-000000000040",
+  generationId: createHash("sha256").update("native-ready-smoke").digest("hex") };
+const wrongRole = await fetch(endpoint, { method: "POST", headers: {
+  authorization: auth(ordinary.credentials.query), "content-type": "application/json"
+}, body: JSON.stringify(body) });
+assert.equal(wrongRole.status, 404);
+const inactive = await fetch(endpoint, { method: "POST", headers: {
+  authorization: auth(ordinary.credentials.registrar), "content-type": "application/json"
+}, body: JSON.stringify(body) });
+assert.equal(inactive.status, 503);
+EOF
 docker container rm --force "$native_service" >/dev/null
 docker run --rm --user 0:0 --entrypoint sh \
   --mount "$config_mount" --mount "type=volume,src=$native_secrets_volume,dst=/run/secrets" \
@@ -453,10 +475,14 @@ assert.equal(proof.status, 200);
 assert.equal(proof.headers.get("content-type"), "application/json");
 assert.equal(proof.headers.get("cache-control"), "no-store");
 assert.deepEqual(await proof.json(), {
-  schemaVersion: 2,
+  schemaVersion: 3,
   servingGenerationId: generationId,
   ownerHostId: importer.hostId,
-  importReceipt: result
+  importReceipt: result,
+  currentHead: {
+    projectId: "project-a", sequence: 0, protectedRef: "refs/heads/main",
+    commit, tree, policyDigest: result.policyDigest
+  }
 });
 assert.equal((await fetch(proofEndpoint, {
   headers: { authorization: auth(native.projectRegistrars[0]) }
@@ -578,15 +604,132 @@ const expectedReceipt = {
   bundleDigest: createHash("sha256").update(bundle).digest("hex"),
   bundleSize: bundle.length, phase: "root-imported"
 };
-assert.equal(proof.schemaVersion, 2);
+assert.equal(proof.schemaVersion, 3);
 assert.equal(proof.servingGenerationId, expectedReceipt.generationId);
 assert.equal(proof.ownerHostId, importer.hostId);
 for (const [field, value] of Object.entries(expectedReceipt)) assert.equal(proof.importReceipt[field], value);
 assert.match(proof.importReceipt.policyDigest, /^[0-9a-f]{64}$/);
 assert.match(proof.importReceipt.importNonce, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-assert.deepEqual(Object.keys(proof).sort(), ["schemaVersion", "servingGenerationId", "ownerHostId", "importReceipt"].sort());
+assert.deepEqual(proof.currentHead, {
+  projectId: "project-a", sequence: 0, protectedRef: "refs/heads/main",
+  commit: expectedReceipt.expectedCommit, tree: expectedReceipt.resolvedTree,
+  policyDigest: proof.importReceipt.policyDigest
+});
+assert.deepEqual(Object.keys(proof).sort(),
+  ["schemaVersion", "servingGenerationId", "ownerHostId", "importReceipt", "currentHead"].sort());
 assert.deepEqual(Object.keys(proof.importReceipt).sort(),
   [...Object.keys(expectedReceipt), "policyDigest", "importNonce"].sort());
+EOF
+docker container exec --user 10002:10002 "$ordinary_service" /usr/local/bin/dim-service activate "$ordinary_generation"
+docker run --rm --interactive --read-only --network "$service_network" --user 10002:10002 \
+  --cap-drop ALL --security-opt no-new-privileges --entrypoint node --mount "$config_mount" \
+  "$ordinary_image" --input-type=module <<'EOF'
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+
+const ordinary = JSON.parse(readFileSync("/run/fixtures/ordinary.json", "utf8"));
+const auth = ({ username, password }) => `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+const origin = "http://ordinary-ci:8080";
+const endpoint = `${origin}/v1/projects/project-a/repositories/root/native-root-admission/register`;
+const generationId = createHash("sha256").update("native-ready-smoke").digest("hex");
+const request = { schemaVersion: 1, requestId: "00000000-0000-4000-8000-000000000041", generationId };
+const headers = { authorization: auth(ordinary.credentials.registrar), "content-type": "application/json" };
+const identity = await fetch(`${origin}/v1/native-root-admission/identity`, {
+  headers: { authorization: auth(ordinary.credentials.registrar) }
+});
+assert.equal(identity.status, 200);
+assert.deepEqual(await identity.json(), { schemaVersion: 1, serviceId: "ordinary-main",
+  servingGenerationId: generationId, role: "native-root-admission-registrar",
+  scope: ["imported-root-admission:write", "imported-root-admission:revoke"] });
+const response = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(request) });
+assert.equal(response.status, 200);
+const registered = await response.json();
+assert.equal(registered.requestId, request.requestId);
+assert.equal(registered.servingGenerationId, generationId);
+assert.equal(registered.admission.importedRoot.currentRoot.sequence, 0);
+assert.equal(registered.admission.importedRoot.currentRoot.commit,
+  readFileSync("/run/fixtures/root.commit", "utf8").trim());
+assert.equal(registered.admission.importedRoot.currentRoot.tree,
+  readFileSync("/run/fixtures/root.tree", "utf8").trim());
+assert.deepEqual(registered.admission.importedRoot.policy.requiredJobs,
+  [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }]);
+const replay = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(request) });
+assert.equal(replay.status, 200);
+assert.deepEqual(await replay.json(), registered);
+const stale = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify({
+  ...request, requestId: "00000000-0000-4000-8000-000000000045", generationId: "f".repeat(64)
+}) });
+assert.equal(stale.status, 409);
+EOF
+docker container rm --force "$ordinary_service" >/dev/null
+docker run --detach --name "$ordinary_service" --network "$service_network" --network-alias ordinary-ci \
+  --publish 127.0.0.1::8080 --read-only --cap-drop ALL --security-opt no-new-privileges \
+  --tmpfs /tmp:rw,noexec,nosuid,nodev,mode=1777 \
+  --mount "type=volume,src=$ordinary_secrets_volume,dst=/run/secrets,readonly" \
+  --mount "type=volume,src=$ordinary_state_volume,dst=/var/lib/dim-ordinary-ci" \
+  "$ordinary_image" serve /run/secrets/service.json "$ordinary_generation" >/dev/null
+for _ in {1..100}; do
+  docker container exec --user 10002:10002 "$ordinary_service" /usr/local/bin/dim-service ready \
+    >"$work_dir/ordinary-restart-ready.out" 2>"$work_dir/ordinary-restart-ready.err" && break
+  sleep 0.05
+done
+[[ ! -s "$work_dir/ordinary-restart-ready.out" && ! -s "$work_dir/ordinary-restart-ready.err" ]]
+docker run --rm --interactive --read-only --network "$service_network" --user 10002:10002 \
+  --cap-drop ALL --security-opt no-new-privileges --entrypoint node --mount "$config_mount" \
+  "$ordinary_image" --input-type=module <<'EOF'
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+
+const ordinary = JSON.parse(readFileSync("/run/fixtures/ordinary.json", "utf8"));
+const auth = ({ username, password }) => `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+const endpoint = "http://ordinary-ci:8080/v1/projects/project-a/repositories/root/native-root-admission/register";
+const generationId = createHash("sha256").update("native-ready-smoke").digest("hex");
+const body = { schemaVersion: 1, requestId: "00000000-0000-4000-8000-000000000041", generationId };
+const response = await fetch(endpoint, { method: "POST", headers: {
+  authorization: auth(ordinary.credentials.registrar), "content-type": "application/json"
+}, body: JSON.stringify(body) });
+assert.equal(response.status, 503);
+EOF
+docker container exec --user 10002:10002 "$ordinary_service" /usr/local/bin/dim-service activate "$ordinary_generation"
+docker run --rm --interactive --read-only --network "$service_network" --user 10002:10002 \
+  --cap-drop ALL --security-opt no-new-privileges --entrypoint node --mount "$config_mount" \
+  "$ordinary_image" --input-type=module <<'EOF'
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+
+const ordinary = JSON.parse(readFileSync("/run/fixtures/ordinary.json", "utf8"));
+const auth = ({ username, password }) => `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+const origin = "http://ordinary-ci:8080/v1/projects/project-a/repositories/root/native-root-admission";
+const generationId = createHash("sha256").update("native-ready-smoke").digest("hex");
+const request = (requestId, admissionGeneration) => ({ schemaVersion: 1, requestId, generationId,
+  ...(admissionGeneration === undefined ? {} : { admissionGeneration }) });
+const call = (operation, credential, body) => fetch(`${origin}/${operation}`, { method: "POST", headers: {
+  authorization: auth(credential), "content-type": "application/json"
+}, body: JSON.stringify(body) });
+const registerRequest = request("00000000-0000-4000-8000-000000000041");
+const replay = await call("register", ordinary.credentials.registrar, registerRequest);
+assert.equal(replay.status, 200);
+const registered = await replay.json();
+const admissionGeneration = registered.admission.admissionGeneration;
+const currentRequest = request("00000000-0000-4000-8000-000000000042", admissionGeneration);
+const current = await call("current", ordinary.credentials.query, currentRequest);
+assert.equal(current.status, 200);
+const historicalCurrent = await current.json();
+const revoke = await call("revoke", ordinary.credentials.registrar,
+  request("00000000-0000-4000-8000-000000000043", admissionGeneration));
+assert.equal(revoke.status, 200);
+const replayedCurrent = await call("current", ordinary.credentials.query, currentRequest);
+assert.equal(replayedCurrent.status, 200);
+assert.deepEqual(await replayedCurrent.json(), historicalCurrent);
+const freshCurrent = await call("current", ordinary.credentials.query,
+  request("00000000-0000-4000-8000-000000000044", admissionGeneration));
+assert.equal(freshCurrent.status, 404);
+const historicalRegister = await call("register", ordinary.credentials.registrar, registerRequest);
+assert.equal(historicalRegister.status, 200);
+assert.deepEqual(await historicalRegister.json(), registered);
 EOF
 docker run --rm --read-only --network "$service_network" --user 10001:10001 \
   --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,mode=1777 \
@@ -617,6 +760,47 @@ docker run --detach --name "$native_service" --network "$service_network" --netw
   --mount "type=volume,src=$native_secrets_volume,dst=/run/secrets,readonly" \
   --mount "type=volume,src=$native_state_volume,dst=/var/lib/dim-native-git" \
   "$native_image" serve /run/secrets/service.json "$native_generation_b" >/dev/null
+docker run --rm --interactive --read-only --network "$service_network" --user 10001:10001 \
+  --cap-drop ALL --security-opt no-new-privileges --entrypoint node \
+  --mount "type=volume,src=$native_secrets_volume,dst=/run/secrets,readonly" \
+  "$native_image" --input-type=module <<'EOF'
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { setTimeout } from "node:timers/promises";
+
+const token = readFileSync("/run/secrets/readiness.token", "utf8").trim();
+const deadline = AbortSignal.timeout(5000);
+let response;
+while (response === undefined) {
+  try {
+    response = await fetch("http://native-git:8080/readyz", {
+      headers: { authorization: `Bearer ${token}` }, signal: deadline
+    });
+  } catch (error) {
+    if (!(error instanceof TypeError) || !(error.cause instanceof Error)
+      || error.cause.code !== "ECONNREFUSED") throw error;
+    await setTimeout(100, undefined, { signal: deadline });
+  }
+}
+assert.equal(response.status, 503);
+EOF
+docker container rm --force "$ordinary_service" >/dev/null
+docker run --rm --interactive --user 0:0 --entrypoint sh \
+  --mount "type=volume,src=$ordinary_secrets_volume,dst=/run/secrets" "$ordinary_image" \
+  -ec 'cat > /run/secrets/activation.token && chmod 0444 /run/secrets/activation.token' \
+  <"$work_dir/ordinary-activation-b.token"
+docker run --detach --name "$ordinary_service" --network "$service_network" --network-alias ordinary-ci \
+  --publish 127.0.0.1::8080 --read-only --cap-drop ALL --security-opt no-new-privileges \
+  --tmpfs /tmp:rw,noexec,nosuid,nodev,mode=1777 \
+  --mount "type=volume,src=$ordinary_secrets_volume,dst=/run/secrets,readonly" \
+  --mount "type=volume,src=$ordinary_state_volume,dst=/var/lib/dim-ordinary-ci" \
+  "$ordinary_image" serve /run/secrets/service.json "$native_generation_b" >/dev/null
+for _ in {1..100}; do
+  docker container exec --user 10002:10002 "$ordinary_service" /usr/local/bin/dim-service ready \
+    >"$work_dir/ordinary-candidate-ready.out" 2>"$work_dir/ordinary-candidate-ready.err" && break
+  sleep 0.05
+done
+[[ ! -s "$work_dir/ordinary-candidate-ready.out" && ! -s "$work_dir/ordinary-candidate-ready.err" ]]
 for _ in {1..100}; do
   docker container exec --user 10001:10001 "$native_service" /usr/local/bin/dim-service ready \
     >"$work_dir/native-candidate-ready.out" 2>"$work_dir/native-candidate-ready.err" && break
@@ -646,6 +830,7 @@ const lease = await fetch(`${origin}/root-read-leases`, {
 assert.equal(lease.status, 503);
 EOF
 docker container exec --user 10001:10001 "$native_service" /usr/local/bin/dim-service activate "$native_generation_b"
+docker container exec --user 10002:10002 "$ordinary_service" /usr/local/bin/dim-service activate "$native_generation_b"
 docker run --rm --interactive --read-only --network "$service_network" --user 10001:10001 \
   --cap-drop ALL --security-opt no-new-privileges --entrypoint node --mount "$config_mount" \
   "$native_image" --input-type=module <<'EOF'
@@ -664,7 +849,7 @@ const proof = await fetch(`${origin}/root-import/proof`, {
 });
 assert.equal(proof.status, 200);
 const imported = await proof.json();
-assert.equal(imported.schemaVersion, 2);
+assert.equal(imported.schemaVersion, 3);
 assert.equal(imported.servingGenerationId, servingGeneration);
 assert.equal(imported.ownerHostId, "host-a");
 assert.equal(imported.importReceipt.generationId, originalGeneration);
@@ -673,6 +858,11 @@ assert.equal(imported.importReceipt.resolvedTree, readFileSync("/run/fixtures/ro
 assert.equal(imported.importReceipt.bundleDigest,
   createHash("sha256").update(readFileSync("/run/fixtures/root.bundle")).digest("hex"));
 assert.equal(imported.importReceipt.phase, "root-imported");
+assert.deepEqual(imported.currentHead, {
+  projectId: "project-a", sequence: 0, protectedRef: "refs/heads/main",
+  commit: imported.importReceipt.expectedCommit, tree: imported.importReceipt.resolvedTree,
+  policyDigest: imported.importReceipt.policyDigest
+});
 const requested = await fetch(`${origin}/root-read-leases`, {
   method: "POST", headers: {
     authorization: auth(native.projectRootReadIssuers[0]), "content-type": "application/json"
@@ -741,12 +931,70 @@ assert.equal((await proof.json()).importReceipt.expectedCommit,
   readFileSync("/run/fixtures/root.commit", "utf8").trim());
 EOF
 printf 'native-workspace-proposal-smoke-ok\n'
-published_port="$(docker container port "$ordinary_service" 8080/tcp | cut -d: -f2)"
-set +e
-curl --fail --silent --max-time 1 "http://127.0.0.1:$published_port/readyz" >/dev/null 2>&1
-curl_status=$?
-set -e
-[[ "$curl_status" -eq 22 ]]
+docker container rm --force "$native_service" >/dev/null
+docker run --rm --interactive --name "$native_service" --network "$service_network" --network-alias native-git \
+  --read-only --user 10001:10001 --cap-drop ALL --security-opt no-new-privileges \
+  --tmpfs /tmp:rw,noexec,nosuid,nodev,mode=1777 --entrypoint node \
+  --mount "$config_mount" \
+  --mount "type=volume,src=$native_secrets_volume,dst=/run/secrets,readonly" \
+  --mount "type=volume,src=$native_state_volume,dst=/var/lib/dim-native-git" \
+  "$native_image" --input-type=module <<'EOF'
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { configuredNativeGitBundleServer } from "/usr/local/lib/dim/native-bundle-server.js";
+
+const native = JSON.parse(readFileSync("/run/fixtures/native-active.json", "utf8"));
+const ordinary = JSON.parse(readFileSync("/run/fixtures/ordinary.json", "utf8"));
+const generationId = createHash("sha256").update("native-candidate-smoke").digest("hex");
+const authorization = ({ username, password }) =>
+  `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+const service = await configuredNativeGitBundleServer({ config: native,
+  stateDirectory: "/var/lib/dim-native-git",
+  readinessToken: readFileSync("/run/secrets/readiness.token", "utf8").trim(),
+  activationToken: readFileSync("/run/secrets/activation.token", "utf8").trim(), expectedGenerationId: generationId });
+await service.listen("0.0.0.0", 8080);
+const activated = await fetch("http://127.0.0.1:8080/v1/activation", { method: "POST", headers: {
+  authorization: `Bearer ${readFileSync("/run/secrets/activation.token", "utf8").trim()}`,
+  "content-type": "application/json"
+}, body: JSON.stringify({ schemaVersion: 1, generationId }) });
+assert.equal(activated.status, 200);
+const workspaceId = Buffer.alloc(32, 60).toString("base64url");
+const envelope = await service.createReview({ projectId: "project-a", repositoryId: "root",
+  proposalRef: `refs/heads/proposals/${workspaceId}/change` });
+const event = envelope.events.find((candidate) => candidate.executionKind === "ordinary-sysbox");
+assert.ok(event);
+const admissionResponse = await fetch(
+  "http://ordinary-ci:8080/v1/projects/project-a/repositories/root/native-root-admission/register", {
+    method: "POST", headers: { authorization: authorization(ordinary.credentials.registrar),
+      "content-type": "application/json" }, body: JSON.stringify({ schemaVersion: 1,
+      requestId: "00000000-0000-4000-8000-000000000046", generationId })
+  });
+assert.equal(admissionResponse.status, 200);
+const admission = (await admissionResponse.json()).admission;
+const body = { schemaVersion: 1, generationId,
+  admissionGeneration: admission.admissionGeneration, event };
+const endpoint = "http://ordinary-ci:8080/v1/native-root-ci-events";
+const headers = { authorization: authorization(ordinary.credentials.webhook), "content-type": "application/json" };
+const receipt = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(body) });
+assert.equal(receipt.status, 202);
+assert.deepEqual(await receipt.json(), { schemaVersion: 1, generationId,
+  admissionGeneration: admission.admissionGeneration, eventId: event.eventId, recorded: true });
+await service.close();
+const outageReplay = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(body) });
+assert.equal(outageReplay.status, 202);
+assert.equal((await outageReplay.json()).eventId, event.eventId);
+EOF
+printf 'native-root-ci-event-receipt-smoke-ok\n'
+[[ "$(docker container port "$ordinary_service" 8080/tcp)" == 127.0.0.1:* ]]
+docker run --rm --interactive --read-only --network "$service_network" --user 10002:10002 \
+  --cap-drop ALL --security-opt no-new-privileges --entrypoint node \
+  "$ordinary_image" --input-type=module <<'EOF'
+import assert from "node:assert/strict";
+
+const response = await fetch("http://ordinary-ci:8080/readyz", { signal: AbortSignal.timeout(5000) });
+assert.equal(response.status, 404);
+EOF
 
 docker run "${common[@]}" --user 10001:10001 --entrypoint sh "$native_image" -ec '
   test ! -e /run/secrets/service.json
