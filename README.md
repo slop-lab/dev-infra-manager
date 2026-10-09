@@ -251,10 +251,16 @@ ordinary-CI service bundle from an operator-owned absolute config path:
 dim installer install control-plane --config /absolute/path/install.json
 ```
 
-The bundle starts both services empty and idle. It does not provide the native
-Project/repository adapter, Project admission, capacity advertisement, host
-controller execution, the real Sysbox job gate, or a reviewer browser UI.
-Those remain separate future work; this idle installer is not completion of
+The bundle starts without a runnable Project. Its ordinary service can now
+durably register and revoke imported-root policy eligibility after exact
+activation and a fresh native Git proof, and native Git readiness attests the
+corresponding read-only identity. It can also retain an inert historical receipt
+for an exact current schema-2 ordinary review event after fresh proof. Neither
+record grants demand, claim, attempt, dispatch, execution, result, promotion,
+or Project readiness. The bundle still
+does not provide the native Project/repository adapter, capacity advertisement,
+host-controller execution, the real Sysbox job gate, or a reviewer browser UI.
+Those remain separate future work; this installer is not completion of
 the broader native control-plane project. The obsolete `dim install-cp` token
 is owned and rejected by the facade with exit code 2 and is never forwarded to
 the separately installed DIM CLI.
@@ -265,7 +271,7 @@ using Docker. Existing schema-8 QEMU runner records are left untouched. Old
 ordinary-pool services could use arbitrary private config and database paths,
 so the new installer neither scans the host for them nor adopts their data;
 operators must stop those external services with the pinned predecessor
-release before installing the idle native bundle.
+release before installing the native bundle.
 
 Check the installed backend before creating a workspace:
 
