@@ -4,17 +4,27 @@ WORKDIR /usr/local/lib/dim
 
 COPY core/images/ordinary-ci/package.json ./
 COPY core/packages/core/dist/errors.js \
+  core/packages/core/dist/nativeGitAdmissionHttpClient.js \
   core/packages/core/dist/nativeOrdinaryAuthorityConfig.js \
   core/packages/core/dist/nativeOrdinaryAuthorityModel.js \
   core/packages/core/dist/nativeOrdinaryAuthorityProtocol.js \
-  core/packages/core/dist/nativeOrdinaryAuthoritySchema.js \
   core/packages/core/dist/nativeOrdinaryBundleConfig.js \
   core/packages/core/dist/nativeOrdinaryBundleFilesystem.js \
   core/packages/core/dist/nativeOrdinaryBundleSnapshot.js \
   core/packages/core/dist/nativeOrdinaryBundleState.js \
-  core/packages/core/dist/nativeOrdinaryIdleService.js \
   core/packages/core/dist/nativeOrdinaryServiceCli.js \
   core/packages/core/dist/nativeOrdinaryServiceReadiness.js \
+  core/packages/core/dist/nativeRootAdmissionModel.js \
+  core/packages/core/dist/nativeRootAdmissionSchema.js \
+  core/packages/core/dist/nativeRootAdmissionService.js \
+  core/packages/core/dist/nativeRootAdmissionStore.js \
+  core/packages/core/dist/nativeRootCiEventReceiptHttp.js \
+  core/packages/core/dist/nativeRootCiEventReceiptIntegrity.js \
+  core/packages/core/dist/nativeRootCiEventReceiptModel.js \
+  core/packages/core/dist/nativeRootCiEventReceiptStore.js \
+  core/packages/core/dist/nativeRootCiProofClient.js \
+  core/packages/core/dist/nativeRootCiProofModel.js \
+  core/packages/core/dist/nativeRootCiReviewEvent.js \
   core/packages/core/dist/sqliteSchemaManifest.js ./
 COPY core/images/ordinary-ci/dim-service /usr/local/bin/dim-service
 
