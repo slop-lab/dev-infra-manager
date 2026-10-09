@@ -61,12 +61,15 @@ export async function publishReviewRecord(publication: ReviewPublication): Promi
   await syncDirectory(publication.stagingRoot);
 }
 
-export async function readReviewJson(path: string, maximumBytes: number): Promise<unknown> {
+export async function readReviewJson(path: string, maximumBytes: number, singleLink = false): Promise<unknown> {
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const stat = await file.stat();
     if (!stat.isFile() || stat.uid !== serviceUid() || (stat.mode & 0o777) !== 0o600) {
       throw new ReviewRecordStorageError("review record must be a caller-owned mode-0600 regular file");
+    }
+    if (singleLink && stat.nlink !== 1) {
+      throw new ReviewRecordStorageError("review record must be a single-link file");
     }
     if (stat.size > maximumBytes) throw new ReviewRecordStorageError("review record exceeds the storage bound");
     return JSON.parse(await file.readFile("utf8"));
