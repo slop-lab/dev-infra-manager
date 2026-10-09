@@ -10,7 +10,7 @@ import type { CommandResult, RunOptions, StreamingCommandRunner } from "../../..
 
 export const runnerImage = `registry.example/runner@sha256:${"b".repeat(64)}`;
 export const jobImage = `registry.example/job@sha256:${"a".repeat(64)}`;
-export const configBytes = Buffer.from(`schemaVersion: 2\nordinary:\n  jobs:\n    source:\n      image: ${jobImage}\n      script: .dim/ci/jobs/source.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n`);
+export const configBytes = Buffer.from("schemaVersion: 3\nordinary:\n  jobs:\n    source:\n      script: .dim/ci/jobs/source.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n");
 const scriptBytes = Buffer.from("printf 'executor-output\\n'\n");
 
 export function execution(candidateConfig = configBytes): NativeHostExecution {

@@ -9,7 +9,7 @@ export type NativeOrdinaryCredential = {
 };
 
 export type NativeOrdinaryAuthorityConfig = {
-  readonly schemaVersion: 3;
+  readonly schemaVersion: 4;
   readonly serviceId: string;
   readonly database: string;
   readonly admissionLeaseMilliseconds: number;
@@ -26,6 +26,7 @@ export type NativeOrdinaryAuthorityConfig = {
     readonly capacities: readonly {
       readonly capacity: string;
       readonly runnerBaseImage: string;
+      readonly jobBaseImage: string;
       readonly bounds: NativeCapacityPolicy["bounds"];
     }[];
   }[];
@@ -34,7 +35,7 @@ export type NativeOrdinaryAuthorityConfig = {
 export function validateNativeOrdinaryAuthorityConfig(
   config: NativeOrdinaryAuthorityConfig
 ): ReadonlyMap<string, NativeCapacityPolicy> {
-  if (config.schemaVersion !== 3) throw new UserError("native ordinary authority schemaVersion must be 3");
+  if (config.schemaVersion !== 4) throw new UserError("native ordinary authority schemaVersion must be 4");
   authorityIdentifier(config.serviceId, "service ID");
   if (config.database.length === 0) throw new UserError("native ordinary authority database path must not be empty");
   if (!Number.isSafeInteger(config.admissionLeaseMilliseconds) || config.admissionLeaseMilliseconds < 1) {
@@ -79,10 +80,14 @@ export function validateNativeOrdinaryAuthorityConfig(
       if (!/^(?:(?:[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/.test(capacity.runnerBaseImage)) {
         throw new UserError("native ordinary authority runner base image is invalid");
       }
+      if (!/^(?:(?:[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/.test(capacity.jobBaseImage)) {
+        throw new UserError("native ordinary authority job base image is invalid");
+      }
       capacities.set(key, {
         hostId: host.hostId,
         capacity: capacity.capacity,
         runnerBaseImage: capacity.runnerBaseImage,
+        jobBaseImage: capacity.jobBaseImage,
         bounds: resourceBounds(capacity.bounds)
       });
     }

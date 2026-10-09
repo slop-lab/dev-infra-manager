@@ -5,6 +5,8 @@ import {
   type NativeGitAttemptIssuerHttpClient
 } from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
 import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
+import { parseNativeExecutionDescriptor } from "../../../../core/packages/core/src/nativeGitAttemptIssuerModel.js";
+import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js";
 import {
   nativeGitReviewFixture,
   readJsonObject,
@@ -23,6 +25,7 @@ const capacity = {
   hostId: "host-a",
   capacity: "primary",
   runnerBaseImage: `registry.example/runner@sha256:${"3".repeat(64)}`,
+  jobBaseImage: `registry.example/common-job@sha256:${"9".repeat(64)}`,
   bounds: {
     cpu: "2",
     memoryBytes: "2147483648",
@@ -66,6 +69,7 @@ describe("native Git attempt issuer client", () => {
       candidateCommit: context.event.candidateCommit,
       candidateTree: context.event.candidateTree,
       jobName: context.event.jobName,
+      jobImage: capacity.jobBaseImage,
       runnerBaseImage: capacity.runnerBaseImage,
       bounds: capacity.bounds
     });
@@ -207,6 +211,34 @@ describe("native Git attempt issuer client", () => {
 
     // Then
     await expect(issue).rejects.toThrow();
+    expect(await attemptFiles(fixture, context.event.reviewId)).toEqual([]);
+  });
+
+  it("rejects a correctly re-digested descriptor using a foreign job image", async () => {
+    const fixture = await startFixture();
+    const review = await createPendingReview(fixture);
+    const context = contextFor(review);
+    const transport = createNodeNativeGitAdmissionHttpClient();
+    const client = createNativeGitAttemptIssuerClient({
+      config: { endpoint: "http://native-git:8080", serviceId: "native-main", attemptIssuer },
+      httpClient: {
+        async request(input) {
+          const response = await transport.request({ ...input, endpoint: fixture.baseUrl() });
+          if (!input.path.endsWith("/ordinary-execution-descriptors")) return response;
+          const issued = parseNativeExecutionDescriptor(JSON.parse(response.body.toString("utf8")));
+          const forged = {
+            ...issued.descriptor,
+            jobImage: `registry.example/attacker@sha256:${"a".repeat(64)}`
+          };
+          return {
+            ...response,
+            body: Buffer.from(JSON.stringify({ ...issued, descriptor: forged, digest: nativeDescriptorDigest(forged) }))
+          };
+        }
+      }
+    });
+
+    await expect(client.loadDescriptor(context)).rejects.toThrow(/unavailable/);
     expect(await attemptFiles(fixture, context.event.reviewId)).toEqual([]);
   });
 });

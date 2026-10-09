@@ -28,6 +28,25 @@ export * from "./nativeOrdinaryEvent.js";
 export * from "./nativeGitAttemptIssuerClient.js";
 export * from "./nativeGitAttemptIssuerModel.js";
 export * from "./nativeGitCandidateReadAuthority.js";
+export * from "./nativeGitProjectRegistrarClient.js";
+export * from "./nativeGitProjectRegistrarConnection.js";
+export * from "./nativeGitRootImporterClient.js";
+export * from "./nativeGitRootImporterConnection.js";
+export * from "./nativeGitRootReadIssuerClient.js";
+export * from "./nativeGitRootReadIssuerConnection.js";
+export * from "./nativeGitWorkspaceWriteIssuerClient.js";
+export * from "./nativeGitWorkspaceWriteIssuerConnection.js";
+export * from "./nativeRootBootstrapGit.js";
+export * from "./nativeRootBootstrapPolicy.js";
+export * from "./nativeProjectBootstrap.js";
+export * from "./nativeProjectDraftStore.js";
+export {
+  issueNativeProjectDraftRootReadLease,
+  NativeProjectDraftRootReadError,
+  type NativeProjectDraftRootReadInput
+} from "./nativeProjectDraftRootRead.js";
+export * from "./nativeProjectDraftRootSnapshot.js";
+export * from "./nativeQemuConnection.js";
 export * from "./nativeOrdinaryExecutor.js";
 export * from "./nativeOrdinaryHostClient.js";
 export * from "./nativeOrdinaryHostJournal.js";

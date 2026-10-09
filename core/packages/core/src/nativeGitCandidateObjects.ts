@@ -1,21 +1,12 @@
-import { createHash } from "node:crypto";
 import { chmod, lstat, mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import type { NativeCandidateBlob } from "./nativeOrdinaryCandidateVerifier.js";
 import {
   effectiveUserId,
-  type DisposableGit,
-  type GitObjectFormat
+  type DisposableGit
 } from "./nativeGitCandidateProcess.js";
-
-const objectFormatProperties = {
-  sha1: { hexLength: 40, rawLength: 20, hashAlgorithm: "sha1" },
-  sha256: { hexLength: 64, rawLength: 32, hashAlgorithm: "sha256" }
-} as const satisfies Record<GitObjectFormat, {
-  readonly hexLength: number;
-  readonly rawLength: number;
-  readonly hashAlgorithm: "sha1" | "sha256";
-}>;
+import { assertObjectId, rawObjectIdLength, readVerifiedBlobObject,
+  readVerifiedTreeBytes, NativeGitObjectBytesError, type NativeGitObjectRead } from "./nativeGitObjectBytes.js";
 
 export type CandidateObjectLimits = {
   readonly maximumBlobBytes: number;
@@ -37,13 +28,6 @@ type MaterializeState = {
   treeBytes: number;
 };
 
-type ObjectRead = {
-  readonly git: DisposableGit;
-  readonly objectId: string;
-  readonly maximumBytes: number;
-  readonly signal: AbortSignal;
-};
-
 type DirectoryMaterialization = {
   readonly git: DisposableGit;
   readonly treeObjectId: string;
@@ -62,9 +46,14 @@ export async function readVerifiedCommit(
   const type = (await git.run(["--git-dir", git.repository, "cat-file", "-t", objectId], 64, signal)).toString("ascii").trim();
   if (type !== "commit") throw new CandidateObjectError("candidate object is not a commit");
   const bytes = await git.run(["--git-dir", git.repository, "cat-file", "commit", objectId], 1024 * 1024, signal);
-  assertObjectId(git.objectFormat, "commit", bytes, objectId);
+  try {
+    assertObjectId(git.objectFormat, "commit", bytes, objectId);
+  } catch (error) {
+    if (error instanceof NativeGitObjectBytesError) throw new CandidateObjectError(error.message, { cause: error });
+    throw error;
+  }
   const lineEnd = bytes.indexOf(0x0a);
-  const objectIdLength = objectFormatProperties[git.objectFormat].hexLength;
+  const objectIdLength = git.objectFormat === "sha1" ? 40 : 64;
   const match = lineEnd < 0 ? null : new RegExp(`^tree ([0-9a-f]{${objectIdLength}})$`)
     .exec(bytes.subarray(0, lineEnd).toString("ascii"));
   if (match?.[1] === undefined) throw new CandidateObjectError("candidate commit has no canonical tree header");
@@ -164,19 +153,22 @@ async function materializeDirectory(input: DirectoryMaterialization): Promise<vo
   }
 }
 
-async function readTree(input: ObjectRead): Promise<{ readonly entries: readonly TreeEntry[]; readonly byteLength: number }> {
-  const bytes = await input.git.run([
-    "--git-dir", input.git.repository, "cat-file", "tree", input.objectId
-  ], input.maximumBytes, input.signal);
-  assertObjectId(input.git.objectFormat, "tree", bytes, input.objectId);
-  const rawObjectIdLength = objectFormatProperties[input.git.objectFormat].rawLength;
+async function readTree(input: NativeGitObjectRead): Promise<{ readonly entries: readonly TreeEntry[]; readonly byteLength: number }> {
+  let bytes: Buffer;
+  try {
+    bytes = await readVerifiedTreeBytes(input);
+  } catch (error) {
+    if (error instanceof NativeGitObjectBytesError) throw new CandidateObjectError(error.message, { cause: error });
+    throw error;
+  }
+  const rawLength = rawObjectIdLength(input.git.objectFormat);
   const entries: TreeEntry[] = [];
   const names = new Set<string>();
   let offset = 0;
   while (offset < bytes.length) {
     const space = bytes.indexOf(0x20, offset);
     const nul = space < 0 ? -1 : bytes.indexOf(0, space + 1);
-    const nextOffset = nul + 1 + rawObjectIdLength;
+    const nextOffset = nul + 1 + rawLength;
     if (space < 0 || nul < 0 || nextOffset > bytes.length) throw new CandidateObjectError("candidate tree encoding is invalid");
     const mode = bytes.subarray(offset, space).toString("ascii");
     if (mode !== "40000" && mode !== "100644" && mode !== "100755") {
@@ -191,30 +183,13 @@ async function readTree(input: ObjectRead): Promise<{ readonly entries: readonly
   return { entries, byteLength: bytes.length };
 }
 
-async function readBlob(input: ObjectRead): Promise<Buffer> {
-  const sizeText = (await input.git.run([
-    "--git-dir", input.git.repository, "cat-file", "-s", input.objectId
-  ], 64, input.signal)).toString("ascii").trim();
-  if (!/^(?:0|[1-9][0-9]*)$/.test(sizeText) || BigInt(sizeText) > BigInt(input.maximumBytes)) {
-    throw new CandidateObjectError("candidate blob exceeds its byte limit");
+async function readBlob(input: NativeGitObjectRead): Promise<Buffer> {
+  try {
+    return await readVerifiedBlobObject(input);
+  } catch (error) {
+    if (error instanceof NativeGitObjectBytesError) throw new CandidateObjectError(error.message, { cause: error });
+    throw error;
   }
-  const bytes = await input.git.run([
-    "--git-dir", input.git.repository, "cat-file", "blob", input.objectId
-  ], input.maximumBytes, input.signal);
-  if (bytes.length !== Number(sizeText)) throw new CandidateObjectError("candidate blob size changed");
-  assertObjectId(input.git.objectFormat, "blob", bytes, input.objectId);
-  return bytes;
-}
-
-function assertObjectId(
-  objectFormat: GitObjectFormat,
-  type: "blob" | "commit" | "tree",
-  bytes: Buffer,
-  expected: string
-): void {
-  const digest = createHash(objectFormatProperties[objectFormat].hashAlgorithm)
-    .update(`${type} ${bytes.length}\0`).update(bytes).digest("hex");
-  if (digest !== expected) throw new CandidateObjectError(`candidate ${type} identity does not match its bytes`);
 }
 
 function candidatePath(path: string, maximumDepth: number): readonly string[] {

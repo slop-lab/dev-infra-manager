@@ -60,4 +60,13 @@ describe("lifecycle options", () => {
       file: "/run/secrets/dim-git-sync.json"
     });
   });
+
+  it.each(["DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE", "DIM_NATIVE_QEMU_CONNECTION_FILE"])(
+    "rejects %s before selecting Gitea while native adapters are unavailable",
+    (selector) => {
+      const env = { HOME: "/home/developer", [selector]: "" };
+
+      expect(() => lifecycleOptionsForBackend("sysbox", env)).toThrow(/native Project and QEMU adapters are unavailable/);
+    }
+  );
 });

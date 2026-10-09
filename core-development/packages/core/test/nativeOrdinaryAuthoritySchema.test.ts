@@ -13,6 +13,25 @@ afterEach(async () => {
 });
 
 describe("native ordinary authority schema manifest", () => {
+  it("rejects an operator job image with a port in a repository path component", async () => {
+    const root = await mkdtemp(join(tmpdir(), "dim-native-invalid-image-"));
+    roots.push(root);
+    const original = config(join(root, "ordinary.sqlite3"));
+    const invalid = {
+      ...original,
+      hosts: original.hosts.map((host) => ({
+        ...host,
+        capacities: host.capacities.map((capacity) => ({
+          ...capacity,
+          jobBaseImage: `registry.example/ns:123/job@sha256:${"4".repeat(64)}`
+        }))
+      }))
+    };
+
+    expect(() => configuredNativeOrdinaryAuthorityServer(invalid)).toThrow(/job base image is invalid/);
+    await expect(readFile(original.database)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("rejects a webhook credential reused by another authority role", async () => {
     // Given
     const root = await mkdtemp(join(tmpdir(), "dim-native-credential-"));
@@ -162,7 +181,7 @@ describe("native ordinary authority schema manifest", () => {
 
 function config(database: string) {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     serviceId: "ordinary-main",
     database,
     admissionLeaseMilliseconds: 300_000,
@@ -185,6 +204,7 @@ function config(database: string) {
       capacities: [{
         capacity: "primary",
         runnerBaseImage: `registry.example/runner@sha256:${"3".repeat(64)}`,
+        jobBaseImage: `registry.example/job@sha256:${"4".repeat(64)}`,
         bounds: { cpu: "2", memoryBytes: "1024", pids: "10", wallClockSeconds: "60", outputBytes: "1024" }
       }]
     }]

@@ -153,7 +153,7 @@ describe("native ordinary host claims", () => {
     expect(claimCounts(fixture.database)).toEqual({ receipts: 0, claims: 0, assignments: 0, preparing: 0 });
   });
 
-  it("revokes a native issuance whose descriptor drifts from the configured runner image", async () => {
+  it("revokes a native issuance whose re-digested descriptor uses the wrong job image", async () => {
     // Given
     let revoked = 0;
     let fixture: AuthorityFixture;
@@ -161,7 +161,7 @@ describe("native ordinary host claims", () => {
       async loadDescriptor(context) {
         const value = {
           ...descriptor(context.event.projectId, context.event.repositoryId, context.admissionGeneration),
-          runnerBaseImage: `registry.example/runner@sha256:${"9".repeat(64)}`
+          jobImage: `registry.example/attacker@sha256:${"9".repeat(64)}`
         };
         return { reviewId: context.event.reviewId, descriptor: value, digest: nativeDescriptorDigest(value) };
       },

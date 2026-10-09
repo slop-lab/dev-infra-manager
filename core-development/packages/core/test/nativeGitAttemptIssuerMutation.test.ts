@@ -37,6 +37,7 @@ const context = {
   capacity: {
     hostId: "host-a",
     capacity: "primary",
+    jobBaseImage: nativeDescriptor.jobImage,
     runnerBaseImage: nativeDescriptor.runnerBaseImage,
     bounds: nativeDescriptor.bounds
   }
@@ -112,6 +113,7 @@ describe("native Git attempt issuer mutation boundaries", () => {
       jobName: context.event.jobName,
       descriptorDigest: descriptor.digest,
       admissionGeneration: context.admissionGeneration,
+      jobBaseImage: context.capacity.jobBaseImage,
       runnerBaseImage: context.capacity.runnerBaseImage,
       bounds: context.capacity.bounds,
       hostId: context.capacity.hostId,

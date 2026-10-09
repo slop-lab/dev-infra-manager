@@ -14,12 +14,12 @@ const nativeGitKeys = ["endpoint", "serviceId", "identity", "attemptIssuer", "re
 const credentialKeys = ["username", "password"] as const;
 const roleKeys = ["webhook", "registrar", "query"] as const;
 const hostKeys = ["hostId", "hostToken", "capacities"] as const;
-const capacityKeys = ["capacity", "runnerBaseImage", "bounds"] as const;
+const capacityKeys = ["capacity", "runnerBaseImage", "jobBaseImage", "bounds"] as const;
 const boundKeys = ["cpu", "memoryBytes", "pids", "wallClockSeconds", "outputBytes"] as const;
 
 export function parseNativeOrdinaryBundleConfig(input: unknown): NativeOrdinaryAuthorityConfig {
   const root = exactRecord(input, topLevelKeys);
-  if (root.schemaVersion !== 3) invalid();
+  if (root.schemaVersion !== 4) invalid();
   if (root.serviceId !== "ordinary-main") {
     throw new NativeOrdinaryBundleConfigError("ordinary CI bundle service ID must be ordinary-main");
   }
@@ -30,7 +30,7 @@ export function parseNativeOrdinaryBundleConfig(input: unknown): NativeOrdinaryA
   const roles = parseRoles(root.credentials);
   const hosts = array(root.hosts).map(parseHost);
   const config: NativeOrdinaryAuthorityConfig = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     serviceId: "ordinary-main",
     database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
     admissionLeaseMilliseconds: positiveSafeInteger(root.admissionLeaseMilliseconds),
@@ -99,10 +99,12 @@ function parseHost(value: unknown): NativeOrdinaryAuthorityConfig["hosts"][numbe
 
 function parseCapacity(value: unknown): NativeOrdinaryAuthorityConfig["hosts"][number]["capacities"][number] {
   const input = exactRecord(value, capacityKeys);
-  if (typeof input.capacity !== "string" || typeof input.runnerBaseImage !== "string") invalid();
+  if (typeof input.capacity !== "string" || typeof input.runnerBaseImage !== "string"
+    || typeof input.jobBaseImage !== "string") invalid();
   return {
     capacity: input.capacity,
     runnerBaseImage: input.runnerBaseImage,
+    jobBaseImage: input.jobBaseImage,
     bounds: parseBounds(input.bounds)
   };
 }

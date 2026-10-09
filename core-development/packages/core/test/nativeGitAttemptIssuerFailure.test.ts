@@ -17,6 +17,7 @@ const capacity = {
   hostId: "host-a",
   capacity: "primary",
   runnerBaseImage: `registry.example/runner@sha256:${"3".repeat(64)}`,
+  jobBaseImage: `registry.example/source@sha256:${"8".repeat(64)}`,
   bounds: {
     cpu: "2",
     memoryBytes: "2147483648",
@@ -75,6 +76,7 @@ describe("native Git attempt issuer response boundary", () => {
       body: JSON.stringify({
         jobName: context.event.jobName,
         admissionGeneration: context.admissionGeneration,
+        jobBaseImage: context.capacity.jobBaseImage,
         runnerBaseImage: context.capacity.runnerBaseImage,
         bounds: context.capacity.bounds
       })

@@ -30,7 +30,7 @@ describe("native ordinary executor live Docker driver", () => {
     // Given
     if (runnerImage === undefined || jobImage === undefined) throw new TypeError("digest fixture images are missing");
     const input = execution();
-    const config = Buffer.from(`schemaVersion: 2\nordinary:\n  jobs:\n    source:\n      image: ${jobImage}\n      script: .dim/ci/jobs/source.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n`);
+    const config = Buffer.from("schemaVersion: 3\nordinary:\n  jobs:\n    source:\n      script: .dim/ci/jobs/source.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n");
     const script = Buffer.from("printf 'native-live-output\\n'\n");
     const descriptor = {
       ...input.claim.descriptor,

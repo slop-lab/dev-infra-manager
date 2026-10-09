@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { lstat } from "node:fs/promises";
+import { join } from "node:path";
 import { MissingRecordError, UserError } from "../errors.js";
 import { ensureGitea, giteaRequest } from "../gitea.js";
 import { LifecycleState, validateLifecycleName } from "../lifecycleState.js";
@@ -16,73 +18,102 @@ export async function createProject(
 ): Promise<ProjectRecord> {
   const name = validateLifecycleName(nameInput, "project");
   const state = new LifecycleState(options.stateRoot);
-  const externalCredentials = options.giteaConnection.kind === "external"
-    ? await ensureGitea(runner, options)
-    : undefined;
-  const gitNamespace = projectNamespace(name);
-  const binding = externalCredentials?.kind === "external"
-    ? externalCredentials.projectBindings[name]
-    : undefined;
-  if (externalCredentials !== undefined && binding === undefined) {
-    throw new UserError(`external Gitea connection has no explicit Project binding for '${name}'`);
-  }
-  if (binding !== undefined && binding.gitNamespace !== gitNamespace) {
-    throw new UserError(`external Gitea Project binding for '${name}' must use namespace '${gitNamespace}'`);
-  }
-  const now = new Date().toISOString();
-  let record: ProjectRecord = {
-    schemaVersion: 4,
-    id: binding?.id ?? randomUUID(),
-    name,
-    gitNamespace,
-    giteaOrganizationId: binding?.giteaOrganizationId ?? null,
-    phase: "creating",
-    repositories: [],
-    createdAt: now,
-    updatedAt: now
-  };
   const release = await state.acquireProjectLock(name);
-  let selected = false;
   try {
+    await assertNoNativeProjectDraft(options.stateRoot, name);
+    const externalCredentials = options.giteaConnection.kind === "external"
+      ? await ensureGitea(runner, options)
+      : undefined;
+    const gitNamespace = projectNamespace(name);
+    const binding = externalCredentials?.kind === "external"
+      ? externalCredentials.projectBindings[name]
+      : undefined;
+    if (externalCredentials !== undefined && binding === undefined) {
+      throw new UserError(`external Gitea connection has no explicit Project binding for '${name}'`);
+    }
+    if (binding !== undefined && binding.gitNamespace !== gitNamespace) {
+      throw new UserError(`external Gitea Project binding for '${name}' must use namespace '${gitNamespace}'`);
+    }
+    const now = new Date().toISOString();
+    let record: ProjectRecord = {
+      schemaVersion: 4,
+      id: binding?.id ?? randomUUID(),
+      name,
+      gitNamespace,
+      giteaOrganizationId: binding?.giteaOrganizationId ?? null,
+      phase: "creating",
+      repositories: [],
+      createdAt: now,
+      updatedAt: now
+    };
+    let selected = false;
     try {
-      const existing = await state.readProject(name);
-      if (binding !== undefined
-        && (existing.id !== binding.id
-          || existing.gitNamespace !== binding.gitNamespace
-          || existing.giteaOrganizationId !== binding.giteaOrganizationId)) {
-        throw new UserError(`project '${name}' does not match its external Gitea Project binding`);
+      try {
+        const existing = await state.readProject(name);
+        if (binding !== undefined
+          && (existing.id !== binding.id
+            || existing.gitNamespace !== binding.gitNamespace
+            || existing.giteaOrganizationId !== binding.giteaOrganizationId)) {
+          throw new UserError(`project '${name}' does not match its external Gitea Project binding`);
+        }
+        if (existing.phase === "ready") throw new UserError(`project '${name}' already exists`);
+        record = { ...existing, phase: "creating", updatedAt: now };
+        delete record.error;
+        await state.writeProject(record);
+      } catch (error) {
+        if (!(error instanceof MissingRecordError)) throw error;
+        await state.claimProject(record);
       }
-      if (existing.phase === "ready") throw new UserError(`project '${name}' already exists`);
-      record = { ...existing, phase: "creating", updatedAt: now };
-      delete record.error;
+      selected = true;
+      const credentials = externalCredentials ?? await ensureGitea(runner, options);
+      const giteaOrganizationId = await ensureOrganization(
+        credentials,
+        record.gitNamespace,
+        record.giteaOrganizationId
+      );
+      if (record.giteaOrganizationId === null) {
+        record = { ...record, giteaOrganizationId, updatedAt: new Date().toISOString() };
+        await state.writeProject(record);
+      }
+      record = { ...record, phase: "ready", updatedAt: new Date().toISOString() };
       await state.writeProject(record);
+      return record;
     } catch (error) {
-      if (!(error instanceof MissingRecordError)) throw error;
-      await state.claimProject(record);
+      if (selected) {
+        record = withProjectError(record, error);
+        await state.writeProject(record);
+      }
+      throw error;
     }
-    selected = true;
-    const credentials = externalCredentials ?? await ensureGitea(runner, options);
-    const giteaOrganizationId = await ensureOrganization(
-      credentials,
-      record.gitNamespace,
-      record.giteaOrganizationId
-    );
-    if (record.giteaOrganizationId === null) {
-      record = { ...record, giteaOrganizationId, updatedAt: new Date().toISOString() };
-      await state.writeProject(record);
-    }
-    record = { ...record, phase: "ready", updatedAt: new Date().toISOString() };
-    await state.writeProject(record);
-    return record;
-  } catch (error) {
-    if (selected) {
-      record = withProjectError(record, error);
-      await state.writeProject(record);
-    }
-    throw error;
   } finally {
     await release();
   }
+}
+
+async function assertNoNativeProjectDraft(stateRoot: string, name: string): Promise<void> {
+  const directory = join(stateRoot, "native-project-drafts");
+  let metadata;
+  try {
+    metadata = await lstat(directory);
+  } catch (error) {
+    if (isMissing(error)) return;
+    throw new UserError("native Project draft directory cannot be inspected safely");
+  }
+  if (!metadata.isDirectory() || metadata.isSymbolicLink() || metadata.uid !== process.geteuid?.()
+    || (metadata.mode & 0o777) !== 0o700) {
+    throw new UserError("native Project draft directory is unsafe");
+  }
+  try {
+    await lstat(join(directory, `${name}.json`));
+  } catch (error) {
+    if (isMissing(error)) return;
+    throw new UserError(`native Project draft '${name}' cannot be inspected safely`);
+  }
+  throw new UserError(`native Project draft '${name}' already exists`);
+}
+
+function isMissing(error: unknown): boolean {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
 export async function removeProject(options: LifecycleOptions, nameInput: string): Promise<void> {

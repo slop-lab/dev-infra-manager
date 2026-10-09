@@ -13,7 +13,7 @@ export const ordinaryBundleSecrets = {
 
 export function ordinaryBundleConfig() {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     serviceId: "ordinary-main",
     database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
     admissionLeaseMilliseconds: 300_000,
@@ -36,6 +36,7 @@ export function ordinaryBundleConfig() {
       capacities: [{
         capacity: "primary",
         runnerBaseImage: `registry.example/dim/ordinary-runner@sha256:${"c".repeat(64)}`,
+        jobBaseImage: `registry.example/dim/ordinary-job@sha256:${"d".repeat(64)}`,
         bounds: {
           cpu: "4",
           memoryBytes: "8589934592",

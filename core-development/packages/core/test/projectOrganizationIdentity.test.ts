@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -116,6 +116,32 @@ describe("Project Gitea organization identity", () => {
       })
     ]);
   });
+
+  it.each(["managed", "external"] as const)(
+    "refuses a same-name native draft before %s Gitea credentials or Project state",
+    async (kind) => {
+      const drafts = join(stateRoot, "native-project-drafts");
+      await mkdir(drafts, { mode: 0o700 });
+      const draftPath = join(drafts, "example.json");
+      await writeFile(draftPath, "incomplete native draft\n", { mode: 0o600 });
+      const options = hostLifecycleOptions(stateRoot);
+      const selected = kind === "external"
+        ? { ...options, giteaConnection: { kind: "external" as const, file: "/not-used" } }
+        : options;
+      vi.mocked(ensureGitea).mockClear();
+      vi.mocked(giteaRequest).mockClear();
+      const runner = new RecordingRunner();
+
+      await expect(createProject(runner, selected, "example")).rejects.toThrow(/native Project draft/);
+
+      expect(ensureGitea).not.toHaveBeenCalled();
+      expect(giteaRequest).not.toHaveBeenCalled();
+      expect(runner.commands).toEqual([]);
+      expect(await readFile(draftPath, "utf8")).toBe("incomplete native draft\n");
+      await expect(stat(new LifecycleState(stateRoot).projectPath("example")))
+        .rejects.toMatchObject({ code: "ENOENT" });
+    }
+  );
 
   it("serializes concurrent creation before selecting absent Project state", async () => {
     // Given

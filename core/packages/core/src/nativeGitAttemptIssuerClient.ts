@@ -91,6 +91,7 @@ export function createNativeGitAttemptIssuerClient(
         body: JSON.stringify({
           jobName: trusted.event.jobName,
           admissionGeneration: trusted.admissionGeneration,
+          jobBaseImage: trusted.capacity.jobBaseImage,
           runnerBaseImage: trusted.capacity.runnerBaseImage,
           bounds: trusted.capacity.bounds
         }),
@@ -118,6 +119,7 @@ export function createNativeGitAttemptIssuerClient(
           jobName: trusted.event.jobName,
           descriptorDigest: requestedDescriptor.digest,
           admissionGeneration: trusted.admissionGeneration,
+          jobBaseImage: trusted.capacity.jobBaseImage,
           runnerBaseImage: trusted.capacity.runnerBaseImage,
           bounds: trusted.capacity.bounds,
           hostId: trusted.capacity.hostId,
@@ -168,6 +170,7 @@ function parseContext(context: NativeAttemptIssuerContext): NativeAttemptIssuerC
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(context.admissionGeneration)
     || !/^[a-z0-9][a-z0-9._-]{0,127}$/.test(context.capacity.hostId)
     || !/^[a-z0-9][a-z0-9._-]{0,127}$/.test(context.capacity.capacity)
+    || !/^(?:(?:[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/.test(context.capacity.jobBaseImage)
     || !/^(?:(?:[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/.test(context.capacity.runnerBaseImage)) {
     throw new NativeGitAttemptIssuerUnavailableError();
   }
@@ -182,7 +185,8 @@ function assertDescriptorBinding(descriptor: NativeExecutionDescriptor, context:
     candidateCommit: context.event.candidateCommit, candidateTree: context.event.candidateTree,
     policyRevision: context.event.policyRevision, requiredReviewRevision: context.event.requiredReviewRevision,
     requiredJobSetRevision: context.event.requiredJobSetRevision, admissionGeneration: context.admissionGeneration,
-    jobName: context.event.jobName, runnerBaseImage: context.capacity.runnerBaseImage, bounds: context.capacity.bounds,
+    jobName: context.event.jobName, jobImage: context.capacity.jobBaseImage,
+    runnerBaseImage: context.capacity.runnerBaseImage, bounds: context.capacity.bounds,
     evidenceClass: context.event.evidenceClass
   };
   const actual = {
@@ -192,7 +196,8 @@ function assertDescriptorBinding(descriptor: NativeExecutionDescriptor, context:
     policyRevision: descriptor.descriptor.policyRevision, requiredReviewRevision: descriptor.descriptor.requiredReviewRevision,
     requiredJobSetRevision: descriptor.descriptor.requiredJobSetRevision,
     admissionGeneration: descriptor.descriptor.admissionGeneration, jobName: descriptor.descriptor.jobName,
-    runnerBaseImage: descriptor.descriptor.runnerBaseImage, bounds: descriptor.descriptor.bounds,
+    jobImage: descriptor.descriptor.jobImage, runnerBaseImage: descriptor.descriptor.runnerBaseImage,
+    bounds: descriptor.descriptor.bounds,
     evidenceClass: descriptor.descriptor.evidenceClass
   };
   if (descriptor.reviewId !== context.event.reviewId || descriptor.digest !== nativeDescriptorDigest(descriptor.descriptor)

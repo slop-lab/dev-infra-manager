@@ -64,8 +64,8 @@ describe("native ordinary authority source gates", () => {
     // Given
     const fixture = await createFixture({
       hosts: [
-        { hostId: "host-b", hostToken: "host-b-token-000000000000000000000000", capacities: [{ capacity: "backup", runnerBaseImage, bounds }] },
-        { hostId: "host-a", hostToken: "host-a-token-000000000000000000000000", capacities: [{ capacity: "primary", runnerBaseImage, bounds }] }
+        { hostId: "host-b", hostToken: "host-b-token-000000000000000000000000", capacities: [{ capacity: "backup", runnerBaseImage, jobBaseImage, bounds }] },
+        { hostId: "host-a", hostToken: "host-a-token-000000000000000000000000", capacities: [{ capacity: "primary", runnerBaseImage, jobBaseImage, bounds }] }
       ]
     });
     const policy = admission("project-a", "source", "1");
@@ -139,6 +139,7 @@ describe("native ordinary authority source gates", () => {
 });
 
 const runnerBaseImage = `registry.example/runner@sha256:${"3".repeat(64)}`;
+const jobBaseImage = `registry.example/job@sha256:${"4".repeat(64)}`;
 const bounds = {
   cpu: "2",
   memoryBytes: "2147483648",

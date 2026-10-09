@@ -83,7 +83,7 @@ function admissionState(file: string): string {
 
 function config(database: string) {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     serviceId: "ordinary-main",
     database,
     admissionLeaseMilliseconds: 300_000,
@@ -106,6 +106,7 @@ function config(database: string) {
       capacities: [{
         capacity: "primary",
         runnerBaseImage: `registry.example/runner@sha256:${"3".repeat(64)}`,
+        jobBaseImage: `registry.example/job@sha256:${"4".repeat(64)}`,
         bounds: { cpu: "2", memoryBytes: "1024", pids: "10", wallClockSeconds: "60", outputBytes: "1024" }
       }]
     }]

@@ -26,6 +26,7 @@ import {
 } from "./nativeGitAdmissionFixture.js";
 
 const runnerBaseImage = `registry.example/runner@sha256:${"3".repeat(64)}`;
+const jobBaseImage = `registry.example/source@sha256:${"8".repeat(64)}`;
 const bounds = {
   cpu: "2",
   memoryBytes: "2147483648",
@@ -82,7 +83,7 @@ export async function startAuthority(options: StartAuthorityOptions = {}): Promi
   const database = options.database ?? join(root ?? "", "ordinary.sqlite3");
   const source = options.source ?? await startNativeGitAdmissionFixture();
   const config = {
-    schemaVersion: 3,
+    schemaVersion: 4,
     serviceId: "ordinary-main",
     database,
     admissionLeaseMilliseconds: 300_000,
@@ -97,9 +98,9 @@ export async function startAuthority(options: StartAuthorityOptions = {}): Promi
     credentials: authorityCredentials,
     hosts: options.hosts ?? [
       { hostId: "host-a", hostToken: authorityHostCredentials["host-a"].password,
-        capacities: [{ capacity: "primary", runnerBaseImage, bounds }] },
+        capacities: [{ capacity: "primary", runnerBaseImage, jobBaseImage, bounds }] },
       { hostId: "host-b", hostToken: authorityHostCredentials["host-b"].password,
-        capacities: [{ capacity: "backup", runnerBaseImage, bounds }] }
+        capacities: [{ capacity: "backup", runnerBaseImage, jobBaseImage, bounds }] }
     ]
   } as const;
   const dependencies = {
@@ -202,7 +203,7 @@ export function descriptor(projectId: string, repositoryId: string, generation: 
     configBlob: { objectId: "4".repeat(40), sha256: `sha256:${"5".repeat(64)}` },
     script: { objectId: "6".repeat(40), sha256: `sha256:${"7".repeat(64)}`, path: ".dim/ci/jobs/source.bash" },
     argv: ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"],
-    jobImage: `registry.example/source@sha256:${"8".repeat(64)}`
+    jobImage: jobBaseImage
   };
 }
 

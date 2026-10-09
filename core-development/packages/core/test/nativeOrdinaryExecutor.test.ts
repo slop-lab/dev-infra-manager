@@ -256,6 +256,22 @@ describe("native ordinary host claim executor", () => {
     expect(runner.calls.some((call) => call.args[0] === "run")).toBe(false);
   });
 
+  it.each([
+    ["candidate-selected image", Buffer.from(configBytes.toString("utf8").replace(
+      "      script:", `      image: registry.example/foreign@sha256:${"c".repeat(64)}\n      script:`
+    ))],
+    ["schema-2 candidate config", Buffer.from(configBytes.toString("utf8").replace("schemaVersion: 3", "schemaVersion: 2"))]
+  ])("rejects %s before image pull or Docker launch", async (_label, candidateConfig) => {
+    const runner = new ExecutorRunner();
+
+    await expect(executeNativeHostClaim(
+      dependencies(runner, authority({}, candidateConfig)),
+      execution(candidateConfig)
+    )).rejects.toBeInstanceOf(NativeHostVerificationError);
+
+    expect(runner.calls.some((call) => call.args[0] === "pull" || call.args[0] === "run")).toBe(false);
+  });
+
   it("rejects a hidden protected ref before candidate reads", async () => {
     // Given
     const runner = new ExecutorRunner();

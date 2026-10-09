@@ -24,7 +24,7 @@ afterAll(async () => {
 });
 
 describe("ordinary CI image configuration preflight CLI", () => {
-  it("accepts an exact private read-only schema-3 bundle file without changing its bytes", async () => {
+  it("accepts an exact private read-only schema-4 bundle file without changing its bytes", async () => {
     // Given
     const config = await fixtureFile("ordinary.json", ordinaryBundleConfig());
     const before = await readFile(config);
@@ -100,6 +100,7 @@ describe("ordinary CI image configuration preflight CLI", () => {
     ["malformed JSON", () => "{", /valid JSON/],
     ["an unknown field", () => ({ ...ordinaryBundleConfig(), obsolete: true }), /invalid ordinary CI bundle configuration/],
     ["the wrong schema", () => ({ ...ordinaryBundleConfig(), schemaVersion: 2 }), /invalid ordinary CI bundle configuration/],
+    ["the predecessor schema with no operator job image contract", () => ({ ...ordinaryBundleConfig(), schemaVersion: 3 }), /invalid ordinary CI bundle configuration/],
     ["the wrong database", () => ({ ...ordinaryBundleConfig(), database: "/tmp/ordinary.sqlite3" }), /database path/],
     ["the wrong service ID", () => ({ ...ordinaryBundleConfig(), serviceId: "ordinary-other" }), /service ID/],
     ["the wrong native origin", () => {

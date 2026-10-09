@@ -80,6 +80,135 @@ with host credentials.
 
 `lifecycleOptions()` reads the same environment used by the CLI:
 
+Native Git root import is an additive host-only API, not a selectable Project
+lifecycle backend. After a separate registrar prepares the empty root, trusted
+host code may call `createNodeNativeGitRootImporterClient(connectionFile)` from
+this package with a different, owner-only mode-`0600` JSON file:
+
+```json
+{
+  "schemaVersion": 1,
+  "endpoint": "http://127.0.0.1:9080",
+  "serviceId": "native-main",
+  "role": "operator-root-importer",
+  "hostId": "builder-a",
+  "generationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "credential": {
+    "username": "root-importer-a",
+    "password": "replace-with-canonical-base64url-32-byte-secret"
+  }
+}
+```
+
+The file must be a single-link, non-symlink regular file owned by the DIM
+host user. The endpoint is an exact loopback HTTP origin; the importer
+credential must be distinct from the registrar and ordinary-CI credentials.
+`importRoot` takes a trusted policy, expected commit, protected ref, local
+Git bundle path, and `AbortSignal`. It attests the exact importer role, host,
+service, and generation immediately before uploading the bounded bundle and
+again before requesting finalization. It checks the durable and final receipt
+against the request and transferred bundle. No reader or writer is issued and
+existing Gitea lifecycle selection remains unchanged.
+
+After root import, trusted host code may separately call
+`createNodeNativeGitRootReadIssuerClient(connectionFile)` with an owner-only
+mode-`0600` connection whose role is `operator-root-read-issuer`. The client
+requests only a 30-second credential for one named Project's fixed `root`
+repository and accepts only an exact non-cacheable `201` response bound to the
+configured service and generation. The returned username and password are for
+upload-pack only; the issuer credential itself cannot use Git, and neither
+credential creates Project ready state. Callers must pass Git credentials
+through a private prompt or environment boundary, never command arguments,
+logs, Git configuration, errors, or persisted state.
+
+For a retained native bootstrap draft, trusted host code should instead call
+`issueNativeProjectDraftRootReadLease({ stateRoot, name,
+importerConnectionFile, issuerConnectionFile, signal })`. This operation loads
+both owner-only role files, requires one endpoint, owner host, and generation
+with distinct credentials, and accepts only an exact `root-imported` draft
+whose immutable receipt matches a fresh importer-authenticated live proof. It
+makes the current importer/issuer generation authenticate that proof and lease,
+while the unchanged draft and nested import receipt retain the generation that
+performed the original import. Pending drafts cannot roll to another generation.
+It mints the Project/root-scoped lease only after that proof and rereads the full
+draft before returning, so changed host state withholds the result. It returns
+only the ephemeral upload-pack lease: neither role credential nor the lease is
+persisted, placed in arguments, or made available to a workspace. The draft
+remains non-runnable and no Gitea or native Project-ready state is created.
+
+Trusted host code may call
+`materializeNativeProjectDraftRootSnapshot({ stateRoot, name,
+importerConnectionFile, issuerConnectionFile, gitExecutable, temporaryRoot,
+signal })` to turn that imported draft into a private, commit-addressed host
+snapshot under `assets/native-project-roots/<projectId>/<rootCommit>`. The
+operation holds the Project lifecycle lock, repeats the live imported-root
+proof, and reuses a recursively validated read-only snapshot without minting a
+lease. Otherwise it uses the short-lived lease only through environment-backed
+Git askpass, fetches and hash-checks the exact commit, tree, and blobs in
+disposable private Git storage, and publishes a fully read-only staged tree.
+Regular and executable files retain their Git modes. Relative symbolic links
+are accepted only after their target blobs are hash-checked and only when they
+resolve inside the complete snapshot; absolute, dangling, escaping, and
+reserved lifecycle-path links, gitlinks, unsafe cache nodes, and oversized
+objects fail without adopting or replacing a target. The return value contains
+only Project/root identity, the protected ref, commit/tree IDs, and the host
+snapshot path. It contains no credential and is not a runtime-ready Project
+descriptor. Native Project selection remains unavailable and Gitea remains the
+only runnable profile.
+
+`parseNativeRootBootstrapManifestYaml(yaml, selectedRef)` is a separate,
+mutation-free reader for the native-only `nativeReview` extension of a reviewed
+`.dim/repos.yml`. `compileNativeRootBootstrapPolicy({rootAlias, protectedRef,
+review})` accepts the same review fields for explicit manifest-free bootstrap.
+Both derive sorted reviewer and required-job lists, bind `ordinary-sysbox` or
+`qemu` job kinds plus the `candidate-controlled` evidence class into the
+versioned imported-root policy, use v2 policy/job revision domains while
+retaining the v1 reviewer domain, and produce the exact native Git import
+policy. The existing Gitea repository-set parser
+rejects this extension. Neither policy function reads Git or creates a Project.
+`prepareNativeRootBootstrapGit` accepts an already-local, trusted host Git
+repository and an owner-only mode-`0700` scratch directory. It resolves one
+concrete branch to an exact commit, reads the native manifest from that same
+commit (or accepts explicit manifest-free policy), and stages a mode-`0600`,
+self-contained, one-ref bundle in private storage. The caller must invoke the
+returned `cleanup()` in a `finally` block after importing. The planner does not
+fetch an origin, attest the selected source URL, call a DIM service, create
+Project state, or grant CI/transport authority. The host-only
+`bootstrapNativeProjectRoot` API loads separate mode-`0600` registrar and
+importer files, checks the same endpoint, host, and generation, then attests
+both roles. It pins the local source, retains the exact bundle and immutable
+policy in a private, non-runnable schema-`2` draft **before** service mutation,
+prepares the root, imports it, and durably binds the final receipt. An exact
+retry after uncertain finalization converges without another protected-ref
+write. Before storing a final receipt or returning an imported draft, the host
+requires a no-store, importer-authenticated read-only proof of the current
+activation, owner, bundle, sole protected ref, commit, tree, and object graph.
+The strict schema-`3` proof binds its outer serving generation to the current
+connection, compares its nested schema-`1` import receipt byte-for-byte with
+the original draft receipt, and parses a separate sequence, ref, commit, tree,
+and policy-bound current head. Sequence zero must equal the original import;
+the service refuses later heads until immutable review, approval, and both CI
+evidence classes can be independently verified. The host draft and
+nested receipt are never rewritten. An imported draft may replay through a newer serving
+generation only when every other claimed intent field is unchanged; the draft
+is never rewritten. A moved ref, missing owner
+marker, or replaced repository path leaves the draft unchanged and non-runnable.
+A completed schema-1 draft from the earlier import implementation remains
+byte-preserved proof/read data only; pending schema-1 drafts cannot resume or
+roll generations, and neither form supplies authoritative kind-labelled jobs.
+This does not attest the external source origin, select native Git for
+`lifecycleOptions()`, issue a Git reader/writer, admit ordinary or QEMU CI, or
+publish a runnable Project. Gitea must remain installed until the distinct
+native adapter and real Sysbox/KVM acceptance gate pass.
+
+`loadNativeQemuConnection(file, expectedHostId)` is a separate host-only
+preflight API for the proposed QEMU scheduler. It checks a single-link,
+owner-only mode-`0600` file, exact service/host/endpoint identity, a canonical
+host token, and globally pinned runner/job images and resource bounds. Parsing
+does not connect to a scheduler, advertise capacity, boot a VM, or provide
+KVM acceptance. Setting `DIM_NATIVE_QEMU_CONNECTION_FILE` still makes
+`lifecycleOptions()` refuse native selection before any Gitea fallback.
+
 - `DIM_STATE_ROOT`
 - `DIM_GITEA_IMAGE`, `DIM_GITEA_PORT`, and `DIM_GITEA_ADMIN_USERNAME` for the
   default host-local managed service

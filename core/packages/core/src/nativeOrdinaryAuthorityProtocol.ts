@@ -12,6 +12,7 @@ export type NativeCapacityPolicy = {
   readonly hostId: string;
   readonly capacity: string;
   readonly runnerBaseImage: string;
+  readonly jobBaseImage: string;
   readonly bounds: NativeResourceBounds;
 };
 
@@ -97,10 +98,10 @@ export function nativeCapacityConfigDigest(capacities: readonly NativeCapacityPo
     const rightKey = `${right.hostId}\0${right.capacity}`;
     return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
   });
-  const hash = createHash("sha256").update("dim-native-ordinary-capacities-v1", "ascii");
+  const hash = createHash("sha256").update("dim-native-ordinary-capacities-v2", "ascii");
   for (const item of ordered) {
     const fields = [
-      item.hostId, item.capacity, item.runnerBaseImage, item.bounds.cpu, item.bounds.memoryBytes,
+      item.hostId, item.capacity, item.runnerBaseImage, item.jobBaseImage, item.bounds.cpu, item.bounds.memoryBytes,
       item.bounds.pids, item.bounds.wallClockSeconds, item.bounds.outputBytes
     ];
     for (const field of fields) hash.update(`${Buffer.byteLength(field, "utf8")}:`, "ascii").update(field, "utf8");
@@ -118,6 +119,7 @@ export function descriptorMatchesPolicy(
     && descriptor.requiredReviewRevision === policy.requiredReviewRevision
     && descriptor.requiredJobSetRevision === policy.requiredJobSetRevision
     && policy.requiredJobs.includes(descriptor.jobName) && descriptor.runnerBaseImage === capacity.runnerBaseImage
+    && descriptor.jobImage === capacity.jobBaseImage
     && Object.keys(descriptor.bounds).every((key) =>
       BigInt(descriptor.bounds[key as keyof NativeResourceBounds]) <= BigInt(capacity.bounds[key as keyof NativeResourceBounds]));
 }

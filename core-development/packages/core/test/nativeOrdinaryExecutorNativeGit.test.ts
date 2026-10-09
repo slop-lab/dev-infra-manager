@@ -15,8 +15,7 @@ import { candidateReadFixture, type CandidateReadFixture } from "./nativeGitCand
 import {
   dependencies,
   execution,
-  ExecutorRunner,
-  jobImage
+  ExecutorRunner
 } from "./nativeOrdinaryExecutorFixture.js";
 
 const fixtures: CandidateReadFixture[] = [];
@@ -179,7 +178,7 @@ async function gitObjectId(fixture: CandidateReadFixture, commit: string, path: 
 }
 
 function candidateConfig(): string {
-  return `schemaVersion: 2\nordinary:\n  jobs:\n    source:\n      image: ${jobImage}\n      script: .dim/ci/jobs/source.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n`;
+  return "schemaVersion: 3\nordinary:\n  jobs:\n    source:\n      script: .dim/ci/jobs/source.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n";
 }
 
 function digest(bytes: Buffer): string {

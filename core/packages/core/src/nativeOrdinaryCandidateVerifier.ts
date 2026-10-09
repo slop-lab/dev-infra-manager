@@ -19,7 +19,6 @@ export interface NativeCandidateReadAuthority {
 }
 
 type CandidateJob = {
-  readonly image: string;
   readonly script: string;
   readonly argv: readonly string[];
 };
@@ -57,8 +56,7 @@ export async function verifyAndMaterializeCandidate(input: {
   });
   assertBlob(config, descriptor.configBlob, 64 * 1024, "config");
   const job = parseCandidateJob(config.bytes, descriptor.jobName);
-  if (job.image !== descriptor.jobImage || job.script !== descriptor.script.path
-    || JSON.stringify(job.argv) !== JSON.stringify(descriptor.argv)) {
+  if (job.script !== descriptor.script.path || JSON.stringify(job.argv) !== JSON.stringify(descriptor.argv)) {
     throw new NativeHostVerificationError("candidate config does not match the descriptor");
   }
   const script = await input.authority.readBlob({
@@ -116,7 +114,7 @@ function parseCandidateJob(bytes: Buffer, jobName: string): CandidateJob {
 
 function parseConfigValue(value: unknown, jobName: string): CandidateJob {
   const root = exactRecord(value, ["schemaVersion", "ordinary"]);
-  if (root.schemaVersion !== 2) throw new NativeHostVerificationError("candidate config schemaVersion must be 2");
+  if (root.schemaVersion !== 3) throw new NativeHostVerificationError("candidate config schemaVersion must be 3");
   const ordinary = exactRecord(root.ordinary, ["jobs"]);
   const jobs = record(ordinary.jobs);
   const names = Object.keys(jobs);
@@ -125,21 +123,18 @@ function parseConfigValue(value: unknown, jobName: string): CandidateJob {
   }
   let selected: CandidateJob | undefined;
   for (const name of names) {
-    const job = exactRecord(jobs[name], ["image", "script", "argv"]);
-    if (typeof job.image !== "string" || !imagePattern.test(job.image)
-      || typeof job.script !== "string" || !validScriptPath(job.script)
+    const job = exactRecord(jobs[name], ["script", "argv"]);
+    if (typeof job.script !== "string" || !validScriptPath(job.script)
       || !Array.isArray(job.argv) || JSON.stringify(job.argv) !== JSON.stringify(candidateArgv)) {
       throw new NativeHostVerificationError("candidate job is invalid");
     }
-    if (name === jobName) selected = { image: job.image, script: job.script, argv: candidateArgv };
+    if (name === jobName) selected = { script: job.script, argv: candidateArgv };
   }
   if (selected === undefined) throw new NativeHostVerificationError("candidate job is missing");
   return selected;
 }
 
 const candidateArgv = ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"] as const;
-const imagePattern = /^(?:(?:[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/;
-
 function validScriptPath(value: string): boolean {
   return value.startsWith(".dim/ci/jobs/") && value.endsWith(".bash") && !value.includes("\\")
     && value.split("/").every((component) => component.length > 0 && component !== "." && component !== "..");
