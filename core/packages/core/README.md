@@ -209,6 +209,51 @@ does not connect to a scheduler, advertise capacity, boot a VM, or provide
 KVM acceptance. Setting `DIM_NATIVE_QEMU_CONNECTION_FILE` still makes
 `lifecycleOptions()` refuse native selection before any Gitea fallback.
 
+The exported `createNativeRootCiProofClient` is a separate strict consumer for
+the installed schema-7 native Git bundle's read-only proof namespace. Its
+configuration pins one endpoint, `native-main` service identity, serving
+generation, and `ordinaryCi.identity` credential. Before reading proof it
+attests the exact `native-root-ci-proof-reader` role and ordered policy/event
+scope. It accepts only bounded non-cacheable exact JSON, verifies every policy
+field, sorted unique jobs/reviewers/rules, v2 policy and job revisions, the v1
+reviewer revision, SHA-256 policy bytes, current-root object format and import
+nonce, and the deterministic schema-2 event digest and selector bindings.
+There are no redirects or retries. `404` and `409` are rejected/stale tuples;
+authentication, protocol, malformed proof, timeout, cancellation, and transport
+failures are unavailable without exposing credentials. This client is not the
+standalone `nativeGitAdmissionSource` and creates no Project, admission,
+attempt, result, scheduler, runtime, promotion, or ready state.
+
+The installed ordinary service consumes that client for native-root policy
+eligibility and inert review-event receipts. Its strict format-5 database adds
+`native_root_ci_event_receipts` to bundle activation, admissions, and the
+100,000-entry request replay ledger; format 4 is rejected unchanged. After exact local activation, the registrar credential
+can register or revoke one imported `root`, while the reader credential can
+query only a named current admission generation. A registration binds the
+complete kind-labelled canonical policy, import nonce and protected ref to the
+installer generation and global `nativeCapacityConfigDigest`; current head
+sequence/commit/tree advance monotonically without changing the admission
+generation. Policy, import, installer-generation, capacity, expiry, or
+revocation changes create a new UUID generation and cannot revive an older
+row. Restart preserves rows but requires activation again. Every freshness
+check must use a new UUIDv4 `requestId`: exact replays of any operation,
+including `current`, return historical receipts, even after revocation or
+expiry, and are not assertions of present eligibility. This surface grants
+no claim, attempt, execution, readiness, promotion, or Project lifecycle
+authority, and the legacy flat ordinary authority is not exported or selected
+by the installed CLI.
+
+The webhook credential's installed endpoint is exact
+`POST /v1/native-root-ci-events`. A strict schema-1 wrapper binds the startup
+generation and active admission generation to one canonical schema-2
+ordinary-Sysbox event. A new receipt requires a fresh native proof of the exact
+event, complete policy/import identity, services, generation, current root, and
+capacity digest. The service repeats those checks in the insertion transaction.
+An exact replay may skip proof only while that admission remains active and
+unexpired. Receipts are permanent, capped globally at 100,000, and mean only
+that delivery was historically recorded; they create no demand, claim,
+attempt, result, dispatch, approval, execution, or current-liveness authority.
+
 - `DIM_STATE_ROOT`
 - `DIM_GITEA_IMAGE`, `DIM_GITEA_PORT`, and `DIM_GITEA_ADMIN_USERNAME` for the
   default host-local managed service
