@@ -5,7 +5,7 @@ import { request } from "node:http";
 import { pathToFileURL } from "node:url";
 import { parseNativeOrdinaryBundleConfig } from "./nativeOrdinaryBundleConfig.js";
 import { inspectNativeOrdinaryBundleState } from "./nativeOrdinaryBundleState.js";
-import { configuredNativeOrdinaryIdleServer } from "./nativeOrdinaryIdleService.js";
+import { configuredNativeRootAdmissionServer } from "./nativeRootAdmissionService.js";
 import { checkNativeOrdinaryServiceReadiness } from "./nativeOrdinaryServiceReadiness.js";
 
 const configPath = "/run/secrets/service.json";
@@ -29,7 +29,7 @@ export async function runNativeOrdinaryServiceCli(
     return;
   }
   if (arguments_.length === 2 && arguments_[0] === "compatibility" && arguments_[1] === "--json") {
-    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, writeFormat: 3, readableFormats: [3] })}\n`);
+    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, writeFormat: 5, readableFormats: [5] })}\n`);
     return;
   }
   if (arguments_.length === 4 && arguments_[0] === "check-state" && arguments_[1] === "--read-only"
@@ -41,7 +41,7 @@ export async function runNativeOrdinaryServiceCli(
   if (arguments_.length === 3 && arguments_[0] === "serve" && arguments_[1] === configPath) {
     const expectedGenerationId = parseGenerationId(arguments_[2]);
     const config = parseNativeOrdinaryBundleConfig(await readJson(configPath, 0o444));
-    const server = await configuredNativeOrdinaryIdleServer({
+    const server = await configuredNativeRootAdmissionServer({
       config,
       stateDirectory,
       readinessToken: await readToken(readinessTokenPath, "readiness"),

@@ -44,12 +44,21 @@ describe("ordinary CI image configuration preflight CLI", () => {
     // Then
     expect(result).toEqual({
       status: 0,
-      stdout: `${JSON.stringify({ schemaVersion: 1, writeFormat: 3, readableFormats: [3] })}\n`,
+      stdout: `${JSON.stringify({ schemaVersion: 1, writeFormat: 5, readableFormats: [5] })}\n`,
       stderr: ""
     });
   });
 
-  it("checks mounted schema-3 state through the built process without changing the read-only target", async () => {
+  it("packages the FORMAT4 native root admission server as the serve implementation", async () => {
+    // Given / When
+    const built = await readFile(serviceCli, "utf8");
+
+    // Then
+    expect(built).toContain('from "./nativeRootAdmissionService.js"');
+    expect(built).not.toContain('from "./nativeOrdinaryIdleService.js"');
+  });
+
+  it("checks mounted schema-4 state through the built process without changing the read-only target", async () => {
     // Given
     const root = await mkdtemp(join(tmpdir(), "dim-ordinary-cli-state-"));
     roots.push(root);
@@ -61,7 +70,7 @@ describe("ordinary CI image configuration preflight CLI", () => {
     const result = await run(process.execPath, [stateProbe, root]);
 
     // Then
-    expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 3 })}\n`);
+    expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 5 })}\n`);
     expect(result.stderr).toBe("");
     expect(await stateTree(root)).toEqual(before);
   });
@@ -88,7 +97,7 @@ describe("ordinary CI image configuration preflight CLI", () => {
       const result = await run(process.execPath, [stateProbe, root]);
 
       // Then
-      expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 3 })}\n`);
+    expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 5 })}\n`);
       expect(result.stderr).toBe("");
       expect(await stateTree(root)).toEqual(before);
     } finally {
