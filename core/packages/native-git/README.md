@@ -163,14 +163,14 @@ Example schema-2 configuration:
 
 `ordinaryCi.endpoint` and `ordinaryCi.webhook.endpoint` are exactly the private
 Compose origin and native-event path shown above. All five ordinary-service
-usernames and passwords must be pairwise distinct and
-must not equal any native Git identity username or password. At startup the
-executable uses only `query` to authenticate `GET /v1/identity`; the response
-must attest schema 1, service ID `ordinary-main`, role `native-query`, and the
-exact ordered scope `admission:read`, `attempt:read`. The verifier is injected
-only after that attestation succeeds. An absent `ordinaryCi` object preserves
-the rejecting verifier, so CI attempt, result, and promotion operations remain
-fail closed.
+usernames and passwords must be pairwise distinct and must not equal any native
+Git identity username or password. Installed readiness uses only `query` to
+authenticate exact `GET /v1/native-root-admission/identity`; the response must
+attest schema 1, service ID `ordinary-main`, the same serving generation, role
+`native-root-admission-reader`, and ordered scope
+`imported-root-admission:read`. Legacy attempt-query identity is not a readiness
+substitute. This admission reader can query eligibility but cannot issue an
+attempt, report a result, promote, or use Git transport.
 
 Native Git identities are limited to reader, writer, reviewer, promoter, and
 administrator roles. Schema-2 configuration rejects the obsolete generic
@@ -503,18 +503,37 @@ the live authoritative policy, protected head, candidate commit/tree, and
 workspace namespace; and stores one immutable complete-tree review with a
 sorted kind-aware `candidate-controlled` event set. It repeats the imported-root
 and ref proof after reading the complete binary-preserving diff. Review state is
-strictly checked on restart. Schema 7 additionally exposes only exact
+strictly checked on restart. Schema 7 additionally exposes exact
 `GET /v1/human-reviewer-identity` and
-`GET /v1/projects/<project>/repositories/root/reviews/<review-id>`. The latter
+`GET /v1/projects/<project>/repositories/root/reviews/<review-id>`, plus a
+reviewer-only exact `POST` to that review's `/approvals` or `/revocations`
+suffix. The GET
 requires the identity-attested serving generation in `x-dim-generation-id` and
-returns the immutable envelope plus `current` or `stale` status after fresh
+returns the immutable envelope, approvals, and `pending`, `approved`, or
+`stale` status after fresh
 import, policy, protected-head, proposal-commit, and proposal-tree checks. Scope
-is derived from the stored review's required reviewer IDs and the live imported
-policy; unknown Projects and review IDs are concealed, other known roles and
-unrequired reviewers are denied, and proof outage is unavailable. Proposal or
-head drift leaves the historical review readable as stale. Neither endpoint
-lists reviews, accepts a decision mutation, returns credentials, or grants Git,
-approval, revocation, CI, promotion, or Project-ready authority. The separate
+is derived from the stored review's required reviewer IDs; unknown Projects and
+review IDs are concealed, other known roles and unrequired reviewers are
+denied, and proof outage is unavailable. Proposal, head, or policy drift leaves
+the historical review readable as stale. The POST accepts only a UUID
+`requestId`, derives every other field, requires the review to be current, and
+reconstructs the complete review identity from current policy and pinned Git
+evidence, including path-added reviewers, and publishes one domain-digested
+mode-`0600` single-link immutable approval without replacement.
+Exact retry converges across restart; a conflicting active request is refused.
+The response includes freshly rechecked status and stale reasons after publication;
+an old-tuple approval does not assert current approval after ref drift.
+Revocation accepts only one 64-hex approval ID, derives the reviewer from the
+credential, and allows only that reviewer to revoke their exact historical
+approval even when the proposal is stale. It publishes a separately
+domain-digested immutable record binding review, reviewer, and approval. Exact
+replay converges; reapproval requires a new request UUID, and a delayed
+revocation of approval A cannot affect later approval B. Startup validates
+approval and revocation bytes, paths, ownership, mode, link count, cross-links,
+and active uniqueness against the immutable review. `stale` dominates the
+otherwise `pending`, `approved`, or `revoked` decision status. No endpoint
+lists reviews, returns credentials, moves a ref, writes promotion state, or
+grants administrator revocation, CI, promotion, or Project-ready authority. The separate
 standalone native Git server retains human approval,
 exact CI evidence, and the serialized compare-and-swap transaction required by
 `TRUST-PROMOTION-001` and `TRUST-PROMOTION-CAS-001`. Protected-write authority
@@ -526,7 +545,51 @@ Independent CI, when a Project requires it, must use a separately selected
 command definition and evidence class; native ordinary candidate self-tests do
 not acquire that label by running on another host.
 
-The internal authoritative candidate reader and review creator do not make
+The internal authoritative candidate reader, review creator, and bounded human
+decision boundary do not make
 imported Projects runnable and provide no ordinary or QEMU scheduler, proposal
-writer, decision, result, promotion, or Project-ready authority. The installed
-human reviewer surface is inspection-only.
+writer, result, promotion, or Project-ready authority.
+
+The installed bundle now also exposes trusted in-process, read-only
+`deriveOrdinaryExecutionDescriptor` and `deriveQemuExecutionDescriptor` methods
+as adapter prerequisites. Their strict inputs name only a Project, immutable
+review, required job, and an explicitly operator-trusted capacity containing
+the admission generation, digest-pinned job/runner images, and bounds. Each
+reconstructs current review identity before and after the bounded schema-4
+candidate reads and requires matching policy/review and candidate-plan kinds.
+The QEMU result is a separate strict schema-1 descriptor with
+`executionKind: "qemu"` and the `dim-native-qemu-execution-v1` digest domain;
+ordinary evidence cannot satisfy it. These methods have no HTTP route or
+credential and perform no admission, scheduling, attempt, result, execution,
+VM launch, promotion, ref, review, or Project-readiness mutation.
+
+The schema-7 installed bundle also exposes a separate read-only
+`native-root-ci-proof` HTTP namespace only to `ordinaryCi.identity`. Its
+identity route attests role `native-root-ci-proof-reader`, the ordered imported
+policy and ordinary-event scopes, and the serving generation even before
+activation; this is compatibility identity, not readiness. Its Project/root
+policy route returns the complete canonical `authoritative-v1` policy, including
+kind-labelled QEMU and ordinary-Sysbox jobs and all reviewer rules, plus the
+live import nonce and current root. Its review-event route accepts QEMU as a
+valid selector shape but proves only an exact stored current
+`ordinary-sysbox` schema-2 event. Both proofs run under the shared review
+serializer, repeat authoritative root and review checks, and leave database,
+refs, reviews, approvals, and revocations unchanged. Current pending, approved,
+and self-revoked reviews are eligible; the proof never means approved. The
+namespace has no fallback to the standalone `ordinary-authority` API and grants
+no admission, intake, attempt, result, execution, promotion, or ready authority.
+
+The paired installed ordinary service uses this proof to store native-root
+eligibility and inert proof-bound event receipts in strict format 5. Registration binds the complete
+kind-labelled policy and import identity to the exact installer generation and
+global capacity digest; current queries perform no upstream refresh. Exact
+request replay survives restart, while expiry, revocation, import/policy
+change, generation rotation, or capacity rotation requires a new admission
+generation. The installed schema-7 webhook endpoint is
+`/v1/native-root-ci-events`; no dispatcher is connected to it. A receipt is
+historical delivery evidence only and does not connect the legacy ordinary
+authority, claim, result, execution, or promotion paths.
+Every current-validity check must use a fresh UUIDv4 `requestId`. Exact replay
+of any operation, including `current`, is a historical receipt and may return
+its original success after revocation or expiry; it does not attest present
+eligibility.
