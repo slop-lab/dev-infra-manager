@@ -216,13 +216,24 @@ trap cleanup EXIT
 
 assert_fixed_absent
 [[ "$(docker version --format '{{.Server.Version}}')" == 29.1.3 ]]
-[[ "$(docker compose version --short)" == 5.0.0 ]]
-daemon_socket_source="$(node -e 'const fs=require("node:fs");const line=fs.readFileSync("/proc/self/mountinfo","utf8").split("\n").find((entry)=>entry.split(" ")[4]==="/run/docker.sock");if(line)process.stdout.write(line.split(" ")[3])')"
-[[ "$daemon_socket_source" =~ ^/run/user/[0-9]+/docker\.sock$ ]]
+docker compose version >/dev/null
+daemon_socket_uri="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
+[[ "$daemon_socket_uri" =~ ^unix://(/.+)$ ]] || {
+  printf 'control-plane live verification requires a local Unix Docker endpoint, got: %s\n' "$daemon_socket_uri" >&2
+  exit 2
+}
+daemon_socket_source="${BASH_REMATCH[1]}"
+[[ -S "$daemon_socket_source" ]] || {
+  printf 'Docker endpoint is not a Unix socket: %s\n' "$daemon_socket_source" >&2
+  exit 2
+}
 
 pnpm --dir "$repo_root/core/packages/core" run build >/dev/null
 pnpm --dir "$repo_root/core/packages/native-git" run build >/dev/null
 pnpm --dir "$repo_root/core/packages/installer" run build >/dev/null
+installer_tarball="$(npm pack --silent --pack-destination "$work_dir" \
+  "$repo_root/core/packages/installer/dist")"
+[[ -f "$work_dir/$installer_tarball" ]]
 
 docker container run --detach --name "$registry_name" \
   --label "org.dim.verification=$run_id" --publish 127.0.0.1::5000 "$registry_image" >/dev/null
@@ -361,10 +372,16 @@ DOCKER_BUILDKIT=0 docker build --target compose --tag "$harness_image" "$work_di
 docker volume create --label "org.dim.verification=$run_id" "$harness_volume" >/dev/null
 harness_mount="$(docker volume inspect "$harness_volume" --format '{{.Mountpoint}}')"
 
-tar -C "$repo_root/core/packages/installer/dist" -cf - . | docker container run --rm --interactive \
+tar -C "$work_dir" -cf - "$installer_tarball" | docker container run --rm --interactive \
   --name "$copy_name" --label "org.dim.verification=$run_id" \
   --mount "type=volume,src=$harness_volume,dst=/payload" --entrypoint sh "$harness_image" \
-  -ec 'mkdir -p /payload/installer && tar -C /payload/installer -xf -'
+  -ec 'tar -C /payload -xf -'
+docker container run --rm --name "$copy_name" --label "org.dim.verification=$run_id" \
+  --mount "type=volume,src=$harness_volume,dst=/payload" --entrypoint sh "$harness_image" \
+  -ec 'npm install --prefix /payload/packaged-installer --no-save --no-fund --no-audit \
+    "/payload/$1" >/dev/null && ln -s \
+    packaged-installer/node_modules/@slop-lab/dim-installer \
+    /payload/installer' sh "$installer_tarball"
 tar -C "$repo_root/verification/scripts" -cf - \
   control-plane-install-live-harness.mjs control-plane-install-live-support.mjs \
   control-plane-install-live-isolated.mjs \

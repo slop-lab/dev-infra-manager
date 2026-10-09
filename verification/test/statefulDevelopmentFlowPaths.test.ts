@@ -32,6 +32,9 @@ describe("stateful development flow shared-path policy", () => {
     expect(smoke).not.toMatch(privateTmpAllocation);
     expect(smoke).toContain('dim_stateful_initialize_work_tree "$repo_root"');
     expect(smoke).toContain("export DIM_AGENT_CONTROLLER_SOCKET");
+    expect(smoke).toContain("export DIM_PLUGIN_HOME");
+    expect(smoke).toContain("@slop-lab/dim-plugin-host-mirrors");
+    expect(smoke).toMatch(/start_controller\ndim admin service ensure/);
     expect(smoke).toContain("export XDG_RUNTIME_DIR");
     expect(smoke).toContain("dim_stateful_assert_shared_paths");
   });
