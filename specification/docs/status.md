@@ -49,8 +49,17 @@ Implemented:
   checks the retained journal, snapshots, runtime topology, and readiness,
   replays only the exact candidate activation, and preserves volumes and
   imported roots. A wrong or incomplete candidate remains refused.
-  It neither selects native Git for Projects nor admits native ordinary CI jobs
-  or capacity. Native Git's strict format-7 volume can record multiple exact
+  It neither selects native Git for Projects nor admits jobs for execution.
+  The ordinary service now durably records imported-root policy eligibility and
+  inert proof-bound ordinary review-event receipts in strict format 5 after
+  exact activation and fresh native proof. Its
+  registrar can register/revoke, its reader can query current eligibility, and
+  native Git readiness attests that reader identity. Admissions bind the full
+  kind-labelled policy to installer generation and global capacity digest, but
+  grant no claim, attempt, execution, result, promotion, or runnable-Project
+  authority. Event receipts likewise create no demand, claim, attempt, result,
+  dispatch, or execution authority. Exact replays are historical receipts, so current-validity checks
+  require fresh UUIDv4 request IDs. Native Git's strict format-8 volume can record multiple exact
   Project/root identities and one immutable import intent per prepared root.
   A strict schema-7 native config with empty registrar, importer, root
   read-issuer, workspace-write-issuer, and human-reviewer lists retains the idle
@@ -87,11 +96,20 @@ Implemented:
   can mint a 30-second memory-only workspace lease after live authoritative
   imported-policy proof; its checked Git backend permits only that workspace's
   proposal namespace. Configured policy-required human reviewers may inspect
-  only one exact immutable Project/root/review ID after a fresh live proof;
-  moved proposal or head evidence is returned as stale. This surface has no
-  list or decision mutation. The installed bundle still issues no durable
-  workspace or promoter identity and exposes no protected writes, approval,
-  native CI admission, or runnable Project. The host-only root fetch is not
+  and durably approve only one exact immutable Project/root/review ID after a
+  fresh live proof. Approval is request-idempotent immutable evidence; all
+  path-added required reviewers must approve before current status is approved,
+  while moved proposal, protected head, or policy evidence is returned as
+  stale. Reviewers can also durably revoke their own exact historical approvals;
+  this surface has no list, CI, promotion, or protected-ref
+  mutation. The installed bundle still issues no durable workspace or promoter
+  identity, executes no native CI job, and exposes no protected writes or
+  runnable Project. Trusted in-process read-only methods can derive separate ordinary and QEMU descriptors
+  from an exact current immutable review plus operator-labelled images, bounds,
+  and admission generation. Each requires matching policy/review and schema-4
+  candidate job kinds, and QEMU uses its own schema and digest domain. They
+  create no admission, attempt, execution, result, or VM and are only future
+  adapter prerequisites. The host-only root fetch is not
   workspace admission. Gitea-free adoption
   remains gated on the clean-host Sysbox and KVM journey above.
 - Service-level candidate job parsing and descriptor binding, central ordinary
