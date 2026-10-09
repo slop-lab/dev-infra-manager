@@ -15,15 +15,14 @@ const hook = `#!/bin/sh
 set -eu
 workspace="\${DIM_NATIVE_GIT_WORKSPACE_ID-}"
 case "$workspace" in
-  ""|*[!a-z0-9-]*) printf '%s\\n' 'DIM proposal identity is invalid' >&2; exit 1 ;;
+  ""|*[!A-Za-z0-9_-]*) printf '%s\\n' 'DIM proposal identity is invalid' >&2; exit 1 ;;
 esac
-zero=0000000000000000000000000000000000000000
 allowed="refs/heads/proposals/$workspace/"
 while IFS=' ' read -r old new ref; do
   case "$ref" in "$allowed"*) ;; *) printf '%s\\n' 'DIM permits only the authenticated workspace proposal namespace' >&2; exit 1 ;; esac
   proposal=\${ref#"$allowed"}
   case "$proposal" in ""|*[!A-Za-z0-9._/-]*|.*|*/.*|*..*|*//*|*.lock|*/|*.) printf '%s\\n' 'DIM proposal ref is unsafe' >&2; exit 1 ;; esac
-  if [ "$new" = "$zero" ]; then printf '%s\\n' 'DIM proposal deletion is denied' >&2; exit 1; fi
+  case "$new" in *[!0]*) ;; *) printf '%s\\n' 'DIM proposal deletion is denied' >&2; exit 1 ;; esac
 done
 `;
 

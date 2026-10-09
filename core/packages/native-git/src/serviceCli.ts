@@ -4,8 +4,10 @@ import { open } from "node:fs/promises";
 import { request } from "node:http";
 import { pathToFileURL } from "node:url";
 import { parseNativeGitBundle, parseNativeGitBundleConfig } from "./bundle-config.js";
+import { configuredNativeGitBundleServer } from "./native-bundle-server.js";
 import { inspectNativeGitBundleState } from "./native-bundle-state.js";
 import { configuredNativeGitIdleServer } from "./native-idle-service.js";
+import { assertGitVersion } from "./repository.js";
 import { checkNativeGitServiceReadiness } from "./serviceReadiness.js";
 
 const configPath = "/run/secrets/service.json";
@@ -33,7 +35,8 @@ export async function runNativeGitServiceCli(
 ): Promise<void> {
   const command = arguments_[0];
   if (command === "check-config" && arguments_.length === 2) {
-    parseNativeGitBundleConfig(await readJson(arguments_[1]));
+    const config = parseNativeGitBundleConfig(await readJson(arguments_[1]));
+    if (config.projectRegistrars.length !== 0) await assertGitVersion(config);
     return;
   }
   if (command === "check-bundle-config" && arguments_.length === 3) {
@@ -42,7 +45,7 @@ export async function runNativeGitServiceCli(
     return;
   }
   if (command === "compatibility" && arguments_.length === 2 && arguments_[1] === "--json") {
-    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, writeFormat: 3, readableFormats: [3] })}\n`);
+    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, writeFormat: 8, readableFormats: [8] })}\n`);
     return;
   }
   if (command === "check-state" && arguments_.length === 4 && arguments_[1] === "--read-only"
@@ -54,14 +57,24 @@ export async function runNativeGitServiceCli(
   if (command === "serve" && arguments_.length === 3 && arguments_[1] === configPath) {
     const expectedGenerationId = parseGenerationId(arguments_[2]);
     const config = parseNativeGitBundleConfig(await readJson(configPath, 0o444));
-    const server = await configuredNativeGitIdleServer({
+    const options = {
       config,
       stateDirectory,
       readinessToken: await readToken(readinessTokenPath, "readiness"),
       activationToken: await readToken(activationTokenPath, "activation"),
       expectedGenerationId
-    });
-    await listenUntilTermination(server);
+    };
+    if (config.projectRegistrars.length === 0) {
+      const server = await configuredNativeGitIdleServer(options);
+      await listenUntilTermination(server);
+      return;
+    }
+    const service = await configuredNativeGitBundleServer(options);
+    try {
+      await listenUntilTermination(service.server, () => service.close());
+    } finally {
+      await service.close();
+    }
     return;
   }
   if (command === "activate" && arguments_.length === 2) {
@@ -182,7 +195,10 @@ async function readToken(path: string, label: string): Promise<string> {
   }
 }
 
-async function listenUntilTermination(server: import("node:http").Server): Promise<void> {
+async function listenUntilTermination(
+  server: import("node:http").Server,
+  closeService?: () => Promise<void>
+): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(8080, "0.0.0.0", () => {
@@ -194,6 +210,10 @@ async function listenUntilTermination(server: import("node:http").Server): Promi
     const close = () => {
       process.off("SIGTERM", close);
       process.off("SIGINT", close);
+      if (closeService !== undefined) {
+        void closeService().then(resolve, reject);
+        return;
+      }
       server.close((error) => error === undefined ? resolve() : reject(error));
       server.closeAllConnections();
     };

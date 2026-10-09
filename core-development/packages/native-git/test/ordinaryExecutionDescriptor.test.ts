@@ -13,9 +13,11 @@ import {
 
 const fixtures: ReviewFixture[] = [];
 const runnerBaseImage = `registry.example/runner@sha256:${"3".repeat(64)}`;
+const jobBaseImage = `registry.example/common-job@sha256:${"9".repeat(64)}`;
 const descriptorBody = {
   jobName: "source",
   admissionGeneration: "generation-7",
+  jobBaseImage,
   runnerBaseImage,
   bounds: {
     cpu: "2",
@@ -24,6 +26,12 @@ const descriptorBody = {
     wallClockSeconds: "900",
     outputBytes: "10485760"
   }
+} as const;
+const descriptorRequestFields = {
+  jobName: descriptorBody.jobName,
+  admissionGeneration: descriptorBody.admissionGeneration,
+  runnerBaseImage: descriptorBody.runnerBaseImage,
+  bounds: descriptorBody.bounds
 } as const;
 
 afterEach(async () => {
@@ -59,10 +67,10 @@ describe("DIM native Git ordinary execution descriptor API", () => {
         policyRevision: "policy-1",
         requiredReviewRevision: "review-1",
         requiredJobSetRevision: "jobs-1",
-        ...descriptorBody,
+        ...descriptorRequestFields,
         evidenceClass: "candidate-controlled",
         argv: ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"],
-        jobImage: `registry.example/source@sha256:${"1".repeat(64)}`
+        jobImage: jobBaseImage
       }),
       digest: expect.stringMatching(/^sha256:[0-9a-f]{64}$/)
     });

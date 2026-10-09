@@ -262,6 +262,7 @@ describe("DIM native Git protected promotion denials", () => {
       jobName: "source",
       descriptorDigest: stringField(validIssuance, "descriptorDigest"),
       admissionGeneration: "generation-7",
+      jobBaseImage: `registry.example/job@sha256:${"9".repeat(64)}`,
       runnerBaseImage: `registry.example/runner@sha256:${"3".repeat(64)}`,
       bounds: objectField(objectField(validIssuance, "descriptor"), "bounds"),
       hostId: "host-a",

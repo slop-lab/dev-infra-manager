@@ -35,13 +35,14 @@ export async function loadCandidateOrdinaryExecution(
   const job = jobs[request.data.jobName];
   if (job === undefined) throw new CandidateExecutionError("candidate runner config does not define the requested job");
   const scriptBlob = await readCandidateBlob(reader, request.data.candidateTree, job.script, 1024 * 1024);
+  const { jobBaseImage, ...descriptorRequest } = request.data;
   const descriptor = candidateOrdinaryExecutionDescriptorSchema.parse({
-    ...request.data,
+    ...descriptorRequest,
     evidenceClass,
     configBlob: { objectId: configBlob.objectId, sha256: sha256(configBlob.bytes) },
     script: { path: job.script, objectId: scriptBlob.objectId, sha256: sha256(scriptBlob.bytes) },
     argv: candidateArgv,
-    jobImage: job.image
+    jobImage: jobBaseImage
   });
   return { descriptor, digest: descriptorDigest(descriptor) };
 }

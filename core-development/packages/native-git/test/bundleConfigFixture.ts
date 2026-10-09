@@ -8,12 +8,18 @@ export const bundleSecrets = {
   webhook: token(5),
   registrar: token(6),
   host: token(7),
-  unpaired: token(8)
+  unpaired: token(8),
+  projectRegistrar: token(9),
+  projectRootImporter: token(10),
+  projectRootReadIssuer: token(11),
+  workspaceWriteIssuer: token(12),
+  humanReviewer: token(13),
+  foreignHumanReviewer: token(14)
 } as const;
 
 export function idleNativeConfig() {
   return {
-    schemaVersion: 2,
+    schemaVersion: 7,
     serviceId: "native-main",
     host: "0.0.0.0",
     port: 8080,
@@ -22,6 +28,11 @@ export function idleNativeConfig() {
     gitVersion: "2.43.0",
     repositories: [],
     identities: [],
+    projectRegistrars: [],
+    projectRootImporters: [],
+    projectRootReadIssuers: [],
+    workspaceWriteIssuers: [],
+    humanReviewers: [],
     ordinaryCi: {
       endpoint: "http://ordinary-ci:8080",
       serviceId: "ordinary-main",
@@ -40,7 +51,7 @@ export function idleNativeConfig() {
 
 export function idleOrdinaryConfig() {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     serviceId: "ordinary-main",
     database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
     admissionLeaseMilliseconds: 300_000,
@@ -63,6 +74,7 @@ export function idleOrdinaryConfig() {
       capacities: [{
         capacity: "primary",
         runnerBaseImage: `registry.example/dim/ordinary-runner@sha256:${"c".repeat(64)}`,
+        jobBaseImage: `registry.example/dim/ordinary-job@sha256:${"d".repeat(64)}`,
         bounds: {
           cpu: "4",
           memoryBytes: "8589934592",

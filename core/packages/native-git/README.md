@@ -295,7 +295,7 @@ capacity. The executable uses a rejecting verifier by default; protected CI
 mutation therefore fails closed until the authenticated ordinary-service client
 is configured. The native attempt binds evidence class `candidate-controlled`
 and the exact candidate config/script blobs,
-normalized fixed argv, job-image digest, operator runner-base digest, effective
+normalized fixed argv, operator job-base and runner-base digests, effective
 bounds, host, and capacity. A successful result records that the selected
 candidate-controlled tests executed within the recorded sandbox and exited
 zero. Protected policy may require that evidence, but it is not independent
@@ -307,6 +307,40 @@ and the exact review/admission tuple, reads only `.dim/ci/runner.yml` and its
 selected script from the named candidate tree, and returns the normalized
 descriptor and digest. It does not schedule or launch work.
 
+The package also exports `parseNativeCandidateJobConfig` as a parse-only boundary
+for the target schema-4 candidate file. It accepts raw bytes plus a trusted
+kind-labelled required-job policy, rejects overlapping ordinary/QEMU names and
+any mismatch with those separate policy sets, and returns canonical ordinary and
+QEMU job maps plus a deterministic kind-labelled plan. It does not read candidate
+trees or scripts, admit or schedule work, execute Sysbox or QEMU jobs, report
+results, or alter the active schema-3 ordinary path.
+
+The separate `loadNativeCandidateJobInputs` library API pins one registered
+Project repository and protected ref, requires the caller's required job names
+to equal that registered policy's flat required-name set, and pins the protected
+head, candidate commit, and candidate tree; reads
+the schema-4 config and every ordinary/QEMU script as bounded regular blobs from
+that exact tree; then rechecks the protected head after all reads. It supports
+both SHA-1 and SHA-256 repositories and returns only config/script object IDs,
+SHA-256 digests, safe paths, execution-kind labels, job names, and the fixed
+argv. It returns no executable bytes, images, bounds, host or capacity choices,
+credentials, admission, attempt, result, scheduling, or VM authority.
+
+The standalone registered review policy still constrains names rather than
+execution kinds, so direct loader callers remain responsible for supplying a
+reviewed kind-labelled set. The distinct internal
+`loadAuthoritativeNativeCandidateJobInputs` entrypoint instead accepts the
+trusted activated bundle runtime plus only a Project and candidate commit/tree.
+It derives the owner host from registered state and the protected ref, expected
+head, and sorted kind-labelled required jobs from the exact live durable
+`authoritative-v1` imported-root policy. It performs full owner, bundle, ref,
+commit, tree, and reachable-graph verification before and after bounded Git
+reads, including exact current serving-generation activation. A completed
+`legacy-import-only` row remains available to import proof and protected-root
+read paths but cannot authorize this reader. The entrypoint returns the same
+identity-only plan and has no HTTP route, admission, scheduling, execution,
+review, result, or state-mutation authority.
+
 Before issuing an attempt, the attempt issuer obtains that descriptor through exact
 `POST /v1/projects/<project>/repositories/<repository>/reviews/<review-id>/ordinary-execution-descriptors`.
 The request has no query parameters, is bounded to 64 KiB, requires exact
@@ -316,6 +350,7 @@ The request has no query parameters, is bounded to 64 KiB, requires exact
 {
   "jobName": "source",
   "admissionGeneration": "generation-7",
+  "jobBaseImage": "registry.example/job@sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
   "runnerBaseImage": "registry.example/runner@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "bounds": {
     "cpu": "2",
@@ -373,12 +408,125 @@ is still valid.
 
 This package is additive and is not selected by `@slop-lab/dim-core` yet.
 Existing managed and external Gitea lifecycle behavior remains unchanged. This
-package now supplies the complete-tree proposal, human review, exact CI
-evidence, and serialized compare-and-swap transaction required by
+package's installed native Git image uses strict format-8 state and a strict
+schema-7 operator config with distinct host-bound Project registrars, root
+importers, root read issuers, workspace write issuers, and global human
+reviewer credentials. Each human reviewer has a unique reviewer ID and
+canonical 32-byte credential; there is no static Project grant in config.
+Empty role lists retain the idle service only
+for empty Project state. With a registrar configured, the activated service
+prepares one owned, inaccessible root per Project after exact generation
+activation. A different authenticated importer can then submit one bounded,
+self-contained Git bundle and a strict schema-1 imported-root policy. That
+policy stores sorted `{name, kind, evidenceClass: "candidate-controlled"}` jobs,
+uses v2 policy/job revision domains, retains the v1 reviewer revision domain,
+and is hashed and retained in the format-8 import row's `policy_json`. Fresh flat-name policies
+are rejected before state mutation. Completed flat-policy rows from the earlier
+unreleased implementation remain live-proof/read-only data; incomplete rows
+cannot resume or roll generations. The read issuer can
+request a live-proof-bound root-read lease only for an imported Project owned
+by its configured host. Exact
+`POST /v1/projects/<project>/root-read-leases` accepts only schema version 1 and
+the active generation. It returns a service-selected 30-second random Basic
+credential scoped to that Project's fixed `root` repository. The issuer
+credential is not itself accepted by Git. Lease digests and scope exist only in
+memory, so expiry and service restart invalidate the credential without durable
+cleanup. The service retains at most 16 unexpired leases, prunes expired entries
+before issuance and authentication, and bounds lease issuance plus transport to
+16 concurrent operations. A separate owner-host workspace write issuer can
+request an equally short-lived lease for `root` and one canonical 43-character
+base64url workspace ID only after live authoritative imported-policy proof.
+That credential can fetch and can create or fast-forward only its own
+`refs/heads/proposals/<workspace-id>/...` refs. The service rechecks the Git
+executable identity and exact installed hook before every backend; protected
+refs, tags, foreign workspace namespaces, deletion, and non-fast-forward writes
+remain denied. Read and write use the same 16-operation gate and both lease
+registries are memory-only. The service durably binds the import digest and the
+expected commit, verifies the complete object graph with image-pinned Git
+`2.39.5`, and uses a separate exact finalize request to install only objects
+before an unborn-ref compare-and-swap creates the initial protected head.
+File and directory syncs precede the durable import completion record; restart
+rechecks and resumes only the bound import. Foreign storage, changed intent,
+or a preexisting protected ref is not adopted. Obsolete format-5 and format-6
+draft state is rejected unchanged.
+
+The host-side core package exports a distinct mode-`0600` root importer
+connection and a bounded streaming client.
+`GET /v1/operator-root-importer-identity` attests the importer role, owner host,
+service, and exact generation without mutating the database, including before
+activation. The client verifies that identity immediately before both upload
+and finalize, then binds the service receipts to the source commit, protected
+ref, bundle digest and size. This does not make the Project runnable.
+
+The importer-only `GET /v1/projects/<project>/root-import/proof` returns a
+strict schema-3 envelope containing the current serving generation, the original
+import receipt, and a separate verified current head only
+while the durable activation token, Project owner
+marker, private bare repository path, retained bundle, sole protected ref,
+original commit and tree, and full reachable graph still agree. Sequence zero
+exactly identifies the import. Format-8 defines a future promotion ledger, but
+the installed service currently rejects any nonempty intent or finalized ledger
+at startup and during proof: self-declared hashes cannot stand in for separately
+verified human approval and ordinary/QEMU evidence. Unrecorded ref drift yields
+no proof. A completed legacy-policy import remains
+sequence-zero read-only data and cannot authorize promotion. The endpoint neither installs
+objects nor writes refs or service state. A host compares this read-only proof
+with its durable non-runnable draft's byte-identical nested receipt before
+persisting a final receipt or returning an already-imported draft. The host
+strictly parses the separate current head but never rewrites the original draft.
+Missing or stale proof never grants Git
+transport, review, CI, or Project readiness. The same full live check runs
+again before every lease-backed upload-pack discovery and RPC. A moved or
+foreign ref, changed durable bundle, missing owner marker, incomplete object
+graph, wrong Project or repository, expired lease, generation mismatch, or
+restart denies access. Receive-pack is always denied for these leases and
+disabled in the backend for non-writers. Transport re-authenticates after live
+verification before spawning Git. Shutdown first stops lease/read admission and
+invalidates leases, then drains admitted verification and backend work before
+releasing storage ownership.
+
+Root import does not publish a runnable DIM Project or issue a durable Git
+reader, workspace writer, reviewer, or promoter credential. The installed
+bundle exposes the short-lived, owner-host-issued protected-root upload-pack
+lease above plus a distinct 30-second workspace-write lease after live
+authoritative imported-policy proof. That write lease permits only creation or
+fast-forward of its exact workspace proposal namespace through the checked
+pre-receive hook; it has no protected-ref, tag, deletion, force-rewrite, reviewer,
+CI, promotion, or Project-ready authority and is
+not connected to runnable core Project lifecycle, ordinary Sysbox CI, or QEMU CI.
+The host-only draft reader consumes the root-read lease after matching the original
+receipt and current serving proof, but its presence does not make a Project
+ready or selectable. The installed bundle object exposes an in-process
+`createReview` method only to its trusted caller. It accepts the Project,
+literal `root` repository, and one canonical workspace proposal ref; derives
+the live authoritative policy, protected head, candidate commit/tree, and
+workspace namespace; and stores one immutable complete-tree review with a
+sorted kind-aware `candidate-controlled` event set. It repeats the imported-root
+and ref proof after reading the complete binary-preserving diff. Review state is
+strictly checked on restart. Schema 7 additionally exposes only exact
+`GET /v1/human-reviewer-identity` and
+`GET /v1/projects/<project>/repositories/root/reviews/<review-id>`. The latter
+requires the identity-attested serving generation in `x-dim-generation-id` and
+returns the immutable envelope plus `current` or `stale` status after fresh
+import, policy, protected-head, proposal-commit, and proposal-tree checks. Scope
+is derived from the stored review's required reviewer IDs and the live imported
+policy; unknown Projects and review IDs are concealed, other known roles and
+unrequired reviewers are denied, and proof outage is unavailable. Proposal or
+head drift leaves the historical review readable as stale. Neither endpoint
+lists reviews, accepts a decision mutation, returns credentials, or grants Git,
+approval, revocation, CI, promotion, or Project-ready authority. The separate
+standalone native Git server retains human approval,
+exact CI evidence, and the serialized compare-and-swap transaction required by
 `TRUST-PROMOTION-001` and `TRUST-PROMOTION-CAS-001`. Protected-write authority
 exists only inside that checked host operation; smart HTTP remains
-proposal-only and has no administrator bypass. Core lifecycle wiring, service
-deployment/restart, UI, and independent-host CI gates remain separate work.
+proposal-only and has no administrator bypass. Core lifecycle wiring, a
+host-side workspace-write lease client, reviewer UI, and independent-host CI
+gates remain separate work.
 Independent CI, when a Project requires it, must use a separately selected
 command definition and evidence class; native ordinary candidate self-tests do
 not acquire that label by running on another host.
+
+The internal authoritative candidate reader and review creator do not make
+imported Projects runnable and provide no ordinary or QEMU scheduler, proposal
+writer, decision, result, promotion, or Project-ready authority. The installed
+human reviewer surface is inspection-only.

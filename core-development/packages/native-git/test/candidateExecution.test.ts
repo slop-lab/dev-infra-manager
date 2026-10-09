@@ -34,13 +34,14 @@ describe("native candidate ordinary execution descriptors", () => {
     const scriptObjectId = await objectId(fixture, ".dim/ci/jobs/source.bash");
     const configSha256 = sha256(Buffer.from(validRunnerYaml()));
     const scriptSha256 = sha256(Buffer.from("set -euo pipefail\nprintf 'verified\\n'\n"));
+    const { jobBaseImage, ...descriptorRequest } = fixture.request;
     expect(result.descriptor).toEqual({
-      ...fixture.request,
+      ...descriptorRequest,
       evidenceClass: "candidate-controlled",
       configBlob: { objectId: configObjectId, sha256: configSha256 },
       script: { path: ".dim/ci/jobs/source.bash", objectId: scriptObjectId, sha256: scriptSha256 },
       argv: ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"],
-      jobImage: imageDigest
+      jobImage: jobBaseImage
     });
     const fields = [
       fixture.request.projectId, fixture.request.repositoryId, fixture.request.protectedRef,
@@ -56,16 +57,15 @@ describe("native candidate ordinary execution descriptors", () => {
   });
 
   it.each([
-    ["an alias", "base: &job\n  image: x\nschemaVersion: 2\nordinary:\n  jobs:\n    source: *job\n"],
+    ["an alias", "base: &job\n  script: .dim/ci/jobs/source.bash\nschemaVersion: 3\nordinary:\n  jobs:\n    source: *job\n"],
     ["an anchor", validRunnerYaml().replace("source:", "source: &source")],
-    ["an explicit tag", validRunnerYaml().replace("schemaVersion: 2", "schemaVersion: !!int 2")],
-    ["a merge key", validRunnerYaml().replace("      image:", "      <<: {}\n      image:")],
-    ["a duplicate key", `${validRunnerYaml()}schemaVersion: 2\n`],
+    ["an explicit tag", validRunnerYaml().replace("schemaVersion: 3", "schemaVersion: !!int 3")],
+    ["a merge key", validRunnerYaml().replace("      script:", "      <<: {}\n      script:")],
+    ["a duplicate key", `${validRunnerYaml()}schemaVersion: 3\n`],
     ["a NUL", `${validRunnerYaml()}\0`],
-    ["schema version 1", validRunnerYaml().replace("schemaVersion: 2", "schemaVersion: 1")],
+    ["schema version 2", validRunnerYaml().replace("schemaVersion: 3", "schemaVersion: 2")],
     ["an unknown key", `${validRunnerYaml()}unexpected: value\n`],
-    ["a non-string image", validRunnerYaml().replace(imageDigest, "42")],
-    ["a tagged image", validRunnerYaml().replace(imageDigest, "registry.example/ci:latest")],
+    ["a candidate-selected image", validRunnerYaml().replace("      script:", `      image: ${imageDigest}\n      script:`)],
     ["a traversing script", validRunnerYaml().replace(".dim/ci/jobs/source.bash", ".dim/ci/jobs/../source.bash")],
     ["candidate-selected argv", validRunnerYaml().replace("/run/dim/job/script", "/workspace/test.bash")]
   ])("rejects runner YAML containing %s", async (_label, yaml) => {
@@ -110,8 +110,8 @@ describe("native candidate ordinary execution descriptors", () => {
     await writeFile(join(fixture.source, ".dim/ci/runner.yml"), `${validRunnerYaml()}#${"x".repeat(65_536)}\n`);
     const oversized = await fixture.commit("oversized config");
     await writeFile(join(fixture.source, ".dim/ci/runner.yml"), validRunnerYaml().replace(
-      "      image:",
-      `    extra:\n      image: ${imageDigest}\n      script: .dim/ci/jobs/source.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n      image:`
+      "    source:",
+      "    extra:\n      script: .dim/ci/jobs/source.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n    source:"
     ));
     const extraJob = await fixture.commit("extra job");
     await writeFile(join(fixture.source, ".dim/ci/runner.yml"), `${validRunnerYaml()}# changed blob\n`);

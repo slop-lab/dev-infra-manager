@@ -81,12 +81,11 @@ export async function candidateExecutionFixture(): Promise<CandidateExecutionFix
   };
 }
 
-export function validRunnerYaml(image = imageDigest): string {
-  return `schemaVersion: 2
+export function validRunnerYaml(): string {
+  return `schemaVersion: 3
 ordinary:
   jobs:
     source:
-      image: ${image}
       script: .dim/ci/jobs/source.bash
       argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
 `;
@@ -184,6 +183,7 @@ async function requestFor(source: string): Promise<CandidateOrdinaryExecutionReq
     requiredJobSetRevision: "jobs-1",
     admissionGeneration: "generation-1",
     jobName: "source",
+    jobBaseImage: imageDigest,
     runnerBaseImage: runnerBaseImageDigest,
     bounds: {
       cpu: "2",

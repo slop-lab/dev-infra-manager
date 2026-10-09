@@ -74,6 +74,7 @@ describe("native Git idle bundle service", () => {
     const peer = await startIdentityPeer();
     const native = await startNative(undefined, peer);
     const mutationPaths = [
+      "/v1/projects/project-a/registrations",
       "/v1/projects/project-a/repositories/root/reviews",
       "/v1/projects/project-a/repositories/root/promotions",
       "/project-a/root.git/git-receive-pack"
@@ -99,13 +100,13 @@ describe("native Git idle bundle service", () => {
     const after = await Promise.all(mutationPaths.map((path) => call(rolledBack.port, "POST", path, nativeActivation, {})));
 
     // Then
-    expect(before.map((result) => result.status)).toEqual([503, 503, 503]);
+    expect(before.map((result) => result.status)).toEqual([503, 503, 503, 503]);
     expect(wrongGeneration.status).toBe(409);
     expect(afterWrongGeneration).toEqual(beforeWrongGeneration);
     expect([first.status, repeated.status, forward.status, rollback.status]).toEqual([200, 200, 200, 200]);
     expect([sameTokenDifferentGeneration.status, sameGenerationDifferentToken.status]).toEqual([409, 409]);
     expect(afterConflict).toEqual(beforeConflict);
-    expect(after.map((result) => result.status)).toEqual([503, 503, 503]);
+    expect(after.map((result) => result.status)).toEqual([503, 503, 503, 503]);
     expect(activationRows(native.root)).toEqual([
       { generationId: generation, tokenSha256: tokenSha256(nativeActivation) },
       { generationId: nextGeneration, tokenSha256: tokenSha256(rotatedNativeActivation) }

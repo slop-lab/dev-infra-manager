@@ -16,7 +16,6 @@ const scriptPath = z.string().refine((value) => {
 export const candidateArgv = ["/bin/bash", "--noprofile", "--norc", "/run/dim/job/script"] as const;
 
 const candidateJobSchema = z.object({
-  image,
   script: scriptPath,
   argv: z.tuple([
     z.literal(candidateArgv[0]),
@@ -27,7 +26,7 @@ const candidateJobSchema = z.object({
 }).strict().readonly();
 
 const candidateConfigSchema = z.object({
-  schemaVersion: z.literal(2),
+  schemaVersion: z.literal(3),
   ordinary: z.object({
     jobs: z.record(identifier, candidateJobSchema)
   }).strict().readonly()
@@ -36,6 +35,7 @@ const candidateConfigSchema = z.object({
 export const ordinaryExecutionDescriptorRequestFields = {
   admissionGeneration: generation,
   jobName: identifier,
+  jobBaseImage: image,
   runnerBaseImage: image,
   bounds: z.object({
     cpu: positiveInteger,
@@ -61,6 +61,22 @@ const candidateOrdinaryExecutionRequestFields = {
   requiredJobSetRevision: revision
 } as const;
 
+const candidateOrdinaryExecutionDescriptorFields = {
+  admissionGeneration: generation,
+  jobName: identifier,
+  runnerBaseImage: image,
+  bounds: ordinaryExecutionDescriptorRequestFields.bounds,
+  projectId: identifier,
+  repositoryId: identifier,
+  protectedRef,
+  expectedProtectedHead: objectId,
+  candidateCommit: objectId,
+  candidateTree: objectId,
+  policyRevision: revision,
+  requiredReviewRevision: revision,
+  requiredJobSetRevision: revision
+} as const;
+
 export const candidateOrdinaryExecutionRequestSchema = z.object(candidateOrdinaryExecutionRequestFields).strict().readonly();
 
 const blobIdentityFields = {
@@ -71,7 +87,7 @@ const blobIdentityFields = {
 const blobIdentitySchema = z.object(blobIdentityFields).strict().readonly();
 
 export const candidateOrdinaryExecutionDescriptorSchema = z.object({
-  ...candidateOrdinaryExecutionRequestFields,
+  ...candidateOrdinaryExecutionDescriptorFields,
   evidenceClass: z.literal("candidate-controlled"),
   configBlob: blobIdentitySchema,
   script: z.object({ ...blobIdentityFields, path: scriptPath }).strict().readonly(),

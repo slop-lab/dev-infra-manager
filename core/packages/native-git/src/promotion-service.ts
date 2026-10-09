@@ -88,6 +88,7 @@ export function createPromotionService(
         const execution = await deriveOrdinaryExecution(config, target, {
           jobName: input.jobName,
           admissionGeneration: input.admissionGeneration,
+          jobBaseImage: input.jobBaseImage,
           runnerBaseImage: input.runnerBaseImage,
           bounds: input.bounds
         });

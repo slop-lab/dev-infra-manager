@@ -9,7 +9,7 @@ const execute = promisify(execFile);
 const processTimeout = 10_000;
 const metadataLimit = 4096;
 
-type GitReader = {
+export type CandidateGitReader = {
   readonly executable: string;
   readonly repositoryPath: string;
   readonly identity: GitExecutableIdentity;
@@ -20,7 +20,7 @@ export type GitBlob = {
   readonly bytes: Buffer;
 };
 
-type CandidateObjectTuple = {
+export type CandidateObjectTuple = {
   readonly protectedRef: string;
   readonly expectedProtectedHead: string;
   readonly candidateCommit: string;
@@ -31,7 +31,7 @@ export async function openCandidateGitReader(
   config: Pick<NativeGitServiceConfig, "gitExecutable" | "gitVersion" | "storageRoot">,
   projectId: string,
   repositoryId: string
-): Promise<GitReader> {
+): Promise<CandidateGitReader> {
   return {
     executable: config.gitExecutable,
     repositoryPath: join(config.storageRoot, projectId, `${repositoryId}.git`),
@@ -40,7 +40,7 @@ export async function openCandidateGitReader(
 }
 
 export async function assertCandidateObjects(
-  reader: GitReader,
+  reader: CandidateGitReader,
   target: CandidateObjectTuple
 ): Promise<void> {
   const protectedHead = await gitText(reader, ["rev-parse", "--verify", `${target.protectedRef}^{commit}`]);
@@ -52,7 +52,7 @@ export async function assertCandidateObjects(
 }
 
 export async function readCandidateBlob(
-  reader: GitReader,
+  reader: CandidateGitReader,
   tree: string,
   path: string,
   maximumBytes: number
@@ -80,7 +80,7 @@ export async function readCandidateBlob(
 }
 
 async function readLiteralTreeEntry(
-  reader: GitReader,
+  reader: CandidateGitReader,
   tree: string,
   component: string,
   fullPath: string
@@ -98,11 +98,11 @@ async function readLiteralTreeEntry(
   return { mode: match[1], type: match[2], objectId: match[3] };
 }
 
-async function gitText(reader: GitReader, args: readonly string[]): Promise<string> {
+async function gitText(reader: CandidateGitReader, args: readonly string[]): Promise<string> {
   return (await gitBuffer(reader, args, metadataLimit)).toString("ascii").trim();
 }
 
-async function gitBuffer(reader: GitReader, args: readonly string[], maxBuffer: number): Promise<Buffer> {
+async function gitBuffer(reader: CandidateGitReader, args: readonly string[], maxBuffer: number): Promise<Buffer> {
   await assertGitExecutableIdentity(reader.executable, reader.identity);
   try {
     const result = await execute(reader.executable, ["--git-dir", reader.repositoryPath, ...args], {

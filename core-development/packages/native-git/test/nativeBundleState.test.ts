@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 describe("native Git idle bundle state", () => {
-  it("initializes truthful schema-3 state and inspects it without changing bytes or mtimes", async () => {
+  it("initializes truthful schema-8 state without writer authority and inspects it without mutation", async () => {
     // Given
     const root = await temporaryRoot();
     const state = await initializeNativeGitBundleState(root);
@@ -26,13 +26,31 @@ describe("native Git idle bundle state", () => {
     const result = await inspectNativeGitBundleState(root);
 
     // Then
-    expect(result).toEqual({ stateFormat: 3 });
+    expect(result).toEqual({ stateFormat: 8 });
     expect(await stateTree(root)).toEqual(before);
     expect(before.map((entry) => entry.entry)).toEqual([
       ".dim-native-git-owner.sqlite3",
       "native-idle.sqlite3",
       "state-format.json"
     ]);
+    expect(JSON.parse(await readFile(join(root, "state-format.json"), "utf8"))).toEqual({
+      schemaVersion: 1,
+      stateFormat: 8,
+      database: "native-idle.sqlite3",
+      schemaManifestSha256: expect.stringMatching(/^sha256:[0-9a-f]{64}$/)
+    });
+    const database = new DatabaseSync(join(root, "native-idle.sqlite3"), { readOnly: true });
+    expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 8 });
+    expect(database.prepare(
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    ).all()).toEqual([
+      { name: "bundle_activation" },
+      { name: "native_project_registration" },
+      { name: "native_project_root_import" },
+      { name: "native_project_root_promotion_finalized" },
+      { name: "native_project_root_promotion_intent" }
+    ]);
+    database.close();
     expect((await stat(join(root, "state-format.json"))).mode & 0o777).toBe(0o444);
   });
 
@@ -53,34 +71,26 @@ describe("native Git idle bundle state", () => {
     expect(await stateTree(root)).toEqual(before);
   });
 
-  it("rejects the prior generation-only format-3 state without changing it", async () => {
+  it("rejects obsolete format-7 state without changing it", async () => {
     // Given
     const root = await temporaryRoot();
     const state = await initializeNativeGitBundleState(root);
     await state.owner.release();
     const database = new DatabaseSync(join(root, "native-idle.sqlite3"));
-    database.exec(`
-      ALTER TABLE bundle_activation RENAME TO replaced_bundle_activation;
-      CREATE TABLE bundle_activation (
-        slot INTEGER PRIMARY KEY CHECK (slot = 1),
-        generation_id TEXT NOT NULL CHECK (length(generation_id) = 64)
-      ) STRICT;
-      DROP TABLE replaced_bundle_activation;
-    `);
+    database.exec("PRAGMA user_version = 7;");
     database.close();
     const markerPath = join(root, "state-format.json");
     const marker = JSON.parse(await readFile(markerPath, "utf8"));
     await replaceMarker(root, `${JSON.stringify({
       ...marker,
-      schemaManifestSha256: "sha256:5671688bf2382c8b74fef5365bc313251c625c636a65434e6ab4abe4177473ad"
+      stateFormat: 7,
+      schemaManifestSha256: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
     })}\n`);
     const before = await stateTree(root);
 
-    // When
-    const inspect = inspectNativeGitBundleState(root);
-
-    // Then
-    await expect(inspect).rejects.toThrow(/marker|schema/i);
+    // When / Then
+    await expect(inspectNativeGitBundleState(root)).rejects.toThrow(/marker|schema/i);
+    await expect(initializeNativeGitBundleState(root)).rejects.toThrow(/marker|schema/i);
     expect(await stateTree(root)).toEqual(before);
   });
 

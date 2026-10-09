@@ -13,6 +13,10 @@ const bundleToken = z.string().regex(/^[A-Za-z0-9_-]+$/).refine((value) => {
   const decoded = Buffer.from(value, "base64url");
   return decoded.length >= 32 && decoded.toString("base64url") === value;
 });
+const projectRegistrarToken = z.string().regex(/^[A-Za-z0-9_-]+$/).refine((value) => {
+  const decoded = Buffer.from(value, "base64url");
+  return decoded.length === 32 && decoded.toString("base64url") === value;
+});
 const credential = z.object({
   username: credentialUsername,
   password: bundleToken
@@ -28,6 +32,7 @@ const bounds = z.object({
 const capacity = z.object({
   capacity: identifier,
   runnerBaseImage: z.string().regex(/^(?:[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/),
+  jobBaseImage: z.string().regex(/^(?:[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/),
   bounds
 }).strict().readonly();
 const host = z.object({
@@ -35,10 +40,41 @@ const host = z.object({
   hostToken: bundleToken,
   capacities: z.array(capacity).min(1).readonly()
 }).strict().readonly();
+const projectRegistrar = z.object({
+  hostId: identifier,
+  username: credentialUsername,
+  password: projectRegistrarToken
+}).strict().readonly();
+const projectRootImporter = z.object({
+  hostId: identifier,
+  username: credentialUsername,
+  password: projectRegistrarToken
+}).strict().readonly();
+const projectRootReadIssuer = z.object({
+  hostId: identifier,
+  username: credentialUsername,
+  password: projectRegistrarToken
+}).strict().readonly();
+const workspaceWriteIssuer = z.object({
+  hostId: identifier,
+  username: credentialUsername,
+  password: projectRegistrarToken
+}).strict().readonly();
+const humanReviewer = z.object({
+  reviewerId: identifier,
+  username: credentialUsername,
+  password: projectRegistrarToken
+}).strict().readonly();
 
 const nativeBundleConfigSchema = nativeGitServiceConfigSchema.unwrap().extend({
+  schemaVersion: z.literal(7),
   repositories: z.array(nativeGitRepositorySchema).readonly(),
   identities: z.array(nativeGitIdentitySchema).readonly(),
+  projectRegistrars: z.array(projectRegistrar).readonly(),
+  projectRootImporters: z.array(projectRootImporter).readonly(),
+  projectRootReadIssuers: z.array(projectRootReadIssuer).readonly(),
+  workspaceWriteIssuers: z.array(workspaceWriteIssuer).readonly(),
+  humanReviewers: z.array(humanReviewer).readonly(),
   ordinaryCi: ordinaryCiDependencyConfigSchema.unwrap().extend({
     query: credential,
     identity: credential,
@@ -53,7 +89,7 @@ const nativeBundleConfigSchema = nativeGitServiceConfigSchema.unwrap().extend({
 }).strict().readonly();
 
 const ordinaryBundleConfigSchema = z.object({
-  schemaVersion: z.literal(3),
+  schemaVersion: z.literal(4),
   serviceId: z.literal("ordinary-main"),
   database: z.literal("/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3"),
   admissionLeaseMilliseconds: z.number().int().positive(),
@@ -98,7 +134,17 @@ export function parseNativeGitBundleConfig(input: unknown): NativeGitBundleConfi
     config.ordinaryCi.attemptIssuer,
     config.ordinaryCi.resultReporter,
     config.ordinaryCi.webhook
+  ], [
+    ...config.projectRegistrars.flatMap((entry) => [entry.hostId, entry.username, entry.password]),
+    ...config.projectRootImporters.flatMap((entry) => [entry.username, entry.password]),
+    ...config.projectRootReadIssuers.flatMap((entry) => [entry.username, entry.password]),
+    ...config.workspaceWriteIssuers.flatMap((entry) => [entry.username, entry.password])
+    , ...config.humanReviewers.flatMap((entry) => [entry.reviewerId, entry.username, entry.password])
   ]);
+  assertDistinctValues(config.projectRootImporters.map((entry) => entry.hostId));
+  assertDistinctValues(config.projectRootReadIssuers.map((entry) => entry.hostId));
+  assertDistinctValues(config.workspaceWriteIssuers.map((entry) => entry.hostId));
+  assertDistinctValues(config.humanReviewers.map((entry) => entry.reviewerId));
   return config;
 }
 
@@ -156,6 +202,28 @@ export function parseNativeGitBundle(
   assertPairedCredential("identity", native.ordinaryCi.identity, ordinary.nativeGit.identity);
   assertPairedCredential("attempt issuer", native.ordinaryCi.attemptIssuer, ordinary.nativeGit.attemptIssuer);
   assertPairedCredential("result reporter", native.ordinaryCi.resultReporter, ordinary.nativeGit.resultReporter);
+  assertDistinctValues([
+    ...native.projectRegistrars.flatMap((entry) => [entry.hostId, entry.username, entry.password]),
+    ...native.projectRootImporters.flatMap((entry) => [entry.username, entry.password]),
+    ...native.projectRootReadIssuers.flatMap((entry) => [entry.username, entry.password]),
+    ...native.workspaceWriteIssuers.flatMap((entry) => [entry.username, entry.password]),
+    ...native.humanReviewers.flatMap((entry) => [entry.reviewerId, entry.username, entry.password]),
+    ordinary.credentials.registrar.username,
+    ordinary.credentials.registrar.password,
+    ...ordinary.hosts.map((entry) => entry.hostToken)
+  ]);
+  if (native.projectRegistrars.some((entry) => ordinary.hosts.some((host) =>
+    host.hostId === entry.username || host.hostId === entry.password))
+    || native.projectRootImporters.some((entry) => ordinary.hosts.some((host) =>
+      host.hostId === entry.username || host.hostId === entry.password))
+    || native.projectRootReadIssuers.some((entry) => ordinary.hosts.some((host) =>
+      host.hostId === entry.username || host.hostId === entry.password))
+    || native.workspaceWriteIssuers.some((entry) => ordinary.hosts.some((host) =>
+      host.hostId === entry.username || host.hostId === entry.password))
+    || native.humanReviewers.some((entry) => ordinary.hosts.some((host) =>
+      host.hostId === entry.reviewerId || host.hostId === entry.username || host.hostId === entry.password))) {
+    throw new NativeGitBundleConfigError("bundle credentials must be globally distinct");
+  }
   return { native, ordinary };
 }
 
@@ -167,6 +235,10 @@ type Credential = { readonly username: string; readonly password: string };
 
 function assertDistinctCredentials(credentials: readonly Credential[], tokens: readonly string[] = []): void {
   const values = [...credentials.flatMap((entry) => [entry.username, entry.password]), ...tokens];
+  assertDistinctValues(values);
+}
+
+function assertDistinctValues(values: readonly string[]): void {
   if (new Set(values).size !== values.length) {
     throw new NativeGitBundleConfigError("bundle credentials must be globally distinct");
   }

@@ -161,7 +161,7 @@ export function createNativeGitServerWithDependencies(
     if (activeBackends >= 16) return send(response, 503);
     activeBackends += 1;
     void assertGitExecutableIdentity(config.gitExecutable, gitIdentity)
-      .then(() => serveGitBackend(config, identity, route, request, response))
+      .then(() => serveGitBackend({ config, identity, route, request, response }))
       .catch(() => send(response, 503))
       .finally(() => { activeBackends -= 1; });
   });

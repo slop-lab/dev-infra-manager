@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { DatabaseSync } from "node:sqlite";
 import { parseNativeGitBundleConfig, type NativeGitBundleConfig } from "./bundle-config.js";
 import { initializeNativeGitBundleState } from "./native-bundle-state.js";
+import { readNativeProjectRegistrationsFromDatabase } from "./native-project-registry-state.js";
 import {
   createNodeAdmissionVerifierHttpClient,
   createOrdinaryAdmissionVerifier,
@@ -23,6 +24,21 @@ export type NativeGitIdleServiceOptions = {
 
 export async function configuredNativeGitIdleServer(options: NativeGitIdleServiceOptions): Promise<Server> {
   const config = parseNativeGitBundleConfig(options.config);
+  if (config.projectRegistrars.length !== 0) {
+    throw new NativeGitIdleServiceError("native Git idle service cannot use Project registrar credentials");
+  }
+  if (config.projectRootImporters.length !== 0) {
+    throw new NativeGitIdleServiceError("native Git idle service cannot use Project root importer credentials");
+  }
+  if (config.projectRootReadIssuers.length !== 0) {
+    throw new NativeGitIdleServiceError("native Git idle service cannot use Project root read issuer credentials");
+  }
+  if (config.workspaceWriteIssuers.length !== 0) {
+    throw new NativeGitIdleServiceError("native Git idle service cannot use workspace write issuer credentials");
+  }
+  if (config.humanReviewers.length !== 0) {
+    throw new NativeGitIdleServiceError("native Git idle service cannot use human reviewer credentials");
+  }
   assertToken(options.readinessToken, "readiness");
   assertToken(options.activationToken, "activation");
   assertGenerationId(options.expectedGenerationId);
@@ -38,9 +54,18 @@ export async function configuredNativeGitIdleServer(options: NativeGitIdleServic
     throw new NativeGitIdleServiceError("native Git readiness, activation, and service credentials must be distinct");
   }
   const activationTokenSha256 = tokenSha256(options.activationToken);
-  const state = await initializeNativeGitBundleState(options.stateDirectory);
-  const database = new DatabaseSync(state.database, { defensive: true });
-  database.exec("PRAGMA synchronous = FULL");
+  const state = await initializeNativeGitBundleState(options.stateDirectory, options.expectedGenerationId);
+  let database: DatabaseSync;
+  try {
+    if (readNativeProjectRegistrationsFromDatabase(state.database).length !== 0) {
+      throw new NativeGitIdleServiceError("native Git idle service cannot conceal a registered Project");
+    }
+    database = new DatabaseSync(state.database, { defensive: true });
+    database.exec("PRAGMA synchronous = FULL");
+  } catch (error) {
+    await state.owner.release();
+    throw error;
+  }
   const identityHttpClient = options.ordinaryIdentityHttpClient ?? createNodeAdmissionVerifierHttpClient();
   const server = createServer((request, response) => {
     void handle(request, response).catch((error) => {

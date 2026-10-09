@@ -114,15 +114,13 @@ export async function nativeGitReviewFixture(
   await writeFile(join(source, "obsolete.txt"), "remove me\n");
   await writeFile(join(source, "mode.sh"), "#!/bin/sh\nexit 0\n");
   await mkdir(join(source, ".dim/ci/jobs"), { recursive: true });
-  await writeFile(join(source, ".dim/ci/runner.yml"), `schemaVersion: 2
+  await writeFile(join(source, ".dim/ci/runner.yml"), `schemaVersion: 3
 ordinary:
   jobs:
     source:
-      image: registry.example/source@sha256:${"1".repeat(64)}
       script: .dim/ci/jobs/source.bash
       argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
     security:
-      image: registry.example/security@sha256:${"2".repeat(64)}
       script: .dim/ci/jobs/security.bash
       argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
 `);

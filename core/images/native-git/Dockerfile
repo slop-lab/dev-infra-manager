@@ -5,17 +5,13 @@ WORKDIR /usr/local/lib/dim
 COPY core/images/native-git/package.json core/images/native-git/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
   && npm cache clean --force
+RUN apt-get update \
+  && apt-get install --yes --no-install-recommends \
+    git=1:2.39.5-0+deb12u3 git-man=1:2.39.5-0+deb12u3 \
+  && test "$(git --version)" = "git version 2.39.5" \
+  && rm -rf /var/lib/apt/lists/*
 
-COPY core/packages/native-git/dist/admission-verifier.js \
-  core/packages/native-git/dist/bundle-config.js \
-  core/packages/native-git/dist/candidate-execution-schema.js \
-  core/packages/native-git/dist/config.js \
-  core/packages/native-git/dist/native-bundle-state.js \
-  core/packages/native-git/dist/native-idle-service.js \
-  core/packages/native-git/dist/ordinary-admission-http.js \
-  core/packages/native-git/dist/serviceCli.js \
-  core/packages/native-git/dist/serviceReadiness.js \
-  core/packages/native-git/dist/storage-owner.js ./
+COPY core/packages/native-git/dist/*.js ./
 COPY core/images/native-git/dim-service /usr/local/bin/dim-service
 
 RUN groupadd --gid 10001 dim-service \

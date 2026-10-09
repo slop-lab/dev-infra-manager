@@ -99,6 +99,7 @@ export async function requestJob(
     {
       jobName,
       admissionGeneration: "generation-7",
+      jobBaseImage: `registry.example/job@sha256:${"9".repeat(64)}`,
       runnerBaseImage: `registry.example/runner@sha256:${"3".repeat(64)}`,
       bounds: {
         cpu: "2",
@@ -116,6 +117,7 @@ export async function requestJob(
     jobName,
     descriptorDigest: stringField(descriptorResult, "digest"),
     admissionGeneration: "generation-7",
+    jobBaseImage: `registry.example/job@sha256:${"9".repeat(64)}`,
     runnerBaseImage: `registry.example/runner@sha256:${"3".repeat(64)}`,
     bounds: objectField(objectField(descriptorResult, "descriptor"), "bounds"),
     hostId: "host-a",

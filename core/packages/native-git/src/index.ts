@@ -29,7 +29,26 @@ export type { NativeGitBundleState } from "./native-bundle-state.js";
 export { configuredNativeGitIdleServer, NativeGitIdleServiceError } from "./native-idle-service.js";
 export type { NativeGitIdleServiceOptions } from "./native-idle-service.js";
 export {
+  configuredNativeGitBundleServer,
+  NativeGitBundleServerError
+} from "./native-bundle-server.js";
+export type {
+  AuthoritativeNativeReviewSelector,
+  NativeGitBundleServer,
+  NativeGitBundleServerOptions,
+  NativeGitPreparedProject
+} from "./native-bundle-server.js";
+export { AuthoritativeNativeReviewError } from "./authoritative-native-review.js";
+export type { AuthoritativeNativeReviewHooks } from "./authoritative-native-review.js";
+export type {
+  AuthoritativeNativeReview,
+  AuthoritativeNativeReviewEnvelope
+} from "./authoritative-native-review-schema.js";
+export { NativeGitProjectRegistrarError } from "./native-project-registrar-http.js";
+export type { NativeGitProjectRegistrar } from "./native-project-registrar-http.js";
+export {
   CandidateExecutionError,
+  candidateArgv,
   candidateOrdinaryExecutionDescriptorSchema,
   candidateOrdinaryExecutionRequestSchema
 } from "./candidate-execution-schema.js";
@@ -37,6 +56,25 @@ export type {
   CandidateOrdinaryExecutionDescriptor,
   CandidateOrdinaryExecutionRequest
 } from "./candidate-execution-schema.js";
+export { parseNativeCandidateJobConfig } from "./native-candidate-job-config.js";
+export type {
+  NativeCandidateJobConfig,
+  NativeCandidateJobPlanEntry,
+  NativeCandidateRequiredJob
+} from "./native-candidate-job-config.js";
+export { loadNativeCandidateJobInputs } from "./native-candidate-job-inputs.js";
+export type {
+  NativeCandidateBlobIdentity,
+  NativeCandidateJobInputPlanEntry,
+  NativeCandidateJobInputs,
+  NativeCandidateJobInputsRequest,
+  NativeCandidateScriptIdentity
+} from "./native-candidate-job-inputs.js";
+export { loadAuthoritativeNativeCandidateJobInputs } from "./authoritative-native-candidate-job-inputs.js";
+export type {
+  AuthoritativeNativeCandidateJobSelector,
+  AuthoritativeNativeCandidateRuntime
+} from "./authoritative-native-candidate-job-inputs.js";
 export { descriptorDigest, loadCandidateOrdinaryExecution } from "./candidate-execution.js";
 export type {
   CandidateOrdinaryExecution

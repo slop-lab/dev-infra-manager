@@ -43,7 +43,7 @@ describe("native candidate execution boundary hardening", () => {
     const fixture = await candidateFixture();
     const yaml = validRunnerYaml().replace(
       "    source:",
-      `    true:\n      image: ${imageDigest}\n      script: .dim/ci/jobs/source.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n    "true":`
+      `    true:\n      script: .dim/ci/jobs/source.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n    "true":`
     );
     await writeFile(join(fixture.source, ".dim/ci/runner.yml"), yaml);
     const request = { ...(await fixture.commit("normalized duplicate job keys")), jobName: "true" };
@@ -59,12 +59,14 @@ describe("native candidate execution boundary hardening", () => {
     await expect(loadCandidateOrdinaryExecution(config, request)).rejects.toBeInstanceOf(CandidateExecutionError);
   });
 
-  it("rejects a digest reference with a port in a repository path component", async () => {
+  it("rejects a candidate-selected image even when it is digest-pinned", async () => {
     // Given
     const fixture = await candidateFixture();
-    const invalidImage = `registry.example/ns:123/repo@sha256:${"3".repeat(64)}`;
-    await writeFile(join(fixture.source, ".dim/ci/runner.yml"), validRunnerYaml(invalidImage));
-    const request = await fixture.commit("Docker-invalid image");
+    await writeFile(
+      join(fixture.source, ".dim/ci/runner.yml"),
+      validRunnerYaml().replace("      script:", `      image: ${imageDigest}\n      script:`)
+    );
+    const request = await fixture.commit("candidate-selected image");
 
     // When / Then
     await expect(loadCandidateOrdinaryExecution(fixture.config, request)).rejects.toBeInstanceOf(CandidateExecutionError);

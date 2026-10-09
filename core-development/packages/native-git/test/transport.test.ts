@@ -39,6 +39,24 @@ describe("DIM native Git smart-HTTP transport", () => {
     await expect(fixture.git(clone, ["fetch", "origin", "refs/heads/proposals/workspace-a/change-1"])).resolves.toBeDefined();
   });
 
+  it("denies proposal deletion when the repository uses SHA-256 objects", async () => {
+    // Given
+    const fixture = await startFixture("sha256");
+    const clone = await writerClone(fixture, "sha256-writer-clone");
+    const proposalRef = "refs/heads/proposals/workspace-a/change-1";
+    await commit(fixture, clone, "proposal.txt", "candidate\n");
+    await fixture.git(clone, ["push", "origin", `HEAD:${proposalRef}`]);
+    const before = await refValue(fixture.repositoryPath("project-a", "source"), proposalRef);
+
+    // When
+    const deletion = fixture.git(clone, ["push", "origin", `:${proposalRef}`]);
+
+    // Then
+    await expect(deletion).rejects.toSatisfy((error: unknown) =>
+      isExitError(error) && /remote rejected/.test(error.stderr));
+    expect(await refValue(fixture.repositoryPath("project-a", "source"), proposalRef)).toBe(before);
+  });
+
   it("denies direct, forced, and deletion updates to a protected ref without changing it", async () => {
     // Given
     const fixture = await startFixture();
@@ -121,8 +139,8 @@ describe("DIM native Git smart-HTTP transport", () => {
   });
 });
 
-async function startFixture(): Promise<NativeGitFixture> {
-  const fixture = await nativeGitFixture();
+async function startFixture(objectFormat: "sha1" | "sha256" = "sha1"): Promise<NativeGitFixture> {
+  const fixture = await nativeGitFixture(objectFormat);
   fixtures.push(fixture);
   return fixture;
 }
