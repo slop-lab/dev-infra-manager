@@ -24,13 +24,13 @@
   revoked policy, foreign tuples, credential crossover, and predecessor
   schema-2 databases fail closed across restart without exposing secrets. The
   service has no Docker or host-administration socket, and a query never creates
-  admission or attempt state. The ordinary bundle image now exposes exact
-  compatibility and read-only state probes plus a distinct idle runtime with
-  authenticated readiness, query-only identity, and restart-bound generation
+  admission or attempt state. The ordinary bundle image exposes exact
+  compatibility and read-only state probes plus an admission-only runtime with
+  authenticated readiness, role-derived identity, and restart-bound generation
   activation. The native Git and ordinary CI services now ship separate
   source Dockerfiles pinned to Node 24.19.0 by digest, fixed non-root identities,
   and only their audited runtime file and package closures. The ordinary volume
-  keeps schema-3 state; the native Git volume creates strict format-8 state with
+  keeps strict format-5 state; the native Git volume creates strict format-8 state with
   a host-bound multi-Project/root registry and a durable non-secret manifest
   marker. The native Git image pins Git `2.39.5`; an operator-supplied strict
   schema-7 config separates host-bound registrars, root importers, root read
@@ -56,12 +56,56 @@
   refs; the service rechecks Git identity and its installed proposal-only hook,
   and rejects protected refs, tags, foreign workspaces, deletion, and force
   rewrites. A policy-required human reviewer can authenticate only to an exact
-  identity endpoint and exact Project/root/review-ID GET, with scope derived
-  from the immutable review and live imported policy rather than config grants.
-  Fresh proof reports current evidence; proposal or head drift preserves the
-  historical complete-tree review as stale. The surface lists nothing, returns
-  no credential, and adds no approval, revocation, CI, promotion, or
-  Project-ready authority.
+  identity endpoint, exact Project/root/review-ID GET, and that review's exact
+  approval or revocation POST, with scope and reviewer identity derived from
+  the immutable review and credential rather than caller input or config grants. Fresh proof
+  reports pending, complete, or revoked approval; proposal, head, or policy drift
+  preserves the historical complete-tree review and any old-tuple approval as
+  stale. Each approval has a request-bound domain identity and separately
+  digested, mode-`0600`, no-replace/fsync storage validated against its review
+  at startup with single-link checks; complete current Git evidence and policy
+  rederive the path-required reviewer set before approval, and the response
+  reports freshly rechecked staleness after publication. Exact replay converges across restart and conflicting active
+  requests fail. The surface lists nothing, returns no credential, leaves
+  review/event and protected-ref bytes unchanged. A reviewer can now revoke
+  only one specified approval bearing that same authenticated reviewer ID,
+  including after the historical review becomes stale; no administrator,
+  writer, importer, CI, foreign, or unrequired-reviewer override exists.
+  Revocations are approval-specific, domain-digested immutable records with the
+  same bounded mode, ownership, single-link, no-replace, fsync, restart, and
+  cross-link validation as approvals. Exact replay converges, a new request UUID
+  safely reapproves after revocation, and replaying or delaying A's revocation
+  cannot cancel B. Read and mutation responses distinguish pending, approved,
+  revoked, and stale with stale dominating. This adds no CI, promotion,
+  format-8 ledger, or Project-ready authority. The installed bundle now also
+  gives only `ordinaryCi.identity` a separate generation-attested
+  `native-root-ci-proof` namespace. It returns the complete canonical imported
+  policy and proves only an exact current stored ordinary-Sysbox schema-2 event
+  after serialized authoritative-root, immutable-envelope, and full liveness
+  rechecks; QEMU selectors remain concealed. A new strict core client verifies
+  the full policy revision/digest domains, sorted reviewer and kind-labelled job
+  shape, current-root/import binding, deterministic event digest, service,
+  scope, generation, and request nonce. Pending, approved, and self-revoked
+  current reviews remain readable without implying approval, and real HTTP
+  tests preserve database, ref, review, approval, and revocation bytes. This
+  installed-only namespace has no standalone authority fallback. The installed
+  ordinary service now consumes that proof only to durably register complete
+  imported-root policy eligibility and inert proof-bound ordinary event
+  receipts in strict format-5 SQLite under the exact
+  installer generation and global capacity digest. Distinct credential-derived
+  registrar and reader identities expose only exact register/current/revoke
+  routes with a capped durable request-replay ledger. Identical bindings renew
+  one monotonic admission generation; changed import, policy, installer
+  generation, capacity, expiry, or revocation requires a new UUID generation,
+  and rollback never revives replaced state. Restart requires reactivation,
+  fresh current checks use new UUIDv4 nonces and never fetch upstream; exact
+  replays are historical receipts, not present-validity assertions. Admission
+  changes and replay receipts commit in one SQLite transaction, including
+  post-proof race and replay-cap checks. Legacy event/claim/result/verification
+  event receipt route stores no demand, claim, attempt, result, dispatch, or
+  execution state. Native Git readiness now attests this admission reader
+  rather than the old attempt-query identity. This adds no intake, attempt,
+  result, execution, promotion, runnable Project, or ready mutation.
   The host-side core importer uses its own owner-only connection file,
   attests the exact importer role, host and generation before each mutation,
   and verifies bounded bundle upload and finalization receipts. The native
