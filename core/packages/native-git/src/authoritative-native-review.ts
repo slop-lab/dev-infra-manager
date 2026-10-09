@@ -119,7 +119,7 @@ export async function createAuthoritativeNativeReview(
   }
 }
 
-function requiredReviewers(
+export function requiredReviewers(
   policy: NativeImportedRootPolicy,
   changes: readonly AuthoritativeNativeChangedPath[]
 ): readonly string[] {
