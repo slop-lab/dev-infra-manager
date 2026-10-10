@@ -263,6 +263,12 @@ report, result reporter cannot issue or revoke, native query cannot mutate, and
 none can read Git, approve, promote, administer, or cross a configured tuple.
 There is no successful native ordinary job or two-host execution acceptance in
 this installer-only gate; that evidence belongs to the future adapter contract.
+The installed reader's admission-discovery POST MUST return only the current
+active, unexpired Project/root admission for the exact activated installer
+generation and capacity digest. Tests MUST prove that discovery with a foreign
+credential or Project, stale generation, expired or revoked admission fails
+without inserting a request-replay row or mutating admission state. Discovery
+is not admission registration, event delivery, claim, or job acceptance.
 The gate MUST prove the bounded predecessor-state preflight runs before config
 reading, Docker, lock creation, staging, or installer-state mutation. Presence
 of `DIM_ORDINARY_CI_POOL_CONNECTION_FILE`, including an empty value, MUST refuse
