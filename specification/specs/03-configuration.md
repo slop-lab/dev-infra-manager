@@ -161,11 +161,12 @@ persistent Git configuration.
 
 ## Native control-plane host connection
 
-**CONFIG-NATIVE-CONTROL-PLANE-001:** This is the unimplemented target host
-connection shape for a future native Project/repository adapter. After that
+**CONFIG-NATIVE-CONTROL-PLANE-001 (host-file parser implemented; native adapter not implemented):**
+This is the target host connection shape for a future native Project/repository adapter. After that
 adapter is separately specified, a participating host MUST set
 `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` to a regular,
-non-symbolic-link, DIM-user-owned mode-`0600` JSON file with this exact schema:
+non-symbolic-link, single-link, DIM-user-owned mode-`0600` JSON file of at most
+64 KiB with this exact schema:
 
 ```json
 {
@@ -209,6 +210,11 @@ origin, `loopback-http`. Unknown keys, duplicate
 capacity names after normalization, shared tokens, redirects, service-identity
 mismatch, and mutable or unassigned endpoints fail before controller capacity
 registration or runtime mutation.
+
+The native Git password and ordinary host token are distinct, canonical
+base64url encodings of exactly 32 bytes. The native Git username equals the
+host ID. Parsing this host file does not attest either service or activate a
+native Project; neither service is contacted until the adapter is implemented.
 
 The native Git credential is host-scoped read/attestation authority, not a
 reviewer, promoter, or storage-administrator identity. Ordinary admission and
