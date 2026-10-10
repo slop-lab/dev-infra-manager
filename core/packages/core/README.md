@@ -243,6 +243,15 @@ no claim, attempt, execution, readiness, promotion, or Project lifecycle
 authority, and the legacy flat ordinary authority is not exported or selected
 by the installed CLI.
 
+The query credential also has `POST
+/v1/projects/PROJECT/repositories/root/native-root-admission/discover`. Its
+strict schema-1 body carries a fresh UUIDv4 `requestId` and the exact installer
+`generationId`. It returns only the active, unexpired Project/root admission
+and its generated admission generation, without writing a replay-ledger entry
+or renewing the lease. This is a current database observation, not event
+delivery or execution permission; the receipt path checks the current native
+review and admission independently.
+
 The webhook credential's installed endpoint is exact
 `POST /v1/native-root-ci-events`. A strict schema-1 wrapper binds the startup
 generation and active admission generation to one canonical schema-2
