@@ -672,8 +672,14 @@ the bounded outbox cannot accept the whole set. Event bytes are the exact
 they contain review and policy provenance but no descriptor or executable
 field.
 
-One service-owned dispatcher sends the oldest undelivered event to the fixed
-ordinary webhook endpoint. It records acknowledgement durably before marking
+One service-owned dispatcher sends the oldest undelivered ordinary-Sysbox event
+to the fixed ordinary receipt endpoint; QEMU events remain outside this lane.
+A separate query-credential resolver obtains the current admission generation
+through the read-only `discover` route and checks the Project/root, full
+operator policy, current head and required ordinary job before returning only
+that generation to the webhook-credential dispatcher. The dispatcher neither
+registers admissions nor receives the query credential. It observes an exact
+non-cacheable durable ordinary receipt before marking
 the event delivered, uses the same event ID and bytes after timeout or crash,
 and never treats delivery as job success. Startup validates event schema,
 digest, path, owner, mode, review linkage, and the all-required-jobs set before
@@ -682,7 +688,9 @@ are never age-pruned. The per-repository tombstone cap is 100,000. Exact known
 replay remains idempotent at the cap; creating a review whose full event set
 would require another tombstone fails with `429` before review or event
 publication. Undelivered events are never pruned. The dispatcher has no native scheduler, CI reporter, reviewer,
-promoter, Git transport, or ordinary query credential.
+promoter, Git transport, or ordinary query credential. Transient marker I/O
+keeps the event pending and retries; unrecoverable marker integrity failures
+withhold native Git readiness rather than leaving a silent healthy dispatcher.
 
 ### Ordinary issuer and reporter endpoints
 
