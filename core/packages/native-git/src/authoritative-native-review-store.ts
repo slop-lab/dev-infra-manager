@@ -69,15 +69,30 @@ export async function assertAuthoritativeNativeReviewStore(repository: string): 
   }
   await assertOwnedReviewDirectory(paths.root);
   const entries = await readdir(paths.root, { withFileTypes: true });
-  if (entries.length !== 2 || entries.some((entry) => !entry.isDirectory()
-    || (entry.name !== "proposals" && entry.name !== "staging"))) {
+  const allowed = new Set(["proposals", "staging", "delivered", "delivery-staging"]);
+  if (!entries.some(({ name }) => name === "proposals") || !entries.some(({ name }) => name === "staging")
+    || entries.some((entry) => !entry.isDirectory() || !allowed.has(entry.name))) {
     throw new AuthoritativeNativeReviewStoreError("authoritative native review store layout is invalid");
   }
   await assertOwnedReviewDirectory(paths.proposals);
   await assertOwnedReviewDirectory(paths.staging);
-  await Promise.all([paths.root, paths.proposals, paths.staging].map(assertPrivateStoreDirectory));
+  await Promise.all([paths.root, ...entries.map(({ name }) => join(paths.root, name))].map(assertPrivateStoreDirectory));
   await recoverPublishedReviewStaging({ stagingRoot: paths.staging, proposalRoot: paths.proposals });
   await readStore(paths);
+}
+
+export async function readAuthoritativeNativeReviewEnvelopes(
+  repository: string
+): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
+  const paths = storePaths(repository);
+  try {
+    await lstat(paths.root);
+  } catch (error) {
+    if (isCode(error, "ENOENT")) return [];
+    throw error;
+  }
+  await assertAuthoritativeNativeReviewStore(repository);
+  return readStore(paths);
 }
 
 type StorePaths = {
