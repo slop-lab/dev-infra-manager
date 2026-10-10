@@ -45,6 +45,8 @@ describe("installed native root admission service", () => {
     const receipt = await call(ordinary.origin, "POST", "/v1/native-root-ci-events",
       authorization("native-events", bundleSecrets.webhook),
       { schemaVersion: 1, generationId, admissionGeneration, event });
+    const removedClaims = await call(ordinary.origin, "POST", "/v1/host-claims",
+      authorization("host-a", bundleSecrets.host), {});
     const conflictingReplay = await call(ordinary.origin, "POST", admissionPath("current"), reader,
       { ...registerRequest, admissionGeneration });
     const currentRequest = { ...requestBody(), admissionGeneration };
@@ -72,6 +74,7 @@ describe("installed native root admission service", () => {
     expect(registered.status).toBe(200);
     expect(receipt).toEqual({ status: 202, body: { schemaVersion: 1, generationId,
       admissionGeneration, eventId: event.eventId, recorded: true } });
+    expect(removedClaims.status).toBe(404);
     expect(conflictingReplay.status).toBe(409);
     expect(current.body).toEqual({ ...bodyRecord(registered.body), requestId: currentRequest.requestId });
     expect(inactive.status).toBe(503);
@@ -84,6 +87,9 @@ describe("installed native root admission service", () => {
     expect(admissionRows(root)).toEqual([{ generation: admissionGeneration, state: "revoked" }]);
     expect(requestCount(root)).toBe(3);
     expect(receiptCount(root)).toBe(1);
+    expect(demandRows(root)).toEqual([{ demandId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      admissionGeneration, eventId: event.eventId,
+      reviewId: event.reviewId, state: "superseded" }]);
   });
 
   it("rejects wrong role, generation, replay tuple, legacy surfaces, and proof outage without mutation", async () => {
@@ -236,6 +242,16 @@ function receiptCount(root: string): number {
   const row = database.prepare("SELECT COUNT(*) AS count FROM native_root_ci_event_receipts").get();
   database.close();
   return Number(row?.count);
+}
+function demandRows(root: string): readonly Readonly<Record<string, string>>[] {
+  const database = new DatabaseSync(join(root, "ordinary", "ordinary-ci.sqlite3"), { readOnly: true });
+  const rows = database.prepare(`SELECT demand_id, admission_generation, event_id, review_id, state
+    FROM native_root_ci_demands ORDER BY created_at, demand_id`).all().map((row) => ({
+      demandId: String(row.demand_id), admissionGeneration: String(row.admission_generation), eventId: String(row.event_id),
+      reviewId: String(row.review_id), state: String(row.state)
+    }));
+  database.close();
+  return rows;
 }
 type Service = { readonly server: Server; readonly origin: string };
 type HttpResult = { readonly status: number; readonly body: unknown };

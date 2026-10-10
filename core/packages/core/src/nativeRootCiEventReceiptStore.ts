@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { isDeepStrictEqual } from "node:util";
 import type { NativeRootCiEventReceiptRequest } from "./nativeRootCiEventReceiptModel.js";
@@ -50,6 +51,18 @@ export class NativeRootCiEventReceiptStore {
         result.admission.ordinaryServiceId, proof.servingGenerationId, proof.serviceId, proof.projectId,
         root.importNonce, root.policyDigest, root.sequence, root.protectedRef, root.commit, root.tree,
         result.admission.capacityConfigDigest, this.context.now());
+      const now = this.context.now();
+      const event = request.event;
+      this.database.prepare(`INSERT INTO native_root_ci_demands
+        (demand_id, admission_generation, event_id, project_id, repository_id, protected_ref, review_id,
+        expected_protected_head, candidate_commit, candidate_tree, policy_revision, required_review_revision,
+        required_job_set_revision, execution_kind, job_name, evidence_class, capacity_config_digest,
+        root_sequence, root_commit, state, created_at, updated_at, terminal_at)
+        VALUES (?, ?, ?, ?, 'root', ?, ?, ?, ?, ?, ?, ?, ?, 'ordinary-sysbox', ?, 'candidate-controlled',
+          ?, ?, ?, 'queued', ?, ?, NULL)`).run(randomUUID(), request.admissionGeneration, event.eventId,
+        event.projectId, event.protectedRef, event.reviewId, event.expectedProtectedHead, event.candidateCommit,
+        event.candidateTree, event.policyRevision, event.requiredReviewRevision, event.requiredJobSetRevision,
+        event.jobName, result.admission.capacityConfigDigest, root.sequence, root.commit, now, now);
       return this.finish({ kind: "replay" });
     } catch (error) {
       this.database.exec("ROLLBACK");
@@ -62,7 +75,12 @@ export class NativeRootCiEventReceiptStore {
     if (admission === undefined) return { kind: "not-found" };
     const receipt = record(this.database.prepare(`SELECT event_digest FROM native_root_ci_event_receipts
       WHERE admission_generation = ? AND event_id = ?`).get(request.admissionGeneration, request.event.eventId));
-    if (receipt !== undefined) return receipt.event_digest === request.eventDigest ? { kind: "replay" } : { kind: "conflict" };
+    if (receipt !== undefined) {
+      const demand = this.database.prepare(`SELECT 1 FROM native_root_ci_demands
+        WHERE admission_generation = ? AND event_id = ?`).get(request.admissionGeneration, request.event.eventId);
+      if (demand === undefined) corrupted();
+      return receipt.event_digest === request.eventDigest ? { kind: "replay" } : { kind: "conflict" };
+    }
     if (scalar(this.database.prepare("SELECT COUNT(*) AS value FROM native_root_ci_event_receipts").get()) >= receiptLimit) {
       return { kind: "full" };
     }
@@ -129,4 +147,7 @@ function number(row: Readonly<Record<string, unknown>>, key: string): number {
 }
 function scalar(value: unknown): number { const row = record(value); return row === undefined ? corrupted() : number(row, "value"); }
 function corrupted(): never { throw new NativeRootCiEventReceiptStoreError(); }
-export class NativeRootCiEventReceiptStoreError extends Error { readonly name = "NativeRootCiEventReceiptStoreError"; }
+export class NativeRootCiEventReceiptStoreError extends Error {
+  readonly name = "NativeRootCiEventReceiptStoreError";
+  constructor() { super("native root CI event receipt state is invalid"); }
+}

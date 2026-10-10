@@ -73,15 +73,95 @@ describe("native root CI event receipt store", () => {
     const rejectedRequest = receiptRequest(rejected.admissionGeneration, event("5".repeat(64)));
     rejected.database.exec(`CREATE TRIGGER reject_event_receipt BEFORE INSERT ON native_root_ci_event_receipts
       BEGIN SELECT RAISE(ABORT, 'receipt rejected'); END`);
+    const demandRejected = await setup();
+    const demandRejectedRequest = receiptRequest(demandRejected.admissionGeneration, event("d".repeat(64)));
+    demandRejected.database.exec(`CREATE TRIGGER reject_demand BEFORE INSERT ON native_root_ci_demands
+      BEGIN SELECT RAISE(ABORT, 'demand rejected'); END`);
     const converged = await setup();
     const convergedRequest = receiptRequest(converged.admissionGeneration, event("6".repeat(64)));
 
     // When / Then
     expect(() => rejected.receipts.commit(rejectedRequest, eventProof(rejectedRequest.event))).toThrow(/receipt rejected/i);
+    expect(() => demandRejected.receipts.commit(demandRejectedRequest,
+      eventProof(demandRejectedRequest.event))).toThrow(/demand rejected/i);
     expect(receiptCount(rejected)).toBe(0);
+    expect(demands(rejected)).toEqual([]);
+    expect(receiptCount(demandRejected)).toBe(0);
+    expect(demands(demandRejected)).toEqual([]);
     expect(converged.receipts.commit(convergedRequest, eventProof(convergedRequest.event)).kind).toBe("replay");
     expect(converged.receipts.commit(convergedRequest, eventProof(convergedRequest.event)).kind).toBe("replay");
     expect(receiptCount(converged)).toBe(1);
+    expect(demands(converged)).toEqual([{
+      admissionGeneration: converged.admissionGeneration,
+      eventId: convergedRequest.event.eventId,
+      reviewId: convergedRequest.event.reviewId,
+      state: "queued"
+    }]);
+  });
+
+  it("never requeues an exact receipt replay after its demand is superseded", async () => {
+    // Given
+    const fixture = await setup();
+    const request = receiptRequest(fixture.admissionGeneration, event("8".repeat(64)));
+    fixture.receipts.commit(request, eventProof(request.event));
+    const moved = policyProof();
+    fixture.admissions.register({ ...moved, currentRoot: { ...moved.currentRoot, sequence: 1,
+      commit: "6".repeat(40), tree: "7".repeat(40) } });
+
+    // When
+    const replay = fixture.receipts.commit(request, eventProof(request.event));
+
+    // Then
+    expect(replay.kind).toBe("replay");
+    expect(receiptCount(fixture)).toBe(1);
+    expect(demands(fixture)).toEqual([{
+      admissionGeneration: fixture.admissionGeneration,
+      eventId: request.event.eventId,
+      reviewId: request.event.reviewId,
+      state: "superseded"
+    }]);
+  });
+
+  it("refuses to acknowledge an existing receipt whose paired demand disappeared", async () => {
+    // Given
+    const fixture = await setup();
+    const request = receiptRequest(fixture.admissionGeneration, event("e".repeat(64)));
+    fixture.receipts.commit(request, eventProof(request.event));
+    fixture.database.prepare("DELETE FROM native_root_ci_demands").run();
+
+    // When / Then
+    expect(() => fixture.receipts.preflight(request)).toThrow(/event receipt/i);
+    expect(receiptCount(fixture)).toBe(1);
+    expect(demands(fixture)).toEqual([]);
+  });
+
+  it("supersedes queued demands on expiry, admission replacement, generation rotation, and capacity rotation", async () => {
+    // Given
+    const expired = await setup();
+    commitEvent(expired, "9".repeat(64));
+    expired.database.prepare("UPDATE native_root_admissions SET lease_expires_at = 1000").run();
+    const replaced = await setup();
+    commitEvent(replaced, "a".repeat(64));
+    const generationRotated = await setup();
+    commitEvent(generationRotated, "b".repeat(64));
+    const capacityRotated = await setup();
+    commitEvent(capacityRotated, "c".repeat(64));
+
+    // When
+    expired.admissions.current("project-a", expired.admissionGeneration);
+    const replacement = policyProof();
+    replaced.admissions.register({ ...replacement, currentRoot: {
+      ...replacement.currentRoot, importNonce: "00000000-0000-4000-8000-000000000099" } });
+    new NativeRootAdmissionStore(generationRotated.database, { ...generationRotated.admissions.context,
+      controlPlaneGenerationId: "b".repeat(64) }).activate();
+    new NativeRootAdmissionStore(capacityRotated.database, { ...capacityRotated.admissions.context,
+      capacityConfigDigest: "d".repeat(64) }).activate();
+
+    // Then
+    expect([expired, replaced, generationRotated, capacityRotated]
+      .map((fixture) => demands(fixture).map(({ state }) => state))).toEqual([
+        ["superseded"], ["superseded"], ["superseded"], ["superseded"]
+      ]);
   });
 });
 
@@ -150,4 +230,17 @@ function fillReceiptCapacity(fixture: Fixture): void {
 }
 function receiptCount(fixture: Fixture): number {
   return Number(fixture.database.prepare("SELECT COUNT(*) AS value FROM native_root_ci_event_receipts").get()?.value);
+}
+function demands(fixture: Fixture): readonly Readonly<Record<string, string>>[] {
+  return fixture.database.prepare(`SELECT admission_generation, event_id, review_id, state
+    FROM native_root_ci_demands ORDER BY created_at, demand_id`).all().map((row) => ({
+      admissionGeneration: String(row.admission_generation),
+      eventId: String(row.event_id),
+      reviewId: String(row.review_id),
+      state: String(row.state)
+    }));
+}
+function commitEvent(fixture: Fixture, reviewId: string): void {
+  const request = receiptRequest(fixture.admissionGeneration, event(reviewId));
+  fixture.receipts.commit(request, eventProof(request.event));
 }

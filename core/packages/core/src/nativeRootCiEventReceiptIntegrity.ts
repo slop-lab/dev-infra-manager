@@ -27,11 +27,50 @@ export function assertNativeRootCiEventReceiptIntegrity(file: string): void {
       assertRow(record(value));
     }
     if (visited !== count) invalid();
+    assertDemands(database, count);
   } catch (error) {
     if (error instanceof UserError) throw error;
     throw new UserError("ordinary CI event receipt state is invalid", { cause: error });
   } finally {
     database.close();
+  }
+}
+
+function assertDemands(database: DatabaseSync, receiptCount: number): void {
+  const demandCount = number(record(database.prepare("SELECT COUNT(*) AS value FROM native_root_ci_demands").get()), "value");
+  const rows = database.prepare(`SELECT d.*, r.project_id AS receipt_project_id,
+    r.repository_id AS receipt_repository_id, r.root_protected_ref AS receipt_protected_ref,
+    r.root_commit AS receipt_root_commit, r.root_sequence AS receipt_root_sequence,
+    r.capacity_config_digest AS receipt_capacity_digest, r.event_json AS receipt_event_json,
+    a.state AS admission_state, a.root_sequence AS current_root_sequence,
+    a.root_commit AS current_root_commit
+    FROM native_root_ci_demands d JOIN native_root_ci_event_receipts r
+      ON r.admission_generation = d.admission_generation AND r.event_id = d.event_id
+    JOIN native_root_admissions a ON a.admission_generation = d.admission_generation
+    ORDER BY d.created_at, d.demand_id`).all();
+  if (demandCount !== receiptCount || rows.length !== demandCount) invalid();
+  for (const value of rows) {
+    const row = record(value);
+    const event = parseNativeRootCiReviewEvent(JSON.parse(text(row, "receipt_event_json")));
+    const state = text(row, "state");
+    const terminalAt = row.terminal_at;
+    if (text(row, "project_id") !== text(row, "receipt_project_id")
+      || text(row, "repository_id") !== text(row, "receipt_repository_id")
+      || text(row, "protected_ref") !== text(row, "receipt_protected_ref")
+      || text(row, "expected_protected_head") !== text(row, "receipt_root_commit")
+      || number(row, "root_sequence") !== number(row, "receipt_root_sequence")
+      || text(row, "root_commit") !== text(row, "receipt_root_commit")
+      || text(row, "capacity_config_digest") !== text(row, "receipt_capacity_digest")
+      || text(row, "review_id") !== event.reviewId || text(row, "candidate_commit") !== event.candidateCommit
+      || text(row, "candidate_tree") !== event.candidateTree || text(row, "policy_revision") !== event.policyRevision
+      || text(row, "required_review_revision") !== event.requiredReviewRevision
+      || text(row, "required_job_set_revision") !== event.requiredJobSetRevision
+      || text(row, "execution_kind") !== event.executionKind || text(row, "job_name") !== event.jobName
+      || text(row, "evidence_class") !== event.evidenceClass
+      || state === "queued" && (text(row, "admission_state") !== "active"
+        || number(row, "root_sequence") !== number(row, "current_root_sequence")
+        || text(row, "root_commit") !== text(row, "current_root_commit"))
+      || state === "queued" && terminalAt !== null || state === "superseded" && typeof terminalAt !== "number") invalid();
   }
 }
 
