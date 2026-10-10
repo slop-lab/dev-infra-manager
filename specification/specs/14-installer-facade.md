@@ -917,7 +917,7 @@ The native image accepts only strict marked format-8 state and pins
 Git `2.39.5` in its runtime image. The installer itself does not create a Project.
 
 After exact activation, a distinct ordinary registrar can explicitly register
-or revoke full imported-root kind-labelled policy eligibility. Its format-5
+or revoke full imported-root kind-labelled policy eligibility. Its format-6
 state binds the import nonce, installer generation, and global operator capacity
 digest. Exact replays are historical receipts; readers MUST use a new UUIDv4
 request ID for each current-validity check. This does not publish a runnable
@@ -925,12 +925,14 @@ Project, advertise capacity, or enable any job execution.
 
 The same service may durably acknowledge only a current canonical schema-2
 ordinary review event after exact native proof under
-`POST /v1/native-root-ci-events`. This is an inert historical receipt boundary:
-it creates no demand, claim, attempt, result, dispatch, approval, execution, or
-promotion authority, and no installed dispatcher invokes it yet.
+`POST /v1/native-root-ci-events`. The installed native Git dispatcher invokes
+this endpoint after read-only admission discovery. A new receipt atomically
+creates one queued demand. Exact replay does not requeue it; stale admission
+or root state supersedes it. Neither receipt nor demand grants a claim,
+attempt, result, approval, execution, or promotion authority.
 
-The native Project/repository adapter, runnable Project admission, native event
-dispatch adapter and demand, capacity advertisement, host-controller execution, real Sysbox job
+The native Project/repository adapter, runnable Project admission, capacity
+advertisement, host-controller execution, real Sysbox job
 gate, and reviewer browser UI remain unavailable. They are not installed or
 enabled by this command, and the installed bundle MUST NOT be presented as
 complete native Project integration or completion of the broader Project #45 work.
