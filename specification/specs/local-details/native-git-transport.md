@@ -597,7 +597,7 @@ response has role `native-root-admission-reader` and scope
 the latter exact identity and no longer treats legacy attempt-query identity as
 readiness. Identity remains available before activation.
 
-The exact Project/root POST suffixes are `register`, `current`, and `revoke`.
+The replay-ledger Project/root POST suffixes are `register`, `current`, and `revoke`.
 Every body is strict schema version 1 with a UUIDv4 `requestId` and exact
 `generationId`; `current` and `revoke` also require a UUIDv4
 `admissionGeneration`. Registration accepts no other field and first obtains a
@@ -610,6 +610,23 @@ not present eligibility. Consumers MUST generate a fresh UUIDv4 `requestId`
 for every current-validity check. Replaying a successful `current` after
 revocation or expiry may return its original `200`; a fresh request returns
 `404` for that admission generation.
+
+An additional query-only Project/root POST suffix, `discover`, accepts exactly
+schema version 1, a fresh UUIDv4 `requestId`, and the current installer
+`generationId`, without an `admissionGeneration`. It returns the same no-store
+admission envelope as `current` only for the one active, unexpired Project/root
+admission bound to the current installer generation and global capacity digest.
+It never fetches upstream, renews, expires, registers, or changes state, and
+does not consume the capped request-replay ledger. A repeated discovery is a
+fresh observation, not a historical replay; after revocation or expiry it
+returns `404`. Discovery supplies only a candidate generation to a separate
+native admission resolver. It is not a review-event proof, demand, claim,
+attempt, result, approval, or runnable-Project authority. Event receipt
+still independently verifies the current admission and native review proof.
+Unknown credentials receive `401`, known wrong-role credentials receive `403`,
+and valid query credentials from a different Project receive `404`. The
+complete admission response is bounded to 64 KiB before registration commits;
+an oversized response rolls back registration and returns `413`.
 
 Business POSTs require successful activation in the current process and the
 exact durable generation/token binding. Restart preserves valid admissions but
