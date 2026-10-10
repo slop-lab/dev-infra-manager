@@ -7,41 +7,25 @@ import {
 } from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
 import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
 import { descriptor as descriptorValue } from "./nativeOrdinaryAuthorityFixture.js";
+import { reservationContext, schema2Event } from "./nativeRootReservationClaimFixture.js";
 
 const originalReceipt = "00000000-0000-4000-8000-000000000101";
-const nativeDescriptor = descriptorValue("project-a", "source", "generation-7");
+const generationId = "a".repeat(64);
+const nativeDescriptor = {
+  ...descriptorValue("project-a", "root", "00000000-0000-4000-8000-000000000104"),
+  policyRevision: "4".repeat(64),
+  requiredReviewRevision: "5".repeat(64),
+  requiredJobSetRevision: "6".repeat(64)
+};
 const descriptor = {
   reviewId: "a".repeat(64),
   descriptor: nativeDescriptor,
   digest: nativeDescriptorDigest(nativeDescriptor)
 } as const;
-const context = {
-  event: {
-    schemaVersion: 1,
-    type: "dim.native.review-job.available",
-    eventId: "00000000-0000-4000-8000-000000000001",
-    projectId: nativeDescriptor.projectId,
-    repositoryId: nativeDescriptor.repositoryId,
-    protectedRef: nativeDescriptor.protectedRef,
-    reviewId: descriptor.reviewId,
-    expectedProtectedHead: nativeDescriptor.expectedProtectedHead,
-    candidateCommit: nativeDescriptor.candidateCommit,
-    candidateTree: nativeDescriptor.candidateTree,
-    policyRevision: nativeDescriptor.policyRevision,
-    requiredReviewRevision: nativeDescriptor.requiredReviewRevision,
-    requiredJobSetRevision: nativeDescriptor.requiredJobSetRevision,
-    jobName: nativeDescriptor.jobName,
-    evidenceClass: "candidate-controlled"
-  },
-  admissionGeneration: nativeDescriptor.admissionGeneration,
-  capacity: {
-    hostId: "host-a",
-    capacity: "primary",
-    jobBaseImage: nativeDescriptor.jobImage,
-    runnerBaseImage: nativeDescriptor.runnerBaseImage,
-    bounds: nativeDescriptor.bounds
-  }
-} as const;
+const context = reservationContext(schema2Event(nativeDescriptor, descriptor.reviewId), {
+  hostId: "host-a", capacity: "primary", jobBaseImage: nativeDescriptor.jobImage,
+  runnerBaseImage: nativeDescriptor.runnerBaseImage, bounds: nativeDescriptor.bounds
+}, generationId);
 const credential = {
   username: "ordinary-attempts",
   password: "attempt-secret-000000000000000000000"
@@ -58,10 +42,11 @@ describe("native Git attempt issuer mutation boundaries", () => {
     };
     const client = createNativeGitAttemptIssuerClient({
       config,
+      generationId,
       httpClient: {
         async request(input) {
           seen.push(input);
-          return response(200, descriptor);
+          return response(200, descriptorEnvelope());
         }
       }
     });
@@ -90,51 +75,65 @@ describe("native Git attempt issuer mutation boundaries", () => {
         requestBodies.push(input.body ?? "");
         entered.resolve();
         await release.promise;
-        return response(201, issuance());
+        return response(201, issuanceEnvelope());
       }
     };
     const client = createClient(httpClient);
-    const input = { issuanceRequestId: originalReceipt, context, descriptor };
+    const expectedClaim = structuredClone(context.claim);
+    const input = { context, descriptor };
     const pending = client.issueAttempt(input);
     await entered.promise;
 
     // When
-    Reflect.set(input, "issuanceRequestId", "00000000-0000-4000-8000-000000000999");
+    Reflect.set(input.context.claim, "claimId", "00000000-0000-4000-8000-000000000999");
     Reflect.set(input, "descriptor", { ...descriptor, digest: `sha256:${"0".repeat(64)}` });
     release.resolve();
 
     // Then
     await expect(pending).resolves.toMatchObject({
-      replayed: false,
       issuance: { issuanceRequestId: originalReceipt, descriptorDigest: descriptor.digest }
     });
     expect(requestBodies).toEqual([JSON.stringify({
-      issuanceRequestId: originalReceipt,
-      jobName: context.event.jobName,
+      schemaVersion: 1,
       descriptorDigest: descriptor.digest,
-      admissionGeneration: context.admissionGeneration,
-      jobBaseImage: context.capacity.jobBaseImage,
-      runnerBaseImage: context.capacity.runnerBaseImage,
-      bounds: context.capacity.bounds,
-      hostId: context.capacity.hostId,
-      capacity: context.capacity.capacity
+      claim: expectedClaim
     })]);
   });
 });
 
 function issuance() {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
+    executionKind: "ordinary-sysbox",
     issuanceRequestId: originalReceipt,
     attemptId: "00000000-0000-4000-8000-000000000201",
     reviewId: descriptor.reviewId,
     attempt: 1,
     descriptor: nativeDescriptor,
     descriptorDigest: descriptor.digest,
-    hostId: context.capacity.hostId,
-    capacity: context.capacity.capacity,
+    hostId: context.claim.hostId,
+    capacity: context.claim.capacity,
     issuedBy: credential.username,
     issuedAt: "2026-10-05T00:00:00.000Z"
+  } as const;
+}
+
+function descriptorEnvelope() {
+  return {
+    schemaVersion: 1,
+    serviceId: "native-main",
+    servingGenerationId: generationId,
+    kind: "ordinary-sysbox",
+    ...descriptor
+  } as const;
+}
+
+function issuanceEnvelope() {
+  return {
+    schemaVersion: 1,
+    serviceId: "native-main",
+    servingGenerationId: generationId,
+    attempt: issuance()
   } as const;
 }
 
@@ -153,6 +152,7 @@ function deferred(): { readonly promise: Promise<void>; readonly resolve: () => 
 function createClient(httpClient: NativeGitAttemptIssuerHttpClient) {
   return createNativeGitAttemptIssuerClient({
     config: { endpoint: "http://native-git:8080", serviceId: "native-main", attemptIssuer: credential },
+    generationId,
     httpClient
   });
 }

@@ -7,8 +7,10 @@ import {
 } from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
 import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
 import { descriptor as descriptorValue } from "./nativeOrdinaryAuthorityFixture.js";
+import { reservationContext, schema2Event } from "./nativeRootReservationClaimFixture.js";
 
 const reviewId = "a".repeat(64);
+const generationId = "a".repeat(64);
 const attemptIssuer = {
   username: "ordinary-attempts",
   password: "attempt-secret-000000000000000000000"
@@ -26,28 +28,13 @@ const capacity = {
     outputBytes: "10485760"
   }
 } as const;
-const nativeDescriptor = descriptorValue("project-a", "source", "generation-7");
-const context = {
-  event: {
-    schemaVersion: 1,
-    type: "dim.native.review-job.available",
-    eventId: "00000000-0000-4000-8000-000000000001",
-    projectId: nativeDescriptor.projectId,
-    repositoryId: nativeDescriptor.repositoryId,
-    protectedRef: nativeDescriptor.protectedRef,
-    reviewId,
-    expectedProtectedHead: nativeDescriptor.expectedProtectedHead,
-    candidateCommit: nativeDescriptor.candidateCommit,
-    candidateTree: nativeDescriptor.candidateTree,
-    policyRevision: nativeDescriptor.policyRevision,
-    requiredReviewRevision: nativeDescriptor.requiredReviewRevision,
-    requiredJobSetRevision: nativeDescriptor.requiredJobSetRevision,
-    jobName: nativeDescriptor.jobName,
-    evidenceClass: "candidate-controlled"
-  },
-  admissionGeneration: "generation-7",
-  capacity
-} as const;
+const nativeDescriptor = {
+  ...descriptorValue("project-a", "root", "00000000-0000-4000-8000-000000000104"),
+  policyRevision: "4".repeat(64),
+  requiredReviewRevision: "5".repeat(64),
+  requiredJobSetRevision: "6".repeat(64)
+};
+const context = reservationContext(schema2Event(nativeDescriptor, reviewId), capacity, generationId);
 const canonicalDescriptor = {
   reviewId,
   descriptor: nativeDescriptor,
@@ -57,11 +44,16 @@ const canonicalDescriptor = {
 describe("native Git attempt issuer response boundary", () => {
   it("keeps the credential in Basic authorization and sends only trusted descriptor selectors", async () => {
     // Given
-    const requests: { readonly endpoint: string; readonly authorization: string; readonly body?: string }[] = [];
+    const requests: {
+      readonly endpoint: string;
+      readonly authorization: string;
+      readonly generationId?: string;
+      readonly body?: string;
+    }[] = [];
     const client = createClient({
       async request(input) {
         requests.push(input);
-        return response(200, canonicalDescriptor);
+        return response(200, descriptorEnvelope());
       }
     });
 
@@ -73,12 +65,16 @@ describe("native Git attempt issuer response boundary", () => {
     expect(requests[0]).toMatchObject({
       endpoint: "http://native-git:8080",
       authorization: `Basic ${Buffer.from(`${attemptIssuer.username}:${attemptIssuer.password}`).toString("base64")}`,
+      generationId,
       body: JSON.stringify({
-        jobName: context.event.jobName,
-        admissionGeneration: context.admissionGeneration,
-        jobBaseImage: context.capacity.jobBaseImage,
-        runnerBaseImage: context.capacity.runnerBaseImage,
-        bounds: context.capacity.bounds
+        schemaVersion: 1,
+        jobName: context.claim.event.jobName,
+        trustedCapacity: {
+          admissionGeneration: context.claim.admissionGeneration,
+          jobBaseImage: context.claim.jobBaseImage,
+          runnerBaseImage: context.claim.runnerBaseImage,
+          bounds: context.claim.bounds
+        }
       })
     });
     expect(requests[0]?.body).not.toContain(attemptIssuer.password);
@@ -92,7 +88,8 @@ describe("native Git attempt issuer response boundary", () => {
     // When
     const create = () => createNativeGitAttemptIssuerClient({
       config,
-      httpClient: { request: async () => response(200, canonicalDescriptor) }
+      generationId,
+      httpClient: { request: async () => response(200, descriptorEnvelope()) }
     });
 
     // Then
@@ -102,9 +99,11 @@ describe("native Git attempt issuer response boundary", () => {
   it.each([
     ["redirect", response(302, {})],
     ["malformed JSON", rawResponse(200, Buffer.from("{"))],
-    ["additional field", response(200, { ...canonicalDescriptor, unexpected: true })],
-    ["wrong review", response(200, { ...canonicalDescriptor, reviewId: "b".repeat(64) })],
-    ["wrong digest", response(200, { ...canonicalDescriptor, digest: `sha256:${"0".repeat(64)}` })]
+    ["additional field", response(200, { ...descriptorEnvelope(), unexpected: true })],
+    ["foreign service", response(200, { ...descriptorEnvelope(), serviceId: "foreign-native" })],
+    ["foreign generation", response(200, { ...descriptorEnvelope(), servingGenerationId: "b".repeat(64) })],
+    ["wrong review", response(200, { ...descriptorEnvelope(), reviewId: "b".repeat(64) })],
+    ["wrong digest", response(200, { ...descriptorEnvelope(), digest: `sha256:${"0".repeat(64)}` })]
   ])("denies a %s descriptor response", async (_label, fixtureResponse) => {
     // Given
     const client = clientReturning(fixtureResponse);
@@ -141,7 +140,8 @@ describe("native Git attempt issuer response boundary", () => {
     // Given
     const receipt = "00000000-0000-4000-8000-000000000101";
     const issuance = {
-      schemaVersion: 2,
+      schemaVersion: 3,
+      executionKind: "ordinary-sysbox",
       issuanceRequestId: receipt,
       attemptId: "00000000-0000-4000-8000-000000000201",
       reviewId,
@@ -154,10 +154,10 @@ describe("native Git attempt issuer response boundary", () => {
       issuedAt: "2026-10-05T00:00:00.000Z",
       ...override
     };
-    const client = clientReturning(response(201, issuance));
+    const client = clientReturning(response(201, issuanceEnvelope(issuance)));
 
     // When
-    const request = client.issueAttempt({ issuanceRequestId: receipt, context, descriptor: canonicalDescriptor });
+    const request = client.issueAttempt({ context, descriptor: canonicalDescriptor });
 
     // Then
     await expect(request).rejects.toBeInstanceOf(NativeGitAttemptIssuerUnavailableError);
@@ -169,7 +169,8 @@ describe("native Git attempt issuer response boundary", () => {
   ])("denies a revocation bound to %s", async (_label, override) => {
     // Given
     const issuance = {
-      schemaVersion: 2,
+      schemaVersion: 3,
+      executionKind: "ordinary-sysbox",
       issuanceRequestId: "00000000-0000-4000-8000-000000000101",
       attemptId: "00000000-0000-4000-8000-000000000201",
       reviewId,
@@ -181,8 +182,10 @@ describe("native Git attempt issuer response boundary", () => {
       issuedBy: attemptIssuer.username,
       issuedAt: "2026-10-05T00:00:00.000Z"
     } as const;
-    const client = clientReturning(response(201, {
-      schemaVersion: 2,
+    const revocation = {
+      schemaVersion: 3,
+      executionKind: "ordinary-sysbox",
+      revocationRequestId: issuance.attemptId,
       revocationId: "00000000-0000-4000-8000-000000000301",
       attemptId: issuance.attemptId,
       reviewId,
@@ -194,7 +197,8 @@ describe("native Git attempt issuer response boundary", () => {
       revokedBy: attemptIssuer.username,
       revokedAt: "2026-10-05T00:00:01.000Z",
       ...override
-    }));
+    } as const;
+    const client = clientReturning(response(201, revocationEnvelope(revocation)));
 
     // When
     const request = client.revokeAttempt(issuance);
@@ -211,8 +215,27 @@ function clientReturning(fixtureResponse: NativeGitAttemptIssuerHttpResponse) {
 function createClient(httpClient: NativeGitAttemptIssuerHttpClient) {
   return createNativeGitAttemptIssuerClient({
     config: { endpoint: "http://native-git:8080", serviceId: "native-main", attemptIssuer },
+    generationId,
     httpClient
   });
+}
+
+function descriptorEnvelope() {
+  return {
+    schemaVersion: 1,
+    serviceId: "native-main",
+    servingGenerationId: generationId,
+    kind: "ordinary-sysbox",
+    ...canonicalDescriptor
+  } as const;
+}
+
+function issuanceEnvelope(attempt: object) {
+  return { schemaVersion: 1, serviceId: "native-main", servingGenerationId: generationId, attempt } as const;
+}
+
+function revocationEnvelope(revocation: object) {
+  return { schemaVersion: 1, serviceId: "native-main", servingGenerationId: generationId, revocation } as const;
 }
 
 function response(statusCode: number, body: unknown): NativeGitAttemptIssuerHttpResponse {

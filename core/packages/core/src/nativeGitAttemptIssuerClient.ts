@@ -2,7 +2,6 @@ import { isDeepStrictEqual } from "node:util";
 import { UserError } from "./errors.js";
 import type {
   NativeGitAdmissionHttpClient,
-  NativeGitAdmissionHttpRequest,
   NativeGitAdmissionHttpResponse
 } from "./nativeGitAdmissionSource.js";
 import {
@@ -14,13 +13,24 @@ import {
   type NativeJobAttemptRevocation
 } from "./nativeGitAttemptIssuerModel.js";
 import { createNodeNativeGitAdmissionHttpClient } from "./nativeGitAdmissionHttpClient.js";
+import {
+  NativeGitAttemptIssuerUnavailableError
+} from "./nativeGitAttemptIssuerErrors.js";
+import {
+  assertAttemptIssuerEnvelope,
+  exactAttemptIssuerEnvelope,
+  requestAttemptIssuerJson
+} from "./nativeGitAttemptIssuerWire.js";
 import { nativeDescriptorDigest, resourceBounds } from "./nativeOrdinaryAuthorityModel.js";
-import type { NativeCapacityPolicy } from "./nativeOrdinaryAuthorityProtocol.js";
-import { parseNativeReviewJobEvent, type NativeReviewJobEvent } from "./nativeOrdinaryEvent.js";
+import {
+  parseNativeRootCiClaim,
+  type NativeRootCiClaim
+} from "./nativeRootCiClaimProtocol.js";
+import { NativeRootCiReviewEventError } from "./nativeRootCiReviewEvent.js";
 
-const maximumResponseBytes = 64 * 1024;
 const requestTimeoutMilliseconds = 5_000;
-const rejectionStatuses = [400, 401, 403, 404, 409] as const;
+
+export { NativeGitAttemptIssuerRejectedError, NativeGitAttemptIssuerUnavailableError } from "./nativeGitAttemptIssuerErrors.js";
 
 export type NativeGitAttemptIssuerConfig = {
   readonly endpoint: "http://native-git:8080";
@@ -32,20 +42,16 @@ export type NativeGitAttemptIssuerConfig = {
 };
 
 export type NativeAttemptIssuerContext = {
-  readonly event: NativeReviewJobEvent;
-  readonly admissionGeneration: string;
-  readonly capacity: NativeCapacityPolicy;
+  readonly claim: NativeRootCiClaim;
 };
 
 export type NativeAttemptIssueRequest = {
-  readonly issuanceRequestId: string;
   readonly context: NativeAttemptIssuerContext;
   readonly descriptor: NativeExecutionDescriptor;
 };
 
 export type NativeAttemptIssueResult = {
   readonly issuance: NativeJobAttemptIssuance;
-  readonly replayed: boolean;
 };
 
 export interface NativeGitAttemptIssuerClient {
@@ -60,12 +66,13 @@ export type NativeGitAttemptIssuerHttpResponse = NativeGitAdmissionHttpResponse;
 export type NativeGitAttemptIssuerClientOptions = {
   readonly config: NativeGitAttemptIssuerConfig;
   readonly httpClient: NativeGitAttemptIssuerHttpClient;
+  readonly generationId: string;
 };
 
 export function createNodeNativeGitAttemptIssuerClient(
-  config: NativeGitAttemptIssuerConfig
+  config: NativeGitAttemptIssuerConfig, generationId: string
 ): NativeGitAttemptIssuerClient {
-  return createNativeGitAttemptIssuerClient({ config, httpClient: createNodeNativeGitAdmissionHttpClient() });
+  return createNativeGitAttemptIssuerClient({ config, generationId, httpClient: createNodeNativeGitAdmissionHttpClient() });
 }
 
 export function createNativeGitAttemptIssuerClient(
@@ -75,68 +82,78 @@ export function createNativeGitAttemptIssuerClient(
   const serviceId = options.config.serviceId;
   const issuerUsername = options.config.attemptIssuer.username;
   const issuerPassword = options.config.attemptIssuer.password;
+  const generationId = options.generationId;
   const httpClient = options.httpClient;
-  if (endpoint !== "http://native-git:8080" || serviceId !== "native-main") {
+  if (endpoint !== "http://native-git:8080" || serviceId !== "native-main"
+    || !/^[0-9a-f]{64}$/.test(generationId)) {
     throw new NativeGitAttemptIssuerUnavailableError();
   }
   const authorization = basicAuthorization(issuerUsername, issuerPassword);
   return {
     async loadDescriptor(context) {
       const trusted = parseContext(context);
-      const response = await requestJson(httpClient, {
+      const response = await requestAttemptIssuerJson(httpClient, {
         endpoint,
         method: "POST",
-        path: reviewPath(trusted.event, "ordinary-execution-descriptors"),
+        path: reviewPath(trusted.claim.event, "ordinary-execution-descriptors"),
         authorization,
+        generationId,
         body: JSON.stringify({
-          jobName: trusted.event.jobName,
-          admissionGeneration: trusted.admissionGeneration,
-          jobBaseImage: trusted.capacity.jobBaseImage,
-          runnerBaseImage: trusted.capacity.runnerBaseImage,
-          bounds: trusted.capacity.bounds
+          schemaVersion: 1,
+          jobName: trusted.claim.event.jobName,
+          trustedCapacity: {
+            admissionGeneration: trusted.claim.admissionGeneration,
+            jobBaseImage: trusted.claim.jobBaseImage,
+            runnerBaseImage: trusted.claim.runnerBaseImage,
+            bounds: trusted.claim.bounds
+          }
         }),
         signal: AbortSignal.timeout(requestTimeoutMilliseconds)
       }, [200]);
-      const descriptor = parseResponse(() => parseNativeExecutionDescriptor(response.body));
+      const envelope = exactAttemptIssuerEnvelope(response.body, [
+        "schemaVersion", "serviceId", "servingGenerationId", "kind", "reviewId", "descriptor", "digest"
+      ]);
+      assertAttemptIssuerEnvelope(envelope, serviceId, generationId);
+      if (envelope.kind !== "ordinary-sysbox") throw new NativeGitAttemptIssuerUnavailableError();
+      const descriptor = parseResponse(() => parseNativeExecutionDescriptor({
+        reviewId: envelope.reviewId,
+        descriptor: envelope.descriptor,
+        digest: envelope.digest
+      }));
       assertDescriptorBinding(descriptor, trusted);
       return descriptor;
     },
     async issueAttempt(input) {
-      const issuanceRequestId = input.issuanceRequestId;
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(issuanceRequestId)) {
-        throw new NativeGitAttemptIssuerUnavailableError();
-      }
       const trusted = parseContext(input.context);
       const requestedDescriptor = parseResponse(() => parseNativeExecutionDescriptor(input.descriptor));
       assertDescriptorBinding(requestedDescriptor, trusted);
-      const response = await requestJson(httpClient, {
+      const response = await requestAttemptIssuerJson(httpClient, {
         endpoint,
         method: "POST",
-        path: reviewPath(trusted.event, "job-attempts"),
+        path: reviewPath(trusted.claim.event, "job-attempts"),
         authorization,
+        generationId,
         body: JSON.stringify({
-          issuanceRequestId,
-          jobName: trusted.event.jobName,
+          schemaVersion: 1,
           descriptorDigest: requestedDescriptor.digest,
-          admissionGeneration: trusted.admissionGeneration,
-          jobBaseImage: trusted.capacity.jobBaseImage,
-          runnerBaseImage: trusted.capacity.runnerBaseImage,
-          bounds: trusted.capacity.bounds,
-          hostId: trusted.capacity.hostId,
-          capacity: trusted.capacity.capacity
+          claim: trusted.claim
         }),
         signal: AbortSignal.timeout(requestTimeoutMilliseconds)
-      }, [200, 201]);
-      const issuance = parseResponse(() => parseNativeJobAttemptIssuance(response.body));
-      if (issuance.issuanceRequestId !== issuanceRequestId
-        || issuance.reviewId !== trusted.event.reviewId
+      }, [201]);
+      const envelope = exactAttemptIssuerEnvelope(response.body, [
+        "schemaVersion", "serviceId", "servingGenerationId", "attempt"
+      ]);
+      assertAttemptIssuerEnvelope(envelope, serviceId, generationId);
+      const issuance = parseResponse(() => parseNativeJobAttemptIssuance(envelope.attempt));
+      if (issuance.issuanceRequestId !== trusted.claim.issuanceRequestId
+        || issuance.reviewId !== trusted.claim.event.reviewId
         || issuance.descriptorDigest !== requestedDescriptor.digest
         || !isDeepStrictEqual(issuance.descriptor, requestedDescriptor.descriptor)
-        || issuance.hostId !== trusted.capacity.hostId || issuance.capacity !== trusted.capacity.capacity
+        || issuance.hostId !== trusted.claim.hostId || issuance.capacity !== trusted.claim.capacity
         || issuance.issuedBy !== issuerUsername) {
         throw new NativeGitAttemptIssuerUnavailableError();
       }
-      return { issuance, replayed: response.statusCode === 200 };
+      return { issuance };
     },
     async revokeAttempt(issuance) {
       const trusted = parseResponse(() => parseNativeJobAttemptIssuance(issuance));
@@ -144,17 +161,28 @@ export function createNativeGitAttemptIssuerClient(
         || trusted.issuedBy !== issuerUsername) {
         throw new NativeGitAttemptIssuerUnavailableError();
       }
-      const response = await requestJson(httpClient, {
+      const response = await requestAttemptIssuerJson(httpClient, {
         endpoint,
         method: "POST",
         path: `/v1/projects/${trusted.descriptor.projectId}/repositories/${trusted.descriptor.repositoryId}`
           + `/reviews/${trusted.reviewId}/job-attempt-revocations`,
         authorization,
-        body: JSON.stringify({ jobName: trusted.descriptor.jobName, attemptId: trusted.attemptId }),
+        generationId,
+        body: JSON.stringify({
+          schemaVersion: 1,
+          revocationRequestId: trusted.attemptId,
+          jobName: trusted.descriptor.jobName,
+          attemptId: trusted.attemptId
+        }),
         signal: AbortSignal.timeout(requestTimeoutMilliseconds)
       }, [201]);
-      const revocation = parseResponse(() => parseNativeJobAttemptRevocation(response.body));
+      const envelope = exactAttemptIssuerEnvelope(response.body, [
+        "schemaVersion", "serviceId", "servingGenerationId", "revocation"
+      ]);
+      assertAttemptIssuerEnvelope(envelope, serviceId, generationId);
+      const revocation = parseResponse(() => parseNativeJobAttemptRevocation(envelope.revocation));
       if (revocation.attemptId !== trusted.attemptId || revocation.reviewId !== trusted.reviewId
+        || revocation.revocationRequestId !== trusted.attemptId
         || revocation.jobName !== trusted.descriptor.jobName || revocation.attempt !== trusted.attempt
         || revocation.descriptorDigest !== trusted.descriptorDigest || revocation.hostId !== trusted.hostId
         || revocation.capacity !== trusted.capacity || revocation.revokedBy !== issuerUsername) {
@@ -166,28 +194,22 @@ export function createNativeGitAttemptIssuerClient(
 }
 
 function parseContext(context: NativeAttemptIssuerContext): NativeAttemptIssuerContext {
-  const event = parseResponse(() => parseNativeReviewJobEvent(context.event));
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(context.admissionGeneration)
-    || !/^[a-z0-9][a-z0-9._-]{0,127}$/.test(context.capacity.hostId)
-    || !/^[a-z0-9][a-z0-9._-]{0,127}$/.test(context.capacity.capacity)
-    || !/^(?:(?:[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/.test(context.capacity.jobBaseImage)
-    || !/^(?:(?:[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]+)?\/)?[a-z0-9]+(?:[._-][a-z0-9]+)*(?:\/[a-z0-9]+(?:[._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$/.test(context.capacity.runnerBaseImage)) {
-    throw new NativeGitAttemptIssuerUnavailableError();
-  }
-  const bounds = parseResponse(() => resourceBounds(context.capacity.bounds));
-  return { event, admissionGeneration: context.admissionGeneration, capacity: { ...context.capacity, bounds } };
+  const claim = parseResponse(() => parseNativeRootCiClaim(context.claim));
+  return { claim: { ...claim, bounds: parseResponse(() => resourceBounds(claim.bounds)) } };
 }
 
 function assertDescriptorBinding(descriptor: NativeExecutionDescriptor, context: NativeAttemptIssuerContext): void {
   const expected = {
-    projectId: context.event.projectId, repositoryId: context.event.repositoryId,
-    protectedRef: context.event.protectedRef, expectedProtectedHead: context.event.expectedProtectedHead,
-    candidateCommit: context.event.candidateCommit, candidateTree: context.event.candidateTree,
-    policyRevision: context.event.policyRevision, requiredReviewRevision: context.event.requiredReviewRevision,
-    requiredJobSetRevision: context.event.requiredJobSetRevision, admissionGeneration: context.admissionGeneration,
-    jobName: context.event.jobName, jobImage: context.capacity.jobBaseImage,
-    runnerBaseImage: context.capacity.runnerBaseImage, bounds: context.capacity.bounds,
-    evidenceClass: context.event.evidenceClass
+    projectId: context.claim.event.projectId, repositoryId: context.claim.event.repositoryId,
+    protectedRef: context.claim.event.protectedRef, expectedProtectedHead: context.claim.event.expectedProtectedHead,
+    candidateCommit: context.claim.event.candidateCommit, candidateTree: context.claim.event.candidateTree,
+    policyRevision: context.claim.event.policyRevision,
+    requiredReviewRevision: context.claim.event.requiredReviewRevision,
+    requiredJobSetRevision: context.claim.event.requiredJobSetRevision,
+    admissionGeneration: context.claim.admissionGeneration,
+    jobName: context.claim.event.jobName, jobImage: context.claim.jobBaseImage,
+    runnerBaseImage: context.claim.runnerBaseImage, bounds: context.claim.bounds,
+    evidenceClass: context.claim.event.evidenceClass
   };
   const actual = {
     projectId: descriptor.descriptor.projectId, repositoryId: descriptor.descriptor.repositoryId,
@@ -200,65 +222,26 @@ function assertDescriptorBinding(descriptor: NativeExecutionDescriptor, context:
     bounds: descriptor.descriptor.bounds,
     evidenceClass: descriptor.descriptor.evidenceClass
   };
-  if (descriptor.reviewId !== context.event.reviewId || descriptor.digest !== nativeDescriptorDigest(descriptor.descriptor)
+  if (descriptor.reviewId !== context.claim.event.reviewId
+    || descriptor.digest !== nativeDescriptorDigest(descriptor.descriptor)
     || !isDeepStrictEqual(actual, expected)) throw new NativeGitAttemptIssuerUnavailableError();
-}
-
-async function requestJson(
-  client: NativeGitAttemptIssuerHttpClient,
-  input: NativeGitAdmissionHttpRequest,
-  successStatuses: readonly number[]
-): Promise<{ readonly statusCode: number; readonly body: unknown }> {
-  let response: NativeGitAttemptIssuerHttpResponse;
-  try {
-    response = await client.request(input);
-  } catch (error) {
-    throw new NativeGitAttemptIssuerUnavailableError({ cause: error });
-  }
-  if (rejectionStatuses.some((status) => status === response.statusCode)) {
-    throw new NativeGitAttemptIssuerRejectedError(response.statusCode);
-  }
-  if (!successStatuses.includes(response.statusCode) || response.contentType !== "application/json; charset=utf-8"
-    || response.cacheControl !== "no-store" || response.body.length > maximumResponseBytes) {
-    throw new NativeGitAttemptIssuerUnavailableError();
-  }
-  try {
-    return { statusCode: response.statusCode, body: JSON.parse(response.body.toString("utf8")) };
-  } catch (error) {
-    if (error instanceof SyntaxError) throw new NativeGitAttemptIssuerUnavailableError({ cause: error });
-    throw error;
-  }
 }
 
 function parseResponse<T>(parser: () => T): T {
   try {
     return parser();
   } catch (error) {
-    if (error instanceof UserError) throw new NativeGitAttemptIssuerUnavailableError({ cause: error });
+    if (error instanceof UserError || error instanceof NativeRootCiReviewEventError) {
+      throw new NativeGitAttemptIssuerUnavailableError({ cause: error });
+    }
     throw error;
   }
 }
 
-function reviewPath(event: NativeReviewJobEvent, action: "ordinary-execution-descriptors" | "job-attempts"): string {
+function reviewPath(event: NativeRootCiClaim["event"], action: "ordinary-execution-descriptors" | "job-attempts"): string {
   return `/v1/projects/${event.projectId}/repositories/${event.repositoryId}/reviews/${event.reviewId}/${action}`;
 }
 
 function basicAuthorization(username: string, password: string): string {
   return `Basic ${Buffer.from(`${username}:${password}`, "utf8").toString("base64")}`;
-}
-
-export class NativeGitAttemptIssuerUnavailableError extends Error {
-  readonly name = "NativeGitAttemptIssuerUnavailableError";
-
-  constructor(options?: ErrorOptions) {
-    super("native Git attempt issuer is unavailable", options);
-  }
-}
-
-export class NativeGitAttemptIssuerRejectedError extends Error {
-  readonly name = "NativeGitAttemptIssuerRejectedError";
-
-  constructor(readonly statusCode: number) {
-    super("native Git rejected the attempt issuer request");
-  }
 }

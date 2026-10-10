@@ -9,7 +9,8 @@ export type NativeExecutionDescriptor = {
 };
 
 export type NativeJobAttemptIssuance = {
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
+  readonly executionKind: "ordinary-sysbox";
   readonly issuanceRequestId: string;
   readonly attemptId: string;
   readonly reviewId: string;
@@ -23,7 +24,9 @@ export type NativeJobAttemptIssuance = {
 };
 
 export type NativeJobAttemptRevocation = {
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
+  readonly executionKind: "ordinary-sysbox";
+  readonly revocationRequestId: string;
   readonly revocationId: string;
   readonly attemptId: string;
   readonly reviewId: string;
@@ -47,12 +50,15 @@ export function parseNativeExecutionDescriptor(value: unknown): NativeExecutionD
 
 export function parseNativeJobAttemptIssuance(value: unknown): NativeJobAttemptIssuance {
   const input = exactRecord(value, [
-    "schemaVersion", "issuanceRequestId", "attemptId", "reviewId", "attempt", "descriptor",
+    "schemaVersion", "executionKind", "issuanceRequestId", "attemptId", "reviewId", "attempt", "descriptor",
     "descriptorDigest", "hostId", "capacity", "issuedBy", "issuedAt"
   ]);
-  if (input.schemaVersion !== 2) throw new UserError("native job attempt schemaVersion must be 2");
+  if (input.schemaVersion !== 3 || input.executionKind !== "ordinary-sysbox") {
+    throw new UserError("native job attempt identity is invalid");
+  }
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
+    executionKind: "ordinary-sysbox",
     issuanceRequestId: uuid(input.issuanceRequestId, "issuance request ID"),
     attemptId: uuid(input.attemptId, "attempt ID"),
     reviewId: reviewDigest(input.reviewId),
@@ -68,12 +74,16 @@ export function parseNativeJobAttemptIssuance(value: unknown): NativeJobAttemptI
 
 export function parseNativeJobAttemptRevocation(value: unknown): NativeJobAttemptRevocation {
   const input = exactRecord(value, [
-    "schemaVersion", "revocationId", "attemptId", "reviewId", "jobName", "attempt", "descriptorDigest",
-    "hostId", "capacity", "revokedBy", "revokedAt"
+    "schemaVersion", "executionKind", "revocationRequestId", "revocationId", "attemptId", "reviewId",
+    "jobName", "attempt", "descriptorDigest", "hostId", "capacity", "revokedBy", "revokedAt"
   ]);
-  if (input.schemaVersion !== 2) throw new UserError("native job attempt revocation schemaVersion must be 2");
+  if (input.schemaVersion !== 3 || input.executionKind !== "ordinary-sysbox") {
+    throw new UserError("native job attempt revocation identity is invalid");
+  }
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
+    executionKind: "ordinary-sysbox",
+    revocationRequestId: uuid(input.revocationRequestId, "revocation request ID"),
     revocationId: uuid(input.revocationId, "revocation ID"),
     attemptId: uuid(input.attemptId, "attempt ID"),
     reviewId: reviewDigest(input.reviewId),

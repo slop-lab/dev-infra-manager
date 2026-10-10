@@ -39,6 +39,7 @@ export type NativeGitAdmissionHttpRequest = {
   readonly method: "GET" | "POST";
   readonly path: string;
   readonly authorization: string;
+  readonly generationId?: string;
   readonly body?: string;
   readonly signal: AbortSignal;
 };

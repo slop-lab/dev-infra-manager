@@ -10,11 +10,15 @@ import type { AuthoritativeNativeCandidateRuntime } from "./authoritative-native
 import { resolveAuthoritativeNativeRootTarget } from "./authoritative-native-root-target.js";
 import { exactActivationIsBound } from "./native-bundle-activation.js";
 import { readNativeProjectRegistrations } from "./native-bundle-state.js";
+import { currentAttemptProof, currentAttemptProofRequestSchema } from "./native-current-attempt-proof.js";
 
 const maximumBodyBytes = 64 * 1024;
 const identifier = "[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?";
 const routePattern = new RegExp(
   `^/v1/projects/(${identifier})/repositories/root/native-root-ci-proof/(policy|review-event)$`
+);
+const currentAttemptRoutePattern = new RegExp(
+  `^/v1/projects/(${identifier})/repositories/root/native-ordinary-attempt-proof/current-attempt$`
 );
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
 const generationId = digest;
@@ -38,7 +42,8 @@ type ProofServiceInput = {
   readonly serialize: <Result>(operation: () => Promise<Result>) => Promise<Result>;
 };
 type ProofRoute = { readonly kind: "identity" }
-  | { readonly kind: "policy" | "review-event"; readonly projectId: string };
+  | { readonly kind: "attempt-identity" }
+  | { readonly kind: "policy" | "review-event" | "current-attempt"; readonly projectId: string };
 type ProofEnvelopeInput = {
   readonly generationId: string;
   readonly requestId: string;
@@ -60,7 +65,13 @@ export function createNativeRootCiProofService(input: ProofServiceInput): Native
         send(response, known ? 403 : 401, { error: known ? "forbidden" : "unauthorized" });
         return true;
       }
-      if (route.kind === "identity") {
+      if (route.kind === "identity" || route.kind === "attempt-identity") {
+        if (route.kind === "attempt-identity") {
+          send(response, 200, { schemaVersion: 1, serviceId: "native-main",
+            role: "native-ordinary-attempt-proof-reader", scope: ["ordinary-current-attempt:read"],
+            generationId: input.runtime.expectedGenerationId });
+          return true;
+        }
         send(response, 200, { schemaVersion: 1, serviceId: "native-main",
           role: "native-root-ci-proof-reader",
           scope: ["imported-policy:read", "ordinary-review-event:read"],
@@ -77,12 +88,13 @@ export function createNativeRootCiProofService(input: ProofServiceInput): Native
         }
         throw error;
       }
-      const parsed = route.kind === "policy" ? policyRequestSchema.safeParse(body) : eventRequestSchema.safeParse(body);
+      const parsed = route.kind === "policy" ? policyRequestSchema.safeParse(body)
+        : route.kind === "review-event" ? eventRequestSchema.safeParse(body) : currentAttemptProofRequestSchema.safeParse(body);
       if (!parsed.success) {
         send(response, 400, { error: "proof request is invalid" });
         return true;
       }
-      if (parsed.data.generationId !== input.runtime.expectedGenerationId) {
+      if ("generationId" in parsed.data && parsed.data.generationId !== input.runtime.expectedGenerationId) {
         send(response, 409, { error: "proof generation conflicts with service startup" });
         return true;
       }
@@ -103,6 +115,18 @@ export function createNativeRootCiProofService(input: ProofServiceInput): Native
               requestId: parsed.data.requestId, projectId: route.projectId, target });
           });
           send(response, 200, proof);
+          return true;
+        }
+        if (route.kind === "current-attempt") {
+          if (request.headers["x-dim-generation-id"] !== input.runtime.expectedGenerationId) {
+            send(response, 409, { error: "proof generation conflicts with service startup" });
+            return true;
+          }
+          const selector = currentAttemptProofRequestSchema.parse(parsed.data);
+          const proof = await input.serialize(() => currentAttemptProof(input.runtime, route.projectId, selector));
+          if (proof === undefined) send(response, 404, { error: "not found" });
+          else if (proof === "conflict") send(response, 409, { error: "proof tuple is stale" });
+          else send(response, 200, proof);
           return true;
         }
         const selector = eventRequestSchema.parse(parsed.data);
@@ -169,7 +193,13 @@ function proofEnvelope(input: ProofEnvelopeInput): Readonly<Record<string, unkno
 function proofRoute(request: IncomingMessage, url: URL): ProofRoute | undefined {
   if (url.search !== "") return undefined;
   if (request.method === "GET" && url.pathname === "/v1/native-root-ci-proof/identity") return { kind: "identity" };
+  if (request.method === "GET" && url.pathname === "/v1/native-ordinary-attempt-proof/identity") {
+    return { kind: "attempt-identity" };
+  }
   if (request.method !== "POST") return undefined;
+  const currentAttemptMatch = currentAttemptRoutePattern.exec(url.pathname);
+  const currentAttemptProjectId = currentAttemptMatch?.[1];
+  if (currentAttemptProjectId !== undefined) return { kind: "current-attempt", projectId: currentAttemptProjectId };
   const match = routePattern.exec(url.pathname);
   const projectId = match?.[1];
   const kind = match?.[2];

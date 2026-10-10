@@ -24,6 +24,7 @@ function nodeRequest(url: URL, input: NativeGitAdmissionHttpRequest): Promise<Na
       headers: {
         Authorization: input.authorization,
         Accept: "application/json",
+        ...(input.generationId === undefined ? {} : { "X-Dim-Generation-Id": input.generationId }),
         ...(body === undefined ? {} : { "Content-Type": "application/json", "Content-Length": String(body.length) })
       }
     }, (response) => {
