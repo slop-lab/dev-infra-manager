@@ -6,6 +6,7 @@ import {
   type NativeRootAdmissionOperation
 } from "./nativeRootAdmissionModel.js";
 import { parseNativeRootCiPolicyProof, type NativeRootCiPolicyProof } from "./nativeRootCiProofModel.js";
+import { NativeRootCiDemandStore } from "./nativeRootCiDemandStore.js";
 
 const requestLimit = 100_000;
 
@@ -31,13 +32,22 @@ export type AdmissionRequestResult = { readonly kind: "committed" | "replay"; re
   | { readonly kind: "request-conflict" | "capacity-full" | "operation-conflict" | "not-found" };
 
 export class NativeRootAdmissionStore {
-  constructor(readonly database: DatabaseSync, readonly context: NativeRootAdmissionStoreContext) {}
+  readonly demandStore: NativeRootCiDemandStore;
+
+  constructor(readonly database: DatabaseSync, readonly context: NativeRootAdmissionStoreContext) {
+    this.demandStore = new NativeRootCiDemandStore(database);
+  }
 
   activate(): void {
-    const now = this.context.now();
-    this.database.prepare(`UPDATE native_root_admissions SET state = 'replaced', ended_at = ?
-      WHERE state = 'active' AND (control_plane_generation_id <> ? OR capacity_config_digest <> ?)`)
-      .run(now, this.context.controlPlaneGenerationId, this.context.capacityConfigDigest);
+    this.transaction(() => {
+      const now = this.context.now();
+      this.expire(now);
+      this.demandStore.supersedeRotated({ controlPlaneGenerationId: this.context.controlPlaneGenerationId,
+        capacityConfigDigest: this.context.capacityConfigDigest, now });
+      this.database.prepare(`UPDATE native_root_admissions SET state = 'replaced', ended_at = ?
+        WHERE state = 'active' AND (control_plane_generation_id <> ? OR capacity_config_digest <> ?)`)
+        .run(now, this.context.controlPlaneGenerationId, this.context.capacityConfigDigest);
+    });
   }
 
   replay(requestId: string, operation: NativeRootAdmissionOperation, tupleDigest: string): ReplayResult {
@@ -97,6 +107,9 @@ export class NativeRootAdmissionStore {
       if (proof.currentRoot.sequence < sequence || proof.currentRoot.sequence === sequence && !sameHead) {
         return { kind: "conflict" };
       }
+      if (proof.currentRoot.sequence > sequence) {
+        this.demandStore.supersedeGeneration(textField(active, "admission_generation"), now);
+      }
       this.database.prepare(`UPDATE native_root_admissions SET root_sequence = ?, root_commit = ?, root_tree = ?,
         lease_expires_at = ?, refreshed_at = ? WHERE admission_generation = ?`).run(proof.currentRoot.sequence,
         proof.currentRoot.commit, proof.currentRoot.tree, expiresAt, now, textField(active, "admission_generation"));
@@ -104,9 +117,12 @@ export class NativeRootAdmissionStore {
         generation: textField(active, "admission_generation"), expiresAt,
         capacityConfigDigest: this.context.capacityConfigDigest, proof }) };
     }
-    if (active !== undefined) this.database.prepare(`UPDATE native_root_admissions
-      SET state = 'replaced', ended_at = ? WHERE admission_generation = ?`)
-      .run(now, textField(active, "admission_generation"));
+    if (active !== undefined) {
+      const generation = textField(active, "admission_generation");
+      this.demandStore.supersedeGeneration(generation, now);
+      this.database.prepare(`UPDATE native_root_admissions
+        SET state = 'replaced', ended_at = ? WHERE admission_generation = ?`).run(now, generation);
+    }
     const admissionGeneration = randomUUID();
     this.database.prepare(`INSERT INTO native_root_admissions (admission_generation, binding_digest,
       ordinary_service_id, control_plane_generation_id, native_service_id, project_id, repository_id,
@@ -146,6 +162,7 @@ export class NativeRootAdmissionStore {
   private revokeMutation(projectId: string, admissionGeneration: string): NativeRootAdmission | undefined {
     const admission = this.current(projectId, admissionGeneration);
     if (admission === undefined) return undefined;
+    this.demandStore.supersedeGeneration(admissionGeneration, this.context.now());
     this.database.prepare(`UPDATE native_root_admissions SET state = 'revoked', ended_at = ?
       WHERE admission_generation = ?`).run(this.context.now(), admissionGeneration);
     return admission;
@@ -186,6 +203,7 @@ export class NativeRootAdmissionStore {
   }
 
   private expire(now: number): void {
+    this.demandStore.supersedeExpired(now);
     this.database.prepare(`UPDATE native_root_admissions SET state = 'expired', ended_at = ?
       WHERE state = 'active' AND lease_expires_at <= ?`).run(now, now);
   }

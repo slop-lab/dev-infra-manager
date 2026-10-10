@@ -5,6 +5,9 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { openNativeRootAdmissionDatabase } from "../../../../core/packages/core/src/nativeRootAdmissionSchema.js";
 import { NativeRootAdmissionStore } from "../../../../core/packages/core/src/nativeRootAdmissionStore.js";
+import { NativeRootCiEventReceiptStore } from "../../../../core/packages/core/src/nativeRootCiEventReceiptStore.js";
+import { parseNativeRootCiEventReceiptRequest } from "../../../../core/packages/core/src/nativeRootCiEventReceiptModel.js";
+import { assertNativeRootCiEventReceiptIntegrity } from "../../../../core/packages/core/src/nativeRootCiEventReceiptIntegrity.js";
 import { createNativeRootCiProofClient } from "../../../../core/packages/core/src/nativeRootCiProofClient.js";
 import type { NativeRootCiPolicyProof } from "../../../../core/packages/core/src/nativeRootCiProofModel.js";
 import { bundleSecrets } from "../../native-git/test/bundleConfigFixture.js";
@@ -102,6 +105,76 @@ describe("native root admission durable lifecycle", () => {
     expect(store.hasRequestCapacity()).toBe(false);
     database.close();
   });
+
+  it("supersedes queued demand on same-admission root movement", async () => {
+    // Given
+    const proof = await realProof("admission-store-root-demand");
+    const root = await temporaryRoot();
+    const database = openNativeRootAdmissionDatabase(join(root, "ordinary.sqlite3"));
+    const now = () => 1_000;
+    const store = new NativeRootAdmissionStore(database, context(now));
+    const admission = registered(store.register(proof));
+    const receipts = new NativeRootCiEventReceiptStore(database, { ...context(now),
+      activated: () => true, activationBound: () => true });
+    const request = parseNativeRootCiEventReceiptRequest({ schemaVersion: 1, generationId,
+      admissionGeneration: admission.admissionGeneration, event: reviewEvent(proof) });
+    receipts.commit(request, { ...proof, reviewLiveness: "current", event: request.event });
+
+    // When
+    const moved = store.register(withRoot(proof, { sequence: proof.currentRoot.sequence + 1,
+      commit: "a".repeat(proof.currentRoot.commit.length), tree: "b".repeat(proof.currentRoot.tree.length) }));
+
+    // Then
+    expect(registered(moved).admissionGeneration).toBe(admission.admissionGeneration);
+    expect(database.prepare("SELECT state FROM native_root_ci_demands").get()).toEqual({ state: "superseded" });
+    database.close();
+  });
+
+  it("expires queued demand during activation after the ordinary service was offline", async () => {
+    // Given
+    const proof = await realProof("admission-store-offline-expiry");
+    const root = await temporaryRoot();
+    const database = openNativeRootAdmissionDatabase(join(root, "ordinary.sqlite3"));
+    let now = 1_000;
+    const first = new NativeRootAdmissionStore(database, context(() => now));
+    const admission = registered(first.register(proof));
+    const receipts = new NativeRootCiEventReceiptStore(database, { ...context(() => now),
+      activated: () => true, activationBound: () => true });
+    const request = parseNativeRootCiEventReceiptRequest({ schemaVersion: 1, generationId,
+      admissionGeneration: admission.admissionGeneration, event: reviewEvent(proof) });
+    receipts.commit(request, { ...proof, reviewLiveness: "current", event: request.event });
+    now = admission.expiresAt;
+
+    // When
+    new NativeRootAdmissionStore(database, context(() => now)).activate();
+
+    // Then
+    expect(database.prepare("SELECT state FROM native_root_admissions").get()).toEqual({ state: "expired" });
+    expect(database.prepare("SELECT state FROM native_root_ci_demands").get()).toEqual({ state: "superseded" });
+    database.close();
+  });
+
+  it("rejects a queued demand reactivated after its admission was revoked", async () => {
+    // Given
+    const proof = await realProof("admission-store-forged-demand");
+    const root = await temporaryRoot();
+    const file = join(root, "ordinary.sqlite3");
+    const database = openNativeRootAdmissionDatabase(file);
+    const now = () => 1_000;
+    const store = new NativeRootAdmissionStore(database, context(now));
+    const admission = registered(store.register(proof));
+    const receipts = new NativeRootCiEventReceiptStore(database, { ...context(now),
+      activated: () => true, activationBound: () => true });
+    const request = parseNativeRootCiEventReceiptRequest({ schemaVersion: 1, generationId,
+      admissionGeneration: admission.admissionGeneration, event: reviewEvent(proof) });
+    receipts.commit(request, { ...proof, reviewLiveness: "current", event: request.event });
+    store.revoke(proof.projectId, admission.admissionGeneration);
+    database.prepare("UPDATE native_root_ci_demands SET state = 'queued', terminal_at = NULL").run();
+    database.close();
+
+    // When / Then
+    expect(() => assertNativeRootCiEventReceiptIntegrity(file)).toThrow(/receipt state is invalid/i);
+  });
 });
 
 async function realProof(label: string): Promise<NativeRootCiPolicyProof> {
@@ -131,6 +204,18 @@ function withPolicy(proof: NativeRootCiPolicyProof): NativeRootCiPolicyProof {
 }
 function revision(domain: "policy" | "reviewers", version: 1 | 2, value: unknown): string {
   return createHash("sha256").update(`dim-native-${domain}-v${version}\0`).update(JSON.stringify(value)).digest("hex");
+}
+function reviewEvent(proof: NativeRootCiPolicyProof) {
+  const reviewId = "8".repeat(64);
+  return { schemaVersion: 2 as const, type: "dim.native.review-job.available" as const,
+    eventId: createHash("sha256").update("dim-native-authoritative-review-event-v1\0")
+      .update(JSON.stringify({ executionKind: "ordinary-sysbox", jobName: "source", reviewId })).digest("hex"),
+    projectId: proof.projectId, repositoryId: "root" as const, protectedRef: proof.currentRoot.protectedRef,
+    reviewId, expectedProtectedHead: proof.currentRoot.commit, candidateCommit: "3".repeat(40),
+    candidateTree: "4".repeat(40), policyRevision: proof.policy.policyRevision,
+    requiredReviewRevision: proof.policy.requiredReviewRevision,
+    requiredJobSetRevision: proof.policy.requiredJobSetRevision, executionKind: "ordinary-sysbox" as const,
+    jobName: "source", evidenceClass: "candidate-controlled" as const };
 }
 function registered(result: ReturnType<NativeRootAdmissionStore["register"]>) {
   if (result.kind !== "registered") throw new TypeError("registration unexpectedly conflicted");
