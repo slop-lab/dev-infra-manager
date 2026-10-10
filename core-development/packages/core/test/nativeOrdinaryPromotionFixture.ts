@@ -57,6 +57,7 @@ export async function nativeOrdinaryPromotionFixture(
   };
   const authority = await startAuthority({
     nativeGitHttpClient: nativeHttpClient,
+    useStandaloneAttemptIssuer: true,
     nativeGitAttemptIssuer: { username: "ordinary-attempts", password: attemptPassword },
     nativeGitResultReporter: { username: "ordinary-results", password: reporterPassword },
     ...(mode === "paused"

@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import type { NativeGitAttemptIssuerClient } from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
+import type { LegacyNativeAttemptIssuer } from "../../../../core/packages/core/src/nativeOrdinaryClaimService.js";
 import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
 import {
   admission,
@@ -30,7 +30,7 @@ describe("native ordinary host claims", () => {
     let issuanceRequestId = "";
     let nativeObservedUnlocked = false;
     let fixture: AuthorityFixture;
-    const issuer: NativeGitAttemptIssuerClient = {
+    const issuer: LegacyNativeAttemptIssuer = {
       async loadDescriptor(context) {
         const database = new DatabaseSync(fixture.database);
         database.exec("BEGIN IMMEDIATE; ROLLBACK;");
@@ -46,9 +46,9 @@ describe("native ordinary host claims", () => {
         const authorized = assignment(input.descriptor.descriptor, input.context.event.reviewId, attemptId);
         fixture.source.authorizeAttempt(authorized);
         return {
-          replayed: issued > 1,
           issuance: {
-            schemaVersion: 2,
+            schemaVersion: 3,
+            executionKind: "ordinary-sysbox",
             issuanceRequestId: input.issuanceRequestId,
             attemptId,
             reviewId: input.context.event.reviewId,
@@ -157,7 +157,7 @@ describe("native ordinary host claims", () => {
     // Given
     let revoked = 0;
     let fixture: AuthorityFixture;
-    const issuer: NativeGitAttemptIssuerClient = {
+    const issuer: LegacyNativeAttemptIssuer = {
       async loadDescriptor(context) {
         const value = {
           ...descriptor(context.event.projectId, context.event.repositoryId, context.admissionGeneration),
@@ -169,9 +169,8 @@ describe("native ordinary host claims", () => {
         const attemptId = "10000000-0000-4000-8000-000000000029";
         fixture.source.authorizeAttempt(assignment(input.descriptor.descriptor, input.context.event.reviewId, attemptId));
         return {
-          replayed: false,
           issuance: {
-            schemaVersion: 2, issuanceRequestId: input.issuanceRequestId, attemptId,
+            schemaVersion: 3, executionKind: "ordinary-sysbox", issuanceRequestId: input.issuanceRequestId, attemptId,
             reviewId: input.context.event.reviewId, attempt: 1, descriptor: input.descriptor.descriptor,
             descriptorDigest: input.descriptor.digest, hostId: input.context.capacity.hostId,
             capacity: input.context.capacity.capacity, issuedBy: "ordinary-attempts", issuedAt: "2026-10-05T00:00:00.000Z"
@@ -181,7 +180,8 @@ describe("native ordinary host claims", () => {
       async revokeAttempt(issuance) {
         revoked += 1;
         return {
-          schemaVersion: 2, revocationId: "40000000-0000-4000-8000-000000000029",
+          schemaVersion: 3, executionKind: "ordinary-sysbox", revocationRequestId: issuance.attemptId,
+          revocationId: "40000000-0000-4000-8000-000000000029",
           attemptId: issuance.attemptId, reviewId: issuance.reviewId, jobName: issuance.descriptor.jobName,
           attempt: issuance.attempt, descriptorDigest: issuance.descriptorDigest, hostId: issuance.hostId,
           capacity: issuance.capacity, revokedBy: "ordinary-attempts", revokedAt: "2026-10-05T00:00:01.000Z"

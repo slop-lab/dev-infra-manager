@@ -55,8 +55,8 @@ describe("native ordinary host claim epoch race", () => {
     )));
     const event = envelope.events.find((candidate) => candidate.jobName === "source");
     if (event === undefined) throw new Error("source event is missing");
-    const proofReached = deferred();
-    const releaseOldProof = deferred();
+    const proofReached = deferred("stale current-attempt proof was not reached");
+    const releaseOldProof = deferred("stale current-attempt proof was not released");
     const transport = createNodeNativeGitAdmissionHttpClient();
     const currentHttpClient = {
       request: (input: Parameters<typeof transport.request>[0]) => transport.request({ ...input, endpoint: native.baseUrl() })
@@ -73,6 +73,7 @@ describe("native ordinary host claim epoch race", () => {
     };
     const stale = await startAuthority({
       nativeGitHttpClient: staleHttpClient,
+      useStandaloneAttemptIssuer: true,
       nativeGitAttemptIssuer: { username: "ordinary-attempts", password: attemptIssuerPassword }
     });
     authorities.push(stale);
@@ -102,6 +103,7 @@ describe("native ordinary host claim epoch race", () => {
     const current = await startAuthority({
       database: stale.database,
       nativeGitHttpClient: currentHttpClient,
+      useStandaloneAttemptIssuer: true,
       nativeGitAttemptIssuer: { username: "ordinary-attempts", password: attemptIssuerPassword }
     });
     authorities.push(current);
@@ -143,13 +145,19 @@ describe("native ordinary host claim epoch race", () => {
   });
 });
 
-function deferred(): { readonly promise: Promise<void>; readonly resolve: () => void } {
+function deferred(message: string): { readonly promise: Promise<void>; readonly resolve: () => void } {
   let resolver: (() => void) | undefined;
-  const promise = new Promise<void>((resolve) => { resolver = resolve; });
+  let rejecter: ((error: Error) => void) | undefined;
+  const promise = new Promise<void>((resolve, reject) => {
+    resolver = resolve;
+    rejecter = reject;
+  });
+  const timeout = setTimeout(() => rejecter?.(new Error(message)), 3_000);
   return {
     promise,
     resolve() {
       if (resolver === undefined) throw new TypeError("deferred resolver is unavailable");
+      clearTimeout(timeout);
       resolver();
     }
   };

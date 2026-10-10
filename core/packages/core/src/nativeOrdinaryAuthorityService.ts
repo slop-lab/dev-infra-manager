@@ -2,10 +2,8 @@ import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { UserError } from "./errors.js";
 import {
-  createNativeGitAttemptIssuerClient,
   NativeGitAttemptIssuerRejectedError,
   NativeGitAttemptIssuerUnavailableError,
-  type NativeGitAttemptIssuerClient
 } from "./nativeGitAttemptIssuerClient.js";
 import {
   createNativeGitAdmissionSource,
@@ -20,7 +18,7 @@ import {
   parseNativeAdmissionVerification,
   parseNativeAttemptVerification
 } from "./nativeOrdinaryAuthorityModel.js";
-import { NativeOrdinaryClaimService } from "./nativeOrdinaryClaimService.js";
+import { NativeOrdinaryClaimService, type LegacyNativeAttemptIssuer } from "./nativeOrdinaryClaimService.js";
 import { NativeOrdinaryStaleAuthorityError } from "./nativeOrdinaryClaimStore.js";
 import { NativeOrdinaryLeaseService } from "./nativeOrdinaryLeaseService.js";
 import { handleNativeOrdinaryHostHttp } from "./nativeOrdinaryHostHttp.js";
@@ -45,7 +43,7 @@ const maximumBodyBytes = 64 * 1024;
 export type NativeOrdinaryAuthorityDependencies = {
   readonly clock?: NativeOrdinaryAuthorityClock;
   readonly nativeGitHttpClient?: NativeGitAdmissionHttpClient;
-  readonly nativeGitAttemptIssuerClient?: NativeGitAttemptIssuerClient;
+  readonly nativeGitAttemptIssuerClient?: LegacyNativeAttemptIssuer;
   readonly nativeGitResultReporterClient?: NativeGitResultReporterClient;
 };
 
@@ -70,10 +68,11 @@ export function configuredNativeOrdinaryAuthorityServer(
       clock: dependencies.clock ?? { now: Date.now }
     }
   );
-  const attemptIssuer = dependencies.nativeGitAttemptIssuerClient ?? createNativeGitAttemptIssuerClient({
-      config: config.nativeGit,
-      httpClient: dependencies.nativeGitHttpClient ?? createNodeNativeGitAdmissionHttpClient()
-    });
+  const attemptIssuer = dependencies.nativeGitAttemptIssuerClient ?? {
+    loadDescriptor: async () => { throw new NativeGitAttemptIssuerUnavailableError(); },
+    issueAttempt: async () => { throw new NativeGitAttemptIssuerUnavailableError(); },
+    revokeAttempt: async () => { throw new NativeGitAttemptIssuerUnavailableError(); }
+  };
   const claimService = new NativeOrdinaryClaimService(store, attemptIssuer, admissionSource);
   const leaseService = new NativeOrdinaryLeaseService(store, attemptIssuer);
   const reporterClient = dependencies.nativeGitResultReporterClient ?? createNativeGitResultReporterClient(

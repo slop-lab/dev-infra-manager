@@ -1,9 +1,11 @@
 import { DatabaseSync } from "node:sqlite";
 import {
-  NativeGitAttemptIssuerUnavailableError,
-  type NativeGitAttemptIssuerClient,
-  type NativeAttemptIssueRequest
+  NativeGitAttemptIssuerUnavailableError
 } from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
+import type {
+  LegacyAttemptIssueRequest,
+  LegacyNativeAttemptIssuer
+} from "../../../../core/packages/core/src/nativeOrdinaryClaimService.js";
 import type { NativeJobAttemptIssuance } from "../../../../core/packages/core/src/nativeGitAttemptIssuerModel.js";
 import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
 import {
@@ -18,7 +20,7 @@ import {
   type StartAuthorityOptions
 } from "./nativeOrdinaryAuthorityFixture.js";
 
-export type LeaseIssuer = NativeGitAttemptIssuerClient & {
+export type LeaseIssuer = LegacyNativeAttemptIssuer & {
   readonly revocations: () => number;
   readonly revocationObservedUnlocked: () => boolean;
   readonly failNextRevocation: () => void;
@@ -53,7 +55,7 @@ export function leaseIssuer(): LeaseIssuer {
       attempts += 1;
       const issuance = issuanceFor(input, attempts);
       fixture?.source.authorizeAttempt(assignment(issuance.descriptor, issuance.reviewId, issuance.attemptId));
-      return { replayed: false, issuance };
+      return { issuance };
     },
     async revokeAttempt(issuance) {
       if (fixture === undefined) throw new TypeError("authority fixture is unavailable");
@@ -67,7 +69,9 @@ export function leaseIssuer(): LeaseIssuer {
         throw new NativeGitAttemptIssuerUnavailableError();
       }
       return {
-        schemaVersion: 2,
+        schemaVersion: 3,
+        executionKind: "ordinary-sysbox",
+        revocationRequestId: issuance.attemptId,
         revocationId: "40000000-0000-4000-8000-000000000019",
         attemptId: issuance.attemptId,
         reviewId: issuance.reviewId,
@@ -123,9 +127,10 @@ export function recoveryRequest(claim: Readonly<Record<string, unknown>>, reques
   };
 }
 
-function issuanceFor(input: NativeAttemptIssueRequest, attempt: number): NativeJobAttemptIssuance {
+function issuanceFor(input: LegacyAttemptIssueRequest, attempt: number): NativeJobAttemptIssuance {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
+    executionKind: "ordinary-sysbox",
     issuanceRequestId: input.issuanceRequestId,
     attemptId: `10000000-0000-4000-8000-${attempt.toString().padStart(12, "0")}`,
     reviewId: input.context.event.reviewId,

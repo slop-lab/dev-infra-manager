@@ -10,7 +10,7 @@ import {
   type NativeOrdinaryAuthorityConfig
 } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityService.js";
 import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
-import type { NativeGitAttemptIssuerClient } from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
+import type { LegacyNativeAttemptIssuer } from "../../../../core/packages/core/src/nativeOrdinaryClaimService.js";
 import {
   NativeGitResultReporterUnavailableError,
   type NativeGitResultReporterClient
@@ -24,6 +24,7 @@ import {
   startNativeGitAdmissionFixture,
   type NativeGitAdmissionFixture
 } from "./nativeGitAdmissionFixture.js";
+import { createStandaloneNativeAttemptIssuer } from "./nativeOrdinaryStandaloneAttemptIssuer.js";
 
 const runnerBaseImage = `registry.example/runner@sha256:${"3".repeat(64)}`;
 const jobBaseImage = `registry.example/source@sha256:${"8".repeat(64)}`;
@@ -73,7 +74,8 @@ export type StartAuthorityOptions = {
   readonly nativeGitAttemptIssuer?: NativeOrdinaryCredential;
   readonly nativeGitResultReporter?: NativeOrdinaryCredential;
   readonly nativeGitHttpClient?: NativeGitAdmissionHttpClient;
-  readonly attemptIssuerClient?: NativeGitAttemptIssuerClient;
+  readonly attemptIssuerClient?: LegacyNativeAttemptIssuer;
+  readonly useStandaloneAttemptIssuer?: boolean;
   readonly resultReporterClient?: NativeGitResultReporterClient;
   readonly useConfiguredResultReporter?: boolean;
 };
@@ -103,10 +105,17 @@ export async function startAuthority(options: StartAuthorityOptions = {}): Promi
         capacities: [{ capacity: "backup", runnerBaseImage, jobBaseImage, bounds }] }
     ]
   } as const;
+  const nativeGitHttpClient = options.nativeGitHttpClient ?? source.httpClient;
+  const attemptIssuerClient = options.attemptIssuerClient ?? (options.useStandaloneAttemptIssuer === true
+    ? createStandaloneNativeAttemptIssuer({
+        httpClient: nativeGitHttpClient,
+        credential: config.nativeGit.attemptIssuer
+      })
+    : undefined);
   const dependencies = {
     clock: { now: options.now ?? Date.now },
-    nativeGitHttpClient: options.nativeGitHttpClient ?? source.httpClient,
-    ...(options.attemptIssuerClient === undefined ? {} : { nativeGitAttemptIssuerClient: options.attemptIssuerClient }),
+    nativeGitHttpClient,
+    ...(attemptIssuerClient === undefined ? {} : { nativeGitAttemptIssuerClient: attemptIssuerClient }),
     ...(options.useConfiguredResultReporter === true
       ? {}
       : {

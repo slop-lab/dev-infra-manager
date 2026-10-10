@@ -1,13 +1,16 @@
 import { isDeepStrictEqual } from "node:util";
 import {
   NativeGitAttemptIssuerRejectedError,
-  type NativeGitAttemptIssuerClient
+  type NativeAttemptIssueResult
 } from "./nativeGitAttemptIssuerClient.js";
 import {
   NativeAdmissionSourceRejectedError,
   type NativeAdmissionSource
 } from "./nativeGitAdmissionSource.js";
 import { parseNativeAttemptAssignment } from "./nativeOrdinaryAuthorityModel.js";
+import type { NativeCapacityPolicy } from "./nativeOrdinaryAuthorityProtocol.js";
+import type { NativeExecutionDescriptor, NativeJobAttemptRevocation } from "./nativeGitAttemptIssuerModel.js";
+import type { NativeReviewJobEvent } from "./nativeOrdinaryEvent.js";
 import type { NativeOrdinaryAuthorityStore } from "./nativeOrdinaryAuthorityStore.js";
 import type { NativeHostClaim, NativeHostClaimRequest } from "./nativeOrdinaryClaimProtocol.js";
 
@@ -16,12 +19,30 @@ export type NativeHostClaimResult =
   | { readonly kind: "empty" }
   | { readonly kind: "conflict" };
 
+export type LegacyNativeAttemptIssuer = {
+  readonly loadDescriptor: (context: LegacyAttemptContext) => Promise<NativeExecutionDescriptor>;
+  readonly issueAttempt: (input: LegacyAttemptIssueRequest) => Promise<NativeAttemptIssueResult>;
+  readonly revokeAttempt: (issuance: NativeAttemptIssueResult["issuance"]) => Promise<NativeJobAttemptRevocation>;
+};
+
+export type LegacyAttemptContext = {
+  readonly event: NativeReviewJobEvent;
+  readonly admissionGeneration: string;
+  readonly capacity: NativeCapacityPolicy;
+};
+
+export type LegacyAttemptIssueRequest = {
+  readonly issuanceRequestId: string;
+  readonly context: LegacyAttemptContext;
+  readonly descriptor: NativeExecutionDescriptor;
+};
+
 export class NativeOrdinaryClaimService {
   readonly #store: NativeOrdinaryAuthorityStore;
-  readonly #issuer: NativeGitAttemptIssuerClient;
+  readonly #issuer: LegacyNativeAttemptIssuer;
   readonly #source: NativeAdmissionSource;
 
-  constructor(store: NativeOrdinaryAuthorityStore, issuer: NativeGitAttemptIssuerClient, source: NativeAdmissionSource) {
+  constructor(store: NativeOrdinaryAuthorityStore, issuer: LegacyNativeAttemptIssuer, source: NativeAdmissionSource) {
     this.#store = store;
     this.#issuer = issuer;
     this.#source = source;

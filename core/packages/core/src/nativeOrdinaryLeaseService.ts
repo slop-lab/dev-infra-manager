@@ -1,4 +1,4 @@
-import type { NativeGitAttemptIssuerClient } from "./nativeGitAttemptIssuerClient.js";
+import type { NativeJobAttemptIssuance, NativeJobAttemptRevocation } from "./nativeGitAttemptIssuerModel.js";
 import type { NativeOrdinaryAuthorityStore } from "./nativeOrdinaryAuthorityStore.js";
 import type {
   NativeHostClaimRenewal,
@@ -8,9 +8,9 @@ import type {
 
 export class NativeOrdinaryLeaseService {
   readonly #store: NativeOrdinaryAuthorityStore;
-  readonly #issuer: NativeGitAttemptIssuerClient;
+  readonly #issuer: NativeAttemptRevoker;
 
-  constructor(store: NativeOrdinaryAuthorityStore, issuer: NativeGitAttemptIssuerClient) {
+  constructor(store: NativeOrdinaryAuthorityStore, issuer: NativeAttemptRevoker) {
     this.#store = store;
     this.#issuer = issuer;
   }
@@ -35,6 +35,10 @@ export class NativeOrdinaryLeaseService {
     }
   }
 }
+
+type NativeAttemptRevoker = {
+  readonly revokeAttempt: (issuance: NativeJobAttemptIssuance) => Promise<NativeJobAttemptRevocation>;
+};
 
 function assertNever(value: never): never {
   throw new TypeError(`unexpected native recovery state: ${JSON.stringify(value)}`);
