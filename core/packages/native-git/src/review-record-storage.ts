@@ -62,6 +62,14 @@ export async function publishReviewRecord(publication: ReviewPublication): Promi
 }
 
 export async function readReviewJson(path: string, maximumBytes: number, singleLink = false): Promise<unknown> {
+  return (await readReviewRecord(path, maximumBytes, singleLink)).value;
+}
+
+export async function readReviewRecord(
+  path: string,
+  maximumBytes: number,
+  singleLink = false
+): Promise<{ readonly value: unknown; readonly serialized: string }> {
   const file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     const stat = await file.stat();
@@ -72,7 +80,8 @@ export async function readReviewJson(path: string, maximumBytes: number, singleL
       throw new ReviewRecordStorageError("review record must be a single-link file");
     }
     if (stat.size > maximumBytes) throw new ReviewRecordStorageError("review record exceeds the storage bound");
-    return JSON.parse(await file.readFile("utf8"));
+    const serialized = await file.readFile("utf8");
+    return { value: JSON.parse(serialized), serialized };
   } finally {
     await file.close();
   }

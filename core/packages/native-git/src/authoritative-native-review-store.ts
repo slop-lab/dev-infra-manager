@@ -48,11 +48,15 @@ export async function readAuthoritativeNativeReviewEnvelope(
 ): Promise<AuthoritativeNativeReviewEnvelope | undefined> {
   if (!/^[0-9a-f]{64}$/.test(reviewId)) return undefined;
   const paths = storePaths(repository);
-  await assertAuthoritativeNativeReviewStore(repository);
   try {
-    return parseAuthoritativeNativeReviewEnvelope(
+    await Promise.all([paths.root, paths.proposals].map(assertPrivateStoreDirectory));
+    const envelope = parseAuthoritativeNativeReviewEnvelope(
       await readReviewJson(join(paths.proposals, `${reviewId}.json`), maximumRecordBytes)
     );
+    if (envelope.review.reviewId !== reviewId) {
+      throw new AuthoritativeNativeReviewStoreError("authoritative native review path conflicts with its identity");
+    }
+    return envelope;
   } catch (error) {
     if (isCode(error, "ENOENT")) return undefined;
     throw error;
