@@ -51,14 +51,15 @@ Implemented:
   imported roots. A wrong or incomplete candidate remains refused.
   It neither selects native Git for Projects nor admits jobs for execution.
   The ordinary service now durably records imported-root policy eligibility and
-  inert proof-bound ordinary review-event receipts in strict format 5 after
+  proof-bound ordinary review-event receipts and queued demand in strict format 6 after
   exact activation and fresh native proof. Its
   registrar can register/revoke, its reader can query current eligibility, and
   native Git readiness attests that reader identity. Admissions bind the full
   kind-labelled policy to installer generation and global capacity digest, but
   grant no claim, attempt, execution, result, promotion, or runnable-Project
-  authority. Event receipts likewise create no demand, claim, attempt, result,
-  dispatch, or execution authority. Exact replays are historical receipts, so current-validity checks
+  authority. A new receipt creates one queued demand atomically, but no claim,
+  attempt, result, dispatch, or execution authority. Exact replays cannot
+  requeue superseded demand; current-validity checks
   require fresh UUIDv4 request IDs. Native Git's strict format-8 volume can record multiple exact
   Project/root identities and one immutable import intent per prepared root.
   A strict schema-7 native config with empty registrar, importer, root
