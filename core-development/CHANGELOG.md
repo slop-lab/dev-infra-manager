@@ -30,7 +30,7 @@
   activation. The native Git and ordinary CI services now ship separate
   source Dockerfiles pinned to Node 24.19.0 by digest, fixed non-root identities,
   and only their audited runtime file and package closures. The ordinary volume
-  keeps strict format-5 state; the native Git volume creates strict format-8 state with
+  keeps strict format-6 state; the native Git volume creates strict format-8 state with
   a host-bound multi-Project/root registry and a durable non-secret manifest
   marker. The native Git image pins Git `2.39.5`; an operator-supplied strict
   schema-7 config separates host-bound registrars, root importers, root read
@@ -90,8 +90,8 @@
   tests preserve database, ref, review, approval, and revocation bytes. This
   installed-only namespace has no standalone authority fallback. The installed
   ordinary service now consumes that proof only to durably register complete
-  imported-root policy eligibility and inert proof-bound ordinary event
-  receipts in strict format-5 SQLite under the exact
+  imported-root policy eligibility and proof-bound ordinary event intake
+  in strict format-6 SQLite under the exact
   installer generation and global capacity digest. Distinct credential-derived
   registrar and reader identities expose exact register/current/revoke
   routes with a capped durable request-replay ledger. A query-only discovery
@@ -110,10 +110,13 @@
   durable per-event markers; lost replies, restart, and transient marker
   writes retry without creating another receipt. Foreign markers fail closed,
   fatal delivery errors withhold readiness, and QEMU events never enter ordinary
-  intake. Legacy event/claim/result/verification
-  event receipt route stores no demand, claim, attempt, result, dispatch, or
-  execution state. Native Git readiness now attests this admission reader
-  rather than the old attempt-query identity. This adds no intake, attempt,
+  intake. A new receipt and one queued demand commit atomically; exact replay
+  neither duplicates nor requeues demand, and revocation, expiry, changed root,
+  generation or capacity supersedes it. Format 5 is rejected unchanged.
+  Legacy claim/result/verification routes remain absent, so a queued demand
+  grants no claim, attempt, execution or job result. Native Git readiness now
+  attests this admission reader rather than the old attempt-query identity.
+  This adds no host claim, attempt,
   result, execution, promotion, runnable Project, or ready mutation.
   The host-side core importer uses its own owner-only connection file,
   attests the exact importer role, host and generation before each mutation,
