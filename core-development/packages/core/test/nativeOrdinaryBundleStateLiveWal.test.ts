@@ -49,7 +49,7 @@ describe("native ordinary bundle state live WAL inspection", () => {
     expect(outcomes.every((outcome) => {
       switch (outcome.kind) {
         case "accepted":
-          return outcome.stateFormat === 5;
+          return outcome.stateFormat === 6;
         case "rejected":
           return outcome.error instanceof Error
             && /state changed while it was inspected/i.test(outcome.error.message);
@@ -65,7 +65,7 @@ describe("native ordinary bundle state live WAL inspection", () => {
 });
 
 type ProbeOutcome =
-  | { readonly kind: "accepted"; readonly stateFormat: 5 }
+  | { readonly kind: "accepted"; readonly stateFormat: 6 }
   | { readonly kind: "rejected"; readonly error: unknown };
 
 async function writerReady(child: ChildProcess): Promise<void> {

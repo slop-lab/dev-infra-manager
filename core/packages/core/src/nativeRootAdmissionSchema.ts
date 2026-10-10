@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { assertSqliteSchema, sqliteSchemaManifestSha256 } from "./sqliteSchemaManifest.js";
 
-const schemaVersion = 5;
+const schemaVersion = 6;
 
 const schemaSql = `
   CREATE TABLE bundle_activation (
@@ -64,6 +64,38 @@ const schemaSql = `
     PRIMARY KEY (admission_generation, event_id),
     FOREIGN KEY (admission_generation) REFERENCES native_root_admissions(admission_generation) ON DELETE RESTRICT
   ) STRICT;
+  CREATE TABLE native_root_ci_demands (
+    demand_id TEXT PRIMARY KEY
+      CHECK(length(demand_id) = 36 AND substr(demand_id, 15, 1) = '4'
+        AND substr(demand_id, 20, 1) IN ('8','9','a','b')),
+    admission_generation TEXT NOT NULL,
+    event_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
+    repository_id TEXT NOT NULL CHECK(repository_id = 'root'),
+    protected_ref TEXT NOT NULL,
+    review_id TEXT NOT NULL CHECK(length(review_id) = 64 AND review_id NOT GLOB '*[^0-9a-f]*'),
+    expected_protected_head TEXT NOT NULL,
+    candidate_commit TEXT NOT NULL,
+    candidate_tree TEXT NOT NULL,
+    policy_revision TEXT NOT NULL,
+    required_review_revision TEXT NOT NULL,
+    required_job_set_revision TEXT NOT NULL,
+    execution_kind TEXT NOT NULL CHECK(execution_kind = 'ordinary-sysbox'),
+    job_name TEXT NOT NULL,
+    evidence_class TEXT NOT NULL CHECK(evidence_class = 'candidate-controlled'),
+    capacity_config_digest TEXT NOT NULL,
+    root_sequence INTEGER NOT NULL CHECK(root_sequence >= 0),
+    root_commit TEXT NOT NULL,
+    state TEXT NOT NULL CHECK(state IN ('queued','superseded')),
+    created_at INTEGER NOT NULL CHECK(created_at > 0),
+    updated_at INTEGER NOT NULL CHECK(updated_at > 0),
+    terminal_at INTEGER,
+    UNIQUE (admission_generation, event_id),
+    FOREIGN KEY (admission_generation, event_id)
+      REFERENCES native_root_ci_event_receipts(admission_generation, event_id) ON DELETE RESTRICT
+  ) STRICT;
+  CREATE INDEX native_root_ci_demands_oldest_queued
+    ON native_root_ci_demands(created_at, demand_id) WHERE state = 'queued';
   PRAGMA user_version = ${schemaVersion};
 `;
 
