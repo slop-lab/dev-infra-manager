@@ -55,6 +55,7 @@ describe("native ordinary result live integration", () => {
     };
     const central = await startAuthority({
       nativeGitHttpClient: nativeHttpClient,
+      useStandaloneAttemptIssuer: true,
       nativeGitAttemptIssuer: { username: "ordinary-attempts", password: attemptPassword },
       nativeGitResultReporter: { username: "ordinary-results", password: reporterPassword },
       useConfiguredResultReporter: true
@@ -134,6 +135,7 @@ describe("native ordinary result live integration", () => {
     const restarted = await startAuthority({
       database: central.database,
       nativeGitHttpClient: nativeHttpClient,
+      useStandaloneAttemptIssuer: true,
       nativeGitAttemptIssuer: { username: "ordinary-attempts", password: attemptPassword },
       nativeGitResultReporter: { username: "ordinary-results", password: reporterPassword },
       useConfiguredResultReporter: true

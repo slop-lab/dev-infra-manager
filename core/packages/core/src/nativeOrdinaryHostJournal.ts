@@ -4,6 +4,11 @@ import { dirname } from "node:path";
 import { parseNativeHostClaimResponse } from "./nativeOrdinaryHostClientProtocol.js";
 import { parseNativeHostClaimRequest, parseNativeHostRecoveryRequest, type NativeHostClaim } from "./nativeOrdinaryClaimProtocol.js";
 import { parseNativeHostResultRequest } from "./nativeOrdinaryResultProtocol.js";
+import {
+  NativeHostPrivateRoot,
+  parseNativeHostPrivateRootIdentity,
+  type NativeHostPrivateRootIdentity
+} from "./nativeOrdinaryExecutorRoot.js";
 
 export type NativeHostPreparedRequest = {
   readonly requestId: string;
@@ -12,9 +17,9 @@ export type NativeHostPreparedRequest = {
 
 export type NativeHostJournalState =
   | { readonly kind: "claim"; readonly request: NativeHostPreparedRequest }
-  | { readonly kind: "active"; readonly claim: NativeHostClaim }
-  | { readonly kind: "result"; readonly claim: NativeHostClaim; readonly request: NativeHostPreparedRequest }
-  | { readonly kind: "recovery"; readonly claim: NativeHostClaim; readonly request: NativeHostPreparedRequest };
+  | { readonly kind: "active"; readonly claim: NativeHostClaim; readonly privateRoot: NativeHostPrivateRootIdentity }
+  | { readonly kind: "result"; readonly claim: NativeHostClaim; readonly privateRoot: NativeHostPrivateRootIdentity; readonly request: NativeHostPreparedRequest }
+  | { readonly kind: "recovery"; readonly claim: NativeHostClaim; readonly privateRoot: NativeHostPrivateRootIdentity; readonly request: NativeHostPreparedRequest };
 
 export class NativeOrdinaryHostJournal {
   readonly #path: string;
@@ -52,7 +57,7 @@ export class NativeOrdinaryHostJournal {
 
   async save(state: NativeHostJournalState): Promise<void> {
     await this.#prepareDirectory();
-    const bytes = JSON.stringify({ schemaVersion: 1, ...state });
+    const bytes = JSON.stringify({ schemaVersion: 2, ...state });
     const temporary = `${this.#path}.${randomUUID()}.tmp`;
     const handle = await open(temporary, "wx", 0o600);
     try {
@@ -82,6 +87,10 @@ export class NativeOrdinaryHostJournal {
     await syncDirectory(this.#directory);
   }
 
+  privateRoot(identity: NativeHostPrivateRootIdentity): NativeHostPrivateRoot {
+    return new NativeHostPrivateRoot(this.#directory, identity);
+  }
+
   async #prepareDirectory(): Promise<void> {
     await mkdir(this.#directory, { recursive: true, mode: 0o700 });
     const metadata = await lstat(this.#directory);
@@ -94,7 +103,8 @@ export class NativeOrdinaryHostJournal {
 
 function parseJournalState(value: unknown): NativeHostJournalState {
   const record = exactRecord(value);
-  if (record.schemaVersion !== 1) throw new NativeOrdinaryHostJournalError("native ordinary host journal schema is invalid");
+  if (record.schemaVersion === 1) return parseLegacyClaim(record);
+  if (record.schemaVersion !== 2) throw new NativeOrdinaryHostJournalError("native ordinary host journal schema is invalid");
   switch (record.kind) {
     case "claim": {
       exactKeys(record, ["schemaVersion", "kind", "request"]);
@@ -104,30 +114,53 @@ function parseJournalState(value: unknown): NativeHostJournalState {
       return { kind: "claim", request };
     }
     case "active":
-      exactKeys(record, ["schemaVersion", "kind", "claim"]);
-      return { kind: "active", claim: parseNativeHostClaimResponse(record.claim) };
+      exactKeys(record, ["schemaVersion", "kind", "claim", "privateRoot"]);
+      return {
+        kind: "active",
+        claim: parseNativeHostClaimResponse(record.claim),
+        privateRoot: parsePrivateRoot(record.privateRoot)
+      };
     case "result": {
-      exactKeys(record, ["schemaVersion", "kind", "claim", "request"]);
+      exactKeys(record, ["schemaVersion", "kind", "claim", "privateRoot", "request"]);
       const claim = parseNativeHostClaimResponse(record.claim);
       const request = parsePreparedRequest(record.request, "result");
       const parsed = parseBody(request.body, parseNativeHostResultRequest);
       if (parsed.requestId !== request.requestId || parsed.claimId !== claim.claimId) {
         throw new NativeOrdinaryHostJournalError("journal result request is inconsistent");
       }
-      return { kind: "result", claim, request };
+      return { kind: "result", claim, privateRoot: parsePrivateRoot(record.privateRoot), request };
     }
     case "recovery": {
-      exactKeys(record, ["schemaVersion", "kind", "claim", "request"]);
+      exactKeys(record, ["schemaVersion", "kind", "claim", "privateRoot", "request"]);
       const claim = parseNativeHostClaimResponse(record.claim);
       const request = parsePreparedRequest(record.request, "recovery");
       const parsed = parseBody(request.body, parseNativeHostRecoveryRequest);
       if (parsed.requestId !== request.requestId || parsed.claimId !== claim.claimId) {
         throw new NativeOrdinaryHostJournalError("journal recovery request is inconsistent");
       }
-      return { kind: "recovery", claim, request };
+      return { kind: "recovery", claim, privateRoot: parsePrivateRoot(record.privateRoot), request };
     }
     default:
       throw new NativeOrdinaryHostJournalError("native ordinary host journal kind is invalid");
+  }
+}
+
+function parseLegacyClaim(record: Readonly<Record<string, unknown>>): NativeHostJournalState {
+  if (record.kind !== "claim") {
+    throw new NativeOrdinaryHostJournalError("legacy native ordinary journal lacks private root identity");
+  }
+  exactKeys(record, ["schemaVersion", "kind", "request"]);
+  const request = parsePreparedRequest(record.request, "claim");
+  const parsed = parseBody(request.body, parseNativeHostClaimRequest);
+  if (parsed.requestId !== request.requestId) throw new NativeOrdinaryHostJournalError("journal claim request ID is inconsistent");
+  return { kind: "claim", request };
+}
+
+function parsePrivateRoot(value: unknown): NativeHostPrivateRootIdentity {
+  try {
+    return parseNativeHostPrivateRootIdentity(value);
+  } catch (error) {
+    throw new NativeOrdinaryHostJournalError("journal private root identity is invalid", { cause: error });
   }
 }
 

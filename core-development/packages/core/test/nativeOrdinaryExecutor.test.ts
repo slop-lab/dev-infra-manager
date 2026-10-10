@@ -1,3 +1,4 @@
+import { lstat } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import { executeNativeHostClaim, NativeHostCleanupError, NativeHostLaunchError, NativeHostVerificationError } from "../../../../core/packages/core/src/nativeOrdinaryExecutor.js";
 import { NativeHostImageError } from "../../../../core/packages/core/src/nativeOrdinaryExecutorDocker.js";
@@ -120,14 +121,25 @@ describe("native ordinary host claim executor", () => {
     const runner = new ExecutorRunner();
     const reports: unknown[] = [];
     const recoveries: unknown[] = [];
+    let privateRoot: string | undefined;
     const fixture = {
       ...dependencies(runner),
+      createReadAuthority(input: Parameters<ReturnType<typeof dependencies>["createReadAuthority"]>[0]) {
+        privateRoot = input.privateRoot;
+        return authority();
+      },
       async reportResult(request: unknown) {
         expect(runner.calls.at(-1)?.args.slice(0, 3)).toEqual(["container", "rm", "--force"]);
+        if (privateRoot === undefined) throw new Error("private root was not observed");
+        await expect(lstat(privateRoot)).rejects.toMatchObject({ code: "ENOENT" });
         reports.push(request);
         throw new Error("reporter unavailable");
       },
-      async recoverClaim(request: unknown) { recoveries.push(request); }
+      async recoverClaim(request: unknown) {
+        if (privateRoot === undefined) throw new Error("private root was not observed");
+        await expect(lstat(privateRoot)).rejects.toMatchObject({ code: "ENOENT" });
+        recoveries.push(request);
+      }
     };
 
     // When

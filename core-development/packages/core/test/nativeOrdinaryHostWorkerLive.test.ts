@@ -37,6 +37,7 @@ describe("native ordinary host capacity worker live integration", () => {
       nativeGitHttpClient: {
         request: (input) => nativeTransport.request({ ...input, endpoint: nativeEndpoint })
       },
+      useStandaloneAttemptIssuer: true,
       nativeGitAttemptIssuer: { username: "ordinary-attempts", password: attemptPassword },
       nativeGitResultReporter: { username: "ordinary-results", password: reporterPassword },
       useConfiguredResultReporter: true

@@ -1,14 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
-import { createNativeGitCandidateReadAuthorityFactory } from "./nativeGitCandidateReadAuthority.js";
 import type { NativeOrdinaryHostClient } from "./nativeOrdinaryHostClient.js";
 import {
   executeNativeHostClaim,
-  NativeHostFinalizationUncertainError,
-  type NativeCandidateReadAuthorityFactoryInput
+  NativeHostFinalizationUncertainError
 } from "./nativeOrdinaryExecutor.js";
 import { cleanupNativeContainer } from "./nativeOrdinaryExecutorDocker.js";
 import { NativeHostCleanupError } from "./nativeOrdinaryExecutorErrors.js";
+import {
+  plannedNativeHostPrivateRoot,
+  type NativeHostPrivateRootIdentity
+} from "./nativeOrdinaryExecutorRoot.js";
 import {
   NativeOrdinaryHostJournal,
   type NativeHostJournalState
@@ -17,20 +19,19 @@ import { NativeOrdinaryHostRequestRejectedError } from "./nativeOrdinaryHostClie
 import type { NativeHostClaim, NativeHostRecoveryRequest } from "./nativeOrdinaryClaimProtocol.js";
 import type { NativeHostResultRequest } from "./nativeOrdinaryResultProtocol.js";
 import type { StreamingCommandRunner } from "./types.js";
+import {
+  createNativeHostClaimReader,
+  NativeOrdinaryHostWorkerError,
+  type NativeGitProjectReaderCredentialResolver
+} from "./nativeOrdinaryHostWorkerReader.js";
 
-export type NativeGitReaderCredentialScope = {
-  readonly projectId: string;
-  readonly repositoryId: string;
-};
+export { NativeOrdinaryHostWorkerError } from "./nativeOrdinaryHostWorkerReader.js";
 
-export type NativeGitProjectReaderCredential = NativeGitReaderCredentialScope & {
-  readonly username: string;
-  readonly password: string;
-};
-
-export type NativeGitProjectReaderCredentialResolver = (
-  scope: NativeGitReaderCredentialScope
-) => NativeGitProjectReaderCredential | undefined | Promise<NativeGitProjectReaderCredential | undefined>;
+export type {
+  NativeGitProjectReaderCredential,
+  NativeGitProjectReaderCredentialResolver,
+  NativeGitReaderCredentialScope
+} from "./nativeOrdinaryHostWorkerReader.js";
 
 export type NativeOrdinaryHostCapacityDependencies = {
   readonly client: NativeOrdinaryHostClient;
@@ -82,37 +83,58 @@ export async function serveNativeOrdinaryHostCapacity(
       }
       continue;
     }
-    await journal.save({ kind: "active", claim });
-    await executeClaim(dependencies, journal, claim, randomId, signal);
+    await startClaim(dependencies, journal, claim, randomId, signal);
   }
 }
 
-async function executeClaim(
+async function startClaim(
   dependencies: NativeOrdinaryHostCapacityDependencies,
   journal: NativeOrdinaryHostJournal,
   claim: NativeHostClaim,
   randomId: () => string,
   signal: AbortSignal
 ): Promise<void> {
+  const privateRoot = plannedNativeHostPrivateRoot(randomId());
+  await journal.save({ kind: "active", claim, privateRoot });
+  await executeClaim(dependencies, journal, claim, privateRoot, randomId, signal);
+}
+
+async function executeClaim(
+  dependencies: NativeOrdinaryHostCapacityDependencies,
+  journal: NativeOrdinaryHostJournal,
+  claim: NativeHostClaim,
+  privateRootIdentity: NativeHostPrivateRootIdentity,
+  randomId: () => string,
+  signal: AbortSignal
+): Promise<void> {
+  const privateRoot = journal.privateRoot(privateRootIdentity);
   await executeNativeHostClaim({
       runner: dependencies.runner,
-      createReadAuthority: (input) => createClaimReader(dependencies, input),
+      createReadAuthority: (input) => createNativeHostClaimReader(dependencies, input),
       renewClaim: (request, requestSignal) => dependencies.client.renewClaim(request, requestSignal),
-      reportResult: (request, requestSignal) => reportResult(dependencies, journal, claim, request, requestSignal),
-      recoverClaim: (request, requestSignal) => recoverClaim(dependencies, journal, claim, request, requestSignal),
+      reportResult: (request, requestSignal) => reportResult(dependencies, journal, claim, privateRoot.identity, request, requestSignal),
+      recoverClaim: (request, requestSignal) => recoverClaim(dependencies, journal, claim, privateRoot.identity, request, requestSignal),
       randomId
-    }, { claim, signal });
+    }, {
+      claim,
+      signal,
+      managedPrivateRoot: {
+        root: privateRoot,
+        publishCreated: (identity) => journal.save({ kind: "active", claim, privateRoot: identity })
+      }
+    });
 }
 
 async function reportResult(
   dependencies: NativeOrdinaryHostCapacityDependencies,
   journal: NativeOrdinaryHostJournal,
   claim: NativeHostClaim,
+  privateRoot: NativeHostPrivateRootIdentity,
   request: NativeHostResultRequest,
   signal: AbortSignal
 ): Promise<void> {
   const prepared = dependencies.client.prepareResult(request);
-  await journal.save({ kind: "result", claim, request: prepared });
+  await journal.save({ kind: "result", claim, privateRoot, request: prepared });
   try {
     await dependencies.client.reportResult(prepared, signal);
   } catch (error) {
@@ -126,11 +148,12 @@ async function recoverClaim(
   dependencies: NativeOrdinaryHostCapacityDependencies,
   journal: NativeOrdinaryHostJournal,
   claim: NativeHostClaim,
+  privateRoot: NativeHostPrivateRootIdentity,
   request: NativeHostRecoveryRequest,
   signal: AbortSignal
 ): Promise<void> {
   const prepared = dependencies.client.prepareRecovery(request);
-  await journal.save({ kind: "recovery", claim, request: prepared });
+  await journal.save({ kind: "recovery", claim, privateRoot, request: prepared });
   await dependencies.client.recoverClaim(prepared, signal);
   await journal.clear();
 }
@@ -149,20 +172,20 @@ async function replayPending(
         await journal.clear();
         return;
       }
-      await journal.save({ kind: "active", claim });
-      await executeClaim(dependencies, journal, claim, randomId, signal);
+      await startClaim(dependencies, journal, claim, randomId, signal);
       return;
     }
     case "active":
-      await cleanupForReplay(dependencies, state.claim);
-      await recoverClaim(dependencies, journal, state.claim, recoveryRequest(state.claim, randomId()), signal);
+      await cleanupForReplay(dependencies, journal, state.claim, state.privateRoot);
+      await recoverClaim(dependencies, journal, state.claim, state.privateRoot,
+        recoveryRequest(state.claim, randomId()), signal);
       return;
     case "result":
-      await cleanupForReplay(dependencies, state.claim);
+      await cleanupForReplay(dependencies, journal, state.claim, state.privateRoot);
       await replayResult(dependencies, journal, state, randomId, signal);
       return;
     case "recovery":
-      await cleanupForReplay(dependencies, state.claim);
+      await cleanupForReplay(dependencies, journal, state.claim, state.privateRoot);
       await dependencies.client.recoverClaim(state.request, signal);
       await journal.clear();
       return;
@@ -183,7 +206,8 @@ async function replayResult(
     await journal.clear();
   } catch (error) {
     if (!isDefinitiveResultRejection(error)) throw error;
-    await recoverClaim(dependencies, journal, state.claim, recoveryRequest(state.claim, randomId()), signal);
+    await recoverClaim(dependencies, journal, state.claim, state.privateRoot,
+      recoveryRequest(state.claim, randomId()), signal);
   }
 }
 
@@ -194,9 +218,13 @@ function isDefinitiveResultRejection(error: unknown): error is NativeOrdinaryHos
 
 async function cleanupForReplay(
   dependencies: NativeOrdinaryHostCapacityDependencies,
-  claim: NativeHostClaim
+  journal: NativeOrdinaryHostJournal,
+  claim: NativeHostClaim,
+  privateRoot: NativeHostPrivateRootIdentity
 ): Promise<void> {
-  if (!await cleanupNativeContainer(dependencies.runner, claim)) throw new NativeHostCleanupError(claim.claimId);
+  const containerCleaned = await cleanupNativeContainer(dependencies.runner, claim);
+  const rootCleaned = await journal.privateRoot(privateRoot).cleanup(claim.claimId);
+  if (!containerCleaned || !rootCleaned) throw new NativeHostCleanupError(claim.claimId);
 }
 
 function recoveryRequest(claim: NativeHostClaim, requestId: string): NativeHostRecoveryRequest {
@@ -215,31 +243,4 @@ function recoveryRequest(claim: NativeHostClaim, requestId: string): NativeHostR
 
 function assertNever(value: never): never {
   throw new TypeError(`unexpected native host journal state: ${JSON.stringify(value)}`);
-}
-
-async function createClaimReader(
-  dependencies: NativeOrdinaryHostCapacityDependencies,
-  input: NativeCandidateReadAuthorityFactoryInput
-) {
-  const scope = {
-    projectId: input.claim.descriptor.projectId,
-    repositoryId: input.claim.descriptor.repositoryId
-  };
-  const credential = await dependencies.resolveReaderCredential(scope);
-  if (credential === undefined || credential.projectId !== scope.projectId
-    || credential.repositoryId !== scope.repositoryId) {
-    throw new NativeOrdinaryHostWorkerError("native Git reader credential mapping does not match the claim");
-  }
-  return createNativeGitCandidateReadAuthorityFactory({
-    gitExecutable: dependencies.gitExecutable,
-    serviceEndpoint: dependencies.nativeGitEndpoint,
-    credential: {
-      username: credential.username,
-      password: credential.password
-    }
-  })(input);
-}
-
-export class NativeOrdinaryHostWorkerError extends Error {
-  readonly name = "NativeOrdinaryHostWorkerError";
 }

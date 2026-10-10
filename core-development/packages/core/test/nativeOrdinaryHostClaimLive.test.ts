@@ -62,6 +62,7 @@ describe("native ordinary host claim live integration", () => {
     };
     const authority = await startAuthority({
       nativeGitHttpClient: nativeHttpClient,
+      useStandaloneAttemptIssuer: true,
       nativeGitAttemptIssuer: {
         username: "ordinary-attempts",
         password: attemptIssuerPassword
@@ -167,6 +168,7 @@ describe("native ordinary host claim live integration", () => {
     const authority = await startAuthority({
       now: () => now,
       nativeGitHttpClient: nativeHttpClient,
+      useStandaloneAttemptIssuer: true,
       nativeGitAttemptIssuer: { username: "ordinary-attempts", password: attemptIssuerPassword }
     });
     authorities.push(authority);

@@ -10,12 +10,17 @@ import { NativeHostCleanupError, NativeHostFinalizationUncertainError, NativeHos
 import { renewalRequest, startNativeLease, type NativeLease } from "./nativeOrdinaryExecutorLease.js";
 import { emptyNativeOutput, NativeOutputCollector, type NativeBoundedOutput } from "./nativeOrdinaryExecutorOutput.js";
 import { submitNativeResult } from "./nativeOrdinaryExecutorReport.js";
+import type { NativeHostPrivateRoot, NativeHostPrivateRootIdentity } from "./nativeOrdinaryExecutorRoot.js";
 import type { NativeHostResultRequest, NativeTerminalCompletion, NativeTerminalEvent } from "./nativeOrdinaryResultProtocol.js";
 import type { StreamingCommandRunner } from "./types.js";
 
 export type NativeHostExecution = {
   readonly claim: NativeHostClaim;
   readonly signal?: AbortSignal;
+  readonly managedPrivateRoot?: {
+    readonly root: NativeHostPrivateRoot;
+    readonly publishCreated: (identity: NativeHostPrivateRootIdentity) => Promise<void>;
+  };
 };
 
 export type NativeHostExecutionResult = {
@@ -49,7 +54,8 @@ export async function executeNativeHostClaim(
   dependencies: NativeHostExecutorDependencies,
   execution: NativeHostExecution
 ): Promise<NativeHostExecutionResult> {
-  const root = await mkdtemp(join(tmpdir(), "dim-native-ordinary-"));
+  const managedPrivateRoot = execution.managedPrivateRoot;
+  const root = managedPrivateRoot?.root.path ?? await mkdtemp(join(tmpdir(), "dim-native-ordinary-"));
   const workspace = join(root, "workspace");
   const script = join(root, "script");
   const launcher = join(root, "runner.bash");
@@ -59,10 +65,30 @@ export async function executeNativeHostClaim(
   const initialSignal = execution.signal ?? new AbortController().signal;
   let signal = initialSignal;
   let containerCleanupArmed = true;
+  let rootCleanupArmed = true;
   let lease: NativeLease | undefined;
   let captured: NativeBoundedOutput = emptyNativeOutput();
   const startedAt = now().toISOString();
+  const cleanupResources = async (): Promise<boolean> => {
+    let cleanupComplete = true;
+    if (containerCleanupArmed) {
+      if (await cleanupNativeContainer(dependencies.runner, execution.claim)) containerCleanupArmed = false;
+      else cleanupComplete = false;
+    }
+    if (rootCleanupArmed) {
+      const cleaned = managedPrivateRoot === undefined
+        ? await rm(root, { recursive: true, force: true }).then(() => true)
+        : await managedPrivateRoot.root.cleanup(execution.claim.claimId);
+      if (cleaned) rootCleanupArmed = false;
+      else cleanupComplete = false;
+    }
+    return cleanupComplete;
+  };
   try {
+    if (managedPrivateRoot !== undefined) {
+      await managedPrivateRoot.root.create(execution.claim.claimId);
+      await managedPrivateRoot.publishCreated(managedPrivateRoot.root.identity);
+    }
     if (nativeDescriptorDigest(execution.claim.descriptor) !== execution.claim.descriptorDigest) {
       throw new NativeHostVerificationError("claim descriptor digest does not match its descriptor");
     }
@@ -106,8 +132,7 @@ export async function executeNativeHostClaim(
       exitCode: parseExitCode(waited.stdout), waitObserverExitCode: waited.exitCode, logsObserverExitCode: logsExitCode
     });
     captured = output.result();
-    if (!await cleanupNativeContainer(dependencies.runner, execution.claim)) throw new NativeHostCleanupError(execution.claim.claimId);
-    containerCleanupArmed = false;
+    if (!await cleanupResources()) throw new NativeHostCleanupError(execution.claim.claimId);
     const finishedAt = now().toISOString();
     const terminalEvent = terminal(execution, completion, captured, startedAt, finishedAt, identifiers());
     if (!lease.isCurrent()) {
@@ -146,8 +171,7 @@ export async function executeNativeHostClaim(
   } catch (error) {
     if (error instanceof NativeHostRecoveryError || error instanceof NativeHostFinalizationUncertainError) throw error;
     await lease?.stop();
-    const cleanupComplete = !containerCleanupArmed || await cleanupNativeContainer(dependencies.runner, execution.claim);
-    containerCleanupArmed = false;
+    const cleanupComplete = await cleanupResources();
     if (!cleanupComplete) {
       throw new NativeHostCleanupError(execution.claim.claimId);
     }
@@ -160,10 +184,9 @@ export async function executeNativeHostClaim(
     return { disposition: "recovered", terminalEvent, stdout: captured.stdout, stderr: captured.stderr };
   } finally {
     await lease?.stop();
-    if (containerCleanupArmed && !await cleanupNativeContainer(dependencies.runner, execution.claim)) {
+    if (!await cleanupResources()) {
       throw new NativeHostCleanupError(execution.claim.claimId);
     }
-    await rm(root, { recursive: true, force: true });
   }
 }
 

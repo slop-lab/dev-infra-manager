@@ -35,4 +35,38 @@ describe("native ordinary host journal", () => {
     expect(bytes).toContain(request.body.replaceAll("\"", "\\\""));
     expect(bytes).not.toMatch(/authorization|password|token/i);
   });
+
+  it("binds active claim recovery to a strict private-root identity", async () => {
+    // Given
+    const root = await mkdtemp(join(tmpdir(), "dim-native-journal-test-"));
+    roots.push(root);
+    const path = join(root, "journal.json");
+    const journal = new NativeOrdinaryHostJournal(path);
+    const claim = (await import("./nativeOrdinaryExecutorFixture.js")).execution().claim;
+    const privateRoot = {
+      schemaVersion: 1,
+      state: "planned",
+      rootId: "93000000-0000-4000-8000-000000000001"
+    } as const;
+
+    // When
+    await journal.save({ kind: "active", claim, privateRoot });
+
+    // Then
+    expect(await journal.load()).toEqual({ kind: "active", claim, privateRoot });
+    expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({ schemaVersion: 2, privateRoot });
+  });
+
+  it("rejects a legacy active claim that cannot identify its private root", async () => {
+    // Given
+    const root = await mkdtemp(join(tmpdir(), "dim-native-journal-test-"));
+    roots.push(root);
+    const path = join(root, "journal.json");
+    const claim = (await import("./nativeOrdinaryExecutorFixture.js")).execution().claim;
+    await (await import("node:fs/promises")).writeFile(path,
+      JSON.stringify({ schemaVersion: 1, kind: "active", claim }), { mode: 0o600 });
+
+    // When / Then
+    await expect(new NativeOrdinaryHostJournal(path).load()).rejects.toThrow(/lacks private root identity/);
+  });
 });
