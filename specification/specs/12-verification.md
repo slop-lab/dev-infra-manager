@@ -255,9 +255,12 @@ snapshot, Compose, or runtime evidence. These Docker and Git checks are not
 the clean-host real Sysbox and accessible-KVM native Project cutover gate.
 
 Until the native Project/repository state adapter has its own approved contract,
-the gate MUST prove that Project/repository admission, native webhook demand,
-host-capacity advertisement, claims, attempts, and result reports all fail
-before service-state, runtime, or protected-ref mutation. Credential tests MUST
+the gate MUST prove that Project/repository readiness, host-capacity advertisement,
+claims, attempts, and result reports all fail before runtime or protected-ref
+mutation. Only an exact admitted and freshly proved ordinary event may create
+one queued demand atomically with its receipt. Missing, foreign, expired,
+revoked, changed-policy, wrong-kind, or proof-race events cannot create demand;
+restart and lost-ack replay cannot duplicate or revive it. Credential tests MUST
 separately prove that identity cannot issue or report, attempt issuer cannot
 report, result reporter cannot issue or revoke, native query cannot mutate, and
 none can read Git, approve, promote, administer, or cross a configured tuple.
@@ -274,7 +277,7 @@ listeners, observe ordinary proof-bound receipt and exact native marker
 publication, then lose an acknowledgement and restart native Git. It MUST
 converge on one receipt with identical event bytes, leave QEMU events out of
 ordinary intake, retry a transient marker write, fail closed on foreign marker
-state, and never treat a receipt as demand, attempt, or job success. The
+state, and never treat a receipt or queued demand as attempt or job success. The
 packaged `serve` listener must start the same dispatcher as the embedding API.
 The gate MUST prove the bounded predecessor-state preflight runs before config
 reading, Docker, lock creation, staging, or installer-state mutation. Presence
