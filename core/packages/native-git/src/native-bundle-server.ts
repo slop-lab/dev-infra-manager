@@ -1,16 +1,9 @@
 import { once } from "node:events";
-import { createServer } from "node:http";
 import { createNativeBundleShutdown } from "./native-bundle-shutdown.js";
 import { createAuthoritativeNativeAdmissionResolver } from "./authoritative-native-admission-resolver.js";
 import { parseNativeGitBundleConfig } from "./bundle-config.js";
-import {
-  createNodeAdmissionVerifierHttpClient,
-} from "./ordinary-admission-http.js";
-import {
-  assertBundleToken,
-  assertGenerationId,
-  sendJson,
-} from "./native-bundle-http.js";
+import { createNodeAdmissionVerifierHttpClient } from "./ordinary-admission-http.js";
+import { assertBundleToken, assertGenerationId } from "./native-bundle-http.js";
 import { createNativeBundleRequestHandler } from "./native-bundle-request-handler.js";
 import { initializeNativeBundleRuntime } from "./native-bundle-startup.js";
 import { initializeNativeGitBundleState } from "./native-bundle-state.js";
@@ -22,26 +15,28 @@ import { createNativeProjectWorkspaceWriteService } from "./native-project-works
 import { createAuthoritativeNativeReviewController } from "./authoritative-native-review-controller.js";
 import { parseNativeGitProjectRegistrars } from "./native-project-registrar-http.js";
 import { executeNativeProjectPreparation } from "./native-project-registration.js";
-import {
-  NativeGitBundleServerError,
-  type NativeGitBundleServer,
-  type NativeGitBundleServerOptions,
-  type NativeGitPreparedProject
-} from "./native-bundle-server-types.js";
+import { NativeGitBundleServerError, type NativeGitBundleServer, type NativeGitBundleServerOptions,
+  type NativeGitPreparedProject } from "./native-bundle-server-types.js";
 import { createNativeHumanReviewerService } from "./native-human-reviewer-http.js";
 import { deriveAuthoritativeOrdinaryExecutionDescriptor } from "./authoritative-ordinary-execution-descriptor.js";
 import { deriveAuthoritativeQemuExecutionDescriptor } from "./authoritative-qemu-execution-descriptor.js";
-import { createNativeRootCiProofService } from "./native-root-ci-proof-http.js";
 import { createAuthoritativeNativeEventDispatcher,
   type AuthoritativeNativeEventDispatcher } from "./authoritative-native-event-dispatcher.js";
 import { nativeBundleKnownCredentials } from "./native-bundle-known-credentials.js";
+import { createOrdinaryReservationClaimVerifier } from "./ordinary-reservation-claim.js";
+import { createNativeBundleOrdinaryServices } from "./native-bundle-ordinary-services.js";
+import { currentOrdinaryTerminalEvidence as readCurrentOrdinaryTerminalEvidence }
+  from "./current-ordinary-terminal-evidence.js";
+import { createNativeBundleHttpServer } from "./native-bundle-http-server.js";
 
 export { NativeGitBundleServerError } from "./native-bundle-server-types.js";
 export type {
   AuthoritativeNativeReviewSelector,
   NativeGitBundleServer,
   NativeGitBundleServerOptions,
-  NativeGitPreparedProject
+  NativeGitPreparedProject,
+  CurrentOrdinaryTerminalEvidence,
+  CurrentOrdinaryTerminalEvidenceSelector
 } from "./native-bundle-server-types.js";
 
 export async function configuredNativeGitBundleServer(
@@ -142,18 +137,25 @@ export async function configuredNativeGitBundleServer(
     stateDirectory: options.stateDirectory
   });
   const knownCredentials = nativeBundleKnownCredentials(config, registrars);
+  const ordinaryServices = createNativeBundleOrdinaryServices({
+    attemptHooks: options.nativeOrdinaryAttemptHooks,
+    config,
+    httpClient: identityHttpClient,
+    knownCredentials,
+    runtime: authoritativeRuntime,
+    serialize: reviewController.run,
+    verifyClaim: createOrdinaryReservationClaimVerifier({
+      config: config.ordinaryCi,
+      generationId: options.expectedGenerationId,
+      httpClient: identityHttpClient
+    }).verify
+  });
   const humanReviewerService = createNativeHumanReviewerService({
     config,
     knownCredentials,
     serialize: reviewController.run,
     ...(options.nativeHumanReviewerHooks === undefined ? {} : { hooks: options.nativeHumanReviewerHooks }),
     runtime: authoritativeRuntime
-  });
-  const rootCiProofService = createNativeRootCiProofService({
-    credential: config.ordinaryCi.identity,
-    knownCredentials,
-    runtime: authoritativeRuntime,
-    serialize: reviewController.run
   });
   const prepareProject = (generationId: string, ownerHostId: string, input: unknown): Promise<NativeGitPreparedProject> => {
     if (closed) return Promise.reject(new NativeGitBundleServerError("native Git bundle server is closed"));
@@ -184,33 +186,18 @@ export async function configuredNativeGitBundleServer(
     state,
     workspaceWriteService,
     humanReviewerService,
-    rootCiProofService,
+    rootCiProofService: ordinaryServices.rootCiProofService,
+    ordinaryAttemptService: ordinaryServices.ordinaryAttemptService,
+    ordinaryStatusService: ordinaryServices.ordinaryStatusService,
     deliveryHealthy: eventDispatcher.healthy,
     activated: () => activated,
     activate: () => { activated = true; },
     prepareProject
   });
-  const server = createServer((request, response) => {
-    if (closed) {
-      sendJson(response, 503, { error: "native Git bundle server is closed" });
-      return;
-    }
-    void handle(request, response).catch(() => {
-      if (closed || response.headersSent || response.writableEnded) response.destroy();
-      else sendJson(response, 500, { error: "internal server error" });
-    });
-  });
-  server.requestTimeout = 30_000;
-  server.headersTimeout = 10_000;
-  server.keepAliveTimeout = 1_000;
-  server.maxRequestsPerSocket = 100;
-  server.on("listening", () => {
-    if (closed) {
-      server.closeAllConnections();
-      server.close();
-      return;
-    }
-    eventDispatcher.start();
+  const server = createNativeBundleHttpServer({
+    closed: () => closed,
+    handle,
+    onListening: eventDispatcher.start
   });
   const close = createNativeBundleShutdown({ server, eventDispatcher, state,
     stopAdmission() {
@@ -246,6 +233,14 @@ export async function configuredNativeGitBundleServer(
     },
     deriveQemuExecutionDescriptor(input) {
       return reviewController.run(() => deriveAuthoritativeQemuExecutionDescriptor(authoritativeRuntime, input));
+    },
+    async currentOrdinaryTerminalEvidence(input) {
+      return readCurrentOrdinaryTerminalEvidence({
+        config: config.ordinaryCi,
+        httpClient: identityHttpClient,
+        runtime: authoritativeRuntime,
+        serialize: reviewController.run
+      }, input);
     },
     close
   };

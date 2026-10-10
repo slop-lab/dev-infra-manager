@@ -45,7 +45,7 @@ describe("installed native root admission service", () => {
     const receipt = await call(ordinary.origin, "POST", "/v1/native-root-ci-events",
       authorization("native-events", bundleSecrets.webhook),
       { schemaVersion: 1, generationId, admissionGeneration, event });
-    const removedClaims = await call(ordinary.origin, "POST", "/v1/host-claims",
+    const malformedClaim = await call(ordinary.origin, "POST", "/v1/host-claims",
       authorization("host-a", bundleSecrets.host), {});
     const conflictingReplay = await call(ordinary.origin, "POST", admissionPath("current"), reader,
       { ...registerRequest, admissionGeneration });
@@ -74,7 +74,7 @@ describe("installed native root admission service", () => {
     expect(registered.status).toBe(200);
     expect(receipt).toEqual({ status: 202, body: { schemaVersion: 1, generationId,
       admissionGeneration, eventId: event.eventId, recorded: true } });
-    expect(removedClaims.status).toBe(404);
+    expect(malformedClaim.status).toBe(400);
     expect(conflictingReplay.status).toBe(409);
     expect(current.body).toEqual({ ...bodyRecord(registered.body), requestId: currentRequest.requestId });
     expect(inactive.status).toBe(503);

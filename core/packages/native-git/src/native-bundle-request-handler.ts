@@ -27,6 +27,8 @@ import {
 import { nativeGitRoute } from "./routing.js";
 import type { NativeHumanReviewerService } from "./native-human-reviewer-http.js";
 import type { NativeRootCiProofService } from "./native-root-ci-proof-http.js";
+import type { NativeOrdinaryAttemptService } from "./native-ordinary-attempt-http.js";
+import type { NativeOrdinaryStatusService } from "./native-ordinary-status-http.js";
 
 type RequestHandlerInput = {
   readonly activationTokenDigest: string;
@@ -41,6 +43,8 @@ type RequestHandlerInput = {
   readonly workspaceWriteService: NativeProjectWorkspaceWriteService;
   readonly humanReviewerService: NativeHumanReviewerService;
   readonly rootCiProofService: NativeRootCiProofService;
+  readonly ordinaryAttemptService: NativeOrdinaryAttemptService;
+  readonly ordinaryStatusService: NativeOrdinaryStatusService;
   readonly deliveryHealthy: () => boolean;
   readonly activated: () => boolean;
   readonly activate: () => void;
@@ -87,6 +91,8 @@ export function createNativeBundleRequestHandler(input: RequestHandlerInput) {
     if (await input.rootReadService.handleLeaseRequest(request, response, url)) return;
     if (await input.workspaceWriteService.handleLeaseRequest(request, response, url)) return;
     if (await input.humanReviewerService.handle(request, response, url)) return;
+    if (await input.ordinaryAttemptService.handle(request, response, url)) return;
+    if (await input.ordinaryStatusService.handle(request, response, url)) return;
     if (await input.rootCiProofService.handle(request, response, url)) return;
     if (/^\/v1\/projects\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\/root-import\/proof$/.test(url.pathname)
       && (request.method !== "GET" || url.search !== "")) return sendNotFound(response);

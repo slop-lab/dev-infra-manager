@@ -30,6 +30,8 @@ export * from "./nativeRootCiProofClient.js";
 export * from "./nativeRootCiProofModel.js";
 export * from "./nativeRootCiReviewEvent.js";
 export * from "./nativeRootCiEventReceiptModel.js";
+export * from "./nativeRootCiResultProofModel.js";
+export * from "./nativeRootCiTerminalResultProofModel.js";
 export * from "./nativeGitProjectRegistrarClient.js";
 export * from "./nativeGitProjectRegistrarConnection.js";
 export * from "./nativeGitRootImporterClient.js";

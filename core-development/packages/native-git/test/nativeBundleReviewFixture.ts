@@ -8,6 +8,7 @@ import type {
 } from "../../../../core/packages/native-git/src/index.js";
 import type { NativeHumanReviewerHooks } from "../../../../core/packages/native-git/src/native-human-reviewer-http.js";
 import type { ReviewPublicationFaults } from "../../../../core/packages/native-git/src/review-record-storage.js";
+import type { NativeOrdinaryAttemptHooks } from "../../../../core/packages/native-git/src/native-ordinary-attempt-http.js";
 import { authoritativePolicy, matchingRunner } from "./authoritativeNativeCandidateFixture.js";
 import {
   activateFinalizeService,
@@ -41,7 +42,8 @@ export async function nativeBundleReviewFixture(
   policy: object = authoritativePolicy(),
   reviewerHooks?: NativeHumanReviewerHooks,
   ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient,
-  deliveryFaults?: ReviewPublicationFaults
+  deliveryFaults?: ReviewPublicationFaults,
+  nativeOrdinaryAttemptHooks?: NativeOrdinaryAttemptHooks
 ): Promise<NativeBundleReviewFixture> {
   const root = await createFinalizeRoot(label);
   const bundle = await createRootBundle({
@@ -52,7 +54,7 @@ export async function nativeBundleReviewFixture(
   });
   const service = await startFinalizeService(
     root, undefined, undefined, undefined, undefined, undefined, reviewHooks, reviewerHooks,
-    ordinaryIdentityHttpClient, deliveryFaults
+    ordinaryIdentityHttpClient, deliveryFaults, nativeOrdinaryAttemptHooks
   );
   await activateFinalizeService(service.origin);
   await service.prepareProject(generationId, importer.hostId, projectInput("project-a"));

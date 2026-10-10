@@ -5,28 +5,16 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { expect } from "vitest";
 import { parseNativeGitBundleConfig } from "../../../../core/packages/native-git/src/bundle-config.js";
-import {
-  configuredNativeGitBundleServer,
-  type NativeGitBundleServer
-} from "../../../../core/packages/native-git/src/native-bundle-server.js";
+import { configuredNativeGitBundleServer, type NativeGitBundleServer } from "../../../../core/packages/native-git/src/native-bundle-server.js";
 import type { AdmissionVerifierHttpClient } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import type { ReviewPublicationFaults } from "../../../../core/packages/native-git/src/review-record-storage.js";
-import type {
-  AuthoritativeNativeReviewHooks
-} from "../../../../core/packages/native-git/src/authoritative-native-review.js";
+import type { AuthoritativeNativeReviewHooks } from "../../../../core/packages/native-git/src/authoritative-native-review.js";
 import type { NativeHumanReviewerHooks } from "../../../../core/packages/native-git/src/native-human-reviewer-http.js";
+import type { NativeOrdinaryAttemptHooks } from "../../../../core/packages/native-git/src/native-ordinary-attempt-http.js";
 import { bundleSecrets, idleNativeConfig } from "./bundleConfigFixture.js";
-import type {
-  GitBundle,
-  ImportReceipt,
-  RootReadLeaseHooks,
-  RunningService,
-  RuntimeGit,
-  WorkspaceWriteLeaseHooks
-} from "./nativeRootImportFinalizeTypes.js";
+import type { GitBundle, ImportReceipt, RootReadLeaseHooks, RunningService, RuntimeGit, WorkspaceWriteLeaseHooks } from "./nativeRootImportFinalizeTypes.js";
 
-export type { GitBundle, ImportReceipt, RootReadLeaseHooks, RunningService, RuntimeGit,
-  WorkspaceWriteLeaseHooks } from "./nativeRootImportFinalizeTypes.js";
+export type { GitBundle, ImportReceipt, RootReadLeaseHooks, RunningService, RuntimeGit, WorkspaceWriteLeaseHooks } from "./nativeRootImportFinalizeTypes.js";
 
 export const runGit = promisify(execFile);
 export const generationId = "a".repeat(64);
@@ -40,15 +28,11 @@ export const authorization = `Basic ${Buffer.from(`${importer.username}:${import
 const wrongHostImporter = {
   hostId: "host-b", username: "project-root-importer-b", password: Buffer.alloc(32, 56).toString("base64url")
 } as const;
-export const wrongHostAuthorization = `Basic ${Buffer.from(
-  `${wrongHostImporter.username}:${wrongHostImporter.password}`
-).toString("base64")}`;
+export const wrongHostAuthorization = `Basic ${Buffer.from(`${wrongHostImporter.username}:${wrongHostImporter.password}`).toString("base64")}`;
 export const rootReadIssuer = {
   hostId: "host-a", username: "project-root-read-issuer-a", password: bundleSecrets.projectRootReadIssuer
 } as const;
-export const rootReadIssuerAuthorization = `Basic ${Buffer.from(
-  `${rootReadIssuer.username}:${rootReadIssuer.password}`
-).toString("base64")}`;
+export const rootReadIssuerAuthorization = `Basic ${Buffer.from(`${rootReadIssuer.username}:${rootReadIssuer.password}`).toString("base64")}`;
 export const wrongHostRootReadIssuer = {
   hostId: "host-b", username: "project-root-read-issuer-b", password: Buffer.alloc(32, 57).toString("base64url")
 } as const;
@@ -91,12 +75,13 @@ export async function startFinalizeService(
   authoritativeReviewHooks?: AuthoritativeNativeReviewHooks,
   nativeHumanReviewerHooks?: NativeHumanReviewerHooks,
   ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient,
-  deliveryFaults?: ReviewPublicationFaults
+  deliveryFaults?: ReviewPublicationFaults,
+  nativeOrdinaryAttemptHooks?: NativeOrdinaryAttemptHooks
 ): Promise<RunningService> {
   return startFinalizeServiceForGeneration(
     root, generationId, activationToken, rootReadLeaseClock, rootReadLeaseHooks, workspaceWriteLeaseClock,
     workspaceWriteLeaseHooks, runtimeGit, authoritativeReviewHooks, nativeHumanReviewerHooks, ordinaryIdentityHttpClient,
-    deliveryFaults
+    deliveryFaults, nativeOrdinaryAttemptHooks
   );
 }
 
@@ -112,7 +97,8 @@ export async function startFinalizeServiceForGeneration(
   authoritativeReviewHooks?: AuthoritativeNativeReviewHooks,
   nativeHumanReviewerHooks?: NativeHumanReviewerHooks,
   ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient,
-  deliveryFaults?: ReviewPublicationFaults
+  deliveryFaults?: ReviewPublicationFaults,
+  nativeOrdinaryAttemptHooks?: NativeOrdinaryAttemptHooks
 ): Promise<RunningService> {
   const options = {
     config: parseNativeGitBundleConfig({
@@ -135,7 +121,8 @@ export async function startFinalizeServiceForGeneration(
     ...(authoritativeReviewHooks === undefined ? {} : { authoritativeReviewHooks }),
     ...(nativeHumanReviewerHooks === undefined ? {} : { nativeHumanReviewerHooks }),
     ...(ordinaryIdentityHttpClient === undefined ? {} : { ordinaryIdentityHttpClient }),
-    ...(deliveryFaults === undefined ? {} : { deliveryFaults })
+    ...(deliveryFaults === undefined ? {} : { deliveryFaults }),
+    ...(nativeOrdinaryAttemptHooks === undefined ? {} : { nativeOrdinaryAttemptHooks })
   };
   const service = await configuredNativeGitBundleServer(options);
   services.push(service);
@@ -155,11 +142,8 @@ export async function activateFinalizeService(origin: string): Promise<void> {
   await activateFinalizeServiceForGeneration(origin, generationId, activationToken);
 }
 
-export async function activateFinalizeServiceForGeneration(
-  origin: string,
-  servingGenerationId: string,
-  servingActivationToken: string
-): Promise<void> {
+export async function activateFinalizeServiceForGeneration(origin: string, servingGenerationId: string,
+  servingActivationToken: string): Promise<void> {
   const response = await fetch(`${origin}/v1/activation`, {
     method: "POST",
     headers: { authorization: `Bearer ${servingActivationToken}`, "content-type": "application/json" },
