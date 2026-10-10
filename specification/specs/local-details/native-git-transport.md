@@ -537,10 +537,11 @@ runtime, promotion, or Project-ready authority.
 
 ### Installed native-root admission contract
 
-The installed ordinary service writes only strict state format 5. Its SQLite
+The installed ordinary service writes only strict state format 6. Its SQLite
 schema contains `bundle_activation`, `native_root_admissions`, and
-`native_root_admission_requests`, plus `native_root_ci_event_receipts`; both
-replay ledgers are independently capped at 100,000 rows. Format 4 and every
+`native_root_admission_requests`, plus `native_root_ci_event_receipts` and
+`native_root_ci_demands`; both replay ledgers are independently capped at
+100,000 rows. Format 5 and every
 other predecessor are rejected byte-for-byte with no
 migration. The schema-4 ordinary configuration is unchanged. The serving
 generation comes only from the `serve ... GENERATION_ID` argument, and the
@@ -570,7 +571,11 @@ equality and the complete admission identity, then repeats activation,
 fresh-clock admission, replay, cap, policy, and full root checks in one
 `BEGIN IMMEDIATE` insertion transaction. A lease-only renewal with unchanged
 identity/root may converge; revocation, replacement, expiry, root movement, or
-changed identity while proof is pending conflicts without mutation.
+changed identity while proof is pending conflicts without mutation. Each newly
+accepted receipt and its one `queued` ordinary-Sysbox demand commit in that
+same transaction. Demand insertion failure rolls both rows back; replay of a
+known receipt requires its paired demand and cannot create or requeue one.
+The demand is only a durable intent, not an executable claim or job result.
 
 The primary key is `(admission_generation,event_id)`, so a new admission may
 record the same deterministic event only after fresh proof. Each row retains
@@ -578,12 +583,15 @@ the canonical event and digest plus services, generation, Project/root, import,
 policy, root snapshot, capacity digest, and receipt time. Rows are never
 deleted. Startup and read-only check-state stream at most 100,000 rows and
 verify canonical bytes/digest, event/row identity, the joined admission's
-immutable identity and policy job/revisions, and monotonic historical roots.
+immutable identity and policy job/revisions, monotonic historical roots, and
+exactly one paired demand. Queued demands whose admission or root is no longer
+current are invalid; revocation, expiry, root movement, and generation or
+capacity replacement supersede queued demand without reviving historical work.
 Inactive historical receipts are valid. Validation performs no repair or
 network request.
 
-`202` means only that this historical receipt exists. It is not review
-liveness, approval, dispatch, demand, claim, attempt, result, execution, or
+`202` means the historical receipt and its demand exist. It is not review
+liveness, approval, dispatch eligibility, claim, attempt, result, execution, or
 promotion authority. No legacy event dispatcher is wired because its flat
 schema-1 payload and acknowledgement are incompatible.
 
