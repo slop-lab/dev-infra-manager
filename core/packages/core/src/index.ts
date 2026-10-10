@@ -49,6 +49,7 @@ export {
 } from "./nativeProjectDraftRootRead.js";
 export * from "./nativeProjectDraftRootSnapshot.js";
 export * from "./nativeQemuConnection.js";
+export * from "./nativeControlPlaneConnection.js";
 export * from "./nativeOrdinaryExecutor.js";
 export * from "./nativeOrdinaryHostClient.js";
 export * from "./nativeOrdinaryHostJournal.js";
