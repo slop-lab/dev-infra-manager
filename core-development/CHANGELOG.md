@@ -104,7 +104,13 @@
   fresh current checks use new UUIDv4 nonces and never fetch upstream; exact
   replays are historical receipts, not present-validity assertions. Admission
   changes and replay receipts commit in one SQLite transaction, including
-  post-proof race and replay-cap checks. Legacy event/claim/result/verification
+  post-proof race and replay-cap checks. Installed native Git now delivers
+  authoritative ordinary-Sysbox review events to these receipts after an
+  independent query-only admission lookup. Exact acknowledgements publish
+  durable per-event markers; lost replies, restart, and transient marker
+  writes retry without creating another receipt. Foreign markers fail closed,
+  fatal delivery errors withhold readiness, and QEMU events never enter ordinary
+  intake. Legacy event/claim/result/verification
   event receipt route stores no demand, claim, attempt, result, dispatch, or
   execution state. Native Git readiness now attests this admission reader
   rather than the old attempt-query identity. This adds no intake, attempt,
