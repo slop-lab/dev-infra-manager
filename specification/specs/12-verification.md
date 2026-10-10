@@ -269,6 +269,13 @@ generation and capacity digest. Tests MUST prove that discovery with a foreign
 credential or Project, stale generation, expired or revoked admission fails
 without inserting a request-replay row or mutating admission state. Discovery
 is not admission registration, event delivery, claim, or job acceptance.
+The installed native review-event delivery check MUST run both real service
+listeners, observe ordinary proof-bound receipt and exact native marker
+publication, then lose an acknowledgement and restart native Git. It MUST
+converge on one receipt with identical event bytes, leave QEMU events out of
+ordinary intake, retry a transient marker write, fail closed on foreign marker
+state, and never treat a receipt as demand, attempt, or job success. The
+packaged `serve` listener must start the same dispatcher as the embedding API.
 The gate MUST prove the bounded predecessor-state preflight runs before config
 reading, Docker, lock creation, staging, or installer-state mutation. Presence
 of `DIM_ORDINARY_CI_POOL_CONNECTION_FILE`, including an empty value, MUST refuse
