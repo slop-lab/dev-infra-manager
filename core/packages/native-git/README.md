@@ -586,8 +586,16 @@ global capacity digest; current queries perform no upstream refresh. Exact
 request replay survives restart, while expiry, revocation, import/policy
 change, generation rotation, or capacity rotation requires a new admission
 generation. The installed schema-7 webhook endpoint is
-`/v1/native-root-ci-events`; no dispatcher is connected to it. A receipt is
-historical delivery evidence only and does not connect the legacy ordinary
+`/v1/native-root-ci-events`. The installed native Git service now delivers
+only authoritative ordinary-Sysbox review events automatically after the
+query-only admission resolver confirms the current Project/root policy and
+generation. The webhook-role dispatcher retains no query credential, retries
+the identical event after lost acknowledgements or transient marker writes,
+and publishes a private digest-bound marker only after the exact durable
+ordinary receipt. Foreign or unsafe markers fail startup unchanged; fatal
+delivery integrity errors make readiness unavailable. QEMU events are never
+submitted to this endpoint. A receipt is historical delivery evidence only
+and does not connect the legacy ordinary
 authority, claim, result, execution, or promotion paths.
 Every current-validity check must use a fresh UUIDv4 `requestId`. Exact replay
 of any operation, including `current`, is a historical receipt and may return
