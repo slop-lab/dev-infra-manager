@@ -251,17 +251,23 @@ ordinary-CI service bundle from an operator-owned absolute config path:
 dim installer install control-plane --config /absolute/path/install.json
 ```
 
-The bundle starts without a runnable Project. Its ordinary service can now
-durably register and revoke imported-root policy eligibility after exact
-activation and a fresh native Git proof, and native Git readiness attests the
-corresponding read-only identity. It can also retain an inert historical receipt
-for an exact current schema-2 ordinary review event after fresh proof. Neither
-record grants demand, claim, attempt, dispatch, execution, result, promotion,
-or Project readiness. The bundle still
-does not provide the native Project/repository adapter, capacity advertisement,
-host-controller execution, the real Sysbox job gate, or a reviewer browser UI.
-Those remain separate future work; this installer is not completion of
-the broader native control-plane project. The obsolete `dim install-cp` token
+The bundle starts without a runnable Project. Its strict ordinary format-11
+state can register imported-root policy, receive current ordinary review events,
+reserve and activate generation-bound host claims, accept schema-2 cleaned host
+results carrying schema-3 terminal evidence, and retry its durable result outbox
+until native Git returns an exact acknowledgement. Native Git keeps the
+corresponding strict schema-3 attempt and status evidence in format-8 state.
+These routes use separate proof, attempt-issuer, result-reporter, webhook,
+query, and host credentials. Capacity is released only after acknowledged
+delivery or cleanup-gated terminal denial.
+
+This is still an additive, fail-closed checkpoint. The installed CLI and
+controller don't start the available host worker, and the bundle has no native
+Project/repository adapter, native QEMU scheduler or executor, protected
+promotion route, or runtime-ready state. No clean-host Sysbox/KVM acceptance has
+been claimed. A later dual-kind promotion path must require every ordinary and
+QEMU result selected by protected policy as well as exact-tree human approval.
+The obsolete `dim install-cp` token
 is owned and rejected by the facade with exit code 2 and is never forwarded to
 the separately installed DIM CLI.
 

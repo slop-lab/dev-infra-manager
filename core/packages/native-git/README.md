@@ -271,11 +271,13 @@ inside the owned bare repository and are validated when the service restarts.
 
 ## CI evidence and promotion
 
-The dedicated `ordinaryCi.attemptIssuer` service credential first issues the current attempt through
+For the standalone schema-2 service, the dedicated `ordinaryCi.attemptIssuer`
+credential first issues the current attempt through
 `POST .../reviews/<review-id>/job-attempts`; it may revoke that attempt through
 `POST .../job-attempt-revocations`. Only `ordinaryCi.resultReporter` submits
-CI reports, using the native
-`dim.ci.job.completed` schema-2 event envelope. Issuance requires a UUID
+CI reports, using its native `dim.ci.job.completed` schema-2 event envelope.
+The installed bundle's schema-3 authority is described under Current integration
+status. Standalone issuance requires a UUID
 `issuanceRequestId`, the expected canonical descriptor digest and all operator
 descriptor inputs, plus the assigned `hostId` and `capacity`. Native Git derives
 the full descriptor again under the protected-ref serializer, verifies current
@@ -381,9 +383,10 @@ strings. The descriptor hash starts with the unframed ASCII domain
 as its ASCII decimal UTF-8 byte length, one colon, and its UTF-8 bytes. These
 choices are part of the exported library contract so scheduler and host
 reverification cannot choose different normalized encodings.
-Attempt, revocation, status-envelope, and status-record state accepts only
-schema version 2. Existing version-1 CI evidence is rejected at startup without
-rewriting it; reviews and human approvals remain immutable and unaffected.
+Standalone attempt, revocation, status-envelope, and status-record state accepts
+only schema version 2. Existing version-1 CI evidence is rejected at startup
+without rewriting it; reviews and human approvals remain immutable and
+unaffected.
 The service holds an exclusive rollback-journal SQLite transaction in
 `.dim-native-git-owner.sqlite3` below the canonical storage root. The database
 is bound to that root's filesystem identity, and a second process sharing the
@@ -493,7 +496,8 @@ authoritative imported-policy proof. That write lease permits only creation or
 fast-forward of its exact workspace proposal namespace through the checked
 pre-receive hook; it has no protected-ref, tag, deletion, force-rewrite, reviewer,
 CI, promotion, or Project-ready authority and is
-not connected to runnable core Project lifecycle, ordinary Sysbox CI, or QEMU CI.
+not connected to runnable core Project lifecycle or QEMU CI and does not itself
+grant ordinary CI authority.
 The host-only draft reader consumes the root-read lease after matching the original
 receipt and current serving proof, but its presence does not make a Project
 ready or selectable. The installed bundle object exposes an in-process
@@ -539,8 +543,8 @@ exact CI evidence, and the serialized compare-and-swap transaction required by
 `TRUST-PROMOTION-001` and `TRUST-PROMOTION-CAS-001`. Protected-write authority
 exists only inside that checked host operation; smart HTTP remains
 proposal-only and has no administrator bypass. Core lifecycle wiring, a
-host-side workspace-write lease client, reviewer UI, and independent-host CI
-gates remain separate work.
+host-side workspace-write lease client, reviewer UI, and installed Project
+lifecycle gates remain separate work.
 Independent CI, when a Project requires it, must use a separately selected
 command definition and evidence class; native ordinary candidate self-tests do
 not acquire that label by running on another host.
@@ -567,37 +571,56 @@ The schema-7 installed bundle also exposes a separate read-only
 `native-root-ci-proof` HTTP namespace only to `ordinaryCi.identity`. Its
 identity route attests role `native-root-ci-proof-reader`, the ordered imported
 policy and ordinary-event scopes, and the serving generation even before
-activation; this is compatibility identity, not readiness. Its Project/root
-policy route returns the complete canonical `authoritative-v1` policy, including
-kind-labelled QEMU and ordinary-Sysbox jobs and all reviewer rules, plus the
-live import nonce and current root. Its review-event route accepts QEMU as a
-valid selector shape but proves only an exact stored current
-`ordinary-sysbox` schema-2 event. Both proofs run under the shared review
-serializer, repeat authoritative root and review checks, and leave database,
-refs, reviews, approvals, and revocations unchanged. Current pending, approved,
-and self-revoked reviews are eligible; the proof never means approved. The
-namespace has no fallback to the standalone `ordinary-authority` API and grants
-no admission, intake, attempt, result, execution, promotion, or ready authority.
+activation. Its Project/root policy route returns the complete canonical
+`authoritative-v1` policy, kind-labelled jobs, reviewer rules, import nonce, and
+current root. The review-event route proves only an exact current stored
+`ordinary-sysbox` schema-2 event. These proofs mutate no state, don't imply
+approval, and have no fallback to the standalone `ordinary-authority` API.
 
-The paired installed ordinary service uses this proof to store native-root
-eligibility and inert proof-bound event receipts in strict format 5. Registration binds the complete
-kind-labelled policy and import identity to the exact installer generation and
-global capacity digest; current queries perform no upstream refresh. Exact
-request replay survives restart, while expiry, revocation, import/policy
-change, generation rotation, or capacity rotation requires a new admission
-generation. The installed schema-7 webhook endpoint is
-`/v1/native-root-ci-events`. The installed native Git service now delivers
-only authoritative ordinary-Sysbox review events automatically after the
-query-only admission resolver confirms the current Project/root policy and
-generation. The webhook-role dispatcher retains no query credential, retries
-the identical event after lost acknowledgements or transient marker writes,
-and publishes a private digest-bound marker only after the exact durable
-ordinary receipt. Foreign or unsafe markers fail startup unchanged; fatal
-delivery integrity errors make readiness unavailable. QEMU events are never
-submitted to this endpoint. A receipt is historical delivery evidence only
-and does not connect the legacy ordinary
-authority, claim, result, execution, or promotion paths.
-Every current-validity check must use a fresh UUIDv4 `requestId`. Exact replay
-of any operation, including `current`, is a historical receipt and may return
-its original success after revocation or expiry; it does not attest present
-eligibility.
+The paired installed ordinary service stores admission, review-event demand,
+claim lifecycle, cleaned host result, and result-delivery state in strict format
+11. Earlier formats aren't adopted or migrated. Registration binds the complete
+kind-labelled policy and import identity to the installer generation and global
+capacity digest. Fresh current checks use new UUIDv4 request IDs. Historical
+replay doesn't assert current eligibility.
+
+The installed event dispatcher uses only its outbound webhook credential and
+the separate query role's read-only admission discovery. It submits ordinary
+events to `/v1/native-root-ci-events`, retries identical bytes after uncertain
+delivery, and writes a private digest-bound marker only after the exact durable
+receipt. QEMU events never enter this lane.
+
+For ordinary work, the paired services keep proof, attempt issuance, result
+reporting, query, webhook, and host credentials distinct. The attempt issuer
+uses exact review-scoped descriptor, issuance, and revocation routes. Native Git
+stores strict schema-3 `ordinary-sysbox` attempts in format-8 state and proves
+only the current unrevoked attempt. The host claim is activated only after that
+proof and remains bound to its generation, service epoch, host, capacity,
+descriptor, and attempt.
+
+The host submits a strict schema-2 result request to `/v1/host-results` only
+after cleanup. Its `resourceId` must equal `claimId`, and its terminal event is
+strict schema 3 with `executionKind: "ordinary-sysbox"`. Ordinary CI commits the
+immutable result and durable report outbox atomically before returning `202`.
+The result reporter retries the same stored event through the native Git
+review-scoped `/statuses` route. Native Git accepts it only from the separate
+reporter credential, rechecks the current unrevoked attempt and current ordinary
+proof, stores one immutable schema-3 status, and returns an exact acknowledgement.
+Capacity is released only after activation-bound acknowledgement, or after a
+terminal denial when cleanup is already proved.
+
+The installed bundle object exposes read-only
+`currentOrdinaryTerminalEvidence`. It rechecks the current imported root and
+review around the proof call, requires the local current unrevoked attempt and
+immutable status, and accepts only a delivered ordinary proof whose
+acknowledgement bytes match that status. The returned evidence remains labelled
+`ordinary-sysbox` and `candidate-controlled`; a QEMU result cannot satisfy it.
+
+The core host worker can journal claim, result, and recovery operations across
+restart, read exact candidate inputs through a scoped Git credential, execute
+one bounded Sysbox job, and verify container plus private-root cleanup. It isn't
+started by the installed CLI or controller. No native Project adapter, native
+QEMU scheduler/executor, protected promotion route, or clean-host Sysbox/KVM
+acceptance exists. The installed bundle is not runtime-ready. A later promotion
+path must still require exact-tree human approval and every ordinary and QEMU
+evidence kind selected by protected policy.

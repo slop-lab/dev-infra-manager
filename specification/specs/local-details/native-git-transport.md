@@ -88,10 +88,11 @@ host-bound Project registrar after generation activation. It derives the
 owner host from that credential, prepares one empty owned root, and responds
 with `root-prepared`, not Project admission. A distinct host-bound importer
 may upload and finalize the initial protected head as specified below;
-neither path issues Git transport or workspace authority. Ordinary admission,
-attempt, and result mutation remain unavailable in this bundle. The obsolete
-combined writer-registration path is not accepted, and marked format-5 and
-format-6 draft state is rejected unchanged.
+neither path issues Git transport or workspace authority. Ordinary attempt and
+status mutation use only the separate installed role-specific paths described
+below and grant no Project readiness. The obsolete combined
+writer-registration path is not accepted, and predecessor draft state is
+rejected unchanged.
 The separately configured host-bound root read issuer is distinct from every
 registrar, importer, service, host, readiness, and activation credential. It is
 not a Git identity and its credential cannot authenticate smart HTTP. After
@@ -537,12 +538,13 @@ runtime, promotion, or Project-ready authority.
 
 ### Installed native-root admission contract
 
-The installed ordinary service writes only strict state format 6. Its SQLite
+The installed ordinary service writes only strict state format 11. Its SQLite
 schema contains `bundle_activation`, `native_root_admissions`, and
 `native_root_admission_requests`, plus `native_root_ci_event_receipts` and
-`native_root_ci_demands`; both replay ledgers are independently capped at
-100,000 rows. Format 5 and every
-other predecessor are rejected byte-for-byte with no
+`native_root_ci_demands`, service epochs, claims, active claim receipts,
+immutable cleaned host results, and a durable report outbox; both replay
+ledgers are independently capped at 100,000 rows. Every predecessor format is
+rejected byte-for-byte with no
 migration. The schema-4 ordinary configuration is unchanged. The serving
 generation comes only from the `serve ... GENERATION_ID` argument, and the
 native-root proof client pins that same generation, `native-main`, endpoint,
@@ -575,7 +577,71 @@ changed identity while proof is pending conflicts without mutation. Each newly
 accepted receipt and its one `queued` ordinary-Sysbox demand commit in that
 same transaction. Demand insertion failure rolls both rows back; replay of a
 known receipt requires its paired demand and cannot create or requeue one.
-The demand is only a durable intent, not an executable claim or job result.
+The demand is only a durable intent until a configured host reserves it. Exact
+`GET /v1/host-identity` exposes only schema version, service ID, role
+`native-host`, and the authenticated host ID. Exact `POST /v1/host-claims`
+binds the host credential to that host and one configured capacity, then uses
+`BEGIN IMMEDIATE` to select the oldest eligible queued demand, change it to
+`preparing`, and persist one claim. The response pins the admission/root tuple,
+canonical event, operator images and bounds, serving generation, and startup
+epoch; its new `claimId` is also its `issuanceRequestId`. The tuple `(hostId,
+capacity, requestId)` replays only its stored response. Concurrent capacities
+cannot reserve the same demand.
+
+Exact query-credential `POST /v1/claim-reservation-verifications` authorizes
+only a byte-equivalent persisted preparing claim whose admission, root,
+capacity configuration, serving generation, and startup epoch are still
+current. Restart creates a new epoch: the original host request may replay its
+historical claim, but verification rejects that inactive epoch. Expiry,
+revocation, root rotation, generation change, or capacity change supersedes
+preparing demand and denies verification. Reservation alone grants no attempt,
+execution, result, approval, promotion, or Project-ready authority.
+
+The ordinary service uses `nativeGit.attemptIssuer` only to call native Git's
+exact schema-3 descriptor, attempt issuance, and revocation authority. It uses
+`claimId` unchanged as `issuanceRequestId`, proves the returned attempt through
+the separate native proof credential, and accepts exact
+`POST /v1/host-claim-activations` only for that current tuple. Activation binds
+the claim, attempt, descriptor, host, capacity, admission, installer generation,
+and active service epoch. `POST /v1/host-claim-renewals` extends only that exact
+active tuple. Restart, generation rotation, stale admission, lease uncertainty,
+or changed capacity withholds renewal and fences reuse until exact recovery.
+
+The same host may call exact `POST /v1/host-recoveries` only after owned cleanup.
+Its request binds the original claim and issuance, and its `resourceId` must be
+the `claimId`. Ordinary CI proves or replays native revocation before releasing
+the fence. A lost or failed revocation response leaves the capacity fenced for
+retry.
+
+Exact `POST /v1/host-results` accepts a strict schema-2 host result only from the
+bound host and capacity. It requires the current active claim and service epoch,
+`resourceId` equal to `claimId`, `cleanupComplete: true`, and a strict schema-3
+`ordinary-sysbox` terminal event matching the exact current attempt and
+descriptor. One transaction stores the immutable result, changes the claim and
+demand to reported, and creates the report outbox before returning `202`.
+Conflicting replay is `409`; foreign or missing authority is concealed.
+
+The result reporter uses only `nativeGit.resultReporter`. It sends one stored
+event at a time to the exact native Git review-scoped `/statuses` route and
+retries the same bytes after timeout, response loss, restart, or temporary
+unavailability. Native Git rechecks activation, current root and review, the
+current unrevoked local attempt, and ordinary current-result proof before
+publishing one immutable schema-3 status. Only its exact non-cacheable
+acknowledgement changes the outbox to delivered and releases the capacity. A
+terminal native denial releases it as failed only because host cleanup was
+already proved. Admission expiry, revocation, root rotation, or generation
+change denies pending old-generation delivery without making a new native
+request.
+
+The query-only current-result proof requires the active admission, current root,
+current epoch, matching cleaned result, and non-denied outbox. The stricter
+current-terminal proof additionally requires delivered state and returns the
+exact native acknowledgement bytes and digest. Native Git's read-only
+`currentOrdinaryTerminalEvidence` compares that proof with its local immutable
+status before and after a fresh root/review check, and returns only
+`ordinary-sysbox`, `candidate-controlled` evidence. Missing delivery, a revoked
+or replaced attempt, stale review/root, wrong classification, or any tuple drift
+fails closed.
 
 The primary key is `(admission_generation,event_id)`, so a new admission may
 record the same deterministic event only after fresh proof. Each row retains
@@ -590,10 +656,10 @@ capacity replacement supersede queued demand without reviving historical work.
 Inactive historical receipts are valid. Validation performs no repair or
 network request.
 
-`202` means the historical receipt and its demand exist. It is not review
-liveness, approval, dispatch eligibility, claim, attempt, result, execution, or
-promotion authority. No legacy event dispatcher is wired because its flat
-schema-1 payload and acknowledgement are incompatible.
+`202` from event intake means the historical receipt and its demand exist. It
+is not review liveness, approval, dispatch eligibility, claim, attempt, result,
+execution, or promotion authority. No legacy event dispatcher is wired because
+its flat schema-1 payload and acknowledgement are incompatible.
 
 Exact `GET /v1/native-root-admission/identity` derives its response from the
 presented credential. The registrar response has role
@@ -657,9 +723,9 @@ admission generation, capacity digest, expiry, and imported-root
 policy}`. A fresh current request performs no upstream fetch, refresh, or creation and returns
 only the exact active, unexpired admission in the present generation/capacity
 context. Revocation grants no execution authority. Legacy operator-admission,
-native-event, claim, result, old verification, and attempt surfaces are absent
-and return `404`. Imported drafts remain non-runnable, and no host lifecycle,
-Project-ready, execution, scheduling, result, or promotion path is activated.
+native-event, and old verification surfaces are absent and return `404`.
+Imported drafts remain non-runnable, and no installed host lifecycle,
+Project-ready, native QEMU, or promotion path is activated.
 
 ### Native review-event outbox
 
@@ -702,7 +768,7 @@ withhold native Git readiness rather than leaving a silent healthy dispatcher.
 
 ### Ordinary issuer and reporter endpoints
 
-The target ordinary attempt-issuer credential is accepted only on the exact
+The installed ordinary attempt-issuer credential is accepted only on the exact
 review-scoped descriptor, attempt issuance, and attempt revocation paths. The
 additive package authenticates the bundle's configured
 `ordinaryCi.attemptIssuer` as a distinct internal service principal rather than
@@ -716,13 +782,23 @@ review, job, attempt, descriptor digest, generation, host, and capacity.
 The credential cannot report a result, use upload-pack or receive-pack, inspect
 or approve a review, promote, administer, or enumerate unrelated repositories.
 
-The ordinary result-reporter credential is accepted only on the existing exact
-review-scoped CI completion path. It submits the native schema-2
+The ordinary result-reporter credential is accepted only on the exact
+review-scoped CI completion path. It submits the native schema-3
 `dim.ci.job.completed` event without translation. Native Git writes the
 immutable status before acknowledging and returns the same success for an exact
 replay. The reporter cannot derive a descriptor, issue or revoke an attempt,
 read Git, or promote. Neither service credential can enumerate repositories or
 select another Project through request data.
+
+The core package's callable host worker journals claim, result, and recovery
+requests, obtains scoped candidate-tree read authority, runs one bounded Sysbox
+job, and verifies container and private-root cleanup. The installed CLI and
+controller do not start that worker. There is no native Project adapter, native
+QEMU scheduler or executor, installed protected-promotion route, or clean-host
+Sysbox/KVM acceptance. The bundle therefore exposes no Project-ready or
+runtime-ready state. Any later protected promotion must keep ordinary and QEMU
+attempt and result authority separate, require every kind selected by current
+policy, and retain exact-tree human approval and checked CAS.
 
 ## Inputs and identity
 
@@ -843,8 +919,10 @@ approval but grants no additional authority.
 
 ## Exact CI evidence and protected promotion
 
-The status API accepts only the native schema-2 `dim.ci.job.completed` event
-envelope. Its payload binds the review ID, full canonical candidate execution
+The standalone schema-2 service's status API accepts only its native schema-2
+`dim.ci.job.completed` event envelope. The installed bundle instead uses the
+strict schema-3 role-separated path above. The standalone payload binds the
+review ID, full canonical candidate execution
 descriptor and digest, authenticated job, server-issued attempt ID and number,
 immutable host/capacity assignment, start and finish times, terminal completion,
 result, and bounded stdout/stderr byte counts and digests. The
@@ -874,7 +952,8 @@ images, bounds, `hostId`,
 and `capacity`. Under the protected-ref serializer, native Git derives the full
 descriptor through a non-locking helper, compares its digest, asks the ordinary
 admission verifier to confirm the exact descriptor and assignment, then writes
-one immutable schema-2 attempt. Exact replay of a still-current request ID
+one immutable schema-2 attempt in the standalone profile. Exact replay of a
+still-current request ID
 returns the existing attempt. Changed reuse or replay after replacement or
 revocation conflicts and creates no record. Revocations repeat the descriptor
 digest and assignment and must match their issuance.
@@ -894,8 +973,9 @@ cancelled requires cancelled completion; every other completion is failure.
 Finish cannot precede start, and combined stdout/stderr captured bytes cannot
 exceed the descriptor output bound.
 
-Attempt, revocation, envelope, and status-record parsers accept only schema
-version 2. Startup rejects version-1 evidence unchanged. It does not migrate,
+Standalone attempt, revocation, envelope, and status-record parsers accept only
+schema version 2. Startup rejects version-1 evidence unchanged. It does not
+migrate,
 rewrite, delete, alias, or union obsolete state; immutable reviews and human
 approvals are preserved so an operator can explicitly issue fresh evidence.
 

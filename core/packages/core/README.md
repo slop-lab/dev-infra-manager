@@ -225,10 +225,12 @@ standalone `nativeGitAdmissionSource` and creates no Project, admission,
 attempt, result, scheduler, runtime, promotion, or ready state.
 
 The installed ordinary service consumes that client for native-root policy
-eligibility and proof-bound review-event intake. Its strict format-6 database
-adds `native_root_ci_event_receipts` and `native_root_ci_demands` to bundle
-activation, admissions, and the 100,000-entry request replay ledger; format 5
-is rejected unchanged. After exact local activation, the registrar credential
+eligibility, proof-bound review-event intake, and ordinary-only host claims and
+results. Its strict format-11 database adds event receipts, demand, service
+epochs, claims, immutable cleaned host results, and a durable report outbox to
+bundle activation, admissions, and the capped request replay ledger. Earlier
+formats are rejected unchanged. After exact local activation, the registrar
+credential
 can register or revoke one imported `root`, while the reader credential can
 query only a named current admission generation. A registration binds the
 complete kind-labelled canonical policy, import nonce and protected ref to the
@@ -239,10 +241,14 @@ revocation changes create a new UUID generation and cannot revive an older
 row. Restart preserves rows but requires activation again. Every freshness
 check must use a new UUIDv4 `requestId`: exact replays of any operation,
 including `current`, return historical receipts, even after revocation or
-expiry, and are not assertions of present eligibility. This surface grants
-no claim, attempt, execution, readiness, promotion, or Project lifecycle
-authority, and the legacy flat ordinary authority is not exported or selected
-by the installed CLI.
+expiry, and are not assertions of present eligibility. A configured host can
+attest its exact `native-host` identity and atomically reserve the oldest
+eligible queued demand for one configured capacity. The ordinary service uses
+separate native proof, attempt-issuer, result-reporter, query, webhook, and host
+credentials. It derives a descriptor, issues and proves the exact current
+native attempt, then activates the claim with `issuanceRequestId` equal to
+`claimId`. Renewals remain bound to that claim, capacity, generation, and
+service epoch.
 
 The query credential also has `POST
 /v1/projects/PROJECT/repositories/root/native-root-admission/discover`. Its
@@ -263,9 +269,29 @@ An exact replay may skip proof only while that admission remains active and
 unexpired. One new receipt atomically creates one queued demand, but no claim,
 attempt, result, dispatch, approval, execution, or current-liveness authority.
 Both remain durable across restart. Revocation, expiry, root movement,
-generation or capacity rotation supersedes queued demand; replay cannot revive
-it. Receipts remain permanent and capped globally at 100,000. The installed
-host-claim API is still unavailable, so queued demand cannot execute a job.
+generation or capacity rotation supersedes queued or active work; replay cannot
+revive it. Receipts remain permanent and capped globally at 100,000. Exact
+`POST /v1/host-claim-activations`, `/v1/host-claim-renewals`,
+`/v1/host-recoveries`, and `/v1/host-results` routes enforce the current claim
+and generation. A schema-2 host result must carry `resourceId` equal to
+`claimId`, a schema-3 `ordinary-sysbox` terminal event, and proof that cleanup
+is complete. Intake atomically records the immutable result and report outbox.
+The reporter retries the same bytes and releases capacity only after exact
+native acknowledgement, or after a terminal denial with cleanup already
+proved. The query-only current-result and current-terminal proof routes expose
+evidence only while the admission and root remain current; terminal proof also
+requires a delivered acknowledgement.
+
+The exported host capacity worker journals claims, results, and recovery across
+response loss and restart, reads the exact candidate tree through a scoped
+native Git credential, runs one bounded digest-pinned Sysbox job, and checks
+container and private-root cleanup before reporting. It is a callable library
+boundary, not installed host lifecycle wiring. The installed CLI and controller
+do not start it, there is no native Project adapter or native QEMU
+scheduler/executor, and no protected promotion path exists. Native selection
+therefore remains fail-closed and Gitea remains the only runnable Project
+profile. No clean-host Sysbox/KVM acceptance or runtime-ready claim has been
+made.
 
 - `DIM_STATE_ROOT`
 - `DIM_GITEA_IMAGE`, `DIM_GITEA_PORT`, and `DIM_GITEA_ADMIN_USERNAME` for the

@@ -283,8 +283,7 @@ Required tests cover:
 
 ## Control-plane bundle
 
-This section is a target contract and is not implemented by the current
-installer release.
+This section is the normative contract for the installed pre-stable bundle.
 
 **INSTALLER-CONTROL-PLANE-001:** The facade exclusively owns:
 
@@ -680,7 +679,7 @@ For an update, each candidate image MUST also expose
 `/usr/local/bin/dim-service compatibility --json`. The installer runs it for
 both candidate and prior services before container replacement and requires
 exact JSON shaped as `{"schemaVersion":1,"writeFormat":8,"readableFormats":[8]}`
-for current native Git and `{"schemaVersion":1,"writeFormat":4,"readableFormats":[4]}`
+for current native Git and `{"schemaVersion":1,"writeFormat":11,"readableFormats":[11]}`
 for current ordinary CI.
 `writeFormat` is one positive integer; `readableFormats` is a non-empty sorted
 array of unique positive integers. The installer also runs both candidate and
@@ -689,8 +688,8 @@ prior images' `dim-service check-state --read-only /var/lib/dim-native-git
 /var/lib/dim-ordinary-ci --json` for ordinary CI, with only that service's data
 volume mounted read-only. Each returns exact JSON
 `{"schemaVersion":1,"stateFormat":8}` for current native Git or
-`{"schemaVersion":1,"stateFormat":4}` for current ordinary CI and performs no
-write. Earlier ordinary format 3 is rejected unchanged, not migrated. The candidate and
+`{"schemaVersion":1,"stateFormat":11}` for current ordinary CI and performs no
+write. Earlier ordinary formats are rejected unchanged, not migrated. The candidate and
 prior probes must report the same state format. The update is admitted only
 when that current state format is in both images'
 `readableFormats`, the candidate write format is in the prior image's
@@ -904,8 +903,8 @@ The pre-stable facade implements `dim installer install control-plane --config
 FILE`, including first installation, identical-input no-op, checked update,
 pre-activation rollback, explicit exact roll-forward recovery after uncertain
 activation, and pre-forward rejection of obsolete `dim install-cp`. The command
-installs only the two-service native Git/ordinary-CI bundle. Ordinary CI remains
-admission-only and starts without admissions; native Git starts idle with no
+installs only the two-service native Git/ordinary-CI bundle. Ordinary CI starts
+without admissions, and native Git starts idle with no
 Project role credentials and empty state.
 Configured registrars may prepare owned roots, and distinct configured importers
 may submit and finalize a verified initial protected head through the service's
@@ -917,22 +916,36 @@ The native image accepts only strict marked format-8 state and pins
 Git `2.39.5` in its runtime image. The installer itself does not create a Project.
 
 After exact activation, a distinct ordinary registrar can explicitly register
-or revoke full imported-root kind-labelled policy eligibility. Its format-6
-state binds the import nonce, installer generation, and global operator capacity
-digest. Exact replays are historical receipts; readers MUST use a new UUIDv4
-request ID for each current-validity check. This does not publish a runnable
-Project, advertise capacity, or enable any job execution.
+or revoke full imported-root kind-labelled policy eligibility. Strict format-11
+state binds the import nonce, installer generation, global operator capacity
+digest, service epoch, demand, claims, cleaned results, and report outbox. Exact
+replays are historical receipts; readers MUST use a new UUIDv4 request ID for
+each current-validity check. This does not publish a runnable Project or
+advertise installed host capacity.
 
 The same service may durably acknowledge only a current canonical schema-2
 ordinary review event after exact native proof under
 `POST /v1/native-root-ci-events`. The installed native Git dispatcher invokes
 this endpoint after read-only admission discovery. A new receipt atomically
-creates one queued demand. Exact replay does not requeue it; stale admission
-or root state supersedes it. Neither receipt nor demand grants a claim,
-attempt, result, approval, execution, or promotion authority.
+creates one queued demand. Exact replay does not requeue it; stale admission or
+root state supersedes it. A configured host credential can reserve the oldest
+eligible demand for one configured capacity. Separate proof, attempt-issuer,
+result-reporter, query, webhook, and host credentials bind descriptor
+derivation, strict schema-3 native attempt issuance, exact current-attempt
+proof, claim activation and renewal, and schema-2 cleaned host result intake.
+The result's `resourceId` MUST equal `claimId`; its terminal event is strict
+schema 3. Result and report-outbox rows commit atomically. The reporter retries
+the same stored bytes and releases capacity only after exact activation-bound
+native acknowledgement or cleanup-gated terminal denial. Native Git's read-only
+current-terminal evidence additionally requires that delivered ordinary proof,
+its local current unrevoked attempt and status, a live root and review, and the
+policy-controlled execution and evidence classes.
 
-The native Project/repository adapter, runnable Project admission, capacity
-advertisement, host-controller execution, real Sysbox job
-gate, and reviewer browser UI remain unavailable. They are not installed or
-enabled by this command, and the installed bundle MUST NOT be presented as
-complete native Project integration or completion of the broader Project #45 work.
+The callable host worker journals claim, result, and recovery operations and
+checks container and private-root cleanup, but the installed host CLI and
+controller do not start it. The native Project/repository adapter, runnable
+Project admission, capacity advertisement, native QEMU scheduler/executor,
+protected promotion, and reviewer browser UI remain unavailable. No clean-host
+Sysbox/KVM acceptance or runtime-ready claim follows from this command. A later
+promotion path MUST keep ordinary and QEMU evidence independent and require
+every policy-selected kind plus exact-tree human approval.

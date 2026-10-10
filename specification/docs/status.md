@@ -9,33 +9,22 @@ Windows, and Docker Desktop are outside the supported runtime model.
 
 Specified but not implemented:
 
-- Native ordinary CI admission and host-controller-owned shared Sysbox
-  capacity. The target has no persistent Project-scoped ordinary runner or
-  image. Its accepted design reads strict schema-3 job config and script from
-  the exact candidate tree, uses an operator-owned digest-pinned common job
-  base image, and labels a zero exit as
-  candidate-controlled self-test evidence, not independent verification.
-  Green records bounded execution of the selected tests, not correctness or
-  completeness of those tests and not blanket product correctness. Product
-  maintainers still review changed requirements, implementation, tests, and
-  results; the sandbox narrows infrastructure security review only.
-  Trusted native Project registration will establish CI eligibility without a
-  separate per-Project approval; operator policy controls required jobs and
-  global capacity, pinned images, and bounds. Existing Gitea ordinary-pool commands, schema-2 state, and persistent
-  Sysbox runners are predecessor behavior and are rejected by the target rather
-  than migrated.
-- A runnable native Project/repository state adapter. Host-only drafts and
-  exact root import exist, but bundle installation does not select native Git
-  for Projects; until a separate adapter is reviewed and implemented,
-  native Project admission, capacity advertisement, claims, attempts, and
-  results remain denied. A separate native QEMU host-file parser provides
-  preflight only: there is no native QEMU scheduler, executor, or VM result,
-  and existing QEMU scheduling remains Gitea-only.
+- A runnable native Project/repository adapter and installed host lifecycle
+  wiring. The ordinary host worker exists as a callable, journaled library
+  boundary, but the installed CLI and controller do not start it or advertise
+  capacity. Native selection therefore fails closed before Project-ready or
+  runtime mutation.
+- Native QEMU scheduling and execution. The host-file parser remains preflight
+  only, existing QEMU scheduling remains Gitea-only, and no native VM result can
+  satisfy policy.
+- Protected native promotion. A future checked CAS must require exact-tree
+  human approval and every policy-required ordinary and QEMU terminal result.
+  Neither evidence kind may substitute for the other.
 
-The installed bundle and passing predecessor Gitea/QEMU gates are not
-evidence that native Project integration is available. Bundle support remains
-gated on the control-plane acceptance run on a clean host. The reviewer browser
-UI and transition away from protected-root schema 1 remain unimplemented.
+The installed bundle and passing predecessor Gitea/QEMU gates are not evidence
+that native Project integration is available. No clean-host Sysbox/KVM
+acceptance has established native runtime readiness. The reviewer browser UI
+and transition away from protected-root schema 1 also remain unimplemented.
 This pre-stable target defines no compatibility parser or source/state migration.
 
 Implemented:
@@ -50,17 +39,24 @@ Implemented:
   replays only the exact candidate activation, and preserves volumes and
   imported roots. A wrong or incomplete candidate remains refused.
   It neither selects native Git for Projects nor admits jobs for execution.
-  The ordinary service now durably records imported-root policy eligibility and
-  proof-bound ordinary review-event receipts and queued demand in strict format 6 after
-  exact activation and fresh native proof. Its
+  The ordinary service now durably records imported-root policy eligibility,
+  proof-bound ordinary review-event receipts, demand, claim lifecycle, cleaned
+  host results, and report delivery in strict format 11 after exact activation
+  and fresh native proof. Its
   registrar can register/revoke, its reader can query current eligibility, and
   native Git readiness attests that reader identity. Admissions bind the full
   kind-labelled policy to installer generation and global capacity digest, but
-  grant no claim, attempt, execution, result, promotion, or runnable-Project
-  authority. A new receipt creates one queued demand atomically, but no claim,
-  attempt, result, dispatch, or execution authority. Exact replays cannot
-  requeue superseded demand; current-validity checks
-  require fresh UUIDv4 request IDs. Native Git's strict format-8 volume can record multiple exact
+  grant no promotion or runnable-Project authority. A new receipt creates one
+  queued demand atomically. Configured ordinary hosts reserve the oldest
+  eligible demand for one capacity. Separate native proof, attempt-issuer,
+  result-reporter, query, webhook, and host credentials then bind descriptor
+  derivation, exact current schema-3 attempt issuance, claim activation and
+  renewal, schema-2 cleaned host result intake, and schema-3 terminal status
+  delivery. `resourceId` must equal `claimId`. Result and outbox rows commit
+  atomically, delivery retries the same bytes, and capacity releases only after
+  exact activation-bound acknowledgement or cleanup-gated terminal denial.
+  Exact replays cannot revive superseded work; current-validity checks require
+  fresh UUIDv4 request IDs. Native Git's strict format-8 volume can record multiple exact
   Project/root identities and one immutable import intent per prepared root.
   A strict schema-7 native config with empty registrar, importer, root
   read-issuer, workspace-write-issuer, and human-reviewer lists retains the idle
@@ -104,18 +100,25 @@ Implemented:
   stale. Reviewers can also durably revoke their own exact historical approvals;
   this surface has no list, CI, promotion, or protected-ref
   mutation. The installed bundle still issues no durable workspace or promoter
-  identity, executes no native CI job, and exposes no protected writes or
-  runnable Project. Trusted in-process read-only methods can derive separate ordinary and QEMU descriptors
+  identity, executes no installed native CI job, and exposes no protected writes
+  or runnable Project. Trusted in-process read-only methods can derive separate
+  ordinary and QEMU descriptors
   from an exact current immutable review plus operator-labelled images, bounds,
   and admission generation. Each requires matching policy/review and schema-4
   candidate job kinds, and QEMU uses its own schema and digest domain. They
-  create no admission, attempt, execution, result, or VM and are only future
-  adapter prerequisites. The host-only root fetch is not
+  create no admission, execution, result, or VM and are only adapter
+  prerequisites. Native Git also exposes read-only
+  `currentOrdinaryTerminalEvidence`, which requires the exact delivered ordinary
+  proof plus its own current unrevoked attempt, immutable status, live review and
+  root, and `ordinary-sysbox` plus `candidate-controlled` classifications. The
+  host-only root fetch is not
   workspace admission. Gitea-free adoption
   remains gated on the clean-host Sysbox and KVM journey above.
 - Service-level candidate job parsing and descriptor binding, central ordinary
-  claim/lease/result state, and a callable host executor. The host worker is
-  not connected to controller startup and no native Project adapter is active.
+  claim, lease, result, report-outbox, and current-terminal proof state, plus a
+  callable host executor with durable claim/result/recovery journal and checked
+  container and private-root cleanup. The worker is not connected to installed
+  host CLI or controller startup, and no native Project adapter is active.
 - Project metadata with exactly one root repository per runnable Project.
 - Schema 4 Project state with a trusted Gitea organization ID persisted before
   ready publication, and Project creation serialized through identity

@@ -25,12 +25,12 @@
   schema-2 databases fail closed across restart without exposing secrets. The
   service has no Docker or host-administration socket, and a query never creates
   admission or attempt state. The ordinary bundle image exposes exact
-  compatibility and read-only state probes plus an admission-only runtime with
+  compatibility and read-only state probes plus an activation-gated runtime with
   authenticated readiness, role-derived identity, and restart-bound generation
   activation. The native Git and ordinary CI services now ship separate
   source Dockerfiles pinned to Node 24.19.0 by digest, fixed non-root identities,
   and only their audited runtime file and package closures. The ordinary volume
-  keeps strict format-6 state; the native Git volume creates strict format-8 state with
+  keeps strict format-11 state; the native Git volume creates strict format-8 state with
   a host-bound multi-Project/root registry and a durable non-secret manifest
   marker. The native Git image pins Git `2.39.5`; an operator-supplied strict
   schema-7 config separates host-bound registrars, root importers, root read
@@ -90,8 +90,8 @@
   tests preserve database, ref, review, approval, and revocation bytes. This
   installed-only namespace has no standalone authority fallback. The installed
   ordinary service now consumes that proof only to durably register complete
-  imported-root policy eligibility and proof-bound ordinary event intake
-  in strict format-6 SQLite under the exact
+  imported-root policy eligibility, proof-bound ordinary event intake, and
+  ordinary-only host claim and result state in strict format-11 SQLite under the exact
   installer generation and global capacity digest. Distinct credential-derived
   registrar and reader identities expose exact register/current/revoke
   routes with a capped durable request-replay ledger. A query-only discovery
@@ -112,12 +112,18 @@
   fatal delivery errors withhold readiness, and QEMU events never enter ordinary
   intake. A new receipt and one queued demand commit atomically; exact replay
   neither duplicates nor requeues demand, and revocation, expiry, changed root,
-  generation or capacity supersedes it. Format 5 is rejected unchanged.
-  Legacy claim/result/verification routes remain absent, so a queued demand
-  grants no claim, attempt, execution or job result. Native Git readiness now
+  generation or capacity supersedes queued and preparing demand. Predecessor
+  formats are rejected unchanged. Configured hosts now attest an exact `native-host`
+  identity and race transactionally for the oldest eligible demand. A durable
+  preparing claim pins the admission/root tuple, operator images and bounds,
+  generation, and startup epoch, and uses its `claimId` unchanged as
+  `issuanceRequestId`. The query role verifies only an exact current claim;
+  restart replay returns the historical response while rejecting its inactive
+  epoch. Separate native proof, attempt-issuer, result-reporter, query, webhook,
+  and host credentials bind descriptor derivation, exact current native attempt
+  issuance, claim activation, result delivery, and verification. Native Git readiness now
   attests this admission reader rather than the old attempt-query identity.
-  This adds no host claim, attempt,
-  result, execution, promotion, runnable Project, or ready mutation.
+  This does not make a Project runnable or ready.
   The host-side core importer uses its own owner-only connection file,
   attests the exact importer role, host and generation before each mutation,
   and verifies bounded bundle upload and finalization receipts. The native
@@ -196,27 +202,26 @@
   maintainers still review changed requirements, implementation, tests, and
   relevant results; only infrastructure security review is narrowed around
   secrets and trusted capabilities. Human exact-tree approval and CAS promotion
-  remain mandatory. Specify the remaining target as native review-event
+  remain mandatory. The installed ordinary path now covers native review-event
   delivery, host-capacity claim, descriptor derivation, receipt-bound native
-  issuance, transactional assignment, cleaned host result,
-  durable native report retry, and fenced release. Webhooks cannot select
+  issuance, transactional assignment, cleaned host result, durable native
+  report retry, and fenced release. Webhooks cannot select
   executable input. One claim UUID is reused as the native issuance request so
   crash recovery converges on one attempt, while generation rotation, lease
   uncertainty, and scheduler restart fence only the affected capacity until the
-  same host proves ownership-safe cleanup. Webhook, query, native identity,
-  issuer, reporter, admission, and host roles remain separate. The final target
-  keeps capacities global and operator-owned, stores no per-Project assignment
-  list, and requires complete SQLite table-shape validation before accepting an
-  unreleased schema-3 database. The standalone webhook intake now accepts only
+  same host proves ownership-safe cleanup. Webhook, query, native proof,
+  issuer, reporter, admission, and host roles remain separate. Capacities stay
+  global and operator-owned, with no per-Project assignment list. The installed
+  webhook intake accepts only
   the exact non-executable review/job event after exact stored-event proof
   and a live admission, atomically records its inbox row, queued demand, and two
   permanent compact replay fences, and acknowledges exact or equivalent-ID
   replay without reopening work across restart or retention time. Changed reuse
   conflicts, each fence table is capped at 100,000 without evicting known
-  replay, and G1 rotation supersedes queued old-generation demand. The former
-  authority-only two-table and unreleased six-table schema-3 shapes are rejected
-  rather than migrated. The final dormant claim, result, report, fence, terminal-detail,
-  and service-epoch tables are present in the compiled manifest. The
+  replay, and G1 rotation supersedes queued old-generation demand. Earlier
+  ordinary formats are rejected rather than migrated. Claim, result,
+  report-outbox, fence, and service-epoch tables are validated as part of the
+  strict format-11 manifest. The
   native Git event emitter now uses a fifth outbound-only webhook credential to
   retry the exact immutable event bytes without blocking review creation, accepts
   only the exact non-cacheable `202` acknowledgement, and stores permanent
@@ -229,43 +234,51 @@
   verifier visibility and fence only that capacity. The same host can record
   exact cleanup and drive idempotent native revocation; a failed or lost revoke
   response retains the fence until retry proves the bound revocation. Cleaned
-  host results now strictly mirror the native schema-2 terminal envelope and
+  host results use a strict schema-2 request with `resourceId` equal to
+  `claimId`, completed cleanup, and the native schema-3 terminal envelope, then
   atomically commit immutable result and outbox rows before `202`. The central
   reporter uses its distinct fixed-peer credential for one bounded send at a
-  time, retries the same stored bytes with capped backoff across response loss
-  and restart, and releases the claim only after exact native acknowledgement
-  or cleanup-gated terminal denial. Durable cleaned results remain valid current-
-  attempt proof only for the current active admission and a non-denied outbox.
+  time, retries the same stored bytes across response loss and restart, and
+  releases capacity only after exact activation-bound native acknowledgement
+  or cleanup-gated terminal denial. Durable cleaned results remain valid current
+  terminal proof only for the current active admission and a delivered outbox.
   Rotation, expiry, and revocation terminally deny and release pending old-
   generation delivery without another native request; a denial after native
   committed a status also prevents that stored status from satisfying
-  promotion. Claims expose no reporter credential. A callable, independently
+  promotion. Claims expose no reporter credential. Native Git stores strict
+  schema-3 ordinary attempts and terminal statuses in format-8 state. Its
+  read-only `currentOrdinaryTerminalEvidence` check requires the exact delivered
+  ordinary proof, local current unrevoked attempt and status, current imported
+  root and review, and the policy-controlled `ordinary-sysbox` and
+  `candidate-controlled` classifications. A callable, independently
   authenticated host capacity worker now journals exact claim, result, and
   recovery requests across response loss and restart. It reads the exact
   candidate tree through Project-scoped native Git reader transport, verifies
   SHA-1 or SHA-256 objects and bounded inputs, runs one digest-pinned nested
   Sysbox job with no host authority in the candidate, renews against a
   request-start monotonic deadline, and submits terminal evidence only after
-  ownership-checked cleanup. The worker is not connected to controller startup;
-  the native Project adapter and job-running integration remain unavailable.
-   The separate installer can deploy the bundle and explicitly roll forward an
-   exact candidate after uncertain activation without automatic rollback,
-   resource replacement, or volume deletion. It does not admit a runnable
-   Project or advertise host capacity, and actual Sysbox execution still
-  requires the unavailable runtime gate. Before installation it now rejects an
+  ownership-checked root and container cleanup. The worker is not connected to
+  installed host CLI or controller startup. The separate installer can deploy
+  the bundle and explicitly roll forward an exact candidate after uncertain
+  activation without automatic rollback, resource replacement, or volume
+  deletion. It does not admit a runnable Project or advertise host capacity.
+  Before installation it now rejects an
   obsolete ordinary-pool selector and canonical Project-scoped Sysbox or unsafe
   runner records without mutation, preserves valid schema-8 QEMU records, and
   refuses to adopt pre-existing fixed-volume or old database state. Arbitrary
   external predecessor config/database paths remain operator-owned and must be
   stopped with the pinned predecessor release because they are not globally
   discoverable installer state.
-  Native Git now
-   authenticates the configured attempt issuer and result reporter as distinct
-   service principals: only the issuer may derive descriptors or issue and
-   revoke current attempts, and only the reporter may submit the exact current
-   schema-2 terminal tuple. The service rejects obsolete generic scheduler and
-   CI identity configuration rather than letting either satisfy protected
-   promotion evidence.
+  Native Git now authenticates the configured attempt issuer and result
+  reporter as distinct service principals: only the issuer may derive
+  descriptors or issue and revoke current attempts, and only the reporter may
+  submit the exact current schema-3 terminal tuple. The service rejects obsolete
+  generic scheduler and CI identity configuration rather than letting either
+  satisfy protected promotion evidence. No installed native QEMU scheduler or
+  executor, protected promotion route, native Project adapter, or clean-host
+  Sysbox/KVM acceptance exists yet. A future protected promotion must still
+  satisfy every policy-required ordinary and QEMU evidence kind plus exact-tree
+  human approval; this checkpoint makes no runtime-ready claim.
 
 - Let one explicitly configured reviewer-web account approve the exact immutable
   review and revoke only its own active approval through fixed, Origin- and CSRF-guarded
