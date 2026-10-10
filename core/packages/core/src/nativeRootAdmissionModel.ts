@@ -45,6 +45,17 @@ export function parseNativeRootAdmissionRequest(
       admissionGeneration: String(admissionGeneration) };
 }
 
+export function parseNativeRootAdmissionDiscoveryRequest(value: unknown): {
+  readonly schemaVersion: 1;
+  readonly requestId: string;
+  readonly generationId: string;
+} {
+  const input = exactRecord(value, ["schemaVersion", "requestId", "generationId"]);
+  if (input.schemaVersion !== 1 || typeof input.requestId !== "string" || !uuidV4Pattern.test(input.requestId)
+    || typeof input.generationId !== "string" || !generationPattern.test(input.generationId)) invalid();
+  return { schemaVersion: 1, requestId: input.requestId, generationId: input.generationId };
+}
+
 export function nativeRootAdmissionTupleDigest(
   operation: NativeRootAdmissionOperation,
   projectId: string,

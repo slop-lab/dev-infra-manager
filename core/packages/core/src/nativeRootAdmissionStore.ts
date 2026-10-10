@@ -131,6 +131,14 @@ export class NativeRootAdmissionStore {
     return row === undefined ? undefined : admissionFromRow(row);
   }
 
+  discover(projectId: string): NativeRootAdmission | undefined {
+    const row = record(this.database.prepare(`SELECT * FROM native_root_admissions WHERE project_id = ?
+      AND repository_id = 'root' AND state = 'active' AND lease_expires_at > ?
+      AND control_plane_generation_id = ? AND capacity_config_digest = ?`)
+      .get(projectId, this.context.now(), this.context.controlPlaneGenerationId, this.context.capacityConfigDigest));
+    return row === undefined ? undefined : admissionFromRow(row);
+  }
+
   revoke(projectId: string, admissionGeneration: string): NativeRootAdmission | undefined {
     return this.transaction(() => this.revokeMutation(projectId, admissionGeneration));
   }

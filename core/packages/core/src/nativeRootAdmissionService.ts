@@ -21,6 +21,8 @@ import {
 import { initializeNativeOrdinaryBundleState, secureNativeOrdinaryDatabaseFiles } from "./nativeOrdinaryBundleState.js";
 import { createNativeRootCiEventReceiptHandler } from "./nativeRootCiEventReceiptHttp.js";
 import { NativeRootCiEventReceiptStore } from "./nativeRootCiEventReceiptStore.js";
+import { createNativeRootAdmissionReadHandler } from "./nativeRootAdmissionReadHttp.js";
+import { createNativeRootAdmissionResponse, NativeRootAdmissionResponseTooLargeError } from "./nativeRootAdmissionResponse.js";
 
 const maximumBodyBytes = 4 * 1024;
 const projectPattern = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
@@ -64,6 +66,9 @@ export async function configuredNativeRootAdmissionServer(
   const handleReceipt = createNativeRootCiEventReceiptHandler({ config: options.config,
     expectedGenerationId: options.expectedGenerationId, store: receiptStore, proofClient,
     activated: () => activated, activationBound });
+  const handleRead = createNativeRootAdmissionReadHandler({ config: options.config,
+    generationId: options.expectedGenerationId, store,
+    active: () => activated && activationBound() });
   const server = createServer((request, response) => {
     void handle(request, response).catch((error) => sendError(response, error));
   });
@@ -82,11 +87,7 @@ export async function configuredNativeRootAdmissionServer(
       database.prepare("SELECT 1").get();
       return sendJson(response, 200, { status: "ready", schemaVersion: 1 });
     }
-    if (request.method === "GET" && url.pathname === "/v1/native-root-admission/identity") {
-      if (basicAuthorized(request, options.config.credentials.registrar)) return sendJson(response, 200, identity("registrar"));
-      if (basicAuthorized(request, options.config.credentials.query)) return sendJson(response, 200, identity("reader"));
-      return notFound(response);
-    }
+    if (await handleRead(request, response, url)) return;
     if (request.method === "POST" && url.pathname === "/v1/activation") {
       if (request.socket.remoteAddress !== "127.0.0.1"
         || !bearerAuthorized(request, options.activationToken)) return notFound(response);
@@ -136,18 +137,9 @@ export async function configuredNativeRootAdmissionServer(
         responseBody: (admission) => responseBody(input.requestId, admission) } }));
   }
 
-  function identity(role: "registrar" | "reader"): unknown {
-    return role === "registrar" ? { schemaVersion: 1, serviceId: options.config.serviceId,
-      servingGenerationId: options.expectedGenerationId, role: "native-root-admission-registrar",
-      scope: ["imported-root-admission:write", "imported-root-admission:revoke"] }
-      : { schemaVersion: 1, serviceId: options.config.serviceId,
-        servingGenerationId: options.expectedGenerationId, role: "native-root-admission-reader",
-        scope: ["imported-root-admission:read"] };
-  }
-
   function responseBody(requestId: string, admission: import("./nativeRootAdmissionModel.js").NativeRootAdmission): unknown {
-    return { schemaVersion: 1, serviceId: options.config.serviceId, requestId,
-      servingGenerationId: options.expectedGenerationId, admission };
+    return createNativeRootAdmissionResponse({ serviceId: options.config.serviceId,
+      generationId: options.expectedGenerationId, requestId, admission });
   }
 
   function sendAdmissionResult(response: ServerResponse,
@@ -244,6 +236,7 @@ function safeEqual(left: string, right: string): boolean {
   return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes);
 }
 function sendError(response: ServerResponse, error: unknown): void {
+  if (error instanceof NativeRootAdmissionResponseTooLargeError) return sendJson(response, 413, { error: error.message });
   if (error instanceof NativeRootCiProofUnavailableError) return sendJson(response, 503, { error: error.message });
   if (error instanceof NativeRootCiProofRejectedError) return sendJson(response, error.statusCode, { error: error.message });
   if (error instanceof AdmissionHttpError) return sendJson(response, error.status, { error: error.message });
