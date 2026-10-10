@@ -29,7 +29,7 @@ export async function runNativeOrdinaryServiceCli(
     return;
   }
   if (arguments_.length === 2 && arguments_[0] === "compatibility" && arguments_[1] === "--json") {
-    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, writeFormat: 5, readableFormats: [5] })}\n`);
+    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, writeFormat: 6, readableFormats: [6] })}\n`);
     return;
   }
   if (arguments_.length === 4 && arguments_[0] === "check-state" && arguments_[1] === "--read-only"

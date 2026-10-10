@@ -198,7 +198,7 @@ docker run "${common[@]}" --user 10001:10001 --entrypoint node "$native_image" \
 [[ "$(docker run "${common[@]}" --user 10001:10001 "$native_image" compatibility --json)" == \
   '{"schemaVersion":1,"writeFormat":8,"readableFormats":[8]}' ]]
 [[ "$(docker run "${common[@]}" --user 10002:10002 "$ordinary_image" compatibility --json)" == \
-  '{"schemaVersion":1,"writeFormat":5,"readableFormats":[5]}' ]]
+  '{"schemaVersion":1,"writeFormat":6,"readableFormats":[6]}' ]]
 
 config_mount="type=volume,src=$config_volume,dst=/run/fixtures,readonly"
 docker run "${common[@]}" --user 10001:10001 --mount "$config_mount" \
@@ -255,7 +255,7 @@ ordinary_state_mount="type=volume,src=$ordinary_state_volume,dst=/var/lib/dim-or
   '{"schemaVersion":1,"stateFormat":8}' ]]
 [[ "$(docker run "${common[@]}" --user 10002:10002 --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m \
   --mount "$ordinary_state_mount" "$ordinary_image" check-state --read-only /var/lib/dim-ordinary-ci --json)" == \
-  '{"schemaVersion":1,"stateFormat":5}' ]]
+  '{"schemaVersion":1,"stateFormat":6}' ]]
 [[ "$(state_digest "$native_image" "$native_state_volume")" == "$native_before" ]]
 [[ "$(state_digest "$ordinary_image" "$ordinary_state_volume")" == "$ordinary_before" ]]
 

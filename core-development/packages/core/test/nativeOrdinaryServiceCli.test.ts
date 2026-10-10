@@ -44,7 +44,7 @@ describe("ordinary CI image configuration preflight CLI", () => {
     // Then
     expect(result).toEqual({
       status: 0,
-      stdout: `${JSON.stringify({ schemaVersion: 1, writeFormat: 5, readableFormats: [5] })}\n`,
+      stdout: `${JSON.stringify({ schemaVersion: 1, writeFormat: 6, readableFormats: [6] })}\n`,
       stderr: ""
     });
   });
@@ -70,7 +70,7 @@ describe("ordinary CI image configuration preflight CLI", () => {
     const result = await run(process.execPath, [stateProbe, root]);
 
     // Then
-    expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 5 })}\n`);
+    expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 6 })}\n`);
     expect(result.stderr).toBe("");
     expect(await stateTree(root)).toEqual(before);
   });
@@ -97,7 +97,7 @@ describe("ordinary CI image configuration preflight CLI", () => {
       const result = await run(process.execPath, [stateProbe, root]);
 
       // Then
-    expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 5 })}\n`);
+      expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 6 })}\n`);
       expect(result.stderr).toBe("");
       expect(await stateTree(root)).toEqual(before);
     } finally {
