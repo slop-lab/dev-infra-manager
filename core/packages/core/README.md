@@ -225,9 +225,10 @@ standalone `nativeGitAdmissionSource` and creates no Project, admission,
 attempt, result, scheduler, runtime, promotion, or ready state.
 
 The installed ordinary service consumes that client for native-root policy
-eligibility and inert review-event receipts. Its strict format-5 database adds
-`native_root_ci_event_receipts` to bundle activation, admissions, and the
-100,000-entry request replay ledger; format 4 is rejected unchanged. After exact local activation, the registrar credential
+eligibility and proof-bound review-event intake. Its strict format-6 database
+adds `native_root_ci_event_receipts` and `native_root_ci_demands` to bundle
+activation, admissions, and the 100,000-entry request replay ledger; format 5
+is rejected unchanged. After exact local activation, the registrar credential
 can register or revoke one imported `root`, while the reader credential can
 query only a named current admission generation. A registration binds the
 complete kind-labelled canonical policy, import nonce and protected ref to the
@@ -259,9 +260,12 @@ ordinary-Sysbox event. A new receipt requires a fresh native proof of the exact
 event, complete policy/import identity, services, generation, current root, and
 capacity digest. The service repeats those checks in the insertion transaction.
 An exact replay may skip proof only while that admission remains active and
-unexpired. Receipts are permanent, capped globally at 100,000, and mean only
-that delivery was historically recorded; they create no demand, claim,
+unexpired. One new receipt atomically creates one queued demand, but no claim,
 attempt, result, dispatch, approval, execution, or current-liveness authority.
+Both remain durable across restart. Revocation, expiry, root movement,
+generation or capacity rotation supersedes queued demand; replay cannot revive
+it. Receipts remain permanent and capped globally at 100,000. The installed
+host-claim API is still unavailable, so queued demand cannot execute a job.
 
 - `DIM_STATE_ROOT`
 - `DIM_GITEA_IMAGE`, `DIM_GITEA_PORT`, and `DIM_GITEA_ADMIN_USERNAME` for the
