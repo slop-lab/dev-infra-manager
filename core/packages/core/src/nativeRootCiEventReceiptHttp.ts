@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { sqliteUnavailable } from "./nativeSqliteAvailability.js";
 import type { NativeOrdinaryAuthorityConfig, NativeOrdinaryCredential } from "./nativeOrdinaryAuthorityConfig.js";
 import {
   NativeRootCiEventReceiptRequestError,
@@ -105,10 +106,6 @@ function authorized(request: IncomingMessage, credential: NativeOrdinaryCredenti
   const actual = Buffer.from(request.headers.authorization ?? "");
   const expected = Buffer.from(`Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString("base64")}`);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-function sqliteUnavailable(error: unknown): boolean {
-  if (!(error instanceof Error) || !("errcode" in error) || typeof error.errcode !== "number") return false;
-  return [5, 6, 8, 10, 13, 14].includes(error.errcode & 0xff);
 }
 function sendJson(response: ServerResponse, status: number, body: unknown): true {
   response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" });
