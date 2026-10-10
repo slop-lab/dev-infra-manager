@@ -93,8 +93,11 @@
   imported-root policy eligibility and inert proof-bound ordinary event
   receipts in strict format-5 SQLite under the exact
   installer generation and global capacity digest. Distinct credential-derived
-  registrar and reader identities expose only exact register/current/revoke
-  routes with a capped durable request-replay ledger. Identical bindings renew
+  registrar and reader identities expose exact register/current/revoke
+  routes with a capped durable request-replay ledger. A query-only discovery
+  route reads the active, unexpired Project/root admission and its generation
+  without changing state or consuming that ledger; it is not event or
+  execution authority. Identical bindings renew
   one monotonic admission generation; changed import, policy, installer
   generation, capacity, expiry, or revocation requires a new UUID generation,
   and rollback never revives replaced state. Restart requires reactivation,
