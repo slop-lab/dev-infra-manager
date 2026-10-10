@@ -8,6 +8,7 @@ import type { AuthoritativeNativeReviewEnvelope } from "./authoritative-native-r
 import type { NativeHumanReviewerHooks } from "./native-human-reviewer-http.js";
 import type { AuthoritativeOrdinaryExecutionDescriptor } from "./authoritative-ordinary-execution-descriptor.js";
 import type { AuthoritativeQemuExecutionDescriptor } from "./authoritative-qemu-execution-descriptor.js";
+import type { ReviewPublicationFaults } from "./review-record-storage.js";
 
 export type NativeGitBundleServerOptions = {
   readonly config: NativeGitBundleConfig;
@@ -16,6 +17,7 @@ export type NativeGitBundleServerOptions = {
   readonly activationToken: string;
   readonly expectedGenerationId: string;
   readonly ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient;
+  readonly deliveryFaults?: ReviewPublicationFaults;
   readonly rootReadLeaseClock?: () => number;
   readonly rootReadLeaseHooks?: NativeProjectRootReadHooks;
   readonly workspaceWriteLeaseClock?: () => number;

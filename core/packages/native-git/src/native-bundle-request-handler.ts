@@ -41,6 +41,7 @@ type RequestHandlerInput = {
   readonly workspaceWriteService: NativeProjectWorkspaceWriteService;
   readonly humanReviewerService: NativeHumanReviewerService;
   readonly rootCiProofService: NativeRootCiProofService;
+  readonly deliveryHealthy: () => boolean;
   readonly activated: () => boolean;
   readonly activate: () => void;
   readonly prepareProject: (
@@ -55,6 +56,7 @@ export function createNativeBundleRequestHandler(input: RequestHandlerInput) {
     const url = new URL(request.url ?? "/", "http://dim-native-git");
     if (request.method === "GET" && url.pathname === "/readyz" && url.search === "") {
       if (!bearerAuthorized(request, input.options.readinessToken)) return sendNotFound(response);
+      if (!input.deliveryHealthy()) return sendJson(response, 503, { error: "native event delivery is unavailable" });
       try {
         await attestNativeRootAdmissionReader({
           config: input.config.ordinaryCi,

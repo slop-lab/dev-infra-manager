@@ -2,10 +2,12 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect } from "vitest";
 import type {
+  AdmissionVerifierHttpClient,
   AuthoritativeNativeReviewEnvelope,
   AuthoritativeNativeReviewHooks
 } from "../../../../core/packages/native-git/src/index.js";
 import type { NativeHumanReviewerHooks } from "../../../../core/packages/native-git/src/native-human-reviewer-http.js";
+import type { ReviewPublicationFaults } from "../../../../core/packages/native-git/src/review-record-storage.js";
 import { authoritativePolicy, matchingRunner } from "./authoritativeNativeCandidateFixture.js";
 import {
   activateFinalizeService,
@@ -37,7 +39,9 @@ export async function nativeBundleReviewFixture(
   label: string,
   reviewHooks?: AuthoritativeNativeReviewHooks,
   policy: object = authoritativePolicy(),
-  reviewerHooks?: NativeHumanReviewerHooks
+  reviewerHooks?: NativeHumanReviewerHooks,
+  ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient,
+  deliveryFaults?: ReviewPublicationFaults
 ): Promise<NativeBundleReviewFixture> {
   const root = await createFinalizeRoot(label);
   const bundle = await createRootBundle({
@@ -47,7 +51,8 @@ export async function nativeBundleReviewFixture(
     ".dim/ci/jobs/integration.bash": "set -euo pipefail\nprintf 'integration\\n'\n"
   });
   const service = await startFinalizeService(
-    root, undefined, undefined, undefined, undefined, undefined, reviewHooks, reviewerHooks
+    root, undefined, undefined, undefined, undefined, undefined, reviewHooks, reviewerHooks,
+    ordinaryIdentityHttpClient, deliveryFaults
   );
   await activateFinalizeService(service.origin);
   await service.prepareProject(generationId, importer.hostId, projectInput("project-a"));

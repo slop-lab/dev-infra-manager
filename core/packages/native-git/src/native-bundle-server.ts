@@ -1,5 +1,7 @@
 import { once } from "node:events";
 import { createServer } from "node:http";
+import { createNativeBundleShutdown } from "./native-bundle-shutdown.js";
+import { createAuthoritativeNativeAdmissionResolver } from "./authoritative-native-admission-resolver.js";
 import { parseNativeGitBundleConfig } from "./bundle-config.js";
 import {
   createNodeAdmissionVerifierHttpClient,
@@ -30,6 +32,9 @@ import { createNativeHumanReviewerService } from "./native-human-reviewer-http.j
 import { deriveAuthoritativeOrdinaryExecutionDescriptor } from "./authoritative-ordinary-execution-descriptor.js";
 import { deriveAuthoritativeQemuExecutionDescriptor } from "./authoritative-qemu-execution-descriptor.js";
 import { createNativeRootCiProofService } from "./native-root-ci-proof-http.js";
+import { createAuthoritativeNativeEventDispatcher,
+  type AuthoritativeNativeEventDispatcher } from "./authoritative-native-event-dispatcher.js";
+import { nativeBundleKnownCredentials } from "./native-bundle-known-credentials.js";
 
 export { NativeGitBundleServerError } from "./native-bundle-server-types.js";
 export type {
@@ -70,17 +75,7 @@ export async function configuredNativeGitBundleServer(
     state,
     importers: config.projectRootImporters,
     humanReviewers: config.humanReviewers,
-    knownCredentials: [
-      ...registrars,
-      ...config.projectRootReadIssuers,
-      ...config.workspaceWriteIssuers,
-      ...config.humanReviewers,
-      config.ordinaryCi.query,
-      config.ordinaryCi.identity,
-      config.ordinaryCi.attemptIssuer,
-      config.ordinaryCi.resultReporter,
-      config.ordinaryCi.webhook
-    ],
+    knownCredentials: nativeBundleKnownCredentials(config, registrars, "root-importers"),
     gitExecutable: config.gitExecutable,
     gitIdentity
   });
@@ -93,6 +88,25 @@ export async function configuredNativeGitBundleServer(
     gitIdentity,
     state
   };
+  let eventDispatcher: AuthoritativeNativeEventDispatcher;
+  try {
+    eventDispatcher = await createAuthoritativeNativeEventDispatcher({
+      webhook: config.ordinaryCi.webhook,
+      resolveAdmission: createAuthoritativeNativeAdmissionResolver({
+        dependency: config.ordinaryCi,
+        generationId: options.expectedGenerationId,
+        httpClient: identityHttpClient
+      }),
+      state,
+      stateDirectory: options.stateDirectory,
+    generationId: options.expectedGenerationId,
+    httpClient: identityHttpClient,
+    ...(options.deliveryFaults === undefined ? {} : { deliveryFaults: options.deliveryFaults })
+    });
+  } catch (error) {
+    await state.owner.release();
+    throw error;
+  }
   const reviewController = createAuthoritativeNativeReviewController({
     available: () => !closed,
     operations: transportOperations,
@@ -106,17 +120,7 @@ export async function configuredNativeGitBundleServer(
     gitExecutable: config.gitExecutable,
     gitIdentity,
     issuers: config.projectRootReadIssuers,
-    knownCredentials: [
-      ...registrars,
-      ...config.projectRootImporters,
-      ...config.workspaceWriteIssuers,
-      ...config.humanReviewers,
-      config.ordinaryCi.query,
-      config.ordinaryCi.identity,
-      config.ordinaryCi.attemptIssuer,
-      config.ordinaryCi.resultReporter,
-      config.ordinaryCi.webhook
-    ],
+    knownCredentials: nativeBundleKnownCredentials(config, registrars, "root-read-issuers"),
     now: options.rootReadLeaseClock ?? Date.now,
     operations: transportOperations,
     ...(options.rootReadLeaseHooks === undefined ? {} : { hooks: options.rootReadLeaseHooks }),
@@ -130,35 +134,14 @@ export async function configuredNativeGitBundleServer(
     gitExecutable: config.gitExecutable,
     gitIdentity,
     issuers: config.workspaceWriteIssuers,
-    knownCredentials: [
-      ...registrars,
-      ...config.projectRootImporters,
-      ...config.projectRootReadIssuers,
-      ...config.humanReviewers,
-      config.ordinaryCi.query,
-      config.ordinaryCi.identity,
-      config.ordinaryCi.attemptIssuer,
-      config.ordinaryCi.resultReporter,
-      config.ordinaryCi.webhook
-    ],
+    knownCredentials: nativeBundleKnownCredentials(config, registrars, "workspace-write-issuers"),
     now: options.workspaceWriteLeaseClock ?? Date.now,
     operations: transportOperations,
     ...(options.workspaceWriteLeaseHooks === undefined ? {} : { hooks: options.workspaceWriteLeaseHooks }),
     state,
     stateDirectory: options.stateDirectory
   });
-  const knownCredentials = [
-    ...registrars,
-    ...config.projectRootImporters,
-    ...config.projectRootReadIssuers,
-    ...config.workspaceWriteIssuers,
-    ...config.humanReviewers,
-    config.ordinaryCi.query,
-    config.ordinaryCi.identity,
-    config.ordinaryCi.attemptIssuer,
-    config.ordinaryCi.resultReporter,
-    config.ordinaryCi.webhook
-  ];
+  const knownCredentials = nativeBundleKnownCredentials(config, registrars);
   const humanReviewerService = createNativeHumanReviewerService({
     config,
     knownCredentials,
@@ -202,11 +185,16 @@ export async function configuredNativeGitBundleServer(
     workspaceWriteService,
     humanReviewerService,
     rootCiProofService,
+    deliveryHealthy: eventDispatcher.healthy,
     activated: () => activated,
     activate: () => { activated = true; },
     prepareProject
   });
   const server = createServer((request, response) => {
+    if (closed) {
+      sendJson(response, 503, { error: "native Git bundle server is closed" });
+      return;
+    }
     void handle(request, response).catch(() => {
       if (closed || response.headersSent || response.writableEnded) response.destroy();
       else sendJson(response, 500, { error: "internal server error" });
@@ -216,10 +204,31 @@ export async function configuredNativeGitBundleServer(
   server.headersTimeout = 10_000;
   server.keepAliveTimeout = 1_000;
   server.maxRequestsPerSocket = 100;
+  server.on("listening", () => {
+    if (closed) {
+      server.closeAllConnections();
+      server.close();
+      return;
+    }
+    eventDispatcher.start();
+  });
+  const close = createNativeBundleShutdown({ server, eventDispatcher, state,
+    stopAdmission() {
+      closed = true;
+      rootReadService.close();
+      workspaceWriteService.close();
+    },
+    async drainOperations() {
+      const transportClosed = transportOperations.close();
+      await Promise.all([preparationQueue, reviewController.waitForIdle()]);
+      await Promise.all([rootImportService.waitForIdle(), transportClosed]);
+    }
+  });
 
   return {
     server,
     async listen(host = config.host, port = config.port) {
+      if (closed) throw new NativeGitBundleServerError("native Git bundle server is closed");
       server.listen(port, host);
       await once(server, "listening");
       const address = server.address();
@@ -227,28 +236,18 @@ export async function configuredNativeGitBundleServer(
       return `http://${host}:${address.port}`;
     },
     prepareProject,
-    createReview: reviewController.create,
+    async createReview(input) {
+      const review = await reviewController.create(input);
+      eventDispatcher.wake();
+      return review;
+    },
     deriveOrdinaryExecutionDescriptor(input) {
       return reviewController.run(() => deriveAuthoritativeOrdinaryExecutionDescriptor(authoritativeRuntime, input));
     },
     deriveQemuExecutionDescriptor(input) {
       return reviewController.run(() => deriveAuthoritativeQemuExecutionDescriptor(authoritativeRuntime, input));
     },
-    async close() {
-      if (closed) return;
-      closed = true;
-      rootReadService.close();
-      workspaceWriteService.close();
-      const transportClosed = transportOperations.close();
-      await Promise.all([preparationQueue, reviewController.waitForIdle()]);
-      await Promise.all([rootImportService.waitForIdle(), transportClosed]);
-      if (server.listening) {
-        server.close();
-        server.closeAllConnections();
-        await once(server, "close");
-      }
-      await state.owner.release();
-    }
+    close
   };
 
 }

@@ -9,6 +9,8 @@ import {
   configuredNativeGitBundleServer,
   type NativeGitBundleServer
 } from "../../../../core/packages/native-git/src/native-bundle-server.js";
+import type { AdmissionVerifierHttpClient } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
+import type { ReviewPublicationFaults } from "../../../../core/packages/native-git/src/review-record-storage.js";
 import type {
   AuthoritativeNativeReviewHooks
 } from "../../../../core/packages/native-git/src/authoritative-native-review.js";
@@ -87,11 +89,14 @@ export async function startFinalizeService(
   workspaceWriteLeaseHooks?: WorkspaceWriteLeaseHooks,
   runtimeGit?: RuntimeGit,
   authoritativeReviewHooks?: AuthoritativeNativeReviewHooks,
-  nativeHumanReviewerHooks?: NativeHumanReviewerHooks
+  nativeHumanReviewerHooks?: NativeHumanReviewerHooks,
+  ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient,
+  deliveryFaults?: ReviewPublicationFaults
 ): Promise<RunningService> {
   return startFinalizeServiceForGeneration(
     root, generationId, activationToken, rootReadLeaseClock, rootReadLeaseHooks, workspaceWriteLeaseClock,
-    workspaceWriteLeaseHooks, runtimeGit, authoritativeReviewHooks, nativeHumanReviewerHooks
+    workspaceWriteLeaseHooks, runtimeGit, authoritativeReviewHooks, nativeHumanReviewerHooks, ordinaryIdentityHttpClient,
+    deliveryFaults
   );
 }
 
@@ -105,7 +110,9 @@ export async function startFinalizeServiceForGeneration(
   workspaceWriteLeaseHooks?: WorkspaceWriteLeaseHooks,
   runtimeGit?: RuntimeGit,
   authoritativeReviewHooks?: AuthoritativeNativeReviewHooks,
-  nativeHumanReviewerHooks?: NativeHumanReviewerHooks
+  nativeHumanReviewerHooks?: NativeHumanReviewerHooks,
+  ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient,
+  deliveryFaults?: ReviewPublicationFaults
 ): Promise<RunningService> {
   const options = {
     config: parseNativeGitBundleConfig({
@@ -126,11 +133,22 @@ export async function startFinalizeServiceForGeneration(
     ...(workspaceWriteLeaseClock === undefined ? {} : { workspaceWriteLeaseClock }),
     ...(workspaceWriteLeaseHooks === undefined ? {} : { workspaceWriteLeaseHooks }),
     ...(authoritativeReviewHooks === undefined ? {} : { authoritativeReviewHooks }),
-    ...(nativeHumanReviewerHooks === undefined ? {} : { nativeHumanReviewerHooks })
+    ...(nativeHumanReviewerHooks === undefined ? {} : { nativeHumanReviewerHooks }),
+    ...(ordinaryIdentityHttpClient === undefined ? {} : { ordinaryIdentityHttpClient }),
+    ...(deliveryFaults === undefined ? {} : { deliveryFaults })
   };
   const service = await configuredNativeGitBundleServer(options);
   services.push(service);
-  return { ...service, origin: await service.listen("127.0.0.1", 0) };
+  await new Promise<void>((resolve, reject) => {
+    service.server.once("error", reject);
+    service.server.listen(0, "127.0.0.1", () => {
+      service.server.off("error", reject);
+      resolve();
+    });
+  });
+  const address = service.server.address();
+  if (address === null || typeof address === "string") throw new TypeError("native Git listener is unavailable");
+  return { ...service, origin: `http://127.0.0.1:${address.port}` };
 }
 
 export async function activateFinalizeService(origin: string): Promise<void> {
@@ -151,7 +169,7 @@ export async function activateFinalizeServiceForGeneration(
 }
 
 export async function closeFinalizeService(service: NativeGitBundleServer): Promise<void> {
-  const index = services.indexOf(service);
+  const index = services.findIndex((candidate) => candidate.server === service.server);
   if (index >= 0) services.splice(index, 1);
   await service.close();
 }
