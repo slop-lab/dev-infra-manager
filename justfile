@@ -48,7 +48,7 @@ install-local-control-plane: install-local
 run-cli *args:
     pnpm --filter @slop-lab/dim-controller-proxy run build
     pnpm --filter @slop-lab/dim-core run build
-    pnpm --dir core-development exec tsx ../core/packages/cli/src/cli.ts {{ args }}
+    pnpm --dir tests exec tsx ../core/packages/cli/src/cli.ts {{ args }}
 
 # Check that the local CLI source can be executed without installing it.
 check-run-cli:

@@ -6,13 +6,10 @@ packages:
   - core/packages/native-git
   - core/packages/web
   - core/packages/contracts/*
-  - core-development
   - plugin-dns-cloudflare
-  - plugin-dns-cloudflare-development
   - plugin-external-urls
-  - plugin-external-urls-development
   - plugin-host-mirrors
-  - plugin-host-mirrors-development
+  - tests
   - verification
 
 linkWorkspacePackages: true

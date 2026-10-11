@@ -8,21 +8,6 @@ importers:
 
   .: {}
 
-  core-development:
-    devDependencies:
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      tsx:
-        specifier: 4.20.3
-        version: 4.20.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-      vitest:
-        specifier: 3.2.4
-        version: 3.2.4(@types/node@24.13.3)(tsx@4.20.3)(yaml@2.8.3)
-
   core/packages/cli:
     dependencies:
       '@slop-lab/dim-core':
@@ -155,24 +140,6 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  plugin-dns-cloudflare-development:
-    devDependencies:
-      '@slop-lab/dim-contracts-external-url':
-        specifier: 0.9.0
-        version: link:../core/packages/contracts/external-url
-      '@slop-lab/dim-core':
-        specifier: 0.9.0
-        version: link:../core/packages/core
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-      vitest:
-        specifier: 3.2.4
-        version: 3.2.4(@types/node@24.13.3)(tsx@4.20.3)(yaml@2.8.3)
-
   plugin-external-urls:
     dependencies:
       '@slop-lab/dim-contracts-external-url':
@@ -192,24 +159,6 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  plugin-external-urls-development:
-    devDependencies:
-      '@slop-lab/dim-contracts-external-url':
-        specifier: 0.9.0
-        version: link:../core/packages/contracts/external-url
-      '@slop-lab/dim-core':
-        specifier: 0.9.0
-        version: link:../core/packages/core
-      '@types/node':
-        specifier: 24.13.3
-        version: 24.13.3
-      typescript:
-        specifier: 5.8.3
-        version: 5.8.3
-      vitest:
-        specifier: 3.2.4
-        version: 3.2.4(@types/node@24.13.3)(tsx@4.20.3)(yaml@2.8.3)
-
   plugin-host-mirrors:
     dependencies:
       '@slop-lab/dim-core':
@@ -223,14 +172,14 @@ importers:
         specifier: 5.8.3
         version: 5.8.3
 
-  plugin-host-mirrors-development:
+  tests:
     devDependencies:
-      '@slop-lab/dim-core':
-        specifier: 0.9.0
-        version: link:../core/packages/core
       '@types/node':
         specifier: 24.13.3
         version: 24.13.3
+      tsx:
+        specifier: 4.20.3
+        version: 4.20.3
       typescript:
         specifier: 5.8.3
         version: 5.8.3
