@@ -49,6 +49,10 @@ MUST be a positive integer. A `ready` Project MUST have a non-null
 `giteaOrganizationId`. Incompatible pre-stable schemas are rejected without
 mutation unless a release explicitly defines a migration.
 
+Native canonical Project identity uses the separate strict schema and phase in
+`PROJECT-NATIVE-PENDING-001`. Schema `4` and schema `5` are distinct adapter
+records, not revisions that either adapter may convert or accept.
+
 Workspace IDs are authority identities under `WORKSPACE-AUTHORITY-001` in
 [Trust and Lifecycle Capability Matrix](04-trust-lifecycle-capability-matrix.md).
 Stop, start, restart, setup, and update retain that ID. Discard ends it, and
@@ -107,11 +111,14 @@ left unchanged.
 
 ## Project namespace
 
-This section specifies the only implemented Project lifecycle, using Gitea.
-Installing the unimplemented target native bundle does not select a Project
-adapter, and native Project operations remain denied until the accepted native
-contract is implemented and verified. Gitea organization, runner, and credential
-shapes do not constrain the idle native services. In the implemented profile, the built-in managed Git
+This section specifies the only implemented runnable Project lifecycle, using
+Gitea.
+Installing the native bundle alone does not select a Project adapter. The
+implemented non-runnable pending-admission step requires the explicit selector in
+`CONFIG-NATIVE-SELECTION-001`, and all runtime-authorizing native Project
+operations remain denied until the full accepted contract is implemented and
+verified. Gitea organization, runner, and credential shapes do not constrain
+the native services. In the implemented profile, the built-in managed Git
 service is one DIM-owned Gitea instance. An explicitly configured external
 Gitea service is operator-owned and shared independently of each host's
 unchanged DIM controller. In both predecessor modes each Project owns the
@@ -287,9 +294,10 @@ exact replay recheck the stored artifact, receipt, and live service owner;
 uncertain or missing proof leaves the draft non-ready and requires explicit
 reconciliation, never a fresh import of different bytes.
 
-A later, separately specified **native** Project record/transition may become
-runnable only after authenticated scoped Git transport and automatic ordinary
-and QEMU capacity admission are operational and the real-host gates in
+A canonical **native** Project record may become runnable only through a later,
+separately specified transition after authenticated scoped Git transport and
+automatic ordinary and QEMU capacity admission are operational and the
+real-host gates in
 `VERIFICATION-NATIVE-CUTOVER-001` pass. Project readiness is not a successful
 candidate test result: candidate jobs require a runnable Project and proposal.
 Protected **promotion** separately requires the exact current ordinary and
@@ -305,6 +313,112 @@ and candidate-controlled provenance bind each result as specified in
 [Native QEMU Scheduler and Evidence](local-details/native-qemu.md).
 Until that full adapter exists, schema-4/Gitea remains the only runnable
 Project profile. No previous Project data is migrated or silently deleted.
+
+**PROJECT-NATIVE-PENDING-001 (target canonical identity, strictly
+non-runnable):** Native selection may derive one canonical Project record at
+`projects/<name>.json` only from a same-name strict schema-`2`
+`native-project-draft` whose phase is `root-imported`. The transition MUST hold
+the existing Project lock from both namespace reads through fresh service proof
+and canonical publication. It MUST require the authenticated schema-`3` proof's
+service ID, owner host, original import receipt, current protected ref, policy
+digest, commit, and tree to match the draft exactly. The current head MUST be
+sequence zero at that imported commit and tree. A promoted, drifting,
+unresolved, legacy, stale-generation, missing, foreign, or ambiguous root is
+not admissible at this checkpoint.
+
+The canonical record has exactly these fields and no optional extension:
+
+```json
+{
+  "schemaVersion": 5,
+  "recordType": "native-project",
+  "phase": "admission-pending",
+  "name": "acme",
+  "projectId": "project-a",
+  "serviceId": "native-main",
+  "ownerHostId": "host-a",
+  "rootRepositoryId": "root",
+  "rootAlias": "root",
+  "protectedRef": "refs/heads/main",
+  "rootCommit": "<complete Git object ID>",
+  "rootTree": "<complete Git object ID>",
+  "reviewPolicy": {
+    "schemaVersion": 2,
+    "protectedRef": "refs/heads/main",
+    "policyRevision": "<64 lowercase hexadecimal characters>",
+    "requiredReviewRevision": "<64 lowercase hexadecimal characters>",
+    "requiredJobSetRevision": "<64 lowercase hexadecimal characters>",
+    "requiredJobs": [{
+      "name": "source",
+      "kind": "ordinary-sysbox",
+      "evidenceClass": "candidate-controlled"
+    }],
+    "requiredReviewerIds": ["reviewer-a"],
+    "pathReviewerRules": []
+  },
+  "bundleDigest": "<64 lowercase hexadecimal characters>",
+  "bundleSize": 1,
+  "importReceipt": {
+    "schemaVersion": 1,
+    "serviceId": "native-main",
+    "projectId": "project-a",
+    "rootRepositoryId": "root",
+    "generationId": "<64 lowercase hexadecimal characters>",
+    "importNonce": "00000000-0000-4000-8000-000000000000",
+    "protectedRef": "refs/heads/main",
+    "expectedCommit": "<complete Git object ID>",
+    "policyDigest": "<64 lowercase hexadecimal characters>",
+    "bundleDigest": "<64 lowercase hexadecimal characters>",
+    "bundleSize": 1,
+    "resolvedTree": "<complete Git object ID>",
+    "phase": "root-imported"
+  }
+}
+```
+
+The example placeholders stand for values satisfying the existing field
+contracts. `reviewPolicy` is the byte-canonical immutable
+schema-`2` draft policy, including protected ref, all three revisions, sorted
+reviewers, path rules, and sorted `{name, kind, evidenceClass}` jobs.
+`importReceipt` contains exactly its schema, service, Project, root repository,
+original generation, import nonce, protected ref, expected commit, policy and
+bundle digests, bundle size, resolved tree, and `root-imported` phase. Every
+top-level identity and digest MUST equal the corresponding draft and receipt
+field. The record contains no credential, token, connection-file path, service
+URL, Gitea URL, Gitea organization or namespace, runtime handle, readiness
+flag, mutable repository catalog, or caller-supplied status text.
+
+Publication uses exclusive mode-`0600` staging creation, file sync, a
+no-replace hard link at the final name, parent-directory sync, staging unlink,
+and a second parent-directory sync. The imported draft and private bundle
+remain unchanged as source evidence. An exact retry MUST re-read the draft and
+obtain a new proof under the lock before recovering publication or returning
+the byte-identical canonical record without replacement or service mutation.
+A normal replay causes no timestamp churn. Recovery MAY unlink only one
+recognized staging name when it and the final name are owner-owned mode-`0600`
+regular files with link count two, identify the same inode, and contain the
+exact freshly derived canonical bytes; dropping that extra link necessarily
+changes inode ctime but not inode identity, bytes, mode, or mtime. A missing
+final name, partial staging file, foreign inode, symbolic link, wrong owner or
+mode, unexpected link count, ambiguous staging set, or mismatched bytes MUST
+be preserved and refused. A process crash after the final hard link remains
+safe for the same recovery on retry. Storage loss before the first
+parent-directory sync can instead leave only partial staging; that unproved
+state is deliberately preserved for operator reconciliation rather than
+deleted or adopted. Any other differing canonical field, draft field, proof
+field, receipt identity, or path type likewise fails closed and preserves both
+namespaces byte-for-byte. A same-name schema-`4` record is predecessor state,
+not a migration source or native replay.
+
+`admission-pending` is visible only through native `project list` and `project
+show`. It is not `ready`, cannot be used to resolve a root for a workspace, and
+grants no reader, writer, reviewer, promoter, ordinary-CI, QEMU-CI, runner,
+capacity, hook, remove, or purge authority. This schema defines no ready phase
+and no transition out of pending. A later contract may add that transition
+only after real ordinary Sysbox execution, real KVM-backed native QEMU
+execution, exact review and checked promotion are integrated and
+`VERIFICATION-NATIVE-CUTOVER-001` passes. Until then, all such mutations reject
+before state, service, Git, credential, runtime, or protected-ref mutation.
 
 In the implemented Gitea profile, Project metadata contains its name/ID,
 namespace, trusted Gitea organization

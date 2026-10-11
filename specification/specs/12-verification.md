@@ -241,6 +241,48 @@ leaving a staging artifact. Cache reuse MUST validate the existing tree
 without minting another lease. Neither a successful fetch nor a snapshot
 creates a runnable native Project, writer, reviewer, promoter, or CI admission.
 
+For `CONFIG-NATIVE-SELECTION-001`, `CLI-NATIVE-PROJECT-PENDING-001`, and
+`PROJECT-NATIVE-PENDING-001`, target adapter tests MUST prove that only a valid,
+nonempty native control-plane connection selects native lifecycle. Every
+predecessor selector, including an empty value, MUST conflict before Project,
+Gitea, Git, service, CI, workspace, lock, or runtime mutation. With native
+selection absent, the existing managed and external Gitea create, list, show,
+repository, workspace, CI, remove, and purge tests MUST remain unchanged. A
+native connection failure MUST never dispatch one of those Gitea paths.
+
+The pending-admission success fixture MUST start with one exact schema-`2`
+`root-imported` draft and its private bundle, obtain a fresh authenticated
+schema-`3` proof under the Project lock, and publish the strict schema-`5`
+`projects/<name>.json` record once. It MUST compare every service, Project,
+owner, root, protected-ref, commit, tree, policy, bundle, and import-receipt
+identity, require the proof's sequence-zero current head, leave the draft and
+bundle byte-for-byte unchanged, and create no credential, Git ref, admission,
+demand, claim, runtime, or other service mutation. `project list` and `project
+show` MUST display `admission-pending` as non-runnable with the bounded identity
+and policy fields, while omitting credentials, URLs, connection and bundle
+paths, and tokens.
+
+An exact create replay MUST obtain a new proof, return the byte-identical
+canonical record, and perform no state replacement, timestamp update, or
+service mutation. Tests MUST independently change each draft, proof, canonical,
+policy, bundle, and receipt identity and prove refusal with both namespaces and
+the native service unchanged. They MUST also deny missing or import-pending
+drafts, schema-`1` drafts, nonzero or drifting current heads, stale generation,
+same-name schema-`4` Gitea records, foreign service/Project/owner/root records,
+unknown schema or record type, malformed JSON, symlinks, non-regular nodes,
+wrong owner or mode, multiple links, and a concurrent same-name publication.
+No denial may delete, rewrite, migrate, adopt, or relabel either record.
+
+For an `admission-pending` Project, tests MUST prove that project remove and
+purge, every repository and workspace operation, ordinary and QEMU admission
+or capacity, credential and transport issuance, review, evidence mutation, and
+promotion all fail before state, service, Git, runtime, or protected-ref
+mutation. Successful import, live proof, cached snapshot, ordinary evidence,
+QEMU evidence, or installer readiness MUST NOT change that result. These tests
+verify only strict pending identity. They MUST NOT be reported as a passing
+`VERIFICATION-NATIVE-CUTOVER-001` gate or as evidence of a usable native
+workspace or promotion path.
+
 The installed control-plane gate MUST also inject a lost candidate activation
 acknowledgement after both exact service activations, observe retention of the
 published candidate and transaction journal without automatic prior rollback,
@@ -254,8 +296,9 @@ activation, multiple retained historical generations, and malformed journal,
 snapshot, Compose, or runtime evidence. These Docker and Git checks are not
 the clean-host real Sysbox and accessible-KVM native Project cutover gate.
 
-Until the native Project/repository state adapter has its own approved contract,
-the gate MUST prove that Project/repository readiness, host-capacity advertisement,
+Until the native Project/repository state adapter advances beyond the approved
+strict pending contract, the gate MUST prove that Project/repository readiness,
+host-capacity advertisement,
 claims, attempts, and result reports all fail before runtime or protected-ref
 mutation. Only an exact admitted and freshly proved ordinary event may create
 one queued demand atomically with its receipt. Missing, foreign, expired,

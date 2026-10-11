@@ -161,9 +161,9 @@ persistent Git configuration.
 
 ## Native control-plane host connection
 
-**CONFIG-NATIVE-CONTROL-PLANE-001 (host-file parser implemented; native adapter not implemented):**
-This is the target host connection shape for a future native Project/repository adapter. After that
-adapter is separately specified, a participating host MUST set
+**CONFIG-NATIVE-CONTROL-PLANE-001 (host-file parser and pending-admission adapter implemented):**
+This is the explicit opt-in connection for the native Project adapter. A
+participating host MUST set
 `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` to a regular,
 non-symbolic-link, single-link, DIM-user-owned mode-`0600` JSON file of at most
 64 KiB with this exact schema:
@@ -213,8 +213,8 @@ registration or runtime mutation.
 
 The native Git password and ordinary host token are distinct, canonical
 base64url encodings of exactly 32 bytes. The native Git username equals the
-host ID. Parsing this host file does not attest either service or activate a
-native Project; neither service is contacted until the adapter is implemented.
+host ID. Parsing this host file does not attest either service or make a native
+Project runnable.
 
 The native Git credential is host-scoped read/attestation authority, not a
 reviewer, promoter, or storage-administrator identity. Ordinary admission and
@@ -230,19 +230,54 @@ job, image, Compose bundle, log, or Project state. Controller startup validates 
 identities before advertising capacity. Failure closes ordinary admission and
 claiming but does not fall back to a local or Project-scoped runner.
 
-No current controller reads or consumes this target connection as native
-authority. Setting `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE`, including an
-empty value, rejects lifecycle option construction before Gitea selection;
-it never silently runs predecessor Gitea operations. Until the native adapter
-is implemented, a requested native Project, repository, admission, or capacity
-operation MUST reject before service-state or runtime mutation. The future
-native connection and `DIM_GITEA_CONNECTION_FILE` are mutually exclusive for
-one host. `DIM_ORDINARY_CI_POOL_CONNECTION_FILE` is obsolete in the target and
-MUST be rejected, not ignored, when that target is implemented.
+**CONFIG-NATIVE-SELECTION-001:** Presence of
+`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` selects only the native adapter.
+An empty value, unreadable or invalid file, or
+unsupported native state MUST reject before selecting an adapter or mutating
+Project, service, Git, CI, workspace, or runtime state. Native selection MUST
+NOT start, inspect, reconcile, or fall back to managed Gitea.
+
+Native selection is mutually exclusive with
+`DIM_GITEA_CONNECTION_FILE`, `DIM_GIT_SYNC_CONNECTION_FILE`,
+`DIM_QEMU_SCHEDULER_CONNECTION_FILE`, and
+`DIM_ORDINARY_CI_POOL_CONNECTION_FILE`, including empty values. It MUST also
+reject a same-name schema-`4` Gitea Project rather than parse, migrate, delete,
+or adopt it. Absence of `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` preserves
+the complete existing managed or external Gitea selection and behavior;
+native state supplies no fallback or authority to that predecessor adapter.
+
+The first native adapter step may derive only the strict canonical
+`admission-pending` record in `PROJECT-NATIVE-PENDING-001`. It MUST use an exact
+imported schema-`2` draft and a fresh authenticated imported-root proof under
+the Project lock. `dim project create PROJECT` under native selection MUST
+also require `DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE` to name the separate
+owner-only mode-`0600` schema-`1` root-importer connection. That connection's
+service, endpoint, and host MUST equal the selected control-plane native Git
+binding; its credential and serving generation remain distinct fields and
+MUST NOT be inferred from the host connection. An absent, empty, invalid,
+foreign, stale, or unauthenticated importer connection rejects before Project
+state mutation. Native `project list` and `project show` do not require or
+load that importer credential.
+
+The installed pending-create step currently requires the native Git endpoint
+to use `loopback-http`. The owner-host importer client supports only loopback
+HTTP, so an otherwise valid HTTPS control-plane connection MUST refuse
+pending creation before reading an importer file or changing Project state;
+HTTPS support requires a separately reviewed importer TLS trust model. This
+limit does not make HTTPS a Gitea fallback.
+
+Pending admission grants no repository transport, workspace, ordinary or
+QEMU admission, review, promotion, removal, purge, or ready authority. Every
+other native mutation MUST fail closed until the ordinary Sysbox path, native
+QEMU path, exact human review, checked promotion path, and
+`VERIFICATION-NATIVE-CUTOVER-001` are complete. The direct host CLI implements
+only this pending step and local pending-state queries; the controller remains
+outside the native path. This contract does not claim that the clean-host gate
+passes.
 
 **CONFIG-NATIVE-PROJECT-DRAFT-001:** The separate trusted-host bootstrap draft
-is not selected by this environment variable or a Gitea connection. Its
-schema-`1` record and private artifact bind the host, active native generation,
+is not selected by this environment variable or a Gitea connection. Its strict
+schema-`2` record and private artifact bind the host, active native generation,
 exact root commit/tree and policy, and bundle digest as
 `PROJECT-NATIVE-DRAFT-001` requires. Registrar and importer credentials remain
 in their distinct owner-only connection files, never in Project state.
