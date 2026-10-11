@@ -44,7 +44,7 @@ describe("ordinary CI image configuration preflight CLI", () => {
     // Then
     expect(result).toEqual({
       status: 0,
-      stdout: `${JSON.stringify({ schemaVersion: 1, writeFormat: 6, readableFormats: [6] })}\n`,
+      stdout: `${JSON.stringify({ schemaVersion: 1, writeFormat: 11, readableFormats: [11] })}\n`,
       stderr: ""
     });
   });
@@ -56,6 +56,34 @@ describe("ordinary CI image configuration preflight CLI", () => {
     // Then
     expect(built).toContain('from "./nativeRootAdmissionService.js"');
     expect(built).not.toContain('from "./nativeOrdinaryIdleService.js"');
+  });
+
+  it("copies every compiled service import into the isolated ordinary image", async () => {
+    // Given
+    const dockerfile = await readFile(join(workspaceRoot, "core/images/ordinary-ci/Dockerfile"), "utf8");
+    const dockerignore = await readFile(join(workspaceRoot, ".dockerignore"), "utf8");
+    const copied = new Set([...dockerfile.matchAll(/core\/packages\/core\/dist\/([A-Za-z0-9-]+\.js)/g)]
+      .map((match) => match[1]));
+    const included = new Set([...dockerignore.matchAll(/!core\/packages\/core\/dist\/([A-Za-z0-9-]+\.js)/g)]
+      .map((match) => match[1]));
+    const required = new Set<string>();
+    const pending = ["nativeOrdinaryServiceCli.js"];
+
+    // When
+    while (pending.length > 0) {
+      const filename = pending.pop();
+      if (filename === undefined || required.has(filename)) continue;
+      required.add(filename);
+      const source = await readFile(join(packageRoot, "dist", filename), "utf8");
+      for (const match of source.matchAll(/(?:from\s*|import\s*)["']\.\/([A-Za-z0-9-]+\.js)["']/g)) {
+        if (match[1] !== undefined) pending.push(match[1]);
+      }
+    }
+
+    // Then
+    expect(dockerfile).not.toMatch(/core\/packages\/core\/dist\/\*\.js/);
+    expect([...required].filter((filename) => !copied.has(filename)).sort()).toEqual([]);
+    expect([...required].filter((filename) => !included.has(filename)).sort()).toEqual([]);
   });
 
   it("checks mounted schema-4 state through the built process without changing the read-only target", async () => {

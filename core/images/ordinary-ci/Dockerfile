@@ -5,6 +5,12 @@ WORKDIR /usr/local/lib/dim
 COPY core/images/ordinary-ci/package.json ./
 COPY core/packages/core/dist/errors.js \
   core/packages/core/dist/nativeGitAdmissionHttpClient.js \
+  core/packages/core/dist/nativeGitAdmissionSource.js \
+  core/packages/core/dist/nativeGitAttemptIssuerClient.js \
+  core/packages/core/dist/nativeGitAttemptIssuerErrors.js \
+  core/packages/core/dist/nativeGitAttemptIssuerModel.js \
+  core/packages/core/dist/nativeGitAttemptIssuerWire.js \
+  core/packages/core/dist/nativeGitCurrentAttemptProofClient.js \
   core/packages/core/dist/nativeOrdinaryAuthorityConfig.js \
   core/packages/core/dist/nativeOrdinaryAuthorityModel.js \
   core/packages/core/dist/nativeOrdinaryAuthorityProtocol.js \
@@ -12,12 +18,26 @@ COPY core/packages/core/dist/errors.js \
   core/packages/core/dist/nativeOrdinaryBundleFilesystem.js \
   core/packages/core/dist/nativeOrdinaryBundleSnapshot.js \
   core/packages/core/dist/nativeOrdinaryBundleState.js \
+  core/packages/core/dist/nativeOrdinaryEvent.js \
+  core/packages/core/dist/nativeOrdinaryResultProtocol.js \
   core/packages/core/dist/nativeOrdinaryServiceCli.js \
   core/packages/core/dist/nativeOrdinaryServiceReadiness.js \
+  core/packages/core/dist/nativeRootAdmissionActivation.js \
+  core/packages/core/dist/nativeRootAdmissionHttp.js \
   core/packages/core/dist/nativeRootAdmissionModel.js \
+  core/packages/core/dist/nativeRootAdmissionReadHttp.js \
+  core/packages/core/dist/nativeRootAdmissionResponse.js \
   core/packages/core/dist/nativeRootAdmissionSchema.js \
   core/packages/core/dist/nativeRootAdmissionService.js \
   core/packages/core/dist/nativeRootAdmissionStore.js \
+  core/packages/core/dist/nativeRootCiClaimHttp.js \
+  core/packages/core/dist/nativeRootCiClaimLifecycleHttp.js \
+  core/packages/core/dist/nativeRootCiClaimLifecycleProtocol.js \
+  core/packages/core/dist/nativeRootCiClaimLifecycleRows.js \
+  core/packages/core/dist/nativeRootCiClaimLifecycleStore.js \
+  core/packages/core/dist/nativeRootCiClaimProtocol.js \
+  core/packages/core/dist/nativeRootCiClaimStore.js \
+  core/packages/core/dist/nativeRootCiDemandStore.js \
   core/packages/core/dist/nativeRootCiEventReceiptHttp.js \
   core/packages/core/dist/nativeRootCiEventReceiptIntegrity.js \
   core/packages/core/dist/nativeRootCiEventReceiptModel.js \
@@ -25,6 +45,18 @@ COPY core/packages/core/dist/errors.js \
   core/packages/core/dist/nativeRootCiProofClient.js \
   core/packages/core/dist/nativeRootCiProofModel.js \
   core/packages/core/dist/nativeRootCiReviewEvent.js \
+  core/packages/core/dist/nativeRootCiResultHttp.js \
+  core/packages/core/dist/nativeRootCiResultIntegrity.js \
+  core/packages/core/dist/nativeRootCiResultProofHttp.js \
+  core/packages/core/dist/nativeRootCiResultProofModel.js \
+  core/packages/core/dist/nativeRootCiResultProofStore.js \
+  core/packages/core/dist/nativeRootCiResultProtocol.js \
+  core/packages/core/dist/nativeRootCiResultReporter.js \
+  core/packages/core/dist/nativeRootCiResultStore.js \
+  core/packages/core/dist/nativeRootCiTerminalResultProofHttp.js \
+  core/packages/core/dist/nativeRootCiTerminalResultProofModel.js \
+  core/packages/core/dist/nativeRootCiTerminalResultProofStore.js \
+  core/packages/core/dist/nativeSqliteAvailability.js \
   core/packages/core/dist/sqliteSchemaManifest.js ./
 COPY core/images/ordinary-ci/dim-service /usr/local/bin/dim-service
 
