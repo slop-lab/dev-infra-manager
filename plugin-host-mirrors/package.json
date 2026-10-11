@@ -21,7 +21,8 @@
   },
   "scripts": {
     "build": "node scripts/clean-package-dist.mjs && tsc -p tsconfig.build.json && node scripts/build-publish-package.mjs",
-    "check": "tsc -p tsconfig.json --noEmit"
+    "check": "tsc -p tsconfig.json --noEmit",
+    "pack:dry-run": "pnpm run build && bash ../core/scripts/pnpm-pack-dry-run.bash ./dist"
   },
   "packageManager": "pnpm@10.13.1",
   "engines": {

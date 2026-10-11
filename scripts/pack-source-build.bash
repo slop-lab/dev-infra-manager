@@ -107,6 +107,7 @@ packages:
   - core/packages/cli
   - core/packages/installer
   - core/packages/controller-proxy
+  - core/packages/native-git
   - core/packages/web
   - core/packages/contracts/*
   - plugin-dns-cloudflare

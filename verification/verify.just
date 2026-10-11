@@ -13,7 +13,7 @@ qemu-ci-image-layers-kvm:
     @[[ "$(uname -m)" == x86_64 ]] || { echo "qemu-ci-image-layers-kvm requires x86-64" >&2; exit 2; }
     @docker info >/dev/null 2>&1 || { echo "qemu-ci-image-layers-kvm requires a reachable Docker daemon" >&2; exit 2; }
     @[[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]] || { echo "qemu-ci-image-layers-kvm requires an accessible character /dev/kvm" >&2; exit 2; }
-    cd .. && DIM_QEMU_CI_KVM_SMOKE=1 pnpm --dir core-development exec vitest run packages/core/test/qemuCiRunnerKvm.test.ts
+    cd .. && DIM_QEMU_CI_KVM_SMOKE=1 pnpm --dir tests exec vitest run packages/core/test/qemuCiRunnerKvm.test.ts
 
 # Run the backend-independent end-to-end contract after a backend is installed.
 full-development:
@@ -74,8 +74,10 @@ package-packs:
     cd .. && pnpm --filter @slop-lab/dim-contracts-external-url run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-controller-proxy run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-native-git run pack:dry-run
+    cd .. && pnpm --filter @slop-lab/dim-web run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-plugin-external-urls run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-plugin-dns-cloudflare run pack:dry-run
+    cd .. && pnpm --filter @slop-lab/dim-plugin-host-mirrors run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-cli run pack:dry-run
     cd .. && pnpm --filter @slop-lab/dim-installer run pack:dry-run
 
@@ -164,8 +166,8 @@ self-development phases="":
 
 # Run generated workspace isolation checks without Docker or workspace creation.
 isolation:
-    cd .. && pnpm --dir core-development exec vitest run packages/core/test/lifecycleContainer.test.ts
+    cd .. && pnpm --dir tests exec vitest run packages/core/test/lifecycleContainer.test.ts
 
 # Run generated workspace isolation checks with Vitest's JSON reporter.
 isolation-json:
-    cd .. && pnpm --dir core-development exec vitest run packages/core/test/lifecycleContainer.test.ts --reporter=json
+    cd .. && pnpm --dir tests exec vitest run packages/core/test/lifecycleContainer.test.ts --reporter=json
