@@ -44,6 +44,8 @@ export * from "./nativeRootBootstrapGit.js";
 export * from "./nativeRootBootstrapPolicy.js";
 export * from "./nativeProjectBootstrap.js";
 export * from "./nativeProjectDraftStore.js";
+export * from "./nativeProjectPendingCodec.js";
+export * from "./nativeProjectPendingStore.js";
 export {
   issueNativeProjectDraftRootReadLease,
   NativeProjectDraftRootReadError,
