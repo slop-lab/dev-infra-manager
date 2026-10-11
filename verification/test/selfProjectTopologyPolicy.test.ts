@@ -12,9 +12,11 @@ describe("DIM monorepo self-project topology policy", () => {
       "utf8"
     );
 
-    expect(setup).toContain('[[ -d "$project_source/.git" && -d "$project_source/core"');
+    expect(setup).toContain('git -C "$project_source" rev-parse --show-toplevel');
+    expect(setup).toContain('[[ "$canonical_root" == "$project_source"');
     expect(setup).toContain('mkdir -p "$source_root/repositories/root"');
     expect(setup).toContain('dim_prepare_clone_source "$project_source" "$source_root/snapshot-root"');
+    expect(setup).not.toMatch(/core-development|plugin-dns-cloudflare-development|plugin-external-urls-development/);
   });
 
   it("keeps single-tree proposals protected and external publication host-authorized", async () => {
@@ -30,7 +32,7 @@ describe("DIM monorepo self-project topology policy", () => {
     expect(agentChecks).toContain("proposal_repository=root");
     expect(agentChecks).toContain("! git push origin HEAD:refs/heads/main");
     expect(agentChecks).toContain("/tmp/dim-self-project-root/.dim/workspace-repositories.json");
-    expect(publicationChecks).toContain('[[ "$self_project_single_tree" == true ]]');
+    expect(publicationChecks).toContain("canonical-root external publication unexpectedly succeeded");
     expect(publicationChecks).toContain("repository synchronization requires DIM_GIT_SYNC_CONNECTION_FILE");
   });
 
@@ -80,33 +82,4 @@ describe("DIM monorepo self-project topology policy", () => {
     });
   });
 
-  it("records every split source and candidate-only trusted overlay", async () => {
-    const sourceLines = (await readFile(resolve(workspaceRoot, ".monorepo-candidate/sources.tsv"), "utf8"))
-      .trim().split("\n").slice(1).map((line) => line.split("\t"));
-    const overlayLines = (await readFile(resolve(workspaceRoot, ".monorepo-candidate/overlay.tsv"), "utf8"))
-      .trim().split("\n").slice(1).map((line) => line.split("\t"));
-
-    expect(sourceLines.map(([repository]) => repository).sort()).toEqual([
-      "core", "core-development", "development", "examples", "plugin-dns-cloudflare",
-      "plugin-dns-cloudflare-development", "plugin-external-urls",
-      "plugin-external-urls-development", "root", "specification", "verification"
-    ]);
-    expect(sourceLines.every((fields) => fields.length === 5 && /^[0-9a-f]{40}$/.test(fields[2] ?? ""))).toBe(true);
-    expect(Object.fromEntries(sourceLines.map(([repository, destination]) => [repository, destination]))).toEqual({
-      development: ".", root: ".", core: "core", "core-development": "core-development",
-      "plugin-dns-cloudflare": "plugin-dns-cloudflare",
-      "plugin-dns-cloudflare-development": "plugin-dns-cloudflare-development",
-      "plugin-external-urls": "plugin-external-urls",
-      "plugin-external-urls-development": "plugin-external-urls-development",
-      verification: "verification", examples: "examples", specification: "specification"
-    });
-    expect(overlayLines.every((fields) => fields.length === 3 && /^[0-9a-f]{64}$/.test(fields[2] ?? ""))).toBe(true);
-    expect(overlayLines.map(([, target]) => target).sort()).toEqual([
-      ".dim/reconcile-repositories.sh", ".dim/repos.yml", ".dim/workspace-repositories.json",
-      ".gitea/CODEOWNERS", ".gitea/workflows/release-gate.yml", ".gitea/workflows/verify.yml",
-      "git-apply", "verification-layout", "verification/scripts/monorepo-candidate-evidence.mjs",
-      "verification/scripts/repository-materialization-smoke.bash",
-      "verification/test/selfProjectTopologyPolicy.test.ts"
-    ]);
-  });
 });

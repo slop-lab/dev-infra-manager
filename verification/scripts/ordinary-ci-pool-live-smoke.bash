@@ -21,12 +21,12 @@ umask 077
 for command in curl docker git jq node openssl; do
   command -v "$command" >/dev/null || { printf '%s is required\n' "$command" >&2; exit 2; }
 done
-[[ -r "$repo_root/core-development/node_modules/tsx/dist/loader.mjs" ]] || {
+[[ -r "$repo_root/tests/node_modules/tsx/dist/loader.mjs" ]] || {
   printf '%s\n' 'ordinary-ci-pool-live requires the installed development dependencies' >&2
   exit 2
 }
 dim_cli=(
-  node --import "$repo_root/core-development/node_modules/tsx/dist/loader.mjs"
+  node --import "$repo_root/tests/node_modules/tsx/dist/loader.mjs"
   "$repo_root/core/packages/cli/src/cli.ts"
 )
 dim() {

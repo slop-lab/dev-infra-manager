@@ -3,13 +3,15 @@ set -euo pipefail
 
 snapshot_root="${1:-snapshot}"
 output="${2:-$snapshot_root/repository-set.json}"
-repositories=(development root core core-development plugin-dns-cloudflare plugin-dns-cloudflare-development plugin-external-urls plugin-external-urls-development verification examples specification)
+repositories=(root)
+if [[ -e "$snapshot_root/project/.git" ]]; then
+  repositories+=(project)
+fi
 
 repository_path() {
   case "$1" in
-    development) printf '%s' "$snapshot_root" ;;
-    root) printf '%s/project' "$snapshot_root" ;;
-    *) printf '%s/%s' "$snapshot_root" "$1" ;;
+    root) printf '%s' "$snapshot_root" ;;
+    project) printf '%s/project' "$snapshot_root" ;;
   esac
 }
 

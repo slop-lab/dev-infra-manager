@@ -111,7 +111,7 @@ chmod 0700 "$work_dir/fake-bin/docker"
 cat >"$work_dir/fake-bin/dim" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-exec node --import "$DIM_SOURCE_ROOT/core-development/node_modules/tsx/dist/loader.mjs" \
+exec node --import "$DIM_SOURCE_ROOT/tests/node_modules/tsx/dist/loader.mjs" \
   "$DIM_SOURCE_ROOT/core/packages/cli/src/cli.ts" "$@"
 EOF
 chmod 0700 "$work_dir/fake-bin/dim"
@@ -142,7 +142,7 @@ start_controller() {
     DIM_GITEA_CONNECTION_FILE="$connection" \
     DIM_PLUGIN_HOME="$client_root/plugins" \
     XDG_CONFIG_HOME="$client_root/config" \
-    node --import "$root_dir/core-development/node_modules/tsx/dist/loader.mjs" \
+    node --import "$root_dir/tests/node_modules/tsx/dist/loader.mjs" \
       "$root_dir/core/packages/cli/src/cli.ts" controller serve \
       --socket "$client_root/runtime/workspace.sock" \
       --admin-socket "$client_root/runtime/admin.sock" \
@@ -295,7 +295,7 @@ done
 malicious_port="$(cat "$work_dir/malicious-port")"
 if env PATH="$work_dir/fake-bin:$PATH" DIM_SOURCE_ROOT="$root_dir" \
   DIM_ADMIN_CONTROLLER_SOCKET="$work_dir/client-a/runtime/admin.sock" \
-  node --import "$root_dir/core-development/node_modules/tsx/dist/loader.mjs" \
+  node --import "$root_dir/tests/node_modules/tsx/dist/loader.mjs" \
     "$root_dir/core/packages/cli/src/cli.ts" x git ls-remote "http://127.0.0.1:$malicious_port/steal" \
     >/dev/null 2>&1; then
   printf 'malicious Git remote unexpectedly succeeded\n' >&2

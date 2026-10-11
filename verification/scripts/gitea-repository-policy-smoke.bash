@@ -113,7 +113,7 @@ git_as "$maintainer_username" "$maintainer_password" -C "$seed" push --quiet "$r
 policy_json="$(
   cd "$root_dir"
   env ADMIN_USERNAME="$admin_username" MAINTAINER_USERNAME="$maintainer_username" node \
-    --import "$root_dir/core-development/node_modules/tsx/dist/loader.mjs" --input-type=module -e '
+    --import "$root_dir/tests/node_modules/tsx/dist/loader.mjs" --input-type=module -e '
       import { branchProtectionOptions } from "./core/packages/core/src/project-registry/repositoryProtection.ts";
       process.stdout.write(JSON.stringify(branchProtectionOptions({
         adminUsername: process.env.ADMIN_USERNAME,

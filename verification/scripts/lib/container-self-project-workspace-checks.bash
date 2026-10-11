@@ -179,33 +179,18 @@ dim workspace run "$workspace_name" bash -- -lc 'rm "$HOME/dim-home-smoke"'
 dim workspace run "$workspace_name" restore <"$home_backup"
 test "$(dim workspace run "$workspace_name" bash -- -lc 'cat "$HOME/dim-home-smoke"')" = persistent
 verification_stage="agent repository materialization"
-if [[ "$self_project_single_tree" == true ]]; then
-  dim workspace run "$workspace_name" bash -- -lc '
-    test -n "$(getent hosts dim-gitea)"
-    git ls-remote origin HEAD >/dev/null
-    test "$(git branch --show-current)" = main
-    test -z "$(git status --short)"
-    test -r AGENTS.md
-    test -r .agents/skills/pull-request/SKILL.md
-    for repository in core core-development plugin-dns-cloudflare plugin-dns-cloudflare-development plugin-external-urls plugin-external-urls-development verification examples specification; do
-      test -d "/workspace/$repository"
-      test ! -e "/workspace/$repository/.git"
-    done
-  '
-else
-  dim workspace run "$workspace_name" bash -- -lc '
+dim workspace run "$workspace_name" bash -- -lc '
   test -n "$(getent hosts dim-gitea)"
   git ls-remote origin HEAD >/dev/null
   test "$(git branch --show-current)" = main
   test -z "$(git status --short)"
   test -r AGENTS.md
   test -r .agents/skills/pull-request/SKILL.md
-  for repository in core core-development plugin-dns-cloudflare plugin-dns-cloudflare-development plugin-external-urls plugin-external-urls-development verification examples specification; do
-    test -d "/workspace/$repository/.git"
-    test "$(git -C "/workspace/$repository" branch --show-current)" = main
+  for directory in core plugin-dns-cloudflare plugin-external-urls plugin-host-mirrors tests verification examples specification; do
+    test -d "/workspace/$directory"
+    test ! -e "/workspace/$directory/.git"
   done
 '
-fi
 agent_commit_identity="$(dim workspace run "$workspace_name" bash -- -lc '
   printf "%s\n" "self agent commit" > self-agent-commit.txt
   git add self-agent-commit.txt

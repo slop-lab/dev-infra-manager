@@ -9,9 +9,15 @@ dim_prepare_clone_source() {
   source_repo="$(git -C "$1" rev-parse --show-toplevel)"
   local snapshot_dir="$2"
   local dirty_policy="${3:-use}"
+  local excluded_path="${4:-}"
   local snapshot_tree="HEAD"
   local snapshot_commit
+  local -a pathspec=(.)
   local -a untracked_files=()
+
+  if [[ -n "$excluded_path" ]]; then
+    pathspec+=(":(exclude)$excluded_path" ":(exclude)$excluded_path/**")
+  fi
 
   case "$dirty_policy" in
     use|discard|auto) ;;
@@ -22,10 +28,10 @@ dim_prepare_clone_source() {
   esac
 
   mapfile -d '' untracked_files \
-    < <(git -C "$source_repo" ls-files --others --exclude-standard -z)
+    < <(git -C "$source_repo" ls-files --others --exclude-standard -z -- "${pathspec[@]}")
 
   local dirty=false
-  if ! git -C "$source_repo" diff --quiet HEAD -- ||
+  if ! git -C "$source_repo" diff --quiet HEAD -- "${pathspec[@]}" ||
     [[ "${#untracked_files[@]}" -gt 0 ]]; then
     dirty=true
   fi
@@ -34,7 +40,7 @@ dim_prepare_clone_source() {
     return 2
   fi
   if [[ "$dirty_policy" == use ]] &&
-    ! git -C "$source_repo" diff --quiet HEAD --; then
+    ! git -C "$source_repo" diff --quiet HEAD -- "${pathspec[@]}"; then
     snapshot_commit="$(git -C "$source_repo" stash create "DIM worktree snapshot")"
     snapshot_tree="$snapshot_commit"
   fi
@@ -65,31 +71,29 @@ dim_prepare_clone_source() {
 }
 
 dim_prepare_workbench_clone_source() {
-  local checkout_root="$1"
+  local checkout_root
+  checkout_root="$(git -C "$1" rev-parse --show-toplevel)"
   local snapshot_dir="$2"
   local dirty_policy="${3:-use}"
-  local repository
-  local repository_source
-  local repository_destination
-  local -a repositories=(
-    development root core core-development
-    plugin-dns-cloudflare plugin-dns-cloudflare-development
-    plugin-external-urls plugin-external-urls-development
-    verification examples specification
-  )
+  local project_source=""
 
   mkdir -p "$snapshot_dir/workbench" "$snapshot_dir/.snapshots"
-  for repository in "${repositories[@]}"; do
-    case "$repository" in
-      development) repository_source="$checkout_root"; repository_destination="$snapshot_dir/workbench" ;;
-      root) repository_source="$checkout_root/project"; repository_destination="$snapshot_dir/workbench/project" ;;
-      *) repository_source="$checkout_root/$repository"; repository_destination="$snapshot_dir/workbench/$repository" ;;
-    esac
+  if [[ -e "$checkout_root/project/.git" ]]; then
+    project_source="$(git -C "$checkout_root/project" rev-parse --show-toplevel)"
+  fi
+
+  dim_prepare_clone_source \
+    "$checkout_root" "$snapshot_dir/.snapshots/root" "$dirty_policy" \
+    "${project_source:+project}"
+  git -C "$DIM_GIT_CLONE_SOURCE" archive HEAD | tar -x -C "$snapshot_dir/workbench"
+
+  if [[ -n "$project_source" ]]; then
+    rm -rf -- "$snapshot_dir/workbench/project"
+    mkdir -p "$snapshot_dir/workbench/project"
     dim_prepare_clone_source \
-      "$repository_source" "$snapshot_dir/.snapshots/$repository" "$dirty_policy"
-    mkdir -p "$repository_destination"
-    git -C "$DIM_GIT_CLONE_SOURCE" archive HEAD | tar -x -C "$repository_destination"
-  done
+      "$project_source" "$snapshot_dir/.snapshots/project" "$dirty_policy"
+    git -C "$DIM_GIT_CLONE_SOURCE" archive HEAD | tar -x -C "$snapshot_dir/workbench/project"
+  fi
   find "$snapshot_dir/.snapshots" -depth -delete
   git -C "$snapshot_dir" init --initial-branch=main >/dev/null
   git -C "$snapshot_dir" add workbench

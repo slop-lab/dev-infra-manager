@@ -1,25 +1,26 @@
 prepare_self_project_workspace() {
-  if [[ -d "$project_source/project/.git" ]]; then
-    mkdir -p "$source_root/repositories"
-    for repository in development root core core-development \
-      plugin-dns-cloudflare plugin-dns-cloudflare-development \
-      plugin-external-urls plugin-external-urls-development verification examples specification; do
-      case "$repository" in
-        development) repository_source="$project_source" ;;
-        root) repository_source="$project_source/project" ;;
-        *) repository_source="$project_source/$repository" ;;
-      esac
-      dim_prepare_clone_source "$repository_source" "$source_root/snapshot-$repository"
-      mkdir -p "$source_root/repositories/$repository"
-      git -C "$DIM_GIT_CLONE_SOURCE" archive HEAD | tar -x -C "$source_root/repositories/$repository"
-    done
-  elif [[ -d "$project_source/.git" && -d "$project_source/core" && -d "$project_source/verification" ]]; then
+  local canonical_root=""
+  canonical_root="$(git -C "$project_source" rev-parse --show-toplevel 2>/dev/null || true)"
+  if [[ "$canonical_root" == "$project_source" && -d "$project_source/core" && -d "$project_source/verification" ]]; then
+    local project_fixture=""
     self_project_single_tree=true
     mkdir -p "$source_root/repositories/root"
-    dim_prepare_clone_source "$project_source" "$source_root/snapshot-root"
+    if [[ -e "$project_source/project/.git" ]]; then
+      project_fixture="$(git -C "$project_source/project" rev-parse --show-toplevel)"
+    fi
+    if [[ -n "$project_fixture" ]]; then
+      dim_prepare_clone_source "$project_source" "$source_root/snapshot-root" use project
+    else
+      dim_prepare_clone_source "$project_source" "$source_root/snapshot-root"
+    fi
     git -C "$DIM_GIT_CLONE_SOURCE" archive HEAD | tar -x -C "$source_root/repositories/root"
+    if [[ -n "$project_fixture" ]]; then
+      mkdir -p "$source_root/repositories/project"
+      dim_prepare_clone_source "$project_fixture" "$source_root/snapshot-project"
+      git -C "$DIM_GIT_CLONE_SOURCE" archive HEAD | tar -x -C "$source_root/repositories/project"
+    fi
   else
-    echo "assembled split or single-tree DIM repository set is required for self-Project verification" >&2
+    echo "canonical DIM root repository is required for self-Project verification" >&2
     return 2
   fi
   project_source="$source_root/repositories/root"
