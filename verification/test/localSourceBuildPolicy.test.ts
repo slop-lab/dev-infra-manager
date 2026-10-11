@@ -367,6 +367,7 @@ describe("local source build policy", () => {
     expect(packaging).toContain('git -C "$repo_root" archive');
     expect(packaging).toContain("  LICENSE \\");
     expect(packaging).toContain('cat >"$source_root/pnpm-workspace.yaml"');
+    expect(packaging).toContain("  - core/packages/native-git");
     expect(packaging).toContain("  - core/packages/web");
     expect(packaging).toContain('pnpm --dir "$source_root" install --frozen-lockfile');
     expect(packaging).toContain("aggregate-lock-sha256=%s");

@@ -36,6 +36,7 @@ async function createRealGitFixture(): Promise<RealGitFixture> {
     "core/packages/cli",
     "core/packages/installer",
     "core/packages/controller-proxy",
+    "core/packages/native-git",
     "core/packages/web",
     "core/packages/contracts/external-url",
     "plugin-dns-cloudflare",

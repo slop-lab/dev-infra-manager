@@ -22,13 +22,13 @@ jobs:
           ref: ${{ inputs.candidate_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Verify dispatch identity and candidate ancestry
+      - name: Verify dispatch identity and exact candidate source
         env:
           DIM_EXPECTED_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           DIM_DISPATCH_SHA: ${{ gitea.sha }}
         run: |
           test "$DIM_EXPECTED_CANDIDATE_SHA" = "$DIM_DISPATCH_SHA"
-          node verification/scripts/monorepo-candidate-evidence.mjs "$DIM_EXPECTED_CANDIDATE_SHA" /tmp/dim-candidate-evidence.json
+          node verification/scripts/candidate-source-evidence.mjs "$DIM_EXPECTED_CANDIDATE_SHA" /tmp/dim-candidate-source-evidence.json
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
           version: 10.13.1
@@ -63,6 +63,7 @@ jobs:
           export TMPDIR="$source_tmp"
           pnpm install --frozen-lockfile
           "$(type -P tini)" -s -- /usr/local/bin/just check-source
+          "$(type -P tini)" -s -- /usr/local/bin/just verify package-packs
           "$(type -P tini)" -s -- /usr/local/bin/just verify workspace-user-setup
           "$(type -P tini)" -s -- /usr/local/bin/just verify headscale-tailnet-tcp
           "$(type -P tini)" -s -- /usr/local/bin/just verify external-gitea-shared-control
@@ -72,12 +73,8 @@ jobs:
         uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
         with:
           name: candidate-container-${{ gitea.sha }}
-          path: |
-            /tmp/dim-candidate-evidence.json
-            .monorepo-candidate/sources.tsv
-            .monorepo-candidate/github-development.tsv
-            .monorepo-candidate/overlay.tsv
-            .monorepo-candidate/overlay.digest
+          path: /tmp/dim-candidate-source-evidence.json
+          if-no-files-found: error
           retention-days: 30
 
   qemu-sysbox:
@@ -90,13 +87,13 @@ jobs:
           ref: ${{ inputs.candidate_sha }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Verify dispatch identity and candidate ancestry
+      - name: Verify dispatch identity and exact candidate source
         env:
           DIM_EXPECTED_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           DIM_DISPATCH_SHA: ${{ gitea.sha }}
         run: |
           test "$DIM_EXPECTED_CANDIDATE_SHA" = "$DIM_DISPATCH_SHA"
-          node verification/scripts/monorepo-candidate-evidence.mjs "$DIM_EXPECTED_CANDIDATE_SHA" /tmp/dim-candidate-evidence.json
+          node verification/scripts/candidate-source-evidence.mjs "$DIM_EXPECTED_CANDIDATE_SHA" /tmp/dim-candidate-source-evidence.json
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
           version: 10.13.1
@@ -111,10 +108,6 @@ jobs:
         uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
         with:
           name: candidate-qemu-${{ gitea.sha }}
-          path: |
-            /tmp/dim-candidate-evidence.json
-            .monorepo-candidate/sources.tsv
-            .monorepo-candidate/github-development.tsv
-            .monorepo-candidate/overlay.tsv
-            .monorepo-candidate/overlay.digest
+          path: /tmp/dim-candidate-source-evidence.json
+          if-no-files-found: error
           retention-days: 30
