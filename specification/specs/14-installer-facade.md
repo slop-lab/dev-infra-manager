@@ -525,11 +525,14 @@ protected ref, tag, foreign workspace ref, deletion, or non-fast-forward update
 and grants no reviewer, CI, promotion, readiness, or runnable-Project authority.
 Empty registrar, importer, and issuer lists start
 the idle service only with empty Project state; an importer or issuer without a
-registrar does not create an implicit active service. Until a separate
-Project/repository adapter is
-verified, requests to mark a Project runnable or advertise ordinary capacity
-MUST fail before admission or runtime mutation. Root preparation or import
-alone grants no workspace, review, CI, or promotion authority.
+registrar does not create an implicit active service. The first separately
+selected adapter step MAY publish only the strict schema-`5`
+`admission-pending` identity in `PROJECT-NATIVE-PENDING-001` from an exact
+imported draft and fresh proof. The installer does not perform that transition.
+Until the full Project/repository adapter is verified, requests to mark a
+Project runnable or advertise ordinary or QEMU capacity MUST fail before
+admission or runtime mutation. Root preparation, import, pending identity, or
+bundle readiness alone grants no workspace, review, CI, or promotion authority.
 
 The trusted host may retain a separate non-runnable native bootstrap draft
 and its exact private bundle as `PROJECT-NATIVE-DRAFT-001`, use the separate
@@ -537,10 +540,12 @@ registrar/importer roles to import one protected root, and persist its exact
 final receipt. Neither this
 host state nor a service-side `root-imported` receipt is installer readiness,
 ordinary/QEMU admission, a workspace credential, or native Project selection.
-Bundle updates MUST retain that draft and the native service volume; missing
+Bundle updates MUST retain that draft, any canonical `admission-pending`
+record, and the native service volume; missing
 or ambiguous binding is a refusal, not an invitation to recreate a Project
-or switch to Gitea. Native `ready` and Gitea removal remain gated on the
-packaged real Sysbox/KVM journey in `VERIFICATION-NATIVE-CUTOVER-001`.
+or switch to Gitea. The pending record does not make installation, service, or
+Project readiness successful. Native `ready` and Gitea removal remain gated on
+the packaged real Sysbox/KVM journey in `VERIFICATION-NATIVE-CUTOVER-001`.
 
 **INSTALLER-NATIVE-PROJECT-CI-001 (accepted target, not implemented):** The
 later adapter MUST separate trusted native Project registration from candidate
@@ -921,7 +926,10 @@ state binds the import nonce, installer generation, global operator capacity
 digest, service epoch, demand, claims, cleaned results, and report outbox. Exact
 replays are historical receipts; readers MUST use a new UUIDv4 request ID for
 each current-validity check. This does not publish a runnable Project or
-advertise installed host capacity.
+advertise installed host capacity. A separately selected adapter may expose the
+canonical `PROJECT-NATIVE-PENDING-001` identity through native list/show, but
+it cannot turn registration, event receipt, a queued demand, or terminal
+evidence into runtime authority.
 
 The same service may durably acknowledge only a current canonical schema-2
 ordinary review event after exact native proof under
@@ -943,9 +951,10 @@ policy-controlled execution and evidence classes.
 
 The callable host worker journals claim, result, and recovery operations and
 checks container and private-root cleanup, but the installed host CLI and
-controller do not start it. The native Project/repository adapter, runnable
-Project admission, capacity advertisement, native QEMU scheduler/executor,
-protected promotion, and reviewer browser UI remain unavailable. No clean-host
+controller do not start it. The native Project/repository adapter, Project
+admission beyond strict `admission-pending`, capacity advertisement, native
+QEMU scheduler/executor, protected promotion, and reviewer browser UI remain
+unavailable. No clean-host
 Sysbox/KVM acceptance or runtime-ready claim follows from this command. A later
 promotion path MUST keep ordinary and QEMU evidence independent and require
 every policy-selected kind plus exact-tree human approval.

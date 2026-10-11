@@ -12,8 +12,8 @@ Specified but not implemented:
 - A runnable native Project/repository adapter and installed host lifecycle
   wiring. The ordinary host worker exists as a callable, journaled library
   boundary, but the installed CLI and controller do not start it or advertise
-  capacity. Native selection therefore fails closed before Project-ready or
-  runtime mutation.
+  capacity. The host CLI selects only a strict, non-runnable native Project
+  checkpoint; native workspace, CI, and ready operations remain closed.
 - Native QEMU scheduling and execution. The host-file parser remains preflight
   only, existing QEMU scheduling remains Gitea-only, and no native VM result can
   satisfy policy.
@@ -29,13 +29,21 @@ This pre-stable target defines no compatibility parser or source/state migration
 
 Implemented:
 
+- A host-only native `project create`, `list`, and `show` checkpoint. Plain
+  create requires a separately imported schema-2 draft, distinct owner-only
+  control-plane and importer connections, and a fresh imported-root proof. It
+  publishes one strict schema-5 `admission-pending` record, then exact replay
+  returns its original bytes. List/show expose only non-secret identity and
+  policy fields plus `runnable: false`; no Gitea fallback, workspace, CI, or
+  promotion authority is granted. Available host checks and remaining gates
+  are listed in `verification/native-cutover-host.md`.
 - One canonical root monorepo contains production packages under `core/` and
   `plugin-*/`, centralized package and plugin tests under `tests/`, host and
   cross-component checks under `verification/`, normative contracts under
   `specification/`, and one reviewed `.dim` Project contract. Candidate and
   release evidence identifies one exact root commit and tree; internal Gitea
   review and GitHub publication remain separate authorities. The centralized
-  suite includes 449 core tests plus the plugin suites.
+  suite includes the core and plugin suites.
 - The installer-facade-owned `dim installer install control-plane --config
   FILE` transaction for the two-service native Git and ordinary CI Compose
   bundle, including distinct nonroot identities and private volumes,
@@ -125,7 +133,7 @@ Implemented:
   claim, lease, result, report-outbox, and current-terminal proof state, plus a
   callable host executor with durable claim/result/recovery journal and checked
   container and private-root cleanup. The worker is not connected to installed
-  host CLI or controller startup, and no native Project adapter is active.
+  host CLI or controller startup, and no runnable native Project adapter is active.
 - Project metadata with exactly one root repository per runnable Project.
 - Schema 4 Project state with a trusted Gitea organization ID persisted before
   ready publication, and Project creation serialized through identity
