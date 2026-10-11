@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { access, lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { assertIdleAuthorityBoundary } from "./control-plane-install-live-evidence.mjs";
 import { captureRollbackState } from "./control-plane-install-live-rollback.mjs";
@@ -16,6 +16,7 @@ export class PrepublicationFailureRunner {
   rollbackStarted = false;
   candidateReady;
   #candidateReadyResolved = false;
+  #beforeInjection;
   #delegate;
   #ordinaryCandidateId;
   #prior;
@@ -23,9 +24,10 @@ export class PrepublicationFailureRunner {
   #released;
   #replacements = 0;
 
-  constructor(delegate, prior) {
+  constructor(delegate, prior, beforeInjection = async () => {}) {
     this.#delegate = delegate;
     this.#prior = prior;
+    this.#beforeInjection = beforeInjection;
     this.candidateReady = new Promise((resolve) => { this.#candidateReadyResolved = resolve; });
     this.#released = new Promise((resolve) => { this.#release = resolve; });
   }
@@ -59,6 +61,7 @@ export class PrepublicationFailureRunner {
       this.#candidateReadyResolved = false;
       await this.#released;
     }
+    await this.#beforeInjection();
     this.injections += 1;
     return injectedFailure;
   }
@@ -66,7 +69,11 @@ export class PrepublicationFailureRunner {
 
 export async function runLivePrepublicationGate(input) {
   await input.selectCandidate();
-  const failureRunner = new PrepublicationFailureRunner(input.runner, input.prior.runtime);
+  const failureRunner = new PrepublicationFailureRunner(
+    input.runner,
+    input.prior.runtime,
+    input.restorePriorConfig
+  );
   const installOutcome = input.install(failureRunner).then(
     (value) => ({ kind: "success", value }),
     (error) => ({ kind: "failure", error })
@@ -93,13 +100,16 @@ export async function runLivePrepublicationGate(input) {
 }
 
 async function assertPrepublicationState(input, candidate) {
-  const [runtime, installBytes, composeBytes, volumes, before] = await Promise.all([
+  const [runtime, installBytes, composeBytes, volumes, before, candidateConfigBytes, candidateConfigMetadata] = await Promise.all([
     input.captureRuntime(),
     readFile(join(input.stateRoot, "install.json")),
     readFile(join(input.stateRoot, "compose.yml")),
     input.captureVolumes(),
-    input.captureState()
+    input.captureState(),
+    readFile(input.nativeConfigPath),
+    lstat(input.nativeConfigPath)
   ]);
+  const candidateConfig = JSON.parse(candidateConfigBytes.toString("utf8"));
   const generationId = runtime.nativeGit.generationId;
   assert.equal(runtime.nativeGit.id, candidate.nativeGitId);
   assert.equal(runtime.ordinaryCi.id, candidate.ordinaryCiId);
@@ -107,6 +117,10 @@ async function assertPrepublicationState(input, candidate) {
   assert.notEqual(generationId, input.prior.state.generationId);
   assert.equal(runtime.nativeGit.image, input.candidateImages.nativeGit);
   assert.equal(runtime.ordinaryCi.image, input.candidateImages.ordinaryCi);
+  assert.equal(candidateConfig.projectRegistrars.length, 1);
+  assert.equal(candidateConfig.repositories.length, 0);
+  assert.equal(candidateConfig.identities.length, 0);
+  assert.equal(candidateConfigMetadata.mode & 0o777, 0o600);
   assert.equal(installBytes.toString("base64"), input.prior.state.installBase64);
   assert.equal(composeBytes.toString("base64"), input.prior.state.composeBase64);
   assert.deepEqual(volumes, input.prior.volumes);
@@ -119,24 +133,29 @@ async function assertPrepublicationState(input, candidate) {
     nativePort: input.nativePort,
     ordinaryPort: input.ordinaryPort,
     credentials: input.credentials,
+    candidateRegistrar: input.candidateRegistrar,
+    candidateGenerationId: generationId,
     runner: input.runner,
     expectedProjectResources: input.prior.authority.projectResources
   });
   const after = await input.captureState();
   assert.deepEqual(after.services, before.services);
+  assert.deepEqual(await readFile(input.nativeConfigPath), candidateConfigBytes);
   assert.equal((await readFile(join(input.stateRoot, "install.json"))).toString("base64"), input.prior.state.installBase64);
   assert.equal((await readFile(join(input.stateRoot, "compose.yml"))).toString("base64"), input.prior.state.composeBase64);
   console.log(`prepublication-candidates ${JSON.stringify({
     generationId, nativeGitId: candidate.nativeGitId, ordinaryCiId: candidate.ordinaryCiId,
     priorInstallSha256: input.prior.state.installSha256,
     priorComposeSha256: input.prior.state.composeSha256,
+    selectorSource: "preserved",
     before: before.services, after: after.services
   })}`);
 }
 
 async function assertRestoredState(input, candidate) {
-  const [state, runtime, volumes, authority] = await Promise.all([
-    captureRollbackState(input.stateRoot), input.captureRuntime(), input.captureVolumes(), input.captureState()
+  const [state, runtime, volumes, authority, nativeConfigBytes, nativeConfigMetadata] = await Promise.all([
+    captureRollbackState(input.stateRoot), input.captureRuntime(), input.captureVolumes(), input.captureState(),
+    readFile(input.nativeConfigPath), lstat(input.nativeConfigPath)
   ]);
   assert.deepEqual(state, input.prior.state);
   assert.deepEqual(volumes, input.prior.volumes);
@@ -144,6 +163,8 @@ async function assertRestoredState(input, candidate) {
   assert.notEqual(runtime.nativeGit.id, candidate?.nativeGitId);
   assert.notEqual(runtime.ordinaryCi.id, candidate?.ordinaryCiId);
   assert.deepEqual(authority.services, input.prior.authority.services);
+  assert.equal(nativeConfigBytes.toString("base64"), input.priorNativeConfigBase64);
+  assert.equal(nativeConfigMetadata.mode & 0o777, 0o600);
   await assert.rejects(access(join(input.stateRoot, "transaction.json")), { code: "ENOENT" });
   await input.assertSentinels();
   console.log(`prepublication-rollback ${JSON.stringify({

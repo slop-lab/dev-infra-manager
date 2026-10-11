@@ -71,6 +71,28 @@ describe("control-plane live prepublication barrier", () => {
     assert.equal(runner.rollbackStarted, true);
     assert.equal(runner.injections, 1);
   });
+
+  it("restores the prior source before injecting the failure that starts rollback", async () => {
+    // Given
+    const events = [];
+    const delegate = { async run(command) { events.push(command.args.at(-1)); return successful(); } };
+    const runner = new PrepublicationFailureRunner(delegate, {
+      nativeGit: { id: "prior-native" }, ordinaryCi: { id: "prior-ordinary" }
+    }, async () => { events.push("restore-idle-config"); });
+    await runner.run(replacement("ordinary-ci"));
+    await runner.run(readiness("ordinary-ci", "candidate-ordinary"));
+    await runner.run(replacement("native-git"));
+    const candidateReady = runner.run(readiness("native-git", "candidate-native"));
+    await runner.candidateReady;
+
+    // When
+    runner.release();
+    const result = await candidateReady;
+
+    // Then
+    assert.equal(result.exitCode, 75);
+    assert.deepEqual(events.slice(-2), ["ready", "restore-idle-config"]);
+  });
 });
 
 function replacement(service) {

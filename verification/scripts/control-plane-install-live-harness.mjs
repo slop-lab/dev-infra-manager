@@ -51,16 +51,36 @@ const compatibilityVariants = parseCompatibilityVariantManifest(
   await readFile(join(root, "compatibility-variants.tsv"), "utf8")
 );
 
+async function runtimeIdentitySnapshot() {
+  const inspect = async (service) => {
+    const result = await docker(["container", "inspect", `dim-control-plane-${service}-1`]);
+    const container = JSON.parse(result.stdout)[0];
+    return { id: container.Id, image: container.Config.Image, generationId: container.Config.Cmd[2] };
+  };
+  const [nativeGit, ordinaryCi] = await Promise.all([inspect("native-git"), inspect("ordinary-ci")]);
+  return { nativeGit, ordinaryCi };
+}
+
 await mkdir(operatorRoot, { recursive: true, mode: 0o700 });
 await mkdir(hostileBin, { mode: 0o700 });
 await writeFile(join(hostileBin, "docker"), `#!/bin/sh\n: > '${hostileDockerMarker}'\nexit 97\n`, { mode: 0o700 });
 await assertDockerCli(runner);
-const { credentials, readinessTokens, sources, writeConfig } = await createOperatorFixture({
+const {
+  candidateRegistrar,
+  candidateRegistrarCredential,
+  credentials,
+  readinessTokens,
+  restoreIdleConfig,
+  sources,
+  writeCandidateConfig,
+  writeConfig
+} = await createOperatorFixture({
   operatorRoot,
   configPath,
   deploymentId,
   ports: { nativeGit: nativePort, ordinaryCi: ordinaryPort }
 });
+const sensitiveValues = [...Object.values(credentials), candidateRegistrarCredential];
 const facadeInstall = {
   executable: facade,
   configPath,
@@ -68,7 +88,7 @@ const facadeInstall = {
   cwd: operatorRoot,
   environment: controlPlaneFacadeEnvironment({ environment: process.env, home: operatorRoot,
     path: `${hostileBin}:${process.env.PATH ?? ""}`, stateHome, lifecycleStateRoot }),
-  forbiddenOutput: Object.values(credentials)
+  forbiddenOutput: sensitiveValues
 };
 const imageProbeTokenPath = join(root, "image-readiness.token");
 const imageProbeToken = randomBytes(32).toString("base64url");
@@ -81,7 +101,7 @@ await runBuiltImageReadinessMatrix({
   runner,
   images: images.g1,
   tokenPath: imageProbeTokenPath,
-  forbiddenValues: [...Object.values(credentials), ...Object.values(readinessTokens), imageProbeToken],
+  forbiddenValues: [...sensitiveValues, ...Object.values(readinessTokens), imageProbeToken],
   writeLine: console.log
 });
 console.log("built-image-readiness token=private-bind mode=0444 argv=redacted output=redacted");
@@ -142,7 +162,7 @@ await inspectEffectiveCompose({
   stateRoot,
   record: first.record,
   operatorPaths: [configPath, ...Object.values(sources)],
-  forbiddenValues: [...Object.values(credentials), ...Object.values(readinessTokens)]
+  forbiddenValues: [...sensitiveValues, ...Object.values(readinessTokens)]
 });
 const firstRuntime = await runtimeSnapshot();
 const firstInstallBytes = await readFile(join(stateRoot, "install.json"));
@@ -163,7 +183,7 @@ await runLiveCandidateCompatibilityDenials(compatibilityInput);
 console.log("compatibility-coverage not-live=none reason=all-requested-candidate-and-safe-prior-cases-ran-live");
 
 await runIsolatedFacadeNoOp({
-  runner, root, stateRoot, forbiddenValues: [...Object.values(credentials), ...Object.values(readinessTokens)],
+  runner, root, stateRoot, forbiddenValues: [...sensitiveValues, ...Object.values(readinessTokens)],
   prior: { generationId: first.record.generationId, runtime: firstRuntime, volumes: firstVolumes,
     installBytes: firstInstallBytes, composeBytes: firstComposeBytes },
   captureRuntime: runtimeSnapshot, captureVolumes: volumeSnapshot, assertSentinels
@@ -178,7 +198,7 @@ await runPublishOnlyEvidence({
   assertSentinels, assertDeployment, writeLine: console.log,
   assertCompose: async (installed) => inspectEffectiveCompose({
     runner, stateRoot, record: installed.record, operatorPaths: [configPath, ...Object.values(sources)],
-    forbiddenValues: [...Object.values(credentials), ...Object.values(readinessTokens)]
+    forbiddenValues: [...sensitiveValues, ...Object.values(readinessTokens)]
   })
 });
 
@@ -206,10 +226,14 @@ await runDependencyReadinessTransition({
 });
 await assertSentinels();
 const priorRollbackState = await captureRollbackState(stateRoot);
+const priorNativeConfigBase64 = (await readFile(sources.nativeGit)).toString("base64");
 const restoredRuntime = await runLivePrepublicationGate({
-  stateRoot, runner, candidateImages: images.g1, nativePort, ordinaryPort, credentials,
+  stateRoot, runner, candidateImages: images.g1, nativePort, ordinaryPort, credentials, candidateRegistrar,
   prior: { state: priorRollbackState, runtime: secondRuntime, volumes: firstVolumes, authority: dependencyState },
-  selectCandidate: async () => writeConfig(images.g1),
+  nativeConfigPath: sources.nativeGit,
+  priorNativeConfigBase64,
+  selectCandidate: async () => writeCandidateConfig(images.g1),
+  restorePriorConfig: restoreIdleConfig,
   install: async (failureRunner) => installControlPlane({ configPath, stateRoot, runner: failureRunner,
     readinessPolicy: { timeoutMilliseconds: 60_000, retryIntervalMilliseconds: 60_000, execTimeoutMilliseconds: 3_000 } }),
   captureRuntime: runtimeSnapshot, captureVolumes: volumeSnapshot,
@@ -225,7 +249,7 @@ await runLiveRollbackMatrix({
     configPath, stateRoot, runner: failureRunner,
     readinessPolicy: { timeoutMilliseconds: 2000, retryIntervalMilliseconds: 2000, execTimeoutMilliseconds: 1000 }
   }),
-  captureRuntime: runtimeSnapshot,
+  captureRuntime: runtimeIdentitySnapshot,
   captureVolumes: volumeSnapshot,
   failureCode: controlPlaneFailureCode,
   uncertainError: () => new ControlPlaneDockerUncertainError("injected replacement shutdown uncertainty"),

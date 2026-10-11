@@ -8,6 +8,12 @@ export async function createOperatorFixture(input) {
     ["query", "identity", "attemptIssuer", "resultReporter", "webhook", "registrar", "host"]
       .map((name) => [name, randomBytes(32).toString("base64url")])
   );
+  const candidateRegistrarCredential = randomBytes(32).toString("base64url");
+  const candidateRegistrar = {
+    hostId: "candidate-registrar-host",
+    username: "candidate-project-registrar",
+    password: candidateRegistrarCredential
+  };
   const readinessTokens = {
     nativeGit: randomBytes(32).toString("base64url"),
     ordinaryCi: randomBytes(32).toString("base64url")
@@ -18,10 +24,10 @@ export async function createOperatorFixture(input) {
     ordinaryCi: join(input.operatorRoot, "ordinary-ci.json"),
     ordinaryReadiness: join(input.operatorRoot, "ordinary-readiness.token")
   };
-  await privateFile(sources.nativeGit, JSON.stringify({
+  const nativeConfig = (projectRegistrars) => JSON.stringify({
     schemaVersion: 7, serviceId: "native-main", host: "0.0.0.0", port: 8080,
     storageRoot: "/var/lib/dim-native-git", gitExecutable: "/usr/bin/git", gitVersion: "2.39.5",
-    repositories: [], identities: [], projectRegistrars: [], projectRootImporters: [],
+    repositories: [], identities: [], projectRegistrars, projectRootImporters: [],
     projectRootReadIssuers: [], workspaceWriteIssuers: [], humanReviewers: [], ordinaryCi: {
       endpoint: "http://ordinary-ci:8080", serviceId: "ordinary-main",
       query: { username: "native-query", password: credentials.query },
@@ -30,7 +36,9 @@ export async function createOperatorFixture(input) {
       resultReporter: { username: "ordinary-results", password: credentials.resultReporter },
     webhook: { endpoint: "http://ordinary-ci:8080/v1/native-root-ci-events", username: "native-events", password: credentials.webhook }
     }
-  }));
+  });
+  const idleNativeConfig = nativeConfig([]);
+  await privateFile(sources.nativeGit, idleNativeConfig);
   await privateFile(sources.ordinaryCi, JSON.stringify({
     schemaVersion: 4, serviceId: "ordinary-main", database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
     admissionLeaseMilliseconds: 300000, claimLeaseMilliseconds: 60000,
@@ -50,21 +58,30 @@ export async function createOperatorFixture(input) {
   await privateFile(sources.nativeReadiness, readinessTokens.nativeGit);
   await privateFile(sources.ordinaryReadiness, readinessTokens.ordinaryCi);
 
+  const writeConfig = async (selectedImages, ports = input.ports) => privateFile(input.configPath, JSON.stringify({
+    schemaVersion: 1, deploymentId: input.deploymentId,
+    nativeGit: {
+      image: selectedImages.nativeGit, configFile: sources.nativeGit,
+      readinessTokenFile: sources.nativeReadiness, publish: { host: "127.0.0.1", port: ports.nativeGit }
+    },
+    ordinaryCi: {
+      image: selectedImages.ordinaryCi, configFile: sources.ordinaryCi,
+      readinessTokenFile: sources.ordinaryReadiness, publish: { host: "127.0.0.1", port: ports.ordinaryCi }
+    }
+  }));
+
   return {
+    candidateRegistrar,
+    candidateRegistrarCredential,
     credentials,
     readinessTokens,
     sources,
-    writeConfig: async (selectedImages, ports = input.ports) => privateFile(input.configPath, JSON.stringify({
-      schemaVersion: 1, deploymentId: input.deploymentId,
-      nativeGit: {
-        image: selectedImages.nativeGit, configFile: sources.nativeGit,
-        readinessTokenFile: sources.nativeReadiness, publish: { host: "127.0.0.1", port: ports.nativeGit }
-      },
-      ordinaryCi: {
-        image: selectedImages.ordinaryCi, configFile: sources.ordinaryCi,
-        readinessTokenFile: sources.ordinaryReadiness, publish: { host: "127.0.0.1", port: ports.ordinaryCi }
-      }
-    }))
+    writeConfig,
+    writeCandidateConfig: async (selectedImages, ports = input.ports) => {
+      await privateFile(sources.nativeGit, nativeConfig([candidateRegistrar]));
+      await writeConfig(selectedImages, ports);
+    },
+    restoreIdleConfig: async () => privateFile(sources.nativeGit, idleNativeConfig)
   };
 }
 
