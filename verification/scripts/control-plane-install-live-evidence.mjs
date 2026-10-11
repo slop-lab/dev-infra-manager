@@ -10,11 +10,18 @@ const bundleResources = [
   ["container", "dim-control-plane-native-git-1"],
   ["container", "dim-control-plane-ordinary-ci-1"]
 ];
-const ordinaryBusinessTables = [
-  "native_admissions", "native_attempt_assignments", "native_event_replay_fences", "review_job_replay_fences",
-  "native_event_inbox", "demands", "claim_receipts", "claims", "capacity_fences", "host_results",
-  "report_outbox", "terminal_details"
+export const ordinaryBusinessTables = [
+  "native_root_admission_requests", "native_root_admissions", "native_root_ci_claim_receipts",
+  "native_root_ci_claims", "native_root_ci_demands", "native_root_ci_event_receipts",
+  "native_root_ci_host_results", "native_root_ci_report_outbox"
 ];
+export const nativeBusinessTables = [
+  "native_project_registration", "native_project_root_import",
+  "native_project_root_promotion_finalized", "native_project_root_promotion_intent"
+];
+// A legitimate service restart appends a fencing epoch; it is not immutable job evidence.
+export const ordinaryAuthorityTables = ["bundle_activation", ...ordinaryBusinessTables];
+export const nativeAuthorityTables = ["bundle_activation", ...nativeBusinessTables];
 
 export async function captureDenialEvidence(context) {
   const [sources, state, resources, containers] = await Promise.all([
@@ -53,12 +60,12 @@ export async function captureAuthorityServiceState(runner, service) {
     ? {
         container: "dim-control-plane-native-git-1", user: "10001:10001",
         root: "/var/lib/dim-native-git", database: "/var/lib/dim-native-git/native-idle.sqlite3",
-        tables: ["bundle_activation"]
+        tables: nativeAuthorityTables
       }
     : {
         container: "dim-control-plane-ordinary-ci-1", user: "10002:10002",
         root: "/var/lib/dim-ordinary-ci", database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
-        tables: ["bundle_activation", ...ordinaryBusinessTables]
+        tables: ordinaryAuthorityTables
       };
   const source = `
     import {createHash} from "node:crypto";
@@ -82,6 +89,7 @@ export async function captureAuthorityServiceState(runner, service) {
   ])).stdout);
   if (service === "nativeGit") {
     assert.deepEqual(state.entries, [".dim-native-git-owner.sqlite3", "native-idle.sqlite3", "state-format.json"]);
+    assert.equal(nativeBusinessTables.every((table) => state.counts[table] === 0), true);
   } else assert.equal(ordinaryBusinessTables.every((table) => state.counts[table] === 0), true);
   assert.deepEqual(state.protectedRefs, []);
   return state;
@@ -90,6 +98,7 @@ export async function captureAuthorityServiceState(runner, service) {
 export function assertIdleAuthorityBoundary(state) {
   assert.deepEqual(state.sockets, [[], []]);
   assert.equal(state.services.nativeGit.protectedRefs.length, 0);
+  assert.equal(nativeBusinessTables.every((table) => state.services.nativeGit.counts[table] === 0), true);
   assert.equal(ordinaryBusinessTables.every((table) => state.services.ordinaryCi.counts[table] === 0), true);
   for (const runtime of state.runtime) {
     assert.equal(runtime.mounts.some(({ Destination }) => Destination === "/run/docker.sock"), false);
