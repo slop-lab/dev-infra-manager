@@ -452,11 +452,10 @@ proxy Git traffic. A repository retains its explicit external connection so
 `repo fetch` can project remote branches under managed `upstream/*` and
 `repo publish` can publish only configured, non-forced branch mappings.
 Omitting the repository alias publishes every repository with configured
-mappings. DIM's self Project maps 11 managed `main` heads to 11 independent
-GitLab development upstreams on `main`. `dim repo publish dim` publishes only
-to those GitLab upstreams. Integrated canonical publication and release on
-GitHub remain separate trusted maintainer actions outside that command's
-authority.
+mappings. DIM's self Project has one managed root repository; its reviewed
+publication mapping may push that root to the configured development upstream.
+Publishing the integrated canonical source on GitHub and releasing it remain
+separate trusted maintainer actions outside `dim repo publish` authority.
 
 An existing ready root origin is not replaced by an ordinary repository-set
 apply. An explicit, reviewed root-origin rebind MAY change only the recorded

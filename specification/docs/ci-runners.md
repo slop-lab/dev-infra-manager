@@ -204,21 +204,25 @@ ordinary-pool ...` commands, `DIM_ORDINARY_CI_POOL_CONNECTION_FILE`, schema-2
 databases, and persistent Project Sysbox runner records are rejected, not
 migrated. See the exact
 [installer contract](../specs/14-installer-facade.md#control-plane-bundle) and
-[paired operations design](../../core-development/ordinary-ci-pool.md).
+[operations design](ordinary-ci-pool.md).
 
 As described in the
-[development repository model](development-repositories.md), DIM develops
-itself through 11 GitLab development upstreams and its DIM-managed internal
-review host, while GitHub remains the integrated canonical public source. The
-current automatic workflows are provider-specific:
-`.gitea/workflows/ci.yml` uses the Project-owned integration label for the
-container gate in a fresh QEMU guest. Persistent Sysbox runners serve only
-ordinary labels. The QEMU gate covers the canonical self-Project's private
-nested runtime on a compatible clean host. `.github/workflows/ci.yml`
-intentionally runs only lightweight Node.js type checks and tests without APT
-or Docker setup. GitHub-only manual Sysbox and KVM release workflows remain
-under `.github/workflows` and are not copied into the managed development Gitea
-instance.
+[development repository model](development-repositories.md), DIM develops from
+one canonical root repository. DIM-managed Gitea hosts internal proposals,
+review, and automatic CI for that same repository. GitHub publication remains a
+separate trusted maintainer action and never follows from a Gitea approval or CI
+result alone. Every workflow must report the exact candidate root commit and
+tree that it checked.
+
+The provider-specific workflows have distinct roles. `.gitea/workflows/ci.yml`
+uses the Project-owned integration label for the container gate in a fresh QEMU
+guest. Persistent Sysbox runners serve only ordinary labels. The QEMU gate
+covers the canonical self-Project's private nested runtime on a compatible clean
+host. `.github/workflows/ci.yml` intentionally runs only lightweight Node.js
+type checks and tests without APT or Docker setup. GitHub-only manual Sysbox and
+KVM release workflows remain under `.github/workflows`; they run after the
+exact canonical commit has been published and aren't copied into internal
+Gitea.
 
 In the current Gitea-only profile, when explicitly created on a host with KVM, DIM starts a small persistent,
 trusted runc supervisor with `/dev/kvm`. A Gitea `workflow_job` webhook asks it
@@ -404,10 +408,10 @@ retains config provenance for both executors and exact hook provenance for QEMU.
 
 The cache hook is optional and belongs in the protected root because it is the
 only Project code allowed to populate persistent runner state. Test orchestration
-and artifact-specific verification should remain in ordinary development
-repositories. The hook runs inside the disposable Packer guest, receives no
-host socket or coordinator credential, and cannot access another Project's
-cache volume.
+and artifact-specific verification remain in the root `tests/` and
+`verification/` trees. The hook runs inside the disposable Packer guest,
+receives no host socket or coordinator credential, and cannot access another
+Project's cache volume.
 
 The enabled host mirror plugin owns the exact digest-pinned APT cache image used
 for workspace package reuse. This cache does not change QEMU source identity:

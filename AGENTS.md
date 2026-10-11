@@ -37,14 +37,17 @@ provider-specific tools; do not assume that `origin` is GitHub.
 ## Work tracking and repository ownership
 
 - Record DIM-managed Gitea issues only in the Project `root` repository. Pull
-  requests still belong to the repository that owns the changed files, and
-  may reference the root issue in their body.
-- Put package-specific changelog entries, maintenance documentation, design
-  notes, and test specifications in the package's paired `*-development`
-  repository when one exists. Keep only build inputs and documentation shipped
-  with the package, such as its package README, in the production source
-  repository.
-- Put cross-package and Project-level normative contracts in `specification`.
+  requests may reference the root issue in their body.
+- This root repository is the canonical monorepo. Production package source is
+  under `core/` and `plugin-*/`; centralized package and plugin tests are under
+  `tests/`; cross-component checks are under `verification/`; and Project-level
+  normative contracts are under `specification/`.
+- Put package-specific changelogs, maintenance notes, and design documents with
+  their owning production package or package group. Keep the core package-group
+  changelog at `core/CHANGELOG.md`; keep a plugin changelog in that plugin's
+  root. Keep cross-package release outcomes in the root `CHANGELOG.md`.
+- Keep test implementation and test-only fixtures in `tests/`, even when their
+  package changelog or design contract lives with production source.
 
 ## Changelogs
 

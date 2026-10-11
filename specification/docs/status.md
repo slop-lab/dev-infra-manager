@@ -29,6 +29,13 @@ This pre-stable target defines no compatibility parser or source/state migration
 
 Implemented:
 
+- One canonical root monorepo contains production packages under `core/` and
+  `plugin-*/`, centralized package and plugin tests under `tests/`, host and
+  cross-component checks under `verification/`, normative contracts under
+  `specification/`, and one reviewed `.dim` Project contract. Candidate and
+  release evidence identifies one exact root commit and tree; internal Gitea
+  review and GitHub publication remain separate authorities. The centralized
+  suite includes 449 core tests plus the plugin suites.
 - The installer-facade-owned `dim installer install control-plane --config
   FILE` transaction for the two-service native Git and ordinary CI Compose
   bundle, including distinct nonroot identities and private volumes,
@@ -196,8 +203,9 @@ installs the unified runtime via `installer install core|plugin` and
 - FIFO command-session input for terminals, redirected files, pipes, and named
   FIFOs, with response, transport, and cancellation failures surfaced to the
   CLI caller.
-- Local source preparation from three named exact production commits, with one
-  aggregate SHA-256 package identity and frozen-lockfile installs. Its local
+- Local source preparation from one exact root-monorepo commit and committed
+  aggregate dependency lock, with one aggregate SHA-256 package identity and
+  frozen-lockfile installs. Its local
   test registry uses the exact lockfile-owned Verdaccio binary on randomized
   loopback, closes signup, and requires login for package mutation.
 
@@ -240,7 +248,7 @@ full-development gates were not rerun for this follow-up.
 
 A lifecycle correction was independently verified on 2026-09-15. Evidence
 included verification across 40 files and 206 tests, passing cross-workspace
-gates, 786 passed core-development tests with 40 environment skips, and 63
+gates, 786 passed core package tests with 40 environment skips, and 63
 passed CLI tests. All 11 typechecks, package builds, Node and Bash syntax, LOC,
 hygiene, and changed-file diff checks passed. Manual Unix-socket checks observed
 status, HTTP `400` handling, and graceful cleanup. Oracle reported a PASS for
@@ -267,7 +275,7 @@ Current review status on 2026-09-17: **PENDING**. Seal
 `6279a7a8f70dd1e5761e5788dea5b596901f0df2e28d6c25dfa026cb0d4be103`
 failed and carries no approval. The parent review observed 221 verification
 tests passing across 43 files; `workspace:check` passing all 11 projects;
-core-development reporting 786 passed and 40 skipped; the CLI reporting 63
+core package tests reporting 786 passed and 40 skipped; the CLI reporting 63
 passed; and the workspace build passing. A manual real-Node Unix-socket check
 observed status HTTP `200`, malformed JSON HTTP `400`, run HTTP `202`, and
 SIGTERM exit `0`, after which the owner, socket, lease, and runs artifacts were

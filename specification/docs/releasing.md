@@ -13,27 +13,30 @@ Keep each unreleased outcome as one evolving entry. A fix or refinement to a
 feature introduced in the same unreleased version updates that feature's
 existing entry instead of adding a second entry describing the intermediate
 defect. Once an affected version has been released, record a later user-visible
-fix as its own outcome. Package-specific entries belong in the paired
-`*-development` repository when one exists; cross-package release outcomes
-belong in the development repository changelog.
+fix as its own outcome. Package-specific outcomes belong in the changelog for
+their owning package or package group. Core package history lives in
+`core/CHANGELOG.md`, and each plugin changelog lives in that plugin's root.
+Cross-package and Project-level outcomes belong in the root `CHANGELOG.md`.
+Don't copy package release history into the root changelog or create a root
+release heading until that root release is actually cut.
 
 ## Prerequisites
 
 - Following the [development repository model](development-repositories.md),
-  all 11 reviewed managed `main` heads have been published to their independent
-  GitLab development upstreams. `dim repo publish dim` performs this GitLab
-  publication only.
-- A trusted maintainer has separately assembled and published the integrated
-  canonical commit to GitHub. DIM-managed Gitea and `dim repo publish dim` have
-  no authority over that publication or the GitHub release.
-- Release evidence records 11 GitLab split repository SHAs and one canonical
-  GitHub SHA as distinct fields. It does not treat them as one shared commit.
-  Automatic CI is green for each reviewed development head and for the
-  canonical GitHub commit under the policies defined for those repositories.
+  the complete release candidate is one clean root-monorepo commit and tree.
+  Production packages, plugins, tests, verification, specifications, workflows,
+  and `.dim` lifecycle inputs all come from that same tree.
+- DIM-managed Gitea has recorded internal review and required automatic CI for
+  that exact root commit and tree. Internal review authority has no GitHub,
+  package-registry, tag, or release credential.
+- A trusted maintainer has separately published the same commit and tree to the
+  canonical GitHub repository. Release evidence records the internal candidate
+  identity and `github_canonical_sha`, and proves that both resolve to the same
+  Git commit and tree rather than an assembled or substituted source set.
 - The manually dispatched Sysbox and KVM installer workflows pass on the
   release commit using fresh ephemeral self-hosted runners.
-- The promotion into the active DIM-managed development repository's `main`
-  branch used a non-draft pull request and passed every automatic
+- The promotion into the active DIM-managed root repository's `main` branch
+  used a non-draft pull request and passed every automatic
   `host backend (BACKEND)` job. These run the same
   `just verify environments-kvm BACKEND` verification through managed runners; the manual
   GitHub run remains an independent release check on a fresh runner against
@@ -73,11 +76,9 @@ just verify environments-kvm
 ```
 
 For the managed Gitea deployment gate, dispatch `QEMU release gate` from the
-integrated `development` repository at the exact candidate ref and set
-`root-ref` to the reviewed root branch, tag, or commit being deployed. The job
-uses the shared `dim-qemu` runner capability and records the exact assembled
-repository set. Require it to pass before host installation or
-`dim workspace restart`.
+root repository at the exact candidate ref. The job uses the shared `dim-qemu`
+runner capability and records the exact root commit and tree. Require it to pass
+before host installation or `dim workspace restart`.
 
 The release gate also runs the complete stateful and canonical self-Project
 contract in a fresh QEMU integration guest. The host-installer gate uses a
@@ -89,27 +90,12 @@ of them.
 `bash verification/scripts/local-ci-matrix.bash --manual` is the combined
 local shorthand for the automatic matrix and both manual backend gates.
 
-After running `dim repo publish dim`, record the exact GitLab `main` SHA for
-each split upstream in the release evidence:
-
-| GitLab repository | Ref | Evidence field |
-| --- | --- | --- |
-| `root` | `main` | `gitlab_root_sha` |
-| `development` | `main` | `gitlab_development_sha` |
-| `core` | `main` | `gitlab_core_sha` |
-| `core-development` | `main` | `gitlab_core_development_sha` |
-| `plugin-dns-cloudflare` | `main` | `gitlab_plugin_dns_cloudflare_sha` |
-| `plugin-dns-cloudflare-development` | `main` | `gitlab_plugin_dns_cloudflare_development_sha` |
-| `plugin-external-urls` | `main` | `gitlab_plugin_external_urls_sha` |
-| `plugin-external-urls-development` | `main` | `gitlab_plugin_external_urls_development_sha` |
-| `verification` | `main` | `gitlab_verification_sha` |
-| `examples` | `main` | `gitlab_examples_sha` |
-| `specification` | `main` | `gitlab_specification_sha` |
-
-Record the integrated GitHub commit separately as `github_canonical_sha`,
-together with its canonical ref. The GitLab SHAs prove split development
-publication. The GitHub SHA proves the separately assembled canonical
-publication. They are not expected to be equal.
+Record the internal candidate as `candidate_root_sha` and
+`candidate_root_tree`, then record the separately published GitHub commit as
+`github_canonical_sha` with its canonical ref. Require
+`candidate_root_sha == github_canonical_sha` and require both repositories to
+resolve that commit to `candidate_root_tree`. A matching branch name, package
+version, workflow run, or working-tree archive is insufficient.
 
 Finally, run the two manual GitHub workflows on actual ephemeral self-hosted
 runners. The workflow definitions must already be present on the canonical
@@ -120,21 +106,27 @@ verify and retain its separate evidence:
 ```bash
 github_canonical_ref=main
 github_canonical_sha="$(git rev-parse HEAD)"
+github_canonical_tree="$(git rev-parse "${github_canonical_sha}^{tree}")"
 test -z "$(git status --porcelain)"
 git fetch GITHUB_REMOTE "$github_canonical_ref"
 test "$(git rev-parse FETCH_HEAD)" = "$github_canonical_sha"
+test "$candidate_root_sha" = "$github_canonical_sha"
+test "$candidate_root_tree" = "$github_canonical_tree"
 ```
 
 Replace `GITHUB_REMOTE` with the configured GitHub remote name. Confirm the
+candidate variables come from retained internal review evidence, not from the
+GitHub checkout itself. Confirm the
 automatic GitHub `CI` run reports
 `headSha == github_canonical_sha`; a green run for the same branch name at
 another SHA does not satisfy the release gate. This GitHub-hosted workflow
 intentionally performs only Node.js type checks and tests without APT or
 Docker setup. The current managed Gitea remains the complete automatic CI
 authority for internal review, while the local matrix and manual GitHub
-workflows cover package, container, Sysbox, and KVM release gates. This split
-implements the [development repository model](development-repositories.md);
-it is not a permanent Gitea contract.
+workflows cover package, container, Sysbox, and KVM release gates. This hosting
+separation implements the [development repository
+model](development-repositories.md); Gitea remains a replaceable internal
+backend and cannot publish the GitHub release.
 
 GitHub workflow dispatch accepts a branch or tag ref, not an arbitrary commit
 SHA. Dispatch with the verified `github_canonical_ref`, then require the
@@ -197,10 +189,10 @@ source preparation accepts `DIM_SOURCE_ROOT_COMMIT` as one exact 40-character
 monorepo commit and defaults it to the current root commit. Bundle builders set
 `DIM_LOCAL_BUILD_VERSION` to `VERSION-local-AGGREGATE_SHA`, where
 `AGGREGATE_SHA` is the SHA-256 of the root commit record and reviewed aggregate
-lock digest. The separate assembled-working-tree helper appends `-dirty` when
-tracked local files differ. Exact internal dependencies use that same version,
-preventing a package manager from treating different local source sets as an
-already-installed release.
+lock digest. Release preparation requires the tracked root tree to match that
+commit; a dirty working tree is not release evidence. Exact internal
+dependencies use the same version, preventing a package manager from treating
+different local source sets as an already-installed release.
 
 ```bash
 pnpm --recursive run build

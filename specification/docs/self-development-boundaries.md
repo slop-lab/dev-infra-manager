@@ -1,86 +1,74 @@
 # DIM Self-development Boundaries
 
-DIM's own Project is intended to demonstrate the same separation expected of
-security-sensitive users: agents may read and propose changes to all source,
-while reviewed refs and narrow capabilities control what may affect trusted
-runtimes or the host.
+DIM's own Project demonstrates the same separation expected of
+security-sensitive users. Agents may read and propose changes to the complete
+root monorepo, while reviewed refs and narrow capabilities control what may
+affect trusted runtimes, protected state, publication, or the host.
 
-## Target repositories
+## Root Tree Responsibilities
 
-Repository names omit a redundant `dim-` prefix because they are already
-scoped by the DIM Project or canonical organization:
-
-| Repository | Responsibility | Review boundary |
+| Path | Responsibility | Review boundary |
 | --- | --- | --- |
-| `root` | Minimal reviewed `.dim` bootstrap, capability grants, promotion policy, and pinned host deployment inputs | Human review before trusted lifecycle or host authority changes |
-| `core` | Self-contained source required to build DIM's controller, CLI, public contracts, and installer | Independently buildable and reviewable by a DIM user |
-| `development` | Common agent development stack and contributor orchestration | Agent-changeable; not part of a production build review closure |
-| `core-development` | Core tests, fixtures, and test-only tooling | Exercises `core` without becoming part of its build closure |
-| one `*-development` repository per plugin | Tests and test-only tooling for the paired plugin | Exercises the plugin without becoming part of its build closure |
-| `verification` | Cross-component, container, host, KVM, and release-gate checks | May consume all source repositories but is not a production input |
-| `examples` | Reviewed, runnable Project examples | Demonstrates Project contracts independently of the verification harness |
-| `specification` | User documentation, normative contracts, and accepted design rationale | Reviewed contract changes without implementation or host authority |
-| one repository per plugin | One independently selected and installed provider implementation | Reviewed only when that plugin is selected |
+| `.dim/` | Reviewed self-Project bootstrap, capability grants, task dispatch, and lifecycle | Human review before trusted lifecycle or host authority changes |
+| `core/` | Production core, CLI, controller, contracts, native Git, installer packages, package design records, and core group changelog | Exact production and package ownership within the root tree |
+| `plugin-*/` | Independently selected production plugins and plugin changelogs | Reviewed when that plugin or its host capability is selected |
+| `tests/` | Centralized core and plugin tests, fixtures, and test-only tooling | Candidate-controlled evidence, not production or promotion authority |
+| `verification/` | Cross-component, container, host, Sysbox, QEMU, and release-gate checks | May consume the complete tree but is not a package runtime input |
+| `examples/` | Reviewed, runnable Project examples | Demonstrates Project contracts without granting host authority |
+| `specification/` | User documentation, normative contracts, accepted design rationale, and operator designs | Contract review without runtime or publication authority |
+| `agent/` and root tooling | Common development environment and contributor orchestration | Agent-changeable candidate input, not trusted merely because it is tooling |
 
-Concrete plugin names should describe the capability or implementation, such
-as `managed-git-gitea`, `external-urls`, and `dns-cloudflare`; they do not repeat
-the Project name.
+The root commit binds all these paths into one candidate. Directory ownership
+keeps build inputs, tests, verification, and policy reviewable, but it doesn't
+create independent Git histories or release identities. Production packages can
+still be built and packed separately from the same exact tree.
 
-Each repository has its own managed `main`, Git history, and review closure:
-`core` builds without `development`, `root`, or an unselected plugin, while
-paired development and verification repositories consume those production
-sources as siblings.
+## Agent-owned Development Environment
 
-## Agent-owned development environment
-
-The reviewed outer workspace bootstraps only a private nested container
-runtime and constrained controller capabilities. The agent itself, its tools,
-and ordinary development services run as containers inside that private
-runtime from source currently held in this repository and ultimately owned by
-`development`.
+The reviewed outer workspace bootstraps only a private nested container runtime
+and constrained controller capabilities. The agent, its tools, and ordinary
+development services run inside that private runtime from the root checkout.
 
 This lets an agent rebuild and restart its development environment without
 turning those definitions into trusted outer lifecycle code. It does not grant
-the inner environment the outer Project-runtime socket, host Docker socket,
-raw secrets, `/dev/kvm`, controller replacement, or host installation
-authority. Those remain explicit reviewed capabilities.
+the inner environment the outer Project-runtime socket, host Docker socket, raw
+secrets, `/dev/kvm`, controller replacement, public publication, or host
+installation authority. Those remain explicit reviewed capabilities.
 
-All Project repositories may be visible to the agent so it can prepare changes
-to security-sensitive code. Visibility does not grant direct protected-branch
-push, merge, deployment, secret access, or host execution.
+The complete repository may be visible and writable to the agent so it can
+prepare changes to security-sensitive code. Visibility does not grant direct
+protected-ref push, merge, deployment, secret access, release, or host
+execution.
 
-## Integrated development tree
+## Integrated Checkout
 
-DIM supplies the Project-specific managed Git base URL and scoped Git
-credentials. Reviewed `root` bootstrap policy selects repository aliases and
-refs, clones them into persistent Project data, and may synthesize pnpm,
-TypeScript, or `just` orchestration across them. DIM core does not define that
-layout.
-
-The self-development checkout is:
+The self-development checkout is the root monorepo itself:
 
 ```text
-/workspace/                     agent cwd and `development` checkout
-├── project/                    reviewed `root` bootstrap
-├── core/
-├── specification/
-├── core-development/          core tests and test-only dependencies
-├── plugin-*/                  minimal plugin build inputs
-├── plugin-*-development/      paired plugin tests
-├── examples/                  Project examples
-└── verification/              cross-repository and host checks
+/workspace/                     agent cwd and canonical root checkout
+├── .dim/                       reviewed outer lifecycle
+├── core/                       production core packages
+├── plugin-*/                   production plugins
+├── tests/                      centralized tests and fixtures
+├── specification/              docs and normative contracts
+├── examples/                   Project examples
+└── verification/               cross-component and host gates
 ```
 
-This remains a Project-owned layout rather than a stable DIM core contract.
-The reviewed root `.dim/repos.yml` registers every alias and its external
-import and publish mappings. Setup reads only the actual runtime catalog,
-clones missing ready aliases into the fixed layout above, and never invokes
-Git against an existing agent-controlled checkout. Agents fetch, fast-forward,
-switch, or preserve dirty/proposal work through their own inner-runtime Git
-process. Each checkout has its own origin, branch, pull request, dependency
-lock, build, and publish boundary while retaining the same development
-ergonomics.
+DIM core does not prescribe this layout for other Projects. For the self-Project,
+the root `.dim` contract stages the one reviewed checkout and never performs Git
+operations against an existing agent-controlled checkout. Agents fetch, switch,
+and preserve dirty or proposal work through their own inner-runtime Git process.
 
-The repository split is complete. Further provider extraction or canonical
-repository publication is ordinary follow-up work and must not reintroduce a
-dual monorepo layout.
+## Review And Publication
+
+DIM-managed Gitea hosts internal proposals, review, and automatic CI. GitHub
+publication, signed tags, package publication, and releases remain separate
+trusted maintainer actions. Both sides identify the same exact root commit and
+tree, but internal approval does not confer public credentials or release
+authority.
+
+Ordinary test results remain candidate-controlled when the candidate supplies
+their scripts or configuration. The separate Sysbox and QEMU gates retain their
+documented runtime boundaries. Human approval of the complete tree and checked
+promotion remain required regardless of green CI.

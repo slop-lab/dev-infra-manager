@@ -78,7 +78,14 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   unchanged on refusal. The local workflow also uses the exact lockfile-owned
   Verdaccio binary on a random loopback port, with
   signup closed and mutation authenticated. Image preparation remains
-  separate.
+  separate. The same root tree now owns production packages under `core/` and
+  `plugin-*/`, centralized tests under `tests/`, host and cross-component gates
+  under `verification/`, normative contracts under `specification/`, and one
+  reviewed `.dim` self-Project contract. Package-specific changelogs and design
+  records live with their production package or group. DIM-managed Gitea keeps
+  internal review and automatic CI authority, while publication of that exact
+  commit and tree to canonical GitHub remains a separate trusted maintainer
+  action.
   The published installer now owns the nested `installer` namespace and the
   explicit obsolete `install-cp` rejection:
   `installer install core|plugin` replaces the old top-level install verbs,
@@ -172,10 +179,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   rootless-Podman, and privileged-runc backend installation and release lanes,
   and keep Docker runc only for trusted infrastructure and QEMU supervision.
 
-- Restored a manually dispatched QEMU release gate in the development
-  repository. It pins both development and root refs and runs the assembled
-  repository set in fresh QEMU integration guests before host installation or
-  workspace restart.
+- Restored a manually dispatched QEMU release gate in the root repository. It
+  pins the exact root candidate and runs that tree in fresh QEMU integration
+  guests before host installation or workspace restart.
 
 - Kept the top-level just recipes focused on discoverable everyday contributor
   commands. CI-only lane composition now lives in checked-in workflows and the
@@ -216,27 +222,6 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   `--bootstrap-git-url/--bootstrap-git-ref`; the URL names a Git repository,
   not a raw `.dim/repos.yml` document, and an omitted ref still selects its
   symbolic `HEAD`.
-- Made the split DIM self-development repositories directly runnable: the
-  reviewed root catalog registers 11 independent GitLab repositories on
-  `main`, maps each managed repository back to its matching upstream, and
-  protects only `root/main` and `development/main`, then materializes missing
-  registered Project repositories into the integrated agent workbench. The
-  trusted outer lifecycle never invokes Git against an existing
-  agent-controlled checkout; agents update those checkouts inside their
-  private runtime. `project create --bootstrap-git-url --apply-repos` applies
-  the complete reviewed repository set while retaining explicit approval for
-  manifests that introduce another host Git origin. DIM-managed Gitea remains
-  the internal review host; integrated GitHub publication remains a separate
-  trusted maintainer action.
-  The development checkout also carries the agent guidance and repository-local
-  PR/release skills used by the existing contributor workflow.
-- Staged the future `root`, `development`, `core`, paired core/plugin
-  development, plugin, `verification`, `examples`, and `specification`
-  repositories as explicit physical subtrees. Production source repositories
-  now contain only their self-contained build inputs; tests, fixtures, and
-  test-only dependencies live in paired development repositories. The tracked
-  ownership and extraction gate rejects unowned files and independently builds
-  production sources before running their sibling development suites.
 - Reduced the canonical self-development outer Compose graph to an
   `agent-dind` rootless runtime and moved the agent inside it, so the agent
   can manage its development containers without access to the trusted
@@ -281,10 +266,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ### Fixed
 
-- Restored the self-development source gate after repository separation by
-  resolving the reviewed root lifecycle from its sibling checkout, removing
-  obsolete archive-extraction checks, and making every independent repository
-  ignore its own generated dependency and build output.
+- Restored the self-development source gate around one root commit, committed
+  lock, centralized test tree, and reviewed `.dim` lifecycle, removing obsolete
+  assembled-tree and archive-extraction checks.
 - Made managed-controller PID ownership publication atomic so concurrent
   readers cannot mistake a newly created empty PID file for stale ownership.
 - Kept the full-development-flow example's private rootless DinD ownership
@@ -348,9 +332,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 - Added a full-development-flow reference Project with key-only, non-root SSH
   sessions that match ordinary agent authority while retaining bounded Git,
   private Docker, and constrained controller access. Its QEMU verification
-  service serializes runs and snapshots agent-visible inputs before launch,
-  while the canonical self-development catalog maps each split repository to
-  its external upstream. The stateful release journey covers reviewed updates,
+  service serializes runs and snapshots agent-visible inputs before launch.
+  The stateful release journey covers reviewed root-monorepo updates,
   restart safety, controller replacement, setup recovery,
   backup/discard/recreate/restore, and cleanup without putting
   verification-only hooks in the checked-in example.

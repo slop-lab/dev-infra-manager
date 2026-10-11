@@ -1,89 +1,61 @@
-# DIM Development Repositories
+# DIM Development Repository
 
-The public GitHub repository is DIM's canonical integrated source repository.
-Public history, release tags, releases, and downstream source links use
-GitHub.
+DIM has one canonical root repository. Its commit and tree identify the complete
+source candidate, including production packages, plugins, centralized tests,
+verification, examples, specifications, workflows, and the reviewed `.dim`
+self-Project contract. Current development does not assemble sibling
+repositories or publish component heads independently.
 
-DIM itself is normally developed through DIM. Its self-development Project
-connects 11 independent GitLab development upstreams to repositories on the
-DIM-managed internal review host. Every upstream and every managed repository
-uses `main`. Workspaces push proposals to the managed host for isolated CI and
-review. The current built-in managed host and CI coordinator are Gitea and
-Gitea Actions, but Gitea is an implementation backend rather than part of the
-long-term Project or contributor contract.
+## Hosting Roles
 
-This gives the three repository locations different roles:
+The same root repository has two distinct hosting roles:
 
-- GitLab hosts the 11 independent development upstreams.
-- DIM-managed Gitea is the internal development and review host.
-- GitHub hosts the integrated canonical source and releases.
+- DIM-managed Gitea is the internal proposal, review, and automatic-CI host.
+- GitHub is the canonical public source and the authority for public tags,
+  releases, and downstream source links.
 
-The reviewed root catalog maps each GitLab upstream's `main` to the matching
-managed repository's `main`, and maps the managed head back to that same
-GitLab branch. The 11 repositories are `root`, `development`, `core`,
-`core-development`, `plugin-dns-cloudflare`,
-`plugin-dns-cloudflare-development`, `plugin-external-urls`,
-`plugin-external-urls-development`, `verification`, `examples`, and
-`specification`.
+Workspaces push proposals to internal Gitea. Review and CI there can approve an
+exact candidate for promotion within the self-Project, but neither grants
+GitHub credentials nor publishes public history. A trusted maintainer separately
+publishes the approved commit to GitHub and verifies that its commit and tree are
+the reviewed candidate. No workflow may infer publication authority from a green
+internal result.
 
-Only `root/main` and `development/main` are protected in the self Project:
-those repositories control the trusted outer lifecycle and common inner
-development environment. Component source, paired tests, plugins, examples,
-verification, and specification repositories intentionally leave managed
-`main` agent-writable. External publication is still host-side authority and
-is not granted by an unprotected managed branch. Publish every current managed
-candidate to its configured GitLab upstream with:
+The current built-in review host and coordinator are Gitea and Gitea Actions.
+They remain implementation backends rather than permanent contributor or
+Project contracts. Tooling must inspect the active remote and resolve the forge
+before using provider-specific commands. It must not assume that `origin` is
+GitHub or expose Gitea administration to an agent workspace.
 
-```bash
-dim repo publish dim
-```
+## Root Project Contract
 
-This command publishes to GitLab only. It does not update GitHub, create an
-integrated canonical commit, tag a release, or publish a GitHub release.
-Workspace credentials cannot publish externally. A trusted maintainer performs
-the separate integrated GitHub publication and release actions. The current
-Gitea rules implement the two protected managed refs; they are not a
-Gitea-specific contract for contributors or product repositories.
+The root `.dim` directory is the self-Project lifecycle contract. It defines the
+reviewed environment, tasks, and constrained capabilities for this monorepo.
+There is no repository catalog of component upstreams and no sibling checkout
+materialization step. One workspace checkout presents the complete tree.
 
-External changes can be imported per repository, for example with
-`dim repo fetch dim core`. They appear as
-managed `upstream/*` tracking branches and still require the normal review path
-before changing managed development history.
+Issue tracking for a DIM-managed Project remains rooted in that Project's root
+repository. Pull requests for this monorepo also belong to the root repository.
+Managed-host issue numbers should appear in public history only when the public
+context remains meaningful; descriptive commit subjects and pull-request titles
+must stand on their own.
 
-Create the split self Project from the GitLab root upstream:
+## Evidence And Publication
 
-```bash
-dim project create dim \
-  --bootstrap-git-url https://gitlab.com/slop-lab/dim/root.git \
-  --bootstrap-git-ref main \
-  --apply-repos
-```
+Every candidate, review, CI result, promotion, and release record names the full
+root commit and tree. A branch name, provider run ID, package version, or partial
+directory digest cannot replace that identity. Checks that read candidate-owned
+workflow or test definitions remain candidate-controlled evidence even when
+they execute in a separate bounded runner.
 
-The explicit apply flag approves the other ten GitLab upstreams declared by
-reviewed root content. Their import, publish, and two protected-branch policies
-are applied from that catalog. No Gitea remote name, URL, or API operation is
-part of the contributor workflow; DIM's repository and pull-request commands
-resolve the active provider.
+Internal and public evidence stay separate:
 
-Do not infer the active forge from an installed CLI or assume that a workspace
-remote is GitHub. Development tooling should inspect the Git remote and select
-the matching provider integration. A future managed-host replacement should
-preserve this workflow without requiring DIM core, Project definitions, or
-agent instructions to name Gitea.
+- Gitea records proposal review and internal automatic CI for the exact root
+  commit and tree.
+- GitHub records the separately published canonical commit, public CI, signed
+  tag, and release.
+- Publication requires equality with the reviewed root commit and tree. It is
+  not an assembly of independent component SHAs.
 
-Release preparation records the 11 GitLab `main` SHAs separately from the one
-integrated canonical GitHub SHA. See [Releasing](releasing.md) for that
-publication and verification procedure.
-
-Because the managed development host is not the canonical public issue or
-source location, its local issue numbers must not appear in commit subjects or
-PR titles that may later become public history. Use standalone descriptive
-subjects; reference a managed-host issue in the development PR body when that
-context is useful locally.
-
-Within a DIM-managed Project, the root repository is the single work-tracking
-location. New managed Gitea repositories therefore enable built-in issues for
-the root and disable them for non-root repositories. This creation-time policy
-does not rewrite existing repository settings. Pull requests remain in the
-repository that owns the changed files, while issue context is referenced from
-their PR bodies.
+See [Releasing](releasing.md) for the exact release checks and retained Sysbox
+and QEMU gates.

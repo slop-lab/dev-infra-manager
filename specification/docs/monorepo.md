@@ -1,56 +1,43 @@
-# Integrated Development Tree
+# Root Monorepo
 
 ## Integrated Layout
 
-DIM development uses independent repositories assembled as siblings by the
-self-development `root` lifecycle. The `development` checkout is the workspace
-root and owns the integrated pnpm and `just` orchestration. See
-[DIM Self-development Boundaries](self-development-boundaries.md) for the
-review model.
+DIM is developed, tested, reviewed, and released from one tracked root
+repository. A candidate is one exact root commit and tree. No sibling checkout,
+temporary assembled tree, or second repository identity is part of the current
+source contract. See [DIM Self-development
+Boundaries](self-development-boundaries.md) for the review model.
 
 ```text
-/workspace/                     `development` repository root
+/workspace/                     canonical repository root and agent cwd
+├── .dim/                       reviewed self-Project lifecycle contract
 ├── agent/                      agent development image
-├── project/                    reviewed `root` repository
-├── core/                       independently cloned `core` repository
-├── core-development/           core unit and integration tests
-├── plugin-*/                   minimal buildable plugin source repository
-├── plugin-*-development/       matching plugin tests and test tooling
-├── specification/              documentation/specification repository
-├── examples/                   reviewed Project examples repository
-└── verification/               cross-repository and host verification
+├── core/                       production core packages and group changelog
+├── plugin-*/                   production plugin packages and changelogs
+├── tests/                      centralized core and plugin tests
+├── specification/              documentation and normative specifications
+├── examples/                   reviewed Project examples
+└── verification/               cross-component, host, container, and QEMU gates
 ```
 
-The `development` repository owns the workspace orchestration
-and development-environment code. It contains no application source or tests.
-`core/packages/cli` imports only the public
-`@slop-lab/dim-core` entrypoint; core never imports the CLI.
-Workspace-level `just` and pnpm commands forward to sibling packages for
-operator convenience. Each checkout owns its tracked files, ignore rules,
-dependency lock, and Git history; the reviewed root `.dim/repos.yml` owns the
-Project repository set and lifecycle placement.
+The root `package.json`, lockfile, TypeScript configuration, `justfile`, and
+workflow files coordinate the whole tree. `core/packages/cli` imports only the
+public `@slop-lab/dim-core` entrypoint; core never imports the CLI. Package and
+plugin build inputs remain identifiable under their production directories,
+while tests and test-only fixtures are centralized under `tests/`.
 
-`core` owns only the files needed to install, check, build, and package its
-production artifacts. Each plugin source repository follows the same rule.
-Tests, fixtures, and test-only dependencies live in the corresponding
-`*-development` repository and consume the source as a sibling checkout.
-Package-specific maintenance documentation, changelog entries, and design or
-test specifications also live in that paired development repository when one
-exists. A production source repository retains only documentation required by
-its build or published package, such as package READMEs. Cross-package and
-Project-level contracts remain in `specification`.
-Cross-component, container, host, KVM, and example-flow checks live in
-`verification`; runnable examples live in `examples`. The source gate
-materializes every repository into siblings, verifies production repositories
-without the development repositories, and then runs each paired development
-suite. Consequently a reviewer can audit the exact production build inputs
-without first trusting test or development-environment code.
-Every managed repository uses `main`. The reviewed root catalog maps each one
-to an independent GitLab development upstream on `main`; only the self
-Project's `root/main` and `development/main` require protected-ref review.
-DIM-managed Gitea remains the internal review host. Publishing the 11 managed
-heads updates GitLab only, while integrated canonical publication and release
-on GitHub remain separate trusted maintainer actions.
+Package-specific changelogs and design contracts live with their owning
+production package or package group. `core/CHANGELOG.md` retains the core group
+history, including the historical 0.9.0 record. Plugin changelogs live in each
+plugin root. Cross-package release outcomes live in the root `CHANGELOG.md`, and
+cross-package normative contracts live under `specification/`. The root
+changelog does not duplicate package release history or invent a root release.
+
+DIM-managed Gitea is the internal proposal, review, and automatic-CI host for
+the root repository. GitHub is the canonical public source, tag, release, and
+downstream source-link location. A trusted maintainer publishes the reviewed
+root commit to GitHub separately. Internal review authority cannot publish to
+GitHub, create a release, or substitute a different tree.
 
 ## Dependency Direction
 
@@ -152,11 +139,11 @@ runtime, which bind-mounts it as the agent's `/home/dim-agent`. Separate
 `dim run` invocations therefore share user-installed tools and configuration
 until the workspace is discarded; source remains in `/workspace`.
 
-Create the split Project and a persistent workspace:
+Create the self Project and a persistent workspace from the canonical root:
 
 ```bash
 dim project create dim-self \
-  --bootstrap-git-url https://gitlab.com/slop-lab/dim/root.git \
+  --bootstrap-git-url https://github.com/slop-lab/dev-infra-manager.git \
   --bootstrap-git-ref main \
   --apply-repos
 dim workspace create dim-self dim-self-dev
