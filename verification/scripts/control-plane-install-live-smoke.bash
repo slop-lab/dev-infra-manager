@@ -227,6 +227,18 @@ daemon_socket_source="${BASH_REMATCH[1]}"
   printf 'Docker endpoint is not a Unix socket: %s\n' "$daemon_socket_source" >&2
   exit 2
 }
+if [[ "$daemon_socket_source" == /run/docker.sock ]]; then
+  forwarded_source="$(docker container inspect "$(hostname)" \
+    --format '{{range .Mounts}}{{if eq .Destination "/run/docker.sock"}}{{.Source}}{{end}}{{end}}' \
+    2>/dev/null)" || forwarded_source=""
+  if [[ -n "$forwarded_source" ]]; then
+    [[ "$forwarded_source" =~ ^/run/user/[0-9]+/docker\.sock$ ]] || {
+      printf 'forwarded Docker socket has an unsupported host path\n' >&2
+      exit 2
+    }
+    daemon_socket_source="$forwarded_source"
+  fi
+fi
 
 pnpm --dir "$repo_root/core/packages/core" run build >/dev/null
 pnpm --dir "$repo_root/core/packages/native-git" run build >/dev/null
