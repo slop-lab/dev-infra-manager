@@ -1,5 +1,0 @@
-{
-  "extends": "../plugin-dns-cloudflare/tsconfig.base.json",
-  "compilerOptions": { "noEmit": true },
-  "include": ["test/**/*.ts"]
-}
