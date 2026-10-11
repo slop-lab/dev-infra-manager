@@ -91,8 +91,28 @@ Control-plane installation belongs exclusively to the installer facade as
 `dim installer install control-plane --config FILE`; this CLI does not
 implement or alias it. The facade rejects obsolete `dim install-cp` input
 before forwarding. The installed native Git and ordinary-CI services remain
-empty and idle without the separate native Project adapter, capacity
-advertisement, host execution, Sysbox job gate, or reviewer browser UI.
+empty and idle without native Project runtime admission, capacity
+advertisement, host execution, a Sysbox job gate, or reviewer browser UI.
+
+The host CLI has a separate non-runnable native Project checkpoint. Set
+`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` to an owner-only mode-`0600` native
+host connection file. Plain `project create` also needs the distinct
+`DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE` for the same service endpoint and
+owning host. Pending creation currently requires `loopback-http`; HTTPS
+selection rejects until the importer supports a reviewed TLS trust model.
+Once trusted host bootstrap has already published an exact
+`root-imported` schema-2 draft:
+
+```bash
+dim project create acme --json
+dim project list --json
+dim project show acme --json
+```
+
+Create publishes only `admission-pending` with `runnable: false`; replay
+requires a fresh service proof. Native repository, workspace, CI, remove, and
+purge operations remain unavailable, without Gitea fallback. Do not mount
+either connection file in an agent or workspace container.
 
 DIM automatically runs one managed controller process with separate local
 Unix sockets: a mode-`0600` host-admin API and a workspace-scoped API. Normal

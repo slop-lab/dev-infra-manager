@@ -80,8 +80,9 @@ with host credentials.
 
 `lifecycleOptions()` reads the same environment used by the CLI:
 
-Native Git root import is an additive host-only API, not a selectable Project
-lifecycle backend. After a separate registrar prepares the empty root, trusted
+Native Git root import is an additive host-only API, not a runnable Project
+lifecycle backend. The host CLI selects only pending Project identity from an
+already imported draft. After a separate registrar prepares the empty root, trusted
 host code may call `createNodeNativeGitRootImporterClient(connectionFile)` from
 this package with a different, owner-only mode-`0600` JSON file:
 
@@ -287,9 +288,9 @@ response loss and restart, reads the exact candidate tree through a scoped
 native Git credential, runs one bounded digest-pinned Sysbox job, and checks
 container and private-root cleanup before reporting. It is a callable library
 boundary, not installed host lifecycle wiring. The installed CLI and controller
-do not start it, there is no native Project adapter or native QEMU
-scheduler/executor, and no protected promotion path exists. Native selection
-therefore remains fail-closed and Gitea remains the only runnable Project
+do not start it; the CLI exposes only pending native Project state, with no
+native QEMU scheduler/executor or protected promotion path. Runtime-authorizing
+native operations remain fail-closed and Gitea remains the only runnable Project
 profile. No clean-host Sysbox/KVM acceptance or runtime-ready claim has been
 made.
 

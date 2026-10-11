@@ -100,12 +100,12 @@ interruption. Each progress row MUST fit the active terminal width.
 ## Projects
 
 The Gitea organization, transfer, and provider details in Projects and
-Repositories below are the only implemented Project-state adapter. Installing
-the future native control-plane bundle does not select it for Project lifecycle.
-Until a separate native Project/repository adapter is specified and
-implemented, requesting native selection MUST reject every Project,
-repository, workspace, ordinary-admission, and CI-runner operation before
-state or runtime mutation.
+Repositories below remain the only runnable Project-state adapter. Installing
+the native control-plane bundle alone does not select native lifecycle.
+`CONFIG-NATIVE-SELECTION-001` makes the host connection file the sole explicit
+native selector and forbids Gitea fallback. The direct host CLI implements the
+pending-admission behavior below without routing through the shipped
+controller.
 
 A trusted-host library may stage a separate `PROJECT-NATIVE-DRAFT-001`
 bootstrap record and its exact private bundle under the per-name Project lock,
@@ -118,8 +118,54 @@ That record is not a `dim project create` result, does not appear in predecessor
 Gitea `project list/show`, and cannot be used for workspace, repository,
 CI, removal, or promotion commands. A same-name draft makes predecessor Gitea
 `project create` refuse before connecting to Gitea or claiming schema-4
-state. Native CLI selection remains unavailable and does not reinterpret
-such a draft as a Gitea Project.
+state. Native CLI selection does not reinterpret such a draft as a Gitea
+Project.
+
+**CLI-NATIVE-PROJECT-PENDING-001:** Under valid native selection, `dim project
+create PROJECT` with no Gitea bootstrap, repository, protection, mirror, or
+apply option may perform only the transition in `PROJECT-NATIVE-PENDING-001`.
+It MUST load the exact same-name schema-`2` `root-imported` draft, obtain a
+fresh authenticated proof, and publish one canonical schema-`5`
+`admission-pending` record under the Project lock. It MUST NOT contact Gitea,
+create or import a repository, issue Git transport, register CI, or report the
+Project as runnable. A missing, pending, legacy schema-`1`, stale, changed,
+foreign, or unverifiable draft or proof is a refusal with both namespaces
+unchanged.
+
+Create MUST load its proof authority only from the distinct
+`DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE`. The selected mode-`0600` importer
+file MUST bind the same native service, exact endpoint, and owner host as
+`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE`; its role credential and serving
+generation MUST be parsed from that importer file and MUST NOT be copied from
+the control-plane host credential. Missing or empty importer selection and any
+binding, identity, generation, credential, attestation, or proof failure reject
+without canonical Project, draft, native Git ref, or service-database mutation.
+The installed importer supports only loopback HTTP; native pending create MUST
+reject an HTTPS-selected native Git endpoint before reading importer credentials
+until a reviewed TLS importer is available.
+List and show read only canonical local pending state and MUST NOT load the
+importer credential or contact native Git.
+
+`dim project list` and `dim project show PROJECT` are the only other native
+Project commands allowed at this checkpoint. They MUST expose the name,
+Project and service identities, owner host, `admission-pending` phase, root
+alias, protected ref, exact root commit and tree, and immutable policy
+revisions, and MUST label the Project non-runnable. Human output and `--json`
+MUST omit credentials, connection paths, service URLs, bundle paths, and raw
+tokens. Exact create replay returns the existing record without rewriting it.
+A changed replay, schema-`4` Gitea record, unknown schema or record type,
+malformed or unsafe node, mismatched Project name, or foreign service, Project,
+owner, root, policy, or receipt identity MUST fail without mutation.
+
+Every native `project remove` or `project purge`, every repository command,
+every workspace command, every CI runner or capacity command, and every review
+or promotion mutation MUST reject while the canonical Project is
+`admission-pending`. The refusal occurs before Git transport, service mutation,
+credential issuance, runtime dispatch, or Project-state rewrite. No command may
+alias pending to ready or use a successful import, proof, snapshot, ordinary
+result, QEMU result, or bundle readiness as runtime authority. These surfaces
+remain closed until both CI kinds, exact review, checked promotion, and the
+clean-host cutover gate are implemented and pass.
 
 ```bash
 dim project create PROJECT [--repos FILE] [--yes]
