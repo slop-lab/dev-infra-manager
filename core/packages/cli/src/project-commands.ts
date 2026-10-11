@@ -13,6 +13,11 @@ import {
   readRemoteRepositorySet, readRepositorySetFile, repositorySetPlan,
   withLocalProgress, type JsonFlags
 } from "./cli-support.js";
+import {
+  nativePendingProjectView,
+  nativeProjectImporter,
+  selectNativeProject
+} from "./native-project-selector.js";
 
 export function registerProjectCommands(program: Command): void {
   const project = program.command("project").description("Manage project metadata and Git namespaces");
@@ -40,6 +45,20 @@ project.command("create")
     mirror?: boolean;
     yes?: boolean;
   }) => {
+    const native = await selectNativeProject();
+    if (native !== undefined) {
+      const nativeOptionsPresent = flags.repos !== undefined || flags.root !== undefined
+        || flags.bootstrapGitUrl !== undefined || flags.bootstrapGitRef !== undefined
+        || flags.protect !== undefined || flags.applyRepos !== undefined
+        || flags.mirror !== undefined || flags.yes !== undefined;
+      if (nativeOptionsPresent) {
+        throw new UserError("native selection permits only plain 'dim project create PROJECT'");
+      }
+      const importer = await nativeProjectImporter(native);
+      const record = await native.store.admit(name, importer, AbortSignal.timeout(10_000));
+      print(nativePendingProjectView(record), flags);
+      return;
+    }
     const rootOptionsPresent = flags.root !== undefined || flags.bootstrapGitUrl !== undefined || flags.bootstrapGitRef !== undefined
       || flags.protect !== undefined
       || flags.mirror !== undefined
@@ -132,15 +151,35 @@ project.command("list")
   .alias("ls")
   .description("List projects")
   .option("--json", "print machine-readable JSON")
-  .action(async (flags: JsonFlags) =>
-    printList(await adminCall<Record<string, unknown>[]>("project.list"), ["name", "phase", "gitNamespace", "rootRepositoryAlias", "rootRef"], flags)
-  );
+  .action(async (flags: JsonFlags) => {
+    const native = await selectNativeProject();
+    if (native !== undefined) {
+      const records = await native.store.list(native.connection.hostId);
+      printList(records.map(nativePendingProjectView), [
+        "name", "projectId", "serviceId", "ownerHostId", "phase", "rootAlias", "protectedRef",
+        "rootCommit", "rootTree", "policyRevision", "requiredReviewRevision",
+        "requiredJobSetRevision", "runnable"
+      ], flags);
+      return;
+    }
+    printList(await adminCall<Record<string, unknown>[]>("project.list"),
+      ["name", "phase", "gitNamespace", "rootRepositoryAlias", "rootRef"], flags);
+  });
 
 project.command("show")
   .description("Show a project")
   .argument("<project>")
   .option("--json", "print machine-readable JSON")
-  .action(async (name: string, flags: JsonFlags) => print(await adminCall("project.show", { name }), flags));
+  .action(async (name: string, flags: JsonFlags) => {
+    const native = await selectNativeProject();
+    if (native !== undefined) {
+      const record = await native.store.read(name, native.connection.hostId);
+      if (record === undefined) throw new UserError(`native project '${name}' not found`);
+      print(nativePendingProjectView(record), flags);
+      return;
+    }
+    print(await adminCall("project.show", { name }), flags);
+  });
 
 project.command("remove")
   .description("Remove project metadata while preserving Git repositories")

@@ -46,6 +46,11 @@ ordinaryService.command("run")
   .description("Run the ordinary CI control plane from a private reviewed config")
   .argument("<config>")
   .action(async (config: string) => {
+    if (process.env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE !== undefined
+      || process.env.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE !== undefined
+      || process.env.DIM_NATIVE_QEMU_CONNECTION_FILE !== undefined) {
+      throw new UserError("native Project and QEMU adapters are unavailable; refusing Gitea fallback");
+    }
     const abort = new AbortController();
     const stop = () => abort.abort();
     process.once("SIGINT", stop);
