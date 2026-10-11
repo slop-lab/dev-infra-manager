@@ -9,8 +9,15 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@slop-lab/dim-core": ["../core/packages/core/src/index.ts"],
+      "@slop-lab/dim-contracts-external-url": [
+        "../core/packages/contracts/external-url/src/index.ts"
+      ]
+    }
   },
-  "include": ["packages/**/*.ts"],
+  "include": ["packages/**/*.ts", "plugins/**/*.ts"],
   "exclude": ["packages/cli/test/**/*.ts"]
 }
