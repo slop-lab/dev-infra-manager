@@ -1,0 +1,101 @@
+name: Verify host backends
+
+on:
+  workflow_call:
+    inputs:
+      candidate_sha:
+        type: string
+        required: true
+      gate:
+        type: string
+        required: true
+      runner-label:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ${{ inputs.runner-label }}
+    timeout-minutes: ${{ (inputs.gate == 'kvm' || inputs.gate == 'kvm-control' || inputs.gate == 'cache-routing-kvm' || inputs.gate == 'qemu-ci-image-layers-kvm') && 60 || 30 }}
+    steps:
+      - name: Check out exact candidate
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.candidate_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify dispatch identity and exact candidate source
+        env:
+          DIM_EXPECTED_CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          DIM_DISPATCH_SHA: ${{ gitea.sha }}
+        run: |
+          test "$DIM_EXPECTED_CANDIDATE_SHA" = "$DIM_DISPATCH_SHA"
+          node verification/scripts/candidate-source-evidence.mjs "$DIM_EXPECTED_CANDIDATE_SHA" /tmp/dim-candidate-source-evidence.json
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.13.1
+      - name: Install exact-tree dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify complete candidate source tree
+        if: ${{ inputs.gate == 'source' }}
+        env:
+          DIM_TEST_PTY_RESIZE: unsupported
+        run: |
+          apt-get update
+          apt-get install --yes tini=0.19.0-1
+          bash verification/scripts/repository-materialization-smoke.bash
+          pnpm run workspace:check
+          tini -s -- pnpm run workspace:test
+          pnpm run workspace:build
+      - name: Verify container integration
+        if: ${{ inputs.gate == 'container' }}
+        run: |
+          just check-source
+          just verify workspace-runtime
+          bash verification/scripts/container-cgroup-smoke.bash
+      - name: Verify full development integration
+        if: ${{ inputs.gate == 'integration' }}
+        run: |
+          just check-source
+          just verify workspace-user-setup
+          just verify headscale-tailnet-tcp
+          just verify external-gitea-shared-control
+          just verify packaged-shared-qemu-scheduler
+          DIM_DOCKER_REGISTRY_MIRROR=http://host.docker.internal:5000 \
+            just verify full-development
+      - name: Verify QEMU backend integration
+        if: ${{ inputs.gate == 'kvm' }}
+        run: |
+          test -r /dev/kvm -a -w /dev/kvm
+          bash verification/scripts/with-ci-registry-cache.bash --qemu-relay \
+            env JUST_UNSTABLE=1 just verify environments-kvm
+      - name: Verify agent-controlled QEMU host integration
+        if: ${{ inputs.gate == 'kvm-control' }}
+        run: |
+          test -r /dev/kvm -a -w /dev/kvm
+          bash verification/scripts/with-ci-registry-cache.bash --qemu-relay \
+            env JUST_UNSTABLE=1 just verify agent-control-kvm
+      - name: Verify route-specific Sysbox registry cache
+        if: ${{ inputs.gate == 'cache-routing-sysbox' }}
+        run: just verify cache-routing-sysbox
+      - name: Verify route-specific KVM registry cache
+        if: ${{ inputs.gate == 'cache-routing-kvm' }}
+        run: |
+          test -r /dev/kvm -a -w /dev/kvm
+          just verify cache-routing-kvm
+      - name: Verify QEMU CI image layers
+        if: ${{ inputs.gate == 'qemu-ci-image-layers-kvm' }}
+        run: |
+          test -r /dev/kvm -a -w /dev/kvm
+          just verify qemu-ci-image-layers-kvm
+      - name: Upload exact-tree evidence
+        if: always()
+        uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5
+        with:
+          name: candidate-host-${{ gitea.sha }}-${{ inputs.gate }}
+          path: /tmp/dim-candidate-source-evidence.json
+          if-no-files-found: error
+          retention-days: 30

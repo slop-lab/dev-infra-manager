@@ -17,33 +17,29 @@ permissions:
 jobs:
   container:
     if: ${{ gitea.event_name == 'schedule' || inputs.lane == 'all' || inputs.lane == 'container' }}
-    uses: ./.gitea/workflows/repository-set.yml
+    uses: ./.gitea/workflows/host-backends.yml
     with:
-      candidate-repository: verification
-      candidate-ref: ${{ gitea.sha }}
+      candidate_sha: ${{ gitea.sha }}
       gate: integration
       runner-label: dim-container-integration
   kvm:
     if: ${{ gitea.event_name == 'schedule' || inputs.lane == 'all' || inputs.lane == 'kvm' }}
-    uses: ./.gitea/workflows/repository-set.yml
+    uses: ./.gitea/workflows/host-backends.yml
     with:
-      candidate-repository: verification
-      candidate-ref: ${{ gitea.sha }}
+      candidate_sha: ${{ gitea.sha }}
       gate: kvm
       runner-label: dim-qemu
   cache-routing-kvm:
     if: ${{ gitea.event_name == 'schedule' || inputs.lane == 'all' || inputs.lane == 'cache-routing-kvm' }}
-    uses: ./.gitea/workflows/repository-set.yml
+    uses: ./.gitea/workflows/host-backends.yml
     with:
-      candidate-repository: verification
-      candidate-ref: ${{ gitea.sha }}
+      candidate_sha: ${{ gitea.sha }}
       gate: cache-routing-kvm
       runner-label: dim-qemu
   qemu-ci-image-layers-kvm:
     if: ${{ gitea.event_name == 'schedule' || inputs.lane == 'all' || inputs.lane == 'qemu-ci-image-layers-kvm' }}
-    uses: ./.gitea/workflows/repository-set.yml
+    uses: ./.gitea/workflows/host-backends.yml
     with:
-      candidate-repository: verification
-      candidate-ref: ${{ gitea.sha }}
+      candidate_sha: ${{ gitea.sha }}
       gate: qemu-ci-image-layers-kvm
       runner-label: dim-qemu

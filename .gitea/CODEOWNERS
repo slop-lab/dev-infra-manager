@@ -9,5 +9,4 @@
 ^verification/.* @dim-dim/Owners
 ^justfile$ @dim-dim/Owners
 ^pnpm-lock[.]yaml$ @dim-dim/Owners
-^\.monorepo-candidate/.* @dim-dim/Owners
 ^CODEOWNERS$ @dim-dim/Owners

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
@@ -60,7 +60,7 @@ describe("DIM development forge policy", () => {
     const gate = await readFile(resolve(workspaceRoot, "verification/scripts/kvm-host-install-smoke.bash"), "utf8");
     const kvm = await readFile(resolve(workspaceRoot, ".dim/qemu-verify.bash"), "utf8");
     const recipes = await readFile(resolve(workspaceRoot, "verification/verify.just"), "utf8");
-    const workflow = await readFile(resolve(workspaceRoot, "verification/.gitea/workflows/repository-set.yml"), "utf8");
+    const workflow = await readFile(resolve(workspaceRoot, ".gitea/workflows/host-backends.yml"), "utf8");
     expect(kvm).toContain('backend="sysbox"');
     expect(kvm).toContain("just verify full-development");
     expect(kvm).toContain('2>&1 | tee "$step_log"');
@@ -85,7 +85,7 @@ describe("DIM development forge policy", () => {
       readonly env?: Readonly<Record<string, unknown>>;
     }[] = parse(workflow).jobs.verify.steps;
     const sourceVerification = verificationSteps.filter(
-      (step) => step.name === "Verify source repository set"
+      (step) => step.name === "Verify complete candidate source tree"
     );
     const containerVerification = verificationSteps.filter(
       (step) => step.name === "Verify container integration"
@@ -106,6 +106,7 @@ describe("DIM development forge policy", () => {
     expect(workflow).not.toContain("dim-ci-runner-health");
     expect(workflow).not.toContain("actions/setup-node");
     expect(workflow).not.toContain("Bootstrap Node.js");
+    expect(workflow).not.toMatch(/repository:|path:\s+snapshot/);
   });
 
   it("runs the clean-host control-plane gate through the packed installer facade", async () => {
@@ -153,14 +154,17 @@ describe("DIM development forge policy", () => {
     const workflowPaths = [
       ".gitea/workflows/verify.yml",
       ".gitea/workflows/release-gate.yml",
-      "verification/.gitea/workflows/integration.yml",
-      "verification/.gitea/workflows/repository-set.yml"
+      ".gitea/workflows/integration.yml",
+      ".gitea/workflows/host-backends.yml"
     ];
     for (const path of workflowPaths) {
       const workflow = await readFile(resolve(workspaceRoot, path), "utf8");
       expect(workflow).not.toContain(":host");
       expect(workflow).not.toContain("dim-ci-runner-health");
     }
+    const nestedWorkflows = await Promise.allSettled(["integration.yml", "repository-set.yml"]
+      .map((path) => access(resolve(workspaceRoot, "verification/.gitea/workflows", path))));
+    expect(nestedWorkflows.every((result) => result.status === "rejected")).toBe(true);
   });
 
   it("builds rootless agent DinD without inherited file-capability layers", async () => {

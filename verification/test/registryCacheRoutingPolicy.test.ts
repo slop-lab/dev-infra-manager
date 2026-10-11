@@ -120,8 +120,8 @@ describe("registry cache routing shell contracts", () => {
   });
 
   it("keeps capability-gated Sysbox routing local while preserving hosted KVM lanes", async () => {
-    const integration = parse(await readFile(resolve(verificationRoot, ".gitea/workflows/integration.yml"), "utf8"));
-    const repositorySet = await readFile(resolve(verificationRoot, ".gitea/workflows/repository-set.yml"), "utf8");
+    const integration = parse(await readFile(resolve(workspaceRoot, ".gitea/workflows/integration.yml"), "utf8"));
+    const hostBackends = await readFile(resolve(workspaceRoot, ".gitea/workflows/host-backends.yml"), "utf8");
     const recipes = await readFile(resolve(verificationRoot, "verify.just"), "utf8");
     const managedSmoke = await readFile(managedSmokeScript, "utf8");
 
@@ -136,7 +136,7 @@ describe("registry cache routing shell contracts", () => {
       "runner-label": "dim-qemu"
     });
     for (const recipe of ["cache-routing-sysbox", "cache-routing-kvm", "qemu-ci-image-layers-kvm"]) {
-      expect(repositorySet).toContain(`just verify ${recipe}`);
+      expect(hostBackends).toContain(`just verify ${recipe}`);
     }
     expect(recipes).toContain("cache-routing-sysbox:");
     expect(recipes).toContain("registry-cache-routing-managed-smoke.bash --sysbox");
