@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
 import { chmod, chown, link, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { NativeProjectDraftStore, NativeProjectDraftStoreError,
   type NativeGitRootImportResult,
@@ -9,6 +12,7 @@ import { NativeProjectDraftStore, NativeProjectDraftStoreError,
 import { compileNativeRootBootstrapPolicy } from "../../../../core/packages/core/src/nativeRootBootstrapPolicy.js";
 
 const roots: string[] = [];
+const run = promisify(execFile);
 const bundleBytes = Buffer.from("private native root bundle\n", "utf8");
 const policy = compileNativeRootBootstrapPolicy({ rootAlias: "root", protectedRef: "refs/heads/main",
   review: { requiredReviewerIds: ["owner"], pathReviewerRules: [], requiredJobs: [
@@ -252,6 +256,48 @@ describe("native Project draft store", () => {
     await expect(linkedStore.read("acme")).rejects.toBeInstanceOf(NativeProjectDraftStoreError);
     await expect(permissiveStore.read("acme")).rejects.toBeInstanceOf(NativeProjectDraftStoreError);
   });
+
+  it("rejects duplicate draft keys without changing persisted evidence", async () => {
+    // Given
+    const { root, claim } = await fixture();
+    const store = new NativeProjectDraftStore(root);
+    await store.claim(claim);
+    const recordPath = join(root, "native-project-drafts", "acme.json");
+    const bytes = Buffer.from((await readFile(recordPath, "utf8")).replace('"name":"acme"',
+      '"name":"other","name":"acme"'));
+    await writeFile(recordPath, bytes, { mode: 0o600 });
+
+    // When / Then
+    await expect(store.read("acme")).rejects.toBeInstanceOf(NativeProjectDraftStoreError);
+    expect(await readFile(recordPath)).toEqual(bytes);
+  });
+
+  it.each(["draft record", "retained artifact"] as const)(
+    "rejects an owner-mode FIFO at the %s boundary without blocking", async (boundary) => {
+      // Given
+      const root = await mkdtemp(join(tmpdir(), "dim-native-draft-fifo-"));
+      roots.push(root);
+      const path = join(root, boundary === "draft record" ? "draft.json" : "artifact.bundle");
+      await run("/usr/bin/mkfifo", [path]);
+      await chmod(path, 0o600);
+      const moduleUrl = pathToFileURL(join(import.meta.dirname,
+        "../../../../core/packages/core/src/nativeProjectDraftFiles.ts")).href;
+      const exportName = boundary === "draft record" ? "readPrivateDraftJson" : "inspectPrivateBundle";
+
+      // When
+      const child = run(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
+        const module = await import(process.env.DIM_TEST_MODULE);
+        await module[process.env.DIM_TEST_EXPORT](process.env.DIM_TEST_PATH).then(
+          () => process.exit(1),
+          () => process.exit(0),
+        );
+      `], { env: { ...process.env, DIM_TEST_MODULE: moduleUrl,
+        DIM_TEST_EXPORT: exportName, DIM_TEST_PATH: path }, timeout: 1_000 });
+
+      // Then
+      await expect(child).resolves.toMatchObject({ stdout: "", stderr: "" });
+    }
+  );
 
   it.runIf(process.geteuid?.() === 0)("refuses a draft record owned by a foreign uid", async () => {
     // Given

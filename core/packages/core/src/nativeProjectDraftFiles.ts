@@ -3,6 +3,7 @@ import { constants, type BigIntStats } from "node:fs";
 import { chmod, link, lstat, mkdir, open, rename, rm, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { UserError } from "./errors.js";
+import { hasDuplicateJsonKeys } from "./nativeControlPlaneJson.js";
 
 const maximumBundleBytes = 256 * 1024 * 1024 - 64 * 1024 - 1;
 const maximumRecordBytes = 1024 * 1024;
@@ -133,7 +134,7 @@ export async function copyPrivateBundle(
 export async function readPrivateDraftJson(path: string): Promise<unknown | undefined> {
   let handle;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
   } catch (error) {
     if (errorCode(error) === "ENOENT") return undefined;
     throw new NativeProjectDraftStoreError("native Project draft record cannot be opened safely", { cause: error });
@@ -150,7 +151,9 @@ export async function readPrivateDraftJson(path: string): Promise<unknown | unde
     }
     await assertStablePath(path, before, await handle.stat({ bigint: true }), "native Project draft record");
     try {
-      return JSON.parse(bytes.toString("utf8"));
+      const text = bytes.toString("utf8");
+      if (hasDuplicateJsonKeys(text)) throw new SyntaxError("duplicate JSON object key");
+      return JSON.parse(text);
     } catch (error) {
       if (error instanceof SyntaxError) {
         throw new NativeProjectDraftStoreError("native Project draft record is not valid JSON", { cause: error });
@@ -206,7 +209,7 @@ async function writeTemporary(path: string, value: unknown): Promise<string> {
 
 async function openPrivateFile(path: string, label: string) {
   try {
-    return await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    return await open(path, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
   } catch (error) {
     throw new NativeProjectDraftStoreError(`${label} cannot be opened safely`, { cause: error });
   }
