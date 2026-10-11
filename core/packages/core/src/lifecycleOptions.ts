@@ -21,6 +21,7 @@ export function lifecycleOptionsForBackend(
   env: NodeJS.ProcessEnv = process.env
 ): LifecycleOptions {
   if (env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE !== undefined
+    || env.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE !== undefined
     || env.DIM_NATIVE_QEMU_CONNECTION_FILE !== undefined) {
     throw new UserError("native Project and QEMU adapters are unavailable; refusing Gitea fallback");
   }

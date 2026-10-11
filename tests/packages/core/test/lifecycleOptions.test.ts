@@ -61,7 +61,8 @@ describe("lifecycle options", () => {
     });
   });
 
-  it.each(["DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE", "DIM_NATIVE_QEMU_CONNECTION_FILE"])(
+  it.each(["DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE", "DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE",
+    "DIM_NATIVE_QEMU_CONNECTION_FILE"])(
     "rejects %s before selecting Gitea while native adapters are unavailable",
     (selector) => {
       const env = { HOME: "/home/developer", [selector]: "" };
