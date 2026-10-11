@@ -1,6 +1,9 @@
-import { chmod, link, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { chmod, link, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   loadNativeGitRootImporterConnection,
@@ -9,6 +12,7 @@ import {
 } from "../../../../core/packages/core/src/nativeGitRootImporterConnection.js";
 
 const roots: string[] = [];
+const run = promisify(execFile);
 const valid = {
   schemaVersion: 1, endpoint: "http://127.0.0.1:8080", serviceId: "native-main",
   role: "operator-root-importer", hostId: "host-a", generationId: "a".repeat(64),
@@ -57,5 +61,42 @@ describe("native Git root importer connection", () => {
     await writeFile(path, JSON.stringify(valid), { mode: 0o640 });
     await chmod(path, 0o640);
     await expect(loadNativeGitRootImporterConnection(path)).rejects.toThrow(NativeGitRootImporterConnectionError);
+  });
+
+  it("rejects duplicate JSON keys without changing the connection file", async () => {
+    // Given
+    const root = await mkdtemp(join(tmpdir(), "dim-root-importer-duplicate-"));
+    roots.push(root);
+    const path = join(root, "importer.json");
+    const bytes = Buffer.from(JSON.stringify(valid).replace('"hostId":"host-a"',
+      '"hostId":"host-b","hostId":"host-a"'));
+    await writeFile(path, bytes, { mode: 0o600 });
+
+    // When / Then
+    await expect(loadNativeGitRootImporterConnection(path)).rejects.toThrow(NativeGitRootImporterConnectionError);
+    expect(await readFile(path)).toEqual(bytes);
+  });
+
+  it("rejects an owner-mode FIFO without blocking", async () => {
+    // Given
+    const root = await mkdtemp(join(tmpdir(), "dim-root-importer-fifo-"));
+    roots.push(root);
+    const path = join(root, "importer.json");
+    await run("/usr/bin/mkfifo", [path]);
+    await chmod(path, 0o600);
+    const moduleUrl = pathToFileURL(join(import.meta.dirname,
+      "../../../../core/packages/core/src/nativeGitRootImporterConnection.ts")).href;
+
+    // When
+    const child = run(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
+      const { loadNativeGitRootImporterConnection } = await import(process.env.DIM_TEST_MODULE);
+      await loadNativeGitRootImporterConnection(process.env.DIM_TEST_PATH).then(
+        () => process.exit(1),
+        () => process.exit(0),
+      );
+    `], { env: { ...process.env, DIM_TEST_MODULE: moduleUrl, DIM_TEST_PATH: path }, timeout: 1_000 });
+
+    // Then
+    await expect(child).resolves.toMatchObject({ stdout: "", stderr: "" });
   });
 });

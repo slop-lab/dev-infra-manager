@@ -1,6 +1,9 @@
+import { execFile } from "node:child_process";
 import { chmod, link, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { lifecycleOptionsForBackend } from "../../../../core/packages/core/src/lifecycleOptions.js";
 import {
@@ -29,6 +32,7 @@ const valid = {
   capacities: { primary: capacity }
 } as const;
 const roots: string[] = [];
+const run = promisify(execFile);
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -113,5 +117,28 @@ describe("native control-plane host connection", () => {
     // When / Then
     await expect(loadNativeControlPlaneConnection(path)).rejects.toThrow(NativeControlPlaneConnectionError);
     await expect(loadNativeControlPlaneConnection(escaped)).rejects.toThrow(NativeControlPlaneConnectionError);
+  });
+
+  it("rejects an owner-mode FIFO without blocking", async () => {
+    // Given
+    const root = await mkdtemp(join(tmpdir(), "dim-native-control-fifo-"));
+    roots.push(root);
+    const path = join(root, "connection.json");
+    await run("/usr/bin/mkfifo", [path]);
+    await chmod(path, 0o600);
+    const moduleUrl = pathToFileURL(join(import.meta.dirname,
+      "../../../../core/packages/core/src/nativeControlPlaneConnection.ts")).href;
+
+    // When
+    const child = run(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
+      const { loadNativeControlPlaneConnection } = await import(process.env.DIM_TEST_MODULE);
+      await loadNativeControlPlaneConnection(process.env.DIM_TEST_PATH).then(
+        () => process.exit(1),
+        () => process.exit(0),
+      );
+    `], { env: { ...process.env, DIM_TEST_MODULE: moduleUrl, DIM_TEST_PATH: path }, timeout: 1_000 });
+
+    // Then
+    await expect(child).resolves.toMatchObject({ stdout: "", stderr: "" });
   });
 });

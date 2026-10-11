@@ -85,7 +85,7 @@ export function parseNativeControlPlaneConnection(value: unknown): NativeControl
 export async function loadNativeControlPlaneConnection(path: string): Promise<NativeControlPlaneConnection> {
   let handle;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
   } catch (error) {
     throw new NativeControlPlaneConnectionError("native control-plane connection cannot be opened safely", { cause: error });
   }
@@ -105,12 +105,13 @@ export async function loadNativeControlPlaneConnection(path: string): Promise<Na
     if (changed(before, after)) return invalid();
     let value: unknown;
     try {
-      value = JSON.parse(bytes.toString("utf8"));
+      const text = bytes.toString("utf8");
+      if (hasDuplicateJsonKeys(text)) return invalid();
+      value = JSON.parse(text);
     } catch (error) {
       if (error instanceof SyntaxError) return invalid();
       throw error;
     }
-    if (hasDuplicateJsonKeys(bytes.toString("utf8"))) return invalid();
     return parseNativeControlPlaneConnection(value);
   } finally {
     await handle.close();

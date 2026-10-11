@@ -1,5 +1,6 @@
 import { constants, type BigIntStats } from "node:fs";
 import { open } from "node:fs/promises";
+import { hasDuplicateJsonKeys } from "./nativeControlPlaneJson.js";
 
 const fields = ["schemaVersion", "endpoint", "serviceId", "role", "hostId", "generationId", "credential"] as const;
 const credentialFields = ["username", "password"] as const;
@@ -25,7 +26,7 @@ export class NativeGitRootImporterConnectionError extends Error {
 export async function loadNativeGitRootImporterConnection(path: string): Promise<NativeGitRootImporterConnection> {
   let handle;
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+    handle = await open(path, constants.O_RDONLY | constants.O_NONBLOCK | constants.O_NOFOLLOW);
   } catch {
     throw new NativeGitRootImporterConnectionError("native Git root importer connection file cannot be opened safely");
   }
@@ -39,7 +40,9 @@ export async function loadNativeGitRootImporterConnection(path: string): Promise
     }
     let parsed: unknown;
     try {
-      parsed = JSON.parse(bytes.toString("utf8"));
+      const text = bytes.toString("utf8");
+      if (hasDuplicateJsonKeys(text)) throw new SyntaxError("duplicate JSON object key");
+      parsed = JSON.parse(text);
     } catch (error) {
       if (error instanceof SyntaxError) {
         throw new NativeGitRootImporterConnectionError("native Git root importer connection file is not valid JSON");
