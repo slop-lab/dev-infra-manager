@@ -111,3 +111,21 @@ supersedes that record's target permission for a candidate-selected job image.
 The current Gitea-only QEMU implementation and native-admission refusal remain
 active until the replacement contracts, implementation, and acceptance gates
 are complete.
+
+## Clarification: independent readiness, security, and quality gates
+
+The goal and clean-host acceptance scope above include both ordinary Sysbox
+and native QEMU execution because the selected deployment must deliver and test
+both capacities. That scope does not make either capacity, any CI result, or a
+completed promotion a prerequisite for native Project or workspace readiness.
+Readiness depends on registered owned native Project and repository state, the
+protected-root snapshot, proposal-only authority, and selected runtime
+prerequisites.
+
+Protected promotion is a separate security gate. It always requires exact
+current human approval and checked compare-and-swap. CI is a separately
+configured Project quality gate whose required-job set may be empty, ordinary
+only, QEMU only, or dual-kind. Promotion additionally requires successful
+current CI evidence only for the jobs and execution kinds selected by that
+policy. No runner, scheduler, capacity host, attempt issuer, or result reporter
+can approve or promote.
