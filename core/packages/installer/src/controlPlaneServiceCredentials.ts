@@ -17,7 +17,7 @@ export function serviceCredentialValues(
   const native = exactRecord(nativeValue, [
     "schemaVersion", "serviceId", "host", "port", "storageRoot", "gitExecutable", "gitVersion",
     "repositories", "identities", "projectRegistrars", "projectRootImporters", "projectRootReadIssuers",
-    "workspaceWriteIssuers", "humanReviewers", "ordinaryCi"
+    "workspaceWriteIssuers", "humanReviewers", "hostPromoters", "ordinaryCi"
   ], "native Git service config");
   if (native.schemaVersion !== 7 || native.serviceId !== "native-main" || native.host !== "0.0.0.0"
     || native.port !== 8080 || native.storageRoot !== "/var/lib/dim-native-git"
@@ -30,15 +30,17 @@ export function serviceCredentialValues(
   const projectRootReadIssuers = hostCredentials(native.projectRootReadIssuers, "native Git Project root read issuer");
   const workspaceWriteIssuers = hostCredentials(native.workspaceWriteIssuers, "native Git workspace write issuer");
   const humanReviewers = reviewerCredentials(native.humanReviewers);
+  const hostPromoters = hostCredentials(native.hostPromoters, "native Git host promoter");
   assertDistinct(projectRootImporters.map((entry) => entry.hostId));
   assertDistinct(projectRootReadIssuers.map((entry) => entry.hostId));
   assertDistinct(workspaceWriteIssuers.map((entry) => entry.hostId));
   assertDistinct(humanReviewers.map((entry) => entry.reviewerId));
+  assertDistinct(hostPromoters.map((entry) => entry.hostId));
 
   const nativeOrdinary = exactRecord(native.ordinaryCi, [
-    "endpoint", "serviceId", "query", "identity", "attemptIssuer", "resultReporter", "webhook"
+    "endpoint", "serviceId", "query", "identity", "attemptIssuer", "candidateReader", "resultReporter", "webhook"
   ], "native Git ordinary CI config");
-  const nativeRoles = ["query", "identity", "attemptIssuer", "resultReporter", "webhook"] as const;
+  const nativeRoles = ["query", "identity", "attemptIssuer", "candidateReader", "resultReporter", "webhook"] as const;
   const nativeCredentials = nativeRoles.map((role) => credential(nativeOrdinary[role], `native Git ${role}`));
   const ordinary = exactRecord(ordinaryValue, [
     "schemaVersion", "serviceId", "database", "admissionLeaseMilliseconds", "claimLeaseMilliseconds",
@@ -49,12 +51,14 @@ export function serviceCredentialValues(
     throw new ControlPlaneSourceError("ordinary CI service config is not a bundle schema-4 config");
   }
   const ordinaryNative = exactRecord(ordinary.nativeGit,
-    ["endpoint", "serviceId", "identity", "attemptIssuer", "resultReporter"], "ordinary CI native Git config");
+    ["endpoint", "serviceId", "identity", "attemptIssuer", "candidateReader", "resultReporter"],
+    "ordinary CI native Git config");
   const roles = exactRecord(ordinary.credentials, ["webhook", "registrar", "query"], "ordinary CI credentials");
   const ordinaryCredentials = [
     credential(roles.webhook, "ordinary CI webhook"), credential(roles.registrar, "ordinary CI registrar"),
     credential(roles.query, "ordinary CI query"), credential(ordinaryNative.identity, "ordinary CI identity"),
     credential(ordinaryNative.attemptIssuer, "ordinary CI attempt issuer"),
+    credential(ordinaryNative.candidateReader, "ordinary CI candidate reader"),
     credential(ordinaryNative.resultReporter, "ordinary CI result reporter")
   ];
   assertPaired(nativeCredentials, ordinaryCredentials);
@@ -69,7 +73,7 @@ export function serviceCredentialValues(
     return { hostId: value.hostId, hostToken: value.hostToken };
   });
   const hostBoundCredentials = [
-    ...projectRegistrars, ...projectRootImporters, ...projectRootReadIssuers, ...workspaceWriteIssuers
+    ...projectRegistrars, ...projectRootImporters, ...projectRootReadIssuers, ...workspaceWriteIssuers, ...hostPromoters
   ];
   if (hostBoundCredentials.some((entry) => hosts.some((host) =>
     host.hostId === entry.username || host.hostId === entry.password))) {
@@ -93,7 +97,8 @@ export function serviceCredentialValues(
     ...projectRootImporters.flatMap((entry) => [entry.username, entry.password]),
     ...projectRootReadIssuers.flatMap((entry) => [entry.username, entry.password]),
     ...workspaceWriteIssuers.flatMap((entry) => [entry.username, entry.password]),
-    ...humanReviewers.flatMap((entry) => [entry.reviewerId, entry.username, entry.password])
+    ...humanReviewers.flatMap((entry) => [entry.reviewerId, entry.username, entry.password]),
+    ...hostPromoters.flatMap((entry) => [entry.hostId, entry.username, entry.password])
   ];
   assertDistinct(roleValues);
   return { credentialValues, roleValues };
@@ -138,7 +143,7 @@ function credential(value: unknown, label: string): Credential {
 }
 
 function assertPaired(native: readonly Credential[], ordinary: readonly Credential[]): void {
-  const pairs = [[0, 2], [1, 3], [2, 4], [3, 5], [4, 0]] as const;
+  const pairs = [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 0]] as const;
   for (const [nativeIndex, ordinaryIndex] of pairs) {
     const left = native[nativeIndex];
     const right = ordinary[ordinaryIndex];

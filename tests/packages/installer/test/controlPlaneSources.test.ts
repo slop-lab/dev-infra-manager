@@ -38,12 +38,14 @@ describe("control-plane private source staging", () => {
     expect(sources.nativeGit.readinessToken.value).toBe(controlPlaneSecrets.nativeReadiness);
     expect(sources.ordinaryCi.readinessToken.value).toBe(controlPlaneSecrets.ordinaryReadiness);
     expect(sources.serviceConfigPreflight.kind).toBe("requires-image-validation");
+    expect(sources.credentialValues).toContain(controlPlaneSecrets.candidateReader);
+    expect(sources.roleValues).toContain("ordinary-candidate-reader");
 
     const complete = completeControlPlaneSourcePreflight(sources, {
       nativeGit: Buffer.from(`${controlPlaneSecrets.nativeActivation}\n`),
       ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
     });
-    expect(complete.allSecretValues).toHaveLength(11);
+    expect(complete.allSecretValues).toHaveLength(12);
   });
 
   it("rejects noncanonical, short, reused, and symlinked token sources", async () => {
@@ -450,6 +452,39 @@ describe("control-plane private source staging", () => {
       humanReviewers: [{
         reviewerId: "owner", username: "human-reviewer-owner", password: controlPlaneSecrets.humanReviewer
       }, second]
+    })}\n`);
+
+    // When / Then
+    await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/distinct/);
+  });
+
+  it("accepts a schema-7 host promoter and binds every identity value into the generation source", async () => {
+    // Given
+    const input = await fixture();
+    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({
+      ...nativeServiceConfig(),
+      hostPromoters: [{ hostId: "host-a", username: "host-promoter-a", password: controlPlaneSecrets.hostPromoter }]
+    })}\n`);
+
+    // When
+    const sources = await readControlPlaneSources(input.parsed);
+
+    // Then
+    expect(sources.credentialValues).toContain(controlPlaneSecrets.hostPromoter);
+    expect(sources.roleValues).toEqual(expect.arrayContaining([
+      "host-a", "host-promoter-a", controlPlaneSecrets.hostPromoter
+    ]));
+  });
+
+  it.each([
+    ["host ID", { hostId: "native-query", username: "host-promoter-a", password: controlPlaneSecrets.hostPromoter }],
+    ["username", { hostId: "host-a", username: "native-query", password: controlPlaneSecrets.hostPromoter }],
+    ["service credential", { hostId: "host-a", username: "host-promoter-a", password: controlPlaneSecrets.query }]
+  ])("rejects a host promoter colliding by %s", async (_label, promoter) => {
+    // Given
+    const input = await fixture();
+    await writePrivate(input.paths.nativeConfig, `${JSON.stringify({
+      ...nativeServiceConfig(), hostPromoters: [promoter]
     })}\n`);
 
     // When / Then

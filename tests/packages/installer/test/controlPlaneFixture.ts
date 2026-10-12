@@ -7,6 +7,7 @@ export const controlPlaneSecrets = {
   query: token(1),
   identity: token(2),
   attemptIssuer: token(3),
+  candidateReader: token(18),
   resultReporter: token(4),
   webhook: token(5),
   registrar: token(6),
@@ -19,7 +20,8 @@ export const controlPlaneSecrets = {
   projectRootImporter: token(13),
   projectRootReadIssuer: token(14),
   workspaceWriteIssuer: token(15),
-  humanReviewer: token(16)
+  humanReviewer: token(16),
+  hostPromoter: token(17)
 } as const;
 
 export function nativeServiceConfig(): Readonly<Record<string, unknown>> {
@@ -38,12 +40,14 @@ export function nativeServiceConfig(): Readonly<Record<string, unknown>> {
     projectRootReadIssuers: [],
     workspaceWriteIssuers: [],
     humanReviewers: [],
+    hostPromoters: [],
     ordinaryCi: {
       endpoint: "http://ordinary-ci:8080",
       serviceId: "ordinary-main",
       query: { username: "native-query", password: controlPlaneSecrets.query },
       identity: { username: "ordinary-identity", password: controlPlaneSecrets.identity },
       attemptIssuer: { username: "ordinary-attempts", password: controlPlaneSecrets.attemptIssuer },
+      candidateReader: { username: "ordinary-candidate-reader", password: controlPlaneSecrets.candidateReader },
       resultReporter: { username: "ordinary-results", password: controlPlaneSecrets.resultReporter },
       webhook: {
         endpoint: "http://ordinary-ci:8080/v1/native-root-ci-events",
@@ -66,6 +70,7 @@ export function ordinaryServiceConfig(registrarPassword = controlPlaneSecrets.re
       serviceId: "native-main",
       identity: { username: "ordinary-identity", password: controlPlaneSecrets.identity },
       attemptIssuer: { username: "ordinary-attempts", password: controlPlaneSecrets.attemptIssuer },
+      candidateReader: { username: "ordinary-candidate-reader", password: controlPlaneSecrets.candidateReader },
       resultReporter: { username: "ordinary-results", password: controlPlaneSecrets.resultReporter }
     },
     credentials: {
