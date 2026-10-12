@@ -15,6 +15,12 @@ qemu-ci-image-layers-kvm:
     @[[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]] || { echo "qemu-ci-image-layers-kvm requires an accessible character /dev/kvm" >&2; exit 2; }
     cd .. && DIM_QEMU_CI_KVM_SMOKE=1 pnpm --dir tests exec vitest run packages/core/test/qemuCiRunnerKvm.test.ts
 
+# Verification-only real guest mechanics under TCG; this is not production KVM acceptance.
+native-qemu-guest-mechanics-tcg:
+    @[[ "$(uname -m)" == x86_64 ]] || { echo "native-qemu-guest-mechanics-tcg requires x86-64" >&2; exit 2; }
+    @docker info >/dev/null 2>&1 || { echo "native-qemu-guest-mechanics-tcg requires a reachable Docker daemon" >&2; exit 2; }
+    cd .. && bash verification/scripts/native-qemu-guest-mechanics-tcg-smoke.bash
+
 # Run the backend-independent end-to-end contract after a backend is installed.
 full-development:
     just verify native-idle-service-images
@@ -122,6 +128,10 @@ native-idle-service-images:
 # Exercise the packaged installer facade and exported API across the idle bundle lifecycle; clean-host acceptance remains separate.
 control-plane-install-live:
 	cd .. && bash verification/scripts/control-plane-install-live-smoke.bash
+
+# Real installed multi-node dual-kind happy-path smoke; this is not VERIFICATION-NATIVE-CUTOVER-001 acceptance.
+native-cutover-clean-host-smoke config:
+	cd .. && bash verification/scripts/native-cutover-clean-host.bash "{{config}}"
 
 # Verify the systemd, cgroupfs, and unsupported Project runtime cgroup contracts.
 project-runtime-cgroups:
