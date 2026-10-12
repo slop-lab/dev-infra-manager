@@ -189,6 +189,11 @@ export class NativeOrdinaryAuthorityStore {
     this.#claimStore.releaseStale(request, claimId);
   }
 
+  activeClaim(hostId: string, claimId: string): import("./nativeOrdinaryClaimProtocol.js").NativeHostClaim | undefined {
+    this.#expire();
+    return this.#claimStore.active(hostId, claimId);
+  }
+
   renewClaim(request: NativeHostClaimRenewalRequest): NativeHostClaimRenewal | undefined {
     this.#expire();
     return this.#leaseStore.renew(request);

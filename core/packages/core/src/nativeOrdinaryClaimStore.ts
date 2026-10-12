@@ -117,6 +117,21 @@ export class NativeOrdinaryClaimStore {
     }
   }
 
+  active(hostId: string, claimId: string): NativeHostClaim | undefined {
+    const row = this.#database.prepare(`
+      SELECT receipts.request_id, receipts.capacity FROM claim_receipts receipts
+      JOIN claims ON claims.claim_id = receipts.claim_id
+      JOIN service_epochs epochs ON epochs.epoch_id = claims.service_epoch_id
+      WHERE receipts.claim_id = ? AND receipts.host_id = ? AND receipts.state = 'active'
+        AND claims.state = 'active' AND claims.lease_expires_at > ?
+        AND epochs.epoch_id = ? AND epochs.active = 1
+    `).get(claimId, hostId, this.#options.now(), this.#options.ownedEpochId);
+    const requestId = stringField(row, "request_id");
+    const capacity = stringField(row, "capacity");
+    if (requestId === undefined || capacity === undefined) return undefined;
+    return this.#loadActive({ schemaVersion: 1, requestId, hostId, capacity }, claimId);
+  }
+
   activate(
     request: NativeHostClaimRequest,
     reservation: Extract<NativeClaimReservation, { readonly kind: "preparing" }>,
