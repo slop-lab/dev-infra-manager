@@ -22,12 +22,17 @@ import { deriveAuthoritativeOrdinaryExecutionDescriptor } from "./authoritative-
 import { deriveAuthoritativeQemuExecutionDescriptor } from "./authoritative-qemu-execution-descriptor.js";
 import { createAuthoritativeNativeEventDispatcher,
   type AuthoritativeNativeEventDispatcher } from "./authoritative-native-event-dispatcher.js";
+import { createAuthoritativeNativeQemuEventDispatcher } from "./authoritative-native-qemu-event-dispatcher.js";
 import { nativeBundleKnownCredentials } from "./native-bundle-known-credentials.js";
 import { createOrdinaryReservationClaimVerifier } from "./ordinary-reservation-claim.js";
 import { createNativeBundleOrdinaryServices } from "./native-bundle-ordinary-services.js";
 import { currentOrdinaryTerminalEvidence as readCurrentOrdinaryTerminalEvidence }
   from "./current-ordinary-terminal-evidence.js";
 import { createNativeBundleHttpServer } from "./native-bundle-http-server.js";
+import { createNativeQemuAuthorityService } from "./native-qemu-authority-http.js";
+import { createNativeHostPromoterService } from "./native-host-promoter-http.js";
+import { promoteInstalledNativeReview } from "./native-installed-promotion.js";
+import { createNativeCandidateReadService } from "./native-candidate-read-http.js";
 
 export { NativeGitBundleServerError } from "./native-bundle-server-types.js";
 export type {
@@ -85,7 +90,7 @@ export async function configuredNativeGitBundleServer(
   };
   let eventDispatcher: AuthoritativeNativeEventDispatcher;
   try {
-    eventDispatcher = await createAuthoritativeNativeEventDispatcher({
+    const ordinaryDispatcher = await createAuthoritativeNativeEventDispatcher({
       webhook: config.ordinaryCi.webhook,
       resolveAdmission: createAuthoritativeNativeAdmissionResolver({
         dependency: config.ordinaryCi,
@@ -98,6 +103,18 @@ export async function configuredNativeGitBundleServer(
     httpClient: identityHttpClient,
     ...(options.deliveryFaults === undefined ? {} : { deliveryFaults: options.deliveryFaults })
     });
+    const qemuDispatcher = config.qemuCi === undefined ? undefined
+      : await createAuthoritativeNativeQemuEventDispatcher({ dependency: config.qemuCi, state,
+        stateDirectory: options.stateDirectory, httpClient: identityHttpClient,
+        ...(options.deliveryFaults === undefined ? {} : { deliveryFaults: options.deliveryFaults }) });
+    eventDispatcher = qemuDispatcher === undefined ? ordinaryDispatcher : {
+      start() { ordinaryDispatcher.start(); qemuDispatcher.start(); },
+      wake() { ordinaryDispatcher.wake(); qemuDispatcher.wake(); },
+      healthy() { return ordinaryDispatcher.healthy() && qemuDispatcher.healthy(); },
+      async close() { const settled = await Promise.allSettled([ordinaryDispatcher.close(), qemuDispatcher.close()]);
+        const rejected = settled.find((result): result is PromiseRejectedResult => result.status === "rejected");
+        if (rejected !== undefined) throw rejected.reason; }
+    };
   } catch (error) {
     await state.owner.release();
     throw error;
@@ -137,6 +154,9 @@ export async function configuredNativeGitBundleServer(
     stateDirectory: options.stateDirectory
   });
   const knownCredentials = nativeBundleKnownCredentials(config, registrars);
+  const candidateReadService = createNativeCandidateReadService({ config, runtime: authoritativeRuntime,
+    gitExecutable: config.gitExecutable, stateDirectory: options.stateDirectory,
+    now: options.rootReadLeaseClock ?? Date.now, serialize: reviewController.run });
   const ordinaryServices = createNativeBundleOrdinaryServices({
     attemptHooks: options.nativeOrdinaryAttemptHooks,
     config,
@@ -150,12 +170,31 @@ export async function configuredNativeGitBundleServer(
       httpClient: identityHttpClient
     }).verify
   });
+  const qemuAuthorityService = createNativeQemuAuthorityService({ config, knownCredentials,
+    runtime: authoritativeRuntime, serialize: reviewController.run });
   const humanReviewerService = createNativeHumanReviewerService({
     config,
     knownCredentials,
     serialize: reviewController.run,
     ...(options.nativeHumanReviewerHooks === undefined ? {} : { hooks: options.nativeHumanReviewerHooks }),
     runtime: authoritativeRuntime
+  });
+  const hostPromoterService = createNativeHostPromoterService({ config, knownCredentials,
+    runtime: authoritativeRuntime,
+    createReview: reviewController.create,
+    promote: (projectId, reviewId) => reviewController.run(() => promoteInstalledNativeReview({
+      config,
+      runtime: authoritativeRuntime,
+      stateDirectory: options.stateDirectory,
+      currentOrdinaryEvidence: (selector) => readCurrentOrdinaryTerminalEvidence({
+        config: config.ordinaryCi,
+        httpClient: identityHttpClient,
+        runtime: authoritativeRuntime,
+        serialize: reviewController.run,
+        alreadySerialized: true
+      }, selector),
+      ...(options.nativePromotionHooks === undefined ? {} : { hooks: options.nativePromotionHooks })
+    }, projectId, reviewId))
   });
   const prepareProject = (generationId: string, ownerHostId: string, input: unknown): Promise<NativeGitPreparedProject> => {
     if (closed) return Promise.reject(new NativeGitBundleServerError("native Git bundle server is closed"));
@@ -185,10 +224,23 @@ export async function configuredNativeGitBundleServer(
     rootReadService,
     state,
     workspaceWriteService,
+    readiness: {
+      activated: () => activated,
+      activationTokenDigest,
+      expectedGenerationId: options.expectedGenerationId,
+      gitExecutable: config.gitExecutable,
+      gitIdentity,
+      issuers: config.workspaceWriteIssuers,
+      state,
+      stateDirectory: options.stateDirectory
+    },
     humanReviewerService,
+    hostPromoterService,
+    candidateReadService,
     rootCiProofService: ordinaryServices.rootCiProofService,
     ordinaryAttemptService: ordinaryServices.ordinaryAttemptService,
     ordinaryStatusService: ordinaryServices.ordinaryStatusService,
+    qemuAuthorityService,
     deliveryHealthy: eventDispatcher.healthy,
     activated: () => activated,
     activate: () => { activated = true; },
@@ -203,6 +255,7 @@ export async function configuredNativeGitBundleServer(
     stopAdmission() {
       closed = true;
       rootReadService.close();
+      candidateReadService.close();
       workspaceWriteService.close();
     },
     async drainOperations() {

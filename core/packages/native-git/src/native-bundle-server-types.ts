@@ -14,6 +14,7 @@ import type {
   AuthoritativeOrdinaryTerminalEvent
 } from "./authoritative-ordinary-status-schema.js";
 import type { OrdinaryTerminalProvenance } from "./ordinary-current-terminal-proof.js";
+import type { NativeInstalledPromotionHooks } from "./native-installed-promotion.js";
 
 export type NativeGitBundleServerOptions = {
   readonly config: NativeGitBundleConfig;
@@ -30,6 +31,7 @@ export type NativeGitBundleServerOptions = {
   readonly authoritativeReviewHooks?: AuthoritativeNativeReviewHooks;
   readonly nativeHumanReviewerHooks?: NativeHumanReviewerHooks;
   readonly nativeOrdinaryAttemptHooks?: NativeOrdinaryAttemptHooks;
+  readonly nativePromotionHooks?: NativeInstalledPromotionHooks;
 };
 
 export type AuthoritativeNativeReviewSelector = {

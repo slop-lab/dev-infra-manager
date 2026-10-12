@@ -9,6 +9,7 @@ import type {
 import type { NativeHumanReviewerHooks } from "../../../../core/packages/native-git/src/native-human-reviewer-http.js";
 import type { ReviewPublicationFaults } from "../../../../core/packages/native-git/src/review-record-storage.js";
 import type { NativeOrdinaryAttemptHooks } from "../../../../core/packages/native-git/src/native-ordinary-attempt-http.js";
+import type { NativeInstalledPromotionHooks } from "../../../../core/packages/native-git/src/native-installed-promotion.js";
 import { authoritativePolicy, matchingRunner } from "./authoritativeNativeCandidateFixture.js";
 import {
   activateFinalizeService,
@@ -43,18 +44,22 @@ export async function nativeBundleReviewFixture(
   reviewerHooks?: NativeHumanReviewerHooks,
   ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient,
   deliveryFaults?: ReviewPublicationFaults,
-  nativeOrdinaryAttemptHooks?: NativeOrdinaryAttemptHooks
+  nativeOrdinaryAttemptHooks?: NativeOrdinaryAttemptHooks,
+  configOverrides: object = {},
+  nativePromotionHooks?: NativeInstalledPromotionHooks,
+  runner = matchingRunner(),
+  candidateLeaseClock?: () => number
 ): Promise<NativeBundleReviewFixture> {
   const root = await createFinalizeRoot(label);
   const bundle = await createRootBundle({
     "README.md": "root bundle\n",
-    ".dim/ci/runner.yml": matchingRunner(),
+    ".dim/ci/runner.yml": runner,
     ".dim/ci/jobs/source.bash": "set -euo pipefail\nprintf 'source\\n'\n",
     ".dim/ci/jobs/integration.bash": "set -euo pipefail\nprintf 'integration\\n'\n"
   });
   const service = await startFinalizeService(
-    root, undefined, undefined, undefined, undefined, undefined, reviewHooks, reviewerHooks,
-    ordinaryIdentityHttpClient, deliveryFaults, nativeOrdinaryAttemptHooks
+    root, candidateLeaseClock, undefined, undefined, undefined, undefined, reviewHooks, reviewerHooks,
+    ordinaryIdentityHttpClient, deliveryFaults, nativeOrdinaryAttemptHooks, configOverrides, nativePromotionHooks
   );
   await activateFinalizeService(service.origin);
   await service.prepareProject(generationId, importer.hostId, projectInput("project-a"));

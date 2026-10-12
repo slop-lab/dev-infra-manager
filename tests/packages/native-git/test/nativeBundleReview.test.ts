@@ -19,10 +19,24 @@ import {
   reviewProposalRef
 } from "./nativeBundleReviewFixture.js";
 import { seedRootPromotion } from "./nativeCurrentRootProofFixture.js";
+import { authoritativePolicy } from "./authoritativeNativeCandidateFixture.js";
 
 afterEach(cleanupFinalizeFixtures);
 
 describe("authoritative installed native review creation", () => {
+  it("publishes an approvable review without creating CI events when quality jobs are disabled", async () => {
+    // Given
+    const fixture = await nativeBundleReviewFixture("bundle-review-no-ci", undefined,
+      authoritativePolicy(["owner"], [], []));
+
+    // When
+    const created = await createBundleReview(fixture.service);
+
+    // Then
+    expect(created.review.requiredJobs).toEqual([]);
+    expect(created.events).toEqual([]);
+  });
+
   it("publishes one complete kind-aware review, retries across restart, and rejects malformed storage", async () => {
     // Given
     const fixture = await nativeBundleReviewFixture("bundle-review-happy");
