@@ -58,6 +58,7 @@ export const ordinaryCiDependencyConfigSchema = z.object({
   query: ordinaryServiceCredentialSchema,
   identity: ordinaryServiceCredentialSchema,
   attemptIssuer: ordinaryServiceCredentialSchema,
+  candidateReader: ordinaryServiceCredentialSchema,
   resultReporter: ordinaryServiceCredentialSchema,
   webhook: ordinaryWebhookCredentialSchema
 }).strict().readonly();
@@ -115,6 +116,7 @@ export function parseNativeGitServiceConfig(input: unknown): NativeGitServiceCon
       config.ordinaryCi.query,
       config.ordinaryCi.identity,
       config.ordinaryCi.attemptIssuer,
+      config.ordinaryCi.candidateReader,
       config.ordinaryCi.resultReporter,
       config.ordinaryCi.webhook
     ];

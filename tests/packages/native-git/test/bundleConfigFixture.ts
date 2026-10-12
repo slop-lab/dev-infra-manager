@@ -4,6 +4,7 @@ export const bundleSecrets = {
   nativeQuery: token(1),
   nativeIdentity: token(2),
   attemptIssuer: token(3),
+  candidateReader: token(16),
   resultReporter: token(4),
   webhook: token(5),
   registrar: token(6),
@@ -14,7 +15,8 @@ export const bundleSecrets = {
   projectRootReadIssuer: token(11),
   workspaceWriteIssuer: token(12),
   humanReviewer: token(13),
-  foreignHumanReviewer: token(14)
+  foreignHumanReviewer: token(14),
+  hostPromoter: token(15)
 } as const;
 
 export function idleNativeConfig() {
@@ -33,12 +35,14 @@ export function idleNativeConfig() {
     projectRootReadIssuers: [],
     workspaceWriteIssuers: [],
     humanReviewers: [],
+    hostPromoters: [],
     ordinaryCi: {
       endpoint: "http://ordinary-ci:8080",
       serviceId: "ordinary-main",
       query: { username: "native-query", password: bundleSecrets.nativeQuery },
       identity: { username: "ordinary-identity", password: bundleSecrets.nativeIdentity },
       attemptIssuer: { username: "ordinary-attempts", password: bundleSecrets.attemptIssuer },
+      candidateReader: { username: "ordinary-candidate-reader", password: bundleSecrets.candidateReader },
       resultReporter: { username: "ordinary-results", password: bundleSecrets.resultReporter },
       webhook: {
     endpoint: "http://ordinary-ci:8080/v1/native-root-ci-events",
@@ -61,6 +65,7 @@ export function idleOrdinaryConfig() {
       serviceId: "native-main",
       identity: { username: "ordinary-identity", password: bundleSecrets.nativeIdentity },
       attemptIssuer: { username: "ordinary-attempts", password: bundleSecrets.attemptIssuer },
+      candidateReader: { username: "ordinary-candidate-reader", password: bundleSecrets.candidateReader },
       resultReporter: { username: "ordinary-results", password: bundleSecrets.resultReporter }
     },
     credentials: {

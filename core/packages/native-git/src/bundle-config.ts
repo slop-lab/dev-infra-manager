@@ -65,6 +65,11 @@ const humanReviewer = z.object({
   username: credentialUsername,
   password: projectRegistrarToken
 }).strict().readonly();
+const hostPromoter = z.object({
+  hostId: identifier,
+  username: credentialUsername,
+  password: projectRegistrarToken
+}).strict().readonly();
 
 const nativeBundleConfigSchema = nativeGitServiceConfigSchema.unwrap().extend({
   schemaVersion: z.literal(7),
@@ -75,17 +80,29 @@ const nativeBundleConfigSchema = nativeGitServiceConfigSchema.unwrap().extend({
   projectRootReadIssuers: z.array(projectRootReadIssuer).readonly(),
   workspaceWriteIssuers: z.array(workspaceWriteIssuer).readonly(),
   humanReviewers: z.array(humanReviewer).readonly(),
+  hostPromoters: z.array(hostPromoter).readonly(),
   ordinaryCi: ordinaryCiDependencyConfigSchema.unwrap().extend({
     query: credential,
     identity: credential,
     attemptIssuer: credential,
+    candidateReader: credential,
     resultReporter: credential,
     webhook: z.object({
       endpoint: z.literal("http://ordinary-ci:8080/v1/native-root-ci-events"),
       username: credentialUsername,
       password: bundleToken
     }).strict().readonly()
-  }).strict().readonly()
+  }).strict().readonly(),
+  qemuCi: z.object({
+    endpoint: z.string().url(),
+    serviceId: z.literal("qemu-main"),
+    query: credential,
+    eventIntake: credential,
+    identity: credential,
+    attemptIssuer: credential,
+    candidateReader: credential,
+    resultReporter: credential
+  }).strict().readonly().optional()
 }).strict().readonly();
 
 const ordinaryBundleConfigSchema = z.object({
@@ -99,6 +116,7 @@ const ordinaryBundleConfigSchema = z.object({
     serviceId: z.literal("native-main"),
     identity: credential,
     attemptIssuer: credential,
+    candidateReader: credential,
     resultReporter: credential
   }).strict().readonly(),
   credentials: z.object({
@@ -132,19 +150,24 @@ export function parseNativeGitBundleConfig(input: unknown): NativeGitBundleConfi
     config.ordinaryCi.query,
     config.ordinaryCi.identity,
     config.ordinaryCi.attemptIssuer,
+    config.ordinaryCi.candidateReader,
     config.ordinaryCi.resultReporter,
-    config.ordinaryCi.webhook
+    config.ordinaryCi.webhook,
+    ...(config.qemuCi === undefined ? [] : [config.qemuCi.query, config.qemuCi.eventIntake, config.qemuCi.identity,
+      config.qemuCi.attemptIssuer, config.qemuCi.candidateReader, config.qemuCi.resultReporter])
   ], [
     ...config.projectRegistrars.flatMap((entry) => [entry.hostId, entry.username, entry.password]),
     ...config.projectRootImporters.flatMap((entry) => [entry.username, entry.password]),
     ...config.projectRootReadIssuers.flatMap((entry) => [entry.username, entry.password]),
-    ...config.workspaceWriteIssuers.flatMap((entry) => [entry.username, entry.password])
-    , ...config.humanReviewers.flatMap((entry) => [entry.reviewerId, entry.username, entry.password])
+    ...config.workspaceWriteIssuers.flatMap((entry) => [entry.username, entry.password]),
+    ...config.humanReviewers.flatMap((entry) => [entry.reviewerId, entry.username, entry.password]),
+    ...config.hostPromoters.flatMap((entry) => [entry.username, entry.password])
   ]);
   assertDistinctValues(config.projectRootImporters.map((entry) => entry.hostId));
   assertDistinctValues(config.projectRootReadIssuers.map((entry) => entry.hostId));
   assertDistinctValues(config.workspaceWriteIssuers.map((entry) => entry.hostId));
   assertDistinctValues(config.humanReviewers.map((entry) => entry.reviewerId));
+  assertDistinctValues(config.hostPromoters.map((entry) => entry.hostId));
   return config;
 }
 
@@ -182,6 +205,7 @@ export function parseOrdinaryBundleConfig(input: unknown): OrdinaryBundleConfig 
     config.credentials.query,
     config.nativeGit.identity,
     config.nativeGit.attemptIssuer,
+    config.nativeGit.candidateReader,
     config.nativeGit.resultReporter
   ], config.hosts.map((entry) => entry.hostToken));
   return config;
@@ -201,6 +225,7 @@ export function parseNativeGitBundle(
   assertPairedCredential("webhook", native.ordinaryCi.webhook, ordinary.credentials.webhook);
   assertPairedCredential("identity", native.ordinaryCi.identity, ordinary.nativeGit.identity);
   assertPairedCredential("attempt issuer", native.ordinaryCi.attemptIssuer, ordinary.nativeGit.attemptIssuer);
+  assertPairedCredential("candidate reader", native.ordinaryCi.candidateReader, ordinary.nativeGit.candidateReader);
   assertPairedCredential("result reporter", native.ordinaryCi.resultReporter, ordinary.nativeGit.resultReporter);
   assertDistinctValues([
     ...native.projectRegistrars.flatMap((entry) => [entry.hostId, entry.username, entry.password]),
@@ -208,6 +233,7 @@ export function parseNativeGitBundle(
     ...native.projectRootReadIssuers.flatMap((entry) => [entry.username, entry.password]),
     ...native.workspaceWriteIssuers.flatMap((entry) => [entry.username, entry.password]),
     ...native.humanReviewers.flatMap((entry) => [entry.reviewerId, entry.username, entry.password]),
+    ...native.hostPromoters.flatMap((entry) => [entry.username, entry.password]),
     ordinary.credentials.registrar.username,
     ordinary.credentials.registrar.password,
     ...ordinary.hosts.map((entry) => entry.hostToken)
@@ -221,7 +247,9 @@ export function parseNativeGitBundle(
     || native.workspaceWriteIssuers.some((entry) => ordinary.hosts.some((host) =>
       host.hostId === entry.username || host.hostId === entry.password))
     || native.humanReviewers.some((entry) => ordinary.hosts.some((host) =>
-      host.hostId === entry.reviewerId || host.hostId === entry.username || host.hostId === entry.password))) {
+      host.hostId === entry.reviewerId || host.hostId === entry.username || host.hostId === entry.password))
+    || native.hostPromoters.some((entry) => ordinary.hosts.some((host) =>
+      host.hostId === entry.username || host.hostId === entry.password))) {
     throw new NativeGitBundleConfigError("bundle credentials must be globally distinct");
   }
   return { native, ordinary };
