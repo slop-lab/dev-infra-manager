@@ -63,7 +63,7 @@ export function parseNativeGitRootReadIssuerConnection(input: unknown): NativeGi
     || record.role !== "operator-root-read-issuer") invalid();
   return {
     schemaVersion: 1,
-    endpoint: loopbackOrigin(record.endpoint),
+    endpoint: serviceOrigin(record.endpoint),
     serviceId: "native-main",
     role: "operator-root-read-issuer",
     hostId: identifier(record.hostId),
@@ -100,7 +100,7 @@ function isRecord(input: unknown): input is Readonly<Record<string, unknown>> {
   return typeof input === "object" && input !== null && !Array.isArray(input);
 }
 
-function loopbackOrigin(input: unknown): string {
+function serviceOrigin(input: unknown): string {
   if (typeof input !== "string") invalid();
   let url: URL;
   try {
@@ -108,7 +108,8 @@ function loopbackOrigin(input: unknown): string {
   } catch {
     return invalid();
   }
-  if (url.protocol !== "http:" || (url.hostname !== "127.0.0.1" && url.hostname !== "[::1]")
+  if ((url.protocol !== "https:" && (url.protocol !== "http:"
+    || (url.hostname !== "127.0.0.1" && url.hostname !== "[::1]")))
     || url.username !== "" || url.password !== "" || url.pathname !== "/"
     || url.search !== "" || url.hash !== "" || input !== url.origin) invalid();
   return url.origin;

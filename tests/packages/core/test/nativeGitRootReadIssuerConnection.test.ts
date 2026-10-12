@@ -20,8 +20,10 @@ afterEach(async () => {
 });
 
 describe("native Git root read issuer connection", () => {
-  it("parses only the exact issuer role, owner, service, generation, and loopback origin", () => {
+  it("parses only the exact issuer role, owner, service, generation, and secure origin", () => {
     expect(parseNativeGitRootReadIssuerConnection(valid)).toEqual(valid);
+    expect(parseNativeGitRootReadIssuerConnection({ ...valid, endpoint: "https://native.example" }))
+      .toMatchObject({ endpoint: "https://native.example" });
     for (const invalid of [
       { ...valid, role: "operator-root-importer" },
       { ...valid, hostId: "Host A" },
