@@ -533,6 +533,11 @@ Until the full Project/repository adapter is verified, requests to mark a
 Project runnable or advertise ordinary or QEMU capacity MUST fail before
 admission or runtime mutation. Root preparation, import, pending identity, or
 bundle readiness alone grants no workspace, review, CI, or promotion authority.
+The later Project-ready transition is governed by
+`TRUST-NATIVE-READINESS-001`: it requires registered owned root and protected
+state, an immutable snapshot, proposal-only authority, and workspace runtime
+prerequisites. It MUST NOT require ordinary or QEMU capacity, a CI result,
+human approval of a proposal, or a prior promotion.
 
 The trusted host may retain a separate non-runnable native bootstrap draft
 and its exact private bundle as `PROJECT-NATIVE-DRAFT-001`, use the separate
@@ -544,14 +549,18 @@ Bundle updates MUST retain that draft, any canonical `admission-pending`
 record, and the native service volume; missing
 or ambiguous binding is a refusal, not an invitation to recreate a Project
 or switch to Gitea. The pending record does not make installation, service, or
-Project readiness successful. Native `ready` and Gitea removal remain gated on
-the packaged real Sysbox/KVM journey in `VERIFICATION-NATIVE-CUTOVER-001`.
+Project readiness successful. The native adapter needs its own real workspace
+readiness gate. Fresh-host acceptance and removal of the predecessor Gitea
+dependency additionally require the full packaged Sysbox/KVM journey in
+`VERIFICATION-NATIVE-CUTOVER-001`; that broader deployment gate does not make
+CI a Project readiness prerequisite.
 
 **INSTALLER-NATIVE-PROJECT-CI-001 (accepted target, not implemented):** The
 later adapter MUST separate trusted native Project registration from candidate
-job selection. Every Project registered through the trusted host lifecycle is
+job selection. Every Project whose separate quality policy selects CI is
 CI-eligible without a separate Project-specific CI approval, runner
-registration or capacity list. Admission binds one native Git
+registration or capacity list. A Project with an empty quality policy needs no
+CI admission or result. Admission binds one native Git
 Project/repository, protected ref, policy and required-review/required-job-set
 revisions, required job names and their `candidate-controlled` evidence class,
 the ordinary service's global operator capacity-config digest, and admission
@@ -593,6 +602,8 @@ maintainers still review changed requirements, implementation, test definitions,
 and relevant results. Infrastructure security review separately follows secret
 exposure and trusted capability changes. Current complete-tree human approval
 and the final checked compare-and-swap remain mandatory.
+Ordinary CI identities, runners, schedulers, and capacity hosts have no review,
+approval, promotion, or protected-ref write authority.
 
 The optional shared QEMU scheduler is a predecessor Gitea-only service and
 configuration. It is never added to this Compose project, cannot be configured
@@ -620,6 +631,10 @@ result, stale generation, or replayed earlier success MUST leave a required
 QEMU condition unsatisfied and the protected ref unchanged. It cannot be
 substituted by ordinary success or downgraded to optional; optional QEMU
 results remain visible without changing ordinary or human approval rules.
+An ordinary-only, QEMU-only, or empty Project quality policy MUST NOT wait for
+an unselected execution kind. QEMU identities, runners, schedulers, and
+capacity hosts have no review, approval, promotion, or protected-ref write
+authority.
 The current Gitea-only QEMU scheduler stays rejected with native selection
 until this distinct path is implemented and verified.
 `CONFIG-NATIVE-QEMU-001` supplies only host-scoped QEMU service authority and
@@ -957,4 +972,6 @@ QEMU scheduler/executor, protected promotion, and reviewer browser UI remain
 unavailable. No clean-host
 Sysbox/KVM acceptance or runtime-ready claim follows from this command. A later
 promotion path MUST keep ordinary and QEMU evidence independent and require
-every policy-selected kind plus exact-tree human approval.
+every policy-selected kind plus exact-tree human approval. A policy may select
+zero jobs, one execution kind, or both; no runner authority may approve or
+promote.
