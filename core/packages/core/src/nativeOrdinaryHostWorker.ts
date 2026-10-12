@@ -39,7 +39,7 @@ export type NativeOrdinaryHostCapacityDependencies = {
   readonly gitExecutable: string;
   readonly nativeGitEndpoint: string;
   readonly journalPath: string;
-  readonly resolveReaderCredential: NativeGitProjectReaderCredentialResolver;
+  readonly resolveReaderCredential?: NativeGitProjectReaderCredentialResolver;
   readonly idleDelayMilliseconds?: number;
   readonly randomId?: () => string;
 };
@@ -110,7 +110,14 @@ async function executeClaim(
   const privateRoot = journal.privateRoot(privateRootIdentity);
   await executeNativeHostClaim({
       runner: dependencies.runner,
-      createReadAuthority: (input) => createNativeHostClaimReader(dependencies, input),
+      createReadAuthority: async (input) => {
+        if (dependencies.resolveReaderCredential !== undefined) return createNativeHostClaimReader({ ...dependencies,
+          resolveReaderCredential: dependencies.resolveReaderCredential }, input);
+        const lease = await dependencies.client.candidateLease(input.claim, randomId(), input.signal);
+        return createNativeHostClaimReader({ ...dependencies,
+          resolveReaderCredential: () => ({ projectId: input.claim.descriptor.projectId,
+            repositoryId: input.claim.descriptor.repositoryId, username: lease.username, password: lease.password }) }, input);
+      },
       renewClaim: (request, requestSignal) => dependencies.client.renewClaim(request, requestSignal),
       reportResult: (request, requestSignal) => reportResult(dependencies, journal, claim, privateRoot.identity, request, requestSignal),
       recoverClaim: (request, requestSignal) => recoverClaim(dependencies, journal, claim, privateRoot.identity, request, requestSignal),

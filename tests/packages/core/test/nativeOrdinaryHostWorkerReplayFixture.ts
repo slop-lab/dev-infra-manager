@@ -13,6 +13,9 @@ export class WorkerClient implements NativeOrdinaryHostClient {
   }
 
   async attest(): Promise<void> {}
+  async candidateLease() {
+    return { username: "candidate", password: "candidate-secret", expiresAt: Date.now() + 30_000 };
+  }
   prepareClaim(requestId: string) {
     return { requestId, body: JSON.stringify({ schemaVersion: 1, requestId, hostId: this.hostId, capacity: this.capacity }) };
   }
