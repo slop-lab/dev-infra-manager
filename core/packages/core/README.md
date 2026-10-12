@@ -80,9 +80,20 @@ with host credentials.
 
 `lifecycleOptions()` reads the same environment used by the CLI:
 
-Native Git root import is an additive host-only API, not a runnable Project
-lifecycle backend. The host CLI selects only pending Project identity from an
-already imported draft. After a separate registrar prepares the empty root, trusted
+Native lifecycle selection uses the owner-only mode-`0600` file named by
+`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE`. Its strict schema-1 `nativeGit`
+object binds the current serving `generationId` and distinct
+`workspaceWriteIssuer` and `rootReadIssuer` credentials. Readiness and
+proposal-write lease issuance use the workspace-write issuer; protected-root
+snapshot materialization uses only the root-read issuer. Project create and
+workspace lifecycle reload this connection while holding the Project lock, so
+a serving-generation rollover does not rewrite the immutable original import
+receipt. The native readiness, issuer, lease, and smart-HTTP clients use
+system-verified TLS for `https` origins, do not follow redirects, and retain
+bracketed IPv6 support for explicit loopback HTTP origins.
+
+Native Git root import begins as a host-only bootstrap boundary. After a
+separate registrar prepares the empty root, trusted
 host code may call `createNodeNativeGitRootImporterClient(connectionFile)` from
 this package with a different, owner-only mode-`0600` JSON file:
 
@@ -104,6 +115,8 @@ this package with a different, owner-only mode-`0600` JSON file:
 The file must be a single-link, non-symlink regular file owned by the DIM
 host user. The endpoint is an exact loopback HTTP origin; the importer
 credential must be distinct from the registrar and ordinary-CI credentials.
+The importer intentionally does not inherit the control connection's remote
+HTTPS support.
 `importRoot` takes a trusted policy, expected commit, protected ref, local
 Git bundle path, and `AbortSignal`. It attests the exact importer role, host,
 service, and generation immediately before uploading the bounded bundle and
@@ -153,9 +166,9 @@ resolve inside the complete snapshot; absolute, dangling, escaping, and
 reserved lifecycle-path links, gitlinks, unsafe cache nodes, and oversized
 objects fail without adopting or replacing a target. The return value contains
 only Project/root identity, the protected ref, commit/tree IDs, and the host
-snapshot path. It contains no credential and is not a runtime-ready Project
-descriptor. Native Project selection remains unavailable and Gitea remains the
-only runnable profile.
+snapshot path. It contains no credential and does not itself publish a
+runtime-ready Project descriptor. `NativeProjectPendingStore.ready` separately
+requires a fresh readiness proof before publishing schema-6 Project state.
 
 `parseNativeRootBootstrapManifestYaml(yaml, selectedRef)` is a separate,
 mutation-free reader for the native-only `nativeReview` extension of a reviewed
@@ -197,18 +210,44 @@ marker, or replaced repository path leaves the draft unchanged and non-runnable.
 A completed schema-1 draft from the earlier import implementation remains
 byte-preserved proof/read data only; pending schema-1 drafts cannot resume or
 roll generations, and neither form supplies authoritative kind-labelled jobs.
-This does not attest the external source origin, select native Git for
-`lifecycleOptions()`, issue a Git reader/writer, admit ordinary or QEMU CI, or
-publish a runnable Project. Gitea must remain installed until the distinct
-native adapter and real Sysbox/KVM acceptance gate pass.
+This bootstrap operation does not attest the external source origin, select
+native Git for `lifecycleOptions()`, issue a Git reader/writer, admit ordinary
+or QEMU CI, or by itself publish a runnable Project. The separate native
+readiness and workspace lifecycle perform those runtime checks.
 
 `loadNativeQemuConnection(file, expectedHostId)` is a separate host-only
-preflight API for the proposed QEMU scheduler. It checks a single-link,
-owner-only mode-`0600` file, exact service/host/endpoint identity, a canonical
-host token, and globally pinned runner/job images and resource bounds. Parsing
-does not connect to a scheduler, advertise capacity, boot a VM, or provide
+preflight API for the QEMU scheduler. It checks a single-link, owner-only
+mode-`0600` file, exact service/host/generation identity, an absolute Git
+executable, a loopback native-Git service identity, a scheduler host token, and
+globally pinned runner/job images and resource bounds. Each
+capacity separates descriptor `memoryBytes` from a strictly larger
+`supervisorMemoryBytes` Docker limit so QEMU has operator-sized overhead. Parsing
+does not connect to either service, advertise capacity, boot a VM, or provide
 KVM acceptance. Setting `DIM_NATIVE_QEMU_CONNECTION_FILE` still makes
 `lifecycleOptions()` refuse native selection before any Gitea fallback.
+
+The package also exports `configuredNativeQemuSchedulerServer`,
+`runNativeQemuHost`, and `buildNativeQemuSchedulerImage`. The scheduler keeps
+its own SQLite demand, capacity-fence, exact claim, attempt, and result state;
+uses only QEMU-specific native-Git proof/issuer/reporter routes; and derives a
+host from its Basic credential. The host performs a functional KVM-only probe,
+runs one worker per configured capacity, and additionally requires the trusted
+launcher and a functional KVM probe inside each digest-pinned supervisor image
+before attestation. That preflight also verifies Docker `type=image` support and
+the pinned job image's Bash and required mount directories. It does not require
+Sysbox. Every capacity is kernel-locked before any capacity attests or claims,
+with all earlier locks released if startup cannot acquire the complete set.
+Active execution renews its lease every five seconds and
+uses a short-lived Project/root upload-pack lease to verify the exact candidate
+commit, tree, config, and script before launch. The guest receives the verified
+tree as a disposable writable `/workspace` and the descriptor/script as a
+separate read-only `/run/dim/job` mount, then runs the fixed Bash argv. No Git
+credential enters the supervisor container or guest. Execution captures only
+the configured combined stdout/stderr bound. A private
+mode-`0600` journal persists active ownership and exact pending terminal
+evidence across restart. Replay cleans the exact claim-labelled container and
+private input root before recovering or retrying the unchanged result. Missing
+KVM is an unavailable prerequisite, never a successful or ordinary result.
 
 The exported `createNativeRootCiProofClient` is a separate strict consumer for
 the installed schema-7 native Git bundle's read-only proof namespace. Its
@@ -286,13 +325,15 @@ requires a delivered acknowledgement.
 The exported host capacity worker journals claims, results, and recovery across
 response loss and restart, reads the exact candidate tree through a scoped
 native Git credential, runs one bounded digest-pinned Sysbox job, and checks
-container and private-root cleanup before reporting. It is a callable library
-boundary, not installed host lifecycle wiring. The installed CLI and controller
-do not start it; the CLI exposes only pending native Project state, with no
-native QEMU scheduler/executor or protected promotion path. Runtime-authorizing
-native operations remain fail-closed and Gitea remains the only runnable Project
-profile. No clean-host Sysbox/KVM acceptance or runtime-ready claim has been
-made.
+container and private-root cleanup before reporting. `runNativeRootCiHost`
+loads one owner-only host file, refuses to claim unless Docker registers
+`sysbox-runc`, runs one worker per fixed capacity, and drains them under one
+abort signal. `admitNativeRootCiProject` independently attests the registrar
+role and registers one immutable native Project ID from a separate owner-only
+file. The installed CLI exposes both operations under `ci native-root`; the
+controller does not start them. Schema-6 native Project readiness and schema-9
+Sysbox workspaces remain independent, and native QEMU execution and protected
+promotion remain fail-closed.
 
 - `DIM_STATE_ROOT`
 - `DIM_GITEA_IMAGE`, `DIM_GITEA_PORT`, and `DIM_GITEA_ADMIN_USERNAME` for the
