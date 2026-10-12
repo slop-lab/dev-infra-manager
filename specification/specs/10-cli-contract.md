@@ -123,7 +123,8 @@ Project.
 
 **CLI-NATIVE-PROJECT-PENDING-001:** Under valid native selection, `dim project
 create PROJECT` with no Gitea bootstrap, repository, protection, mirror, or
-apply option may perform only the transition in `PROJECT-NATIVE-PENDING-001`.
+apply option performs the transitions in `PROJECT-NATIVE-PENDING-001` and
+`PROJECT-NATIVE-READY-001` as one convergent command.
 It MUST load the exact same-name schema-`2` `root-imported` draft, obtain a
 fresh authenticated proof, and publish one canonical schema-`5`
 `admission-pending` record under the Project lock. It MUST NOT contact Gitea,
@@ -146,9 +147,8 @@ until a reviewed TLS importer is available.
 List and show read only canonical local pending state and MUST NOT load the
 importer credential or contact native Git.
 
-`dim project list` and `dim project show PROJECT` are the only other native
-Project commands allowed at this checkpoint. They MUST expose the name,
-Project and service identities, owner host, `admission-pending` phase, root
+`dim project list` and `dim project show PROJECT` expose the name,
+Project and service identities, owner host, current phase, root
 alias, protected ref, exact root commit and tree, and immutable policy
 revisions, and MUST label the Project non-runnable. Human output and `--json`
 MUST omit credentials, connection paths, service URLs, bundle paths, and raw
@@ -164,8 +164,91 @@ or promotion mutation MUST reject while the canonical Project is
 credential issuance, runtime dispatch, or Project-state rewrite. No command may
 alias pending to ready or use a successful import, proof, snapshot, ordinary
 result, QEMU result, or bundle readiness as runtime authority. These surfaces
-remain closed until both CI kinds, exact review, checked promotion, and the
-clean-host cutover gate are implemented and pass.
+remain closed while pending. The ready transition opens workspace operations
+only after the registered owned root,
+protected snapshot, proposal-only authority, and runtime prerequisites in
+`TRUST-NATIVE-READINESS-001` are satisfied. It MUST NOT require either CI kind,
+a CI result, or a prior promotion. Review and checked promotion remain separate
+operations after a proposal exists.
+
+The installed native-Git operator client exposes the following host-only
+commands. `CONNECTION` is an absolute caller-owned mode-`0600` reviewer or
+promoter connection file; credentials are never accepted as arguments or read
+from a generic Git credential helper.
+
+```bash
+dim-native-git operator review create CONNECTION PROJECT PROPOSAL_REF
+dim-native-git operator review inspect CONNECTION PROJECT REVIEW_ID
+dim-native-git operator review approve CONNECTION PROJECT REVIEW_ID
+dim-native-git operator review revoke CONNECTION PROJECT REVIEW_ID APPROVAL_ID
+dim-native-git operator review promote CONNECTION PROJECT REVIEW_ID
+```
+
+Create and promote require role `host-promoter`; inspect, approve, and revoke
+require role `human-reviewer`. Each invocation first attests the role, service,
+identity, and serving generation through its installed identity route, then
+sends the exact generation-bound request. Mutations print the service response
+only after it is durably committed. Invalid role, stale generation, foreign
+Project, stale review, incomplete approval or selected quality evidence, and a
+failed compare-and-swap fail nonzero without changing the protected ref. Exact
+create, decision, and promotion retries converge. No command prints or logs the
+connection path contents, authorization header, password, or a credential-bearing
+URL.
+
+**CLI-NATIVE-PROJECT-BOOTSTRAP-001:** A trusted host operator may create the
+initial native root from an already-local reviewed Git repository with:
+
+```bash
+dim project bootstrap-native-root PROJECT \
+  --project-id PROJECT_ID \
+  --source-repository /absolute/path/to/repository \
+  --source-ref refs/heads/BRANCH \
+  --registrar-connection /absolute/path/to/registrar.json \
+  --importer-connection /absolute/path/to/importer.json \
+  [--git-executable /absolute/path/to/git] [--json]
+```
+
+All five named options are required except `--git-executable`, which defaults
+to `/usr/bin/git`. The source repository, connection files, and Git executable
+must be absolute local paths. `--source-ref` must be one canonical full branch
+ref and is resolved once to the exact reviewed commit. The command reads the
+native-only policy from that commit's `.dim/repos.yml`; it has no URL, fetch,
+manifest-free-policy, moving-tag, or Gitea mode. `--project-id` supplies the
+stable native service identity and is not derived from the display name.
+
+The command uses `DIM_STATE_ROOT`, or the normal private DIM state root when
+unset, for both its retained schema-2 draft and disposable mode-0700 scratch.
+It loads the registrar and importer from the two explicit caller-owned,
+single-link mode-0600 files, requires one loopback endpoint, owner host, and
+serving generation with distinct credentials, then invokes the exported
+trusted bootstrap operation. Exact replay converges to the same imported draft;
+changed source, policy, Project identity, owner, or receipt fails without
+rewriting the draft or protected ref. Output contains only Project/root,
+commit/tree, generation, policy revision, bundle digest/size, and phase fields.
+It never prints or logs a connection path, endpoint, username, password,
+authorization header, import nonce, or credential-bearing URL.
+
+This command creates no runnable Project, workspace, lease, CI admission,
+review, approval, result, or promotion. After it reports `root-imported`, the
+operator selects the matching native host and runs plain `dim project create
+PROJECT`; that separate command performs admission and readiness.
+
+**CLI-NATIVE-PROJECT-READY-001:** Under native selection, plain `dim project
+create PROJECT` performs the `PROJECT-NATIVE-READY-001` transition immediately
+after publishing or replaying admission-pending state. It accepts no Gitea, repository, CI,
+review, promotion, or runtime option. It holds the Project lock, requires the
+strict schema-5 `admission-pending` record, obtains the exact non-mutating
+`CONFIG-NATIVE-READINESS-001` proof, revalidates the protected-root snapshot
+and local runtime prerequisites, and atomically publishes schema 6 with
+`readyAt`. Exact replay returns the existing ready record without timestamp or
+state churn. Every mismatch or dependency failure leaves the pending record
+unchanged and reports which readiness prerequisite failed.
+
+The command MUST NOT contact ordinary or QEMU CI, inspect capacity, wait for a
+job, require a quality result or prior promotion, create security approval, or
+mint a Git lease. `project list` and `project show` expose `ready` only after
+the schema-6 record is durable. Readiness, human security approval, and CI
+quality remain three independent states; none may be inferred from another.
 
 ```bash
 dim project create PROJECT [--repos FILE] [--yes]
@@ -428,6 +511,44 @@ Specifically, it does not pre-approve those bytes as trusted infrastructure;
 product maintainers still review the candidate's test definitions and scripts
 with its requirements and implementation before protected promotion.
 
+The installed host and central-admission surfaces are:
+
+```bash
+dim ci native-root host run /absolute/path/host.json
+dim ci native-root project admit PROJECT_ID /absolute/path/admission.json
+dim ci native-qemu scheduler run /absolute/path/scheduler.json
+dim ci native-qemu scheduler image build IMAGE
+dim ci native-qemu host run HOST_ID /absolute/path/connection.json
+```
+
+The `native-qemu` namespace is an independently deployed, Gitea-free quality
+lane. `scheduler run` requires the private schema-1 operator configuration in
+`NATIVE-QEMU-OPERATOR-001`; `host run` derives the host identity from the
+command argument and requires the connection file to bind that exact identity.
+Neither command accepts Project credentials, images, bounds, guest argv, or a
+fallback executor on the command line. Missing functional KVM exits as an
+unavailable host prerequisite before a claim is requested and never prints a
+successful result.
+
+`host run` validates the private node file and host/runtime prerequisites
+before starting one worker loop per fixed capacity. It owns signal-driven
+shutdown, waits for every loop to stop and clean its exact owned resource, and
+exits nonzero while retaining the journal when finalization is uncertain. It
+MUST require Docker's registered `sysbox-runc` runtime before claiming; a host
+without Sysbox receives an explicit prerequisite failure and no `runc`
+fallback. The command is suitable as the fixed `ExecStart` of a host-only
+service and makes no Gitea or workspace call.
+
+`project admit` accepts the immutable native Project ID, not a workspace or
+Gitea name. It sends one fresh register request to the ordinary service, prints
+the exact returned admission JSON, and makes no workspace, Gitea, runner
+registration, or host-runtime call. Exact request replay is a service concern;
+each CLI invocation uses a new UUID. Invalid scope, role, service/generation
+identity, transport, configuration ownership, or response shape fails closed.
+This admission exists only when the Project quality policy selects ordinary
+jobs. It is not Project readiness, and an empty or QEMU-only quality policy
+requires no ordinary admission.
+
 One ordinary admission is derived from operator/native Project membership and
 the protected policy. It binds the native Project and repository IDs,
 protected ref, policy and required-review/required-job-set revisions, required
@@ -469,7 +590,8 @@ ordinary:
       argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
 ```
 
-The root has exactly `schemaVersion` and `ordinary`; `ordinary` has exactly
+When the Project quality policy selects ordinary jobs, the root has exactly
+`schemaVersion` and `ordinary`; `ordinary` has exactly
 `jobs`; and each job has exactly `script` and `argv`. An `image` key is
 rejected even when digest-pinned. Unknown keys,
 aliases, anchors, merge keys, duplicate mapping keys, duplicate normalized job
@@ -480,6 +602,8 @@ match `[a-z][a-z0-9-]{0,62}` byte-for-byte with no case folding, and the job-key
 set MUST equal the protected policy's required `ordinary-sysbox`
 candidate-controlled job set,
 with no missing or extra job.
+When that set is empty, no schema-3 file, ordinary event, admission, attempt, or
+result is required for readiness or promotion.
 
 `script` is a normalized repository-relative path below
 `.dim/ci/jobs/`, has no empty, `.`, or `..` segment, no backslash, and ends in
@@ -577,16 +701,20 @@ qemu:
       argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
 ```
 
-The root has exactly `schemaVersion`, `ordinary`, and `qemu`; each workload
-has exactly `jobs`, and every job has only the strict script and fixed argv
-defined above. Neither workload nor candidate can name an image, bound,
+The root has exactly `schemaVersion` plus the nonempty execution-kind sections
+selected by the Project quality policy. It may contain `ordinary`, `qemu`, or
+both. Each present workload has exactly `jobs`, and every job has only the
+strict script and fixed argv defined above. Neither workload nor candidate can name an image, bound,
 host command, environment, mount, network, URL, or credential. The maps' job
 names are globally distinct and equal the protected policy's corresponding
 required `(executionKind, jobName)` sets; QEMU and ordinary jobs cannot be
 swapped even if their script bytes match. The current ordinary-only schema-3
 parser is not a QEMU parser. Enabling schema 4 rejects schema 3 rather than
 silently accepting both; no Project becomes native-ready because this target
-format is documented.
+format is documented. If the policy selects no CI jobs, no schema-4 file or CI
+evidence is required. The current schema-4 library still requires both sections
+and at least one required job. Optional sections and the empty policy are target
+behavior, not an implemented runtime claim.
 
 The QEMU descriptor binds `executionKind=qemu` and
 `evidenceClass=candidate-controlled` to the same complete review/ref,
@@ -693,17 +821,41 @@ identifies that receipt. The service then obtains the strict descriptor from
 native Git using only the receipt's review/job tuple, current admission
   generation, and the selected capacity's operator job and runner bases and
   bounds, authenticated
-only with `attemptIssuer`. That credential may derive this descriptor and issue
+only with `attemptIssuer`. That scheduler-held credential may derive this descriptor and issue
 or revoke its exact receipt-bound attempt; it cannot report results, read Git,
 approve, promote, or administer. Webhook, query, identity, reporter, admission,
 host, reviewer, administrator, promoter, and unrelated scheduler credentials
-cannot derive a descriptor. The service reuses the same `claimId`
+cannot derive a descriptor. It is never present in a host connection or host
+journal. The service reuses the same `claimId`
 byte-for-byte as native Git's `issuanceRequestId` and asks native Git to issue
 the attempt. After obtaining the issued-attempt proof, ordinary CI
 commits the exact assignment and active claim together in one transaction. A
 claim response contains only schema version, service ID, request ID, claim ID,
 event ID, review ID, attempt ID, admission generation, host, capacity, lease
 expiry, complete descriptor, and descriptor digest.
+
+After activation, an authenticated host obtains candidate bytes only through
+exact `POST /v1/host-candidate-leases`. Its strict body contains schema version,
+a fresh request UUID, claim ID, attempt ID, and descriptor digest. The service
+derives the host from authentication and derives the configured capacity and
+complete assignment from its active claim; the body cannot select a Project,
+repository, ref, commit, tree, job kind, endpoint, URL, credential, path, or
+command. It refuses a non-current, foreign, expired, recovering, reported, or
+released claim. The service then uses its native-Git `candidateReader`
+credential, distinct from `identity`, `attemptIssuer`, and `resultReporter`, to
+request an ephemeral lease for that exact assignment.
+
+Native Git accepts that request only for the current unrevoked attempt whose
+descriptor and digest exactly bind `ordinary-sysbox`, host, capacity, Project,
+root repository, protected ref/head, candidate commit/tree, admission
+generation, review, and job. The returned credential authorizes smart-HTTP
+upload-pack only for that root repository and exact candidate tuple, expires
+after at most 30 seconds, exists only in memory, and is rechecked against
+current attempt state before each backend invocation. Revocation, replacement,
+expiry, protected-head change, descriptor drift, foreign route, or receive-pack
+denies the request before Git starts. Neither scheduler nor host persists the
+lease. The route is not a filesystem, command, URL, SSH, proxy, or SSRF
+forwarder and sends no backend credential or script bytes to the candidate.
 
 The receipt state machine is `preparing -> active -> reported -> released` or
 `preparing|active -> recovering -> released`; a no-work request has terminal
@@ -1176,6 +1328,22 @@ contract. DIM does not materialize mutable repository checkouts. Project code
 owns repository aliases, refs, checkout paths, and reconciliation policy.
 Resource flags are stored in the workspace record. Environment configuration
 provides their defaults but does not force one limit set on every workspace.
+
+For a schema-6 native Project, `create` obtains the same non-mutating readiness
+proof, stores its strict `native` source in schema-9 workspace state, and uses
+the recorded immutable snapshot for root publication and setup. `setup` reuses
+that exact stored snapshot. `start`, `update`, and `restart` may select a newer
+protected snapshot only through a fresh proof and the existing fast-forward
+rules. None of these commands contacts CI or requires a quality result.
+
+Setup, lifecycle hooks, `exec`, and normal Git clone, fetch, and proposal push
+receive only the workspace-local endpoint from
+`WORKSPACE-NATIVE-GIT-BROKER-001` and its separate workspace-bound grant. They
+never receive the host issuer credential or an upstream 30-second lease. Each
+smart-HTTP discovery and RPC obtains a fresh lease inside the broker. A broker
+or issuer outage, expiry, or restart fails only the current Git request unless
+a lifecycle mutation has already entered its documented non-ready recovery
+phase; it does not revoke Project readiness or turn CI into a prerequisite.
 `resources` requires at least one flag, applies the complete effective limit
 set to the existing top-level container with `docker update`, and persists
 state only after the runtime accepts the update. Omitted flags retain their
