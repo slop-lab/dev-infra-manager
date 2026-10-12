@@ -10,11 +10,13 @@ const roots: string[] = [];
 const capacity = { capacity: "primary",
   runnerBaseImage: `registry.example/dim/qemu-runner@sha256:${"c".repeat(64)}`,
   jobBaseImage: `registry.example/dim/qemu-job@sha256:${"d".repeat(64)}`,
-  cpus: 4, memoryBytes: 8589934592, pids: 2048, timeoutSeconds: 3600, outputBytes: 16777216
+  cpus: 4, memoryBytes: 8589934592, supervisorMemoryBytes: 9663676416,
+  pids: 2048, timeoutSeconds: 3600, outputBytes: 16777216
 } as const;
-const valid = { schemaVersion: 1, hostId: "host-a",
+const valid = { schemaVersion: 1, hostId: "host-a", generationId: "e".repeat(64), gitExecutable: "/usr/bin/git",
   scheduler: { transport: "loopback-http", endpoint: "http://127.0.0.1:9080",
     serviceId: "qemu-main", hostToken: Buffer.alloc(32, 71).toString("base64url") },
+  nativeGit: { transport: "loopback-http", endpoint: "http://127.0.0.1:9081", serviceId: "native-main" },
   capacities: [capacity]
 } as const;
 
@@ -36,6 +38,9 @@ describe("native QEMU host connection preflight", () => {
     const https = { ...valid, scheduler: { ...valid.scheduler, transport: "https",
       endpoint: "https://qemu.example" } };
     expect(parseNativeQemuConnection(https, "host-a")).toEqual(https);
+    const remoteNativeGit = { ...https, nativeGit: { ...valid.nativeGit,
+      transport: "https", endpoint: "https://native.example" } } as const;
+    expect(parseNativeQemuConnection(remoteNativeGit, "host-a")).toEqual(remoteNativeGit);
   });
 
   it("rejects Gitea selectors, foreign hosts, mutable images, and unsafe scheduler authority", () => {
@@ -48,9 +53,15 @@ describe("native QEMU host connection preflight", () => {
       { ...valid, scheduler: { ...valid.scheduler, endpoint: "http://127.0.0.1:9080/v1" } },
       { ...valid, scheduler: { ...valid.scheduler, endpoint: "http://user:pass@127.0.0.1:9080" } },
       { ...valid, scheduler: { ...valid.scheduler, transport: "isolated-http" } },
+      { ...valid, generationId: "generation-1" },
+      { ...valid, gitExecutable: "git" },
+      { ...valid, nativeGit: { ...valid.nativeGit,
+        rootReadIssuer: { username: "qemu-reader", password: Buffer.alloc(32, 72).toString("base64url") } } },
       { ...valid, capacities: [capacity, capacity] },
       { ...valid, capacities: [{ ...capacity, jobBaseImage: "registry.example/job:latest" }] },
       { ...valid, capacities: [{ ...capacity, cpus: 0 }] },
+      { ...valid, capacities: [{ ...capacity, supervisorMemoryBytes: capacity.memoryBytes }] },
+      { ...valid, capacities: [{ ...capacity, supervisorMemoryBytes: capacity.memoryBytes - 1 }] },
       { ...valid, capacities: [{ ...capacity, labels: ["dim-qemu"] }] }
     ]) expect(() => parseNativeQemuConnection(invalid, "host-a")).toThrow(NativeQemuConnectionError);
   });
@@ -89,11 +100,11 @@ describe("native QEMU host connection preflight", () => {
     await expect(loadNativeQemuConnection(oversized, "host-a")).rejects.toThrow(NativeQemuConnectionError);
   });
 
-  it("cannot enable native lifecycle or fall back to Gitea after a valid file is parsed", async () => {
+  it("cannot enable native QEMU or fall back to Gitea after a valid file is parsed", async () => {
     const path = await connectionFile();
     expect(await loadNativeQemuConnection(path, "host-a")).toEqual(valid);
     expect(() => lifecycleOptionsForBackend("sysbox", { HOME: "/home/dim",
       DIM_NATIVE_QEMU_CONNECTION_FILE: path, DIM_GITEA_CONNECTION_FILE: "/not-used" }))
-      .toThrow(/native Project and QEMU adapters are unavailable; refusing Gitea fallback/);
+      .toThrow(/native QEMU adapter is unavailable; refusing fallback/);
   });
 });

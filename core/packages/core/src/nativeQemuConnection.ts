@@ -1,5 +1,6 @@
 import { constants, type BigIntStats } from "node:fs";
 import { open } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 import { UserError } from "./errors.js";
 
 const maximumConnectionBytes = 64 * 1024;
@@ -9,11 +10,18 @@ const imagePattern = /^(?:(?:[a-z0-9]+(?:[.-][a-z0-9]+)*)(?::[0-9]+)?\/)?[a-z0-9
 export type NativeQemuConnection = {
   readonly schemaVersion: 1;
   readonly hostId: string;
+  readonly generationId: string;
+  readonly gitExecutable: string;
   readonly scheduler: {
     readonly transport: "https" | "loopback-http";
     readonly endpoint: string;
     readonly serviceId: "qemu-main";
     readonly hostToken: string;
+  };
+  readonly nativeGit: {
+    readonly transport: "https" | "loopback-http";
+    readonly endpoint: string;
+    readonly serviceId: "native-main";
   };
   readonly capacities: readonly {
     readonly capacity: string;
@@ -21,33 +29,49 @@ export type NativeQemuConnection = {
     readonly jobBaseImage: string;
     readonly cpus: number;
     readonly memoryBytes: number;
+    readonly supervisorMemoryBytes?: number;
     readonly pids: number;
     readonly timeoutSeconds: number;
     readonly outputBytes: number;
   }[];
 };
 
+export type LoadedNativeQemuConnection = Omit<NativeQemuConnection, "capacities"> & {
+  readonly capacities: readonly (NativeQemuConnection["capacities"][number] & {
+    readonly supervisorMemoryBytes: number;
+  })[];
+};
+
 export class NativeQemuConnectionError extends UserError {
   readonly name = "NativeQemuConnectionError";
 }
 
-export function parseNativeQemuConnection(value: unknown, expectedHostId: string): NativeQemuConnection {
+export function parseNativeQemuConnection(value: unknown, expectedHostId: string): LoadedNativeQemuConnection {
   const expected = identifier(expectedHostId);
-  const input = exactRecord(value, ["schemaVersion", "hostId", "scheduler", "capacities"]);
+  const input = exactRecord(value, ["schemaVersion", "hostId", "generationId", "gitExecutable",
+    "scheduler", "nativeGit", "capacities"]);
   if (input.schemaVersion !== 1 || identifier(input.hostId) !== expected) invalid();
   const scheduler = exactRecord(input.scheduler, ["transport", "endpoint", "serviceId", "hostToken"]);
+  const nativeGit = exactRecord(input.nativeGit, ["transport", "endpoint", "serviceId"]);
   if (scheduler.serviceId !== "qemu-main") invalid();
+  if (nativeGit.serviceId !== "native-main") invalid();
   const transport = parseTransport(scheduler.transport);
+  const nativeGitTransport = parseTransport(nativeGit.transport);
+  const hostToken = token(scheduler.hostToken);
   if (!Array.isArray(input.capacities) || input.capacities.length === 0) invalid();
-  const capacities = input.capacities.map((value: unknown): NativeQemuConnection["capacities"][number] => {
+  const capacities = input.capacities.map((value: unknown): LoadedNativeQemuConnection["capacities"][number] => {
     const capacity = exactRecord(value, ["capacity", "runnerBaseImage", "jobBaseImage", "cpus",
-      "memoryBytes", "pids", "timeoutSeconds", "outputBytes"]);
+      "memoryBytes", "supervisorMemoryBytes", "pids", "timeoutSeconds", "outputBytes"]);
+    const memoryBytes = positiveInteger(capacity.memoryBytes);
+    const supervisorMemoryBytes = positiveInteger(capacity.supervisorMemoryBytes);
+    if (supervisorMemoryBytes <= memoryBytes) invalid();
     return {
       capacity: identifier(capacity.capacity),
       runnerBaseImage: pinnedImage(capacity.runnerBaseImage),
       jobBaseImage: pinnedImage(capacity.jobBaseImage),
       cpus: positiveInteger(capacity.cpus),
-      memoryBytes: positiveInteger(capacity.memoryBytes),
+      memoryBytes,
+      supervisorMemoryBytes,
       pids: positiveInteger(capacity.pids),
       timeoutSeconds: positiveInteger(capacity.timeoutSeconds),
       outputBytes: positiveInteger(capacity.outputBytes)
@@ -57,13 +81,17 @@ export function parseNativeQemuConnection(value: unknown, expectedHostId: string
   return {
     schemaVersion: 1,
     hostId: expected,
+    generationId: matchingString(input.generationId, /^[0-9a-f]{64}$/),
+    gitExecutable: absolutePath(input.gitExecutable),
     scheduler: { transport, endpoint: origin(scheduler.endpoint, transport),
-      serviceId: "qemu-main", hostToken: token(scheduler.hostToken) },
+      serviceId: "qemu-main", hostToken },
+    nativeGit: { transport: nativeGitTransport, endpoint: origin(nativeGit.endpoint, nativeGitTransport),
+      serviceId: "native-main" },
     capacities
   };
 }
 
-export async function loadNativeQemuConnection(path: string, expectedHostId: string): Promise<NativeQemuConnection> {
+export async function loadNativeQemuConnection(path: string, expectedHostId: string): Promise<LoadedNativeQemuConnection> {
   let handle;
   try {
     handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -154,6 +182,16 @@ function token(value: unknown): string {
 
 function pinnedImage(value: unknown): string {
   if (typeof value !== "string" || !imagePattern.test(value)) invalid();
+  return value;
+}
+
+function matchingString(value: unknown, pattern: RegExp): string {
+  if (typeof value !== "string" || !pattern.test(value)) invalid();
+  return value;
+}
+
+function absolutePath(value: unknown): string {
+  if (typeof value !== "string" || !isAbsolute(value) || value === "/") invalid();
   return value;
 }
 
