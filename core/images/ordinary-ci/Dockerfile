@@ -6,6 +6,7 @@ COPY core/images/ordinary-ci/package.json ./
 COPY core/packages/core/dist/errors.js \
   core/packages/core/dist/nativeGitAdmissionHttpClient.js \
   core/packages/core/dist/nativeGitAdmissionSource.js \
+  core/packages/core/dist/nativeGitCandidateLeaseClient.js \
   core/packages/core/dist/nativeGitAttemptIssuerClient.js \
   core/packages/core/dist/nativeGitAttemptIssuerErrors.js \
   core/packages/core/dist/nativeGitAttemptIssuerModel.js \
@@ -30,6 +31,7 @@ COPY core/packages/core/dist/errors.js \
   core/packages/core/dist/nativeRootAdmissionSchema.js \
   core/packages/core/dist/nativeRootAdmissionService.js \
   core/packages/core/dist/nativeRootAdmissionStore.js \
+  core/packages/core/dist/nativeRootCiCandidateAssignment.js \
   core/packages/core/dist/nativeRootCiClaimHttp.js \
   core/packages/core/dist/nativeRootCiClaimLifecycleHttp.js \
   core/packages/core/dist/nativeRootCiClaimLifecycleProtocol.js \
