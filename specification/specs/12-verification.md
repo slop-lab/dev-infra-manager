@@ -46,6 +46,55 @@ Verification of
 [Trust and Lifecycle Capability Matrix](04-trust-lifecycle-capability-matrix.md)
 MUST distinguish contract evidence from unavailable runtime capability.
 
+For `TRUST-NATIVE-READINESS-001`, tests MUST publish a native Project and
+workspace as ready only after verifying registered immutable Project and
+repository IDs, exact owned root and protected ref, an immutable protected-root
+snapshot, proposal-only writer authority, and the selected runtime
+prerequisites. The same transition MUST succeed with no CI jobs configured and
+while ordinary and QEMU services are unavailable. It MUST create no review,
+approval, promotion, runner, attempt, or result authority. A ready Project MUST
+remain ready across a later CI outage.
+
+For `CONFIG-NATIVE-READINESS-001`, `PROJECT-NATIVE-READY-001`,
+`CLI-NATIVE-PROJECT-READY-001`, `WORKSPACE-SOURCE-001`, and
+`WORKSPACE-NATIVE-GIT-BROKER-001`, one installed-user gate MUST begin with the
+exact schema-5 pending stage within `dim project create` and publish schema 6 only after the live
+non-mutating readiness proof and protected-root snapshot revalidation. Fault
+injection before atomic publication MUST preserve the schema-5 bytes. Success
+MUST preserve every immutable field, add only `readyAt` while changing schema
+and phase, and replay without timestamp churn. Independently changing every
+identity, object, policy revision, response field, connection binding, snapshot
+entry, or local runtime prerequisite MUST refuse without a lease, ref, review,
+approval, CI, Project-state, or runtime mutation. The success case MUST run
+with ordinary and QEMU services stopped and no approval, result, or promotion.
+
+The same gate MUST create a workspace through the packaged CLI and inspect its
+strict schema-9 `native` source, then exercise setup, restart, real Git fetch,
+and a proposal push through the workspace-local broker endpoint. Exact-schema
+tests MUST independently accept both source alternatives and reject mixed,
+unknown, obsolete provider-Git, credential, lease, URL, and wrong-alternative
+fields before runtime or remote access. Setup MUST reuse the stored snapshot;
+a newer restart snapshot MUST satisfy the fresh proof and fast-forward rules.
+
+Live transport inspection MUST prove that each of the four allowed smart-HTTP
+discovery or RPC requests causes a distinct workspace-write lease issuance for
+the exact workspace ID and source tuple, with a newly random credential and
+exactly 30 seconds of validity. The credential MUST remain absent from client
+responses, state, manifests, URLs, argv, logs, and errors. Expiry and restart
+MUST invalidate a captured lease; retry MUST obtain a fresh lease without
+changing readiness. Alternate methods, paths, queries, services, content
+types, Projects, repositories, workspaces, authorities, redirects, and private
+or metadata destinations MUST fail before upstream connection. Real Git pushes
+MUST allow only create or fast-forward in the caller's proposal namespace and
+leave all refs unchanged for protected, tag, delete, force, and foreign-workspace
+attempts. A real HTTPS fixture with a trusted test CA MUST exercise identity,
+readiness, candidate-lease, and smart-HTTP requests; an unknown CA and wrong
+hostname MUST fail, while bracketed IPv6 and IPv4 loopback HTTP plus the
+intentionally loopback-only root importer remain supported. Inspection MUST
+show host-loopback-only listening and workspace access
+through the narrow `dim-controller-proxy` Unix-transport preset, never raw host
+TCP or a reusable host/controller grant.
+
 For `TRUST-PROMOTION-001` and `TRUST-PROMOTION-CAS-001`, deterministic tests
 MUST bind review and every required job to one repository, protected ref,
 expected head, candidate commit and tree, policy revision, review revision, and
@@ -73,6 +122,18 @@ to the candidate. Tests MUST prove restart persistence, exact-candidate
 idempotence, one concurrent winner, cross-process single-owner enforcement,
 role separation, and unchanged protected
 refs for every denial. Smart HTTP MUST remain proposal-only.
+
+The promotion matrix MUST include an empty Project quality policy, an
+ordinary-only policy, a QEMU-only policy, and a dual-kind policy. Exact current
+human approval and checked compare-and-swap are mandatory in every case. CI
+success is required only for jobs selected by the current quality policy. No
+runner, scheduler, host-capacity, attempt-issuer, or result-reporter identity
+may approve or promote.
+Changing only the quality-policy revision MUST invalidate old CI applicability
+without making the Project non-ready or replacing exact human approval of an
+otherwise unchanged security tuple. Changing the protected head, candidate,
+security policy, or required-review revision MUST still make that approval
+stale.
 
 Native ordinary-CI tests MUST label their result
 `candidate-controlled`, not independent. They MUST prove that one exact
@@ -442,7 +503,8 @@ Compose project.
 
 ## Gitea-free native Project and QEMU cutover gate
 
-**VERIFICATION-NATIVE-CUTOVER-001 (target, not implemented):** This gate is
+**VERIFICATION-NATIVE-CUTOVER-001 (normative full gate; not yet implemented):**
+This gate is
 separate from the installer-only bundle gate and the predecessor Gitea
 ordinary/QEMU gates. It MUST run the packaged facade and the real activated
 native services on a disposable clean Linux host with Sysbox and accessible
@@ -451,6 +513,15 @@ unit suite, simulated Docker runner, two logical hosts on one daemon, or idle
 service readiness MUST NOT count as acceptance. The gate MUST record the exact
 source/package/image digests, host runtime capabilities, effective container
 configuration, and complete cleanup outcome.
+
+This is full deployment acceptance for the user's selected host scope, so it
+includes native workspaces, distributed ordinary runners, and native QEMU
+runners in one recorded journey. Those acceptance components are not security
+prerequisites for one another. In particular, Project and workspace readiness
+MUST be established before CI execution and MUST remain valid when both CI
+services are stopped. The gate's dual-kind quality policy tests CI coverage; it
+does not redefine native readiness or make both kinds mandatory for another
+Project.
 
 The successful journey MUST create a fresh native Project and root repository
 through trusted host administration, import or seed one reviewed protected
@@ -465,7 +536,8 @@ After promotion, a new protected-root read MUST return the promoted tree;
 changing the protected head or policy between approval and promotion MUST
 leave the ref unchanged.
 
-The gate MUST observe automatic CI eligibility for a trusted native Project
+For a Project whose quality policy selects both execution kinds, the gate MUST
+observe automatic CI eligibility for a trusted native Project
 without Project-specific CI approval, Gitea registration, webhook, or runner
 token. It MUST run one ordinary Sysbox job and one QEMU VM job from separate
 named capacities using operator-owned digest-pinned common runner and job base
@@ -481,8 +553,8 @@ authority; the host-owned trusted
 supervisor alone receives `/dev/kvm`. Ordinary jobs MUST have no `/dev/kvm`
 or QEMU capacity authority.
 
-When protected policy requires both named jobs, promotion MUST fail before
-ref mutation for each independently injected missing, failed, wrong-kind,
+When the test Project's quality policy requires both named jobs, promotion MUST
+fail before ref mutation for each independently injected missing, failed, wrong-kind,
 foreign, stale-generation, old-attempt, mismatched-descriptor, and replayed
 success result. The ordinary result MUST NOT satisfy the QEMU slot or vice
 versa. A missing or inaccessible `/dev/kvm` is an unavailable QEMU gate, not a
@@ -491,6 +563,11 @@ Optional QEMU failure remains visible without changing the ordinary requirement
 or exact human approval. Reviewer and promotion output MUST distinguish
 candidate-controlled evidence from independent verification and must not
 present a common base image as proof that candidate-selected tests are correct.
+
+The same gate MUST use a separate no-CI Project or a separately recorded empty
+quality-policy proposal to prove that exact human approval and checked CAS can
+promote without any CI result. It MUST also exercise ordinary-only and
+QEMU-only policies without waiting for the unselected execution kind.
 
 Restart/crash injection MUST cover native Project registration, review/job
 event delivery, both schedulers' claims and renewals, attempt issuance, VM and
@@ -513,6 +590,95 @@ Gitea Project/webhook/registration fields, and native lifecycle selection
 without an implemented adapter. Those checks and simulated claim/recovery
 tests are preparation for `VERIFICATION-NATIVE-CUTOVER-001`, never real Sysbox
 or KVM acceptance evidence.
+
+### Packaged clean-host smoke
+
+The repository provides one bounded operator smoke entrypoint at
+`verification/scripts/native-cutover-clean-host.bash`. It MUST accept one
+caller-owned, single-link, mode-`0600` configuration containing only explicit
+SSH aliases, absolute host paths, immutable identities, and expected marker
+bytes. It MUST NOT accept candidate-selected commands, SSH options, credential
+values, or a general remote command. The operator's SSH authority is trusted;
+the fixed commands sent through it remain harness code. Credential-bearing
+files stay on their owning host and are named only by absolute path. Their
+contents MUST NOT enter SSH argv, process argv, guest inputs, evidence, or
+logs.
+
+The command MUST complete every local and remote prerequisite before its first
+installation, service, Project, workspace, Git-ref, admission, or runner
+mutation. It MUST exit `2` with an actionable operator step when SSH is
+unavailable, source/package provenance is not the exact reviewed commit,
+required files are unsafe, Docker or Compose is unavailable, `sysbox-runc` is
+not registered, KVM is inaccessible or nonfunctional, the QEMU images do not
+support the fixed launcher and Docker `type=image` mount, or a required
+endpoint is not usable. TCG, runc, a fake device, an idle-service probe, and a
+simulated runner MUST NOT be fallback paths. A prerequisite-only invocation
+MUST perform no remote mutation.
+
+At least two independently configured Linux nodes MUST participate. Before
+mutation, the smoke MUST record and compare their configured DIM host IDs,
+`/etc/machine-id`, kernel boot IDs, Docker daemon IDs, state-directory device
+and inode identities, source roots, and exact package provenance. The ordinary
+Sysbox host MUST differ from the control/QEMU host in every host, machine,
+kernel-instance, daemon, and local-state identity. The production QEMU host
+connection supports operator-managed HTTPS native Git. This smoke deliberately
+requires a loopback native-Git endpoint and places that worker on the
+control-plane host; that two-node topology is a smoke limitation, not a
+production transport limitation.
+
+The smoke MUST reject use of the protected
+`/run/dim/qemu-verification/service.sock`; the native QEMU worker journey uses
+the installed host service instead. A supplemental socket probe cannot replace
+the required native worker evidence or attest the protected service's source
+root.
+
+After prerequisites, the smoke MUST install the already prepared exact
+package set on every node, install and activate the control plane, create the
+fresh native root and schema-6 ready Project, create and inspect a schema-9
+workspace, and keep readiness valid while CI services are stopped. It MUST
+create the proposal through that workspace's broker, prove protected, delete,
+force, and foreign-namespace pushes fail, and bind the review's candidate
+commit and tree to the workspace-produced values. It MUST start separately
+configured ordinary and QEMU services, admit both policies, observe one real
+Sysbox result and one real KVM-guest result, and retain their distinct host,
+capacity, generation, attempt, descriptor, image, bound, cleanup, and terminal
+output-digest evidence. The exact configured ordinary and QEMU marker bytes
+MUST match the respective non-truncated terminal stdout evidence; a success
+status without that digest match is not smoke success.
+
+The smoke's promotion MUST first fail with the protected ref unchanged before
+current approval and both selected results exist. The command MUST then present the
+complete immutable review to the operator and require an explicit confirmation
+before creating human approval. It MUST run the checked promotion, prove the
+response candidate, protected ref, and durable finalized ledger agree, prove
+no intent remains, and obtain a fresh protected-root view naming the promoted
+commit and tree. Non-interactive approval is forbidden for this smoke.
+
+Smoke cleanup MUST stop only services started by the command, discard only its
+exact workspace, and inspect worker journals, state roots, and runtime labels to prove
+that no active or ambiguous ordinary or QEMU claim resource remains. Foreign
+or changed resources MUST remain untouched and make cleanup fail. Native
+Project and control-plane state MUST be retained as evidence because the
+current native CLI has no ownership-checked Project removal or bundle uninstall
+operation; final disposal is an explicit clean-node destruction step, not an
+unverified recursive deletion. The evidence directory MUST contain a
+credential-free manifest of every command phase, exact commit/tree and image
+digest, node-separation proof, review and kind-labelled terminal evidence,
+promotion/CAS result, cleanup result, and this retained-state limitation. A
+failed prerequisite or incomplete cleanup MUST never write a result marker.
+Only the complete bounded journey may atomically publish `SMOKE-PASSED`, whose
+manifest MUST identify its scope and the unverified full-gate phases. It MUST
+NOT publish an acceptance result or imply that
+`VERIFICATION-NATIVE-CUTOVER-001` passed.
+
+This smoke covers one real installed dual-kind happy path, proposal and
+pre-approval denials, operator approval, checked promotion, and owned-claim
+cleanup. It does not cover the full gate's empty/ordinary-only/QEMU-only policy
+matrix; missing, failed, wrong-kind, foreign, stale, mismatched, or replayed
+evidence matrix; crash/restart and reboot recovery; guest authority inspection;
+or effective traffic inspection. Those phases require a future full-gate
+harness and real hardware evidence before `VERIFICATION-NATIVE-CUTOVER-001` can
+pass.
 
 For `TRUST-RUNTIME-001`, each implemented backend MUST run the same
 backend-neutral agent journey. A supported VM backend additionally requires a
