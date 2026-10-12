@@ -69,6 +69,92 @@ cutover_ssh() {
   ssh -o BatchMode=yes -o ConnectTimeout=10 -- "$target" "$@"
 }
 
+cutover_native_qemu_qmp() {
+  timeout -s KILL 5 \
+    qemu-system-x86_64 -enable-kvm -machine none -nodefaults -display none -qmp stdio <<'QMP'
+{"execute":"qmp_capabilities","id":"caps"}
+{"execute":"query-kvm","id":"kvm"}
+{"execute":"quit","id":"quit"}
+QMP
+}
+
+cutover_validate_native_qemu_qmp() {
+  jq -e -s '
+    all(.[]; has("error") | not) and
+    ([.[] | select(has("id"))] |
+      length == 3 and
+      .[0].id == "caps" and .[0].return == {} and
+      .[1].id == "kvm" and .[1].return == {enabled:true,present:true} and
+      .[2].id == "quit" and .[2].return == {})
+  ' >/dev/null
+}
+
+cutover_native_qemu_kvm_probe() {
+  local output
+  output="$(cutover_native_qemu_qmp)" || return
+  cutover_validate_native_qemu_qmp <<<"$output"
+}
+
+cutover_native_qemu_cleanup_probe() {
+  local name="$1" token="$2" metadata id owner actual_name
+  metadata="$(timeout -s KILL 5 docker container inspect --format \
+    '{{.Id}}{{println}}{{index .Config.Labels "org.dim.native-cutover-probe"}}{{println}}{{.Name}}' "$name")" || return
+  mapfile -t fields <<<"$metadata"
+  [[ "${#fields[@]}" -eq 3 ]] || return 1
+  id="${fields[0]}"; owner="${fields[1]}"; actual_name="${fields[2]}"
+  [[ "$id" =~ ^[0-9a-f]{64}$ && "$owner" == "$token" && "$actual_name" == "/$name" ]] || return 1
+  timeout -s KILL 5 docker container rm --force "$id" >/dev/null
+}
+
+cutover_native_qemu_docker_probe() (
+  local duration="$1" token name output run_status cleanup_armed=0
+  shift
+  cutover_native_qemu_finish_probe() {
+    local original_status="$1" cleanup_status=0
+    trap - EXIT HUP INT TERM
+    if [[ "$cleanup_armed" -eq 1 ]]; then
+      cutover_native_qemu_cleanup_probe "$name" "$token" || cleanup_status=$?
+    fi
+    [[ "$original_status" -eq 0 ]] || exit "$original_status"
+    exit "$cleanup_status"
+  }
+  trap 'cutover_native_qemu_finish_probe "$?"' EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  token="$(cat /proc/sys/kernel/random/uuid)" || return
+  [[ "$token" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] || return 1
+  name="dim-native-cutover-probe-$token"
+  cleanup_armed=1
+  if output="$(timeout -s KILL "$duration" docker run --pull never --name "$name" \
+      --label "org.dim.native-cutover-probe=$token" "$@")"; then
+    run_status=0
+  else
+    run_status=$?
+  fi
+  [[ "$run_status" -eq 0 ]] || return "$run_status"
+  printf '%s\n' "$output"
+)
+
+cutover_native_qemu_runner_probe() {
+  local runner="$1" output qmp_function
+  qmp_function="$(declare -f cutover_native_qemu_qmp)"
+  output="$(cutover_native_qemu_docker_probe 10 \
+    --read-only --network none --device /dev/kvm:/dev/kvm --entrypoint sh "$runner" -ec \
+      "$qmp_function
+test -x /usr/local/bin/dim-native-qemu-run
+cutover_native_qemu_qmp")" || return
+  cutover_validate_native_qemu_qmp <<<"$output"
+}
+
+cutover_native_qemu_root_probe() {
+  local runner="$1" job="$2"
+  cutover_native_qemu_docker_probe 10 --read-only --network none --entrypoint sh \
+    --mount "type=image,src=$job,dst=/run/dim/guest-root" "$runner" -ec \
+    'test -x /run/dim/guest-root/bin/bash && test -d /run/dim/guest-root/dev && test -d /run/dim/guest-root/proc && test -d /run/dim/guest-root/sys && test -d /run/dim/guest-root/run/dim/job && test -d /run/dim/guest-root/workspace' \
+    >/dev/null
+}
+
 cutover_remote_static_preflight() {
   local target="$1" role="$2" source_root="$3"
   shift 3
@@ -123,7 +209,11 @@ REMOTE
 
 cutover_remote_runtime_preflight() {
   local target="$1" kind="$2" config="$3" host_id="$4"
-  cutover_ssh "$target" bash -s -- "$kind" "$config" "$host_id" <<'REMOTE'
+  cutover_ssh "$target" bash -s -- "$kind" "$config" "$host_id" < <(
+    declare -f cutover_native_qemu_qmp cutover_validate_native_qemu_qmp \
+      cutover_native_qemu_kvm_probe cutover_native_qemu_cleanup_probe \
+      cutover_native_qemu_docker_probe cutover_native_qemu_runner_probe cutover_native_qemu_root_probe
+    cat <<'REMOTE'
 set -euo pipefail
 kind="$1"; config="$2"; expected_host="$3"
 actual_host="$(jq -er '.hostId' "$config")"
@@ -140,20 +230,18 @@ case "$kind" in
     [[ -c /dev/kvm && -r /dev/kvm && -w /dev/kvm ]] || {
       printf 'QEMU node requires readable and writable /dev/kvm; grant host KVM access\n' >&2; exit 2;
     }
-    qemu-system-x86_64 -enable-kvm -machine none -nodefaults -display none
+    cutover_native_qemu_kvm_probe
     while IFS=$'\t' read -r runner job; do
-      docker image inspect "$runner" "$job" >/dev/null
-      docker run --rm --read-only --network none --device /dev/kvm:/dev/kvm --entrypoint sh "$runner" -ec \
-        'test -x /usr/local/bin/dim-native-qemu-run; qemu-system-x86_64 -enable-kvm -machine none -nodefaults -display none'
-      docker run --rm --read-only --network none --entrypoint sh \
-        --mount "type=image,src=$job,dst=/run/dim/guest-root" "$runner" -ec \
-        'test -x /run/dim/guest-root/bin/bash && test -d /run/dim/guest-root/dev && test -d /run/dim/guest-root/proc && test -d /run/dim/guest-root/sys && test -d /run/dim/guest-root/run/dim/job && test -d /run/dim/guest-root/workspace'
+      timeout -s KILL 5 docker image inspect "$runner" "$job" >/dev/null
+      cutover_native_qemu_runner_probe "$runner"
+      cutover_native_qemu_root_probe "$runner" "$job"
     done < <(jq -r '.capacities[] | [.runnerBaseImage,.jobBaseImage] | @tsv' "$config")
     ;;
   *) exit 2 ;;
 esac
 printf '%s\n' "$actual_host"
 REMOTE
+  )
 }
 
 cutover_assert_node_separation() {

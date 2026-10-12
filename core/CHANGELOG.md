@@ -7,7 +7,9 @@
   an owned KVM host execution path, and a separate durable QEMU review outbox
   with explicit Project admission and operator status discovery, without
   ordinary or Gitea substitution. Host startup now reserves an explicit QEMU
-  supervisor memory allowance above guest RAM, verifies Docker image mounts and
+  supervisor memory allowance above guest RAM, requires bounded QMP KVM
+  readiness with explicit normal shutdown rather than accepting cancellation,
+  verifies Docker image mounts and
   the job root before contacting the scheduler, and exclusively kernel-locks
   every capacity through replay and execution. The guest initramfs now loads
   usable 9p modules, enables the cgroup-v2 PID controller, and launches the
