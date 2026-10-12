@@ -113,7 +113,9 @@ export async function configuredNativeRootAdmissionServer(
     httpClient: nativeGitHttpClient });
   const handleClaimLifecycle = createNativeRootCiClaimLifecycleHandler({ config: options.config,
     generationId: options.expectedGenerationId, capacities, store: lifecycleStore,
-    proof: attemptProof, issuer: attemptIssuer, active: () => activated && activationBound() });
+    proof: attemptProof, issuer: attemptIssuer, httpClient: nativeGitHttpClient,
+    claimCurrent: (claim) => claimStore.verify(claim) === "current",
+    active: () => activated && activationBound() });
   const resultStore = new NativeRootCiResultStore(database, { generationId: options.expectedGenerationId,
     serviceEpochId, capacityConfigDigest, now: options.now ?? Date.now });
   const handleResult = createNativeRootCiResultHandler({ config: options.config,

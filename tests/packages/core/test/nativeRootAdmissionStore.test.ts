@@ -197,12 +197,11 @@ function withPolicy(proof: NativeRootCiPolicyProof): NativeRootCiPolicyProof {
   const reviewers = { requiredReviewerIds, pathReviewerRules: proof.policy.pathReviewerRules };
   const requiredReviewRevision = revision("reviewers", 1, reviewers);
   const policy = { ...proof.policy, requiredReviewerIds, requiredReviewRevision,
-    policyRevision: revision("policy", 2, { protectedRef: proof.policy.protectedRef,
-      ...reviewers, requiredJobs: proof.policy.requiredJobs }) };
+    policyRevision: revision("policy", 3, { protectedRef: proof.policy.protectedRef, ...reviewers }) };
   return { ...proof, policy, currentRoot: { ...proof.currentRoot,
     policyDigest: createHash("sha256").update(JSON.stringify(policy)).digest("hex") } };
 }
-function revision(domain: "policy" | "reviewers", version: 1 | 2, value: unknown): string {
+function revision(domain: "policy" | "reviewers", version: 1 | 2 | 3, value: unknown): string {
   return createHash("sha256").update(`dim-native-${domain}-v${version}\0`).update(JSON.stringify(value)).digest("hex");
 }
 function reviewEvent(proof: NativeRootCiPolicyProof) {

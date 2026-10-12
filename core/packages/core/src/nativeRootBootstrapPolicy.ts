@@ -41,7 +41,7 @@ export function compileNativeRootBootstrapPolicy(input: {
   const review = exactRecord(input.review, ["requiredReviewerIds", "requiredJobs"], ["pathReviewerRules"],
     "native root review policy");
   const requiredReviewerIds = reviewerIds(review.requiredReviewerIds, "required reviewers").sort();
-  const requiredJobs = entries(review.requiredJobs, "required jobs").map((value): RequiredJob => {
+  const requiredJobs = entries(review.requiredJobs, "required jobs", true).map((value): RequiredJob => {
     const job = exactRecord(value, ["name", "kind"], [], "required job");
     if (typeof job.name !== "string" || !jobPattern.test(job.name)
       || (job.kind !== "ordinary-sysbox" && job.kind !== "qemu")) {
@@ -49,9 +49,9 @@ export function compileNativeRootBootstrapPolicy(input: {
     }
     return { name: job.name, kind: job.kind };
   }).sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
-  if (requiredJobs.length < 1 || requiredJobs.length > 64
+  if (requiredJobs.length > 64
     || new Set(requiredJobs.map(({ name }) => name)).size !== requiredJobs.length) {
-    throw new UserError("native required jobs must be distinct and nonempty");
+    throw new UserError("native required jobs must be distinct and contain at most 64 entries");
   }
   const pathReviewerRules = (review.pathReviewerRules === undefined
     ? [] : entries(review.pathReviewerRules, "path reviewer rules", true)).map((value) => {
@@ -71,7 +71,7 @@ export function compileNativeRootBootstrapPolicy(input: {
   const importedJobs = requiredJobs.map((job): ImportedRequiredJob => ({
     ...job, evidenceClass: "candidate-controlled"
   }));
-  const policyRevision = revision("policy", 2, { protectedRef, ...reviews, requiredJobs: importedJobs });
+  const policyRevision = revision("policy", 3, { protectedRef, ...reviews });
   return {
     rootAlias, protectedRef,
     reviewPolicy: { schemaVersion: 1, protectedRef, policyRevision,
@@ -155,6 +155,6 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function revision(domain: string, version: 1 | 2, input: unknown): string {
+function revision(domain: string, version: 1 | 2 | 3, input: unknown): string {
   return createHash("sha256").update(`dim-native-${domain}-v${version}\0`).update(JSON.stringify(input)).digest("hex");
 }

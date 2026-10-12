@@ -64,12 +64,42 @@ describe("native root bootstrap policy", () => {
     expect(fromManifest.reviewPolicy.requiredJobSetRevision).toBe(createHash("sha256")
       .update("dim-native-jobs-v2\0").update(JSON.stringify(jobs)).digest("hex"));
     expect(fromManifest.reviewPolicy.policyRevision).toBe(createHash("sha256")
-      .update("dim-native-policy-v2\0").update(JSON.stringify({
-        protectedRef: "refs/heads/main", ...reviewers, requiredJobs: jobs
+      .update("dim-native-policy-v3\0").update(JSON.stringify({
+        protectedRef: "refs/heads/main", ...reviewers
       })).digest("hex"));
     expect(fromManifest.reviewPolicy.requiredReviewRevision).toBe(createHash("sha256")
       .update("dim-native-reviewers-v1\0").update(JSON.stringify(reviewers)).digest("hex"));
     expect(() => parseRepositorySetYaml(manifest())).toThrow(/unknown field 'nativeReview'/);
+  });
+
+  it.each([
+    ["zero jobs", []],
+    ["ordinary only", [{ name: "source", kind: "ordinary-sysbox" }]],
+    ["QEMU only", [{ name: "integration", kind: "qemu" }]],
+    ["both execution kinds", review.requiredJobs]
+  ] as const)("accepts %s as an explicit quality policy", (_label, requiredJobs) => {
+    // Given / When
+    const compiled = compileNativeRootBootstrapPolicy({
+      rootAlias: "root", protectedRef: "refs/heads/main", review: { ...review, requiredJobs }
+    });
+
+    // Then
+    expect(compiled.reviewPolicy.requiredJobs).toHaveLength(requiredJobs.length);
+  });
+
+  it("keeps the security policy revision stable across quality-only jobset changes", () => {
+    // Given
+    const input = { rootAlias: "root", protectedRef: "refs/heads/main", review } as const;
+
+    // When
+    const dual = compileNativeRootBootstrapPolicy(input).reviewPolicy;
+    const disabled = compileNativeRootBootstrapPolicy({ ...input,
+      review: { ...review, requiredJobs: [] } }).reviewPolicy;
+
+    // Then
+    expect(disabled.policyRevision).toBe(dual.policyRevision);
+    expect(disabled.requiredReviewRevision).toBe(dual.requiredReviewRevision);
+    expect(disabled.requiredJobSetRevision).not.toBe(dual.requiredJobSetRevision);
   });
 
   it("rejects mismatched or unprotected reviewed root refs and unknown manifest fields", () => {
