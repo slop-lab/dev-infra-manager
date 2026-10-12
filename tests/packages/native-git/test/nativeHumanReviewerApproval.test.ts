@@ -1,6 +1,7 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   closeFinalizeService,
@@ -13,6 +14,7 @@ import {
   startFinalizeService
 } from "./nativeRootImportFinalizeFixture.js";
 import { authoritativePolicy } from "./authoritativeNativeCandidateFixture.js";
+import { bundleSecrets } from "./bundleConfigFixture.js";
 import { createBundleReview, nativeBundleReviewFixture } from "./nativeBundleReviewFixture.js";
 
 afterEach(cleanupFinalizeFixtures);
@@ -107,7 +109,66 @@ describe("installed native human approval", () => {
     expect((await pending.json()).status).toBe("pending");
     expect((await approved.json()).status).toBe("approved");
   });
+
+  it("preserves security approval across a quality-only revision while rejecting stale CI evidence", async () => {
+    // Given
+    const fixture = await nativeBundleReviewFixture("human-approval-quality-revision");
+    const envelope = await createBundleReview(fixture.service);
+    const event = envelope.events.find((candidate) => candidate.executionKind === "ordinary-sysbox");
+    if (event === undefined) throw new ApprovalFixtureError();
+    const endpoint = `${fixture.service.origin}/v1/projects/project-a/repositories/root/reviews/${envelope.review.reviewId}`;
+    const reviewerHeaders = { authorization: humanReviewerAuthorization, "x-dim-generation-id": generationId };
+    expect((await fetch(`${endpoint}/approvals`, { method: "POST",
+      headers: { ...reviewerHeaders, "content-type": "application/json" },
+      body: JSON.stringify({ requestId: randomUUID() }) })).status).toBe(201);
+    await closeFinalizeService(fixture.service);
+    const ordinaryOnly = authoritativePolicy(["owner"], [], [
+      { name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }
+    ]);
+    replaceImportedPolicy(fixture.root, ordinaryOnly);
+    const restarted = await startFinalizeService(fixture.root);
+    const identityAuthorization = `Basic ${Buffer.from(
+      `ordinary-identity:${bundleSecrets.nativeIdentity}`
+    ).toString("base64")}`;
+    const proofHeaders = { authorization: identityAuthorization, "content-type": "application/json" };
+    const proofRequest = { schemaVersion: 1, requestId: randomUUID(), generationId };
+    const policyProof = await fetch(`${restarted.origin}/v1/projects/project-a/repositories/root/native-root-ci-proof/policy`, {
+      method: "POST", headers: proofHeaders, body: JSON.stringify(proofRequest)
+    });
+    const currentRoot = recordField(await policyProof.json(), "currentRoot");
+
+    // When
+    const status = await fetch(endpoint.replace(fixture.service.origin, restarted.origin), { headers: reviewerHeaders });
+    const staleEvidence = await fetch(
+      `${restarted.origin}/v1/projects/project-a/repositories/root/native-root-ci-proof/review-event`, {
+        method: "POST", headers: proofHeaders, body: JSON.stringify({ ...proofRequest,
+          importNonce: stringField(currentRoot, "importNonce"), policyDigest: stringField(currentRoot, "policyDigest"),
+          eventId: event.eventId, reviewId: event.reviewId,
+          executionKind: event.executionKind, jobName: event.jobName })
+      }
+    );
+
+    // Then
+    expect(status.status).toBe(200);
+    expect((await status.json()).status).toBe("approved");
+    expect(staleEvidence.status).toBe(409);
+  });
 });
+
+function replaceImportedPolicy(root: string, policy: object): void {
+  const policyJson = JSON.stringify(policy);
+  const database = new DatabaseSync(join(root, "native-idle.sqlite3"));
+  database.prepare("UPDATE native_project_root_import SET policy_json = ?, policy_sha256 = ?")
+    .run(policyJson, createHash("sha256").update(policyJson).digest("hex"));
+  database.close();
+}
+
+function recordField(value: unknown, field: string): Readonly<Record<string, unknown>> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new ApprovalFixtureError();
+  const selected = Reflect.get(value, field);
+  if (typeof selected !== "object" || selected === null || Array.isArray(selected)) throw new ApprovalFixtureError();
+  return selected;
+}
 
 function stringField(value: unknown, field: string): string {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new ApprovalFixtureError();
