@@ -9,7 +9,7 @@ import {
   UserError,
   type NativeControlPlaneConnection,
   type NativeGitRootImporterClient,
-  type NativeProjectPendingRecord
+  type NativeProjectRecord
 } from "@slop-lab/dim-core";
 
 const predecessorSelectors = [
@@ -25,12 +25,12 @@ export type NativeProjectSelection = {
   readonly environment: NodeJS.ProcessEnv;
 };
 
-export type NativePendingProjectView = {
+export type NativeProjectView = {
   readonly name: string;
   readonly projectId: string;
   readonly serviceId: "native-main";
   readonly ownerHostId: string;
-  readonly phase: "admission-pending";
+  readonly phase: "admission-pending" | "ready";
   readonly rootAlias: string;
   readonly protectedRef: string;
   readonly rootCommit: string;
@@ -38,7 +38,8 @@ export type NativePendingProjectView = {
   readonly policyRevision: string;
   readonly requiredReviewRevision: string;
   readonly requiredJobSetRevision: string;
-  readonly runnable: false;
+  readonly runnable: boolean;
+  readonly readyAt?: string;
 };
 
 export async function selectNativeProject(
@@ -90,7 +91,7 @@ export async function nativeProjectImporter(
   return createNativeGitRootImporterClient(connection);
 }
 
-export function nativePendingProjectView(record: NativeProjectPendingRecord): NativePendingProjectView {
+export function nativePendingProjectView(record: NativeProjectRecord): NativeProjectView {
   return {
     name: record.name,
     projectId: record.projectId,
@@ -104,6 +105,7 @@ export function nativePendingProjectView(record: NativeProjectPendingRecord): Na
     policyRevision: record.reviewPolicy.policyRevision,
     requiredReviewRevision: record.reviewPolicy.requiredReviewRevision,
     requiredJobSetRevision: record.reviewPolicy.requiredJobSetRevision,
-    runnable: false
+    runnable: record.phase === "ready",
+    ...(record.phase === "ready" ? { readyAt: record.readyAt } : {})
   };
 }

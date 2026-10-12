@@ -18,9 +18,11 @@ import {
   nativeProjectImporter,
   selectNativeProject
 } from "./native-project-selector.js";
+import { registerNativeProjectBootstrapCommand } from "./native-project-bootstrap-command.js";
 
 export function registerProjectCommands(program: Command): void {
   const project = program.command("project").description("Manage project metadata and Git namespaces");
+  registerNativeProjectBootstrapCommand(project);
 
 project.command("create")
   .description("Create a project and its managed Git namespace")
@@ -55,7 +57,8 @@ project.command("create")
         throw new UserError("native selection permits only plain 'dim project create PROJECT'");
       }
       const importer = await nativeProjectImporter(native);
-      const record = await native.store.admit(name, importer, AbortSignal.timeout(10_000));
+      await native.store.admit(name, importer, AbortSignal.timeout(10_000));
+      const record = await native.store.ready(name, native.connection, AbortSignal.timeout(10_000));
       print(nativePendingProjectView(record), flags);
       return;
     }
@@ -158,7 +161,7 @@ project.command("list")
       printList(records.map(nativePendingProjectView), [
         "name", "projectId", "serviceId", "ownerHostId", "phase", "rootAlias", "protectedRef",
         "rootCommit", "rootTree", "policyRevision", "requiredReviewRevision",
-        "requiredJobSetRevision", "runnable"
+        "requiredJobSetRevision", "runnable", "readyAt"
       ], flags);
       return;
     }
@@ -185,6 +188,9 @@ project.command("remove")
   .description("Remove project metadata while preserving Git repositories")
   .argument("<project>")
   .action(async (name: string) => {
+    if (await selectNativeProject() !== undefined) {
+      throw new UserError("native Project remove is unavailable; refusing Gitea fallback");
+    }
     await adminCall("project.remove", { name });
   });
 
@@ -193,6 +199,9 @@ project.command("purge")
   .argument("<project>")
   .option("--yes", "confirm permanent repository deletion")
   .action(async (name: string, flags: { yes?: boolean }) => {
+    if (await selectNativeProject() !== undefined) {
+      throw new UserError("native Project purge is unavailable; refusing Gitea fallback");
+    }
     await confirmAction(flags.yes ?? false, `Permanently delete project '${name}' and its managed repositories?`);
     await adminCall("project.purge", { name });
   });

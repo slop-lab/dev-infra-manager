@@ -9,6 +9,13 @@ import {
 
 export function registerRepositoryCommands(program: Command): void {
   const repo = program.command("repo").description("Manage project-scoped repositories");
+  repo.hook("preAction", (_command, actionCommand) => {
+    if (actionCommand.parent?.parent?.name() === "sync-service") return;
+    if (process.env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE !== undefined
+      || process.env.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE !== undefined) {
+      throw new UserError("native repository operations are unavailable; refusing Gitea fallback");
+    }
+  });
   const syncServiceImage = repo.command("sync-service").description("Manage shared Git-host sync deployment assets")
     .command("image").description("Manage the shared Git-host sync service image");
   syncServiceImage.command("build")
