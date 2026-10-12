@@ -15,6 +15,7 @@ export type ReviewClientRequest = {
   readonly path: string;
   readonly credentials: ReviewClientCredentials;
   readonly body?: unknown;
+  readonly generationId?: string;
 };
 
 export async function requestReviewApi(input: ReviewClientRequest): Promise<string> {
@@ -32,6 +33,7 @@ export async function requestReviewApi(input: ReviewClientRequest): Promise<stri
       method: input.method,
       headers: {
         Authorization: `Basic ${Buffer.from(`${input.credentials.username}:${input.credentials.password}`, "utf8").toString("base64")}`,
+        ...(input.generationId === undefined ? {} : { "x-dim-generation-id": input.generationId }),
         ...(body === undefined ? {} : { "Content-Length": String(body.length), "Content-Type": "application/json" })
       }
     }, (incoming) => {
