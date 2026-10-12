@@ -17,8 +17,11 @@ export function assertDistinctNativeBundleServerCredentials(
     config.ordinaryCi.query,
     config.ordinaryCi.identity,
     config.ordinaryCi.attemptIssuer,
+    config.ordinaryCi.candidateReader,
     config.ordinaryCi.resultReporter,
-    config.ordinaryCi.webhook
+    config.ordinaryCi.webhook,
+    ...(config.qemuCi === undefined ? [] : [config.qemuCi.query, config.qemuCi.eventIntake, config.qemuCi.identity,
+      config.qemuCi.attemptIssuer, config.qemuCi.candidateReader, config.qemuCi.resultReporter])
   ].flatMap((credential) => [credential.username, credential.password]);
   const registrarCredentialValues = registrars.flatMap((registrar) => [
     registrar.hostId, registrar.username, registrar.password
@@ -30,8 +33,9 @@ export function assertDistinctNativeBundleServerCredentials(
     ...registrarCredentialValues,
     ...config.projectRootImporters.flatMap((importer) => [importer.username, importer.password]),
     ...config.projectRootReadIssuers.flatMap((issuer) => [issuer.username, issuer.password]),
-    ...config.workspaceWriteIssuers.flatMap((issuer) => [issuer.username, issuer.password])
-    , ...config.humanReviewers.flatMap((reviewer) => [reviewer.reviewerId, reviewer.username, reviewer.password])
+    ...config.workspaceWriteIssuers.flatMap((issuer) => [issuer.username, issuer.password]),
+    ...config.humanReviewers.flatMap((reviewer) => [reviewer.reviewerId, reviewer.username, reviewer.password]),
+    ...config.hostPromoters.flatMap((promoter) => [promoter.username, promoter.password])
   ];
   if (new Set(protectedCredentialValues).size !== protectedCredentialValues.length) {
     throw new NativeGitBundleServerError("native Git readiness, activation, and service credentials must be distinct");
