@@ -18,19 +18,22 @@ export interface NativeCandidateReadAuthority {
   materializeTree(input: { readonly projectId: string; readonly repositoryId: string; readonly commitObjectId: string; readonly treeObjectId: string; readonly destination: string; readonly signal: AbortSignal }): Promise<{ readonly commitObjectId: string; readonly treeObjectId: string }>;
 }
 
-type CandidateJob = {
+export type NativeCandidateJob = {
   readonly script: string;
   readonly argv: readonly string[];
 };
 
-export async function verifyAndMaterializeCandidate(input: {
+export type NativeCandidateVerificationInput = {
   readonly authority: NativeCandidateReadAuthority;
   readonly descriptor: NativeOrdinaryDescriptor;
   readonly descriptorDigest: string;
   readonly workspace: string;
   readonly scriptFile: string;
   readonly signal: AbortSignal;
-}): Promise<void> {
+  readonly parseJob?: (bytes: Buffer, jobName: string) => NativeCandidateJob;
+};
+
+export async function verifyAndMaterializeCandidate(input: NativeCandidateVerificationInput): Promise<void> {
   let descriptor: NativeOrdinaryDescriptor;
   try {
     descriptor = parseNativeDescriptor(input.descriptor);
@@ -55,7 +58,7 @@ export async function verifyAndMaterializeCandidate(input: {
     signal: input.signal
   });
   assertBlob(config, descriptor.configBlob, 64 * 1024, "config");
-  const job = parseCandidateJob(config.bytes, descriptor.jobName);
+  const job = (input.parseJob ?? parseCandidateJob)(config.bytes, descriptor.jobName);
   if (job.script !== descriptor.script.path || JSON.stringify(job.argv) !== JSON.stringify(descriptor.argv)) {
     throw new NativeHostVerificationError("candidate config does not match the descriptor");
   }
@@ -87,7 +90,7 @@ function assertBlob(
   }
 }
 
-function parseCandidateJob(bytes: Buffer, jobName: string): CandidateJob {
+function parseCandidateJob(bytes: Buffer, jobName: string): NativeCandidateJob {
   if (bytes.length > 64 * 1024 || bytes.includes(0)) throw new NativeHostVerificationError("candidate config bytes are invalid");
   let source: string;
   try {
@@ -112,7 +115,7 @@ function parseCandidateJob(bytes: Buffer, jobName: string): CandidateJob {
   return parseConfigValue(document.toJS({ maxAliasCount: 0 }), jobName);
 }
 
-function parseConfigValue(value: unknown, jobName: string): CandidateJob {
+function parseConfigValue(value: unknown, jobName: string): NativeCandidateJob {
   const root = exactRecord(value, ["schemaVersion", "ordinary"]);
   if (root.schemaVersion !== 3) throw new NativeHostVerificationError("candidate config schemaVersion must be 3");
   const ordinary = exactRecord(root.ordinary, ["jobs"]);
@@ -121,7 +124,7 @@ function parseConfigValue(value: unknown, jobName: string): CandidateJob {
   if (names.length < 1 || names.length > 64 || names.some((name) => !/^[a-z][a-z0-9-]{0,62}$/.test(name))) {
     throw new NativeHostVerificationError("candidate job names are invalid");
   }
-  let selected: CandidateJob | undefined;
+  let selected: NativeCandidateJob | undefined;
   for (const name of names) {
     const job = exactRecord(jobs[name], ["script", "argv"]);
     if (typeof job.script !== "string" || !validScriptPath(job.script)
