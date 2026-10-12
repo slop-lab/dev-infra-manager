@@ -27,9 +27,11 @@ afterEach(async () => {
 });
 
 describe("native Git workspace write issuer connection", () => {
-  it("parses only the exact issuer role, owner, service, generation, and loopback origin", () => {
+  it("parses only the exact issuer role, owner, service, generation, and secure origin", () => {
     // Given / When / Then
     expect(parseNativeGitWorkspaceWriteIssuerConnection(valid)).toEqual(valid);
+    expect(parseNativeGitWorkspaceWriteIssuerConnection({ ...valid, endpoint: "https://native.example" }))
+      .toMatchObject({ endpoint: "https://native.example" });
     for (const invalid of [
       { ...valid, role: "operator-root-read-issuer" },
       { ...valid, hostId: "Host A" },

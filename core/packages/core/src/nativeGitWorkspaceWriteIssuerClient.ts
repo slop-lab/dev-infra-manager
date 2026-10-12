@@ -68,7 +68,8 @@ export async function createNodeNativeGitWorkspaceWriteIssuerClient(
 
 export function createNativeGitWorkspaceWriteIssuerClient(
   input: NativeGitWorkspaceWriteIssuerConnection,
-  httpClient: NativeGitAdmissionHttpClient = createNodeNativeGitAdmissionHttpClient()
+  httpClient: NativeGitAdmissionHttpClient = createNodeNativeGitAdmissionHttpClient(),
+  now: () => number = Date.now
 ): NativeGitWorkspaceWriteIssuerClient {
   const connection = parseNativeGitWorkspaceWriteIssuerConnection(input);
   const authorization = `Basic ${Buffer.from(
@@ -99,7 +100,7 @@ export function createNativeGitWorkspaceWriteIssuerClient(
       } catch {
         throw new NativeGitWorkspaceWriteIssuerClientError("native Git workspace write lease request failed");
       }
-      const receivedAt = Date.now();
+      const receivedAt = now();
       return parseLease(parseResponse(response), connection, request, receivedAt);
     }
   };
