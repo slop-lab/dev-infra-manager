@@ -30,6 +30,23 @@ export type NativeProjectDraftRootSnapshot = {
   readonly rootSnapshotPath: string;
 };
 
+export type NativeProjectReadyRootSnapshotInput = {
+  readonly stateRoot: string;
+  readonly name: string;
+  readonly projectId: string;
+  readonly rootAlias: string;
+  readonly protectedRef: string;
+  readonly rootCommit: string;
+  readonly rootTree: string;
+  readonly gitExecutable: string;
+  readonly temporaryRoot: string;
+  readonly serviceEndpoint: string;
+  readonly username: string;
+  readonly password: string;
+  readonly signal: AbortSignal;
+  readonly projectLockHeld?: true;
+};
+
 export class NativeProjectDraftRootSnapshotError extends UserError {
   readonly name = "NativeProjectDraftRootSnapshotError";
 }
@@ -66,6 +83,51 @@ export async function materializeNativeProjectDraftRootSnapshot(
   } catch (error) {
     if (error instanceof NativeProjectDraftRootSnapshotError) throw error;
     throw new NativeProjectDraftRootSnapshotError("native Project draft root snapshot could not be materialized");
+  } finally {
+    if (staging !== undefined) await removePrivateStaging(staging);
+    await release();
+  }
+}
+
+export async function materializeNativeProjectReadyRootSnapshot(
+  input: NativeProjectReadyRootSnapshotInput
+): Promise<NativeProjectDraftRootSnapshot> {
+  const state = new LifecycleState(input.stateRoot);
+  const release = input.projectLockHeld === true
+    ? async (): Promise<void> => undefined
+    : await state.acquireProjectLock(input.name);
+  let staging: string | undefined;
+  try {
+    const parent = path.join(input.stateRoot, "assets", "native-project-roots", input.projectId);
+    await ensurePrivateParents(input.stateRoot, input.projectId);
+    const target = path.join(parent, input.rootCommit);
+    if (await validateCachedSnapshot(target, input.rootTree)) {
+      return { projectId: input.projectId, rootRepositoryId: "root", rootAlias: input.rootAlias,
+        protectedRef: input.protectedRef, rootCommit: input.rootCommit, rootTree: input.rootTree,
+        rootSnapshotPath: target };
+    }
+    staging = await mkdtemp(path.join(parent, ".staging-"));
+    await materializeNativeRootSnapshotTree({
+      gitExecutable: input.gitExecutable, temporaryRoot: input.temporaryRoot,
+      serviceEndpoint: input.serviceEndpoint, projectId: input.projectId,
+      protectedRef: input.protectedRef, currentHeadCommit: input.rootCommit,
+      commit: input.rootCommit, tree: input.rootTree, username: input.username,
+      password: input.password, destination: staging, signal: input.signal
+    });
+    await makeSnapshotReadOnly(staging);
+    await assertSnapshot(staging);
+    await assertAbsent(target);
+    await rename(staging, target);
+    staging = undefined;
+    await syncDirectory(parent);
+    return { projectId: input.projectId, rootRepositoryId: "root", rootAlias: input.rootAlias,
+      protectedRef: input.protectedRef, rootCommit: input.rootCommit, rootTree: input.rootTree,
+      rootSnapshotPath: target };
+  } catch (error) {
+    if (error instanceof NativeProjectDraftRootSnapshotError) throw error;
+    throw new NativeProjectDraftRootSnapshotError("native Project ready root snapshot could not be materialized", {
+      cause: error
+    });
   } finally {
     if (staging !== undefined) await removePrivateStaging(staging);
     await release();
