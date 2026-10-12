@@ -73,7 +73,8 @@ export async function assertAuthoritativeNativeReviewStore(repository: string): 
   }
   await assertOwnedReviewDirectory(paths.root);
   const entries = await readdir(paths.root, { withFileTypes: true });
-  const allowed = new Set(["proposals", "staging", "delivered", "delivery-staging"]);
+  const allowed = new Set(["proposals", "staging", "delivered", "delivery-staging",
+    "qemu-delivered", "qemu-delivery-staging"]);
   if (!entries.some(({ name }) => name === "proposals") || !entries.some(({ name }) => name === "staging")
     || entries.some((entry) => !entry.isDirectory() || !allowed.has(entry.name))) {
     throw new AuthoritativeNativeReviewStoreError("authoritative native review store layout is invalid");

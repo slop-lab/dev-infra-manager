@@ -120,18 +120,22 @@ qemu:
 
 export function authoritativePolicy(
   requiredReviewerIds: readonly string[] = ["owner"],
-  pathReviewerRules: readonly { readonly pathPrefix: string; readonly reviewerIds: readonly string[] }[] = []
-) {
-  const requiredJobs = [
+  pathReviewerRules: readonly { readonly pathPrefix: string; readonly reviewerIds: readonly string[] }[] = [],
+  requiredJobs: readonly {
+    readonly name: string;
+    readonly kind: "ordinary-sysbox" | "qemu";
+    readonly evidenceClass: "candidate-controlled";
+  }[] = [
     { name: "integration", kind: "qemu", evidenceClass: "candidate-controlled" },
     { name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }
-  ] as const;
+  ]
+) {
   const reviewers = { requiredReviewerIds, pathReviewerRules } as const;
   const revision = (domain: string, version: number, value: unknown) => createHash("sha256")
     .update(`dim-native-${domain}-v${version}\0`).update(JSON.stringify(value)).digest("hex");
   return {
     schemaVersion: 1, protectedRef: "refs/heads/main",
-    policyRevision: revision("policy", 2, { protectedRef: "refs/heads/main", ...reviewers, requiredJobs }),
+    policyRevision: revision("policy", 3, { protectedRef: "refs/heads/main", ...reviewers }),
     requiredReviewRevision: revision("reviewers", 1, reviewers),
     requiredJobSetRevision: revision("jobs", 2, requiredJobs),
     requiredJobs, ...reviewers

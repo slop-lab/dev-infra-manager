@@ -48,7 +48,7 @@ const identityObjectSchema = z.object({
   requiredJobSetRevision: digest,
   policyDigest: digest,
   workspaceId: stableWorkspaceId,
-  requiredJobs: z.array(authoritativeNativeRequiredJobSchema).min(1).max(64).readonly(),
+  requiredJobs: z.array(authoritativeNativeRequiredJobSchema).max(64).readonly(),
   requiredReviewerIds: z.array(identifier).min(1).readonly(),
   changes: z.array(authoritativeNativeChangedPathSchema).readonly(),
   patch: z.string(),
@@ -82,7 +82,7 @@ export const authoritativeNativeReviewEventSchema = z.object({
 export const authoritativeNativeReviewEnvelopeSchema = z.object({
   schemaVersion: z.literal(1),
   review: authoritativeNativeReviewSchema,
-  events: z.array(authoritativeNativeReviewEventSchema).min(1).max(64).readonly()
+  events: z.array(authoritativeNativeReviewEventSchema).max(64).readonly()
 }).strict().readonly();
 
 export type AuthoritativeNativeChangedPath = z.infer<typeof authoritativeNativeChangedPathSchema>;
