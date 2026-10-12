@@ -92,3 +92,14 @@ candidate that product maintainers review before promotion.
 This record supersedes the protected-snapshot ordinary admission semantics
 previously stated by `CI-ORDINARY-POOL-001` and `CI-JOB-IMAGE-001`. It does not
 change protected QEMU cache-hook or predecessor Gitea runner admission.
+
+## Clarification: optional quality policy
+
+This decision classifies native ordinary evidence when a Project quality
+policy selects an ordinary job. It does not require a Project to configure CI,
+does not make ordinary capacity or results a Project or workspace readiness
+condition, and does not grant any runner or CI identity approval or promotion
+authority. A quality policy may contain no jobs. Protected promotion always
+requires exact current human approval and checked compare-and-swap; successful
+CI is an additional condition only for jobs that the current quality policy
+selects.
