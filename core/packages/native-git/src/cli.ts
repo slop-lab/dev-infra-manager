@@ -6,6 +6,7 @@ import {
   parseNativeGitServiceConfig
 } from "./index.js";
 import { requestReviewApi, type ReviewClientCredentials } from "./review-client.js";
+import { runNativeGitOperatorReview } from "./operator-review-cli.js";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -17,6 +18,7 @@ async function main(): Promise<void> {
     await review(args.slice(1));
     return;
   }
+  if (args[0] === "operator" && args[1] === "review" && await runNativeGitOperatorReview(args.slice(2))) return;
   usage();
 }
 
@@ -89,6 +91,11 @@ function usage(): void {
     "       dim-native-git review API_ORIGIN show PROJECT REPOSITORY REVIEW_ID",
     "       dim-native-git review API_ORIGIN approve PROJECT REPOSITORY REVIEW_ID",
     "       dim-native-git review API_ORIGIN revoke PROJECT REPOSITORY REVIEW_ID APPROVAL_ID"
+    , "       dim-native-git operator review create CONNECTION PROJECT PROPOSAL_REF"
+    , "       dim-native-git operator review inspect CONNECTION PROJECT REVIEW_ID"
+    , "       dim-native-git operator review approve CONNECTION PROJECT REVIEW_ID"
+    , "       dim-native-git operator review revoke CONNECTION PROJECT REVIEW_ID APPROVAL_ID"
+    , "       dim-native-git operator review promote CONNECTION PROJECT REVIEW_ID"
   ].join("\n") + "\n");
   process.exitCode = 2;
 }

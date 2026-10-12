@@ -87,6 +87,8 @@ export {
   qemuExecutionDescriptorSchema
 } from "./qemu-execution-descriptor.js";
 export type { QemuExecutionDescriptor } from "./qemu-execution-descriptor.js";
+export * from "./native-qemu-authority-http.js";
+export * from "./native-qemu-authority-state.js";
 export type { AdmissionVerifier } from "./admission-verifier.js";
 export {
   createNodeAdmissionVerifierHttpClient,
