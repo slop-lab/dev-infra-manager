@@ -1,4 +1,5 @@
 import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import type {
   NativeGitAdmissionHttpClient,
   NativeGitAdmissionHttpRequest,
@@ -18,7 +19,8 @@ export function createNodeNativeGitAdmissionHttpClient(): NativeGitAdmissionHttp
 function nodeRequest(url: URL, input: NativeGitAdmissionHttpRequest): Promise<NativeGitAdmissionHttpResponse> {
   return new Promise((resolve, reject) => {
     const body = input.body === undefined ? undefined : Buffer.from(input.body, "utf8");
-    const request = httpRequest(url, {
+    const sendRequest = url.protocol === "https:" ? httpsRequest : httpRequest;
+    const request = sendRequest(url, {
       method: input.method,
       signal: input.signal,
       headers: {
