@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- Add strict native QEMU scheduler configuration and SQLite capacity fencing,
+  dedicated native-Git QEMU authority state/routes, a packaged scheduler image,
+  an owned KVM host execution path, and a separate durable QEMU review outbox
+  with explicit Project admission and operator status discovery, without
+  ordinary or Gitea substitution. Host startup now reserves an explicit QEMU
+  supervisor memory allowance above guest RAM, verifies Docker image mounts and
+  the job root before contacting the scheduler, and exclusively kernel-locks
+  every capacity through replay and execution. The guest initramfs now loads
+  usable 9p modules, enables the cgroup-v2 PID controller, and launches the
+  fixed Bash command as UID/GID 1000 with no effective capabilities or
+  privilege regain while keeping kernel and cgroup controls read-only.
+
 - Add the native ordinary authority library as the first bounded slice of the
   native ordinary-CI target. Its separate schema-3 SQLite state admits exact
   canonical operator Project/repository policy returned by an authenticated
@@ -76,8 +88,8 @@
   cross-link validation as approvals. Exact replay converges, a new request UUID
   safely reapproves after revocation, and replaying or delaying A's revocation
   cannot cancel B. Read and mutation responses distinguish pending, approved,
-  revoked, and stale with stale dominating. This adds no CI, promotion,
-  format-8 ledger, or Project-ready authority. The installed bundle now also
+  revoked, and stale with stale dominating. Approval mutation itself grants no
+  CI, promotion, format-8 ledger, or Project-ready authority. The installed bundle now also
   gives only `ordinaryCi.identity` a separate generation-attested
   `native-root-ci-proof` namespace. It returns the complete canonical imported
   policy and proves only an exact current stored ordinary-Sysbox schema-2 event
@@ -137,9 +149,10 @@
   read-only, importer-scoped schema-3 live-root proof separates the currently
   activated serving generation and verified format-8 current head from the
   unchanged original import receipt. Format-8 defines a strict promotion
-  ledger, but the service refuses any nonempty intent or finalized row until
-  independent human-approval and ordinary/QEMU evidence checks exist. Sequence
-  zero verifies the exact live ref, tree, and complete graph. The trusted host
+  ledger: unattested rows fail closed, while host-promoter transitions record
+  verified exact human approval and selected ordinary/QEMU evidence around a
+  checked protected-ref compare-and-swap. Sequence zero verifies the exact live
+  ref, tree, and complete graph. The trusted host
   loads separate issuer/importer connections,
   compares the live proof and complete draft before returning a read lease,
   and never persists either credential. It can materialize the exact imported
@@ -257,11 +270,20 @@
   SHA-1 or SHA-256 objects and bounded inputs, runs one digest-pinned nested
   Sysbox job with no host authority in the candidate, renews against a
   request-start monotonic deadline, and submits terminal evidence only after
-  ownership-checked root and container cleanup. The worker is not connected to
-  installed host CLI or controller startup. The separate installer can deploy
+  ownership-checked root and container cleanup. The installed CLI now exposes
+  a direct host-only service command that requires registered `sysbox-runc`,
+  runs one loop per fixed capacity, and drains all loops on termination. A
+  separate registrar-only command admits one immutable native Project and
+  validates the exact service response; neither command uses Gitea, workspace,
+  or controller authority. The installed CLI also wraps the trusted native
+  root bootstrap API: it pins one reviewed local branch commit, loads distinct
+  owner-only registrar and importer files, retains the private bundle/draft,
+  and converges exact replay without exposing credentials, after which plain
+  native `project create` publishes ready state. The separate installer can deploy
   the bundle and explicitly roll forward an exact candidate after uncertain
   activation without automatic rollback, resource replacement, or volume
-  deletion. It does not admit a runnable Project or advertise host capacity.
+  deletion. Ordinary admission remains independent of Project readiness, and
+  host capacity exists only while the explicit host command runs.
   Before installation it now rejects an
   obsolete ordinary-pool selector and canonical Project-scoped Sysbox or unsafe
   runner records without mutation, preserves valid schema-8 QEMU records, and
@@ -274,11 +296,19 @@
   descriptors or issue and revoke current attempts, and only the reporter may
   submit the exact current schema-3 terminal tuple. The service rejects obsolete
   generic scheduler and CI identity configuration rather than letting either
-  satisfy protected promotion evidence. No installed native QEMU scheduler or
-  executor, protected promotion route, native Project adapter, or clean-host
-  Sysbox/KVM acceptance exists yet. A future protected promotion must still
-  satisfy every policy-required ordinary and QEMU evidence kind plus exact-tree
-  human approval; this checkpoint makes no runtime-ready claim.
+  satisfy protected promotion evidence. The installed native QEMU scheduler,
+  executor, and protected promotion route remain subject to clean-host
+  Sysbox/KVM acceptance. The native Project adapter now converges schema 5 to schema 6,
+  creates and refreshes schema-9 Sysbox workspaces from current fast-forward
+  protected-root proofs, and brokers proposal-only Git without Gitea fallback.
+  Readiness, workspace lifecycle, and per-request broker leases reload the
+  current serving generation from the owner-only host connection while keeping
+  the original import receipt immutable; root snapshot staging uses distinct
+  read-only issuer authority rather than proposal-write authority. Protected
+  promotion now requires every policy-selected ordinary and QEMU evidence kind
+  plus exact-tree human approval, persists an authorization-verified intent,
+  performs one checked compare-and-swap, and reconciles both crash windows;
+  this checkpoint still makes no clean-host runtime-ready claim.
 
 - Let one explicitly configured reviewer-web account approve the exact immutable
   review and revoke only its own active approval through fixed, Origin- and CSRF-guarded
@@ -296,8 +326,9 @@
   runtime and controller after injected failure. The facade now exclusively
   owns `dim installer install control-plane --config FILE`, installs and updates
   the empty idle native Git/ordinary-CI bundle transactionally, and rejects
-  obsolete `dim install-cp` before forwarding. Native Project integration,
-  capacity, Sysbox job execution, and the reviewer UI remain unavailable.
+  obsolete `dim install-cp` before forwarding. The independently configured
+  native Project, capacity, and Sysbox execution paths are now available; the
+  reviewer UI remains separately deployed.
 
 - Add a standalone DIM-owned Git smart-HTTP host with exact
   Project/repository registration, identity-scoped reads, and workspace-bound
@@ -309,10 +340,10 @@
   human reviewers; and record or revoke approval bound to exact refs, heads,
   commits, trees, policies, and identities. Ref, tree, policy, or identity drift
   makes approval stale across restart. It is not yet selected by Project
-  lifecycle code and exposes no issue tracker, CI status, merge, or
-  protected-promotion authority; existing managed and external Gitea behavior
-  remains unchanged while exact-evidence CI and compare-and-swap promotion
-  remain future gates. Storage ownership now uses a validated file-backed
+  lifecycle code and exposes no issue tracker; existing managed and external
+  Gitea behavior remains unchanged. Its installed native successor adds
+  kind-bound exact-evidence CI and host-only compare-and-swap promotion. Storage
+  ownership now uses a validated file-backed
   SQLite exclusive transaction on the shared repository volume, preventing
   duplicate owners across container network namespaces while allowing a clean
   replacement after process death.
