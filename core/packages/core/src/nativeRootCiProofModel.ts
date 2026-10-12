@@ -107,14 +107,14 @@ function parsePolicy(value: unknown): NativeRootCiPolicy {
   const requiredJobs = array(policy.requiredJobs).map(parseJob);
   const requiredReviewerIds = array(policy.requiredReviewerIds).map(parseIdentifier);
   const pathReviewerRules = array(policy.pathReviewerRules).map(parseRule);
-  assertSortedUnique(requiredJobs.map(({ name }) => name));
+  assertSortedUnique(requiredJobs.map(({ name }) => name), true);
   assertSortedUnique(requiredReviewerIds);
   assertSortedUnique(pathReviewerRules.map((rule) => JSON.stringify(rule)), true);
   const reviewers = { requiredReviewerIds, pathReviewerRules };
   if (policy.requiredReviewRevision !== revision("reviewers", 1, reviewers)
     || policy.requiredJobSetRevision !== revision("jobs", 2, requiredJobs)
-    || policy.policyRevision !== revision("policy", 2,
-      { protectedRef: policy.protectedRef, ...reviewers, requiredJobs })) invalid();
+    || policy.policyRevision !== revision("policy", 3,
+      { protectedRef: policy.protectedRef, ...reviewers })) invalid();
   return { schemaVersion: 1, protectedRef: policy.protectedRef, policyRevision: policy.policyRevision,
     requiredReviewRevision: policy.requiredReviewRevision, requiredJobSetRevision: policy.requiredJobSetRevision,
     requiredJobs, requiredReviewerIds, pathReviewerRules };
@@ -197,7 +197,7 @@ function safeProtectedRef(value: string): boolean {
     && value.slice("refs/heads/".length).split("/").every((part) => part.length > 0 && !part.startsWith("."));
 }
 
-function revision(domain: "policy" | "reviewers" | "jobs", version: 1 | 2, value: unknown): string {
+function revision(domain: "policy" | "reviewers" | "jobs", version: 1 | 2 | 3, value: unknown): string {
   return createHash("sha256").update(`dim-native-${domain}-v${version}\0`).update(JSON.stringify(value)).digest("hex");
 }
 

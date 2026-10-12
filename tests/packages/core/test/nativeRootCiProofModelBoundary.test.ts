@@ -15,7 +15,7 @@ describe("native root CI event policy binding", () => {
       .update(`dim-native-${domain}-v${version}\0`).update(JSON.stringify(value)).digest("hex");
     const policy = {
       schemaVersion: 1, protectedRef: "refs/heads/main",
-      policyRevision: revision("policy", 2, { protectedRef: "refs/heads/main", ...reviewers, requiredJobs }),
+      policyRevision: revision("policy", 3, { protectedRef: "refs/heads/main", ...reviewers }),
       requiredReviewRevision: revision("reviewers", 1, reviewers),
       requiredJobSetRevision: revision("jobs", 2, requiredJobs), requiredJobs, ...reviewers
     };
