@@ -22,23 +22,48 @@ generation without changing the workspace ID.
 
 ## Protected source promotion
 
+**TRUST-NATIVE-READINESS-001:** Native Project readiness is an infrastructure
+state, not a CI result or a protected-ref promotion. A native Project may
+publish `ready` only after the trusted host has registered its immutable
+Project and repository identities, verified exact ownership of its one root
+repository and protected ref, published the immutable protected-root snapshot,
+installed scoped read and proposal-only writer authority, and satisfied the
+selected workspace runtime prerequisites. Readiness MUST NOT require a CI
+scheduler, runner, capacity, attempt, result, human approval for a proposal, or
+a prior protected-ref promotion. A CI outage or an empty required-job set MUST
+NOT make an otherwise valid ready Project or workspace non-ready.
+
+Native readiness grants no protected-ref write, review, promotion, CI
+registration, runner, scheduler, or result-reporting authority. These
+authorities remain separately scoped. In particular, a runner, scheduler,
+capacity host, attempt issuer, or result reporter MUST NOT approve a review or
+promote a protected ref.
+
 **TRUST-PROMOTION-001:** Every proposal for a protected ref MUST bind the
 repository ID, protected ref, expected protected-ref head, candidate commit,
-candidate tree, protection-policy revision, required-review revision, and
-required-job-set revision. Commit and tree identities MUST be complete object
-IDs. The review surface MUST show the complete base-to-candidate change set,
+candidate tree, protection-policy revision, and required-review revision as its
+security approval tuple. It MUST separately record the current Project
+quality-policy revision and its required-job set, which may be empty. Commit and
+tree identities MUST be complete object IDs. The review
+surface MUST show the complete base-to-candidate change set,
 including additions, modifications, deletions, renames, file modes, and
 symbolic links. Path-owner rules MAY add reviewers, but MUST NOT exempt any
 path or turn a path-filter result into approval of only part of the candidate
 tree.
 
-A designated human reviewer MAY approve only that immutable proposal tuple.
+A designated human reviewer MAY approve only that immutable security approval
+tuple.
 The author, workspace writer, CI identity, and an identity controlled by the
 candidate workload MUST NOT satisfy human review. Changing any bound identity
-or policy revision makes the approval stale. Approval is review evidence, not
-Git write authority.
+or security-policy revision makes the approval stale. Approval is review
+evidence, not Git write authority or CI evidence. Changing only the separately
+revisioned quality policy invalidates prior CI applicability but MUST NOT turn
+current human approval of the unchanged security tuple into a CI decision or
+make a runner capable of approval.
 
-CI results MUST bind the same repository, protected ref, candidate commit,
+CI is an optional Project quality gate. When the current Project quality policy
+requires no jobs, promotion requires no CI result. When it requires jobs, each
+CI result MUST bind the same repository, protected ref, candidate commit,
 candidate tree, policy revision, required-job-set revision, job name, attempt,
 and terminal result. CI MUST NOT update a protected ref, approve its own
 candidate, or convert unavailable capacity into success.
@@ -61,7 +86,15 @@ CI evidence has two trust classes:
   of the test definitions, product correctness, security, policy compliance, or
   fitness for promotion.
 
-The required-job policy MUST identify which trust class satisfies each job.
+The Project quality policy MUST identify which trust class and execution kind
+satisfies each required job. It MAY select no jobs, only ordinary Sysbox jobs,
+only QEMU jobs, or jobs of both kinds. Evidence from an unselected kind is
+diagnostic only and MUST NOT become a readiness or promotion requirement.
+The quality policy is independently configured and revisioned from native
+readiness and the human-review policy. An implementation MAY store these
+policies in one document, but it MUST preserve their distinct revisions,
+authority checks, and effects. A quality-policy update MUST NOT revoke Project
+or workspace readiness.
 Evidence from one class MUST NOT be displayed or exported as the other. The
 native ordinary CI target uses candidate-controlled self-tests. Such a result
 MAY satisfy a required CI condition when the protected policy explicitly names
@@ -81,14 +114,15 @@ reported as minimizing product or test review.
 **TRUST-PROMOTION-CAS-001:** Protected promotion MUST execute as one
 serialized compare-and-swap operation. While holding the repository/ref
 serialization boundary, the promoter MUST reread the protected ref and current
-policy, verify that:
+security and quality policies, verify that:
 
 1. the live ref equals the proposal's expected head;
 2. the candidate descends from that head under the selected merge policy;
 3. the candidate commit and tree still match the reviewed proposal;
 4. every required current human approval is present and not revoked;
-5. every required current CI job has a successful terminal result for the
-   exact promotion tuple; and
+5. when the current Project quality policy selects jobs, every selected job has
+   a successful terminal result for the exact promotion tuple and execution
+   kind; and
 6. the provider can atomically update that exact old object ID to the exact
    candidate object ID.
 
@@ -110,7 +144,7 @@ review or promotion, and MUST NOT be reported as one.
 | Human reviewer | Approve or reject one immutable complete-tree proposal | Self-approve, approve only selected paths, or reuse approval after tuple drift |
 | CI identity | Report one job attempt and its trust class for the exact candidate tuple | Approve, merge, deploy, report a different head/tree as the candidate, or label candidate-controlled evidence independent |
 | Host scheduler | Issue or revoke the current job attempt | Report a result, approve, promote, or write refs |
-| Host promoter | Perform the checked atomic old-ID to candidate-ID update | Bypass review/jobs, ignore policy drift, or overwrite a concurrently moved ref |
+| Host promoter | Perform the checked atomic old-ID to candidate-ID update | Bypass review or configured quality jobs, ignore policy drift, or overwrite a concurrently moved ref |
 | Repository owner or provider administrator | Configure policy through host administration | Routine direct push or provider review bypass |
 
 ## Backend and guest authority
@@ -301,7 +335,7 @@ with trusted authority.
 
 | Contract | Required positive evidence | Required denial evidence |
 | --- | --- | --- |
-| `TRUST-PROMOTION-001`, `TRUST-PROMOTION-CAS-001` | Complete-tree proposal, current human approval, exact-head jobs, and one atomic promotion | Path-only review, stale/revoked approval, changed policy/tree/head, wrong job attempt, force/delete, and concurrent second promotion leave the ref unchanged |
+| `TRUST-PROMOTION-001`, `TRUST-PROMOTION-CAS-001` | Complete-tree proposal, current human approval, every quality-policy-selected exact-head job, and one atomic promotion | Path-only review, stale/revoked approval, changed security policy/tree/head, stale quality evidence, wrong job attempt, force/delete, and concurrent second promotion leave the ref unchanged |
 | `TRUST-RUNTIME-001` | Same agent journey through each supported backend and live VM persistence/recovery on a KVM-capable host | Guest cannot read secrets, `/dev/kvm`, host/admin/runtime sockets, other-workspace data, or promotion credentials |
 | `STATE-BACKEND-001` | Exact current state round-trips | Historical `sysbox`, cross-backend, mixed-label, and unknown state remain byte-for-byte unchanged with no runtime mutation |
 | `WORKSPACE-AUTHORITY-001` | Stop/start preserves one instance; retained-volume recreation preserves declared data with a fresh workspace ID and grants | Old token, route, approval, permalink, device grant, foreign volume, and old runtime generation cannot authorize the recreated instance |
