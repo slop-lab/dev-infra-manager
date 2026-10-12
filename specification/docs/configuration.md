@@ -46,12 +46,12 @@ DIM_CI_RUNNER_PIDS
 DIM_QEMU_SCHEDULER_CONNECTION_FILE
 ```
 
-The following native control-plane host connection is a specified but
-unimplemented target for a future Project/repository adapter. Current
-controllers do not read or consume this variable, so setting it is ignored and
-does not select native lifecycle or reject otherwise valid Gitea operations.
-Do not rely on it in the current release. The target shape is one owner-only
-file, not a set of command-line tokens:
+The following readiness-only native control-plane host connection is a
+specified but unimplemented target for the Project/workspace adapter. The
+current parser instead requires ordinary-CI fields and capacity, and the
+controller does not implement the ready transition or broker. Do not rely on
+this target form in the current release. It is one owner-only file, not a set
+of command-line tokens:
 
 ```json
 {
@@ -63,34 +63,20 @@ file, not a set of command-line tokens:
     "serviceId": "native-main",
     "username": "host-a",
     "password": "replace-with-native-host-credential"
-  },
-  "ordinaryCi": {
-    "transport": "https",
-    "endpoint": "https://ci-control.example",
-    "serviceId": "ordinary-main",
-    "hostToken": "replace-with-host-token",
-    "admissionToken": "replace-with-admission-token",
-    "resultToken": "replace-with-result-token"
-  },
-  "capacities": {
-    "primary": { "cpus": 4, "memoryBytes": 8589934592, "pids": 2048 }
   }
 }
 ```
 
 Create it as a regular, non-symlink, DIM-user-owned mode-`0600` file. HTTPS
 origins contain no path or credentials. `loopback-http` is accepted only for a
-loopback origin. All credentials are distinct and remain in the host
-controller. Capacity names and limits are host installation policy; Projects
-are not listed here and do not acquire persistent runner or image state.
-After the future adapter exists, controller startup authenticates both service
-identities before advertising capacity and never falls back to a local or
-Project-scoped ordinary runner.
+loopback origin. The credential remains in the host controller and is used only
+for the non-mutating readiness proof and workspace-bound lease issuance.
+Projects, CI services, capacities, candidate images, approvals, and results are
+not listed here.
 
-When target parsing is implemented before the adapter is available, a request
-for native Project, repository, admission, or capacity behavior rejects before
-mutation. This future fail-closed rule must not be read as current support for
-or validation of the variable.
+Until target parsing and the adapter are implemented together, native
+readiness, workspace, and broker requests reject before mutation. This
+fail-closed rule must not be read as current support for the target form.
 
 The future target file is mutually exclusive with `DIM_GITEA_CONNECTION_FILE`.
 `DIM_ORDINARY_CI_POOL_CONNECTION_FILE` and the old schema-2 Gitea pool are
@@ -247,13 +233,12 @@ dim ci runner defaults show
 dim ci runner defaults reset
 ```
 
-They do not configure target native ordinary capacity. After a native Project
-adapter exists, the target requires
-operator-selected digest-pinned `runnerBaseImage` and `jobBaseImage` and explicit positive
-`cpus`, `memoryBytes`, `pids`, `timeoutSeconds`, and `outputBytes` for every
-host-owned capacity in `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE`. Candidate
-schema-3 job config selects only the fixed-shape script command; it cannot
-select an image, widen capacity bounds, or replace either operator base.
+They do not configure target native ordinary capacity. Native ordinary
+capacity belongs to the separately installed ordinary service and host
+execution configuration, not
+`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE`. Candidate schema-3 job config
+selects only the fixed-shape script command; it cannot select an image, widen
+capacity bounds, or replace either operator-selected base image.
 There is no Project runner override or fallback.
 
 DIM is pre-stable. Incompatible configuration and state are rejected rather
