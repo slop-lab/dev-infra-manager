@@ -52,7 +52,8 @@ const transitionSchemaColumns = `
     CHECK (length(required_job_set_revision) = 64 AND required_job_set_revision NOT GLOB '*[^0-9a-f]*'),
   evidence_json TEXT NOT NULL,
   evidence_sha256 TEXT NOT NULL
-    CHECK (length(evidence_sha256) = 64 AND evidence_sha256 NOT GLOB '*[^0-9a-f]*')`;
+    CHECK (length(evidence_sha256) = 64 AND evidence_sha256 NOT GLOB '*[^0-9a-f]*'),
+  authorization_verified INTEGER NOT NULL DEFAULT 0 CHECK (authorization_verified IN (0, 1))`;
 
 export const nativeProjectRootPromotionIntentSchema = `CREATE TABLE native_project_root_promotion_intent (${transitionSchemaColumns},
   PRIMARY KEY (project_id)
@@ -73,6 +74,7 @@ export type NativeProjectRootCurrentHead = {
 };
 
 export function assertNativeProjectRootPromotionRows(database: DatabaseSync): void {
+  assertAllTransitionsVerified(database);
   const imports = new Map(assertNativeProjectRootImportRows(database).map((entry) => [entry.projectId, entry]));
   const generations = activatedGenerations(database);
   const finalized = selectTransitions(database, "native_project_root_promotion_finalized");
@@ -92,9 +94,6 @@ export function assertNativeProjectRootPromotionRows(database: DatabaseSync): vo
     const current = heads.get(intent.projectId) ?? initialHead(imported);
     assertNextTransition(imported, current, intent, generations);
   }
-  if (finalized.length > 0 || intents.length > 0) {
-    throw new NativeProjectRootPromotionStateError("native Project root promotion evidence is not yet verified");
-  }
 }
 
 export function readNativeProjectRootCurrentHeadFromDatabase(
@@ -105,6 +104,7 @@ export function readNativeProjectRootCurrentHeadFromDatabase(
     .find((entry) => entry.projectId === projectId));
   const database = new DatabaseSync(databasePath, { readOnly: true, defensive: true });
   try {
+    assertAllTransitionsVerified(database, projectId);
     const generations = activatedGenerations(database);
     const intents = selectTransitions(database, "native_project_root_promotion_intent", projectId);
     const finalized = selectTransitions(database, "native_project_root_promotion_finalized", projectId);
@@ -113,13 +113,71 @@ export function readNativeProjectRootCurrentHeadFromDatabase(
       assertNextTransition(imported, current, intent, generations);
       throw new NativeProjectRootPromotionStateError("native Project root promotion intent is unresolved");
     }
-    if (finalized.length > 0) {
-      throw new NativeProjectRootPromotionStateError("native Project root promotion evidence is not yet verified");
-    }
     return current;
   } finally {
     database.close();
   }
+}
+
+export function saveNativeProjectRootPromotionIntent(
+  databasePath: string,
+  transition: NativeProjectRootPromotionTransition
+): void {
+  const database = new DatabaseSync(databasePath);
+  try {
+    const existing = selectTransitions(database, "native_project_root_promotion_intent", transition.projectId)[0];
+    if (existing !== undefined) {
+      if (existing.transitionId !== transition.transitionId) {
+        throw new NativeProjectRootPromotionStateError("native Project root promotion intent conflicts");
+      }
+      return;
+    }
+    insertTransition(database, "native_project_root_promotion_intent", transition);
+  } finally { database.close(); }
+}
+
+export function finalizeNativeProjectRootPromotion(
+  databasePath: string,
+  transition: NativeProjectRootPromotionTransition
+): void {
+  const database = new DatabaseSync(databasePath);
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const intent = selectTransitions(database, "native_project_root_promotion_intent", transition.projectId)[0];
+    if (intent === undefined || intent.transitionId !== transition.transitionId) {
+      throw new NativeProjectRootPromotionStateError("native Project root promotion intent is missing");
+    }
+    insertTransition(database, "native_project_root_promotion_finalized", transition);
+    database.prepare("DELETE FROM native_project_root_promotion_intent WHERE project_id = ?")
+      .run(transition.projectId);
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  } finally { database.close(); }
+}
+
+export function readNativeProjectRootPromotionIntents(
+  databasePath: string
+): readonly NativeProjectRootPromotionTransition[] {
+  const database = new DatabaseSync(databasePath, { readOnly: true, defensive: true });
+  try {
+    assertAllTransitionsVerified(database);
+    return selectTransitions(database, "native_project_root_promotion_intent");
+  }
+  finally { database.close(); }
+}
+
+export function readNativeProjectRootPromotionFinalized(
+  databasePath: string,
+  projectId?: string
+): readonly NativeProjectRootPromotionTransition[] {
+  const database = new DatabaseSync(databasePath, { readOnly: true, defensive: true });
+  try {
+    assertAllTransitionsVerified(database, projectId);
+    return selectTransitions(database, "native_project_root_promotion_finalized", projectId);
+  }
+  finally { database.close(); }
 }
 
 function foldCurrentHead(
@@ -186,6 +244,34 @@ function selectTransitions(
   const where = projectId === undefined ? "" : " WHERE project_id = ?";
   return database.prepare(`SELECT ${transitionColumns} FROM ${table}${where} ORDER BY project_id, sequence`)
     .all(...(projectId === undefined ? [] : [projectId])).map(parseNativeProjectRootPromotionRow);
+}
+
+function insertTransition(
+  database: DatabaseSync,
+  table: "native_project_root_promotion_finalized" | "native_project_root_promotion_intent",
+  transition: NativeProjectRootPromotionTransition
+): void {
+  database.prepare(`INSERT INTO ${table}
+    (${transitionColumns}, authorization_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
+    .run(transition.projectId, transition.transitionId, transition.importNonce, transition.sequence,
+      transition.reviewId, transition.protectedRef, transition.proposalRef, transition.expectedCommit,
+      transition.expectedTree, transition.candidateCommit, transition.candidateTree,
+      transition.decisionGeneration, transition.policyDigest, transition.policyRevision,
+      transition.requiredReviewRevision, transition.requiredJobSetRevision,
+      JSON.stringify(transition.evidence), transition.evidenceDigest);
+}
+
+function assertAllTransitionsVerified(database: DatabaseSync, projectId?: string): void {
+  const where = projectId === undefined
+    ? " WHERE authorization_verified != 1"
+    : " WHERE project_id = ? AND authorization_verified != 1";
+  for (const table of ["native_project_root_promotion_finalized", "native_project_root_promotion_intent"] as const) {
+    const row = database.prepare(`SELECT 1 FROM ${table}${where} LIMIT 1`)
+      .get(...(projectId === undefined ? [] : [projectId]));
+    if (row !== undefined) {
+      throw new NativeProjectRootPromotionStateError("native Project root promotion evidence is not yet verified");
+    }
+  }
 }
 
 function activatedGenerations(database: DatabaseSync): ReadonlySet<string> {

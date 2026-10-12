@@ -24,7 +24,7 @@ const promotionEvidence = z.object({
   reviewId: digest,
   requiredReviewerIds: z.array(identifier).min(1).readonly(),
   approvals: z.array(approvalEvidence).min(1).readonly(),
-  jobs: z.array(jobEvidence).min(1).max(64).readonly()
+  jobs: z.array(jobEvidence).max(64).readonly()
 }).strict().readonly();
 const storedTransition = z.object({
   projectId: identifier,
