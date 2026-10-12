@@ -138,8 +138,11 @@ strict job config and script. Operator capacity contributes digest-pinned
 runner and common job base images and resource ceilings.
 Candidate job bytes are not trusted by admission and do not create a persistent
 runner, image installation, or capacity. Native Git denies protected promotion
-when exact current ordinary evidence is unavailable. Optional QEMU integration
-capacity and its scheduler remain a separate, predecessor Gitea-only boundary.
+when exact current evidence for an ordinary job selected by the Project quality
+policy is unavailable. The policy may select no CI, ordinary jobs, QEMU jobs,
+or both. CI capacity and results do not make a Project or workspace ready.
+Optional QEMU integration capacity and its scheduler remain a separate,
+predecessor Gitea-only boundary.
 
 Native ordinary success records that the exact candidate-selected process ran
 the selected tests and exited successfully in its recorded sandbox. It may
