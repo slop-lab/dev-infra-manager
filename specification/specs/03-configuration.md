@@ -41,7 +41,7 @@ itself. A runtime error MUST NOT switch an existing or newly requested
 workspace between Incus and libvirt.
 
 **CONFIG-BACKEND-002:** The release-selected profile is persisted in target
-schema `9` workspace state as `runtimeBackendProfile`; it is not copied from
+schema `10` workspace state as `runtimeBackendProfile`; it is not copied from
 untrusted input. A new-workspace request MAY choose only a backend identity
 enabled by the installed release and local host. Omission MAY use the trusted
 host default. The selected backend, profile, and profile version become
@@ -71,9 +71,10 @@ Configuration and state admission MUST produce these results:
 | --- | --- |
 | Current release with `workspaceBackend: "sysbox"` and exact current state | Accept under the current Sysbox profile |
 | Current release with `workspaceBackend: "container"` or `"vm"` | Reject as unsupported before mutation; do not claim a candidate gate passed |
-| Target release with a newly selected enabled backend and exact release profile, plus successful local preflight | Permit creation of a fresh schema-`9` workspace record |
+| First release implementing the native adapter, with `workspaceBackend: "sysbox"` and a strict native source | Permit creation of a fresh source-aware schema-`9` workspace record under the unchanged Sysbox profile |
+| Target release with a newly selected enabled backend and exact release profile, plus successful local preflight | Permit creation of a fresh schema-`10` workspace record |
 | Target release with `vm` while KVM, Incus, image, storage, network, successful memory decrease, provider-name cloud-init metadata, controlled-first-boot validation, host-only backup permission, restriction, or release-gate support is absent or indeterminate | Reject before provider or state mutation and report the failed prerequisite |
-| Target release with `workspaceBackend: "sysbox"` or schema-`8` `runtimeBackend: "sysbox"` | Reject unchanged with prior-release export/discard/create/restore guidance; never alias to `container` |
+| Later multi-backend target release with `workspaceBackend: "sysbox"`, schema-`8` `runtimeBackend: "sysbox"`, or schema-`9` `runtimeBackend: "sysbox"` | Reject unchanged with prior-release export/discard/create/restore guidance; never alias to `container` |
 | Existing `container` workspace requested as `vm`, or existing `vm` requested as `container` | Reject unchanged before contacting either provider |
 | Unknown backend, profile, profile version, state schema, provider field, device, label, or mixed provider identity | Reject unchanged before plugin, hook, grant, network, storage, or runtime mutation |
 | Guest, Project, plugin, or environment supplies low-level Incus/libvirt/QEMU/device/network/storage settings | Reject the settings; do not widen the release profile |
@@ -161,7 +162,7 @@ persistent Git configuration.
 
 ## Native control-plane host connection
 
-**CONFIG-NATIVE-CONTROL-PLANE-001 (host-file parser and pending-admission adapter implemented):**
+**CONFIG-NATIVE-CONTROL-PLANE-001:**
 This is the explicit opt-in connection for the native Project adapter. A
 participating host MUST set
 `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` to a regular,
@@ -176,59 +177,86 @@ non-symbolic-link, single-link, DIM-user-owned mode-`0600` JSON file of at most
     "transport": "https",
     "endpoint": "https://git-control.example",
     "serviceId": "native-main",
-    "username": "host-a",
-    "password": "replace-with-native-host-credential"
-  },
-  "ordinaryCi": {
-    "transport": "https",
-    "endpoint": "https://ci-control.example",
-    "serviceId": "ordinary-main",
-    "hostToken": "replace-with-host-token"
-  },
-  "capacities": {
-    "primary": {
-      "runnerBaseImage": "registry.example/dim/ordinary-runner@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      "jobBaseImage": "registry.example/dim/ordinary-job@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-      "cpus": 4,
-      "memoryBytes": 8589934592,
-      "pids": 2048,
-      "timeoutSeconds": 3600,
-      "outputBytes": 16777216
+    "generationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "workspaceWriteIssuer": {
+      "username": "host-a",
+      "password": "replace-with-canonical-32-byte-base64url-secret"
+    },
+    "rootReadIssuer": {
+      "username": "root-reader-host-a",
+      "password": "replace-with-another-canonical-32-byte-base64url-secret"
     }
   }
 }
 ```
 
-The schema has no Project list or candidate-selected image. `hostId`, service
-identities, and capacity names are safe non-empty identifiers. Each capacity's
-runner and job base images are operator-selected registry references pinned by
-complete lowercase `sha256` digests with no tags and shared across eligible
-Projects on that capacity. Each resource, timeout, and output bound
-is a positive integer. Candidate config and claims cannot widen them. URLs are
+This readiness-only form contains exactly `schemaVersion`, `hostId`, and
+`nativeGit`. It has no Project list, ordinary-CI endpoint, capacity,
+candidate-selected image, reviewer, promoter, or storage-administrator
+identity. `hostId`, `serviceId`, and both usernames are safe non-empty identifiers.
+URLs are
 credential-free origins without path, query, or fragment. Each transport is exactly `https` or, only for a loopback HTTP
 origin, `loopback-http`. Unknown keys, duplicate
-capacity names after normalization, shared tokens, redirects, service-identity
-mismatch, and mutable or unassigned endpoints fail before controller capacity
-registration or runtime mutation.
+credentials, redirects, service-identity or host-identity mismatch, and mutable
+or unassigned endpoints fail before Project, workspace, grant, or runtime
+mutation. HTTPS requests use the system certificate store and hostname
+verification, with no insecure verification bypass or automatic redirect.
+Ordinary-CI service and host-capacity configuration belong to their
+separate operator-owned connection and are not accepted in this file.
 
-The native Git password and ordinary host token are distinct, canonical
-base64url encodings of exactly 32 bytes. The native Git username equals the
-host ID. Parsing this host file does not attest either service or make a native
+The generation is exactly 64 lowercase hexadecimal characters and identifies
+the current serving generation, not the immutable generation in an original
+Project import receipt. Both passwords are distinct canonical base64url
+encodings of exactly 32 bytes. The workspace-write issuer username equals the
+host ID. Parsing this host file does not attest the service or make a native
 Project runnable.
 
-The native Git credential is host-scoped read/attestation authority, not a
-reviewer, promoter, or storage-administrator identity. Ordinary admission and
-host authorities are distinct. `hostToken` may claim, renew, recover, and
-submit a result only for this host's named capacities. The separate global
+The workspace-write issuer is host-scoped readiness-attestation and
+proposal-write lease authority. The separate root-read issuer can mint only a
+short-lived read lease used to materialize the protected root snapshot. Neither
+is a reviewer, promoter, storage-administrator, or CI identity. The separate global
 operator registrar credential may attest a Project created through the trusted
 native lifecycle and its protected required-job policy without a separate
 Project-specific CI approval, but cannot review candidate-selected job bytes,
 claim, or report. The
 central service's separate native reporter credential, not a host credential,
 submits accepted durable evidence to native Git. None may enter a workspace,
-job, image, Compose bundle, log, or Project state. Controller startup validates both authenticated service
-identities before advertising capacity. Failure closes ordinary admission and
-claiming but does not fall back to a local or Project-scoped runner.
+job, image, Compose bundle, log, or Project state. Failure of an independently
+configured ordinary-CI service closes ordinary admission and claiming but does
+not change native Project readiness or cause a local or Project-scoped fallback.
+
+**CONFIG-NATIVE-READINESS-001:** The selected host proves readiness through
+exact `POST /v1/projects/{projectId}/workspace-readiness` with no query string.
+The request body contains exactly `schemaVersion: 1`, the current connection's
+`generationId`, `repositoryId: "root"`, the full `protectedRef`, and the
+schema-5 record's exact `rootCommit`, `rootTree`, and three review-policy
+revisions. The authenticated credential supplies the owner host and cannot
+select another host in the body.
+
+A successful non-cacheable `200` response contains exactly schema version,
+service ID, owner host ID, Project ID, root repository ID, generation ID,
+protected ref, commit, tree, policy revision, required-review revision, and
+required-job-set revision. The service returns it only after a fresh read-only
+proof of the registered owner, imported root and protected ref, complete object
+graph, authoritative policy, and installed proposal-only workspace transport.
+The host requires exact identity and revision equality with the connection and
+Project record. The selected commit and tree must also match unless a workspace
+lifecycle operation explicitly requests a fast-forward selection, in which case
+the service proves that its returned current head descends from the stored root.
+It
+reloads the owner-only connection while holding the Project lock before each
+ready transition or workspace lifecycle selection. Snapshot materialization
+uses the distinct root-read issuer; readiness and proposal transport use the
+workspace-write issuer. A later serving generation does not rewrite the
+original import receipt.
+Missing, additional, malformed, oversized, stale, foreign, redirected, or
+cacheable responses fail closed.
+
+This operation creates no lease, credential, ref, review, approval, promotion,
+CI admission, attempt, result, Project state, or workspace state. It is the only
+service request allowed to authorize the schema-5 to schema-6 ready transition;
+a root-import proof, snapshot, CI result, or successful Git request alone is not
+readiness evidence.
 
 **CONFIG-NATIVE-SELECTION-001:** Presence of
 `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` selects only the native adapter.
@@ -268,9 +296,12 @@ limit does not make HTTPS a Gitea fallback.
 
 Pending admission grants no repository transport, workspace, ordinary or
 QEMU admission, review, promotion, removal, purge, or ready authority. Every
-other native mutation MUST fail closed until the ordinary Sysbox path, native
-QEMU path, exact human review, checked promotion path, and
-`VERIFICATION-NATIVE-CUTOVER-001` are complete. The direct host CLI implements
+other native mutation MUST fail closed until its own contract is implemented.
+The later ready transition depends on registered owned repository state,
+protected-root snapshot and proposal-only transport, plus workspace runtime
+prerequisites under `TRUST-NATIVE-READINESS-001`. It MUST NOT wait for ordinary
+or QEMU CI deployment, a CI result, or a completed promotion. The direct host
+CLI implements
 only this pending step and local pending-state queries; the controller remains
 outside the native path. This contract does not claim that the clean-host gate
 passes.
@@ -283,6 +314,20 @@ exact root commit/tree and policy, and bundle digest as
 in their distinct owner-only connection files, never in Project state.
 Creating a draft does not load this target connection, advertise capacity,
 grant Git transport, or let a native lifecycle request fall back to Gitea.
+
+The installed bootstrap command names those files independently with
+`--registrar-connection` and `--importer-connection`; neither is inferred from
+`DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` or
+`DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE`. It also requires
+`--project-id`, `--source-repository`, and the canonical full branch
+`--source-ref`; accepts only the reviewed manifest at the pinned source commit;
+and optionally accepts an absolute `--git-executable` (default `/usr/bin/git`).
+The command creates its disposable scratch below the selected private DIM state
+root and does not accept an alternate scratch, remote URL, branch shorthand,
+tag, raw policy JSON, or credential value on the command line. Registrar and
+importer files retain their existing exact schema-1 formats and loopback-HTTP
+limit. This bootstrap-host limit is independent of HTTPS ordinary/QEMU worker
+connections and does not claim built-in TLS termination for any service.
 
 **CONFIG-QEMU-SCHEDULER-001:** This is a predecessor Gitea-only contract.
 `DIM_QEMU_SCHEDULER_CONNECTION_FILE` MAY select
@@ -308,7 +353,7 @@ tokens, an explicit label set, and a lease of at least 60 seconds. Those
 Project-scoped credentials and `workflow-job` events belong **only** to
 `CONFIG-QEMU-SCHEDULER-001`; they MUST NOT authorize native QEMU admission.
 
-**CONFIG-NATIVE-QEMU-001 (host-file parser implemented; native adapter not implemented):** Native Project QEMU
+**CONFIG-NATIVE-QEMU-001:** Native Project QEMU
 capacity MUST use a separate operator-owned connection from the predecessor
 `DIM_QEMU_SCHEDULER_CONNECTION_FILE`. A participating host supplies
 `DIM_NATIVE_QEMU_CONNECTION_FILE` as a regular, non-symlink, DIM-user-owned
@@ -318,11 +363,18 @@ mode-`0600`, single-link JSON file of at most 64 KiB. Its exact schema is:
 {
   "schemaVersion": 1,
   "hostId": "host-a",
+  "generationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "gitExecutable": "/usr/bin/git",
   "scheduler": {
     "transport": "https",
     "endpoint": "https://qemu-ci.example",
     "serviceId": "qemu-main",
     "hostToken": "replace-with-canonical-32-byte-base64url-secret"
+  },
+  "nativeGit": {
+    "transport": "loopback-http",
+    "endpoint": "http://127.0.0.1:9080",
+    "serviceId": "native-main"
   },
   "capacities": [{
     "capacity": "primary",
@@ -330,6 +382,7 @@ mode-`0600`, single-link JSON file of at most 64 KiB. Its exact schema is:
     "jobBaseImage": "registry.example/dim/qemu-job@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     "cpus": 4,
     "memoryBytes": 8589934592,
+    "supervisorMemoryBytes": 9663676416,
     "pids": 2048,
     "timeoutSeconds": 3600,
     "outputBytes": 16777216
@@ -337,9 +390,14 @@ mode-`0600`, single-link JSON file of at most 64 KiB. Its exact schema is:
 }
 ```
 
-The credential example is a placeholder, not a valid token. The host token
-MUST be canonical base64url decoding to exactly 32 bytes; it is separate from
-native Git, ordinary CI, registrar, reporter, and predecessor QEMU secrets.
+The credential examples are placeholders, not valid tokens. The generation is
+exactly 64 lowercase hexadecimal characters and `gitExecutable` is an absolute
+non-root path. The host token MUST be canonical base64url decoding to exactly
+32 bytes and MUST be distinct from ordinary CI, registrar, reporter, and
+predecessor QEMU secrets. `nativeGit` is exactly the loopback HTTP origin for
+`native-main`. The scheduler brokers one short-lived, Project/root-scoped
+candidate lease for an active exact assignment; no reusable native-Git
+credential is persisted or passed into the supervisor container or guest.
 The scheduler endpoint is an exact credential-free HTTP origin with no path,
 query, or fragment. `transport` is exactly `https` for an HTTPS origin or
 `loopback-http` for an HTTP origin on `127.0.0.1` or `[::1]` only. The stable
@@ -357,6 +415,13 @@ executor from ordinary Sysbox capacity, outside the installed two-service
 Compose bundle. Native selection rejects the predecessor QEMU variable even
 when this file is absent.
 
+`memoryBytes` is the guest RAM bound copied into the authoritative descriptor
+and passed to QEMU. `supervisorMemoryBytes` is the outer trusted Docker
+supervisor limit and MUST be strictly greater than `memoryBytes`; operators
+must size the difference for QEMU, the kernel and initramfs, and supervisor
+process overhead. Equal or smaller limits fail while parsing this private file,
+before scheduler contact.
+
 The host token may claim, renew, recover, and report only its own QEMU
 capacity. Scheduler intake accepts authenticated events bound to the current
 native Project, review, exact candidate commit/tree and required-job policy.
@@ -365,14 +430,97 @@ ceilings, host command, mount, network or reusable credential. The candidate
 may supply only a strict job definition and script executed with fixed argv
 inside the VM. All such results are `candidate-controlled`, including on
 KVM-capable hosts. Missing KVM reports unavailable; it never changes a
-required QEMU job into an ordinary job or a success. No shipped controller
-reads this target native QEMU connection as authority; its presence, including
-an empty value, rejects lifecycle option construction before the adapter and
-scheduler exist, without runtime mutation.
+required QEMU job into an ordinary job or a success. No controller lifecycle
+reads this target native QEMU connection as authority; the separately invoked
+native QEMU host worker does. Its presence, including an empty value, still
+rejects lifecycle option construction before any Gitea fallback, without
+runtime mutation.
 
-The future scheduler owns a distinct private configuration and database with
+The scheduler owns a distinct private configuration and database with
 host-scoped tokens and global capacities, not Project-bound credentials or
 ordinary-CI state; see [Native QEMU Scheduler and Evidence](local-details/native-qemu.md).
+
+## Native ordinary-CI host connection
+
+**CONFIG-NATIVE-ROOT-CI-HOST-001:** An installed ordinary Sysbox execution
+node uses one operator-owned, absolute, mode-`0600`, single-link regular JSON
+file. The file is host state and MUST NOT be mounted into a workspace or job.
+Its exact schema is:
+
+```json
+{
+  "schemaVersion": 1,
+  "hostId": "host-a",
+  "generationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "stateDirectory": "/var/lib/dim/native-root-ci-host",
+  "gitExecutable": "/usr/bin/git",
+  "ordinaryCi": {
+    "transport": "https",
+    "endpoint": "https://ordinary-ci.example",
+    "serviceId": "ordinary-main",
+    "credential": {
+      "username": "host-a",
+      "password": "replace-with-canonical-32-byte-base64url-secret"
+    }
+  },
+  "nativeGit": {
+    "transport": "https",
+    "endpoint": "https://native-git.example",
+    "serviceId": "native-main"
+  },
+  "capacities": ["primary", "secondary"]
+}
+```
+
+`hostId` and every capacity are safe identifiers, and capacities are nonempty
+and unique. The ordinary credential username equals `hostId`. Its password is
+a canonical base64url encoding of exactly 32 bytes and is the node's only
+reusable service credential.
+Endpoints are credential-free origins. `transport` is `https`, or
+`loopback-http` only for `127.0.0.1` or `[::1]`. The generation is exactly 64
+lowercase hexadecimal characters. State and executable paths are absolute.
+The state directory and every capacity journal are owner-only; a node MUST
+refuse a symlink, foreign owner, permissive mode, malformed journal, duplicate
+capacity, or changed replay identity before claiming.
+
+Each configured capacity runs one exclusive loop. The ordinary scheduler,
+never the node, derives the exact descriptor and issues or revokes the attempt
+after durably reserving the node and capacity. Exact reservation replay returns
+the same server-selected assignment. For an active claim the node may request
+one ephemeral candidate-read lease from the ordinary service using only its
+host credential and claim identity. The service derives the authenticated host,
+configured capacity, active claim, attempt, descriptor, and job kind from its
+own state and asks native Git with its distinct `candidateReader` credential.
+Native Git issues an in-memory lease only after proving the current unrevoked
+exact attempt, descriptor digest and contents, `ordinary-sysbox` kind, host,
+capacity, Project, repository, protected head, candidate commit, and candidate
+tree. It repeats that currentness proof before each upload-pack invocation.
+Malformed requests return `400`, unknown credentials return `401`, and a
+configured candidate reader used for the wrong execution kind returns `403`.
+Missing, unregistered, or non-current tuples return `404`; a known current tuple
+that conflicts with live authority, including inactive authority, returns
+`409`. Unexpected storage and I/O failures remain internal errors.
+
+The node persists exact claim, renewal, recovery, and result request bytes
+before each uncertain network boundary. Restart replays those bytes and
+ownership-inspects cleanup; it never regenerates an identity, adopts an unknown
+resource, silently uses `runc`, or claims another job on a fenced capacity. The
+candidate lease is not persisted by either service or the node and only it
+reaches the private Git subprocess. No scheduler `candidateReader`, attempt
+issuer, host credential, ordinary-CI credential, or native-Git secret enters
+the candidate tree, container, arguments, logs, or terminal evidence. Host
+config and journal schemas reject `attemptIssuer`, `rootReadIssuer`, candidate
+lease credentials, and arbitrary reader mappings.
+
+**CONFIG-NATIVE-ROOT-CI-ADMISSION-001:** Central Project admission uses a
+separate operator-owned mode-`0600` JSON file containing exactly
+`schemaVersion: 1`, the same `generationId`, and `ordinaryCi` with
+`transport`, credential-free `endpoint`, fixed `serviceId: "ordinary-main"`,
+and a `registrar` username/password credential. It contains no workspace,
+Gitea, host token, capacity, runtime socket, native Git issuer, or result
+reporter. Admission asks the ordinary service to derive the current imported
+root and protected quality policy from native authority; it does not inspect
+or require a workspace.
 
 Project-specific Git namespaces, repository aliases, root repository/ref,
 profiles, and the trusted host's effective backend choice belong to
