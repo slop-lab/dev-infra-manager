@@ -65,6 +65,24 @@ export async function inspectImportedNativeRootReadOnly(input: NativeRootProofGi
   }
 }
 
+export async function assertNativeRootSelectionFastForward(
+  input: NativeRootProofGitInput,
+  selectedCommit: string,
+  selectedTree: string
+): Promise<void> {
+  try {
+    const tree = (await runPinned(input,
+      ["rev-parse", "--verify", `${selectedCommit}^{tree}`])).stdout.trim();
+    if (tree !== selectedTree) {
+      throw new NativeRootImportBundleError("native root selected tree conflicts");
+    }
+    await runPinned(input, ["merge-base", "--is-ancestor", selectedCommit, input.currentCommit]);
+  } catch (error) {
+    if (error instanceof NativeRootImportBundleError) throw error;
+    throw new NativeRootImportBundleError("native root selection is not a fast-forward", { cause: error });
+  }
+}
+
 async function inspectRefs(input: NativeRootProofGitInput): Promise<void> {
   const refs = (await runPinned(input, ["for-each-ref", "--format=%(refname)"]))
     .stdout.split("\n").filter((ref) => ref.length > 0);
