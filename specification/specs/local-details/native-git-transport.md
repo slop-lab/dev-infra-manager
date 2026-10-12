@@ -119,6 +119,16 @@ Issuance returns no lease for an incomplete or non-live import.
 The separately configured host-bound workspace write issuer is distinct from
 every registrar, importer, read issuer, service, host, readiness, and activation
 credential. It is not a Git identity and cannot authenticate smart HTTP.
+The target adapter also permits that issuer to call exact `POST
+/v1/projects/{projectId}/workspace-readiness` under
+`CONFIG-NATIVE-READINESS-001`. That route performs the same live owner, root,
+protected-ref, object-graph, authoritative-policy, executable-identity, and
+proposal-hook checks used before workspace-write issuance, but returns only the
+strict identity, snapshot, and policy-revision proof. It creates no credential,
+lease, service row, ref, review, approval, CI evidence, Project record, or
+workspace record. The installed service exposes this route only to the
+configured owner-host workspace-write issuer for the current serving
+generation.
 After exact activation, only the imported Project's owner-host issuer may call
 exact `POST /v1/projects/{projectId}/workspace-write-leases` without a query
 string. The strict JSON body contains exactly `schemaVersion: 1`, the active
@@ -223,6 +233,65 @@ promotion ledger, admit CI, promote, or grant Project readiness. Revocation
 does not delete or replace approval evidence and grants no promotion authority.
 Responses are non-cacheable and expose no configured username, password, other
 account, or review list.
+
+### Installed review and protected promotion operator contract
+
+The installed native-Git configuration additionally contains `hostPromoters`,
+an array of strict `{hostId, username, password}` credentials. A promoter is
+bound to the same owner host as the registered Project. Its username and
+canonical 32-byte base64url password are distinct from every registrar,
+importer, issuer, reviewer, ordinary-CI, QEMU-CI, readiness, and activation
+value. A promoter credential is not a Git transport, reviewer, CI, scheduler,
+or general administrator identity. Human-reviewer credentials cannot create or
+promote a review, and promoter credentials cannot approve or revoke one.
+
+The installed service exposes exact `GET /v1/host-promoter-identity`, returning
+only schema version `1`, service ID, role `host-promoter`, owner host ID, and the
+serving generation. Exact `POST
+/v1/projects/{projectId}/repositories/root/reviews` accepts only
+`{schemaVersion:1, proposalRef}` from the owner-host promoter and creates or
+replays the immutable authoritative review through the same serialized complete
+tree proof as the in-process method. Exact `POST` to the named review's
+`/promotions` suffix accepts only `{schemaVersion:1}` from that promoter. Both
+routes require the exact serving generation in `x-dim-generation-id`, have no
+query string, and return non-cacheable strict JSON. The existing reviewer GET,
+approval, and revocation routes remain reviewer-only inspection and human
+decision surfaces.
+
+Promotion holds the root review serializer from the first live-root read until
+the durable result is finalized. It reconstructs the current review and active
+approval set, rereads the current imported policy, and requires the review's
+repository, protected ref, expected protected head, candidate commit/tree,
+protection-policy revision, and required-review revision to match exactly.
+Quality policy and required-job-set revision are evaluated separately at
+promotion time: a quality-only revision change does not invalidate an otherwise
+exact security approval, but every job selected by the current quality policy
+must have exact current successful delivered evidence of its named execution
+kind. An empty selected job set requires no CI call or result. Ordinary evidence
+must pass the installed current-terminal proof; QEMU evidence must be the exact
+current native attempt/status and a completed, cleanup-confirmed scheduler
+result for its stored review event. Evidence from an unselected or different
+kind is ignored and cannot satisfy a selected slot.
+
+Before moving the ref, the service writes one canonical intent to the existing
+format-8 promotion-intent table and synchronizes the database. Git then performs
+one old-object-ID to candidate-object-ID compare-and-swap while also verifying
+the proposal ref. After a successful CAS the service atomically moves that exact
+intent to the append-only finalized table. Startup and request-time recovery
+accept only a canonical next intent: an old ref means the CAS has not happened
+and the operation may retry it; the exact candidate ref means the CAS happened
+and recovery finalizes without another Git write; any other ref is an integrity
+failure. A finalized exact candidate returns `already-current`. No state may be
+finalized from hashes alone, and an unresolved or malformed row yields no root
+proof. Concurrent promotions from one old head permit at most one successful
+transition.
+
+The packaged operator client reads either a reviewer or promoter connection
+from a caller-owned, single-link, non-symlink mode-`0600` JSON file. The strict
+file binds schema version, role, service ID, HTTP(S) origin, serving generation,
+username, and password. Review create, inspect, approve, revoke, and promote
+commands never accept a raw credential in argv, a URL, a job payload, or output;
+they authenticate only in the HTTP header and print only the strict response.
 
 The installed bundle has separate trusted in-process read-only ordinary and
 QEMU descriptor methods. Each accepts a strict object containing only `projectId`,
@@ -793,12 +862,14 @@ select another Project through request data.
 The core package's callable host worker journals claim, result, and recovery
 requests, obtains scoped candidate-tree read authority, runs one bounded Sysbox
 job, and verifies container and private-root cleanup. The installed CLI and
-controller do not start that worker. There is no native Project adapter, native
-QEMU scheduler or executor, installed protected-promotion route, or clean-host
-Sysbox/KVM acceptance. The bundle therefore exposes no Project-ready or
-runtime-ready state. Any later protected promotion must keep ordinary and QEMU
-attempt and result authority separate, require every kind selected by current
-policy, and retain exact-tree human approval and checked CAS.
+controller do not start that worker. The native Project adapter, native QEMU
+scheduler and executor, and installed protected-promotion route are implemented,
+but clean-host Sysbox/KVM acceptance remains outstanding. Protected promotion
+keeps ordinary and QEMU attempt and result authority separate, requires every
+kind selected by current quality policy, and retains exact-tree human approval
+and checked CAS. The quality policy may select zero jobs, one execution kind,
+or both. Neither CI deployment nor a CI result is a Project readiness
+prerequisite, and no CI role may approve or promote.
 
 ## Inputs and identity
 
@@ -916,6 +987,10 @@ or oversized state. Status rereads live refs and current configuration. Any
 protected head, proposal commit/tree, policy/revision, writer, or reviewer
 identity drift makes approval stale. Restart with unchanged state preserves
 approval but grants no additional authority.
+The current standalone format folds all three revisions into the review digest,
+so a quality-only revision change also stales its approval. The native target
+must split the security approval tuple from the separately revisioned quality
+policy as `TRUST-PROMOTION-001` requires. That split is not implemented.
 
 ## Exact CI evidence and protected promotion
 
@@ -933,7 +1008,9 @@ same attempt is rejected. Startup validates record schema, digest, path, mode,
 and ownership. Promotion considers only the current durable, unrevoked
 attempt-issuer-created attempt for every currently required job and requires
 each to be `success` with `exited/0` from the configured
-`ordinaryCi.resultReporter` credential.
+`ordinaryCi.resultReporter` credential. An empty Project quality policy
+requires no attempt or CI result. An ordinary-only or QEMU-only policy requires
+no evidence from the unselected kind.
 
 For native ordinary CI, the issued attempt and completed event additionally
 bind evidence class `candidate-controlled` and the canonical execution
