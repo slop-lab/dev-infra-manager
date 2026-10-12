@@ -315,11 +315,12 @@ record from acquiring mixed identity and makes partial cleanup reviewable.
 
 ## Versioned target state and transition
 
-The first release that adopts `container` or `vm` MUST bump workspace records
-from schema `8` to schema `9`. Schema `9` retains the schema-`8` `workspaceId`,
-name, Project identity, immutable root repository/ref/commit, canonical
+The first release that adopts `container` or `vm` MUST bump source-aware
+workspace records from schema `9` to schema `10`. Schema `10` retains the
+schema-`9` `workspaceId`, name, Project identity, immutable root
+repository/ref/commit, canonical
 workspace-data path, phase, profiles, capability results, Compose Project name,
-resource values, routes, Git identity/base URL, host aliases, manifest path,
+resource values, routes, the `WORKSPACE-SOURCE-001` source discriminator, host aliases, manifest path,
 timestamps, setup result, and error fields with their existing meaning. It
 removes the Docker-specific `containerName`, `networkName`, `dockerVolumeName`,
 and ambiguous `kvm` fields. The following exact fields are added or replaced;
@@ -327,7 +328,7 @@ the JSON is an embedded fragment, not a complete workspace record:
 
 ```json
 {
-  "schemaVersion": 9,
+  "schemaVersion": 10,
   "runtimeBackend": "vm",
   "runtimeBackendProfile": {
     "name": "incus-vm",
@@ -359,23 +360,24 @@ exactly `container`, `dataVolume`, and `network` objects with the same exact
 Project-owned runtime-provider binding, not a workspace-owned Incus project.
 All generated IDs are immutable random identities stored both in state and
 provider metadata; names are non-authorizing locators. Exact-schema parsing
-MUST reject missing, extra, unknown, or mistyped schema-`9` fields. Current
-schema-`8` fields not explicitly retained above MUST NOT be inferred or copied.
+MUST reject missing, extra, unknown, or mistyped schema-`10` fields. Current
+schema-`9` fields not explicitly retained above MUST NOT be inferred or copied.
 
 The transition matrix is:
 
-| Input to a target schema-`9` release | Result |
+| Input to a target schema-`10` release | Result |
 | --- | --- |
-| New workspace with a release-supported backend/profile and successful local preflight | Create schema `9` state only after ownership-safe resource creation reaches its documented commit point |
-| Exact schema `9`, backend, profile/version, resources, labels, and ownership | Reconcile only those exact resources |
+| New workspace with a release-supported backend/profile and successful local preflight | Create schema `10` state only after ownership-safe resource creation reaches its documented commit point |
+| Exact schema `10`, backend, profile/version, resources, labels, and ownership | Reconcile only those exact resources |
 | Schema `8` record with historical `runtimeBackend: "sysbox"` | Reject byte-for-byte unchanged with old-release export/discard/create/restore guidance |
+| Schema `9` source-aware record with historical `runtimeBackend: "sysbox"` | Reject byte-for-byte unchanged with old-release export/discard/create/restore guidance |
 | Configuration value `sysbox` read by a target release | Reject unchanged; it is not an alias for `container` |
 | Existing `container` requested as `vm`, or `vm` requested as `container` | Reject unchanged before provider access |
 | Unknown schema, backend, profile, profile version, resource field, label, or mixed provider identity | Reject unchanged before plugin, hook, grant, network, storage, or runtime mutation |
 | Retained volume from another backend/profile or without the exact retained record | Reject without attachment or metadata change |
 | A release that has not passed the VM live gate sees `vm` or `incus-vm` | Reject as unsupported before state or provider mutation |
 
-No schema `8` to schema `9` workspace migration exists. To preserve data, the
+No schema `8` or `9` to schema `10` workspace migration exists. To preserve data, the
 operator MUST keep the prior exact DIM release and backend available, stop new
 work in the workspace, and run the reviewed Project-owned export/backup task
 from that release. The export MUST be a backend-neutral archive of declared
