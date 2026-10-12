@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
@@ -10,9 +11,13 @@ import {
 } from "./nativeOrdinaryTerminalEvidenceFixture.js";
 import {
   cleanupFinalizeFixtures,
+  generationId,
+  hostPromoterAuthorization,
+  humanReviewerAuthorization,
   rootRepository,
   runGit
 } from "./nativeRootImportFinalizeFixture.js";
+import { authoritativePolicy } from "./authoritativeNativeCandidateFixture.js";
 import { statusRecordPath } from "./nativeOrdinaryStatusFixture.js";
 import { bundleSecrets } from "./bundleConfigFixture.js";
 
@@ -101,6 +106,40 @@ describe("installed two-service ordinary terminal evidence", () => {
     expect(await nativeSnapshot(revoked.nativeRoot, revoked.reviewId)).toEqual(revokedBefore);
     expect(await nativeSnapshot(expired.nativeRoot, expired.reviewId)).toEqual(expiredBefore);
   }, 60_000);
+
+  it("promotes only after the policy-selected ordinary result is durably delivered", async () => {
+    // Given
+    const policy = authoritativePolicy(["owner"], [], [
+      { name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }
+    ]);
+    const runner = `schemaVersion: 4
+ordinary:
+  jobs:
+    source:
+      script: .dim/ci/jobs/source.bash
+      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
+qemu:
+  jobs: {}
+`;
+    const fixture = await nativeOrdinaryTerminalFixture("ordinary-terminal-promotion", true, policy, runner);
+    const active = await createActiveAttempt(fixture);
+    expect((await hostResult(fixture.ordinaryOrigin, resultRequest(active.claim, active.issuance, "945"))).status)
+      .toBe(202);
+    await waitFor(() => terminalState(fixture.database).outbox === "delivered");
+    const approved = await reviewPost(fixture.native.origin,
+      `/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}/approvals`,
+      humanReviewerAuthorization, { requestId: randomUUID() });
+    expect(approved.status, JSON.stringify(approved.body)).toBe(201);
+
+    // When
+    const promoted = await reviewPost(fixture.native.origin,
+      `/v1/projects/project-a/repositories/root/reviews/${fixture.reviewId}/promotions`,
+      hostPromoterAuthorization, { schemaVersion: 1 });
+
+    // Then
+    expect(promoted.status).toBe(201);
+    expect(promoted.body).toMatchObject({ outcome: "promoted", reviewId: fixture.reviewId, sequence: 1 });
+  }, 45_000);
 });
 
 async function deliveredFixture(label: string, suffix: string) {
@@ -148,6 +187,13 @@ function hostResult(origin: string, body: object): Promise<Response> {
     },
     body: JSON.stringify(body)
   });
+}
+
+async function reviewPost(origin: string, path: string, authorization: string, body: object) {
+  const response = await fetch(`${origin}${path}`, { method: "POST", headers: {
+    authorization, "content-type": "application/json", "x-dim-generation-id": generationId
+  }, body: JSON.stringify(body) });
+  return { status: response.status, body: await response.json() };
 }
 
 function terminalState(file: string): { readonly outbox: string } {

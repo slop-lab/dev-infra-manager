@@ -17,6 +17,7 @@ import type { NativeJobAttemptIssuance } from "../../../../core/packages/core/sr
 import type { AdmissionVerifierHttpClient } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import { bundleSecrets, idleOrdinaryConfig } from "./bundleConfigFixture.js";
 import { createBundleReview, nativeBundleReviewFixture } from "./nativeBundleReviewFixture.js";
+import { authoritativePolicy } from "./authoritativeNativeCandidateFixture.js";
 import { generationId, type RunningService } from "./nativeRootImportFinalizeFixture.js";
 
 const readinessToken = Buffer.alloc(32, 81).toString("base64url");
@@ -47,14 +48,17 @@ type FixtureValueInput = {
 
 export async function nativeOrdinaryTerminalFixture(
   label: string,
-  deliverStatus = true
+  deliverStatus = true,
+  policy: object = authoritativePolicy(),
+  runner?: string
 ): Promise<NativeOrdinaryTerminalFixture> {
   const transport = createNodeNativeGitAdmissionHttpClient();
   let ordinaryOrigin = "http://127.0.0.1:1";
   const nativeHttpClient: AdmissionVerifierHttpClient = {
     request: (input) => transport.request({ ...input, endpoint: ordinaryOrigin })
   };
-  const nativeFixture = await nativeBundleReviewFixture(label, undefined, undefined, undefined, nativeHttpClient);
+  const nativeFixture = await nativeBundleReviewFixture(label, undefined, policy, undefined, nativeHttpClient,
+    undefined, undefined, {}, undefined, runner);
   const envelope = await createBundleReview(nativeFixture.service);
   const ordinaryRoot = await mkdtemp(join(tmpdir(), "dim-native-terminal-ordinary-"));
   await chmod(ordinaryRoot, 0o750);

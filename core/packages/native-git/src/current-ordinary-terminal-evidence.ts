@@ -14,13 +14,17 @@ type CurrentOrdinaryTerminalEvidenceContext = {
   readonly httpClient: AdmissionVerifierHttpClient;
   readonly runtime: AuthoritativeNativeCandidateRuntime;
   readonly serialize: <Result>(operation: () => Promise<Result>) => Promise<Result>;
+  readonly alreadySerialized?: boolean;
 };
 
 export async function currentOrdinaryTerminalEvidence(
   context: CurrentOrdinaryTerminalEvidenceContext,
   input: CurrentOrdinaryTerminalEvidenceSelector
 ): Promise<CurrentOrdinaryTerminalEvidence> {
-  const before = await context.serialize(() => currentAuthoritativeOrdinaryTerminal(
+  const serialize = context.alreadySerialized === true
+    ? <Result>(operation: () => Promise<Result>): Promise<Result> => operation()
+    : context.serialize;
+  const before = await serialize(() => currentAuthoritativeOrdinaryTerminal(
     context.runtime,
     input,
     context.config.resultReporter.username
@@ -35,7 +39,7 @@ export async function currentOrdinaryTerminalEvidence(
     status: before.terminal.status,
     statusJson: before.terminal.serialized
   });
-  return context.serialize(async () => {
+  return serialize(async () => {
     const after = await currentAuthoritativeOrdinaryTerminal(
       context.runtime,
       input,
