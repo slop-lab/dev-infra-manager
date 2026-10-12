@@ -28,6 +28,7 @@ import {
 } from "./nativeOrdinaryHostClientProtocol.js";
 export { NativeOrdinaryHostClientError } from "./nativeOrdinaryHostClientProtocol.js";
 import { createNodeNativeOrdinaryHostHttpClient } from "./nativeOrdinaryHostTransport.js";
+import type { NativeCandidateLease } from "./nativeCandidateLease.js";
 
 const requestTimeoutMilliseconds = 5_000;
 const maximumResponseBytes = 64 * 1024;
@@ -49,6 +50,7 @@ export interface NativeOrdinaryHostClient {
   attest(signal: AbortSignal): Promise<void>;
   prepareClaim(requestId: string): NativeHostPreparedRequest;
   claim(request: NativeHostPreparedRequest, signal: AbortSignal): Promise<NativeHostClaim | undefined>;
+  candidateLease(claim: NativeHostClaim, requestId: string, signal: AbortSignal): Promise<NativeCandidateLease>;
   renewClaim(request: NativeHostClaimRenewalRequest, signal: AbortSignal): Promise<NativeHostClaimRenewal>;
   prepareRecovery(request: NativeHostRecoveryRequest): NativeHostPreparedRequest;
   recoverClaim(request: NativeHostPreparedRequest, signal: AbortSignal): Promise<void>;
@@ -113,6 +115,17 @@ export function createNativeOrdinaryHostClient(
         throw new NativeOrdinaryHostClientError("native ordinary claim does not match the request");
       }
       return claim;
+    },
+    async candidateLease(claim, requestId, signal) {
+      const body = await jsonRequest(httpClient, request({ endpoint, authorization, method: "POST",
+        path: "/v1/host-candidate-leases", signal, body: JSON.stringify({ schemaVersion: 1, requestId,
+          claimId: claim.claimId, attemptId: claim.attemptId, descriptorDigest: claim.descriptorDigest }) }), 201);
+      const lease = exactNativeHostResponse(body, ["schemaVersion", "serviceId", "requestId", "username", "password", "expiresAt"]);
+      if (lease.schemaVersion !== 1 || lease.serviceId !== serviceId || lease.requestId !== requestId
+        || typeof lease.username !== "string" || typeof lease.password !== "string" || typeof lease.expiresAt !== "number") {
+        throw new NativeOrdinaryHostClientError("native ordinary candidate lease does not match the request");
+      }
+      return { username: lease.username, password: lease.password, expiresAt: lease.expiresAt };
     },
     async renewClaim(input, signal) {
       const trusted = parseNativeHostRenewalRequest(input, hostId, capacity);

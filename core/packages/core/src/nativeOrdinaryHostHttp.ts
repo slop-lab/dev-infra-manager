@@ -14,6 +14,7 @@ import {
 } from "./nativeOrdinaryClaimProtocol.js";
 import { parseNativeHostResultRequest } from "./nativeOrdinaryResultProtocol.js";
 import type { NativeOrdinaryAuthorityStore } from "./nativeOrdinaryAuthorityStore.js";
+import type { NativeCandidateLease } from "./nativeCandidateLease.js";
 
 type HostHttpContext = {
   readonly request: IncomingMessage;
@@ -25,6 +26,8 @@ type HostHttpContext = {
   readonly leaseService: NativeOrdinaryLeaseService;
   readonly store: NativeOrdinaryAuthorityStore;
   readonly readJson: () => Promise<unknown>;
+  readonly issueCandidateLease: (claim: import("./nativeOrdinaryClaimProtocol.js").NativeHostClaim,
+    requestId: string, signal: AbortSignal) => Promise<NativeCandidateLease>;
 };
 
 export async function handleNativeOrdinaryHostHttp(context: HostHttpContext): Promise<boolean> {
@@ -73,6 +76,16 @@ export async function handleNativeOrdinaryHostHttp(context: HostHttpContext): Pr
     else sendJson(context.response, 200, renewal);
     return true;
   }
+  if (context.pathname === "/v1/host-candidate-leases") {
+    const body = candidateLeaseRequest(await context.readJson());
+    const claim = context.store.activeClaim(hostId, body.claimId);
+    if (claim === undefined || claim.attemptId !== body.attemptId
+      || claim.descriptorDigest !== body.descriptorDigest) return notFound(context.response);
+    const lease = await context.issueCandidateLease(claim, body.requestId, AbortSignal.timeout(5_000));
+    sendJson(context.response, 201, { schemaVersion: 1, serviceId: context.config.serviceId,
+      requestId: body.requestId, ...lease });
+    return true;
+  }
   if (context.pathname === "/v1/host-results") {
     const resultRequest = parseNativeHostResultRequest(await context.readJson());
     if (!inScope(context, hostId, resultRequest.terminalEvent.payload.hostId,
@@ -94,6 +107,7 @@ export async function handleNativeOrdinaryHostHttp(context: HostHttpContext): Pr
 const hostPaths = new Set([
   "/v1/host-claims",
   "/v1/host-claim-renewals",
+  "/v1/host-candidate-leases",
   "/v1/host-results",
   "/v1/host-recoveries"
 ]);
@@ -111,6 +125,7 @@ function knownCredential(request: IncomingMessage, config: NativeOrdinaryAuthori
     ...Object.values(config.credentials),
     config.nativeGit.identity,
     config.nativeGit.attemptIssuer,
+    config.nativeGit.candidateReader,
     config.nativeGit.resultReporter,
     ...config.hosts.map((host) => ({ username: host.hostId, password: host.hostToken }))
   ].some((credential) => authorized(request, credential));
@@ -120,6 +135,17 @@ function authorized(request: IncomingMessage, credential: NativeOrdinaryCredenti
   const supplied = Buffer.from(request.headers.authorization ?? "");
   const expected = Buffer.from(`Basic ${Buffer.from(`${credential.username}:${credential.password}`, "utf8").toString("base64")}`);
   return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
+
+function candidateLeaseRequest(value: unknown): { readonly requestId: string; readonly claimId: string;
+  readonly attemptId: string; readonly descriptorDigest: string } {
+  if (typeof value !== "object" || value === null || Array.isArray(value)
+    || Object.keys(value).length !== 5 || Reflect.get(value, "schemaVersion") !== 1) throw new TypeError("invalid candidate lease request");
+  const requestId = Reflect.get(value, "requestId"); const claimId = Reflect.get(value, "claimId");
+  const attemptId = Reflect.get(value, "attemptId"); const descriptorDigest = Reflect.get(value, "descriptorDigest");
+  if (typeof requestId !== "string" || typeof claimId !== "string" || typeof attemptId !== "string"
+    || typeof descriptorDigest !== "string") throw new TypeError("invalid candidate lease request");
+  return { requestId, claimId, attemptId, descriptorDigest };
 }
 
 function sendJson(response: ServerResponse, status: number, body: unknown): void {
