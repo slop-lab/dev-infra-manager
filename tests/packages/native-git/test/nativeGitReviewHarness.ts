@@ -77,6 +77,7 @@ export async function nativeGitReviewFixture(
       query: { username: "native-main", password: "query-credential-secret" },
       identity: { username: "ordinary-identity", password: "identity-secret-00000000000000000000" },
       attemptIssuer: { username: "ordinary-attempts", password: "attempt-credential-secret" },
+      candidateReader: { username: "ordinary-reader", password: "reader-credential-secret" },
       resultReporter: { username: "ordinary-results", password: "reporter-credential-secret" },
       webhook: {
         endpoint: "http://ordinary-ci:8080/v1/native-events",

@@ -12,6 +12,9 @@ import {
   type DeliveryScenario
 } from "./authoritativeNativeEventDeliveryFixture.js";
 import { addCandidateCommit, createBundleReview, reviewProposalRef } from "./nativeBundleReviewFixture.js";
+import { acknowledgeAuthoritativeNativeQemuDelivery,
+  readPendingAuthoritativeNativeQemuDeliveries }
+  from "../../../../core/packages/native-git/src/authoritative-native-qemu-delivery-store.js";
 import {
   cleanupFinalizeFixtures,
   closeFinalizeService,
@@ -27,6 +30,26 @@ afterEach(async () => {
 });
 
 describe("installed authoritative native event delivery", () => {
+  it("keeps QEMU demand in an independent durable outbox", async () => {
+    // Given
+    const scenario = await scenarioFor("qemu-outbox");
+    const envelope = await createBundleReview(scenario.native.service);
+    const repository = join(scenario.native.root, "project-a", "root.git");
+    const qemu = envelope.events.find(({ executionKind }) => executionKind === "qemu");
+    if (qemu === undefined) throw new TypeError("QEMU event is missing");
+
+    // When
+    const pending = await readPendingAuthoritativeNativeQemuDeliveries(repository, 10);
+    const delivery = pending[0];
+    if (delivery === undefined) throw new TypeError("QEMU delivery is missing");
+    await acknowledgeAuthoritativeNativeQemuDelivery(repository, delivery, scenario.admissionGeneration);
+
+    // Then
+    expect(pending.map(({ event }) => event.eventId)).toEqual([qemu.eventId]);
+    expect(await readPendingAuthoritativeNativeQemuDeliveries(repository, 10)).toEqual([]);
+    expect(await readdir(join(repository, "dim-authoritative-reviews", "qemu-delivered")))
+      .toEqual([`${qemu.eventId}.json`]);
+  });
   it("does not accept a new listener after storage ownership is released", async () => {
     // Given
     const scenario = await scenarioFor("closed-listener");
