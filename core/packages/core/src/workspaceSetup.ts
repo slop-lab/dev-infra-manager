@@ -7,10 +7,9 @@ import type {
   WorkspaceRecord
 } from "./lifecycleTypes.js";
 import type { StreamingCommandRunner } from "./types.js";
-import { protectedRootSnapshotPath } from "./protectedRootSnapshot.js";
 import { writeProjectManifest } from "./workspaceRepositorySnapshot.js";
 import { assertContainerRunning, reconcileContainer } from "./workspaceContainer.js";
-import { workspaceGitEnvironment } from "./workspaceLifecycleTypes.js";
+import { workspaceGitEnvironment, workspaceRootSnapshotPath } from "./workspaceLifecycleTypes.js";
 import {
   combineWorkspaceLifecycleFailures,
   runWorkspaceLifecycle,
@@ -59,6 +58,10 @@ export async function setupWorkspace(
         }
         setStage("protected root validation");
         await assertRootSnapshot(options.stateRoot, record);
+        if (record.schemaVersion === 9) {
+          record = await reconcileNativeWorkspace(runner, options, state, record, setStage);
+          return setupWorkspaceLocked(runner, options, state, record, profilesChanged, false, setStage, setErrorStage);
+        }
         if (record.phase === "setting-up" || record.phase === "setup-error" || record.phase === "error") {
           setStage("Project state loading");
           const project = await state.readProject(record.projectName);
@@ -78,7 +81,7 @@ export async function setupWorkspace(
             target: {
               rootRef: record.rootRef,
               rootCommit: record.rootCommit,
-              rootSnapshotPath: protectedRootSnapshotPath(options.stateRoot, record.projectId, record.rootCommit)
+              rootSnapshotPath: workspaceRootSnapshotPath(options.stateRoot, record)
             }
           });
         }
@@ -208,8 +211,12 @@ export async function reconcileProject(
 export async function reconcileProjectContainer(
   input: ReconcileProjectContainerInput
 ): Promise<{ readonly record: WorkspaceRecord; readonly containerId: string }> {
+  if (input.record.schemaVersion === 9) {
+    throw new UserError("native workspace reconciliation is not initialized");
+  }
   const release = await input.state.acquireWorkspaceLock(input.record.name);
   let record = await readWorkspaceForOperation(input.state, input.record.name, input.options.giteaConnection);
+  if (record.schemaVersion !== 8) throw new UserError("native workspace reconciliation is not initialized");
   let stage = "container inspection";
   try {
     await inspectWorkspaceContainer(input.runner, record);
@@ -252,5 +259,34 @@ export async function reconcileProjectContainer(
     input.setStage("workspace reconciliation lock release");
     await release();
     input.setStage("workspace reconciliation");
+  }
+}
+
+export async function reconcileNativeWorkspace(
+  runner: StreamingCommandRunner,
+  options: LifecycleOptions,
+  state: LifecycleState,
+  initialRecord: WorkspaceRecord,
+  setStage: SetWorkspaceLifecycleStage
+): Promise<WorkspaceRecord> {
+  if (initialRecord.schemaVersion !== 9) throw new UserError("native workspace record is required");
+  const release = await state.acquireWorkspaceLock(initialRecord.name);
+  let record = await readWorkspaceForOperation(state, initialRecord.name, options.giteaConnection);
+  try {
+    if (record.schemaVersion !== 9 || record.workspaceId !== initialRecord.workspaceId) {
+      throw new UserError("native workspace identity changed");
+    }
+    const containerId = await reconcileContainer(runner, options, record, {
+      username: "dim", token: "", userName: record.gitUserName, userEmail: record.gitUserEmail
+    });
+    await installHostInputHelper(runner, { ...record, containerName: containerId });
+    await writeProjectManifest(runner, { ...record, containerName: containerId });
+    record = { ...record, updatedAt: new Date().toISOString() };
+    await state.writeWorkspace(record);
+    return record;
+  } finally {
+    setStage("workspace reconciliation lock release");
+    await release();
+    setStage("workspace reconciliation");
   }
 }

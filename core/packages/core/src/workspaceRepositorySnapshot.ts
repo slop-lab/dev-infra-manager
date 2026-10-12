@@ -2,7 +2,7 @@ import { UserError } from "./errors.js";
 import type { WorkspaceRecord } from "./lifecycleTypes.js";
 import { inspectProjectRuntimeCgroups, type ProjectRuntimeCgroups } from "./projectRuntimeCgroups.js";
 import type { StreamingCommandRunner } from "./types.js";
-import { PROJECT_ROOT } from "./workspaceLifecycleTypes.js";
+import { PROJECT_ROOT, workspaceGitBaseUrl } from "./workspaceLifecycleTypes.js";
 
 const WORKSPACE_USER = "dim";
 export async function writeProjectManifest(
@@ -33,7 +33,7 @@ export function projectRuntimeManifest(
       path: PROJECT_ROOT
     },
     data: { path: record.workspaceDataPath },
-    gitBaseUrl: record.gitBaseUrl,
+    gitBaseUrl: workspaceGitBaseUrl(record),
     hostAliases: record.hostAliases,
     runtime: {
       cgroups,

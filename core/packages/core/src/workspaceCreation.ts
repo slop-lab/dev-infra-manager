@@ -18,6 +18,7 @@ import {
   validateWorkspaceProfiles,
   validateWorkspaceResources
 } from "./workspaceValidation.js";
+import { createNativeWorkspace } from "./nativeWorkspaceCreation.js";
 
 export async function createWorkspace(
   runner: StreamingCommandRunner,
@@ -38,6 +39,9 @@ export async function createWorkspace(
   },
   plugins: Pick<RegisteredDimPlugins, "workspaceCapabilityProviders"> = { workspaceCapabilityProviders: new Map() }
 ): Promise<WorkspaceRecord> {
+  if (options.nativeControlPlaneConnection !== undefined) {
+    return createNativeWorkspace({ runner, options, request: input, plugins });
+  }
   return runWorkspaceLifecycle("create", async (setStage, setErrorStage) => {
     const project = validateLifecycleName(input.project, "project");
     const name = validateLifecycleName(input.name, "workspace");

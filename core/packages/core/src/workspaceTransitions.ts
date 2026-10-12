@@ -23,6 +23,7 @@ import {
 } from "./workspaceState.js";
 import { readWorkspaceForOperation, validateWorkspaceProfiles } from "./workspaceValidation.js";
 import { assertWorkspaceLifecycleActive } from "./workspaceRecord.js";
+import { transitionNativeWorkspace } from "./nativeWorkspaceTransitions.js";
 
 export async function updateWorkspace(
   runner: StreamingCommandRunner,
@@ -36,6 +37,10 @@ export async function updateWorkspace(
     setStage("workspace state loading");
     const initialRecord = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
     assertWorkspaceLifecycleActive(initialRecord);
+    if (initialRecord.schemaVersion === 9) {
+      return transitionNativeWorkspace({ operation: "update", runner, options, initial: initialRecord,
+        ...(profiles === undefined ? {} : { profiles }), setStage, setErrorStage });
+    }
     setStage("protected root selection");
     const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: initialRecord.projectName });
     setStage("Project lock acquisition");
@@ -106,6 +111,10 @@ export async function startWorkspace(
     setStage("workspace state loading");
     const record = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
     assertWorkspaceLifecycleActive(record);
+    if (record.schemaVersion === 9) {
+      return transitionNativeWorkspace({ operation: "start", runner, options, initial: record,
+        setStage, setErrorStage });
+    }
     setStage("protected root selection");
     const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: record.projectName });
     setStage("Project lock acquisition");
@@ -179,6 +188,10 @@ export async function restartWorkspace(
     setStage("workspace state loading");
     const initialRecord = await readWorkspaceForOperation(state, workspaceName, options.giteaConnection);
     assertWorkspaceLifecycleActive(initialRecord);
+    if (initialRecord.schemaVersion === 9) {
+      return transitionNativeWorkspace({ operation: "restart", runner, options, initial: initialRecord,
+        setStage, setErrorStage });
+    }
     setStage("protected root selection");
     const selectedRoot = await resolveProtectedRootSnapshot({ runner, options, projectName: initialRecord.projectName });
     setStage("Project lock acquisition");

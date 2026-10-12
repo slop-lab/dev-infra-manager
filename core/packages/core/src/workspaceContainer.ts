@@ -10,10 +10,10 @@ import {
   REGISTRY_CACHE_ENDPOINT
 } from "./registryCache.js";
 import { workspaceRuntimePlan } from "./runtimeBackends.js";
-import { protectedRootSnapshotPath } from "./protectedRootSnapshot.js";
 import type { StreamingCommandRunner } from "./types.js";
 import {
   PROJECT_ROOT,
+  workspaceRootSnapshotPath,
   WORKSPACE_RUNTIME_CONFIG_VERSION,
   WORKSPACE_USER,
   type WorkspaceGitEnvironment
@@ -37,7 +37,7 @@ export async function assertContainerRunning(
   if (container === undefined || !container.running) {
     throw new UserError(`workspace '${record.name}' is stopped; run dim workspace start`);
   }
-  if (container.rootSnapshotPath !== protectedRootSnapshotPath(stateRoot, record.projectId, record.rootCommit)) {
+  if (container.rootSnapshotPath !== workspaceRootSnapshotPath(stateRoot, record)) {
     throw new UserError(`workspace '${record.name}' container root does not match its recorded immutable root`);
   }
   return container.id;
@@ -62,10 +62,13 @@ export async function reconcileContainer(
   const state = new LifecycleState(options.stateRoot);
   const controllerGrant = await state.ensureWorkspaceGrant(record.name);
   const agentGrant = await state.ensureAgentGrant(record.name);
+  const effectiveGit = record.schemaVersion === 9
+    ? { ...git, brokerToken: await state.ensureNativeGitGrant(record.name) }
+    : git;
   let container = await inspectWorkspaceContainer(runner, record);
   if (container === undefined) {
     const created = await runner.run("docker", workspaceContainerArgs(
-      options, record, git, controllerGrant, undefined, agentGrant
+      options, record, effectiveGit, controllerGrant, undefined, agentGrant
     ));
     container = await inspectWorkspaceContainer(runner, record);
     if (container === undefined) {
@@ -75,13 +78,13 @@ export async function reconcileContainer(
     }
   }
   if (container.runtimeConfig !== WORKSPACE_RUNTIME_CONFIG_VERSION
-    || container.rootSnapshotPath !== protectedRootSnapshotPath(options.stateRoot, record.projectId, record.rootCommit)) {
+    || container.rootSnapshotPath !== workspaceRootSnapshotPath(options.stateRoot, record)) {
     const removed = await runner.run("docker", ["container", "rm", "--force", container.id]);
     if (removed.exitCode !== 0 && !isMissingContainer(removed.stderr, container.id)) {
       throw new UserError(`failed to replace workspace container: ${removed.stderr.trim()}`);
     }
     const created = await runner.run("docker", workspaceContainerArgs(
-      options, record, git, controllerGrant, undefined, agentGrant
+      options, record, effectiveGit, controllerGrant, undefined, agentGrant
     ));
     container = await inspectWorkspaceContainer(runner, record);
     if (container === undefined) {
@@ -92,7 +95,7 @@ export async function reconcileContainer(
     if (container.runtimeConfig !== WORKSPACE_RUNTIME_CONFIG_VERSION) {
       throw new UserError(`workspace container '${record.containerName}' has stale runtime configuration`);
     }
-    if (container.rootSnapshotPath !== protectedRootSnapshotPath(options.stateRoot, record.projectId, record.rootCommit)) {
+    if (container.rootSnapshotPath !== workspaceRootSnapshotPath(options.stateRoot, record)) {
       throw new UserError(`workspace container '${record.containerName}' has the wrong immutable Project root`);
     }
   }
@@ -145,7 +148,7 @@ export function workspaceContainerArgs(
     "--memory-swap", record.memory,
     "--pids-limit", record.pidsLimit,
     "--mount", `type=volume,source=${record.dockerVolumeName},target=${plan.runtimeDataPath}`,
-    "--mount", `type=bind,source=${protectedRootSnapshotPath(options.stateRoot, record.projectId, record.rootCommit)},target=${PROJECT_ROOT},readonly`,
+    "--mount", `type=bind,source=${workspaceRootSnapshotPath(options.stateRoot, record)},target=${PROJECT_ROOT},readonly`,
     "--mount", `type=bind,source=${path.dirname(options.controllerSocketPath)},target=/run/dim/controller`,
     "--mount", `type=bind,source=${path.dirname(options.agentControllerSocketPath)},target=/run/dim/agent-controller`,
     ...workspaceContainerLabels(record).flatMap((label) => ["--label", label]),
@@ -173,6 +176,7 @@ export function workspaceContainerArgs(
     args.push("--env", "DIM_AGENT_CONTROLLER_SOCKET=/run/dim/agent-controller/controller.sock");
     args.push("--env", `DIM_AGENT_CONTROLLER_TOKEN=${agentGrant}`);
   }
+  if (git.brokerToken !== undefined) args.push("--env", `DIM_NATIVE_GIT_BROKER_TOKEN=${git.brokerToken}`);
   for (const capability of plan.capabilities) args.push("--cap-add", capability);
   for (const provision of record.capabilities ?? []) {
     if (provision.status !== "provided") continue;

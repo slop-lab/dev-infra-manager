@@ -2,10 +2,9 @@ import { UserError } from "./errors.js";
 import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
 import type { ProtectedRootSnapshot } from "./protectedRootSnapshot.js";
-import { protectedRootSnapshotPath } from "./protectedRootSnapshot.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { assertContainerRunning } from "./workspaceContainer.js";
-import type { WorkspaceResourceInput } from "./workspaceLifecycleTypes.js";
+import { workspaceRootSnapshotPath, type WorkspaceResourceInput } from "./workspaceLifecycleTypes.js";
 import {
   inspectWorkspaceContainer,
   isMissingContainer
@@ -47,7 +46,7 @@ export async function reconcileWorkspaceRuntimeState(
   const running = container?.running ?? false;
   // A running outer container is not sufficient evidence that reviewed Project
   // setup completed. Only DIM setup may promote a workspace back to ready.
-  if (running && container?.rootSnapshotPath !== protectedRootSnapshotPath(stateRoot, record.projectId, record.rootCommit)) {
+  if (running && container?.rootSnapshotPath !== workspaceRootSnapshotPath(stateRoot, record)) {
     const error = "workspace container root does not match its recorded immutable root";
     const reconciled = { ...record, phase: "error" as const, error, updatedAt: new Date().toISOString() };
     await state.writeWorkspace(reconciled);
@@ -85,7 +84,7 @@ export async function listWorkspaces(
   options: LifecycleOptions
 ): Promise<WorkspaceRecord[]> {
   const state = new LifecycleState(options.stateRoot);
-  const records = await state.listWorkspaces();
+  const records = await state.listWorkspaces(options.nativeControlPlaneConnection === undefined ? 8 : 9);
   const reconciled: WorkspaceRecord[] = [];
   for (const record of records) {
     const release = await state.acquireWorkspaceSetupLock(record.name);

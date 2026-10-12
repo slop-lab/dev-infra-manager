@@ -1,12 +1,13 @@
 import { stat } from "node:fs/promises";
 import { UserError } from "./errors.js";
 import type { WorkspaceRecord } from "./lifecycleTypes.js";
-import { protectedRootSnapshotPath } from "./protectedRootSnapshot.js";
 import type { CommandResult, StreamingCommandRunner } from "./types.js";
 import {
   PROJECT_COMPOSE_NAME,
   PROJECT_ROOT,
-  WORKSPACE_USER
+  WORKSPACE_USER,
+  workspaceGitBaseUrl,
+  workspaceRootSnapshotPath
 } from "./workspaceLifecycleTypes.js";
 
 const HOST_INPUT_HELPER = `#!/usr/bin/env sh
@@ -121,7 +122,7 @@ function projectEnvironment(record: WorkspaceRecord): string[] {
     "--env", `DIM_WORKSPACE_KVM=${record.kvm ? "1" : "0"}`,
     "--env", `DIM_NESTED_ENGINE=${nestedEngine(record)}`,
     "--env", `COMPOSE_PROFILES=${record.profiles.join(",")}`,
-    "--env", `DIM_GIT_BASE_URL=${record.gitBaseUrl}`
+    "--env", `DIM_GIT_BASE_URL=${workspaceGitBaseUrl(record)}`
   ];
 }
 
@@ -149,7 +150,7 @@ export function lifecycleRoot(record: WorkspaceRecord): string {
 
 export async function assertRootSnapshot(stateRoot: string, record: WorkspaceRecord): Promise<void> {
   try {
-    const snapshot = await stat(protectedRootSnapshotPath(stateRoot, record.projectId, record.rootCommit));
+  const snapshot = await stat(workspaceRootSnapshotPath(stateRoot, record));
     if (snapshot.isDirectory()) return;
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;

@@ -3,7 +3,7 @@ import { LifecycleState, validateLifecycleName } from "./lifecycleState.js";
 import type { LifecycleOptions, WorkspaceRecord } from "./lifecycleTypes.js";
 import type { WorkspaceDiscardHook } from "./plugin.js";
 import type { StreamingCommandRunner } from "./types.js";
-import { protectedRootSnapshotPath } from "./protectedRootSnapshot.js";
+import { workspaceRootSnapshotPath } from "./workspaceLifecycleTypes.js";
 import { waitForInnerDocker } from "./workspaceContainer.js";
 import { runProjectTeardown } from "./workspaceProjectCommands.js";
 import {
@@ -33,6 +33,7 @@ export async function discardWorkspace(
       await state.writeWorkspace(discarding);
       await state.removeWorkspaceGrant(record);
       await state.removeAgentGrant(record);
+      await state.removeNativeGitGrant(record);
     } finally {
       await releaseAuthority();
     }
@@ -48,7 +49,7 @@ export async function discardWorkspace(
     const container = await inspectWorkspaceContainer(runner, record);
     const volume = await inspectWorkspaceVolume(runner, record);
     if (container !== undefined) {
-      if (container.rootSnapshotPath !== protectedRootSnapshotPath(options.stateRoot, record.projectId, record.rootCommit)) {
+    if (container.rootSnapshotPath !== workspaceRootSnapshotPath(options.stateRoot, record)) {
         throw new UserError(`workspace '${record.name}' container root does not match its recorded immutable root`);
       }
       const inspectedRecord = { ...record, containerName: container.id };

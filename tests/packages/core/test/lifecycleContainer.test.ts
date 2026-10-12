@@ -133,5 +133,35 @@ it("builds a persistent container with credentials but no host mounts or socket"
     }, "work-1.controller-grant", () => 992, "work-1.agent.agent-grant");
     expect(withoutKvm).not.toContain("/dev/kvm");
     expect(withoutKvm).not.toContain("--group-add");
+
+    const { gitBaseUrl: providerGitBaseUrl, ...workspaceBase } = record;
+    expect(providerGitBaseUrl).toBe("http://172.20.0.2:3000/dim-project");
+    const nativeArgs = workspaceContainerArgs(options, {
+      ...workspaceBase,
+      schemaVersion: 9,
+      source: {
+        kind: "native",
+        serviceId: "native-main",
+        snapshot: {
+          projectId: "project-id",
+          repositoryId: "root",
+          protectedRef: "refs/heads/main",
+          commit: "a".repeat(40),
+          tree: "b".repeat(40)
+        },
+        policyRevision: "c".repeat(64),
+        requiredReviewRevision: "d".repeat(64),
+        requiredJobSetRevision: "e".repeat(64)
+      }
+    }, {
+      username: "dim",
+      token: "",
+      userName: "Agent",
+      userEmail: "agent@example.invalid",
+      brokerToken: "native-git-grant"
+    }, "work-1.controller-grant", () => 992, "work-1.agent.agent-grant");
+    expect(nativeArgs).toEqual(expect.arrayContaining([
+      "--env", "DIM_NATIVE_GIT_BROKER_TOKEN=native-git-grant"
+    ]));
   });
 });

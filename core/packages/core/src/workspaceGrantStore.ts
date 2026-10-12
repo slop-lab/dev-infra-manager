@@ -5,7 +5,7 @@ import type { WorkspaceRecord } from "./lifecycleTypes.js";
 import { validateLifecycleName } from "./lifecycleRecord.js";
 import { validateWorkspaceId } from "./workspaceRecord.js";
 
-type GrantAudience = "workspace" | "agent";
+type GrantAudience = "workspace" | "agent" | "native-git";
 
 export class WorkspaceGrantStore {
   constructor(private readonly root: string) {}
