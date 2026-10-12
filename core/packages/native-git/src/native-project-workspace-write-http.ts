@@ -63,6 +63,29 @@ export function createNativeProjectWorkspaceWriteService(
       leases.clear();
     },
     async handleLeaseRequest(request, response, url) {
+      const identityPath = "/v1/operator-workspace-write-issuer-identity";
+      if (url.pathname === identityPath) {
+        if (request.method !== "GET" || url.search !== "") {
+          sendNotFound(response);
+          return true;
+        }
+        if (input.issuers.length === 0) {
+          sendNotFound(response);
+          return true;
+        }
+        const issuer = input.issuers.find((candidate) => nativeBasicAuthorized(request, candidate)
+          || nativeBasicAuthorized(request, { username: candidate.hostId, password: candidate.password }));
+        if (issuer === undefined) {
+          const known = input.knownCredentials.some((credential) => nativeBasicAuthorized(request, credential));
+          sendJson(response, known ? 403 : 401, { error: known ? "forbidden" : "unauthorized" });
+          return true;
+        }
+        sendJson(response, 200, {
+          schemaVersion: 1, serviceId: "native-main", role: "operator-workspace-write-issuer",
+          hostId: issuer.hostId, generationId: input.expectedGenerationId
+        });
+        return true;
+      }
       const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/workspace-write-leases$/
         .exec(url.pathname);
       if (match === null) return false;
@@ -80,7 +103,8 @@ export function createNativeProjectWorkspaceWriteService(
         sendJson(response, 503, { error: "native Git business operations require exact generation activation" });
         return true;
       }
-      const issuer = input.issuers.find((candidate) => nativeBasicAuthorized(request, candidate));
+       const issuer = input.issuers.find((candidate) => nativeBasicAuthorized(request, candidate)
+         || nativeBasicAuthorized(request, { username: candidate.hostId, password: candidate.password }));
       if (issuer === undefined) {
         const known = input.knownCredentials.some((credential) => nativeBasicAuthorized(request, credential));
         sendJson(response, known ? 403 : 401, { error: known ? "forbidden" : "unauthorized" });
