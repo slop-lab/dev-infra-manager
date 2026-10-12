@@ -10,7 +10,7 @@ const topLevelKeys = [
   "schemaVersion", "serviceId", "database", "admissionLeaseMilliseconds", "claimLeaseMilliseconds",
   "nativeGit", "credentials", "hosts"
 ] as const;
-const nativeGitKeys = ["endpoint", "serviceId", "identity", "attemptIssuer", "resultReporter"] as const;
+const nativeGitKeys = ["endpoint", "serviceId", "identity", "attemptIssuer", "candidateReader", "resultReporter"] as const;
 const credentialKeys = ["username", "password"] as const;
 const roleKeys = ["webhook", "registrar", "query"] as const;
 const hostKeys = ["hostId", "hostToken", "capacities"] as const;
@@ -59,6 +59,7 @@ function parseNativeGit(value: unknown): NativeOrdinaryAuthorityConfig["nativeGi
     serviceId: "native-main",
     identity: parseCredential(input.identity),
     attemptIssuer: parseCredential(input.attemptIssuer),
+    candidateReader: parseCredential(input.candidateReader),
     resultReporter: parseCredential(input.resultReporter)
   };
 }
@@ -138,6 +139,7 @@ function assertDistinctAuthority(config: NativeOrdinaryAuthorityConfig): void {
     ...Object.values(config.credentials),
     config.nativeGit.identity,
     config.nativeGit.attemptIssuer,
+    config.nativeGit.candidateReader,
     config.nativeGit.resultReporter
   ];
   const values = [

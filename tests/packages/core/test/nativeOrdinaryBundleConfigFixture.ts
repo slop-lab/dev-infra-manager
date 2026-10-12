@@ -3,6 +3,7 @@ const token = (fill: number): string => Buffer.alloc(32, fill).toString("base64u
 export const ordinaryBundleSecrets = {
   identity: token(1),
   attemptIssuer: token(2),
+  candidateReader: token(9),
   resultReporter: token(3),
   webhook: token(4),
   registrar: token(5),
@@ -23,6 +24,7 @@ export function ordinaryBundleConfig() {
       serviceId: "native-main",
       identity: { username: "ordinary-identity", password: ordinaryBundleSecrets.identity },
       attemptIssuer: { username: "ordinary-attempts", password: ordinaryBundleSecrets.attemptIssuer },
+      candidateReader: { username: "ordinary-candidate-reader", password: ordinaryBundleSecrets.candidateReader },
       resultReporter: { username: "ordinary-results", password: ordinaryBundleSecrets.resultReporter }
     },
     credentials: {

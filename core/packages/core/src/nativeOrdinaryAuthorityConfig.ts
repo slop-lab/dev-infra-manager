@@ -14,7 +14,9 @@ export type NativeOrdinaryAuthorityConfig = {
   readonly database: string;
   readonly admissionLeaseMilliseconds: number;
   readonly claimLeaseMilliseconds: number;
-  readonly nativeGit: NativeGitAdmissionConfig & NativeGitResultReporterConfig;
+  readonly nativeGit: NativeGitAdmissionConfig & NativeGitResultReporterConfig & {
+    readonly candidateReader: NativeOrdinaryCredential;
+  };
   readonly credentials: {
     readonly webhook: NativeOrdinaryCredential;
     readonly registrar: NativeOrdinaryCredential;
@@ -51,6 +53,7 @@ export function validateNativeOrdinaryAuthorityConfig(
     ...Object.values(config.credentials),
     config.nativeGit.identity,
     config.nativeGit.attemptIssuer,
+    config.nativeGit.candidateReader,
     config.nativeGit.resultReporter
   ];
   for (const credential of credentials) {
