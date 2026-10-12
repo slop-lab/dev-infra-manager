@@ -4,6 +4,7 @@ import path from "node:path";
 import { createAgentControllerProxy, createControllerProxy } from "./index.js";
 import { externalUrlProxy, type ExternalUrlTarget } from "./external-url.js";
 import { ensureManagedProxy, managedProxyFingerprint } from "./managed-proxy.js";
+import { createNativeGitProxy, listenNativeGitProxy } from "./native-git.js";
 
 async function main(arguments_: string[]): Promise<void> {
   if (arguments_[0] === "--config") {
@@ -15,6 +16,23 @@ async function main(arguments_: string[]): Promise<void> {
   const ensure = arguments_[0] === "ensure";
   const presetIndex = ensure ? 1 : 0;
   const preset = arguments_[presetIndex];
+  if (preset === "native-git") {
+    if (ensure || arguments_.length !== 3 || arguments_[1] !== "--listen") usage();
+    const [host, portValue, extra] = (arguments_[2] ?? "").split(":");
+    if (host !== "127.0.0.1" || portValue === undefined || extra !== undefined) usage();
+    const options = {
+      host: "127.0.0.1",
+      port: port(portValue),
+      sourceSocket: requiredEnvironment("DIM_CONTROLLER_SOCKET"),
+      token: requiredEnvironment("DIM_NATIVE_GIT_BROKER_TOKEN")
+    } as const;
+    const proxy = createNativeGitProxy(options);
+    await listenNativeGitProxy(proxy, options);
+    for (const signal of ["SIGINT", "SIGTERM"] as const) {
+      process.once(signal, () => proxy.close(() => process.exit(0)));
+    }
+    return;
+  }
   if (preset !== "external-url" && preset !== "agent") usage();
   let listen: string | undefined;
   let socketMode = 0o660;
@@ -157,7 +175,8 @@ function requiredValue(arguments_: string[], index: number, option: string): str
   return value;
 }
 
-function requiredEnvironment(name: "DIM_AGENT_CONTROLLER_SOCKET" | "DIM_AGENT_CONTROLLER_TOKEN"): string {
+function requiredEnvironment(name: "DIM_AGENT_CONTROLLER_SOCKET" | "DIM_AGENT_CONTROLLER_TOKEN"
+  | "DIM_CONTROLLER_SOCKET" | "DIM_NATIVE_GIT_BROKER_TOKEN"): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required`);
   return value;
@@ -176,6 +195,7 @@ function usage(): never {
     + "   or: dim-controller-proxy agent --listen SOCKET --allow-workspace-restart\n"
     + "   or: dim-controller-proxy agent --listen SOCKET --allow-workspace-resources\n"
     + "       [--directory-mode MODE] [--socket-mode MODE]\n"
+    + "   or: dim-controller-proxy native-git --listen 127.0.0.1:PORT\n"
     + "   or: dim-controller-proxy --config FILE.mjs"
   );
 }
