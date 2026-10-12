@@ -6,7 +6,7 @@ import {
   ADMIN_CONTROLLER_STOP_EVENT, configuredDimAdminController, configuredDimAgentController, configuredDimController,
   configuredOrdinaryCiPoolSupervisor, initializeControllerRoutes, LifecycleState, lifecycleOptions, loadInstalledPlugins,
   hostLifecycleStatus, HostRuntimeTransitions, migrateHostLifecycleState, reconcileReadyHostManagedGit, requireHostMirrorProvider, resolveHostMirrorProvider,
-  resolvePluginHome, UserError
+  resolvePluginHome, loadNativeControlPlaneConnection, UserError
 } from "@slop-lab/dim-core";
 import {
   claimControllerPid, pidFileOwnedByCurrentProcess,
@@ -24,6 +24,13 @@ controller.command("restart")
   .description("Restart the managed controller and reload installed plugins and ingress configuration")
   .action(async () => {
     const options = lifecycleOptions();
+    if (options.nativeControlPlaneConnection !== undefined) {
+      const nativeConnectionFile = options.nativeControlPlaneConnection.file;
+      await controllerStartupStage(
+        "validating native control-plane selection",
+        async () => await loadNativeControlPlaneConnection(nativeConnectionFile)
+      );
+    }
     await restartManagedController(options);
     console.log(`Restarted managed DIM controller at ${options.controllerSocketPath}`);
   });
@@ -50,6 +57,13 @@ controller.command("serve")
       throw new UserError("controller serve requires --socket, or both --host and --port");
     }
     const options = lifecycleOptions();
+    if (options.nativeControlPlaneConnection !== undefined) {
+      const nativeConnectionFile = options.nativeControlPlaneConnection.file;
+      await controllerStartupStage(
+        "validating native control-plane selection",
+        async () => await loadNativeControlPlaneConnection(nativeConnectionFile)
+      );
+    }
     const adminSocket = flags.socket
       ? flags.adminSocket ?? options.adminControllerSocketPath
       : undefined;
@@ -64,7 +78,7 @@ controller.command("serve")
     let server: ReturnType<typeof configuredDimController> | undefined;
     let adminServer: ReturnType<typeof configuredDimAdminController> | undefined;
     let agentServer: ReturnType<typeof configuredDimAgentController> | undefined;
-    let hostRuntime: Awaited<ReturnType<typeof configuredOrdinaryCiPoolSupervisor>>;
+    let hostRuntime: Awaited<ReturnType<typeof configuredOrdinaryCiPoolSupervisor>> | undefined;
     let hostTransitions: HostRuntimeTransitions | undefined;
     let shutdownReached = false;
     try {
@@ -78,34 +92,42 @@ controller.command("serve")
         async () => await loadInstalledPlugins(await resolvePluginHome())
       );
       loaded = loadedPlugins;
-      const hostMirrorProvider = await controllerStartupStage(
-        "resolving host mirror provider",
-        async () => requireHostMirrorProvider(resolveHostMirrorProvider(loadedPlugins.registered.host))
-      );
-      const runtimeOptions = { ...options, hostMirrorProvider };
-      const migration = await controllerStartupStage(
-        "migrating host lifecycle state",
-        async () => await migrateHostLifecycleState(new LifecycleState(options.stateRoot))
-      );
-      if (migration.kind === "migrated") {
-        console.log("Migrated host lifecycle state schema 1 to 2");
-      } else if (migration.kind === "recovered") {
-        console.log("Recovered host lifecycle state schema 2 from the schema 1 backup");
+      const native = options.nativeControlPlaneConnection !== undefined;
+      const hostMirrorProvider = resolveHostMirrorProvider(loadedPlugins.registered.host);
+      if (!native) requireHostMirrorProvider(hostMirrorProvider);
+      const runtimeOptions = hostMirrorProvider === undefined ? options : { ...options, hostMirrorProvider };
+      if (native) {
+        await controllerStartupStage(
+          "validating native workspace state",
+          async () => { await new LifecycleState(options.stateRoot).listWorkspaces(9); }
+        );
+      } else {
+        const migration = await controllerStartupStage(
+          "migrating host lifecycle state",
+          async () => await migrateHostLifecycleState(new LifecycleState(options.stateRoot))
+        );
+        if (migration.kind === "migrated") {
+          console.log("Migrated host lifecycle state schema 1 to 2");
+        } else if (migration.kind === "recovered") {
+          console.log("Recovered host lifecycle state schema 2 from the schema 1 backup");
+        }
+        await controllerStartupStage("reconciling managed Git service", async () => {
+          await reconcileReadyHostManagedGit(runner, options);
+        });
       }
-      await controllerStartupStage("reconciling managed Git service", async () => {
-        await reconcileReadyHostManagedGit(runner, options);
-      });
       await controllerStartupStage(
         "initializing plugin routes",
         async () => await initializeControllerRoutes(runtimeOptions, loadedPlugins.registered)
       );
-      hostRuntime = await controllerStartupStage(
-        "configuring ordinary CI capacity",
-        async () => await configuredOrdinaryCiPoolSupervisor(runner, runtimeOptions, (capacity, error, delay) => {
-          const detail = error instanceof Error ? error.message : String(error);
-          console.error(`ordinary CI capacity '${capacity}' failed; retrying in ${delay}ms: ${detail}`);
-        })
-      );
+      if (!native) {
+        hostRuntime = await controllerStartupStage(
+          "configuring ordinary CI capacity",
+          async () => await configuredOrdinaryCiPoolSupervisor(runner, runtimeOptions, (capacity, error, delay) => {
+            const detail = error instanceof Error ? error.message : String(error);
+            console.error(`ordinary CI capacity '${capacity}' failed; retrying in ${delay}ms: ${detail}`);
+          })
+        );
+      }
       hostTransitions = new HostRuntimeTransitions(hostRuntime);
       server = configuredDimController(runtimeOptions, loaded.registered);
       adminServer = configuredDimAdminController(runtimeOptions, loaded.registered, runner, hostTransitions);

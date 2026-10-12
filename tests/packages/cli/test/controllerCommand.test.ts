@@ -75,6 +75,152 @@ test("controller serve preserves the active owner and cleans up its runtime file
   }
 });
 
+test("native controller rejects an invalid connection before creating runtime state", async () => {
+  // Given
+  const root = await mkdtemp(path.join(tmpdir(), "dim-native-controller-invalid-"));
+  const configHome = path.join(root, "config");
+  const connection = path.join(root, "native.json");
+  const pidPath = path.join(root, "controller.pid");
+  await mkdir(path.join(configHome, "dim"), { recursive: true });
+  await writeFile(path.join(configHome, "dim", "config.json"),
+    `${JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" })}\n`);
+  await writeFile(connection, "{}\n", { mode: 0o600 });
+
+  try {
+    // When
+    const result = await runCli([
+      "controller", "serve", "--socket", path.join(root, "controller.sock"),
+      "--admin-socket", path.join(root, "admin.sock"),
+      "--agent-socket", path.join(root, "agent.sock"), "--pid-file", pidPath
+    ], {
+      ...process.env,
+      DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: connection,
+      DIM_PLUGIN_HOME: path.join(root, "plugins"),
+      DIM_STATE_ROOT: path.join(root, "state"),
+      XDG_CONFIG_HOME: configHome
+    });
+
+    // Then
+    assert.equal(result.code, 2);
+    assert.match(result.stderr, /validating native control-plane selection.*connection is invalid/);
+    await assert.rejects(access(pidPath), { code: "ENOENT" });
+    await assert.rejects(access(path.join(root, "state")), { code: "ENOENT" });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("native controller rejects mixed, empty, and importer-only selectors before state mutation", async () => {
+  // Given
+  const root = await mkdtemp(path.join(tmpdir(), "dim-native-controller-selectors-"));
+  const configHome = path.join(root, "config");
+  await mkdir(path.join(configHome, "dim"), { recursive: true });
+  await writeFile(path.join(configHome, "dim", "config.json"),
+    `${JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" })}\n`);
+  const cases: ReadonlyArray<Readonly<Record<string, string>>> = [
+    { DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: "" },
+    { DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE: path.join(root, "importer.json") },
+    { DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: path.join(root, "native.json"),
+      DIM_GITEA_CONNECTION_FILE: path.join(root, "gitea.json") },
+    { DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: path.join(root, "native.json"),
+      DIM_GIT_SYNC_CONNECTION_FILE: path.join(root, "sync.json") },
+    { DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: path.join(root, "native.json"),
+      DIM_ORDINARY_CI_POOL_CONNECTION_FILE: path.join(root, "pool.json") }
+  ];
+
+  try {
+    for (const [index, selectors] of cases.entries()) {
+      const runtime = path.join(root, `runtime-${index}`);
+      const state = path.join(root, `state-${index}`);
+
+      // When
+      const result = await runCli([
+        "controller", "serve", "--socket", path.join(runtime, "controller.sock"),
+        "--admin-socket", path.join(runtime, "admin.sock"),
+        "--agent-socket", path.join(runtime, "agent.sock"),
+        "--pid-file", path.join(runtime, "controller.pid")
+      ], {
+        ...process.env,
+        ...selectors,
+        DIM_PLUGIN_HOME: path.join(root, "plugins"),
+        DIM_STATE_ROOT: state,
+        XDG_CONFIG_HOME: configHome
+      });
+
+      // Then
+      assert.equal(result.code, 2, JSON.stringify(selectors));
+      await assert.rejects(access(runtime), { code: "ENOENT" });
+      await assert.rejects(access(state), { code: "ENOENT" });
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("native controller serves host shutdown and start without predecessor services", async () => {
+  // Given
+  const root = await mkdtemp(path.join(tmpdir(), "dim-native-controller-lifecycle-"));
+  const configHome = path.join(root, "config");
+  const stateRoot = path.join(root, "state");
+  const socket = path.join(root, "controller.sock");
+  const adminSocket = path.join(root, "admin.sock");
+  const agentSocket = path.join(root, "agent.sock");
+  const pidPath = path.join(root, "controller.pid");
+  const connection = path.join(root, "native.json");
+  const bin = path.join(root, "bin");
+  const dockerCalls = path.join(root, "docker-calls");
+  await mkdir(path.join(configHome, "dim"), { recursive: true });
+  await mkdir(bin, { recursive: true });
+  await writeFile(path.join(configHome, "dim", "config.json"),
+    `${JSON.stringify({ schemaVersion: 1, workspaceBackend: "sysbox" })}\n`);
+  await writeNativeConnection(connection);
+  await writeFile(path.join(bin, "docker"), `#!/bin/sh\nprintf '%s\\n' "$*" >>${JSON.stringify(dockerCalls)}\nexit 97\n`, { mode: 0o755 });
+  const env = {
+    ...process.env,
+    DIM_ADMIN_CONTROLLER_SOCKET: adminSocket,
+    DIM_AGENT_CONTROLLER_SOCKET: agentSocket,
+    DIM_CONTROLLER_SOCKET: socket,
+    DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: connection,
+    DIM_PLUGIN_HOME: path.join(root, "plugins"),
+    DIM_STATE_ROOT: stateRoot,
+    PATH: `${bin}:${process.env.PATH ?? ""}`,
+    XDG_CONFIG_HOME: configHome
+  };
+  const controller = spawn(process.execPath, [
+    "--import", tsxImport, cli, "controller", "serve", "--socket", socket,
+    "--admin-socket", adminSocket, "--agent-socket", agentSocket, "--pid-file", pidPath
+  ], { cwd: packageDirectory, env, stdio: ["ignore", "pipe", "pipe"] });
+  const controllerExit = once(controller, "exit");
+
+  try {
+    await waitForPath(adminSocket);
+
+    // When
+    const status = await runCli(["host", "status", "--json"], env);
+    const shutdown = await runCli(["host", "shutdown"], env);
+    const start = await runCli(["host", "start"], env);
+
+    // Then
+    assert.equal(status.code, 0, status.stderr);
+    assert.equal(JSON.parse(status.stdout).phase, "ready");
+    assert.equal(shutdown.code, 0, shutdown.stderr);
+    assert.equal(start.code, 0, start.stderr);
+    const host = JSON.parse(await readFile(path.join(stateRoot, "host.json"), "utf8"));
+    assert.equal(host.schemaVersion, 2);
+    assert.equal(host.phase, "ready");
+    assert.deepEqual(host.resumeWorkspaces, []);
+    assert.deepEqual(host.restartCiRunners, []);
+    assert.deepEqual(host.resumeManagedContainers, []);
+    await assert.rejects(access(dockerCalls), { code: "ENOENT" });
+  } finally {
+    if (controller.exitCode === null) {
+      controller.kill("SIGTERM");
+      await controllerExit;
+    }
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("controller stop never signals an unrelated process with controller-looking argv", async () => {
   // Given
   const root = await mkdtemp(path.join(tmpdir(), "dim-controller-stop-owner-"));
@@ -466,6 +612,27 @@ async function installProviderPlugin(pluginHome: string): Promise<void> {
     });
   }
 };\n`);
+}
+
+async function writeNativeConnection(target: string): Promise<void> {
+  await writeFile(target, `${JSON.stringify({
+    schemaVersion: 1,
+    hostId: "host-a",
+    nativeGit: {
+      transport: "loopback-http",
+      endpoint: "http://127.0.0.1:65535",
+      serviceId: "native-main",
+      generationId: "a".repeat(64),
+      workspaceWriteIssuer: {
+        username: "host-a",
+        password: Buffer.alloc(32, 1).toString("base64url")
+      },
+      rootReadIssuer: {
+        username: "root-reader",
+        password: Buffer.alloc(32, 2).toString("base64url")
+      }
+    }
+  })}\n`, { mode: 0o600 });
 }
 
 async function waitForPath(target: string): Promise<void> {
