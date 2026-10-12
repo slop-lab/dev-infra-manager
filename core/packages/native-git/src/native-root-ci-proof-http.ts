@@ -171,6 +171,11 @@ async function reviewEventProof(
     && candidate.reviewId === selector.reviewId && candidate.executionKind === selector.executionKind
     && candidate.jobName === selector.jobName);
   if (event === undefined) return undefined;
+  const currentJob = target.imported.policy.requiredJobs.some((job) => job.name === event.jobName
+    && job.kind === event.executionKind && job.evidenceClass === event.evidenceClass);
+  if (!currentJob || envelope.review.policyDigest !== target.imported.policyDigest
+    || envelope.review.requiredJobSetRevision !== target.imported.policy.requiredJobSetRevision
+    || event.requiredJobSetRevision !== target.imported.policy.requiredJobSetRevision) return "conflict";
   if ((await nativeHumanReviewStaleReasons(runtime, target, envelope.review)).length > 0) return "conflict";
   const confirmedTarget = await resolveAuthoritativeNativeRootTarget(runtime, { projectId });
   const confirmedEnvelope = await readAuthoritativeNativeReviewEnvelope(target.repository, selector.reviewId);
