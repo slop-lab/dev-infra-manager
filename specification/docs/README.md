@@ -51,9 +51,9 @@ Docker/Git terms aren't repeated here.
   lifecycle code builds and deploys it from a human-reviewed ref. It may
   receive raw secrets; the agent container receives neither those secrets nor
   its runtime control socket.
-- **Target ordinary CI capacity** — a specified but unimplemented named,
-  host-controller-owned share of Sysbox execution. After a native Project
-  adapter exists, the ordinary scheduler leases it for one admitted job at a
+- **Native ordinary CI capacity** — an explicitly started named, host-owned
+  share of Sysbox execution. After native Project admission, the ordinary
+  scheduler leases it for one admitted job at a
   time; each claim creates an ephemeral runner and disposable job container
   without the host Docker socket or DIM workspace credentials. It is not a
   persistent Project runner or image. Its schema-3 command and script come
@@ -62,8 +62,8 @@ Docker/Git terms aren't repeated here.
   self-test evidence rather than independent verification. Protected policy may
   require it, but product maintainers still review changed requirements,
   implementation, tests, and results, and human approval and checked promotion
-  remain separate. Current
-  ordinary CI instead uses the Gitea Project-scoped runner profile.
+  remain separate. The predecessor Gitea Project-scoped runner profile remains
+  a distinct path.
 - **QEMU integration capacity** — a current Gitea-only optional Project-scoped trusted supervisor
   that boots a fresh VM for an integration job. Its scheduler, hook, cache, and
   `/dev/kvm` boundary remain separate from ordinary CI.
