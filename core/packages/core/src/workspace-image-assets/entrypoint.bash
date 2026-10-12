@@ -92,6 +92,30 @@ for _ in $(seq 1 60); do
 done
 docker info >/dev/null 2>&1 || { cat /var/log/dockerd.log >&2; exit 1; }
 
+if [[ -n "${DIM_NATIVE_GIT_BROKER_TOKEN:-}" ]]; then
+  sudo -H -E -u dim dim-controller-proxy native-git \
+    --listen 127.0.0.1:19418 >/var/log/dim-native-git-proxy.log 2>&1 &
+  native_git_proxy_pid="$!"
+  for _ in $(seq 1 50); do
+    if (exec 3<>/dev/tcp/127.0.0.1/19418) 2>/dev/null; then
+      exec 3>&-
+      exec 3<&-
+      break
+    fi
+    kill -0 "$native_git_proxy_pid" 2>/dev/null || {
+      cat /var/log/dim-native-git-proxy.log >&2
+      exit 1
+    }
+    sleep 0.1
+  done
+  (exec 3<>/dev/tcp/127.0.0.1/19418) 2>/dev/null || {
+    cat /var/log/dim-native-git-proxy.log >&2
+    exit 1
+  }
+  exec 3>&-
+  exec 3<&-
+fi
+
 exec sudo -H -E -u dim env \
   HOME=/home/dim \
   PATH=/home/dim/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
