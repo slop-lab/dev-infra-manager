@@ -192,7 +192,7 @@ function policyFixture() {
   const revision = (domain: string, version: number, value: unknown) => createHash("sha256")
     .update(`dim-native-${domain}-v${version}\0`).update(JSON.stringify(value)).digest("hex");
   return { schemaVersion: 1, protectedRef: "refs/heads/main",
-    policyRevision: revision("policy", 2, { protectedRef: "refs/heads/main", ...reviewers, requiredJobs }),
+    policyRevision: revision("policy", 3, { protectedRef: "refs/heads/main", ...reviewers }),
     requiredReviewRevision: revision("reviewers", 1, reviewers),
     requiredJobSetRevision: revision("jobs", 2, requiredJobs), requiredJobs, ...reviewers };
 }
@@ -203,8 +203,8 @@ function unsortedJobsProof(proof: Record<string, unknown>): Record<string, unkno
   const reviewers = { requiredReviewerIds: original.requiredReviewerIds, pathReviewerRules: original.pathReviewerRules };
   const revision = (domain: string, version: number, value: unknown) => createHash("sha256")
     .update(`dim-native-${domain}-v${version}\0`).update(JSON.stringify(value)).digest("hex");
-  const policy = { ...original, policyRevision: revision("policy", 2,
-    { protectedRef: original.protectedRef, ...reviewers, requiredJobs }),
+  const policy = { ...original, policyRevision: revision("policy", 3,
+    { protectedRef: original.protectedRef, ...reviewers }),
     requiredJobSetRevision: revision("jobs", 2, requiredJobs), requiredJobs };
   return { ...proof, policy, currentRoot: { ...record(proof.currentRoot),
     policyDigest: createHash("sha256").update(JSON.stringify(policy)).digest("hex") } };

@@ -189,7 +189,7 @@ function policyProof(): NativeRootCiPolicyProof {
   const requiredReviewRevision = revision("reviewers", 1, reviewers);
   const requiredJobSetRevision = revision("jobs", 2, requiredJobs);
   const policy = { schemaVersion: 1 as const, protectedRef: "refs/heads/main",
-    policyRevision: revision("policy", 2, { protectedRef: "refs/heads/main", ...reviewers, requiredJobs }),
+    policyRevision: revision("policy", 3, { protectedRef: "refs/heads/main", ...reviewers }),
     requiredReviewRevision, requiredJobSetRevision, requiredJobs, ...reviewers };
   return { schemaVersion: 1, serviceId: "native-main", requestId: "00000000-0000-4000-8000-000000000010",
     servingGenerationId: generationId, projectId: "project-a", repositoryId: "root", currentRoot: {
