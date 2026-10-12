@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NativeHostVerificationError, verifyAndMaterializeCandidate, type NativeCandidateReadAuthority } from "./nativeOrdinaryCandidateVerifier.js";
+import { NativeHostVerificationError, verifyAndMaterializeCandidate, type NativeCandidateReadAuthority,
+  type NativeCandidateVerificationInput } from "./nativeOrdinaryCandidateVerifier.js";
 import { nativeDescriptorDigest } from "./nativeOrdinaryAuthorityProtocol.js";
 import type { NativeHostClaim, NativeHostClaimRenewal, NativeHostClaimRenewalRequest, NativeHostRecoveryRequest } from "./nativeOrdinaryClaimProtocol.js";
 import { cleanupNativeContainer, nativeContainerArgs, nativeDaemonConfig, nativeRunnerScript, prepareNativeImages } from "./nativeOrdinaryExecutorDocker.js";
@@ -48,6 +49,7 @@ export type NativeHostExecutorDependencies = {
   readonly recoverClaim: (request: NativeHostRecoveryRequest, signal: AbortSignal) => Promise<void>;
   readonly randomId?: () => string;
   readonly now?: () => Date;
+  readonly verifyCandidate?: (input: NativeCandidateVerificationInput) => Promise<void>;
 };
 
 export async function executeNativeHostClaim(
@@ -104,7 +106,7 @@ export async function executeNativeHostClaim(
       privateRoot: root,
       signal
     });
-    await verifyAndMaterializeCandidate({
+    await (dependencies.verifyCandidate ?? verifyAndMaterializeCandidate)({
       authority: readAuthority, descriptor: execution.claim.descriptor,
       descriptorDigest: execution.claim.descriptorDigest, workspace, scriptFile: script, signal
     });
