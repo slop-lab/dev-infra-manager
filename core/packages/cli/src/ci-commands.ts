@@ -2,11 +2,20 @@ import { type Command } from "commander";
 import {
   BUILTIN_CI_RUNNER_DEFAULTS,
   buildSharedQemuSchedulerImage,
+  buildNativeQemuSchedulerImage,
+  buildNativeQemuRunnerImage,
+  admitNativeQemuProject,
+  queryNativeQemuEvent,
   configuredCiRunnerDefaults,
+  admitNativeRootCiProject,
   lifecycleOptions,
   ProcessRunner,
   reconcileOrdinaryCiPoolProject,
   runOrdinaryCiPoolService,
+  runNativeRootCiHost,
+  runNativeQemuHost,
+  configuredNativeQemuSchedulerServer,
+  loadNativeQemuSchedulerConfig,
   setConfiguredCiRunnerDefaults,
   UserError
 } from "@slop-lab/dim-core";
@@ -17,6 +26,83 @@ import {
 
 export function registerCiCommands(program: Command): void {
   const ci = program.command("ci").description("Manage isolated CI execution");
+const nativeQemu = ci.command("native-qemu").description("Manage Gitea-free native QEMU capacity");
+const nativeQemuScheduler = nativeQemu.command("scheduler").description("Manage the native QEMU scheduler");
+nativeQemuScheduler.command("run")
+  .description("Run the native QEMU scheduler from a private operator config")
+  .argument("<config>")
+  .action(async (configPath: string) => {
+    const config = await loadNativeQemuSchedulerConfig(configPath);
+    const server = configuredNativeQemuSchedulerServer(config);
+    const abort = new AbortController();
+    const stop = () => abort.abort();
+    process.once("SIGINT", stop); process.once("SIGTERM", stop);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.once("error", reject); server.listen(config.port, config.host, resolve);
+      });
+      await new Promise<void>((resolve) => abort.signal.addEventListener("abort", () => resolve(), { once: true }));
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error === undefined ? resolve() : reject(error)));
+      process.off("SIGINT", stop); process.off("SIGTERM", stop);
+    }
+  });
+nativeQemuScheduler.command("image").description("Manage the native QEMU scheduler image")
+  .command("build").description("Build the independently deployed native QEMU scheduler image")
+  .argument("<image>").action(async (image: string) => {
+    await buildNativeQemuSchedulerImage(new ProcessRunner(), image); console.log(image);
+  });
+nativeQemu.command("runner").description("Manage the trusted native QEMU runner image")
+  .command("image").description("Manage the trusted native QEMU runner image")
+  .command("build").description("Build the KVM runner image and fixed guest launcher")
+  .argument("<image>").action(async (image: string) => {
+    await buildNativeQemuRunnerImage(new ProcessRunner(), image); console.log(image);
+  });
+nativeQemu.command("host").description("Run trusted native QEMU host capacity").command("run")
+  .description("Run fixed KVM capacities from a private host connection")
+  .argument("<host-id>").argument("<connection>")
+  .action(async (hostId: string, connection: string) => {
+    const abort = new AbortController(); const stop = () => abort.abort();
+    process.once("SIGINT", stop); process.once("SIGTERM", stop);
+    try { await runNativeQemuHost(hostId, connection, abort.signal); }
+    finally { process.off("SIGINT", stop); process.off("SIGTERM", stop); }
+  });
+nativeQemu.command("project").description("Manage independently admitted native QEMU Projects")
+  .command("admit").description("Admit one Project's current protected QEMU policy")
+  .argument("<project-id>").argument("<scheduler-config>")
+  .action(async (projectId: string, config: string) => {
+    console.log(JSON.stringify(await admitNativeQemuProject(projectId, config)));
+  });
+nativeQemu.command("event").description("Inspect durable native QEMU review demand")
+  .command("status").description("Show one review event, claim, attempt, and terminal result")
+  .argument("<event-id>").argument("<scheduler-config>")
+  .action(async (eventId: string, config: string) => {
+    console.log(JSON.stringify(await queryNativeQemuEvent(eventId, config)));
+  });
+const nativeRoot = ci.command("native-root").description("Manage native root ordinary CI");
+const nativeRootHost = nativeRoot.command("host").description("Run native root CI host capacity");
+nativeRootHost.command("run")
+  .description("Run fixed Sysbox capacities from a private host config")
+  .argument("<config>")
+  .action(async (config: string) => {
+    const abort = new AbortController();
+    const stop = () => abort.abort();
+    process.once("SIGINT", stop);
+    process.once("SIGTERM", stop);
+    try { await runNativeRootCiHost(config, abort.signal); }
+    finally {
+      process.off("SIGINT", stop);
+      process.off("SIGTERM", stop);
+    }
+  });
+const nativeRootProject = nativeRoot.command("project").description("Manage native Project CI admission");
+nativeRootProject.command("admit")
+  .description("Admit a native Project's current protected ordinary CI policy")
+  .argument("<project-id>")
+  .argument("<admission-config>")
+  .action(async (projectId: string, config: string) => {
+    console.log(JSON.stringify(await admitNativeRootCiProject(projectId, config)));
+  });
 const schedulerImage = ci.command("scheduler").description("Manage shared QEMU scheduler deployment assets")
   .command("image").description("Manage the shared QEMU scheduler image");
 schedulerImage.command("build")
