@@ -26,7 +26,7 @@ export const nativeImportedRootPolicySchema = z.object({
     name: jobName,
     kind: z.union([z.literal("ordinary-sysbox"), z.literal("qemu")]),
     evidenceClass: z.literal("candidate-controlled")
-  }).strict().readonly()).min(1).max(64).readonly(),
+  }).strict().readonly()).max(64).readonly(),
   requiredReviewerIds: z.array(identifier).min(1).readonly(),
   pathReviewerRules: z.array(pathRule).readonly()
 }).strict().readonly();
@@ -53,8 +53,8 @@ export function parseAuthoritativeImportedRootPolicy(value: unknown): NativeImpo
     pathReviewerRules: normalized.pathReviewerRules };
   if (normalized.requiredReviewRevision !== revision("reviewers", 1, reviewers)
     || normalized.requiredJobSetRevision !== revision("jobs", 2, normalized.requiredJobs)
-    || normalized.policyRevision !== revision("policy", 2, {
-      protectedRef: normalized.protectedRef, ...reviewers, requiredJobs: normalized.requiredJobs
+    || normalized.policyRevision !== revision("policy", 3, {
+      protectedRef: normalized.protectedRef, ...reviewers
     })) throw new ImportedRootPolicyError();
   return normalized;
 }
@@ -83,7 +83,7 @@ function assertUnique(values: readonly string[]): void {
   if (new Set(values).size !== values.length) throw new ImportedRootPolicyError();
 }
 
-function revision(domain: "policy" | "reviewers" | "jobs", version: 1 | 2, value: unknown): string {
+function revision(domain: "policy" | "reviewers" | "jobs", version: 1 | 2 | 3, value: unknown): string {
   return createHash("sha256").update(`dim-native-${domain}-v${version}\0`)
     .update(JSON.stringify(value)).digest("hex");
 }
