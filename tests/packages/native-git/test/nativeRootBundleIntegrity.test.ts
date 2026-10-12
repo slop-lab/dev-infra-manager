@@ -59,7 +59,7 @@ async function durableFixture(): Promise<{ readonly root: string; readonly path:
       protectedRef: "refs/heads/main", expectedCommit: "c".repeat(40),
       policy: {
         schemaVersion: 1, protectedRef: "refs/heads/main",
-        policyRevision: "1260bff66b3d732abb336c2885d6a69a47e465369083c28875dc9cb09a9a480c",
+  policyRevision: "20fae3447611216cea5303d066fe137933b11fad6646b3c41cc39f440f123e3b",
         requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
         requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
         requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],

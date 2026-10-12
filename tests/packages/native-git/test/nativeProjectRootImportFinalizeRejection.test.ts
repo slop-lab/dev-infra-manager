@@ -132,7 +132,7 @@ describe("native Project root import finalize rejection", () => {
           || typeof row.policy_json !== "string") throw new Error("missing import policy fixture");
         database.prepare("UPDATE native_project_root_import SET policy_json = ?")
           .run(row.policy_json.replace(
-            "1260bff66b3d732abb336c2885d6a69a47e465369083c28875dc9cb09a9a480c",
+            "20fae3447611216cea5303d066fe137933b11fad6646b3c41cc39f440f123e3b",
             "f".repeat(64)
           ));
       }

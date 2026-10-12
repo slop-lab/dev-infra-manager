@@ -26,7 +26,7 @@ const project = { serviceId: "native-main", projectId: "project-a", rootReposito
 const policy = {
   schemaVersion: 1,
   protectedRef: "refs/heads/main",
-  policyRevision: "fdffae92e9014e33a9403f93357910d07597a3b714145ae8919af7fa7213b1ac",
+  policyRevision: "634a32b9b5077e16b05d2ca1d309f754dfc0b2f1bbc0085179a13dffe4eb8043",
   requiredReviewRevision: "ff16b06bda98a4c379e4b5134f68f6ff5892908e71adc784236d74fe796905a9",
   requiredJobSetRevision: "0ad50d5aeb109a11fa76caa3fcd0614d39d69331d2e27520078dc814bb1426c1",
   requiredJobs: [

@@ -11,6 +11,7 @@ import type { ReviewPublicationFaults } from "../../../../core/packages/native-g
 import type { AuthoritativeNativeReviewHooks } from "../../../../core/packages/native-git/src/authoritative-native-review.js";
 import type { NativeHumanReviewerHooks } from "../../../../core/packages/native-git/src/native-human-reviewer-http.js";
 import type { NativeOrdinaryAttemptHooks } from "../../../../core/packages/native-git/src/native-ordinary-attempt-http.js";
+import type { NativeInstalledPromotionHooks } from "../../../../core/packages/native-git/src/native-installed-promotion.js";
 import { bundleSecrets, idleNativeConfig } from "./bundleConfigFixture.js";
 import type { GitBundle, ImportReceipt, RootReadLeaseHooks, RunningService, RuntimeGit, WorkspaceWriteLeaseHooks } from "./nativeRootImportFinalizeTypes.js";
 
@@ -51,6 +52,18 @@ export const humanReviewerAuthorization = `Basic ${Buffer.from(
 export const foreignHumanReviewer = {
   reviewerId: "foreign", username: "human-reviewer-foreign", password: bundleSecrets.foreignHumanReviewer
 } as const;
+export const hostPromoter = {
+  hostId: "host-a", username: "host-promoter-a", password: bundleSecrets.hostPromoter
+} as const;
+export const hostPromoterAuthorization = `Basic ${Buffer.from(
+  `${hostPromoter.username}:${hostPromoter.password}`
+).toString("base64")}`;
+export const foreignHostPromoter = {
+  hostId: "host-b", username: "host-promoter-b", password: Buffer.alloc(32, 58).toString("base64url")
+} as const;
+export const foreignHostPromoterAuthorization = `Basic ${Buffer.from(
+  `${foreignHostPromoter.username}:${foreignHostPromoter.password}`
+).toString("base64")}`;
 const roots: string[] = [];
 const services: NativeGitBundleServer[] = [];
 
@@ -76,12 +89,14 @@ export async function startFinalizeService(
   nativeHumanReviewerHooks?: NativeHumanReviewerHooks,
   ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient,
   deliveryFaults?: ReviewPublicationFaults,
-  nativeOrdinaryAttemptHooks?: NativeOrdinaryAttemptHooks
+  nativeOrdinaryAttemptHooks?: NativeOrdinaryAttemptHooks,
+  configOverrides: object = {},
+  nativePromotionHooks?: NativeInstalledPromotionHooks
 ): Promise<RunningService> {
   return startFinalizeServiceForGeneration(
     root, generationId, activationToken, rootReadLeaseClock, rootReadLeaseHooks, workspaceWriteLeaseClock,
     workspaceWriteLeaseHooks, runtimeGit, authoritativeReviewHooks, nativeHumanReviewerHooks, ordinaryIdentityHttpClient,
-    deliveryFaults, nativeOrdinaryAttemptHooks
+    deliveryFaults, nativeOrdinaryAttemptHooks, configOverrides, nativePromotionHooks
   );
 }
 
@@ -98,17 +113,21 @@ export async function startFinalizeServiceForGeneration(
   nativeHumanReviewerHooks?: NativeHumanReviewerHooks,
   ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient,
   deliveryFaults?: ReviewPublicationFaults,
-  nativeOrdinaryAttemptHooks?: NativeOrdinaryAttemptHooks
+  nativeOrdinaryAttemptHooks?: NativeOrdinaryAttemptHooks,
+  configOverrides: object = {},
+  nativePromotionHooks?: NativeInstalledPromotionHooks
 ): Promise<RunningService> {
   const options = {
     config: parseNativeGitBundleConfig({
       ...idleNativeConfig(),
+      ...configOverrides,
       ...(runtimeGit === undefined ? {} : runtimeGit),
       projectRegistrars: [{ hostId: "host-a", username: "registrar-a", password: bundleSecrets.projectRegistrar }],
       projectRootImporters: [importer, wrongHostImporter],
       projectRootReadIssuers: [rootReadIssuer, wrongHostRootReadIssuer],
       workspaceWriteIssuers: [workspaceWriteIssuer],
-      humanReviewers: [humanReviewer, foreignHumanReviewer]
+      humanReviewers: [humanReviewer, foreignHumanReviewer],
+      hostPromoters: [hostPromoter, foreignHostPromoter]
     }),
     stateDirectory: root,
     readinessToken: Buffer.alloc(32, 41).toString("base64url"),
@@ -122,7 +141,8 @@ export async function startFinalizeServiceForGeneration(
     ...(nativeHumanReviewerHooks === undefined ? {} : { nativeHumanReviewerHooks }),
     ...(ordinaryIdentityHttpClient === undefined ? {} : { ordinaryIdentityHttpClient }),
     ...(deliveryFaults === undefined ? {} : { deliveryFaults }),
-    ...(nativeOrdinaryAttemptHooks === undefined ? {} : { nativeOrdinaryAttemptHooks })
+    ...(nativeOrdinaryAttemptHooks === undefined ? {} : { nativeOrdinaryAttemptHooks }),
+    ...(nativePromotionHooks === undefined ? {} : { nativePromotionHooks })
   };
   const service = await configuredNativeGitBundleServer(options);
   services.push(service);
@@ -248,7 +268,7 @@ export function parseImportReceipt(value: unknown): ImportReceipt {
 function importPolicy() {
   return {
     schemaVersion: 1, protectedRef: "refs/heads/main",
-    policyRevision: "1260bff66b3d732abb336c2885d6a69a47e465369083c28875dc9cb09a9a480c",
+    policyRevision: "20fae3447611216cea5303d066fe137933b11fad6646b3c41cc39f440f123e3b",
     requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
     requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
     requiredJobs: [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }],
