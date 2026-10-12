@@ -28,7 +28,8 @@ output.exports = {
     import: "./index.js"
   }
 };
-output.bin = { "dim-service": "nativeOrdinaryServiceCli.js" };
+output.bin = { "dim-service": "nativeOrdinaryServiceCli.js",
+  "dim-native-qemu-service": "nativeQemuServiceCli.js" };
 
 if ("private" in output) {
   throw new Error("The publish package.json must not contain private");
@@ -46,6 +47,16 @@ await cp(
 await cp(
   new URL("../src/shared-qemu-scheduler-assets", import.meta.url),
   new URL("../dist/shared-qemu-scheduler-assets", import.meta.url),
+  { recursive: true }
+);
+await cp(
+  new URL("../src/native-qemu-scheduler-assets", import.meta.url),
+  new URL("../dist/native-qemu-scheduler-assets", import.meta.url),
+  { recursive: true }
+);
+await cp(
+  new URL("../src/native-qemu-runner-assets", import.meta.url),
+  new URL("../dist/native-qemu-runner-assets", import.meta.url),
   { recursive: true }
 );
 await cp(
