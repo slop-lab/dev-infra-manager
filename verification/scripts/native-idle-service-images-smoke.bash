@@ -40,7 +40,7 @@ import { join } from "node:path";
 const root = process.argv[2];
 const token = () => randomBytes(32).toString("base64url");
 const credentials = {
-  query: token(), identity: token(), attemptIssuer: token(), resultReporter: token(),
+  query: token(), identity: token(), attemptIssuer: token(), candidateReader: token(), resultReporter: token(),
   webhook: token(), registrar: token(), host: token()
 };
 const native = {
@@ -58,12 +58,14 @@ const native = {
   projectRootReadIssuers: [],
   workspaceWriteIssuers: [],
   humanReviewers: [],
+  hostPromoters: [],
   ordinaryCi: {
     endpoint: "http://ordinary-ci:8080",
     serviceId: "ordinary-main",
     query: { username: "native-query", password: credentials.query },
     identity: { username: "ordinary-identity", password: credentials.identity },
     attemptIssuer: { username: "ordinary-attempts", password: credentials.attemptIssuer },
+    candidateReader: { username: "ordinary-candidate-reader", password: credentials.candidateReader },
     resultReporter: { username: "ordinary-results", password: credentials.resultReporter },
     webhook: {
       endpoint: "http://ordinary-ci:8080/v1/native-root-ci-events",
@@ -83,6 +85,7 @@ const ordinary = {
     serviceId: "native-main",
     identity: { username: "ordinary-identity", password: credentials.identity },
     attemptIssuer: { username: "ordinary-attempts", password: credentials.attemptIssuer },
+    candidateReader: { username: "ordinary-candidate-reader", password: credentials.candidateReader },
     resultReporter: { username: "ordinary-results", password: credentials.resultReporter }
   },
   credentials: {
@@ -427,7 +430,7 @@ const prelude = {
   rootRepositoryId: "root", protectedRef: "refs/heads/main", expectedCommit: commit,
   policy: {
     schemaVersion: 1, protectedRef: "refs/heads/main",
-    policyRevision: "1260bff66b3d732abb336c2885d6a69a47e465369083c28875dc9cb09a9a480c",
+    policyRevision: "20fae3447611216cea5303d066fe137933b11fad6646b3c41cc39f440f123e3b",
     requiredReviewRevision: "02b474b992388d574069fe2806c9a918f3c660053df4ab6baf595d9d178ea824",
     requiredJobSetRevision: "b9763406fad20f0f816d6346d69d27eb953d7053301bd87275ba73b1f82bc8a1",
     requiredJobs: [{name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled"}],
