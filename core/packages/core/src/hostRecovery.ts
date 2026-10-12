@@ -5,6 +5,7 @@ import { ensureAptCache } from "./aptCache.js";
 import { requireHostMirrorProvider } from "./hostMirrorProvider.js";
 import { LifecycleState } from "./lifecycleState.js";
 import type { HostLifecycleRecord, LifecycleOptions } from "./lifecycleTypes.js";
+import { recoverNativeWorkspace } from "./nativeWorkspaceTransitions.js";
 import { ensureRegistryCache } from "./registryCache.js";
 import type { StreamingCommandRunner } from "./types.js";
 import { setupWorkspace, showWorkspace, startWorkspace } from "./workspaceLifecycle.js";
@@ -14,6 +15,7 @@ export async function reconcileReadyHostManagedGit(
   runner: StreamingCommandRunner,
   options: LifecycleOptions
 ): Promise<void> {
+  if (options.nativeControlPlaneConnection !== undefined) return;
   if (options.giteaConnection.kind === "external") return;
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireHostLifecycleLock();
@@ -36,36 +38,50 @@ export async function startHost(
   runner: StreamingCommandRunner,
   options: LifecycleOptions
 ): Promise<HostLifecycleRecord> {
-  requireHostMirrorProvider(options.hostMirrorProvider);
+  const native = options.nativeControlPlaneConnection !== undefined;
+  if (!native) requireHostMirrorProvider(options.hostMirrorProvider);
   const state = new LifecycleState(options.stateRoot);
   const release = await state.acquireHostLifecycleLock();
   try {
     const current = await state.readHostLifecycle();
+    if (native) await state.listWorkspaces(9);
+    if (native && current !== undefined
+      && (current.restartCiRunners.length > 0 || current.resumeManagedContainers.length > 0)) {
+      throw new UserError("native host lifecycle state contains predecessor recovery targets");
+    }
     if (!current || current.phase === "ready") {
       const record = current ?? readyRecord();
+      if (native) return record;
       if (options.giteaConnection.kind === "managed") await reconcileReadyManagedGit(runner, options, state, record);
       await ensureRegistryCache(runner, options);
       await ensureAptCache(runner, options);
       return record;
     }
     for (const workspace of current.resumeWorkspaces) {
-      await readWorkspaceForOperation(state, workspace, options.giteaConnection);
+      const record = await readWorkspaceForOperation(state, workspace, options.giteaConnection);
+      if (native && record.schemaVersion !== 9) {
+        throw new UserError(`workspace '${workspace}' is not a native schema-9 workspace`);
+      }
     }
-    await ensureGitea(runner, options);
-    await ensureRegistryCache(runner, options);
-    await ensureAptCache(runner, options);
+    if (!native) {
+      await ensureGitea(runner, options);
+      await ensureRegistryCache(runner, options);
+      await ensureAptCache(runner, options);
+    }
     const entryPhase = current.phase;
     let record: HostLifecycleRecord = { ...current, phase: "starting", updatedAt: new Date().toISOString() };
     delete record.error;
     await state.writeHostLifecycle(record);
     try {
-      for (const container of record.resumeManagedContainers) {
-        await startManagedContainer(runner, container);
+      if (!native) {
+        for (const container of record.resumeManagedContainers) {
+          await startManagedContainer(runner, container);
+        }
       }
       for (const workspace of record.resumeWorkspaces) {
         await recoverWorkspace(runner, options, workspace);
       }
-      while (record.restartCiRunners.length > 0) {
+      while (!native && record.restartCiRunners.length > 0) {
         const target = record.restartCiRunners[0];
         if (target === undefined) break;
         await recoverCiRunner(runner, options, {
@@ -130,6 +146,12 @@ async function recoverWorkspace(
   name: string
 ): Promise<void> {
   const workspace = await showWorkspace(runner, options, name);
+  if (options.nativeControlPlaneConnection !== undefined) {
+    if (workspace.schemaVersion !== 9) throw new UserError(`workspace '${name}' is not a native schema-9 workspace`);
+    if (workspace.phase === "ready") return;
+    await recoverNativeWorkspace(runner, options, workspace);
+    return;
+  }
   switch (workspace.phase) {
     case "ready":
       return;

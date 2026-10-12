@@ -20,10 +20,29 @@ export function lifecycleOptionsForBackend(
   defaultWorkspaceBackend: LifecycleOptions["defaultWorkspaceBackend"],
   env: NodeJS.ProcessEnv = process.env
 ): LifecycleOptions {
-  if (env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE !== undefined
-    || env.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE !== undefined
-    || env.DIM_NATIVE_QEMU_CONNECTION_FILE !== undefined) {
-    throw new UserError("native Project and QEMU adapters are unavailable; refusing Gitea fallback");
+  const nativeConnectionFile = selectedAbsoluteFile(
+    env.DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE,
+    "DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE"
+  );
+  const importerConnectionFile = selectedAbsoluteFile(
+    env.DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE,
+    "DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE"
+  );
+  if (importerConnectionFile !== undefined && nativeConnectionFile === undefined) {
+    throw new UserError(
+      "DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE requires native control-plane selection"
+    );
+  }
+  if (nativeConnectionFile !== undefined) {
+    const conflicting = ["DIM_GITEA_CONNECTION_FILE", "DIM_GIT_SYNC_CONNECTION_FILE",
+      "DIM_QEMU_SCHEDULER_CONNECTION_FILE", "DIM_ORDINARY_CI_POOL_CONNECTION_FILE"]
+      .find((name) => env[name] !== undefined);
+    if (conflicting !== undefined) {
+      throw new UserError(`${conflicting} cannot be combined with native control-plane selection`);
+    }
+  }
+  if (env.DIM_NATIVE_QEMU_CONNECTION_FILE !== undefined) {
+    throw new UserError("native QEMU adapter is unavailable; refusing fallback");
   }
   const stateRoot = path.resolve(env.DIM_STATE_ROOT ?? path.join(os.homedir(), ".local/state/dim"));
   const defaultStateRoot = path.resolve(path.join(os.homedir(), ".local/state/dim"));
@@ -39,7 +58,12 @@ export function lifecycleOptionsForBackend(
     );
   return {
     stateRoot,
-    giteaConnection: env.DIM_GITEA_CONNECTION_FILE === undefined
+    ...(nativeConnectionFile === undefined
+      ? {}
+      : { nativeControlPlaneConnection: { file: nativeConnectionFile } }),
+    giteaConnection: nativeConnectionFile !== undefined
+      ? { kind: "disabled" }
+      : env.DIM_GITEA_CONNECTION_FILE === undefined
       ? { kind: "managed" }
       : { kind: "external", file: path.resolve(env.DIM_GITEA_CONNECTION_FILE) },
     ...(env.DIM_GIT_SYNC_CONNECTION_FILE === undefined
@@ -78,6 +102,14 @@ export function lifecycleOptionsForBackend(
     adminControllerSocketPath: env.DIM_ADMIN_CONTROLLER_SOCKET
       ?? path.join(controllerDirectory, "admin", "controller.sock")
   };
+}
+
+function selectedAbsoluteFile(value: string | undefined, name: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (value.length === 0 || !path.isAbsolute(value)) {
+    throw new UserError(`${name} must name an absolute connection file`);
+  }
+  return value;
 }
 
 function dockerHostName(value: string | undefined): string | undefined {

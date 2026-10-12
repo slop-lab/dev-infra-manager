@@ -25,6 +25,13 @@ export async function shutdownHost(
     if (current && current.phase !== "ready") {
       throw new UserError(`DIM host is already ${current.phase}; run dim host start to recover it`);
     }
+    if (options.nativeControlPlaneConnection !== undefined) {
+      if (current !== undefined
+        && (current.restartCiRunners.length > 0 || current.resumeManagedContainers.length > 0)) {
+        throw new UserError("native host lifecycle state contains predecessor recovery targets");
+      }
+      return await shutdownNativeHost(runner, options, state);
+    }
     const mirrorOwnership = await state.readHostMirrorOwnership();
     if (mirrorOwnership === undefined) throw new UserError("host mirror ownership state not found");
     const registryCache = await inspectHostMirrorContainer(runner, mirrorOwnership, "registry-cache");
@@ -103,6 +110,43 @@ export async function shutdownHost(
   } finally {
     await release();
   }
+}
+
+async function shutdownNativeHost(
+  runner: StreamingCommandRunner,
+  options: LifecycleOptions,
+  state: LifecycleState
+): Promise<HostLifecycleRecord> {
+  const workspaces = await state.listWorkspaces(9);
+  const resumeWorkspaces = workspaces
+    .filter((workspace) => workspace.phase === "ready")
+    .map((workspace) => workspace.name);
+  const shutdownWorkspaces = workspaces
+    .filter((workspace) => workspace.phase === "ready" || workspace.phase === "discarding")
+    .map((workspace) => workspace.name);
+  let record: HostLifecycleRecord = {
+    schemaVersion: 2,
+    phase: "stopping",
+    resumeWorkspaces,
+    restartCiRunners: [],
+    resumeManagedContainers: [],
+    updatedAt: new Date().toISOString()
+  };
+  await state.writeHostLifecycle(record);
+  const errors: string[] = [];
+  for (const workspace of shutdownWorkspaces) {
+    await attempt(errors, `stop workspace '${workspace}'`, () =>
+      stopWorkspaceForHostShutdown(runner, options, workspace));
+  }
+  record = {
+    ...record,
+    phase: errors.length === 0 ? "stopped" : "error",
+    updatedAt: new Date().toISOString(),
+    ...(errors.length === 0 ? {} : { error: errors.join("; ") })
+  };
+  await state.writeHostLifecycle(record);
+  if (errors.length > 0) throw new UserError(errors.join("; "));
+  return record;
 }
 
 type HostMirrorContainerResource = Extract<HostMirrorResource, "registry-cache" | "apt-cache">;

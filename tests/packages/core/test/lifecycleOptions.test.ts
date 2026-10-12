@@ -61,13 +61,52 @@ describe("lifecycle options", () => {
     });
   });
 
-  it.each(["DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE", "DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE",
-    "DIM_NATIVE_QEMU_CONNECTION_FILE"])(
-    "rejects %s before selecting Gitea while native adapters are unavailable",
-    (selector) => {
-      const env = { HOME: "/home/developer", [selector]: "" };
+  it("selects native Project lifecycle through an explicit control-plane connection", () => {
+    const options = lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer",
+      DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: "/run/secrets/dim-native-control.json"
+    });
 
-      expect(() => lifecycleOptionsForBackend("sysbox", env)).toThrow(/native Project and QEMU adapters are unavailable/);
-    }
-  );
+    expect(options.nativeControlPlaneConnection).toEqual({
+      file: "/run/secrets/dim-native-control.json"
+    });
+    expect(options.giteaConnection).toEqual({ kind: "disabled" });
+  });
+
+  it.each([
+    "DIM_GITEA_CONNECTION_FILE",
+    "DIM_GIT_SYNC_CONNECTION_FILE",
+    "DIM_QEMU_SCHEDULER_CONNECTION_FILE",
+    "DIM_ORDINARY_CI_POOL_CONNECTION_FILE"
+  ])("rejects native lifecycle combined with %s before resolving paths", (selector) => {
+    expect(() => lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer",
+      DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: "/missing/native.json",
+      [selector]: "/missing/predecessor.json"
+    })).toThrow(new RegExp(`${selector} cannot be combined with native control-plane selection`));
+  });
+
+  it("rejects an importer selector without native lifecycle selection", () => {
+    expect(() => lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer",
+      DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE: "/run/secrets/dim-native-importer.json"
+    })).toThrow(/DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE requires native control-plane selection/);
+  });
+
+  it.each([
+    "DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE",
+    "DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE"
+  ])("rejects an empty %s selector", (selector) => {
+    expect(() => lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer",
+      [selector]: ""
+    })).toThrow(new RegExp(`${selector} must name an absolute connection file`));
+  });
+
+  it("rejects native QEMU before selecting Gitea while that adapter is unavailable", () => {
+    expect(() => lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/developer",
+      DIM_NATIVE_QEMU_CONNECTION_FILE: "/run/secrets/dim-native-qemu.json"
+    })).toThrow(/native QEMU adapter is unavailable; refusing fallback/);
+  });
 });

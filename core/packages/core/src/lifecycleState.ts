@@ -46,6 +46,10 @@ export class LifecycleState {
     return this.grants.ensure(await this.readWorkspace(name), "agent");
   }
 
+  async ensureNativeGitGrant(name: string): Promise<string> {
+    return this.grants.ensure(await this.readWorkspace(name), "native-git");
+  }
+
   async readWorkspaceGrant(name: string): Promise<string> {
     return this.grants.read(await this.readWorkspace(name), "workspace");
   }
@@ -58,12 +62,20 @@ export class LifecycleState {
     return this.grants.authenticate(token, "agent", (name) => this.readWorkspace(name));
   }
 
+  async authenticateNativeGitGrant(token: string): Promise<WorkspaceRecord | undefined> {
+    return this.grants.authenticate(token, "native-git", (name) => this.readWorkspace(name));
+  }
+
   async removeWorkspaceGrant(record: Pick<WorkspaceRecord, "name" | "workspaceId">): Promise<void> {
     await this.grants.remove(record, "workspace");
   }
 
   async removeAgentGrant(record: Pick<WorkspaceRecord, "name" | "workspaceId">): Promise<void> {
     await this.grants.remove(record, "agent");
+  }
+
+  async removeNativeGitGrant(record: Pick<WorkspaceRecord, "name" | "workspaceId">): Promise<void> {
+    await this.grants.remove(record, "native-git");
   }
 
   giteaServicePath(): string {
@@ -246,8 +258,12 @@ export class LifecycleState {
     return acquireLifecycleLock({ root: this.root, name: `workspace-${validateLifecycleName(name, "workspace")}-authority`, description: `workspace '${name}' authority`, options: this.lockOptions });
   }
 
-  async listWorkspaces(): Promise<WorkspaceRecord[]> {
-    const records = await listRecords<WorkspaceRecord>(path.join(this.root, "workspaces"), "workspace", 8);
+  async listWorkspaces(expectedSchemaVersion: 8 | 9 = 8): Promise<WorkspaceRecord[]> {
+    const records = await listRecords<WorkspaceRecord>(
+      path.join(this.root, "workspaces"),
+      "workspace",
+      expectedSchemaVersion
+    );
     for (const record of records) {
       assertWorkspaceRecord(record, this.workspacePath(record.name));
     }

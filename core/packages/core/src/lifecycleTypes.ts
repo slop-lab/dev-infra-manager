@@ -6,6 +6,7 @@ export interface LifecycleOptions {
   gitSyncConnection?: { readonly file: string };
   qemuSchedulerConnection?: { readonly file: string };
   ordinaryCiPoolConnection?: { readonly file: string };
+  nativeControlPlaneConnection?: { readonly file: string };
   giteaImage: string;
   giteaHost: string;
   giteaPort: number;
@@ -33,7 +34,8 @@ export interface LifecycleOptions {
 
 export type GiteaConnectionConfiguration =
   | { readonly kind: "managed" }
-  | { readonly kind: "external"; readonly file: string };
+  | { readonly kind: "external"; readonly file: string }
+  | { readonly kind: "disabled" };
 
 export interface HostLifecycleRecord {
   schemaVersion: 2;
@@ -259,8 +261,22 @@ export interface WorkspaceCapabilityRecord {
   environment?: Record<string, string>;
 }
 
-export interface WorkspaceRecord {
-  schemaVersion: 8;
+export type NativeWorkspaceSource = {
+  readonly kind: "native";
+  readonly serviceId: "native-main";
+  readonly snapshot: {
+    readonly projectId: string;
+    readonly repositoryId: "root";
+    readonly protectedRef: string;
+    readonly commit: string;
+    readonly tree: string;
+  };
+  readonly policyRevision: string;
+  readonly requiredReviewRevision: string;
+  readonly requiredJobSetRevision: string;
+};
+
+interface WorkspaceRecordBase {
   workspaceId: string;
   name: string;
   projectId: string;
@@ -284,7 +300,6 @@ export interface WorkspaceRecord {
   routes: string[];
   gitUserName: string;
   gitUserEmail: string;
-  gitBaseUrl: string;
   hostAliases: Record<string, string[]>;
   projectManifestPath: string;
   createdAt: string;
@@ -292,3 +307,15 @@ export interface WorkspaceRecord {
   lastSetup?: WorkspaceSetupRecord;
   error?: string;
 }
+
+export interface GiteaWorkspaceRecord extends WorkspaceRecordBase {
+  schemaVersion: 8;
+  gitBaseUrl: string;
+}
+
+export interface NativeWorkspaceRecord extends WorkspaceRecordBase {
+  schemaVersion: 9;
+  source: NativeWorkspaceSource;
+}
+
+export type WorkspaceRecord = GiteaWorkspaceRecord | NativeWorkspaceRecord;
