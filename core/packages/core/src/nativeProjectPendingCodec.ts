@@ -26,14 +26,24 @@ export type NativeProjectPendingRecord = {
   readonly importReceipt: NativeGitRootImportResult;
 };
 
+export type NativeProjectReadyRecord = Omit<NativeProjectPendingRecord, "schemaVersion" | "phase"> & {
+  readonly schemaVersion: 6;
+  readonly phase: "ready";
+  readonly readyAt: string;
+};
+
+export type NativeProjectRecord = NativeProjectPendingRecord | NativeProjectReadyRecord;
+
 export class NativeProjectPendingRecordError extends UserError {
   readonly name = "NativeProjectPendingRecordError";
 }
 
-export function parseNativeProjectPendingRecord(input: unknown): NativeProjectPendingRecord {
+export function parseNativeProjectPendingRecord(input: unknown): NativeProjectRecord {
   const record = exactRecord(input);
-  if (record.schemaVersion !== 5 || record.recordType !== "native-project"
-    || record.phase !== "admission-pending") invalid();
+  const pending = record.schemaVersion === 5 && record.phase === "admission-pending";
+  const ready = record.schemaVersion === 6 && record.phase === "ready"
+    && typeof record.readyAt === "string" && new Date(record.readyAt).toISOString() === record.readyAt;
+  if ((!pending && !ready) || record.recordType !== "native-project") invalid();
   try {
     const draft = parseNativeProjectDraft({
       schemaVersion: 2,
@@ -55,10 +65,8 @@ export function parseNativeProjectPendingRecord(input: unknown): NativeProjectPe
       importReceipt: record.importReceipt
     });
     if (draft.schemaVersion !== 2 || draft.phase !== "root-imported") invalid();
-    return {
-      schemaVersion: 5,
-      recordType: "native-project",
-      phase: "admission-pending",
+    const common = {
+      recordType: "native-project" as const,
       name: draft.name,
       projectId: draft.projectId,
       serviceId: draft.serviceId,
@@ -73,6 +81,11 @@ export function parseNativeProjectPendingRecord(input: unknown): NativeProjectPe
       bundleSize: draft.bundleSize,
       importReceipt: draft.importReceipt
     };
+    if (ready) {
+      if (typeof record.readyAt !== "string") invalid();
+      return { ...common, schemaVersion: 6, phase: "ready", readyAt: record.readyAt };
+    }
+    return { ...common, schemaVersion: 5, phase: "admission-pending" };
   } catch (error) {
     if (error instanceof NativeProjectPendingRecordError) throw error;
     throw new NativeProjectPendingRecordError("native Project admission-pending record is invalid", {
@@ -83,8 +96,9 @@ export function parseNativeProjectPendingRecord(input: unknown): NativeProjectPe
 
 function exactRecord(input: unknown): Readonly<Record<string, unknown>> {
   if (!isRecord(input)
-    || Object.keys(input).length !== fields.length
-    || fields.some((field) => !Object.hasOwn(input, field))) invalid();
+    || (Object.keys(input).length !== fields.length && Object.keys(input).length !== fields.length + 1)
+    || fields.some((field) => !Object.hasOwn(input, field))
+    || (Object.keys(input).length === fields.length + 1 && !Object.hasOwn(input, "readyAt"))) invalid();
   return input;
 }
 

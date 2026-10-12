@@ -7,7 +7,13 @@ import { LifecycleState } from "./lifecycleState.js";
 import type { NativeGitImportedRootProof,
   NativeGitRootImporterClient } from "./nativeGitRootImporterClient.js";
 import { parseNativeProjectPendingRecord,
-  type NativeProjectPendingRecord } from "./nativeProjectPendingCodec.js";
+  type NativeProjectPendingRecord, type NativeProjectReadyRecord,
+  type NativeProjectRecord } from "./nativeProjectPendingCodec.js";
+import type { NativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
+import { proveNativeProjectReadiness } from "./nativeProjectReadinessClient.js";
+import { replaceNativeProjectRecord } from "./nativeProjectReadyFiles.js";
+import { materializeNativeProjectReadinessRoot } from "./nativeProjectRootSelection.js";
+import { assertNativeProjectRootSnapshotTree } from "./nativeProjectRootSnapshotTreeHash.js";
 import { NativeProjectPendingFileError, publishNativeProjectPending,
   readNativeProjectPending, recoverNativeProjectPendingPublication } from "./nativeProjectPendingFiles.js";
 import type { NativeProjectDraft } from "./nativeProjectDraftCodec.js";
@@ -31,7 +37,7 @@ export class NativeProjectPendingStore {
     this.#drafts = new NativeProjectDraftStore(root);
   }
 
-  async read(name: string, ownerHostId: string): Promise<NativeProjectPendingRecord | undefined> {
+  async read(name: string, ownerHostId: string): Promise<NativeProjectRecord | undefined> {
     try {
       const stored = await readNativeProjectPending(this.root, this.#state.projectPath(name));
       if (stored === undefined) return undefined;
@@ -45,7 +51,7 @@ export class NativeProjectPendingStore {
     }
   }
 
-  async list(ownerHostId: string): Promise<readonly NativeProjectPendingRecord[]> {
+  async list(ownerHostId: string): Promise<readonly NativeProjectRecord[]> {
     const directory = join(this.root, "projects");
     try {
       await readNativeProjectPending(this.root, this.#state.projectPath("native-list-probe"));
@@ -66,7 +72,7 @@ export class NativeProjectPendingStore {
         }
         return name;
       }).sort((left, right) => left.localeCompare(right));
-      const records: NativeProjectPendingRecord[] = [];
+      const records: NativeProjectRecord[] = [];
       for (const name of names) {
         const record = await this.read(name, ownerHostId);
         if (record === undefined) {
@@ -87,7 +93,7 @@ export class NativeProjectPendingStore {
     name: string,
     importer: NativeGitRootImporterClient,
     signal: AbortSignal
-  ): Promise<NativeProjectPendingRecord> {
+  ): Promise<NativeProjectRecord> {
     signal.throwIfAborted();
     const release = await this.#state.acquireProjectLock(name);
     try {
@@ -109,6 +115,8 @@ export class NativeProjectPendingStore {
       await recoverNativeProjectPendingPublication(this.root, target, bytes);
       const existing = await readNativeProjectPending(this.root, target);
       if (existing !== undefined) {
+        if (existing.record.phase === "ready"
+          && isDeepStrictEqual(pendingProjection(existing.record), candidate)) return existing.record;
         if (!existing.bytes.equals(bytes)) {
           throw new NativeProjectPendingStoreError("canonical Project replay conflicts with admission intent");
         }
@@ -124,6 +132,53 @@ export class NativeProjectPendingStore {
       throw new NativeProjectPendingStoreError("native Project admission-pending publication failed", {
         cause: error
       });
+    } finally {
+      await release();
+    }
+  }
+
+  async ready(
+    name: string,
+    connection: NativeControlPlaneConnection,
+    signal: AbortSignal
+  ): Promise<NativeProjectReadyRecord> {
+    const release = await this.#state.acquireProjectLock(name);
+    try {
+      const target = this.#state.projectPath(name);
+      const stored = await readNativeProjectPending(this.root, target);
+      if (stored === undefined) throw new NativeProjectPendingStoreError("native Project admission-pending state is missing");
+      this.#assertSelectedRecord(stored.record, name, connection.hostId);
+      const proof = await proveNativeProjectReadiness(connection, stored.record, signal,
+        stored.record.phase === "ready"
+          ? { commit: stored.record.rootCommit, tree: stored.record.rootTree, allowFastForward: true }
+          : undefined);
+      if (stored.record.phase === "ready") {
+        await assertNativeProjectRootSnapshotTree(
+          join(this.root, "assets", "native-project-roots", stored.record.projectId, stored.record.rootCommit),
+          stored.record.rootTree
+        );
+        return stored.record;
+      }
+      await materializeNativeProjectReadinessRoot({
+        stateRoot: this.root, connection, project: { ...stored.record,
+          schemaVersion: 6, phase: "ready", readyAt: new Date().toISOString() },
+        proof, signal
+      });
+      const ready = parseNativeProjectPendingRecord({
+        ...stored.record,
+        rootCommit: proof.commit,
+        rootTree: proof.tree,
+        schemaVersion: 6,
+        phase: "ready",
+        readyAt: new Date().toISOString()
+      });
+      if (ready.phase !== "ready") throw new NativeProjectPendingStoreError("native Project ready record is invalid");
+      const bytes = Buffer.from(`${JSON.stringify(ready)}\n`, "utf8");
+      await replaceNativeProjectRecord(target, stored.bytes, bytes);
+      return ready;
+    } catch (error) {
+      if (error instanceof NativeProjectPendingStoreError) throw error;
+      throw new NativeProjectPendingStoreError("native Project ready publication failed", { cause: error });
     } finally {
       await release();
     }
@@ -152,7 +207,7 @@ export class NativeProjectPendingStore {
       || proof.currentHead.policyDigest !== policyDigest) {
       throw new NativeProjectPendingStoreError("native Project imported root proof conflicts with the draft");
     }
-    return parseNativeProjectPendingRecord({
+    const candidate = parseNativeProjectPendingRecord({
       schemaVersion: 5,
       recordType: "native-project",
       phase: "admission-pending",
@@ -170,9 +225,13 @@ export class NativeProjectPendingStore {
       bundleSize: draft.bundleSize,
       importReceipt: draft.importReceipt
     });
+    if (candidate.phase !== "admission-pending") {
+      throw new NativeProjectPendingStoreError("native Project pending record is invalid");
+    }
+    return candidate;
   }
 
-  #assertSelectedRecord(record: NativeProjectPendingRecord, name: string, ownerHostId: string): void {
+  #assertSelectedRecord(record: NativeProjectRecord, name: string, ownerHostId: string): void {
     if (record.name !== name) {
       throw new NativeProjectPendingStoreError("native Project record name conflicts with its path");
     }
@@ -180,6 +239,11 @@ export class NativeProjectPendingStore {
       throw new NativeProjectPendingStoreError("native Project belongs to another native host");
     }
   }
+}
+
+function pendingProjection(record: NativeProjectReadyRecord): NativeProjectPendingRecord {
+  const { readyAt: _readyAt, ...common } = record;
+  return { ...common, schemaVersion: 5, phase: "admission-pending" };
 }
 
 function errorCode(error: unknown): string | undefined {

@@ -4,7 +4,7 @@ import { chmod, link, lstat, mkdir, open, readdir, rm, unlink } from "node:fs/pr
 import { basename, dirname } from "node:path";
 import { hasDuplicateJsonKeys } from "./nativeControlPlaneJson.js";
 import { NativeProjectPendingRecordError,
-  parseNativeProjectPendingRecord, type NativeProjectPendingRecord } from "./nativeProjectPendingCodec.js";
+  parseNativeProjectPendingRecord, type NativeProjectRecord } from "./nativeProjectPendingCodec.js";
 
 const maximumRecordBytes = 1024 * 1024;
 
@@ -13,7 +13,7 @@ export class NativeProjectPendingFileError extends Error {
 }
 
 export type StoredNativeProjectPending = {
-  readonly record: NativeProjectPendingRecord;
+  readonly record: NativeProjectRecord;
   readonly bytes: Buffer;
 };
 
@@ -53,7 +53,7 @@ export async function readNativeProjectPending(
       return { record: parseNativeProjectPendingRecord(input), bytes };
     } catch (error) {
       if (error instanceof NativeProjectPendingRecordError) {
-        throw new NativeProjectPendingFileError("canonical Project record is not native admission-pending state", {
+        throw new NativeProjectPendingFileError("canonical Project record is not native Project state", {
           cause: error
         });
       }
