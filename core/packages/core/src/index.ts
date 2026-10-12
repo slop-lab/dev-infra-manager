@@ -29,6 +29,11 @@ export * from "./nativeGitCandidateReadAuthority.js";
 export * from "./nativeRootCiProofClient.js";
 export * from "./nativeRootCiProofModel.js";
 export * from "./nativeRootCiReviewEvent.js";
+export * from "./nativeRootCiHostAdmission.js";
+export * from "./nativeRootCiHostClient.js";
+export * from "./nativeRootCiHostConfig.js";
+export * from "./nativeRootCiHostService.js";
+export * from "./nativeRootCiHostWorker.js";
 export * from "./nativeRootCiEventReceiptModel.js";
 export * from "./nativeRootCiResultProofModel.js";
 export * from "./nativeRootCiTerminalResultProofModel.js";
@@ -46,6 +51,8 @@ export * from "./nativeProjectBootstrap.js";
 export * from "./nativeProjectDraftStore.js";
 export * from "./nativeProjectPendingCodec.js";
 export * from "./nativeProjectPendingStore.js";
+export * from "./nativeProjectReadinessClient.js";
+export * from "./nativeWorkspaceGitBroker.js";
 export {
   issueNativeProjectDraftRootReadLease,
   NativeProjectDraftRootReadError,
@@ -53,6 +60,18 @@ export {
 } from "./nativeProjectDraftRootRead.js";
 export * from "./nativeProjectDraftRootSnapshot.js";
 export * from "./nativeQemuConnection.js";
+export * from "./nativeQemuHostRuntime.js";
+export * from "./nativeQemuHostClient.js";
+export * from "./nativeQemuHostExecutor.js";
+export * from "./nativeQemuHostJournal.js";
+export * from "./nativeQemuHostService.js";
+export * from "./nativeQemuAuthorityClient.js";
+export * from "./nativeQemuSchedulerConfig.js";
+export * from "./nativeQemuSchedulerService.js";
+export * from "./nativeQemuSchedulerImage.js";
+export * from "./nativeQemuRunnerImage.js";
+export * from "./nativeQemuOperator.js";
+export * from "./nativeQemuSchedulerStore.js";
 export * from "./nativeControlPlaneConnection.js";
 export * from "./nativeOrdinaryExecutor.js";
 export * from "./nativeOrdinaryHostClient.js";
