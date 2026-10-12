@@ -21,6 +21,9 @@ export async function ensureGitea(runner: CommandRunner, options: LifecycleOptio
   if (options.giteaConnection.kind === "external") {
     return externalGiteaConnection(options.giteaConnection.file);
   }
+  if (options.giteaConnection.kind === "disabled") {
+    throw new UserError("Gitea operations are unavailable under native control-plane selection");
+  }
   return ensureManagedGitea(runner, options);
 }
 
@@ -32,6 +35,9 @@ export async function configureGiteaWebhookAllowedHosts(
   if (options.giteaConnection.kind === "external") {
     await ensureGitea(runner, options);
     return;
+  }
+  if (options.giteaConnection.kind === "disabled") {
+    throw new UserError("Gitea operations are unavailable under native control-plane selection");
   }
   await configureManagedGiteaWebhookAllowedHosts(runner, options, hosts);
 }

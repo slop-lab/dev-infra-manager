@@ -13,6 +13,8 @@ import {
   restartWorkspace as restartWorkspaceLifecycle
 } from "./workspaceLifecycle.js";
 import { workspaceResourcesRoute } from "./workspaceResourcesRoute.js";
+import { loadNativeControlPlaneConnection } from "./nativeControlPlaneConnection.js";
+import { serveNativeWorkspaceGit } from "./nativeWorkspaceGitBroker.js";
 
 export type ControllerMethod = "GET" | "POST" | "DELETE" | "PUT" | "PATCH";
 export type ControllerAudience = "workspace" | "agent";
@@ -80,6 +82,13 @@ export interface DimControllerOptions {
   routes: readonly DimControllerRoute[];
   hostInputProviders?: RegisteredDimPlugins["hostInputProviders"];
   authenticate(token: string): Promise<ControllerWorkspace | undefined>;
+  authenticateNativeGit?(token: string): Promise<ControllerWorkspace | undefined>;
+  serveNativeGit?(
+    workspace: ControllerWorkspace,
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL
+  ): Promise<void>;
   resolveTarget(
     workspace: ControllerWorkspace,
     target: WorkspaceTarget,
@@ -98,6 +107,7 @@ export function configuredDimController(
   runner: StreamingCommandRunner = new ProcessRunner()
 ): Server {
   const state = new LifecycleState(lifecycle.stateRoot);
+  const nativeConnectionFile = lifecycle.nativeControlPlaneConnection?.file;
   return createDimController({
     stateRoot: lifecycle.stateRoot,
     routes: controllerRoutesForAudience(plugins.controllerRoutes, "workspace"),
@@ -118,6 +128,25 @@ export function configuredDimController(
         projectName: workspace.projectName
       };
     },
+    ...(nativeConnectionFile === undefined ? {} : {
+      authenticateNativeGit: async (token: string) => {
+        const workspace = await state.authenticateNativeGitGrant(token);
+        return workspace && {
+          id: workspace.workspaceId, name: workspace.name, projectId: workspace.projectId,
+          projectName: workspace.projectName
+        };
+      },
+      serveNativeGit: async (workspace: ControllerWorkspace, request: IncomingMessage,
+        response: ServerResponse, url: URL) => {
+        const record = await state.readWorkspace(workspace.name);
+        if (record.schemaVersion !== 9 || record.workspaceId !== workspace.id) {
+          throw new UserError("native Git broker requires an active native workspace");
+        }
+        await serveNativeWorkspaceGit({ stateRoot: lifecycle.stateRoot,
+          connection: await loadNativeControlPlaneConnection(nativeConnectionFile),
+          workspace: record, request, response, url });
+      }
+    }),
     runWorkspaceRequest: (workspace, operation) => runWorkspaceRequest(state, workspace, operation),
     resolveTarget: async (workspace, target, mode) => {
       const record = await state.readWorkspace(workspace.name);
@@ -220,6 +249,21 @@ async function handleRequest(
   if (request.method === "GET" && url.pathname === "/healthz") {
     const ready = options.hostReady === undefined || await options.hostReady();
     return sendJson(response, 200, { ok: true, ready, apiVersion: 1 });
+  }
+  if (url.pathname.startsWith("/api/native-git/")) {
+    if (options.authenticateNativeGit === undefined || options.serveNativeGit === undefined) {
+      return sendJson(response, 404, { error: "not found" });
+    }
+    if (options.hostReady !== undefined && !await options.hostReady()) {
+      return sendJson(response, 503, { error: "DIM host is not ready" });
+    }
+    const header = request.headers.authorization;
+    const workspace = header?.startsWith("Bearer ")
+      ? await options.authenticateNativeGit(header.slice("Bearer ".length))
+      : undefined;
+    if (workspace === undefined) return sendJson(response, 401, { error: "invalid native Git broker grant" });
+    return options.runWorkspaceRequest(workspace,
+      () => options.serveNativeGit?.(workspace, request, response, url) ?? Promise.resolve());
   }
   let workspace: ControllerWorkspace | undefined;
   if (options.hostReady !== undefined && !await options.hostReady()) {
