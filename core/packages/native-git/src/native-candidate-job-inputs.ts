@@ -29,7 +29,7 @@ const requestSchema = z.object({
   expectedProtectedHead: objectId,
   candidateCommit: objectId,
   candidateTree: objectId,
-  requiredJobs: z.array(requiredJob).min(1).max(64).readonly()
+  requiredJobs: z.array(requiredJob).max(64).readonly()
 }).strict().readonly();
 
 export type NativeCandidateJobInputsRequest = z.infer<typeof requestSchema>;

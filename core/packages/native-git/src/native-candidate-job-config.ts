@@ -35,7 +35,7 @@ const requiredJobSchema = z.object({
   kind: executionKindSchema
 }).strict().readonly();
 
-const requiredJobsSchema = z.array(requiredJobSchema).min(1).max(64).readonly();
+const requiredJobsSchema = z.array(requiredJobSchema).max(64).readonly();
 
 export type NativeCandidateRequiredJob = z.infer<typeof requiredJobSchema>;
 
