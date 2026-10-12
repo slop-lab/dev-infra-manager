@@ -41,6 +41,10 @@ Path-prefix rules may add required reviewers based on either side of a rename,
 but every approval still covers the entire review object. A moved protected or
 proposal ref, changed candidate tree, changed policy, or changed bound identity
 makes existing approval stale.
+The current package folds security and quality revisions into that review
+identity. The native target instead keeps exact human approval bound to the
+security tuple while a quality-only revision change invalidates CI
+applicability. That revision split is not implemented here yet.
 
 Unknown routes, foreign Projects, foreign repositories, malformed paths, and
 unregistered repositories are not passed to Git. Both receive-pack discovery
@@ -290,8 +294,9 @@ contract, not an emulation of GitHub Actions or another provider API. Records
 are immutable, restart-checked, and conflict when the same job attempt is
 reported with different evidence.
 
-Only the current, unrevoked issued attempt can be reported or satisfy promotion.
-Issuance, report, and promotion each require an injected ordinary-admission
+Only the current, unrevoked issued attempt can be reported or satisfy an
+ordinary quality condition. Issuance and reporting, plus promotion when the
+Project quality policy selects ordinary jobs, require an injected ordinary-admission
 verifier to confirm the exact current generation, descriptor digest, host, and
 capacity. The executable uses a rejecting verifier by default; protected CI
 mutation therefore fails closed until the authenticated ordinary-service client
@@ -409,7 +414,8 @@ is still valid.
 
 ## Current integration status
 
-This package is additive and is not selected by `@slop-lab/dim-core` yet.
+`@slop-lab/dim-core` selects this package for explicitly configured native
+Project readiness, protected-root reads, and workspace proposal transport.
 Existing managed and external Gitea lifecycle behavior remains unchanged. This
 package's installed native Git image uses strict format-8 state and a strict
 schema-7 operator config with distinct host-bound Project registrars, root
@@ -467,11 +473,12 @@ import receipt, and a separate verified current head only
 while the durable activation token, Project owner
 marker, private bare repository path, retained bundle, sole protected ref,
 original commit and tree, and full reachable graph still agree. Sequence zero
-exactly identifies the import. Format-8 defines a future promotion ledger, but
-the installed service currently rejects any nonempty intent or finalized ledger
-at startup and during proof: self-declared hashes cannot stand in for separately
-verified human approval and ordinary/QEMU evidence. Unrecorded ref drift yields
-no proof. A completed legacy-policy import remains
+exactly identifies the import. Later sequences fold only authorization-verified,
+contiguous finalized promotion transitions whose import, parent, policy, review,
+and selected ordinary/QEMU evidence tuple remains canonical. Unresolved intents
+with verified authorization are reconciled against the protected ref before any
+current-head proof is served; unattested ledger rows and unrecorded ref drift
+yield no proof. A completed legacy-policy import remains
 sequence-zero read-only data and cannot authorize promotion. The endpoint neither installs
 objects nor writes refs or service state. A host compares this read-only proof
 with its durable non-runnable draft's byte-identical nested receipt before
@@ -495,13 +502,14 @@ lease above plus a distinct 30-second workspace-write lease after live
 authoritative imported-policy proof. That write lease permits only creation or
 fast-forward of its exact workspace proposal namespace through the checked
 pre-receive hook; it has no protected-ref, tag, deletion, force-rewrite, reviewer,
-CI, promotion, or Project-ready authority and is
-not connected to runnable core Project lifecycle or QEMU CI and does not itself
-grant ordinary CI authority.
+CI, promotion, or Project-ready authority. Core uses the lease only through the
+host broker for an already-ready schema-6 Project and its schema-9 workspace;
+the lease does not itself grant readiness, QEMU CI, or ordinary CI authority.
 The host-only draft reader consumes the root-read lease after matching the original
 receipt and current serving proof, but its presence does not make a Project
-ready or selectable. The installed bundle object exposes an in-process
-`createReview` method only to its trusted caller. It accepts the Project,
+ready or selectable. The installed bundle exposes review creation both to its
+trusted in-process caller and through the host-promoter-only exact
+`POST /v1/projects/<project>/repositories/root/reviews` route. It accepts the Project,
 literal `root` repository, and one canonical workspace proposal ref; derives
 the live authoritative policy, protected head, candidate commit/tree, and
 workspace namespace; and stores one immutable complete-tree review with a
@@ -535,16 +543,21 @@ replay converges; reapproval requires a new request UUID, and a delayed
 revocation of approval A cannot affect later approval B. Startup validates
 approval and revocation bytes, paths, ownership, mode, link count, cross-links,
 and active uniqueness against the immutable review. `stale` dominates the
-otherwise `pending`, `approved`, or `revoked` decision status. No endpoint
-lists reviews, returns credentials, moves a ref, writes promotion state, or
-grants administrator revocation, CI, promotion, or Project-ready authority. The separate
-standalone native Git server retains human approval,
-exact CI evidence, and the serialized compare-and-swap transaction required by
-`TRUST-PROMOTION-001` and `TRUST-PROMOTION-CAS-001`. Protected-write authority
-exists only inside that checked host operation; smart HTTP remains
-proposal-only and has no administrator bypass. Core lifecycle wiring, a
-host-side workspace-write lease client, reviewer UI, and installed Project
-lifecycle gates remain separate work.
+otherwise `pending`, `approved`, or `revoked` decision status. No endpoint lists
+reviews or returns credentials, and administrator, reviewer, and CI identities
+cannot promote. The distinct host promoter may call exact
+`POST /v1/projects/<project>/repositories/root/reviews/<review-id>/promotions`.
+The serialized operation rereads the immutable review, current active approvals,
+policy and refs; verifies every selected ordinary and QEMU terminal result;
+records a durable authorization-verified intent; and performs one protected-ref
+compare-and-swap before finalizing the transition. Startup reconciles crashes
+before or after that compare-and-swap exactly once. Protected-write authority
+exists only inside this checked host operation; smart HTTP remains proposal-only
+and has no administrator bypass. The packaged `dim-native-git operator review`
+commands create, inspect, approve, revoke, and promote through caller-owned,
+single-link mode-`0600` connection files so credentials never appear in argv or
+output. Core readiness and workspace lifecycle wiring plus the host-side
+workspace-write lease client are active; reviewer UI remains separate work.
 Independent CI, when a Project requires it, must use a separately selected
 command definition and evidence class; native ordinary candidate self-tests do
 not acquire that label by running on another host.
@@ -566,6 +579,27 @@ The QEMU result is a separate strict schema-1 descriptor with
 ordinary evidence cannot satisfy it. These methods have no HTTP route or
 credential and perform no admission, scheduling, attempt, result, execution,
 VM launch, promotion, ref, review, or Project-readiness mutation.
+
+When the optional strict `qemuCi` dependency is present in installed native-Git
+configuration, the bundle exposes a separate `native-qemu-proof` policy/event
+namespace, QEMU descriptor and attempt issuance/revocation routes, and
+`qemu-statuses`. Its scheduler `query` and `eventIntake` credentials and native
+Git `identity`, `attemptIssuer`, and `resultReporter`
+credentials are distinct from every ordinary and Git identity. QEMU attempts
+and statuses are stored under `dim-authoritative-qemu` in the owned repository,
+retain `executionKind: "qemu"`, verify the
+`dim-native-qemu-execution-v1` descriptor digest, and cannot satisfy ordinary
+evidence. Attempt issuance returns the bounded exact script bytes with the
+descriptor only to the authenticated scheduler issuer; no credential or
+candidate-selected image, argv, host, or bounds is returned.
+
+QEMU review events use a separate service-owned outbox under
+`dim-authoritative-reviews/qemu-delivered`. Native Git discovers an existing,
+unexpired scheduler admission with `qemuCi.query`, then submits only exact
+stored `qemu` events with `qemuCi.eventIntake`. Lost responses retry identical
+bytes; the scheduler's event primary key prevents duplicate execution. The
+ordinary event endpoint, proof protocol, and delivered-marker namespace are
+not used by this path.
 
 The schema-7 installed bundle also exposes a separate read-only
 `native-root-ci-proof` HTTP namespace only to `ordinaryCi.identity`. Its
@@ -619,8 +653,9 @@ acknowledgement bytes match that status. The returned evidence remains labelled
 The core host worker can journal claim, result, and recovery operations across
 restart, read exact candidate inputs through a scoped Git credential, execute
 one bounded Sysbox job, and verify container plus private-root cleanup. It isn't
-started by the installed CLI or controller. No native Project adapter, native
-QEMU scheduler/executor, protected promotion route, or clean-host Sysbox/KVM
-acceptance exists. The installed bundle is not runtime-ready. A later promotion
-path must still require exact-tree human approval and every ordinary and QEMU
-evidence kind selected by protected policy.
+started by the installed CLI or controller. The native Project adapter supports
+readiness and Sysbox workspaces. The separately deployed native QEMU scheduler,
+operator admission/status commands, and trusted host worker are installed;
+protected promotion requires exact-tree human approval and every ordinary and
+QEMU evidence kind selected by protected policy. Clean-host KVM acceptance
+remains a separate release gate.
