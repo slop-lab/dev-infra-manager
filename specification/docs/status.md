@@ -9,17 +9,24 @@ Windows, and Docker Desktop are outside the supported runtime model.
 
 Specified but not implemented:
 
-- A runnable native Project/repository adapter and installed host lifecycle
-  wiring. The ordinary host worker exists as a callable, journaled library
-  boundary, but the installed CLI and controller do not start it or advertise
-  capacity. The host CLI selects only a strict, non-runnable native Project
-  checkpoint; native workspace, CI, and ready operations remain closed.
-- Native QEMU scheduling and execution. The host-file parser remains preflight
-  only, existing QEMU scheduling remains Gitea-only, and no native VM result can
-  satisfy policy.
-- Protected native promotion. A future checked CAS must require exact-tree
-  human approval and every policy-required ordinary and QEMU terminal result.
-  Neither evidence kind may substitute for the other.
+- Clean-host native ordinary/QEMU execution and cutover acceptance. The ordinary
+  host worker exists as a callable, journaled library boundary, but the installed
+  CLI and controller do not start it or advertise
+  capacity. Native Project readiness and schema-9 Sysbox workspace lifecycle are
+  implemented locally, but no capable clean host has accepted them. The
+  ready transition depends on registered owned root/protected state,
+  immutable snapshot and proposal-only authority, plus workspace runtime
+  prerequisites. It does not depend on CI deployment, CI results, or a prior
+  promotion.
+- The readiness-only native host connection form and optional Project quality
+  policy. Bootstrap, imported-policy, candidate-input, review, and promotion
+  evidence parsers accept an empty required-job set, one execution kind, or
+  both, and security approval revisions are independent from quality-jobset
+  revisions. Host configuration still requires ordinary service fields and at
+  least one capacity, and both schema-4 execution-kind sections remain required.
+- Clean-host native QEMU execution acceptance. The native scheduler, authority,
+  host worker, kind-bound result evidence, and promotion gate are implemented,
+  but no supported clean KVM host has completed the release acceptance gate.
 
 The installed bundle and passing predecessor Gitea/QEMU gates are not evidence
 that native Project integration is available. No clean-host Sysbox/KVM
@@ -29,13 +36,23 @@ This pre-stable target defines no compatibility parser or source/state migration
 
 Implemented:
 
-- A host-only native `project create`, `list`, and `show` checkpoint. Plain
+- Installed host-only native review creation and protected promotion. A distinct
+  host-promoter credential cannot approve reviews and reviewer, administrator,
+  ordinary-CI, and QEMU credentials cannot promote. Promotion requires the
+  current exact-tree approvals and every ordinary/QEMU terminal result selected
+  by policy, records an authorization-verified intent, performs one checked Git
+  compare-and-swap, and reconciles intent/CAS crash windows exactly once before
+  serving the new current head. The packaged operator CLI uses caller-owned
+  mode-`0600` connection files rather than credential argv.
+
+- Host-only native `project create`, `list`, and `show`. Plain
   create requires a separately imported schema-2 draft, distinct owner-only
   control-plane and importer connections, and a fresh imported-root proof. It
-  publishes one strict schema-5 `admission-pending` record, then exact replay
-  returns its original bytes. List/show expose only non-secret identity and
-  policy fields plus `runnable: false`; no Gitea fallback, workspace, CI, or
-  promotion authority is granted. Available host checks and remaining gates
+  publishes one strict schema-5 `admission-pending` crash/retry stage, obtains
+  fresh readiness and snapshot evidence, then atomically publishes schema 6.
+  List/show expose only non-secret identity and policy fields. Schema-9 native
+  Sysbox lifecycle and proposal-only brokered Git do not fall back to Gitea;
+  CI and promotion authority remain separate. Available host checks and remaining gates
   are listed in `verification/native-cutover-host.md`.
 - One canonical root monorepo contains production packages under `core/` and
   `plugin-*/`, centralized package and plugin tests under `tests/`, host and
@@ -126,14 +143,15 @@ Implemented:
   `currentOrdinaryTerminalEvidence`, which requires the exact delivered ordinary
   proof plus its own current unrevoked attempt, immutable status, live review and
   root, and `ordinary-sysbox` plus `candidate-controlled` classifications. The
-  host-only root fetch is not
-  workspace admission. Gitea-free adoption
-  remains gated on the clean-host Sysbox and KVM journey above.
+  host-only root fetch is not workspace admission. Gitea-free Project readiness
+  and workspace execution are implemented independently. Full fresh-host acceptance remains gated on
+  the clean-host Sysbox and KVM journey above, but those CI capacities are not
+  readiness or promotion-security prerequisites.
 - Service-level candidate job parsing and descriptor binding, central ordinary
   claim, lease, result, report-outbox, and current-terminal proof state, plus a
-  callable host executor with durable claim/result/recovery journal and checked
-  container and private-root cleanup. The worker is not connected to installed
-  host CLI or controller startup, and no runnable native Project adapter is active.
+  installed host executor with durable claim/result/recovery journal and checked
+  container and private-root cleanup. The direct CLI runs fixed capacities and
+  separate Project admission; controller startup does not start the worker.
 - Project metadata with exactly one root repository per runnable Project.
 - Schema 4 Project state with a trusted Gitea organization ID persisted before
   ready publication, and Project creation serialized through identity
