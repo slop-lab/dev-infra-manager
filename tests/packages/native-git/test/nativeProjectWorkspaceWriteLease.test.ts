@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { isExitError } from "./nativeGitHarness.js";
+import { publishedReviewNames } from "./nativeBundleReviewFixture.js";
 import {
   activateFinalizeService,
   cleanupFinalizeFixtures,
@@ -57,6 +58,7 @@ describe("native Project workspace write lease", () => {
     await commit(clone, "proposal.txt", "candidate\n");
     await runGit("/usr/bin/git", ["-C", clone, "push", "origin", `HEAD:${proposalRef}`]);
     const proposalBefore = await refValue(fixture.root, proposalRef);
+    const envelopesBefore = await publishedReviewNames(fixture.root);
 
     // When / Then
     await expectRejectedPush(clone, ["HEAD:refs/heads/main"]);
@@ -71,6 +73,7 @@ describe("native Project workspace write lease", () => {
     expect(await refValue(fixture.root, proposalRef)).toBe(proposalBefore);
     expect(await refValue(fixture.root, "refs/tags/unreviewed")).toBeUndefined();
     expect(await refValue(fixture.root, `refs/heads/proposals/${foreignWorkspaceId}/stolen`)).toBeUndefined();
+    expect(await publishedReviewNames(fixture.root)).toEqual(envelopesBefore);
   });
 
   it("invalidates workspace write leases on expiry and restart", async () => {

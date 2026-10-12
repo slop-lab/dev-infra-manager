@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { assertSqliteSchema, sqliteSchemaManifestSha256 } from "./sqliteSchemaManifest.js";
 
-const schemaVersion = 11;
+const schemaVersion = 12;
 
 const schemaSql = `
   CREATE TABLE bundle_activation (
@@ -44,14 +44,6 @@ const schemaSql = `
   ) STRICT;
   CREATE UNIQUE INDEX native_root_admissions_active_project
     ON native_root_admissions(project_id, repository_id) WHERE state = 'active';
-  CREATE TABLE native_root_admission_requests (
-    request_id TEXT PRIMARY KEY,
-    operation TEXT NOT NULL CHECK(operation IN ('register','current','revoke')),
-    tuple_digest TEXT NOT NULL,
-    status_code INTEGER NOT NULL,
-    response_json TEXT NOT NULL,
-    created_at INTEGER NOT NULL CHECK(created_at > 0)
-  ) STRICT;
   CREATE TABLE native_root_ci_event_receipts (
     admission_generation TEXT NOT NULL,
     event_id TEXT NOT NULL CHECK(length(event_id) = 64 AND event_id NOT GLOB '*[^0-9a-f]*'),

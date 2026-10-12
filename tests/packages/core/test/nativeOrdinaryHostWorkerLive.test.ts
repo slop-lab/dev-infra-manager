@@ -8,7 +8,7 @@ import { serveNativeOrdinaryHostCapacity } from "../../../../core/packages/core/
 import { parseReviewEnvelope } from "../../../../core/packages/native-git/src/review-event-schema.js";
 import { createNodeAdmissionVerifierHttpClient, createOrdinaryAdmissionVerifier } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import { nativeGitReviewFixture, readJsonObject, reviewPath, stringField, type ReviewFixture } from "../../native-git/test/nativeGitReviewHarness.js";
-import { authorityCredentials, authorityHostCredentials, jsonRecord, post, startAuthority, type AuthorityFixture } from "./nativeOrdinaryAuthorityFixture.js";
+import { activeEligibilityGeneration, authorityCredentials, authorityHostCredentials, jsonRecord, post, startAuthority, type AuthorityFixture } from "./nativeOrdinaryAuthorityFixture.js";
 import { ExecutorRunner } from "./nativeOrdinaryExecutorFixture.js";
 import { centralState, completed, demandStates, waitFor } from "./nativeOrdinaryHostWorkerLiveFixture.js";
 
@@ -95,7 +95,7 @@ describe("native ordinary host capacity worker live integration", () => {
     if (event === undefined) throw new Error("source event is missing");
     const recoveryEvent = proposal.events.find((candidate) => candidate.jobName === "security");
     if (recoveryEvent === undefined) throw new Error("security event is missing");
-    const admission = await post(central.endpoint, "/v1/operator-admissions", "registrar", {
+    const policy = {
       schemaVersion: 1,
       projectId: "project-a",
       repositoryId: "source",
@@ -104,12 +104,10 @@ describe("native ordinary host capacity worker live integration", () => {
       requiredReviewRevision: "review-1",
       requiredJobSetRevision: "jobs-1",
       requiredJobs: ["security", "source"]
-    });
-    if (admission.status !== 200) throw new Error(await admission.text());
-    const generation = (await jsonRecord(admission)).admissionGeneration;
-    if (typeof generation !== "string") throw new Error("admission generation is missing");
-    native.setAdmissionGeneration(generation);
+    } as const;
     expect((await post(central.endpoint, "/v1/native-events", "webhook", event)).status).toBe(202);
+    const generation = activeEligibilityGeneration(central, policy.projectId, policy.repositoryId);
+    native.setAdmissionGeneration(generation);
     const hostConfig = {
       endpoint: central.endpoint,
       serviceId: "ordinary-main",

@@ -16,6 +16,8 @@ import {
 import { saveAuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-store.js";
 import type { NativeImportedRootPolicy } from "./native-imported-root-policy.js";
 import { CandidateExecutionError } from "./candidate-execution-schema.js";
+import { loadAuthoritativeNativeCandidateJobInputs } from "./authoritative-native-candidate-job-inputs.js";
+import type { AuthoritativeNativePlanning } from "./authoritative-native-review-schema.js";
 
 const workspaceId = z.string().regex(/^[A-Za-z0-9_-]{43}$/).refine((value) =>
   Buffer.from(value, "base64url").length === 32 && Buffer.from(value, "base64url").toString("base64url") === value);
@@ -72,7 +74,7 @@ export async function createAuthoritativeNativeReview(
     })).sort((left, right) => left.executionKind.localeCompare(right.executionKind)
       || left.jobName.localeCompare(right.jobName));
     const identity: AuthoritativeNativeReviewIdentity = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       serviceId: "native-main",
       projectId: selector.data.projectId,
       repositoryId: selector.data.repositoryId,
@@ -81,13 +83,26 @@ export async function createAuthoritativeNativeReview(
       ...evidence,
       policyRevision: policy.policyRevision,
       requiredReviewRevision: policy.requiredReviewRevision,
-      requiredJobSetRevision: policy.requiredJobSetRevision,
-      policyDigest: target.imported.policyDigest,
       workspaceId: selector.data.workspaceId,
-      requiredJobs,
       requiredReviewerIds: requiredReviewers(policy, evidence.changes)
     };
-    const envelope = createAuthoritativeNativeReviewEnvelope(identity, new Date().toISOString());
+    let planning: AuthoritativeNativePlanning;
+    try {
+      const inputs = await loadAuthoritativeNativeCandidateJobInputs(runtime, {
+        projectId: selector.data.projectId,
+        candidateCommit: evidence.candidateCommit,
+        candidateTree: evidence.candidateTree
+      });
+      planning = { status: "valid", configBlob: inputs.configBlob,
+        jobs: inputs.plan.map((job) => ({ executionKind: job.kind, jobName: job.name,
+          evidenceClass: "candidate-controlled" as const, script: job.script, argv: job.argv })) };
+    } catch (error) {
+      if (!(error instanceof CandidateExecutionError)) throw error;
+      planning = { status: "invalid", reason: "invalid-candidate-job-plan" };
+    }
+    const envelope = createAuthoritativeNativeReviewEnvelope({ identity,
+      qualityRevision: policy.requiredJobSetRevision, policyDigest: target.imported.policyDigest,
+      requiredJobs, planning, createdAt: new Date().toISOString() });
     await hooks.beforeFinalVerification?.();
     const current = await resolveAuthoritativeNativeRootTarget(runtime, { projectId: selector.data.projectId });
     if (current.repository !== target.repository

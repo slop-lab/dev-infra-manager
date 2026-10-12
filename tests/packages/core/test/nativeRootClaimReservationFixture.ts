@@ -49,20 +49,13 @@ export async function reservationFixture(
   const service = await start(root, native.service.origin, now, ordinaryNativeClient);
   ordinaryOrigin = service.origin;
   await activate(service.origin);
-  const registration = await post(service.origin, admissionPath("register"), registrarAuthorization(), {
-    schemaVersion: 1,
-    requestId: randomUUID(),
-    generationId
-  });
-  expect(registration.status).toBe(200);
-  const admissionGeneration = admissionField(registration.body);
   const receipt = await post(service.origin, "/v1/native-root-ci-events", webhookAuthorization(), {
     schemaVersion: 1,
     generationId,
-    admissionGeneration,
     event
   });
   expect(receipt.status).toBe(202);
+  const admissionGeneration = eligibilityGeneration(receipt.body);
   return fixtureValue(root, native.root, native.service.server, service, admissionGeneration, event, now, ordinaryNativeClient,
     (origin) => { ordinaryOrigin = origin; });
 }
@@ -189,16 +182,11 @@ function webhookAuthorization(): string {
 function authorization(username: string, password: string): string {
   return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
 }
-function admissionPath(operation: "register" | "revoke"): string {
-  return `/v1/projects/project-a/repositories/root/native-root-admission/${operation}`;
-}
 function activate(origin: string): Promise<HttpResult> {
   return post(origin, "/v1/activation", `Bearer ${activationToken}`, { schemaVersion: 1, generationId });
 }
-function admissionField(body: unknown): string {
-  const admission = typeof body === "object" && body !== null ? Reflect.get(body, "admission") : undefined;
-  const value = typeof admission === "object" && admission !== null
-    ? Reflect.get(admission, "admissionGeneration") : undefined;
+function eligibilityGeneration(body: unknown): string {
+  const value = typeof body === "object" && body !== null ? Reflect.get(body, "eligibilityGeneration") : undefined;
   if (typeof value !== "string") throw new TypeError("admission generation is unavailable");
   return value;
 }

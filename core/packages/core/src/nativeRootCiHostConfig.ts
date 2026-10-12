@@ -33,17 +33,6 @@ export type NativeRootCiHostConfig = {
   readonly capacities: readonly string[];
 };
 
-export type NativeRootCiAdmissionConfig = {
-  readonly schemaVersion: 1;
-  readonly generationId: string;
-  readonly ordinaryCi: {
-    readonly transport: Transport;
-    readonly endpoint: string;
-    readonly serviceId: "ordinary-main";
-    readonly registrar: Credential;
-  };
-};
-
 export class NativeRootCiHostConfigError extends UserError {
   readonly name = "NativeRootCiHostConfigError";
 }
@@ -80,30 +69,8 @@ export function parseNativeRootCiHostConfig(value: unknown): NativeRootCiHostCon
   };
 }
 
-export function parseNativeRootCiAdmissionConfig(value: unknown): NativeRootCiAdmissionConfig {
-  const input = exactRecord(value, ["schemaVersion", "generationId", "ordinaryCi"]);
-  const ordinary = exactRecord(input.ordinaryCi,
-    ["transport", "endpoint", "serviceId", "registrar"]);
-  if (input.schemaVersion !== 1 || ordinary.serviceId !== "ordinary-main") invalid();
-  const parsedTransport = transport(ordinary.transport);
-  return {
-    schemaVersion: 1,
-    generationId: generation(input.generationId),
-    ordinaryCi: {
-      transport: parsedTransport,
-      endpoint: origin(ordinary.endpoint, parsedTransport),
-      serviceId: "ordinary-main",
-      registrar: credential(ordinary.registrar)
-    }
-  };
-}
-
 export function loadNativeRootCiHostConfig(path: string): Promise<NativeRootCiHostConfig> {
   return loadConfig(path, parseNativeRootCiHostConfig);
-}
-
-export function loadNativeRootCiAdmissionConfig(path: string): Promise<NativeRootCiAdmissionConfig> {
-  return loadConfig(path, parseNativeRootCiAdmissionConfig);
 }
 
 async function loadConfig<T>(path: string, parser: (value: unknown) => T): Promise<T> {

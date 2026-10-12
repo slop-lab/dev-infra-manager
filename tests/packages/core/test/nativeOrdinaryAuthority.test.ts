@@ -5,9 +5,9 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { configuredNativeOrdinaryAuthorityServer } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityService.js";
 import {
+  acceptNativeEvent,
   admission,
-  jsonRecord,
-  post,
+  nativeEvent,
   startAuthority,
   type AuthorityFixture
 } from "./nativeOrdinaryAuthorityFixture.js";
@@ -22,30 +22,19 @@ afterEach(async () => {
 });
 
 describe("native ordinary authority", () => {
-  it("admits a native policy and keeps a revoked generation denied across restart", async () => {
+  it("derives eligibility from a native event and keeps it durable across restart", async () => {
     // Given
     const fixture = await createFixture();
     const policy = admission("project-a", "source", "1");
-    fixture.source.authorizePolicy(policy);
-    const registered = await post(fixture.endpoint, "/v1/operator-admissions", "registrar", policy);
-    const generation = (await jsonRecord(registered)).admissionGeneration;
-    if (typeof generation !== "string") throw new Error("admission generation is missing");
-    expect(registered.status).toBe(200);
+    await acceptNativeEvent(fixture, policy, nativeEvent());
 
     // When
-    const revoked = await post(fixture.endpoint, "/v1/operator-admission-revocations", "registrar", {
-      schemaVersion: 1,
-      projectId: "project-a",
-      repositoryId: "source",
-      admissionGeneration: generation
-    });
     await fixture.close();
     const restarted = await startAuthority({ database: fixture.database });
     fixtures.push(restarted);
 
     // Then
-    expect(revoked.status).toBe(204);
-    expect(admissionState(restarted.database)).toBe("revoked");
+    expect(admissionState(restarted.database)).toBe("active");
   });
 
   it("rejects a predecessor schema-2 database without changing its bytes", async () => {
@@ -83,10 +72,10 @@ function admissionState(file: string): string {
 
 function config(database: string) {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     serviceId: "ordinary-main",
     database,
-    admissionLeaseMilliseconds: 300_000,
+    eligibilityLeaseMilliseconds: 300_000,
     claimLeaseMilliseconds: 60_000,
     nativeGit: {
       endpoint: "http://native-git:8080",
@@ -98,7 +87,6 @@ function config(database: string) {
     },
     credentials: {
       webhook: { username: "native-events", password: "webhook-secret-000000000000000000000" },
-      registrar: { username: "operator-registrar", password: "registrar-secret-00000000000000000000" },
       query: { username: "native-query", password: "query-secret-0000000000000000000000" }
     },
     hosts: [{

@@ -28,11 +28,11 @@ const auth = (username: string, password: string): string =>
   `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
 
 describe("authoritative native QEMU delivery", () => {
-  it("retries lost delivery, stores QEMU evidence, and promotes the approved review", async () => {
+  it("retries stale and lost delivery, stores QEMU evidence, and promotes the approved review", async () => {
     // Given
     const root = await mkdtemp("/tmp/native-qemu-e2e-");
     temporaryRoots.push(root);
-    const config = schedulerConfig(join(root, "qemu.sqlite3"));
+    const config = schedulerConfig(join(root, "qemu.sqlite3"), 10_000);
     let authority: NativeQemuAuthorityClient | undefined;
     const forwarding: NativeQemuAuthorityClient = {
       readPolicy(projectId, signal) { return requiredAuthority(authority).readPolicy(projectId, signal); },
@@ -61,10 +61,6 @@ describe("authoritative native QEMU delivery", () => {
       ]), undefined, transport, undefined, undefined, { qemuCi }, undefined, qemuOnlyRunner());
     authority = createNativeQemuAuthorityClient({ ...config,
       nativeGit: { ...config.nativeGit, endpoint: fixture.service.origin } });
-    const admission = await post(`${schedulerOrigin}/v1/qemu-projects/project-a/admission`, {},
-      auth(config.credentials.registrar.username, config.credentials.registrar.password));
-    expect(admission.admissionGeneration).toEqual(expect.any(String));
-
     // When
     const envelope = await createBundleReview(fixture.service);
     const event = envelope.events.find(({ executionKind }) => executionKind === "qemu");
@@ -75,7 +71,8 @@ describe("authoritative native QEMU delivery", () => {
       undefined, undefined, undefined, transport, undefined, undefined, { qemuCi });
     authority = createNativeQemuAuthorityClient({ ...config,
       nativeGit: { ...config.nativeGit, endpoint: restarted.origin } });
-    await waitFor(() => eventCount(config.database) === 1 && transport.eventBodies.length === 2);
+    await waitFor(() => eventCount(config.database) === 1 && transport.eventBodies.length === 3);
+    expect((transport.eventTimes[1] ?? 0) - (transport.eventTimes[0] ?? 0)).toBeGreaterThanOrEqual(200);
     const claimResponses = await Promise.all(config.hosts.map((host) => fetch(`${schedulerOrigin}/v1/qemu-host-claims`, {
       method: "POST", headers: { authorization: auth(host.hostId, host.hostToken), "content-type": "application/json" },
       body: JSON.stringify({ schemaVersion: 1, requestId: randomUUID(), capacity: "kvm-1" })
@@ -103,9 +100,15 @@ describe("authoritative native QEMU delivery", () => {
     // Then
     expect(claimResponses.map(({ status }) => status).sort()).toEqual([201, 204]);
     expect(transport.eventBodies[1]).toBe(transport.eventBodies[0]);
+    expect(transport.eventBodies[2]).toBe(transport.eventBodies[0]);
     expect(eventCount(config.database)).toBe(1);
-    const status = await fetch(`${schedulerOrigin}/v1/qemu-events/${event.eventId}/status`, { headers: {
-      authorization: auth(config.credentials.query.username, config.credentials.query.password) } });
+    const marker = JSON.parse(await readFile(join(fixture.root, "project-a", "root.git",
+      "dim-authoritative-reviews", "qemu-delivered", `${event.eventId}.json`), "utf8"));
+    expect(marker).toEqual(expect.objectContaining({ schemaVersion: 3, state: "recorded", eventId: event.eventId }));
+    const statusUrl = `${schedulerOrigin}/v1/qemu-events/${event.eventId}/status`;
+    const statusHeaders = { authorization: auth(config.credentials.query.username, config.credentials.query.password) };
+    await waitFor(async () => record(await (await fetch(statusUrl, { headers: statusHeaders })).json()).state === "completed");
+    const status = await fetch(statusUrl, { headers: statusHeaders });
     expect(await status.json()).toEqual(expect.objectContaining({ state: "completed", eventId: event.eventId,
       attemptId: attempt.attemptId, result: expect.objectContaining({ result: "success" }) }));
     const authorityState = JSON.parse(await readFile(join(fixture.root, "project-a", "root.git",
@@ -120,32 +123,41 @@ describe("authoritative native QEMU delivery", () => {
 
 class LostQemuAcknowledgementClient implements AdmissionVerifierHttpClient {
   readonly eventBodies: string[] = [];
+  readonly eventTimes: number[] = [];
+  private reject = true;
   private lose = true;
   private lostResolve: (() => void) | undefined;
   readonly lostAcknowledgement = new Promise<void>((resolve) => { this.lostResolve = resolve; });
   constructor(private readonly delegate: AdmissionVerifierHttpClient) {}
   async request(input: AdmissionVerifierHttpRequest): Promise<AdmissionVerifierHttpResponse> {
-    const response = await this.delegate.request(input);
     if (input.path === "/v1/qemu-events") {
       this.eventBodies.push(input.body ?? "");
+      this.eventTimes.push(Date.now());
+      if (this.reject) {
+        this.reject = false;
+        return { statusCode: 409, contentType: "application/json", cacheControl: "no-store",
+          body: Buffer.from(JSON.stringify({ error: "stale" })) };
+      }
+    }
+    const response = await this.delegate.request(input);
+    if (input.path === "/v1/qemu-events") {
       if (this.lose) { this.lose = false; this.lostResolve?.(); throw new LostAcknowledgementError(); }
     }
     return response;
   }
 }
-function schedulerConfig(database: string): NativeQemuSchedulerConfig {
+function schedulerConfig(database: string, eligibilityLeaseMilliseconds = 120_000): NativeQemuSchedulerConfig {
   const capacity = { capacity: "kvm-1", runnerBaseImage: `runner@sha256:${"1".repeat(64)}`,
     jobBaseImage: `job@sha256:${"2".repeat(64)}`, bounds: { cpu: "2", memoryBytes: "1024", pids: "64",
       wallClockSeconds: "60", outputBytes: "1024" } };
-  return { schemaVersion: 1, serviceId: "qemu-main", host: "127.0.0.1", port: 1, database,
-    admissionLeaseMilliseconds: 120_000, claimLeaseMilliseconds: 60_000,
+  return { schemaVersion: 2, serviceId: "qemu-main", host: "127.0.0.1", port: 1, database,
+    eligibilityLeaseMilliseconds, claimLeaseMilliseconds: 60_000,
     nativeGit: { endpoint: "http://127.0.0.1:1", serviceId: "native-main",
       identity: { username: "qemu-identity", password: token("q") },
       attemptIssuer: { username: "qemu-attempts", password: token("r") },
       candidateReader: { username: "qemu-reader", password: token("y") },
       resultReporter: { username: "qemu-results", password: token("s") } },
     credentials: { eventIntake: { username: "qemu-events", password: token("t") },
-      registrar: { username: "qemu-registrar", password: token("u") },
       query: { username: "qemu-query", password: token("v") } },
     hosts: [{ hostId: "node-a", hostToken: token("w"), capacities: [capacity] },
       { hostId: "node-b", hostToken: token("x"), capacities: [capacity] }] };
@@ -161,8 +173,9 @@ async function post(url: string, body: unknown, authorization: string): Promise<
   const response = await fetch(url, { method: "POST", headers: { authorization, "content-type": "application/json",
     "x-dim-generation-id": generationId },
     body: JSON.stringify(body) });
-  expect(response.status).toBeLessThan(300);
-  return await response.json() as Record<string, unknown>;
+  const responseBody = await response.json() as Record<string, unknown>;
+  expect(response.status, JSON.stringify(responseBody)).toBeLessThan(300);
+  return responseBody;
 }
 
 function qemuOnlyRunner(): string {
@@ -181,9 +194,9 @@ function eventCount(database: string): number {
   try { return Number(record(connection.prepare("SELECT count(*) AS count FROM native_qemu_events").get()).count); }
   finally { connection.close(); }
 }
-async function waitFor(predicate: () => boolean): Promise<void> {
+async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {
   for (let attempt = 0; attempt < 300; attempt += 1) {
-    if (predicate()) return; await new Promise((resolve) => setTimeout(resolve, 10));
+    if (await predicate()) return; await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new TypeError("QEMU delivery condition was not reached");
 }

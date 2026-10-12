@@ -43,20 +43,20 @@ export function serviceCredentialValues(
   const nativeRoles = ["query", "identity", "attemptIssuer", "candidateReader", "resultReporter", "webhook"] as const;
   const nativeCredentials = nativeRoles.map((role) => credential(nativeOrdinary[role], `native Git ${role}`));
   const ordinary = exactRecord(ordinaryValue, [
-    "schemaVersion", "serviceId", "database", "admissionLeaseMilliseconds", "claimLeaseMilliseconds",
+    "schemaVersion", "serviceId", "database", "eligibilityLeaseMilliseconds", "claimLeaseMilliseconds",
     "nativeGit", "credentials", "hosts"
   ], "ordinary CI service config");
-  if (ordinary.schemaVersion !== 4 || ordinary.serviceId !== "ordinary-main"
+  if (ordinary.schemaVersion !== 5 || ordinary.serviceId !== "ordinary-main"
     || ordinary.database !== "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3") {
-    throw new ControlPlaneSourceError("ordinary CI service config is not a bundle schema-4 config");
+    throw new ControlPlaneSourceError("ordinary CI service config is not a bundle schema-5 config");
   }
   const ordinaryNative = exactRecord(ordinary.nativeGit,
     ["endpoint", "serviceId", "identity", "attemptIssuer", "candidateReader", "resultReporter"],
     "ordinary CI native Git config");
-  const roles = exactRecord(ordinary.credentials, ["webhook", "registrar", "query"], "ordinary CI credentials");
+  const roles = exactRecord(ordinary.credentials, ["webhook", "query"], "ordinary CI credentials");
   const ordinaryCredentials = [
-    credential(roles.webhook, "ordinary CI webhook"), credential(roles.registrar, "ordinary CI registrar"),
-    credential(roles.query, "ordinary CI query"), credential(ordinaryNative.identity, "ordinary CI identity"),
+    credential(roles.webhook, "ordinary CI webhook"), credential(roles.query, "ordinary CI query"),
+    credential(ordinaryNative.identity, "ordinary CI identity"),
     credential(ordinaryNative.attemptIssuer, "ordinary CI attempt issuer"),
     credential(ordinaryNative.candidateReader, "ordinary CI candidate reader"),
     credential(ordinaryNative.resultReporter, "ordinary CI result reporter")
@@ -79,19 +79,14 @@ export function serviceCredentialValues(
     host.hostId === entry.username || host.hostId === entry.password))) {
     throw new ControlPlaneSourceError("control-plane credential and token values must be distinct");
   }
-  const registrar = ordinaryCredentials[1];
-  if (registrar === undefined) throw new ControlPlaneSourceError("ordinary CI registrar credential is missing");
   const credentialValues = [
     ...nativeCredentials.map((entry) => entry.password),
-    registrar.password,
     ...hosts.map((entry) => entry.hostToken),
     ...hostBoundCredentials.map((entry) => entry.password),
     ...humanReviewers.map((entry) => entry.password)
   ];
   const roleValues = [
     ...nativeCredentials.flatMap((entry) => [entry.username, entry.password]),
-    registrar.username,
-    registrar.password,
     ...hosts.map((entry) => entry.hostToken),
     ...projectRegistrars.flatMap((entry) => [entry.hostId, entry.username, entry.password]),
     ...projectRootImporters.flatMap((entry) => [entry.username, entry.password]),
@@ -143,7 +138,7 @@ function credential(value: unknown, label: string): Credential {
 }
 
 function assertPaired(native: readonly Credential[], ordinary: readonly Credential[]): void {
-  const pairs = [[0, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 0]] as const;
+  const pairs = [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]] as const;
   for (const [nativeIndex, ordinaryIndex] of pairs) {
     const left = native[nativeIndex];
     const right = ordinary[ordinaryIndex];

@@ -49,9 +49,10 @@ export async function currentAuthoritativeOrdinaryTerminal(
     throw new CurrentAuthoritativeOrdinaryTerminalError("current ordinary review was not found");
   }
   const review = envelope.review;
-  const required = review.requiredJobs.some((job) => job.executionKind === "ordinary-sysbox"
+  const required = envelope.planning.status === "valid" && envelope.planning.jobs.some((job) => job.executionKind === "ordinary-sysbox"
     && job.jobName === selector.jobName);
-  if (!required || (await nativeHumanReviewStaleReasons(runtime, target, review)).length > 0) {
+  if (!required || envelope.qualityRevision !== target.imported.policy.requiredJobSetRevision
+    || (await nativeHumanReviewStaleReasons(runtime, target, review)).length > 0) {
     throw new CurrentAuthoritativeOrdinaryTerminalError("current ordinary review is stale");
   }
   const attempt = await createAuthoritativeOrdinaryAttemptStore(target.repository)
@@ -78,7 +79,7 @@ function descriptorMatchesReview(
     && descriptor.candidateCommit === review.candidateCommit && descriptor.candidateTree === review.candidateTree
     && descriptor.policyRevision === review.policyRevision
     && descriptor.requiredReviewRevision === review.requiredReviewRevision
-    && descriptor.requiredJobSetRevision === review.requiredJobSetRevision;
+    && descriptor.requiredJobSetRevision === envelope.qualityRevision;
 }
 
 export class CurrentAuthoritativeOrdinaryTerminalError extends Error {

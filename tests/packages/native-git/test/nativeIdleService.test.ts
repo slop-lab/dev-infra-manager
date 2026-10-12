@@ -9,7 +9,6 @@ import { parseNativeOrdinaryBundleConfig } from "../../../../core/packages/core/
 import { configuredNativeRootAdmissionServer } from "../../../../core/packages/core/src/nativeRootAdmissionService.js";
 import { parseNativeGitBundleConfig } from "../../../../core/packages/native-git/src/bundle-config.js";
 import { configuredNativeGitIdleServer } from "../../../../core/packages/native-git/src/native-idle-service.js";
-import { createNodeAdmissionVerifierHttpClient } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
 import { bundleSecrets, idleNativeConfig, idleOrdinaryConfig } from "./bundleConfigFixture.js";
 
 const roots: string[] = [];
@@ -31,7 +30,7 @@ describe("native Git idle bundle service", () => {
   it("is ready only with the exact authenticated ordinary identity while ordinary readiness stays independent", async () => {
     // Given
     const ordinary = await startOrdinary();
-    const native = await startNative(undefined, ordinary.origin);
+    const native = await startNative();
 
     // When
     const [ordinaryReady, nativeReady] = await Promise.all([
@@ -53,28 +52,22 @@ describe("native Git idle bundle service", () => {
   });
 
   it.each([
-    ["peer outage", async () => "http://127.0.0.1:1"],
-    ["wrong service ID", async () => startIdentityPeer({ serviceId: "ordinary-other" })],
-    ["wrong role", async () => startIdentityPeer({ role: "native-root-admission-registrar" })],
-    ["wrong scope", async () => startIdentityPeer({ scope: ["imported-root-admission:write"] })],
-    ["wrong generation", async () => startIdentityPeer({ servingGenerationId: nextGeneration })],
-    ["redirect", async () => startIdentityPeer({}, 302)]
-  ])("returns 503 readiness for %s", async (_label, peerOrigin) => {
+    ["peer outage"], ["foreign identity"], ["redirect"]
+  ])("keeps readiness independent of ordinary peer %s", async () => {
     // Given
-    const native = await startNative(undefined, await peerOrigin());
+    const native = await startNative();
 
     // When
     const result = await call(native.port, "GET", "/readyz", nativeReadiness);
 
     // Then
-    expect(result.status).toBe(503);
+    expect(result.status).toBe(200);
     expect(JSON.stringify(result)).not.toContain(bundleSecrets.nativeQuery);
   });
 
   it("binds each activation generation to exactly one token while mutations remain unavailable", async () => {
     // Given
-    const peer = await startIdentityPeer();
-    const native = await startNative(undefined, peer);
+    const native = await startNative();
     const mutationPaths = [
       "/v1/projects/project-a/registrations",
       "/v1/projects/project-a/repositories/root/reviews",
@@ -91,13 +84,13 @@ describe("native Git idle bundle service", () => {
     const repeated = await activate(native.port, generation);
     const sameTokenDifferentGeneration = await activate(native.port, nextGeneration);
     await closeServer(native.server);
-    const rotated = await startNative(native.root, peer, rotatedNativeActivation);
+    const rotated = await startNative(native.root, rotatedNativeActivation);
     const beforeConflict = activationRows(native.root);
     const sameGenerationDifferentToken = await activate(rotated.port, generation, rotatedNativeActivation);
     const afterConflict = activationRows(native.root);
     const forward = await activate(rotated.port, nextGeneration, rotatedNativeActivation);
     await closeServer(rotated.server);
-    const rolledBack = await startNative(native.root, peer, nativeActivation);
+    const rolledBack = await startNative(native.root, nativeActivation);
     const rollback = await activate(rolledBack.port, generation);
     const after = await Promise.all(mutationPaths.map((path) => call(rolledBack.port, "POST", path, nativeActivation, {})));
 
@@ -119,8 +112,7 @@ describe("native Git idle bundle service", () => {
 
   it("rejects cross-role credentials for readiness and activation", async () => {
     // Given
-    const peer = await startIdentityPeer();
-    const native = await startNative(undefined, peer);
+    const native = await startNative();
 
     // When
     const ready = await call(native.port, "GET", "/readyz", nativeActivation);
@@ -134,8 +126,7 @@ describe("native Git idle bundle service", () => {
   });
 
   it("hides activation from a non-service-local peer before authorization and persistence", async () => {
-    const peer = await startIdentityPeer();
-    const native = await startNative(undefined, peer);
+    const native = await startNative();
 
     const result = await call(native.port, "POST", "/v1/activation", nativeActivation, {
       schemaVersion: 1,
@@ -160,34 +151,17 @@ async function startOrdinary(): Promise<{ readonly port: number; readonly origin
   return { port, origin: `http://127.0.0.1:${port}` };
 }
 
-async function startNative(existingRoot: string | undefined, peerOrigin: string, activationToken = nativeActivation) {
+async function startNative(existingRoot?: string, activationToken = nativeActivation) {
   const root = existingRoot ?? await temporaryRoot();
   const server = await configuredNativeGitIdleServer({
     config: parseNativeGitBundleConfig(idleNativeConfig()),
     stateDirectory: join(root, "native"),
     readinessToken: nativeReadiness,
     activationToken,
-    expectedGenerationId: activationToken === rotatedNativeActivation ? nextGeneration : generation,
-    ordinaryIdentityHttpClient: createNodeAdmissionVerifierHttpClient(peerOrigin)
+    expectedGenerationId: activationToken === rotatedNativeActivation ? nextGeneration : generation
   });
   const port = await listen(server);
   return { root, server, port };
-}
-
-async function startIdentityPeer(overrides: Readonly<Record<string, unknown>> = {}, status = 200): Promise<string> {
-  const server = (await import("node:http")).createServer((request_, response) => {
-    response.writeHead(status, { "content-type": "application/json", "cache-control": "no-store",
-      location: "/v1/native-root-admission/identity" });
-    response.end(JSON.stringify({
-      schemaVersion: 1,
-      serviceId: "ordinary-main",
-      servingGenerationId: generation,
-      role: "native-root-admission-reader",
-      scope: ["imported-root-admission:read"],
-      ...overrides
-    }));
-  });
-  return `http://127.0.0.1:${await listen(server)}`;
 }
 
 async function listen(server: import("node:http").Server): Promise<number> {

@@ -71,7 +71,7 @@ describe("authoritative ordinary execution descriptor", () => {
         candidateTree: envelope.review.candidateTree,
         policyRevision: envelope.review.policyRevision,
         requiredReviewRevision: envelope.review.requiredReviewRevision,
-        requiredJobSetRevision: envelope.review.requiredJobSetRevision,
+        requiredJobSetRevision: envelope.qualityRevision,
         evidenceClass: "candidate-controlled",
         configBlob: { objectId: configObjectId, sha256: digest(matchingRunner()) },
         script: {
@@ -104,7 +104,7 @@ describe("authoritative ordinary execution descriptor", () => {
     expect(await authoritySnapshot(fixture.root, envelope.review.reviewId)).toEqual(before);
   });
 
-  it("rejects a candidate that moves a policy-bound QEMU job to ordinary", async () => {
+  it("derives a candidate job moved to ordinary independently of quality policy", async () => {
     // Given
     const fixture = await nativeBundleReviewFixture("ordinary-wrong-kind");
     await writeFile(join(fixture.clone, ".dim/ci/runner.yml"), wrongKindRunner());
@@ -112,16 +112,14 @@ describe("authoritative ordinary execution descriptor", () => {
     await runGit("/usr/bin/git", ["-C", fixture.clone, "commit", "-m", "move integration kind"]);
     await runGit("/usr/bin/git", ["-C", fixture.clone, "push", "origin", `HEAD:${reviewProposalRef}`]);
     const envelope = await createBundleReview(fixture.service);
-    const before = await authoritySnapshot(fixture.root, envelope.review.reviewId);
-
     // When
-    const derive = fixture.service.deriveOrdinaryExecutionDescriptor({
-      projectId: "project-a", reviewId: envelope.review.reviewId, jobName: "source", trustedCapacity
+    const derived = await fixture.service.deriveOrdinaryExecutionDescriptor({
+      projectId: "project-a", reviewId: envelope.review.reviewId, jobName: "integration", trustedCapacity
     });
 
     // Then
-    await expect(derive).rejects.toBeInstanceOf(CandidateExecutionError);
-    expect(await authoritySnapshot(fixture.root, envelope.review.reviewId)).toEqual(before);
+    expect(derived.descriptor.jobName).toBe("integration");
+    expect(derived.kind).toBe("ordinary-sysbox");
   });
 
   it.each(["proposal", "head", "policy"] as const)("rejects a review after %s drift without mutation", async (drift) => {
@@ -174,10 +172,13 @@ describe("authoritative ordinary execution descriptor", () => {
 
 async function authoritySnapshot(root: string, reviewId: string): Promise<unknown> {
   const repository = rootRepository(root);
+  const reviewDirectory = join(repository, "dim-authoritative-reviews", "proposals");
+  const reviewName = (await readdir(reviewDirectory))[0];
+  if (reviewName === undefined) throw new Error(`review fixture is missing: ${reviewId}`);
   return {
     state: await readFile(join(root, "native-idle.sqlite3")),
     repositoryEntries: (await readdir(repository)).sort(),
-    review: await readFile(join(repository, "dim-authoritative-reviews", "proposals", `${reviewId}.json`)),
+    review: await readFile(join(reviewDirectory, reviewName)),
     protectedHead: (await runGit("/usr/bin/git", ["--git-dir", repository, "rev-parse", "refs/heads/main"])).stdout.trim(),
     proposalHead: (await runGit("/usr/bin/git", ["--git-dir", repository, "rev-parse", reviewProposalRef])).stdout.trim()
   };

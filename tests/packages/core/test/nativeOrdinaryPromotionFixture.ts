@@ -15,6 +15,7 @@ import {
   type ReviewFixture
 } from "../../native-git/test/nativeGitReviewHarness.js";
 import {
+  activeEligibilityGeneration,
   authorityCredentials,
   jsonRecord,
   post,
@@ -34,6 +35,7 @@ export type NativeOrdinaryPromotionFixture = {
   readonly events: ReturnType<typeof parseReviewEnvelope>["events"];
   readonly admissionGeneration: string;
   readonly lostStatusResponse: () => boolean;
+  readonly rotateEligibility: () => Promise<string>;
   readonly rejectReporter: () => Promise<void>;
   readonly restoreReporter: () => Promise<void>;
 };
@@ -108,10 +110,11 @@ export async function nativeOrdinaryPromotionFixture(
     requiredJobSetRevision: "jobs-1",
     requiredJobs: ["security", "source"]
   } as const;
-  const admission = await post(authority.endpoint, "/v1/operator-admissions", "registrar", policy);
-  if (admission.status !== 200) throw new Error(await admission.text());
-  const admissionGeneration = (await jsonRecord(admission)).admissionGeneration;
-  if (typeof admissionGeneration !== "string") throw new Error("admission generation is missing");
+  const initialEvent = envelope.events[0];
+  if (initialEvent === undefined) throw new Error("ordinary review event is missing");
+  const intake = await post(authority.endpoint, "/v1/native-events", "webhook", initialEvent);
+  if (intake.status !== 202) throw new Error(await intake.text());
+  const admissionGeneration = activeEligibilityGeneration(authority, policy.projectId, policy.repositoryId);
   return {
     authority,
     native,
@@ -119,6 +122,30 @@ export async function nativeOrdinaryPromotionFixture(
     events: envelope.events,
     admissionGeneration,
     lostStatusResponse: () => lostStatusResponse,
+    async rotateEligibility() {
+      const nextConfig = native.configWithPolicyRevision("policy-2");
+      const ordinaryCi = nextConfig.ordinaryCi;
+      if (ordinaryCi === undefined) throw new Error("ordinary CI config is missing");
+      await native.restart({
+        ...nextConfig,
+        ordinaryCi: {
+          ...ordinaryCi,
+          attemptIssuer: { username: "ordinary-attempts", password: attemptPassword },
+          resultReporter: { username: "ordinary-results", password: reporterPassword }
+        }
+      });
+      nativeEndpoint = native.baseUrl();
+      const rotatedReview = await createApprovedReview(native);
+      const rotatedReviewId = stringField(rotatedReview, "reviewId");
+      const rotatedEnvelope = parseReviewEnvelope(JSON.parse(await readFile(
+        join(native.repositoryPath, "dim-reviews", "proposals", `${rotatedReviewId}.json`), "utf8"
+      )));
+      const rotatedEvent = rotatedEnvelope.events[0];
+      if (rotatedEvent === undefined) throw new Error("rotated ordinary review event is missing");
+      const response = await post(authority.endpoint, "/v1/native-events", "webhook", rotatedEvent);
+      if (response.status !== 202) throw new Error(await response.text());
+      return activeEligibilityGeneration(authority, policy.projectId, policy.repositoryId);
+    },
     async rejectReporter() {
       await configureNative(native, "replacement-reporter-secret-000000000");
       nativeEndpoint = native.baseUrl();

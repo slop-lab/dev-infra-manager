@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   loadNativeRootCiHostConfig,
-  parseNativeRootCiAdmissionConfig,
   parseNativeRootCiHostConfig
 } from "../../../../core/packages/core/src/nativeRootCiHostConfig.js";
 
@@ -80,23 +79,6 @@ describe("native root CI host configuration", () => {
     await expect(loaded).rejects.toThrow(/path must be absolute/);
   });
 
-  it("parses a workspace-free central admission config", () => {
-    // Given
-    const input = {
-      schemaVersion: 1,
-      generationId,
-      ordinaryCi: {
-        transport: "loopback-http",
-        endpoint: "http://127.0.0.1:8080",
-        serviceId: "ordinary-main",
-        registrar: { username: "ordinary-registrar", password: token(4) }
-      }
-    } as const;
-
-    // When / Then
-    expect(parseNativeRootCiAdmissionConfig(input)).toEqual(input);
-    expect(() => parseNativeRootCiAdmissionConfig({ ...input, workspace: "work-1" })).toThrow();
-  });
 });
 
 function hostConfig() {

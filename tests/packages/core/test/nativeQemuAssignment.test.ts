@@ -28,12 +28,15 @@ const connection: NativeQemuConnection = { schemaVersion: 1, hostId: "host-a",
   capacities: [{ capacity: "kvm-a",
     runnerBaseImage: descriptor.runnerBaseImage, jobBaseImage: descriptor.jobImage, cpus: 2,
     memoryBytes: 536870912, pids: 64, timeoutSeconds: 60, outputBytes: 1024 }] };
-const event = { schemaVersion: 2 as const, type: "dim.native.review-job.available" as const,
-  eventId: "9".repeat(64), projectId: descriptor.projectId, repositoryId: "root" as const,
+const envelopeId = "9".repeat(64);
+const event = { schemaVersion: 3 as const, type: "dim.native.review-job.available" as const,
+  eventId: createHash("sha256").update("dim-native-authoritative-review-event-v3\0")
+    .update(JSON.stringify({ envelopeId, executionKind: "qemu", jobName: descriptor.jobName })).digest("hex"),
+  envelopeId, projectId: descriptor.projectId, repositoryId: "root" as const,
   protectedRef: descriptor.protectedRef, reviewId: "a".repeat(64),
   expectedProtectedHead: descriptor.expectedProtectedHead, candidateCommit: descriptor.candidateCommit,
   candidateTree: descriptor.candidateTree, policyRevision: descriptor.policyRevision,
-  requiredReviewRevision: descriptor.requiredReviewRevision, requiredJobSetRevision: descriptor.requiredJobSetRevision,
+  requiredReviewRevision: descriptor.requiredReviewRevision, qualityRevision: descriptor.requiredJobSetRevision,
   executionKind: "qemu" as const, jobName: descriptor.jobName, evidenceClass: "candidate-controlled" as const };
 
 function assignment(scriptBytesBase64: string | undefined = undefined, hostId = "host-a",

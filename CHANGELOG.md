@@ -14,14 +14,16 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   for real guest-mechanics verification without treating it as KVM acceptance
   or a production fallback.
 
-- Implement the installed native ordinary-CI host and central admission
-  surfaces. A private host file starts one journaled worker per fixed capacity,
-  refuses missing Docker `sysbox-runc` before claiming, uses short-lived native
-  Git root-read credentials, and delivers cleaned schema-3 ordinary evidence
-  through schema-2 results. Restart replays exact claim, result, or recovery
-  bytes; signal shutdown waits for owned cleanup. A separate private registrar
-  file admits one immutable native Project ID without workspace, Gitea, runner,
-  or host-runtime authority.
+- Implement the installed native ordinary-CI host and automatic central
+  eligibility surfaces. A private host file starts one journaled worker per
+  fixed global capacity, refuses missing Docker `sysbox-runc` before claiming,
+  uses short-lived native Git root-read credentials, and delivers cleaned
+  schema-3 ordinary evidence through schema-2 results. Native Git automatically
+  queues every valid candidate-declared ordinary and QEMU job after proposal
+  pushes; no Project-local CI admission or host registration is required.
+  Restart replays exact claim, result, or recovery bytes, durable event and
+  result outboxes converge after outages, and signal shutdown waits for owned
+  cleanup.
 
 - Change the specified native ordinary-CI target so each exact candidate tree
   selects its own strict job config, Bash script, and digest-pinned disposable
@@ -30,8 +32,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   verification or blanket proof of correctness. Product maintainers still
   review changed requirements, implementation, tests, and relevant results;
   DIM narrows only infrastructure security review around secrets, protected
-  refs, host privileges, and trusted capability elevation. Operator-owned admission, bounded
-  ephemeral Sysbox execution, human approval of the exact tree, and checked CAS
+  refs, host privileges, and trusted capability elevation. Trusted native
+  Project registration, bounded ephemeral Sysbox execution, human approval of
+  the exact tree, and checked CAS
   promotion remain required. The installed ordinary executor accepts the
   strict combined schema-4 candidate definition and defines no compatibility
   parser or automatic source or state migration.

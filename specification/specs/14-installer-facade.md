@@ -732,17 +732,14 @@ Compose bytes and image digests before replacement. The only supported order is:
    snapshot, local database readability/durability, and local listener state;
 3. replace `native-git`, use its image-local `dim-service ready` command to
    require the same response shape from its service-local `/readyz`;
-4. require native Git readiness to include a successful authenticated
-   dependency probe to the installed ordinary service identity; and
-5. atomically publish the new rendered Compose bytes, install record, and
+4. atomically publish the new rendered Compose bytes, install record, and
    generation ID as installed state, then activate that exact generation.
 
 Ordinary readiness MUST NOT contact native Git, require a Project, or validate
 admission/webhook state. Ordinary CI instead verifies the configured native
 identity, repository tuple, and credential role on each later admission,
 webhook, attempt, and result operation. Native readiness may depend on ordinary
-identity; the installed profile attests only the exact generation-bound
-`native-root-admission-reader`, not legacy attempt-query authority. Before exact-generation
+identity. Native readiness does not contact ordinary CI. Before exact-generation
 activation, implemented authenticated business mutation endpoints return `503`;
 absent legacy mutation endpoints return `404`. Neither service creates admission,
 webhook, attempt, claim, result, repository,

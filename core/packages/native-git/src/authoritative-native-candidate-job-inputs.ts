@@ -43,8 +43,7 @@ export async function loadAuthoritativeNativeCandidateJobInputs(
         repositoryPath: verified.repository,
         identity: runtime.gitIdentity
       },
-      target,
-      verified.imported.policy.requiredJobs.map(({ name, kind }) => ({ name, kind }))
+      target
     );
     const current = await resolveAuthoritativeNativeRootTarget(runtime, { projectId: selector.data.projectId });
     if (current.repository !== verified.repository

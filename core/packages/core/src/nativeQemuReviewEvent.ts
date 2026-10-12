@@ -1,49 +1,56 @@
 export type NativeQemuReviewEvent = {
-  readonly schemaVersion: 2;
+  readonly schemaVersion: 3;
   readonly type: "dim.native.review-job.available";
   readonly eventId: string;
   readonly projectId: string;
   readonly repositoryId: "root";
   readonly protectedRef: string;
   readonly reviewId: string;
+  readonly envelopeId: string;
   readonly expectedProtectedHead: string;
   readonly candidateCommit: string;
   readonly candidateTree: string;
   readonly policyRevision: string;
   readonly requiredReviewRevision: string;
-  readonly requiredJobSetRevision: string;
+  readonly qualityRevision: string;
   readonly executionKind: "qemu";
   readonly jobName: string;
   readonly evidenceClass: "candidate-controlled";
 };
 
 const eventFields = ["schemaVersion", "type", "eventId", "projectId", "repositoryId", "protectedRef",
-  "reviewId", "expectedProtectedHead", "candidateCommit", "candidateTree", "policyRevision",
-  "requiredReviewRevision", "requiredJobSetRevision", "executionKind", "jobName", "evidenceClass"] as const;
+  "reviewId", "envelopeId", "expectedProtectedHead", "candidateCommit", "candidateTree", "policyRevision",
+  "requiredReviewRevision", "qualityRevision", "executionKind", "jobName", "evidenceClass"] as const;
 
 export function parseNativeQemuReviewEvent(value: unknown): NativeQemuReviewEvent {
   const event = exactRecord(value, eventFields);
-  if (event.schemaVersion !== 2 || event.type !== "dim.native.review-job.available"
+  if (event.schemaVersion !== 3 || event.type !== "dim.native.review-job.available"
     || event.repositoryId !== "root" || event.executionKind !== "qemu"
     || event.evidenceClass !== "candidate-controlled") invalid();
-  return {
-    schemaVersion: 2,
+  const parsed: NativeQemuReviewEvent = {
+    schemaVersion: 3,
     type: "dim.native.review-job.available",
     eventId: matching(event.eventId, /^[0-9a-f]{64}$/),
     projectId: matching(event.projectId, /^[a-z][a-z0-9-]{0,62}$/),
     repositoryId: "root",
     protectedRef: headRef(event.protectedRef),
     reviewId: matching(event.reviewId, /^[0-9a-f]{64}$/),
+    envelopeId: matching(event.envelopeId, /^[0-9a-f]{64}$/),
     expectedProtectedHead: matching(event.expectedProtectedHead, /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
     candidateCommit: matching(event.candidateCommit, /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
     candidateTree: matching(event.candidateTree, /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
     policyRevision: revision(event.policyRevision),
     requiredReviewRevision: revision(event.requiredReviewRevision),
-    requiredJobSetRevision: revision(event.requiredJobSetRevision),
+    qualityRevision: revision(event.qualityRevision),
     executionKind: "qemu",
     jobName: matching(event.jobName, /^[a-z][a-z0-9-]{0,62}$/),
     evidenceClass: "candidate-controlled"
   };
+  const expectedEventId = createHash("sha256").update("dim-native-authoritative-review-event-v3\0")
+    .update(JSON.stringify({ envelopeId: parsed.envelopeId, executionKind: "qemu", jobName: parsed.jobName }))
+    .digest("hex");
+  if (parsed.eventId !== expectedEventId) invalid();
+  return parsed;
 }
 
 function exactRecord(value: unknown, fields: readonly string[]): Readonly<Record<string, unknown>> {
@@ -76,3 +83,4 @@ function invalid(): never {
 export class NativeQemuReviewEventError extends Error {
   readonly name = "NativeQemuReviewEventError";
 }
+import { createHash } from "node:crypto";

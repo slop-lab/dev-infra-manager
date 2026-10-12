@@ -89,7 +89,7 @@ describe("installed two-service ordinary terminal evidence", () => {
     expect(await nativeSnapshotWithoutStatus(fixture.nativeRoot)).toEqual(before);
   }, 45_000);
 
-  it("rejects revoked and expired ordinary admission after delivery without native mutation", async () => {
+  it("rejects revoked evidence but retains exact delivered evidence after cache expiry without native mutation", async () => {
     // Given
     const revoked = await deliveredFixture("ordinary-terminal-admission-revoked", "943");
     const expired = await deliveredFixture("ordinary-terminal-admission-expired", "944");
@@ -102,7 +102,7 @@ describe("installed two-service ordinary terminal evidence", () => {
     const outcomes = await Promise.allSettled([currentEvidence(revoked), currentEvidence(expired)]);
 
     // Then
-    expect(outcomes.map(({ status }) => status)).toEqual(["rejected", "rejected"]);
+    expect(outcomes.map(({ status }) => status)).toEqual(["rejected", "fulfilled"]);
     expect(await nativeSnapshot(revoked.nativeRoot, revoked.reviewId)).toEqual(revokedBefore);
     expect(await nativeSnapshot(expired.nativeRoot, expired.reviewId)).toEqual(expiredBefore);
   }, 60_000);

@@ -135,7 +135,7 @@ describe("native root CI event receipt store", () => {
     expect(demands(fixture)).toEqual([]);
   });
 
-  it("supersedes queued demands on expiry, admission replacement, generation rotation, and capacity rotation", async () => {
+  it("preserves queued demand on cache expiry and supersedes binding rotations", async () => {
     // Given
     const expired = await setup();
     commitEvent(expired, "9".repeat(64));
@@ -160,7 +160,7 @@ describe("native root CI event receipt store", () => {
     // Then
     expect([expired, replaced, generationRotated, capacityRotated]
       .map((fixture) => demands(fixture).map(({ state }) => state))).toEqual([
-        ["superseded"], ["superseded"], ["superseded"], ["superseded"]
+        ["queued"], ["superseded"], ["superseded"], ["superseded"]
       ]);
   });
 });
@@ -200,18 +200,20 @@ function policyProof(): NativeRootCiPolicyProof {
 
 function event(reviewId: string) {
   const policy = policyProof().policy;
-  const eventId = createHash("sha256").update("dim-native-authoritative-review-event-v1\0")
-    .update(JSON.stringify({ executionKind: "ordinary-sysbox", jobName: "source", reviewId })).digest("hex");
-  return { schemaVersion: 2 as const, type: "dim.native.review-job.available" as const, eventId,
+  const envelopeId = createHash("sha256").update(`envelope:${reviewId}`).digest("hex");
+  const eventId = createHash("sha256").update("dim-native-authoritative-review-event-v3\0")
+    .update(JSON.stringify({ envelopeId, executionKind: "ordinary-sysbox", jobName: "source" })).digest("hex");
+  return { schemaVersion: 3 as const, type: "dim.native.review-job.available" as const, eventId, envelopeId,
     projectId: "project-a", repositoryId: "root" as const, protectedRef: "refs/heads/main", reviewId,
     expectedProtectedHead: "1".repeat(40), candidateCommit: "3".repeat(40), candidateTree: "4".repeat(40),
     policyRevision: policy.policyRevision, requiredReviewRevision: policy.requiredReviewRevision,
-    requiredJobSetRevision: policy.requiredJobSetRevision, executionKind: "ordinary-sysbox" as const,
+    qualityRevision: policy.requiredJobSetRevision, executionKind: "ordinary-sysbox" as const,
     jobName: "source", evidenceClass: "candidate-controlled" as const };
 }
 
 function receiptRequest(admissionGeneration: string, reviewEvent: ReturnType<typeof event>) {
-  return parseNativeRootCiEventReceiptRequest({ schemaVersion: 1, generationId, admissionGeneration, event: reviewEvent });
+  return { ...parseNativeRootCiEventReceiptRequest({ schemaVersion: 1, generationId, event: reviewEvent }),
+    admissionGeneration };
 }
 function eventProof(reviewEvent: ReturnType<typeof event>): NativeRootCiReviewEventProof {
   return { ...policyProof(), reviewLiveness: "current", event: reviewEvent };

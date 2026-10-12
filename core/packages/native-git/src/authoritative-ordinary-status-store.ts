@@ -69,7 +69,7 @@ export async function assertAuthoritativeOrdinaryStatusStore(repository: string)
     const envelope = await readAuthoritativeNativeReviewEnvelope(repository, status.reviewId);
     if (envelope === undefined || envelope.review.projectId !== status.payload.descriptor.projectId
       || envelope.review.repositoryId !== status.payload.descriptor.repositoryId
-      || !envelope.review.requiredJobs.some((job) => job.executionKind === "ordinary-sysbox"
+      || envelope.planning.status !== "valid" || !envelope.planning.jobs.some((job) => job.executionKind === "ordinary-sysbox"
         && job.jobName === status.payload.descriptor.jobName)) {
       throw new AuthoritativeOrdinaryStatusStoreError("ordinary status does not match its review");
     }

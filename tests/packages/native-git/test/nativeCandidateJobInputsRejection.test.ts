@@ -19,7 +19,7 @@ afterEach(async () => {
 });
 
 describe("native schema-4 candidate job input rejection", () => {
-  it("rejects stale heads, foreign repositories, commit/tree mismatch, and wrong job-kind policy", async () => {
+  it("rejects stale heads, foreign repositories, commit/tree mismatch, and extra request fields", async () => {
     // Given
     const fixture = await startFixture();
     await writeFile(join(fixture.source, "moved.txt"), "moved\n");
@@ -30,11 +30,7 @@ describe("native schema-4 candidate job input rejection", () => {
       { ...fixture.input, protectedRef: "refs/heads/foreign" },
       { ...fixture.input, candidateTree: "0".repeat(fixture.input.candidateTree.length) },
       { ...fixture.input, candidateCommit: "0".repeat(fixture.input.candidateCommit.length) },
-      { ...fixture.input, unexpected: true },
-      { ...fixture.input, requiredJobs: fixture.input.requiredJobs.map((job) => ({
-        ...job,
-        kind: job.kind === "qemu" ? "ordinary-sysbox" as const : "qemu" as const
-      })) }
+      { ...fixture.input, unexpected: true }
     ];
 
     // When / Then
@@ -43,7 +39,7 @@ describe("native schema-4 candidate job input rejection", () => {
     }
   });
 
-  it("rejects a caller job outside the registered protected policy", async () => {
+  it("accepts candidate jobs outside the registered protected policy", async () => {
     // Given: the registered protected policy requires only the ordinary job.
     const fixture = await startFixture();
     const config = { ...fixture.config, repositories: fixture.config.repositories.map((repository) => ({
@@ -51,11 +47,11 @@ describe("native schema-4 candidate job input rejection", () => {
       reviewPolicies: repository.reviewPolicies?.map((policy) => ({ ...policy, requiredJobNames: ["source"] }))
     })) };
 
-    // When: the caller includes the candidate's extra QEMU job as required.
-    const read = loadNativeCandidateJobInputs(config, fixture.input);
+    // When
+    const result = await loadNativeCandidateJobInputs(config, fixture.input);
 
-    // Then: the service library refuses to describe an unregistered required job.
-    await expect(read).rejects.toBeInstanceOf(CandidateExecutionError);
+    // Then
+    expect(result.plan.map(({ name }) => name)).toEqual(["source", "integration"]);
   });
 
   it.each([
@@ -73,7 +69,7 @@ describe("native schema-4 candidate job input rejection", () => {
     } else {
       await git(fixture.source, ["update-index", "--add", "--cacheinfo", `${mode},${fixture.input.candidateCommit},${path}`]);
     }
-    const input = await fixture.commit(`nonregular ${path}`);
+    const input = await fixture.commit(`nonregular ${path}`, mode !== "160000");
 
     // When / Then
     await expect(loadNativeCandidateJobInputs(fixture.config, input)).rejects.toBeInstanceOf(CandidateExecutionError);

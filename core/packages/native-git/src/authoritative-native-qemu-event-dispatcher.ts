@@ -4,20 +4,19 @@ import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
 import { acknowledgeAuthoritativeNativeQemuDelivery,
   readPendingAuthoritativeNativeQemuDeliveries,
+  supersedeAuthoritativeNativeQemuDelivery,
   type AuthoritativeNativeQemuPendingDelivery } from "./authoritative-native-qemu-delivery-store.js";
 import type { NativeGitBundleConfig } from "./bundle-config.js";
+import { authoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
 import type { AdmissionVerifierHttpClient, AdmissionVerifierHttpResponse } from "./ordinary-admission-http.js";
 import type { NativeGitBundleState } from "./native-bundle-state.js";
 import { readNativeProjectRegistrations } from "./native-bundle-state.js";
 import type { ReviewPublicationFaults } from "./review-record-storage.js";
 
 const maximumResponseBytes = 64 * 1024;
-const admissionSchema = z.object({ schemaVersion: z.literal(1), serviceId: z.literal("qemu-main"),
-  requestId: z.string().uuid(), admission: z.object({ projectId: z.string(), admissionGeneration: z.string().uuid(),
-    leaseExpiresAt: z.number().int(), policyRevision: z.string(), requiredJobSetRevision: z.string(),
-    requiredQemuJobs: z.array(z.string()).readonly() }).strict().readonly() }).strict().readonly();
-const acknowledgementSchema = z.object({ schemaVersion: z.literal(1), eventId: z.string(),
-  recorded: z.literal(true) }).strict().readonly();
+const acknowledgementSchema = z.object({ schemaVersion: z.literal(2), serviceId: z.literal("qemu-main"),
+  serviceGenerationId: z.string().uuid(), eventId: z.string(), eligibilityGeneration: z.string().uuid(),
+  eligibilityExpiresAt: z.number().int().positive(), recorded: z.literal(true) }).strict().readonly();
 
 export type AuthoritativeNativeQemuEventDispatcher = {
   readonly start: () => void; readonly wake: () => void; readonly close: () => Promise<void>;
@@ -27,6 +26,7 @@ export type AuthoritativeNativeQemuEventDispatcherOptions = {
   readonly dependency: NonNullable<NativeGitBundleConfig["qemuCi"]>;
   readonly state: NativeGitBundleState; readonly stateDirectory: string;
   readonly httpClient: AdmissionVerifierHttpClient; readonly deliveryFaults?: ReviewPublicationFaults;
+  readonly serialize: <Result>(operation: () => Promise<Result>) => Promise<Result>;
   readonly minimumRetryMilliseconds?: number; readonly maximumRetryMilliseconds?: number;
   readonly idleMilliseconds?: number; readonly requestTimeoutMilliseconds?: number;
 };
@@ -37,9 +37,10 @@ export async function createAuthoritativeNativeQemuEventDispatcher(
   const timing = { minimum: options.minimumRetryMilliseconds ?? 250,
     maximum: options.maximumRetryMilliseconds ?? 30_000, idle: options.idleMilliseconds ?? 1_000,
     request: options.requestTimeoutMilliseconds ?? 5_000 };
+  const binding = authoritativeNativeDeliveryBinding(options.dependency.serviceId, options.dependency.endpoint);
   if (Object.values(timing).some((value) => !Number.isInteger(value) || value < 1 || value > 30_000)
     || timing.minimum > timing.maximum) throw new AuthoritativeNativeQemuEventDeliveryError("QEMU delivery timing is invalid");
-  await pendingDelivery(options);
+  await options.serialize(() => pendingDelivery(options, binding));
   const shutdown = new AbortController();
   let task: Promise<void> | undefined;
   let wakeCurrent: (() => void) | undefined;
@@ -55,11 +56,20 @@ export async function createAuthoritativeNativeQemuEventDispatcher(
     let retry = timing.minimum;
     while (!shutdown.signal.aborted) {
       try {
-        const pending = await pendingDelivery(options);
+        const pending = await options.serialize(() => pendingDelivery(options, binding));
         if (pending === undefined) { await wait(timing.idle); continue; }
-        const admissionGeneration = await deliver(options, pending, shutdown.signal, timing.request);
-        await acknowledgeAuthoritativeNativeQemuDelivery(pending.repository, pending.delivery,
-          admissionGeneration, options.deliveryFaults);
+        let acknowledgement;
+        try { acknowledgement = await deliver(options, pending, shutdown.signal, timing.request); }
+        catch (error) {
+          if (!(error instanceof AuthoritativeNativeQemuEventRejectedError)) throw error;
+          await options.serialize(() => supersedeAuthoritativeNativeQemuDelivery(pending.repository,
+            pending.delivery, binding, error.statusCode, timing.minimum, options.deliveryFaults));
+          retry = timing.minimum;
+          continue;
+        }
+        await options.serialize(() => acknowledgeAuthoritativeNativeQemuDelivery(
+          pending.repository, pending.delivery, acknowledgement, binding, options.deliveryFaults
+        ));
         persistenceUnavailable = false; retry = timing.minimum;
       } catch (error) {
         if (shutdown.signal.aborted) return;
@@ -80,10 +90,11 @@ export async function createAuthoritativeNativeQemuEventDispatcher(
   }
 }
 
-async function pendingDelivery(options: AuthoritativeNativeQemuEventDispatcherOptions): Promise<Pending | undefined> {
+async function pendingDelivery(options: AuthoritativeNativeQemuEventDispatcherOptions,
+  binding: ReturnType<typeof authoritativeNativeDeliveryBinding>): Promise<Pending | undefined> {
   const candidates = await Promise.all(readNativeProjectRegistrations(options.state).map(async (registration) => {
     const repository = join(options.stateDirectory, registration.projectId, `${registration.rootRepositoryId}.git`);
-    const delivery = (await readPendingAuthoritativeNativeQemuDeliveries(repository, 1))[0];
+    const delivery = (await readPendingAuthoritativeNativeQemuDeliveries(repository, 1, binding))[0];
     return delivery === undefined ? undefined : { repository, delivery };
   }));
   return candidates.filter((candidate): candidate is Pending => candidate !== undefined)
@@ -92,27 +103,13 @@ async function pendingDelivery(options: AuthoritativeNativeQemuEventDispatcherOp
 }
 
 async function deliver(options: AuthoritativeNativeQemuEventDispatcherOptions, pending: Pending,
-  shutdown: AbortSignal, timeoutMilliseconds: number): Promise<string> {
+  shutdown: AbortSignal, timeoutMilliseconds: number): Promise<{ readonly serviceId: string;
+    readonly serviceGenerationId: string; readonly eligibilityGeneration: string;
+    readonly eligibilityExpiresAt: number }> {
   const signal = AbortSignal.any([shutdown, AbortSignal.timeout(timeoutMilliseconds)]);
   const event = pending.delivery.event;
-  const requestId = randomUUID();
-  const discoveryResult = admissionSchema.safeParse(await requestJson(options.httpClient, {
-    endpoint: options.dependency.endpoint, method: "POST",
-    path: `/v1/qemu-projects/${event.projectId}/admission/discover`, authorization: authorization(options.dependency.query),
-    body: JSON.stringify({ schemaVersion: 1, requestId }), signal
-  }, 200));
-  if (!discoveryResult.success) {
-    throw new AuthoritativeNativeQemuEventDeliveryError("QEMU admission response is malformed");
-  }
-  const discovered = discoveryResult.data;
-  if (discovered.requestId !== requestId || discovered.admission.projectId !== event.projectId
-    || discovered.admission.policyRevision !== event.policyRevision
-    || discovered.admission.requiredJobSetRevision !== event.requiredJobSetRevision
-    || !discovered.admission.requiredQemuJobs.includes(event.jobName)) {
-    throw new AuthoritativeNativeQemuEventDeliveryError("QEMU admission does not match authoritative event");
-  }
   const body = JSON.stringify({ schemaVersion: 1, requestId: eventRequestId(event.eventId),
-    admissionGeneration: discovered.admission.admissionGeneration, event });
+    event });
   const acknowledgementResult = acknowledgementSchema.safeParse(await requestJson(options.httpClient, {
     endpoint: options.dependency.endpoint, method: "POST", path: "/v1/qemu-events",
     authorization: authorization(options.dependency.eventIntake), body, signal
@@ -121,10 +118,12 @@ async function deliver(options: AuthoritativeNativeQemuEventDispatcherOptions, p
     throw new AuthoritativeNativeQemuEventDeliveryError("QEMU acknowledgement is malformed");
   }
   const acknowledged = acknowledgementResult.data;
-  if (!isDeepStrictEqual(acknowledged, { schemaVersion: 1, eventId: event.eventId, recorded: true })) {
+  if (acknowledged.eventId !== event.eventId || acknowledged.recorded !== true) {
     throw new AuthoritativeNativeQemuEventDeliveryError("QEMU acknowledgement does not match delivery");
   }
-  return discovered.admission.admissionGeneration;
+  return { serviceId: acknowledged.serviceId, serviceGenerationId: acknowledged.serviceGenerationId,
+    eligibilityGeneration: acknowledged.eligibilityGeneration,
+    eligibilityExpiresAt: acknowledged.eligibilityExpiresAt };
 }
 
 async function requestJson(client: AdmissionVerifierHttpClient,
@@ -132,6 +131,10 @@ async function requestJson(client: AdmissionVerifierHttpClient,
   let response: AdmissionVerifierHttpResponse;
   try { response = await client.request(input); }
   catch (error) { throw new AuthoritativeNativeQemuEventDeliveryError("QEMU delivery request failed", { cause: error }); }
+  if ((response.statusCode === 404 || response.statusCode === 409) && response.contentType === "application/json"
+    && response.cacheControl === "no-store" && response.body.length <= maximumResponseBytes) {
+    throw new AuthoritativeNativeQemuEventRejectedError(response.statusCode);
+  }
   const statuses = typeof expectedStatus === "number" ? [expectedStatus] : expectedStatus;
   if (!statuses.includes(response.statusCode) || response.contentType !== "application/json"
     || response.cacheControl !== "no-store" || response.body.length > maximumResponseBytes) {
@@ -154,5 +157,9 @@ function transientFilesystemError(error: unknown): boolean {
 }
 type Pending = { readonly repository: string; readonly delivery: AuthoritativeNativeQemuPendingDelivery };
 export class AuthoritativeNativeQemuEventDeliveryError extends Error {
-  readonly name = "AuthoritativeNativeQemuEventDeliveryError";
+  readonly name: string = "AuthoritativeNativeQemuEventDeliveryError";
+}
+class AuthoritativeNativeQemuEventRejectedError extends AuthoritativeNativeQemuEventDeliveryError {
+  readonly name = "AuthoritativeNativeQemuEventRejectedError";
+  constructor(readonly statusCode: 404 | 409) { super("QEMU delivery event is stale"); }
 }

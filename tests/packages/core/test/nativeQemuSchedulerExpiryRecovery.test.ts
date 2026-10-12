@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { mkdtemp } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -18,12 +19,19 @@ const servers: ReturnType<typeof configuredNativeQemuSchedulerServer>[] = [];
 const token = (character: string): string => Buffer.alloc(32, character).toString("base64url");
 const authorization = (hostId: string, password: string): string =>
   `Basic ${Buffer.from(`${hostId}:${password}`).toString("base64")}`;
-const baseEvent = { schemaVersion: 2 as const, type: "dim.native.review-job.available" as const,
-  eventId: "a".repeat(64), projectId: "project-a", repositoryId: "root" as const,
-  protectedRef: "refs/heads/main", reviewId: "b".repeat(64), expectedProtectedHead: "c".repeat(40),
+const baseEvent = { schemaVersion: 3 as const, type: "dim.native.review-job.available" as const,
+  eventId: createHash("sha256").update("dim-native-authoritative-review-event-v3\0")
+    .update(JSON.stringify({ envelopeId: "9".repeat(64), executionKind: "qemu", jobName: "integration" }))
+    .digest("hex"), projectId: "project-a", repositoryId: "root" as const,
+  protectedRef: "refs/heads/main", reviewId: "b".repeat(64), envelopeId: "9".repeat(64), expectedProtectedHead: "c".repeat(40),
   candidateCommit: "d".repeat(40), candidateTree: "e".repeat(40), policyRevision: "f".repeat(64),
-  requiredReviewRevision: "1".repeat(64), requiredJobSetRevision: "2".repeat(64),
+  requiredReviewRevision: "1".repeat(64), qualityRevision: "2".repeat(64),
   executionKind: "qemu" as const, jobName: "integration", evidenceClass: "candidate-controlled" as const };
+const secondEnvelopeId = "8".repeat(64);
+const secondEvent = { ...baseEvent, envelopeId: secondEnvelopeId,
+  eventId: createHash("sha256").update("dim-native-authoritative-review-event-v3\0")
+    .update(JSON.stringify({ envelopeId: secondEnvelopeId, executionKind: "qemu", jobName: "integration" }))
+    .digest("hex") };
 
 afterEach(async () => {
   vi.useRealTimers();
@@ -36,7 +44,7 @@ describe("native QEMU scheduler expiry recovery", () => {
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
     const fixture = await schedulerFixture();
     await fixture.enqueue(baseEvent);
-    await fixture.enqueue({ ...baseEvent, eventId: "9".repeat(64) });
+    await fixture.enqueue(secondEvent);
     const stateDirectory = await mkdtemp(join(tmpdir(), "native-qemu-expired-host-"));
     const journal = new NativeQemuHostJournal(join(stateDirectory, "journal.json"));
     const requestId = randomUUID();
@@ -63,7 +71,7 @@ describe("native QEMU scheduler expiry recovery", () => {
     expect(next.status).toBe(201);
     const firstEventId = String((firstClaim.event as Readonly<Record<string, unknown>>).eventId);
     expect(((await next.json() as Record<string, unknown>).claim as Record<string, unknown>).event)
-      .toEqual(expect.objectContaining({ eventId: firstEventId === baseEvent.eventId ? "9".repeat(64) : baseEvent.eventId }));
+      .toEqual(expect.objectContaining({ eventId: firstEventId === baseEvent.eventId ? secondEvent.eventId : baseEvent.eventId }));
     expect(fixture.issues).toBe(2);
     expect(fixture.revocations).toEqual([firstClaim.claimId]);
   });
@@ -86,7 +94,7 @@ describe("native QEMU scheduler expiry recovery", () => {
     const malformed = await fixture.result("node-a", String(claim.claimId), { ...terminalEvent, extra: true });
     expect(malformed.status).toBe(400);
     const first = await fixture.result("node-a", String(claim.claimId), terminalEvent);
-    expect(first.status).toBe(503);
+    expect(first.status).toBe(202);
     await fixture.restart();
     const foreign = await fixture.result("node-b", String(claim.claimId), terminalEvent);
     const foreignCapacity = await fixture.result("node-a", String(claim.claimId), terminalEvent, "kvm-2");
@@ -129,7 +137,7 @@ async function schedulerFixture(options: { readonly failFirstIssue?: boolean; re
   const revocations: unknown[] = [];
   const authority: NativeQemuAuthorityClient = {
     async readPolicy(projectId) { return { projectId, policyRevision: baseEvent.policyRevision,
-      requiredJobSetRevision: baseEvent.requiredJobSetRevision, requiredQemuJobs: [baseEvent.jobName] }; },
+      requiredJobSetRevision: baseEvent.qualityRevision, requiredQemuJobs: [baseEvent.jobName] }; },
     async proveEvent() {},
     async issue(claim) {
       issues += 1;
@@ -139,7 +147,7 @@ async function schedulerFixture(options: { readonly failFirstIssue?: boolean; re
           protectedRef: claim.event.protectedRef, expectedProtectedHead: claim.event.expectedProtectedHead,
           candidateCommit: claim.event.candidateCommit, candidateTree: claim.event.candidateTree,
           policyRevision: claim.event.policyRevision, requiredReviewRevision: claim.event.requiredReviewRevision,
-          requiredJobSetRevision: claim.event.requiredJobSetRevision, jobName: claim.event.jobName,
+    requiredJobSetRevision: claim.event.qualityRevision, jobName: claim.event.jobName,
           runnerBaseImage: `runner@sha256:${"1".repeat(64)}`, jobImage: `job@sha256:${"2".repeat(64)}`,
           bounds: { cpu: "2", memoryBytes: "1024", pids: "64", wallClockSeconds: "60", outputBytes: "1024" } };
       return { attemptId: randomUUID(), descriptorDigest: nativeQemuDescriptorDigest(descriptor), descriptor };
@@ -162,8 +170,6 @@ async function schedulerFixture(options: { readonly failFirstIssue?: boolean; re
       "content-type": "application/json" },
     body: JSON.stringify(body) });
   await start();
-  const admission = await request(config.credentials.registrar.username, "/v1/qemu-projects/project-a/admission", {});
-  const admissionGeneration = String((await admission.json() as Record<string, unknown>).admissionGeneration);
   return {
     get issues() { return issues; }, reports, revocations,
     async restart() {
@@ -173,7 +179,7 @@ async function schedulerFixture(options: { readonly failFirstIssue?: boolean; re
     },
     async enqueue(event: typeof baseEvent) {
       return request(config.credentials.eventIntake.username, "/v1/qemu-events",
-        { schemaVersion: 1, requestId: randomUUID(), admissionGeneration, event });
+        { schemaVersion: 1, requestId: randomUUID(), event });
     },
     rawClaim: (hostId: string, requestId: string) => request(hostId, "/v1/qemu-host-claims",
       { schemaVersion: 1, requestId, capacity: "kvm-1" }),
@@ -219,14 +225,14 @@ function schedulerConfig(database: string): NativeQemuSchedulerConfig {
   const capacity = { capacity: "kvm-1", runnerBaseImage: `runner@sha256:${"1".repeat(64)}`,
     jobBaseImage: `job@sha256:${"2".repeat(64)}`, bounds: { cpu: "2", memoryBytes: "1024", pids: "64",
       wallClockSeconds: "60", outputBytes: "1024" } };
-  return { schemaVersion: 1, serviceId: "qemu-main", host: "127.0.0.1", port: 0, database,
-    admissionLeaseMilliseconds: 120_000, claimLeaseMilliseconds: 60_000,
+  return { schemaVersion: 2, serviceId: "qemu-main", host: "127.0.0.1", port: 0, database,
+    eligibilityLeaseMilliseconds: 120_000, claimLeaseMilliseconds: 60_000,
     nativeGit: { endpoint: "http://127.0.0.1:9080", serviceId: "native-main",
       identity: { username: "identity", password: token("a") }, attemptIssuer: { username: "attempts", password: token("b") },
       candidateReader: { username: "candidate-reader", password: token("i") },
       resultReporter: { username: "results", password: token("c") } },
     credentials: { eventIntake: { username: "events", password: token("d") },
-      registrar: { username: "registrar", password: token("e") }, query: { username: "query", password: token("f") } },
+      query: { username: "query", password: token("f") } },
     hosts: [{ hostId: "node-a", hostToken: token("g"), capacities: [capacity, { ...capacity, capacity: "kvm-2" }] },
       { hostId: "node-b", hostToken: token("h"), capacities: [capacity] }] };
 }

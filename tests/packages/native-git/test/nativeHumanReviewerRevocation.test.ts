@@ -27,11 +27,12 @@ afterEach(cleanupFinalizeFixtures);
 describe("installed native human approval self-revocation", () => {
   it("revokes one immutable approval, safely reapproves, and ignores a delayed old revocation across restart", async () => {
     const fixture = await nativeBundleReviewFixture("human-revocation-lifecycle");
-    const { review } = await createBundleReview(fixture.service);
+    const created = await createBundleReview(fixture.service);
+    const { review } = created;
     const endpoint = reviewEndpoint(fixture.service.origin, review.reviewId);
     const protectedBefore = await protectedHead(fixture.root);
     const reviewPath = join(rootRepository(fixture.root), "dim-authoritative-reviews", "proposals",
-      `${review.reviewId}.json`);
+      `${review.reviewId}.${created.envelopeId}.json`);
     const reviewBefore = await readFile(reviewPath);
     const approvalA = await approve(endpoint, randomUUID());
     expect(approvalA.response.status).toBe(201);

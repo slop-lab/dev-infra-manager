@@ -140,7 +140,7 @@ Native ordinary-CI tests MUST label their result
 candidate tree supplies schema-3 `.dim/ci/runner.yml` and the regular script
 blob; that the strict parser rejects schemas 1 and 2, unknown/duplicate YAML fields,
 aliases/tags, oversized or non-UTF-8 input, unsafe paths, symlinks, gitlinks,
-any candidate image field, extra or missing required jobs, and any argv other than
+any candidate image field and any argv other than
 the fixed Bash vector; and that webhook fields cannot select an image, command,
 script, environment, mount, network, URL, resource, or credential. A successful
 fixture MUST observe that the selected candidate-controlled tests execute in
@@ -157,6 +157,32 @@ product maintainers can assess changed requirements, implementation, tests, and
 results. This product review is distinct from infrastructure security review of
 secret exposure, protected-ref authority, host/runtime privilege, and trusted
 capability elevation.
+
+For `TRUST-NATIVE-CI-ELIGIBILITY-001`, tests MUST register each native Project
+once through the trusted lifecycle and perform no per-Project CI admission,
+runner registration, policy refresh, promoter review creation, or human job
+approval. A workspace proposal create and fast-forward MUST each reconcile one
+exact candidate envelope and queue every valid candidate-declared ordinary and
+QEMU job, including jobs absent from `requiredJobs`. Changing or adding a valid
+job or script MUST require no protected-policy change. Promotion MUST ignore
+extra results and require only the current successful subset selected by
+`requiredJobs`; a selected job absent from the candidate MUST block promotion.
+Multiple globally registered nodes of each enabled kind MUST claim eligible
+work without local Project records.
+
+Restart, generation rollover, lease expiry, and an injected native Git or CI
+outage MUST preserve queued work and converge through internal reconciliation
+without another push or operator action. Tests MUST prove that old attempts
+stay fenced, uncertain ownership blocks only the affected capacity, the same
+host performs exact owned cleanup, and no retry releases uncleaned capacity or
+converts outage into success.
+Native Git verification MUST also inject one failure after `git-receive-pack`
+has durably changed the proposal ref but before envelope publication. The live
+process MUST retain the uncertain response, reconcile exactly one canonical
+envelope and event set without restart, repush, object change, or read-side
+trigger, and wake delivery. Persistent malformed or foreign storage MUST become
+unready after bounded retries without destructive recovery, a busy scan loop,
+or retry work surviving owner shutdown.
 
 ## Control-plane bundle gate
 
@@ -421,8 +447,10 @@ attempt API, ordinary reporter, and native terminal-status API. It MUST prove
 the exact event has no executable or authority-bearing field and that adding
 any image, argv, command, script, path, environment, mount, network, URL,
 resource, host, capacity, credential, or unknown field rejects before inbox
-mutation. Policy membership MUST admit bounded use of the global configured
-capacities without storing or accepting a per-Project eligible-assignment list.
+mutation. Trusted Project registration MUST permit bounded use of the global
+configured capacities without storing or accepting a per-Project
+eligible-assignment list. Policy membership MUST NOT filter candidate event
+creation or execution.
 Candidate config and script remain candidate-controlled provenance and MUST
 NOT be reported as trusted because the Project is admitted. The job and
 runner images must match the operator-owned capacity, not a candidate field.
@@ -538,8 +566,10 @@ leave the ref unchanged.
 
 For a Project whose quality policy selects both execution kinds, the gate MUST
 observe automatic CI eligibility for a trusted native Project
-without Project-specific CI approval, Gitea registration, webhook, or runner
-token. It MUST run one ordinary Sysbox job and one QEMU VM job from separate
+without Project-specific CI approval, admission, refresh, Gitea registration,
+webhook, or runner token. The workspace proposal push, not a promoter-created
+review, MUST trigger all jobs in the exact candidate config. It MUST run one
+ordinary Sysbox job and one QEMU VM job from separate
 named capacities using operator-owned digest-pinned common runner and job base
 images. A different Project with candidate-supplied image or resource fields
 MUST NOT widen these global choices. Both executions MUST verify the exact
@@ -639,7 +669,7 @@ workspace, and keep readiness valid while CI services are stopped. It MUST
 create the proposal through that workspace's broker, prove protected, delete,
 force, and foreign-namespace pushes fail, and bind the review's candidate
 commit and tree to the workspace-produced values. It MUST start separately
-configured ordinary and QEMU services, admit both policies, observe one real
+configured ordinary and QEMU services, observe automatic eligibility and one real
 Sysbox result and one real KVM-guest result, and retain their distinct host,
 capacity, generation, attempt, descriptor, image, bound, cleanup, and terminal
 output-digest evidence. The exact configured ordinary and QEMU marker bytes
@@ -679,6 +709,66 @@ evidence matrix; crash/restart and reboot recovery; guest authority inspection;
 or effective traffic inspection. Those phases require a future full-gate
 harness and real hardware evidence before `VERIFICATION-NATIVE-CUTOVER-001` can
 pass.
+
+### Native quality-policy matrix harness
+
+The repository also provides
+`verification/scripts/native-cutover-policy-matrix.bash` as preparation for the
+quality-policy portion of `VERIFICATION-NATIVE-CUTOVER-001`. It traces
+`TRUST-NATIVE-READINESS-001`, `TRUST-PROMOTION-001`, and
+`TRUST-PROMOTION-CAS-001` through four isolated fresh Projects whose exact
+reviewed source snapshots select an empty, ordinary-only, QEMU-only, or
+dual-kind required-job set.
+
+The harness MUST accept one literal caller-owned, single-link mode-`0600`
+configuration. Its values are limited to predefined SSH aliases, absolute host
+paths, complete source commits and refs, expected identifiers, unit names,
+container names, and marker bytes. It MUST NOT source that file, accept a
+caller-selected command or SSH option, or accept a credential value. The four
+Project, workspace, and proposal namespaces MUST be distinct. All source
+snapshots, private files, node identities, runtimes, images, and stopped units
+MUST pass one prerequisite-only phase before any local or remote mutation.
+
+For each profile the harness MUST establish Project and workspace readiness
+while both CI host services are stopped, then start the globally configured
+ordinary host and QEMU scheduler/host before pushing one exact proposal. The
+successful push MUST automatically publish one envelope-schema-2 record and
+event-schema-3 work for every valid candidate-planned job without Project
+admission, registration, refresh, review creation, or job approval. A reviewer
+credential MAY only resolve and inspect that already durable review. The
+harness MUST prove pre-approval promotion denial leaves the protected ref unchanged.
+For the empty and QEMU-only profiles it MUST additionally validate the exact
+installed ordinary-CI container's complete owner labels, immutable container
+and image IDs, and logical state digest; stop only that ID before Project and
+workspace creation and readiness; and restore that same ID with unchanged
+durable admission/result state before global executors start and the proposal
+is pushed. The
+state comparison MAY exclude only the service-epoch rows that exact-generation
+activation intentionally rotates on restart. Foreign or changed
+identity MUST remain untouched, and failed restore MUST fail the run. The empty
+profile MUST reach interactive human approval and checked promotion without CI
+results. Every profile's candidate MUST plan and automatically execute both the
+ordinary and QEMU fixture jobs. `requiredJobs` MUST remain a separate
+promotion-only subset: ordinary- and QEMU-quality profiles promote without
+waiting for the other kind, while dual waits for both. The harness MUST still
+  observe both executed jobs before cleanup. Native QEMU ordering is scheduler
+  start, schema-3 generation and exact execution-authority metadata validation,
+  then health validation and host start, all before
+proposal push. Every approval remains interactive and bound to the complete
+candidate commit and tree.
+
+Each profile MUST isolate its evidence and owned cleanup, record central-service
+identity/outage/restore state where applicable, its exact
+source ref/commit, candidate commit/tree, final protected ref commit/tree,
+review, executed jobs, quality-required jobs, kind-labelled results, and retained-state limitation, and
+atomically publish its result only after cleanup succeeds. A final atomic
+matrix manifest MUST enumerate all four successful profiles and MUST state
+that the full gate is not satisfied. It MUST continue to list fault-result
+denials, crash/restart and reboot recovery, guest-authority inspection, and
+traffic inspection as unverified until those phases and real independent-host
+evidence exist. A fixed preparation manifest MAY enumerate those deferred
+phase evidence requirements, but MUST mark each phase unimplemented and MUST
+NOT serve as phase execution or acceptance evidence.
 
 For `TRUST-RUNTIME-001`, each implemented backend MUST run the same
 backend-neutral agent journey. A supported VM backend additionally requires a

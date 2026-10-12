@@ -6,12 +6,12 @@ const image = (name: string, character: string): string => `${name}@sha256:${cha
 
 function config(): unknown {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     serviceId: "qemu-main",
     host: "127.0.0.1",
     port: 9082,
     database: "/var/lib/dim-native-qemu/qemu.sqlite3",
-    admissionLeaseMilliseconds: 120_000,
+    eligibilityLeaseMilliseconds: 120_000,
     claimLeaseMilliseconds: 60_000,
     nativeGit: {
       endpoint: "http://127.0.0.1:9080",
@@ -23,7 +23,6 @@ function config(): unknown {
     },
     credentials: {
       eventIntake: { username: "qemu-events", password: token("d") },
-      registrar: { username: "qemu-registrar", password: token("e") },
       query: { username: "qemu-query", password: token("f") }
     },
     hosts: [{
@@ -41,6 +40,19 @@ describe("native QEMU scheduler config", () => {
     const parsed = parseNativeQemuSchedulerConfig(config());
     expect(parsed.hosts[0]?.capacities[0]?.capacity).toBe("kvm-1");
     expect(parsed.claimLeaseMilliseconds).toBe(60_000);
+    expect(parsed.eligibilityLeaseMilliseconds).toBe(120_000);
+  });
+
+  it("rejects the predecessor schema without accepting its registrar credential", () => {
+    const value = config();
+    if (typeof value !== "object" || value === null) throw new TypeError("fixture");
+    Reflect.set(value, "schemaVersion", 1);
+    Reflect.set(value, "admissionLeaseMilliseconds", Reflect.get(value, "eligibilityLeaseMilliseconds"));
+    Reflect.deleteProperty(value, "eligibilityLeaseMilliseconds");
+    const credentials = Reflect.get(value, "credentials");
+    if (typeof credentials !== "object" || credentials === null) throw new TypeError("fixture");
+    Reflect.set(credentials, "registrar", { username: "qemu-registrar", password: token("e") });
+    expect(() => parseNativeQemuSchedulerConfig(value)).toThrow(/configuration/i);
   });
 
   it("rejects a claim lease shorter than sixty seconds", () => {

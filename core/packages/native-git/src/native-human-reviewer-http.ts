@@ -12,7 +12,10 @@ import {
 import type { NativeGitBundleConfig } from "./bundle-config.js";
 import { nativeHumanReviewStaleReasons } from "./native-human-reviewer-freshness.js";
 import { nativeHumanReviewStatus } from "./native-human-reviewer-status.js";
-import { readAuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-store.js";
+import {
+  readAuthoritativeNativeReviewEnvelope,
+  readAuthoritativeNativeReviewEnvelopes
+} from "./authoritative-native-review-store.js";
 import type { AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
 import { resolveAuthoritativeNativeRootTarget } from "./authoritative-native-root-target.js";
 import { exactActivationIsBound } from "./native-bundle-activation.js";
@@ -32,6 +35,10 @@ type HumanReviewerHttpInput = {
 export type NativeHumanReviewerHooks = { readonly beforeApprovalPublication?: () => void | Promise<void> };
 const approvalRequestSchema = z.object({ requestId: z.string().uuid() }).strict().readonly();
 const revocationRequestSchema = z.object({ approvalId: z.string().regex(/^[0-9a-f]{64}$/) }).strict().readonly();
+const resolveRequestSchema = z.object({
+  schemaVersion: z.literal(1),
+  proposalRef: z.string().min(1).max(1024)
+}).strict().readonly();
 
 export type NativeHumanReviewerService = {
   readonly handle: (request: IncomingMessage, response: ServerResponse, url: URL) => Promise<boolean>;
@@ -42,12 +49,15 @@ export function createNativeHumanReviewerService(input: HumanReviewerHttpInput):
     async handle(request, response, url) {
       const identity = request.method === "GET" && url.pathname === "/v1/human-reviewer-identity"
         && url.search === "";
+      const resolve = request.method === "POST" && url.search === ""
+        && /^\/v1\/projects\/[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?\/repositories\/root\/reviews\/resolve$/
+          .test(url.pathname);
       const match = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/root\/reviews\/([0-9a-f]{64})(\/(?:approvals|revocations))?$/
         .exec(url.pathname);
       const review = request.method === "GET" && url.search === "" && match !== null && match[3] === undefined;
       const approval = request.method === "POST" && url.search === "" && match?.[3] === "/approvals";
       const revocation = request.method === "POST" && url.search === "" && match?.[3] === "/revocations";
-      if (!identity && !review && !approval && !revocation) return false;
+      if (!identity && !resolve && !review && !approval && !revocation) return false;
       const reviewer = input.config.humanReviewers.find((candidate) => basicAuthorized(request, candidate));
       if (reviewer === undefined) {
         const known = input.knownCredentials.some((credential) => basicAuthorized(request, credential));
@@ -64,6 +74,12 @@ export function createNativeHumanReviewerService(input: HumanReviewerHttpInput):
         });
         return true;
       }
+      if (resolve) {
+        const projectId = url.pathname.split("/")[3];
+        if (projectId === undefined) return false;
+        await resolveCurrentEnvelope(input, reviewer, projectId, request, response);
+        return true;
+      }
       const projectId = match?.[1];
       const reviewId = match?.[2];
       if (projectId === undefined || reviewId === undefined) return false;
@@ -73,6 +89,53 @@ export function createNativeHumanReviewerService(input: HumanReviewerHttpInput):
       return true;
     }
   };
+}
+
+async function resolveCurrentEnvelope(
+  input: HumanReviewerHttpInput,
+  reviewer: HumanReviewer,
+  projectId: string,
+  request: IncomingMessage,
+  response: ServerResponse
+): Promise<void> {
+  let body: z.infer<typeof resolveRequestSchema>;
+  try {
+    body = resolveRequestSchema.parse(await readBoundedJson(request));
+  } catch (error) {
+    if (error instanceof z.ZodError || error instanceof NativeGitBundleHttpError) {
+      return sendJson(response, 400, { error: "review resolution request is invalid" });
+    }
+    throw error;
+  }
+  await input.serialize(async () => {
+    if (request.headers["x-dim-generation-id"] !== input.runtime.expectedGenerationId) {
+      return sendJson(response, 409, { error: "review generation conflicts with service startup" });
+    }
+    if (!input.runtime.activated() || !exactActivationIsBound(
+      input.runtime.state, input.runtime.expectedGenerationId, input.runtime.activationTokenDigest
+    )) return sendJson(response, 503, { error: "human review proof is unavailable" });
+    let target: Awaited<ReturnType<typeof resolveAuthoritativeNativeRootTarget>>;
+    try {
+      target = await resolveAuthoritativeNativeRootTarget(input.runtime, { projectId });
+    } catch (error) {
+      if (error instanceof Error) return sendJson(response, 404, { error: "not found" });
+      throw error;
+    }
+    const envelopes = (await readAuthoritativeNativeReviewEnvelopes(target.repository))
+      .filter((envelope) => envelope.review.projectId === projectId
+        && envelope.review.proposalRef === body.proposalRef
+        && envelope.policyDigest === target.imported.policyDigest
+        && envelope.qualityRevision === target.imported.policy.requiredJobSetRevision)
+      .sort((left, right) => right.review.createdAt.localeCompare(left.review.createdAt));
+    for (const envelope of envelopes) {
+      if ((await nativeHumanReviewStaleReasons(input.runtime, target, envelope.review)).length !== 0) continue;
+      if (!envelope.review.requiredReviewerIds.includes(reviewer.reviewerId)) {
+        return sendJson(response, 403, { error: "reviewer is not required for this review" });
+      }
+      return sendJson(response, 200, envelope);
+    }
+    return sendNotFound(response);
+  });
 }
 
 async function serveExactReview(

@@ -27,6 +27,10 @@ describe("installed native ordinary host results", () => {
     fixtures.push(fixture);
     const active = await activeAttempt(fixture, "301");
     const request = resultRequest(active.claim, active.issuance, "501");
+    const expiredAdmission = new DatabaseSync(fixture.database);
+    expiredAdmission.prepare("UPDATE native_root_admissions SET lease_expires_at = 1 WHERE admission_generation = ?")
+      .run(fixture.admissionGeneration);
+    expiredAdmission.close();
 
     // When
     const accepted = await post(fixture.origin, "/v1/host-results", hostAuthorization("host-a"), request);

@@ -214,16 +214,18 @@ Project runnable.
 The workspace-write issuer is host-scoped readiness-attestation and
 proposal-write lease authority. The separate root-read issuer can mint only a
 short-lived read lease used to materialize the protected root snapshot. Neither
-is a reviewer, promoter, storage-administrator, or CI identity. The separate global
-operator registrar credential may attest a Project created through the trusted
-native lifecycle and its protected required-job policy without a separate
-Project-specific CI approval, but cannot review candidate-selected job bytes,
-claim, or report. The
+is a reviewer, promoter, storage-administrator, or CI identity. The central
+services automatically derive CI eligibility for every Project created through
+the trusted native lifecycle. No per-Project registrar, admission file,
+approval, or refresh is part of host configuration. This eligibility is
+independent of the protected required-job policy and does not review
+candidate-selected job bytes. The
 central service's separate native reporter credential, not a host credential,
 submits accepted durable evidence to native Git. None may enter a workspace,
 job, image, Compose bundle, log, or Project state. Failure of an independently
-configured ordinary-CI service closes ordinary admission and claiming but does
-not change native Project readiness or cause a local or Project-scoped fallback.
+configured ordinary-CI service pauses claiming while durable candidate work
+queues for automatic retry. It does not change native Project readiness or
+cause a local or Project-scoped fallback.
 
 **CONFIG-NATIVE-READINESS-001:** The selected host proves readiness through
 exact `POST /v1/projects/{projectId}/workspace-readiness` with no query string.
@@ -409,8 +411,8 @@ fields fail before registration or runtime mutation; the file is opened with
 no-follow semantics and its owner, mode, link count, size, and stable metadata
 are checked around parsing. There is no Project list, label, webhook URL,
 per-Project token, Gitea URL, runner registration, or candidate-selected image.
-All eligible native Projects use the operator-owned capacities without a
-second Project-specific CI approval. QEMU remains a separate scheduler and
+All registered native Projects use the operator-owned capacities without a
+Project-specific CI registration, approval, admission, or refresh. QEMU remains a separate scheduler and
 executor from ordinary Sysbox capacity, outside the installed two-service
 Compose bundle. Native selection rejects the predecessor QEMU variable even
 when this file is absent.
@@ -424,7 +426,9 @@ before scheduler contact.
 
 The host token may claim, renew, recover, and report only its own QEMU
 capacity. Scheduler intake accepts authenticated events bound to the current
-native Project, review, exact candidate commit/tree and required-job policy.
+registered native Project, workspace proposal, exact candidate commit/tree,
+and candidate-declared job. The protected required-job policy is recorded for
+later promotion evaluation but does not create eligibility or filter intake.
 Neither candidate content nor a webhook may choose the base image, resource
 ceilings, host command, mount, network or reusable credential. The candidate
 may supply only a strict job definition and script executed with fixed argv
@@ -512,15 +516,15 @@ the candidate tree, container, arguments, logs, or terminal evidence. Host
 config and journal schemas reject `attemptIssuer`, `rootReadIssuer`, candidate
 lease credentials, and arbitrary reader mappings.
 
-**CONFIG-NATIVE-ROOT-CI-ADMISSION-001:** Central Project admission uses a
-separate operator-owned mode-`0600` JSON file containing exactly
-`schemaVersion: 1`, the same `generationId`, and `ordinaryCi` with
-`transport`, credential-free `endpoint`, fixed `serviceId: "ordinary-main"`,
-and a `registrar` username/password credential. It contains no workspace,
-Gitea, host token, capacity, runtime socket, native Git issuer, or result
-reporter. Admission asks the ordinary service to derive the current imported
-root and protected quality policy from native authority; it does not inspect
-or require a workspace.
+**CONFIG-NATIVE-ROOT-CI-ELIGIBILITY-001:** The ordinary and QEMU services use
+their operator-owned global service and host configuration to reconcile all
+registered native Projects. There is no per-Project CI connection file,
+registrar credential, admission lease, or operator refresh command. A service
+restart, generation rollover, or temporary native-Git outage triggers internal
+reconciliation and retry. Host credentials remain scoped to one registered
+node and its named capacities. Candidate events remain scoped to one Project,
+root repository, workspace proposal, commit, tree, execution kind, and job.
+Neither source may supply the other source's authority.
 
 Project-specific Git namespaces, repository aliases, root repository/ref,
 profiles, and the trusted host's effective backend choice belong to

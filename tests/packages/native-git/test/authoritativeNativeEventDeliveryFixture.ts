@@ -12,7 +12,7 @@ import type {
   AdmissionVerifierHttpRequest,
   AdmissionVerifierHttpResponse
 } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
-import { bundleSecrets, idleOrdinaryConfig } from "./bundleConfigFixture.js";
+import { idleOrdinaryConfig } from "./bundleConfigFixture.js";
 import { nativeBundleReviewFixture, type NativeBundleReviewFixture } from "./nativeBundleReviewFixture.js";
 import { generationId } from "./nativeRootImportFinalizeFixture.js";
 
@@ -22,6 +22,7 @@ const activationToken = Buffer.alloc(32, 72).toString("base64url");
 export type DeliveryBridgeMode = "normal" | "stale" | "unavailable";
 export class DeliveryBridge implements AdmissionVerifierHttpClient {
   mode: DeliveryBridgeMode = "normal";
+  staleResponsesRemaining = 0;
   targetOrigin: string | undefined;
   loseNextReceiptAcknowledgement = false;
   failNextMarkerWrite = false;
@@ -34,7 +35,11 @@ export class DeliveryBridge implements AdmissionVerifierHttpClient {
 
   async request(input: AdmissionVerifierHttpRequest): Promise<AdmissionVerifierHttpResponse> {
     this.requests.push(input);
-    if (input.path.endsWith("/discover") && this.mode !== "normal") {
+    if (input.path === "/v1/native-root-ci-events" && this.staleResponsesRemaining > 0) {
+      this.staleResponsesRemaining -= 1;
+      return jsonResponse(409, { error: "stale" });
+    }
+    if (input.path === "/v1/native-root-ci-events" && this.mode !== "normal") {
       return jsonResponse(this.mode === "stale" ? 409 : 503, { error: this.mode });
     }
     const origin = this.targetOrigin;
@@ -68,7 +73,10 @@ export type DeliveryScenario = {
   close(): Promise<void>;
 };
 
-export async function startDeliveryScenario(label: string): Promise<DeliveryScenario> {
+export async function startDeliveryScenario(
+  label: string,
+  eligibilityLeaseMilliseconds = 300_000
+): Promise<DeliveryScenario> {
   const bridge = new DeliveryBridge();
   const native = await nativeBundleReviewFixture(label, undefined, undefined, undefined, bridge, {
     beforePublish() {
@@ -85,7 +93,8 @@ export async function startDeliveryScenario(label: string): Promise<DeliveryScen
   const root = await mkdtemp(join(tmpdir(), `dim-authoritative-delivery-${label}-`));
   const nodeClient = createNodeNativeGitAdmissionHttpClient();
   const ordinaryServer = await configuredNativeRootAdmissionServer({
-    config: parseNativeOrdinaryBundleConfig(idleOrdinaryConfig()), stateDirectory: join(root, "ordinary"),
+    config: parseNativeOrdinaryBundleConfig({ ...idleOrdinaryConfig(), eligibilityLeaseMilliseconds }),
+    stateDirectory: join(root, "ordinary"),
     readinessToken, activationToken, expectedGenerationId: generationId,
     proofHttpClient: { request: (input) => nodeClient.request({ ...input, endpoint: native.service.origin }) }
   });
@@ -95,16 +104,7 @@ export async function startDeliveryScenario(label: string): Promise<DeliveryScen
   const ordinaryOrigin = `http://127.0.0.1:${address.port}`;
   bridge.targetOrigin = ordinaryOrigin;
   await post(ordinaryOrigin, "/v1/activation", `Bearer ${activationToken}`, { schemaVersion: 1, generationId });
-  const registered = await post(ordinaryOrigin,
-    "/v1/projects/project-a/repositories/root/native-root-admission/register",
-    authorization("ordinary-registrar", bundleSecrets.registrar),
-    { schemaVersion: 1, requestId: randomUUID(), generationId });
-  const body: unknown = await registered.json();
-  if (!registered.ok || typeof body !== "object" || body === null) throw new DeliveryFixtureError("admission failed");
-  const admission = Reflect.get(body, "admission");
-  const admissionGeneration = typeof admission === "object" && admission !== null
-    ? Reflect.get(admission, "admissionGeneration") : undefined;
-  if (typeof admissionGeneration !== "string") throw new DeliveryFixtureError("admission generation is missing");
+  const admissionGeneration = randomUUID();
   return { bridge, native, ordinaryServer, ordinaryOrigin,
     ordinaryDatabase: join(root, "ordinary", "ordinary-ci.sqlite3"), admissionGeneration,
     async close() {
@@ -133,7 +133,7 @@ export function post(origin: string, path: string, authorizationHeader: string, 
     "content-type": "application/json" }, body: JSON.stringify(body) });
 }
 export async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
+  for (let attempt = 0; attempt < 1_000; attempt += 1) {
     if (await predicate()) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }

@@ -171,27 +171,32 @@ protected snapshot, proposal-only authority, and runtime prerequisites in
 a CI result, or a prior promotion. Review and checked promotion remain separate
 operations after a proposal exists.
 
-The installed native-Git operator client exposes the following host-only
-commands. `CONNECTION` is an absolute caller-owned mode-`0600` reviewer or
+The target native-Git operator client exposes the following host-only commands.
+The installed predecessor still has `review create`; that command is obsolete
+and is removed by this target rather than preserved as an alias. `CONNECTION`
+is an absolute caller-owned mode-`0600` reviewer or
 promoter connection file; credentials are never accepted as arguments or read
 from a generic Git credential helper.
 
 ```bash
-dim-native-git operator review create CONNECTION PROJECT PROPOSAL_REF
+dim-native-git operator review resolve CONNECTION PROJECT PROPOSAL_REF
 dim-native-git operator review inspect CONNECTION PROJECT REVIEW_ID
 dim-native-git operator review approve CONNECTION PROJECT REVIEW_ID
 dim-native-git operator review revoke CONNECTION PROJECT REVIEW_ID APPROVAL_ID
 dim-native-git operator review promote CONNECTION PROJECT REVIEW_ID
 ```
 
-Create and promote require role `host-promoter`; inspect, approve, and revoke
-require role `human-reviewer`. Each invocation first attests the role, service,
+`resolve`, inspect, approve, and revoke require role `human-reviewer`; promote
+requires role `host-promoter`. `resolve` is read-only and returns the immutable
+envelope that proposal receive already created. It cannot create or rerun CI.
+The obsolete `review create` command MUST be removed rather than aliased to
+`resolve`. Each invocation first attests the role, service,
 identity, and serving generation through its installed identity route, then
 sends the exact generation-bound request. Mutations print the service response
 only after it is durably committed. Invalid role, stale generation, foreign
 Project, stale review, incomplete approval or selected quality evidence, and a
 failed compare-and-swap fail nonzero without changing the protected ref. Exact
-create, decision, and promotion retries converge. No command prints or logs the
+resolve, decision, and promotion retries converge. No command prints or logs the
 connection path contents, authorization header, password, or a credential-bearing
 URL.
 
@@ -496,33 +501,30 @@ local data, and lifecycle state.
 
 **CI-ORDINARY-POOL-001:** Ordinary CI is supplied by the native control-plane
 bundle in [Installer Facade](14-installer-facade.md#control-plane-bundle). The
-contract below is a target and is not implemented. Without the separate native
-Project/repository adapter, the installed bundle admits no Project and every
-capacity advertisement or claim fails before mutation. Once that adapter is
-approved, the
-ordinary scheduler/webhook service owns admission, demand, queueing, and fenced
-leases. Each participating DIM host controller owns named shared capacities
+automatic eligibility and proposal-trigger contract below is a target and is
+not implemented. Once the native Project/repository adapter registers a
+Project, the ordinary scheduler owns demand, queueing, and fenced leases. Each
+participating DIM host controller registers once with named shared capacities
 and executes claims through its local Sysbox runtime. The service receives no
 host runtime socket or generic controller capability and cannot execute a job.
-Project admission means that an operator has authorized a Project/repository,
-protected ref, required job names and evidence classes, and bounded host
-capacity. It does not mean that candidate CI bytes were reviewed.
-Specifically, it does not pre-approve those bytes as trusted infrastructure;
-product maintainers still review the candidate's test definitions and scripts
-with its requirements and implementation before protected promotion.
+All registered native Projects are eligible to use those capacities. There is
+no per-Project admission, runner registration, policy refresh, or human CI
+approval. Eligibility does not mean that candidate CI bytes were reviewed or
+trusted as infrastructure. Product maintainers may inspect those bytes and
+their results when deciding whether to approve protected promotion, but no such
+inspection is a prerequisite to executing them.
 
-The installed host and central-admission surfaces are:
+The target long-running host and central service surfaces are:
 
 ```bash
 dim ci native-root host run /absolute/path/host.json
-dim ci native-root project admit PROJECT_ID /absolute/path/admission.json
 dim ci native-qemu scheduler run /absolute/path/scheduler.json
 dim ci native-qemu scheduler image build IMAGE
 dim ci native-qemu host run HOST_ID /absolute/path/connection.json
 ```
 
 The `native-qemu` namespace is an independently deployed, Gitea-free quality
-lane. `scheduler run` requires the private schema-1 operator configuration in
+lane. `scheduler run` requires the private target schema-2 operator configuration in
 `NATIVE-QEMU-OPERATOR-001`; `host run` derives the host identity from the
 command argument and requires the connection file to bind that exact identity.
 Neither command accepts Project credentials, images, bounds, guest argv, or a
@@ -539,33 +541,23 @@ without Sysbox receives an explicit prerequisite failure and no `runc`
 fallback. The command is suitable as the fixed `ExecStart` of a host-only
 service and makes no Gitea or workspace call.
 
-`project admit` accepts the immutable native Project ID, not a workspace or
-Gitea name. It sends one fresh register request to the ordinary service, prints
-the exact returned admission JSON, and makes no workspace, Gitea, runner
-registration, or host-runtime call. Exact request replay is a service concern;
-each CLI invocation uses a new UUID. Invalid scope, role, service/generation
-identity, transport, configuration ownership, or response shape fails closed.
-This admission exists only when the Project quality policy selects ordinary
-jobs. It is not Project readiness, and an empty or QEMU-only quality policy
-requires no ordinary admission.
+The removed `dim ci native-root project admit` and `dim ci native-qemu project
+admit` commands are obsolete target surfaces. They MUST be removed, not retained
+as compatibility aliases. Trusted native Project registration is the sole
+eligibility source. Each CI service discovers and reconciles registered
+Projects internally, including after restart, generation rollover, expiry, or
+temporary native-Git outage. No operator repeats registration or refreshes a
+Project lease. Old demand and claims remain durable but inactive and MUST NOT
+be rebound or renewed under a replacement generation.
 
-One ordinary admission is derived from operator/native Project membership and
-the protected policy. It binds the native Project and repository IDs,
-protected ref, policy and required-review/required-job-set revisions, required
-job names and their `candidate-controlled` evidence class, the digest of the
-ordinary service's complete global capacity configuration, and a fresh random
-public generation. It does not carry a per-Project assignment list or bind a
-protected-head job image, argv, script, or `.dim/ci/runner.yml` digest. An active byte-identical
-policy refresh retains its generation. Expiry, revocation, or any changed
-binding creates a new generation, even if a later policy is byte-identical. Old
-demand and claims remain durable but inactive and MUST NOT be rebound, renewed,
-or requeued under the replacement generation.
-
-Authenticated native Git webhook events are demand input, never admission
-authority. The event's Project, repository, protected tuple, job name, and
-candidate commit/tree MUST match a live admission before demand is queued.
-Missing, foreign, expired, revoked, stale, or tuple-mismatched events are
-rejected without queue or attempt mutation. A webhook may carry only the native
+Authenticated native Git events are demand input, never eligibility authority.
+Native Git creates them from each successful workspace-scoped proposal create
+or fast-forward update and the exact candidate `.dim/ci/runner.yml`, not from
+the protected policy's `requiredJobs`. The event's Project, repository,
+workspace proposal, job kind and name, and candidate commit/tree MUST match a
+registered Project and exact candidate envelope before demand is queued.
+Foreign, stale, or tuple-mismatched events are rejected without queue or attempt
+mutation. A webhook may carry only the native
 event ID and exact tuple above; image, argv, script, path, environment, network,
 mount, resource, URL, and credential fields are invalid. The scheduler reads
 the execution definition only from `.dim/ci/runner.yml` in the exact candidate
@@ -590,7 +582,7 @@ ordinary:
       argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]
 ```
 
-When the Project quality policy selects ordinary jobs, the root has exactly
+When the candidate requests ordinary jobs, the root has exactly
 `schemaVersion` and `ordinary`; `ordinary` has exactly
 `jobs`; and each job has exactly `script` and `argv`. An `image` key is
 rejected even when digest-pinned. Unknown keys,
@@ -598,12 +590,11 @@ aliases, anchors, merge keys, duplicate mapping keys, duplicate normalized job
 names, non-string scalars where strings or arrays are required, and explicit
 YAML tags are errors. The UTF-8 file is
 at most 64 KiB, contains no NUL, and defines between 1 and 64 jobs. Job names
-match `[a-z][a-z0-9-]{0,62}` byte-for-byte with no case folding, and the job-key
-set MUST equal the protected policy's required `ordinary-sysbox`
-candidate-controlled job set,
-with no missing or extra job.
-When that set is empty, no schema-3 file, ordinary event, admission, attempt, or
-result is required for readiness or promotion.
+match `[a-z][a-z0-9-]{0,62}` byte-for-byte with no case folding. The candidate
+job-key set is independent of the protected policy's required
+`ordinary-sysbox` set. Extra valid jobs execute and remain visible evidence;
+missing policy-required jobs block only promotion. When the candidate declares
+no jobs, no schema-3 file, ordinary event, attempt, or result is created.
 
 `script` is a normalized repository-relative path below
 `.dim/ci/jobs/`, has no empty, `.`, or `..` segment, no backslash, and ends in
@@ -639,8 +630,8 @@ before launch.
 Each host controller authenticates with one host-scoped credential and
 advertises operator-configured capacity names, job and runner base images,
 and bounds. Capacity is
-installation state, not Project state: a host may execute an admitted Project
-without a local Project record, but it MUST verify the signed admission tuple
+installation state, not Project state: a host may execute an eligible Project
+without a local Project record, but it MUST verify the signed exact-candidate tuple
 and exact native service identity before launch. Claims are exclusive per host
 and capacity and use renewable leases. An expired claim fences that capacity
 until the same host controller has ownership-inspected and reaped its exact
@@ -702,17 +693,18 @@ qemu:
 ```
 
 The root has exactly `schemaVersion` plus the nonempty execution-kind sections
-selected by the Project quality policy. It may contain `ordinary`, `qemu`, or
+selected by the candidate. It may contain `ordinary`, `qemu`, or
 both. Each present workload has exactly `jobs`, and every job has only the
 strict script and fixed argv defined above. Neither workload nor candidate can name an image, bound,
 host command, environment, mount, network, URL, or credential. The maps' job
-names are globally distinct and equal the protected policy's corresponding
-required `(executionKind, jobName)` sets; QEMU and ordinary jobs cannot be
+names are globally distinct and independent of the protected policy's
+`requiredJobs`; QEMU and ordinary jobs cannot be
 swapped even if their script bytes match. The current ordinary-only schema-3
 parser is not a QEMU parser. Enabling schema 4 rejects schema 3 rather than
 silently accepting both; no Project becomes native-ready because this target
-format is documented. If the policy selects no CI jobs, no schema-4 file or CI
-evidence is required. The current schema-4 library still requires both sections
+format is documented. If the candidate selects no CI jobs, no schema-4 file or
+CI execution is required. An empty promotion policy may still receive and
+display optional candidate job evidence. The current schema-4 library still requires both sections
 and at least one required job. Optional sections and the empty policy are target
 behavior, not an implemented runtime claim.
 
@@ -734,13 +726,17 @@ are implemented as a core library, including lease renewal and same-host
 recovery; host execution, results, and deployment remain targets. Native Git is the
 only ordinary review-event emitter, ordinary CI is the only ordinary inbox and scheduler, and a
 claiming host controller is the only executor. No Project has a persistent
-runner, worker, scheduler, or `eligibleAssignments` record. Every active
-admission uses the complete lexically sorted set of capacities from the
+runner, worker, scheduler, or `eligibleAssignments` record. Every internal
+execution generation uses the complete lexically sorted set of capacities from the
 ordinary service's operator-owned global configuration.
 
-Native Git MUST create one immutable outbox event for each currently required
-job when it creates an immutable review. It MUST persist the review and all of
-its events before returning success. Each event has this exact JSON shape:
+Native Git MUST automatically create or reconcile one immutable candidate
+envelope after each successful workspace proposal create or fast-forward and
+write one outbox event for every valid job in the exact candidate config. It
+MUST persist the envelope and all events before acknowledging the proposal
+update. This internal envelope may retain a review ID for exact provenance, but
+no host-promoter review-create call or human approval is required for CI. Each
+event has this exact JSON shape:
 
 ```json
 {
@@ -777,8 +773,8 @@ repository at 10,000 undelivered events and 100,000 delivered tombstones. A
 known exact replay remains acknowledged when the tombstone store is full; a new
 review whose complete event set would exceed either cap fails with `429` before
 publishing the review or events.
-Review creation fails atomically before publishing either the review or any
-event if all required events cannot fit. Pruning never removes an undelivered
+Proposal reconciliation fails atomically before publishing the candidate
+envelope or any event if the complete candidate event set cannot fit. Pruning never removes an undelivered
 event or a delivery tombstone.
 
 Ordinary CI authenticates the webhook role, attests the configured native

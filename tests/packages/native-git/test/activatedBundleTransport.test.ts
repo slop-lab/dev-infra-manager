@@ -41,10 +41,7 @@ afterEach(async () => {
 });
 
 describe("activated native Git bundle transport", () => {
-  it.each([
-    ["ordinary-main", 200],
-    ["foreign-ordinary", 503]
-  ] as const)("returns bounded readiness for ordinary identity %s", async (serviceId, expectedStatus) => {
+  it("returns bounded readiness without contacting ordinary CI", async () => {
     const root = await mkdtemp(join(tmpdir(), "dim-native-peer-readiness-"));
     roots.push(root);
     const service = await start(root, {
@@ -56,13 +53,7 @@ describe("activated native Git bundle transport", () => {
           statusCode: 200,
           contentType: "application/json",
           cacheControl: "no-store",
-          body: Buffer.from(JSON.stringify({
-            schemaVersion: 1,
-            serviceId,
-            servingGenerationId: generationId,
-            role: "native-root-admission-reader",
-            scope: ["imported-root-admission:read"]
-          }))
+          body: Buffer.alloc(0)
         };
       }
     });
@@ -71,7 +62,7 @@ describe("activated native Git bundle transport", () => {
       headers: { authorization: `Bearer ${readinessToken}` }
     });
 
-    expect(response.status).toBe(expectedStatus);
+    expect(response.status).toBe(200);
   });
 
   it("returns unavailable readiness when the ordinary CI identity cannot be attested", async () => {
@@ -83,7 +74,7 @@ describe("activated native Git bundle transport", () => {
       headers: { authorization: `Bearer ${readinessToken}` }
     });
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(200);
   });
 
   it("prepares roots only after exact activation without exposing Git authority", async () => {

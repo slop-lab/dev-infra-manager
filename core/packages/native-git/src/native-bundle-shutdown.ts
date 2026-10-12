@@ -16,14 +16,14 @@ export function createNativeBundleShutdown(input: {
     closing ??= (async () => {
       input.stopAdmission();
       let failure: Error | undefined;
-      try { await input.drainOperations(); }
-      catch (error) {
-        failure = error instanceof Error ? error : new NativeGitBundleServerError("native bundle drain failed");
-      }
       try { await input.eventDispatcher.close(); }
       catch (error) {
-        failure ??= error instanceof Error ? error
+        failure = error instanceof Error ? error
           : new NativeGitBundleServerError("authoritative event dispatcher shutdown failed");
+      }
+      try { await input.drainOperations(); }
+      catch (error) {
+        failure ??= error instanceof Error ? error : new NativeGitBundleServerError("native bundle drain failed");
       }
       try {
         if (input.server.listening) {

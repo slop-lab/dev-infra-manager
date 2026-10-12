@@ -110,7 +110,7 @@ export class NativeOrdinaryAuthorityStore {
         SELECT admission_generation, policy_digest, capacity_config_digest, expires_at
         FROM native_admissions WHERE project_id = ? AND repository_id = ? AND state = 'active'
       `).get(policy.projectId, policy.repositoryId));
-      const reusable = existing !== undefined && existing.expiresAt > now && existing.policyDigest === digest
+      const reusable = existing !== undefined && existing.policyDigest === digest
         && existing.capacityConfigDigest === this.#capacityConfigDigest;
       if (reusable) {
         this.#database.prepare(`
@@ -119,7 +119,7 @@ export class NativeOrdinaryAuthorityStore {
         this.#database.exec("COMMIT");
         return { admissionGeneration: existing.admissionGeneration, expiresAt };
       }
-      if (existing !== undefined) this.#invalidateGeneration(existing.admissionGeneration, existing.expiresAt <= now ? "expired" : "replaced", now);
+      if (existing !== undefined) this.#invalidateGeneration(existing.admissionGeneration, "replaced", now);
       const admissionGeneration = randomUUID();
       this.#database.prepare(`
         INSERT INTO native_admissions(
@@ -268,15 +268,12 @@ export class NativeOrdinaryAuthorityStore {
     fenceExpiredClaims(this.#database, now);
     const expired = this.#database.prepare(`
       SELECT admission_generation FROM native_admissions
-      WHERE state = 'active' AND (expires_at <= ? OR capacity_config_digest <> ?)
-    `).all(now, this.#capacityConfigDigest);
+      WHERE state = 'active' AND capacity_config_digest <> ?
+    `).all(this.#capacityConfigDigest);
     for (const row of expired) {
       const generation = stringField(row, "admission_generation");
       if (generation === undefined) throw new UserError("native ordinary database contains an invalid admission row");
-      const expiresAt = numberField(this.#database.prepare(
-        "SELECT expires_at FROM native_admissions WHERE admission_generation = ?"
-      ).get(generation), "expires_at");
-      this.#invalidateGeneration(generation, expiresAt !== undefined && expiresAt <= now ? "expired" : "replaced", now);
+      this.#invalidateGeneration(generation, "replaced", now);
     }
   }
 

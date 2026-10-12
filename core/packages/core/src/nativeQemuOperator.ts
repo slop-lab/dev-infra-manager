@@ -3,14 +3,6 @@ import { loadNativeQemuSchedulerConfig, type NativeQemuCredential,
   type NativeQemuSchedulerConfig } from "./nativeQemuSchedulerConfig.js";
 import { UserError } from "./errors.js";
 
-export async function admitNativeQemuProject(projectId: string, configPath: string): Promise<unknown> {
-  if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(projectId)) {
-    throw new UserError("native QEMU Project ID is invalid");
-  }
-  const config = await loadNativeQemuSchedulerConfig(configPath);
-  return call(config, config.credentials.registrar, "POST", `/v1/qemu-projects/${projectId}/admission`);
-}
-
 export async function queryNativeQemuEvent(eventId: string, configPath: string): Promise<unknown> {
   if (!/^[0-9a-f]{64}$/.test(eventId)) throw new UserError("native QEMU event ID is invalid");
   const config = await loadNativeQemuSchedulerConfig(configPath);

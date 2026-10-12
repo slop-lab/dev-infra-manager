@@ -29,6 +29,8 @@ export type NativeGitAdmissionConfig = {
 };
 
 export interface NativeAdmissionSource {
+  readRegisteredPolicy(input: Pick<NativeAdmissionPolicy,
+    "projectId" | "repositoryId" | "protectedRef">): Promise<NativeAdmissionPolicy>;
   assertRegisteredPolicy(input: NativeAdmissionPolicy): Promise<NativeAdmissionPolicy>;
   assertReviewEvent(input: NativeReviewJobEvent): Promise<NativeReviewJobEvent>;
   assertIssuedAttempt(input: NativeAttemptAssignment): Promise<NativeAttemptAssignment>;
@@ -70,6 +72,11 @@ export function createNativeGitAdmissionSource(options: NativeGitAdmissionSource
   let attestation: Promise<void> | undefined;
 
   return {
+    async readRegisteredPolicy(input) {
+      const signal = AbortSignal.timeout(requestTimeoutMilliseconds);
+      await attest(signal);
+      return readPolicy(input, signal);
+    },
     async assertRegisteredPolicy(input) {
       const signal = AbortSignal.timeout(requestTimeoutMilliseconds);
       await attest(signal);

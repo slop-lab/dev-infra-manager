@@ -41,10 +41,13 @@ Path-prefix rules may add required reviewers based on either side of a rename,
 but every approval still covers the entire review object. A moved protected or
 proposal ref, changed candidate tree, changed policy, or changed bound identity
 makes existing approval stale.
-The current package folds security and quality revisions into that review
-identity. The native target instead keeps exact human approval bound to the
-security tuple while a quality-only revision change invalidates CI
-applicability. That revision split is not implemented here yet.
+Installed native reviews use strict review schema 2, envelope schema 2, and
+event schema 3. The immutable human review identity binds only the security,
+complete-tree, and reviewer tuple. A separate envelope identity binds that
+review, the current quality revision, the complete candidate config/script
+identities and planning status. A quality-only revision therefore preserves
+human approval identity while creating new events; evidence from the prior
+envelope is not applicable to promotion.
 
 Unknown routes, foreign Projects, foreign repositories, malformed paths, and
 unregistered repositories are not passed to Git. Both receive-pack discovery
@@ -168,13 +171,11 @@ Example schema-2 configuration:
 `ordinaryCi.endpoint` and `ordinaryCi.webhook.endpoint` are exactly the private
 Compose origin and native-event path shown above. All five ordinary-service
 usernames and passwords must be pairwise distinct and must not equal any native
-Git identity username or password. Installed readiness uses only `query` to
-authenticate exact `GET /v1/native-root-admission/identity`; the response must
-attest schema 1, service ID `ordinary-main`, the same serving generation, role
-`native-root-admission-reader`, and ordered scope
-`imported-root-admission:read`. Legacy attempt-query identity is not a readiness
-substitute. This admission reader can query eligibility but cannot issue an
-attempt, report a result, promote, or use Git transport.
+Git identity username or password. The standalone service uses `query` only for
+the exact admission and current-attempt verification requests below. Installed
+native Git readiness does not query ordinary eligibility; the paired ordinary
+service reconciles eligibility internally from each authenticated native review
+event.
 
 Native Git identities are limited to reader, writer, reviewer, promoter, and
 administrator roles. Schema-2 configuration rejects the obsolete generic
@@ -315,16 +316,16 @@ selected script from the named candidate tree, and returns the normalized
 descriptor and digest. It does not schedule or launch work.
 
 The package also exports `parseNativeCandidateJobConfig` as a parse-only boundary
-for the target schema-4 candidate file. It accepts raw bytes plus a trusted
-kind-labelled required-job policy, rejects overlapping ordinary/QEMU names and
-any mismatch with those separate policy sets, and returns canonical ordinary and
+for the target schema-4 candidate file. It accepts raw bytes independently of
+the protected required-job policy, rejects overlapping ordinary/QEMU names,
+caps both kinds at 64 combined jobs, and returns canonical ordinary and
 QEMU job maps plus a deterministic kind-labelled plan. It does not read candidate
 trees or scripts, admit or schedule work, execute Sysbox or QEMU jobs, report
 results, or alter the active schema-3 ordinary path.
 
 The separate `loadNativeCandidateJobInputs` library API pins one registered
-Project repository and protected ref, requires the caller's required job names
-to equal that registered policy's flat required-name set, and pins the protected
+Project repository and protected ref independently of the promotion-required
+job set, and pins the protected
 head, candidate commit, and candidate tree; reads
 the schema-4 config and every ordinary/QEMU script as bounded regular blobs from
 that exact tree; then rechecks the protected head after all reads. It supports
@@ -333,14 +334,12 @@ SHA-256 digests, safe paths, execution-kind labels, job names, and the fixed
 argv. It returns no executable bytes, images, bounds, host or capacity choices,
 credentials, admission, attempt, result, scheduling, or VM authority.
 
-The standalone registered review policy still constrains names rather than
-execution kinds, so direct loader callers remain responsible for supplying a
-reviewed kind-labelled set. The distinct internal
+Candidate job names and kinds come only from the strict candidate plan. The distinct internal
 `loadAuthoritativeNativeCandidateJobInputs` entrypoint instead accepts the
 trusted activated bundle runtime plus only a Project and candidate commit/tree.
 It derives the owner host from registered state and the protected ref, expected
-head, and sorted kind-labelled required jobs from the exact live durable
-`authoritative-v1` imported-root policy. It performs full owner, bundle, ref,
+head from the exact live durable `authoritative-v1` imported-root state, then
+derives the complete kind-labelled job set from the candidate. It performs full owner, bundle, ref,
 commit, tree, and reachable-graph verification before and after bounded Git
 reads, including exact current serving-generation activation. A completed
 `legacy-import-only` row remains available to import proof and protected-root
@@ -507,19 +506,19 @@ host broker for an already-ready schema-6 Project and its schema-9 workspace;
 the lease does not itself grant readiness, QEMU CI, or ordinary CI authority.
 The host-only draft reader consumes the root-read lease after matching the original
 receipt and current serving proof, but its presence does not make a Project
-ready or selectable. The installed bundle exposes review creation both to its
-trusted in-process caller and through the host-promoter-only exact
-`POST /v1/projects/<project>/repositories/root/reviews` route. It accepts the Project,
-literal `root` repository, and one canonical workspace proposal ref; derives
+ready or selectable. Each successful proposal create or fast-forward derives
 the live authoritative policy, protected head, candidate commit/tree, and
-workspace namespace; and stores one immutable complete-tree review with a
-sorted kind-aware `candidate-controlled` event set. It repeats the imported-root
-and ref proof after reading the complete binary-preserving diff. Review state is
-strictly checked on restart. Schema 7 additionally exposes exact
+workspace namespace, then stores one immutable complete-tree envelope with a
+sorted kind-aware `candidate-controlled` event set before ending the receive
+response. Client disconnect does not cancel this service-owned publication.
+Startup and activation scan every bounded registered proposal namespace and
+reconcile a ref committed before envelope publication without another push.
+Review state is strictly checked on restart. Schema 7 additionally exposes exact
 `GET /v1/human-reviewer-identity` and
 `GET /v1/projects/<project>/repositories/root/reviews/<review-id>`, plus a
 reviewer-only exact `POST` to that review's `/approvals` or `/revocations`
-suffix. The GET
+suffix. Reviewer-only `POST .../reviews/resolve` reads the exact current
+proposal envelope and creates no review or CI work. The GET
 requires the identity-attested serving generation in `x-dim-generation-id` and
 returns the immutable envelope, approvals, and `pending`, `approved`, or
 `stale` status after fresh
@@ -554,9 +553,10 @@ compare-and-swap before finalizing the transition. Startup reconciles crashes
 before or after that compare-and-swap exactly once. Protected-write authority
 exists only inside this checked host operation; smart HTTP remains proposal-only
 and has no administrator bypass. The packaged `dim-native-git operator review`
-commands create, inspect, approve, revoke, and promote through caller-owned,
+commands resolve, inspect, approve, revoke, and promote through caller-owned,
 single-link mode-`0600` connection files so credentials never appear in argv or
-output. Core readiness and workspace lifecycle wiring plus the host-side
+output. The obsolete host-promoter review collection POST and operator `create`
+command are rejected rather than aliased. Core readiness and workspace lifecycle wiring plus the host-side
 workspace-write lease client are active; reviewer UI remains separate work.
 Independent CI, when a Project requires it, must use a separately selected
 command definition and evidence class; native ordinary candidate self-tests do
@@ -594,8 +594,7 @@ descriptor only to the authenticated scheduler issuer; no credential or
 candidate-selected image, argv, host, or bounds is returned.
 
 QEMU review events use a separate service-owned outbox under
-`dim-authoritative-reviews/qemu-delivered`. Native Git discovers an existing,
-unexpired scheduler admission with `qemuCi.query`, then submits only exact
+`dim-authoritative-reviews/qemu-delivered`. Native Git submits exact
 stored `qemu` events with `qemuCi.eventIntake`. Lost responses retry identical
 bytes; the scheduler's event primary key prevents duplicate execution. The
 ordinary event endpoint, proof protocol, and delivered-marker namespace are
@@ -608,18 +607,16 @@ policy and ordinary-event scopes, and the serving generation even before
 activation. Its Project/root policy route returns the complete canonical
 `authoritative-v1` policy, kind-labelled jobs, reviewer rules, import nonce, and
 current root. The review-event route proves only an exact current stored
-`ordinary-sysbox` schema-2 event. These proofs mutate no state, don't imply
+`ordinary-sysbox` schema-3 event. These proofs mutate no state, don't imply
 approval, and have no fallback to the standalone `ordinary-authority` API.
 
 The paired installed ordinary service stores admission, review-event demand,
 claim lifecycle, cleaned host result, and result-delivery state in strict format
-11. Earlier formats aren't adopted or migrated. Registration binds the complete
-kind-labelled policy and import identity to the installer generation and global
-capacity digest. Fresh current checks use new UUIDv4 request IDs. Historical
-replay doesn't assert current eligibility.
+12. Earlier formats aren't adopted or migrated. Event intake automatically
+reconciles complete kind-labelled policy and import identity to the installer
+generation and global capacity digest.
 
-The installed event dispatcher uses only its outbound webhook credential and
-the separate query role's read-only admission discovery. It submits ordinary
+The installed event dispatcher uses only its outbound webhook credential. It submits ordinary
 events to `/v1/native-root-ci-events`, retries identical bytes after uncertain
 delivery, and writes a private digest-bound marker only after the exact durable
 receipt. QEMU events never enter this lane.

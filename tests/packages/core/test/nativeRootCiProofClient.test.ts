@@ -70,6 +70,23 @@ describe("native root CI proof client", () => {
       .rejects.toThrow(NativeRootCiProofUnavailableError);
   });
 
+  it("accepts a candidate-declared ordinary event absent from protected required jobs", async () => {
+    // Given
+    const candidateProof = candidateOnlyEventProof("placeholder");
+    const client = createNativeRootCiProofClient(config(), scriptedClient((request) => {
+      if (request.method === "GET") return identity();
+      return candidateOnlyEventProof(bodyRecord(request.body).requestId);
+    }));
+
+    // When
+    const proof = await client.readOrdinaryReviewEvent({ ...eventSelector(),
+      policyDigest: candidateProof.currentRoot.policyDigest }, AbortSignal.timeout(1_000));
+
+    // Then
+    expect(proof.policy.requiredJobs).toEqual([]);
+    expect(proof.event.jobName).toBe("source");
+  });
+
   it.each([
     ["event selector", (proof: Record<string, unknown>) => ({ ...proof,
       event: { ...record(proof.event), jobName: "foreign" } })],
@@ -174,13 +191,25 @@ function canonicalPolicyProof(requestId = "00000000-0000-4000-8000-000000000031"
 }
 
 function canonicalEventProof(requestId: unknown) {
+  const envelopeId = "9".repeat(64);
   return { ...canonicalPolicyProof(String(requestId)), reviewLiveness: "current", event: {
-    schemaVersion: 2, type: "dim.native.review-job.available", eventId: eventId(), projectId: "project-a",
-    repositoryId: "root", protectedRef: "refs/heads/main", reviewId: "a".repeat(64),
+    schemaVersion: 3, type: "dim.native.review-job.available", eventId: eventId(), projectId: "project-a",
+    repositoryId: "root", protectedRef: "refs/heads/main", reviewId: "a".repeat(64), envelopeId,
     expectedProtectedHead: "1".repeat(40), candidateCommit: "3".repeat(40), candidateTree: "4".repeat(40),
     policyRevision: policyFixture().policyRevision, requiredReviewRevision: policyFixture().requiredReviewRevision,
-    requiredJobSetRevision: policyFixture().requiredJobSetRevision, executionKind: "ordinary-sysbox",
+    qualityRevision: policyFixture().requiredJobSetRevision, executionKind: "ordinary-sysbox",
     jobName: "source", evidenceClass: "candidate-controlled" } };
+}
+
+function candidateOnlyEventProof(requestId: unknown) {
+  const proof = canonicalEventProof(requestId);
+  const requiredJobs: readonly never[] = [];
+  const requiredJobSetRevision = revision("jobs", 2, requiredJobs);
+  const policy = { ...proof.policy, requiredJobSetRevision, requiredJobs };
+  return { ...proof,
+    currentRoot: { ...proof.currentRoot,
+      policyDigest: createHash("sha256").update(JSON.stringify(policy)).digest("hex") },
+    policy, event: { ...proof.event, qualityRevision: requiredJobSetRevision } };
 }
 
 function policyFixture() {
@@ -189,12 +218,15 @@ function policyFixture() {
     { name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }
   ] as const;
   const reviewers = { requiredReviewerIds: ["owner"], pathReviewerRules: [] } as const;
-  const revision = (domain: string, version: number, value: unknown) => createHash("sha256")
-    .update(`dim-native-${domain}-v${version}\0`).update(JSON.stringify(value)).digest("hex");
   return { schemaVersion: 1, protectedRef: "refs/heads/main",
     policyRevision: revision("policy", 3, { protectedRef: "refs/heads/main", ...reviewers }),
     requiredReviewRevision: revision("reviewers", 1, reviewers),
     requiredJobSetRevision: revision("jobs", 2, requiredJobs), requiredJobs, ...reviewers };
+}
+
+function revision(domain: string, version: number, value: unknown): string {
+  return createHash("sha256").update(`dim-native-${domain}-v${version}\0`)
+    .update(JSON.stringify(value)).digest("hex");
 }
 
 function unsortedJobsProof(proof: Record<string, unknown>): Record<string, unknown> {
@@ -211,8 +243,8 @@ function unsortedJobsProof(proof: Record<string, unknown>): Record<string, unkno
 }
 
 function eventId(): string {
-  return createHash("sha256").update("dim-native-authoritative-review-event-v1\0")
-    .update(JSON.stringify({ executionKind: "ordinary-sysbox", jobName: "source", reviewId: "a".repeat(64) }))
+  return createHash("sha256").update("dim-native-authoritative-review-event-v3\0")
+    .update(JSON.stringify({ envelopeId: "9".repeat(64), executionKind: "ordinary-sysbox", jobName: "source" }))
     .digest("hex");
 }
 

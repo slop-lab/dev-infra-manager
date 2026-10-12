@@ -124,13 +124,14 @@ async function currentTuple(runtime: AuthoritativeNativeCandidateRuntime, projec
   }
   const review = envelope.review;
   const descriptor = event.payload.descriptor;
-  const required = review.requiredJobs.some((job) => job.executionKind === "ordinary-sysbox"
+  const required = envelope.planning.status === "valid" && envelope.planning.jobs.some((job) => job.executionKind === "ordinary-sysbox"
     && job.jobName === descriptor.jobName);
-  if (!required || (await nativeHumanReviewStaleReasons(runtime, target, review)).length > 0
+  if (!required || envelope.qualityRevision !== target.imported.policy.requiredJobSetRevision
+    || (await nativeHumanReviewStaleReasons(runtime, target, review)).length > 0
     || review.protectedRef !== descriptor.protectedRef || review.expectedProtectedHead !== descriptor.expectedProtectedHead
     || review.candidateCommit !== descriptor.candidateCommit || review.candidateTree !== descriptor.candidateTree
     || review.policyRevision !== descriptor.policyRevision || review.requiredReviewRevision !== descriptor.requiredReviewRevision
-    || review.requiredJobSetRevision !== descriptor.requiredJobSetRevision) {
+    || envelope.qualityRevision !== descriptor.requiredJobSetRevision) {
     throw new NativeOrdinaryStatusConflictError();
   }
   const attempt = await createAuthoritativeOrdinaryAttemptStore(target.repository).current(reviewId, descriptor.jobName);

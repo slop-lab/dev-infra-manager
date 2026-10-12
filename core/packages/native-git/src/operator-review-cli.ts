@@ -23,13 +23,13 @@ export async function runNativeGitOperatorReview(arguments_: readonly string[]):
   const projectId = arguments_[2];
   if (operation === undefined || connectionPath === undefined || projectId === undefined) return false;
   const connection = await loadConnection(connectionPath);
-  const expectedRole = operation === "create" || operation === "promote" ? "host-promoter" : "human-reviewer";
+  const expectedRole = operation === "promote" ? "host-promoter" : "human-reviewer";
   if (connection.role !== expectedRole) throw new NativeGitOperatorReviewError(`operation requires ${expectedRole} connection`);
   await attest(connection);
   const prefix = `/v1/projects/${encodeURIComponent(projectId)}/repositories/root/reviews`;
   let request: Parameters<typeof requestReviewApi>[0];
-  if (operation === "create" && arguments_.length === 4) {
-    request = { baseUrl: connection.endpoint, method: "POST", path: prefix,
+  if (operation === "resolve" && arguments_.length === 4) {
+    request = { baseUrl: connection.endpoint, method: "POST", path: `${prefix}/resolve`,
       credentials: connection, generationId: connection.generationId,
       body: { schemaVersion: 1, proposalRef: arguments_[3] } };
   } else if (operation === "inspect" && arguments_.length === 4) {

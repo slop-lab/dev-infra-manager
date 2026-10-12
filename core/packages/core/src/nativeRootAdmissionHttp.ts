@@ -7,7 +7,6 @@ import {
   NativeRootCiProofRejectedError,
   NativeRootCiProofUnavailableError
 } from "./nativeRootCiProofClient.js";
-import { NativeRootAdmissionResponseTooLargeError } from "./nativeRootAdmissionResponse.js";
 
 const maximumBodyBytes = 4 * 1024;
 
@@ -40,7 +39,6 @@ export function nativeRootBearerAuthorized(request: IncomingMessage, token: stri
 }
 
 export function sendNativeRootAdmissionError(response: ServerResponse, error: unknown): void {
-  if (error instanceof NativeRootAdmissionResponseTooLargeError) return sendNativeRootJson(response, 413, { error: error.message });
   if (error instanceof NativeRootCiProofUnavailableError) return sendNativeRootJson(response, 503, { error: error.message });
   if (error instanceof NativeRootCiProofRejectedError) return sendNativeRootJson(response, error.statusCode, { error: error.message });
   if (error instanceof NativeRootAdmissionHttpError) return sendNativeRootJson(response, error.status, { error: error.message });

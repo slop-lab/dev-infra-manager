@@ -47,14 +47,9 @@ export async function deriveAuthoritativeQemuExecutionDescriptor(
       });
     }
     const snapshot = await loadAuthoritativeExecutionReview(runtime, request.data);
-    const requiredJob = snapshot.envelope.review.requiredJobs
-      .find(({ jobName }) => jobName === request.data.jobName);
-    if (requiredJob?.executionKind !== "qemu") {
-      throw new CandidateExecutionError("authoritative review job is not qemu");
-    }
     const { inputs, review } = await loadCurrentAuthoritativeExecutionInputs(runtime, snapshot);
     const selected = inputs.plan.find(({ name }) => name === request.data.jobName);
-    if (selected?.kind !== "qemu") {
+    if (selected?.kind !== "qemu" || inputs.configBlob === null) {
       throw new CandidateExecutionError("authoritative candidate job is not qemu");
     }
     const descriptor = qemuExecutionDescriptorSchema.parse({
@@ -72,7 +67,7 @@ export async function deriveAuthoritativeQemuExecutionDescriptor(
       candidateTree: review.candidateTree,
       policyRevision: review.policyRevision,
       requiredReviewRevision: review.requiredReviewRevision,
-      requiredJobSetRevision: review.requiredJobSetRevision,
+      requiredJobSetRevision: snapshot.envelope.qualityRevision,
       evidenceClass: "candidate-controlled",
       configBlob: inputs.configBlob,
       script: selected.script,

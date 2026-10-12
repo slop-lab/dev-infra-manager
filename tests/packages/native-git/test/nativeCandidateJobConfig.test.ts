@@ -1,15 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   candidateArgv,
-  parseNativeCandidateJobConfig,
-  type NativeCandidateRequiredJob
+  parseNativeCandidateJobConfig
 } from "../../../../core/packages/native-git/src/index.js";
-
-const requiredJobs = [
-  { name: "source", kind: "ordinary-sysbox" },
-  { name: "lint", kind: "ordinary-sysbox" },
-  { name: "integration", kind: "qemu" }
-] as const satisfies readonly NativeCandidateRequiredJob[];
 
 function validConfig(): string {
   return `schemaVersion: 4
@@ -35,7 +28,7 @@ describe("native schema-4 candidate job config", () => {
     const bytes = Buffer.from(validConfig(), "utf8");
 
     // When
-    const config = parseNativeCandidateJobConfig(bytes, [requiredJobs[2], requiredJobs[0], requiredJobs[1]]);
+    const config = parseNativeCandidateJobConfig(bytes);
 
     // Then
     expect(config).toEqual({
@@ -61,7 +54,7 @@ describe("native schema-4 candidate job config", () => {
     expect(Object.keys(config.qemu.jobs)).toEqual(["integration"]);
   });
 
-  it("accepts one required kind while keeping the other map separate and empty", () => {
+  it("accepts one candidate kind while keeping the other map separate and empty", () => {
     // Given
     const bytes = Buffer.from(validConfig()
       .replace("    lint:\n      script: .dim/ci/jobs/lint.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n", "")
@@ -69,7 +62,7 @@ describe("native schema-4 candidate job config", () => {
       .replace("  jobs:\nqemu:", "  jobs: {}\nqemu:"));
 
     // When
-    const config = parseNativeCandidateJobConfig(bytes, [{ name: "integration", kind: "qemu" }]);
+    const config = parseNativeCandidateJobConfig(bytes);
 
     // Then
     expect(config.ordinary.jobs).toEqual({});
@@ -85,10 +78,26 @@ describe("native schema-4 candidate job config", () => {
     ));
 
     // When: both job-kind sets are matched against trusted policy.
-    const config = parseNativeCandidateJobConfig(bytes, requiredJobs);
+    const config = parseNativeCandidateJobConfig(bytes);
 
     // Then: only the QEMU job points to its selected script.
     expect(config.qemu.jobs.integration?.script).toBe(".dim/ci/jobs/suite.bash");
     expect(config.ordinary.jobs.source?.script).toBe(".dim/ci/jobs/source.bash");
+  });
+
+  it("accepts candidate-added jobs without a protected required-job input", () => {
+    // Given
+    const bytes = Buffer.from(validConfig().replace("    source:", "    extra:\n      script: .dim/ci/jobs/extra.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n    source:"));
+
+    // When
+    const config = parseNativeCandidateJobConfig(bytes);
+
+    // Then
+    expect(config.plan.map(({ name, kind }) => ({ name, kind }))).toEqual([
+      { name: "extra", kind: "ordinary-sysbox" },
+      { name: "lint", kind: "ordinary-sysbox" },
+      { name: "source", kind: "ordinary-sysbox" },
+      { name: "integration", kind: "qemu" }
+    ]);
   });
 });

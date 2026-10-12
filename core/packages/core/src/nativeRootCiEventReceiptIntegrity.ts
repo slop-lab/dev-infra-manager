@@ -70,7 +70,7 @@ function assertDemands(database: DatabaseSync, receiptCount: number): void {
       || text(row, "review_id") !== event.reviewId || text(row, "candidate_commit") !== event.candidateCommit
       || text(row, "candidate_tree") !== event.candidateTree || text(row, "policy_revision") !== event.policyRevision
       || text(row, "required_review_revision") !== event.requiredReviewRevision
-      || text(row, "required_job_set_revision") !== event.requiredJobSetRevision
+      || text(row, "required_job_set_revision") !== event.qualityRevision
       || text(row, "execution_kind") !== event.executionKind || text(row, "job_name") !== event.jobName
       || text(row, "evidence_class") !== event.evidenceClass
       || (state === "queued" || state === "preparing") && (text(row, "admission_state") !== "active"
@@ -201,8 +201,7 @@ function assertRow(row: Readonly<Record<string, unknown>>): void {
     || text(row, "root_tree").length !== text(row, "root_commit").length
     || event.policyRevision !== proof.policy.policyRevision
     || event.requiredReviewRevision !== proof.policy.requiredReviewRevision
-    || event.requiredJobSetRevision !== proof.policy.requiredJobSetRevision
-    || !proof.policy.requiredJobs.some((job) => job.name === event.jobName && job.kind === "ordinary-sysbox")
+    || event.qualityRevision !== proof.policy.requiredJobSetRevision
     || receiptSequence > proof.currentRoot.sequence
     || receiptSequence === proof.currentRoot.sequence && (text(row, "root_commit") !== proof.currentRoot.commit
       || text(row, "root_tree") !== proof.currentRoot.tree)) invalid();

@@ -4,12 +4,6 @@ import { DatabaseSync } from "node:sqlite";
 import type { NativeOrdinaryAuthorityConfig } from "./nativeOrdinaryAuthorityConfig.js";
 import { validateNativeOrdinaryAuthorityConfig } from "./nativeOrdinaryAuthorityConfig.js";
 import { nativeCapacityConfigDigest } from "./nativeOrdinaryAuthorityProtocol.js";
-import {
-  parseNativeRootAdmissionRequest,
-  nativeRootAdmissionTupleDigest,
-  NativeRootAdmissionRequestError,
-  type NativeRootAdmissionOperation
-} from "./nativeRootAdmissionModel.js";
 import { NativeRootAdmissionStore } from "./nativeRootAdmissionStore.js";
 import {
   createNativeRootCiProofClient,
@@ -33,10 +27,7 @@ import { NativeRootCiResultReporter } from "./nativeRootCiResultReporter.js";
 import { createNodeNativeGitAdmissionHttpClient } from "./nativeGitAdmissionSource.js";
 import { createNativeGitAttemptIssuerClient } from "./nativeGitAttemptIssuerClient.js";
 import { createNativeGitCurrentAttemptProofClient } from "./nativeGitCurrentAttemptProofClient.js";
-import { createNativeRootAdmissionReadHandler } from "./nativeRootAdmissionReadHttp.js";
-import { createNativeRootAdmissionResponse } from "./nativeRootAdmissionResponse.js";
 import {
-  nativeRootBasicAuthorized,
   nativeRootBearerAuthorized,
   readNativeRootAdmissionJson,
   sendNativeRootAdmissionError,
@@ -50,8 +41,6 @@ import {
   assertActivationOptions,
   bindActivation
 } from "./nativeRootAdmissionActivation.js";
-
-const projectPattern = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 
 export type NativeRootAdmissionServiceOptions = {
   readonly config: NativeOrdinaryAuthorityConfig;
@@ -77,7 +66,7 @@ export async function configuredNativeRootAdmissionServer(
   assertNativeRootCiResultIntegrity(database, 100_000, options.config.nativeGit.resultReporter.username);
   const store = new NativeRootAdmissionStore(database, { ordinaryServiceId: options.config.serviceId,
     controlPlaneGenerationId: options.expectedGenerationId, capacityConfigDigest,
-    leaseMilliseconds: options.config.admissionLeaseMilliseconds, now: options.now ?? Date.now });
+    leaseMilliseconds: options.config.eligibilityLeaseMilliseconds, now: options.now ?? Date.now });
   const nativeGitHttpClient = options.proofHttpClient ?? createNodeNativeGitAdmissionHttpClient();
   const proofClient = createNativeRootCiProofClient({ endpoint: options.config.nativeGit.endpoint,
     serviceId: options.config.nativeGit.serviceId, generationId: options.expectedGenerationId,
@@ -91,10 +80,14 @@ export async function configuredNativeRootAdmissionServer(
     activated: () => activated, activationBound, now: options.now ?? Date.now });
   const handleReceipt = createNativeRootCiEventReceiptHandler({ config: options.config,
     expectedGenerationId: options.expectedGenerationId, store: receiptStore, proofClient,
-    activated: () => activated, activationBound });
-  const handleRead = createNativeRootAdmissionReadHandler({ config: options.config,
-    generationId: options.expectedGenerationId, store,
-    active: () => activated && activationBound() });
+    activated: () => activated, activationBound,
+    currentEligibility(projectId) { return store.discover(projectId)?.admissionGeneration; },
+    async reconcileEligibility(projectId) {
+      const proof = await proofClient.readImportedPolicy(projectId, AbortSignal.timeout(5_000));
+      const result = store.register(proof);
+      if (result.kind === "conflict") throw new NativeRootEligibilityConflictError();
+      return result.admission.admissionGeneration;
+    } });
   const claimStore = new NativeRootCiClaimStore(database, { serviceId: options.config.serviceId,
     generationId: options.expectedGenerationId, serviceEpochId, capacityConfigDigest,
     capacities, now: options.now ?? Date.now });
@@ -157,7 +150,6 @@ export async function configuredNativeRootAdmissionServer(
       database.prepare("SELECT 1").get();
       return sendNativeRootJson(response, 200, { status: "ready", schemaVersion: 1 });
     }
-    if (await handleRead(request, response, url)) return;
     if (await handleClaim(request, response, url)) return;
     if (await handleClaimLifecycle(request, response, url)) return;
     if (await handleResult(request, response, url) || await handleResultProof(request, response, url)
@@ -176,67 +168,10 @@ export async function configuredNativeRootAdmissionServer(
       return sendNativeRootJson(response, 200, { schemaVersion: 1, generationId, activated: true });
     }
     if (await handleReceipt(request, response, url)) return;
-    const route = admissionRoute(url.pathname);
-    if (request.method !== "POST" || route === undefined) return sendNativeRootNotFound(response);
-    const credential = route.operation === "current" ? options.config.credentials.query : options.config.credentials.registrar;
-    if (!nativeRootBasicAuthorized(request, credential)) return sendNativeRootNotFound(response);
-    if (!activated || !activationIsBound(database, options.expectedGenerationId, activationDigest)) {
-      return sendNativeRootJson(response, 503, { error: "native root admission requires exact generation activation" });
-    }
-    const input = parseNativeRootAdmissionRequest(await readNativeRootAdmissionJson(request), route.operation);
-    if (input.generationId !== options.expectedGenerationId) {
-      return sendNativeRootJson(response, 409, { error: "native root admission generation is stale" });
-    }
-    const tupleDigest = nativeRootAdmissionTupleDigest(route.operation, route.projectId, input);
-    const replay = store.replay(input.requestId, route.operation, tupleDigest);
-    switch (replay.kind) {
-      case "conflict": return sendNativeRootJson(response, 409, { error: "request replay conflicts" });
-      case "replay": return sendNativeRootJson(response, replay.response.status, replay.response.body);
-      case "none": break;
-      default: return assertNever(replay);
-    }
-    if (!store.hasRequestCapacity()) {
-      return sendNativeRootJson(response, 429, { error: "native root admission request capacity is full" });
-    }
-    if (route.operation === "register") {
-      const proof = await proofClient.readImportedPolicy(route.projectId, AbortSignal.timeout(5_000));
-      return sendAdmissionResult(response, store.commitRegistration({ proof, request: {
-        requestId: input.requestId, operation: route.operation, tupleDigest,
-        responseBody: (admission) => responseBody(input.requestId, admission)
-      } }));
-    }
-    const admissionGeneration = input.admissionGeneration;
-    if (admissionGeneration === undefined) throw new NativeRootAdmissionRequestError("admission generation is required");
-    return sendAdmissionResult(response, store.commitExisting({ projectId: route.projectId, admissionGeneration,
-      request: { requestId: input.requestId, operation: route.operation, tupleDigest,
-        responseBody: (admission) => responseBody(input.requestId, admission) } }));
-  }
-
-  function responseBody(requestId: string, admission: import("./nativeRootAdmissionModel.js").NativeRootAdmission): unknown {
-    return createNativeRootAdmissionResponse({ serviceId: options.config.serviceId,
-      generationId: options.expectedGenerationId, requestId, admission });
-  }
-
-  function sendAdmissionResult(response: ServerResponse,
-    result: ReturnType<NativeRootAdmissionStore["commitRegistration"]>): void {
-    switch (result.kind) {
-      case "committed":
-      case "replay": return sendNativeRootJson(response, result.response.status, result.response.body);
-      case "request-conflict": return sendNativeRootJson(response, 409, { error: "request replay conflicts" });
-      case "capacity-full": return sendNativeRootJson(response, 429, { error: "native root admission request capacity is full" });
-      case "operation-conflict": return sendNativeRootJson(response, 409, { error: "current imported root conflicts" });
-      case "not-found": return sendNativeRootNotFound(response);
-      default: return assertNever(result);
-    }
+    return sendNativeRootNotFound(response);
   }
 }
 
-function admissionRoute(path: string): { readonly projectId: string; readonly operation: NativeRootAdmissionOperation } | undefined {
-  const match = /^\/v1\/projects\/([^/]+)\/repositories\/root\/native-root-admission\/(register|current|revoke)$/.exec(path);
-  if (match === null || !projectPattern.test(match[1] ?? "")) return undefined;
-  const operation = match[2];
-  if (operation !== "register" && operation !== "current" && operation !== "revoke") return undefined;
-  return { projectId: match[1] ?? "", operation };
+class NativeRootEligibilityConflictError extends Error {
+  readonly name = "NativeRootEligibilityConflictError";
 }
-
-function assertNever(value: never): never { throw new TypeError(`unexpected native root admission result: ${JSON.stringify(value)}`); }

@@ -135,16 +135,35 @@ dim-acme/environment
 Project has a distinct strict Project record containing its immutable native
 service and Project identities and registered repository IDs, not a Gitea
 organization ID or provider URL. The trusted host creates the Project once;
-Projects whose quality policy selects CI acquire the corresponding globally
-configured ordinary, QEMU, or dual-kind admission without a second
-Project-specific CI approval. Registration must bind the
+Project registration automatically makes the Project eligible for every
+globally configured ordinary and QEMU execution kind, without a per-Project CI
+registration, admission, approval, or refresh. Registration must bind the
 native service identity, Project, root repository, protected ref and security
 policy revision before publishing Project readiness. The independently
 revisioned Project quality policy defaults to an empty required-job set and may
-be configured without changing readiness. A candidate, workspace writer,
-webhook or CI worker cannot create or change that binding. Project state must
+be configured without changing readiness or CI eligibility. It selects only
+the result subset required for protected promotion. A candidate, workspace
+writer, webhook or CI worker cannot create or change the Project binding.
+Project state must
 not contain credentials, host Docker authority or CI service tokens. A native
-Project never falls back to Gitea if admission or native Git is unavailable.
+Project never falls back to Gitea if native Git or a CI service is unavailable.
+
+Every successful create or fast-forward update of a workspace proposal ref
+automatically reconciles an immutable exact-candidate CI envelope. Native Git
+parses `.dim/ci/runner.yml` from that commit and queues every valid declared
+ordinary and QEMU job. No host-promoter review-create action or human approval
+precedes this execution. The candidate may change or add jobs and scripts
+within the strict schema and operator-owned limits without changing
+`requiredJobs`. Jobs not selected by `requiredJobs` remain visible evidence but
+do not block promotion. If a selected job is absent or unsuccessful, promotion
+remains blocked. Temporary service outage leaves the candidate work durably
+queued for internal retry; it does not require another push or operator action.
+An absent `.dim/ci/runner.yml` is a valid empty plan with no events. A present
+invalid schema-4 manifest or invalid referenced script publishes no events and
+records a durable invalid planning status for the exact candidate. Planning is
+atomic across at most 64 ordinary and QEMU jobs combined: no valid prefix may
+be queued from an invalid plan, and invalid planning is never reported as
+successful CI even when the quality policy requires no jobs.
 
 The trusted host imports or initializes exactly one root repository before
 publishing it as runnable. Initial import has narrowly scoped, temporary
@@ -227,8 +246,9 @@ separate current connection matches the proof's serving generation. An
 earlier-generation incomplete import cannot roll over. This path
 does not attest an external source origin or enable Project lifecycle
 selection. No Project-ready
-record, workspace reader/writer, reviewer, promoter, or native ordinary/QEMU
-CI admission is issued by this service-level import. The trusted host may use
+record, workspace reader/writer, reviewer, promoter, or executable CI attempt
+is issued by this service-level import. Automatic CI eligibility begins only
+with canonical trusted Project registration. The trusted host may use
 the same proof and a freshly minted lease to materialize the exact imported
 commit and tree as a private read-only host snapshot under the distinct
 `assets/native-project-roots/<project-id>/<commit>` namespace. It MUST hold the
@@ -326,8 +346,8 @@ is unavailable, never a successful or ordinary-substituted QEMU result.
 The native QEMU scheduler and host connection are distinct from the
 predecessor Gitea QEMU topology and from ordinary Sysbox claims and results.
 Every native Project uses operator-owned digest-pinned common capacity images
-without a Project-specific approval or runner token. Candidate job bytes are
-execution inputs, never Project admission; exact kind, attempt, lease cleanup
+without a Project-specific approval, admission, refresh, or runner token.
+Candidate job bytes are execution inputs, never eligibility authority; exact kind, attempt, lease cleanup
 and candidate-controlled provenance bind each result as specified in
 [Native QEMU Scheduler and Evidence](local-details/native-qemu.md).
 Until that full adapter exists, schema-4/Gitea remains the only runnable

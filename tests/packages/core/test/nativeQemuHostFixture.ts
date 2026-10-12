@@ -32,12 +32,15 @@ export const qemuAssignment: NativeQemuHostAssignment = {
   claim: { claimId: "00000000-0000-4000-8000-000000000001",
     requestId: "00000000-0000-4000-8000-000000000003", hostId: "host-a", capacity: "kvm-a",
     admissionGeneration: qemuDescriptor.admissionGeneration, leaseExpiresAt: Date.now() + 60_000,
-    event: { schemaVersion: 2, type: "dim.native.review-job.available", eventId: "6".repeat(64),
+    event: { schemaVersion: 3, type: "dim.native.review-job.available",
+      eventId: createHash("sha256").update("dim-native-authoritative-review-event-v3\0")
+        .update(JSON.stringify({ envelopeId: "9".repeat(64), executionKind: "qemu", jobName: qemuDescriptor.jobName }))
+        .digest("hex"), envelopeId: "9".repeat(64),
       projectId: qemuDescriptor.projectId, repositoryId: "root", protectedRef: qemuDescriptor.protectedRef,
       reviewId: "1".repeat(64), expectedProtectedHead: qemuDescriptor.expectedProtectedHead,
       candidateCommit: qemuDescriptor.candidateCommit, candidateTree: qemuDescriptor.candidateTree,
       policyRevision: qemuDescriptor.policyRevision, requiredReviewRevision: qemuDescriptor.requiredReviewRevision,
-      requiredJobSetRevision: qemuDescriptor.requiredJobSetRevision, executionKind: "qemu",
+      qualityRevision: qemuDescriptor.requiredJobSetRevision, executionKind: "qemu",
       jobName: qemuDescriptor.jobName, evidenceClass: "candidate-controlled" } },
   attempt: { attemptId: "00000000-0000-4000-8000-000000000002",
     descriptorDigest: nativeQemuDescriptorDigest(qemuDescriptor), descriptor: qemuDescriptor }

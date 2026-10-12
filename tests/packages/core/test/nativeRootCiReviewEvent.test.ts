@@ -7,7 +7,7 @@ import {
 } from "../../../../core/packages/core/src/nativeRootCiReviewEvent.js";
 
 describe("native root CI review event parser", () => {
-  it("canonicalizes the exact schema-2 ordinary event for proof and receipt use", () => {
+  it("canonicalizes the exact schema-3 ordinary event for proof and receipt use", () => {
     // Given
     const input = event();
 
@@ -19,7 +19,7 @@ describe("native root CI review event parser", () => {
   });
 
   it.each([
-    ["legacy schema", { ...event(), schemaVersion: 1 }],
+    ["legacy schema", { ...event(), schemaVersion: 2 }],
     ["qemu", { ...event(), executionKind: "qemu" }],
     ["extra field", { ...event(), extra: true }],
     ["executable input", { ...event(), argv: ["sh"] }],
@@ -32,12 +32,13 @@ describe("native root CI review event parser", () => {
 
 function event() {
   const reviewId = "1".repeat(64);
+  const envelopeId = "9".repeat(64);
   const jobName = "source";
-  const eventId = createHash("sha256").update("dim-native-authoritative-review-event-v1\0")
-    .update(JSON.stringify({ executionKind: "ordinary-sysbox", jobName, reviewId })).digest("hex");
-  return { schemaVersion: 2, type: "dim.native.review-job.available", eventId, projectId: "project-a",
-    repositoryId: "root", protectedRef: "refs/heads/main", reviewId, expectedProtectedHead: "1".repeat(40),
+  const eventId = createHash("sha256").update("dim-native-authoritative-review-event-v3\0")
+    .update(JSON.stringify({ envelopeId, executionKind: "ordinary-sysbox", jobName })).digest("hex");
+  return { schemaVersion: 3, type: "dim.native.review-job.available", eventId, projectId: "project-a",
+    repositoryId: "root", protectedRef: "refs/heads/main", reviewId, envelopeId, expectedProtectedHead: "1".repeat(40),
     candidateCommit: "2".repeat(40), candidateTree: "3".repeat(40), policyRevision: "4".repeat(64),
-    requiredReviewRevision: "5".repeat(64), requiredJobSetRevision: "6".repeat(64),
+    requiredReviewRevision: "5".repeat(64), qualityRevision: "6".repeat(64),
     executionKind: "ordinary-sysbox", jobName, evidenceClass: "candidate-controlled" };
 }

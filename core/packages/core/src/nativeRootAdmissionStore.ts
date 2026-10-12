@@ -2,13 +2,10 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import {
   nativeRootAdmissionBindingDigest,
-  type NativeRootAdmission,
-  type NativeRootAdmissionOperation
+  type NativeRootAdmission
 } from "./nativeRootAdmissionModel.js";
 import { parseNativeRootCiPolicyProof, type NativeRootCiPolicyProof } from "./nativeRootCiProofModel.js";
 import { NativeRootCiDemandStore } from "./nativeRootCiDemandStore.js";
-
-const requestLimit = 100_000;
 
 export type NativeRootAdmissionStoreContext = {
   readonly ordinaryServiceId: string;
@@ -17,19 +14,8 @@ export type NativeRootAdmissionStoreContext = {
   readonly leaseMilliseconds: number;
   readonly now: () => number;
 };
-export type StoredAdmissionResponse = { readonly status: number; readonly body: unknown };
-export type NativeRootAdmissionRequest<Operation extends NativeRootAdmissionOperation = NativeRootAdmissionOperation> = {
-  readonly requestId: string;
-  readonly operation: Operation;
-  readonly tupleDigest: string;
-  readonly responseBody: (admission: NativeRootAdmission) => unknown;
-};
-export type ReplayResult = { readonly kind: "none" } | { readonly kind: "conflict" }
-  | { readonly kind: "replay"; readonly response: StoredAdmissionResponse };
 export type RegistrationResult = { readonly kind: "registered"; readonly admission: NativeRootAdmission }
   | { readonly kind: "conflict" };
-export type AdmissionRequestResult = { readonly kind: "committed" | "replay"; readonly response: StoredAdmissionResponse }
-  | { readonly kind: "request-conflict" | "capacity-full" | "operation-conflict" | "not-found" };
 
 export class NativeRootAdmissionStore {
   readonly demandStore: NativeRootCiDemandStore;
@@ -41,48 +27,11 @@ export class NativeRootAdmissionStore {
   activate(): void {
     this.transaction(() => {
       const now = this.context.now();
-      this.expire(now);
       this.demandStore.supersedeRotated({ controlPlaneGenerationId: this.context.controlPlaneGenerationId,
         capacityConfigDigest: this.context.capacityConfigDigest, now });
       this.database.prepare(`UPDATE native_root_admissions SET state = 'replaced', ended_at = ?
         WHERE state = 'active' AND (control_plane_generation_id <> ? OR capacity_config_digest <> ?)`)
         .run(now, this.context.controlPlaneGenerationId, this.context.capacityConfigDigest);
-    });
-  }
-
-  replay(requestId: string, operation: NativeRootAdmissionOperation, tupleDigest: string): ReplayResult {
-    const row = record(this.database.prepare(`SELECT operation, tuple_digest, status_code, response_json
-      FROM native_root_admission_requests WHERE request_id = ?`).get(requestId));
-    if (row === undefined) return { kind: "none" };
-    if (row.operation !== operation || row.tuple_digest !== tupleDigest) return { kind: "conflict" };
-    if (typeof row.status_code !== "number" || typeof row.response_json !== "string") corrupted();
-    return { kind: "replay", response: { status: row.status_code, body: JSON.parse(row.response_json) } };
-  }
-
-  hasRequestCapacity(): boolean {
-    return scalar(this.database.prepare("SELECT COUNT(*) AS value FROM native_root_admission_requests").get()) < requestLimit;
-  }
-
-  commitRegistration(input: {
-    readonly request: NativeRootAdmissionRequest<"register">;
-    readonly proof: NativeRootCiPolicyProof;
-  }): AdmissionRequestResult {
-    return this.commitRequest(input.request, () => {
-      const result = this.registerMutation(input.proof);
-      return result.kind === "conflict" ? { kind: "operation-conflict" } : { kind: "success", admission: result.admission };
-    });
-  }
-
-  commitExisting(input: {
-    readonly request: NativeRootAdmissionRequest<"current" | "revoke">;
-    readonly projectId: string;
-    readonly admissionGeneration: string;
-  }): AdmissionRequestResult {
-    return this.commitRequest(input.request, () => {
-      const admission = input.request.operation === "current"
-        ? this.current(input.projectId, input.admissionGeneration)
-        : this.revokeMutation(input.projectId, input.admissionGeneration);
-      return admission === undefined ? { kind: "not-found" } : { kind: "success", admission };
     });
   }
 
@@ -98,7 +47,6 @@ export class NativeRootAdmissionStore {
       projectId: proof.projectId, importNonce: proof.currentRoot.importNonce,
       protectedRef: proof.currentRoot.protectedRef, policyDigest: proof.currentRoot.policyDigest,
       policy: proof.policy, capacityConfigDigest: this.context.capacityConfigDigest });
-    this.expire(now);
     const active = record(this.database.prepare(`SELECT * FROM native_root_admissions
       WHERE project_id = ? AND repository_id = 'root' AND state = 'active'`).get(proof.projectId));
     if (active !== undefined && active.binding_digest === bindingDigest) {
@@ -139,11 +87,11 @@ export class NativeRootAdmissionStore {
   }
 
   current(projectId: string, admissionGeneration: string): NativeRootAdmission | undefined {
-    this.expire(this.context.now());
     const row = record(this.database.prepare(`SELECT * FROM native_root_admissions WHERE project_id = ?
       AND repository_id = 'root' AND admission_generation = ? AND state = 'active'
+      AND lease_expires_at > ?
       AND control_plane_generation_id = ? AND capacity_config_digest = ?`).get(projectId, admissionGeneration,
-      this.context.controlPlaneGenerationId, this.context.capacityConfigDigest));
+      this.context.now(), this.context.controlPlaneGenerationId, this.context.capacityConfigDigest));
     return row === undefined ? undefined : admissionFromRow(row);
   }
 
@@ -168,28 +116,6 @@ export class NativeRootAdmissionStore {
     return admission;
   }
 
-  private commitRequest(request: NativeRootAdmissionRequest,
-    mutate: () => RequestMutationResult): AdmissionRequestResult {
-    return this.transaction(() => {
-      const replay = this.replay(request.requestId, request.operation, request.tupleDigest);
-      switch (replay.kind) {
-        case "conflict": return { kind: "request-conflict" };
-        case "replay": return { kind: "replay", response: replay.response };
-        case "none": break;
-        default: return assertNever(replay);
-      }
-      if (!this.hasRequestCapacity()) return { kind: "capacity-full" };
-      const mutation = mutate();
-      if (mutation.kind !== "success") return mutation;
-      const response: StoredAdmissionResponse = { status: 200, body: request.responseBody(mutation.admission) };
-      this.database.prepare(`INSERT INTO native_root_admission_requests
-        (request_id, operation, tuple_digest, status_code, response_json, created_at) VALUES (?, ?, ?, ?, ?, ?)`)
-        .run(request.requestId, request.operation, request.tupleDigest, response.status,
-          JSON.stringify(response.body), this.context.now());
-      return { kind: "committed", response };
-    });
-  }
-
   private transaction<Result>(operation: () => Result): Result {
     this.database.exec("BEGIN IMMEDIATE");
     try {
@@ -202,15 +128,7 @@ export class NativeRootAdmissionStore {
     }
   }
 
-  private expire(now: number): void {
-    this.demandStore.supersedeExpired(now);
-    this.database.prepare(`UPDATE native_root_admissions SET state = 'expired', ended_at = ?
-      WHERE state = 'active' AND lease_expires_at <= ?`).run(now, now);
-  }
 }
-
-type RequestMutationResult = { readonly kind: "success"; readonly admission: NativeRootAdmission }
-  | { readonly kind: "operation-conflict" | "not-found" };
 
 function admissionFromProof(input: { readonly generation: string; readonly expiresAt: number;
   readonly capacityConfigDigest: string; readonly proof: NativeRootCiPolicyProof }): NativeRootAdmission {
@@ -251,10 +169,5 @@ function numberField(row: Readonly<Record<string, unknown>>, key: string): numbe
   if (typeof value !== "number") corrupted();
   return value;
 }
-function scalar(value: unknown): number {
-  const row = record(value);
-  return row === undefined ? corrupted() : numberField(row, "value");
-}
 function corrupted(): never { throw new NativeRootAdmissionStoreError(); }
-function assertNever(value: never): never { throw new TypeError(`unexpected replay result: ${JSON.stringify(value)}`); }
 export class NativeRootAdmissionStoreError extends Error { readonly name = "NativeRootAdmissionStoreError"; }

@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { promote, protectedHead } from "../../native-git/test/nativeGitPromotionHarness.js";
 import { stringField } from "../../native-git/test/nativeGitReviewHarness.js";
-import { admission, jsonRecord, post, type AuthorityFixture } from "./nativeOrdinaryAuthorityFixture.js";
+import { jsonRecord, post, type AuthorityFixture } from "./nativeOrdinaryAuthorityFixture.js";
 import {
   nativeOrdinaryPromotionFixture,
   type NativeOrdinaryPromotionFixture
@@ -33,25 +33,12 @@ describe("native ordinary result promotion authority", () => {
     const before = await protectedHead(system.native);
 
     // When
-    const revoked = await post(system.authority.endpoint, "/v1/operator-admission-revocations", "registrar", {
-      schemaVersion: 1,
-      projectId: "project-a",
-      repositoryId: "source",
-      admissionGeneration: system.admissionGeneration
-    });
-    const policy = admission("project-a", "source", "1");
-    const admitted = await post(system.authority.endpoint, "/v1/operator-admissions", "registrar", {
-      ...policy,
-      requiredJobs: ["security", "source"]
-    });
-    const generation2 = (await jsonRecord(admitted)).admissionGeneration;
+    const generation2 = await system.rotateEligibility();
     const sourceVerification = await verify(system.authority, source, "81");
     const securityVerification = await verify(system.authority, security, "82");
     const promotion = await promote(system.native, system.review);
 
     // Then
-    expect(revoked.status).toBe(204);
-    expect(admitted.status).toBe(200);
     expect(generation2).not.toBe(system.admissionGeneration);
     expect([sourceVerification.status, securityVerification.status]).toEqual([404, 404]);
     expect(promotion.status).toBe(409);

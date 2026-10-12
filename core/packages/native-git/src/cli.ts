@@ -91,7 +91,7 @@ function usage(): void {
     "       dim-native-git review API_ORIGIN show PROJECT REPOSITORY REVIEW_ID",
     "       dim-native-git review API_ORIGIN approve PROJECT REPOSITORY REVIEW_ID",
     "       dim-native-git review API_ORIGIN revoke PROJECT REPOSITORY REVIEW_ID APPROVAL_ID"
-    , "       dim-native-git operator review create CONNECTION PROJECT PROPOSAL_REF"
+, "       dim-native-git operator review resolve CONNECTION PROJECT PROPOSAL_REF"
     , "       dim-native-git operator review inspect CONNECTION PROJECT REVIEW_ID"
     , "       dim-native-git operator review approve CONNECTION PROJECT REVIEW_ID"
     , "       dim-native-git operator review revoke CONNECTION PROJECT REVIEW_ID APPROVAL_ID"

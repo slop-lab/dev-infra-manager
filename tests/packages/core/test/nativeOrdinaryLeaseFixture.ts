@@ -95,7 +95,6 @@ export async function preparedLeaseFixture(
   issuer.authorizeWith(fixture);
   const policy = admission("project-a", "source", "1");
   fixture.source.authorizePolicy(policy);
-  await post(fixture.endpoint, "/v1/operator-admissions", "registrar", policy);
   const event = nativeEvent();
   fixture.source.authorizeEvent(event);
   await post(fixture.endpoint, "/v1/native-events", "webhook", event);

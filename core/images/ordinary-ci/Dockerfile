@@ -26,8 +26,6 @@ COPY core/packages/core/dist/errors.js \
   core/packages/core/dist/nativeRootAdmissionActivation.js \
   core/packages/core/dist/nativeRootAdmissionHttp.js \
   core/packages/core/dist/nativeRootAdmissionModel.js \
-  core/packages/core/dist/nativeRootAdmissionReadHttp.js \
-  core/packages/core/dist/nativeRootAdmissionResponse.js \
   core/packages/core/dist/nativeRootAdmissionSchema.js \
   core/packages/core/dist/nativeRootAdmissionService.js \
   core/packages/core/dist/nativeRootAdmissionStore.js \

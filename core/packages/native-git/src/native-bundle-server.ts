@@ -1,6 +1,5 @@
 import { once } from "node:events";
 import { createNativeBundleShutdown } from "./native-bundle-shutdown.js";
-import { createAuthoritativeNativeAdmissionResolver } from "./authoritative-native-admission-resolver.js";
 import { parseNativeGitBundleConfig } from "./bundle-config.js";
 import { createNodeAdmissionVerifierHttpClient } from "./ordinary-admission-http.js";
 import { assertBundleToken, assertGenerationId } from "./native-bundle-http.js";
@@ -13,6 +12,11 @@ import { createNativeProjectRootReadService } from "./native-project-root-read-h
 import { createRootReadOperationGate } from "./native-root-read-lifecycle.js";
 import { createNativeProjectWorkspaceWriteService } from "./native-project-workspace-write-http.js";
 import { createAuthoritativeNativeReviewController } from "./authoritative-native-review-controller.js";
+import {
+  reconcileNativeProposalRefs,
+  reconcileRegisteredNativeProposals
+} from "./native-proposal-reconciler.js";
+import { createNativeProposalReconciliationLoop } from "./native-proposal-reconciliation-loop.js";
 import { parseNativeGitProjectRegistrars } from "./native-project-registrar-http.js";
 import { executeNativeProjectPreparation } from "./native-project-registration.js";
 import { NativeGitBundleServerError, type NativeGitBundleServer, type NativeGitBundleServerOptions,
@@ -66,8 +70,10 @@ export async function configuredNativeGitBundleServer(
   }
   const { activationTokenDigest, gitIdentity, runtimeConfig } = startup;
   let { activated } = startup;
+  let businessReady = false;
+  let proposalReconciliationHealthy = true;
   const rootImportService = createNativeProjectRootImportService({
-    activated: () => activated,
+    activated: () => businessReady,
     activationTokenDigest,
     available: () => !closed,
     expectedGenerationId: options.expectedGenerationId,
@@ -88,24 +94,26 @@ export async function configuredNativeGitBundleServer(
     gitIdentity,
     state
   };
+  const reviewController = createAuthoritativeNativeReviewController({
+    available: () => !closed,
+    operations: transportOperations,
+    runtime: authoritativeRuntime,
+    ...(options.authoritativeReviewHooks === undefined ? {} : { hooks: options.authoritativeReviewHooks })
+  });
   let eventDispatcher: AuthoritativeNativeEventDispatcher;
   try {
     const ordinaryDispatcher = await createAuthoritativeNativeEventDispatcher({
       webhook: config.ordinaryCi.webhook,
-      resolveAdmission: createAuthoritativeNativeAdmissionResolver({
-        dependency: config.ordinaryCi,
-        generationId: options.expectedGenerationId,
-        httpClient: identityHttpClient
-      }),
       state,
       stateDirectory: options.stateDirectory,
-    generationId: options.expectedGenerationId,
-    httpClient: identityHttpClient,
-    ...(options.deliveryFaults === undefined ? {} : { deliveryFaults: options.deliveryFaults })
+      generationId: options.expectedGenerationId,
+      httpClient: identityHttpClient,
+      serialize: reviewController.run,
+      ...(options.deliveryFaults === undefined ? {} : { deliveryFaults: options.deliveryFaults })
     });
     const qemuDispatcher = config.qemuCi === undefined ? undefined
       : await createAuthoritativeNativeQemuEventDispatcher({ dependency: config.qemuCi, state,
-        stateDirectory: options.stateDirectory, httpClient: identityHttpClient,
+        stateDirectory: options.stateDirectory, httpClient: identityHttpClient, serialize: reviewController.run,
         ...(options.deliveryFaults === undefined ? {} : { deliveryFaults: options.deliveryFaults }) });
     eventDispatcher = qemuDispatcher === undefined ? ordinaryDispatcher : {
       start() { ordinaryDispatcher.start(); qemuDispatcher.start(); },
@@ -119,14 +127,40 @@ export async function configuredNativeGitBundleServer(
     await state.owner.release();
     throw error;
   }
-  const reviewController = createAuthoritativeNativeReviewController({
-    available: () => !closed,
-    operations: transportOperations,
-    runtime: authoritativeRuntime,
-    ...(options.authoritativeReviewHooks === undefined ? {} : { hooks: options.authoritativeReviewHooks })
+  const reconcileAllProposals = async (): Promise<void> => {
+    await reconcileRegisteredNativeProposals(authoritativeRuntime, options.authoritativeReviewHooks ?? {});
+    eventDispatcher.wake();
+  };
+  const proposalReconciliation = createNativeProposalReconciliationLoop({
+    reconcile: () => reviewController.run(reconcileAllProposals),
+    unavailable() {
+      proposalReconciliationHealthy = false;
+      businessReady = false;
+    }
   });
+  const reconcileProposalRefs = async (projectId: string, proposalRefs: readonly string[]): Promise<void> => {
+    try {
+      await reconcileNativeProposalRefs(
+        authoritativeRuntime, projectId, proposalRefs, options.authoritativeReviewHooks ?? {}
+      );
+      eventDispatcher.wake();
+    } catch (error) {
+      proposalReconciliation.wake();
+      throw error;
+    }
+  };
+  if (activated) {
+    try {
+      await reviewController.run(reconcileAllProposals);
+      businessReady = true;
+    } catch (error) {
+      await eventDispatcher.close();
+      await state.owner.release();
+      throw error;
+    }
+  }
   const rootReadService = createNativeProjectRootReadService({
-    activated: () => activated,
+    activated: () => businessReady,
     activationTokenDigest,
     expectedGenerationId: options.expectedGenerationId,
     gitExecutable: config.gitExecutable,
@@ -140,7 +174,7 @@ export async function configuredNativeGitBundleServer(
     stateDirectory: options.stateDirectory
   });
   const workspaceWriteService = createNativeProjectWorkspaceWriteService({
-    activated: () => activated,
+    activated: () => businessReady,
     activationTokenDigest,
     expectedGenerationId: options.expectedGenerationId,
     gitExecutable: config.gitExecutable,
@@ -149,6 +183,8 @@ export async function configuredNativeGitBundleServer(
     knownCredentials: nativeBundleKnownCredentials(config, registrars, "workspace-write-issuers"),
     now: options.workspaceWriteLeaseClock ?? Date.now,
     operations: transportOperations,
+    reconcileProposalRefs,
+    serializeReceive: reviewController.run,
     ...(options.workspaceWriteLeaseHooks === undefined ? {} : { hooks: options.workspaceWriteLeaseHooks }),
     state,
     stateDirectory: options.stateDirectory
@@ -181,7 +217,6 @@ export async function configuredNativeGitBundleServer(
   });
   const hostPromoterService = createNativeHostPromoterService({ config, knownCredentials,
     runtime: authoritativeRuntime,
-    createReview: reviewController.create,
     promote: (projectId, reviewId) => reviewController.run(() => promoteInstalledNativeReview({
       config,
       runtime: authoritativeRuntime,
@@ -199,7 +234,7 @@ export async function configuredNativeGitBundleServer(
   const prepareProject = (generationId: string, ownerHostId: string, input: unknown): Promise<NativeGitPreparedProject> => {
     if (closed) return Promise.reject(new NativeGitBundleServerError("native Git bundle server is closed"));
     const operation = preparationQueue.then(async () => {
-      if (!activated || generationId !== options.expectedGenerationId) {
+      if (!businessReady || generationId !== options.expectedGenerationId) {
         throw new NativeGitBundleServerError("native Project preparation requires exact activation");
       }
       return executeNativeProjectPreparation({
@@ -217,7 +252,6 @@ export async function configuredNativeGitBundleServer(
   const handle = createNativeBundleRequestHandler({
     activationTokenDigest,
     config,
-    identityHttpClient,
     options,
     registrars,
     rootImportService,
@@ -241,9 +275,14 @@ export async function configuredNativeGitBundleServer(
     ordinaryAttemptService: ordinaryServices.ordinaryAttemptService,
     ordinaryStatusService: ordinaryServices.ordinaryStatusService,
     qemuAuthorityService,
-    deliveryHealthy: eventDispatcher.healthy,
-    activated: () => activated,
-    activate: () => { activated = true; },
+    deliveryHealthy: () => eventDispatcher.healthy() && proposalReconciliationHealthy,
+    activated: () => businessReady,
+    async activate() {
+      if (businessReady) return;
+      activated = true;
+      await reviewController.run(reconcileAllProposals);
+      businessReady = true;
+    },
     prepareProject
   });
   const server = createNativeBundleHttpServer({
@@ -260,6 +299,7 @@ export async function configuredNativeGitBundleServer(
     },
     async drainOperations() {
       const transportClosed = transportOperations.close();
+      await proposalReconciliation.close();
       await Promise.all([preparationQueue, reviewController.waitForIdle()]);
       await Promise.all([rootImportService.waitForIdle(), transportClosed]);
     }

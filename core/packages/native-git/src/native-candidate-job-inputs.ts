@@ -3,25 +3,18 @@ import { z } from "zod";
 import type { NativeGitServiceConfig } from "./config.js";
 import {
   assertCandidateObjects,
+  candidatePathExists,
   type CandidateGitReader,
   type CandidateObjectTuple,
   openCandidateGitReader,
   readCandidateBlob
 } from "./candidate-execution-git.js";
 import { candidateArgv, CandidateExecutionError } from "./candidate-execution-schema.js";
-import {
-  parseNativeCandidateJobConfig,
-  type NativeCandidateRequiredJob
-} from "./native-candidate-job-config.js";
+import { parseNativeCandidateJobConfig, type NativeCandidateRequiredJob } from "./native-candidate-job-config.js";
 
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const protectedRef = z.string().max(1024).refine((value) => safeHeadRef(value));
-const requiredJob = z.object({
-  name: z.string().regex(/^[a-z][a-z0-9-]{0,62}$/),
-  kind: z.enum(["ordinary-sysbox", "qemu"])
-}).strict().readonly();
-
 const requestSchema = z.object({
   projectId: identifier,
   repositoryId: identifier,
@@ -29,7 +22,6 @@ const requestSchema = z.object({
   expectedProtectedHead: objectId,
   candidateCommit: objectId,
   candidateTree: objectId,
-  requiredJobs: z.array(requiredJob).max(64).readonly()
 }).strict().readonly();
 
 export type NativeCandidateJobInputsRequest = z.infer<typeof requestSchema>;
@@ -49,7 +41,7 @@ export type NativeCandidateJobInputPlanEntry = NativeCandidateRequiredJob & {
 };
 
 export type NativeCandidateJobInputs = {
-  readonly configBlob: NativeCandidateBlobIdentity;
+  readonly configBlob: NativeCandidateBlobIdentity | null;
   readonly plan: readonly NativeCandidateJobInputPlanEntry[];
 };
 
@@ -64,7 +56,7 @@ export async function loadNativeCandidateJobInputs(
     }
     assertRegisteredTarget(config, request.data);
     const reader = await openCandidateGitReader(config, request.data.projectId, request.data.repositoryId);
-    return await readNativeCandidateJobInputsFromGit(reader, request.data, request.data.requiredJobs);
+    return await readNativeCandidateJobInputsFromGit(reader, request.data);
   } catch (error) {
     if (error instanceof CandidateExecutionError) throw error;
     throw new CandidateExecutionError("native candidate job inputs could not be loaded", { cause: error });
@@ -73,12 +65,15 @@ export async function loadNativeCandidateJobInputs(
 
 export async function readNativeCandidateJobInputsFromGit(
   reader: CandidateGitReader,
-  target: CandidateObjectTuple,
-  requiredJobs: readonly NativeCandidateRequiredJob[]
+  target: CandidateObjectTuple
 ): Promise<NativeCandidateJobInputs> {
   await assertCandidateObjects(reader, target);
+  if (!await candidatePathExists(reader, target.candidateTree, ".dim/ci/runner.yml")) {
+    await assertCandidateObjects(reader, target);
+    return { configBlob: null, plan: [] };
+  }
   const configBlob = await readCandidateBlob(reader, target.candidateTree, ".dim/ci/runner.yml", 64 * 1024);
-  const parsed = parseNativeCandidateJobConfig(configBlob.bytes, requiredJobs);
+  const parsed = parseNativeCandidateJobConfig(configBlob.bytes);
   const plan: NativeCandidateJobInputPlanEntry[] = [];
   for (const job of parsed.plan) {
     const scriptBlob = await readCandidateBlob(reader, target.candidateTree, job.script, 1024 * 1024);
@@ -103,12 +98,6 @@ function assertRegisteredTarget(config: NativeGitServiceConfig, request: NativeC
   const policy = repository?.reviewPolicies?.find((candidate) => candidate.protectedRef === request.protectedRef);
   if (policy === undefined) {
     throw new CandidateExecutionError("native candidate job inputs do not match a registered repository policy");
-  }
-  const requiredNames = request.requiredJobs.map((job) => job.name).sort();
-  const registeredNames = [...policy.requiredJobNames].sort();
-  if (requiredNames.length !== registeredNames.length
-    || requiredNames.some((name, index) => name !== registeredNames[index])) {
-    throw new CandidateExecutionError("native candidate job inputs do not match the registered required jobs");
   }
 }
 

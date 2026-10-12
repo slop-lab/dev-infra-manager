@@ -45,7 +45,7 @@ describe("control-plane private source staging", () => {
       nativeGit: Buffer.from(`${controlPlaneSecrets.nativeActivation}\n`),
       ordinaryCi: Buffer.from(`${controlPlaneSecrets.ordinaryActivation}\n`)
     });
-    expect(complete.allSecretValues).toHaveLength(12);
+    expect(complete.allSecretValues).toHaveLength(11);
   });
 
   it("rejects noncanonical, short, reused, and symlinked token sources", async () => {
@@ -82,13 +82,17 @@ describe("control-plane private source staging", () => {
   it("rejects a credential reused for a different service role", async () => {
     // Given
     const input = await fixture();
-    await writePrivate(input.paths.ordinaryConfig, `${JSON.stringify(ordinaryServiceConfig(controlPlaneSecrets.host))}\n`);
+    const ordinary = ordinaryServiceConfig();
+    const credentials = Reflect.get(ordinary, "credentials") as Readonly<Record<string, unknown>>;
+    await writePrivate(input.paths.ordinaryConfig, `${JSON.stringify({ ...ordinary, credentials: {
+      ...credentials, query: { username: "native-query", password: controlPlaneSecrets.host }
+    } })}\n`);
 
     // When
     const action = readControlPlaneSources(input.parsed);
 
     // Then
-    await expect(action).rejects.toThrow(/distinct/);
+    await expect(action).rejects.toThrow(/paired|distinct/);
   });
 
   it("rejects the obsolete ordinary config schema without changing operator input", async () => {
@@ -98,7 +102,7 @@ describe("control-plane private source staging", () => {
     })}\n`);
     const before = await readFile(input.paths.ordinaryConfig);
 
-    await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/schema-4/);
+    await expect(readControlPlaneSources(input.parsed)).rejects.toThrow(/schema-5/);
     expect(await readFile(input.paths.ordinaryConfig)).toEqual(before);
   });
 
@@ -147,8 +151,6 @@ describe("control-plane private source staging", () => {
     ["passwords", { hostId: "controller-b", username: "project-registrar-b", password: controlPlaneSecrets.projectRegistrar }],
     ["service identifiers", { hostId: "native-query", username: "project-registrar-b", password: controlPlaneSecrets.nativeActivation }],
     ["service secrets", { hostId: "controller-b", username: "project-registrar-b", password: controlPlaneSecrets.query }],
-    ["ordinary registrar identifiers", { hostId: "controller-b", username: "ordinary-registrar", password: controlPlaneSecrets.nativeActivation }],
-    ["ordinary registrar secrets", { hostId: "controller-b", username: "project-registrar-b", password: controlPlaneSecrets.registrar }],
     ["ordinary host identifiers", { hostId: "controller-b", username: "host-a", password: controlPlaneSecrets.nativeActivation }],
     ["host secrets", { hostId: "controller-b", username: "project-registrar-b", password: controlPlaneSecrets.host }]
   ])("rejects duplicate project registrar %s", async (_label, secondRegistrar) => {
@@ -219,7 +221,6 @@ describe("control-plane private source staging", () => {
 
   it.each([
     ["native service secret", controlPlaneSecrets.query],
-    ["ordinary registrar secret", controlPlaneSecrets.registrar],
     ["native registrar secret", controlPlaneSecrets.projectRegistrar],
     ["ordinary host token", controlPlaneSecrets.host],
     ["native readiness token", controlPlaneSecrets.nativeReadiness],
@@ -244,7 +245,6 @@ describe("control-plane private source staging", () => {
 
   it.each([
     ["native service role", "native-query"],
-    ["ordinary registrar role", "ordinary-registrar"],
     ["native registrar role", "project-registrar-a"]
   ])("rejects a root importer username reused as a %s", async (_label, username) => {
     // Given
@@ -319,7 +319,6 @@ describe("control-plane private source staging", () => {
 
   it.each([
     ["native service secret", controlPlaneSecrets.query],
-    ["ordinary registrar secret", controlPlaneSecrets.registrar],
     ["native registrar secret", controlPlaneSecrets.projectRegistrar],
     ["root importer secret", controlPlaneSecrets.projectRootImporter],
     ["ordinary host token", controlPlaneSecrets.host],
@@ -348,7 +347,6 @@ describe("control-plane private source staging", () => {
 
   it.each([
     ["native service role", "native-query"],
-    ["ordinary registrar role", "ordinary-registrar"],
     ["native registrar role", "project-registrar-a"],
     ["root importer role", "project-root-importer-a"]
   ])("rejects a root read issuer username reused as a %s", async (_label, username) => {
@@ -396,7 +394,6 @@ describe("control-plane private source staging", () => {
 
   it.each([
     ["native service secret", controlPlaneSecrets.query],
-    ["ordinary registrar secret", controlPlaneSecrets.registrar],
     ["native registrar secret", controlPlaneSecrets.projectRegistrar],
     ["root importer secret", controlPlaneSecrets.projectRootImporter],
     ["root read issuer secret", controlPlaneSecrets.projectRootReadIssuer],

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { assertNativeRootCiEventReceiptIntegrity } from "../../../../core/packages/core/src/nativeRootCiEventReceiptIntegrity.js";
@@ -8,7 +7,6 @@ import {
   hostAuthorization,
   post,
   queryAuthorization,
-  registrarAuthorization,
   reservationFixture,
   rows,
   type ReservationFixture,
@@ -107,7 +105,7 @@ describe("installed native root claim reservations", () => {
     expect(() => assertNativeRootCiEventReceiptIntegrity(fixture.database)).toThrow(/receipt state is invalid/i);
   });
 
-  it("rejects verification after expiry, root rotation, and revocation", async () => {
+  it("rejects verification after eligibility expiry and root rotation", async () => {
     // Given
     const fixture = await reservationFixture("installed-claim-invalidation");
     fixtures.push(fixture);
@@ -134,17 +132,8 @@ describe("installed native root claim reservations", () => {
     database.prepare(`UPDATE native_root_admissions SET root_sequence = ?, root_commit = ?, root_tree = ?
       WHERE admission_generation = ?`).run(rootSequence, rootCommit, rootTree, fixture.admissionGeneration);
     database.close();
-    const revoked = await post(fixture.origin,
-      "/v1/projects/project-a/repositories/root/native-root-admission/revoke", registrarAuthorization(), {
-        schemaVersion: 1,
-        requestId: randomUUID(),
-        generationId,
-        admissionGeneration: fixture.admissionGeneration
-      });
-    const afterRevocation = await verify(fixture, reserved.body);
-
     // Then
-    expect([expired.status, rotated.status, revoked.status, afterRevocation.status]).toEqual([404, 404, 200, 404]);
+    expect([expired.status, rotated.status]).toEqual([404, 404]);
   });
 
   it("replays one historical claim after restart but rejects its old service epoch", async () => {

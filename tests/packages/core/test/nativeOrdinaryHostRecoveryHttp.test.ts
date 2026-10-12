@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  activeEligibilityGeneration,
   admission,
   jsonRecord,
   nativeEvent,
@@ -159,12 +160,7 @@ describe("native ordinary host recovery HTTP", () => {
     fixtures.push(fixture);
     const rotatedPolicy = admission("project-a", "source", "2");
     fixture.source.authorizePolicy(rotatedPolicy);
-    const rotation = await post(fixture.endpoint, "/v1/operator-admissions", "registrar", rotatedPolicy);
-    const currentGeneration = (await jsonRecord(rotation)).admissionGeneration;
     const request = recoveryRequest(claim, "30000000-0000-4000-8000-000000000043");
-
-    // When
-    const recovered = await post(fixture.endpoint, "/v1/host-recoveries", "host-a", request);
     const currentEvent = {
       ...nativeEvent("00000000-0000-4000-8000-000000000043"),
       reviewId: "c".repeat(64),
@@ -173,7 +169,11 @@ describe("native ordinary host recovery HTTP", () => {
       requiredJobSetRevision: "jobs-2"
     };
     fixture.source.authorizeEvent(currentEvent);
-    await post(fixture.endpoint, "/v1/native-events", "webhook", currentEvent);
+    expect((await post(fixture.endpoint, "/v1/native-events", "webhook", currentEvent)).status).toBe(202);
+    const currentGeneration = activeEligibilityGeneration(fixture, rotatedPolicy.projectId, rotatedPolicy.repositoryId);
+
+    // When
+    const recovered = await post(fixture.endpoint, "/v1/host-recoveries", "host-a", request);
     const fresh = await post(fixture.endpoint, "/v1/host-claims", "host-a", {
       schemaVersion: 1,
       requestId: "20000000-0000-4000-8000-000000000043",

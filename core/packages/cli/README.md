@@ -91,8 +91,9 @@ Control-plane installation belongs exclusively to the installer facade as
 `dim installer install control-plane --config FILE`; this CLI does not
 implement or alias it. The facade rejects obsolete `dim install-cp` input
 before forwarding. The installed native Git and ordinary-CI services remain
-empty and idle until an operator explicitly admits a native Project and starts
-host capacity. They do not infer admission or capacity from workspace state.
+empty and idle until native review events establish automatic eligibility and
+an operator starts host capacity. They do not infer eligibility or capacity
+from workspace state.
 
 The host CLI can admit a bootstrapped native Project and run its Sysbox
 workspaces without Gitea. Set
@@ -151,12 +152,11 @@ promotion remain unavailable without Gitea fallback. Native ordinary CI uses
 separate owner-only configuration and direct host commands:
 
 ```bash
-dim ci native-root project admit project-a /absolute/path/admission.json
 dim ci native-root host run /absolute/path/host.json
 ```
 
-Admission prints the exact service response. Host execution first requires the
-registered Docker `sysbox-runc` runtime, then runs one persistent worker per
+Host execution first requires the registered Docker `sysbox-runc` runtime,
+then runs one persistent worker per
 configured capacity and drains owned work on `SIGINT` or `SIGTERM`. Neither
 command uses workspace or Gitea authority. Do not mount any native connection
 file or host/issuer credential in an agent, workspace, or job container.
@@ -170,7 +170,6 @@ scheduler image, then run each fixed KVM host from its private connection:
 ```bash
 dim ci native-qemu scheduler image build registry.example/dim-native-qemu:0.9.0
 dim ci native-qemu scheduler run /absolute/path/native-qemu-scheduler.json
-dim ci native-qemu project admit project-a /absolute/path/native-qemu-scheduler.json
 dim ci native-qemu host run node-a /absolute/path/node-a-qemu.json
 dim ci native-qemu event status EVENT_ID /absolute/path/native-qemu-scheduler.json
 ```

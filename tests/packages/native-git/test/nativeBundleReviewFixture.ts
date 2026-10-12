@@ -1,6 +1,5 @@
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect } from "vitest";
 import type {
   AdmissionVerifierHttpClient,
   AuthoritativeNativeReviewEnvelope,
@@ -10,6 +9,7 @@ import type { NativeHumanReviewerHooks } from "../../../../core/packages/native-
 import type { ReviewPublicationFaults } from "../../../../core/packages/native-git/src/review-record-storage.js";
 import type { NativeOrdinaryAttemptHooks } from "../../../../core/packages/native-git/src/native-ordinary-attempt-http.js";
 import type { NativeInstalledPromotionHooks } from "../../../../core/packages/native-git/src/native-installed-promotion.js";
+import { parseAuthoritativeNativeReviewEnvelope } from "../../../../core/packages/native-git/src/authoritative-native-review-schema.js";
 import { authoritativePolicy, matchingRunner } from "./authoritativeNativeCandidateFixture.js";
 import {
   activateFinalizeService,
@@ -68,12 +68,13 @@ export async function nativeBundleReviewFixture(
     bundle,
     policy
   )).json());
-  expect((await finalizeRootImport(service.origin, {
+  const finalized = await finalizeRootImport(service.origin, {
     schemaVersion: 1,
     generationId,
     importNonce: receipt.importNonce,
     bundleDigest: receipt.bundleDigest
-  })).status).toBe(200);
+  });
+  if (finalized.status !== 200) throw new ReviewFixtureError();
   const lease = await issueWorkspaceLease(service.origin);
   const clone = await createFinalizeRoot(`${label}-clone`);
   await runGit("/usr/bin/git", ["clone", authenticatedRemote(service.origin, lease), clone]);
@@ -100,6 +101,15 @@ export async function publishedReviewNames(root: string): Promise<readonly strin
   }
 }
 
+export async function publishedReviewEnvelopes(
+  root: string
+): Promise<readonly AuthoritativeNativeReviewEnvelope[]> {
+  const directory = join(rootRepository(root), "dim-authoritative-reviews", "proposals");
+  const names = await publishedReviewNames(root);
+  return Promise.all(names.map(async (name) =>
+    parseAuthoritativeNativeReviewEnvelope(JSON.parse(await readFile(join(directory, name), "utf8")))));
+}
+
 export function createBundleReview(service: RunningService): Promise<AuthoritativeNativeReviewEnvelope> {
   return service.createReview({
     projectId: "project-a",
@@ -119,7 +129,7 @@ async function issueWorkspaceLease(origin: string): Promise<{ readonly username:
       workspaceId: reviewWorkspaceId
     })
   });
-  expect(response.status).toBe(201);
+  if (response.status !== 201) throw new ReviewFixtureError();
   const value: unknown = await response.json();
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new ReviewFixtureError();
   const username = Reflect.get(value, "username");

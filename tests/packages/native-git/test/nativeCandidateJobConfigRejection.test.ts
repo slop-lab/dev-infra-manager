@@ -1,15 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   CandidateExecutionError,
-  parseNativeCandidateJobConfig,
-  type NativeCandidateRequiredJob
+  parseNativeCandidateJobConfig
 } from "../../../../core/packages/native-git/src/index.js";
 import { parseCandidateConfig } from "../../../../core/packages/native-git/src/candidate-execution-schema.js";
-
-const requiredJobs = [
-  { name: "source", kind: "ordinary-sysbox" },
-  { name: "integration", kind: "qemu" }
-] as const satisfies readonly NativeCandidateRequiredJob[];
 
 function validConfig(): string {
   return `schemaVersion: 4
@@ -26,8 +20,8 @@ qemu:
 `;
 }
 
-function rejects(bytes: Buffer, jobs: readonly NativeCandidateRequiredJob[] = requiredJobs): void {
-  expect(() => parseNativeCandidateJobConfig(bytes, jobs)).toThrow(CandidateExecutionError);
+function rejects(bytes: Buffer): void {
+  expect(() => parseNativeCandidateJobConfig(bytes)).toThrow(CandidateExecutionError);
 }
 
 describe("native schema-4 candidate job config rejection", () => {
@@ -87,42 +81,19 @@ describe("native schema-4 candidate job config rejection", () => {
     rejects(oversized);
   });
 
-  it.each([
-    ["missing ordinary job", validConfig().replace("    source:\n      script: .dim/ci/jobs/source.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n", "")],
-    ["extra ordinary job", validConfig().replace("    source:", "    extra:\n      script: .dim/ci/jobs/extra.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n    source:")],
-    ["missing QEMU job", validConfig().replace("    integration:\n      script: .dim/ci/jobs/integration.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n", "")],
-    ["extra QEMU job", validConfig().replace("    integration:", "    extra:\n      script: .dim/ci/jobs/extra.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n    integration:")]
-  ])("rejects a policy mismatch with a %s", (_label, source) => {
-    // Given / When / Then
-    rejects(Buffer.from(source, "utf8"));
-  });
-
-  it("rejects overlapping candidate names and overlapping trusted names", () => {
+  it("rejects overlapping candidate names", () => {
     // Given
     const overlappingConfig = validConfig().replace("    integration:", "    source:");
-    const overlappingPolicy = [
-      { name: "source", kind: "ordinary-sysbox" },
-      { name: "source", kind: "qemu" }
-    ] as const;
-
     // When / Then
-    rejects(Buffer.from(overlappingConfig, "utf8"), overlappingPolicy);
-    rejects(Buffer.from(validConfig(), "utf8"), overlappingPolicy);
+    rejects(Buffer.from(overlappingConfig, "utf8"));
   });
 
-  it("rejects invalid trusted required-job sets", () => {
+  it("rejects more than 64 combined candidate jobs", () => {
     // Given
-    const duplicate = [requiredJobs[0], requiredJobs[0]];
-    const unsafe = [{ name: "../source", kind: "ordinary-sysbox" }] as const;
-    const tooMany = Array.from({ length: 65 }, (_value, index) => ({
-      name: `job-${index}`,
-      kind: "ordinary-sysbox" as const
-    }));
+    const jobs = Array.from({ length: 65 }, (_value, index) => `    job-${index}:\n      script: .dim/ci/jobs/job-${index}.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]`).join("\n");
+    const source = `schemaVersion: 4\nordinary:\n  jobs:\n${jobs}\nqemu:\n  jobs: {}\n`;
 
     // When / Then
-    rejects(Buffer.from(validConfig()), []);
-    rejects(Buffer.from(validConfig()), duplicate);
-    rejects(Buffer.from(validConfig()), unsafe);
-    rejects(Buffer.from(validConfig()), tooMany);
+    rejects(Buffer.from(source));
   });
 });

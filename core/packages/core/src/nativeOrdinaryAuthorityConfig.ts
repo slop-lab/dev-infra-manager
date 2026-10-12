@@ -9,17 +9,16 @@ export type NativeOrdinaryCredential = {
 };
 
 export type NativeOrdinaryAuthorityConfig = {
-  readonly schemaVersion: 4;
+  readonly schemaVersion: 5;
   readonly serviceId: string;
   readonly database: string;
-  readonly admissionLeaseMilliseconds: number;
+  readonly eligibilityLeaseMilliseconds: number;
   readonly claimLeaseMilliseconds: number;
   readonly nativeGit: NativeGitAdmissionConfig & NativeGitResultReporterConfig & {
     readonly candidateReader: NativeOrdinaryCredential;
   };
   readonly credentials: {
     readonly webhook: NativeOrdinaryCredential;
-    readonly registrar: NativeOrdinaryCredential;
     readonly query: NativeOrdinaryCredential;
   };
   readonly hosts: readonly {
@@ -37,11 +36,11 @@ export type NativeOrdinaryAuthorityConfig = {
 export function validateNativeOrdinaryAuthorityConfig(
   config: NativeOrdinaryAuthorityConfig
 ): ReadonlyMap<string, NativeCapacityPolicy> {
-  if (config.schemaVersion !== 4) throw new UserError("native ordinary authority schemaVersion must be 4");
+  if (config.schemaVersion !== 5) throw new UserError("native ordinary authority schemaVersion must be 5");
   authorityIdentifier(config.serviceId, "service ID");
   if (config.database.length === 0) throw new UserError("native ordinary authority database path must not be empty");
-  if (!Number.isSafeInteger(config.admissionLeaseMilliseconds) || config.admissionLeaseMilliseconds < 1) {
-    throw new UserError("native ordinary authority admission lease must be positive");
+  if (!Number.isSafeInteger(config.eligibilityLeaseMilliseconds) || config.eligibilityLeaseMilliseconds < 1) {
+    throw new UserError("native ordinary authority eligibility lease must be positive");
   }
   if (!Number.isSafeInteger(config.claimLeaseMilliseconds) || config.claimLeaseMilliseconds < 1) {
     throw new UserError("native ordinary authority claim lease must be positive");

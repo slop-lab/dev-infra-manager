@@ -11,6 +11,7 @@ import {
   type ReviewFixture
 } from "../../native-git/test/nativeGitReviewHarness.js";
 import {
+  activeEligibilityGeneration,
   authorityHostCredentials,
   jsonRecord,
   post,
@@ -79,12 +80,9 @@ describe("native ordinary host claim live integration", () => {
       requiredJobSetRevision: "jobs-1",
       requiredJobs: ["security", "source"]
     } as const;
-    const admissionResponse = await post(authority.endpoint, "/v1/operator-admissions", "registrar", policy);
-    if (admissionResponse.status !== 200) throw new Error(await admissionResponse.text());
-    const generation = (await jsonRecord(admissionResponse)).admissionGeneration;
-    if (typeof generation !== "string") throw new Error("admission generation is missing");
-    native.setAdmissionGeneration(generation);
     expect((await post(authority.endpoint, "/v1/native-events", "webhook", event)).status).toBe(202);
+    const generation = activeEligibilityGeneration(authority, policy.projectId, policy.repositoryId);
+    native.setAdmissionGeneration(generation);
     const requests = [
       { schemaVersion: 1, requestId: "20000000-0000-4000-8000-000000000021", hostId: "host-a", capacity: "primary" },
       { schemaVersion: 1, requestId: "20000000-0000-4000-8000-000000000022", hostId: "host-b", capacity: "backup" }
@@ -182,11 +180,9 @@ describe("native ordinary host claim live integration", () => {
       requiredJobSetRevision: "jobs-1",
       requiredJobs: ["security", "source"]
     } as const;
-    const admissionResponse = await post(authority.endpoint, "/v1/operator-admissions", "registrar", policy);
-    const generation = (await jsonRecord(admissionResponse)).admissionGeneration;
-    if (typeof generation !== "string") throw new Error("admission generation is missing");
+    expect((await post(authority.endpoint, "/v1/native-events", "webhook", event)).status).toBe(202);
+    const generation = activeEligibilityGeneration(authority, policy.projectId, policy.repositoryId);
     native.setAdmissionGeneration(generation);
-    await post(authority.endpoint, "/v1/native-events", "webhook", event);
     const claimed = await post(authority.endpoint, "/v1/host-claims", "host-a", {
       schemaVersion: 1,
       requestId: "20000000-0000-4000-8000-000000000023",

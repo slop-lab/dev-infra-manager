@@ -16,11 +16,12 @@ export type NativeRootCiEventReceiptStoreContext = {
   readonly now: () => number;
 };
 export type ReceiptPreflight = { readonly kind: "ready"; readonly admission: ReceiptAdmission }
-  | { readonly kind: "replay" } | { readonly kind: "conflict" }
+  | { readonly kind: "replay"; readonly eligibilityExpiresAt: number } | { readonly kind: "conflict" }
   | { readonly kind: "not-found" } | { readonly kind: "full" };
 export type ReceiptCommit = Exclude<ReceiptPreflight, { readonly kind: "ready" }>;
 export type ReceiptAdmission = {
   readonly generation: string;
+  readonly expiresAt: number;
   readonly proof: NativeRootCiPolicyProof;
   readonly ordinaryServiceId: string;
   readonly capacityConfigDigest: string;
@@ -61,9 +62,9 @@ export class NativeRootCiEventReceiptStore {
         VALUES (?, ?, ?, ?, 'root', ?, ?, ?, ?, ?, ?, ?, ?, 'ordinary-sysbox', ?, 'candidate-controlled',
           ?, ?, ?, 'queued', ?, ?, NULL)`).run(randomUUID(), request.admissionGeneration, event.eventId,
         event.projectId, event.protectedRef, event.reviewId, event.expectedProtectedHead, event.candidateCommit,
-        event.candidateTree, event.policyRevision, event.requiredReviewRevision, event.requiredJobSetRevision,
+        event.candidateTree, event.policyRevision, event.requiredReviewRevision, event.qualityRevision,
         event.jobName, result.admission.capacityConfigDigest, root.sequence, root.commit, now, now);
-      return this.finish({ kind: "replay" });
+      return this.finish({ kind: "replay", eligibilityExpiresAt: result.admission.expiresAt });
     } catch (error) {
       this.database.exec("ROLLBACK");
       throw error;
@@ -79,7 +80,8 @@ export class NativeRootCiEventReceiptStore {
       const demand = this.database.prepare(`SELECT 1 FROM native_root_ci_demands
         WHERE admission_generation = ? AND event_id = ?`).get(request.admissionGeneration, request.event.eventId);
       if (demand === undefined) corrupted();
-      return receipt.event_digest === request.eventDigest ? { kind: "replay" } : { kind: "conflict" };
+      return receipt.event_digest === request.eventDigest
+        ? { kind: "replay", eligibilityExpiresAt: admission.expiresAt } : { kind: "conflict" };
     }
     if (scalar(this.database.prepare("SELECT COUNT(*) AS value FROM native_root_ci_event_receipts").get()) >= receiptLimit) {
       return { kind: "full" };
@@ -104,7 +106,7 @@ export class NativeRootCiEventReceiptStore {
         tree: text(row, "root_tree"), policyDigest: text(row, "policy_digest")
       }, policy: JSON.parse(text(row, "policy_json")) }, { serviceId: "native-main", generationId: generation,
       requestId: "00000000-0000-4000-8000-000000000000", projectId: request.event.projectId });
-    return { generation: request.admissionGeneration, proof,
+    return { generation: request.admissionGeneration, expiresAt: number(row, "lease_expires_at"), proof,
       ordinaryServiceId: text(row, "ordinary_service_id"),
       capacityConfigDigest: text(row, "capacity_config_digest") };
   }
@@ -122,8 +124,7 @@ function eventMatches(admission: ReceiptAdmission, request: NativeRootCiEventRec
   const { currentRoot, policy } = admission.proof;
   return event.protectedRef === currentRoot.protectedRef && event.expectedProtectedHead === currentRoot.commit
     && event.policyRevision === policy.policyRevision && event.requiredReviewRevision === policy.requiredReviewRevision
-    && event.requiredJobSetRevision === policy.requiredJobSetRevision && policy.requiredJobs.some((job) =>
-      job.name === event.jobName && job.kind === "ordinary-sysbox" && job.evidenceClass === "candidate-controlled");
+    && event.qualityRevision === policy.requiredJobSetRevision;
 }
 
 function proofMatches(admission: ReceiptAdmission, request: NativeRootCiEventReceiptRequest,

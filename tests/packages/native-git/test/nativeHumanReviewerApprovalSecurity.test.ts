@@ -97,7 +97,10 @@ describe("installed native human approval security", () => {
     const approving = approve(fixture.service.origin, review.reviewId);
     await entered.promise;
     await addCandidateCommit(fixture.clone, "raced.txt", Buffer.from("raced\n"));
-    await runGit("/usr/bin/git", ["-C", fixture.clone, "push", "origin", `HEAD:${reviewProposalRef}`]);
+    const candidate = (await runGit("/usr/bin/git", ["-C", fixture.clone, "rev-parse", "HEAD"])).stdout.trim();
+    await runGit("/usr/bin/git", ["--git-dir", rootRepository(fixture.root), "fetch", fixture.clone, candidate]);
+    await runGit("/usr/bin/git", ["--git-dir", rootRepository(fixture.root), "update-ref",
+      reviewProposalRef, candidate, review.candidateCommit]);
     publication.resolve();
     const approval = await approving;
     const inspected = await fetch(

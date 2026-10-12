@@ -83,7 +83,7 @@ function response(body: unknown) {
 }
 
 function eventId(): string {
-  return createHash("sha256").update("dim-native-authoritative-review-event-v1\0")
-    .update(JSON.stringify({ executionKind: "ordinary-sysbox", jobName: "source", reviewId: "a".repeat(64) }))
+  return createHash("sha256").update("dim-native-authoritative-review-event-v3\0")
+    .update(JSON.stringify({ envelopeId: "9".repeat(64), executionKind: "ordinary-sysbox", jobName: "source" }))
     .digest("hex");
 }

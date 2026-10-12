@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isDeepStrictEqual } from "node:util";
@@ -28,24 +28,15 @@ export async function currentQemuTerminalEvidence(
   if (scheduler.serviceId !== dependency.serviceId || scheduler.eventId !== event.eventId
     || scheduler.state !== "completed" || !isDeepStrictEqual(scheduler.event, event)
     || scheduler.attemptId !== attempt.attemptId || scheduler.descriptorDigest !== attempt.descriptorDigest
+    || scheduler.eligibilityGeneration !== attempt.descriptor.admissionGeneration
+    || typeof scheduler.eligibilityExpiresAt !== "number" || scheduler.eligibilityExpiresAt <= Date.now()
     || result.claimId !== scheduler.claimId || result.cleanupComplete !== true || result.result !== "success"
     || result.eventId !== status.eventId) {
     throw new CurrentQemuTerminalEvidenceError("QEMU scheduler evidence is not current and delivered");
   }
-  const requestId = randomUUID();
-  const admission = record(await requestJson(dependency, "POST",
-    `/v1/qemu-projects/${encodeURIComponent(envelope.review.projectId)}/admission/discover`,
-    { schemaVersion: 1, requestId }));
-  const selected = record(admission.admission);
-  if (scheduler.schemaVersion !== 1 || admission.schemaVersion !== 1
-    || admission.serviceId !== dependency.serviceId || admission.requestId !== requestId
-    || selected.admissionGeneration !== attempt.descriptor.admissionGeneration
-    || selected.policyRevision !== envelope.review.policyRevision
-    || selected.requiredJobSetRevision !== envelope.review.requiredJobSetRevision) {
-    throw new CurrentQemuTerminalEvidenceError("QEMU admission evidence is not current");
-  }
+  if (scheduler.schemaVersion !== 1) throw new CurrentQemuTerminalEvidenceError("QEMU eligibility evidence is invalid");
   return createHash("sha256").update("dim-native-qemu-promotion-evidence-v1\0")
-    .update(JSON.stringify({ attempt, status, scheduler, admission })).digest("hex");
+    .update(JSON.stringify({ attempt, status, scheduler })).digest("hex");
 }
 
 async function requestJson(

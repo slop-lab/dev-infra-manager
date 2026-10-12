@@ -195,21 +195,19 @@ test("ordinary CI pool commands separate control-plane service and host capacity
   assert.match(separateWorker.stderr, /unknown command 'worker'/);
 });
 
-test("native root CI exposes separate host execution and Project admission commands", () => {
+test("native root CI exposes host execution without manual Project admission", () => {
   // Given
   const help = run(["ci", "native-root", "--help"]);
 
   // When
   const host = run(["ci", "native-root", "host", "run", "--help"]);
-  const admission = run(["ci", "native-root", "project", "admit", "--help"]);
 
   // Then
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /host[\s\S]*project|project[\s\S]*host/);
+  assert.match(help.stdout, /host/);
+  assert.doesNotMatch(help.stdout, /project/);
   assert.equal(host.status, 0);
   assert.match(host.stdout, /<config>/);
-  assert.equal(admission.status, 0);
-  assert.match(admission.stdout, /<project-id>[\s\S]*<admission-config>/);
 });
 
 test("host lifecycle commands expose volume-preserving maintenance", () => {

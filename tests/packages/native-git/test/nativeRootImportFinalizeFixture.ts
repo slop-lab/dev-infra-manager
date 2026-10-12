@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { expect } from "vitest";
 import { parseNativeGitBundleConfig } from "../../../../core/packages/native-git/src/bundle-config.js";
 import { configuredNativeGitBundleServer, type NativeGitBundleServer } from "../../../../core/packages/native-git/src/native-bundle-server.js";
 import type { AdmissionVerifierHttpClient } from "../../../../core/packages/native-git/src/ordinary-admission-http.js";
@@ -20,6 +19,7 @@ export type { GitBundle, ImportReceipt, RootReadLeaseHooks, RunningService, Runt
 export const runGit = promisify(execFile);
 export const generationId = "a".repeat(64);
 export const activationToken = Buffer.alloc(32, 42).toString("base64url");
+export const finalizeReadinessToken = Buffer.alloc(32, 41).toString("base64url");
 export const generationB = "b".repeat(64);
 export const activationTokenB = Buffer.alloc(32, 43).toString("base64url");
 export const importer = {
@@ -130,7 +130,7 @@ export async function startFinalizeServiceForGeneration(
       hostPromoters: [hostPromoter, foreignHostPromoter]
     }),
     stateDirectory: root,
-    readinessToken: Buffer.alloc(32, 41).toString("base64url"),
+    readinessToken: finalizeReadinessToken,
     activationToken: servingActivationToken,
     expectedGenerationId: servingGenerationId,
     ...(rootReadLeaseClock === undefined ? {} : { rootReadLeaseClock }),
@@ -169,7 +169,9 @@ export async function activateFinalizeServiceForGeneration(origin: string, servi
     headers: { authorization: `Bearer ${servingActivationToken}`, "content-type": "application/json" },
     body: JSON.stringify({ schemaVersion: 1, generationId: servingGenerationId })
   });
-  expect(response.status).toBe(200);
+  if (response.status !== 200) {
+    throw new TypeError(`native finalize service activation returned ${String(response.status)}`);
+  }
 }
 
 export async function closeFinalizeService(service: NativeGitBundleServer): Promise<void> {

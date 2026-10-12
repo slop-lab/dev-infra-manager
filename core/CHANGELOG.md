@@ -12,7 +12,14 @@
   every capacity through replay and execution. The guest initramfs now loads
   usable 9p modules, enables the cgroup-v2 PID controller, and launches the
   fixed Bash command as UID/GID 1000 with no effective capabilities or
-  privilege regain while keeping kernel and cgroup controls read-only.
+  privilege regain while keeping kernel and cgroup controls read-only. Ordinary
+  and QEMU native event delivery now stores strict destination-bound,
+  deadline-bearing acknowledgements and automatically refreshes eligibility
+  after expiry without duplicate execution; definitive stale events receive a
+  finite suppression deadline, no longer block newer work, and retry rather
+  than being permanently discarded. Active ordinary execution leases remain valid across
+  intake-cache expiry while exact generation, root, capacity, and lease fences
+  still apply.
 
 - Add the native ordinary authority library as the first bounded slice of the
   native ordinary-CI target. Its separate schema-3 SQLite state admits exact
@@ -42,7 +49,7 @@
   activation. The native Git and ordinary CI services now ship separate
   source Dockerfiles pinned to Node 24.19.0 by digest, fixed non-root identities,
   and only their audited runtime file and package closures. The ordinary volume
-  keeps strict format-11 state; the native Git volume creates strict format-8 state with
+  keeps strict format-12 state; the native Git volume creates strict format-8 state with
   a host-bound multi-Project/root registry and a durable non-secret manifest
   marker. The native Git image pins Git `2.39.5`; an operator-supplied strict
   schema-7 config separates host-bound registrars, root importers, root read
@@ -101,24 +108,21 @@
   current reviews remain readable without implying approval, and real HTTP
   tests preserve database, ref, review, approval, and revocation bytes. This
   installed-only namespace has no standalone authority fallback. The installed
-  ordinary service now consumes that proof only to durably register complete
-  imported-root policy eligibility, proof-bound ordinary event intake, and
-  ordinary-only host claim and result state in strict format-11 SQLite under the exact
-  installer generation and global capacity digest. Distinct credential-derived
-  registrar and reader identities expose exact register/current/revoke
-  routes with a capped durable request-replay ledger. A query-only discovery
-  route reads the active, unexpired Project/root admission and its generation
-  without changing state or consuming that ledger; it is not event or
-  execution authority. Identical bindings renew
-  one monotonic admission generation; changed import, policy, installer
-  generation, capacity, expiry, or revocation requires a new UUID generation,
-  and rollback never revives replaced state. Restart requires reactivation,
-  fresh current checks use new UUIDv4 nonces and never fetch upstream; exact
-  replays are historical receipts, not present-validity assertions. Admission
-  changes and replay receipts commit in one SQLite transaction, including
-  post-proof race and replay-cap checks. Installed native Git now delivers
-  authoritative ordinary-Sysbox review events to these receipts after an
-  independent query-only admission lookup. Exact acknowledgements publish
+  ordinary service now consumes that proof to reconcile complete imported-root
+  eligibility internally when native Git submits a candidate job event, and
+  keeps proof-bound ordinary event intake, host claims, results, and report
+  outbox state in strict format-12 SQLite under the exact installer generation
+  and global capacity digest. There are no Project admission, discovery,
+  refresh, or revocation routes or credentials. Candidate-declared jobs define
+  runnable work independently of promotion-only protected `requiredJobs`.
+  Changed import, policy, installer generation, capacity, expiry, or replacement
+  requires a new UUID generation, and rollback never revives replaced state.
+  Restart requires exact reactivation; event intake obtains fresh policy and
+  stored-event proof, while exact durable receipt replay can proceed without
+  native Git only while the same eligibility remains current. Eligibility
+  changes and replay receipts commit transactionally, including post-proof race
+  and replay-cap checks. Installed native Git now delivers authoritative
+  ordinary-Sysbox review events directly to these receipts. Exact acknowledgements publish
   durable per-event markers; lost replies, restart, and transient marker
   writes retry without creating another receipt. Foreign markers fail closed,
   fatal delivery errors withhold readiness, and QEMU events never enter ordinary
@@ -234,7 +238,7 @@
   replay, and G1 rotation supersedes queued old-generation demand. Earlier
   ordinary formats are rejected rather than migrated. Claim, result,
   report-outbox, fence, and service-epoch tables are validated as part of the
-  strict format-11 manifest. The
+  strict format-12 manifest. The
   native Git event emitter now uses a fifth outbound-only webhook credential to
   retry the exact immutable event bytes without blocking review creation, accepts
   only the exact non-cacheable `202` acknowledgement, and stores permanent
@@ -272,17 +276,16 @@
   request-start monotonic deadline, and submits terminal evidence only after
   ownership-checked root and container cleanup. The installed CLI now exposes
   a direct host-only service command that requires registered `sysbox-runc`,
-  runs one loop per fixed capacity, and drains all loops on termination. A
-  separate registrar-only command admits one immutable native Project and
-  validates the exact service response; neither command uses Gitea, workspace,
-  or controller authority. The installed CLI also wraps the trusted native
-  root bootstrap API: it pins one reviewed local branch commit, loads distinct
-  owner-only registrar and importer files, retains the private bundle/draft,
+  runs one loop per fixed capacity, and drains all loops on termination. Hosts
+  remain globally configured and require no Project-local registration or
+  admission command. The installed CLI also wraps the trusted native root
+  bootstrap API: it pins one reviewed local branch commit, loads the owner-only
+  importer file, retains the private bundle/draft,
   and converges exact replay without exposing credentials, after which plain
   native `project create` publishes ready state. The separate installer can deploy
   the bundle and explicitly roll forward an exact candidate after uncertain
   activation without automatic rollback, resource replacement, or volume
-  deletion. Ordinary admission remains independent of Project readiness, and
+  deletion. Automatic ordinary eligibility remains independent of Project readiness, and
   host capacity exists only while the explicit host command runs.
   Before installation it now rejects an
   obsolete ordinary-pool selector and canonical Project-scoped Sysbox or unsafe

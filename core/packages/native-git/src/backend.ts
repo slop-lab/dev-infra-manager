@@ -24,6 +24,10 @@ export function serveGitBackend(
   let headersSent = false;
   let errorOutput = "";
   let settled = false;
+  const responseCompleted = new Promise<void>((done) => {
+    input.response.once("finish", done);
+    input.response.once("close", done);
+  });
   const finish = (): void => {
     if (settled) return;
     settled = true;
@@ -55,7 +59,7 @@ export function serveGitBackend(
   });
   input.request.on("aborted", () => child.kill("SIGKILL"));
   input.response.on("close", () => {
-    if (!input.response.writableEnded) child.kill("SIGKILL");
+    if (!input.response.writableEnded && input.afterSuccessfulWrite === undefined) child.kill("SIGKILL");
   });
 
   child.stdout.on("data", (chunk: Buffer) => {
@@ -85,7 +89,7 @@ export function serveGitBackend(
   });
   input.response.on("drain", () => child.stdout.resume());
   child.stdout.on("end", () => {
-    if (headersSent && !input.response.writableEnded) input.response.end();
+    if (headersSent && input.afterSuccessfulWrite === undefined && !input.response.writableEnded) input.response.end();
   });
   child.stderr.on("data", (chunk: Buffer) => {
     if (errorOutput.length < MAX_ERROR_BYTES) errorOutput += chunk.toString("utf8", 0, MAX_ERROR_BYTES - errorOutput.length);
@@ -95,12 +99,25 @@ export function serveGitBackend(
     else input.response.destroy();
   });
   child.on("close", (code) => {
+    void complete(code);
+  });
+
+  async function complete(code: number | null): Promise<void> {
     if (!headersSent && !input.response.writableEnded) {
       input.response.writeHead(code === 0 ? 502 : 500, { "Content-Type": "text/plain; charset=utf-8" });
       input.response.end(errorOutput.length > 0 ? "Git backend failed\n" : "Git backend produced no response\n");
     }
+    if (code === 0 && headersSent && input.afterSuccessfulWrite !== undefined) {
+      try {
+        await input.afterSuccessfulWrite();
+        if (!input.response.writableEnded && !input.response.destroyed) input.response.end();
+      } catch (error) {
+        if (!input.response.destroyed) input.response.destroy(error instanceof Error ? error : undefined);
+      }
+    }
+    await responseCompleted;
     finish();
-  });
+  }
   });
 }
 
@@ -110,6 +127,7 @@ type GitBackendRequest = {
   readonly route: NativeGitRoute;
   readonly request: IncomingMessage;
   readonly response: ServerResponse;
+  readonly afterSuccessfulWrite?: () => Promise<void>;
 };
 
 function backendEnvironment(input: GitBackendRequest): NodeJS.ProcessEnv {

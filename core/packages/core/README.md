@@ -257,7 +257,7 @@ attests the exact `native-root-ci-proof-reader` role and ordered policy/event
 scope. It accepts only bounded non-cacheable exact JSON, verifies every policy
 field, sorted unique jobs/reviewers/rules, v2 policy and job revisions, the v1
 reviewer revision, SHA-256 policy bytes, current-root object format and import
-nonce, and the deterministic schema-2 event digest and selector bindings.
+nonce, and the deterministic schema-3 event digest and selector bindings.
 There are no redirects or retries. `404` and `409` are rejected/stale tuples;
 authentication, protocol, malformed proof, timeout, cancellation, and transport
 failures are unavailable without exposing credentials. This client is not the
@@ -266,22 +266,18 @@ attempt, result, scheduler, runtime, promotion, or ready state.
 
 The installed ordinary service consumes that client for native-root policy
 eligibility, proof-bound review-event intake, and ordinary-only host claims and
-results. Its strict format-11 database adds event receipts, demand, service
+results. Its strict format-12 database adds event receipts, demand, service
 epochs, claims, immutable cleaned host results, and a durable report outbox to
-bundle activation, admissions, and the capped request replay ledger. Earlier
-formats are rejected unchanged. After exact local activation, the registrar
-credential
-can register or revoke one imported `root`, while the reader credential can
-query only a named current admission generation. A registration binds the
+bundle activation and internally managed eligibility. Earlier formats are
+rejected unchanged. Event intake reconciles current imported-root policy from
+native Git and binds the
 complete kind-labelled canonical policy, import nonce and protected ref to the
 installer generation and global `nativeCapacityConfigDigest`; current head
 sequence/commit/tree advance monotonically without changing the admission
 generation. Policy, import, installer-generation, capacity, expiry, or
-revocation changes create a new UUID generation and cannot revive an older
+replacement changes create a new UUID generation and cannot revive an older
 row. Restart preserves rows but requires activation again. Every freshness
-check must use a new UUIDv4 `requestId`: exact replays of any operation,
-including `current`, return historical receipts, even after revocation or
-expiry, and are not assertions of present eligibility. A configured host can
+check is internal to event intake. A configured host can
 attest its exact `native-host` identity and atomically reserve the oldest
 eligible queued demand for one configured capacity. The ordinary service uses
 separate native proof, attempt-issuer, result-reporter, query, webhook, and host
@@ -290,18 +286,9 @@ native attempt, then activates the claim with `issuanceRequestId` equal to
 `claimId`. Renewals remain bound to that claim, capacity, generation, and
 service epoch.
 
-The query credential also has `POST
-/v1/projects/PROJECT/repositories/root/native-root-admission/discover`. Its
-strict schema-1 body carries a fresh UUIDv4 `requestId` and the exact installer
-`generationId`. It returns only the active, unexpired Project/root admission
-and its generated admission generation, without writing a replay-ledger entry
-or renewing the lease. This is a current database observation, not event
-delivery or execution permission; the receipt path checks the current native
-review and admission independently.
-
 The webhook credential's installed endpoint is exact
 `POST /v1/native-root-ci-events`. A strict schema-1 wrapper binds the startup
-generation and active admission generation to one canonical schema-2
+generation to one canonical schema-3
 ordinary-Sysbox event. A new receipt requires a fresh native proof of the exact
 event, complete policy/import identity, services, generation, current root, and
 capacity digest. The service repeats those checks in the insertion transaction.
@@ -328,10 +315,9 @@ native Git credential, runs one bounded digest-pinned Sysbox job, and checks
 container and private-root cleanup before reporting. `runNativeRootCiHost`
 loads one owner-only host file, refuses to claim unless Docker registers
 `sysbox-runc`, runs one worker per fixed capacity, and drains them under one
-abort signal. `admitNativeRootCiProject` independently attests the registrar
-role and registers one immutable native Project ID from a separate owner-only
-file. The installed CLI exposes both operations under `ci native-root`; the
-controller does not start them. Schema-6 native Project readiness and schema-9
+abort signal. Eligibility is automatic; no Project registrar command or
+credential is installed. The controller does not start host capacity.
+Schema-6 native Project readiness and schema-9
 Sysbox workspaces remain independent, and native QEMU execution and protected
 promotion remain fail-closed.
 

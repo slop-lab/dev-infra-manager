@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import type { Server } from "node:http";
 import { tmpdir } from "node:os";
@@ -6,8 +5,12 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { createNodeNativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionHttpClient.js";
+import { validateNativeOrdinaryAuthorityConfig } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityConfig.js";
+import { nativeCapacityConfigDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js";
 import { parseNativeOrdinaryBundleConfig } from "../../../../core/packages/core/src/nativeOrdinaryBundleConfig.js";
 import { configuredNativeRootAdmissionServer } from "../../../../core/packages/core/src/nativeRootAdmissionService.js";
+import { NativeRootAdmissionStore } from "../../../../core/packages/core/src/nativeRootAdmissionStore.js";
+import { createNativeRootCiProofClient } from "../../../../core/packages/core/src/nativeRootCiProofClient.js";
 import { bundleSecrets, idleOrdinaryConfig } from "../../native-git/test/bundleConfigFixture.js";
 import { createBundleReview, nativeBundleReviewFixture } from "../../native-git/test/nativeBundleReviewFixture.js";
 import { cleanupFinalizeFixtures, generationId } from "../../native-git/test/nativeRootImportFinalizeFixture.js";
@@ -24,23 +27,21 @@ afterEach(async () => {
 });
 
 describe("native root CI event receipt proof races", () => {
-  it("conflicts when admission is revoked after the real proof returns", async () => {
+  it("conflicts when eligibility is replaced after proof and reconciles on retry", async () => {
     // Given
     const fixture = await raceFixture("receipt-revoke-race");
 
     // When
     const pending = fixture.sendReceipt();
     await fixture.proofReturned.promise;
-    const revoked = await call(fixture.origin, admissionPath("revoke"), registrarAuthorization(), {
-      schemaVersion: 1, requestId: randomUUID(), generationId, admissionGeneration: fixture.admissionGeneration
-    });
+    replaceEligibility(fixture.root, fixture.admissionGeneration);
     fixture.releaseProof.resolve();
     const raced = await pending;
     const inactivePreflight = await fixture.sendReceipt();
 
     // Then
-    expect([revoked.status, raced.status, inactivePreflight.status]).toEqual([200, 409, 404]);
-    expect(receiptCount(fixture.root)).toBe(0);
+    expect([raced.status, inactivePreflight.status]).toEqual([409, 202]);
+    expect(receiptCount(fixture.root)).toBe(1);
   });
 
   it("conflicts when admission expires after the real proof returns", async () => {
@@ -56,8 +57,8 @@ describe("native root CI event receipt proof races", () => {
     const inactivePreflight = await fixture.sendReceipt();
 
     // Then
-    expect([raced.status, inactivePreflight.status]).toEqual([409, 404]);
-    expect(receiptCount(fixture.root)).toBe(0);
+    expect([raced.status, inactivePreflight.status]).toEqual([409, 202]);
+    expect(receiptCount(fixture.root)).toBe(1);
   });
 
   it("conflicts when durable activation changes after the real proof returns", async () => {
@@ -88,12 +89,14 @@ async function raceFixture(label: string) {
   const releaseProof = deferred();
   const nodeClient = createNodeNativeGitAdmissionHttpClient();
   const clock = { value: 1_000 };
+  let blockProof = false;
+  const config = parseNativeOrdinaryBundleConfig(idleOrdinaryConfig());
   const server = await configuredNativeRootAdmissionServer({
-    config: parseNativeOrdinaryBundleConfig(idleOrdinaryConfig()), stateDirectory: join(root, "ordinary"),
+    config, stateDirectory: join(root, "ordinary"),
     readinessToken, activationToken, expectedGenerationId: generationId, now: () => clock.value,
     proofHttpClient: { request: async (input) => {
       const response = await nodeClient.request({ ...input, endpoint: native.service.origin });
-      if (input.path.endsWith("/review-event")) {
+      if (blockProof && input.path.endsWith("/review-event")) {
         proofReturned.resolve();
         await releaseProof.promise;
       }
@@ -106,21 +109,26 @@ async function raceFixture(label: string) {
   if (address === null || typeof address === "string") throw new TypeError("ordinary listener is unavailable");
   const origin = `http://127.0.0.1:${address.port}`;
   await call(origin, "/v1/activation", `Bearer ${activationToken}`, { schemaVersion: 1, generationId });
-  const registered = await call(origin, admissionPath("register"), registrarAuthorization(), {
-    schemaVersion: 1, requestId: randomUUID(), generationId
-  });
-  const admission = admissionRecord(registered.body);
-  const admissionGeneration = stringField(admission, "admissionGeneration");
-  const expiresAt = numberField(admission, "expiresAt");
-  const body = { schemaVersion: 1, generationId, admissionGeneration, event };
+  const proof = await createNativeRootCiProofClient({ endpoint: config.nativeGit.endpoint,
+    serviceId: config.nativeGit.serviceId, generationId, identity: config.nativeGit.identity }, {
+    request: (input) => nodeClient.request({ ...input, endpoint: native.service.origin })
+  }).readImportedPolicy("project-a", AbortSignal.timeout(5_000));
+  const database = new DatabaseSync(join(root, "ordinary", "ordinary-ci.sqlite3"));
+  const capacities = validateNativeOrdinaryAuthorityConfig(config);
+  const store = new NativeRootAdmissionStore(database, { ordinaryServiceId: config.serviceId,
+    controlPlaneGenerationId: generationId, capacityConfigDigest: nativeCapacityConfigDigest([...capacities.values()]),
+    leaseMilliseconds: config.eligibilityLeaseMilliseconds, now: () => clock.value });
+  const registered = store.register(proof);
+  if (registered.kind !== "registered") throw new TypeError("eligibility seed conflicted");
+  const admissionGeneration = registered.admission.admissionGeneration;
+  const expiresAt = registered.admission.expiresAt;
+  database.close();
+  blockProof = true;
+  const body = { schemaVersion: 1, generationId, event };
   return { root, origin, clock, expiresAt, admissionGeneration, proofReturned, releaseProof,
     sendReceipt: () => call(origin, "/v1/native-root-ci-events", webhookAuthorization(), body) };
 }
 
-function admissionPath(operation: "register" | "revoke"): string {
-  return `/v1/projects/project-a/repositories/root/native-root-admission/${operation}`;
-}
-function registrarAuthorization(): string { return authorization("ordinary-registrar", bundleSecrets.registrar); }
 function webhookAuthorization(): string { return authorization("native-events", bundleSecrets.webhook); }
 function authorization(username: string, password: string): string {
   return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
@@ -131,13 +139,9 @@ async function call(origin: string, path: string, authorizationHeader: string, b
   }, body: JSON.stringify(body) });
   return { status: response.status, body: await response.json() };
 }
-function admissionRecord(value: unknown): Readonly<Record<string, unknown>> {
+function record(value: unknown): Readonly<Record<string, unknown>> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new TypeError("response is invalid");
-  const admission = Reflect.get(value, "admission");
-  if (typeof admission !== "object" || admission === null || Array.isArray(admission)) {
-    throw new TypeError("admission is invalid");
-  }
-  return Object.fromEntries(Object.keys(admission).map((key) => [key, Reflect.get(admission, key)]));
+  return Object.fromEntries(Object.keys(value).map((key) => [key, Reflect.get(value, key)]));
 }
 function stringField(record: Readonly<Record<string, unknown>>, field: string): string {
   const value = record[field];
@@ -148,6 +152,12 @@ function numberField(record: Readonly<Record<string, unknown>>, field: string): 
   const value = record[field];
   if (typeof value !== "number") throw new TypeError("admission number field is invalid");
   return value;
+}
+function replaceEligibility(root: string, admissionGeneration: string): void {
+  const database = new DatabaseSync(join(root, "ordinary", "ordinary-ci.sqlite3"));
+  database.prepare("UPDATE native_root_admissions SET state = 'replaced', ended_at = ? WHERE admission_generation = ?")
+    .run(1_001, admissionGeneration);
+  database.close();
 }
 function replaceActivationDigest(root: string): void {
   const database = new DatabaseSync(join(root, "ordinary", "ordinary-ci.sqlite3"));

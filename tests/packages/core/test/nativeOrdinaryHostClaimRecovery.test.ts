@@ -4,6 +4,7 @@ import {
   NativeGitAttemptIssuerUnavailableError
 } from "../../../../core/packages/core/src/nativeGitAttemptIssuerClient.js";
 import {
+  activeEligibilityGeneration,
   admission,
   assignment,
   descriptor,
@@ -81,8 +82,7 @@ describe("native ordinary host claim recovery", () => {
     const request = claimRequest("20000000-0000-4000-8000-000000000012");
     expect((await post(fixture.endpoint, "/v1/host-claims", "host-a", request)).status).toBe(503);
     const rotated = admission("project-a", "source", "2");
-    fixture.source.authorizePolicy(rotated);
-    expect((await post(fixture.endpoint, "/v1/operator-admissions", "registrar", rotated)).status).toBe(200);
+    await rotateEligibility(fixture, rotated, "82");
 
     // When
     const stale = await post(fixture.endpoint, "/v1/host-claims", "host-a", request);
@@ -187,8 +187,7 @@ describe("native ordinary host claim recovery", () => {
     const pendingResponse = post(stale.endpoint, "/v1/host-claims", "host-a", request);
     await attemptStarted.promise;
     const rotated = admission("project-a", "source", "2");
-    stale.source.authorizePolicy(rotated);
-    expect((await post(stale.endpoint, "/v1/operator-admissions", "registrar", rotated)).status).toBe(200);
+    await rotateEligibility(stale, rotated, "91");
 
     // When
     continueAttempt.resolve();
@@ -209,13 +208,11 @@ describe("native ordinary host claim recovery", () => {
     const claimed = await post(fixture.endpoint, "/v1/host-claims", "host-a", request);
     expect(claimed.status).toBe(200);
     const rotated = admission("project-a", "source", "2");
-    fixture.source.authorizePolicy(rotated);
-
     // When
-    const rotation = await post(fixture.endpoint, "/v1/operator-admissions", "registrar", rotated);
+    const rotation = await rotateEligibility(fixture, rotated, "15");
 
     // Then
-    expect(rotation.status).toBe(200);
+    expect(rotation.status).toBe(409);
     expect(states(fixture.database)).toEqual({ receipt: "recovering", demand: "claimed", claims: 1, assignments: 0 });
     expect(fenceReason(fixture.database)).toBe("generation-rotated");
   });
@@ -230,11 +227,24 @@ async function preparedFixture(
   fixtures.push(fixture);
   const policy = admission("project-a", "source", "1");
   fixture.source.authorizePolicy(policy);
-  expect((await post(fixture.endpoint, "/v1/operator-admissions", "registrar", policy)).status).toBe(200);
   const event = nativeEvent();
   fixture.source.authorizeEvent(event);
   expect((await post(fixture.endpoint, "/v1/native-events", "webhook", event)).status).toBe(202);
   return fixture;
+}
+
+async function rotateEligibility(fixture: AuthorityFixture, policy: ReturnType<typeof admission>, suffix: string) {
+  fixture.source.authorizePolicy(policy);
+  const event = {
+    ...nativeEvent(`00000000-0000-4000-8000-0000000000${suffix}`),
+    policyRevision: policy.policyRevision,
+    requiredReviewRevision: policy.requiredReviewRevision,
+    requiredJobSetRevision: policy.requiredJobSetRevision
+  };
+  fixture.source.authorizeEvent(event);
+  const response = await post(fixture.endpoint, "/v1/native-events", "webhook", event);
+  activeEligibilityGeneration(fixture, policy.projectId, policy.repositoryId);
+  return response;
 }
 
 function claimRequest(requestId: string) {

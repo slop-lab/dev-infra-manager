@@ -25,9 +25,8 @@ export type NativeCandidateJobInputsFixture = {
     readonly expectedProtectedHead: string;
     readonly candidateCommit: string;
     readonly candidateTree: string;
-    readonly requiredJobs: readonly NativeCandidateRequiredJob[];
   };
-  commit(message: string): Promise<NativeCandidateJobInputsFixture["input"]>;
+  commit(message: string, stage?: boolean): Promise<NativeCandidateJobInputsFixture["input"]>;
   close(): Promise<void>;
 };
 
@@ -82,8 +81,8 @@ export async function nativeCandidateJobInputsFixture(
     repositoryPath,
     config,
     input,
-    async commit(message) {
-      await git(source, ["add", "-A"]);
+    async commit(message, stage = true) {
+      if (stage) await git(source, ["add", "-A"]);
       await git(source, ["commit", "-m", message]);
       await git(root, ["--git-dir", repositoryPath, "fetch", source, "+refs/heads/main:refs/heads/main"]);
       return inputFor(source);
@@ -124,7 +123,6 @@ async function inputFor(source: string): Promise<NativeCandidateJobInputsFixture
     protectedRef: "refs/heads/main",
     expectedProtectedHead: candidateCommit,
     candidateCommit,
-    candidateTree,
-    requiredJobs: nativeRequiredJobs
+    candidateTree
   };
 }

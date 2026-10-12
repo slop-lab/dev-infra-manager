@@ -5,24 +5,24 @@ import {
   type NativeRootCiReviewEvent
 } from "./nativeRootCiReviewEvent.js";
 
-const fields = ["schemaVersion", "generationId", "admissionGeneration", "event"] as const;
+const fields = ["schemaVersion", "generationId", "event"] as const;
 const generationPattern = /^[0-9a-f]{64}$/;
-const uuidV4Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
-export type NativeRootCiEventReceiptRequest = {
+export type NativeRootCiEventIntakeRequest = {
   readonly schemaVersion: 1;
   readonly generationId: string;
-  readonly admissionGeneration: string;
   readonly event: NativeRootCiReviewEvent;
   readonly canonicalEvent: string;
   readonly eventDigest: string;
 };
+export type NativeRootCiEventReceiptRequest = NativeRootCiEventIntakeRequest & {
+  readonly admissionGeneration: string;
+};
 
-export function parseNativeRootCiEventReceiptRequest(value: unknown): NativeRootCiEventReceiptRequest {
+export function parseNativeRootCiEventReceiptRequest(value: unknown): NativeRootCiEventIntakeRequest {
   const input = exactRecord(value);
   if (input.schemaVersion !== 1 || typeof input.generationId !== "string"
-    || !generationPattern.test(input.generationId) || typeof input.admissionGeneration !== "string"
-    || !uuidV4Pattern.test(input.admissionGeneration)) invalid();
+    || !generationPattern.test(input.generationId)) invalid();
   let event: NativeRootCiReviewEvent;
   try { event = parseNativeRootCiReviewEvent(input.event); }
   catch (error) {
@@ -30,8 +30,7 @@ export function parseNativeRootCiEventReceiptRequest(value: unknown): NativeRoot
     throw error;
   }
   const canonicalEvent = canonicalNativeRootCiReviewEvent(event);
-  return { schemaVersion: 1, generationId: input.generationId,
-    admissionGeneration: input.admissionGeneration, event, canonicalEvent,
+  return { schemaVersion: 1, generationId: input.generationId, event, canonicalEvent,
     eventDigest: `sha256:${createHash("sha256").update(canonicalEvent).digest("hex")}` };
 }
 

@@ -1,5 +1,4 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { AdmissionVerifierTimeoutError } from "./admission-verifier.js";
 import type { NativeGitBundleConfig } from "./bundle-config.js";
 import { bindExactActivation } from "./native-bundle-activation.js";
 import {
@@ -19,11 +18,6 @@ import {
 import type { NativeProjectRootImportService } from "./native-project-root-import-http.js";
 import type { NativeProjectRootReadService } from "./native-project-root-read-http.js";
 import type { NativeProjectWorkspaceWriteService } from "./native-project-workspace-write-http.js";
-import {
-  attestNativeRootAdmissionReader,
-  OrdinaryAdmissionVerifierError,
-  type AdmissionVerifierHttpClient
-} from "./ordinary-admission-http.js";
 import { nativeGitRoute } from "./routing.js";
 import type { NativeHumanReviewerService } from "./native-human-reviewer-http.js";
 import type { NativeRootCiProofService } from "./native-root-ci-proof-http.js";
@@ -37,7 +31,6 @@ import type { NativeCandidateReadService } from "./native-candidate-read-http.js
 type RequestHandlerInput = {
   readonly activationTokenDigest: string;
   readonly config: NativeGitBundleConfig;
-  readonly identityHttpClient: AdmissionVerifierHttpClient;
   readonly options: Pick<NativeGitBundleServerOptions,
     "activationToken" | "expectedGenerationId" | "readinessToken">;
   readonly registrars: readonly NativeGitProjectRegistrar[];
@@ -54,7 +47,7 @@ type RequestHandlerInput = {
   readonly candidateReadService: NativeCandidateReadService;
   readonly deliveryHealthy: () => boolean;
   readonly activated: () => boolean;
-  readonly activate: () => void;
+  readonly activate: () => Promise<void>;
   readonly readiness: Parameters<typeof handleNativeProjectReadinessHttp>[0];
   readonly prepareProject: (
     generationId: string,
@@ -69,18 +62,6 @@ export function createNativeBundleRequestHandler(input: RequestHandlerInput) {
     if (request.method === "GET" && url.pathname === "/readyz" && url.search === "") {
       if (!bearerAuthorized(request, input.options.readinessToken)) return sendNotFound(response);
       if (!input.deliveryHealthy()) return sendJson(response, 503, { error: "native event delivery is unavailable" });
-      try {
-        await attestNativeRootAdmissionReader({
-          config: input.config.ordinaryCi,
-          httpClient: input.identityHttpClient,
-          timeoutMilliseconds: 2_000
-        }, input.options.expectedGenerationId);
-      } catch (error) {
-        if (error instanceof OrdinaryAdmissionVerifierError || error instanceof AdmissionVerifierTimeoutError) {
-          return sendJson(response, 503, { error: "ordinary CI identity is unavailable" });
-        }
-        throw error;
-      }
       return sendJson(response, 200, { status: "ready", schemaVersion: 1 });
     }
     if (request.method === "POST" && url.pathname === "/v1/activation" && url.search === "") {
@@ -93,7 +74,7 @@ export function createNativeBundleRequestHandler(input: RequestHandlerInput) {
       if (!bindExactActivation(input.state, generationId, input.activationTokenDigest)) {
         return sendJson(response, 409, { error: "native Git activation binding conflicts with durable state" });
       }
-      input.activate();
+      await input.activate();
       return sendJson(response, 200, { schemaVersion: 1, generationId, activated: true });
     }
     if (await input.rootReadService.handleLeaseRequest(request, response, url)) return;

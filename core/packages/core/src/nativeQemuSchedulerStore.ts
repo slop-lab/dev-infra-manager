@@ -4,14 +4,11 @@ import type { NativeQemuAttempt } from "./nativeQemuAuthorityClient.js";
 import type { NativeQemuReviewEvent } from "./nativeQemuReviewEvent.js";
 import { openNativeQemuSchedulerDatabase } from "./nativeQemuSchedulerDatabase.js";
 import { NativeQemuSchedulerStoreError, nullableText, number, optionalText, parseAttempt, parseCompletion,
-  parseEvent, stringArray, text, type NativeQemuCompletion } from "./nativeQemuSchedulerRows.js";
+  parseEvent, text, type NativeQemuCompletion } from "./nativeQemuSchedulerRows.js";
 
 export type { NativeQemuReviewEvent } from "./nativeQemuReviewEvent.js";
 export { NativeQemuSchedulerStoreError } from "./nativeQemuSchedulerRows.js";
 export type { NativeQemuCompletion } from "./nativeQemuSchedulerRows.js";
-export type NativeQemuAdmission = { readonly projectId: string; readonly admissionGeneration: string;
-  readonly leaseExpiresAt: number; readonly policyRevision: string; readonly requiredJobSetRevision: string;
-  readonly requiredQemuJobs: readonly string[] };
 export type NativeQemuClaim = { readonly claimId: string; readonly requestId: string; readonly hostId: string;
   readonly capacity: string; readonly admissionGeneration: string; readonly leaseExpiresAt: number;
   readonly event: NativeQemuReviewEvent };
@@ -22,65 +19,63 @@ export type NativeQemuFinalization = { readonly state: "active" | "completed"; r
 
 export class NativeQemuSchedulerStore {
   readonly #database: DatabaseSync;
-  constructor(path: string, readonly now: () => number = Date.now) {
-    this.#database = openNativeQemuSchedulerDatabase(path);
+  constructor(path: string, executionAuthorityJson: string, readonly now: () => number = Date.now) {
+    this.#database = openNativeQemuSchedulerDatabase(path, executionAuthorityJson);
   }
   close(): void { this.#database.close(); }
 
-  admit(input: NativeQemuAdmission): void {
-    if (input.requiredQemuJobs.length === 0 || new Set(input.requiredQemuJobs).size !== input.requiredQemuJobs.length) {
-      throw new NativeQemuSchedulerStoreError("native QEMU admission jobs are invalid");
-    }
-    this.#database.prepare(`INSERT INTO native_qemu_admissions
-      (project_id, admission_generation, lease_expires_at, policy_revision, job_set_revision, jobs_json)
-      VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(project_id) DO UPDATE SET admission_generation=excluded.admission_generation,
-      lease_expires_at=excluded.lease_expires_at, policy_revision=excluded.policy_revision,
-      job_set_revision=excluded.job_set_revision, jobs_json=excluded.jobs_json`).run(input.projectId,
-      input.admissionGeneration, input.leaseExpiresAt, input.policyRevision, input.requiredJobSetRevision,
-      JSON.stringify([...input.requiredQemuJobs].sort()));
-  }
-
-  admission(projectId: string): NativeQemuAdmission | undefined {
-    const row = this.#database.prepare("SELECT * FROM native_qemu_admissions WHERE project_id=? AND lease_expires_at>?")
-      .get(projectId, this.now());
-    if (row === undefined) return undefined;
-    return { projectId, admissionGeneration: text(row, "admission_generation"),
-      leaseExpiresAt: number(row, "lease_expires_at"), policyRevision: text(row, "policy_revision"),
-      requiredJobSetRevision: text(row, "job_set_revision"),
-      requiredQemuJobs: stringArray(text(row, "jobs_json")) };
+  serviceGenerationId(): string {
+    const row = this.#database.prepare("SELECT value FROM native_qemu_metadata WHERE key='service_generation_id'").get();
+    return text(row, "value");
   }
 
   eventStatus(eventId: string): Readonly<Record<string, unknown>> | undefined {
     const row = this.#database.prepare(`SELECT e.event_json,e.state,c.claim_id,c.host_id,c.capacity,
-      c.attempt_id,c.descriptor_digest,c.result_json FROM native_qemu_events e
-      LEFT JOIN native_qemu_claims c ON c.event_id=e.event_id WHERE e.event_id=?`).get(eventId);
+      c.attempt_id,c.descriptor_digest,c.result_json,e.admission_generation,a.lease_expires_at
+      FROM native_qemu_events e
+      LEFT JOIN native_qemu_claims c ON c.event_id=e.event_id
+      LEFT JOIN native_qemu_eligibility a ON a.eligibility_generation=e.admission_generation
+      WHERE e.event_id=?`).get(eventId);
     if (row === undefined) return undefined;
     return { event: parseEvent(text(row, "event_json")), state: text(row, "state"),
       ...optionalText(row, "claim_id", "claimId"), ...optionalText(row, "host_id", "hostId"),
       ...optionalText(row, "capacity", "capacity"), ...optionalText(row, "attempt_id", "attemptId"),
       ...optionalText(row, "descriptor_digest", "descriptorDigest"),
+      eligibilityGeneration: text(row, "admission_generation"),
+      eligibilityExpiresAt: number(row, "lease_expires_at"),
       ...(nullableText(row, "result_json") === undefined ? {} : { result: JSON.parse(nullableText(row, "result_json") ?? "") }) };
   }
 
-  enqueue(admissionGeneration: string, event: NativeQemuReviewEvent): "created" | "replay" {
-    const admission = this.#database.prepare(`SELECT project_id, lease_expires_at, policy_revision, job_set_revision, jobs_json
-      FROM native_qemu_admissions WHERE admission_generation = ?`).get(admissionGeneration);
-    if (admission === undefined || text(admission, "project_id") !== event.projectId
-      || number(admission, "lease_expires_at") <= this.now() || text(admission, "policy_revision") !== event.policyRevision
-      || text(admission, "job_set_revision") !== event.requiredJobSetRevision
-      || !stringArray(text(admission, "jobs_json")).includes(event.jobName) || event.executionKind !== "qemu") {
-      throw new NativeQemuSchedulerStoreError("native QEMU event is not admitted");
-    }
-    const serialized = JSON.stringify(event);
-    const existing = this.#database.prepare("SELECT event_json FROM native_qemu_events WHERE event_id = ?").get(event.eventId);
-    if (existing !== undefined) {
-      if (text(existing, "event_json") !== serialized) throw new NativeQemuSchedulerStoreError("native QEMU event conflicts");
-      return "replay";
-    }
-    this.#database.prepare(`INSERT INTO native_qemu_events
-      (event_id, admission_generation, event_json, state, created_at) VALUES (?, ?, ?, 'queued', ?)`)
-      .run(event.eventId, admissionGeneration, serialized, this.now());
-    return "created";
+  enqueue(event: NativeQemuReviewEvent, eligibilityLeaseMilliseconds: number): {
+    readonly result: "created" | "replay"; readonly eligibilityGeneration: string; readonly expiresAt: number
+  } {
+    if (event.executionKind !== "qemu") throw new NativeQemuSchedulerStoreError("native QEMU event is invalid");
+    return this.transaction(() => {
+      const now = this.now();
+      const expiresAt = now + eligibilityLeaseMilliseconds;
+      const existingEligibility = this.#database.prepare("SELECT * FROM native_qemu_eligibility WHERE project_id=?")
+        .get(event.projectId);
+      const eligibilityGeneration = existingEligibility === undefined
+        ? randomUUID() : text(existingEligibility, "eligibility_generation");
+      this.#database.prepare(`INSERT INTO native_qemu_eligibility
+        (project_id,eligibility_generation,lease_expires_at,refreshed_at) VALUES (?,?,?,?)
+        ON CONFLICT(project_id) DO UPDATE SET eligibility_generation=excluded.eligibility_generation,
+        lease_expires_at=excluded.lease_expires_at,refreshed_at=excluded.refreshed_at`)
+        .run(event.projectId, eligibilityGeneration, expiresAt, now);
+      this.#database.prepare(`UPDATE native_qemu_events SET admission_generation=?
+        WHERE state='queued' AND json_extract(event_json,'$.projectId')=?`)
+        .run(eligibilityGeneration, event.projectId);
+      const serialized = JSON.stringify(event);
+      const existing = this.#database.prepare("SELECT event_json FROM native_qemu_events WHERE event_id = ?").get(event.eventId);
+      if (existing !== undefined) {
+        if (text(existing, "event_json") !== serialized) throw new NativeQemuSchedulerStoreError("native QEMU event conflicts");
+        return { result: "replay", eligibilityGeneration, expiresAt };
+      }
+      this.#database.prepare(`INSERT INTO native_qemu_events
+        (event_id, admission_generation, event_json, state, created_at) VALUES (?, ?, ?, 'queued', ?)`)
+        .run(event.eventId, eligibilityGeneration, serialized, now);
+      return { result: "created", eligibilityGeneration, expiresAt };
+    });
   }
 
   reserve(input: ReservationInput): NativeQemuClaim | undefined {
@@ -96,7 +91,7 @@ export class NativeQemuSchedulerStore {
       if (this.#database.prepare(`SELECT 1 FROM native_qemu_claims WHERE host_id=? AND capacity=?
         AND state IN ('reserved','active')`).get(input.hostId, input.capacity) !== undefined) return undefined;
       const row = this.#database.prepare(`SELECT e.event_id, e.admission_generation, e.event_json FROM native_qemu_events e
-        JOIN native_qemu_admissions a ON a.admission_generation=e.admission_generation
+        JOIN native_qemu_eligibility a ON a.eligibility_generation=e.admission_generation
         WHERE e.state='queued' AND a.lease_expires_at>? ORDER BY e.created_at,e.event_id LIMIT 1`).get(this.now());
       if (row === undefined) return undefined;
       const claimId = randomUUID();
@@ -185,6 +180,9 @@ export class NativeQemuSchedulerStore {
         return "replay";
       }
       this.#database.prepare("UPDATE native_qemu_claims SET result_json=? WHERE claim_id=?").run(serialized, input.claimId);
+      this.#database.prepare(`INSERT INTO native_qemu_report_outbox
+        (claim_id,terminal_event_json,state,created_at,delivered_at) VALUES (?,?,'pending',?,NULL)`)
+        .run(input.claimId, JSON.stringify(input.terminalEvent), this.now());
       return "created";
     });
   }
@@ -200,7 +198,22 @@ export class NativeQemuSchedulerStore {
       if (text(row, "state") !== "active") throw new NativeQemuSchedulerStoreError("native QEMU claim is not active");
       this.#database.prepare("UPDATE native_qemu_claims SET state='completed' WHERE claim_id=?").run(claimId);
       this.#database.prepare("UPDATE native_qemu_events SET state='completed' WHERE event_id=?").run(text(row, "event_id"));
+      this.#database.prepare("UPDATE native_qemu_report_outbox SET state='delivered',delivered_at=? WHERE claim_id=?")
+        .run(this.now(), claimId);
     });
+  }
+
+  pendingReports(): readonly { readonly claim: NativeQemuClaim;
+    readonly terminalEvent: import("./nativeQemuTerminalEvent.js").NativeQemuTerminalEvent }[] {
+    return this.#database.prepare(`SELECT c.* FROM native_qemu_report_outbox o
+      JOIN native_qemu_claims c ON c.claim_id=o.claim_id WHERE o.state='pending' ORDER BY o.created_at,o.claim_id`)
+      .all().map((row) => {
+        const outbox = this.#database.prepare("SELECT terminal_event_json FROM native_qemu_report_outbox WHERE claim_id=?")
+          .get(text(row, "claim_id"));
+        if (outbox === undefined) throw new NativeQemuSchedulerStoreError("native QEMU report outbox is invalid");
+        return { claim: this.claim(row), terminalEvent: JSON.parse(text(outbox, "terminal_event_json")) as
+          import("./nativeQemuTerminalEvent.js").NativeQemuTerminalEvent };
+      });
   }
 
   recover(claimId: string, hostId: string, capacity: string): void {
@@ -211,6 +224,18 @@ export class NativeQemuSchedulerStore {
       if (text(row, "state") === "completed") return;
       this.#database.prepare("UPDATE native_qemu_claims SET state='completed' WHERE claim_id=?").run(claimId);
       this.#database.prepare("UPDATE native_qemu_events SET state='completed' WHERE event_id=?").run(text(row, "event_id"));
+    });
+  }
+
+  supersedeReservation(claimId: string): void {
+    this.transaction(() => {
+      const row = this.#database.prepare("SELECT event_id,state FROM native_qemu_claims WHERE claim_id=?").get(claimId);
+      if (row === undefined || text(row, "state") !== "reserved") {
+        throw new NativeQemuSchedulerStoreError("native QEMU reservation supersession conflicts");
+      }
+      this.#database.prepare("UPDATE native_qemu_events SET state='superseded' WHERE event_id=?")
+        .run(text(row, "event_id"));
+      this.#database.prepare("DELETE FROM native_qemu_claims WHERE claim_id=?").run(claimId);
     });
   }
 

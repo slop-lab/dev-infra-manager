@@ -87,7 +87,6 @@ export class NativeRootCiTerminalResultProofStore {
       || field(row, "outbox_state") !== "delivered"
       || field(row, "claim_state") !== "released" || field(row, "receipt_state") !== "released"
       || field(row, "demand_state") !== "completed" || field(row, "admission_state") !== "active"
-      || integer(row, "admission_expires_at") <= this.context.now()
       || field(row, "terminal_event_json") !== eventJson || field(row, "terminal_event_digest") !== eventDigest
       || field(row, "outbox_event_json") !== eventJson || field(row, "outbox_event_digest") !== eventDigest
       || storedRequest.resourceId !== storedRequest.claimId

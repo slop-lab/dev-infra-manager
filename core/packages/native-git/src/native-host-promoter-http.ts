@@ -1,7 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
-import type { AuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-schema.js";
 import type { AuthoritativeNativeCandidateRuntime } from "./authoritative-native-root-target.js";
 import type { NativeGitBundleConfig } from "./bundle-config.js";
 import { exactActivationIsBound } from "./native-bundle-activation.js";
@@ -15,15 +14,10 @@ type Input = {
   readonly config: NativeGitBundleConfig;
   readonly knownCredentials: readonly Credential[];
   readonly runtime: AuthoritativeNativeCandidateRuntime;
-  readonly createReview: (input: { readonly projectId: string; readonly repositoryId: "root";
-    readonly proposalRef: string }) => Promise<AuthoritativeNativeReviewEnvelope>;
   readonly promote: (projectId: string, reviewId: string) => Promise<NativeInstalledPromotionResult>;
 };
 
-const createSchema = z.object({ schemaVersion: z.literal(1), proposalRef: z.string().min(1).max(1024) })
-  .strict().readonly();
 const promoteSchema = z.object({ schemaVersion: z.literal(1) }).strict().readonly();
-const reviewRoute = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/root\/reviews$/;
 const promotionRoute = /^\/v1\/projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/repositories\/root\/reviews\/([0-9a-f]{64})\/promotions$/;
 
 export type NativeHostPromoterService = {
@@ -33,9 +27,8 @@ export type NativeHostPromoterService = {
 export function createNativeHostPromoterService(input: Input): NativeHostPromoterService {
   return { async handle(request, response, url) {
     const identity = request.method === "GET" && url.pathname === "/v1/host-promoter-identity" && url.search === "";
-    const createMatch = request.method === "POST" && url.search === "" ? reviewRoute.exec(url.pathname) : null;
     const promoteMatch = request.method === "POST" && url.search === "" ? promotionRoute.exec(url.pathname) : null;
-    if (!identity && createMatch === null && promoteMatch === null) return false;
+    if (!identity && promoteMatch === null) return false;
     const promoter = input.config.hostPromoters.find((candidate) => basicAuthorized(request, candidate));
     if (promoter === undefined) {
       const known = input.knownCredentials.some((credential) => basicAuthorized(request, credential));
@@ -47,7 +40,7 @@ export function createNativeHostPromoterService(input: Input): NativeHostPromote
         hostId: promoter.hostId, generationId: input.runtime.expectedGenerationId });
       return true;
     }
-    const projectId = createMatch?.[1] ?? promoteMatch?.[1];
+    const projectId = promoteMatch?.[1];
     if (projectId === undefined || !authorizedProject(input, promoter, projectId)) {
       sendNotFound(response);
       return true;
@@ -62,17 +55,11 @@ export function createNativeHostPromoterService(input: Input): NativeHostPromote
       return true;
     }
     try {
-      if (createMatch !== null) {
-        const body = createSchema.parse(await readBoundedJson(request));
-        const envelope = await input.createReview({ projectId, repositoryId: "root", proposalRef: body.proposalRef });
-        sendJson(response, 201, envelope);
-      } else {
-        promoteSchema.parse(await readBoundedJson(request));
-        const reviewId = promoteMatch?.[2];
-        if (reviewId === undefined) return true;
-        const promoted = await input.promote(projectId, reviewId);
-        sendJson(response, promoted.outcome === "promoted" ? 201 : 200, promoted);
-      }
+      promoteSchema.parse(await readBoundedJson(request));
+      const reviewId = promoteMatch?.[2];
+      if (reviewId === undefined) return true;
+      const promoted = await input.promote(projectId, reviewId);
+      sendJson(response, promoted.outcome === "promoted" ? 201 : 200, promoted);
     } catch (error) {
       if (error instanceof z.ZodError || error instanceof NativeGitBundleHttpError) {
         sendJson(response, 400, { error: "promoter request is invalid" });

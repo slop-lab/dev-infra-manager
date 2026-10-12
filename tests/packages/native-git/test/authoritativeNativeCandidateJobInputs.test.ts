@@ -73,15 +73,18 @@ describe("authoritative imported-root candidate job inputs", () => {
     await fixture.close();
   });
 
-  it("rejects a candidate that moves a policy-bound QEMU job to ordinary", async () => {
+  it("accepts a candidate that changes a job kind independently of quality policy", async () => {
     // Given
     const fixture = await finalizedCandidateRoot("wrong-kind", wrongKindRunner(), authoritativePolicy());
 
     // When
-    const read = loadAuthoritativeNativeCandidateJobInputs(fixture.context, fixture.selector);
+    const result = await loadAuthoritativeNativeCandidateJobInputs(fixture.context, fixture.selector);
 
     // Then
-    await expect(read).rejects.toBeInstanceOf(CandidateExecutionError);
+    expect(result.plan.map(({ name, kind }) => ({ name, kind }))).toEqual([
+      { name: "integration", kind: "ordinary-sysbox" },
+      { name: "source", kind: "ordinary-sysbox" }
+    ]);
     await fixture.close();
   });
 

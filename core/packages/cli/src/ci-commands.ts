@@ -4,10 +4,8 @@ import {
   buildSharedQemuSchedulerImage,
   buildNativeQemuSchedulerImage,
   buildNativeQemuRunnerImage,
-  admitNativeQemuProject,
   queryNativeQemuEvent,
   configuredCiRunnerDefaults,
-  admitNativeRootCiProject,
   lifecycleOptions,
   ProcessRunner,
   reconcileOrdinaryCiPoolProject,
@@ -67,12 +65,6 @@ nativeQemu.command("host").description("Run trusted native QEMU host capacity").
     try { await runNativeQemuHost(hostId, connection, abort.signal); }
     finally { process.off("SIGINT", stop); process.off("SIGTERM", stop); }
   });
-nativeQemu.command("project").description("Manage independently admitted native QEMU Projects")
-  .command("admit").description("Admit one Project's current protected QEMU policy")
-  .argument("<project-id>").argument("<scheduler-config>")
-  .action(async (projectId: string, config: string) => {
-    console.log(JSON.stringify(await admitNativeQemuProject(projectId, config)));
-  });
 nativeQemu.command("event").description("Inspect durable native QEMU review demand")
   .command("status").description("Show one review event, claim, attempt, and terminal result")
   .argument("<event-id>").argument("<scheduler-config>")
@@ -94,14 +86,6 @@ nativeRootHost.command("run")
       process.off("SIGINT", stop);
       process.off("SIGTERM", stop);
     }
-  });
-const nativeRootProject = nativeRoot.command("project").description("Manage native Project CI admission");
-nativeRootProject.command("admit")
-  .description("Admit a native Project's current protected ordinary CI policy")
-  .argument("<project-id>")
-  .argument("<admission-config>")
-  .action(async (projectId: string, config: string) => {
-    console.log(JSON.stringify(await admitNativeRootCiProject(projectId, config)));
   });
 const schedulerImage = ci.command("scheduler").description("Manage shared QEMU scheduler deployment assets")
   .command("image").description("Manage the shared QEMU scheduler image");

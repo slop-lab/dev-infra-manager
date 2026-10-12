@@ -80,7 +80,7 @@ describe("authoritative QEMU execution descriptor", () => {
         candidateTree: envelope.review.candidateTree,
         policyRevision: envelope.review.policyRevision,
         requiredReviewRevision: envelope.review.requiredReviewRevision,
-        requiredJobSetRevision: envelope.review.requiredJobSetRevision,
+        requiredJobSetRevision: envelope.qualityRevision,
         evidenceClass: "candidate-controlled",
         configBlob: { objectId: configObjectId, sha256: digest(matchingRunner()) },
         script: {
@@ -221,10 +221,13 @@ async function createDrift(
 
 async function authoritySnapshot(root: string, reviewId: string): Promise<unknown> {
   const repository = rootRepository(root);
+  const reviewDirectory = join(repository, "dim-authoritative-reviews", "proposals");
+  const reviewName = (await readdir(reviewDirectory))[0];
+  if (reviewName === undefined) throw new Error(`review fixture is missing: ${reviewId}`);
   return {
     state: await readFile(join(root, "native-idle.sqlite3")),
     repositoryEntries: (await readdir(repository)).sort(),
-    review: await readFile(join(repository, "dim-authoritative-reviews", "proposals", `${reviewId}.json`)),
+    review: await readFile(join(reviewDirectory, reviewName)),
     protectedHead: (await runGit("/usr/bin/git", ["--git-dir", repository, "rev-parse", "refs/heads/main"])).stdout.trim(),
     proposalHead: (await runGit("/usr/bin/git", ["--git-dir", repository, "rev-parse", reviewProposalRef])).stdout.trim()
   };

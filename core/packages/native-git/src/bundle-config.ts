@@ -106,10 +106,10 @@ const nativeBundleConfigSchema = nativeGitServiceConfigSchema.unwrap().extend({
 }).strict().readonly();
 
 const ordinaryBundleConfigSchema = z.object({
-  schemaVersion: z.literal(4),
+  schemaVersion: z.literal(5),
   serviceId: z.literal("ordinary-main"),
   database: z.literal("/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3"),
-  admissionLeaseMilliseconds: z.number().int().positive(),
+  eligibilityLeaseMilliseconds: z.number().int().positive(),
   claimLeaseMilliseconds: z.number().int().positive(),
   nativeGit: z.object({
     endpoint: z.literal("http://native-git:8080"),
@@ -121,7 +121,6 @@ const ordinaryBundleConfigSchema = z.object({
   }).strict().readonly(),
   credentials: z.object({
     webhook: credential,
-    registrar: credential,
     query: credential
   }).strict().readonly(),
   hosts: z.array(host).min(1).readonly()
@@ -201,7 +200,6 @@ export function parseOrdinaryBundleConfig(input: unknown): OrdinaryBundleConfig 
   }
   assertDistinctCredentials([
     config.credentials.webhook,
-    config.credentials.registrar,
     config.credentials.query,
     config.nativeGit.identity,
     config.nativeGit.attemptIssuer,
@@ -234,8 +232,6 @@ export function parseNativeGitBundle(
     ...native.workspaceWriteIssuers.flatMap((entry) => [entry.username, entry.password]),
     ...native.humanReviewers.flatMap((entry) => [entry.reviewerId, entry.username, entry.password]),
     ...native.hostPromoters.flatMap((entry) => [entry.username, entry.password]),
-    ordinary.credentials.registrar.username,
-    ordinary.credentials.registrar.password,
     ...ordinary.hosts.map((entry) => entry.hostToken)
   ]);
   if (native.projectRegistrars.some((entry) => ordinary.hosts.some((host) =>

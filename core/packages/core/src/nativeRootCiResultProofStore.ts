@@ -81,7 +81,6 @@ export class NativeRootCiResultProofStore {
       || field(row, "claim_state") !== "reported"
       || field(row, "receipt_state") !== "reported" || field(row, "demand_state") !== "reported"
       || field(row, "admission_state") !== "active"
-      || integer(row, "admission_expires_at") <= this.context.now()
       || field(row, "terminal_event_json") !== eventJson || field(row, "terminal_event_digest") !== digest
       || field(row, "outbox_event_json") !== eventJson || field(row, "outbox_event_digest") !== digest
       || field(row, "outbox_state") !== "pending" || integer(row, "cleanup_complete") !== 1

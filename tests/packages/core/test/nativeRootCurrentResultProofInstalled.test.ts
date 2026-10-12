@@ -188,7 +188,6 @@ function proofRows(file: string): Readonly<Record<string, unknown>> {
       activation: database.prepare("SELECT * FROM bundle_activation").all(),
       epochs: database.prepare("SELECT * FROM native_root_ci_service_epochs").all(),
       admissions: database.prepare("SELECT * FROM native_root_admissions").all(),
-      requests: database.prepare("SELECT * FROM native_root_admission_requests").all(),
       demands: database.prepare("SELECT * FROM native_root_ci_demands").all(),
       claims: database.prepare("SELECT * FROM native_root_ci_claims").all(),
       receipts: database.prepare("SELECT * FROM native_root_ci_claim_receipts").all(),

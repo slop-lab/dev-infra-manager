@@ -1,23 +1,31 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { createNativeQemuAuthorityClient, type NativeQemuAuthorityClient } from "./nativeQemuAuthorityClient.js";
-import type { NativeQemuCapacity, NativeQemuCredential, NativeQemuSchedulerConfig } from "./nativeQemuSchedulerConfig.js";
+import {
+  createNativeQemuAuthorityClient,
+  NativeQemuAuthorityRejectedError,
+  type NativeQemuAuthorityClient
+} from "./nativeQemuAuthorityClient.js";
+import { nativeQemuExecutionAuthorityJson,
+  type NativeQemuCapacity, type NativeQemuCredential,
+  type NativeQemuSchedulerConfig } from "./nativeQemuSchedulerConfig.js";
 import { NativeQemuSchedulerStore, type NativeQemuReviewEvent } from "./nativeQemuSchedulerStore.js";
 import { parseNativeQemuReviewEvent } from "./nativeQemuReviewEvent.js";
 import { parseNativeQemuTerminalEvent, terminalEventMatchesClaim } from "./nativeQemuTerminalEvent.js";
+import { NativeQemuResultReporter } from "./nativeQemuResultReporter.js";
 
 export function configuredNativeQemuSchedulerServer(
   config: NativeQemuSchedulerConfig,
   authority: NativeQemuAuthorityClient = createNativeQemuAuthorityClient(config)
 ): Server {
-  const store = new NativeQemuSchedulerStore(config.database);
+  const store = new NativeQemuSchedulerStore(config.database, nativeQemuExecutionAuthorityJson(config));
+  const reporter = new NativeQemuResultReporter(store, authority);
   const server = createServer((request, response) => {
     void handle(request, response).catch(() => send(response, 503, { error: "native QEMU scheduler is unavailable" }));
   });
   server.requestTimeout = 10_000;
   server.headersTimeout = 10_000;
   server.keepAliveTimeout = 1_000;
-  server.once("close", () => store.close());
+  server.once("close", () => { reporter.close(); store.close(); });
   return server;
 
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -31,28 +39,6 @@ export function configuredNativeQemuSchedulerServer(
         { schemaVersion: 1, serviceId: "qemu-main", role: "qemu-host", hostId: host.hostId,
           capacities: host.capacities.map(({ capacity }) => capacity) });
     }
-    const admission = /^\/v1\/qemu-projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/admission$/.exec(url.pathname);
-    if (request.method === "POST" && admission !== null) {
-      if (!authorized(request, config.credentials.registrar)) return authenticationFailure(request, response);
-      const projectId = admission[1];
-      if (projectId === undefined) return notFound(response);
-      const proof = await authority.readPolicy(projectId, AbortSignal.timeout(5_000));
-      const admissionGeneration = crypto.randomUUID();
-      store.admit({ ...proof, admissionGeneration,
-        leaseExpiresAt: Date.now() + config.admissionLeaseMilliseconds });
-      return send(response, 201, { schemaVersion: 1, serviceId: "qemu-main", admissionGeneration, ...proof });
-    }
-    const admissionDiscovery = /^\/v1\/qemu-projects\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/admission\/discover$/.exec(url.pathname);
-    if (request.method === "POST" && admissionDiscovery !== null) {
-      if (!authorized(request, config.credentials.query)) return authenticationFailure(request, response);
-      const projectId = admissionDiscovery[1];
-      const body = record(await readJson(request));
-      if (projectId === undefined || !exactKeys(body, ["schemaVersion", "requestId"])
-        || body.schemaVersion !== 1 || !isUuid(body.requestId)) return badRequest(response);
-      const current = store.admission(projectId);
-      return current === undefined ? notFound(response) : send(response, 200,
-        { schemaVersion: 1, serviceId: "qemu-main", requestId: body.requestId, admission: current });
-    }
     const eventStatus = /^\/v1\/qemu-events\/([0-9a-f]{64})\/status$/.exec(url.pathname);
     if (request.method === "GET" && eventStatus !== null) {
       if (!authorized(request, config.credentials.query)) return authenticationFailure(request, response);
@@ -64,14 +50,21 @@ export function configuredNativeQemuSchedulerServer(
     if (request.method === "POST" && url.pathname === "/v1/qemu-events") {
       if (!authorized(request, config.credentials.eventIntake)) return authenticationFailure(request, response);
       const body = record(await readJson(request));
-      if (!exactKeys(body, ["schemaVersion", "requestId", "admissionGeneration", "event"])
+      if (!exactKeys(body, ["schemaVersion", "requestId", "event"])
         || body.schemaVersion !== 1 || !isUuid(body.requestId)) return badRequest(response);
       const event = parseEvent(body.event);
-      if (typeof body.admissionGeneration !== "string") return badRequest(response);
-      await authority.proveEvent(event, AbortSignal.timeout(5_000));
-      const result = store.enqueue(body.admissionGeneration, event);
-      return send(response, result === "created" ? 201 : 200,
-        { schemaVersion: 1, eventId: event.eventId, recorded: true });
+      try { await authority.proveEvent(event, AbortSignal.timeout(5_000)); }
+      catch (error) {
+        if (error instanceof NativeQemuAuthorityRejectedError) {
+          return send(response, error.status, { error: "native QEMU event is stale" });
+        }
+        throw error;
+      }
+      const intake = store.enqueue(event, config.eligibilityLeaseMilliseconds);
+      return send(response, intake.result === "created" ? 201 : 200,
+        { schemaVersion: 2, serviceId: config.serviceId, serviceGenerationId: store.serviceGenerationId(),
+          eventId: event.eventId, eligibilityGeneration: intake.eligibilityGeneration,
+          eligibilityExpiresAt: intake.expiresAt, recorded: true });
     }
     if (request.method === "POST" && url.pathname === "/v1/qemu-host-claims") {
       const host = authenticatedHost(request);
@@ -84,12 +77,19 @@ export function configuredNativeQemuSchedulerServer(
       const replay = store.assignment(body.requestId, host.hostId, capacity.capacity);
       if (replay !== undefined) return send(response, 200,
         { schemaVersion: 1, serviceId: "qemu-main", ...replay });
-      const claim = store.reserve({ requestId: body.requestId, hostId: host.hostId,
-        capacity: capacity.capacity, leaseMilliseconds: config.claimLeaseMilliseconds });
-      if (claim === undefined) return empty(response);
-      const attempt = await authority.issue(claim, capacity, AbortSignal.timeout(10_000));
-      store.activate(claim.claimId, attempt);
-      return send(response, 201, { schemaVersion: 1, serviceId: "qemu-main", claim, attempt });
+      for (;;) {
+        const claim = store.reserve({ requestId: body.requestId, hostId: host.hostId,
+          capacity: capacity.capacity, leaseMilliseconds: config.claimLeaseMilliseconds });
+        if (claim === undefined) return empty(response);
+        try {
+          const attempt = await authority.issue(claim, capacity, AbortSignal.timeout(10_000));
+          store.activate(claim.claimId, attempt);
+          return send(response, 201, { schemaVersion: 1, serviceId: "qemu-main", claim, attempt });
+        } catch (error) {
+          if (!(error instanceof NativeQemuAuthorityRejectedError)) throw error;
+          store.supersedeReservation(claim.claimId);
+        }
+      }
     }
     if (request.method === "POST" && url.pathname === "/v1/qemu-host-claim-renewals") {
       const host = authenticatedHost(request);
@@ -122,6 +122,7 @@ export function configuredNativeQemuSchedulerServer(
       if (!exactKeys(body, ["schemaVersion", "requestId", "claimId", "capacity", "cleanupComplete", "terminalEvent"])
         || body.schemaVersion !== 1 || !isUuid(body.requestId) || !isUuid(body.claimId)
         || typeof body.capacity !== "string" || body.cleanupComplete !== true) return badRequest(response);
+      if (capacityFor(host.capacities, body.capacity) === undefined) return notFound(response);
       const owned = store.finalization(body.claimId, host.hostId, body.capacity);
       if (owned === undefined) return notFound(response);
       let terminalEvent;
@@ -134,8 +135,7 @@ export function configuredNativeQemuSchedulerServer(
       }
       store.recordResult({ claimId: owned.claim.claimId, cleanupComplete: true, eventId: terminalEvent.eventId,
         result: terminalEvent.payload.result, terminalEvent });
-      await authority.report(owned.claim, terminalEvent, AbortSignal.timeout(10_000));
-      store.acknowledgeResult(owned.claim.claimId);
+      reporter.wake();
       return send(response, 202, { schemaVersion: 1, claimId: owned.claim.claimId, accepted: true });
     }
     if (request.method === "POST" && url.pathname === "/v1/qemu-host-recoveries") {

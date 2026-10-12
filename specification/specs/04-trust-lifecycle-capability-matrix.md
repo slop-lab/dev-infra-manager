@@ -34,10 +34,58 @@ a prior protected-ref promotion. A CI outage or an empty required-job set MUST
 NOT make an otherwise valid ready Project or workspace non-ready.
 
 Native readiness grants no protected-ref write, review, promotion, CI
-registration, runner, scheduler, or result-reporting authority. These
+execution, runner, scheduler, or result-reporting authority. These
 authorities remain separately scoped. In particular, a runner, scheduler,
 capacity host, attempt issuer, or result reporter MUST NOT approve a review or
 promote a protected ref.
+
+**TRUST-NATIVE-CI-ELIGIBILITY-001:** Registering a Project through the trusted
+native lifecycle makes that Project and its root repository eligible for every
+globally enabled native CI execution kind. This is a central consequence of
+Project registration, not a per-Project runner registration, admission request,
+quality-policy selection, or human decision. Hosts and named capacities are
+registered once in operator-owned service configuration and may serve any
+eligible native Project. A Project, workspace, candidate, webhook, reviewer, or
+promoter MUST NOT add a host, widen a capacity, change an image or resource
+ceiling, or obtain a host credential.
+
+Each create or fast-forward update of a workspace-scoped proposal ref MUST
+cause native Git to durably reconcile one exact candidate envelope and queue
+every valid job declared by that candidate's `.dim/ci/runner.yml`. CI starts
+without a host-promoter creating a review and without a reviewer approving the
+config, script, job name, or execution kind. The internal envelope MAY use the
+same immutable review and provenance records used by promotion, but creating it
+is a service action derived from the proposal push, not a review or promotion
+decision. A candidate may add, remove, or change valid jobs without changing
+Project policy. The candidate cannot make its Project eligible, escape the
+strict job schema, or alter operator-owned limits.
+
+The quality policy is only a promotion filter. Its `requiredJobs` set selects
+which exact candidate job results must be successful before protected
+promotion. It MUST NOT limit which valid candidate jobs execute, create CI
+eligibility, or serve as the source of CI events. Extra candidate jobs remain
+visible candidate-controlled evidence but are not promotion requirements.
+Absent candidate jobs produce no work; a required job absent from the exact
+candidate result set leaves promotion unsatisfied.
+
+Candidate planning MUST distinguish an absent `.dim/ci/runner.yml` from a
+present invalid file. Absence is a valid empty candidate plan and produces no
+events. A present file is parsed as one complete strict schema-4 plan,
+independently of `requiredJobs`; every valid ordinary and QEMU job produces an
+event, up to 64 jobs combined. If the file, any declared job, or any referenced
+script is invalid, native Git MUST durably record an invalid planning status
+for that exact candidate and publish zero events. It MUST NOT publish a partial
+plan, represent invalid planning as successful CI, or discard the status merely
+because the quality policy selects no jobs. Invalid planning and a selected job
+missing from a valid plan both leave promotion unsatisfied.
+
+Eligibility and proposal delivery MUST reconcile automatically after service
+restart, generation rollover, lease expiry, policy change, or a dependency
+outage. Operators MUST NOT refresh or readmit each Project. Durable candidate
+events remain queued and retry when the matching global service and capacity
+return. Old attempts stay fenced by their exact generation and lease, and no
+outage or retry may reuse an expired attempt, release uncleaned capacity, or
+convert unavailable capacity into success.
 
 **TRUST-PROMOTION-001:** Every proposal for a protected ref MUST bind the
 repository ID, protected ref, expected protected-ref head, candidate commit,
@@ -87,7 +135,7 @@ CI evidence has two trust classes:
   fitness for promotion.
 
 The Project quality policy MUST identify which trust class and execution kind
-satisfies each required job. It MAY select no jobs, only ordinary Sysbox jobs,
+satisfies each promotion-required job. It MAY select no jobs, only ordinary Sysbox jobs,
 only QEMU jobs, or jobs of both kinds. Evidence from an unselected kind is
 diagnostic only and MUST NOT become a readiness or promotion requirement.
 The quality policy is independently configured and revisioned from native
@@ -336,6 +384,7 @@ with trusted authority.
 | Contract | Required positive evidence | Required denial evidence |
 | --- | --- | --- |
 | `TRUST-PROMOTION-001`, `TRUST-PROMOTION-CAS-001` | Complete-tree proposal, current human approval, every quality-policy-selected exact-head job, and one atomic promotion | Path-only review, stale/revoked approval, changed security policy/tree/head, stale quality evidence, wrong job attempt, force/delete, and concurrent second promotion leave the ref unchanged |
+| `TRUST-NATIVE-CI-ELIGIBILITY-001` | Registered Project proposal pushes automatically queue all valid exact-candidate jobs across multiple globally registered Sysbox and QEMU nodes, including recovery after outage | Per-Project admission, manual refresh, promoter-created CI, policy-filtered event creation, unclean lease reuse, and candidate changes to host limits are denied |
 | `TRUST-RUNTIME-001` | Same agent journey through each supported backend and live VM persistence/recovery on a KVM-capable host | Guest cannot read secrets, `/dev/kvm`, host/admin/runtime sockets, other-workspace data, or promotion credentials |
 | `STATE-BACKEND-001` | Exact current state round-trips | Historical `sysbox`, cross-backend, mixed-label, and unknown state remain byte-for-byte unchanged with no runtime mutation |
 | `WORKSPACE-AUTHORITY-001` | Stop/start preserves one instance; retained-volume recreation preserves declared data with a fresh workspace ID and grants | Old token, route, approval, permalink, device grant, foreign volume, and old runtime generation cannot authorize the recreated instance |

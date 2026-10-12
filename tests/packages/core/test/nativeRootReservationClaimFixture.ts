@@ -10,20 +10,22 @@ export function schema2Event(
   reviewId: string
 ): NativeRootCiReviewEvent {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     type: "dim.native.review-job.available",
-    eventId: createHash("sha256").update("dim-native-authoritative-review-event-v1\0")
-      .update(JSON.stringify({ executionKind: "ordinary-sysbox", jobName: descriptor.jobName, reviewId })).digest("hex"),
+    eventId: createHash("sha256").update("dim-native-authoritative-review-event-v3\0")
+      .update(JSON.stringify({ envelopeId: "9".repeat(64), executionKind: "ordinary-sysbox",
+        jobName: descriptor.jobName })).digest("hex"),
     projectId: descriptor.projectId,
     repositoryId: "root",
     protectedRef: descriptor.protectedRef,
     reviewId,
+    envelopeId: "9".repeat(64),
     expectedProtectedHead: descriptor.expectedProtectedHead,
     candidateCommit: descriptor.candidateCommit,
     candidateTree: descriptor.candidateTree,
     policyRevision: descriptor.policyRevision,
     requiredReviewRevision: descriptor.requiredReviewRevision,
-    requiredJobSetRevision: descriptor.requiredJobSetRevision,
+    qualityRevision: descriptor.requiredJobSetRevision,
     executionKind: "ordinary-sysbox",
     jobName: descriptor.jobName,
     evidenceClass: "candidate-controlled"

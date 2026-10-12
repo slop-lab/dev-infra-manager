@@ -55,10 +55,10 @@ export function idleNativeConfig() {
 
 export function idleOrdinaryConfig() {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     serviceId: "ordinary-main",
     database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
-    admissionLeaseMilliseconds: 300_000,
+    eligibilityLeaseMilliseconds: 300_000,
     claimLeaseMilliseconds: 60_000,
     nativeGit: {
       endpoint: "http://native-git:8080",
@@ -70,7 +70,6 @@ export function idleOrdinaryConfig() {
     },
     credentials: {
       webhook: { username: "native-events", password: bundleSecrets.webhook },
-      registrar: { username: "ordinary-registrar", password: bundleSecrets.registrar },
       query: { username: "native-query", password: bundleSecrets.nativeQuery }
     },
     hosts: [{

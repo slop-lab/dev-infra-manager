@@ -4,6 +4,7 @@ import { z } from "zod";
 const identifier = z.string().regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/);
 const objectId = z.string().regex(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/);
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
+const sha256 = z.string().regex(/^sha256:[0-9a-f]{64}$/);
 const mode = z.string().regex(/^[0-7]{6}$/);
 const jobName = z.string().regex(/^[a-z][a-z0-9-]{0,62}$/);
 const base64 = z.string().refine((value) => Buffer.from(value, "base64").toString("base64") === value);
@@ -12,76 +13,54 @@ const stableWorkspaceId = z.string().regex(/^[A-Za-z0-9_-]{43}$/).refine((value)
 
 export const authoritativeNativeChangedPathSchema = z.object({
   status: z.enum(["added", "modified", "deleted", "renamed", "copied", "type-changed"]),
-  oldPath: z.string().optional(),
-  newPath: z.string().optional(),
-  oldPathBytes: base64,
-  newPathBytes: base64,
-  oldMode: mode,
-  newMode: mode,
-  oldObjectId: objectId.or(z.literal("0")),
-  newObjectId: objectId.or(z.literal("0")),
-  similarity: z.number().int().min(0).max(100).optional(),
-  oldSymlinkTarget: z.string().optional(),
-  newSymlinkTarget: z.string().optional(),
-  oldSymlinkTargetBytes: base64.optional(),
-  newSymlinkTargetBytes: base64.optional()
+  oldPath: z.string().optional(), newPath: z.string().optional(), oldPathBytes: base64, newPathBytes: base64,
+  oldMode: mode, newMode: mode, oldObjectId: objectId.or(z.literal("0")), newObjectId: objectId.or(z.literal("0")),
+  similarity: z.number().int().min(0).max(100).optional(), oldSymlinkTarget: z.string().optional(),
+  newSymlinkTarget: z.string().optional(), oldSymlinkTargetBytes: base64.optional(), newSymlinkTargetBytes: base64.optional()
 }).strict().readonly();
 
-export const authoritativeNativeRequiredJobSchema = z.object({
-  executionKind: z.enum(["ordinary-sysbox", "qemu"]),
-  jobName,
-  evidenceClass: z.literal("candidate-controlled")
+const authoritativeNativeRequiredJobObject = z.object({
+  executionKind: z.enum(["ordinary-sysbox", "qemu"]), jobName, evidenceClass: z.literal("candidate-controlled")
+}).strict();
+export const authoritativeNativeRequiredJobSchema = authoritativeNativeRequiredJobObject.readonly();
+
+const blobIdentityObject = z.object({ objectId, sha256 }).strict();
+const blobIdentity = blobIdentityObject.readonly();
+const plannedJob = authoritativeNativeRequiredJobObject.extend({
+  script: blobIdentityObject.extend({ path: z.string().regex(/^\.dim\/ci\/jobs\/[a-z][a-z0-9-]{0,62}\.bash$/) }).strict().readonly(),
+  argv: z.tuple([z.literal("/bin/bash"), z.literal("--noprofile"), z.literal("--norc"),
+    z.literal("/run/dim/job/script")]).readonly()
 }).strict().readonly();
+const planning = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("valid"), configBlob: blobIdentity.nullable(), jobs: z.array(plannedJob).max(64).readonly() }).strict().readonly(),
+  z.object({ status: z.literal("invalid"), reason: z.literal("invalid-candidate-job-plan") }).strict().readonly()
+]);
 
 const identityObjectSchema = z.object({
-  schemaVersion: z.literal(1),
-  serviceId: z.literal("native-main"),
-  projectId: identifier,
-  repositoryId: z.literal("root"),
-  protectedRef: z.string(),
-  proposalRef: z.string(),
-  expectedProtectedHead: objectId,
-  candidateCommit: objectId,
-  candidateTree: objectId,
-  policyRevision: digest,
-  requiredReviewRevision: digest,
-  requiredJobSetRevision: digest,
-  policyDigest: digest,
-  workspaceId: stableWorkspaceId,
-  requiredJobs: z.array(authoritativeNativeRequiredJobSchema).max(64).readonly(),
+  schemaVersion: z.literal(2), serviceId: z.literal("native-main"), projectId: identifier,
+  repositoryId: z.literal("root"), protectedRef: z.string(), proposalRef: z.string(),
+  expectedProtectedHead: objectId, candidateCommit: objectId, candidateTree: objectId,
+  policyRevision: digest, requiredReviewRevision: digest, workspaceId: stableWorkspaceId,
   requiredReviewerIds: z.array(identifier).min(1).readonly(),
-  changes: z.array(authoritativeNativeChangedPathSchema).readonly(),
-  patch: z.string(),
-  patchBytes: base64
+  changes: z.array(authoritativeNativeChangedPathSchema).readonly(), patch: z.string(), patchBytes: base64
 }).strict();
 
 export const authoritativeNativeReviewSchema = identityObjectSchema.extend({
-  reviewId: digest,
-  createdAt: z.string().datetime()
+  reviewId: digest, createdAt: z.string().datetime()
 }).strict().readonly();
 
 export const authoritativeNativeReviewEventSchema = z.object({
-  schemaVersion: z.literal(2),
-  type: z.literal("dim.native.review-job.available"),
-  eventId: digest,
-  projectId: identifier,
-  repositoryId: z.literal("root"),
-  protectedRef: z.string(),
-  reviewId: digest,
-  expectedProtectedHead: objectId,
-  candidateCommit: objectId,
-  candidateTree: objectId,
-  policyRevision: digest,
-  requiredReviewRevision: digest,
-  requiredJobSetRevision: digest,
-  executionKind: z.enum(["ordinary-sysbox", "qemu"]),
-  jobName,
-  evidenceClass: z.literal("candidate-controlled")
+  schemaVersion: z.literal(3), type: z.literal("dim.native.review-job.available"), eventId: digest,
+  envelopeId: digest, projectId: identifier, repositoryId: z.literal("root"), protectedRef: z.string(),
+  reviewId: digest, expectedProtectedHead: objectId, candidateCommit: objectId, candidateTree: objectId,
+  policyRevision: digest, requiredReviewRevision: digest, qualityRevision: digest,
+  executionKind: z.enum(["ordinary-sysbox", "qemu"]), jobName, evidenceClass: z.literal("candidate-controlled")
 }).strict().readonly();
 
 export const authoritativeNativeReviewEnvelopeSchema = z.object({
-  schemaVersion: z.literal(1),
-  review: authoritativeNativeReviewSchema,
+  schemaVersion: z.literal(2), envelopeId: digest, review: authoritativeNativeReviewSchema,
+  qualityRevision: digest, policyDigest: digest,
+  requiredJobs: z.array(authoritativeNativeRequiredJobSchema).max(64).readonly(), planning,
   events: z.array(authoritativeNativeReviewEventSchema).max(64).readonly()
 }).strict().readonly();
 
@@ -89,90 +68,76 @@ export type AuthoritativeNativeChangedPath = z.infer<typeof authoritativeNativeC
 export type AuthoritativeNativeReviewIdentity = z.infer<typeof identityObjectSchema>;
 export type AuthoritativeNativeReview = z.infer<typeof authoritativeNativeReviewSchema>;
 export type AuthoritativeNativeReviewEnvelope = z.infer<typeof authoritativeNativeReviewEnvelopeSchema>;
+export type AuthoritativeNativePlanning = z.infer<typeof planning>;
 
 export function authoritativeNativeReviewDigest(identity: AuthoritativeNativeReviewIdentity): string {
-  return domainDigest("dim-native-authoritative-review-v1\0", identity);
+  return domainDigest("dim-native-authoritative-review-v2\0", identity);
 }
 
-export function createAuthoritativeNativeReviewEnvelope(
-  identity: AuthoritativeNativeReviewIdentity,
-  createdAt: string
-): AuthoritativeNativeReviewEnvelope {
-  assertSortedUnique(identity.requiredJobs.map(({ executionKind, jobName }) => `${executionKind}\0${jobName}`));
-  assertSortedUnique(identity.requiredReviewerIds);
-  const review = authoritativeNativeReviewSchema.parse({
-    ...identity,
-    reviewId: authoritativeNativeReviewDigest(identity),
-    createdAt
-  });
-  const events = review.requiredJobs.map((job) => authoritativeNativeReviewEventSchema.parse({
-    schemaVersion: 2,
-    type: "dim.native.review-job.available",
-    eventId: domainDigest("dim-native-authoritative-review-event-v1\0", {
-      reviewId: review.reviewId,
-      executionKind: job.executionKind,
-      jobName: job.jobName
-    }),
-    projectId: review.projectId,
-    repositoryId: review.repositoryId,
-    protectedRef: review.protectedRef,
-    reviewId: review.reviewId,
-    expectedProtectedHead: review.expectedProtectedHead,
-    candidateCommit: review.candidateCommit,
-    candidateTree: review.candidateTree,
-    policyRevision: review.policyRevision,
-    requiredReviewRevision: review.requiredReviewRevision,
-    requiredJobSetRevision: review.requiredJobSetRevision,
-    ...job
-  }));
-  return parseAuthoritativeNativeReviewEnvelope({ schemaVersion: 1, review, events });
+export function createAuthoritativeNativeReviewEnvelope(input: {
+  readonly identity: AuthoritativeNativeReviewIdentity;
+  readonly qualityRevision: string;
+  readonly policyDigest: string;
+  readonly requiredJobs: readonly z.infer<typeof authoritativeNativeRequiredJobSchema>[];
+  readonly planning: AuthoritativeNativePlanning;
+  readonly createdAt: string;
+}): AuthoritativeNativeReviewEnvelope {
+  assertSortedUnique(input.identity.requiredReviewerIds);
+  assertSortedUnique(input.requiredJobs.map(jobKey));
+  if (input.planning.status === "valid") assertSortedUnique(input.planning.jobs.map(jobKey));
+  const review = authoritativeNativeReviewSchema.parse({ ...input.identity,
+    reviewId: authoritativeNativeReviewDigest(input.identity), createdAt: input.createdAt });
+  const envelopeIdentity = { reviewId: review.reviewId, qualityRevision: input.qualityRevision,
+    policyDigest: input.policyDigest, requiredJobs: input.requiredJobs, planning: input.planning };
+  const envelopeId = domainDigest("dim-native-authoritative-envelope-v2\0", envelopeIdentity);
+  const events = input.planning.status === "valid" ? input.planning.jobs.map((job) => eventFor({
+    review, envelopeId, qualityRevision: input.qualityRevision, job
+  })) : [];
+  return parseAuthoritativeNativeReviewEnvelope({ schemaVersion: 2, envelopeId, review,
+    qualityRevision: input.qualityRevision, policyDigest: input.policyDigest,
+    requiredJobs: input.requiredJobs, planning: input.planning, events });
 }
 
 export function parseAuthoritativeNativeReviewEnvelope(input: unknown): AuthoritativeNativeReviewEnvelope {
   const envelope = authoritativeNativeReviewEnvelopeSchema.parse(input);
   const { reviewId, createdAt: _createdAt, ...identity } = envelope.review;
-  assertSortedUnique(identity.requiredJobs.map(({ executionKind, jobName: name }) => `${executionKind}\0${name}`));
   assertSortedUnique(identity.requiredReviewerIds);
-  if (!identity.proposalRef.startsWith(`refs/heads/proposals/${identity.workspaceId}/`)) {
-    throw new AuthoritativeNativeReviewSchemaError("authoritative native review workspace binding is invalid");
-  }
-  if (authoritativeNativeReviewDigest(identity) !== reviewId) {
-    throw new AuthoritativeNativeReviewSchemaError("authoritative native review digest is invalid");
-  }
-  const expected = createExpectedEvents(envelope.review);
-  if (JSON.stringify(envelope.events) !== JSON.stringify(expected)) {
-    throw new AuthoritativeNativeReviewSchemaError("authoritative native review event set is invalid");
-  }
+  assertSortedUnique(envelope.requiredJobs.map(jobKey));
+  if (!identity.proposalRef.startsWith(`refs/heads/proposals/${identity.workspaceId}/`)
+    || authoritativeNativeReviewDigest(identity) !== reviewId) invalid("review identity");
+  if (envelope.planning.status === "valid") assertSortedUnique(envelope.planning.jobs.map(jobKey));
+  const expectedEnvelopeId = domainDigest("dim-native-authoritative-envelope-v2\0", {
+    reviewId, qualityRevision: envelope.qualityRevision, policyDigest: envelope.policyDigest,
+    requiredJobs: envelope.requiredJobs, planning: envelope.planning
+  });
+  if (envelope.envelopeId !== expectedEnvelopeId) invalid("envelope identity");
+  const expectedEvents = envelope.planning.status === "valid" ? envelope.planning.jobs.map((job) => eventFor({
+    review: envelope.review, envelopeId: envelope.envelopeId, qualityRevision: envelope.qualityRevision, job
+  })) : [];
+  if (JSON.stringify(envelope.events) !== JSON.stringify(expectedEvents)) invalid("event set");
   return envelope;
 }
 
-function createExpectedEvents(review: AuthoritativeNativeReview): AuthoritativeNativeReviewEnvelope["events"] {
-  return review.requiredJobs.map((job) => authoritativeNativeReviewEventSchema.parse({
-    schemaVersion: 2,
-    type: "dim.native.review-job.available",
-    eventId: domainDigest("dim-native-authoritative-review-event-v1\0", {
-      reviewId: review.reviewId,
-      executionKind: job.executionKind,
-      jobName: job.jobName
-    }),
-    projectId: review.projectId,
-    repositoryId: review.repositoryId,
-    protectedRef: review.protectedRef,
-    reviewId: review.reviewId,
-    expectedProtectedHead: review.expectedProtectedHead,
-    candidateCommit: review.candidateCommit,
-    candidateTree: review.candidateTree,
-    policyRevision: review.policyRevision,
-    requiredReviewRevision: review.requiredReviewRevision,
-    requiredJobSetRevision: review.requiredJobSetRevision,
-    ...job
-  }));
+function eventFor(input: { readonly review: AuthoritativeNativeReview; readonly envelopeId: string;
+  readonly qualityRevision: string; readonly job: z.infer<typeof plannedJob> }) {
+  const eventIdentity = { envelopeId: input.envelopeId, executionKind: input.job.executionKind,
+    jobName: input.job.jobName };
+  return authoritativeNativeReviewEventSchema.parse({ schemaVersion: 3, type: "dim.native.review-job.available",
+    eventId: domainDigest("dim-native-authoritative-review-event-v3\0", eventIdentity),
+    envelopeId: input.envelopeId, projectId: input.review.projectId, repositoryId: input.review.repositoryId,
+    protectedRef: input.review.protectedRef, reviewId: input.review.reviewId,
+    expectedProtectedHead: input.review.expectedProtectedHead, candidateCommit: input.review.candidateCommit,
+    candidateTree: input.review.candidateTree, policyRevision: input.review.policyRevision,
+    requiredReviewRevision: input.review.requiredReviewRevision, qualityRevision: input.qualityRevision,
+    executionKind: input.job.executionKind, jobName: input.job.jobName, evidenceClass: input.job.evidenceClass });
 }
 
+function jobKey(job: { readonly executionKind: string; readonly jobName: string }): string {
+  return `${job.executionKind}\0${job.jobName}`;
+}
 function domainDigest(domain: string, value: unknown): string {
   return createHash("sha256").update(domain).update(JSON.stringify(canonicalValue(value))).digest("hex");
 }
-
 function canonicalValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalValue);
   if (typeof value !== "object" || value === null) return value;
@@ -180,16 +145,14 @@ function canonicalValue(value: unknown): unknown {
   for (const key of Object.keys(value).sort()) canonical[key] = canonicalValue(Reflect.get(value, key));
   return canonical;
 }
-
 function assertSortedUnique(values: readonly string[]): void {
   if (new Set(values).size !== values.length || values.some((value, index) => {
-    const previous = values[index - 1];
-    return previous !== undefined && value <= previous;
-  })) {
-    throw new AuthoritativeNativeReviewSchemaError("authoritative native review set is not sorted and unique");
-  }
+    const previous = values[index - 1]; return previous !== undefined && value <= previous;
+  })) invalid("set ordering");
 }
-
+function invalid(part: string): never {
+  throw new AuthoritativeNativeReviewSchemaError(`authoritative native ${part} is invalid`);
+}
 export class AuthoritativeNativeReviewSchemaError extends Error {
   readonly name = "AuthoritativeNativeReviewSchemaError";
 }

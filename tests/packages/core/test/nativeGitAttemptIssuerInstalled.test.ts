@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import {
   createNativeGitAttemptIssuerClient,
@@ -15,7 +14,6 @@ import {
   claimRequest,
   hostAuthorization,
   post,
-  registrarAuthorization,
   reservationFixture,
   type ReservationFixture
 } from "./nativeRootClaimReservationFixture.js";
@@ -106,21 +104,6 @@ describe("native Git attempt issuer installed protocol", () => {
     database.prepare("UPDATE native_root_admissions SET lease_expires_at = ? WHERE admission_generation = ?")
       .run(admission.lease_expires_at, fixture.admissionGeneration);
     database.close();
-    const revokedAdmission = await post(fixture.origin,
-      "/v1/projects/project-a/repositories/root/native-root-admission/revoke", registrarAuthorization(), {
-        schemaVersion: 1,
-        requestId: randomUUID(),
-        generationId,
-        admissionGeneration: fixture.admissionGeneration
-      });
-    const afterRevocation = await issueDirect(fixture.nativeOrigin, issuePath, issueBody);
-    const replacement = await post(fixture.origin,
-      "/v1/projects/project-a/repositories/root/native-root-admission/register", registrarAuthorization(), {
-        schemaVersion: 1,
-        requestId: randomUUID(),
-        generationId
-      });
-    const afterReplacement = await issueDirect(fixture.nativeOrigin, issuePath, issueBody);
     fixture.server.closeAllConnections();
     await new Promise<void>((resolve, reject) => fixture.server.close((error) => error === undefined ? resolve() : reject(error)));
     const outage = await issueDirect(fixture.nativeOrigin, issuePath, issueBody);
@@ -134,8 +117,7 @@ describe("native Git attempt issuer installed protocol", () => {
     expect(new Set(issueBodies).size).toBe(1);
     expect(invalidStatuses).toEqual([409, 409, 409, 409, 409]);
     expect(duplicateReservation.status).toBe(409);
-    expect([expired, revokedAdmission.status, afterRevocation, replacement.status, afterReplacement])
-      .toEqual([409, 200, 409, 200, 409]);
+    expect(expired).toBe(409);
     expect(outage).toBe(503);
     expect(staleEpochReplay).toBe(201);
     expect(await readFile(attemptFile)).toEqual(durableBytes);

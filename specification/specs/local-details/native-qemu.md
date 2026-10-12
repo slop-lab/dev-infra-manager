@@ -2,7 +2,7 @@
 
 **Kind: Implementation profile**
 
-**Status: Host-file preflight, schema-4 candidate parsing, authoritative native-Git descriptor derivation, the dedicated scheduler/host service contracts below, and their package surfaces are implemented. Clean-host KVM acceptance remains environment-gated and is not implied by unit or simulated scheduler tests.**
+**Status: Host-file preflight, schema-4 candidate parsing, authoritative native-Git descriptor derivation, automatic scheduler eligibility, durable result reporting, and dedicated scheduler/host package surfaces are implemented. Clean-host KVM acceptance remains environment-gated and is not implied by unit or simulated scheduler tests.**
 
 ## Operator deployment contract
 
@@ -14,13 +14,13 @@ only the trusted host worker for the named fixed host from the existing
 build IMAGE` builds the scheduler service image. These commands do not start,
 configure, inspect, or fall back to Gitea or ordinary CI.
 
-`dim ci native-qemu project admit PROJECT_ID CONFIG` independently admits the
-current protected QEMU policy through the scheduler registrar credential.
 `dim ci native-qemu event status EVENT_ID CONFIG` reads the durable queue,
 claim, attempt, and terminal-result state through the distinct query
-credential. Native Git discovers that admission and sends exact stored QEMU
-review events with its distinct event-intake credential; it does not create
-admission, call the ordinary event endpoint, or reuse ordinary markers.
+credential. The removed `dim ci native-qemu project admit` command is obsolete
+and must not remain as an alias. The scheduler automatically reconciles every
+registered native Project and native Git sends exact stored QEMU candidate
+events with its distinct event-intake credential. It does not call the ordinary
+event endpoint or reuse ordinary markers.
 
 `dim ci native-qemu runner image build IMAGE` builds the trusted KVM runner
 with the fixed `/usr/local/bin/dim-native-qemu-run` launcher. The host mounts
@@ -28,16 +28,18 @@ the configured digest-pinned job image read-only as the guest root; candidate
 script and descriptor bytes enter the guest through a separate read-only 9p
 mount. The launcher provides no network device or reusable credential.
 
-The scheduler file is strict schema `1` and contains exactly `schemaVersion`,
-`serviceId`, `host`, `port`, `database`, `admissionLeaseMilliseconds`,
+The target scheduler file is strict schema `2` and contains exactly `schemaVersion`,
+`serviceId`, `host`, `port`, `database`, `eligibilityLeaseMilliseconds`,
 `claimLeaseMilliseconds`, `nativeGit`, `credentials`, and `hosts`.
-`serviceId` is `qemu-main`; `database` is an absolute private path; admission
-and claim leases are positive and the claim lease is at least 60 seconds.
+`serviceId` is `qemu-main`; `database` is an absolute private path; internal
+eligibility and claim leases are positive and the claim lease is at least 60
+seconds. Eligibility lease expiry causes automatic reconciliation, not an
+operator refresh.
 `nativeGit` contains one exact HTTP(S) origin, service ID `native-main`, and
 pairwise-distinct `identity`, `attemptIssuer`, `candidateReader`, and
 `resultReporter` Basic
-credentials. `credentials` contains pairwise-distinct `eventIntake`,
-`registrar`, and `query` credentials. Each host has one unique `hostId`, one
+credentials. `credentials` contains pairwise-distinct `eventIntake` and `query`
+credentials. Each host has one unique `hostId`, one
 unique canonical 32-byte base64url `hostToken`, and one or more uniquely named
 capacities. Each capacity fixes digest-pinned runner/job images and positive
 CPU, memory-byte, PID, wall-clock-second, and output-byte bounds. Every
@@ -60,19 +62,19 @@ capacity, and VM executor. It is not a third member of the native Git/ordinary
 CI Compose bundle, the predecessor Gitea `workflow-job` scheduler, or an
 ordinary Sysbox result alias. No Project-specific runner registration, Gitea
 organization, Actions webhook, label set, approval, or API/webhook token is
-required. Only the trusted native lifecycle may register a Project whose
-separate quality policy selects QEMU; the
+required. Trusted native Project registration makes the Project eligible for
+QEMU independently of its quality policy; the
 operator configures global host capacities and digest-pinned common runner
 and job base images. Candidate bytes cannot select an image or capacity.
 
 The host connection is the exact schema in `CONFIG-NATIVE-QEMU-001`. A separate
-operator-owned scheduler configuration has schema version `1`, service ID
-`qemu-main`, its own private database path, positive admission and claim lease
+operator-owned target scheduler configuration has schema version `2`, service ID
+`qemu-main`, its own private database path, positive internal eligibility and claim lease
 durations (the claim lease is at least 60 seconds), and an exact native Git
 service origin and ID. It contains distinct credentials for native Git policy
 and stored-event identity proof, current-attempt issuance/revocation, and
-terminal-result reporting; separately scoped QEMU event-intake, registrar and
-query identities; and an array of host IDs, unique host tokens, and named
+terminal-result reporting; separately scoped QEMU event-intake and query
+identities; and an array of host IDs, unique host tokens, and named
 capacities with the same pinned images and bounds the participating host
 attests. No Project map or credential enters native Project state. Scheduler,
 host, ordinary, native Git, and predecessor tokens are pairwise distinct.
@@ -87,8 +89,7 @@ overhead instead of placing QEMU in a container capped at exactly guest RAM.
 | --- | --- |
 | QEMU host token | Attest one host and claim, renew, recover or report only its named capacities |
 | QEMU event intake | Receive a native Git event for an exact QEMU review job, never executable input |
-| QEMU registrar | Attest and revoke a trusted native Project policy without Project-specific approval |
-| QEMU query | Read exact current admission and attempt tuples |
+| QEMU query | Read exact current eligibility and attempt tuples |
 | Native Git QEMU identity | Read the exact protected policy and stored review-event proof |
 | Native Git QEMU issuer | Derive one QEMU descriptor and issue/revoke its current exact attempt |
 | Native Git QEMU candidate reader | Mint only an ephemeral smart-HTTP read lease for one current exact QEMU assignment |
@@ -103,7 +104,7 @@ review, promote a protected ref, or make a Project or workspace ready.
 
 ## Candidate, attempt, and proof tuple
 
-The protected policy names required jobs by the **pair** `(executionKind,
+The protected policy names promotion-required jobs by the **pair** `(executionKind,
 jobName)` with `executionKind` exactly `ordinary-sysbox` or `qemu` and
 `evidenceClass` exactly `candidate-controlled`. Required QEMU and ordinary
 names are distinct during the pre-stable transition from flat native Git job
@@ -112,20 +113,22 @@ be derived from authenticated current policy, never supplied by a webhook.
 
 The target unified candidate file is strict schema `4` `.dim/ci/runner.yml`.
 It has top-level `schemaVersion` plus exactly the nonempty execution-kind
-sections selected by the Project quality policy: `ordinary`, `qemu`, or both.
+sections selected by the candidate: `ordinary`, `qemu`, or both.
 Each present section contains exactly a `jobs` map. Every named job contains
 only `script` and the runtime-fixed
 `argv` of `[/bin/bash, --noprofile, --norc, /run/dim/job/script]`. The name
-sets MUST equal the policy's corresponding selected ordinary and QEMU required
-sets. A Project with no required jobs needs no candidate CI file or result.
+sets are independent of the policy's ordinary and QEMU `requiredJobs` subsets.
+A candidate with no jobs needs no CI file or result. Extra valid candidate jobs
+run and remain visible evidence, while a missing policy-required job blocks
+only promotion.
 The parser rejects images, bounds, mounts, environment, network, URL, host
 command, credential, extra argv, unsafe script paths, non-regular Git blobs,
 unknown/duplicate YAML fields, aliases/tags and unsupported schemas. Both
 config and script identities come from the **exact candidate commit/tree**;
 both results remain candidate-controlled self-test evidence. The exported
-schema-4 parser validates supplied bytes against trusted kind-labelled required
-jobs. The separate native-Git library reader requires the supplied job names
-to match the registered protected policy's flat required-name set, then pins
+schema-4 parser validates supplied bytes and returns their strict kind-labelled
+candidate jobs. The separate native-Git library reader does not filter those
+names through the registered protected policy. It pins
 the repository, protected head, candidate commit and tree; reads the config and every selected
 ordinary/QEMU script as bounded regular blobs; rechecks the protected head after
 all reads; and returns only object IDs, SHA-256 digests, safe paths, kind-labelled
@@ -134,8 +137,8 @@ scheduler, executor, admission, image, bounds, host, capacity, credential,
 attempt, result, or VM authority. The registered standalone policy does not bind
 execution kinds, so that API remains caller-trusted for kind labels. A distinct
 internal reader accepts only the trusted activated bundle runtime, Project, and
-candidate commit/tree. It derives owner, protected ref/head, and required job
-kinds from a fully live-verified durable `authoritative-v1` imported-root row,
+candidate commit/tree. It derives owner and protected ref/head from a fully
+live-verified durable `authoritative-v1` imported-root row,
 repeats activation and complete owner/bundle/ref/graph proof after candidate
 blob reads, and rejects quarantined `legacy-import-only` rows. It is not an
 installed route or lifecycle/policy admission adapter and creates no state.
@@ -143,12 +146,13 @@ The separately active ordinary-only schema-3 parser and loader remain unchanged
 and are not a native-QEMU compatibility path after schema 4 is enabled.
 
 The installed native-Git bundle also exposes a trusted in-process, read-only
-QEMU descriptor method. It accepts only a Project, immutable review, required
-job name, and explicitly operator-trusted admission generation, digest-pinned
+QEMU descriptor method. It accepts only a Project, immutable candidate
+envelope, candidate job name, and explicitly operator-trusted execution
+generation, digest-pinned
 job and runner images, and positive bounds. It reconstructs the exact current
-review before and after the authoritative schema-4 candidate reads, requires
-both imported policy/review evidence and the candidate plan to label the job
-`qemu`, and returns a strict schema-1 descriptor with `executionKind: qemu`,
+envelope before and after the authoritative schema-4 candidate reads, requires
+the candidate plan to label the job `qemu`, and returns a strict schema-1
+descriptor with `executionKind: qemu`,
 `evidenceClass: candidate-controlled`, exact config/script identities, fixed
 argv, and the QEMU-only `dim-native-qemu-execution-v1` digest. It has no HTTP
 route, QEMU credential, admission, scheduler, attempt, result, VM, promotion,
@@ -161,9 +165,36 @@ the standalone ordinary-only event contract. An event from native Git carries ex
 protected head, candidate commit/tree, three current policy revisions, and
 `candidate-controlled` class. It carries no script, image, argv, bounds,
 host, capacity, URL or credential. QEMU intake verifies the immutable stored
-review-job event and current Project/policy tuple before recording demand.
+candidate-job event and current registered Project tuple before recording
+demand. The policy tuple is retained for promotion provenance, not eligibility.
 
-Each claim binds the current admission generation, event, review, ref/head,
+Each successful workspace proposal create or fast-forward causes native Git to
+reconcile the exact candidate envelope and enqueue all declared QEMU jobs. No
+promoter or reviewer action is needed. Scheduler restart, generation rollover,
+lease expiry, and native-Git outage trigger internal reconciliation and durable
+retry, never a per-Project admission or refresh. Old claims remain fenced until
+the same host completes ownership-safe cleanup.
+Fresh proof of the same Project eligibility renews its stable internal
+generation after cache expiry. A definitive native authority `404` or `409`
+during issuance terminally supersedes that queue head and releases its
+reservation so later valid work can progress. A `502`, timeout, cancellation,
+or transport failure is transient: the exact reservation remains retryable and
+is not reclassified as stale.
+
+Successful event intake returns a strict schema-2 acknowledgement containing
+`qemu-main`, the scheduler's database-persisted service-generation UUID, the
+stable eligibility generation, and its exact finite deadline. Native Git stores
+that tuple in a strict schema-3 event/digest marker bound to a non-secret digest
+of the configured scheduler destination. Deadline expiry or destination change
+automatically redelivers the identical event; scheduler primary keys make the
+refresh idempotent. Definitive authenticated `404` or `409` intake rejection is
+stored as destination-bound supersession with a finite retry deadline so stale
+work cannot head-of-line block newer events. Expiry retries the same immutable
+event at the same destination, and a durable acknowledgement replaces the same
+marker path. The scheduler database is strict schema 3 and rejects schema 2
+unchanged rather than migrating it.
+
+Each claim binds the current internal execution generation, event, review, ref/head,
 candidate commit/tree, policy/review/job-set revisions, execution kind `qemu`,
 job name, candidate config/script blob IDs and SHA-256 digests, exact fixed
 argv, operator runner/job base digests, resource/time/output bounds, host,

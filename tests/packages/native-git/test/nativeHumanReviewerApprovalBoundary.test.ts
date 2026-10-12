@@ -58,10 +58,16 @@ describe("native human approval boundaries", () => {
       authoritativePolicy(["owner"], [{ pathPrefix: "candidate.bin", reviewerIds: ["foreign"] }]));
     const original = await createBundleReview(fixture.service);
     const { reviewId: _reviewId, createdAt, ...identity } = original.review;
-    const altered = createAuthoritativeNativeReviewEnvelope({ ...identity,
-      requiredReviewerIds: ["owner"] }, createdAt);
+    const altered = createAuthoritativeNativeReviewEnvelope({
+      identity: { ...identity, requiredReviewerIds: ["owner"] },
+      qualityRevision: original.qualityRevision,
+      policyDigest: original.policyDigest,
+      requiredJobs: original.requiredJobs,
+      planning: original.planning,
+      createdAt
+    });
     await writeFile(join(rootRepository(fixture.root), "dim-authoritative-reviews", "proposals",
-      `${altered.review.reviewId}.json`), `${JSON.stringify(altered)}\n`, { mode: 0o600 });
+      `${altered.review.reviewId}.${altered.envelopeId}.json`), `${JSON.stringify(altered)}\n`, { mode: 0o600 });
 
     // When
     const response = await fetch(`${fixture.service.origin}/v1/projects/project-a/repositories/root/reviews/${altered.review.reviewId}/approvals`, {

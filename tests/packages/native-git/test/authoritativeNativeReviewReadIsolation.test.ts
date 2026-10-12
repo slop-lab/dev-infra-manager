@@ -27,7 +27,7 @@ describe("authoritative native review named-read isolation", () => {
     await closeFinalizeService(fixture.service);
     const repository = rootRepository(fixture.root);
     const root = join(repository, "dim-authoritative-reviews");
-    const selectedPath = join(root, "proposals", `${selected.review.reviewId}.json`);
+    const selectedPath = join(root, "proposals", `${selected.review.reviewId}.${selected.envelopeId}.json`);
     const unrelatedId = selected.review.reviewId === "f".repeat(64) ? "e".repeat(64) : "f".repeat(64);
     const unrelatedPath = join(root, "proposals", `${unrelatedId}.json`);
     const stagingPath = join(root, "staging", `${unrelatedId}.json.${randomUUID()}.tmp`);
@@ -60,7 +60,7 @@ describe("authoritative native review named-read isolation", () => {
     const selected = await createBundleReview(fixture.service);
     await closeFinalizeService(fixture.service);
     const repository = rootRepository(fixture.root);
-    const path = selectedReviewPath(repository, selected.review.reviewId);
+    const path = selectedReviewPath(repository, selected.review.reviewId, selected.envelopeId);
     await writeFile(path, "{", "utf8");
 
     // When / Then
@@ -78,7 +78,7 @@ describe("authoritative native review named-read isolation", () => {
     const selected = await createBundleReview(fixture.service);
     await closeFinalizeService(fixture.service);
     const repository = rootRepository(fixture.root);
-    const path = selectedReviewPath(repository, selected.review.reviewId);
+    const path = selectedReviewPath(repository, selected.review.reviewId, selected.envelopeId);
     const bytes = await readFile(path);
     await makeUnsafe(repository, path);
 
@@ -88,8 +88,8 @@ describe("authoritative native review named-read isolation", () => {
   }, 30_000);
 });
 
-function selectedReviewPath(repository: string, reviewId: string): string {
-  return join(repository, "dim-authoritative-reviews", "proposals", `${reviewId}.json`);
+function selectedReviewPath(repository: string, reviewId: string, envelopeId: string): string {
+  return join(repository, "dim-authoritative-reviews", "proposals", `${reviewId}.${envelopeId}.json`);
 }
 
 function fileIdentity(metadata: Stats) {

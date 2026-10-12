@@ -14,7 +14,7 @@ import {
 
 const maximumRecordBytes = 128 * 1024 * 1024;
 const maximumEvents = 100_000;
-const recordPattern = /^([0-9a-f]{64})\.json$/;
+const recordPattern = /^([0-9a-f]{64})\.([0-9a-f]{64})\.json$/;
 
 export async function saveAuthoritativeNativeReviewEnvelope(
   repository: string,
@@ -23,7 +23,7 @@ export async function saveAuthoritativeNativeReviewEnvelope(
   const paths = storePaths(repository);
   await initializeStore(paths);
   const envelopes = await readStore(paths);
-  const existing = envelopes.find(({ review }) => review.reviewId === envelope.review.reviewId);
+  const existing = envelopes.find((candidate) => candidate.envelopeId === envelope.envelopeId);
   if (existing !== undefined) return existing;
   if (envelopes.reduce((count, current) => count + current.events.length, 0) + envelope.events.length > maximumEvents) {
     throw new AuthoritativeNativeReviewStoreError("authoritative native review event capacity is exhausted");
@@ -32,7 +32,7 @@ export async function saveAuthoritativeNativeReviewEnvelope(
   if (Buffer.byteLength(serialized, "utf8") > maximumRecordBytes) {
     throw new AuthoritativeNativeReviewStoreError("authoritative native review envelope exceeds the storage bound");
   }
-  const path = join(paths.proposals, `${envelope.review.reviewId}.json`);
+  const path = join(paths.proposals, `${envelope.review.reviewId}.${envelope.envelopeId}.json`);
   try {
     await publishReviewRecord({ path, serialized, stagingRoot: paths.staging, faults: {} });
     return envelope;
@@ -50,13 +50,17 @@ export async function readAuthoritativeNativeReviewEnvelope(
   const paths = storePaths(repository);
   try {
     await Promise.all([paths.root, paths.proposals].map(assertPrivateStoreDirectory));
-    const envelope = parseAuthoritativeNativeReviewEnvelope(
-      await readReviewJson(join(paths.proposals, `${reviewId}.json`), maximumRecordBytes)
-    );
-    if (envelope.review.reviewId !== reviewId) {
+    await Promise.all([paths.root, paths.proposals].map(assertPrivateStoreDirectory));
+    const names = (await readdir(paths.proposals, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && entry.name.startsWith(`${reviewId}.`))
+      .map(({ name }) => name).sort();
+    const envelopes = await Promise.all(names.map(async (name) => parseAuthoritativeNativeReviewEnvelope(
+      await readReviewJson(join(paths.proposals, name), maximumRecordBytes)
+    )));
+    if (envelopes.some(({ review }) => review.reviewId !== reviewId)) {
       throw new AuthoritativeNativeReviewStoreError("authoritative native review path conflicts with its identity");
     }
-    return envelope;
+    return envelopes.sort((left, right) => right.review.createdAt.localeCompare(left.review.createdAt))[0];
   } catch (error) {
     if (isCode(error, "ENOENT")) return undefined;
     throw error;
@@ -139,7 +143,7 @@ async function readStore(paths: StorePaths): Promise<readonly AuthoritativeNativ
     const envelope = parseAuthoritativeNativeReviewEnvelope(
       await readReviewJson(join(paths.proposals, entry.name), maximumRecordBytes)
     );
-    if (match[1] !== envelope.review.reviewId) {
+    if (match[1] !== envelope.review.reviewId || match[2] !== envelope.envelopeId) {
       throw new AuthoritativeNativeReviewStoreError("authoritative native review path conflicts with its identity");
     }
     for (const event of envelope.events) {

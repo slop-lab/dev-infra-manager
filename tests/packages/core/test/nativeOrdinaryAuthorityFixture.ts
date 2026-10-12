@@ -4,12 +4,15 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Server } from "node:http";
+import { DatabaseSync } from "node:sqlite";
 import {
   configuredNativeOrdinaryAuthorityServer,
   type NativeOrdinaryCredential,
   type NativeOrdinaryAuthorityConfig
 } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityService.js";
 import type { NativeGitAdmissionHttpClient } from "../../../../core/packages/core/src/nativeGitAdmissionSource.js";
+import type { NativeAdmissionPolicy } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js";
+import type { NativeReviewJobEvent } from "../../../../core/packages/core/src/nativeOrdinaryEvent.js";
 import type { LegacyNativeAttemptIssuer } from "../../../../core/packages/core/src/nativeOrdinaryClaimService.js";
 import {
   NativeGitResultReporterUnavailableError,
@@ -38,7 +41,6 @@ const bounds = {
 
 export const authorityCredentials = {
   webhook: { username: "native-events", password: "webhook-secret-000000000000000000000" },
-  registrar: { username: "operator-registrar", password: "registrar-secret-00000000000000000000" },
   query: { username: "native-query", password: "query-secret-0000000000000000000000" }
 } as const;
 
@@ -90,10 +92,10 @@ export async function startAuthority(options: StartAuthorityOptions = {}): Promi
   const database = options.database ?? join(root ?? "", "ordinary.sqlite3");
   const source = options.source ?? await startNativeGitAdmissionFixture();
   const config = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     serviceId: "ordinary-main",
     database,
-    admissionLeaseMilliseconds: 300_000,
+    eligibilityLeaseMilliseconds: 300_000,
     claimLeaseMilliseconds: 60_000,
     nativeGit: {
       endpoint: "http://native-git:8080",
@@ -103,7 +105,7 @@ export async function startAuthority(options: StartAuthorityOptions = {}): Promi
       candidateReader: nativeGitCandidateReaderCredential,
       resultReporter: options.nativeGitResultReporter ?? nativeGitResultReporterCredential
     },
-    credentials: authorityCredentials,
+    credentials: { webhook: authorityCredentials.webhook, query: authorityCredentials.query },
     hosts: options.hosts ?? [
       { hostId: "host-a", hostToken: authorityHostCredentials["host-a"].password,
         capacities: [{ capacity: "primary", runnerBaseImage, jobBaseImage, bounds }] },
@@ -198,6 +200,38 @@ export function nativeEvent(eventId = "00000000-0000-4000-8000-000000000001") {
     jobName: "source",
     evidenceClass: "candidate-controlled"
   } as const;
+}
+
+export async function acceptNativeEvent(
+  fixture: AuthorityFixture,
+  policy: NativeAdmissionPolicy,
+  event: NativeReviewJobEvent
+): Promise<string> {
+  fixture.source.authorizePolicy(policy);
+  fixture.source.authorizeEvent(event);
+  const response = await post(fixture.endpoint, "/v1/native-events", "webhook", event);
+  if (response.status !== 202) throw new Error(await response.text());
+  return activeEligibilityGeneration(fixture, event.projectId, event.repositoryId, event.protectedRef);
+}
+
+export function activeEligibilityGeneration(
+  fixture: AuthorityFixture,
+  projectId: string,
+  repositoryId: string,
+  protectedRef = "refs/heads/main"
+): string {
+  const database = new DatabaseSync(fixture.database, { readOnly: true });
+  try {
+    const row = database.prepare(`SELECT admission_generation FROM native_admissions
+      WHERE project_id=? AND repository_id=? AND protected_ref=? AND state='active'`).get(
+      projectId, repositoryId, protectedRef
+    );
+    const generation = row === undefined ? undefined : Reflect.get(row, "admission_generation");
+    if (typeof generation !== "string") throw new Error("eligibility generation is missing");
+    return generation;
+  } finally {
+    database.close();
+  }
 }
 
 export function descriptor(projectId: string, repositoryId: string, generation: string): CandidateOrdinaryExecutionDescriptor {

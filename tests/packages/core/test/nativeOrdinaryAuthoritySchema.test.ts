@@ -181,10 +181,10 @@ describe("native ordinary authority schema manifest", () => {
 
 function config(database: string) {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     serviceId: "ordinary-main",
     database,
-    admissionLeaseMilliseconds: 300_000,
+    eligibilityLeaseMilliseconds: 300_000,
     claimLeaseMilliseconds: 60_000,
     nativeGit: {
       endpoint: "http://native-git:8080",
@@ -196,7 +196,6 @@ function config(database: string) {
     },
     credentials: {
       webhook: { username: "native-events", password: "webhook-secret-000000000000000000000" },
-      registrar: { username: "operator-registrar", password: "registrar-secret-00000000000000000000" },
       query: { username: "native-query", password: "query-secret-0000000000000000000000" }
     },
     hosts: [{

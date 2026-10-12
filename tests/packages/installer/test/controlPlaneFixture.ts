@@ -58,12 +58,12 @@ export function nativeServiceConfig(): Readonly<Record<string, unknown>> {
   };
 }
 
-export function ordinaryServiceConfig(registrarPassword = controlPlaneSecrets.registrar): Readonly<Record<string, unknown>> {
+export function ordinaryServiceConfig(): Readonly<Record<string, unknown>> {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     serviceId: "ordinary-main",
     database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
-    admissionLeaseMilliseconds: 300_000,
+    eligibilityLeaseMilliseconds: 300_000,
     claimLeaseMilliseconds: 60_000,
     nativeGit: {
       endpoint: "http://native-git:8080",
@@ -75,7 +75,6 @@ export function ordinaryServiceConfig(registrarPassword = controlPlaneSecrets.re
     },
     credentials: {
       webhook: { username: "native-events", password: controlPlaneSecrets.webhook },
-      registrar: { username: "ordinary-registrar", password: registrarPassword },
       query: { username: "native-query", password: controlPlaneSecrets.query }
     },
     hosts: [{ hostId: "host-a", hostToken: controlPlaneSecrets.host, capacities: [] }]

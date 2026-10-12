@@ -30,14 +30,11 @@ const configSchema = z.object({
   qemu: jobGroupSchema
 }).strict().readonly();
 
-const requiredJobSchema = z.object({
+const candidateJobIdentitySchema = z.object({
   name: jobNameSchema,
   kind: executionKindSchema
 }).strict().readonly();
-
-const requiredJobsSchema = z.array(requiredJobSchema).max(64).readonly();
-
-export type NativeCandidateRequiredJob = z.infer<typeof requiredJobSchema>;
+export type NativeCandidateRequiredJob = z.infer<typeof candidateJobIdentitySchema>;
 
 export type NativeCandidateJobPlanEntry = NativeCandidateRequiredJob & CandidateJob;
 
@@ -49,18 +46,8 @@ export type NativeCandidateJobConfig = {
 };
 
 export function parseNativeCandidateJobConfig(
-  bytes: Buffer,
-  requiredJobs: readonly NativeCandidateRequiredJob[]
+  bytes: Buffer
 ): NativeCandidateJobConfig {
-  const required = requiredJobsSchema.safeParse(requiredJobs);
-  if (!required.success) {
-    throw new CandidateExecutionError("native required jobs are invalid", { cause: required.error });
-  }
-  const requiredNames = required.data.map(({ name }) => name);
-  if (new Set(requiredNames).size !== requiredNames.length) {
-    throw new CandidateExecutionError("native required jobs must have distinct names");
-  }
-
   const parsed = configSchema.safeParse(parseStrictYaml(bytes));
   if (!parsed.success) {
     throw new CandidateExecutionError("native candidate runner config has an invalid schema", { cause: parsed.error });
@@ -72,17 +59,9 @@ export function parseNativeCandidateJobConfig(
   if (ordinaryNames.some((name) => Object.hasOwn(qemuJobs, name))) {
     throw new CandidateExecutionError("native candidate runner job names overlap across execution kinds");
   }
-
-  const requiredOrdinary = required.data
-    .filter(({ kind }) => kind === "ordinary-sysbox")
-    .map(({ name }) => name)
-    .sort();
-  const requiredQemu = required.data
-    .filter(({ kind }) => kind === "qemu")
-    .map(({ name }) => name)
-    .sort();
-  assertExactJobSet(ordinaryNames, requiredOrdinary, "ordinary-sysbox");
-  assertExactJobSet(qemuNames, requiredQemu, "qemu");
+  if (ordinaryNames.length + qemuNames.length > 64) {
+    throw new CandidateExecutionError("native candidate runner config exceeds 64 combined jobs");
+  }
 
   const ordinaryPlan = Object.entries(ordinaryJobs).map(([name, job]) => ({
     name, kind: "ordinary-sysbox" as const, script: job.script, argv: candidateArgv
@@ -151,10 +130,4 @@ function parseStrictYaml(bytes: Buffer): unknown {
 
 function canonicalJobs(jobs: Readonly<Record<string, CandidateJob>>): Readonly<Record<string, CandidateJob>> {
   return Object.fromEntries(Object.entries(jobs).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0));
-}
-
-function assertExactJobSet(actual: readonly string[], required: readonly string[], kind: string): void {
-  if (actual.length !== required.length || actual.some((name, index) => name !== required[index])) {
-    throw new CandidateExecutionError(`native candidate ${kind} jobs do not equal the protected policy job set`);
-  }
 }

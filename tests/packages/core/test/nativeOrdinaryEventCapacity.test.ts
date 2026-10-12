@@ -23,7 +23,6 @@ describe("native ordinary event replay capacity", () => {
     fixtures.push(fixture);
     const policy = admission("project-a", "source", "1");
     fixture.source.authorizePolicy(policy);
-    expect((await post(fixture.endpoint, "/v1/operator-admissions", "registrar", policy)).status).toBe(200);
     const accepted = nativeEvent();
     fixture.source.authorizeEvent(accepted);
     expect((await post(fixture.endpoint, "/v1/native-events", "webhook", accepted)).status).toBe(202);

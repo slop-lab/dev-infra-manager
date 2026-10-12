@@ -15,21 +15,12 @@ import { candidateOrdinaryExecutionDescriptorSchema } from "./candidate-executio
 
 const maximumResponseBytes = 64 * 1024;
 const queryScope = ["admission:read", "attempt:read"] as const;
-const admissionReaderScope = ["imported-root-admission:read"] as const;
 
 const identityResponseSchema = z.object({
   schemaVersion: z.literal(1),
   serviceId: z.string(),
   role: z.literal("native-query"),
   scope: z.tuple([z.literal(queryScope[0]), z.literal(queryScope[1])]).readonly()
-}).strict().readonly();
-
-const admissionReaderIdentitySchema = z.object({
-  schemaVersion: z.literal(1),
-  serviceId: z.string(),
-  servingGenerationId: z.string().regex(/^[0-9a-f]{64}$/),
-  role: z.literal("native-root-admission-reader"),
-  scope: z.tuple([z.literal(admissionReaderScope[0])]).readonly()
 }).strict().readonly();
 
 const admittedResponseSchema = z.object({
@@ -143,27 +134,6 @@ export async function createOrdinaryAdmissionVerifier(
       assertExactResponse(currentAttemptResponseSchema, response, expected);
     }
   };
-}
-
-export async function attestNativeRootAdmissionReader(
-  options: OrdinaryAdmissionVerifierOptions,
-  generationId: string
-): Promise<void> {
-  const authorization = basicAuthorization(options.config.query.username, options.config.query.password);
-  await withinAdmissionVerificationDeadline(async (signal) => {
-    const response = await requestJson(options.httpClient, {
-      endpoint: options.config.endpoint,
-      method: "GET",
-      path: "/v1/native-root-admission/identity",
-      authorization,
-      signal
-    });
-    const identity = parseResponse(admissionReaderIdentitySchema, response);
-    if (identity.serviceId !== options.config.serviceId || identity.servingGenerationId !== generationId
-      || !isDeepStrictEqual(identity.scope, admissionReaderScope)) {
-      throw new OrdinaryAdmissionVerifierError("ordinary CI admission reader identity did not match");
-    }
-  }, options.timeoutMilliseconds ?? admissionVerificationTimeoutMilliseconds);
 }
 
 export function createNodeAdmissionVerifierHttpClient(originOverride?: string): AdmissionVerifierHttpClient {

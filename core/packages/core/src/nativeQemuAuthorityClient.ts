@@ -108,6 +108,9 @@ async function send(endpoint: string, credential: NativeQemuCredential, path: st
       });
       incoming.once("error", reject);
       incoming.once("end", () => {
+        if (incoming.statusCode === 404 || incoming.statusCode === 409) {
+          reject(new NativeQemuAuthorityRejectedError(incoming.statusCode)); return;
+        }
         if (incoming.statusCode === undefined || incoming.statusCode < 200 || incoming.statusCode >= 300
           || incoming.headers["cache-control"] !== "no-store") {
           reject(new NativeQemuAuthorityError("native QEMU authority rejected the request")); return;
@@ -125,4 +128,8 @@ function record(value: unknown): Readonly<Record<string, unknown>> {
   return Object.fromEntries(Object.keys(value).map((key) => [key, Reflect.get(value, key)]));
 }
 function invalid(): never { throw new NativeQemuAuthorityError("native QEMU authority response is invalid"); }
-export class NativeQemuAuthorityError extends Error { readonly name = "NativeQemuAuthorityError"; }
+export class NativeQemuAuthorityError extends Error { readonly name: string = "NativeQemuAuthorityError"; }
+export class NativeQemuAuthorityRejectedError extends NativeQemuAuthorityError {
+  readonly name = "NativeQemuAuthorityRejectedError";
+  constructor(readonly status: 404 | 409) { super("native QEMU authority rejected a stale request"); }
+}

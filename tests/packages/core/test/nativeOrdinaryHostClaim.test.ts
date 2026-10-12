@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { LegacyNativeAttemptIssuer } from "../../../../core/packages/core/src/nativeOrdinaryClaimService.js";
 import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityModel.js";
 import {
+  activeEligibilityGeneration,
   admission,
   assignment,
   authorityCredentials,
@@ -70,12 +71,10 @@ describe("native ordinary host claims", () => {
     fixtures.push(fixture);
     const policy = admission("project-a", "source", "1");
     fixture.source.authorizePolicy(policy);
-    const admitted = await post(fixture.endpoint, "/v1/operator-admissions", "registrar", policy);
-    const generation = (await jsonRecord(admitted)).admissionGeneration;
-    if (typeof generation !== "string") throw new Error("admission generation is missing");
     const event = nativeEvent();
     fixture.source.authorizeEvent(event);
     expect((await post(fixture.endpoint, "/v1/native-events", "webhook", event)).status).toBe(202);
+    const generation = activeEligibilityGeneration(fixture, policy.projectId, policy.repositoryId);
     const request = {
       schemaVersion: 1,
       requestId: "20000000-0000-4000-8000-000000000001",
@@ -192,7 +191,6 @@ describe("native ordinary host claims", () => {
     fixtures.push(fixture);
     const policy = admission("project-a", "source", "1");
     fixture.source.authorizePolicy(policy);
-    expect((await post(fixture.endpoint, "/v1/operator-admissions", "registrar", policy)).status).toBe(200);
     const event = nativeEvent();
     fixture.source.authorizeEvent(event);
     expect((await post(fixture.endpoint, "/v1/native-events", "webhook", event)).status).toBe(202);

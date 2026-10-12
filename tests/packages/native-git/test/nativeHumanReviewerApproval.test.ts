@@ -23,10 +23,12 @@ describe("installed native human approval", () => {
   it("binds a required human approval to the exact current review without moving the protected ref", async () => {
     // Given
     const fixture = await nativeBundleReviewFixture("human-approval");
-    const { review } = await createBundleReview(fixture.service);
+    const created = await createBundleReview(fixture.service);
+    const { review } = created;
     const endpoint = `${fixture.service.origin}/v1/projects/project-a/repositories/root/reviews/${review.reviewId}`;
     const headers = { authorization: humanReviewerAuthorization, "x-dim-generation-id": generationId };
-    const reviewPath = join(rootRepository(fixture.root), "dim-authoritative-reviews", "proposals", `${review.reviewId}.json`);
+    const reviewPath = join(rootRepository(fixture.root), "dim-authoritative-reviews", "proposals",
+      `${review.reviewId}.${created.envelopeId}.json`);
     const reviewBefore = await readFile(reviewPath);
     const protectedBefore = (await runGit("/usr/bin/git", ["--git-dir", rootRepository(fixture.root),
       "rev-parse", "refs/heads/main"])).stdout.trim();
@@ -142,7 +144,7 @@ describe("installed native human approval", () => {
     const staleEvidence = await fetch(
       `${restarted.origin}/v1/projects/project-a/repositories/root/native-root-ci-proof/review-event`, {
         method: "POST", headers: proofHeaders, body: JSON.stringify({ ...proofRequest,
-          importNonce: stringField(currentRoot, "importNonce"), policyDigest: stringField(currentRoot, "policyDigest"),
+          importNonce: stringField(currentRoot, "importNonce"), policyDigest: envelope.policyDigest,
           eventId: event.eventId, reviewId: event.reviewId,
           executionKind: event.executionKind, jobName: event.jobName })
       }

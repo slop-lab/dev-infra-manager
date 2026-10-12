@@ -92,7 +92,7 @@ export class NativeRootCiResultStore {
       || field(row, "control_plane_generation_id") !== this.context.generationId
       || field(row, "state") !== "active" || field(row, "receipt_state") !== "active"
       || field(row, "demand_state") !== "active" || field(row, "admission_state") !== "active"
-      || numeric(row, "lease_expires_at") <= now || numeric(row, "admission_expires_at") <= now
+      || numeric(row, "lease_expires_at") <= now
       || !this.currentEpoch()
       || field(row, "event_root_commit") !== field(row, "admission_root_commit")
       || field(row, "event_root_tree") !== field(row, "admission_root_tree")

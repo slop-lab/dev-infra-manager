@@ -92,8 +92,6 @@ export function parseNativeRootCiReviewEventProof(value: unknown, expected: Nati
     .filter(([key]) => key !== "reviewLiveness" && key !== "event")), expected);
   if (outer.reviewLiveness !== "current" || policyProof.currentRoot.importNonce !== selector.importNonce
     || policyProof.currentRoot.policyDigest !== selector.policyDigest) invalid();
-  if (!policyProof.policy.requiredJobs.some((job) => job.name === selector.jobName
-    && job.kind === "ordinary-sysbox" && job.evidenceClass === "candidate-controlled")) invalid();
   const event = parseEvent(outer.event, policyProof, selector);
   return { ...policyProof, reviewLiveness: "current", event };
 }
@@ -146,7 +144,8 @@ function parseEvent(value: unknown, proof: NativeRootCiPolicyProof,
     || event.candidateTree.length !== proof.currentRoot.commit.length
     || event.policyRevision !== proof.policy.policyRevision
     || event.requiredReviewRevision !== proof.policy.requiredReviewRevision
-    || event.requiredJobSetRevision !== proof.policy.requiredJobSetRevision
+    || event.qualityRevision !== proof.policy.requiredJobSetRevision
+    || event.executionKind !== selector.executionKind
     || event.jobName !== selector.jobName) invalid();
   return event;
 }

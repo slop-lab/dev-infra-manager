@@ -205,7 +205,7 @@ function assertDescriptorBinding(descriptor: NativeExecutionDescriptor, context:
     candidateCommit: context.claim.event.candidateCommit, candidateTree: context.claim.event.candidateTree,
     policyRevision: context.claim.event.policyRevision,
     requiredReviewRevision: context.claim.event.requiredReviewRevision,
-    requiredJobSetRevision: context.claim.event.requiredJobSetRevision,
+    requiredJobSetRevision: context.claim.event.qualityRevision,
     admissionGeneration: context.claim.admissionGeneration,
     jobName: context.claim.event.jobName, jobImage: context.claim.jobBaseImage,
     runnerBaseImage: context.claim.runnerBaseImage, bounds: context.claim.bounds,

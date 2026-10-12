@@ -72,9 +72,6 @@ describe("native ordinary event intake", () => {
     if (event === undefined) throw new Error("expected stored source event");
     const fixture = await startAuthority({ nativeGitHttpClient: nativeHttpClient(native) });
     fixtures.push(fixture);
-    const policy = { ...admission("project-a", "source", "1"), requiredJobs: ["security", "source"] } as const;
-    expect((await post(fixture.endpoint, "/v1/operator-admissions", "registrar", policy)).status).toBe(200);
-
     // When
     const first = await post(fixture.endpoint, "/v1/native-events", "webhook", event);
     const replay = await post(fixture.endpoint, "/v1/native-events", "webhook", event);
@@ -127,7 +124,7 @@ describe("native ordinary event intake", () => {
     expect(databaseCounts(fixture.database)).toEqual({ inbox: 1, demands: 1, eventFences: 1, reviewJobFences: 1 });
   });
 
-  it("denies unauthenticated, wrong-role, executable, foreign, expired, and stale-policy events before mutation", async () => {
+  it("denies unauthenticated, wrong-role, executable, foreign, and stale-policy events before mutation", async () => {
     // Given
     let now = 1_000;
     const fixture = await preparedFixture({ now: () => now });
@@ -146,17 +143,21 @@ describe("native ordinary event intake", () => {
     const expired = await post(fixture.endpoint, "/v1/native-events", "webhook", event);
     now = 1_000;
     fixture.source.authorizePolicy(admission("project-a", "source", "2"));
-    const stale = await post(fixture.endpoint, "/v1/native-events", "webhook", event);
+    const staleEvent = { ...event,
+      eventId: "00000000-0000-4000-8000-000000000003",
+      reviewId: "b".repeat(64) };
+    fixture.source.authorizeEvent(staleEvent);
+    const stale = await post(fixture.endpoint, "/v1/native-events", "webhook", staleEvent);
 
     // Then
     expect((await unauthenticated).status).toBe(401);
     expect((await wrongRole).status).toBe(403);
     expect((await executable).status).toBe(400);
     expect((await foreign).status).toBe(404);
-    expect(expired.status).toBe(404);
+    expect(expired.status).toBe(202);
     expect(stale.status).toBe(404);
-    expect(databaseCounts(fixture.database)).toEqual({ inbox: 0, demands: 0, eventFences: 0, reviewJobFences: 0 });
-    expect(admissionStates(fixture.database)).toEqual(["expired"]);
+    expect(databaseCounts(fixture.database)).toEqual({ inbox: 1, demands: 1, eventFences: 1, reviewJobFences: 1 });
+    expect(admissionStates(fixture.database)).toEqual(["active", "replaced"]);
   });
 
   it("supersedes queued old-generation demand on G1 policy rotation while preserving replay acknowledgement", async () => {
@@ -166,9 +167,13 @@ describe("native ordinary event intake", () => {
     expect((await post(fixture.endpoint, "/v1/native-events", "webhook", event)).status).toBe(202);
     const rotated = admission("project-a", "source", "2");
     fixture.source.authorizePolicy(rotated);
+    const rotatedEvent = { ...event, eventId: "00000000-0000-4000-8000-000000000099",
+      policyRevision: rotated.policyRevision, requiredReviewRevision: rotated.requiredReviewRevision,
+      requiredJobSetRevision: rotated.requiredJobSetRevision };
+    fixture.source.authorizeEvent(rotatedEvent);
 
     // When
-    expect((await post(fixture.endpoint, "/v1/operator-admissions", "registrar", rotated)).status).toBe(200);
+    expect((await post(fixture.endpoint, "/v1/native-events", "webhook", rotatedEvent)).status).toBe(409);
     const replay = await post(fixture.endpoint, "/v1/native-events", "webhook", event);
 
     // Then
@@ -235,7 +240,7 @@ describe("native ordinary event intake", () => {
     expect(databaseCounts(fixture.database)).toEqual({ inbox: 0, demands: 0, eventFences: 0, reviewJobFences: 0 });
   });
 
-  it("supersedes queued demand when its admission expires across restart", async () => {
+  it("preserves queued demand when its eligibility proof expires across restart", async () => {
     // Given
     let now = 1_000;
     const fixture = await preparedFixture({ now: () => now, authorizeEvent: true });
@@ -248,8 +253,8 @@ describe("native ordinary event intake", () => {
     fixtures.push(restarted);
 
     // Then
-    expect(databaseSummary(restarted.database).demandState).toBe("superseded");
-    expect(admissionStates(restarted.database)).toEqual(["expired"]);
+    expect(databaseSummary(restarted.database).demandState).toBe("queued");
+    expect(admissionStates(restarted.database)).toEqual(["active"]);
   });
 });
 
@@ -258,7 +263,6 @@ async function preparedFixture(options: { readonly now?: () => number; readonly 
   fixtures.push(fixture);
   const policy = admission("project-a", "source", "1");
   fixture.source.authorizePolicy(policy);
-  expect((await post(fixture.endpoint, "/v1/operator-admissions", "registrar", policy)).status).toBe(200);
   if (options.authorizeEvent !== false) fixture.source.authorizeEvent(nativeEvent());
   return fixture;
 }

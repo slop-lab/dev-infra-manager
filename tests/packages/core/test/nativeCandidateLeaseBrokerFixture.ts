@@ -55,9 +55,6 @@ export async function qemuBrokerFixture(): Promise<QemuBrokerFixture> {
     ]), undefined, undefined, undefined, undefined, { qemuCi }, undefined, qemuOnlyRunner(), () => now.value);
   authority = createNativeQemuAuthorityClient({ ...config,
     nativeGit: { ...config.nativeGit, endpoint: native.service.origin } });
-  const admitted = await post(`${schedulerOrigin}/v1/qemu-projects/project-a/admission`, {},
-    authorization(config.credentials.registrar));
-  if (!admitted.ok) throw new TypeError("QEMU admission failed");
   await createBundleReview(native.service);
   await waitFor(() => eventCount(config.database) === 1);
   const [first, second] = config.hosts;
@@ -86,15 +83,14 @@ function schedulerConfig(database: string): NativeQemuSchedulerConfig {
     runnerBaseImage: `registry.example/runner@sha256:${"1".repeat(64)}`,
     jobBaseImage: `registry.example/job@sha256:${"2".repeat(64)}`,
     bounds: { cpu: "2", memoryBytes: "1048576", pids: "64", wallClockSeconds: "60", outputBytes: "1024" } });
-  return { schemaVersion: 1, serviceId: "qemu-main", host: "127.0.0.1", port: 0, database,
-    admissionLeaseMilliseconds: 120_000, claimLeaseMilliseconds: 60_000,
+  return { schemaVersion: 2, serviceId: "qemu-main", host: "127.0.0.1", port: 0, database,
+    eligibilityLeaseMilliseconds: 120_000, claimLeaseMilliseconds: 60_000,
     nativeGit: { endpoint: "http://127.0.0.1:1", serviceId: "native-main",
       identity: { username: "qemu-identity", password: token("a") },
       attemptIssuer: { username: "qemu-attempts", password: token("b") },
       candidateReader: { username: "qemu-reader", password: token("c") },
       resultReporter: { username: "qemu-results", password: token("d") } },
     credentials: { eventIntake: { username: "qemu-events", password: token("e") },
-      registrar: { username: "qemu-registrar", password: token("f") },
       query: { username: "qemu-query", password: token("g") } },
     hosts: [{ hostId: "worker-qemu", hostToken: token("h"), capacities: [capacity("kvm-main")] },
       { hostId: "foreign-qemu", hostToken: token("i"), capacities: [capacity("kvm-foreign")] }] };

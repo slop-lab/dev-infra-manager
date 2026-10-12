@@ -63,7 +63,7 @@ export function configuredNativeOrdinaryAuthorityServer(
     config.database,
     {
       serviceId: config.serviceId,
-      leaseMilliseconds: config.admissionLeaseMilliseconds,
+      leaseMilliseconds: config.eligibilityLeaseMilliseconds,
       claimLeaseMilliseconds: config.claimLeaseMilliseconds,
       capacities,
       clock: dependencies.clock ?? { now: Date.now }
@@ -122,33 +122,14 @@ export function configuredNativeOrdinaryAuthorityServer(
       const replay = store.checkEventReplay(event);
       if (replay === "accepted") return sendJson(response, 202, { schemaVersion: 1, eventId: event.eventId, accepted: true });
       if (replay === "full") return sendJson(response, 429, { error: "native event intake capacity is full" });
+      const policy = await admissionSource.readRegisteredPolicy(event);
+      store.admit(policy);
       const canonical = parseNativeReviewJobEvent(await admissionSource.assertReviewEvent(event));
       const result = store.acceptEvent(canonical);
       if (result === "accepted") return sendJson(response, 202, { schemaVersion: 1, eventId: event.eventId, accepted: true });
       if (result === "conflict") return sendJson(response, 409, { error: "event replay conflicts" });
       if (result === "full") return sendJson(response, 429, { error: "native event intake capacity is full" });
       return notFound(response);
-    }
-    if (request.method === "POST" && url.pathname === "/v1/operator-admissions") {
-      if (!authorized(request, config.credentials.registrar)) return notFound(response);
-      const requestedPolicy = parseNativeAdmissionPolicy(await readJson(request));
-      const policy = parseNativeAdmissionPolicy(await admissionSource.assertRegisteredPolicy(requestedPolicy));
-      const admission = store.admit(policy);
-      return sendJson(response, 200, {
-        schemaVersion: 1,
-        serviceId: config.serviceId,
-        projectId: policy.projectId,
-        repositoryId: policy.repositoryId,
-        admissionGeneration: admission.admissionGeneration,
-        expiresAt: admission.expiresAt
-      });
-    }
-    if (request.method === "POST" && url.pathname === "/v1/operator-admission-revocations") {
-      if (!authorized(request, config.credentials.registrar)) return notFound(response);
-      const input = parseNativeAdmissionRevocation(await readJson(request));
-      if (!store.revoke(input.projectId, input.repositoryId, input.admissionGeneration)) return notFound(response);
-      response.writeHead(204, { "cache-control": "no-store" }).end();
-      return;
     }
     if (await handleNativeOrdinaryHostHttp({
       request,
@@ -217,7 +198,6 @@ function webhookAuthentication(
 ): "authorized" | "invalid" | "wrong-role" {
   if (authorized(request, config.credentials.webhook)) return "authorized";
   const knownCredentials = [
-    config.credentials.registrar,
     config.credentials.query,
     config.nativeGit.identity,
     config.nativeGit.attemptIssuer,

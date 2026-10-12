@@ -55,7 +55,7 @@ describe("ordinary CI idle bundle service process", () => {
     // When
     const identity = await call(service.port, "GET", "/v1/identity", queryAuthorization, undefined, true);
     const statuses = await Promise.all([
-      "/v1/operator-admissions", "/v1/native-events", "/v1/claims",
+      "/v1/native-events", "/v1/claims",
       "/v1/admission-verifications", "/v1/current-attempt-verifications"
     ].map(async (path) => (await call(service.port, "POST", path, activationToken, {})).status));
 
@@ -64,7 +64,7 @@ describe("ordinary CI idle bundle service process", () => {
       status: 200,
       body: { schemaVersion: 1, serviceId: "ordinary-main", role: "native-query", scope: ["admission:read", "attempt:read"] }
     });
-    expect(statuses).toEqual([503, 503, 503, 503, 503]);
+    expect(statuses).toEqual([503, 503, 503, 503]);
     expect(businessRowCount(service.stateDirectory)).toBe(0);
   });
 
@@ -268,7 +268,7 @@ function tokenSha256(token: string): string {
 function businessRowCount(stateDirectory: string): number {
   const database = new DatabaseSync(join(stateDirectory, "ordinary-ci.sqlite3"), { readOnly: true });
   const tables = [
-    "native_root_admissions", "native_root_admission_requests", "native_root_ci_event_receipts"
+    "native_root_admissions", "native_root_ci_event_receipts"
   ] as const;
   const count = tables.reduce((total, table) => {
     const row = database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get();

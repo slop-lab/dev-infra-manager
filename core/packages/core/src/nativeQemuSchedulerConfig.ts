@@ -16,22 +16,36 @@ export type NativeQemuCapacity = {
     readonly wallClockSeconds: string; readonly outputBytes: string };
 };
 export type NativeQemuSchedulerConfig = {
-  readonly schemaVersion: 1;
+  readonly schemaVersion: 2;
   readonly serviceId: "qemu-main";
   readonly host: string;
   readonly port: number;
   readonly database: string;
-  readonly admissionLeaseMilliseconds: number;
+  readonly eligibilityLeaseMilliseconds: number;
   readonly claimLeaseMilliseconds: number;
   readonly nativeGit: { readonly endpoint: string; readonly serviceId: "native-main";
     readonly identity: NativeQemuCredential; readonly attemptIssuer: NativeQemuCredential;
     readonly candidateReader: NativeQemuCredential;
     readonly resultReporter: NativeQemuCredential };
-  readonly credentials: { readonly eventIntake: NativeQemuCredential; readonly registrar: NativeQemuCredential;
-    readonly query: NativeQemuCredential };
+  readonly credentials: { readonly eventIntake: NativeQemuCredential; readonly query: NativeQemuCredential };
   readonly hosts: readonly { readonly hostId: string; readonly hostToken: string;
     readonly capacities: readonly NativeQemuCapacity[] }[];
 };
+
+export function nativeQemuExecutionAuthorityJson(
+  config: Pick<NativeQemuSchedulerConfig, "hosts">
+): string {
+  return JSON.stringify([...config.hosts]
+    .sort((left, right) => lexical(left.hostId, right.hostId))
+    .map((host) => ({ hostId: host.hostId, capacities: [...host.capacities]
+      .sort((left, right) => lexical(left.capacity, right.capacity))
+      .map((entry) => ({ capacity: entry.capacity, runnerBaseImage: entry.runnerBaseImage,
+        jobBaseImage: entry.jobBaseImage, bounds: { cpu: entry.bounds.cpu,
+          memoryBytes: entry.bounds.memoryBytes, pids: entry.bounds.pids,
+          wallClockSeconds: entry.bounds.wallClockSeconds, outputBytes: entry.bounds.outputBytes } })) })));
+}
+
+function lexical(left: string, right: string): number { return left < right ? -1 : left > right ? 1 : 0; }
 
 export class NativeQemuSchedulerConfigError extends UserError {
   readonly name = "NativeQemuSchedulerConfigError";
@@ -39,8 +53,8 @@ export class NativeQemuSchedulerConfigError extends UserError {
 
 export function parseNativeQemuSchedulerConfig(value: unknown): NativeQemuSchedulerConfig {
   const root = exact(value, ["schemaVersion", "serviceId", "host", "port", "database",
-    "admissionLeaseMilliseconds", "claimLeaseMilliseconds", "nativeGit", "credentials", "hosts"]);
-  if (root.schemaVersion !== 1 || root.serviceId !== "qemu-main" || typeof root.host !== "string"
+    "eligibilityLeaseMilliseconds", "claimLeaseMilliseconds", "nativeGit", "credentials", "hosts"]);
+  if (root.schemaVersion !== 2 || root.serviceId !== "qemu-main" || typeof root.host !== "string"
     || root.host.length === 0 || !isAbsolutePath(root.database)) invalid();
   const claimLeaseMilliseconds = integer(root.claimLeaseMilliseconds);
   if (claimLeaseMilliseconds < 60_000) {
@@ -49,20 +63,19 @@ export function parseNativeQemuSchedulerConfig(value: unknown): NativeQemuSchedu
   const nativeGit = exact(root.nativeGit,
     ["endpoint", "serviceId", "identity", "attemptIssuer", "candidateReader", "resultReporter"]);
   if (nativeGit.serviceId !== "native-main") invalid();
-  const credentials = exact(root.credentials, ["eventIntake", "registrar", "query"]);
+  const credentials = exact(root.credentials, ["eventIntake", "query"]);
   if (!Array.isArray(root.hosts) || root.hosts.length === 0) invalid();
   const hosts = root.hosts.map(parseHost);
   unique(hosts.map(({ hostId }) => hostId));
   const parsed: NativeQemuSchedulerConfig = {
-    schemaVersion: 1, serviceId: "qemu-main", host: root.host, port: port(root.port),
-    database: root.database, admissionLeaseMilliseconds: integer(root.admissionLeaseMilliseconds),
+    schemaVersion: 2, serviceId: "qemu-main", host: root.host, port: port(root.port),
+    database: root.database, eligibilityLeaseMilliseconds: integer(root.eligibilityLeaseMilliseconds),
     claimLeaseMilliseconds,
     nativeGit: { endpoint: origin(nativeGit.endpoint), serviceId: "native-main",
       identity: credential(nativeGit.identity), attemptIssuer: credential(nativeGit.attemptIssuer),
       candidateReader: credential(nativeGit.candidateReader),
       resultReporter: credential(nativeGit.resultReporter) },
-    credentials: { eventIntake: credential(credentials.eventIntake),
-      registrar: credential(credentials.registrar), query: credential(credentials.query) },
+    credentials: { eventIntake: credential(credentials.eventIntake), query: credential(credentials.query) },
     hosts
   };
   const authority = [...Object.values(parsed.nativeGit).filter(isCredential),

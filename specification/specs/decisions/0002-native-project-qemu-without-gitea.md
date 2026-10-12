@@ -43,16 +43,16 @@ implemented and verified.
    journey; feature parity with Gitea's web UI is not required. Review and
    promotion remain separate authorities.
 
-3. CI does not require a Project-specific human approval step. The trusted
-   host administrator sets global CI execution policy; every Project created
-   through the trusted native lifecycle is eligible without a separate CI
-   approval or Project-specific runner registration. Admission attests the
-   already-registered native Project identity, protected policy revision, and
-   service/host generation automatically. A candidate cannot create an
-   eligible Project, change host membership, resource bounds, service
-   credentials, or required-job policy. Candidate CI definitions are execution
-   inputs, not admission authority. They remain part of the exact tree a human
-   reviews for product correctness before promotion.
+3. The trusted host administrator sets global CI execution policy; every
+   Project created through the trusted native lifecycle is automatically
+   eligible without a separate CI approval, Project-specific runner
+   registration, admission command, or refresh. Each workspace proposal push
+   queues all valid jobs from the exact candidate `.dim/ci/runner.yml`, without
+   a promoter creating a review or a human approving scripts, job names, or
+   kinds first. The protected `requiredJobs` policy selects only the evidence
+   needed for promotion. A candidate may add or change valid jobs without a
+   policy change, but cannot create an eligible Project, change host membership,
+   resource bounds, service credentials, or operator images.
 
 4. QEMU is a distinct native integration capacity, not an ordinary Sysbox job,
    ordinary-result alias, or fallback. All Projects use operator-owned,
@@ -79,7 +79,11 @@ implemented and verified.
    Gitea `workflow_job` events or `act_runner` registration. A restarted or
    uncertain worker must inspect and reap only its exact owned VM/container
    before capacity is reusable. A result is promotable only after terminal
-   evidence, cleanup, and the matching current review tuple are durable.
+   evidence, cleanup, and the matching current candidate envelope are durable.
+   Multiple ordinary and QEMU nodes register once through global operator
+   configuration. Service outages retain queued work and retry after internal
+   reconciliation; expired generations and leases remain fenced without an
+   operator readmitting the Project.
 
 ## Implementation dependency and acceptance
 

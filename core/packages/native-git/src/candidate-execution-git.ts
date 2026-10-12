@@ -61,6 +61,9 @@ export async function readCandidateBlob(
   let objectId = tree;
   for (const [index, component] of components.entries()) {
     const entry = await readLiteralTreeEntry(reader, objectId, component, path);
+    if (entry === undefined) {
+      throw new CandidateExecutionError(`candidate tree does not contain one literal entry at ${path}`);
+    }
     if (index < components.length - 1) {
       if (entry.mode !== "040000" || entry.type !== "tree") {
         throw new CandidateExecutionError(`candidate path has a non-tree ancestor at ${path}`);
@@ -79,14 +82,33 @@ export async function readCandidateBlob(
   return { objectId, bytes };
 }
 
+export async function candidatePathExists(
+  reader: CandidateGitReader,
+  tree: string,
+  path: string
+): Promise<boolean> {
+  const components = path.split("/");
+  let objectId = tree;
+  for (const [index, component] of components.entries()) {
+    const entry = await readLiteralTreeEntry(reader, objectId, component, path);
+    if (entry === undefined) return false;
+    if (index < components.length - 1) {
+      if (entry.mode !== "040000" || entry.type !== "tree") return true;
+      objectId = entry.objectId;
+    }
+  }
+  return true;
+}
+
 async function readLiteralTreeEntry(
   reader: CandidateGitReader,
   tree: string,
   component: string,
   fullPath: string
-): Promise<{ readonly mode: string; readonly type: string; readonly objectId: string }> {
+): Promise<{ readonly mode: string; readonly type: string; readonly objectId: string } | undefined> {
   const listing = await gitBuffer(reader, ["ls-tree", "-z", tree, "--", `:(literal)${component}`], metadataLimit);
-  if (listing.length === 0 || listing[listing.length - 1] !== 0 || listing.subarray(0, listing.length - 1).includes(0)) {
+  if (listing.length === 0) return undefined;
+  if (listing[listing.length - 1] !== 0 || listing.subarray(0, listing.length - 1).includes(0)) {
     throw new CandidateExecutionError(`candidate tree does not contain one literal entry at ${fullPath}`);
   }
   const match = /^([0-7]{6}) (blob|tree|commit) ([0-9a-f]{40}|[0-9a-f]{64})\t([^/]+)$/.exec(

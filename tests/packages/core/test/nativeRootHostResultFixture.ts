@@ -85,8 +85,9 @@ export function enqueueAdditionalDemand(file: string): void {
     const sourceDemandId = sqliteText(demand.demand_id, "source demand ID");
     const event = JSON.parse(receipt.event_json);
     event.reviewId = "8".repeat(64);
-    event.eventId = createHash("sha256").update("dim-native-authoritative-review-event-v1\0")
-      .update(JSON.stringify({ executionKind: "ordinary-sysbox", jobName: event.jobName, reviewId: event.reviewId }))
+    event.envelopeId = "7".repeat(64);
+    event.eventId = createHash("sha256").update("dim-native-authoritative-review-event-v3\0")
+      .update(JSON.stringify({ envelopeId: event.envelopeId, executionKind: "ordinary-sysbox", jobName: event.jobName }))
       .digest("hex");
     const eventJson = JSON.stringify(event);
     const eventDigest = `sha256:${createHash("sha256").update(eventJson).digest("hex")}`;

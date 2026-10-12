@@ -1,13 +1,12 @@
 import { join } from "node:path";
-import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
-import { AuthoritativeNativeAdmissionResolutionError,
-  type AuthoritativeNativeAdmissionResolver } from "./authoritative-native-admission-resolver.js";
 import {
   acknowledgeAuthoritativeNativeDelivery,
   readPendingAuthoritativeNativeDeliveries,
+  supersedeAuthoritativeNativeDelivery,
   type AuthoritativeNativePendingDelivery
 } from "./authoritative-native-delivery-store.js";
+import { authoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
 import { readNativeProjectRegistrations, type NativeGitBundleState } from "./native-bundle-state.js";
 import type { AdmissionVerifierHttpClient, AdmissionVerifierHttpResponse } from "./ordinary-admission-http.js";
 import type { ReviewPublicationFaults } from "./review-record-storage.js";
@@ -15,8 +14,9 @@ import type { ReviewPublicationFaults } from "./review-record-storage.js";
 const maximumResponseBytes = 64 * 1024;
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
 const uuidV4 = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-const acknowledgementSchema = z.object({ schemaVersion: z.literal(1), generationId: digest,
-  admissionGeneration: uuidV4, eventId: digest, recorded: z.literal(true) }).strict().readonly();
+const acknowledgementSchema = z.object({ schemaVersion: z.literal(2), serviceId: z.literal("ordinary-main"),
+  serviceGenerationId: digest, generationId: digest, eligibilityGeneration: uuidV4,
+  eligibilityExpiresAt: z.number().int().positive(), eventId: digest, recorded: z.literal(true) }).strict().readonly();
 
 export type AuthoritativeNativeEventDispatcher = {
   readonly start: () => void;
@@ -27,11 +27,11 @@ export type AuthoritativeNativeEventDispatcher = {
 
 export type AuthoritativeNativeEventDispatcherOptions = {
   readonly webhook: { readonly endpoint: string; readonly username: string; readonly password: string };
-  readonly resolveAdmission: AuthoritativeNativeAdmissionResolver;
   readonly state: NativeGitBundleState;
   readonly stateDirectory: string;
   readonly generationId: string;
   readonly httpClient: AdmissionVerifierHttpClient;
+  readonly serialize: <Result>(operation: () => Promise<Result>) => Promise<Result>;
   readonly deliveryFaults?: ReviewPublicationFaults;
   readonly minimumRetryMilliseconds?: number;
   readonly maximumRetryMilliseconds?: number;
@@ -45,11 +45,12 @@ export async function createAuthoritativeNativeEventDispatcher(
   const timing = { minimum: options.minimumRetryMilliseconds ?? 250,
     maximum: options.maximumRetryMilliseconds ?? 30_000, idle: options.idleMilliseconds ?? 1_000,
     request: options.requestTimeoutMilliseconds ?? 5_000 };
+  const binding = authoritativeNativeDeliveryBinding("ordinary-main", options.webhook.endpoint);
   if (Object.values(timing).some((value) => !Number.isInteger(value) || value < 1 || value > 30_000)
     || timing.minimum > timing.maximum) {
     throw new AuthoritativeNativeEventDeliveryError("authoritative native delivery timing is invalid");
   }
-  await pendingDelivery(options);
+  await options.serialize(() => pendingDelivery(options, binding));
   const shutdown = new AbortController();
   let task: Promise<void> | undefined;
   let wakeCurrent: (() => void) | undefined;
@@ -75,23 +76,29 @@ export async function createAuthoritativeNativeEventDispatcher(
     let retry = timing.minimum;
     while (!shutdown.signal.aborted) {
       try {
-        const pending = await pendingDelivery(options);
+        const pending = await options.serialize(() => pendingDelivery(options, binding));
         if (pending === undefined) {
           await wait(timing.idle);
           continue;
         }
-        const admissionGeneration = await deliver(options, pending, {
-          shutdown: shutdown.signal,
-          timeoutMilliseconds: timing.request
-        });
-        await acknowledgeAuthoritativeNativeDelivery(pending.repository, pending.delivery, admissionGeneration,
-          options.deliveryFaults);
+        let acknowledgement;
+        try { acknowledgement = await deliver(options, pending, {
+          shutdown: shutdown.signal, timeoutMilliseconds: timing.request
+        }); } catch (error) {
+          if (!(error instanceof AuthoritativeNativeEventRejectedError)) throw error;
+          await options.serialize(() => supersedeAuthoritativeNativeDelivery(pending.repository,
+            pending.delivery, binding, error.statusCode, timing.minimum, options.deliveryFaults));
+          retry = timing.minimum;
+          continue;
+        }
+        await options.serialize(() => acknowledgeAuthoritativeNativeDelivery(
+          pending.repository, pending.delivery, acknowledgement, binding, options.deliveryFaults
+        ));
         persistenceUnavailable = false;
         retry = timing.minimum;
       } catch (error) {
         if (shutdown.signal.aborted) return;
         if (!(error instanceof AuthoritativeNativeEventDeliveryError)
-          && !(error instanceof AuthoritativeNativeAdmissionResolutionError)
           && !transientFilesystemError(error)) throw error;
         if (transientFilesystemError(error)) persistenceUnavailable = true;
         await wait(retry);
@@ -121,10 +128,11 @@ function transientFilesystemError(error: unknown): boolean {
     && ["ENOSPC", "EIO", "EMFILE", "ENFILE", "EAGAIN", "EBUSY", "EACCES"].includes(error.code);
 }
 
-async function pendingDelivery(options: AuthoritativeNativeEventDispatcherOptions): Promise<Pending | undefined> {
+async function pendingDelivery(options: AuthoritativeNativeEventDispatcherOptions,
+  binding: ReturnType<typeof authoritativeNativeDeliveryBinding>): Promise<Pending | undefined> {
   const candidates = await Promise.all(readNativeProjectRegistrations(options.state).map(async (registration) => {
     const repository = join(options.stateDirectory, registration.projectId, `${registration.rootRepositoryId}.git`);
-    const delivery = (await readPendingAuthoritativeNativeDeliveries(repository, 1))[0];
+    const delivery = (await readPendingAuthoritativeNativeDeliveries(repository, 1, binding))[0];
     return delivery === undefined ? undefined : { repository, delivery };
   }));
   return candidates.filter((candidate): candidate is Pending => candidate !== undefined)
@@ -139,12 +147,11 @@ async function deliver(
   options: AuthoritativeNativeEventDispatcherOptions,
   pending: Pending,
   context: DeliveryContext
-): Promise<string> {
+): Promise<{ readonly serviceId: string; readonly serviceGenerationId: string;
+  readonly eligibilityGeneration: string; readonly eligibilityExpiresAt: number }> {
   const signal = AbortSignal.any([context.shutdown, AbortSignal.timeout(context.timeoutMilliseconds)]);
   const event = pending.delivery.event;
-  const admissionGeneration = await options.resolveAdmission(pending.delivery, signal);
-  const receipt = { schemaVersion: 1, generationId: options.generationId,
-    admissionGeneration, event } as const;
+  const receipt = { schemaVersion: 1, generationId: options.generationId, event } as const;
   const acknowledgementResult = acknowledgementSchema.safeParse(await requestJson(options.httpClient, {
     endpoint: options.webhook.endpoint, method: "POST", path: "/v1/native-root-ci-events",
     authorization: authorization(options.webhook), body: JSON.stringify(receipt), signal
@@ -153,12 +160,13 @@ async function deliver(
     throw new AuthoritativeNativeEventDeliveryError("ordinary receipt acknowledgement is malformed");
   }
   const acknowledged = acknowledgementResult.data;
-  const expected = { schemaVersion: 1, generationId: options.generationId,
-    admissionGeneration, eventId: event.eventId, recorded: true } as const;
-  if (!isDeepStrictEqual(acknowledged, expected)) {
+  if (acknowledged.generationId !== options.generationId
+    || acknowledged.serviceGenerationId !== options.generationId || acknowledged.eventId !== event.eventId) {
     throw new AuthoritativeNativeEventDeliveryError("ordinary receipt acknowledgement does not match delivery");
   }
-  return admissionGeneration;
+  return { serviceId: acknowledged.serviceId, serviceGenerationId: acknowledged.serviceGenerationId,
+    eligibilityGeneration: acknowledged.eligibilityGeneration,
+    eligibilityExpiresAt: acknowledged.eligibilityExpiresAt };
 }
 
 async function requestJson(
@@ -169,6 +177,10 @@ async function requestJson(
   let response: AdmissionVerifierHttpResponse;
   try { response = await client.request(input); }
   catch (error) { throw new AuthoritativeNativeEventDeliveryError("ordinary delivery request failed", { cause: error }); }
+  if ((response.statusCode === 404 || response.statusCode === 409) && response.contentType === "application/json"
+    && response.cacheControl === "no-store" && response.body.length <= maximumResponseBytes) {
+    throw new AuthoritativeNativeEventRejectedError(response.statusCode);
+  }
   if (response.statusCode !== expectedStatus || response.contentType !== "application/json"
     || response.cacheControl !== "no-store" || response.body.length > maximumResponseBytes) {
     throw new AuthoritativeNativeEventDeliveryError("ordinary delivery response is invalid");
@@ -189,5 +201,9 @@ function authorization(credential: { readonly username: string; readonly passwor
 type Pending = { readonly repository: string; readonly delivery: AuthoritativeNativePendingDelivery };
 type DeliveryContext = { readonly shutdown: AbortSignal; readonly timeoutMilliseconds: number };
 export class AuthoritativeNativeEventDeliveryError extends Error {
-  readonly name = "AuthoritativeNativeEventDeliveryError";
+  readonly name: string = "AuthoritativeNativeEventDeliveryError";
+}
+class AuthoritativeNativeEventRejectedError extends AuthoritativeNativeEventDeliveryError {
+  readonly name = "AuthoritativeNativeEventRejectedError";
+  constructor(readonly statusCode: 404 | 409) { super("ordinary delivery event is stale"); }
 }

@@ -310,10 +310,9 @@ describe("native Git image configuration preflight CLI", () => {
     }, /paired query credential/],
     ["shared role secrets", () => {
       const ordinary = idleOrdinaryConfig();
-      return { ...ordinary, credentials: {
-        ...ordinary.credentials,
-        registrar: { username: "ordinary-registrar", password: bundleSecrets.webhook }
-      } };
+      return { ...ordinary, hosts: ordinary.hosts.map((host) => ({
+        ...host, hostToken: bundleSecrets.webhook
+      })) };
     }, /credentials must be globally distinct/],
     ["an unknown ordinary field", () => ({ ...idleOrdinaryConfig(), obsolete: true }), /invalid ordinary CI bundle configuration/],
     ["the wrong native service origin", () => {

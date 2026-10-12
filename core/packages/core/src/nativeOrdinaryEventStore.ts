@@ -88,7 +88,7 @@ export class NativeOrdinaryEventStore {
         event.projectId, event.repositoryId, this.#options.serviceId, event.protectedRef, event.policyRevision,
         event.requiredReviewRevision, event.requiredJobSetRevision, this.#options.capacityConfigDigest
       ));
-      if (admission === undefined || admission.expiresAt <= now || !admission.policy.requiredJobs.includes(event.jobName)) {
+      if (admission === undefined || admission.expiresAt <= now) {
         return this.finish("not_found");
       }
       if (this.fenceCount("native_event_replay_fences") >= replayFenceLimit

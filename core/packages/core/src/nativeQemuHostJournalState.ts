@@ -40,7 +40,7 @@ export function parseNativeQemuHostJournalState(value: unknown): NativeQemuHostJ
       || descriptor.candidateCommit !== event.candidateCommit || descriptor.candidateTree !== event.candidateTree
       || descriptor.policyRevision !== event.policyRevision
       || descriptor.requiredReviewRevision !== event.requiredReviewRevision
-      || descriptor.requiredJobSetRevision !== event.requiredJobSetRevision
+      || descriptor.requiredJobSetRevision !== event.qualityRevision
       || descriptor.evidenceClass !== event.evidenceClass) invalid("journal assignment is inconsistent");
     return { kind: "active", assignment: {
       claim: { claimId, requestId, hostId, capacity, admissionGeneration, leaseExpiresAt, event },

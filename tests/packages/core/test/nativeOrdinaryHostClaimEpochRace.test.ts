@@ -12,6 +12,7 @@ import {
   type ReviewFixture
 } from "../../native-git/test/nativeGitReviewHarness.js";
 import {
+  activeEligibilityGeneration,
   jsonRecord,
   post,
   startAuthority,
@@ -87,11 +88,9 @@ describe("native ordinary host claim epoch race", () => {
       requiredJobSetRevision: "jobs-1",
       requiredJobs: ["security", "source"]
     } as const;
-    const admissionResponse = await post(stale.endpoint, "/v1/operator-admissions", "registrar", policy);
-    const generation = (await jsonRecord(admissionResponse)).admissionGeneration;
-    if (typeof generation !== "string") throw new Error("admission generation is missing");
+    expect((await post(stale.endpoint, "/v1/native-events", "webhook", event)).status).toBe(202);
+    const generation = activeEligibilityGeneration(stale, policy.projectId, policy.repositoryId);
     native.setAdmissionGeneration(generation);
-    await post(stale.endpoint, "/v1/native-events", "webhook", event);
     const request = {
       schemaVersion: 1,
       requestId: "20000000-0000-4000-8000-000000000024",

@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import type { NativeOrdinaryAuthorityConfig } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityService.js";
 import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js";
-import { admission, descriptor, jsonRecord, post, startAuthority, type AuthorityFixture } from "./nativeOrdinaryAuthorityFixture.js";
+import { acceptNativeEvent, admission, descriptor, nativeEvent, post, startAuthority, type AuthorityFixture } from "./nativeOrdinaryAuthorityFixture.js";
 
 const runnerBaseImage = `registry.example/runner@sha256:${"3".repeat(64)}`;
 const jobBaseImage = `registry.example/job@sha256:${"4".repeat(64)}`;
@@ -20,6 +20,7 @@ const hostTokens = {
   "host-b": "host-b-token-000000000000000000000000"
 } as const;
 const fixtures: AuthorityFixture[] = [];
+let eventSequence = 0;
 
 afterEach(async () => {
   await Promise.all(fixtures.splice(0).map(async (fixture) => {
@@ -109,12 +110,12 @@ async function createFixture(hosts: NativeOrdinaryAuthorityConfig["hosts"]): Pro
 }
 
 async function register(fixture: AuthorityFixture, policy: ReturnType<typeof admission>): Promise<string> {
-  fixture.source.authorizePolicy(policy);
-  const response = await post(fixture.endpoint, "/v1/operator-admissions", "registrar", policy);
-  expect(response.status).toBe(200);
-  const generation = (await jsonRecord(response)).admissionGeneration;
-  if (typeof generation !== "string") throw new Error("admission generation is missing");
-  return generation;
+  eventSequence += 1;
+  const suffix = eventSequence.toString(16).padStart(12, "0");
+  return acceptNativeEvent(fixture, policy, {
+    ...nativeEvent(`00000000-0000-4000-8000-${suffix}`),
+    reviewId: eventSequence.toString(16).padStart(64, "0")
+  });
 }
 
 function admissionStates(file: string): readonly string[] {

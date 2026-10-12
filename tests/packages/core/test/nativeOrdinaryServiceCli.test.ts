@@ -24,7 +24,7 @@ afterAll(async () => {
 });
 
 describe("ordinary CI image configuration preflight CLI", () => {
-  it("accepts an exact private read-only schema-4 bundle file without changing its bytes", async () => {
+  it("accepts an exact private read-only schema-5 bundle file without changing its bytes", async () => {
     // Given
     const config = await fixtureFile("ordinary.json", ordinaryBundleConfig());
     const before = await readFile(config);
@@ -44,7 +44,7 @@ describe("ordinary CI image configuration preflight CLI", () => {
     // Then
     expect(result).toEqual({
       status: 0,
-      stdout: `${JSON.stringify({ schemaVersion: 1, writeFormat: 11, readableFormats: [11] })}\n`,
+      stdout: `${JSON.stringify({ schemaVersion: 1, writeFormat: 12, readableFormats: [12] })}\n`,
       stderr: ""
     });
   });
@@ -98,7 +98,7 @@ describe("ordinary CI image configuration preflight CLI", () => {
     const result = await run(process.execPath, [stateProbe, root]);
 
     // Then
-    expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 11 })}\n`);
+    expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 12 })}\n`);
     expect(result.stderr).toBe("");
     expect(await stateTree(root)).toEqual(before);
   });
@@ -125,7 +125,7 @@ describe("ordinary CI image configuration preflight CLI", () => {
       const result = await run(process.execPath, [stateProbe, root]);
 
       // Then
-      expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 11 })}\n`);
+      expect(result.stdout).toBe(`${JSON.stringify({ schemaVersion: 1, stateFormat: 12 })}\n`);
       expect(result.stderr).toBe("");
       expect(await stateTree(root)).toEqual(before);
     } finally {
@@ -145,7 +145,7 @@ describe("ordinary CI image configuration preflight CLI", () => {
       return { ...config, nativeGit: { ...config.nativeGit, endpoint: "http://localhost:8080" } };
     }, /native Git identity/],
     ["obsolete second leases", () => {
-      const { admissionLeaseMilliseconds: _admission, claimLeaseMilliseconds: _claim, ...config } = ordinaryBundleConfig();
+      const { eligibilityLeaseMilliseconds: _eligibility, claimLeaseMilliseconds: _claim, ...config } = ordinaryBundleConfig();
       return { ...config, admissionLeaseSeconds: 300, claimLeaseSeconds: 60 };
     }, /invalid ordinary CI bundle configuration/],
     ["map-shaped hosts", () => ({ ...ordinaryBundleConfig(), hosts: { "host-a": {} } }), /invalid ordinary CI bundle configuration/],
@@ -153,14 +153,14 @@ describe("ordinary CI image configuration preflight CLI", () => {
       const config = ordinaryBundleConfig();
       return { ...config, credentials: {
         ...config.credentials,
-        registrar: { username: "ordinary-registrar", password: ordinaryBundleSecrets.webhook }
+        query: { username: "native-query", password: ordinaryBundleSecrets.webhook }
       } };
     }, /credentials must be globally distinct/],
     ["a weak role credential", () => {
       const config = ordinaryBundleConfig();
       return { ...config, credentials: {
         ...config.credentials,
-        registrar: { username: "ordinary-registrar", password: Buffer.alloc(31, 1).toString("base64url") }
+        query: { username: "native-query", password: Buffer.alloc(31, 1).toString("base64url") }
       } };
     }, /credential token/],
     ["a weak host credential", () => {

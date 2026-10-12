@@ -52,11 +52,14 @@ Docker/Git terms aren't repeated here.
   receive raw secrets; the agent container receives neither those secrets nor
   its runtime control socket.
 - **Native ordinary CI capacity** — an explicitly started named, host-owned
-  share of Sysbox execution. After native Project admission, the ordinary
-  scheduler leases it for one admitted job at a
+  share of Sysbox execution. Trusted native Project registration makes the
+  Project automatically eligible, and the ordinary scheduler leases capacity
+  for one candidate-declared job at a
   time; each claim creates an ephemeral runner and disposable job container
   without the host Docker socket or DIM workspace credentials. It is not a
-  persistent Project runner or image. Its schema-3 command and script come
+  persistent Project runner or image. Workspace proposal pushes queue all valid
+  jobs without a per-Project CI admission or human script approval. Its
+  schema-3 command and script come
   from the exact candidate tree while the job base image is operator-owned;
   success is candidate-controlled
   self-test evidence rather than independent verification. Protected policy may

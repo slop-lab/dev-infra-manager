@@ -69,9 +69,6 @@ describe("native review-event dispatcher", () => {
       createNodeNativeEventHttpClient(`http://127.0.0.1:${proxyPort}`)
     );
     fixtures.push(native);
-    const policy = { ...admission("project-a", "source", "1"), requiredJobs: ["security", "source"] } as const;
-    expect((await post(authority.endpoint, "/v1/operator-admissions", "registrar", policy)).status).toBe(200);
-
     // When
     const response = await native.request("reviewer-a-user", "POST", reviewPath(), {
       protectedRef: "refs/heads/main",

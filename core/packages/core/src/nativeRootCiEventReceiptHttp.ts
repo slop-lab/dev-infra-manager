@@ -23,6 +23,8 @@ export type NativeRootCiEventReceiptHttpOptions = {
   readonly expectedGenerationId: string;
   readonly store: NativeRootCiEventReceiptStore;
   readonly proofClient: NativeRootCiProofClient;
+  readonly currentEligibility: (projectId: string) => string | undefined;
+  readonly reconcileEligibility: (projectId: string) => Promise<string>;
   readonly activated: () => boolean;
   readonly activationBound: () => boolean;
 };
@@ -38,10 +40,17 @@ export function createNativeRootCiEventReceiptHandler(options: NativeRootCiEvent
       return sendJson(response, 503, { error: "native root CI event intake requires exact generation activation" });
     }
     try {
-      const input = parseNativeRootCiEventReceiptRequest(await readJson(request));
-      if (input.generationId !== options.expectedGenerationId) {
+      const intake = parseNativeRootCiEventReceiptRequest(await readJson(request));
+      if (intake.generationId !== options.expectedGenerationId) {
         return sendJson(response, 409, { error: "native root CI event generation is stale" });
       }
+      const currentGeneration = options.currentEligibility(intake.event.projectId);
+      if (currentGeneration !== undefined) {
+        const currentInput = { ...intake, admissionGeneration: currentGeneration };
+        const currentPreflight = options.store.preflight(currentInput);
+        if (currentPreflight.kind === "replay") return sendResult(response, currentInput, currentPreflight);
+      }
+      const input = { ...intake, admissionGeneration: await options.reconcileEligibility(intake.event.projectId) };
       const preflight = options.store.preflight(input);
       if (preflight.kind !== "ready") return sendResult(response, input, preflight);
       const admission = preflight.admission.proof;
@@ -66,11 +75,13 @@ export function createNativeRootCiEventReceiptHandler(options: NativeRootCiEvent
   };
 }
 
-function sendResult(response: ServerResponse, input: ReturnType<typeof parseNativeRootCiEventReceiptRequest>,
+function sendResult(response: ServerResponse, input: import("./nativeRootCiEventReceiptModel.js").NativeRootCiEventReceiptRequest,
   result: Exclude<ReceiptPreflight, { readonly kind: "ready" }>): true {
   switch (result.kind) {
-    case "replay": return sendJson(response, 202, { schemaVersion: 1, generationId: input.generationId,
-      admissionGeneration: input.admissionGeneration, eventId: input.event.eventId, recorded: true });
+    case "replay": return sendJson(response, 202, { schemaVersion: 2, serviceId: "ordinary-main",
+      serviceGenerationId: input.generationId, generationId: input.generationId,
+      eligibilityGeneration: input.admissionGeneration, eligibilityExpiresAt: result.eligibilityExpiresAt,
+      eventId: input.event.eventId, recorded: true });
     case "conflict": return sendJson(response, 409, { error: "native root CI event receipt conflicts" });
     case "not-found": return sendJson(response, 404, { error: "not found" });
     case "full": return sendJson(response, 429, { error: "native root CI event receipt capacity is full" });
@@ -97,7 +108,7 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
 
 function authenticate(request: IncomingMessage, config: NativeOrdinaryAuthorityConfig): "authorized" | "invalid" | "wrong-role" {
   if (authorized(request, config.credentials.webhook)) return "authorized";
-  const known = [config.credentials.registrar, config.credentials.query, config.nativeGit.identity,
+  const known = [config.credentials.query, config.nativeGit.identity,
     config.nativeGit.attemptIssuer, config.nativeGit.resultReporter,
     ...config.hosts.map((host) => ({ username: host.hostId, password: host.hostToken }))];
   return known.some((credential) => authorized(request, credential)) ? "wrong-role" : "invalid";

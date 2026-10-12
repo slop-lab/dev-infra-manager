@@ -97,12 +97,12 @@ export class NativeRootCiClaimLifecycleStore {
         JOIN native_root_ci_event_receipts e
           ON e.admission_generation = d.admission_generation AND e.event_id = d.event_id
         JOIN native_root_admissions a ON a.admission_generation = c.admission_generation
-        WHERE c.claim_id = ? AND d.state = 'active' AND a.state = 'active' AND a.lease_expires_at > ?
+        WHERE c.claim_id = ? AND d.state = 'active' AND a.state = 'active'
           AND a.control_plane_generation_id = c.generation_id
           AND a.capacity_config_digest = c.capacity_config_digest
           AND a.root_sequence = e.root_sequence AND a.root_commit = e.root_commit
           AND a.root_tree = e.root_tree AND a.policy_digest = e.policy_digest`).get(
-        request.claimId, this.context.now());
+        request.claimId);
       if (row === undefined || !this.currentEpoch() || request.generationId !== this.context.generationId
         || field(row, "service_epoch_id") !== this.context.serviceEpochId
         || field(row, "generation_id") !== this.context.generationId || field(row, "host_id") !== request.hostId

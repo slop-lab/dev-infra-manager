@@ -65,12 +65,6 @@ export async function nativeOrdinaryTerminalFixture(
   const ordinary = await startOrdinary(ordinaryRoot, nativeFixture.service.origin, deliverStatus);
   ordinaryOrigin = origin(ordinary);
   await activate(ordinaryOrigin);
-  expect((await jsonPost(ordinaryOrigin, "/v1/projects/project-a/repositories/root/native-root-admission/register",
-    authorization("ordinary-registrar", bundleSecrets.registrar), {
-      schemaVersion: 1,
-      requestId: randomUUID(),
-      generationId
-    })).status).toBe(200);
   await waitFor(() => eventReceiptCount(join(ordinaryRoot, "ordinary-ci.sqlite3")) === 1);
   const fixture = fixtureValue({
     nativeRoot: nativeFixture.root,

@@ -4,14 +4,8 @@ import { DatabaseSync } from "node:sqlite";
 import { parseNativeGitBundleConfig, type NativeGitBundleConfig } from "./bundle-config.js";
 import { initializeNativeGitBundleState } from "./native-bundle-state.js";
 import { readNativeProjectRegistrationsFromDatabase } from "./native-project-registry-state.js";
-import {
-  createNodeAdmissionVerifierHttpClient,
-  attestNativeRootAdmissionReader,
-  type AdmissionVerifierHttpClient
-} from "./ordinary-admission-http.js";
 
 const maximumBodyBytes = 4 * 1024;
-const identityTimeoutMilliseconds = 2_000;
 
 export type NativeGitIdleServiceOptions = {
   readonly config: NativeGitBundleConfig;
@@ -19,7 +13,6 @@ export type NativeGitIdleServiceOptions = {
   readonly readinessToken: string;
   readonly activationToken: string;
   readonly expectedGenerationId: string;
-  readonly ordinaryIdentityHttpClient?: AdmissionVerifierHttpClient;
 };
 
 export async function configuredNativeGitIdleServer(options: NativeGitIdleServiceOptions): Promise<Server> {
@@ -66,7 +59,6 @@ export async function configuredNativeGitIdleServer(options: NativeGitIdleServic
     await state.owner.release();
     throw error;
   }
-  const identityHttpClient = options.ordinaryIdentityHttpClient ?? createNodeAdmissionVerifierHttpClient();
   const server = createServer((request, response) => {
     void handle(request, response).catch((error) => {
       if (error instanceof IdleRequestError) sendJson(response, error.status, { error: error.message });
@@ -90,18 +82,6 @@ export async function configuredNativeGitIdleServer(options: NativeGitIdleServic
     if (request.method === "GET" && url.pathname === "/readyz") {
       if (!bearerAuthorized(request, options.readinessToken)) return notFound(response);
       database.prepare("SELECT 1").get();
-      try {
-        await attestNativeRootAdmissionReader({
-          config: config.ordinaryCi,
-          httpClient: identityHttpClient,
-          timeoutMilliseconds: identityTimeoutMilliseconds
-        }, options.expectedGenerationId);
-      } catch (error) {
-        if (error instanceof Error) {
-          return sendJson(response, 503, { error: "ordinary CI identity is unavailable" });
-        }
-        throw error;
-      }
       return sendJson(response, 200, { status: "ready", schemaVersion: 1 });
     }
     if (request.method === "POST" && url.pathname === "/v1/activation") {

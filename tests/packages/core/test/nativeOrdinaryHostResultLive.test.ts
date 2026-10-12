@@ -16,6 +16,7 @@ import {
   type ReviewFixture
 } from "../../native-git/test/nativeGitReviewHarness.js";
 import {
+  activeEligibilityGeneration,
   authorityCredentials,
   jsonRecord,
   post,
@@ -114,11 +115,8 @@ describe("native ordinary result live integration", () => {
       requiredJobSetRevision: "jobs-1",
       requiredJobs: ["security", "source"]
     } as const;
-    const admission = await post(central.endpoint, "/v1/operator-admissions", "registrar", policy);
-    if (admission.status !== 200) throw new Error(await admission.text());
-    const generation = (await jsonRecord(admission)).admissionGeneration;
-    if (typeof generation !== "string") throw new Error("admission generation is missing");
     expect((await post(central.endpoint, "/v1/native-events", "webhook", event)).status).toBe(202);
+    activeEligibilityGeneration(central, policy.projectId, policy.repositoryId);
     const claimed = await post(central.endpoint, "/v1/host-claims", "host-a", {
       schemaVersion: 1,
       requestId: "20000000-0000-4000-8000-000000000051",

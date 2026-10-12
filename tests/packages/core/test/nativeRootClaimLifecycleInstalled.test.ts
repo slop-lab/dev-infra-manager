@@ -164,6 +164,29 @@ describe("installed native root claim lifecycle", () => {
     expect(renewal.status).toBe(409);
   }, 20_000);
 
+  it("renews an exact active execution after only its intake eligibility cache expires", async () => {
+    // Given
+    const fixture = await reservationFixture("installed-active-cache-expiry");
+    fixtures.push(fixture);
+    const claim = await reserve(fixture, "20000000-0000-4000-8000-000000000325");
+    const issuance = await issue(fixture, claim);
+    expect((await post(fixture.origin, "/v1/host-claim-activations", hostAuthorization("host-a"),
+      activationRequest(claim, issuance, "30000000-0000-4000-8000-000000000325"))).status).toBe(201);
+    const database = new DatabaseSync(fixture.database);
+    database.prepare("UPDATE native_root_admissions SET lease_expires_at = 1 WHERE admission_generation = ?")
+      .run(fixture.admissionGeneration);
+    database.close();
+
+    // When
+    const renewed = await post(fixture.origin, "/v1/host-claim-renewals", hostAuthorization("host-a"),
+      renewalRequest(claim, issuance, "40000000-0000-4000-8000-000000000325"));
+
+    // Then
+    expect(renewed.status).toBe(200);
+    expect(lifecycleRows(fixture.database)).toMatchObject({ demand: { state: "active" },
+      claim: { state: "active" }, receipt: { state: "active" } });
+  }, 20_000);
+
   it("revokes and denies a reported pending result before releasing its capacity", async () => {
     // Given
     const fixture = await reservationFixture("installed-reported-result-recovery");

@@ -36,7 +36,19 @@ This pre-stable target defines no compatibility parser or source/state migration
 
 Implemented:
 
-- Installed host-only native review creation and protected promotion. A distinct
+- Automatic native proposal reconciliation. Every successful workspace
+  proposal create or fast-forward durably publishes the exact candidate plan
+  and all valid ordinary/QEMU events before receive response completion. A
+  missing manifest is valid-empty, invalid planning is durable with no partial
+  events, dependency outages leave events queued, and startup or activation
+  reconciles committed proposal refs without another push. `requiredJobs`
+  remains only a protected-promotion filter.
+
+- Installed host-only native review resolution and protected promotion. Manual
+  `operator review create`, `dim ci native-root project admit`, and `dim ci
+  native-qemu project admit` are predecessor surfaces targeted for removal, not
+  compatibility aliases; installed native Git now rejects review creation and
+  exposes reviewer-only read-only `operator review resolve`. A distinct
   host-promoter credential cannot approve reviews and reviewer, administrator,
   ordinary-CI, and QEMU credentials cannot promote. Promotion requires the
   current exact-tree approvals and every ordinary/QEMU terminal result selected
@@ -150,8 +162,9 @@ Implemented:
 - Service-level candidate job parsing and descriptor binding, central ordinary
   claim, lease, result, report-outbox, and current-terminal proof state, plus a
   installed host executor with durable claim/result/recovery journal and checked
-  container and private-root cleanup. The direct CLI runs fixed capacities and
-  separate Project admission; controller startup does not start the worker.
+  container and private-root cleanup. The direct CLI runs fixed capacities, but
+  the current separate Project admission is predecessor behavior. Controller
+  startup does not start the worker.
 - Project metadata with exactly one root repository per runnable Project.
 - Schema 4 Project state with a trusted Gitea organization ID persisted before
   ready publication, and Project creation serialized through identity

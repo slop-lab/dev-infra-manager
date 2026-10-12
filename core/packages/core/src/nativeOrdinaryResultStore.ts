@@ -108,10 +108,9 @@ export class NativeOrdinaryResultStore {
         AND claims.admission_generation = ? AND results.host_id = ? AND claims.capacity = ?
         AND results.cleanup_complete = 1 AND outbox.state <> 'denied'
         AND admissions.service_id = ? AND admissions.capacity_config_digest = ?
-        AND admissions.state = 'active' AND admissions.expires_at > ?
+        AND admissions.state = 'active'
     `).get(input.reviewId, input.attemptId, input.descriptorDigest, input.admissionGeneration,
-      input.hostId, input.capacity, this.#options.serviceId, this.#options.capacityConfigDigest,
-      this.#options.now()) !== undefined;
+      input.hostId, input.capacity, this.#options.serviceId, this.#options.capacityConfigDigest) !== undefined;
   }
 
   takeDue(): NativeReportDelivery | undefined {
@@ -131,7 +130,6 @@ export class NativeOrdinaryResultStore {
       if (row === undefined) return this.#finish(undefined);
       const claimId = requiredClaimString(row, "claim_id");
       if (stringField(row, "admission_state") !== "active"
-        || requiredClaimNumber(row, "admission_expires_at") <= now
         || stringField(row, "service_id") !== this.#options.serviceId
         || stringField(row, "capacity_config_digest") !== this.#options.capacityConfigDigest) {
         this.#completeInTransaction({ claimId, outcome: "denied", denialCode: "admission-inactive", now });
@@ -201,7 +199,6 @@ export class NativeOrdinaryResultStore {
       && stringField(row, "demand_state") === "claimed"
       && stringField(row, "admission_state") === "active"
       && requiredClaimNumber(row, "lease_expires_at") > now
-      && requiredClaimNumber(row, "admission_expires_at") > now
       && stringField(row, "capacity_config_digest") === this.#options.capacityConfigDigest
       && stringField(row, "assignment_claim_id") === requiredClaimString(row, "claim_id")
       && event.payload.reviewId === requiredClaimString(row, "review_id")

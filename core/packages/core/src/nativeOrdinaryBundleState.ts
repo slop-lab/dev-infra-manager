@@ -24,12 +24,12 @@ const allowedEntries = new Set([databaseName, markerName, `${databaseName}-wal`,
 
 export type NativeOrdinaryBundleState = {
   readonly database: string;
-  readonly stateFormat: 11;
+  readonly stateFormat: 12;
 };
 
 type NativeOrdinaryBundleMarker = {
   readonly schemaVersion: 1;
-  readonly stateFormat: 11;
+  readonly stateFormat: 12;
   readonly database: typeof databaseName;
   readonly schemaManifestSha256: string;
 };
@@ -50,7 +50,7 @@ export async function initializeNativeOrdinaryBundleState(stateDirectory: string
     await syncDirectory(stateDirectory);
     await publishMarker(marker, expectedMarker());
     await syncDirectory(stateDirectory);
-    return { database, stateFormat: 11 };
+    return { database, stateFormat: 12 };
   }
   assertKnownEntries(entries);
   if (!entries.includes(markerName)) throw new UserError("ordinary CI bundle state marker is missing; existing databases are not adopted");
@@ -62,12 +62,12 @@ export async function initializeNativeOrdinaryBundleState(stateDirectory: string
   if (parsed.schemaManifestSha256 !== manifest) {
     throw new UserError("ordinary CI bundle marker does not match the database schema manifest");
   }
-  return { database, stateFormat: 11 };
+  return { database, stateFormat: 12 };
 }
 
 export async function inspectNativeOrdinaryBundleState(
   stateDirectory: string
-): Promise<{ readonly stateFormat: 11 }> {
+): Promise<{ readonly stateFormat: 12 }> {
   await assertOrdinaryStateDirectory(stateDirectory);
   const entries = await readdir(stateDirectory);
   assertKnownEntries(entries);
@@ -82,7 +82,7 @@ export async function inspectNativeOrdinaryBundleState(
     if (marker.schemaManifestSha256 !== manifest) {
       throw new UserError("ordinary CI bundle marker does not match the database schema manifest");
     }
-    return { stateFormat: 11 };
+    return { stateFormat: 12 };
   } finally {
     await rm(copyDirectory, { recursive: true, force: true });
   }
@@ -133,7 +133,7 @@ function parseMarker(contents: string): NativeOrdinaryBundleMarker {
     if (error instanceof SyntaxError) throw new UserError("ordinary CI bundle state marker must contain valid JSON");
     throw error;
   }
-  if (!isRecord(value) || Object.keys(value).length !== 4 || value.schemaVersion !== 1 || value.stateFormat !== 11
+  if (!isRecord(value) || Object.keys(value).length !== 4 || value.schemaVersion !== 1 || value.stateFormat !== 12
     || value.database !== databaseName || typeof value.schemaManifestSha256 !== "string"
     || !/^sha256:[0-9a-f]{64}$/.test(value.schemaManifestSha256)) {
     throw new UserError("ordinary CI bundle state marker is invalid");
@@ -144,7 +144,7 @@ function parseMarker(contents: string): NativeOrdinaryBundleMarker {
   }
   return {
     schemaVersion: 1,
-    stateFormat: 11,
+    stateFormat: 12,
     database: databaseName,
     schemaManifestSha256: value.schemaManifestSha256
   };
@@ -185,7 +185,7 @@ async function syncDirectory(path: string): Promise<void> {
 function expectedMarker(): NativeOrdinaryBundleMarker {
   return {
     schemaVersion: 1,
-    stateFormat: 11,
+    stateFormat: 12,
     database: databaseName,
     schemaManifestSha256: nativeRootAdmissionSchemaManifestSha256()
   };

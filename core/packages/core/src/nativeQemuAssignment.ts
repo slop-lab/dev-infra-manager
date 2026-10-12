@@ -44,7 +44,7 @@ export function parseNativeQemuHostAssignment(value: unknown, expected: Expected
     || descriptor.candidateCommit !== event.candidateCommit || descriptor.candidateTree !== event.candidateTree
     || descriptor.policyRevision !== event.policyRevision
     || descriptor.requiredReviewRevision !== event.requiredReviewRevision
-    || descriptor.requiredJobSetRevision !== event.requiredJobSetRevision
+    || descriptor.requiredJobSetRevision !== event.qualityRevision
     || descriptor.evidenceClass !== event.evidenceClass || descriptor.runnerBaseImage !== capacity.runnerBaseImage
     || descriptor.jobImage !== capacity.jobBaseImage || descriptor.bounds.cpu !== String(capacity.cpus)
     || descriptor.bounds.memoryBytes !== String(capacity.memoryBytes) || descriptor.bounds.pids !== String(capacity.pids)

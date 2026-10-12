@@ -37,9 +37,9 @@ describe("installed native protected promotion", () => {
     const fixture = await nativeBundleReviewFixture("installed-promotion", undefined,
       authoritativePolicy(["owner"], [], []));
     const created = await post(fixture.service.origin,
-      "/v1/projects/project-a/repositories/root/reviews", hostPromoterAuthorization,
+      "/v1/projects/project-a/repositories/root/reviews/resolve", humanReviewerAuthorization,
       { schemaVersion: 1, proposalRef: reviewProposalRef });
-    expect(created.response.status).toBe(201);
+    expect(created.response.status).toBe(200);
     const reviewId = field(created.body, "review").reviewId;
     expect(typeof reviewId).toBe("string");
     const approved = await post(fixture.service.origin,
@@ -69,12 +69,31 @@ describe("installed native protected promotion", () => {
     } finally { database.close(); }
   });
 
+  it("rejects obsolete promoter review creation and resolves without mutating the current envelope", async () => {
+    // Given
+    const fixture = await nativeBundleReviewFixture("installed-review-resolve", undefined,
+      authoritativePolicy(["owner"], [], []));
+
+    // When
+    const rejected = await post(fixture.service.origin,
+      "/v1/projects/project-a/repositories/root/reviews", hostPromoterAuthorization,
+      { schemaVersion: 1, proposalRef: reviewProposalRef });
+    const resolved = await post(fixture.service.origin,
+      "/v1/projects/project-a/repositories/root/reviews/resolve", humanReviewerAuthorization,
+      { schemaVersion: 1, proposalRef: reviewProposalRef });
+
+    // Then
+    expect(rejected.response.status).toBe(404);
+    expect(resolved.response.status).toBe(200);
+    expect(field(resolved.body, "review").proposalRef).toBe(reviewProposalRef);
+  });
+
   it("rejects reviewer promotion and promoter approval without moving the ref", async () => {
     // Given
     const fixture = await nativeBundleReviewFixture("installed-promotion-roles", undefined,
       authoritativePolicy(["owner"], [], []));
     const created = await post(fixture.service.origin,
-      "/v1/projects/project-a/repositories/root/reviews", hostPromoterAuthorization,
+      "/v1/projects/project-a/repositories/root/reviews/resolve", humanReviewerAuthorization,
       { schemaVersion: 1, proposalRef: reviewProposalRef });
     const reviewId = field(created.body, "review").reviewId;
     const before = await protectedHead(fixture.root);
@@ -100,7 +119,7 @@ describe("installed native protected promotion", () => {
     const fixture = await nativeBundleReviewFixture("installed-promotion-denials", undefined,
       authoritativePolicy(["owner"], [], []));
     const created = await post(fixture.service.origin,
-      "/v1/projects/project-a/repositories/root/reviews", hostPromoterAuthorization,
+      "/v1/projects/project-a/repositories/root/reviews/resolve", humanReviewerAuthorization,
       { schemaVersion: 1, proposalRef: reviewProposalRef });
     const reviewId = field(created.body, "review").reviewId;
     if (typeof reviewId !== "string") throw new TypeError("review ID is missing");
@@ -135,7 +154,7 @@ describe("installed native protected promotion", () => {
     const fixture = await nativeBundleReviewFixture("installed-promotion-concurrent", undefined,
       authoritativePolicy(["owner"], [], []));
     const created = await post(fixture.service.origin,
-      "/v1/projects/project-a/repositories/root/reviews", hostPromoterAuthorization,
+      "/v1/projects/project-a/repositories/root/reviews/resolve", humanReviewerAuthorization,
       { schemaVersion: 1, proposalRef: reviewProposalRef });
     const reviewId = field(created.body, "review").reviewId;
     if (typeof reviewId !== "string") throw new TypeError("review ID is missing");
@@ -170,7 +189,7 @@ describe("installed native protected promotion", () => {
     ]);
 
     // When
-    const created = await cli(["create", promoterPath, "project-a", reviewProposalRef]);
+    const created = await cli(["resolve", reviewerPath, "project-a", reviewProposalRef]);
     const reviewId = field(JSON.parse(created), "review").reviewId;
     if (typeof reviewId !== "string") throw new TypeError("review ID is missing");
     await cli(["inspect", reviewerPath, "project-a", reviewId]);
@@ -195,7 +214,7 @@ describe("installed native protected promotion", () => {
           })
         });
       const created = await post(fixture.service.origin,
-        "/v1/projects/project-a/repositories/root/reviews", hostPromoterAuthorization,
+        "/v1/projects/project-a/repositories/root/reviews/resolve", humanReviewerAuthorization,
         { schemaVersion: 1, proposalRef: reviewProposalRef });
       const review = field(created.body, "review");
       const reviewId = review.reviewId;

@@ -8,19 +8,29 @@
 
 Native ordinary CI reads `.dim/ci/runner.yml` and its named script from the
 exact candidate Git tree, not from the protected head. The candidate may choose
-the digest-pinned disposable job image and the script bytes within the strict
-schema and sandbox fixed by `CI-NATIVE-CANDIDATE-JOB-001`.
+job names and script bytes within the strict schema and sandbox fixed by
+`CI-NATIVE-CANDIDATE-JOB-001`. The operator chooses the digest-pinned job and
+runner base images and all resource limits.
 
-The protected required-job policy may accept a successful native ordinary job
-as a promotion condition. That result is candidate-controlled self-test
+Every create or fast-forward update of a workspace-scoped proposal ref
+automatically queues every valid job in that exact candidate tree. Trusted
+native Project registration supplies eligibility centrally. There is no
+per-Project runner registration, admission command, repeated policy refresh,
+host-promoter review-create action, or human approval of a job name, kind,
+config, or script before execution. A candidate may add or change valid jobs
+without changing protected policy.
+
+The protected required-job policy selects a subset of successful native jobs
+as promotion conditions. It does not select which candidate jobs run. Each
+result is candidate-controlled self-test
 evidence. It is not independent CI and must never be described as independent
 verification. Success records that the candidate-selected tests executed within
 the recorded bounds and the bound process exited successfully. That is useful,
 limited product/QA evidence when maintainers review the test definition and
 result; it is not blanket proof of product correctness.
 
-The operator still controls Project and repository eligibility, protected-ref
-policy, required job names and evidence classes, host membership, capacity,
+The operator still controls trusted Project registration, protected-ref
+policy, required promotion job names and evidence classes, host membership, capacity,
 resource ceilings, the digest-pinned runner base, and service credentials. A
 candidate controls only bytes executed inside one fixed, bounded, ephemeral
 Sysbox job. A webhook cannot supply an image, command, argument, script, path,
@@ -52,11 +62,11 @@ implementation, tests, and results together. DIM's effort to minimize review
 applies only to the security-sensitive surface that can expose secrets or
 elevate trusted authority; it does not minimize product or test review.
 
-Project admission and script trust are separate questions. Admission says an
-operator permits an eligible Project to consume bounded capacity and submit the
-named evidence required by protected policy. It does not make candidate job
-bytes pre-reviewed or trusted as infrastructure. Those bytes remain part of the
-candidate that product maintainers review before promotion.
+Project eligibility and script trust are separate questions. Trusted native
+registration permits a Project to consume bounded global capacity. It does not
+make candidate job bytes pre-reviewed or trusted as infrastructure. Those
+bytes may run before review and remain part of the candidate that product
+maintainers assess before protected promotion.
 
 ## Consequences
 
@@ -86,6 +96,9 @@ candidate that product maintainers review before promotion.
   authenticated ordinary-service verifier client, scheduler path, and host
   executor remain unimplemented; without that client the production gate fails
   closed.
+- Service restart, generation rollover, lease expiry, and dependency outage
+  must reconcile eligibility and retry durable queued work internally. They
+  must not require another proposal push or operator readmission.
 
 ## Supersedes
 
@@ -95,8 +108,8 @@ change protected QEMU cache-hook or predecessor Gitea runner admission.
 
 ## Clarification: optional quality policy
 
-This decision classifies native ordinary evidence when a Project quality
-policy selects an ordinary job. It does not require a Project to configure CI,
+This decision classifies native ordinary evidence whether or not a Project
+quality policy selects the job for promotion. It does not require a Project to configure CI,
 does not make ordinary capacity or results a Project or workspace readiness
 condition, and does not grant any runner or CI identity approval or promotion
 authority. A quality policy may contain no jobs. Protected promotion always

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { constants, type Stats } from "node:fs";
-import { chmod, link, lstat, mkdir, open, readdir, unlink } from "node:fs/promises";
+import { chmod, link, lstat, mkdir, open, readdir, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 
 export type ReviewPublicationFaults = {
@@ -61,6 +61,35 @@ export async function publishReviewRecord(publication: ReviewPublication): Promi
   await syncDirectory(publication.stagingRoot);
 }
 
+export async function replaceReviewRecord(publication: ReviewPublication): Promise<void> {
+  const stagedPath = join(publication.stagingRoot, `${basename(publication.path)}.${randomUUID()}.tmp`);
+  const file = await open(
+    stagedPath,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+    0o600
+  );
+  try {
+    await file.writeFile(publication.serialized, "utf8");
+    await file.chmod(0o600);
+    await publication.faults.beforeFileSync?.();
+    await file.sync();
+  } catch (error) {
+    await file.close();
+    await removeStaged(stagedPath);
+    throw error;
+  }
+  await file.close();
+  try {
+    await publication.faults.beforePublish?.();
+    await rename(stagedPath, publication.path);
+    await syncDirectory(dirname(publication.path));
+    await publication.faults.afterPublish?.();
+  } finally {
+    await removeStaged(stagedPath);
+  }
+  await syncDirectory(publication.stagingRoot);
+}
+
 export async function readReviewJson(path: string, maximumBytes: number, singleLink = false): Promise<unknown> {
   return (await readReviewRecord(path, maximumBytes, singleLink)).value;
 }
@@ -89,7 +118,7 @@ export async function readReviewRecord(
 
 export async function recoverPublishedReviewStaging(recovery: ReviewStagingRecovery): Promise<void> {
   for (const entry of await readdir(recovery.stagingRoot, { withFileTypes: true })) {
-    const match = /^([0-9a-f]{64}\.json)\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.tmp$/.exec(entry.name);
+    const match = /^([0-9a-f]{64}(?:\.[0-9a-f]{64})?\.json)\.[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.tmp$/.exec(entry.name);
     if (!entry.isFile() || match === null) throw new ReviewRecordStorageError("review staging entry is invalid");
     const finalName = match[1];
     if (finalName === undefined) throw new ReviewRecordStorageError("review staging entry has no final identity");

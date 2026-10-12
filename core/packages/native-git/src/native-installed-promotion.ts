@@ -69,6 +69,15 @@ export async function promoteInstalledNativeReview(
   }
   const staleReasons = await nativeHumanReviewStaleReasons(context.runtime, target, review);
   if (staleReasons.length > 0) throw new NativeInstalledPromotionError("review security tuple is stale");
+  if (envelope.qualityRevision !== target.imported.policy.requiredJobSetRevision
+    || envelope.policyDigest !== target.imported.policyDigest || envelope.planning.status !== "valid") {
+    throw new NativeInstalledPromotionError("candidate quality envelope is stale or invalid");
+  }
+  const plannedJobs = new Set(envelope.planning.jobs.map(({ executionKind, jobName }) =>
+    `${executionKind}\0${jobName}`));
+  if (target.imported.policy.requiredJobs.some(({ kind, name }) => !plannedJobs.has(`${kind}\0${name}`))) {
+    throw new NativeInstalledPromotionError("a promotion-required candidate job is missing");
+  }
   const decisions = await readAuthoritativeNativeDecisions(target.repository, reviewId);
   const active = [...decisions.activeApprovals].sort((left, right) => left.reviewerId.localeCompare(right.reviewerId));
   if (JSON.stringify(active.map(({ reviewerId }) => reviewerId)) !== JSON.stringify(review.requiredReviewerIds)) {

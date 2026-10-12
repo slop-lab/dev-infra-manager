@@ -6,7 +6,6 @@ export const ordinaryBundleSecrets = {
   candidateReader: token(9),
   resultReporter: token(3),
   webhook: token(4),
-  registrar: token(5),
   query: token(6),
   host: token(7),
   alternate: token(8)
@@ -14,10 +13,10 @@ export const ordinaryBundleSecrets = {
 
 export function ordinaryBundleConfig() {
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     serviceId: "ordinary-main",
     database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
-    admissionLeaseMilliseconds: 300_000,
+    eligibilityLeaseMilliseconds: 300_000,
     claimLeaseMilliseconds: 60_000,
     nativeGit: {
       endpoint: "http://native-git:8080",
@@ -29,7 +28,6 @@ export function ordinaryBundleConfig() {
     },
     credentials: {
       webhook: { username: "native-events", password: ordinaryBundleSecrets.webhook },
-      registrar: { username: "ordinary-registrar", password: ordinaryBundleSecrets.registrar },
       query: { username: "native-query", password: ordinaryBundleSecrets.query }
     },
     hosts: [{

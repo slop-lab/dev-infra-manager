@@ -29,7 +29,6 @@ export * from "./nativeGitCandidateReadAuthority.js";
 export * from "./nativeRootCiProofClient.js";
 export * from "./nativeRootCiProofModel.js";
 export * from "./nativeRootCiReviewEvent.js";
-export * from "./nativeRootCiHostAdmission.js";
 export * from "./nativeRootCiHostClient.js";
 export * from "./nativeRootCiHostConfig.js";
 export * from "./nativeRootCiHostService.js";

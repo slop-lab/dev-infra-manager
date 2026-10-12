@@ -26,6 +26,11 @@ import {
 } from "./repository.js";
 import type { NativeGitRoute } from "./routing.js";
 import {
+  changedNativeProposalRefs,
+  readNativeProposalRefs,
+  type NativeProposalRefSnapshot
+} from "./native-proposal-reconciler.js";
+import {
   createWorkspaceWriteLeaseRegistry,
 } from "./native-workspace-write-lifecycle.js";
 import {
@@ -46,6 +51,8 @@ type WorkspaceWriteServiceInput = WorkspaceWriteVerificationInput & {
   readonly now: () => number;
   readonly operations: RootReadOperationGate;
   readonly hooks?: NativeProjectWorkspaceWriteHooks;
+  readonly reconcileProposalRefs: (projectId: string, proposalRefs: readonly string[]) => Promise<void>;
+  readonly serializeReceive: <Result>(operation: () => Promise<Result>) => Promise<Result>;
 };
 
 export type NativeProjectWorkspaceWriteService = {
@@ -177,12 +184,7 @@ export function createNativeProjectWorkspaceWriteService(
         sendNotFound(response);
         return true;
       }
-      const release = input.operations.acquire();
-      if (release === undefined) {
-        if (input.operations.isOpen()) sendEmpty(response, 503);
-        return true;
-      }
-      try {
+      await input.serializeReceive(async () => {
         await input.hooks?.beforeVerification?.();
         if (!input.operations.isOpen()) return true;
         try {
@@ -194,7 +196,7 @@ export function createNativeProjectWorkspaceWriteService(
           }, { projectId: route.projectId, repositoryId: "root", reviewPolicies: [] });
         } catch (error) {
           if (input.operations.isOpen()) sendVerificationFailure(response, error);
-          return true;
+          return;
         }
         if (!input.operations.isOpen()) return true;
         const currentLease = credential === undefined ? undefined : leases.authenticate(credential);
@@ -203,17 +205,23 @@ export function createNativeProjectWorkspaceWriteService(
           sendEmpty(response, 401, { "WWW-Authenticate": 'Basic realm="DIM Git"' });
           return true;
         }
+        let before: NativeProposalRefSnapshot | undefined;
+        if (request.method === "POST" && route.pathInfo.endsWith("/git-receive-pack")) {
+          before = await readNativeProposalRefs(input, route.projectId, lease.workspaceId);
+        }
         await serveGitBackend({
           config: { gitExecutable: input.gitExecutable, storageRoot: input.stateDirectory },
           identity: { role: "writer", username: "workspace-write-lease", workspaceId: lease.workspaceId },
           route,
           request,
-          response
+          response,
+          ...(before === undefined ? {} : { afterSuccessfulWrite: async () => {
+            const after = await readNativeProposalRefs(input, route.projectId, lease.workspaceId);
+            await input.reconcileProposalRefs(route.projectId, changedNativeProposalRefs(before, after));
+          } })
         });
-        return true;
-      } finally {
-        release();
-      }
+      });
+      return true;
     }
   };
 }

@@ -92,7 +92,6 @@ describe("installed native ordinary current-terminal proof", () => {
     const wrongRoles = await Promise.all([
       hostAuthorization("host-a"),
       basic("native-events", bundleSecrets.webhook),
-      basic("ordinary-registrar", bundleSecrets.registrar),
       basic("ordinary-identity", bundleSecrets.nativeIdentity),
       basic("ordinary-attempts", bundleSecrets.attemptIssuer),
       basic("ordinary-results", bundleSecrets.resultReporter)
@@ -119,7 +118,7 @@ describe("installed native ordinary current-terminal proof", () => {
     database.close();
 
     // Then
-    expect(wrongRoles.map((response) => response.status)).toEqual([403, 403, 403, 403, 403, 403]);
+    expect(wrongRoles.map((response) => response.status)).toEqual([403, 403, 403, 403, 403]);
     expect([unknown.status, foreignProject.status, foreignHost.status, foreignAttempt.status,
       staleGeneration.status, malformed.status, staleAdmission.status, staleRoot.status, inactive.status])
       .toEqual([401, 404, 404, 404, 409, 400, 409, 409, 503]);

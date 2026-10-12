@@ -13,6 +13,15 @@ serialized compare-and-swap operation. It does not implement issues, pull
 requests, workflow execution, general merge administration, or provider
 Actions compatibility.
 
+The target native profile creates or reconciles its immutable candidate and
+review envelope automatically after each successful workspace proposal create
+or fast-forward. It parses the exact candidate `.dim/ci/runner.yml` and emits
+one event for every valid candidate job. This needs no host-promoter creation
+request and no human approval of config, scripts, names, or kinds. Trusted
+native Project registration supplies central eligibility. The Project quality
+policy is consulted only to choose which completed jobs are required at
+protected promotion.
+
 The package is additive and not yet selected by core Project lifecycle code.
 Managed and external Gitea remain the current lifecycle implementation while
 the native path is independently reviewed and completed.
@@ -247,14 +256,14 @@ promote a review, and promoter credentials cannot approve or revoke one.
 
 The installed service exposes exact `GET /v1/host-promoter-identity`, returning
 only schema version `1`, service ID, role `host-promoter`, owner host ID, and the
-serving generation. Exact `POST
-/v1/projects/{projectId}/repositories/root/reviews` accepts only
-`{schemaVersion:1, proposalRef}` from the owner-host promoter and creates or
-replays the immutable authoritative review through the same serialized complete
-tree proof as the in-process method. Exact `POST` to the named review's
-`/promotions` suffix accepts only `{schemaVersion:1}` from that promoter. Both
-routes require the exact serving generation in `x-dim-generation-id`, have no
-query string, and return non-cacheable strict JSON. The existing reviewer GET,
+serving generation. The target removes exact `POST
+/v1/projects/{projectId}/repositories/root/reviews` and the matching `operator
+review create` command. They are obsolete and MUST NOT remain as compatibility
+aliases. Proposal receive performs the same serialized complete-tree proof and
+publishes the immutable envelope internally. Exact `POST` to the named review's
+`/promotions` suffix accepts only `{schemaVersion:1}` from that promoter. The
+automatic proposal path and promotion require the exact serving generation,
+have no query string, and return non-cacheable strict JSON. The existing reviewer GET,
 approval, and revocation routes remain reviewer-only inspection and human
 decision surfaces.
 
@@ -289,7 +298,7 @@ transition.
 The packaged operator client reads either a reviewer or promoter connection
 from a caller-owned, single-link, non-symlink mode-`0600` JSON file. The strict
 file binds schema version, role, service ID, HTTP(S) origin, serving generation,
-username, and password. Review create, inspect, approve, revoke, and promote
+username, and password. Inspect, approve, revoke, and promote
 commands never accept a raw credential in argv, a URL, a job payload, or output;
 they authenticate only in the HTTP header and print only the strict response.
 
@@ -302,14 +311,14 @@ and output bounds. Project and review selectors cannot supply a ref, candidate
 object ID, policy revision, script, argv, image, bound, execution kind, or other
 override.
 
-Each method loads the exact immutable stored review, proves its complete current
+Each method loads the exact immutable stored candidate envelope, proves its complete current
 identity with the same policy, protected-head, proposal commit/tree, and
 required-reviewer reconstruction used by the human-review boundary, and does so
 both before and after candidate Git reads. It derives the full current
-kind-labelled required-job set from the durable imported policy and parses the
-candidate's complete schema-4 ordinary/QEMU config through the authoritative
-candidate reader. Ordinary selection succeeds only when both review policy and candidate
-plan label the named job `ordinary-sysbox`; a QEMU job cannot be aliased through
+candidate-job set from the exact schema-4 ordinary/QEMU config through the
+authoritative candidate reader. Ordinary selection succeeds when the candidate
+plan labels the named job `ordinary-sysbox`; the protected policy need not name
+it unless its result will gate promotion. A QEMU job cannot be aliased through
 that API. The response is explicitly kind `ordinary-sysbox` and binds the
 review, current protected head, all policy revisions, exact config/script object
 IDs and digests, fixed argv, operator images, bounds, and admission generation
@@ -587,14 +596,14 @@ protectedRef, commit, tree, policyDigest}`. The policy retains all QEMU and
 ordinary-Sysbox job labels, required reviewers, and path reviewer rules.
 
 The sibling `review-event` POST additionally accepts exactly the import nonce,
-policy digest, schema-2 event and review IDs, execution kind, and job name.
+policy digest, schema-3 event and review IDs, execution kind, and job name.
 `qemu` is parsed but concealed as `404`; only `ordinary-sysbox` can be proved.
 The service loads the immutable stored envelope, verifies the exact selector,
 runs full review liveness, and rechecks both target and envelope while holding
 the same serialized gate. Pending, approved, and self-revoked reviews are
 eligible while current; approval is not implied. The response repeats the full
 policy/current-root envelope, sets `reviewLiveness: current`, and includes the
-exact stored schema-2 event.
+exact stored schema-3 event.
 
 Known foreign roles receive `403`, unknown credentials `401`, malformed or
 non-exact JSON `400`, alternate method/path/query/repository and QEMU selectors
@@ -605,33 +614,40 @@ and successful responses are bounded to 64 KiB exact JSON with
 decision records, or grants admission, intake, attempts, results, scheduling,
 runtime, promotion, or Project-ready authority.
 
-### Installed native-root admission contract
+### Installed native-root eligibility contract
 
-The installed ordinary service writes only strict state format 11. Its SQLite
-schema contains `bundle_activation`, `native_root_admissions`, and
-`native_root_admission_requests`, plus `native_root_ci_event_receipts` and
-`native_root_ci_demands`, service epochs, claims, active claim receipts,
-immutable cleaned host results, and a durable report outbox; both replay
-ledgers are independently capped at 100,000 rows. Every predecessor format is
-rejected byte-for-byte with no
-migration. The schema-4 ordinary configuration is unchanged. The serving
+The installed ordinary service derives eligibility from trusted native Project
+registration and reconciles it internally when native Git submits a candidate
+job event. There are no registration, discovery, refresh, revocation, or
+operator-admission routes, credentials, commands, or compatibility aliases.
+Candidate-job events, not protected `requiredJobs`, define runnable work;
+protected policy remains promotion-only.
+
+The ordinary service writes only strict state format 12. Its SQLite schema
+contains `bundle_activation`, internally managed `native_root_admissions`,
+event receipts and demands, service epochs, claims, active claim receipts,
+immutable cleaned host results, and a durable report outbox. The removed
+admission-request replay ledger is absent. Every predecessor format is rejected
+byte-for-byte with no migration. Strict ordinary configuration schema 5 uses
+`eligibilityLeaseMilliseconds` and has no registrar credential. The serving
 generation comes only from the `serve ... GENERATION_ID` argument, and the
-native-root proof client pins that same generation, `native-main`, endpoint,
-and `ordinaryCi.identity` credential. The global capacity digest is the sorted
-`nativeCapacityConfigDigest` over all operator hosts and capacities. No
-Project-specific capacity, image, job, or assignment selection is stored.
+native-root proof client pins that generation, `native-main`, endpoint, and
+`ordinaryCi.identity` credential.
 
 Exact `POST /v1/native-root-ci-events` uses only the configured webhook
 credential. Unknown credentials receive `401`, known other roles `403`, and
 exact activation is required before parsing. The body is bounded to 64 KiB,
 requires exact `application/json` and no query, and contains only schema version
-1, the startup generation, one UUIDv4 admission generation, and the strict
-canonical schema-2 `ordinary-sysbox` event. Schema 1, QEMU, unknown fields, and
+1, the startup generation, and the strict canonical schema-3
+`ordinary-sysbox` event. QEMU, unknown fields, and
 executable inputs are rejected. The installed schema-7 native configuration
 pins this new namespace; the standalone schema-2 service retains its separate
 legacy route and no alias connects them.
 
-Preflight is read-only and requires the exact active, unexpired admission,
+Intake first acknowledges an exact locally durable replay without requiring
+native Git availability. Eligibility cache expiry withholds new claims, but it
+does not delete the durable receipt, queued demand, or terminal evidence.
+New intake reconciles a fresh imported-policy proof, then requires the exact active, unexpired eligibility,
 Project/root, installer generation, capacity digest, current ref/head, complete
 policy revisions, and required ordinary job. An exact receipt replay is `202`
 without upstream proof only while that same admission remains active; changed
@@ -641,8 +657,9 @@ a fresh native ordinary-event proof, requires canonical submitted/proved event
 equality and the complete admission identity, then repeats activation,
 fresh-clock admission, replay, cap, policy, and full root checks in one
 `BEGIN IMMEDIATE` insertion transaction. A lease-only renewal with unchanged
-identity/root may converge; revocation, replacement, expiry, root movement, or
-changed identity while proof is pending conflicts without mutation. Each newly
+identity/root may converge and renew the same eligibility generation even after
+cache expiry. Revocation, replacement, root movement, or changed identity while
+proof is pending conflicts without mutation. Each newly
 accepted receipt and its one `queued` ordinary-Sysbox demand commit in that
 same transaction. Demand insertion failure rolls both rows back; replay of a
 known receipt requires its paired demand and cannot create or requeue one.
@@ -673,8 +690,10 @@ the separate native proof credential, and accepts exact
 `POST /v1/host-claim-activations` only for that current tuple. Activation binds
 the claim, attempt, descriptor, host, capacity, admission, installer generation,
 and active service epoch. `POST /v1/host-claim-renewals` extends only that exact
-active tuple. Restart, generation rotation, stale admission, lease uncertainty,
-or changed capacity withholds renewal and fences reuse until exact recovery.
+active tuple. Eligibility-cache expiry alone does not invalidate an already
+active execution lease. Restart, generation rotation, tuple drift, execution
+lease uncertainty, or changed capacity withholds renewal and fences reuse until
+exact recovery.
 
 The same host may call exact `POST /v1/host-recoveries` only after owned cleanup.
 Its request binds the original claim and issuance, and its `resourceId` must be
@@ -698,12 +717,13 @@ current unrevoked local attempt, and ordinary current-result proof before
 publishing one immutable schema-3 status. Only its exact non-cacheable
 acknowledgement changes the outbox to delivered and releases the capacity. A
 terminal native denial releases it as failed only because host cleanup was
-already proved. Admission expiry, revocation, root rotation, or generation
-change denies pending old-generation delivery without making a new native
-request.
+already proved. Revocation, root rotation, or generation change denies pending
+old-generation delivery without making a new native request. Cache expiry alone
+retains the durable result and outbox for exact retry after fresh proof.
 
-The query-only current-result proof requires the active admission, current root,
-current epoch, matching cleaned result, and non-denied outbox. The stricter
+The query-only current-result proof requires the unchanged admission binding,
+current root, matching cleaned result, and non-denied outbox; cache freshness is
+not terminal-evidence currentness. The stricter
 current-terminal proof additionally requires delivered state and returns the
 exact native acknowledgement bytes and digest. Native Git's read-only
 `currentOrdinaryTerminalEvidence` compares that proof with its local immutable
@@ -712,16 +732,17 @@ status before and after a fresh root/review check, and returns only
 or replaced attempt, stale review/root, wrong classification, or any tuple drift
 fails closed.
 
-The primary key is `(admission_generation,event_id)`, so a new admission may
+The primary key is `(admission_generation,event_id)`, so a new eligibility generation may
 record the same deterministic event only after fresh proof. Each row retains
 the canonical event and digest plus services, generation, Project/root, import,
 policy, root snapshot, capacity digest, and receipt time. Rows are never
 deleted. Startup and read-only check-state stream at most 100,000 rows and
 verify canonical bytes/digest, event/row identity, the joined admission's
 immutable identity and policy job/revisions, monotonic historical roots, and
-exactly one paired demand. Queued demands whose admission or root is no longer
-current are invalid; revocation, expiry, root movement, and generation or
+exactly one paired demand. Queued demands whose admission binding or root is no
+longer current are invalid; revocation, root movement, and generation or
 capacity replacement supersede queued demand without reviving historical work.
+Cache expiry preserves the queue while withholding claims until fresh proof.
 Inactive historical receipts are valid. Validation performs no repair or
 network request.
 
@@ -730,49 +751,8 @@ is not review liveness, approval, dispatch eligibility, claim, attempt, result,
 execution, or promotion authority. No legacy event dispatcher is wired because
 its flat schema-1 payload and acknowledgement are incompatible.
 
-Exact `GET /v1/native-root-admission/identity` derives its response from the
-presented credential. The registrar response has role
-`native-root-admission-registrar` and ordered scopes
-`imported-root-admission:write`, `imported-root-admission:revoke`; the query
-response has role `native-root-admission-reader` and scope
-`imported-root-admission:read`. Both include schema version 1,
-`ordinary-main`, and `servingGenerationId`. Native Git readiness attests only
-the latter exact identity and no longer treats legacy attempt-query identity as
-readiness. Identity remains available before activation.
-
-The replay-ledger Project/root POST suffixes are `register`, `current`, and `revoke`.
-Every body is strict schema version 1 with a UUIDv4 `requestId` and exact
-`generationId`; `current` and `revoke` also require a UUIDv4
-`admissionGeneration`. Registration accepts no other field and first obtains a
-fresh verified native-root policy proof. Proof outage is `503`, stale proof
-`409`, and absent proof `404`, all without ordinary-state mutation. A stored
-exact request replay returns its historical response before another proof
-request; reuse for another operation, path tuple, or body is `409`.
-All exact replays, including `current`, acknowledge a historical operation,
-not present eligibility. Consumers MUST generate a fresh UUIDv4 `requestId`
-for every current-validity check. Replaying a successful `current` after
-revocation or expiry may return its original `200`; a fresh request returns
-`404` for that admission generation.
-
-An additional query-only Project/root POST suffix, `discover`, accepts exactly
-schema version 1, a fresh UUIDv4 `requestId`, and the current installer
-`generationId`, without an `admissionGeneration`. It returns the same no-store
-admission envelope as `current` only for the one active, unexpired Project/root
-admission bound to the current installer generation and global capacity digest.
-It never fetches upstream, renews, expires, registers, or changes state, and
-does not consume the capped request-replay ledger. A repeated discovery is a
-fresh observation, not a historical replay; after revocation or expiry it
-returns `404`. Discovery supplies only a candidate generation to a separate
-native admission resolver. It is not a review-event proof, demand, claim,
-attempt, result, approval, or runnable-Project authority. Event receipt
-still independently verifies the current admission and native review proof.
-Unknown credentials receive `401`, known wrong-role credentials receive `403`,
-and valid query credentials from a different Project receive `404`. The
-complete admission response is bounded to 64 KiB before registration commits;
-an oversized response rolls back registration and returns `413`.
-
 Business POSTs require successful activation in the current process and the
-exact durable generation/token binding. Restart preserves valid admissions but
+exact durable generation/token binding. Restart preserves valid eligibility but
 requires activation again. A successful activation with another installer
 generation or global capacity digest marks every old active row `replaced`;
 rollback never revives one. Each admission stores a UUIDv4 generation, binding
@@ -783,32 +763,32 @@ binding digest excludes only the moving root sequence/commit/tree. An identical
 active binding renews the same generation and accepts only an identical or
 higher current root; a lower sequence or changed head at the same sequence is
 `409` without renewal. Import, policy, installer generation, or capacity
-change replaces it. Expiry or revocation requires a new generation.
+change replaces it. Fresh proof of the same binding renews the same generation
+after cache expiry; revocation requires a new generation. Expired active claims
+and attempts remain fenced and are never revived by that renewal.
 
-Successful responses contain schema version 1, `ordinary-main`, echoed request
-ID, serving generation, and an admission envelope with schema version 1,
-admission generation, capacity digest, expiry, and imported-root
-`{serviceId, servingGenerationId, projectId, repositoryId: root, currentRoot,
-policy}`. A fresh current request performs no upstream fetch, refresh, or creation and returns
-only the exact active, unexpired admission in the present generation/capacity
-context. Revocation grants no execution authority. Legacy operator-admission,
-native-event, and old verification surfaces are absent and return `404`.
+Event acknowledgements contain strict schema version 2, ordinary service ID,
+serving service generation, service-issued eligibility generation and exact
+eligibility deadline, event ID, and `recorded: true`. Legacy
+operator-admission, discovery, registrar identity, and old verification
+surfaces are absent and return `404`.
 Imported drafts remain non-runnable, and no installed host lifecycle,
 Project-ready, native QEMU, or promotion path is activated.
 
 ### Native review-event outbox
 
-Creating an immutable review writes one strict immutable envelope containing
-exactly `{review, events}` to that repository's owned proposal directory. The
-review identity binds the sorted complete required-job-name set, and `events`
-contains exactly one event in that order for every bound job. The service writes
+Reconciling a workspace proposal writes one strict immutable envelope containing
+the review, quality identity, candidate planning status, and events to that
+repository's owned proposal directory. The review identity remains independent
+of the protected `requiredJobs` subset, and `events` contains exactly one event in
+canonical order for every valid candidate job. The service writes
 the complete mode-`0600` envelope to a uniquely named staging file, fsyncs it,
 publishes it without replacement by hard-linking it to the review path, and
 fsyncs the proposal directory before returning success. It then removes the
 staging link and fsyncs the staging directory. Startup removes only a strictly
 named, caller-owned mode-`0600` staging link whose device and inode exactly
 match its expected published review; foreign, unpublished, or mismatched state
-is rejected unchanged. A partial event set or repository-wide duplicate event
+is rejected unchanged. A partial candidate event set or repository-wide duplicate event
 ID is invalid startup state, and review creation fails before publication if
 the bounded outbox cannot accept the whole set. Event bytes are the exact
 `dim.native.review-job.available` JSON defined by `CI-NATIVE-DELIVERY-001`;
@@ -817,23 +797,66 @@ field.
 
 One service-owned dispatcher sends the oldest undelivered ordinary-Sysbox event
 to the fixed ordinary receipt endpoint; QEMU events remain outside this lane.
-A separate query-credential resolver obtains the current admission generation
-through the read-only `discover` route and checks the Project/root, full
-operator policy, current head and required ordinary job before returning only
-that generation to the webhook-credential dispatcher. The dispatcher neither
-registers admissions nor receives the query credential. It observes an exact
+A separate query-credential resolver obtains the current internal execution
+generation and checks the registered Project/root, current proposal head, and
+candidate-declared ordinary job before returning only that generation to the
+webhook-credential dispatcher. It does not filter jobs through protected policy.
+The dispatcher receives no query credential. It observes an exact
 non-cacheable durable ordinary receipt before marking
 the event delivered, uses the same event ID and bytes after timeout or crash,
 and never treats delivery as job success. Startup validates event schema,
-digest, path, owner, mode, review linkage, and the all-required-jobs set before
-dispatch. Delivered records compact to `(eventId, eventDigest)` tombstones that
-are never age-pruned. The per-repository tombstone cap is 100,000. Exact known
+digest, path, owner, mode, review linkage, and the complete candidate-job set before
+dispatch. Delivered records are strict schema-3 markers bound to the event and
+digest, target service, service generation, non-secret endpoint digest,
+eligibility generation, and exact eligibility deadline. A marker suppresses
+delivery only until that deadline and only for the same destination binding;
+expiry or destination rotation automatically makes the immutable event pending
+again. The durable receipt replay fence refreshes eligibility without creating
+another demand, claim, attempt, or result. An authenticated definitive `404` or
+`409` writes a destination-bound superseded marker with a finite retry deadline
+so a stale oldest event cannot block newer work without being discarded. The
+same immutable event becomes pending after that deadline or when the destination
+changes, and a later durable receipt replaces the same marker path. Marker
+replacement uses an fsynced staged file and atomic rename. The per-repository
+marker cap is 100,000. Exact known
 replay remains idempotent at the cap; creating a review whose full event set
 would require another tombstone fails with `429` before review or event
 publication. Undelivered events are never pruned. The dispatcher has no native scheduler, CI reporter, reviewer,
 promoter, Git transport, or ordinary query credential. Transient marker I/O
 keeps the event pending and retries; unrecoverable marker integrity failures
 withhold native Git readiness rather than leaving a silent healthy dispatcher.
+
+The envelope also carries the exact candidate planning status. A missing
+`.dim/ci/runner.yml` is canonical valid-empty planning with an empty event set.
+A present invalid schema-4 manifest, an invalid referenced script, or more than
+64 combined ordinary and QEMU jobs is canonical invalid planning with an empty
+event set and a durable bounded diagnostic. Valid planning carries every
+candidate job and its config/script identity and emits the complete matching
+event set. Parsing, bounded script reads, envelope identity calculation, and
+publication are one fail-closed operation; no partial event set is publishable.
+Only strict review schema 2, envelope schema 2, and review-job event schema 3
+are accepted by this pre-stable profile. Earlier review, envelope, and event
+records are rejected unchanged at startup; there is no compatibility parser,
+alias, rewrite, or migration.
+
+The receive service snapshots the authenticated workspace proposal namespace
+before `git-receive-pack`, compares it with a bounded service-owned ref scan
+after the child succeeds, and reconciles every changed current ref under the
+same serializer used by review and promotion operations. It withholds response
+EOF until envelope publication is durable and retains operation ownership until
+the response emits `finish` or `close`. A disconnect after the Git child has
+committed refs does not cancel reconciliation. Startup and generation activation
+scan at most 10,000 current proposal refs per registered root before opening
+business admission, closing the ref-commit/envelope-publication crash window.
+If the Git child commits a ref but the synchronous envelope operation fails,
+the response remains uncertain and the live service schedules a bounded,
+serializer-owned scan of registered proposal refs. A transient failure therefore
+converges without another client request, ref object change, or restart. Retry
+work is coalesced to one pending scan, uses bounded backoff, wakes both event
+dispatchers only after durable reconciliation, and is cancelled and drained
+before storage ownership is released. Exhausting the bounded retry schedule
+makes business admission unavailable; malformed or foreign durable storage is
+never deleted, rewritten, or treated as successful recovery.
 
 ### Ordinary issuer and reporter endpoints
 
@@ -1067,8 +1090,8 @@ revisions come only from the immutable review. The response contains only
 `reviewId`, the canonical `descriptor`, and its `digest`; obtaining it creates
 no attempt, status, or other durable state and grants no Git transport read.
 
-The named job must remain required by current policy. Pending, approved, and
-revoked reviews are eligible because ordinary CI may inform human approval;
+The named job must remain present in the exact candidate config. Pending,
+approved, and revoked reviews are eligible because ordinary CI may inform human approval;
 stale reviews conflict. Under the protected-ref serializer, the service checks
 status before loading the bounded candidate config and script blobs and checks
 status again afterward. The second check detects a concurrent proposal

@@ -7,19 +7,19 @@ import {
 } from "./nativeOrdinaryAuthorityConfig.js";
 
 const topLevelKeys = [
-  "schemaVersion", "serviceId", "database", "admissionLeaseMilliseconds", "claimLeaseMilliseconds",
+  "schemaVersion", "serviceId", "database", "eligibilityLeaseMilliseconds", "claimLeaseMilliseconds",
   "nativeGit", "credentials", "hosts"
 ] as const;
 const nativeGitKeys = ["endpoint", "serviceId", "identity", "attemptIssuer", "candidateReader", "resultReporter"] as const;
 const credentialKeys = ["username", "password"] as const;
-const roleKeys = ["webhook", "registrar", "query"] as const;
+const roleKeys = ["webhook", "query"] as const;
 const hostKeys = ["hostId", "hostToken", "capacities"] as const;
 const capacityKeys = ["capacity", "runnerBaseImage", "jobBaseImage", "bounds"] as const;
 const boundKeys = ["cpu", "memoryBytes", "pids", "wallClockSeconds", "outputBytes"] as const;
 
 export function parseNativeOrdinaryBundleConfig(input: unknown): NativeOrdinaryAuthorityConfig {
   const root = exactRecord(input, topLevelKeys);
-  if (root.schemaVersion !== 4) invalid();
+  if (root.schemaVersion !== 5) invalid();
   if (root.serviceId !== "ordinary-main") {
     throw new NativeOrdinaryBundleConfigError("ordinary CI bundle service ID must be ordinary-main");
   }
@@ -30,10 +30,10 @@ export function parseNativeOrdinaryBundleConfig(input: unknown): NativeOrdinaryA
   const roles = parseRoles(root.credentials);
   const hosts = array(root.hosts).map(parseHost);
   const config: NativeOrdinaryAuthorityConfig = {
-    schemaVersion: 4,
+    schemaVersion: 5,
     serviceId: "ordinary-main",
     database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
-    admissionLeaseMilliseconds: positiveSafeInteger(root.admissionLeaseMilliseconds),
+    eligibilityLeaseMilliseconds: positiveSafeInteger(root.eligibilityLeaseMilliseconds),
     claimLeaseMilliseconds: positiveSafeInteger(root.claimLeaseMilliseconds),
     nativeGit,
     credentials: roles,
@@ -68,7 +68,6 @@ function parseRoles(value: unknown): NativeOrdinaryAuthorityConfig["credentials"
   const input = exactRecord(value, roleKeys);
   return {
     webhook: parseCredential(input.webhook),
-    registrar: parseCredential(input.registrar),
     query: parseCredential(input.query)
   };
 }

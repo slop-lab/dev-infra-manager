@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseNativeGitBundleConfig } from "../../../../core/packages/native-git/src/bundle-config.js";
@@ -131,7 +131,7 @@ describe("installed imported-root human reviewer", () => {
     });
     expect(current.status).toBe(200);
     expect(await current.json()).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       status: "pending",
       staleReasons: [],
       review: { reviewId: created.review.reviewId, requiredReviewerIds: ["owner"] },
@@ -186,7 +186,8 @@ describe("installed imported-root human reviewer", () => {
 });
 
 async function currentStoredEnvelope(root: string, reviewId: string): Promise<unknown> {
-  return JSON.parse(await readFile(join(
-    rootRepository(root), "dim-authoritative-reviews", "proposals", `${reviewId}.json`
-  ), "utf8"));
+  const directory = join(rootRepository(root), "dim-authoritative-reviews", "proposals");
+  const name = (await readdir(directory)).find((candidate) => candidate.startsWith(`${reviewId}.`));
+  if (name === undefined) throw new Error("stored review fixture is missing");
+  return JSON.parse(await readFile(join(directory, name), "utf8"));
 }

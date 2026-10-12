@@ -36,7 +36,8 @@ describe("installed native root CI proof HTTP boundary", () => {
     const event = envelope.events.find((candidate) => candidate.executionKind === "ordinary-sysbox");
     if (event === undefined) throw new TypeError("ordinary event fixture is missing");
     const repository = rootRepository(fixture.root);
-    const reviewPath = join(repository, "dim-authoritative-reviews", "proposals", `${envelope.review.reviewId}.json`);
+    const reviewPath = join(repository, "dim-authoritative-reviews", "proposals",
+      `${envelope.review.reviewId}.${envelope.envelopeId}.json`);
     const before = await proofState(fixture.root, reviewPath);
 
     // When
@@ -82,7 +83,7 @@ describe("installed native root CI proof HTTP boundary", () => {
         protectedRef: "refs/heads/main",
         commit: envelope.review.expectedProtectedHead,
         tree: expect.stringMatching(/^[0-9a-f]{40}$/),
-        policyDigest: envelope.review.policyDigest
+        policyDigest: envelope.policyDigest
       },
       policy: authoritativePolicy()
     });

@@ -7,23 +7,34 @@ import {
   readAuthoritativeNativeReviewEnvelopes
 } from "./authoritative-native-review-store.js";
 import type { AuthoritativeNativeReviewEnvelope } from "./authoritative-native-review-schema.js";
+import type { AuthoritativeNativeDeliveryBinding } from "./authoritative-native-delivery-binding.js";
 import {
   ownedReviewDirectory,
   publishReviewRecord,
   readReviewJson,
   recoverPublishedReviewStaging,
+  replaceReviewRecord,
   type ReviewPublicationFaults
 } from "./review-record-storage.js";
 
 const maximumEvents = 100_000;
 const maximumMarkerBytes = 4 * 1024;
 const uuidV4 = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-const markerSchema = z.object({
-  schemaVersion: z.literal(1),
+const markerBase = {
+  schemaVersion: z.literal(3),
   eventId: z.string().regex(/^[0-9a-f]{64}$/),
   eventDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/),
-  admissionGeneration: uuidV4
-}).strict().readonly();
+  serviceId: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/),
+  destinationDigest: z.string().regex(/^sha256:[0-9a-f]{64}$/)
+} as const;
+const markerSchema = z.discriminatedUnion("state", [z.object({ ...markerBase, state: z.literal("recorded"),
+  serviceGenerationId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+  eligibilityGeneration: uuidV4,
+  eligibilityExpiresAt: z.number().int().positive()
+}).strict().readonly(), z.object({ ...markerBase, state: z.literal("superseded"),
+  rejectionStatus: z.union([z.literal(404), z.literal(409)]), rejectedAt: z.number().int().positive(),
+  retryAfter: z.number().int().positive()
+}).strict().readonly()]);
 
 type OrdinaryEvent = AuthoritativeNativeReviewEnvelope["events"][number] & {
   readonly executionKind: "ordinary-sysbox";
@@ -37,7 +48,9 @@ export type AuthoritativeNativePendingDelivery = {
 
 export async function readPendingAuthoritativeNativeDeliveries(
   repository: string,
-  limit: number
+  limit: number,
+  binding: AuthoritativeNativeDeliveryBinding,
+  now = Date.now()
 ): Promise<readonly AuthoritativeNativePendingDelivery[]> {
   if (!Number.isInteger(limit) || limit < 1 || limit > maximumEvents) {
     throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery enumeration bound is invalid");
@@ -46,14 +59,16 @@ export async function readPendingAuthoritativeNativeDeliveries(
   const paths = await initializeDeliveryStore(repository);
   const envelopes = await readAuthoritativeNativeReviewEnvelopes(repository);
   const events = ordinaryEvents(envelopes);
-  const delivered = await readMarkers(paths.delivered, events);
+  const delivered = await readMarkers(paths.delivered, events, binding, now);
   return events.filter(({ event }) => !delivered.has(event.eventId)).slice(0, limit);
 }
 
 export async function acknowledgeAuthoritativeNativeDelivery(
   repository: string,
   delivery: AuthoritativeNativePendingDelivery,
-  admissionGeneration: string,
+  acknowledgement: { readonly serviceId: string; readonly serviceGenerationId: string;
+    readonly eligibilityGeneration: string; readonly eligibilityExpiresAt: number },
+  binding: AuthoritativeNativeDeliveryBinding,
   faults: ReviewPublicationFaults = {}
 ): Promise<z.infer<typeof markerSchema>> {
   const paths = await initializeDeliveryStore(repository);
@@ -62,8 +77,11 @@ export async function acknowledgeAuthoritativeNativeDelivery(
   if (stored === undefined || stored.eventDigest !== delivery.eventDigest) {
     throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery event does not match stored review");
   }
-  const marker = markerSchema.parse({ schemaVersion: 1, eventId: delivery.event.eventId,
-    eventDigest: delivery.eventDigest, admissionGeneration });
+  const marker = markerSchema.parse({ schemaVersion: 3, state: "recorded", eventId: delivery.event.eventId,
+    eventDigest: delivery.eventDigest, serviceId: acknowledgement.serviceId,
+    serviceGenerationId: acknowledgement.serviceGenerationId, destinationDigest: binding.destinationDigest,
+    eligibilityGeneration: acknowledgement.eligibilityGeneration,
+    eligibilityExpiresAt: acknowledgement.eligibilityExpiresAt });
   const path = join(paths.delivered, `${marker.eventId}.json`);
   try {
     await publishReviewRecord({ path, serialized: `${JSON.stringify(marker)}\n`,
@@ -71,11 +89,33 @@ export async function acknowledgeAuthoritativeNativeDelivery(
   } catch (error) {
     if (!isCode(error, "EEXIST")) throw error;
     const existing = markerSchema.parse(await readReviewJson(path, maximumMarkerBytes, true));
-    if (JSON.stringify(existing) !== JSON.stringify(marker)) {
+    if (existing.eventId !== marker.eventId || existing.eventDigest !== marker.eventDigest) {
       throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery marker conflicts with acknowledgement");
     }
+    if (JSON.stringify(existing) !== JSON.stringify(marker)) await replaceReviewRecord({ path,
+      serialized: `${JSON.stringify(marker)}\n`, stagingRoot: paths.staging, faults });
   }
   return marker;
+}
+
+export async function supersedeAuthoritativeNativeDelivery(repository: string,
+  delivery: AuthoritativeNativePendingDelivery, binding: AuthoritativeNativeDeliveryBinding,
+  rejectionStatus: 404 | 409, suppressionMilliseconds: number, faults: ReviewPublicationFaults = {}): Promise<void> {
+  const paths = await initializeDeliveryStore(repository);
+  const rejectedAt = Date.now();
+  const marker = markerSchema.parse({ schemaVersion: 3, state: "superseded", eventId: delivery.event.eventId,
+    eventDigest: delivery.eventDigest, serviceId: binding.serviceId, destinationDigest: binding.destinationDigest,
+    rejectionStatus, rejectedAt, retryAfter: rejectedAt + suppressionMilliseconds });
+  const path = join(paths.delivered, `${marker.eventId}.json`);
+  try { await publishReviewRecord({ path, serialized: `${JSON.stringify(marker)}\n`, stagingRoot: paths.staging, faults }); }
+  catch (error) {
+    if (!isCode(error, "EEXIST")) throw error;
+    const existing = markerSchema.parse(await readReviewJson(path, maximumMarkerBytes, true));
+    if (existing.eventId !== marker.eventId || existing.eventDigest !== marker.eventDigest) {
+      throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery marker conflicts with rejection");
+    }
+    await replaceReviewRecord({ path, serialized: `${JSON.stringify(marker)}\n`, stagingRoot: paths.staging, faults });
+  }
 }
 
 async function initializeDeliveryStore(repository: string): Promise<DeliveryPaths> {
@@ -90,7 +130,9 @@ async function initializeDeliveryStore(repository: string): Promise<DeliveryPath
 
 async function readMarkers(
   directory: string,
-  events: readonly AuthoritativeNativePendingDelivery[]
+  events: readonly AuthoritativeNativePendingDelivery[],
+  binding: AuthoritativeNativeDeliveryBinding,
+  now: number
 ): Promise<ReadonlySet<string>> {
   const expected = new Map(events.map((delivery) => [delivery.event.eventId, delivery]));
   const delivered = new Set<string>();
@@ -109,7 +151,10 @@ async function readMarkers(
     if (event === undefined || marker.eventId !== eventId || marker.eventDigest !== event.eventDigest) {
       throw new AuthoritativeNativeDeliveryStoreError("authoritative delivery marker does not match its event");
     }
-    delivered.add(eventId);
+    if (marker.serviceId === binding.serviceId && marker.destinationDigest === binding.destinationDigest
+      && (marker.state === "superseded" ? marker.retryAfter > now : marker.eligibilityExpiresAt > now)) {
+      delivered.add(eventId);
+    }
   }
   return delivered;
 }
@@ -117,8 +162,8 @@ async function readMarkers(
 function ordinaryEvents(
   envelopes: readonly AuthoritativeNativeReviewEnvelope[]
 ): readonly AuthoritativeNativePendingDelivery[] {
-  return envelopes.flatMap(({ review, events }) => events.flatMap((event) => event.executionKind === "ordinary-sysbox"
-    ? [{ createdAt: review.createdAt, event: { ...event, executionKind: "ordinary-sysbox" as const }, policyDigest: review.policyDigest,
+  return envelopes.flatMap(({ review, events, policyDigest }) => events.flatMap((event) => event.executionKind === "ordinary-sysbox"
+    ? [{ createdAt: review.createdAt, event: { ...event, executionKind: "ordinary-sysbox" as const }, policyDigest,
       eventDigest: `sha256:${createHash("sha256").update(JSON.stringify(event)).digest("hex")}` }]
     : [])).sort((left, right) => left.createdAt.localeCompare(right.createdAt)
     || left.event.reviewId.localeCompare(right.event.reviewId)

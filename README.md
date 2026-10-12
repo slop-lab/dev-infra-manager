@@ -73,8 +73,8 @@ Workspaces persist. Verification runs separately in disposable job containers.
 Secret-bearing Project services must be built and deployed from reviewed refs.
 
 Separation of execution is not automatically independence of evidence. The
-native ordinary-CI path is activated only by explicit Project admission and a
-separately running host capacity service; its candidate tree can
+native ordinary-CI path derives eligibility automatically from authenticated
+native review events and uses a separately running host capacity service; its candidate tree can
 select its job config, script, and digest-pinned image. Its success is therefore
 candidate-controlled self-test evidence, even though it runs in a separate
 bounded Sysbox job. Protected policy may require that result, but a human must
@@ -252,8 +252,8 @@ ordinary-CI service bundle from an operator-owned absolute config path:
 dim installer install control-plane --config /absolute/path/install.json
 ```
 
-The bundle starts without a runnable Project. Its strict ordinary format-11
-state can register imported-root policy, receive current ordinary review events,
+The bundle starts without a runnable Project. Its strict ordinary format-12
+state automatically reconciles imported-root eligibility from current ordinary review events,
 reserve and activate generation-bound host claims, accept schema-2 cleaned host
 results carrying schema-3 terminal evidence, and retry its durable result outbox
 until native Git returns an exact acknowledgement. Native Git keeps the
@@ -262,13 +262,14 @@ These routes use separate proof, attempt-issuer, result-reporter, webhook,
 query, and host credentials. Capacity is released only after acknowledged
 delivery or cleanup-gated terminal denial.
 
-This is still an additive, fail-closed checkpoint. The installed CLI can admit
-one native Project and run explicitly configured host capacity, while the
+This is still an additive, fail-closed checkpoint. Native Git automatically
+delivers candidate-job events to explicitly configured host capacity, while the
 controller does not start that host service. Native ordinary and QEMU execution
 remain separately deployed host services. A distinct host-promoter credential
-can create a review and request protected promotion only after exact-tree human
-approval and every ordinary or QEMU terminal result selected by the Project
-quality policy. Promotion records a durable intent, performs a checked Git
+can request protected promotion only after the proposal push has automatically
+published its exact candidate envelope, exact-tree human approval is complete,
+and every ordinary or QEMU terminal result selected by the Project quality
+policy is successful. Promotion records a durable intent, performs a checked Git
 compare-and-swap, and reconciles either crash window before serving the folded
 current head. The policy may select neither kind, one kind, or both. No
 clean-host Sysbox/KVM acceptance has been claimed. CI deployment and results

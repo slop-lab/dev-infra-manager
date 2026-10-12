@@ -17,7 +17,7 @@ afterEach(async () => {
 });
 
 describe("native ordinary bundle state", () => {
-  it("creates a durable schema-11 terminal-evidence database bound to its exact schema manifest", async () => {
+  it("creates a durable schema-12 terminal-evidence database bound to its exact schema manifest", async () => {
     // Given
     const root = await temporaryStateRoot();
 
@@ -25,16 +25,16 @@ describe("native ordinary bundle state", () => {
     const initialized = await initializeNativeOrdinaryBundleState(root);
 
     // Then
-    expect(initialized).toEqual({ database: join(root, "ordinary-ci.sqlite3"), stateFormat: 11 });
+    expect(initialized).toEqual({ database: join(root, "ordinary-ci.sqlite3"), stateFormat: 12 });
     const marker: unknown = JSON.parse(await readFile(nativeOrdinaryBundleMarkerPath(root), "utf8"));
     expect(marker).toEqual({
       schemaVersion: 1,
-      stateFormat: 11,
+      stateFormat: 12,
       database: "ordinary-ci.sqlite3",
       schemaManifestSha256: expect.stringMatching(/^sha256:[0-9a-f]{64}$/)
     });
     const database = new DatabaseSync(initialized.database, { readOnly: true });
-    expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 11 });
+    expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 12 });
     expect(database.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'bundle_activation'").get())
       .toEqual({ name: "bundle_activation" });
     expect(database.prepare("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'native_root_ci_demands'").get())
@@ -178,7 +178,7 @@ describe("native ordinary bundle state", () => {
     const result = await inspectNativeOrdinaryBundleState(root);
 
     // Then
-    expect(result).toEqual({ stateFormat: 11 });
+    expect(result).toEqual({ stateFormat: 12 });
     expect(await treeSnapshot(root)).toEqual(before);
     expect(await readdir(root)).not.toContain("ordinary-ci.sqlite3-shm");
   });
