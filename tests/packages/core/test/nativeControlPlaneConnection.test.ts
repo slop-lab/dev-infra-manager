@@ -23,7 +23,9 @@ const valid = {
   hostId: "host-a",
   nativeGit: {
     transport: "loopback-http", endpoint: "http://127.0.0.1:9080", serviceId: "native-main",
-    username: "host-a", password: token(1)
+    generationId: "a".repeat(64),
+    workspaceWriteIssuer: { username: "host-a", password: token(1) },
+    rootReadIssuer: { username: "root-read-a", password: token(3) }
   },
   ordinaryCi: {
     transport: "loopback-http", endpoint: "http://127.0.0.1:9081", serviceId: "ordinary-main",
@@ -47,7 +49,7 @@ async function connectionFile(contents: string = JSON.stringify(valid)): Promise
 }
 
 describe("native control-plane host connection", () => {
-  it("parses an exact host manifest without enabling lifecycle authority", async () => {
+  it("parses an exact host manifest and selects native lifecycle authority", async () => {
     // Given
     const path = await connectionFile();
 
@@ -57,10 +59,10 @@ describe("native control-plane host connection", () => {
     // Then
     expect(connection).toEqual(valid);
     expect(parseNativeControlPlaneConnection(valid)).toEqual(valid);
-    expect(() => lifecycleOptionsForBackend("sysbox", {
-      HOME: "/home/dim", DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: path,
-      DIM_GITEA_CONNECTION_FILE: "/not-used"
-    })).toThrow(/refusing Gitea fallback/);
+    const options = lifecycleOptionsForBackend("sysbox", {
+      HOME: "/home/dim", DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE: path
+    });
+    expect(options.nativeControlPlaneConnection).toEqual({ file: path });
   });
 
   it("rejects foreign authorities and candidate-selected resources", () => {
@@ -69,8 +71,15 @@ describe("native control-plane host connection", () => {
       { ...valid, projects: { acme: {} } },
       { ...valid, schemaVersion: 2 },
       { ...valid, nativeGit: { ...valid.nativeGit, serviceId: "foreign" } },
-      { ...valid, nativeGit: { ...valid.nativeGit, username: "host-b" } },
-      { ...valid, nativeGit: { ...valid.nativeGit, password: valid.ordinaryCi.hostToken } },
+      { ...valid, nativeGit: { ...valid.nativeGit, generationId: "b" } },
+      { ...valid, nativeGit: { ...valid.nativeGit,
+        workspaceWriteIssuer: { ...valid.nativeGit.workspaceWriteIssuer, username: "host-b" } } },
+      { ...valid, nativeGit: { ...valid.nativeGit,
+        workspaceWriteIssuer: { ...valid.nativeGit.workspaceWriteIssuer,
+          password: valid.ordinaryCi.hostToken } } },
+      { ...valid, nativeGit: { ...valid.nativeGit,
+        rootReadIssuer: { ...valid.nativeGit.rootReadIssuer,
+          password: valid.nativeGit.workspaceWriteIssuer.password } } },
       { ...valid, ordinaryCi: { ...valid.ordinaryCi, endpoint: "http://remote.example" } },
       { ...valid, nativeGit: { ...valid.nativeGit, endpoint: "http://127.0.0.1:9080/v1" } },
       { ...valid, nativeGit: { ...valid.nativeGit, endpoint: "http://user:pass@127.0.0.1:9080" } },
@@ -86,6 +95,16 @@ describe("native control-plane host connection", () => {
     for (const input of invalid) {
       expect(() => parseNativeControlPlaneConnection(input)).toThrow(NativeControlPlaneConnectionError);
     }
+  });
+
+  it("accepts verified HTTPS and bracketed IPv6 loopback origins", () => {
+    // Given / When / Then
+    expect(parseNativeControlPlaneConnection({ ...valid, nativeGit: {
+      ...valid.nativeGit, transport: "https", endpoint: "https://native.example"
+    } })).toMatchObject({ nativeGit: { endpoint: "https://native.example" } });
+    expect(parseNativeControlPlaneConnection({ ...valid, nativeGit: {
+      ...valid.nativeGit, endpoint: "http://[::1]:9080"
+    } })).toMatchObject({ nativeGit: { endpoint: "http://[::1]:9080" } });
   });
 
   it("rejects linked, permissive, oversized, and malformed host files", async () => {

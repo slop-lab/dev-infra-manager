@@ -11,6 +11,10 @@ type ServiceConnection = {
   readonly transport: "https" | "loopback-http";
   readonly endpoint: string;
 };
+type Credential = {
+  readonly username: string;
+  readonly password: string;
+};
 type Capacity = {
   readonly runnerBaseImage: string;
   readonly jobBaseImage: string;
@@ -26,14 +30,15 @@ export type NativeControlPlaneConnection = {
   readonly hostId: string;
   readonly nativeGit: ServiceConnection & {
     readonly serviceId: "native-main";
-    readonly username: string;
-    readonly password: string;
+    readonly generationId: string;
+    readonly workspaceWriteIssuer: Credential;
+    readonly rootReadIssuer: Credential;
   };
-  readonly ordinaryCi: ServiceConnection & {
+  readonly ordinaryCi?: ServiceConnection & {
     readonly serviceId: "ordinary-main";
     readonly hostToken: string;
   };
-  readonly capacities: Readonly<Record<string, Capacity>>;
+  readonly capacities?: Readonly<Record<string, Capacity>>;
 };
 
 export class NativeControlPlaneConnectionError extends UserError {
@@ -41,18 +46,36 @@ export class NativeControlPlaneConnectionError extends UserError {
 }
 
 export function parseNativeControlPlaneConnection(value: unknown): NativeControlPlaneConnection {
-  const input = exactRecord(value, ["schemaVersion", "hostId", "nativeGit", "ordinaryCi", "capacities"]);
+  const recordValue = record(value);
+  const readinessOnly = Object.keys(recordValue).length === 3;
+  const input = exactRecord(recordValue, readinessOnly
+    ? ["schemaVersion", "hostId", "nativeGit"]
+    : ["schemaVersion", "hostId", "nativeGit", "ordinaryCi", "capacities"]);
   if (input.schemaVersion !== 1) return invalid();
   const hostId = identifier(input.hostId);
-  const git = exactRecord(input.nativeGit, ["transport", "endpoint", "serviceId", "username", "password"]);
-  const ordinary = exactRecord(input.ordinaryCi, ["transport", "endpoint", "serviceId", "hostToken"]);
-  if (git.serviceId !== "native-main" || ordinary.serviceId !== "ordinary-main"
-    || git.username !== hostId) return invalid();
+  const git = exactRecord(input.nativeGit, ["transport", "endpoint", "serviceId", "generationId",
+    "workspaceWriteIssuer", "rootReadIssuer"]);
+  if (git.serviceId !== "native-main") return invalid();
   const nativeTransport = transport(git.transport);
+  const workspaceWriteIssuer = credential(git.workspaceWriteIssuer);
+  const rootReadIssuer = credential(git.rootReadIssuer);
+  if (workspaceWriteIssuer.username !== hostId
+    || workspaceWriteIssuer.password === rootReadIssuer.password) return invalid();
+  const nativeGit = { transport: nativeTransport, endpoint: origin(git.endpoint, nativeTransport),
+    serviceId: "native-main" as const, generationId: generation(git.generationId),
+    workspaceWriteIssuer, rootReadIssuer };
+  if (readinessOnly) {
+    return {
+      schemaVersion: 1,
+      hostId,
+      nativeGit
+    };
+  }
+  const ordinary = exactRecord(input.ordinaryCi, ["transport", "endpoint", "serviceId", "hostToken"]);
+  if (ordinary.serviceId !== "ordinary-main") return invalid();
   const ordinaryTransport = transport(ordinary.transport);
-  const password = token(git.password);
   const hostToken = token(ordinary.hostToken);
-  if (password === hostToken) return invalid();
+  if (workspaceWriteIssuer.password === hostToken || rootReadIssuer.password === hostToken) return invalid();
   const configured = record(input.capacities);
   const entries = Object.entries(configured);
   if (entries.length === 0) return invalid();
@@ -74,8 +97,7 @@ export function parseNativeControlPlaneConnection(value: unknown): NativeControl
   return {
     schemaVersion: 1,
     hostId,
-    nativeGit: { transport: nativeTransport, endpoint: origin(git.endpoint, nativeTransport),
-      serviceId: "native-main", username: hostId, password },
+    nativeGit,
     ordinaryCi: { transport: ordinaryTransport, endpoint: origin(ordinary.endpoint, ordinaryTransport),
       serviceId: "ordinary-main", hostToken },
     capacities
@@ -148,6 +170,16 @@ function token(value: unknown): string {
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]+$/.test(value)) return invalid();
   const bytes = Buffer.from(value, "base64url");
   if (bytes.length !== 32 || bytes.toString("base64url") !== value) return invalid();
+  return value;
+}
+
+function credential(value: unknown): Credential {
+  const input = exactRecord(value, ["username", "password"]);
+  return { username: identifier(input.username), password: token(input.password) };
+}
+
+function generation(value: unknown): string {
+  if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value)) return invalid();
   return value;
 }
 
