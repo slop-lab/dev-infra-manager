@@ -1,0 +1,40 @@
+#!/bin/busybox sh
+set -eu
+/bin/busybox --install -s /bin
+mount -t devtmpfs devtmpfs /dev
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+/bin/busybox modprobe virtio_pci
+/bin/busybox modprobe 9p
+/bin/busybox modprobe 9pnet_virtio
+mkdir -p /sys/fs/cgroup
+mount -t cgroup2 cgroup2 /sys/fs/cgroup
+pids=
+for argument in $(cat /proc/cmdline); do
+  case "$argument" in dim.pids=*) pids=${argument#dim.pids=} ;; esac
+done
+case "$pids" in ''|*[!0-9]*|0) /guest-exit 64; poweroff -f ;; esac
+grep -qw pids /sys/fs/cgroup/cgroup.controllers || { /guest-exit 64; poweroff -f; }
+printf '+pids\n' >/sys/fs/cgroup/cgroup.subtree_control
+mkdir /sys/fs/cgroup/dim-job
+printf '%s\n' "$pids" >/sys/fs/cgroup/dim-job/pids.max
+printf '%s\n' "$$" >/sys/fs/cgroup/dim-job/cgroup.procs
+mount -t 9p -o trans=virtio,ro jobroot /guest
+mount --bind /dev /guest/dev
+mount --bind /proc /guest/proc
+mount -o remount,bind,ro /guest/proc
+mount --bind /sys /guest/sys
+mount --bind /sys/fs/cgroup /guest/sys/fs/cgroup
+mount -o remount,bind,ro /guest/sys/fs/cgroup
+mount -o remount,bind,ro /guest/sys
+mount -t 9p -o trans=virtio,ro job /guest/run/dim/job
+mount -t 9p -o trans=virtio workspace /guest/workspace
+chown -R 1000:1000 /guest/workspace
+mount -t tmpfs -o mode=1777,nosuid,nodev tmpfs /guest/tmp
+set +e
+/guest-exec /guest /workspace 1000 1000 /bin/bash --noprofile --norc /run/dim/job/script
+status=$?
+set -e
+sync
+/guest-exit "$status"
+poweroff -f

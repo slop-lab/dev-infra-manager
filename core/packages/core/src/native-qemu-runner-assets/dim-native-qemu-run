@@ -1,0 +1,44 @@
+#!/bin/sh
+set -eu
+
+descriptor=${1-}
+script=${2-}
+workspace=${3-}
+job_image=${4-}
+cpus=${5-}
+guest_memory_bytes=${6-}
+pids=${7-}
+if [ "$#" -ne 7 ] || [ "$descriptor" != /run/dim/job/descriptor.json ] || \
+  [ "$script" != /run/dim/job/script ] || [ ! -r "$descriptor" ] || [ ! -r "$script" ] || \
+  [ "$workspace" != /run/dim/workspace ] || [ ! -d "$workspace" ] || [ ! -w "$workspace" ] || \
+  [ ! -d /run/dim/guest-root ] || ! printf '%s' "$job_image" | grep -Eq '@sha256:[0-9a-f]{64}$'; then
+  echo "invalid native QEMU runner invocation" >&2
+  exit 64
+fi
+for bound in "$cpus" "$guest_memory_bytes" "$pids"; do
+  case "$bound" in ''|*[!0-9]*|0) echo "invalid native QEMU resource bound" >&2; exit 64 ;; esac
+done
+memory_mib=$((guest_memory_bytes / 1048576))
+if [ "$memory_mib" -lt 1 ]; then
+  echo "native QEMU memory bound is below one MiB" >&2
+  exit 64
+fi
+
+set +e
+qemu-system-x86_64 \
+  -machine q35,accel=kvm -cpu host -smp "$cpus" -m "${memory_mib}M" \
+  -nodefaults -no-reboot -display none -serial stdio \
+  -kernel /opt/dim/vmlinuz -initrd /opt/dim/initramfs.gz \
+  -append "console=ttyS0 panic=-1 dim.pids=$pids" \
+  -device virtio-rng-pci \
+  -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+  -fsdev local,id=jobroot,path=/run/dim/guest-root,security_model=none,readonly=on \
+  -device virtio-9p-pci,fsdev=jobroot,mount_tag=jobroot \
+  -fsdev local,id=job,path=/run/dim/job,security_model=none,readonly=on \
+  -device virtio-9p-pci,fsdev=job,mount_tag=job \
+  -fsdev local,id=workspace,path=/run/dim/workspace,security_model=none \
+  -device virtio-9p-pci,fsdev=workspace,mount_tag=workspace
+status=$?
+set -e
+[ "$status" -eq 85 ] && exit 0
+exit 1
