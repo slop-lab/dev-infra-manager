@@ -91,28 +91,119 @@ Control-plane installation belongs exclusively to the installer facade as
 `dim installer install control-plane --config FILE`; this CLI does not
 implement or alias it. The facade rejects obsolete `dim install-cp` input
 before forwarding. The installed native Git and ordinary-CI services remain
-empty and idle without native Project runtime admission, capacity
-advertisement, host execution, a Sysbox job gate, or reviewer browser UI.
+empty and idle until an operator explicitly admits a native Project and starts
+host capacity. They do not infer admission or capacity from workspace state.
 
-The host CLI has a separate non-runnable native Project checkpoint. Set
+The host CLI can admit a bootstrapped native Project and run its Sysbox
+workspaces without Gitea. Set
 `DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE` to an owner-only mode-`0600` native
 host connection file. Plain `project create` also needs the distinct
 `DIM_NATIVE_ROOT_IMPORTER_CONNECTION_FILE` for the same service endpoint and
 owning host. Pending creation currently requires `loopback-http`; HTTPS
 selection rejects until the importer supports a reviewed TLS trust model.
-Once trusted host bootstrap has already published an exact
-`root-imported` schema-2 draft:
+The host connection records the current serving generation plus distinct
+root-read and workspace-write issuer credentials. DIM reloads it under the
+Project lock for readiness and workspace lifecycle operations, while retaining
+the original import receipt generation unchanged.
+Create the initial schema-2 draft from one already-local reviewed repository.
+This command does not fetch, accept a tag, or accept policy JSON outside the
+selected commit's `.dim/repos.yml`:
+
+```bash
+dim project bootstrap-native-root acme \
+  --project-id project-a \
+  --source-repository /absolute/path/to/reviewed-acme \
+  --source-ref refs/heads/main \
+  --registrar-connection /absolute/operator/project-registrar.json \
+  --importer-connection /absolute/operator/root-importer.json \
+  --git-executable /usr/bin/git --json
+```
+
+The two connection files must be distinct caller-owned, single-link mode-0600
+files for the same native Git endpoint, owner host, and serving generation.
+Bootstrap retains the exact bundle and policy below the private DIM state root,
+imports the protected root, and prints a credential-free `root-imported` view.
+Exact replay converges. It does not create runnable Project state.
+
+After bootstrap has published that draft:
 
 ```bash
 dim project create acme --json
 dim project list --json
 dim project show acme --json
+dim workspace create acme feature-123
+dim workspace exec feature-123 -- bash
+dim workspace run feature-123 TASK
 ```
 
-Create publishes only `admission-pending` with `runnable: false`; replay
-requires a fresh service proof. Native repository, workspace, CI, remove, and
-purge operations remain unavailable, without Gitea fallback. Do not mount
-either connection file in an agent or workspace container.
+Create first publishes `admission-pending`, obtains a fresh service readiness
+proof, materializes the immutable protected root, and atomically publishes a
+schema-6 `ready` Project with `runnable: true`. Native workspace creation stores
+schema-9 state and starts a loopback smart-HTTP proxy in the workspace. The
+proxy receives only a workspace-scoped controller grant; the host obtains a
+fresh 30-second native Git lease for each request. Clone and fetch are allowed,
+while pushes can only create or fast-forward
+`refs/heads/proposals/<workspace-id>/...`. Protected refs, tags, deletion,
+foreign workspace namespaces, and non-fast-forward updates are rejected.
+
+Native repository administration, Project remove/purge, and protected
+promotion remain unavailable without Gitea fallback. Native ordinary CI uses
+separate owner-only configuration and direct host commands:
+
+```bash
+dim ci native-root project admit project-a /absolute/path/admission.json
+dim ci native-root host run /absolute/path/host.json
+```
+
+Admission prints the exact service response. Host execution first requires the
+registered Docker `sysbox-runc` runtime, then runs one persistent worker per
+configured capacity and drains owned work on `SIGINT` or `SIGTERM`. Neither
+command uses workspace or Gitea authority. Do not mount any native connection
+file or host/issuer credential in an agent, workspace, or job container.
+Run these foreground commands under an operator-owned service manager for
+durability; the native cutover host guide contains exact user-systemd units.
+
+Native QEMU is a separate optional service and host worker, not a third member
+of the installed native Git/ordinary Compose bundle. Build and deploy its
+scheduler image, then run each fixed KVM host from its private connection:
+
+```bash
+dim ci native-qemu scheduler image build registry.example/dim-native-qemu:0.9.0
+dim ci native-qemu scheduler run /absolute/path/native-qemu-scheduler.json
+dim ci native-qemu project admit project-a /absolute/path/native-qemu-scheduler.json
+dim ci native-qemu host run node-a /absolute/path/node-a-qemu.json
+dim ci native-qemu event status EVENT_ID /absolute/path/native-qemu-scheduler.json
+```
+
+The scheduler config is a mode-`0600` schema-1 JSON file. It fixes
+`serviceId: "qemu-main"`, listener, absolute SQLite path, admission and
+60-second-or-longer claim leases, distinct native-Git identity/attempt/result
+credentials, distinct event/registrar/query credentials, and unique hosts.
+Each host has one canonical 32-byte base64url token and named capacities with
+digest-pinned runner/job images plus positive CPU, memory, PID, timeout, and
+output bounds. The host file is `CONFIG-NATIVE-QEMU-001`; candidate bytes cannot
+select those values.
+
+Native Git stores QEMU demand in a dedicated durable outbox after review
+creation. It discovers only an independently admitted Project, sends the exact
+kind-labelled event through the scheduler's event-intake credential, and
+retries identical bytes after uncertain delivery. Scheduler event identity is
+idempotent, so retry cannot create a second execution. This path does not use
+the ordinary-CI webhook, proof protocol, or delivery marker namespace.
+
+The trusted runner image must provide `/usr/local/bin/dim-native-qemu-run` and
+boot the candidate job in a disposable KVM guest. The host passes `/dev/kvm`
+only to that trusted supervisor container, uses `--network none`, and mounts
+only the exact descriptor and candidate script read-only. The guest receives no
+scheduler, native-Git, reviewer, promotion, Docker-host, or DIM host credential.
+Before attestation or claiming, the host runs both its fixed
+`qemu-system-x86_64 -enable-kvm` probe and the same probe inside every
+digest-pinned runner image after requiring the trusted launcher. During a job
+it renews the claim every five seconds, bounds combined stdout/stderr capture,
+and aborts on renewal loss. A mode-`0600` journal per capacity records active
+ownership and the exact cleanup-gated terminal result; restart cleans only the
+claim-labelled container and private root, then recovers the claim or retries
+the unchanged result. There is no TCG or ordinary fallback.
 
 DIM automatically runs one managed controller process with separate local
 Unix sockets: a mode-`0600` host-admin API and a workspace-scoped API. Normal
