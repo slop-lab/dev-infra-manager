@@ -4,3 +4,4 @@ dist/
 coverage/
 *.log
 .local/
+.playwright-mcp
