@@ -68,7 +68,8 @@ async function runChild() {
   const ordinaryConfig = JSON.parse(await readFile(join(operatorRoot, "ordinary-ci.json"), "utf8"));
   const forbiddenValues = [
     nativeConfig.ordinaryCi.query.password, nativeConfig.ordinaryCi.identity.password,
-    nativeConfig.ordinaryCi.attemptIssuer.password, nativeConfig.ordinaryCi.resultReporter.password,
+    nativeConfig.ordinaryCi.attemptIssuer.password, nativeConfig.ordinaryCi.candidateReader.password,
+    nativeConfig.ordinaryCi.resultReporter.password,
     nativeConfig.ordinaryCi.webhook.password, ordinaryConfig.credentials.registrar.password,
     ordinaryConfig.hosts[0].hostToken,
     (await readFile(join(operatorRoot, "native-readiness.token"), "utf8")).trim(),

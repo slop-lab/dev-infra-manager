@@ -16,23 +16,31 @@ export const roleDenialCases = [
     expectedStatuses: ordinaryStatuses("registrar", 503, 404) },
   { name: "admission-discover", service: "ordinaryCi", method: "POST",
     path: `${projectRoot}/native-root-admission/discover`, authorizedRoles: ["query"],
-    expectedStatuses: ordinaryStatuses("query", 503) },
+    expectedStatuses: statuses({ query: 503, "candidate-reader": 401 }, 403) },
   { name: "event", service: "ordinaryCi", method: "POST", path: "/v1/native-root-ci-events",
-    authorizedRoles: ["webhook"], expectedStatuses: ordinaryStatuses("webhook", 503) },
+    authorizedRoles: ["webhook"], expectedStatuses: statuses({ webhook: 503, "candidate-reader": 401 }, 403) },
   { name: "claim", service: "ordinaryCi", method: "POST", path: "/v1/host-claims",
-    authorizedRoles: ["host"], expectedStatuses: ordinaryStatuses("host", 503) },
+    authorizedRoles: ["host"], expectedStatuses: statuses({ host: 503, "candidate-reader": 401 }, 403) },
   { name: "claim-result", service: "ordinaryCi", method: "POST", path: "/v1/host-results",
-    authorizedRoles: ["host"], expectedStatuses: ordinaryStatuses("host", 503) },
+    authorizedRoles: ["host"], expectedStatuses: statuses({ host: 503, "candidate-reader": 401 }, 403) },
   { name: "admission-identity", service: "ordinaryCi", method: "GET",
     path: "/v1/native-root-admission/identity", authorizedRoles: ["query", "registrar"],
     expectedStatuses: statuses({ query: 200, registrar: 200 }, 404) },
   { name: "host-identity", service: "ordinaryCi", method: "GET", path: "/v1/host-identity",
-    authorizedRoles: ["host"], expectedStatuses: ordinaryStatuses("host", 200) },
+    authorizedRoles: ["host"], expectedStatuses: statuses({ host: 200, "candidate-reader": 401 }, 403) },
   { name: "attempt-issue", service: "nativeGit", method: "POST", path: `${reviewRoot}/job-attempts`,
     authorizedRoles: ["attempt-issuer"], expectedStatuses: nativeStatuses("attempt-issuer", 409) },
   { name: "attempt-revoke", service: "nativeGit", method: "POST",
     path: `${reviewRoot}/job-attempt-revocations`, authorizedRoles: ["attempt-issuer"],
     expectedStatuses: nativeStatuses("attempt-issuer", 409) },
+  { name: "candidate-read", service: "nativeGit", method: "POST", path: "/v1/candidate-read-leases",
+    authorizedRoles: ["candidate-reader"], expectedStatuses: statuses({ "candidate-reader": 404 }, 401),
+    body: {
+      schemaVersion: 1, requestId: "00000000-0000-4000-8000-000000000001",
+      executionKind: "ordinary-sysbox", projectId: "live-smoke", reviewId,
+      jobName: "source", attemptId: "00000000-0000-4000-8000-000000000002",
+      descriptorDigest: `sha256:${"b".repeat(64)}`, hostId: "host-a", capacity: "primary"
+    } },
   { name: "result-report", service: "nativeGit", method: "POST", path: `${reviewRoot}/statuses`,
     authorizedRoles: ["result-reporter"], expectedStatuses: nativeStatuses("result-reporter", 409) },
   { name: "proof-policy", service: "nativeGit", method: "POST",
@@ -87,7 +95,8 @@ export async function runRoleRequests(input) {
         port: testCase.service === "nativeGit" ? input.nativePort : input.ordinaryPort,
         method: testCase.method,
         path: testCase.path,
-        authorization: role.authorization
+        authorization: role.authorization,
+        body: testCase.body
       });
       const expected = testCase.expectedStatuses[role.name];
       const status = result.status;
@@ -191,6 +200,7 @@ function configuredRoles(credentials) {
     ["query", basic("native-query", credentials.query)],
     ["identity", basic("ordinary-identity", credentials.identity)],
     ["attempt-issuer", basic("ordinary-attempts", credentials.attemptIssuer)],
+    ["candidate-reader", basic("ordinary-candidate-reader", credentials.candidateReader)],
     ["result-reporter", basic("ordinary-results", credentials.resultReporter)],
     ["webhook", basic("native-events", credentials.webhook)],
     ["registrar", basic("ordinary-registrar", credentials.registrar)],
@@ -216,7 +226,7 @@ function activationGateStatuses() {
 
 function statuses(overrides, defaultStatus) {
   return Object.fromEntries([
-    "query", "identity", "attempt-issuer", "result-reporter", "webhook", "registrar", "host"
+    "query", "identity", "attempt-issuer", "candidate-reader", "result-reporter", "webhook", "registrar", "host"
   ].map((role) => [role, overrides[role] ?? defaultStatus]));
 }
 

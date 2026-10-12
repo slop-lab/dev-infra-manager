@@ -44,7 +44,7 @@ describe("control-plane live facade support", () => {
     const install = JSON.parse(await readFile(configPath, "utf8"));
     assert.equal(candidate.projectRegistrars.length, 1);
     assert.equal(candidate.projectRegistrars[0].password, fixture.candidateRegistrarCredential);
-    assert.equal(new Set([...Object.values(fixture.credentials), fixture.candidateRegistrarCredential]).size, 8);
+    assert.equal(new Set([...Object.values(fixture.credentials), fixture.candidateRegistrarCredential]).size, 9);
     assert.equal((await lstat(fixture.sources.nativeGit)).mode & 0o777, 0o600);
     assert.equal(install.nativeGit.image, images.nativeGit);
     assert.equal(install.ordinaryCi.image, images.ordinaryCi);

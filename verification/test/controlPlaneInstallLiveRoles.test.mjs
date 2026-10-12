@@ -8,6 +8,7 @@ const credentials = {
   query: "query-secret",
   identity: "identity-secret",
   attemptIssuer: "issuer-secret",
+  candidateReader: "candidate-reader-secret",
   resultReporter: "reporter-secret",
   webhook: "webhook-secret",
   registrar: "registrar-secret",
@@ -22,8 +23,8 @@ const candidateGenerationId = "b".repeat(64);
 const reviewId = "a".repeat(64);
 const projectRoot = "/v1/projects/live-smoke/repositories/root";
 const reviewRoot = `${projectRoot}/reviews/${reviewId}`;
-const roleNames = ["attempt-issuer", "host", "identity", "query", "registrar", "result-reporter", "webhook"];
-const configuredRoleNames = ["query", "identity", "attempt-issuer", "result-reporter", "webhook", "registrar", "host"];
+const roleNames = ["attempt-issuer", "candidate-reader", "host", "identity", "query", "registrar", "result-reporter", "webhook"];
+const configuredRoleNames = ["query", "identity", "attempt-issuer", "candidate-reader", "result-reporter", "webhook", "registrar", "host"];
 
 afterEach(async () => {
   await Promise.all(servers.splice(0).map(async (server) => {
@@ -47,6 +48,7 @@ describe("control-plane live role denial matrix", () => {
       { name: "host-identity", method: "GET", path: "/v1/host-identity", authorizedRoles: ["host"] },
       { name: "attempt-issue", method: "POST", path: `${reviewRoot}/job-attempts`, authorizedRoles: ["attempt-issuer"] },
       { name: "attempt-revoke", method: "POST", path: `${reviewRoot}/job-attempt-revocations`, authorizedRoles: ["attempt-issuer"] },
+      { name: "candidate-read", method: "POST", path: "/v1/candidate-read-leases", authorizedRoles: ["candidate-reader"] },
       { name: "result-report", method: "POST", path: `${reviewRoot}/statuses`, authorizedRoles: ["result-reporter"] },
       { name: "proof-policy", method: "POST", path: "/v1/projects/live-smoke/repositories/root/native-root-ci-proof/policy", authorizedRoles: ["identity"] },
       { name: "attempt-identity", method: "GET", path: "/v1/native-ordinary-attempt-authority/identity", authorizedRoles: ["attempt-issuer"] },
@@ -59,6 +61,10 @@ describe("control-plane live role denial matrix", () => {
     for (const testCase of roleDenialCases) {
       assert.deepEqual(Object.keys(testCase.expectedStatuses).sort(), roleNames);
     }
+    const candidateRead = roleDenialCases.find(({ name }) => name === "candidate-read");
+    assert.equal(candidateRead.expectedStatuses["candidate-reader"], 404);
+    assert.deepEqual(Object.entries(candidateRead.expectedStatuses)
+      .filter(([role]) => role !== "candidate-reader").map(([, status]) => status), Array(7).fill(401));
     assert.equal(roleDenialCases.some(({ path }) => path === "/v1/operator-admissions"), false);
   });
 
@@ -82,9 +88,9 @@ describe("control-plane live role denial matrix", () => {
       writeLine: (line) => lines.push(line)
     });
 
-    assert.equal(lines.length, 8);
+    assert.equal(lines.length, 9);
     assert.match(lines[0], /^authority-denial role=query /);
-    for (const [index, line] of lines.slice(0, 7).entries()) {
+    for (const [index, line] of lines.slice(0, 8).entries()) {
       const role = configuredRoleNames[index];
       for (const testCase of roleDenialCases) {
         const suffix = testCase.evidence === undefined ? "" : `:${testCase.evidence}`;
@@ -92,24 +98,24 @@ describe("control-plane live role denial matrix", () => {
       }
       for (const secret of Object.values(credentials)) assert.equal(line.includes(secret), false);
     }
-    assert.match(lines[7], /^authority-denial role=candidate-project-registrar /);
-    assert.match(lines[7], /registrar-identity=200/);
-    for (const role of ["query", "identity", "attempt-issuer", "result-reporter", "webhook"]) {
-      assert.match(lines[7], new RegExp(`other-${role}=403(?: |$)`));
+    assert.match(lines[8], /^authority-denial role=candidate-project-registrar /);
+    assert.match(lines[8], /registrar-identity=200/);
+    for (const role of ["query", "identity", "attempt-issuer", "candidate-reader", "result-reporter", "webhook"]) {
+      assert.match(lines[8], new RegExp(`other-${role}=403(?: |$)`));
     }
     for (const role of ["registrar", "host"]) {
-      assert.match(lines[7], new RegExp(`other-${role}=401(?: |$)`));
+      assert.match(lines[8], new RegExp(`other-${role}=401(?: |$)`));
     }
-    assert.match(lines[7], /registrar-preparation=503:generic-activation-gated$/);
-    assert.equal(lines[7].includes(candidateRegistrar.password), false);
+    assert.match(lines[8], /registrar-preparation=503:generic-activation-gated$/);
+    assert.equal(lines[8].includes(candidateRegistrar.password), false);
     assert.deepEqual(preparations, [{
       schemaVersion: 1,
       generationId: candidateGenerationId,
       preparation: { serviceId: "native-main", projectId: "live-smoke", rootRepositoryId: "root" }
     }]);
     assert.equal(captures.nativeGit,
-      1 + 7 * roleDenialCases.filter(({ service }) => service === "nativeGit").length + 9);
-    assert.equal(captures.ordinaryCi, 1 + 7 * roleDenialCases.filter(({ service }) => service === "ordinaryCi").length);
+      1 + 8 * roleDenialCases.filter(({ service }) => service === "nativeGit").length + 10);
+    assert.equal(captures.ordinaryCi, 1 + 8 * roleDenialCases.filter(({ service }) => service === "ordinaryCi").length);
   });
 
   it("fails at the exact role and route whose service state changes", async () => {
@@ -168,6 +174,7 @@ function roleForAuthorization(authorization) {
     ["query", basic("native-query", credentials.query)],
     ["identity", basic("ordinary-identity", credentials.identity)],
     ["attempt-issuer", basic("ordinary-attempts", credentials.attemptIssuer)],
+    ["candidate-reader", basic("ordinary-candidate-reader", credentials.candidateReader)],
     ["result-reporter", basic("ordinary-results", credentials.resultReporter)],
     ["webhook", basic("native-events", credentials.webhook)],
     ["registrar", basic("ordinary-registrar", credentials.registrar)],
