@@ -37,6 +37,7 @@ import {
   NativeGitResultReporter,
   type NativeGitResultReporterClient
 } from "./nativeGitResultReporter.js";
+import { requestNativeGitCandidateLease } from "./nativeGitCandidateLeaseClient.js";
 
 const maximumBodyBytes = 64 * 1024;
 
@@ -158,7 +159,15 @@ export function configuredNativeOrdinaryAuthorityServer(
       claimService,
       leaseService,
       store,
-      readJson: () => readJson(request)
+      readJson: () => readJson(request),
+      issueCandidateLease: (claim, requestId, signal) => requestNativeGitCandidateLease({
+        endpoint: config.nativeGit.endpoint, credential: config.nativeGit.candidateReader,
+        httpClient: dependencies.nativeGitHttpClient ?? createNodeNativeGitAdmissionHttpClient(), signal,
+        selector: { schemaVersion: 1, requestId, executionKind: "ordinary-sysbox",
+          projectId: claim.descriptor.projectId, reviewId: claim.reviewId, jobName: claim.descriptor.jobName,
+          attemptId: claim.attemptId, descriptorDigest: claim.descriptorDigest,
+          hostId: claim.hostId, capacity: claim.capacity }
+      })
     })) return;
     if (request.method === "POST" && url.pathname === "/v1/admission-verifications") {
       if (!authorized(request, config.credentials.query)) return notFound(response);
@@ -212,6 +221,7 @@ function webhookAuthentication(
     config.credentials.query,
     config.nativeGit.identity,
     config.nativeGit.attemptIssuer,
+    config.nativeGit.candidateReader,
     config.nativeGit.resultReporter,
     ...config.hosts.map((host) => ({ username: host.hostId, password: host.hostToken }))
   ];

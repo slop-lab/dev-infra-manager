@@ -57,6 +57,11 @@ export const nativeGitResultReporterCredential = {
   password: "result-secret-0000000000000000000000"
 } as const;
 
+export const nativeGitCandidateReaderCredential = {
+  username: "ordinary-candidate-reader",
+  password: "candidate-reader-secret-000000000000000"
+} as const;
+
 export type AuthorityFixture = {
   readonly database: string;
   readonly endpoint: string;
@@ -95,6 +100,7 @@ export async function startAuthority(options: StartAuthorityOptions = {}): Promi
       serviceId: "native-main",
       identity: options.nativeGitIdentity ?? nativeGitIdentityCredential,
       attemptIssuer: options.nativeGitAttemptIssuer ?? nativeGitAttemptIssuerCredential,
+      candidateReader: nativeGitCandidateReaderCredential,
       resultReporter: options.nativeGitResultReporter ?? nativeGitResultReporterCredential
     },
     credentials: authorityCredentials,
@@ -149,6 +155,7 @@ export async function verifier(endpoint: string) {
       query: authorityCredentials.query,
       identity: { username: "ordinary-identity", password: "identity-secret-00000000000000000000" },
       attemptIssuer: { username: "ordinary-attempts", password: "attempt-secret-000000000000000000000" },
+      candidateReader: nativeGitCandidateReaderCredential,
       resultReporter: { username: "ordinary-results", password: "result-secret-0000000000000000000000" },
       webhook: {
         endpoint: "http://ordinary-ci:8080/v1/native-events",
