@@ -106,6 +106,25 @@ It reads the trusted upstream socket and bearer grant from
 `--directory-mode` and `--socket-mode` accept octal Unix modes; their defaults
 are `0700` and `0660`.
 
+## Native Git preset
+
+The workspace image starts the native Git preset only when the host injects a
+workspace-scoped `DIM_NATIVE_GIT_BROKER_TOKEN`:
+
+```bash
+dim-controller-proxy native-git --listen 127.0.0.1:19418
+```
+
+The preset binds only loopback and forwards the exact smart-HTTP discovery,
+upload-pack, and receive-pack routes for a Project's fixed `root` repository to
+`DIM_CONTROLLER_SOCKET`. It authenticates with the dedicated broker token, not
+the ordinary workspace controller grant. Unknown paths, extra query fields,
+and mismatched methods or content types receive no upstream request. The host
+broker obtains a short-lived native Git lease per accepted request; server-side
+policy limits writes to fast-forward updates in that workspace's proposal
+namespace. Neither the native Git issuer credential nor a lease enters the
+workspace.
+
 Mount only `/run/dim/dev-controller` into the child container and configure the
 child to use that socket. Never pass it the original token or mount the
 original controller socket directory.
