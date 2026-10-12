@@ -56,7 +56,7 @@ describe("control-plane live readiness evidence", () => {
     assert.equal(lines.join("\n").includes(token), false);
   });
 
-  it("targets saved service IDs and restores healthy unchanged runtime after dependency outages", async () => {
+  it("keeps peer readiness independent and restores unchanged runtime after service outages", async () => {
     const nativeId = "a".repeat(64);
     const ordinaryId = "b".repeat(64);
     const calls = [];
@@ -79,7 +79,7 @@ describe("control-plane live readiness evidence", () => {
         if (kind === "container" && action === "exec") {
           const id = rest[2];
           if (id === ordinaryId) return result(ordinaryRunning ? 0 : 1);
-          if (id === nativeId) return result(nativeRunning && ordinaryRunning ? 0 : 1);
+          if (id === nativeId) return result(nativeRunning ? 0 : 1);
         }
         throw new Error(`unexpected command ${command.args.join(" ")}`);
       }
@@ -107,7 +107,7 @@ describe("control-plane live readiness evidence", () => {
       && !args.includes("dim-control-plane-ordinary-ci-1")), true);
     assert.match(lines.join("\n"), new RegExp(`native=${nativeId} ordinary=${ordinaryId}`));
     assert.match(lines.join("\n"), /ordinary-with-native-stopped exit=0/);
-    assert.match(lines.join("\n"), /native-with-ordinary-stopped exit=1/);
+    assert.match(lines.join("\n"), /native-with-ordinary-stopped exit=0/);
     assert.match(lines.join("\n"), /restored healthy=true state=unchanged volumes=unchanged/);
   });
 });

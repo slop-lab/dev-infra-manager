@@ -70,7 +70,7 @@ async function runChild() {
     nativeConfig.ordinaryCi.query.password, nativeConfig.ordinaryCi.identity.password,
     nativeConfig.ordinaryCi.attemptIssuer.password, nativeConfig.ordinaryCi.candidateReader.password,
     nativeConfig.ordinaryCi.resultReporter.password,
-    nativeConfig.ordinaryCi.webhook.password, ordinaryConfig.credentials.registrar.password,
+    nativeConfig.ordinaryCi.webhook.password, ordinaryConfig.credentials.query.password,
     ordinaryConfig.hosts[0].hostToken,
     (await readFile(join(operatorRoot, "native-readiness.token"), "utf8")).trim(),
     (await readFile(join(operatorRoot, "ordinary-readiness.token"), "utf8")).trim()

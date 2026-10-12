@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 export async function createOperatorFixture(input) {
   const credentials = Object.fromEntries(
-    ["query", "identity", "attemptIssuer", "candidateReader", "resultReporter", "webhook", "registrar", "host"]
+    ["query", "identity", "attemptIssuer", "candidateReader", "resultReporter", "webhook", "host"]
       .map((name) => [name, randomBytes(32).toString("base64url")])
   );
   const candidateRegistrarCredential = randomBytes(32).toString("base64url");
@@ -41,8 +41,8 @@ export async function createOperatorFixture(input) {
   const idleNativeConfig = nativeConfig([]);
   await privateFile(sources.nativeGit, idleNativeConfig);
   await privateFile(sources.ordinaryCi, JSON.stringify({
-    schemaVersion: 4, serviceId: "ordinary-main", database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
-    admissionLeaseMilliseconds: 300000, claimLeaseMilliseconds: 60000,
+    schemaVersion: 5, serviceId: "ordinary-main", database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
+    eligibilityLeaseMilliseconds: 300000, claimLeaseMilliseconds: 60000,
     nativeGit: {
       endpoint: "http://native-git:8080", serviceId: "native-main",
       identity: { username: "ordinary-identity", password: credentials.identity },
@@ -52,7 +52,6 @@ export async function createOperatorFixture(input) {
     },
     credentials: {
       webhook: { username: "native-events", password: credentials.webhook },
-      registrar: { username: "ordinary-registrar", password: credentials.registrar },
       query: { username: "native-query", password: credentials.query }
     },
     hosts: [{ hostId: "host-a", hostToken: credentials.host, capacities: [{ capacity: "primary", runnerBaseImage: `registry.example/runner@sha256:${"c".repeat(64)}`, jobBaseImage: `registry.example/job@sha256:${"d".repeat(64)}`, bounds: { cpu: "4", memoryBytes: "8589934592", pids: "2048", wallClockSeconds: "3600", outputBytes: "16777216" } }] }]

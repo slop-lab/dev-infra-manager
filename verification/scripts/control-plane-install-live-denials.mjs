@@ -29,7 +29,7 @@ export async function runPreInstallDenials(context) {
     value.nativeGit.identity.password = Buffer.alloc(32, 41).toString("base64url");
   }, /paired credentials must match/);
   await withJsonMutation(context, context.sources.ordinaryCi, "duplicate-credential", (value) => {
-    value.credentials.registrar.password = value.hosts[0].hostToken;
+    value.hosts[0].hostToken = value.credentials.query.password;
   }, /credential and token values must be distinct/);
   await withNetworkFixture(context, "foreign-labels", [
     "--label", `dev.dim.verification=${context.verificationId}`

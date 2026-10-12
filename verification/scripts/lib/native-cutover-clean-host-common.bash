@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 cutover_die() {
-  printf 'native-cutover-clean-host-smoke: %s\n' "$1" >&2
+  printf '%s: %s\n' "${CUTOVER_DIAGNOSTIC_NAME:-native-cutover-clean-host-smoke}" "$1" >&2
   exit "${2:-1}"
 }
 
@@ -28,23 +28,27 @@ cutover_require_config() {
   for required in "${CUTOVER_REQUIRED_KEYS[@]}"; do
     [[ -n "${CUTOVER_CONFIG[$required]:-}" ]] || cutover_die "operator config is missing '$required'" 2
   done
-  [[ "${CUTOVER_CONFIG[EXPECTED_COMMIT]}" =~ ^[0-9a-f]{40}$ ]] || cutover_die "EXPECTED_COMMIT must be 40 lowercase hex" 2
-  [[ "${CUTOVER_CONFIG[PROJECT_COMMIT]}" =~ ^[0-9a-f]{40}$ ]] || cutover_die "PROJECT_COMMIT must be 40 lowercase hex" 2
+  local commit_key
+  for commit_key in "${CUTOVER_COMMIT_KEYS[@]}"; do
+    [[ "${CUTOVER_CONFIG[$commit_key]}" =~ ^[0-9a-f]{40}$ ]] || cutover_die "$commit_key must be 40 lowercase hex" 2
+  done
   [[ "${CUTOVER_CONFIG[CONTROL_SSH]}" =~ ^[A-Za-z0-9_.@-]+$ &&
      "${CUTOVER_CONFIG[ORDINARY_SSH]}" =~ ^[A-Za-z0-9_.@-]+$ ]] ||
     cutover_die "SSH endpoints must be aliases or user@host names without options" 2
   local identifier_key
-  for identifier_key in PROJECT_NAME PROJECT_ID WORKSPACE_NAME ORDINARY_HOST_ID QEMU_HOST_ID ORDINARY_JOB QEMU_JOB; do
+  for identifier_key in "${CUTOVER_IDENTIFIER_KEYS[@]}"; do
     [[ "${CUTOVER_CONFIG[$identifier_key]}" =~ ^[a-z0-9][a-z0-9._-]{0,127}$ ]] ||
       cutover_die "$identifier_key is invalid" 2
   done
   local unit_key
-  for unit_key in ORDINARY_UNIT QEMU_SCHEDULER_UNIT QEMU_HOST_UNIT; do
+  for unit_key in "${CUTOVER_UNIT_KEYS[@]}"; do
     [[ "${CUTOVER_CONFIG[$unit_key]}" =~ ^[A-Za-z0-9_.@-]+\.service$ ]] || cutover_die "$unit_key is invalid" 2
   done
-  [[ "${CUTOVER_CONFIG[NATIVE_GIT_CONTAINER]}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]+$ &&
-     "${CUTOVER_CONFIG[ORDINARY_CI_CONTAINER]}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]+$ ]] ||
-    cutover_die "control-plane container names are invalid" 2
+  local container_key
+  for container_key in "${CUTOVER_CONTAINER_KEYS[@]}"; do
+    [[ "${CUTOVER_CONFIG[$container_key]}" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]+$ ]] ||
+      cutover_die "$container_key is invalid" 2
+  done
   [[ "${CUTOVER_CONFIG[PROTECTED_QEMU_MODE]}" == "unused" ]] ||
     cutover_die "set PROTECTED_QEMU_MODE=unused; this gate never trusts the protected verification socket" 2
   local path_key
@@ -164,4 +168,13 @@ cutover_assert_node_separation() {
     [[ "$(jq -r ".$field" <<<"$control")" == "$(jq -r ".$field" <<<"$ordinary")" ]] ||
       cutover_die "control/QEMU and ordinary nodes differ in prepared $field" 2
   done
+}
+
+cutover_deferred_phase_manifest() {
+  jq -cn '{schemaVersion:1,status:"preparation-only",fullGate:"VERIFICATION-NATIVE-CUTOVER-001-not-satisfied",
+    phases:[
+      {name:"fault-and-recovery",implemented:false,requiredEvidence:["service-restart","durable-outbox-replay","lease-expiry-fencing","host-reboot"]},
+      {name:"authority",implemented:false,requiredEvidence:["guest-no-host-sockets","guest-no-kvm","guest-no-raw-secrets","no-promotion-credential"]},
+      {name:"traffic",implemented:false,requiredEvidence:["effective-ordinary-flow","effective-qemu-flow","cross-project-denial","no-fallback"]}
+    ]}'
 }

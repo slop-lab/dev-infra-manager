@@ -11,7 +11,7 @@ readonly CUTOVER_REQUIRED_KEYS=(
   CONTROL_SSH ORDINARY_SSH EXPECTED_COMMIT CONTROL_SOURCE_ROOT ORDINARY_SOURCE_ROOT
   CONTROL_INSTALL_CONFIG PROJECT_NAME PROJECT_ID PROJECT_SOURCE PROJECT_REF PROJECT_COMMIT
   REGISTRAR_CONNECTION IMPORTER_CONNECTION CONTROL_PLANE_CONNECTION WORKSPACE_NAME WORKSPACE_REPOSITORY
-  ORDINARY_ADMISSION_CONFIG ORDINARY_HOST_CONFIG ORDINARY_HOST_ID ORDINARY_UNIT ORDINARY_STATE_DIRECTORY
+  ORDINARY_HOST_CONFIG ORDINARY_HOST_ID ORDINARY_UNIT ORDINARY_STATE_DIRECTORY
   QEMU_SCHEDULER_CONFIG QEMU_HOST_CONFIG QEMU_HOST_ID QEMU_SCHEDULER_UNIT QEMU_HOST_UNIT
   PROMOTER_CONNECTION REVIEWER_CONNECTION NATIVE_GIT_CONTAINER ORDINARY_CI_CONTAINER
   ORDINARY_JOB QEMU_JOB ORDINARY_MARKER QEMU_MARKER EVIDENCE_DIR PROTECTED_QEMU_MODE
@@ -19,10 +19,16 @@ readonly CUTOVER_REQUIRED_KEYS=(
 readonly CUTOVER_ALL_KEYS=("${CUTOVER_REQUIRED_KEYS[@]}")
 readonly CUTOVER_PATH_KEYS=(
   CONTROL_SOURCE_ROOT ORDINARY_SOURCE_ROOT CONTROL_INSTALL_CONFIG PROJECT_SOURCE REGISTRAR_CONNECTION
-  IMPORTER_CONNECTION CONTROL_PLANE_CONNECTION WORKSPACE_REPOSITORY ORDINARY_ADMISSION_CONFIG
+  IMPORTER_CONNECTION CONTROL_PLANE_CONNECTION WORKSPACE_REPOSITORY
   ORDINARY_HOST_CONFIG ORDINARY_STATE_DIRECTORY QEMU_SCHEDULER_CONFIG QEMU_HOST_CONFIG
   PROMOTER_CONNECTION REVIEWER_CONNECTION EVIDENCE_DIR
 )
+readonly CUTOVER_COMMIT_KEYS=(EXPECTED_COMMIT PROJECT_COMMIT)
+readonly CUTOVER_IDENTIFIER_KEYS=(
+  PROJECT_NAME PROJECT_ID WORKSPACE_NAME ORDINARY_HOST_ID QEMU_HOST_ID ORDINARY_JOB QEMU_JOB
+)
+readonly CUTOVER_UNIT_KEYS=(ORDINARY_UNIT QEMU_SCHEDULER_UNIT QEMU_HOST_UNIT)
+readonly CUTOVER_CONTAINER_KEYS=(NATIVE_GIT_CONTAINER ORDINARY_CI_CONTAINER)
 readonly CUTOVER_RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 CUTOVER_STARTED_SERVICES=0
 
@@ -32,9 +38,11 @@ print_command_plan() {
     'install:just-install-local' \
     'control-plane:dim-installer-install-control-plane' \
     'project:bootstrap-native-root,create-ready' \
-    'workspace:create-schema9,proposal-push-denials' \
-    'ci:native-root-admit-host,native-qemu-scheduler-admit-host' \
-    'review:create,inspect,promote-denied,approve,promote-cas' \
+    'workspace:create-schema9,ready-before-ci' \
+    'ci:start-global-ordinary-host,qemu-scheduler-health,qemu-host' \
+    'proposal:push-denials,automatic-envelope2-events3-queue' \
+    'review:resolve-existing,inspect,promote-denied,approve,promote-cas' \
+    'preparation:fault-recovery,authority,traffic-explicitly-deferred' \
     'cleanup:workspace-discard,started-services-stop,owned-claim-residue' \
     'evidence:credential-free-manifest,atomic-smoke-marker'
 }
@@ -68,7 +76,7 @@ done
 control_files=(
   "${CUTOVER_CONFIG[CONTROL_INSTALL_CONFIG]}" "${CUTOVER_CONFIG[REGISTRAR_CONNECTION]}"
   "${CUTOVER_CONFIG[IMPORTER_CONNECTION]}" "${CUTOVER_CONFIG[CONTROL_PLANE_CONNECTION]}"
-  "${CUTOVER_CONFIG[ORDINARY_ADMISSION_CONFIG]}" "${CUTOVER_CONFIG[QEMU_SCHEDULER_CONFIG]}"
+  "${CUTOVER_CONFIG[QEMU_SCHEDULER_CONFIG]}"
   "${CUTOVER_CONFIG[QEMU_HOST_CONFIG]}" "${CUTOVER_CONFIG[PROMOTER_CONNECTION]}"
   "${CUTOVER_CONFIG[REVIEWER_CONNECTION]}"
 )
@@ -117,6 +125,7 @@ umask 077
 mkdir -m 700 -- "${CUTOVER_CONFIG[EVIDENCE_DIR]}"
 evidence="${CUTOVER_CONFIG[EVIDENCE_DIR]}"
 print_command_plan >"$evidence/command-plan.txt"
+cutover_deferred_phase_manifest >"$evidence/deferred-phase-preparation.json"
 jq -cn --argjson control "$control_identity" --argjson ordinary "$ordinary_identity" \
   --arg ordinaryHost "${CUTOVER_CONFIG[ORDINARY_HOST_ID]}" --arg qemuHost "${CUTOVER_CONFIG[QEMU_HOST_ID]}" \
   '{schemaVersion:1,controlQemu:$control,ordinary:$ordinary,configuredHosts:{ordinary:$ordinaryHost,qemu:$qemuHost}}' \
@@ -124,19 +133,28 @@ jq -cn --argjson control "$control_identity" --argjson ordinary "$ordinary_ident
 
 cutover_install_packages | tee "$evidence/package-install.log"
 cutover_install_control_plane | tee "$evidence/control-plane-install.log"
+cutover_assert_ordinary_service_contract >"$evidence/ordinary-service-contract.json"
 cutover_create_project_workspace | tee "$evidence/project-workspace.jsonl"
+cutover_start_global_ci | tee "$evidence/global-ci-start.log"
 proposal="$(cutover_create_proposal)"
 printf '%s\n' "$proposal" >"$evidence/proposal.json"
 CUTOVER_PROPOSAL_REF="$(jq -er '.proposalRef' <<<"$proposal")"
 CUTOVER_CANDIDATE_COMMIT="$(jq -er '.candidateCommit' <<<"$proposal")"
 CUTOVER_CANDIDATE_TREE="$(jq -er '.candidateTree' <<<"$proposal")"
 
-cutover_admit_and_start_ci | tee "$evidence/ci-admission.log"
-review="$(cutover_create_review)"
-printf '%s\n' "$review" >"$evidence/review-create.json"
+review="$(cutover_resolve_review)"
+printf '%s\n' "$review" >"$evidence/review-resolve.json"
 CUTOVER_REVIEW_ID="$(jq -er '.review.reviewId' <<<"$review")"
 [[ "$(jq -er '.review.candidateCommit' <<<"$review")" == "$CUTOVER_CANDIDATE_COMMIT" ]]
 [[ "$(jq -er '.review.candidateTree' <<<"$review")" == "$CUTOVER_CANDIDATE_TREE" ]]
+jq -e --arg ordinary "${CUTOVER_CONFIG[ORDINARY_JOB]}" --arg qemu "${CUTOVER_CONFIG[QEMU_JOB]}" '
+  .schemaVersion == 2 and .planning.status == "valid" and
+  [.planning.jobs[] | {executionKind,jobName,evidenceClass}] == [
+    {executionKind:"ordinary-sysbox",jobName:$ordinary,evidenceClass:"candidate-controlled"},
+    {executionKind:"qemu",jobName:$qemu,evidenceClass:"candidate-controlled"}
+  ] and .requiredJobs == [.planning.jobs[] | {executionKind,jobName,evidenceClass}] and (.events | length) == 2 and
+  all(.events[]; .schemaVersion == 3 and .type == "dim.native.review-job.available")
+' <<<"$review" >/dev/null || cutover_die "automatic review envelope did not contain current dual-kind planning/events"
 cutover_inspect_review >"$evidence/review-inspect.json"
 cutover_require_promotion_denial >"$evidence/protected-ref-before.txt"
 
@@ -166,18 +184,17 @@ printf '%s\n' "$ledger" >"$evidence/promotion-ledger.json"
 jq -e --arg commit "$CUTOVER_CANDIDATE_COMMIT" --arg tree "$CUTOVER_CANDIDATE_TREE" \
   '.intent == 0 and .finalized[-1].candidate_commit == $commit and .finalized[-1].candidate_tree == $tree' \
   <<<"$ledger" >/dev/null || cutover_die "durable promotion ledger does not match protected CAS"
-cutover_refresh_protected_root >"$evidence/promoted-workspace.jsonl"
-[[ "$(jq -sr '.[-1].rootCommit' "$evidence/promoted-workspace.jsonl")" == "$CUTOVER_CANDIDATE_COMMIT" ]] ||
-  cutover_die "fresh protected-root workspace view does not name the promoted commit"
-
 cutover_cleanup_remote
 smoke_result_temporary="$evidence/.SMOKE-PASSED.$$.tmp"
 jq -cn --arg commit "${CUTOVER_CONFIG[EXPECTED_COMMIT]}" --arg projectCommit "${CUTOVER_CONFIG[PROJECT_COMMIT]}" \
   --arg candidate "$CUTOVER_CANDIDATE_COMMIT" --arg tree "$CUTOVER_CANDIDATE_TREE" --arg review "$CUTOVER_REVIEW_ID" \
   '{schemaVersion:1,result:"smoke-passed",scope:"real-installed-multi-node-dual-kind-happy-path",
     softwareCommit:$commit,projectBaseCommit:$projectCommit,candidateCommit:$candidate,candidateTree:$tree,reviewId:$review,
-    verified:["node-prerequisites","native-project-workspace","proposal-push-denials","ordinary-sysbox-success",
-      "qemu-kvm-success","pre-approval-promotion-denial","human-approval","promotion-cas","owned-claim-cleanup"],
+    contracts:{reviewEnvelopeSchema:2,reviewEventSchema:3,ordinaryConfigSchema:5,ordinaryStateFormat:12,
+      qemuConfigSchema:2,qemuDatabaseSchema:3},
+    verified:["node-prerequisites","native-project-workspace-ready-before-ci","automatic-envelope2-events3-queue",
+      "ordinary-sysbox-success","qemu-kvm-success","pre-approval-promotion-denial","human-approval",
+      "promotion-cas","owned-claim-cleanup"],
     notVerified:["empty-policy","ordinary-only-policy","qemu-only-policy","failed-result-denials","wrong-kind-denials",
       "foreign-or-stale-evidence-denials","replay-denials","crash-and-restart-recovery","guest-authority-inspection",
       "traffic-inspection","host-reboot-recovery"],workers:{ordinary:"ordinary-sysbox",qemu:"qemu"},

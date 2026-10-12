@@ -11,7 +11,7 @@ const bundleResources = [
   ["container", "dim-control-plane-ordinary-ci-1"]
 ];
 export const ordinaryBusinessTables = [
-  "native_root_admission_requests", "native_root_admissions", "native_root_ci_claim_receipts",
+  "native_root_admissions", "native_root_ci_claim_receipts",
   "native_root_ci_claims", "native_root_ci_demands", "native_root_ci_event_receipts",
   "native_root_ci_host_results", "native_root_ci_report_outbox"
 ];

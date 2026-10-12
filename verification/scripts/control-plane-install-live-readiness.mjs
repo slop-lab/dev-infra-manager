@@ -119,7 +119,8 @@ export async function runDependencyReadinessTransition(input) {
     await lifecycle(input.runner, "stop", ordinaryId);
     ordinaryStopped = true;
     const nativeWhileOrdinaryStopped = await readiness(input.runner, nativeId, "10001:10001");
-    assert.notEqual(nativeWhileOrdinaryStopped.exitCode, 0);
+    assert.equal(nativeWhileOrdinaryStopped.exitCode, 0);
+    assert.equal(nativeWhileOrdinaryStopped.output, "");
     assert.equal(nativeWhileOrdinaryStopped.elapsedMilliseconds <= 3_000, true);
     input.writeLine(`dependency-readiness native-with-ordinary-stopped exit=${nativeWhileOrdinaryStopped.exitCode} elapsed-ms=${nativeWhileOrdinaryStopped.elapsedMilliseconds}`);
 

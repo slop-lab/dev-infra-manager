@@ -307,8 +307,8 @@ for service in nativeGit ordinaryCi; do
     base_image="$g2_ordinary"
     image_repository="$registry/ordinary-ci-compatibility"
     service_user="10002:10002"
-    format_version=5
-    incompatible_format=6
+    format_version=12
+    incompatible_format=13
   fi
   for profile in "${variant_profiles[@]}"; do
     context="$work_dir/variant-$service-$profile"

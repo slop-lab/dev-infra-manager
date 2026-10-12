@@ -48,12 +48,3 @@ database.close();
 process.stdout.write(`${JSON.stringify({ intent: intent.count, finalized })}\n`);
 NODE
 }
-
-cutover_refresh_protected_root() {
-  cutover_ssh "${CUTOVER_CONFIG[CONTROL_SSH]}" bash -s -- "${CUTOVER_CONFIG[CONTROL_PLANE_CONNECTION]}" \
-    "${CUTOVER_CONFIG[WORKSPACE_NAME]}" <<'REMOTE'
-set -euo pipefail
-DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE="$1" dim workspace restart "$2" >/dev/null
-DIM_NATIVE_CONTROL_PLANE_CONNECTION_FILE="$1" dim workspace show "$2" --json
-REMOTE
-}

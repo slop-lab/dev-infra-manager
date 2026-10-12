@@ -133,6 +133,10 @@ control-plane-install-live:
 native-cutover-clean-host-smoke config:
 	cd .. && bash verification/scripts/native-cutover-clean-host.bash "{{config}}"
 
+# Real installed four-policy happy-path matrix; fault, authority, traffic, recovery, and independent-host execution remain deferred.
+native-cutover-policy-matrix config:
+	cd .. && bash verification/scripts/native-cutover-policy-matrix.bash "{{config}}"
+
 # Verify the systemd, cgroupfs, and unsupported Project runtime cgroup contracts.
 project-runtime-cgroups:
     cd .. && bash verification/scripts/project-runtime-cgroups-example-smoke.bash

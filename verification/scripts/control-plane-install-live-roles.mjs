@@ -11,21 +11,12 @@ const projectRoot = "/v1/projects/live-smoke/repositories/root";
 const reviewRoot = `${projectRoot}/reviews/${reviewId}`;
 
 export const roleDenialCases = [
-  { name: "admission-register", service: "ordinaryCi", method: "POST",
-    path: `${projectRoot}/native-root-admission/register`, authorizedRoles: ["registrar"],
-    expectedStatuses: ordinaryStatuses("registrar", 503, 404) },
-  { name: "admission-discover", service: "ordinaryCi", method: "POST",
-    path: `${projectRoot}/native-root-admission/discover`, authorizedRoles: ["query"],
-    expectedStatuses: statuses({ query: 503, "candidate-reader": 401 }, 403) },
   { name: "event", service: "ordinaryCi", method: "POST", path: "/v1/native-root-ci-events",
     authorizedRoles: ["webhook"], expectedStatuses: statuses({ webhook: 503, "candidate-reader": 401 }, 403) },
   { name: "claim", service: "ordinaryCi", method: "POST", path: "/v1/host-claims",
     authorizedRoles: ["host"], expectedStatuses: statuses({ host: 503, "candidate-reader": 401 }, 403) },
   { name: "claim-result", service: "ordinaryCi", method: "POST", path: "/v1/host-results",
     authorizedRoles: ["host"], expectedStatuses: statuses({ host: 503, "candidate-reader": 401 }, 403) },
-  { name: "admission-identity", service: "ordinaryCi", method: "GET",
-    path: "/v1/native-root-admission/identity", authorizedRoles: ["query", "registrar"],
-    expectedStatuses: statuses({ query: 200, registrar: 200 }, 404) },
   { name: "host-identity", service: "ordinaryCi", method: "GET", path: "/v1/host-identity",
     authorizedRoles: ["host"], expectedStatuses: statuses({ host: 200, "candidate-reader": 401 }, 403) },
   { name: "attempt-issue", service: "nativeGit", method: "POST", path: `${reviewRoot}/job-attempts`,
@@ -164,7 +155,7 @@ async function runCandidateRegistrarRequests(input, nativeBaseline) {
       path: "/v1/operator-project-registrar-identity",
       authorization: role.authorization
     });
-    const expected = role.name === "registrar" || role.name === "host" ? 401 : 403;
+    const expected = role.name === "host" ? 401 : 403;
     assert.equal(result.status, expected,
       `role=${role.name} case=registrar-identity returned ${result.status}`);
     await assertNativeState(role.name, "registrar-identity");
@@ -203,21 +194,16 @@ function configuredRoles(credentials) {
     ["candidate-reader", basic("ordinary-candidate-reader", credentials.candidateReader)],
     ["result-reporter", basic("ordinary-results", credentials.resultReporter)],
     ["webhook", basic("native-events", credentials.webhook)],
-    ["registrar", basic("ordinary-registrar", credentials.registrar)],
     ["host", basic("host-a", credentials.host)]
   ].map(([name, authorization]) => ({ name, authorization }));
 }
 
-function ordinaryStatuses(authorizedRole, authorizedStatus, deniedStatus = 403) {
-  return statuses({ [authorizedRole]: authorizedStatus }, deniedStatus);
-}
-
 function nativeStatuses(authorizedRole, authorizedStatus) {
-  return statuses({ [authorizedRole]: authorizedStatus, registrar: 401, host: 401 }, 403);
+  return statuses({ [authorizedRole]: authorizedStatus, host: 401 }, 403);
 }
 
 function nativeUnassignedStatuses() {
-  return statuses({ registrar: 401, host: 401 }, 403);
+  return statuses({ host: 401 }, 403);
 }
 
 function activationGateStatuses() {
@@ -226,7 +212,7 @@ function activationGateStatuses() {
 
 function statuses(overrides, defaultStatus) {
   return Object.fromEntries([
-    "query", "identity", "attempt-issuer", "candidate-reader", "result-reporter", "webhook", "registrar", "host"
+    "query", "identity", "attempt-issuer", "candidate-reader", "result-reporter", "webhook", "host"
   ].map((role) => [role, overrides[role] ?? defaultStatus]));
 }
 

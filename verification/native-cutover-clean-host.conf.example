@@ -15,7 +15,6 @@ IMPORTER_CONNECTION=/srv/dim-operator/importer.json
 CONTROL_PLANE_CONNECTION=/srv/dim-operator/control-plane.json
 WORKSPACE_NAME=cutover-workspace
 WORKSPACE_REPOSITORY=/workspace/root
-ORDINARY_ADMISSION_CONFIG=/srv/dim-operator/ordinary-admission.json
 ORDINARY_HOST_CONFIG=/srv/dim-operator/ordinary-host.json
 ORDINARY_HOST_ID=ordinary-a
 ORDINARY_UNIT=dim-native-root-host.service

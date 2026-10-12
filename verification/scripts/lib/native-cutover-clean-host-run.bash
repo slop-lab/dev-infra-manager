@@ -18,6 +18,12 @@ cutover_install_control_plane() {
     "${CUTOVER_CONFIG[CONTROL_INSTALL_CONFIG]}"
 }
 
+cutover_assert_ordinary_service_contract() {
+  cutover_ssh "${CUTOVER_CONFIG[CONTROL_SSH]}" bash \
+    "${CUTOVER_CONFIG[CONTROL_SOURCE_ROOT]}/verification/scripts/lib/native-cutover-policy-matrix-ordinary-service.bash" \
+    inspect "${CUTOVER_CONFIG[ORDINARY_CI_CONTAINER]}" "${CUTOVER_CONFIG[CONTROL_INSTALL_CONFIG]}"
+}
+
 cutover_create_project_workspace() {
   cutover_ssh "${CUTOVER_CONFIG[CONTROL_SSH]}" bash -s -- \
     "${CUTOVER_CONFIG[PROJECT_NAME]}" "${CUTOVER_CONFIG[PROJECT_ID]}" "${CUTOVER_CONFIG[PROJECT_SOURCE]}" \
@@ -82,20 +88,85 @@ INNER
 REMOTE
 }
 
-cutover_admit_and_start_ci() {
-  cutover_ssh "${CUTOVER_CONFIG[CONTROL_SSH]}" dim ci native-root project admit \
-    "${CUTOVER_CONFIG[PROJECT_ID]}" "${CUTOVER_CONFIG[ORDINARY_ADMISSION_CONFIG]}"
-  cutover_ssh "${CUTOVER_CONFIG[CONTROL_SSH]}" dim ci native-qemu project admit \
-    "${CUTOVER_CONFIG[PROJECT_ID]}" "${CUTOVER_CONFIG[QEMU_SCHEDULER_CONFIG]}"
+cutover_wait_for_qemu_scheduler() {
+  cutover_ssh "${CUTOVER_CONFIG[CONTROL_SSH]}" bash -s -- "${CUTOVER_CONFIG[QEMU_SCHEDULER_CONFIG]}" <<'REMOTE'
+set -euo pipefail
+node --input-type=module - "$1" <<'NODE'
+import { readFile } from "node:fs/promises";
+import { request } from "node:http";
+import { DatabaseSync } from "node:sqlite";
+import { setTimeout as delay } from "node:timers/promises";
+const config = JSON.parse(await readFile(process.argv[2], "utf8"));
+if (config.schemaVersion !== 2 || config.serviceId !== "qemu-main"
+  || typeof config.host !== "string" || !Number.isSafeInteger(config.port)
+  || typeof config.database !== "string" || !Array.isArray(config.hosts)) process.exit(2);
+const lexical = (left, right) => left < right ? -1 : left > right ? 1 : 0;
+const executionAuthority = [...config.hosts]
+  .sort((left, right) => lexical(left.hostId, right.hostId))
+  .map((host) => ({ hostId: host.hostId, capacities: [...host.capacities]
+    .sort((left, right) => lexical(left.capacity, right.capacity))
+    .map((entry) => ({ capacity: entry.capacity, runnerBaseImage: entry.runnerBaseImage,
+      jobBaseImage: entry.jobBaseImage, bounds: { cpu: entry.bounds.cpu,
+        memoryBytes: entry.bounds.memoryBytes, pids: entry.bounds.pids,
+        wallClockSeconds: entry.bounds.wallClockSeconds, outputBytes: entry.bounds.outputBytes } })) }));
+const executionAuthorityJson = JSON.stringify(executionAuthority);
+const database = new DatabaseSync(config.database, { readOnly: true });
+let version;
+let metadata;
+try {
+  version = database.prepare("PRAGMA user_version").get()?.user_version;
+  metadata = database.prepare("SELECT key,value FROM native_qemu_metadata ORDER BY key").all();
+} finally {
+  database.close();
+}
+const serviceGenerationId = metadata[2]?.value;
+if (version !== 3 || metadata.length !== 3
+  || metadata[0]?.key !== "execution_authority_json" || metadata[0]?.value !== executionAuthorityJson
+  || metadata[1]?.key !== "schema_version" || metadata[1]?.value !== "3"
+  || metadata[2]?.key !== "service_generation_id"
+  || typeof serviceGenerationId !== "string"
+  || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(serviceGenerationId)) process.exit(2);
+const host = config.host === "0.0.0.0" ? "127.0.0.1" : config.host;
+for (let attempt = 0; attempt < 30; attempt += 1) {
+  const ready = await new Promise((resolve) => {
+    const operation = request({ host, port: config.port, method: "GET", path: "/healthz" }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          resolve(response.statusCode === 200 && body.serviceId === "qemu-main" && body.status === "ready");
+        } catch { resolve(false); }
+      });
+    });
+    operation.once("error", () => resolve(false));
+    operation.setTimeout(1_000, () => { operation.destroy(); resolve(false); });
+    operation.end();
+  });
+  if (ready) {
+    process.stdout.write(`${JSON.stringify({ schemaVersion: 1, serviceId: "qemu-main", status: "ready",
+      serviceGenerationId, executionAuthority,
+      contracts: { qemuConfigSchema: 2, qemuDatabaseSchema: 3 } })}\n`);
+    process.exit(0);
+  }
+  await delay(1_000);
+}
+process.exit(2);
+NODE
+REMOTE
+}
+
+cutover_start_global_ci() {
   CUTOVER_STARTED_SERVICES=1
-  cutover_ssh "${CUTOVER_CONFIG[CONTROL_SSH]}" systemctl --user start \
-    "${CUTOVER_CONFIG[QEMU_SCHEDULER_UNIT]}" "${CUTOVER_CONFIG[QEMU_HOST_UNIT]}"
+  cutover_ssh "${CUTOVER_CONFIG[CONTROL_SSH]}" systemctl --user start "${CUTOVER_CONFIG[QEMU_SCHEDULER_UNIT]}"
+  cutover_wait_for_qemu_scheduler
+  cutover_ssh "${CUTOVER_CONFIG[CONTROL_SSH]}" systemctl --user start "${CUTOVER_CONFIG[QEMU_HOST_UNIT]}"
   cutover_ssh "${CUTOVER_CONFIG[ORDINARY_SSH]}" systemctl --user start "${CUTOVER_CONFIG[ORDINARY_UNIT]}"
 }
 
-cutover_create_review() {
-  cutover_ssh "${CUTOVER_CONFIG[CONTROL_SSH]}" dim-native-git operator review create \
-    "${CUTOVER_CONFIG[PROMOTER_CONNECTION]}" "${CUTOVER_CONFIG[PROJECT_ID]}" "$CUTOVER_PROPOSAL_REF"
+cutover_resolve_review() {
+  cutover_ssh "${CUTOVER_CONFIG[CONTROL_SSH]}" dim-native-git operator review resolve \
+    "${CUTOVER_CONFIG[REVIEWER_CONNECTION]}" "${CUTOVER_CONFIG[PROJECT_ID]}" "$CUTOVER_PROPOSAL_REF"
 }
 
 cutover_inspect_review() {
@@ -130,12 +201,19 @@ import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 const [repository, reviewId, ordinaryJob, qemuJob] = process.argv.slice(2);
 const statusRoot = join(repository, "dim-authoritative-statuses", "ordinary-sysbox", reviewId, ordinaryJob);
-const names = (await readdir(statusRoot)).filter((name) => /^[1-9][0-9]*\.json$/.test(name)).sort();
+const names = (await readdir(statusRoot)).filter((name) => /^[1-9][0-9]*\.json$/.test(name))
+  .sort((left, right) => Number.parseInt(left, 10) - Number.parseInt(right, 10));
 const ordinary = JSON.parse(await readFile(join(statusRoot, names.at(-1)), "utf8"));
 const qemuState = JSON.parse(await readFile(join(repository, "dim-authoritative-qemu", "state.json"), "utf8"));
 const qemuAttempt = [...qemuState.attempts].reverse().find((entry) => entry.reviewId === reviewId && entry.descriptor.jobName === qemuJob && entry.revokedAt === undefined);
 const qemu = qemuState.statuses.find((entry) => entry.attemptId === qemuAttempt?.attemptId);
-if (ordinary.payload?.descriptor?.jobName !== ordinaryJob || qemu === undefined) process.exit(2);
+if (ordinary.schemaVersion !== 3 || ordinary.payload?.executionKind !== "ordinary-sysbox"
+  || ordinary.payload?.reviewId !== reviewId || ordinary.payload?.descriptor?.jobName !== ordinaryJob
+  || qemuState.schemaVersion !== 1
+  || qemu?.schemaVersion !== 1 || qemu.event?.schemaVersion !== 3
+  || qemu.event?.payload?.executionKind !== "qemu" || qemu.event?.payload?.reviewId !== reviewId
+  || qemu.event?.payload?.attemptId !== qemuAttempt?.attemptId
+  || qemu.event?.payload?.descriptor?.jobName !== qemuJob) process.exit(2);
 process.stdout.write(`${JSON.stringify({ ordinary: { event: ordinary }, qemu })}\n`);
 NODE
 }

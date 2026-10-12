@@ -41,6 +41,93 @@ protected service's source root, and the command never restarts or repoints that
 service. Human approval is interactive and requires typing the complete
 candidate commit after inspecting the recorded review.
 
+## Run the four-profile quality-policy matrix
+
+The policy-matrix entrypoint extends the bounded smoke with four fresh native
+Projects whose reviewed roots select, respectively, no jobs, ordinary Sysbox
+only, QEMU only, and both execution kinds:
+
+```bash
+cp verification/native-cutover-policy-matrix.conf.example \
+  /absolute/operator/native-cutover-matrix.conf
+chmod 0600 /absolute/operator/native-cutover-matrix.conf
+bash verification/scripts/native-cutover-policy-matrix.bash --preflight-only \
+  /absolute/operator/native-cutover-matrix.conf
+bash verification/scripts/native-cutover-policy-matrix.bash \
+  /absolute/operator/native-cutover-matrix.conf
+# Equivalent recipe:
+just verify native-cutover-policy-matrix /absolute/operator/native-cutover-matrix.conf
+```
+
+Each `*_PROJECT_SOURCE`, `*_PROJECT_REF`, and `*_PROJECT_COMMIT` triple names an
+operator-reviewed local Git snapshot whose protected quality policy and
+schema-4 candidate CI configuration select exactly that profile. The four
+Project names, Project IDs, workspace names, source roots, and source commits
+are explicit inputs. Project names, Project IDs, and workspace names must be
+pairwise distinct so retained native state and cleanup evidence cannot alias.
+The source refs are full `refs/heads/...` names and the commits are complete
+lowercase object IDs. The config parser treats every value literally; it does
+not evaluate shell, accept commands or SSH options, or accept credential
+values. Credential-bearing operator files remain absolute mode-`0600` paths.
+
+Every matrix fixture declares both the ordinary and QEMU candidate jobs. Both
+run automatically after proposal push in all four profiles. The protected
+policy's `requiredJobs` is recorded separately as the empty, ordinary, QEMU, or
+dual quality subset required before checked promotion; it never disables an
+unselected candidate job.
+
+`--preflight-only` validates both independent nodes, exact DIM source/package
+provenance, all four Project snapshots, private files, stopped service units,
+Sysbox, KVM, and fixed images before any installation, Project,
+workspace, ref, service, or evidence mutation. The executable's
+`--print-command-plan` output is the reviewable installed-command surface.
+
+Every profile creates a ready Project and workspace while both CI host services
+remain stopped. In addition, the empty and QEMU-quality profiles verify the installed
+ordinary-CI container's complete DIM and Compose ownership labels, immutable
+container and image IDs, and logical database digest, then stops only that
+exact container ID before Project/workspace creation. It remains stopped through
+the readiness observation, then the harness restarts that same ID, waits for
+readiness, and requires the durable admission/result state digest to be
+unchanged before any CI service starts or proposal is pushed. The digest excludes
+only the service-epoch table that activation intentionally rotates on restart.
+The QEMU-only profile repeats this
+owned outage so its unselected ordinary central service cannot become a hidden
+dependency.
+
+All profiles require the owned ordinary central service to be running, start
+the ordinary host and QEMU scheduler globally, validate the scheduler's
+schema-3 generation-bound database and real `/healthz`, and start the QEMU host before proposal
+push. The push automatically publishes envelope schema 2 and event schema 3
+for both candidate jobs. The empty profile requires pre-approval promotion
+denial and permits interactive human approval plus checked CAS without waiting
+for either result; ordinary- and QEMU-quality profiles wait only for their
+selected subset; dual waits for both. The harness then waits for both executed
+jobs before cleanup so unselected execution remains observable. Every
+profile uses a separately named Project/workspace/proposal namespace, requires
+the operator to type its complete candidate commit before approval, and records
+the source ref/commit, candidate commit/tree, protected ref commit/tree, review,
+    executed jobs, quality-required jobs, kind-labelled results, and owned cleanup outcome.
+
+Cleanup discards only the profile's exact workspace and stops only services
+started for that profile. A failed central-service restore is a fatal cleanup
+failure and cannot be hidden by the exit trap. Foreign, changed, or ambiguous
+runtime/state resources remain untouched and make the run fail. Native Project and control-plane state stay
+retained for explicit disposable-node destruction. A profile result is first
+written to a private temporary file and renamed to `PROFILE-PASSED`; the matrix
+result is likewise atomically published as `MATRIX-PASSED` only after all four
+profile cleanups succeed. Neither marker is acceptance of
+`VERIFICATION-NATIVE-CUTOVER-001`.
+
+The matrix supplies the empty, ordinary-only, QEMU-only, and dual-kind
+happy-path evidence missing from the original smoke. Independent-host execution
+must still be performed by an operator. Fault-result injection, stale and
+replayed evidence denials, crash/restart and reboot recovery, guest-authority
+inspection, and effective traffic inspection remain separate unimplemented
+full-gate phases. Each run writes `deferred-phase-preparation.json` with fixed
+recovery, authority, and traffic evidence requirements and `implemented:false`;
+that preparation artifact is traceability, not execution or acceptance.
+
 ## Pin the source and the VM owner
 
 Use one reviewed commit and a clean checkout on the host. Do not run the QEMU
@@ -203,6 +290,47 @@ The installed commands are foreground processes with `SIGTERM` drain behavior.
 Install them as user services on each applicable node; systemd receives only
 absolute private config paths, never credential contents:
 
+The installed ordinary service uses exact config schema 5 and strict state
+format 12. Earlier admission/registrar fields and state formats are rejected;
+eligibility is derived from delivered review events:
+
+<!-- native-cutover-smoke-fixture:ordinary-service -->
+```json
+{
+  "schemaVersion": 5,
+  "serviceId": "ordinary-main",
+  "database": "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
+  "eligibilityLeaseMilliseconds": 300000,
+  "claimLeaseMilliseconds": 60000,
+  "nativeGit": {
+    "endpoint": "http://native-git:8080",
+    "serviceId": "native-main",
+    "identity": {"username": "ordinary-identity", "password": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"},
+    "attemptIssuer": {"username": "ordinary-attempts", "password": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI"},
+    "candidateReader": {"username": "ordinary-candidate", "password": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM"},
+    "resultReporter": {"username": "ordinary-results", "password": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ"}
+  },
+  "credentials": {
+    "webhook": {"username": "ordinary-events", "password": "BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU"},
+    "query": {"username": "ordinary-query", "password": "BgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgY"}
+  },
+  "hosts": [{
+    "hostId": "ordinary-a",
+    "hostToken": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+    "capacities": [{
+      "capacity": "ordinary-a-1",
+      "runnerBaseImage": "registry.example/ordinary-runner@sha256:6666666666666666666666666666666666666666666666666666666666666666",
+      "jobBaseImage": "registry.example/job@sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "bounds": {"cpu": "2", "memoryBytes": "4294967296", "pids": "1024", "wallClockSeconds": "1800", "outputBytes": "10485760"}
+    }]
+  }]
+}
+```
+
+The service state marker records `stateFormat: 12`, and its SQLite database
+uses `PRAGMA user_version=12`. The harness checks both before using or stopping
+the owned central service.
+
 The ordinary host file is exact schema 1. Its `capacities` names are fixed
 operator capacity IDs, all paths are absolute, and every credential is distinct:
 
@@ -265,19 +393,19 @@ the QEMU worker is deliberately control-local:
 }
 ```
 
-The scheduler has exactly four native-Git credentials, including the candidate
-reader, plus event-intake, registrar, and query credentials. Every username,
+The target scheduler has exactly four native-Git credentials, including the candidate
+reader, plus event-intake and query credentials. Every username,
 password, and host token is globally distinct:
 
 <!-- native-cutover-smoke-fixture:qemu-scheduler -->
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "serviceId": "qemu-main",
   "host": "127.0.0.1",
   "port": 9090,
   "database": "/absolute/state/native-qemu-scheduler.sqlite3",
-  "admissionLeaseMilliseconds": 300000,
+  "eligibilityLeaseMilliseconds": 300000,
   "claimLeaseMilliseconds": 60000,
   "nativeGit": {
     "endpoint": "http://127.0.0.1:9080",
@@ -289,7 +417,6 @@ password, and host token is globally distinct:
   },
   "credentials": {
     "eventIntake": {"username": "qemu-events", "password": "BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQU"},
-    "registrar": {"username": "qemu-registrar", "password": "BgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgYGBgY"},
     "query": {"username": "qemu-query", "password": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"}
   },
   "hosts": [{
@@ -305,10 +432,20 @@ password, and host token is globally distinct:
 }
 ```
 
-`NativeRootCiHostConfig`, `NativeQemuConnection`, and
-`NativeQemuSchedulerConfig` are strict; the verification suite parses these
-three documented fixtures with the production parsers. Replace every example
-secret and digest as one coherent set, and store all three files as
+The scheduler database is strict schema 3 (`PRAGMA user_version=3`). Its
+`native_qemu_metadata` table contains exactly `execution_authority_json`,
+`schema_version=3`, and a lowercase RFC 4122 version-4
+`service_generation_id`. The authority value is the canonical JSON of hosts
+and capacities sorted by ID, including images and bounds but excluding host
+tokens and credentials. The harness requires a byte-exact match to the current
+config before accepting `/healthz` and records both the non-secret authority
+and generation ID in readiness evidence. A stale config field such as `listen`,
+a schema-1 or schema-2 database, missing or mismatched authority metadata, or a
+malformed generation ID fails before proposal push.
+
+`NativeOrdinaryBundleConfig`, `NativeRootCiHostConfig`,
+`NativeQemuConnection`, and `NativeQemuSchedulerConfig` are strict. Replace
+every example secret and digest as one coherent set, and store all files as
 caller-owned, single-link mode-0600 files.
 The QEMU host's `memoryBytes` is guest RAM. Set `supervisorMemoryBytes` to a
 strictly larger operator limit that includes QEMU, kernel/initramfs, and
@@ -413,12 +550,13 @@ support is therefore required. The trusted QEMU supervisor does not require
 Sysbox. A missing or nonfunctional KVM device is unavailable, never a passing
 or ordinary result. Do not use TCG as a substitute.
 
-Admit the selected policies only after their private files and services exist:
-
-```bash
-dim ci native-root project admit "$PROJECT_ID" /absolute/operator/ordinary-admission.json
-dim ci native-qemu project admit "$PROJECT_ID" "$QEMU_SCHEDULER_CONFIG"
-```
+Start globally configured nodes only after their private files and services
+exist. Trusted native Project registration makes the Project eligible
+automatically. The old `dim ci native-root project admit` and `dim ci
+native-qemu project admit` commands are obsolete targets to remove, not
+compatible aliases. Operators don't register or refresh each Project. After an
+outage, the services reconcile internally and resume durable queued proposal
+work while preserving generation, lease, and owned-cleanup fences.
 
 ### Network truth
 
@@ -433,13 +571,13 @@ an independent ordinary worker node, not a three-node deployment.
 
 ## Discover reviews, jobs, and results
 
-Create a review with the installed `dim-native-git` operator command, retain
-its returned review ID, and use that immutable review as the result-discovery
+Push the workspace-scoped proposal and resolve the immutable envelope that
+native Git created automatically. Retain its review ID as the result-discovery
 root. `inspect` returns current approval state plus kind-labelled ordinary and
 QEMU attempt/status evidence without returning credentials:
 
 ```bash
-dim-native-git operator review create "$OPERATOR_DIR/promoter.json" \
+dim-native-git operator review resolve "$OPERATOR_DIR/reviewer.json" \
   "$PROJECT_ID" refs/heads/proposals/WORKSPACE_ID/change-1 |
   tee "$OPERATOR_DIR/review.json"
 REVIEW_ID="$(jq -er '.review.reviewId' "$OPERATOR_DIR/review.json")"
@@ -496,7 +634,9 @@ host instead of the protected service, run
 `just verify environments-kvm` there, not inside the agent container.
 
 The bootstrap and create commands above now cover source-to-imported-draft and
-imported-draft-to-ready. They still do not advertise CI. Do not place any
+imported-draft-to-ready. Global CI services discover the resulting registered
+Project internally; these commands don't register a runner or admit a Project
+to CI. Do not place any
 connection file in a guest, workspace, container image, or diagnostic log.
 
 ## Prove installed review and protected promotion
@@ -545,9 +685,9 @@ PROJECT=REPLACE_WITH_PROJECT
 PROPOSAL_REF=refs/heads/proposals/REPLACE_WITH_43_CHARACTER_WORKSPACE_ID/change-1
 CONTAINER=dim-control-plane-native-git-1
 
-before="$("${native_git_cli[@]}" operator review create \
-  "$OPERATOR_DIR/promoter.json" "$PROJECT" "$PROPOSAL_REF" | tee "$EVIDENCE_DIR/review-create.json" | jq -r '.review.expectedProtectedHead')"
-review_id="$(jq -r '.review.reviewId' "$EVIDENCE_DIR/review-create.json")"
+before="$("${native_git_cli[@]}" operator review resolve \
+  "$OPERATOR_DIR/reviewer.json" "$PROJECT" "$PROPOSAL_REF" | tee "$EVIDENCE_DIR/review-resolve.json" | jq -r '.review.expectedProtectedHead')"
+review_id="$(jq -r '.review.reviewId' "$EVIDENCE_DIR/review-resolve.json")"
 test -n "$review_id" && test "$review_id" != null
 ref_before="$(docker exec --user 10001:10001 "$CONTAINER" \
   git --git-dir "/var/lib/dim-native-git/$PROJECT/root.git" rev-parse refs/heads/main)"

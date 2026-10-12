@@ -41,7 +41,7 @@ const root = process.argv[2];
 const token = () => randomBytes(32).toString("base64url");
 const credentials = {
   query: token(), identity: token(), attemptIssuer: token(), candidateReader: token(), resultReporter: token(),
-  webhook: token(), registrar: token(), host: token()
+  webhook: token(), host: token()
 };
 const native = {
   schemaVersion: 7,
@@ -75,10 +75,10 @@ const native = {
   }
 };
 const ordinary = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   serviceId: "ordinary-main",
   database: "/var/lib/dim-ordinary-ci/ordinary-ci.sqlite3",
-  admissionLeaseMilliseconds: 300000,
+  eligibilityLeaseMilliseconds: 300000,
   claimLeaseMilliseconds: 60000,
   nativeGit: {
     endpoint: "http://native-git:8080",
@@ -90,7 +90,6 @@ const ordinary = {
   },
   credentials: {
     webhook: { username: "native-events", password: credentials.webhook },
-    registrar: { username: "ordinary-registrar", password: credentials.registrar },
     query: { username: "native-query", password: credentials.query }
   },
   hosts: [{
@@ -184,7 +183,22 @@ docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
   git -C /tmp/source config user.name DIM
   git -C /tmp/source config user.email bootstrap@example.invalid
   printf "trusted root\n" > /tmp/source/README.md
-  git -C /tmp/source add README.md
+  mkdir -p /tmp/source/.dim/ci/jobs
+  printf "%s\n" \
+    "schemaVersion: 4" \
+    "ordinary:" \
+    "  jobs:" \
+    "    source:" \
+    "      script: .dim/ci/jobs/source.bash" \
+    "      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]" \
+    "qemu:" \
+    "  jobs:" \
+    "    integration:" \
+    "      script: .dim/ci/jobs/integration.bash" \
+    "      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]" > /tmp/source/.dim/ci/runner.yml
+  printf "set -euo pipefail\nprintf source\\n\n" > /tmp/source/.dim/ci/jobs/source.bash
+  printf "set -euo pipefail\nprintf integration\\n\n" > /tmp/source/.dim/ci/jobs/integration.bash
+  git -C /tmp/source add README.md .dim/ci
   git -C /tmp/source commit -m bootstrap >/dev/null
   git -C /tmp/source rev-parse HEAD > /fixtures/root.commit
   git -C /tmp/source rev-parse "HEAD^{tree}" > /fixtures/root.tree
@@ -201,7 +215,7 @@ docker run "${common[@]}" --user 10001:10001 --entrypoint node "$native_image" \
 [[ "$(docker run "${common[@]}" --user 10001:10001 "$native_image" compatibility --json)" == \
   '{"schemaVersion":1,"writeFormat":8,"readableFormats":[8]}' ]]
 [[ "$(docker run "${common[@]}" --user 10002:10002 "$ordinary_image" compatibility --json)" == \
-  '{"schemaVersion":1,"writeFormat":11,"readableFormats":[11]}' ]]
+  '{"schemaVersion":1,"writeFormat":12,"readableFormats":[12]}' ]]
 
 config_mount="type=volume,src=$config_volume,dst=/run/fixtures,readonly"
 docker run "${common[@]}" --user 10001:10001 --mount "$config_mount" \
@@ -258,7 +272,7 @@ ordinary_state_mount="type=volume,src=$ordinary_state_volume,dst=/var/lib/dim-or
   '{"schemaVersion":1,"stateFormat":8}' ]]
 [[ "$(docker run "${common[@]}" --user 10002:10002 --tmpfs /tmp:rw,noexec,nosuid,nodev,size=16m \
   --mount "$ordinary_state_mount" "$ordinary_image" check-state --read-only /var/lib/dim-ordinary-ci --json)" == \
-  '{"schemaVersion":1,"stateFormat":11}' ]]
+  '{"schemaVersion":1,"stateFormat":12}' ]]
 [[ "$(state_digest "$native_image" "$native_state_volume")" == "$native_before" ]]
 [[ "$(state_digest "$ordinary_image" "$ordinary_state_volume")" == "$ordinary_before" ]]
 
@@ -313,21 +327,23 @@ docker run --rm --interactive --read-only --network "$service_network" --user 10
   --cap-drop ALL --security-opt no-new-privileges --entrypoint node --mount "$config_mount" \
   "$ordinary_image" --input-type=module <<'EOF'
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 const ordinary = JSON.parse(readFileSync("/run/fixtures/ordinary.json", "utf8"));
 const auth = ({ username, password }) => `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
-const endpoint = "http://ordinary-ci:8080/v1/projects/project-a/repositories/root/native-root-admission/register";
-const body = { schemaVersion: 1, requestId: "00000000-0000-4000-8000-000000000040",
-  generationId: createHash("sha256").update("native-ready-smoke").digest("hex") };
-const wrongRole = await fetch(endpoint, { method: "POST", headers: {
-  authorization: auth(ordinary.credentials.query), "content-type": "application/json"
-}, body: JSON.stringify(body) });
-assert.equal(wrongRole.status, 404);
-const inactive = await fetch(endpoint, { method: "POST", headers: {
-  authorization: auth(ordinary.credentials.registrar), "content-type": "application/json"
-}, body: JSON.stringify(body) });
+const origin = "http://ordinary-ci:8080";
+const obsoleteBase = `${origin}/v1/projects/project-a/repositories/root/native-root-admission`;
+const obsoleteOperations = ["register", "current", "revoke"];
+assert.equal((await fetch(`${origin}/v1/native-root-admission/identity`)).status, 404);
+for (const operation of obsoleteOperations) {
+  const response = await fetch(`${obsoleteBase}/${operation}`, { method: "POST", headers: {
+    authorization: auth(ordinary.credentials.webhook), "content-type": "application/json"
+  }, body: "{}" });
+  assert.equal(response.status, 404);
+}
+const inactive = await fetch(`${origin}/v1/native-root-ci-events`, { method: "POST", headers: {
+  authorization: auth(ordinary.credentials.webhook), "content-type": "application/json"
+}, body: "{}" });
 assert.equal(inactive.status, 503);
 EOF
 docker container rm --force "$native_service" >/dev/null
@@ -377,9 +393,9 @@ const headers = { authorization: auth(registrar), "content-type": "application/j
 const denied = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify({ ...body, hostId: "host-b" }) });
 assert.equal(denied.status, 400);
 const wrongRole = await fetch(endpoint, { method: "POST", headers: {
-  ...headers, authorization: auth(ordinary.credentials.registrar)
+  ...headers, authorization: auth(ordinary.credentials.webhook)
 }, body: JSON.stringify(body) });
-assert.equal(wrongRole.status, 401);
+assert.equal(wrongRole.status, 403);
 const obsolete = await fetch(`${origin}/v1/operator-project-registrations`, {
   method: "POST", headers, body: JSON.stringify({ ...body, registration: { ...preparation, writer } })
 });
@@ -497,7 +513,7 @@ const transport = await fetch(`${origin}/v1/projects/project-a/repositories/root
   headers: { authorization: auth(writer) }
 });
 assert.equal(transport.status, 401);
-assert.equal(JSON.stringify(result).includes(ordinary.credentials.registrar.password), false);
+assert.equal(JSON.stringify(result).includes(ordinary.credentials.webhook.password), false);
 EOF
 docker run --rm --interactive --read-only --network "$service_network" --user 10001:10001 \
   --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,mode=1777 \
@@ -623,117 +639,6 @@ assert.deepEqual(Object.keys(proof).sort(),
 assert.deepEqual(Object.keys(proof.importReceipt).sort(),
   [...Object.keys(expectedReceipt), "policyDigest", "importNonce"].sort());
 EOF
-docker container exec --user 10002:10002 "$ordinary_service" /usr/local/bin/dim-service activate "$ordinary_generation"
-docker run --rm --interactive --read-only --network "$service_network" --user 10002:10002 \
-  --cap-drop ALL --security-opt no-new-privileges --entrypoint node --mount "$config_mount" \
-  "$ordinary_image" --input-type=module <<'EOF'
-import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-
-const ordinary = JSON.parse(readFileSync("/run/fixtures/ordinary.json", "utf8"));
-const auth = ({ username, password }) => `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
-const origin = "http://ordinary-ci:8080";
-const endpoint = `${origin}/v1/projects/project-a/repositories/root/native-root-admission/register`;
-const generationId = createHash("sha256").update("native-ready-smoke").digest("hex");
-const request = { schemaVersion: 1, requestId: "00000000-0000-4000-8000-000000000041", generationId };
-const headers = { authorization: auth(ordinary.credentials.registrar), "content-type": "application/json" };
-const identity = await fetch(`${origin}/v1/native-root-admission/identity`, {
-  headers: { authorization: auth(ordinary.credentials.registrar) }
-});
-assert.equal(identity.status, 200);
-assert.deepEqual(await identity.json(), { schemaVersion: 1, serviceId: "ordinary-main",
-  servingGenerationId: generationId, role: "native-root-admission-registrar",
-  scope: ["imported-root-admission:write", "imported-root-admission:revoke"] });
-const response = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(request) });
-assert.equal(response.status, 200);
-const registered = await response.json();
-assert.equal(registered.requestId, request.requestId);
-assert.equal(registered.servingGenerationId, generationId);
-assert.equal(registered.admission.importedRoot.currentRoot.sequence, 0);
-assert.equal(registered.admission.importedRoot.currentRoot.commit,
-  readFileSync("/run/fixtures/root.commit", "utf8").trim());
-assert.equal(registered.admission.importedRoot.currentRoot.tree,
-  readFileSync("/run/fixtures/root.tree", "utf8").trim());
-assert.deepEqual(registered.admission.importedRoot.policy.requiredJobs,
-  [{ name: "source", kind: "ordinary-sysbox", evidenceClass: "candidate-controlled" }]);
-const replay = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(request) });
-assert.equal(replay.status, 200);
-assert.deepEqual(await replay.json(), registered);
-const stale = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify({
-  ...request, requestId: "00000000-0000-4000-8000-000000000045", generationId: "f".repeat(64)
-}) });
-assert.equal(stale.status, 409);
-EOF
-docker container rm --force "$ordinary_service" >/dev/null
-docker run --detach --name "$ordinary_service" --network "$service_network" --network-alias ordinary-ci \
-  --publish 127.0.0.1::8080 --read-only --cap-drop ALL --security-opt no-new-privileges \
-  --tmpfs /tmp:rw,noexec,nosuid,nodev,mode=1777 \
-  --mount "type=volume,src=$ordinary_secrets_volume,dst=/run/secrets,readonly" \
-  --mount "type=volume,src=$ordinary_state_volume,dst=/var/lib/dim-ordinary-ci" \
-  "$ordinary_image" serve /run/secrets/service.json "$ordinary_generation" >/dev/null
-for _ in {1..100}; do
-  docker container exec --user 10002:10002 "$ordinary_service" /usr/local/bin/dim-service ready \
-    >"$work_dir/ordinary-restart-ready.out" 2>"$work_dir/ordinary-restart-ready.err" && break
-  sleep 0.05
-done
-[[ ! -s "$work_dir/ordinary-restart-ready.out" && ! -s "$work_dir/ordinary-restart-ready.err" ]]
-docker run --rm --interactive --read-only --network "$service_network" --user 10002:10002 \
-  --cap-drop ALL --security-opt no-new-privileges --entrypoint node --mount "$config_mount" \
-  "$ordinary_image" --input-type=module <<'EOF'
-import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-
-const ordinary = JSON.parse(readFileSync("/run/fixtures/ordinary.json", "utf8"));
-const auth = ({ username, password }) => `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
-const endpoint = "http://ordinary-ci:8080/v1/projects/project-a/repositories/root/native-root-admission/register";
-const generationId = createHash("sha256").update("native-ready-smoke").digest("hex");
-const body = { schemaVersion: 1, requestId: "00000000-0000-4000-8000-000000000041", generationId };
-const response = await fetch(endpoint, { method: "POST", headers: {
-  authorization: auth(ordinary.credentials.registrar), "content-type": "application/json"
-}, body: JSON.stringify(body) });
-assert.equal(response.status, 503);
-EOF
-docker container exec --user 10002:10002 "$ordinary_service" /usr/local/bin/dim-service activate "$ordinary_generation"
-docker run --rm --interactive --read-only --network "$service_network" --user 10002:10002 \
-  --cap-drop ALL --security-opt no-new-privileges --entrypoint node --mount "$config_mount" \
-  "$ordinary_image" --input-type=module <<'EOF'
-import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-
-const ordinary = JSON.parse(readFileSync("/run/fixtures/ordinary.json", "utf8"));
-const auth = ({ username, password }) => `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
-const origin = "http://ordinary-ci:8080/v1/projects/project-a/repositories/root/native-root-admission";
-const generationId = createHash("sha256").update("native-ready-smoke").digest("hex");
-const request = (requestId, admissionGeneration) => ({ schemaVersion: 1, requestId, generationId,
-  ...(admissionGeneration === undefined ? {} : { admissionGeneration }) });
-const call = (operation, credential, body) => fetch(`${origin}/${operation}`, { method: "POST", headers: {
-  authorization: auth(credential), "content-type": "application/json"
-}, body: JSON.stringify(body) });
-const registerRequest = request("00000000-0000-4000-8000-000000000041");
-const replay = await call("register", ordinary.credentials.registrar, registerRequest);
-assert.equal(replay.status, 200);
-const registered = await replay.json();
-const admissionGeneration = registered.admission.admissionGeneration;
-const currentRequest = request("00000000-0000-4000-8000-000000000042", admissionGeneration);
-const current = await call("current", ordinary.credentials.query, currentRequest);
-assert.equal(current.status, 200);
-const historicalCurrent = await current.json();
-const revoke = await call("revoke", ordinary.credentials.registrar,
-  request("00000000-0000-4000-8000-000000000043", admissionGeneration));
-assert.equal(revoke.status, 200);
-const replayedCurrent = await call("current", ordinary.credentials.query, currentRequest);
-assert.equal(replayedCurrent.status, 200);
-assert.deepEqual(await replayedCurrent.json(), historicalCurrent);
-const freshCurrent = await call("current", ordinary.credentials.query,
-  request("00000000-0000-4000-8000-000000000044", admissionGeneration));
-assert.equal(freshCurrent.status, 404);
-const historicalRegister = await call("register", ordinary.credentials.registrar, registerRequest);
-assert.equal(historicalRegister.status, 200);
-assert.deepEqual(await historicalRegister.json(), registered);
-EOF
 docker run --rm --read-only --network "$service_network" --user 10001:10001 \
   --cap-drop ALL --security-opt no-new-privileges --tmpfs /tmp:rw,nosuid,nodev,mode=1777 \
   --entrypoint sh --mount "$config_mount" "$native_image" -ec '
@@ -785,7 +690,7 @@ while (response === undefined) {
     await setTimeout(100, undefined, { signal: deadline });
   }
 }
-assert.equal(response.status, 503);
+assert.equal(response.status, 200);
 EOF
 docker container rm --force "$ordinary_service" >/dev/null
 docker run --rm --interactive --user 0:0 --entrypoint sh \
@@ -941,10 +846,11 @@ docker run --rm --interactive --name "$native_service" --network "$service_netwo
   --mount "$config_mount" \
   --mount "type=volume,src=$native_secrets_volume,dst=/run/secrets,readonly" \
   --mount "type=volume,src=$native_state_volume,dst=/var/lib/dim-native-git" \
-  "$native_image" --input-type=module <<'EOF'
+  "$native_image" --input-type=module >"$work_dir/automatic-claim.json" <<'EOF'
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { setTimeout } from "node:timers/promises";
 import { configuredNativeGitBundleServer } from "/usr/local/lib/dim/native-bundle-server.js";
 
 const native = JSON.parse(readFileSync("/run/fixtures/native-active.json", "utf8"));
@@ -967,28 +873,85 @@ const envelope = await service.createReview({ projectId: "project-a", repository
   proposalRef: `refs/heads/proposals/${workspaceId}/change` });
 const event = envelope.events.find((candidate) => candidate.executionKind === "ordinary-sysbox");
 assert.ok(event);
-const admissionResponse = await fetch(
-  "http://ordinary-ci:8080/v1/projects/project-a/repositories/root/native-root-admission/register", {
-    method: "POST", headers: { authorization: authorization(ordinary.credentials.registrar),
-      "content-type": "application/json" }, body: JSON.stringify({ schemaVersion: 1,
-      requestId: "00000000-0000-4000-8000-000000000046", generationId })
-  });
-assert.equal(admissionResponse.status, 200);
-const admission = (await admissionResponse.json()).admission;
-const body = { schemaVersion: 1, generationId,
-  admissionGeneration: admission.admissionGeneration, event };
-const endpoint = "http://ordinary-ci:8080/v1/native-root-ci-events";
-const headers = { authorization: authorization(ordinary.credentials.webhook), "content-type": "application/json" };
-const receipt = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(body) });
-assert.equal(receipt.status, 202);
-assert.deepEqual(await receipt.json(), { schemaVersion: 1, generationId,
-  admissionGeneration: admission.admissionGeneration, eventId: event.eventId, recorded: true });
+const request = { schemaVersion: 1, requestId: randomUUID(), generationId, hostId: "host-a", capacity: "primary" };
+let claimed;
+for (let attempt = 0; attempt < 100; attempt += 1) {
+  const response = await fetch("http://ordinary-ci:8080/v1/host-claims", { method: "POST", headers: {
+    authorization: authorization({ username: "host-a", password: ordinary.hosts[0].hostToken }),
+    "content-type": "application/json"
+  }, body: JSON.stringify(request) });
+  if (response.status === 204) {
+    await setTimeout(50);
+    continue;
+  }
+  assert.equal(response.status, 201);
+  claimed = await response.json();
+  break;
+}
+assert.ok(claimed);
+assert.equal(claimed.event.eventId, event.eventId);
+assert.equal(claimed.requestId, request.requestId);
+assert.match(claimed.serviceEpochId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 await service.close();
-const outageReplay = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify(body) });
-assert.equal(outageReplay.status, 202);
-assert.equal((await outageReplay.json()).eventId, event.eventId);
+process.stdout.write(JSON.stringify({ request, claim: claimed }));
 EOF
-printf 'native-root-ci-event-receipt-smoke-ok\n'
+printf 'native-root-ci-automatic-eligibility-smoke-ok\n'
+docker run --rm --interactive --user 0:0 --entrypoint sh \
+  --mount "type=volume,src=$config_volume,dst=/fixtures" "$ordinary_image" \
+  -ec 'cat > /fixtures/automatic-claim.json && chmod 0444 /fixtures/automatic-claim.json' \
+  <"$work_dir/automatic-claim.json"
+docker container rm --force "$ordinary_service" >/dev/null
+docker run --detach --name "$ordinary_service" --network "$service_network" --network-alias ordinary-ci \
+  --publish 127.0.0.1::8080 --read-only --cap-drop ALL --security-opt no-new-privileges \
+  --tmpfs /tmp:rw,noexec,nosuid,nodev,mode=1777 \
+  --mount "type=volume,src=$ordinary_secrets_volume,dst=/run/secrets,readonly" \
+  --mount "type=volume,src=$ordinary_state_volume,dst=/var/lib/dim-ordinary-ci" \
+  "$ordinary_image" serve /run/secrets/service.json "$native_generation_b" >/dev/null
+for _ in {1..100}; do
+  docker container exec --user 10002:10002 "$ordinary_service" /usr/local/bin/dim-service ready \
+    >"$work_dir/ordinary-automatic-restart-ready.out" 2>"$work_dir/ordinary-automatic-restart-ready.err" && break
+  sleep 0.05
+done
+[[ ! -s "$work_dir/ordinary-automatic-restart-ready.out" && ! -s "$work_dir/ordinary-automatic-restart-ready.err" ]]
+docker run --rm --interactive --read-only --network "$service_network" --user 10002:10002 \
+  --cap-drop ALL --security-opt no-new-privileges --entrypoint node --mount "$config_mount" \
+  "$ordinary_image" --input-type=module <<'EOF'
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const ordinary = JSON.parse(readFileSync("/run/fixtures/ordinary.json", "utf8"));
+const { request } = JSON.parse(readFileSync("/run/fixtures/automatic-claim.json", "utf8"));
+const authorization = `Basic ${Buffer.from(`host-a:${ordinary.hosts[0].hostToken}`).toString("base64")}`;
+const response = await fetch("http://ordinary-ci:8080/v1/host-claims", { method: "POST", headers: {
+  authorization, "content-type": "application/json"
+}, body: JSON.stringify(request) });
+assert.equal(response.status, 503);
+EOF
+docker container exec --user 10002:10002 "$ordinary_service" /usr/local/bin/dim-service activate "$native_generation_b"
+docker run --rm --interactive --read-only --network "$service_network" --user 10002:10002 \
+  --cap-drop ALL --security-opt no-new-privileges --entrypoint node --mount "$config_mount" \
+  "$ordinary_image" --input-type=module <<'EOF'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+
+const ordinary = JSON.parse(readFileSync("/run/fixtures/ordinary.json", "utf8"));
+const { request, claim } = JSON.parse(readFileSync("/run/fixtures/automatic-claim.json", "utf8"));
+const auth = ({ username, password }) => `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
+const origin = "http://ordinary-ci:8080";
+const replay = await fetch(`${origin}/v1/host-claims`, { method: "POST", headers: {
+  authorization: auth({ username: "host-a", password: ordinary.hosts[0].hostToken }),
+  "content-type": "application/json"
+}, body: JSON.stringify(request) });
+assert.equal(replay.status, 200);
+assert.deepEqual(await replay.json(), claim);
+const stale = await fetch(`${origin}/v1/claim-reservation-verifications`, { method: "POST", headers: {
+  authorization: auth(ordinary.credentials.query), "content-type": "application/json"
+}, body: JSON.stringify({ schemaVersion: 1, requestId: randomUUID(),
+  generationId: request.generationId, claim }) });
+assert.equal(stale.status, 409);
+EOF
+printf 'native-automatic-eligibility-restart-smoke-ok\n'
 [[ "$(docker container port "$ordinary_service" 8080/tcp)" == 127.0.0.1:* ]]
 docker run --rm --interactive --read-only --network "$service_network" --user 10002:10002 \
   --cap-drop ALL --security-opt no-new-privileges --entrypoint node \
