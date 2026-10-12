@@ -131,14 +131,17 @@ dim-acme/product
 dim-acme/environment
 ```
 
-**PROJECT-NATIVE-001 (accepted target, not implemented):** A fresh native
+**PROJECT-NATIVE-001:** A fresh native
 Project has a distinct strict Project record containing its immutable native
 service and Project identities and registered repository IDs, not a Gitea
 organization ID or provider URL. The trusted host creates the Project once;
-eligible Projects acquire globally configured ordinary and QEMU CI admission
-without a second Project-specific CI approval. Registration must bind the
-native service identity, Project, root repository, protected ref and policy
-revision before publishing Project readiness. A candidate, workspace writer,
+Projects whose quality policy selects CI acquire the corresponding globally
+configured ordinary, QEMU, or dual-kind admission without a second
+Project-specific CI approval. Registration must bind the
+native service identity, Project, root repository, protected ref and security
+policy revision before publishing Project readiness. The independently
+revisioned Project quality policy defaults to an empty required-job set and may
+be configured without changing readiness. A candidate, workspace writer,
 webhook or CI worker cannot create or change that binding. Project state must
 not contain credentials, host Docker authority or CI service tokens. A native
 Project never falls back to Gitea if admission or native Git is unavailable.
@@ -203,8 +206,11 @@ importer-authenticated schema-3 read-only proof that matches every bound receipt
 field and live owner, current serving generation, original import generation,
 bundle, and separately folded current protected Git head. The original nested
 receipt and host draft remain immutable. Format-8 records cannot yet advance
-the current head: the installed service rejects any intent or finalized row
-until separate review, approval, and both CI evidence stores are verified.
+the current head except through the installed host-promoter adapter. That
+adapter requires exact human approval and checked CAS, plus only the CI evidence
+selected by the current Project quality policy. It durably records verified
+authorization before the CAS, finalizes the contiguous transition after it,
+and reconciles either crash window before current-head proof is available.
 An unresolved intent or unrecorded ref drift yields no proof. A missing owner
 marker, replaced repository path, or moved ref leaves the draft non-ready
 without host-state mutation. A trusted host root-read operation loads separate
@@ -235,15 +241,20 @@ lifecycle-path links; and create accepted relative links only after all regular
 files and directories exist. Existing unsafe targets are conflicts and MUST
 NOT be adopted, removed, or rewritten. The resulting descriptor contains no
 credential or runtime authority and does not create Project readiness. The
-remaining trusted host adapter, review/promotion integration, and both CI kinds
-are still required before `PROJECT-NATIVE-001` becomes operational.
+remaining trusted host adapter, scoped repository/workspace authority, runtime
+integration, and ready transition are still required before
+`PROJECT-NATIVE-001` becomes operational. CI deployment and protected
+promotion are separate implementation tracks, not prerequisites for that ready
+transition.
 
 An exact-tree human approval is required before native protected promotion.
 Product maintainers review changed requirements, implementation, tests and
 results; deeper infrastructure security review covers only authority-bearing
 changes and their dependency closure. The native host performs a serialized
 compare-and-swap against the reviewed expected protected head after rechecking
-the current policy, approval, and required exact ordinary/QEMU evidence. A
+the current policy and approval. If the Project quality policy selects CI jobs,
+it also rechecks the exact current evidence for every selected ordinary and/or
+QEMU job. A
 stale head, policy or evidence leaves the ref unchanged. Native Project purge
 may remove only the exact registered Project's resources after workspace and
 CI claims are closed; it never removes a foreign same-name resource.
@@ -260,9 +271,14 @@ repository ID `root`, root alias, concrete protected branch, exact commit and
 tree object IDs, one canonical versioned native import policy, and the SHA-256
 digest and byte size of one bounded private bundle. The policy contains sorted
 `requiredJobs` entries with exact `name`, `kind`, and
-`evidenceClass: candidate-controlled`; the draft MUST NOT duplicate those jobs
-at top level. Policy and job-set revisions use their v2 domains, while the
-reviewer revision remains in its v1 domain.
+`evidenceClass: candidate-controlled`; the array MAY be empty and the draft
+MUST NOT duplicate those jobs
+at top level. The security-policy revision uses its v3 domain, the job-set
+revision uses its v2 domain, and the reviewer revision remains in its v1
+domain.
+`requiredJobSetRevision` is the independent Project quality-policy revision.
+Changing only that revision or its job set MUST NOT change Project readiness or
+the validity of human approval for an otherwise unchanged security tuple.
 It contains no URL, Gitea organization, credential, host-runtime authority,
 CI token, caller-controlled error text, or readiness flag. The only phases
 are `import-pending` and `root-imported`; **neither is runnable** and this
@@ -295,14 +311,17 @@ uncertain or missing proof leaves the draft non-ready and requires explicit
 reconciliation, never a fresh import of different bytes.
 
 A canonical **native** Project record may become runnable only through a later,
-separately specified transition after authenticated scoped Git transport and
-automatic ordinary and QEMU capacity admission are operational and the
-real-host gates in
-`VERIFICATION-NATIVE-CUTOVER-001` pass. Project readiness is not a successful
-candidate test result: candidate jobs require a runnable Project and proposal.
-Protected **promotion** separately requires the exact current ordinary and
-QEMU terminal results for every job required by policy, correct execution
-kinds, current approval, and the checked ref compare-and-swap. Missing KVM
+separately specified transition after authenticated scoped Git transport,
+registered owned root and protected-ref state, immutable protected-root
+snapshot, proposal-only writer authority, and selected workspace runtime
+prerequisites are operational. Project readiness is not a successful candidate
+test result: candidate jobs require a runnable Project and proposal. It does
+not require ordinary or QEMU capacity, CI evidence, or a prior promotion.
+Protected **promotion** separately requires current exact-tree human approval
+and the checked ref compare-and-swap. When the separately configured Project
+quality policy selects jobs, promotion also requires the exact current terminal
+results for every selected ordinary and/or QEMU job and correct execution
+kinds. Missing KVM
 is unavailable, never a successful or ordinary-substituted QEMU result.
 The native QEMU scheduler and host connection are distinct from the
 predecessor Gitea QEMU topology and from ordinary Sysbox claims and results.
@@ -326,7 +345,8 @@ sequence zero at that imported commit and tree. A promoted, drifting,
 unresolved, legacy, stale-generation, missing, foreign, or ambiguous root is
 not admissible at this checkpoint.
 
-The canonical record has exactly these fields and no optional extension:
+The canonical schema-5 `NativeProjectPendingRecord` has exactly these fields
+and no optional extension:
 
 ```json
 {
@@ -413,12 +433,42 @@ not a migration source or native replay.
 `admission-pending` is visible only through native `project list` and `project
 show`. It is not `ready`, cannot be used to resolve a root for a workspace, and
 grants no reader, writer, reviewer, promoter, ordinary-CI, QEMU-CI, runner,
-capacity, hook, remove, or purge authority. This schema defines no ready phase
-and no transition out of pending. A later contract may add that transition
-only after real ordinary Sysbox execution, real KVM-backed native QEMU
-execution, exact review and checked promotion are integrated and
-`VERIFICATION-NATIVE-CUTOVER-001` passes. Until then, all such mutations reject
-before state, service, Git, credential, runtime, or protected-ref mutation.
+capacity, hook, remove, or purge authority. Ordinary Sysbox CI, native QEMU CI,
+review, and checked promotion remain separately verified capabilities and MUST
+NOT be conditions for publishing the Project ready.
+
+**PROJECT-NATIVE-READY-001:** A strict
+schema-`6` `NativeProjectReadyRecord` contains every field of the schema-`5`
+`NativeProjectPendingRecord` above with byte-identical values, except that
+`schemaVersion` is `6`, `phase` is `ready`, and one required `readyAt` timestamp
+is added. The transition changes no name, Project, service, owner host, root
+repository, alias, protected ref, commit, tree, review policy, bundle, or import
+receipt field. The schema accepts no timestamp other than `readyAt` and no
+credential, endpoint, lease, runtime handle, approval, result, or readiness
+extension field.
+
+The transition holds the Project lock, rereads the exact schema-5 bytes and
+readiness-only native connection, and obtains the fresh non-mutating proof in
+`CONFIG-NATIVE-READINESS-001`. It requires every returned identity, object, and
+revision to equal the pending record and revalidates the already-published
+read-only protected-root snapshot at the exact recorded commit and tree. It
+also requires the selected workspace runtime's local admission prerequisites
+and configured host broker path, but it does not create a workspace, issue a
+Git lease, run Project code, or probe either CI service.
+
+Publication uses an atomic synced replacement while the lock remains held. A
+retry accepts only the exact schema-5 record or byte-identical schema-6 result,
+and the schema-6 replay still reloads the current connection, obtains a fresh
+readiness proof, and validates the stored protected-root snapshot;
+a changed, stale, foreign, malformed, or unknown record or proof remains
+non-ready without state, service, Git, credential, runtime, or protected-ref
+mutation. `readyAt` records the one successful publication and does not churn
+on replay. A serving-generation rollover updates only the private connection;
+it never rewrites the original import receipt in either ready record. Readiness
+grants workspace lifecycle only through the source and
+broker contracts below. It creates no review, approval, promotion, runner,
+attempt, result, protected-ref write, or CI authority and remains valid through
+a later CI outage.
 
 In the implemented Gitea profile, Project metadata contains its name/ID,
 namespace, trusted Gitea organization
@@ -596,8 +646,8 @@ DIM never clones, fetches, switches, merges, or resets a repository there.
 For create, start, update, and restart, DIM resolves a
 single concrete branch covered by the root repository's applied protection,
 pins its exact commit, and atomically publishes the complete commit tree below
-the controller-owned content-addressed assets path. The workspace record uses
-schema version `8` and records a fresh 256-bit workspace instance ID together
+the controller-owned content-addressed assets path. The implemented Gitea
+workspace record uses schema version `8` and records a fresh 256-bit workspace instance ID together
 with that root ref, commit, and the canonical workspace-data path. The
 protected-root path is derived from the state root,
 Project ID, and exact commit rather than persisted. The record contains no repository catalog or
@@ -605,6 +655,107 @@ per-repository ref overrides. Schema `7`, older workspace schemas, and records c
 obsolete checkout-layout fields are rejected before mutation, with guidance
 to use the prior pinned release to export important Project/user data and then
 discard and recreate the workspace. No workspace-state migration is defined.
+
+**WORKSPACE-SOURCE-001:** The first native
+workspace uses strict schema `9`. It retains every schema-8 Sysbox backend and
+lifecycle field with its existing meaning and replaces provider-specific Git
+identity and base-URL fields with one required `source` discriminator. Current
+schema-8 Gitea records remain unchanged; a future Gitea schema-9 record uses the
+second alternative. The exact source value is one of these two shapes:
+
+```json
+{
+  "kind": "native",
+  "serviceId": "native-main",
+  "snapshot": {
+    "projectId": "project-a",
+    "repositoryId": "root",
+    "protectedRef": "refs/heads/main",
+    "commit": "<complete Git object ID>",
+    "tree": "<complete Git object ID>"
+  },
+  "policyRevision": "<64 lowercase hexadecimal characters>",
+  "requiredReviewRevision": "<64 lowercase hexadecimal characters>",
+  "requiredJobSetRevision": "<64 lowercase hexadecimal characters>"
+}
+```
+
+```json
+{
+  "kind": "gitea",
+  "serviceId": "gitea-host-id",
+  "snapshot": {
+    "projectId": "local-project-id",
+    "repositoryId": "root",
+    "protectedRef": "refs/heads/main",
+    "commit": "<complete Git object ID>",
+    "tree": "<complete Git object ID>"
+  },
+  "gitNamespace": "dim-project",
+  "giteaOrganizationId": 123
+}
+```
+
+The discriminator controls exact parsing. Native schema-9 state comes only
+from a fresh `CONFIG-NATIVE-READINESS-001` proof whose host, service, Project,
+repository, protected ref, commit, tree, and revisions match the schema-6
+Project record at creation. Start, update, and restart may record a later
+commit and tree only after the same proof and existing fast-forward checks;
+setup reuses the stored snapshot and resolves no moving ref. Native fields in a
+Gitea source, Gitea fields in a native source, mixed or unknown fields, obsolete
+provider Git fields, and any missing or mistyped value are incompatible state
+and fail before runtime, hook, grant, broker, or remote mutation. The record
+contains no issuer or broker credential, upstream Basic credential, lease,
+lease expiry, arbitrary URL, provider path, approval, or CI result. No schema-8
+to schema-9 migration exists.
+
+**WORKSPACE-NATIVE-GIT-BROKER-001:** Native
+Git access uses a host-owned broker with one random grant bound to the immutable
+`workspaceId`, native service, Project, root repository, and current grant
+generation. The grant authenticates only the broker entrypoint. It cannot
+authenticate to a controller or native Git route, select another workspace or
+repository, or act after discard or generation rotation.
+
+The broker constructs, and accepts from the workspace only, these exact smart
+HTTP requests for the source tuple stored in schema-9 state:
+
+```text
+GET  /v1/projects/<projectId>/repositories/<repositoryId>.git/info/refs?service=git-upload-pack
+POST /v1/projects/<projectId>/repositories/<repositoryId>.git/git-upload-pack
+GET  /v1/projects/<projectId>/repositories/<repositoryId>.git/info/refs?service=git-receive-pack
+POST /v1/projects/<projectId>/repositories/<repositoryId>.git/git-receive-pack
+```
+
+POST requests require the matching Git smart-HTTP content type. Upload permits
+clone and fetch. Receive remains limited by the installed native Git hook to a
+create or fast-forward update below
+`refs/heads/proposals/<workspaceId>/...`. Protected refs, tags, deletion,
+non-fast-forward updates, another workspace namespace, and every alternate
+method, path, query, service, content type, authority, or destination fail
+before an upstream connection or ref mutation. Redirects are errors.
+
+Before every discovery or RPC request, including a Git retry, the broker
+rereads the workspace under its authority lock and requires the grant's exact
+workspace ID and generation, `ready` phase, and native source tuple. It then
+uses the host-only issuer credential to call exact `POST
+/v1/projects/{projectId}/workspace-write-leases` with the existing strict
+schema-1 body, including the active generation, root repository, and canonical
+32-byte workspace ID. Each HTTP request obtains a newly random Basic credential
+whose server-selected expiry is exactly 30 seconds; no lease is shared across
+discovery, RPC, retry, workspace, method, or repository requests. The broker
+keeps it only in memory, starts no upstream request after expiry, follows no
+redirect, and never returns it to the workspace or places it in state, URLs,
+argv, manifests, logs, or errors. Expiry or service restart invalidates the
+request; a retry obtains a fresh lease and does not change workspace readiness.
+
+The broker listens only on host loopback. The workspace reaches it through an
+exact native-Git preset in `dim-controller-proxy` over the existing workspace
+controller Unix transport. That preset exposes only the four routes above at a
+workspace-local loopback endpoint, injects the separate broker grant, strips
+client authorization and forwarding headers, and exposes no raw host TCP
+address, issuer credential, general controller grant, or arbitrary proxy
+configuration. Reviewed Project code may relay that fixed endpoint to its own
+agent network but cannot widen its route or destination policy.
 
 The selected Project-root snapshot is mounted read-only only into the trusted
 outer workspace. It is not writable agent data. Setup, entrypoint,
