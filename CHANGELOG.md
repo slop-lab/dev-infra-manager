@@ -7,6 +7,22 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+- Add the independently deployable Gitea-free native QEMU scheduler and trusted
+  host worker surface, with fixed operator capacity, QEMU-specific native-Git
+  attempts/statuses, KVM-only execution, cleanup-gated evidence, and a hardened
+  non-root guest job boundary. Add a separately labelled Docker-hosted TCG lane
+  for real guest-mechanics verification without treating it as KVM acceptance
+  or a production fallback.
+
+- Implement the installed native ordinary-CI host and central admission
+  surfaces. A private host file starts one journaled worker per fixed capacity,
+  refuses missing Docker `sysbox-runc` before claiming, uses short-lived native
+  Git root-read credentials, and delivers cleaned schema-3 ordinary evidence
+  through schema-2 results. Restart replays exact claim, result, or recovery
+  bytes; signal shutdown waits for owned cleanup. A separate private registrar
+  file admits one immutable native Project ID without workspace, Gitea, runner,
+  or host-runtime authority.
+
 - Change the specified native ordinary-CI target so each exact candidate tree
   selects its own strict job config, Bash script, and digest-pinned disposable
   image. Results are explicitly candidate-controlled self-test evidence: a zero
@@ -16,9 +32,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   DIM narrows only infrastructure security review around secrets, protected
   refs, host privileges, and trusted capability elevation. Operator-owned admission, bounded
   ephemeral Sysbox execution, human approval of the exact tree, and checked CAS
-  promotion remain required. This intentional pre-stable contract change is
-  not implemented yet and defines no compatibility parser or automatic source
-  or state migration.
+  promotion remain required. The installed ordinary executor accepts the
+  strict combined schema-4 candidate definition and defines no compatibility
+  parser or automatic source or state migration.
 
 - Pin the self-Project CI job image with the complete source-verification
   toolchain, including GNU sed for pnpm's generated shims, findutils, jq,
@@ -105,7 +121,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
   installer facade now installs and transactionally updates the empty, idle
   native Git/ordinary-CI bundle through `installer install control-plane
   --config FILE`; it rejects obsolete `install-cp` before CLI forwarding. The
-  native Project adapter, capacity, Sysbox job execution, and reviewer UI remain
+  Native Project create now converges its schema-5 crash/retry stage to a
+  schema-6 ready record without waiting for CI. Schema-9 native Sysbox
+  workspaces use fresh fast-forward protected-root proofs across lifecycle
+  transitions and proposal-only Git through a workspace-local broker, without
+  Gitea fallback or host credentials in the container. Installed native CI
+  capacity, Sysbox job execution, protected promotion, and reviewer UI remain
   unavailable.
   Published CLI installations can now explicitly run `dim workspace image
   build` from any directory. The core package ships the complete trusted build
