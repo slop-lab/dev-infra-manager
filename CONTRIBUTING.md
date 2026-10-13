@@ -13,7 +13,8 @@ just install-dependencies # locked monorepo dependencies
 just typecheck       # TypeScript checks only
 just test            # unit tests
 just build-packages  # publishable package builds
-just check-source    # typecheck + test + package builds; only Node.js and pnpm required
+just check-source    # isolated pinned source gate; Docker is the only toolchain prerequisite
+just check-source-native # same gate in an already pinned native environment
 just verify agent    # strongest gate supported inside this repository's DIM agent
 bash verification/scripts/local-ci-matrix.bash # exact Node.js 24/26 CI matrix via mise
 just build-workspace-image # run the source CLI's shipped-asset release image build
@@ -35,6 +36,42 @@ that workspace's own nested runtime.
 The top-level justfile is an everyday contributor index, not a mirror of every
 CI job. Reusable verification commands remain under `just verify`; hosted lane
 composition lives in workflows and scripts.
+
+The recommended complete source check requires only Bash and Docker on the
+host:
+
+```bash
+bash verification/scripts/source-gate-container.bash
+```
+
+`just check-source` and `just check-source-container` are convenience aliases
+for that command. The wrapper builds an image from digest-pinned Node.js 24 and
+Python 3.13.7 bases with checksum-pinned Git 2.43.0 and Just 1.43.1, plus
+exact-version pnpm 10.13.1. It copies the current worktree, including tracked and untracked changes,
+into a disposable container;
+it excludes Git metadata, generated `node_modules` and `dist` trees, user state,
+and conventional local credential files and directories. This is not a general
+secret scanner: submit only a reviewed checkout without other secret-bearing
+files. The source checkout is never mounted writable, the Docker socket and
+host environment are not passed through, and build or test output stays inside
+the container. Network access remains available because source installer tests
+intentionally download packages. The gate runs the complete recursive source
+unit, verification, and CLI suites; hardware and live-runtime verification
+remain explicit separate gates.
+
+Run the real native ordinary executor Docker integration separately on a host
+with a reachable Docker daemon, `sysbox-runc`, and both digest-pinned fixture
+images already available through `DIM_TEST_NATIVE_RUNNER_IMAGE` and
+`DIM_TEST_NATIVE_JOB_IMAGE`:
+
+```bash
+just verify native-ordinary-executor-live
+```
+
+Use `just check-source-native` only in an already reviewed environment that
+provides `/usr/bin/git` 2.43.0, Node.js 24 or 26, pnpm 10.13.1, a trusted
+temporary directory, and disposable root-ownership fixture capability. It
+preserves the direct gate used by pinned CI environments.
 
 The `Expensive integration` workflow has dedicated clean hosted
 `cache-routing-kvm` and `qemu-ci-image-layers-kvm` lanes. The direct local

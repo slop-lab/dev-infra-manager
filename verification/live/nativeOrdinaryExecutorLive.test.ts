@@ -5,10 +5,10 @@ import {
   executeNativeHostClaim,
   type NativeCandidateReadAuthority,
   type NativeHostExecutorDependencies
-} from "../../../../core/packages/core/src/nativeOrdinaryExecutor.js";
-import { nativeDescriptorDigest } from "../../../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js";
-import { ProcessRunner } from "../../../../core/packages/core/src/runner.js";
-import { execution } from "./nativeOrdinaryExecutorFixture.js";
+} from "../../core/packages/core/src/nativeOrdinaryExecutor.js";
+import { nativeDescriptorDigest } from "../../core/packages/core/src/nativeOrdinaryAuthorityProtocol.js";
+import { ProcessRunner } from "../../core/packages/core/src/runner.js";
+import { execution } from "../../tests/packages/core/test/nativeOrdinaryExecutorFixture.js";
 
 const runner = new ProcessRunner();
 const dockerInfo = await runner.run("docker", ["info", "--format", "{{json .Runtimes}}"], {
@@ -26,8 +26,10 @@ describe("native ordinary executor live Docker driver", () => {
     expect(JSON.parse(dockerInfo.stdout)).toBeTypeOf("object");
   });
 
-  it.skipIf(!hasSysbox || !hasImages)("runs a digest-pinned nested job only with an available Sysbox fixture", async () => {
+  it("runs a digest-pinned nested job with the required Sysbox fixtures", async () => {
     // Given
+    expect(hasSysbox).toBe(true);
+    expect(hasImages).toBe(true);
     if (runnerImage === undefined || jobImage === undefined) throw new TypeError("digest fixture images are missing");
     const input = execution();
     const config = Buffer.from("schemaVersion: 3\nordinary:\n  jobs:\n    source:\n      script: .dim/ci/jobs/source.bash\n      argv: [/bin/bash, --noprofile, --norc, /run/dim/job/script]\n");

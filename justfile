@@ -22,8 +22,16 @@ test:
 build-packages:
     pnpm run workspace:build
 
-# Run the complete source gate in the pinned Git integration profile.
+# Run the complete source gate in its pinned, isolated container.
 check-source:
+    bash verification/scripts/source-gate-container.bash
+
+# Run the isolated source gate explicitly.
+check-source-container:
+    bash verification/scripts/source-gate-container.bash
+
+# Run the complete source gate directly in an already pinned native environment.
+check-source-native:
     bash verification/scripts/source-gate-preflight.bash
     bash verification/scripts/source-gate-preflight-test.bash
     bash verification/scripts/repository-materialization-smoke.bash

@@ -21,6 +21,16 @@ native-qemu-guest-mechanics-tcg:
     @docker info >/dev/null 2>&1 || { echo "native-qemu-guest-mechanics-tcg requires a reachable Docker daemon" >&2; exit 2; }
     cd .. && bash verification/scripts/native-qemu-guest-mechanics-tcg-smoke.bash
 
+# Real native ordinary executor Docker integration; nested execution requires explicit digest-pinned Sysbox fixture images.
+native-ordinary-executor-live:
+    @docker info >/dev/null 2>&1 || { echo "native-ordinary-executor-live requires a reachable Docker daemon" >&2; exit 2; }
+    @docker info 2>/dev/null | grep -Eq '^ Runtimes:.*sysbox-runc' || { echo "native-ordinary-executor-live requires sysbox-runc" >&2; exit 2; }
+    @[[ "${DIM_TEST_NATIVE_RUNNER_IMAGE:-}" =~ @sha256:[0-9a-f]{64}$ ]] || { echo "native-ordinary-executor-live requires DIM_TEST_NATIVE_RUNNER_IMAGE as a digest reference" >&2; exit 2; }
+    @[[ "${DIM_TEST_NATIVE_JOB_IMAGE:-}" =~ @sha256:[0-9a-f]{64}$ ]] || { echo "native-ordinary-executor-live requires DIM_TEST_NATIVE_JOB_IMAGE as a digest reference" >&2; exit 2; }
+    @docker image inspect "$DIM_TEST_NATIVE_RUNNER_IMAGE" >/dev/null 2>&1 || { echo "native-ordinary-executor-live requires the runner fixture image locally" >&2; exit 2; }
+    @docker image inspect "$DIM_TEST_NATIVE_JOB_IMAGE" >/dev/null 2>&1 || { echo "native-ordinary-executor-live requires the job fixture image locally" >&2; exit 2; }
+    cd .. && pnpm --dir verification exec vitest run --config live/vitest.config.ts live/nativeOrdinaryExecutorLive.test.ts
+
 # Run the backend-independent end-to-end contract after a backend is installed.
 full-development:
     just verify native-idle-service-images

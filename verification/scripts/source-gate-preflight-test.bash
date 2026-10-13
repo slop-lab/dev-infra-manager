@@ -96,7 +96,7 @@ set -e
 
 PATH="$fixture/tools:/usr/bin:/bin" TMPDIR="$fixture/temp" bash "$preflight" --require-artifacts "$fixture/root" >/dev/null
 
-recipe="$(awk '/^check-source:/{capture=1} capture{print} capture && /^$/{exit}' "$workspace_root/justfile")"
+recipe="$(awk '/^check-source-native:/{capture=1} capture{print} capture && /^$/{exit}' "$workspace_root/justfile")"
 required_steps=(
   "bash verification/scripts/source-gate-preflight.bash"
   "bash verification/scripts/source-gate-preflight-test.bash"
@@ -114,8 +114,8 @@ required_steps=(
 previous=-1
 for step in "${required_steps[@]}"; do
   line="$(grep -nFx "    $step" <<<"$recipe" | cut -d: -f1 || true)"
-  [[ -n "$line" ]] || fail "check-source omitted step: $step"
-  (( line > previous )) || fail "check-source step is out of order: $step"
+  [[ -n "$line" ]] || fail "check-source-native omitted step: $step"
+  (( line > previous )) || fail "check-source-native step is out of order: $step"
   previous="$line"
 done
 
